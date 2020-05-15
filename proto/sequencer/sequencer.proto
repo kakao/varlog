@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package solar;
+
+option go_package = "sequencer";
+
+message SequencerRequest {
+        int64 epoch = 1;
+};
+
+message SequencerResponse {
+        uint64 glsn = 1;
+};
+
+service SequencerService {
+        rpc Next(stream SequencerRequest) returns (stream SequencerResponse) {}
+};

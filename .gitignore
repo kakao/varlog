@@ -30,3 +30,21 @@
 *.exe
 *.out
 *.app
+
+# Editor or IDE files
+*.swp
+*.vcxproj
+.vscode/*
+.history/
+
+# Build tools
+*.cmake
+CMakeCache.txt
+CMakeFiles/
+build/
+cache.mk
+/cmake/build
+cmake-build-debug/
+
+# ctags
+tags
