@@ -13,5 +13,5 @@ message SequencerResponse {
 };
 
 service SequencerService {
-        rpc Next(stream SequencerRequest) returns (stream SequencerResponse) {}
+        rpc Next(SequencerRequest) returns (SequencerResponse) {}
 };
