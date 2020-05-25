@@ -1,5 +1,6 @@
 package main
 
+/*
 import (
 	"context"
 	"fmt"
@@ -7,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	sequencer "github.daumkakao.com/wokl/wokl/pkg/libsequencer"
+	libsolar "github.daumkakao.com/wokl/solar/pkg/libsolar"
 )
 
 const (
@@ -20,7 +21,7 @@ type report struct {
 	numRecv int
 }
 
-func do_next(conn *sequencer.SequencerConnection) {
+func do_next(conn *libsolar.SequencerConnection) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
 
@@ -61,4 +62,8 @@ func main() {
 	log.Printf("elapsed = %v ms", elapsed.Milliseconds())
 	qps := float64(numClients*numNextCalls) / elapsed.Seconds()
 	log.Printf("QPS = %v", qps)
+}
+*/
+
+func main() {
 }
