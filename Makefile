@@ -6,33 +6,49 @@ BUILD_DIR := $(MAKEFILE_DIR)/build
 
 GO := go
 LDFLAGS :=
-# CFLAGS := -gcflags "-N -l"
-CFLAGS := 
+CFLAGS := -gcflags "-N -l"
 PROTOC := protoc
 PROTO_INCS := -I ${GOPATH}/src -I vendor -I .
 
+all : proto libsolar sequencer storage_node sequencer_client
+
 SEQUENCER_PROTO := proto/sequencer
-PROTO := $(SEQUENCER_PROTO)
-proto: $(PROTO)
+STORAGE_NODE_PROTO := proto/storage_node
+METADATA_REPOSITORY_PROTO := proto/metadata_repository
+PROTO := $(SEQUENCER_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO)
+proto : $(PROTO)
 
-SEQUENCER_SERVER := cmd/sequencer_server
-sequencer_server: $(SEQUENCER_PROTO) $(SEQUENCER_SERVER)
+SEQUENCER := cmd/sequencer
+sequencer : $(SEQUENCER_PROTO) $(SEQUENCER)
 
-SEQUENCER_CLIENT_LIB := pkg/libsequencer
-sequencer_client_lib: $(SEQUENCER_PROTO) $(SEQUENCER_CLIENT_LIB)
+STORAGE_NODE := cmd/storage_node
+storage_node : $(STORAGE_NODE_PROTO) $(STORAGE_NODE)
+
+LIBSOLAR := pkg/solar
+libsolar : $(SEQUENCER_PROTO) $(LIBSOLAR)
 
 SEQUENCER_CLIENT := cmd/sequencer_client
-sequencer_client: $(SEQUENCER_PROTO) $(SEQUENCER_CLIENT)
+sequencer_client : $(SEQUENCER_PROTO) $(SEQUENCER_CLIENT)
 
-SUBDIRS := $(SEQUENCER_PROTO) $(SEQUENCER_SERVER) $(SEQUENCER_CLIENT_LIB) $(SEQUENCER_CLIENT)
-subdirs: $(SUBDIRS)
+SUBDIRS := $(PROTO) $(SEQUENCER) $(STORAGE_NODE) $(LIBSOLAR) $(SEQUENCER_CLIENT)
+subdirs : $(SUBDIRS)
 
-$(SUBDIRS):
+mockgen : pkg/libsolar/mock/sequencer_mock.go pkg/libsolar/mock/storage_node_mock.go
+
+pkg/libsolar/mock/sequencer_mock.go : $(PROTO) proto/sequencer/sequencer.pb.go
+	mockgen -source=proto/sequencer/sequencer.pb.go -package mock SequencerServiceClient > pkg/libsolar/mock/sequencer_mock.go
+
+pkg/libsolar/mock/storage_node_mock.go : $(PROTO) proto/storage_node/storage_node.pb.go
+	mockgen -source=proto/storage_node/storage_node.pb.go -package mock StorageNodeServiceClient > pkg/libsolar/mock/storage_node_mock.go
+
+$(SUBDIRS) :
 	$(MAKE) -C $@
 
-clean:
+clean :
 	for dir in $(SUBDIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
+	$(RM) proto/sequencer/sequencer.pb.go
+	$(RM) proto/storage_node/storage_node.pb.go
 
-.PHONY: clean subdirs $(SUBDIRS)
+.PHONY : all clean subdirs $(SUBDIRS) mockgen

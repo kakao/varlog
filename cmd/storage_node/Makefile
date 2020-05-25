@@ -1,0 +1,11 @@
+STORAGE_NODE_SRCS := $(shell find . -name '*.go')
+STORAGE_NODE_MAIN := main.go
+STORAGE_NODE_TARGET := $(BUILD_DIR)/storage_node
+
+$(STORAGE_NODE_TARGET): $(STORAGE_NODE_SRCS)
+	$(GO) build -o $(STORAGE_NODE_TARGET) $(STORAGE_NODE_MAIN)
+
+clean:
+	$(RM) $(STORAGE_NODE_TARGET)
+
+.PHONY: clean

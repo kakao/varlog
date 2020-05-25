@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package solar;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option go_package = "storage_node";
+
+enum StorageNodeAPI {
+        option (gogoproto.goproto_enum_prefix) = false;
+        READ = 0;
+        APPEND = 1;
+        FILL = 2;
+        TRIM = 3;
+        SEAL = 4;
+}
+
+message StorageNodeRequest {
+        StorageNodeAPI api = 1;
+        uint64 epoch = 2;
+        uint64 glsn = 3;
+        bytes data = 4;
+}
+
+message StorageNodeResponse {
+        enum ReturnCodeType {
+                option (gogoproto.goproto_enum_prefix) = false;
+                OK = 0;
+                UNWRITTEN = 1;
+                WRITTEN = 2;
+                SEALED = 3;
+                TRIMMED = 4;
+        }
+        StorageNodeAPI api = 1;
+        ReturnCodeType return_code = 2;
+        bytes data = 3;
+        uint64 maxLsn = 4;
+}
+
+service StorageNodeService {
+        rpc Call(StorageNodeRequest) returns (StorageNodeResponse) {}
+}
