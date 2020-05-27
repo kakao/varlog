@@ -5,8 +5,8 @@ import (
 	"net"
 	"runtime"
 
-	"github.daumkakao.com/solar/solar/internal/storage"
-	pb "github.daumkakao.com/solar/solar/proto/storage_node"
+	"github.daumkakao.com/solar/solar/internal/metadata_repository"
+	pb "github.daumkakao.com/solar/solar/proto/metadata_repository"
 	"google.golang.org/grpc"
 )
 
@@ -16,13 +16,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("could not listen: %v", err)
 	}
-	stg := storage.NewInMemoryStorage(1000)
-	service := storage.NewStorageNodeService(stg)
-	if err != nil {
-		log.Fatalf("could create storage node service: %v", err)
-	}
+	metaRepos := metadata_repository.NewInMemoryMetadataRepository()
+	service := metadata_repository.NewMetadataRepositoryService(metaRepos)
 	s := grpc.NewServer()
-	pb.RegisterStorageNodeServiceServer(s, service)
+	pb.RegisterMetadataRepositoryServiceServer(s, service)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("could not serve: %v", err)
 	}

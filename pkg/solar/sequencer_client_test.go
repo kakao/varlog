@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.daumkakao.com/wokl/solar/pkg/solar/mock"
-	"github.daumkakao.com/wokl/solar/proto/sequencer"
+	"github.daumkakao.com/solar/solar/pkg/solar/mock"
+	"github.daumkakao.com/solar/solar/proto/sequencer"
 )
 
 func TestNext(t *testing.T) {

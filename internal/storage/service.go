@@ -1,22 +1,27 @@
-package app
+package storage
 
 import (
 	"context"
 
-	"github.daumkakao.com/wokl/solar/internal/storage"
-	pb "github.daumkakao.com/wokl/solar/proto/storage_node"
+	"github.daumkakao.com/solar/solar/pkg/solar"
+	pb "github.daumkakao.com/solar/solar/proto/storage_node"
+	"google.golang.org/grpc"
 )
 
 type StorageNodeService struct {
 	pb.UnimplementedStorageNodeServiceServer
-	storage storage.Storage
+	storage Storage
 }
 
-func NewStorageNodeService() (*StorageNodeService, error) {
+func NewStorageNodeService(storage Storage) *StorageNodeService {
 	return &StorageNodeService{
-		storage: storage.NewInMemoryStorage(1000),
-	}, nil
+		storage: storage,
+	}
 
+}
+
+func (s *StorageNodeService) Register(server *grpc.Server) {
+	pb.RegisterStorageNodeServiceServer(server, s)
 }
 
 func (s *StorageNodeService) Call(ctx context.Context, req *pb.StorageNodeRequest) (*pb.StorageNodeResponse, error) {
@@ -57,13 +62,13 @@ func (s *StorageNodeService) setReturnCode(err error, rsp *pb.StorageNodeRespons
 	switch err {
 	case nil:
 		rsp.ReturnCode = pb.OK
-	case storage.StorageErrorWrittenLogEntry:
+	case solar.ErrWrittenLogEntry:
 		rsp.ReturnCode = pb.WRITTEN
-	case storage.StorageErrorTrimmedLogEntry:
+	case solar.ErrTrimmedLogEntry:
 		rsp.ReturnCode = pb.TRIMMED
-	case storage.StorageErrorUnwrittenLogEntry:
+	case solar.ErrUnwrittenLogEntry:
 		rsp.ReturnCode = pb.UNWRITTEN
-	case storage.StorageErrorSealedEpoch:
+	case solar.ErrSealedEpoch:
 		rsp.ReturnCode = pb.SEALED
 	}
 }

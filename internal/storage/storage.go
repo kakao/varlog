@@ -9,29 +9,3 @@ type Storage interface {
 	GetHighLSN(lsn *uint64) error
 	GetEpoch() uint64
 }
-
-type StorageError struct {
-	code string
-}
-
-func (e StorageError) Error() string {
-	return e.code
-}
-
-var (
-	StorageErrorUnwrittenLogEntry = StorageError{
-		code: "UnwrittenLogEntry",
-	}
-
-	StorageErrorWrittenLogEntry = StorageError{
-		code: "WrittenLogEntry",
-	}
-
-	StorageErrorSealedEpoch = StorageError{
-		code: "SealedEpoch",
-	}
-
-	StorageErrorTrimmedLogEntry = StorageError{
-		code: "TrimmedLogEntry",
-	}
-)

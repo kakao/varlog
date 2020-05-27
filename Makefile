@@ -8,14 +8,15 @@ GO := go
 LDFLAGS :=
 CFLAGS := -gcflags "-N -l"
 PROTOC := protoc
-PROTO_INCS := -I ${GOPATH}/src -I vendor -I .
+PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
 all : proto libsolar sequencer storage_node sequencer_client
 
+SOLAR_PROTO := proto/solar
 SEQUENCER_PROTO := proto/sequencer
 STORAGE_NODE_PROTO := proto/storage_node
 METADATA_REPOSITORY_PROTO := proto/metadata_repository
-PROTO := $(SEQUENCER_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO)
+PROTO := $(SOLAR_PROTO) $(SEQUENCER_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO)
 proto : $(PROTO)
 
 SEQUENCER := cmd/sequencer

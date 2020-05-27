@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package solar;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option go_package = "github.daumkakao.com/solar/solar/proto/solar";
+
+message ReplicaDescriptor {
+        uint64 min_lsn = 1;
+        uint64 max_lsn = 2;
+        repeated string storage_node_ids = 3;
+}
+
+message StorageNodeDescriptor {
+        string storage_node_id = 1;
+        string address = 2;
+}
+
+message SequencerDescriptor {
+        string address = 1;
+}
+
+message ProjectionDescriptor {
+        uint64 epoch = 1;
+        SequencerDescriptor sequencer = 2 [(gogoproto.nullable) = false];
+        repeated StorageNodeDescriptor storage_nodes = 3 [(gogoproto.nullable) = false];
+        repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = false];
+}

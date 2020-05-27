@@ -1,4 +1,6 @@
-SRC := sequencer.proto
+SRC := metadata.proto
+# TARGET_PATH := $(MAKEFILE_DIR)/pkg/solar
+# TARGET := $(TARGET_PATH)/$(SRC:.proto=.pb.go)
 TARGET := $(SRC:.proto=.pb.go)
 
 $(TARGET): $(SRC)

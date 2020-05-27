@@ -2,6 +2,8 @@ package storage
 
 import (
 	"sync"
+
+	"github.daumkakao.com/solar/solar/pkg/solar"
 )
 
 type memLogEntryStatus int
@@ -37,14 +39,14 @@ func NewInMemoryStorage(initalLogStreamSize int) *InMemoryStorage {
 
 func (s *InMemoryStorage) Read(epoch uint64, glsn uint64) ([]byte, error) {
 	if epoch != s.epoch {
-		return nil, StorageErrorSealedEpoch
+		return nil, solar.ErrSealedEpoch
 	}
 	return s.read(glsn)
 }
 
 func (s *InMemoryStorage) Append(epoch uint64, glsn uint64, data []byte) error {
 	if epoch != s.epoch {
-		return StorageErrorSealedEpoch
+		return solar.ErrSealedEpoch
 	}
 	logEntry := inMemoryLogEntry{
 		status: Written,
@@ -55,7 +57,7 @@ func (s *InMemoryStorage) Append(epoch uint64, glsn uint64, data []byte) error {
 
 func (s *InMemoryStorage) Fill(epoch uint64, glsn uint64) error {
 	if epoch != s.epoch {
-		return StorageErrorSealedEpoch
+		return solar.ErrSealedEpoch
 	}
 	logEntry := inMemoryLogEntry{
 		status: Junk,
@@ -65,10 +67,10 @@ func (s *InMemoryStorage) Fill(epoch uint64, glsn uint64) error {
 
 func (s *InMemoryStorage) Trim(epoch uint64, glsn uint64) error {
 	if epoch != s.epoch {
-		return StorageErrorSealedEpoch
+		return solar.ErrSealedEpoch
 	}
 	if !s.hasRoom(glsn) {
-		return StorageErrorUnwrittenLogEntry
+		return solar.ErrUnwrittenLogEntry
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -123,16 +125,16 @@ func (s *InMemoryStorage) expand(glsn uint64) {
 
 func (s *InMemoryStorage) read(glsn uint64) ([]byte, error) {
 	if !s.hasRoom(glsn) {
-		return nil, StorageErrorUnwrittenLogEntry
+		return nil, solar.ErrUnwrittenLogEntry
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	logEntry := s.logStream[glsn]
 	switch logEntry.status {
 	case Unwritten:
-		return nil, StorageErrorUnwrittenLogEntry
+		return nil, solar.ErrUnwrittenLogEntry
 	case Trimmed:
-		return nil, StorageErrorTrimmedLogEntry
+		return nil, solar.ErrTrimmedLogEntry
 	}
 	return logEntry.data, nil
 }
@@ -146,9 +148,9 @@ func (s *InMemoryStorage) write(glsn uint64, logEntry inMemoryLogEntry) error {
 	logEntryPosition := &s.logStream[glsn]
 	switch logEntryPosition.status {
 	case Written, Junk:
-		return StorageErrorWrittenLogEntry
+		return solar.ErrWrittenLogEntry
 	case Trimmed:
-		return StorageErrorTrimmedLogEntry
+		return solar.ErrTrimmedLogEntry
 	}
 	logEntryPosition.status = logEntry.status
 	logEntryPosition.data = logEntry.data
