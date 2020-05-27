@@ -1,5 +1,6 @@
 package solar
 
 type ReplicaSet struct {
-	logStreams []*LogStream
+	LogStream
+	StorageNodeAddresses []string
 }

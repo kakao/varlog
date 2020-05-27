@@ -4,7 +4,7 @@ package solar;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-option go_package = "storage_node";
+option go_package = "github.daumkakao.com/solar/solar/proto/storage_node";
 
 enum StorageNodeAPI {
         option (gogoproto.goproto_enum_prefix) = false;

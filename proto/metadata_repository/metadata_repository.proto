@@ -3,49 +3,28 @@ syntax = "proto3";
 package solar;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "solar/metadata.proto";
 
-option go_package = "metadata_repository";
-
-message LogStream {
-        int32 storage_node_id = 1;
-        uint64 min_lsn = 2;
-        uint64 max_lsn = 3;
-}
-
-message StorageNode {
-	int32 id = 1;
-	repeated LogStream log_streams = 2;
-	string address = 3;
-}
-
-message ReplicaSet {
-        repeated LogStream log_streams = 1;
-        uint64 min_lsn = 2;
-        uint64 max_lsn = 3;
-}
-
-message Projection {
-	repeated ReplicaSet layout = 1;
-	string sequencer_address = 2;
-	uint64 epoch = 3;
-}
+option go_package = "github.daumkakao.com/solar/solar/proto/metadata_repository";
 
 message ProposeRequest {
-        Projection projection = 1;
-        uint64 epoch = 2;
+        uint64 epoch = 1;
+        ProjectionDescriptor projection = 2;
 }
 
 message ProposeResponse {
+        uint64 epoch = 1;
+        ProjectionDescriptor projection = 2;
 }
 
-message RefreshRequest {
+message GetRequest {
 }
 
-message RefreshResponse {
-        Projection projection = 1;
+message GetResponse {
+        ProjectionDescriptor projection = 1;
 }
 
 service MetadataRepositoryService {
         rpc Propose(ProposeRequest) returns (ProposeResponse) {}
-        rpc Refresh(RefreshRequest) returns (RefreshResponse) {}
+        rpc Get(GetRequest) returns (GetResponse) {}
 }

@@ -1,8 +1,15 @@
 package solar
 
 type LogStream struct {
-	minLsn uint64
-	maxLsn uint64
-
-	storageNode *StorageNode
+	MinLsn uint64
+	MaxLsn uint64
 }
+
+/*
+func (ls *LogStream) Clone() *LogStream {
+	return &LogStream{
+		minLsn: ls.minLsn,
+		maxLsn: ls.maxLsn,
+	}
+}
+*/

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	libsolar "github.daumkakao.com/wokl/solar/pkg/libsolar"
+	libsolar "github.daumkakao.com/solar/solar/pkg/libsolar"
 )
 
 const (

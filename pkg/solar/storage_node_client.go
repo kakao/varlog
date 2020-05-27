@@ -3,7 +3,7 @@ package solar
 import (
 	"context"
 
-	pb "github.daumkakao.com/wokl/solar/proto/storage_node"
+	pb "github.daumkakao.com/solar/solar/proto/storage_node"
 )
 
 type StorageNodeClient interface {
@@ -12,11 +12,15 @@ type StorageNodeClient interface {
 	Append(ctx context.Context, epoch uint64, glsn uint64, data []byte) error
 	Fill(ctx context.Context, epoch uint64, glsn uint64) error
 	Trim(ctx context.Context, epoch uint64, glsn uint64) error
+	Seal(ctx context.Context, epoch uint64) (uint64, error)
 }
 
 type storageNodeClient struct {
 	rpcConn *rpcConn
-	client  pb.StorageNodeServiceClient
+
+	storageNodeID string
+	logStream     LogStream
+	client        pb.StorageNodeServiceClient
 }
 
 func NewStorageNodeClient(address string) (StorageNodeClient, error) {
@@ -81,4 +85,8 @@ func (c *storageNodeClient) Trim(ctx context.Context, epoch uint64, glsn uint64)
 	}
 	_, err := c.client.Call(ctx, req)
 	return err
+}
+
+func (c *storageNodeClient) Seal(ctx context.Context, epoch uint64) (uint64, error) {
+	panic("unimplemented")
 }

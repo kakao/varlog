@@ -1,8 +1,10 @@
 package metadata_repository
 
-import "github.daumkakao.com/wokl/solar/pkg/solar"
+import (
+	solarpb "github.daumkakao.com/solar/solar/proto/solar"
+)
 
 type MetadataRepository interface {
-	Propose(projection *solar.Projection) error
-	GetProjection() (*solar.Projection, error)
+	Propose(epoch uint64, projection *solarpb.ProjectionDescriptor) error
+	Get() (*solarpb.ProjectionDescriptor, error)
 }

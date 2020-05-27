@@ -1,4 +1,4 @@
-module github.daumkakao.com/wokl/solar
+module github.daumkakao.com/solar/solar
 
 go 1.14
 

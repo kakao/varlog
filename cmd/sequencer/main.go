@@ -5,8 +5,8 @@ import (
 	"net"
 	"runtime"
 
-	app "github.daumkakao.com/wokl/solar/cmd/sequencer/app"
-	pb "github.daumkakao.com/wokl/solar/proto/sequencer"
+	sequencer "github.daumkakao.com/solar/solar/internal/sequencer"
+	pb "github.daumkakao.com/solar/solar/proto/sequencer"
 	"google.golang.org/grpc"
 )
 
@@ -16,7 +16,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("could not listen: %v", err)
 	}
-	service, err := app.NewSequencerService()
+	sqr := sequencer.NewSequencer()
+	service := sequencer.NewSequencerService(sqr)
 	if err != nil {
 		log.Fatalf("could create sequencer service: %v", err)
 	}
