@@ -37,7 +37,6 @@
 *.cmake
 CMakeCache.txt
 CMakeFiles/
-build/
 cache.mk
 /cmake/build
 cmake-build-debug/

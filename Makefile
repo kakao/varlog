@@ -4,11 +4,22 @@ MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MAKEFILE_DIR := $(dir $(MAKEFILE_PATH))
 BUILD_DIR := $(MAKEFILE_DIR)/build
 
+GO_VERSION := 1.14.4
+GO_HOME := $(BUILD_DIR)/go
+
+PROTOBUF_VERSION := 3.12.2
+PROTOBUF_HOME := $(BUILD_DIR)/protobuf
+
 GO := go
 LDFLAGS :=
 CFLAGS := -gcflags "-N -l"
 PROTOC := protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
+
+GOPATH := $(shell $(GO) env GOPATH)
+ifeq ($(GOPATH), )
+	GOPATH := $(BUILD_DIR)/gopath
+endif
 
 all : proto libsolar sequencer storage_node sequencer_client
 
@@ -45,11 +56,24 @@ pkg/libsolar/mock/storage_node_mock.go : $(PROTO) proto/storage_node/storage_nod
 $(SUBDIRS) :
 	$(MAKE) -C $@
 
+test:
+	PATH=$$PATH:$(GO_HOME)/bin GOPATH=$(GOPATH) $(GO) test ./...
+
 clean :
 	for dir in $(SUBDIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
-	$(RM) proto/sequencer/sequencer.pb.go
-	$(RM) proto/storage_node/storage_node.pb.go
 
-.PHONY : all clean subdirs $(SUBDIRS) mockgen
+golang:
+	GO_VERSION=$(GO_VERSION) GO_HOME=$(GO_HOME) scripts/golang.sh
+
+protobuf:
+	PROTOBUF_VERSION=$(PROTOBUF_VERSION) PROTOBUF_HOME=$(PROTOBUF_HOME) scripts/protobuf.sh
+
+gogoproto:
+	PATH=$$PATH:$(GO_HOME)/bin GOPATH=$(GOPATH) $(GO) get github.com/gogo/protobuf/proto
+	PATH=$$PATH:$(GO_HOME)/bin GOPATH=$(GOPATH) $(GO) get github.com/gogo/protobuf/jsonpb
+	PATH=$$PATH:$(GO_HOME)/bin GOPATH=$(GOPATH) $(GO) get github.com/gogo/protobuf/protoc-gen-gogo
+	PATH=$$PATH:$(GO_HOME)/bin GOPATH=$(GOPATH) $(GO) get github.com/gogo/protobuf/gogoproto
+
+.PHONY : all clean subdirs $(SUBDIRS) mockgen golang protobuf gogoproto test
