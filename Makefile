@@ -5,7 +5,7 @@ MAKEFILE_DIR := $(dir $(MAKEFILE_PATH))
 BUILD_DIR := $(MAKEFILE_DIR)/build
 
 GO_VERSION := 1.14.4
-GO_HOME := $(BUILD_DIR)/go
+GO_HOME := $(HOME)/go
 
 PROTOBUF_VERSION := 3.12.2
 PROTOBUF_HOME := $(BUILD_DIR)/protobuf
@@ -18,7 +18,7 @@ PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendo
 
 GOPATH := $(shell $(GO) env GOPATH)
 ifeq ($(GOPATH), )
-	GOPATH := $(BUILD_DIR)/gopath
+	GOPATH := $(HOME)/gopath
 endif
 
 all : proto libvarlog sequencer storage_node sequencer_client
