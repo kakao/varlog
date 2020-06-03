@@ -9,10 +9,10 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 	"github.daumkakao.com/varlog/varlog/internal/sequencer"
 	"github.daumkakao.com/varlog/varlog/internal/storage"
-	"github.daumkakao.com/varlog/varlog/pkg/solar"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"google.golang.org/grpc"
 
-	solarpb "github.daumkakao.com/varlog/varlog/proto/solar"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 )
 
 func createServer() (net.Listener, *grpc.Server, error) {
@@ -32,16 +32,16 @@ func startServer(lis net.Listener, server *grpc.Server) {
 
 func createMetadataRepository(server *grpc.Server, addr string) {
 	metaRepos := metadata_repository.NewInMemoryMetadataRepository()
-	projection := &solarpb.ProjectionDescriptor{}
+	projection := &varlogpb.ProjectionDescriptor{}
 	projection.Epoch = 0
-	projection.Sequencer = solarpb.SequencerDescriptor{Address: addr}
-	projection.StorageNodes = []solarpb.StorageNodeDescriptor{
+	projection.Sequencer = varlogpb.SequencerDescriptor{Address: addr}
+	projection.StorageNodes = []varlogpb.StorageNodeDescriptor{
 		{
 			StorageNodeId: addr,
 			Address:       addr,
 		},
 	}
-	projection.Replicas = []solarpb.ReplicaDescriptor{
+	projection.Replicas = []varlogpb.ReplicaDescriptor{
 		{
 			MinLsn:         0,
 			MaxLsn:         math.MaxUint64,
@@ -84,10 +84,10 @@ func TestClient(t *testing.T) {
 	defer server.GracefulStop()
 
 	const msg = "hello"
-	opts := solar.Options{
+	opts := varlog.Options{
 		MetadataRepositoryAddress: address,
 	}
-	client, err := solar.Open("foo", opts)
+	client, err := varlog.Open("foo", opts)
 	if err != nil {
 		t.Errorf("uninitialied client: %v", err)
 	}
