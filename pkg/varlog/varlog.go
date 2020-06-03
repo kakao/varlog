@@ -1,11 +1,11 @@
-package solar
+package varlog
 
 import (
 	"context"
 	"errors"
 	"sort"
 
-	solarpb "github.daumkakao.com/solar/solar/proto/solar"
+	varlogpb "github.com/kakao/varlog/proto/varlog"
 )
 
 type Replica struct {
@@ -25,13 +25,13 @@ type Options struct {
 	MetadataRepositoryAddress string
 }
 
-// Solar is a log interface with thread-safety. Many goroutines can share the same solar object.
+// Solar is a log interface with thread-safety. Many goroutines can share the same varlog object.
 type Solar interface {
 	Read(glsn uint64) ([]byte, error)
 	Append(data []byte) (uint64, error)
 }
 
-type solar struct {
+type varlog struct {
 	logID           string
 	epoch           uint64
 	metaReposClient MetadataRepositoryClient
@@ -46,28 +46,28 @@ func Open(logID string, opts Options) (Solar, error) {
 	if err != nil {
 		return nil, err
 	}
-	solar := &solar{
+	varlog := &varlog{
 		logID:           logID,
 		epoch:           0,
 		metaReposClient: metaReposClient,
 	}
 
-	newPrj, err := solar.fetchProjection()
+	newPrj, err := varlog.fetchProjection()
 	if err != nil {
 		return nil, err
 	}
 
-	err = solar.applyProjection(newPrj)
+	err = varlog.applyProjection(newPrj)
 	if err != nil {
 		return nil, err
 	}
 
-	solar.replicas = solar.createReplicas(newPrj.GetReplicas())
+	varlog.replicas = varlog.createReplicas(newPrj.GetReplicas())
 
-	return solar, nil
+	return varlog, nil
 }
 
-func (s *solar) Read(glsn uint64) ([]byte, error) {
+func (s *varlog) Read(glsn uint64) ([]byte, error) {
 	replica, err := s.getReplica(glsn)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (s *solar) Read(glsn uint64) ([]byte, error) {
 	return snClient.Read(context.Background(), s.epoch, glsn)
 }
 
-func (s *solar) Append(data []byte) (uint64, error) {
+func (s *varlog) Append(data []byte) (uint64, error) {
 	glsn, err := s.sqrClient.Next(context.Background())
 	if err != nil {
 		return 0, err
@@ -96,15 +96,15 @@ func (s *solar) Append(data []byte) (uint64, error) {
 	return glsn, nil
 }
 
-func (s *solar) Fill(glsn uint64) error {
+func (s *varlog) Fill(glsn uint64) error {
 	panic("not implemented")
 }
 
-func (s *solar) Trim(glsn uint64) error {
+func (s *varlog) Trim(glsn uint64) error {
 	panic("not implemented")
 }
 
-func (s *solar) fetchProjection() (*solarpb.ProjectionDescriptor, error) {
+func (s *varlog) fetchProjection() (*varlogpb.ProjectionDescriptor, error) {
 	ctx := context.Background()
 	prj, err := s.metaReposClient.Get(ctx)
 	if err != nil {
@@ -114,7 +114,7 @@ func (s *solar) fetchProjection() (*solarpb.ProjectionDescriptor, error) {
 }
 
 // FIXME: it should be more precise method
-func (s *solar) applyProjection(newPrj *solarpb.ProjectionDescriptor) error {
+func (s *varlog) applyProjection(newPrj *varlogpb.ProjectionDescriptor) error {
 	if newPrj == nil {
 		return ErrInvalidProjection
 	}
@@ -178,7 +178,7 @@ func (s *solar) applyProjection(newPrj *solarpb.ProjectionDescriptor) error {
 	return nil
 }
 
-func (s *solar) createReplicas(replicas []solarpb.ReplicaDescriptor) []Replica {
+func (s *varlog) createReplicas(replicas []varlogpb.ReplicaDescriptor) []Replica {
 	r := make([]Replica, len(replicas))
 	for i, replica := range replicas {
 		r[i].MinLsn = replica.GetMinLsn()
@@ -190,7 +190,7 @@ func (s *solar) createReplicas(replicas []solarpb.ReplicaDescriptor) []Replica {
 	return r
 }
 
-func (s *solar) getReplica(glsn uint64) (Replica, error) {
+func (s *varlog) getReplica(glsn uint64) (Replica, error) {
 	lenReplicas := len(s.replicas)
 	idx := sort.Search(lenReplicas, func(i int) bool {
 		return s.replicas[i].MinLsn <= glsn

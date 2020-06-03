@@ -7,7 +7,7 @@ package mock
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	sequencer "github.daumkakao.com/solar/solar/proto/sequencer"
+	sequencer "github.com/kakao/varlog/proto/sequencer"
 	grpc "google.golang.org/grpc"
 	reflect "reflect"
 )

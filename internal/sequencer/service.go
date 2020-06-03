@@ -3,7 +3,7 @@ package sequencer
 import (
 	"context"
 
-	pb "github.daumkakao.com/solar/solar/proto/sequencer"
+	pb "github.com/kakao/varlog/proto/sequencer"
 	"google.golang.org/grpc"
 )
 

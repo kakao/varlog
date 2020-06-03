@@ -1,4 +1,4 @@
-package solar
+package varlog
 
 import "errors"
 

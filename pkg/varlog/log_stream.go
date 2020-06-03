@@ -1,4 +1,4 @@
-package solar
+package varlog
 
 type LogStream struct {
 	MinLsn uint64

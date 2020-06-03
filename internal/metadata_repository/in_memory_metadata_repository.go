@@ -3,12 +3,12 @@ package metadata_repository
 import (
 	"sync"
 
-	"github.daumkakao.com/solar/solar/pkg/solar"
-	solarpb "github.daumkakao.com/solar/solar/proto/solar"
+	"github.com/kakao/varlog/pkg/varlog"
+	varlogpb "github.com/kakao/varlog/proto/varlog"
 )
 
 type InMemoryMetadataRepository struct {
-	solarpb.ProjectionDescriptor
+	varlogpb.ProjectionDescriptor
 	mu sync.RWMutex
 }
 
@@ -18,17 +18,17 @@ func NewInMemoryMetadataRepository() *InMemoryMetadataRepository {
 	return r
 }
 
-func (r *InMemoryMetadataRepository) Propose(epoch uint64, projection *solarpb.ProjectionDescriptor) error {
+func (r *InMemoryMetadataRepository) Propose(epoch uint64, projection *varlogpb.ProjectionDescriptor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if epoch < r.Epoch {
-		return solar.ErrSealedEpoch
+		return varlog.ErrSealedEpoch
 	}
 	r.ProjectionDescriptor = *projection
 	return nil
 }
 
-func (r *InMemoryMetadataRepository) Get() (*solarpb.ProjectionDescriptor, error) {
+func (r *InMemoryMetadataRepository) Get() (*varlogpb.ProjectionDescriptor, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return &r.ProjectionDescriptor, nil

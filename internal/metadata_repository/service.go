@@ -3,7 +3,7 @@ package metadata_repository
 import (
 	"context"
 
-	pb "github.daumkakao.com/solar/solar/proto/metadata_repository"
+	pb "github.com/kakao/varlog/proto/metadata_repository"
 	"google.golang.org/grpc"
 )
 
@@ -25,7 +25,7 @@ func (s *MetadataRepositoryService) Register(server *grpc.Server) {
 func (s *MetadataRepositoryService) Propose(ctx context.Context, req *pb.ProposeRequest) (*pb.ProposeResponse, error) {
 	/*
 		clientEpoch := req.GetEpoch()
-		proposedProjection := solar.Projection{
+		proposedProjection := varlog.Projection{
 			Epoch: req.GetProjection().GetEpoch(),
 		}
 		s.metaRepos.Propose(req.GetEpoch(), req.GetProjection())

@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package solar;
+package varlog;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-import "solar/metadata.proto";
+import "varlog/metadata.proto";
 
-option go_package = "github.daumkakao.com/solar/solar/proto/metadata_repository";
+option go_package = "github.com/kakao/varlog/proto/metadata_repository";
 
 message ProposeRequest {
         uint64 epoch = 1;

@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 
-	"github.daumkakao.com/solar/solar/pkg/solar"
-	pb "github.daumkakao.com/solar/solar/proto/storage_node"
+	"github.com/kakao/varlog/pkg/varlog"
+	pb "github.com/kakao/varlog/proto/storage_node"
 	"google.golang.org/grpc"
 )
 
@@ -62,13 +62,13 @@ func (s *StorageNodeService) setReturnCode(err error, rsp *pb.StorageNodeRespons
 	switch err {
 	case nil:
 		rsp.ReturnCode = pb.OK
-	case solar.ErrWrittenLogEntry:
+	case varlog.ErrWrittenLogEntry:
 		rsp.ReturnCode = pb.WRITTEN
-	case solar.ErrTrimmedLogEntry:
+	case varlog.ErrTrimmedLogEntry:
 		rsp.ReturnCode = pb.TRIMMED
-	case solar.ErrUnwrittenLogEntry:
+	case varlog.ErrUnwrittenLogEntry:
 		rsp.ReturnCode = pb.UNWRITTEN
-	case solar.ErrSealedEpoch:
+	case varlog.ErrSealedEpoch:
 		rsp.ReturnCode = pb.SEALED
 	}
 }

@@ -1,10 +1,10 @@
 package metadata_repository
 
 import (
-	solarpb "github.daumkakao.com/solar/solar/proto/solar"
+	varlogpb "github.com/kakao/varlog/proto/varlog"
 )
 
 type MetadataRepository interface {
-	Propose(epoch uint64, projection *solarpb.ProjectionDescriptor) error
-	Get() (*solarpb.ProjectionDescriptor, error)
+	Propose(epoch uint64, projection *varlogpb.ProjectionDescriptor) error
+	Get() (*varlogpb.ProjectionDescriptor, error)
 }

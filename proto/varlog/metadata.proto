@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package solar;
+package varlog;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-option go_package = "github.daumkakao.com/solar/solar/proto/solar";
+option go_package = "github.com/kakao/varlog/proto/varlog";
 
 message ReplicaDescriptor {
         uint64 min_lsn = 1;

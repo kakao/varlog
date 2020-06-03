@@ -1,15 +1,15 @@
-package solar
+package varlog
 
 import (
 	"context"
 
-	pb "github.daumkakao.com/solar/solar/proto/metadata_repository"
-	solarpb "github.daumkakao.com/solar/solar/proto/solar"
+	pb "github.com/kakao/varlog/proto/metadata_repository"
+	varlogpb "github.com/kakao/varlog/proto/varlog"
 )
 
 type MetadataRepositoryClient interface {
 	Propose(context.Context) error
-	Get(context.Context) (*solarpb.ProjectionDescriptor, error)
+	Get(context.Context) (*varlogpb.ProjectionDescriptor, error)
 }
 
 type metadataRepositoryClient struct {
@@ -45,7 +45,7 @@ func (c *metadataRepositoryClient) Propose(ctx context.Context) error {
 	return nil
 }
 
-func (c *metadataRepositoryClient) Get(ctx context.Context) (*solarpb.ProjectionDescriptor, error) {
+func (c *metadataRepositoryClient) Get(ctx context.Context) (*varlogpb.ProjectionDescriptor, error) {
 	rsp, err := c.client.Get(ctx, &pb.GetRequest{})
 	if err != nil {
 		return nil, err

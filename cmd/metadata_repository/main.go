@@ -5,8 +5,8 @@ import (
 	"net"
 	"runtime"
 
-	"github.daumkakao.com/solar/solar/internal/metadata_repository"
-	pb "github.daumkakao.com/solar/solar/proto/metadata_repository"
+	"github.com/kakao/varlog/internal/metadata_repository"
+	pb "github.com/kakao/varlog/proto/metadata_repository"
 	"google.golang.org/grpc"
 )
 

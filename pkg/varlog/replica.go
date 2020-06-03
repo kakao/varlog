@@ -1,4 +1,4 @@
-package solar
+package varlog
 
 type ReplicaSet struct {
 	LogStream
