@@ -1,9 +1,9 @@
-package solar
+package varlog
 
 import (
 	"context"
 
-	pb "github.daumkakao.com/solar/solar/proto/storage_node"
+	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 )
 
 type StorageNodeClient interface {

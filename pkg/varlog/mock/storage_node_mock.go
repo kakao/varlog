@@ -7,7 +7,7 @@ package mock
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	storage_node "github.daumkakao.com/solar/solar/proto/storage_node"
+	storage_node "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	grpc "google.golang.org/grpc"
 	reflect "reflect"
 )

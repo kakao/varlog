@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	libsolar "github.daumkakao.com/solar/solar/pkg/libsolar"
+	libvarlog "github.daumkakao.com/varlog/varlog/pkg/libvarlog"
 )
 
 const (
@@ -21,7 +21,7 @@ type report struct {
 	numRecv int
 }
 
-func do_next(conn *libsolar.SequencerConnection) {
+func do_next(conn *libvarlog.SequencerConnection) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
 

@@ -5,8 +5,8 @@ import (
 	"net"
 	"runtime"
 
-	"github.daumkakao.com/solar/solar/internal/storage"
-	pb "github.daumkakao.com/solar/solar/proto/storage_node"
+	"github.daumkakao.com/varlog/varlog/internal/storage"
+	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	"google.golang.org/grpc"
 )
 

@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package solar;
+package varlog;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-option go_package = "github.daumkakao.com/solar/solar/proto/sequencer";
+option go_package = "github.daumkakao.com/varlog/varlog/proto/sequencer";
 
 message SequencerRequest {
         uint64 epoch = 1;

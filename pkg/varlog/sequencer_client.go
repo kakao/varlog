@@ -1,9 +1,9 @@
-package solar
+package varlog
 
 import (
 	"context"
 
-	pb "github.daumkakao.com/solar/solar/proto/sequencer"
+	pb "github.daumkakao.com/varlog/varlog/proto/sequencer"
 )
 
 type SequencerClient interface {

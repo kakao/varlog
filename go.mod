@@ -1,4 +1,4 @@
-module github.daumkakao.com/solar/solar
+module github.daumkakao.com/varlog/varlog
 
 go 1.14
 

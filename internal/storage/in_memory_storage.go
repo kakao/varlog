@@ -3,7 +3,7 @@ package storage
 import (
 	"sync"
 
-	"github.daumkakao.com/solar/solar/pkg/solar"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 )
 
 type memLogEntryStatus int
@@ -39,14 +39,14 @@ func NewInMemoryStorage(initalLogStreamSize int) *InMemoryStorage {
 
 func (s *InMemoryStorage) Read(epoch uint64, glsn uint64) ([]byte, error) {
 	if epoch != s.epoch {
-		return nil, solar.ErrSealedEpoch
+		return nil, varlog.ErrSealedEpoch
 	}
 	return s.read(glsn)
 }
 
 func (s *InMemoryStorage) Append(epoch uint64, glsn uint64, data []byte) error {
 	if epoch != s.epoch {
-		return solar.ErrSealedEpoch
+		return varlog.ErrSealedEpoch
 	}
 	logEntry := inMemoryLogEntry{
 		status: Written,
@@ -57,7 +57,7 @@ func (s *InMemoryStorage) Append(epoch uint64, glsn uint64, data []byte) error {
 
 func (s *InMemoryStorage) Fill(epoch uint64, glsn uint64) error {
 	if epoch != s.epoch {
-		return solar.ErrSealedEpoch
+		return varlog.ErrSealedEpoch
 	}
 	logEntry := inMemoryLogEntry{
 		status: Junk,
@@ -67,10 +67,10 @@ func (s *InMemoryStorage) Fill(epoch uint64, glsn uint64) error {
 
 func (s *InMemoryStorage) Trim(epoch uint64, glsn uint64) error {
 	if epoch != s.epoch {
-		return solar.ErrSealedEpoch
+		return varlog.ErrSealedEpoch
 	}
 	if !s.hasRoom(glsn) {
-		return solar.ErrUnwrittenLogEntry
+		return varlog.ErrUnwrittenLogEntry
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -125,16 +125,16 @@ func (s *InMemoryStorage) expand(glsn uint64) {
 
 func (s *InMemoryStorage) read(glsn uint64) ([]byte, error) {
 	if !s.hasRoom(glsn) {
-		return nil, solar.ErrUnwrittenLogEntry
+		return nil, varlog.ErrUnwrittenLogEntry
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	logEntry := s.logStream[glsn]
 	switch logEntry.status {
 	case Unwritten:
-		return nil, solar.ErrUnwrittenLogEntry
+		return nil, varlog.ErrUnwrittenLogEntry
 	case Trimmed:
-		return nil, solar.ErrTrimmedLogEntry
+		return nil, varlog.ErrTrimmedLogEntry
 	}
 	return logEntry.data, nil
 }
@@ -148,9 +148,9 @@ func (s *InMemoryStorage) write(glsn uint64, logEntry inMemoryLogEntry) error {
 	logEntryPosition := &s.logStream[glsn]
 	switch logEntryPosition.status {
 	case Written, Junk:
-		return solar.ErrWrittenLogEntry
+		return varlog.ErrWrittenLogEntry
 	case Trimmed:
-		return solar.ErrTrimmedLogEntry
+		return varlog.ErrTrimmedLogEntry
 	}
 	logEntryPosition.status = logEntry.status
 	logEntryPosition.data = logEntry.data

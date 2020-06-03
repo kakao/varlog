@@ -5,8 +5,8 @@ import (
 	"net"
 	"runtime"
 
-	sequencer "github.daumkakao.com/solar/solar/internal/sequencer"
-	pb "github.daumkakao.com/solar/solar/proto/sequencer"
+	sequencer "github.daumkakao.com/varlog/varlog/internal/sequencer"
+	pb "github.daumkakao.com/varlog/varlog/proto/sequencer"
 	"google.golang.org/grpc"
 )
 

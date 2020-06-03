@@ -1,12 +1,12 @@
-package solar
+package varlog
 
 import (
 	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.daumkakao.com/solar/solar/pkg/solar/mock"
-	"github.daumkakao.com/solar/solar/proto/sequencer"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/mock"
+	"github.daumkakao.com/varlog/varlog/proto/sequencer"
 )
 
 func TestNext(t *testing.T) {

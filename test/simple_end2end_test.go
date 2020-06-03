@@ -6,13 +6,13 @@ import (
 	"net"
 	"testing"
 
-	"github.daumkakao.com/solar/solar/internal/metadata_repository"
-	"github.daumkakao.com/solar/solar/internal/sequencer"
-	"github.daumkakao.com/solar/solar/internal/storage"
-	"github.daumkakao.com/solar/solar/pkg/solar"
+	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
+	"github.daumkakao.com/varlog/varlog/internal/sequencer"
+	"github.daumkakao.com/varlog/varlog/internal/storage"
+	"github.daumkakao.com/varlog/varlog/pkg/solar"
 	"google.golang.org/grpc"
 
-	solarpb "github.daumkakao.com/solar/solar/proto/solar"
+	solarpb "github.daumkakao.com/varlog/varlog/proto/solar"
 )
 
 func createServer() (net.Listener, *grpc.Server, error) {
