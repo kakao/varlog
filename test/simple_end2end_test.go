@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"net"
@@ -75,7 +76,9 @@ func TestClient(t *testing.T) {
 	if err != nil {
 		t.Errorf("server error: %v", err)
 	}
-	address := lis.Addr().String()
+	addr := lis.Addr()
+	tcpAddr := addr.(*net.TCPAddr)
+	address := fmt.Sprintf("localhost:%d", tcpAddr.Port)
 	t.Logf("address: %v", address)
 	createSequencer(server)
 	createStorageNode(server)
