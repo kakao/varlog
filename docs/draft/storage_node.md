@@ -5,7 +5,8 @@
 - Replica의 수는 3개이며, Storage Node 2개가 Fail될때까지 Availability를 유지할
 수 있다.
 
-## Append
+## Basic APIs
+### Append
 Client는 Log Entry를 Append하기 위해서 Sequencer에게 GLSN을 발급받는다. GLSN은
 Log Entry가 쓰여질 위치이다. 해당 GLSN이 쓰여져야할 Log Stream의 Replica정보는
 Client 로컬 Projection 정보를 통해 알아내고, Chain Replication 순서대로 Storage
@@ -29,7 +30,7 @@ Node들에 write 요청을 한다.
 
 Write가 성공하는 경우 4RTTs RPC가 발생한다.
 
-## Read
+### Read
 Client가 특정 로그 읽기 위해서 먼저 해당 GLSN을 갖고 있는 Log Stream의
 Replica들을 알아야한다. 이는 로컬에 저장된 Projection을 통해서 알수 있다. Chain
 Replication의 Tail (아래 그림에서는 SN3)에게 읽기 요청을 한다.
@@ -48,11 +49,24 @@ Replication의 Tail (아래 그림에서는 SN3)에게 읽기 요청을 한다.
 
 Read가 성공하는 경우 1RTT RPC가 발생한다.
 
-## Failures
+### Fill
+### Trim
+### Seal
+### Subscribe
+
+## Fault-tolerance
 
 ### Append failure
+CL이 append를 시도하지만 SN에 장애가 발생하여 실패할 수 있다. CR (Chain
+Replication)의 경우, chain의 head와 tail은 중요한 역할을 한다. Log Entry를
+append하려면 head에 가장 먼저 write RPC를 시도한다. Chain을 구성하는 모든 SN에게
+write RPC를 성공하고 tail 까지 write를 성공했다면, Log Entry는 완전히 쓰여진
+것이다. 그러므로 read RPC는 tail SN에게만 시도한다.  
+CR에서 head와 tail은 중요한 역할을 하므로, SN의 장애 상황은 head와 tail의 장애로
+나누어 살펴본다. Chain에서 head와 tail이 아닌 SN의 failure는 두가지 상황과
+유사하게 대처한다.
 
-#### Chain의 Head가 Fail한 경우
+#### Failure of the head of a chain
 
     +--------+   +--------+   +--------+   +--------+   +--------+   +--------+
     |   CL   |   |   SQ   |   |  SN1   |   |  SN2   |   |  SN3   |   |   MR   |
@@ -134,7 +148,7 @@ reconfiguration을 시도하고, 해당 Log Stream에 대한 Storage Node가 SN3
 있다.
 - 읽기 요청은 안정적으로 받을 수 있다.
 
-### Chain Tail이 Fail한 경우
+#### Failure of the tail of a chain
 Chain의 tail은 append에서 가장 마지막에 쓰여지는 노드이다. 즉, tail에 쓰여진
 로그 엔트리는 commit된 것이며, replication이 완료된 데이터이다. 그러므로 CL이
 read할때 tail 노드만 읽기를 한다. append 과정에서 tail에 해당하는 Storage Node가
@@ -172,5 +186,10 @@ fail된 경우, reconfiguration을 하고 실패한 write를 이어서 진행한
     +--------+   +--------+   +--------+   +--------+   +--------+   +--------+
     |   CL   |   |   SQ   |   |  SN1   |   |  SN2   |   |  SN3   |   |   MR   |
     +--------+   +--------+   +--------+   +--------+   +--------+   +--------+
+
+#### Failure of a CL
+CL이 append 중에 장애가 발생할 수 있다. SQ로부터 GLSN을 받아서 SN에 전혀
+write하지 못한 경우와 그렇지 않은 경우를 나누어 살펴보겠다.
+
 
 
