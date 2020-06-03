@@ -30,5 +30,11 @@ pipeline {
       }
     }
 
+    stage('test') {
+      steps {
+        sh 'make test'
+      }
+    }
+
   }
 }
