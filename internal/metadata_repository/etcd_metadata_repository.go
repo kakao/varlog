@@ -26,20 +26,6 @@ func NewEtcdMetadataRepository() *EtcdMetadataRepository {
 		return nil
 	}
 
-	kvc := etcdcli.NewKV(cli)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	_, err = kvc.Txn(ctx).
-		If(etcdcli.Compare(etcdcli.CreateRevision("epoch"), "=", 0)).
-		Then(etcdcli.OpPut("epoch", "0")).
-		Commit()
-	cancel()
-
-	//log.Printf("%+v\n", t)
-	if err != nil {
-		log.Println(err)
-		return nil
-	}
-
 	r := &EtcdMetadataRepository{cli: cli}
 	return r
 }
@@ -92,7 +78,7 @@ func (r *EtcdMetadataRepository) Get(epoch uint64) (*varlogpb.ProjectionDescript
 
 func (r *EtcdMetadataRepository) Clear() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	r.cli.Delete(ctx, "epoch")
+	r.cli.Put(ctx, "epoch", "0")
 	r.cli.Delete(ctx, "projection-", etcdcli.WithPrefix())
 	cancel()
 }

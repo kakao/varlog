@@ -78,8 +78,6 @@ func makeDummyProjection(epoch uint64) *varlogpb.ProjectionDescriptor {
 }
 
 func TestEtcdMetadataRepositoryPropose(t *testing.T) {
-	t.Skip()
-
 	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
 	p, err := startProcess(etcd, "--force-new-cluster=true")
 	if err != nil {
@@ -101,7 +99,7 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 
 	dur := time.Now()
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 5; i++ {
 		wg.Add(1)
 
 		go func() {
@@ -109,7 +107,7 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 
 			metaRepos := metadata_repository.NewEtcdMetadataRepository()
 
-			for epoch := uint64(0); epoch < uint64(100); epoch++ {
+			for epoch := uint64(0); epoch < uint64(10); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
 				err := metaRepos.Propose(epoch, projection)
 				if err != nil {
@@ -174,7 +172,7 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 
 	dur := time.Now()
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 5; i++ {
 		wg.Add(1)
 
 		go func() {
@@ -185,7 +183,7 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 				t.Errorf("uninitialied client: %v", err)
 			}
 
-			for epoch := uint64(0); epoch < uint64(100); epoch++ {
+			for epoch := uint64(0); epoch < uint64(10); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
 				err = metaRepoClient.Propose(context.Background(), epoch, projection)
 				if err != nil {
