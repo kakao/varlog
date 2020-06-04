@@ -81,7 +81,7 @@ func makeDummyProjection(epoch uint64) *varlogpb.ProjectionDescriptor {
 	return projection
 }
 
-func proposeByClientDirect(t *testing.T) {
+func testProposeByClientDirect(t *testing.T) {
 	metaRepos := metadata_repository.NewEtcdMetadataRepository()
 	if metaRepos == nil {
 		t.Fatal()
@@ -131,7 +131,7 @@ func proposeByClientDirect(t *testing.T) {
 	t.Logf("dur %v\n", time.Now().Sub(dur))
 }
 
-func proposeUsingProxy(t *testing.T) {
+func testProposeUsingProxy(t *testing.T) {
 	/* make repository */
 	metaRepos := metadata_repository.NewEtcdProxyMetadataRepository()
 	if metaRepos == nil {
@@ -211,6 +211,6 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	proposeByClientDirect(t)
-	proposeUsingProxy(t)
+	testProposeByClientDirect(t)
+	//testProposeUsingProxy(t)
 }
