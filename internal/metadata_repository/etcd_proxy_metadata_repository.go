@@ -188,6 +188,4 @@ func (r *EtcdProxyMetadataRepository) Clear() {
 
 	r.epoch = 0
 	r.projections = make(map[uint64]*varlogpb.ProjectionDescriptor)
-
-	log.Printf("etcd clear. epoch:0\n")
 }
