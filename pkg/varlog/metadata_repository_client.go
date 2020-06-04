@@ -10,6 +10,7 @@ import (
 type MetadataRepositoryClient interface {
 	Propose(context.Context, uint64, *varlogpb.ProjectionDescriptor) error
 	Get(context.Context, uint64) (*varlogpb.ProjectionDescriptor, error)
+	Close() error
 }
 
 type metadataRepositoryClient struct {
