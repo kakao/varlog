@@ -21,8 +21,7 @@ import (
 func startProcess(args ...string) (p *os.Process, err error) {
 	if args[0], err = exec.LookPath(args[0]); err == nil {
 		var procAttr os.ProcAttr
-		//procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
-		procAttr.Files = []*os.File{}
+		procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
 
 		log.Printf("start process %s\n", args[0])
 		p, err := os.StartProcess(args[0], args, &procAttr)
@@ -76,13 +75,13 @@ func makeDummyProjection(epoch uint64) *varlogpb.ProjectionDescriptor {
 
 func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
-	p, err := startProcess(etcd)
+	p, err := startProcess(etcd, "--force-new-cluster=true")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer p.Kill()
 
-	err = connectCheck("localhost", "2379", 30*time.Second)
+	err = connectCheck("localhost", "2379", 10*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,13 +134,13 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 
 func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
-	p, err := startProcess(etcd)
+	p, err := startProcess(etcd, "--force-new-cluster=true")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer p.Kill()
 
-	err = connectCheck("localhost", "2379", 30*time.Second)
+	err = connectCheck("localhost", "2379", 10*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
