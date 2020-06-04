@@ -60,7 +60,7 @@ $(SUBDIRS) :
 	$(MAKE) -C $@
 
 test:
-	PATH=$$PATH:$(GO_HOME)/bin GOPATH=$(GOPATH) $(GO) test -v ./...
+	PATH=$$PATH:$(GO_HOME)/bin GOPATH=$(GOPATH) $(GO) test -v -count=1 ./...
 
 clean :
 	for dir in $(SUBDIRS); do \
