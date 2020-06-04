@@ -151,12 +151,10 @@ func testProposeUsingProxy(t *testing.T) {
 	service.Register(server)
 
 	go startServer(lis, server)
-	/*
-		defer func() {
-			server.GracefulStop()
-			t.Log("server closed\n")
-		}()
-	*/
+	defer func() {
+		server.GracefulStop()
+		t.Log("server closed\n")
+	}()
 
 	dur := time.Now()
 	var wg sync.WaitGroup
@@ -171,6 +169,8 @@ func testProposeUsingProxy(t *testing.T) {
 				t.Errorf("uninitialied client: %v", err)
 			}
 			defer metaRepoClient.Close()
+
+			return
 
 			for epoch := uint64(0); epoch < uint64(50); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
