@@ -146,6 +146,7 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 }
 
 func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
+	t.Skip()
 	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
 	p, err := startProcess(etcd, "--force-new-cluster=true")
 	if err != nil {
