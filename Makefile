@@ -21,7 +21,7 @@ ifeq ($(GOPATH), )
 	GOPATH := $(HOME)/gopath
 endif
 
-all : proto libvarlog sequencer storage_node sequencer_client
+all : proto libvarlog sequencer storage_node sequencer_client metadata_repository
 
 SOLAR_PROTO := proto/varlog
 SEQUENCER_PROTO := proto/sequencer
@@ -42,7 +42,10 @@ libvarlog : $(SEQUENCER_PROTO) $(LIBVARLOG)
 SEQUENCER_CLIENT := cmd/sequencer_client
 sequencer_client : $(SEQUENCER_PROTO) $(SEQUENCER_CLIENT)
 
-SUBDIRS := $(PROTO) $(SEQUENCER) $(STORAGE_NODE) $(LIBVARLOG) $(SEQUENCER_CLIENT)
+METADATA_REPOSITORY := cmd/metadata_repository
+metadata_repository : $(METADATA_REPOSITORY_PROTO) $(METADATA_REPOSITORY)
+
+SUBDIRS := $(PROTO) $(SEQUENCER) $(STORAGE_NODE) $(LIBSOLAR) $(SEQUENCER_CLIENT) $(METADATA_REPOSITORY)
 subdirs : $(SUBDIRS)
 
 mockgen : pkg/libvarlog/mock/sequencer_mock.go pkg/libvarlog/mock/storage_node_mock.go
