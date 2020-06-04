@@ -211,6 +211,6 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testProposeByClientDirect(t)
-	//testProposeUsingProxy(t)
+	//testProposeByClientDirect(t)
+	testProposeUsingProxy(t)
 }
