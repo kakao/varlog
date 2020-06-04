@@ -21,8 +21,8 @@ import (
 func startProcess(args ...string) (p *os.Process, err error) {
 	if args[0], err = exec.LookPath(args[0]); err == nil {
 		var procAttr os.ProcAttr
-		//procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
-		procAttr.Files = []*os.File{}
+		procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
+		//procAttr.Files = []*os.File{}
 
 		log.Printf("start process %s\n", args[0])
 		p, err := os.StartProcess(args[0], args, &procAttr)
@@ -82,7 +82,7 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 	}
 	defer p.Kill()
 
-	err = connectCheck("localhost", "2379", 10*time.Second)
+	err = connectCheck("localhost", "2379", 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
