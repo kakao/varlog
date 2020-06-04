@@ -99,7 +99,7 @@ func proposeByClientDirect(t *testing.T) {
 
 			metaRepos := metadata_repository.NewEtcdMetadataRepository()
 
-			for epoch := uint64(0); epoch < uint64(100); epoch++ {
+			for epoch := uint64(0); epoch < uint64(50); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
 				err := metaRepos.Propose(epoch, projection)
 				if err != nil {
@@ -166,7 +166,7 @@ func proposeUsingProxy(t *testing.T) {
 				t.Errorf("uninitialied client: %v", err)
 			}
 
-			for epoch := uint64(0); epoch < uint64(100); epoch++ {
+			for epoch := uint64(0); epoch < uint64(50); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
 				err = metaRepoClient.Propose(context.Background(), epoch, projection)
 				if err != nil {
@@ -199,7 +199,12 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer p.Kill()
+	defer func() {
+		err := p.Kill()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	err = connectCheck("localhost", "2379", 10*time.Second)
 	if err != nil {
@@ -208,5 +213,4 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 
 	proposeByClientDirect(t)
 	proposeUsingProxy(t)
-
 }
