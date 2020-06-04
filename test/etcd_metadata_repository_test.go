@@ -26,7 +26,8 @@ func startProcess(args ...string) (p *os.Process, err error) {
 	for i := 0; i < 5; i++ {
 		if args[0], err = exec.LookPath(args[0]); err == nil {
 			var procAttr os.ProcAttr
-			procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
+			//procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
+			procAttr.Files = []*os.File{}
 
 			log.Printf("start process %v\n", args)
 			p, err := os.StartProcess(args[0], args, &procAttr)
@@ -91,7 +92,7 @@ func testProposeByClientDirect(t *testing.T) {
 
 	dur := time.Now()
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 100; i++ {
 		wg.Add(1)
 
 		go func() {
@@ -99,7 +100,7 @@ func testProposeByClientDirect(t *testing.T) {
 
 			metaRepos := metadata_repository.NewEtcdMetadataRepository()
 
-			for epoch := uint64(0); epoch < uint64(50); epoch++ {
+			for epoch := uint64(0); epoch < uint64(100); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
 				err := metaRepos.Propose(epoch, projection)
 				if err != nil {
@@ -145,20 +146,19 @@ func testProposeUsingProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	address := lis.Addr().String()
+	addr := lis.Addr()
+	tcpAddr := addr.(*net.TCPAddr)
+	address := fmt.Sprintf("localhost:%d", tcpAddr.Port)
 
 	service := metadata_repository.NewMetadataRepositoryService(metaRepos)
 	service.Register(server)
 
 	go startServer(lis, server)
-	defer func() {
-		server.GracefulStop()
-		t.Log("server closed\n")
-	}()
+	defer server.GracefulStop()
 
 	dur := time.Now()
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 100; i++ {
 		wg.Add(1)
 
 		go func() {
@@ -168,12 +168,9 @@ func testProposeUsingProxy(t *testing.T) {
 			if err != nil {
 				t.Errorf("uninitialied client: %v", err)
 			}
+			defer metaRepoClient.Close()
 
-			metaRepoClient.Close()
-
-			return
-
-			for epoch := uint64(0); epoch < uint64(50); epoch++ {
+			for epoch := uint64(0); epoch < uint64(100); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
 				err = metaRepoClient.Propose(context.Background(), epoch, projection)
 				if err != nil {
@@ -218,6 +215,6 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//testProposeByClientDirect(t)
+	testProposeByClientDirect(t)
 	testProposeUsingProxy(t)
 }
