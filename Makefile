@@ -12,7 +12,7 @@ PROTOBUF_HOME := $(BUILD_DIR)/protobuf
 
 GO := go
 LDFLAGS :=
-CFLAGS := -gcflags "-N -l"
+CFLAGS := -gcflags=all="-N -l" -race
 PROTOC := protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
