@@ -52,7 +52,7 @@ func (r *EtcdMetadataRepository) Propose(epoch uint64, projection *varlogpb.Proj
 	nepoch := strconv.FormatUint(epoch+1, 10)
 
 	kvc := etcdcli.NewKV(r.cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 	_, err := kvc.Txn(ctx).
 		If(etcdcli.Compare(etcdcli.Value("epoch"), "=", sepoch)).
@@ -71,7 +71,7 @@ func (r *EtcdMetadataRepository) Propose(epoch uint64, projection *varlogpb.Proj
 func (r *EtcdMetadataRepository) Get(epoch uint64) (*varlogpb.ProjectionDescriptor, error) {
 	pkey := fmt.Sprintf("projection-%020d", epoch)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	resp, err := r.cli.Get(ctx, pkey)
 	cancel()
 	if err != nil {
@@ -91,7 +91,7 @@ func (r *EtcdMetadataRepository) Get(epoch uint64) (*varlogpb.ProjectionDescript
 }
 
 func (r *EtcdMetadataRepository) Clear() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	r.cli.Delete(ctx, "epoch")
 	r.cli.Delete(ctx, "projection-", etcdcli.WithPrefix())
 	cancel()

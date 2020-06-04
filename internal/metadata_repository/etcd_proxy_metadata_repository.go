@@ -48,7 +48,7 @@ func NewEtcdProxyMetadataRepository() *EtcdProxyMetadataRepository {
 
 		epoch, _ = strconv.ParseUint(string(v), 10, 64)
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		_, err = cli.Put(ctx, "epoch", "0")
@@ -60,7 +60,7 @@ func NewEtcdProxyMetadataRepository() *EtcdProxyMetadataRepository {
 	}
 
 	if epoch > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		resp, err := cli.Get(ctx, "projection-", etcdcli.WithPrefix())
@@ -102,7 +102,7 @@ func (r *EtcdProxyMetadataRepository) Propose(epoch uint64, projection *varlogpb
 	}
 
 	kvc := etcdcli.NewKV(r.cli)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	t, err := kvc.Txn(ctx).
@@ -127,7 +127,7 @@ func (r *EtcdProxyMetadataRepository) Get(epoch uint64) (*varlogpb.ProjectionDes
 	defer r.mu.Unlock()
 
 	if r.epoch < epoch {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		resp, err := r.cli.Get(ctx, "epoch")
@@ -153,7 +153,7 @@ func (r *EtcdProxyMetadataRepository) Get(epoch uint64) (*varlogpb.ProjectionDes
 
 	pkey := fmt.Sprintf("projection-%020d", epoch)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	resp, err := r.cli.Get(ctx, pkey)
 	if err != nil {
