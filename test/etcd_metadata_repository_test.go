@@ -28,7 +28,7 @@ func startProcess(args ...string) (p *os.Process, err error) {
 			var procAttr os.ProcAttr
 			procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
 
-			log.Printf("start process %s\n", args[0])
+			log.Printf("start process %v\n", args)
 			p, err := os.StartProcess(args[0], args, &procAttr)
 			if err == nil {
 				return p, nil
@@ -81,20 +81,7 @@ func makeDummyProjection(epoch uint64) *varlogpb.ProjectionDescriptor {
 	return projection
 }
 
-func TestEtcdMetadataRepositoryPropose(t *testing.T) {
-
-	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
-	p, err := startProcess(etcd, "--force-new-cluster=true")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer p.Kill()
-
-	err = connectCheck("localhost", "2379", 10*time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+func proposeByClientDirect(t *testing.T) {
 	metaRepos := metadata_repository.NewEtcdMetadataRepository()
 	if metaRepos == nil {
 		t.Fatal()
@@ -142,23 +129,9 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 	wg.Wait()
 
 	t.Logf("dur %v\n", time.Now().Sub(dur))
-
 }
 
-func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
-	t.Skip()
-	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
-	p, err := startProcess(etcd, "--force-new-cluster=true")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer p.Kill()
-
-	err = connectCheck("localhost", "2379", 10*time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+func proposeUsingProxy(t *testing.T) {
 	/* make repository */
 	metaRepos := metadata_repository.NewEtcdProxyMetadataRepository()
 	if metaRepos == nil {
@@ -218,4 +191,22 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 	wg.Wait()
 
 	t.Logf("dur %v\n", time.Now().Sub(dur))
+}
+
+func TestEtcdMetadataRepositoryPropose(t *testing.T) {
+	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
+	p, err := startProcess(etcd, "--force-new-cluster=true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Kill()
+
+	err = connectCheck("localhost", "2379", 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	proposeByClientDirect(t)
+	proposeUsingProxy(t)
+
 }
