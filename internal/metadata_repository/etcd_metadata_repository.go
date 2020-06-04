@@ -26,6 +26,18 @@ func NewEtcdMetadataRepository() *EtcdMetadataRepository {
 		return nil
 	}
 
+	kvc := etcdcli.NewKV(cli)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = kvc.Txn(ctx).
+		If(etcdcli.Compare(etcdcli.CreateRevision("epoch"), "=", 0)).
+		Then(etcdcli.OpPut("epoch", "0")).
+		Commit()
+	if err != nil {
+		return nil
+	}
+
 	r := &EtcdMetadataRepository{cli: cli}
 	return r
 }
