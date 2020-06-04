@@ -25,7 +25,8 @@ func Init() {
 func startProcess(args ...string) (p *os.Process, err error) {
 	if args[0], err = exec.LookPath(args[0]); err == nil {
 		var procAttr os.ProcAttr
-		procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
+		//procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
+		procAttr.Files = []*os.File{}
 
 		log.Printf("start process %s\n", args[0])
 		p, err := os.StartProcess(args[0], args, &procAttr)
@@ -142,8 +143,6 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 }
 
 func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
-	t.Skip()
-
 	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
 	p, err := startProcess(etcd, "--force-new-cluster=true")
 	if err != nil {
@@ -179,7 +178,7 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 
 	dur := time.Now()
 	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 50; i++ {
 		wg.Add(1)
 
 		go func() {
@@ -194,40 +193,20 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 				projection := makeDummyProjection(epoch + 1)
 				err = metaRepoClient.Propose(context.Background(), epoch, projection)
 				if err != nil {
-					t.Fatalf("propose error: %v", err)
+					t.Errorf("propose error: %v", err)
+					return
 				}
 
 				recvProjection, err := metaRepoClient.Get(context.Background(), epoch+1)
 				if err != nil {
-					t.Fatalf("get error: %v", err)
+					t.Errorf("get error: %v", err)
+					return
 				}
 
 				if recvProjection.Epoch != epoch+1 {
-					t.Fatalf("expected projection[%d] actual[%d]", epoch+1, recvProjection.Epoch)
+					t.Errorf("expected projection[%d] actual[%d]", epoch+1, recvProjection.Epoch)
+					return
 				}
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	t.Logf("dur %v\n", time.Now().Sub(dur))
-}
-
-func TestSleep(t *testing.T) {
-	t.Skip()
-
-	dur := time.Now()
-
-	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			for epoch := uint64(0); epoch < uint64(100); epoch++ {
-				time.Sleep(10 * time.Millisecond)
 			}
 		}()
 	}
