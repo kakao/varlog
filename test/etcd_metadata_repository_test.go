@@ -78,6 +78,8 @@ func makeDummyProjection(epoch uint64) *varlogpb.ProjectionDescriptor {
 }
 
 func TestEtcdMetadataRepositoryPropose(t *testing.T) {
+	t.Skip()
+
 	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
 	p, err := startProcess(etcd, "--force-new-cluster=true")
 	if err != nil {
@@ -137,6 +139,8 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 }
 
 func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
+	t.Skip()
+
 	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
 	p, err := startProcess(etcd, "--force-new-cluster=true")
 	if err != nil {
@@ -198,6 +202,27 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 				if recvProjection.Epoch != epoch+1 {
 					t.Fatalf("expected projection[%d] actual[%d]", epoch+1, recvProjection.Epoch)
 				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	t.Logf("dur %v\n", time.Now().Sub(dur))
+}
+
+func TestSleep(t *testing.T) {
+	dur := time.Now()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			for epoch := uint64(0); epoch < uint64(100); epoch++ {
+				time.Sleep(10 * time.Millisecond)
 			}
 		}()
 	}
