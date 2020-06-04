@@ -164,13 +164,13 @@ func testProposeUsingProxy(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			return
-
 			metaRepoClient, err := varlog.NewMetadataRepositoryClient(address)
 			if err != nil {
 				t.Errorf("uninitialied client: %v", err)
 			}
 			defer metaRepoClient.Close()
+
+			return
 
 			for epoch := uint64(0); epoch < uint64(50); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
