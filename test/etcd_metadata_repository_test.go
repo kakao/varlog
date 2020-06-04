@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"os"
 	"os/exec"
 	"runtime"
@@ -20,7 +21,8 @@ import (
 func startProcess(args ...string) (p *os.Process, err error) {
 	if args[0], err = exec.LookPath(args[0]); err == nil {
 		var procAttr os.ProcAttr
-		procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
+		//procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
+		procAttr.Files = []*os.File{}
 
 		log.Printf("start process %s\n", args[0])
 		p, err := os.StartProcess(args[0], args, &procAttr)
@@ -29,6 +31,25 @@ func startProcess(args ...string) (p *os.Process, err error) {
 		}
 	}
 	return nil, err
+}
+
+func connectCheck(host, port string, timeout time.Duration) error {
+	st := time.Now()
+
+	for {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), timeout)
+		if conn != nil {
+			defer conn.Close()
+			log.Printf("connection check OK(dur:%v)", time.Now().Sub(st))
+			return nil
+		}
+
+		if time.Now().Sub(st) > timeout {
+			return fmt.Errorf("conn fail. %v", err)
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func makeDummyProjection(epoch uint64) *varlogpb.ProjectionDescriptor {
@@ -60,6 +81,11 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Kill()
+
+	err = connectCheck("localhost", "2379", 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	metaRepos := metadata_repository.NewEtcdMetadataRepository()
 	if metaRepos == nil {
@@ -114,6 +140,11 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Kill()
+
+	err = connectCheck("localhost", "2379", 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	/* make repository */
 	metaRepos := metadata_repository.NewEtcdProxyMetadataRepository()
