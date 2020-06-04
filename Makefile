@@ -12,7 +12,8 @@ PROTOBUF_HOME := $(BUILD_DIR)/protobuf
 
 GO := go
 LDFLAGS :=
-CFLAGS := -gcflags "-N -l"
+GOFLAGS := -race
+GCFLAGS := -gcflags=all='-N -l'
 PROTOC := protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
@@ -60,7 +61,7 @@ $(SUBDIRS) :
 	$(MAKE) -C $@
 
 test:
-	PATH=$$PATH:$(GO_HOME)/bin GOPATH=$(GOPATH) $(GO) test -v -count=1 ./...
+	PATH=$$PATH:$(GO_HOME)/bin GOPATH=$(GOPATH) $(GO) test $(GOFLAGS) $(GCFLAGS) -v ./...
 
 clean :
 	for dir in $(SUBDIRS); do \
