@@ -168,7 +168,8 @@ func testProposeUsingProxy(t *testing.T) {
 			if err != nil {
 				t.Errorf("uninitialied client: %v", err)
 			}
-			defer metaRepoClient.Close()
+
+			metaRepoClient.Close()
 
 			return
 
