@@ -20,8 +20,8 @@ import (
 func startProcess(args ...string) (p *os.Process, err error) {
 	if args[0], err = exec.LookPath(args[0]); err == nil {
 		var procAttr os.ProcAttr
-		procAttr.Files = []*os.File{os.Stdin,
-			os.Stdout, os.Stderr}
+		//procAttr.Files = []*os.File{os.Stdin,
+		procAttr.Files = []*os.File{}
 
 		log.Printf("start process %s\n", args[0])
 		p, err := os.StartProcess(args[0], args, &procAttr)
@@ -79,7 +79,6 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 
 			metaRepos := metadata_repository.NewEtcdMetadataRepository()
 
-			st := time.Now()
 			for epoch := uint64(0); epoch < uint64(100); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
 				err := metaRepos.Propose(epoch, projection)
@@ -100,13 +99,12 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 					t.Fatalf("expected projection[%d] actual[%d]", epoch+1, recv.Epoch)
 				}
 			}
-			log.Println(time.Now().Sub(st))
 		}()
 	}
 
 	wg.Wait()
 
-	log.Printf("dur %v\n", time.Now().Sub(dur))
+	t.Logf("dur %v\n", time.Now().Sub(dur))
 
 }
 
@@ -132,7 +130,6 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 	}
 
 	address := lis.Addr().String()
-	log.Printf("address: %v\n", address)
 
 	service := metadata_repository.NewMetadataRepositoryService(metaRepos)
 	service.Register(server)
@@ -153,8 +150,6 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 				t.Errorf("uninitialied client: %v", err)
 			}
 
-			st := time.Now()
-
 			for epoch := uint64(0); epoch < uint64(100); epoch++ {
 				projection := makeDummyProjection(epoch + 1)
 				err = metaRepoClient.Propose(context.Background(), epoch, projection)
@@ -171,12 +166,10 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 					t.Fatalf("expected projection[%d] actual[%d]", epoch+1, recvProjection.Epoch)
 				}
 			}
-
-			log.Println(time.Now().Sub(st))
 		}()
 	}
 
 	wg.Wait()
 
-	log.Printf("dur %v\n", time.Now().Sub(dur))
+	t.Logf("dur %v\n", time.Now().Sub(dur))
 }
