@@ -100,7 +100,7 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 
 	dur := time.Now()
 	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 50; i++ {
 		wg.Add(1)
 
 		go func() {
