@@ -18,6 +18,10 @@ import (
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 )
 
+func Init() {
+	os.RemoveAll("./default.etcd")
+}
+
 func startProcess(args ...string) (p *os.Process, err error) {
 	if args[0], err = exec.LookPath(args[0]); err == nil {
 		var procAttr os.ProcAttr
