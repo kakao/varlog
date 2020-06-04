@@ -29,6 +29,7 @@ func startServer(lis net.Listener, server *grpc.Server) {
 	if err := server.Serve(lis); err != nil {
 		log.Fatalf("could not serve: %v", err)
 	}
+	log.Printf("terminate server\n")
 }
 
 func createMetadataRepository(server *grpc.Server, addr string) {

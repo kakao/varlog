@@ -151,7 +151,10 @@ func testProposeUsingProxy(t *testing.T) {
 	service.Register(server)
 
 	go startServer(lis, server)
-	defer server.GracefulStop()
+	defer func() {
+		server.GracefulStop()
+		t.Log("server closed\n")
+	}()
 
 	dur := time.Now()
 	var wg sync.WaitGroup
