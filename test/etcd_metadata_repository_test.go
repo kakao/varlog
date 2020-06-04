@@ -78,7 +78,6 @@ func makeDummyProjection(epoch uint64) *varlogpb.ProjectionDescriptor {
 }
 
 func TestEtcdMetadataRepositoryPropose(t *testing.T) {
-	t.Skip()
 
 	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
 	p, err := startProcess(etcd, "--force-new-cluster=true")
@@ -101,7 +100,7 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 
 	dur := time.Now()
 	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 5; i++ {
 		wg.Add(1)
 
 		go func() {
@@ -113,20 +112,24 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 				projection := makeDummyProjection(epoch + 1)
 				err := metaRepos.Propose(epoch, projection)
 				if err != nil {
-					t.Fatalf("propose error: %v", err)
+					t.Errorf("propose error: %v", err)
+					return
 				}
 
 				recv, err := metaRepos.Get(epoch + 1)
 				if err != nil {
-					t.Fatalf("get error: %v", err)
+					t.Errorf("get error: %v", err)
+					return
 				}
 
 				if recv == nil {
-					t.Fatalf("get projection[%d] should success", epoch+1)
+					t.Errorf("get projection[%d] should success", epoch+1)
+					return
 				}
 
 				if recv.Epoch != epoch+1 {
-					t.Fatalf("expected projection[%d] actual[%d]", epoch+1, recv.Epoch)
+					t.Errorf("expected projection[%d] actual[%d]", epoch+1, recv.Epoch)
+					return
 				}
 			}
 		}()
@@ -212,6 +215,8 @@ func TestEtcdProxyMetadataRepositoryPropose(t *testing.T) {
 }
 
 func TestSleep(t *testing.T) {
+	t.Skip()
+
 	dur := time.Now()
 
 	var wg sync.WaitGroup
