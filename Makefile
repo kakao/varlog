@@ -63,9 +63,9 @@ clean :
 	done
 
 .PHONY: protoc
-protoc: $(PROTOC_HOME)
+protoc: $(PROTOC_HOME)/bin/protoc
 
-$(PROTOC_HOME)/:
+$(PROTOC_HOME)/bin/protoc:
 	PROTOC_HOME=$(PROTOC_HOME) PROTOC_VERSION=$(PROTOC_VERSION) scripts/install_protoc.sh
 
 GOGOPROTO_SRC := $(GOPATH)/src/github.com/gogo/protobuf
