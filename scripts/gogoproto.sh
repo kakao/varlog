@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-go get github.com/gogo/protobuf/proto
-go get github.com/gogo/protobuf/jsonpb
-go get github.com/gogo/protobuf/protoc-gen-gogo
-go get github.com/gogo/protobuf/gogoproto
-
+go get -u github.com/gogo/protobuf/protoc-gen-gogo
+go get -u github.com/gogo/protobuf/gogoproto
+go get -u github.com/gogo/protobuf/proto
+go get -u github.com/gogo/protobuf/jsonpb
