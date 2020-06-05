@@ -5,10 +5,14 @@ MAKEFILE_DIR := $(dir $(MAKEFILE_PATH))
 BUILD_DIR := $(MAKEFILE_DIR)/build
 
 GO := go
+GOPATH := $(shell $(GO) env GOPATH)
 LDFLAGS :=
 GOFLAGS := -race
 GCFLAGS := -gcflags=all='-N -l'
-PROTOC := protoc
+
+PROTOC_HOME := $(BUILD_DIR)/protoc
+PROTOC_VERSION := 3.12.2
+PROTOC := $(PROTOC_HOME)/bin/protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
 all : proto libvarlog sequencer storage_node sequencer_client metadata_repository
@@ -18,7 +22,8 @@ SEQUENCER_PROTO := proto/sequencer
 STORAGE_NODE_PROTO := proto/storage_node
 METADATA_REPOSITORY_PROTO := proto/metadata_repository
 PROTO := $(SOLAR_PROTO) $(SEQUENCER_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO)
-proto : $(PROTO)
+
+proto : protoc gogoproto $(PROTO)
 
 SEQUENCER := cmd/sequencer
 sequencer : $(SEQUENCER_PROTO) $(SEQUENCER)
@@ -56,5 +61,22 @@ clean :
 	for dir in $(SUBDIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
+
+.PHONY: protoc
+protoc: $(PROTOC_HOME)
+
+$(PROTOC_HOME)/:
+	PROTOC_HOME=$(PROTOC_HOME) PROTOC_VERSION=$(PROTOC_VERSION) scripts/install_protoc.sh
+
+GOGOPROTO_SRC := $(GOPATH)/src/github.com/gogo/protobuf
+
+.PHONY: gogoproto
+gogoproto: $(GOGOPROTO_SRC)
+
+$(GOGOPROTO_SRC)/:
+	$(GO) get -u github.com/gogo/protobuf/protoc-gen-gogo
+	$(GO) get -u github.com/gogo/protobuf/gogoproto
+	$(GO) get -u github.com/gogo/protobuf/proto
+	$(GO) get -u github.com/gogo/protobuf/jsonpb
 
 .PHONY : all clean subdirs $(SUBDIRS) mockgen test
