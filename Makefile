@@ -73,7 +73,7 @@ GOGOPROTO_SRC := $(GOPATH)/src/github.com/gogo/protobuf
 .PHONY: gogoproto
 gogoproto: $(GOGOPROTO_SRC)
 
-$(GOGOPROTO_SRC)/:
+$(GOGOPROTO_SRC):
 	$(GO) get -u github.com/gogo/protobuf/protoc-gen-gogo
 	$(GO) get -u github.com/gogo/protobuf/gogoproto
 	$(GO) get -u github.com/gogo/protobuf/proto
