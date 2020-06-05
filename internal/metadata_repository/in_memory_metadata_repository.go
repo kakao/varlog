@@ -28,7 +28,7 @@ func (r *InMemoryMetadataRepository) Propose(epoch uint64, projection *varlogpb.
 	return nil
 }
 
-func (r *InMemoryMetadataRepository) Get() (*varlogpb.ProjectionDescriptor, error) {
+func (r *InMemoryMetadataRepository) Get(epoch uint64) (*varlogpb.ProjectionDescriptor, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return &r.ProjectionDescriptor, nil

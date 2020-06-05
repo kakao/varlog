@@ -8,8 +8,9 @@ import (
 )
 
 type MetadataRepositoryClient interface {
-	Propose(context.Context) error
-	Get(context.Context) (*varlogpb.ProjectionDescriptor, error)
+	Propose(context.Context, uint64, *varlogpb.ProjectionDescriptor) error
+	Get(context.Context, uint64) (*varlogpb.ProjectionDescriptor, error)
+	Close() error
 }
 
 type metadataRepositoryClient struct {
@@ -37,16 +38,16 @@ func (c *metadataRepositoryClient) Close() error {
 	return c.rpcConn.close()
 }
 
-func (c *metadataRepositoryClient) Propose(ctx context.Context) error {
-	_, err := c.client.Propose(ctx, &pb.ProposeRequest{})
+func (c *metadataRepositoryClient) Propose(ctx context.Context, epoch uint64, projection *varlogpb.ProjectionDescriptor) error {
+	_, err := c.client.Propose(ctx, &pb.ProposeRequest{Epoch: epoch, Projection: projection})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *metadataRepositoryClient) Get(ctx context.Context) (*varlogpb.ProjectionDescriptor, error) {
-	rsp, err := c.client.Get(ctx, &pb.GetRequest{})
+func (c *metadataRepositoryClient) Get(ctx context.Context, epoch uint64) (*varlogpb.ProjectionDescriptor, error) {
+	rsp, err := c.client.Get(ctx, &pb.GetRequest{Epoch: epoch})
 	if err != nil {
 		return nil, err
 	}
