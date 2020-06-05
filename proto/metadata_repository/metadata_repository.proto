@@ -7,6 +7,10 @@ import "varlog/metadata.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/metadata_repository";
 
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 message ProposeRequest {
         uint64 epoch = 1;
         ProjectionDescriptor projection = 2;
@@ -18,6 +22,7 @@ message ProposeResponse {
 }
 
 message GetRequest {
+        uint64 epoch = 1;
 }
 
 message GetResponse {

@@ -6,6 +6,10 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/varlog";
 
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 message ReplicaDescriptor {
         uint64 min_lsn = 1;
         uint64 max_lsn = 2;

@@ -23,18 +23,12 @@ func (s *MetadataRepositoryService) Register(server *grpc.Server) {
 }
 
 func (s *MetadataRepositoryService) Propose(ctx context.Context, req *pb.ProposeRequest) (*pb.ProposeResponse, error) {
-	/*
-		clientEpoch := req.GetEpoch()
-		proposedProjection := varlog.Projection{
-			Epoch: req.GetProjection().GetEpoch(),
-		}
-		s.metaRepos.Propose(req.GetEpoch(), req.GetProjection())
-	*/
-	return nil, nil
+	s.metaRepos.Propose(req.GetEpoch(), req.GetProjection())
+	return &pb.ProposeResponse{}, nil
 }
 
 func (s *MetadataRepositoryService) Get(ctx context.Context, req *pb.GetRequest) (*pb.GetResponse, error) {
-	projection, err := s.metaRepos.Get()
+	projection, err := s.metaRepos.Get(req.Epoch)
 	if err != nil {
 		return nil, err
 	}

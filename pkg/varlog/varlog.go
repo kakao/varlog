@@ -106,7 +106,7 @@ func (s *varlog) Trim(glsn uint64) error {
 
 func (s *varlog) fetchProjection() (*varlogpb.ProjectionDescriptor, error) {
 	ctx := context.Background()
-	prj, err := s.metaReposClient.Get(ctx)
+	prj, err := s.metaReposClient.Get(ctx, 0)
 	if err != nil {
 		return nil, err
 	}
