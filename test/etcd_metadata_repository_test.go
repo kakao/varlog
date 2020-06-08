@@ -60,25 +60,12 @@ func connectCheck(host, port string, timeout time.Duration) error {
 }
 
 func makeDummyProjection(epoch uint64) *varlogpb.ProjectionDescriptor {
-	projection := &varlogpb.ProjectionDescriptor{}
-	projection.Sequencer = varlogpb.SequencerDescriptor{Address: "addr"}
-	projection.StorageNodes = []varlogpb.StorageNodeDescriptor{
-		{
-			StorageNodeId: "addr",
-			Address:       "addr",
-		},
-	}
-	projection.Replicas = []varlogpb.ReplicaDescriptor{
-		{
-			MinLsn:         0,
-			MaxLsn:         math.MaxUint64,
-			StorageNodeIds: []string{"addr"},
-		},
-	}
+	prj := &varlogpb.ProjectionDescriptor{}
+	prj.Epoch = epoch
+	prj.MinLsn = 0
+	prj.MaxLsn = math.MaxUint64
 
-	projection.Epoch = epoch
-
-	return projection
+	return prj
 }
 
 func testProposeByClientDirect(t *testing.T) {
@@ -177,7 +164,7 @@ func testProposeUsingProxy(t *testing.T) {
 					return
 				}
 
-				recvProjection, err := metaRepoClient.Get(context.Background(), epoch+1)
+				recvProjection, err := metaRepoClient.GetProjection(context.Background(), epoch+1)
 				if err != nil {
 					t.Errorf("get error: %v", err)
 					return
@@ -214,6 +201,6 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testProposeByClientDirect(t)
+	//testProposeByClientDirect(t)
 	testProposeUsingProxy(t)
 }

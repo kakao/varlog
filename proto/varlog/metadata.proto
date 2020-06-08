@@ -10,24 +10,40 @@ option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-message ReplicaDescriptor {
-        uint64 min_lsn = 1;
-        uint64 max_lsn = 2;
-        repeated string storage_node_ids = 3;
+message SequencerDescriptor {
+        string address = 1;
+}
+
+message StorageDescriptor {
+        string path = 1;
+        uint64 used = 2;
+        uint64 total = 3;
 }
 
 message StorageNodeDescriptor {
         string storage_node_id = 1;
         string address = 2;
+        repeated StorageDescriptor storages = 3[(gogoproto.nullable) = false];
 }
 
-message SequencerDescriptor {
-        string address = 1;
+message ReplicaDescriptor {
+        string storage_node_id = 1;
+        string path = 2;
+}
+
+message LogStreamDescriptor {
+        repeated ReplicaDescriptor replicas = 1[(gogoproto.nullable) = false];
 }
 
 message ProjectionDescriptor {
         uint64 epoch = 1;
-        SequencerDescriptor sequencer = 2 [(gogoproto.nullable) = false];
-        repeated StorageNodeDescriptor storage_nodes = 3 [(gogoproto.nullable) = false];
-        repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = false];
+        uint64 min_lsn = 2;
+        uint64 max_lsn = 3;
+        repeated LogStreamDescriptor log_streams = 4 [(gogoproto.nullable) = false];
+}
+
+message MetadataDescriptor {
+        SequencerDescriptor sequencer = 1 [(gogoproto.nullable) = false];
+        repeated StorageNodeDescriptor storage_nodes = 2 [(gogoproto.nullable) = false];
+        repeated ProjectionDescriptor projections = 3 [(gogoproto.nullable) = false];
 }

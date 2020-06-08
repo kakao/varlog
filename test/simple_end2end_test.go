@@ -33,22 +33,22 @@ func startServer(lis net.Listener, server *grpc.Server) {
 
 func createMetadataRepository(server *grpc.Server, addr string) {
 	metaRepos := metadata_repository.NewInMemoryMetadataRepository()
+	metaRepos.RegisterSequencer(addr)
+	metaRepos.RegisterStorage(addr, "test", 100)
+
 	projection := &varlogpb.ProjectionDescriptor{}
 	projection.Epoch = 0
-	projection.Sequencer = varlogpb.SequencerDescriptor{Address: addr}
-	projection.StorageNodes = []varlogpb.StorageNodeDescriptor{
-		{
-			StorageNodeId: addr,
-			Address:       addr,
-		},
+	projection.MinLsn = 0
+	projection.MaxLsn = math.MaxUint64
+
+	replica := varlogpb.ReplicaDescriptor{
+		StorageNodeId: addr,
+		Path:          "test",
 	}
-	projection.Replicas = []varlogpb.ReplicaDescriptor{
-		{
-			MinLsn:         0,
-			MaxLsn:         math.MaxUint64,
-			StorageNodeIds: []string{addr},
-		},
-	}
+
+	logStream := varlogpb.LogStreamDescriptor{}
+	logStream.Replicas = append(logStream.Replicas, replica)
+	projection.LogStreams = append(projection.LogStreams, logStream)
 
 	// FIXME:
 	err := metaRepos.Propose(0, projection)
@@ -92,7 +92,7 @@ func TestClient(t *testing.T) {
 	}
 	client, err := varlog.Open("foo", opts)
 	if err != nil {
-		t.Errorf("uninitialied client: %v", err)
+		t.Fatalf("uninitialied client: %v", err)
 	}
 
 	pos, err := client.Append([]byte(msg))
