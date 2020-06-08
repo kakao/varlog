@@ -9,7 +9,8 @@ import (
 
 type MetadataRepositoryClient interface {
 	Propose(context.Context, uint64, *varlogpb.ProjectionDescriptor) error
-	Get(context.Context, uint64) (*varlogpb.ProjectionDescriptor, error)
+	GetMetadata(context.Context) (*varlogpb.MetadataDescriptor, error)
+	GetProjection(context.Context, uint64) (*varlogpb.ProjectionDescriptor, error)
 	Close() error
 }
 
@@ -46,11 +47,18 @@ func (c *metadataRepositoryClient) Propose(ctx context.Context, epoch uint64, pr
 	return nil
 }
 
-func (c *metadataRepositoryClient) Get(ctx context.Context, epoch uint64) (*varlogpb.ProjectionDescriptor, error) {
-	rsp, err := c.client.Get(ctx, &pb.GetRequest{Epoch: epoch})
+func (c *metadataRepositoryClient) GetProjection(ctx context.Context, epoch uint64) (*varlogpb.ProjectionDescriptor, error) {
+	rsp, err := c.client.GetProjection(ctx, &pb.GetProjectionRequest{Epoch: epoch})
 	if err != nil {
 		return nil, err
 	}
-	//projection := NewProjectionFromProto(rsp.GetProjection())
 	return rsp.GetProjection(), nil
+}
+
+func (c *metadataRepositoryClient) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
+	rsp, err := c.client.GetMetadata(ctx, &pb.GetMetadataRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return rsp.GetMetadata(), nil
 }

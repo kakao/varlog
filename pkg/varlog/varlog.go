@@ -2,22 +2,9 @@ package varlog
 
 import (
 	"context"
-	"errors"
-	"sort"
 
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 )
-
-type Replica struct {
-	LogStream
-	StorageNodeIDs []string
-}
-
-type ReplicaSorter []Replica
-
-func (s ReplicaSorter) Len() int           { return len(s) }
-func (s ReplicaSorter) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s ReplicaSorter) Less(i, j int) bool { return s[i].MinLsn < s[j].MinLsn }
 
 type OpenMode int
 
@@ -37,7 +24,7 @@ type varlog struct {
 	metaReposClient MetadataRepositoryClient
 	sqrClient       SequencerClient
 	snClientMap     map[string]StorageNodeClient
-	replicas        []Replica
+	metadata        *varlogpb.MetadataDescriptor
 }
 
 // Open creates new logs or opens an already created logs.
@@ -52,28 +39,31 @@ func Open(logID string, opts Options) (Solar, error) {
 		metaReposClient: metaReposClient,
 	}
 
-	newPrj, err := varlog.fetchProjection()
+	metadata, err := varlog.fetchMetadata()
 	if err != nil {
 		return nil, err
 	}
 
-	err = varlog.applyProjection(newPrj)
+	err = varlog.applyMetadata(metadata)
 	if err != nil {
 		return nil, err
 	}
-
-	varlog.replicas = varlog.createReplicas(newPrj.GetReplicas())
 
 	return varlog, nil
 }
 
 func (s *varlog) Read(glsn uint64) ([]byte, error) {
-	replica, err := s.getReplica(glsn)
+	prj, err := s.getProjection(glsn)
 	if err != nil {
 		return nil, err
 	}
-	snID := replica.StorageNodeIDs[len(replica.StorageNodeIDs)-1]
+
+	logStream, _ := prj.GetLogStream(glsn)
+	replicas := logStream.GetReplicas()
+
+	snID := replicas[len(replicas)-1].GetStorageNodeId()
 	snClient := s.snClientMap[snID]
+
 	return snClient.Read(context.Background(), s.epoch, glsn)
 }
 
@@ -82,11 +72,16 @@ func (s *varlog) Append(data []byte) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	replica, err := s.getReplica(glsn)
+	prj, err := s.getProjection(glsn)
 	if err != nil {
 		return 0, err
 	}
-	for _, snID := range replica.StorageNodeIDs {
+
+	logStream, _ := prj.GetLogStream(glsn)
+	replicas := logStream.GetReplicas()
+
+	for _, replica := range replicas {
+		snID := replica.GetStorageNodeId()
 		snClient := s.snClientMap[snID]
 		if err := snClient.Append(context.Background(), s.epoch, glsn, data); err != nil {
 			return 0, err
@@ -104,26 +99,26 @@ func (s *varlog) Trim(glsn uint64) error {
 	panic("not implemented")
 }
 
-func (s *varlog) fetchProjection() (*varlogpb.ProjectionDescriptor, error) {
+func (s *varlog) fetchMetadata() (*varlogpb.MetadataDescriptor, error) {
 	ctx := context.Background()
-	prj, err := s.metaReposClient.Get(ctx, 0)
+	meta, err := s.metaReposClient.GetMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return prj, nil
+	return meta, nil
 }
 
 // FIXME: it should be more precise method
-func (s *varlog) applyProjection(newPrj *varlogpb.ProjectionDescriptor) error {
-	if newPrj == nil {
+func (s *varlog) applyMetadata(metadata *varlogpb.MetadataDescriptor) error {
+	if metadata == nil {
 		return ErrInvalidProjection
 	}
-	newEpoch := newPrj.GetEpoch()
+	newEpoch := metadata.GetLastEpoch()
 	if s.epoch > newEpoch {
 		return ErrInvalidEpoch
 	}
 
-	newSqr := newPrj.GetSequencer()
+	newSqr := metadata.GetSequencer()
 	newSqrAddr := newSqr.GetAddress()
 	if len(newSqrAddr) == 0 {
 		return ErrInvalidProjection
@@ -144,9 +139,10 @@ func (s *varlog) applyProjection(newPrj *varlogpb.ProjectionDescriptor) error {
 	}
 
 	newSnClientMap := make(map[string]StorageNodeClient)
-	for _, newSn := range newPrj.GetStorageNodes() {
+	for _, newSn := range metadata.GetStorageNodes() {
 		newSnID := newSn.GetStorageNodeId()
 		newSnAddr := newSn.GetAddress()
+
 		if len(newSnID) == 0 || len(newSnAddr) == 0 {
 			return ErrInvalidProjection
 		}
@@ -175,28 +171,10 @@ func (s *varlog) applyProjection(newPrj *varlogpb.ProjectionDescriptor) error {
 	s.epoch = newEpoch
 	s.sqrClient = newSqrClient
 	s.snClientMap = newSnClientMap
+	s.metadata = metadata
 	return nil
 }
 
-func (s *varlog) createReplicas(replicas []varlogpb.ReplicaDescriptor) []Replica {
-	r := make([]Replica, len(replicas))
-	for i, replica := range replicas {
-		r[i].MinLsn = replica.GetMinLsn()
-		r[i].MaxLsn = replica.GetMaxLsn()
-		r[i].StorageNodeIDs = replica.GetStorageNodeIds()
-	}
-	// FIXME: replicas in projection descriptor should have been sorted
-	sort.Sort(ReplicaSorter(r))
-	return r
-}
-
-func (s *varlog) getReplica(glsn uint64) (Replica, error) {
-	lenReplicas := len(s.replicas)
-	idx := sort.Search(lenReplicas, func(i int) bool {
-		return s.replicas[i].MinLsn <= glsn
-	})
-	if idx < lenReplicas && s.replicas[idx].MaxLsn > glsn {
-		return s.replicas[idx], nil
-	}
-	return Replica{}, errors.New("no replica")
+func (s *varlog) getProjection(glsn uint64) (*varlogpb.ProjectionDescriptor, error) {
+	return s.metadata.GetProjection(glsn), nil
 }
