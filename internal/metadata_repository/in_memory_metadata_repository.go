@@ -1,6 +1,7 @@
 package metadata_repository
 
 import (
+	"errors"
 	"sync"
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
@@ -85,9 +86,9 @@ func (r *InMemoryMetadataRepository) GetMetadata() (*varlogpb.MetadataDescriptor
 }
 
 func (r *InMemoryMetadataRepository) UnregisterStorage(addr, path string) error {
-	return nil
+	return errors.New("not yet implemented")
 }
 
 func (r *InMemoryMetadataRepository) UpdateStorage(addr, path string, used uint64) error {
-	return nil
+	return errors.New("not yet implemented")
 }
