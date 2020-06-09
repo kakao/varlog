@@ -32,8 +32,7 @@ func NewEtcdProxyMetadataRepository() *EtcdProxyMetadataRepository {
 	})
 
 	if err != nil {
-		log.Println(err)
-		return nil
+		panic(err)
 	}
 
 	r := &EtcdProxyMetadataRepository{
@@ -42,7 +41,7 @@ func NewEtcdProxyMetadataRepository() *EtcdProxyMetadataRepository {
 
 	err = r.fetchMetadata()
 	if err != nil {
-		return nil
+		panic(err)
 	}
 
 	return r
@@ -93,8 +92,14 @@ func (r *EtcdProxyMetadataRepository) fetchEpoch() error {
 	if len(resp.Kvs) > 0 {
 		v := resp.Kvs[0].Value
 
-		e, _ := strconv.ParseUint(string(v), 10, 64)
+		e, err := strconv.ParseUint(string(v), 10, 64)
+		if err != nil {
+			return err
+		}
+
 		r.epoch = e
+	} else {
+		return errors.New("No epoch info")
 	}
 
 	return nil
@@ -113,7 +118,10 @@ func (r *EtcdProxyMetadataRepository) fetchSequencer() error {
 		v := resp.Kvs[0].Value
 
 		s := &varlogpb.SequencerDescriptor{}
-		s.Unmarshal(v)
+		err := s.Unmarshal(v)
+		if err != nil {
+			return err
+		}
 
 		r.metadata.Sequencer = *s
 	}
@@ -132,7 +140,10 @@ func (r *EtcdProxyMetadataRepository) fetchProjections() error {
 
 	for _, ev := range resp.Kvs {
 		p := &varlogpb.ProjectionDescriptor{}
-		p.Unmarshal(ev.Value)
+		err := p.Unmarshal(ev.Value)
+		if err != nil {
+			return err
+		}
 
 		r.metadata.Projections = append(r.metadata.Projections, *p)
 	}
@@ -141,6 +152,12 @@ func (r *EtcdProxyMetadataRepository) fetchProjections() error {
 }
 
 func (r *EtcdProxyMetadataRepository) fetchProjectionsWithRange(start, end uint64) error {
+	/* if start < end, get [start, end)
+	*  else if start == end, get start */
+	if start < end {
+		return nil
+	}
+
 	skey := getProjectionKey(start)
 	ekey := getProjectionKey(end)
 
@@ -160,9 +177,26 @@ func (r *EtcdProxyMetadataRepository) fetchProjectionsWithRange(start, end uint6
 
 	for _, ev := range resp.Kvs {
 		p := &varlogpb.ProjectionDescriptor{}
-		p.Unmarshal(ev.Value)
+		err := p.Unmarshal(ev.Value)
+		if err != nil {
+			return err
+		}
 
 		r.metadata.Projections = append(r.metadata.Projections, *p)
+	}
+
+	return nil
+}
+
+func (r *EtcdProxyMetadataRepository) fetchEpochProjections() error {
+	epoch := r.metadata.GetLastEpoch()
+
+	if err := r.fetchEpoch(); err != nil {
+		return err
+	}
+
+	if err := r.fetchProjectionsWithRange(epoch+1, r.epoch+1); err != nil {
+		return err
 	}
 
 	return nil
@@ -179,7 +213,10 @@ func (r *EtcdProxyMetadataRepository) fetchStorageNodes() error {
 
 	for _, ev := range resp.Kvs {
 		s := &varlogpb.StorageNodeDescriptor{}
-		s.Unmarshal(ev.Value)
+		err := s.Unmarshal(ev.Value)
+		if err != nil {
+			return err
+		}
 
 		r.metadata.StorageNodes = append(r.metadata.StorageNodes, *s)
 	}
@@ -188,7 +225,11 @@ func (r *EtcdProxyMetadataRepository) fetchStorageNodes() error {
 }
 
 func (r *EtcdProxyMetadataRepository) Propose(epoch uint64, projection *varlogpb.ProjectionDescriptor) error {
-	body, _ := projection.Marshal()
+	body, err := projection.Marshal()
+	if err != nil {
+		return err
+	}
+
 	pkey := getProjectionKey(epoch + 1)
 
 	sepoch := strconv.FormatUint(epoch, 10)
@@ -200,6 +241,8 @@ func (r *EtcdProxyMetadataRepository) Propose(epoch uint64, projection *varlogpb
 	if r.metadata.GetLastEpoch() > epoch {
 		return nil
 	}
+
+	lastEpoch := r.metadata.GetLastEpoch()
 
 	kvc := etcdcli.NewKV(r.cli)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -216,7 +259,19 @@ func (r *EtcdProxyMetadataRepository) Propose(epoch uint64, projection *varlogpb
 
 	if t.Succeeded {
 		r.epoch = epoch + 1
-		r.metadata.Projections = append(r.metadata.Projections, *projection)
+		if lastEpoch == epoch {
+			r.metadata.Projections = append(r.metadata.Projections, *projection)
+		} else {
+			// epoch > lastEpoch, local epoch 가 최신 epoch 가 아니었으므로 update 한다.
+			if err := r.fetchEpochProjections(); err != nil {
+				return err
+			}
+		}
+	} else if lastEpoch == epoch {
+		// local epoch 가 최신 epoch 가 아니므로 update 한다.
+		if err := r.fetchEpochProjections(); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -227,17 +282,12 @@ func (r *EtcdProxyMetadataRepository) GetProjection(epoch uint64) (*varlogpb.Pro
 	defer r.mu.Unlock()
 
 	if r.epoch < epoch {
-		if err := r.fetchEpoch(); err != nil {
+		if err := r.fetchEpochProjections(); err != nil {
 			return nil, err
 		}
 
 		if r.epoch < epoch {
 			return nil, errors.New("invalid epoch")
-		}
-
-		lastEpoch := r.metadata.GetLastEpoch()
-		if err := r.fetchProjectionsWithRange(lastEpoch+1, r.epoch+1); err != nil {
-			return nil, err
 		}
 	}
 
@@ -266,17 +316,17 @@ func (r *EtcdProxyMetadataRepository) Clear() {
 }
 
 func (r *EtcdProxyMetadataRepository) RegisterSequencer(addr string) error {
-	return nil
+	return errors.New("not yet implemented")
 }
 
 func (r *EtcdProxyMetadataRepository) RegisterStorage(addr, path string, total uint64) error {
-	return nil
+	return errors.New("not yet implemented")
 }
 
 func (r *EtcdProxyMetadataRepository) UnregisterStorage(addr, path string) error {
-	return nil
+	return errors.New("not yet implemented")
 }
 
 func (r *EtcdProxyMetadataRepository) UpdateStorage(addr, path string, used uint64) error {
-	return nil
+	return errors.New("not yet implemented")
 }

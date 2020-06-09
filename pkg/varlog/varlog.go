@@ -58,7 +58,11 @@ func (s *varlog) Read(glsn uint64) ([]byte, error) {
 		return nil, err
 	}
 
-	logStream, _ := prj.GetLogStream(glsn)
+	logStream, err := prj.GetLogStream(glsn)
+	if err != nil {
+		return nil, err
+	}
+
 	replicas := logStream.GetReplicas()
 
 	snID := replicas[len(replicas)-1].GetStorageNodeId()
@@ -77,7 +81,11 @@ func (s *varlog) Append(data []byte) (uint64, error) {
 		return 0, err
 	}
 
-	logStream, _ := prj.GetLogStream(glsn)
+	logStream, err := prj.GetLogStream(glsn)
+	if err != nil {
+		return 0, err
+	}
+
 	replicas := logStream.GetReplicas()
 
 	for _, replica := range replicas {
