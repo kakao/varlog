@@ -150,7 +150,7 @@ func (r *EtcdProxyMetadataRepository) fetchProjectionsWithRange(start, end uint6
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if start < end {
-		resp, err = r.cli.Get(ctx, skey, etcdcli.WithRange(ekey))
+		resp, err = r.cli.Get(ctx, skey, etcdcli.WithRange(ekey), etcdcli.WithSort(etcdcli.SortByKey, etcdcli.SortAscend))
 	} else {
 		resp, err = r.cli.Get(ctx, skey)
 	}
