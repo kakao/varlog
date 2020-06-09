@@ -25,6 +25,10 @@ func (meta *MetadataDescriptor) GetLastEpoch() uint64 {
 
 func (meta *MetadataDescriptor) GetProjection(epoch uint64) *ProjectionDescriptor {
 	lenProjections := len(meta.GetProjections())
+	if lenProjections == 0 {
+		return nil
+	}
+
 	idx := sort.Search(lenProjections, func(i int) bool {
 		return meta.GetProjections()[i].GetEpoch() >= epoch
 	})
