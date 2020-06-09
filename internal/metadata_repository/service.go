@@ -27,13 +27,24 @@ func (s *MetadataRepositoryService) Propose(ctx context.Context, req *pb.Propose
 	return &pb.ProposeResponse{}, nil
 }
 
-func (s *MetadataRepositoryService) Get(ctx context.Context, req *pb.GetRequest) (*pb.GetResponse, error) {
-	projection, err := s.metaRepos.Get(req.Epoch)
+func (s *MetadataRepositoryService) GetProjection(ctx context.Context, req *pb.GetProjectionRequest) (*pb.GetProjectionResponse, error) {
+	projection, err := s.metaRepos.GetProjection(req.Epoch)
 	if err != nil {
 		return nil, err
 	}
-	rsp := &pb.GetResponse{
+	rsp := &pb.GetProjectionResponse{
 		Projection: projection,
+	}
+	return rsp, nil
+}
+
+func (s *MetadataRepositoryService) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
+	metadata, err := s.metaRepos.GetMetadata()
+	if err != nil {
+		return nil, err
+	}
+	rsp := &pb.GetMetadataResponse{
+		Metadata: metadata,
 	}
 	return rsp, nil
 }
