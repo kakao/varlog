@@ -21,15 +21,22 @@ message ProposeResponse {
         ProjectionDescriptor projection = 2;
 }
 
-message GetRequest {
+message GetProjectionRequest {
         uint64 epoch = 1;
 }
 
-message GetResponse {
+message GetProjectionResponse {
         ProjectionDescriptor projection = 1;
+}
+
+message GetMetadataRequest {}
+
+message GetMetadataResponse {
+        MetadataDescriptor metadata = 1;
 }
 
 service MetadataRepositoryService {
         rpc Propose(ProposeRequest) returns (ProposeResponse) {}
-        rpc Get(GetRequest) returns (GetResponse) {}
+        rpc GetProjection(GetProjectionRequest) returns (GetProjectionResponse) {}
+        rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
 }
