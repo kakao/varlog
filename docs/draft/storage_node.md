@@ -1,3 +1,8 @@
+- Status: Rejected
+- Reason: CORFU 모델 및 CR 방식보다 Scalog 모델 및 PB 방식으로 설계 변경
+- Authors: jun.song
+- Date: 2020-05-10
+
 # Storage Node
 이 문서에서는 아래와 같은 가정을 한다.
 
