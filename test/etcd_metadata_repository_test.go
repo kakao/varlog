@@ -16,6 +16,8 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+
+	etcdcli "go.etcd.io/etcd/clientv3"
 )
 
 func Init() {
@@ -203,4 +205,57 @@ func TestEtcdMetadataRepositoryPropose(t *testing.T) {
 
 	//testProposeByClientDirect(t)
 	testProposeUsingProxy(t)
+}
+
+func TestEtcdValue(t *testing.T) {
+	etcd := fmt.Sprintf("./etcd/%s/etcd", runtime.GOOS)
+	p, err := startProcess(etcd, "--force-new-cluster=true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := p.Kill()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	cli, err := etcdcli.New(etcdcli.Config{
+		Endpoints:   []string{"localhost:2379"},
+		DialTimeout: 5 * time.Second,
+	})
+
+	// init data
+	val := make([]byte, 64*1024)
+	for i := 0; i < 64*1024; i++ {
+		val[i] = byte('a')
+	}
+	v1 := string(val[:256])
+	v2 := string(val[:16*1024])
+	v3 := string(val[:64*1024])
+
+	// warm up
+	for i := 0; i < 1000; i++ {
+		cli.Put(context.TODO(), "test", "0")
+	}
+
+	st := time.Now()
+	for i := 0; i < 1000; i++ {
+		cli.Put(context.TODO(), "test", v1)
+	}
+
+	t1 := time.Now()
+	for i := 0; i < 1000; i++ {
+		cli.Put(context.TODO(), "test", v2)
+	}
+
+	t2 := time.Now()
+	for i := 0; i < 1000; i++ {
+		cli.Put(context.TODO(), "test", v3)
+	}
+	t3 := time.Now()
+
+	t.Logf("%d : %v", len(v1), t1.Sub(st)/1000)
+	t.Logf("%d : %v", len(v2), t2.Sub(t1)/1000)
+	t.Logf("%d : %v", len(v3), t3.Sub(t2)/1000)
 }
