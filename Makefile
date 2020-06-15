@@ -15,47 +15,36 @@ PROTOC_VERSION := 3.12.2
 PROTOC := $(PROTOC_HOME)/bin/protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
-all : proto libvarlog sequencer storage_node sequencer_client metadata_repository
+TEST_DIRS := $(sort $(dir $(shell find . -name '*_test.go')))
+
+all : proto libvarlog storage_node metadata_repository
 
 SOLAR_PROTO := proto/varlog
-SEQUENCER_PROTO := proto/sequencer
 STORAGE_NODE_PROTO := proto/storage_node
 METADATA_REPOSITORY_PROTO := proto/metadata_repository
-PROTO := $(SOLAR_PROTO) $(SEQUENCER_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO)
+PROTO := $(SOLAR_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO)
 
 proto : protoc gogoproto $(PROTO)
-
-SEQUENCER := cmd/sequencer
-sequencer : $(SEQUENCER_PROTO) $(SEQUENCER)
 
 STORAGE_NODE := cmd/storage_node
 storage_node : $(STORAGE_NODE_PROTO) $(STORAGE_NODE)
 
 LIBVARLOG := pkg/varlog
-libvarlog : $(SEQUENCER_PROTO) $(LIBVARLOG)
-
-SEQUENCER_CLIENT := cmd/sequencer_client
-sequencer_client : $(SEQUENCER_PROTO) $(SEQUENCER_CLIENT)
+libvarlog : $(LIBVARLOG)
 
 METADATA_REPOSITORY := cmd/metadata_repository
 metadata_repository : $(METADATA_REPOSITORY_PROTO) $(METADATA_REPOSITORY)
 
-SUBDIRS := $(PROTO) $(SEQUENCER) $(STORAGE_NODE) $(LIBSOLAR) $(SEQUENCER_CLIENT) $(METADATA_REPOSITORY)
+SUBDIRS := $(PROTO) $(STORAGE_NODE) $(LIBSOLAR) $(METADATA_REPOSITORY)
 subdirs : $(SUBDIRS)
-
-mockgen : pkg/libvarlog/mock/sequencer_mock.go pkg/libvarlog/mock/storage_node_mock.go
-
-pkg/libvarlog/mock/sequencer_mock.go : $(PROTO) proto/sequencer/sequencer.pb.go
-	mockgen -source=proto/sequencer/sequencer.pb.go -package mock SequencerServiceClient > pkg/libvarlog/mock/sequencer_mock.go
-
-pkg/libvarlog/mock/storage_node_mock.go : $(PROTO) proto/storage_node/storage_node.pb.go
-	mockgen -source=proto/storage_node/storage_node.pb.go -package mock StorageNodeServiceClient > pkg/libvarlog/mock/storage_node_mock.go
 
 $(SUBDIRS) :
 	$(MAKE) -C $@
 
 test:
-	$(GO) test $(GOFLAGS) $(GCFLAGS) -v ./...
+	for dir in $(TEST_DIRS); do \
+		$(GO) test $(GOFLAGS) $(GCFLAGS) -v -c $$dir ; \
+	done
 
 clean :
 	for dir in $(SUBDIRS); do \
