@@ -6,37 +6,65 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "github.com/kakao/varlog/proto/storage_node";
 
-enum StorageNodeAPI {
-        option (gogoproto.goproto_enum_prefix) = false;
-        READ = 0;
-        APPEND = 1;
-        FILL = 2;
-        TRIM = 3;
-        SEAL = 4;
+// AppendRequest is a message to send a payload to a storage node. It contains 
+// a vector of storage nodes to replicate the payload. 
+message AppendRequest {
+    message BackupNode {
+        uint64 storage_node_id = 1;
+        uint64 log_stream_id = 2 ;
+        string address = 3;
+    }
+    bytes payload = 1;
+    repeated BackupNode backups = 2;
 }
 
-message StorageNodeRequest {
-        StorageNodeAPI api = 1;
-        uint64 epoch = 2;
-        uint64 glsn = 3;
-        bytes data = 4;
+// AppendResponse contains GLSN (Global Log Sequence Number) that indicates log 
+// position in global log space.
+message AppendResponse {
+    uint64 glsn = 1;
 }
 
-message StorageNodeResponse {
-        enum ReturnCodeType {
-                option (gogoproto.goproto_enum_prefix) = false;
-                OK = 0;
-                UNWRITTEN = 1;
-                WRITTEN = 2;
-                SEALED = 3;
-                TRIMMED = 4;
-        }
-        StorageNodeAPI api = 1;
-        ReturnCodeType return_code = 2;
-        bytes data = 3;
-        uint64 maxLsn = 4;
+// ReadRequest asks a storage node to retrieve log entry at the GLSN.
+message ReadRequest {
+    uint64 glsn = 1;
+}
+
+// ReadResponse contains the contents of the log entry which is retrieved by 
+// the ReadRequest.
+message ReadResponse {
+    bytes payload = 1;
+}
+
+// SubscribeRequest has GLSN which indicates an inclusive starting position 
+// from which a client wants to receive.
+message SubscribeRequest {
+    uint64 glsn = 1;
+}
+
+// SubscribeResponse comprises the contents of the log entry and its GLSN.  
+message SubscribeResponse {
+    uint64 glsn = 1;
+    bytes payload = 2;
+}
+
+// TrimRequest contains inclusive GLSN until which a client wants to delete. 
+// If async field is true, the trim operation returns immediately and the 
+// storage node removes its log entry in the background.
+message TrimRequest {
+    uint64 glsn = 1;
+    bool async = 2;
+}
+
+// TrimResponse indicates how many log entries are deleted by using the 
+// num_trimmed field. In the case of an asynchronous request, the num_trimmed 
+// is zero.
+message TrimResponse {
+    uint64 num_trimmed = 1;
 }
 
 service StorageNodeService {
-        rpc Call(StorageNodeRequest) returns (StorageNodeResponse) {}
+    rpc Append(AppendRequest) returns (AppendResponse) {}
+    rpc Read(ReadRequest) returns (ReadResponse) {}
+    rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
+    rpc Trim(TrimRequest) returns (TrimResponse) {}
 }

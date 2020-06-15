@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 
-	"github.com/kakao/varlog/pkg/varlog"
 	pb "github.com/kakao/varlog/proto/storage_node"
 	"google.golang.org/grpc"
 )
@@ -24,51 +23,18 @@ func (s *StorageNodeService) Register(server *grpc.Server) {
 	pb.RegisterStorageNodeServiceServer(server, s)
 }
 
-func (s *StorageNodeService) Call(ctx context.Context, req *pb.StorageNodeRequest) (*pb.StorageNodeResponse, error) {
-	var err error
-	rsp := &pb.StorageNodeResponse{
-		Api: req.GetApi(),
-	}
-	epoch := req.GetEpoch()
-	glsn := req.GetGlsn()
-	data := req.GetData()
-	switch req.GetApi() {
-	case pb.READ:
-		data, err = s.storage.Read(epoch, glsn)
-		rsp.Data = data
-	case pb.APPEND:
-		err = s.storage.Append(epoch, glsn, data)
-	case pb.FILL:
-		err = s.storage.Fill(epoch, glsn)
-	case pb.TRIM:
-		err = s.storage.Trim(epoch, glsn)
-	case pb.SEAL:
-		err = s.storage.Seal(epoch, &rsp.MaxLsn)
-	}
-	// s.setReturnCode(err, rsp)
-	if err != nil {
-		return nil, err
-	}
-	return rsp, nil
+func (s *StorageNodeService) Append(context.Context, *pb.AppendRequest) (*pb.AppendResponse, error) {
+	panic("not yet implemented")
 }
 
-func (s *StorageNodeService) read(epoch uint64, glsn uint64, rsp *pb.StorageNodeResponse) error {
-	data, err := s.storage.Read(epoch, glsn)
-	rsp.Data = data
-	return err
+func (s *StorageNodeService) Read(context.Context, *pb.ReadRequest) (*pb.ReadResponse, error) {
+	panic("not yet implemented")
 }
 
-func (s *StorageNodeService) setReturnCode(err error, rsp *pb.StorageNodeResponse) {
-	switch err {
-	case nil:
-		rsp.ReturnCode = pb.OK
-	case varlog.ErrWrittenLogEntry:
-		rsp.ReturnCode = pb.WRITTEN
-	case varlog.ErrTrimmedLogEntry:
-		rsp.ReturnCode = pb.TRIMMED
-	case varlog.ErrUnwrittenLogEntry:
-		rsp.ReturnCode = pb.UNWRITTEN
-	case varlog.ErrSealedEpoch:
-		rsp.ReturnCode = pb.SEALED
-	}
+func (s *StorageNodeService) Subscribe(*pb.SubscribeRequest, pb.StorageNodeService_SubscribeServer) error {
+	panic("not yet implemented")
+}
+
+func (s *StorageNodeService) Trim(context.Context, *pb.TrimRequest) (*pb.TrimResponse, error) {
+	panic("not yet implemented")
 }

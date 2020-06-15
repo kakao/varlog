@@ -1,10 +1,11 @@
-SRC := storage_node.proto
+SRC := storage_node.proto log_stream_reporter.proto
 TARGET := $(SRC:.proto=.pb.go)
 
 $(TARGET): $(SRC)
-	$(PROTOC) $(PROTO_INCS) \
-		--gogo_out=plugins=grpc,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,paths=source_relative:. \
-		$(SRC)
+	for src in $(SRC) ; do \
+		$(PROTOC) $(PROTO_INCS) \
+		--gogo_out=plugins=grpc,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,paths=source_relative:. $$src ; \
+	done
 
 clean:
 	$(RM) $(TARGET)
