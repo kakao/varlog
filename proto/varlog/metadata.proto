@@ -10,10 +10,6 @@ option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-message SequencerDescriptor {
-        string address = 1;
-}
-
 message StorageDescriptor {
         string path = 1;
         uint64 used = 2;
@@ -43,7 +39,6 @@ message ProjectionDescriptor {
 }
 
 message MetadataDescriptor {
-        SequencerDescriptor sequencer = 1 [(gogoproto.nullable) = false];
         repeated StorageNodeDescriptor storage_nodes = 2 [(gogoproto.nullable) = false];
         repeated ProjectionDescriptor projections = 3 [(gogoproto.nullable) = false];
 }
