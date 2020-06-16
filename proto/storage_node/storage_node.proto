@@ -10,8 +10,10 @@ option go_package = "github.daumkakao.com/varlog/varlog/proto/storage_node";
 // a vector of storage nodes to replicate the payload. 
 message AppendRequest {
     message BackupNode {
-        uint64 storage_node_id = 1;
-        uint64 log_stream_id = 2 ;
+        int32 storage_node_id = 1 
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID"];
+        int32 log_stream_id = 2 
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID"];
         string address = 3;
     }
     bytes payload = 1;
@@ -21,12 +23,14 @@ message AppendRequest {
 // AppendResponse contains GLSN (Global Log Sequence Number) that indicates log 
 // position in global log space.
 message AppendResponse {
-    uint64 glsn = 1;
+    uint64 glsn = 1
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
 }
 
 // ReadRequest asks a storage node to retrieve log entry at the GLSN.
 message ReadRequest {
-    uint64 glsn = 1;
+    uint64 glsn = 1
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
 }
 
 // ReadResponse contains the contents of the log entry which is retrieved by 
@@ -38,12 +42,14 @@ message ReadResponse {
 // SubscribeRequest has GLSN which indicates an inclusive starting position 
 // from which a client wants to receive.
 message SubscribeRequest {
-    uint64 glsn = 1;
+    uint64 glsn = 1
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
 }
 
 // SubscribeResponse comprises the contents of the log entry and its GLSN.  
 message SubscribeResponse {
-    uint64 glsn = 1;
+    uint64 glsn = 1
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
     bytes payload = 2;
 }
 
@@ -51,7 +57,8 @@ message SubscribeResponse {
 // If async field is true, the trim operation returns immediately and the 
 // storage node removes its log entry in the background.
 message TrimRequest {
-    uint64 glsn = 1;
+    uint64 glsn = 1
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
     bool async = 2;
 }
 
