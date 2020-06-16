@@ -4,19 +4,20 @@ import (
 	"context"
 	"io"
 
+	types "github.com/kakao/varlog/pkg/varlog/types"
 	pb "github.com/kakao/varlog/proto/storage_node"
 )
 
 type StorageNode struct {
-	Id   StorageNodeID
+	Id   types.StorageNodeID
 	Addr string
 }
 
 type StorageNodeClient interface {
-	Append(ctx context.Context, logStreamID LogStreamID, data []byte, backups ...StorageNode) (uint64, error)
-	Read(ctx context.Context, logStreamID LogStreamID, glsn uint64) ([]byte, error)
-	Subscribe(ctx context.Context, glsn uint64) (<-chan []byte, error)
-	Trim(ctx context.Context, glsn uint64) (uint64, error)
+	Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error)
+	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
+	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan []byte, error)
+	Trim(ctx context.Context, glsn types.GLSN) (uint64, error)
 	Close() error
 }
 
@@ -40,7 +41,7 @@ func NewStorageNodeClientFromRpcConn(rpcConn *rpcConn) (StorageNodeClient, error
 	}, nil
 }
 
-func (c *storageNodeClient) Append(ctx context.Context, logStreamID LogStreamID, data []byte, backups ...StorageNode) (uint64, error) {
+func (c *storageNodeClient) Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error) {
 	req := &pb.AppendRequest{
 		Payload: data,
 	}
@@ -51,7 +52,7 @@ func (c *storageNodeClient) Append(ctx context.Context, logStreamID LogStreamID,
 	return rsp.GetGlsn(), nil
 }
 
-func (c *storageNodeClient) Read(ctx context.Context, logStreamID LogStreamID, glsn uint64) ([]byte, error) {
+func (c *storageNodeClient) Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
 	req := &pb.ReadRequest{
 		Glsn: glsn,
 	}
@@ -62,7 +63,7 @@ func (c *storageNodeClient) Read(ctx context.Context, logStreamID LogStreamID, g
 	return rsp.GetPayload(), nil
 }
 
-func (c *storageNodeClient) Subscribe(ctx context.Context, glsn uint64) (<-chan []byte, error) {
+func (c *storageNodeClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan []byte, error) {
 	req := &pb.SubscribeRequest{Glsn: glsn}
 	stream, err := c.rpcClient.Subscribe(ctx, req)
 	if err != nil {
@@ -86,7 +87,7 @@ func (c *storageNodeClient) Subscribe(ctx context.Context, glsn uint64) (<-chan 
 	return ch, nil
 }
 
-func (c *storageNodeClient) Trim(ctx context.Context, glsn uint64) (uint64, error) {
+func (c *storageNodeClient) Trim(ctx context.Context, glsn types.GLSN) (uint64, error) {
 	req := &pb.TrimRequest{
 		Glsn:  glsn,
 		Async: false,

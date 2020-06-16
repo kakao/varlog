@@ -1,6 +1,7 @@
 package varlog
 
 import (
+	types "github.com/kakao/varlog/pkg/varlog/types"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 )
 
@@ -23,20 +24,21 @@ type AppendOption struct {
 
 // Varlog is a log interface with thread-safety. Many goroutines can share the same varlog object.
 type Varlog interface {
-	Append(data []byte, opts AppendOption) (uint64, error)
-	Read(glsn uint64, logStreamID string) ([]byte, error)
-	Subscribe(glsn uint64) (<-chan []byte, error)
-	Trim(glsn uint64) error
+	Append(data []byte, opts AppendOption) (types.GLSN, error)
+	AppendTo(logStreamID types.LogStreamID, data []byte, opts AppendOption) (types.GLSN, error)
+	Read(logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
+	Subscribe(glsn types.GLSN) (<-chan []byte, error)
+	Trim(glsn types.GLSN) error
 	Close() error
 }
 
 type varlog struct {
 	logID string
 
-	logStreams     []LogStreamID
-	storageNodes   []StorageNodeID
-	replicationMap map[LogStreamID][]StorageNodeID
-	storageMap     map[StorageNodeID]StorageNodeClient
+	logStreams     []types.LogStreamID
+	storageNodes   []types.StorageNodeID
+	replicationMap map[types.LogStreamID][]types.StorageNodeID
+	storageMap     map[types.StorageNodeID]StorageNodeClient
 
 	metaReposClient MetadataRepositoryClient
 	metadata        *varlogpb.MetadataDescriptor
@@ -55,19 +57,23 @@ func Open(logID string, opts Options) (Varlog, error) {
 	return varlog, nil
 }
 
-func (s *varlog) Append(data []byte, opts AppendOption) (uint64, error) {
+func (s *varlog) Append(data []byte, opts AppendOption) (types.GLSN, error) {
 	panic("not yet implemented")
 }
 
-func (s *varlog) Read(glsn uint64, logStreamID string) ([]byte, error) {
+func (s *varlog) AppendTo(logStreamID types.LogStreamID, data []byte, opts AppendOption) (types.GLSN, error) {
 	panic("not yet implemented")
 }
 
-func (v *varlog) Subscribe(glsn uint64) (<-chan []byte, error) {
+func (s *varlog) Read(logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
+	panic("not yet implemented")
+}
+
+func (v *varlog) Subscribe(glsn types.GLSN) (<-chan []byte, error) {
 	panic("not implemented")
 }
 
-func (s *varlog) Trim(glsn uint64) error {
+func (s *varlog) Trim(glsn types.GLSN) error {
 	panic("not implemented")
 }
 
