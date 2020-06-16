@@ -2,34 +2,48 @@ syntax = "proto3";
 
 package varlog;
 
-import "google/protobuf/empty.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/empty.proto";
 
 option go_package = "github.com/kakao/varlog/proto/storage_node";
 
-// LocalLogStreamDescriptor is manifest that log stream reports to metadata 
+// LocalLogStreamDescriptor is manifest that log stream reports to metadata
 // repository about log entries those are waiting to commit.
 message LocalLogStreamDescriptor {
-    string log_stream_id = 1;
-    string storage_node_id = 2;
-    uint64 uncommitted_llsn_begin = 3;
-    uint64 uncommitted_llsn_end = 4;
-    uint64 known_highest_glsn = 5;
+    message LogStreamUncommitReport {
+        uint64 log_stream_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID"];
+        uint64 uncommitted_llsn_begin = 2
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN"];
+        uint64 uncommitted_llsn_end = 3
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN"];
+    }
+    int32 storage_node_id = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID"];
+    uint64 known_highest_glsn = 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
+    repeated LogStreamUncommitReport uncommit = 3;
 }
 
-// GlobalLogStreamDescriptor is a committing result against with 
-// LocalLogStreamDescriptor. Field highest_glsn is the highest position in the 
-// global log space. 
-// Field commit_result contains positions of all log entries of log streams in 
+// GlobalLogStreamDescriptor is a committing result against with
+// LocalLogStreamDescriptor. Field highest_glsn is the highest position in the
+// global log space.
+// Field commit_result contains positions of all log entries of log streams in
 // a storage node which is a receiver of this GlobalLogStreamDescriptor.
 message GlobalLogStreamDescriptor {
     message LogStreamCommitResult {
-        string log_stream_id = 1;
-        uint64 committed_glsn_begin = 2;
-        uint64 committed_glsn_end = 3;
+        int32 log_stream_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID"];
+        uint64 committed_glsn_begin = 2
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
+        uint64 committed_glsn_end = 3
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
     }
-    uint64 highest_glsn = 1;
-    repeated LogStreamCommitResult commit_result = 2;
+    uint64 highest_glsn = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
+    uint64 prev_highest_glsn = 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
+    repeated LogStreamCommitResult commit_result = 3;
 }
 
 service LogStreamReporter {

@@ -10,6 +10,14 @@ option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
+enum LogStreamStatus {
+        option (gogoproto.goproto_enum_prefix) = false;
+
+        NONE = 0 [(gogoproto.enumvalue_customname) = "LogStreamStatusNone"];
+        NORMAL = 1 [(gogoproto.enumvalue_customname) = "LogStreamStatusNormal"];
+        FINALIZED = 2 [(gogoproto.enumvalue_customname) = "LogStreamStatusFinalized"];
+}
+
 message StorageDescriptor {
         string path = 1;
         uint64 used = 2;
@@ -17,28 +25,27 @@ message StorageDescriptor {
 }
 
 message StorageNodeDescriptor {
-        string storage_node_id = 1;
+        int32 storage_node_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID"];
         string address = 2;
         repeated StorageDescriptor storages = 3[(gogoproto.nullable) = false];
 }
 
 message ReplicaDescriptor {
-        string storage_node_id = 1;
+        int32 storage_node_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID"];
         string path = 2;
 }
 
 message LogStreamDescriptor {
-        repeated ReplicaDescriptor replicas = 1[(gogoproto.nullable) = false];
-}
+        int32 log_stream_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID"];
+        LogStreamStatus status = 2;
 
-message ProjectionDescriptor {
-        uint64 epoch = 1;
-        uint64 min_lsn = 2;
-        uint64 max_lsn = 3;
-        repeated LogStreamDescriptor log_streams = 4 [(gogoproto.nullable) = false];
+        repeated ReplicaDescriptor replicas = 3[(gogoproto.nullable) = false];
 }
 
 message MetadataDescriptor {
-        repeated StorageNodeDescriptor storage_nodes = 2 [(gogoproto.nullable) = false];
-        repeated ProjectionDescriptor projections = 3 [(gogoproto.nullable) = false];
+        repeated StorageNodeDescriptor storage_nodes = 1 [(gogoproto.nullable) = false];
+        repeated LogStreamDescriptor log_streams = 2 [(gogoproto.nullable) = false];
 }

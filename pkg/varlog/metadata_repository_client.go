@@ -8,9 +8,7 @@ import (
 )
 
 type MetadataRepositoryClient interface {
-	Propose(context.Context, uint64, *varlogpb.ProjectionDescriptor) error
 	GetMetadata(context.Context) (*varlogpb.MetadataDescriptor, error)
-	GetProjection(context.Context, uint64) (*varlogpb.ProjectionDescriptor, error)
 	Close() error
 }
 
@@ -39,20 +37,26 @@ func (c *metadataRepositoryClient) Close() error {
 	return c.rpcConn.close()
 }
 
-func (c *metadataRepositoryClient) Propose(ctx context.Context, epoch uint64, projection *varlogpb.ProjectionDescriptor) error {
-	_, err := c.client.Propose(ctx, &pb.ProposeRequest{Epoch: epoch, Projection: projection})
+func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn varlogpb.StorageNodeDescriptor) error {
+	req := &pb.RegisterStorageNodeRequest{
+		StorageNode: sn,
+	}
+	_, err := c.client.RegisterStorageNode(ctx, req)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *metadataRepositoryClient) GetProjection(ctx context.Context, epoch uint64) (*varlogpb.ProjectionDescriptor, error) {
-	rsp, err := c.client.GetProjection(ctx, &pb.GetProjectionRequest{Epoch: epoch})
-	if err != nil {
-		return nil, err
+func (c *metadataRepositoryClient) CreateLogStream(ctx context.Context, ls varlogpb.LogStreamDescriptor) error {
+	req := &pb.CreateLogStreamRequest{
+		LogStream: ls,
 	}
-	return rsp.GetProjection(), nil
+	_, err := c.client.CreateLogStream(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *metadataRepositoryClient) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
