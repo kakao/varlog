@@ -11,32 +11,28 @@ option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-message ProposeRequest {
-        uint64 epoch = 1;
-        ProjectionDescriptor projection = 2;
-}
-
-message ProposeResponse {
-        uint64 epoch = 1;
-        ProjectionDescriptor projection = 2;
-}
-
-message GetProjectionRequest {
-        uint64 epoch = 1;
-}
-
-message GetProjectionResponse {
-        ProjectionDescriptor projection = 1;
-}
-
 message GetMetadataRequest {}
 
 message GetMetadataResponse {
         MetadataDescriptor metadata = 1;
 }
 
+message RegisterStorageNodeRequest {
+        StorageNodeDescriptor storage_node = 1[(gogoproto.nullable) = false];
+}
+
+message RegisterStorageNodeResponse {
+}
+
+message CreateLogStreamRequest {
+        LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = false];
+}
+
+message CreateLogStreamResponse {
+}
+
 service MetadataRepositoryService {
-        rpc Propose(ProposeRequest) returns (ProposeResponse) {}
-        rpc GetProjection(GetProjectionRequest) returns (GetProjectionResponse) {}
+        rpc RegisterStorageNode(RegisterStorageNodeRequest) returns (RegisterStorageNodeResponse) {}
+        rpc CreateLogStream(CreateLogStreamRequest) returns (CreateLogStreamResponse) {}
         rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
 }

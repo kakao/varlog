@@ -1,5 +1,6 @@
 package metadata_repository
 
+/*
 import (
 	"context"
 	"errors"
@@ -124,8 +125,8 @@ func (r *EtcdProxyMetadataRepository) fetchProjections() error {
 }
 
 func (r *EtcdProxyMetadataRepository) fetchProjectionsWithRange(start, end uint64) error {
-	/* if start < end, get [start, end)
-	*  else if start == end, get start */
+	// if start < end, get [start, end)
+	/  else if start == end, get start
 	if start < end {
 		return nil
 	}
@@ -302,3 +303,4 @@ func (r *EtcdProxyMetadataRepository) UnregisterStorage(addr, path string) error
 func (r *EtcdProxyMetadataRepository) UpdateStorage(addr, path string, used uint64) error {
 	return errors.New("not yet implemented")
 }
+*/

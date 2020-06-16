@@ -22,19 +22,21 @@ func (s *MetadataRepositoryService) Register(server *grpc.Server) {
 	pb.RegisterMetadataRepositoryServiceServer(server, s)
 }
 
-func (s *MetadataRepositoryService) Propose(ctx context.Context, req *pb.ProposeRequest) (*pb.ProposeResponse, error) {
-	s.metaRepos.Propose(req.GetEpoch(), req.GetProjection())
-	return &pb.ProposeResponse{}, nil
-}
-
-func (s *MetadataRepositoryService) GetProjection(ctx context.Context, req *pb.GetProjectionRequest) (*pb.GetProjectionResponse, error) {
-	projection, err := s.metaRepos.GetProjection(req.Epoch)
+func (s *MetadataRepositoryService) RegisterStorageNode(ctx context.Context, req *pb.RegisterStorageNodeRequest) (*pb.RegisterStorageNodeResponse, error) {
+	err := s.metaRepos.RegisterStorageNode(req.StorageNode)
 	if err != nil {
 		return nil, err
 	}
-	rsp := &pb.GetProjectionResponse{
-		Projection: projection,
+	rsp := &pb.RegisterStorageNodeResponse{}
+	return rsp, nil
+}
+
+func (s *MetadataRepositoryService) CreateLogStream(ctx context.Context, req *pb.CreateLogStreamRequest) (*pb.CreateLogStreamResponse, error) {
+	err := s.metaRepos.CreateLogStream(req.LogStream)
+	if err != nil {
+		return nil, err
 	}
+	rsp := &pb.CreateLogStreamResponse{}
 	return rsp, nil
 }
 
