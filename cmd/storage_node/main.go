@@ -6,9 +6,24 @@ import (
 	"runtime"
 
 	"github.daumkakao.com/varlog/varlog/internal/storage"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	"google.golang.org/grpc"
 )
+
+type sstorage struct{}
+
+func (s *sstorage) Read(glsn types.GLSN) ([]byte, error) {
+	panic("not yet implemented")
+}
+
+func (s *sstorage) Write(glsn types.GLSN, data []byte) error {
+	panic("not yet implemented")
+}
+
+func (s *sstorage) Delete(glsn types.GLSN) error {
+	panic("not yet implemented")
+}
 
 func main() {
 	log.Printf("GOMAXPROCS: %v\n", runtime.GOMAXPROCS(0))
@@ -16,7 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("could not listen: %v", err)
 	}
-	stg := storage.NewInMemoryStorage(1000)
+	stg := &sstorage{}
 	service := storage.NewStorageNodeService(stg)
 	if err != nil {
 		log.Fatalf("could create storage node service: %v", err)

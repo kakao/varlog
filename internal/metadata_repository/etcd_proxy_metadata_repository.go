@@ -52,10 +52,6 @@ func (r *EtcdProxyMetadataRepository) fetchMetadata() error {
 		return err
 	}
 
-	if err := r.fetchSequencer(); err != nil {
-		return err
-	}
-
 	if err := r.fetchProjections(); err != nil {
 		return err
 	}
@@ -100,30 +96,6 @@ func (r *EtcdProxyMetadataRepository) fetchEpoch() error {
 		r.epoch = e
 	} else {
 		return errors.New("No epoch info")
-	}
-
-	return nil
-}
-
-func (r *EtcdProxyMetadataRepository) fetchSequencer() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	resp, err := r.cli.Get(ctx, "sequencer")
-	if err != nil {
-		return err
-	}
-
-	if len(resp.Kvs) > 0 {
-		v := resp.Kvs[0].Value
-
-		s := &varlogpb.SequencerDescriptor{}
-		err := s.Unmarshal(v)
-		if err != nil {
-			return err
-		}
-
-		r.metadata.Sequencer = *s
 	}
 
 	return nil
