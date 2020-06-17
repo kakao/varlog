@@ -18,14 +18,14 @@ message GetMetadataResponse {
 }
 
 message RegisterStorageNodeRequest {
-        StorageNodeDescriptor storage_node = 1[(gogoproto.nullable) = false];
+        StorageNodeDescriptor storage_node = 1[(gogoproto.nullable) = true];
 }
 
 message RegisterStorageNodeResponse {
 }
 
 message CreateLogStreamRequest {
-        LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = false];
+        LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
 }
 
 message CreateLogStreamResponse {

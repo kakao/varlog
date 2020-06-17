@@ -33,23 +33,27 @@ func (m *MetadataDescriptor) searchLogStream(id types.LogStreamID) (int, bool) {
 
 func (m *MetadataDescriptor) insertStorageNodeAt(idx int, sn *StorageNodeDescriptor) {
 	l := m.StorageNodes
-	l = append(l, StorageNodeDescriptor{})
+	l = append(l, &StorageNodeDescriptor{})
 	copy(l[idx+1:], l[idx:])
 
-	l[idx] = *sn
+	l[idx] = sn
 	m.StorageNodes = l
 }
 
 func (m *MetadataDescriptor) insertLogStreamAt(idx int, ls *LogStreamDescriptor) {
 	l := m.LogStreams
-	l = append(l, LogStreamDescriptor{})
+	l = append(l, &LogStreamDescriptor{})
 	copy(l[idx+1:], l[idx:])
 
-	l[idx] = *ls
+	l[idx] = ls
 	m.LogStreams = l
 }
 
 func (m *MetadataDescriptor) InsertStorageNode(sn *StorageNodeDescriptor) error {
+	if m == nil || sn == nil {
+		return nil
+	}
+
 	idx, match := m.searchStorageNode(sn.StorageNodeId)
 	if match {
 		return errors.New("already exist")
@@ -60,6 +64,10 @@ func (m *MetadataDescriptor) InsertStorageNode(sn *StorageNodeDescriptor) error 
 }
 
 func (m *MetadataDescriptor) DeleteStorageNode(id types.StorageNodeID) {
+	if m == nil {
+		return
+	}
+
 	idx, match := m.searchStorageNode(id)
 	if match {
 		l := m.StorageNodes
@@ -70,15 +78,23 @@ func (m *MetadataDescriptor) DeleteStorageNode(id types.StorageNodeID) {
 }
 
 func (m *MetadataDescriptor) GetStorageNode(id types.StorageNodeID) *StorageNodeDescriptor {
+	if m == nil {
+		return nil
+	}
+
 	idx, match := m.searchStorageNode(id)
 	if match {
-		return &m.StorageNodes[idx]
+		return m.StorageNodes[idx]
 	}
 
 	return nil
 }
 
 func (m *MetadataDescriptor) InsertLogStream(ls *LogStreamDescriptor) error {
+	if m == nil || ls == nil {
+		return nil
+	}
+
 	idx, match := m.searchLogStream(ls.LogStreamId)
 	if match {
 		return errors.New("already exist")
@@ -89,6 +105,10 @@ func (m *MetadataDescriptor) InsertLogStream(ls *LogStreamDescriptor) error {
 }
 
 func (m *MetadataDescriptor) DeleteLogStream(id types.LogStreamID) {
+	if m == nil {
+		return
+	}
+
 	idx, match := m.searchLogStream(id)
 	if match {
 		l := m.LogStreams
@@ -99,9 +119,13 @@ func (m *MetadataDescriptor) DeleteLogStream(id types.LogStreamID) {
 }
 
 func (m *MetadataDescriptor) GetLogStream(id types.LogStreamID) *LogStreamDescriptor {
+	if m == nil {
+		return nil
+	}
+
 	idx, match := m.searchLogStream(id)
 	if match {
-		return &m.LogStreams[idx]
+		return m.LogStreams[idx]
 	}
 
 	return nil

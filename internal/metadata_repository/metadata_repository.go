@@ -5,7 +5,7 @@ import (
 )
 
 type MetadataRepository interface {
-	RegisterStorageNode(varlogpb.StorageNodeDescriptor) error
-	CreateLogStream(varlogpb.LogStreamDescriptor) error
+	RegisterStorageNode(*varlogpb.StorageNodeDescriptor) error
+	CreateLogStream(*varlogpb.LogStreamDescriptor) error
 	GetMetadata() (*varlogpb.MetadataDescriptor, error)
 }
