@@ -11,15 +11,7 @@ type Options struct {
 	MetadataRepositoryAddress string
 }
 
-type LogStreamSelectionPolicy int
-
-const (
-	RanomSelection LogStreamSelectionPolicy = iota
-	CustomSelection
-)
-
 type AppendOption struct {
-	LSSPolicy LogStreamSelectionPolicy
 }
 
 // Varlog is a log interface with thread-safety. Many goroutines can share the same varlog object.
@@ -57,15 +49,15 @@ func Open(logID string, opts Options) (Varlog, error) {
 	return varlog, nil
 }
 
-func (s *varlog) Append(data []byte, opts AppendOption) (types.GLSN, error) {
+func (v *varlog) Append(data []byte, opts AppendOption) (types.GLSN, error) {
 	panic("not yet implemented")
 }
 
-func (s *varlog) AppendTo(logStreamID types.LogStreamID, data []byte, opts AppendOption) (types.GLSN, error) {
+func (v *varlog) AppendTo(logStreamID types.LogStreamID, data []byte, opts AppendOption) (types.GLSN, error) {
 	panic("not yet implemented")
 }
 
-func (s *varlog) Read(logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
+func (v *varlog) Read(logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
 	panic("not yet implemented")
 }
 
@@ -73,10 +65,10 @@ func (v *varlog) Subscribe(glsn types.GLSN) (<-chan []byte, error) {
 	panic("not implemented")
 }
 
-func (s *varlog) Trim(glsn types.GLSN) error {
+func (v *varlog) Trim(glsn types.GLSN) error {
 	panic("not implemented")
 }
 
-func (s *varlog) Close() error {
+func (v *varlog) Close() error {
 	panic("not implemented")
 }
