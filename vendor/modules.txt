@@ -1,29 +1,11 @@
 # github.com/coreos/etcd v3.3.22+incompatible
 ## explicit
-github.com/coreos/etcd/auth/authpb
-github.com/coreos/etcd/clientv3/balancer
-github.com/coreos/etcd/clientv3/balancer/connectivity
-github.com/coreos/etcd/clientv3/balancer/picker
-github.com/coreos/etcd/clientv3/balancer/resolver/endpoint
-github.com/coreos/etcd/clientv3/credentials
-github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes
-github.com/coreos/etcd/etcdserver/etcdserverpb
-github.com/coreos/etcd/mvcc/mvccpb
-github.com/coreos/etcd/pkg/logutil
-github.com/coreos/etcd/pkg/systemd
-github.com/coreos/etcd/pkg/types
-github.com/coreos/etcd/raft
-github.com/coreos/etcd/raft/raftpb
-github.com/coreos/etcd/version
 # github.com/coreos/go-semver v0.3.0
 ## explicit
-github.com/coreos/go-semver/semver
 # github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 ## explicit
-github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 ## explicit
-github.com/coreos/pkg/capnslog
 # github.com/gogo/protobuf v1.3.1
 ## explicit
 github.com/gogo/protobuf/gogoproto
@@ -35,29 +17,29 @@ github.com/gogo/protobuf/types
 ## explicit
 # github.com/golang/protobuf v1.3.2
 github.com/golang/protobuf/proto
-github.com/golang/protobuf/protoc-gen-go/descriptor
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/google/uuid v1.1.1
 ## explicit
-github.com/google/uuid
+# github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1
+github.com/gopherjs/gopherjs/js
+# github.com/jtolds/gls v4.20.0+incompatible
+github.com/jtolds/gls
+# github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d
+github.com/smartystreets/assertions
+github.com/smartystreets/assertions/internal/go-render/render
+github.com/smartystreets/assertions/internal/oglematchers
+# github.com/smartystreets/goconvey v1.6.4
+## explicit
+github.com/smartystreets/goconvey/convey
+github.com/smartystreets/goconvey/convey/gotest
+github.com/smartystreets/goconvey/convey/reporting
 # go.etcd.io/etcd v3.3.22+incompatible
 ## explicit
-go.etcd.io/etcd/clientv3
-# go.uber.org/atomic v1.6.0
-go.uber.org/atomic
-# go.uber.org/multierr v1.5.0
-go.uber.org/multierr
 # go.uber.org/zap v1.15.0
 ## explicit
-go.uber.org/zap
-go.uber.org/zap/buffer
-go.uber.org/zap/internal/bufferpool
-go.uber.org/zap/internal/color
-go.uber.org/zap/internal/exit
-go.uber.org/zap/zapcore
 # golang.org/x/net v0.0.0-20190620200207-3b0461eec859
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
@@ -73,7 +55,6 @@ golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 # google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
-google.golang.org/genproto/googleapis/api/annotations
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.26.0
 ## explicit
@@ -109,8 +90,6 @@ google.golang.org/grpc/metadata
 google.golang.org/grpc/naming
 google.golang.org/grpc/peer
 google.golang.org/grpc/resolver
-google.golang.org/grpc/resolver/dns
-google.golang.org/grpc/resolver/passthrough
 google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status

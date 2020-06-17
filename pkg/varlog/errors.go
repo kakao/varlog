@@ -8,4 +8,5 @@ var (
 	ErrTrimmedLogEntry   = errors.New("already trimmed log entry")
 
 	ErrInvalidProjection = errors.New("invalid projection")
+	ErrAlreadyExist      = errors.New("already exist")
 )
