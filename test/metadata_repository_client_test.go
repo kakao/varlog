@@ -89,12 +89,12 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 	Convey("Register Storage Node", t, func(ctx C) {
 		snId := types.StorageNodeID(time.Now().UnixNano())
 
-		s := varlogpb.StorageDescriptor{
+		s := &varlogpb.StorageDescriptor{
 			Path:  "test",
 			Used:  0,
 			Total: 100,
 		}
-		sn := varlogpb.StorageNodeDescriptor{
+		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNodeId: snId,
 			Address:       "localhost",
 		}
@@ -111,14 +111,14 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 
 		Convey("Register Exist Storage Node", func(ctx C) {
 			err := env.cli.RegisterStorageNode(context.TODO(), sn)
-			So(err, ShouldNotEqual, nil)
+			So(varlog.IsAlreadyExistsErr(err), ShouldEqual, true)
 		})
 	})
 
 	Convey("Create Log Stream", t, func(ctx C) {
 		lsId := types.LogStreamID(time.Now().UnixNano())
 
-		ls := varlogpb.LogStreamDescriptor{
+		ls := &varlogpb.LogStreamDescriptor{
 			LogStreamId: lsId,
 		}
 
@@ -133,7 +133,7 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 
 		Convey("Create Exist Log Steam", func(ctx C) {
 			err := env.cli.CreateLogStream(context.TODO(), ls)
-			So(err, ShouldNotEqual, nil)
+			So(varlog.IsAlreadyExistsErr(err), ShouldEqual, true)
 		})
 	})
 }

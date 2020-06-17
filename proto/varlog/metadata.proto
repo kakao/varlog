@@ -28,7 +28,7 @@ message StorageNodeDescriptor {
         int32 storage_node_id = 1
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID"];
         string address = 2;
-        repeated StorageDescriptor storages = 3[(gogoproto.nullable) = false];
+        repeated StorageDescriptor storages = 3[(gogoproto.nullable) = true];
 }
 
 message ReplicaDescriptor {
@@ -42,10 +42,10 @@ message LogStreamDescriptor {
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID"];
         LogStreamStatus status = 2;
 
-        repeated ReplicaDescriptor replicas = 3[(gogoproto.nullable) = false];
+        repeated ReplicaDescriptor replicas = 3[(gogoproto.nullable) = true];
 }
 
 message MetadataDescriptor {
-        repeated StorageNodeDescriptor storage_nodes = 1 [(gogoproto.nullable) = false];
-        repeated LogStreamDescriptor log_streams = 2 [(gogoproto.nullable) = false];
+        repeated StorageNodeDescriptor storage_nodes = 1 [(gogoproto.nullable) = true];
+        repeated LogStreamDescriptor log_streams = 2 [(gogoproto.nullable) = true];
 }

@@ -24,23 +24,23 @@ func NewInMemoryMetadataRepository() *InMemoryMetadataRepository {
 	return r
 }
 
-func (r *InMemoryMetadataRepository) RegisterStorageNode(sn varlogpb.StorageNodeDescriptor) error {
+func (r *InMemoryMetadataRepository) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if err := r.metadata.InsertStorageNode(&sn); err != nil {
-		return varlog.ErrAlreadyExist
+	if err := r.metadata.InsertStorageNode(sn); err != nil {
+		return varlog.ErrAlreadyExists
 	}
 
 	return nil
 }
 
-func (r *InMemoryMetadataRepository) CreateLogStream(ls varlogpb.LogStreamDescriptor) error {
+func (r *InMemoryMetadataRepository) CreateLogStream(ls *varlogpb.LogStreamDescriptor) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if err := r.metadata.InsertLogStream(&ls); err != nil {
-		return varlog.ErrAlreadyExist
+	if err := r.metadata.InsertLogStream(ls); err != nil {
+		return varlog.ErrAlreadyExists
 	}
 
 	return nil
@@ -73,6 +73,6 @@ func (r *InMemoryMetadataRepository) penddingReport(report *snpb.LocalLogStreamD
 	return nil
 }
 
-func (r *InMemoryMetadataRepository) deliveryResult(snId types.StorageNodeID, results []snpb.GlobalLogStreamDescriptor) error {
+func (r *InMemoryMetadataRepository) deliveryResult(snId types.StorageNodeID, results []*snpb.GlobalLogStreamDescriptor) error {
 	return errors.New("not yet implemented")
 }
