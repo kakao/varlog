@@ -43,7 +43,7 @@ $(SUBDIRS) :
 
 test:
 	for dir in $(TEST_DIRS); do \
-		$(GO) test $(GOFLAGS) $(GCFLAGS) -v -c $$dir ; \
+		$(GO) test $(GOFLAGS) $(GCFLAGS) -v -count=1 $$dir ; \
 	done
 
 clean :

@@ -28,7 +28,9 @@ func (r *InMemoryMetadataRepository) RegisterStorageNode(sn varlogpb.StorageNode
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	r.metadata.StorageNodes = append(r.metadata.StorageNodes, sn)
+	if err := r.metadata.InsertStorageNode(&sn); err != nil {
+		return varlog.ErrAlreadyExist
+	}
 
 	return nil
 }
@@ -37,7 +39,9 @@ func (r *InMemoryMetadataRepository) CreateLogStream(ls varlogpb.LogStreamDescri
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	r.metadata.LogStreams = append(r.metadata.LogStreams, ls)
+	if err := r.metadata.InsertLogStream(&ls); err != nil {
+		return varlog.ErrAlreadyExist
+	}
 
 	return nil
 }

@@ -27,6 +27,7 @@ func (s *MetadataRepositoryService) RegisterStorageNode(ctx context.Context, req
 	if err != nil {
 		return nil, err
 	}
+
 	rsp := &pb.RegisterStorageNodeResponse{}
 	return rsp, nil
 }

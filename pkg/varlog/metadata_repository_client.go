@@ -8,6 +8,8 @@ import (
 )
 
 type MetadataRepositoryClient interface {
+	RegisterStorageNode(context.Context, varlogpb.StorageNodeDescriptor) error
+	CreateLogStream(context.Context, varlogpb.LogStreamDescriptor) error
 	GetMetadata(context.Context) (*varlogpb.MetadataDescriptor, error)
 	Close() error
 }
@@ -41,10 +43,12 @@ func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn v
 	req := &pb.RegisterStorageNodeRequest{
 		StorageNode: sn,
 	}
+
 	_, err := c.client.RegisterStorageNode(ctx, req)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
