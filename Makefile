@@ -10,9 +10,9 @@ LDFLAGS :=
 GOFLAGS := -race
 GCFLAGS := -gcflags=all='-N -l'
 
+PROTOC_VERSION := 3.12.3
 PROTOC_HOME := $(BUILD_DIR)/protoc
-PROTOC_VERSION := 3.12.2
-PROTOC := $(PROTOC_HOME)/bin/protoc
+PROTOC := protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
 TEST_DIRS := $(sort $(dir $(shell find . -name '*_test.go')))
@@ -24,7 +24,7 @@ STORAGE_NODE_PROTO := proto/storage_node
 METADATA_REPOSITORY_PROTO := proto/metadata_repository
 PROTO := $(SOLAR_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO)
 
-proto : protoc gogoproto $(PROTO)
+proto : check_protoc gogoproto $(PROTO)
 
 STORAGE_NODE := cmd/storage_node
 storage_node : $(STORAGE_NODE_PROTO) $(STORAGE_NODE)
@@ -50,6 +50,18 @@ clean :
 	for dir in $(SUBDIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
+
+.PHONY: check_protoc
+check_protoc:
+ifneq ($(wildcard $(PROTOC_HOME)/bin/protoc),)
+	$(info Installed protoc: $(shell $(PROTOC_HOME)/bin/protoc --version))
+else
+ifneq ($(shell which protoc),)
+	$(info Installed protoc: $(shell protoc --version))
+else
+	$(error Install protoc. You can use '"make protoc"'.)
+endif
+endif
 
 .PHONY: protoc
 protoc: $(PROTOC_HOME)
