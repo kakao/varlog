@@ -122,7 +122,7 @@ func (c *storageNodeClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-c
 				first = false
 			}
 			pllsn = cllsn
-			if result.Error != nil {
+			if result.Error == nil {
 				result.LogEntry = &LogEntry{
 					GLSN: rsp.GetGLSN(),
 					LLSN: cllsn,
@@ -133,7 +133,6 @@ func (c *storageNodeClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-c
 			case out <- result:
 			case <-ctx.Done():
 			}
-
 		}
 	}(ctx)
 	return out, nil
