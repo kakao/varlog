@@ -41,6 +41,15 @@ subdirs : $(SUBDIRS)
 $(SUBDIRS) :
 	$(MAKE) -C $@
 
+mockgen: pkg/varlog/mock/storage_node_mock.go
+
+pkg/varlog/mock/storage_node_mock.go: $(PROTO) proto/storage_node/storage_node.pb.go
+	mockgen -build_flags=-mod=vendor \
+		-package=mock \
+		github.daumkakao.com/varlog/varlog/proto/storage_node \
+		StorageNodeServiceClient,StorageNodeServiceServer,StorageNodeService_SubscribeClient,StorageNodeService_SubscribeServer \
+		> pkg/varlog/mock/storage_node_mock.go
+
 test:
 	for dir in $(TEST_DIRS); do \
 		$(GO) test $(GOFLAGS) $(GCFLAGS) -v -count=1 $$dir ; \
