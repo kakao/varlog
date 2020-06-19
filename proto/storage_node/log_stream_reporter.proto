@@ -7,6 +7,10 @@ import "google/protobuf/empty.proto";
 
 option go_package = "github.com/kakao/varlog/proto/storage_node";
 
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 // LocalLogStreamDescriptor is manifest that log stream reports to metadata
 // repository about log entries those are waiting to commit.
 message LocalLogStreamDescriptor {
