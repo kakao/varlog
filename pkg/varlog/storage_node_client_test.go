@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -25,6 +26,7 @@ type storageNode struct {
 	llsn       types.LLSN
 	logEntries map[types.GLSN][]byte
 	glsnToLLSN map[types.GLSN]types.LLSN
+	mu         sync.Mutex
 }
 
 func newStorageNode() storageNode {
@@ -44,9 +46,11 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 		gomock.Any(),
 		gomock.Any(),
 	).DoAndReturn(func(ctx context.Context, req *pb.AppendRequest) (*pb.AppendResponse, error) {
+		sn.mu.Lock()
 		defer func() {
 			sn.glsn++
 			sn.llsn++
+			sn.mu.Unlock()
 		}()
 		sn.logEntries[sn.glsn] = req.GetPayload()
 		sn.glsnToLLSN[sn.glsn] = sn.llsn
@@ -58,6 +62,8 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 		gomock.Any(),
 		gomock.Any(),
 	).DoAndReturn(func(_ context.Context, req *pb.ReadRequest) (*pb.ReadResponse, error) {
+		sn.mu.Lock()
+		defer sn.mu.Unlock()
 		data, ok := sn.logEntries[req.GetGLSN()]
 		if !ok {
 			return nil, fmt.Errorf("no entry")
@@ -77,6 +83,8 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 		stream := mock.NewMockStorageNodeService_SubscribeClient(ctrl)
 		stream.EXPECT().Recv().DoAndReturn(
 			func() (*pb.SubscribeResponse, error) {
+				sn.mu.Lock()
+				defer sn.mu.Unlock()
 				var glsns []types.GLSN
 				for glsn := range sn.logEntries {
 					glsns = append(glsns, glsn)
@@ -104,6 +112,8 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 		gomock.Any(),
 		gomock.Any(),
 	).DoAndReturn(func(_ context.Context, req *pb.TrimRequest) (*pb.TrimResponse, error) {
+		sn.mu.Lock()
+		defer sn.mu.Unlock()
 		var num uint64 = 0
 		for glsn := range sn.logEntries {
 			if glsn > req.GetGLSN() {
