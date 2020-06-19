@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package varlog;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+import "varlog/metadata.proto";
+import "storage_node/log_stream_reporter.proto";
+import "metadata_repository.proto";
+
+option go_package = "github.daumkakao.com/varlog/varlog/proto/metadata_repository";
+
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+
+message RaftEntry {
+        message Request {
+                option (gogoproto.onlyone) = true;
+
+                RegisterStorageNodeRequest storage_node = 1;
+                CreateLogStreamRequest log_stream = 2;
+        }
+        uint64 session_num = 1;
+        Request request = 2[(gogoproto.nullable) = false];
+}
+
+message MetadataRepositoryDescriptor {
+        MetadataDescriptor metadata = 1[(gogoproto.nullable) = true];
+        repeated GlobalLogStreamDescriptor global_log_streams = 2[(gogoproto.nullable) = true];
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ type testEnv struct {
 	lis  net.Listener
 	srv  *grpc.Server
 	cli  varlog.MetadataRepositoryClient
+	mr   metadata_repository.MetadataRepository
 }
 
 func createServer() (net.Listener, *grpc.Server, error) {
@@ -39,10 +41,29 @@ func startServer(lis net.Listener, server *grpc.Server) {
 	}
 }
 
-func createMetadataRepository(server *grpc.Server) {
+func createMetadataRepository(server *grpc.Server) metadata_repository.MetadataRepository {
 	metaRepos := metadata_repository.NewInMemoryMetadataRepository()
 	service := metadata_repository.NewMetadataRepositoryService(metaRepos)
 	service.Register(server)
+
+	return metaRepos
+}
+
+func createRaftMetadataRepository(server *grpc.Server) metadata_repository.MetadataRepository {
+	var cluster []string
+
+	os.RemoveAll("raftexample-1")
+	os.RemoveAll("raftexample-1-snap")
+
+	cluster = append(cluster, "http://127.0.0.1:10000")
+
+	metaRepos := metadata_repository.NewRaftMetadataRepository(0, cluster)
+	metaRepos.Start()
+
+	service := metadata_repository.NewMetadataRepositoryService(metaRepos)
+	service.Register(server)
+
+	return metaRepos
 }
 
 func CreateEnv(t *testing.T) *testEnv {
@@ -54,7 +75,8 @@ func CreateEnv(t *testing.T) *testEnv {
 	tcpAddr := addr.(*net.TCPAddr)
 	address := fmt.Sprintf("localhost:%d", tcpAddr.Port)
 
-	createMetadataRepository(srv)
+	//mr = createMetadataRepository(srv)
+	mr := createRaftMetadataRepository(srv)
 	go startServer(lis, srv)
 
 	cli, err := varlog.NewMetadataRepositoryClient(address)
@@ -67,6 +89,7 @@ func CreateEnv(t *testing.T) *testEnv {
 		lis:  lis,
 		srv:  srv,
 		cli:  cli,
+		mr:   mr,
 	}
 
 	return env
@@ -76,6 +99,7 @@ func (env *testEnv) Close() {
 	env.cli.Close()
 	env.srv.GracefulStop()
 	env.lis.Close()
+	env.mr.Close()
 }
 
 func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {

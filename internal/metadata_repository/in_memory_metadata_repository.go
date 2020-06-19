@@ -12,7 +12,7 @@ import (
 
 type InMemoryMetadataRepository struct {
 	metadata        varlogpb.MetadataDescriptor
-	globalLogStream []snpb.GlobalLogStreamDescriptor
+	globalLogStream []*snpb.GlobalLogStreamDescriptor
 	penddingC       chan *snpb.LocalLogStreamDescriptor
 	commitC         chan *snpb.GlobalLogStreamDescriptor
 	storageMap      map[types.StorageNodeID]varlog.StorageNodeClient
@@ -22,6 +22,10 @@ type InMemoryMetadataRepository struct {
 func NewInMemoryMetadataRepository() *InMemoryMetadataRepository {
 	r := &InMemoryMetadataRepository{}
 	return r
+}
+
+func (r *InMemoryMetadataRepository) Close() error {
+	return nil
 }
 
 func (r *InMemoryMetadataRepository) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
