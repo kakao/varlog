@@ -57,7 +57,7 @@ func createRaftMetadataRepository(server *grpc.Server) metadata_repository.Metad
 
 	cluster = append(cluster, "http://127.0.0.1:10000")
 
-	metaRepos := metadata_repository.NewRaftMetadataRepository(0, cluster)
+	metaRepos := metadata_repository.NewRaftMetadataRepository(0, 1, cluster)
 	metaRepos.Start()
 
 	service := metadata_repository.NewMetadataRepositoryService(metaRepos)

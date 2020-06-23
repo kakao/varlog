@@ -6,7 +6,6 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 import "varlog/metadata.proto";
 import "storage_node/log_stream_reporter.proto";
-import "metadata_repository.proto";
 
 option go_package = "github.com/kakao/varlog/proto/metadata_repository";
 
@@ -14,13 +13,35 @@ option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
+message RegisterStorageNode {
+        StorageNodeDescriptor storage_node = 1[(gogoproto.nullable) = true];
+}
+
+message CreateLogStream {
+        LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
+}
+
+message Report {
+        LocalLogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
+}
+
+message Cut {
+}
+
+message TrimCut {
+    uint64 glsn = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
+}
 
 message RaftEntry {
         message Request {
                 option (gogoproto.onlyone) = true;
 
-                RegisterStorageNodeRequest storage_node = 1;
-                CreateLogStreamRequest log_stream = 2;
+                RegisterStorageNode storage_node = 1;
+                CreateLogStream log_stream = 2;
+                Report report = 3;
+                Cut cut = 4;
+                TrimCut trim_cut = 5;
         }
         uint64 session_num = 1;
         Request request = 2[(gogoproto.nullable) = false];
