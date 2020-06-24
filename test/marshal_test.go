@@ -15,14 +15,14 @@ func TestSnapshotMarshal(t *testing.T) {
 
 	for i := 0; i < 128; i++ {
 		gls := &snpb.GlobalLogStreamDescriptor{}
-		gls.HighestGlsn = types.GLSN((i + 1) * 16)
-		gls.PrevHighestGlsn = types.GLSN(i * 16)
+		gls.NextGLSN = types.GLSN((i + 1) * 16)
+		gls.PrevNextGLSN = types.GLSN(i * 16)
 
 		for j := 0; j < 1024; j++ {
 			lls := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{}
-			lls.LogStreamId = types.LogStreamID(j)
-			lls.CommittedGlsnBegin = gls.PrevHighestGlsn + types.GLSN(j*2)
-			lls.CommittedGlsnEnd = lls.CommittedGlsnBegin + 1
+			lls.LogStreamID = types.LogStreamID(j)
+			lls.CommittedGLSNBegin = gls.PrevNextGLSN + types.GLSN(j*2)
+			lls.CommittedGLSNEnd = lls.CommittedGLSNBegin + 1
 
 			gls.CommitResult = append(gls.CommitResult, lls)
 		}
@@ -39,14 +39,14 @@ func TestSnapshotMarshal(t *testing.T) {
 
 func TestGlobalLogStreamMarshal(t *testing.T) {
 	gls := &snpb.GlobalLogStreamDescriptor{}
-	gls.HighestGlsn = types.GLSN(1000)
-	gls.PrevHighestGlsn = types.GLSN(16)
+	gls.NextGLSN = types.GLSN(1000)
+	gls.PrevNextGLSN = types.GLSN(16)
 
 	for i := 0; i < 5000; i++ {
 		lls := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{}
-		lls.LogStreamId = types.LogStreamID(i)
-		lls.CommittedGlsnBegin = gls.PrevHighestGlsn + types.GLSN(i*2)
-		lls.CommittedGlsnEnd = lls.CommittedGlsnBegin + 1
+		lls.LogStreamID = types.LogStreamID(i)
+		lls.CommittedGLSNBegin = gls.PrevNextGLSN + types.GLSN(i*2)
+		lls.CommittedGLSNEnd = lls.CommittedGLSNBegin + 1
 
 		gls.CommitResult = append(gls.CommitResult, lls)
 	}

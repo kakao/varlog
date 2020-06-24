@@ -17,7 +17,11 @@ func (s *sstorage) Read(glsn types.GLSN) ([]byte, error) {
 	panic("not yet implemented")
 }
 
-func (s *sstorage) Write(glsn types.GLSN, data []byte) error {
+func (s *sstorage) Write(llsn types.LLSN, data []byte) error {
+	panic("not yet implemented")
+}
+
+func (s *sstorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 	panic("not yet implemented")
 }
 

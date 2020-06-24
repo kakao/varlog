@@ -119,7 +119,7 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 			Total: 100,
 		}
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeId: snId,
+			StorageNodeID: snId,
 			Address:       "localhost",
 		}
 		sn.Storages = append(sn.Storages, s)
@@ -143,7 +143,7 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 		lsId := types.LogStreamID(time.Now().UnixNano())
 
 		ls := &varlogpb.LogStreamDescriptor{
-			LogStreamId: lsId,
+			LogStreamID: lsId,
 		}
 
 		err := env.cli.CreateLogStream(context.TODO(), ls)
