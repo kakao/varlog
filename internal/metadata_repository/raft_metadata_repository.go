@@ -21,9 +21,9 @@ import (
 const DefaultNumGlobalLogStreams int = 128
 
 type localCutInfo struct {
-	beginLlsn        types.LLSN
-	endLlsn          types.LLSN
-	knownHighestGlsn types.GLSN
+	beginLlsn     types.LLSN
+	endLlsn       types.LLSN
+	knownNextGLSN types.GLSN
 }
 
 type RaftMetadataRepository struct {
@@ -222,9 +222,9 @@ func (mr *RaftMetadataRepository) applyCreateLogStream(r *pb.CreateLogStream) er
 func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
 	//TODO:: handle failover StorageNode
 
-	snId := r.LogStream.StorageNodeId
+	snId := r.LogStream.StorageNodeID
 	for _, l := range r.LogStream.Uncommit {
-		lsId := l.LogStreamId
+		lsId := l.LogStreamID
 		lm, ok := mr.localCuts[lsId]
 		if !ok {
 			lm = make(map[types.StorageNodeID]localCutInfo)
@@ -232,17 +232,17 @@ func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
 		}
 
 		u := localCutInfo{
-			beginLlsn:        l.UncommittedLlsnBegin,
-			endLlsn:          l.UncommittedLlsnEnd,
-			knownHighestGlsn: r.LogStream.KnownHighestGlsn,
+			beginLlsn:     l.UncommittedLLSNBegin,
+			endLlsn:       l.UncommittedLLSNEnd,
+			knownNextGLSN: r.LogStream.NextGLSN,
 		}
 
 		s, ok := lm[snId]
 		if !ok || s.endLlsn < u.endLlsn {
 			// 같은 SN 으로부터 받은 report 정보중에
 			// local cut 의 endLlsn 이 더 크다면
-			// knownHighestGlsn 은 크거나 같다.
-			// knownHighestGlsn 이 더 크고
+			// knownNextGLSN 은 크거나 같다.
+			// knownNextGLSN 이 더 크고
 			// endLlsn 이 더 작은 local cut 은 있을 수 없다.
 			lm[snId] = u
 		}
@@ -253,10 +253,10 @@ func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
 
 func getCommitResultFromGls(gls *snpb.GlobalLogStreamDescriptor, lsId types.LogStreamID) *snpb.GlobalLogStreamDescriptor_LogStreamCommitResult {
 	i := sort.Search(len(gls.CommitResult), func(i int) bool {
-		return gls.CommitResult[i].LogStreamId >= lsId
+		return gls.CommitResult[i].LogStreamID >= lsId
 	})
 
-	if i < len(gls.CommitResult) && gls.CommitResult[i].LogStreamId == lsId {
+	if i < len(gls.CommitResult) && gls.CommitResult[i].LogStreamID == lsId {
 		return gls.CommitResult[i]
 	}
 
@@ -271,15 +271,15 @@ Search:
 	for i = len(mr.smr.GlobalLogStreams) - 1; i >= 0; i-- {
 		gls := mr.smr.GlobalLogStreams[i]
 
-		if gls.HighestGlsn == glsn {
+		if gls.NextGLSN == glsn {
 			break Search
-		} else if gls.HighestGlsn < glsn {
+		} else if gls.NextGLSN < glsn {
 			panic("broken global cut consistency")
 		}
 
 		r := getCommitResultFromGls(gls, lsId)
 		if r != nil {
-			num += uint64(r.CommittedGlsnEnd - r.CommittedGlsnBegin)
+			num += uint64(r.CommittedGLSNEnd - r.CommittedGLSNBegin)
 		}
 	}
 
@@ -287,11 +287,11 @@ Search:
 }
 
 func (mr *RaftMetadataRepository) cut() error {
-	prev := mr.getHighestGlsn()
+	prev := mr.getNextGLSN()
 	glsn := prev
 
 	gls := &snpb.GlobalLogStreamDescriptor{
-		PrevHighestGlsn: prev,
+		PrevNextGLSN: prev,
 	}
 
 Loop:
@@ -315,16 +315,16 @@ Loop:
 		}
 
 		commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
-			LogStreamId:        lsId,
-			CommittedGlsnBegin: glsn,
-			CommittedGlsnEnd:   glsn + types.GLSN(nrUncommit),
+			LogStreamID:        lsId,
+			CommittedGLSNBegin: glsn,
+			CommittedGLSNEnd:   glsn + types.GLSN(nrUncommit),
 		}
 
 		gls.CommitResult = append(gls.CommitResult, commit)
-		glsn = commit.CommittedGlsnEnd
+		glsn = commit.CommittedGLSNEnd
 	}
 
-	gls.HighestGlsn = glsn
+	gls.NextGLSN = glsn
 
 	mr.appendGlobalLogStream(gls)
 	mr.proposeTrimCut()
@@ -341,7 +341,7 @@ func (mr *RaftMetadataRepository) trimCut(r *pb.TrimCut) error {
 
 	pos := 0
 	for idx, gls := range mr.smr.GlobalLogStreams {
-		if gls.HighestGlsn <= r.Glsn {
+		if gls.NextGLSN <= r.Glsn {
 			pos = idx + 1
 		}
 	}
@@ -371,10 +371,10 @@ func (mr *RaftMetadataRepository) calculateCut(m map[types.StorageNodeID]localCu
 			endLlsn = l.endLlsn
 		}
 
-		if l.knownHighestGlsn > knownGlsn {
-			// knownHighestGlsn 이 다르다면,
+		if l.knownNextGLSN > knownGlsn {
+			// knownNextGLSN 이 다르다면,
 			// 일부 SN 이 commitResult 를 받지 못했을 뿐이다.
-			knownGlsn = l.knownHighestGlsn
+			knownGlsn = l.knownNextGLSN
 		}
 	}
 
@@ -385,7 +385,7 @@ func (mr *RaftMetadataRepository) calculateCut(m map[types.StorageNodeID]localCu
 	return knownGlsn, uint64(endLlsn - beginLlsn)
 }
 
-func (mr *RaftMetadataRepository) getLogStreamIds() []types.LogStreamID {
+func (mr *RaftMetadataRepository) getLogStreamIDs() []types.LogStreamID {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 
@@ -396,19 +396,19 @@ func (mr *RaftMetadataRepository) getLogStreamIds() []types.LogStreamID {
 	lsIds := make([]types.LogStreamID, len(mr.smr.Metadata.LogStreams))
 
 	for i, l := range mr.smr.Metadata.LogStreams {
-		lsIds[i] = l.LogStreamId
+		lsIds[i] = l.LogStreamID
 	}
 
 	return lsIds
 }
 
-func (mr *RaftMetadataRepository) getHighestGlsn() types.GLSN {
+func (mr *RaftMetadataRepository) getNextGLSN() types.GLSN {
 	len := len(mr.smr.GlobalLogStreams)
 	if len == 0 {
 		return 0
 	}
 
-	return mr.smr.GlobalLogStreams[len-1].HighestGlsn
+	return mr.smr.GlobalLogStreams[len-1].NextGLSN
 }
 
 func (mr *RaftMetadataRepository) appendGlobalLogStream(gls *snpb.GlobalLogStreamDescriptor) {
@@ -416,7 +416,7 @@ func (mr *RaftMetadataRepository) appendGlobalLogStream(gls *snpb.GlobalLogStrea
 		return
 	}
 
-	sort.Slice(gls.CommitResult, func(i, j int) bool { return gls.CommitResult[i].LogStreamId < gls.CommitResult[j].LogStreamId })
+	sort.Slice(gls.CommitResult, func(i, j int) bool { return gls.CommitResult[i].LogStreamID < gls.CommitResult[j].LogStreamID })
 
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -435,7 +435,7 @@ func (mr *RaftMetadataRepository) proposeTrimCut() {
 	}
 
 	r := &pb.TrimCut{
-		Glsn: mr.smr.GlobalLogStreams[0].HighestGlsn,
+		Glsn: mr.smr.GlobalLogStreams[0].NextGLSN,
 	}
 	mr.propose(r)
 

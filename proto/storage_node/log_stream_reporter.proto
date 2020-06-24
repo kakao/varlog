@@ -16,16 +16,21 @@ option (gogoproto.unmarshaler_all) = true;
 message LocalLogStreamDescriptor {
     message LogStreamUncommitReport {
         uint64 log_stream_id = 1
-            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID"];
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+             (gogoproto.customname) = "LogStreamID"];
         uint64 uncommitted_llsn_begin = 2
-            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN"];
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+             (gogoproto.customname) = "UncommittedLLSNBegin"];
         uint64 uncommitted_llsn_end = 3
-            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN"];
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+             (gogoproto.customname) = "UncommittedLLSNEnd"];
     }
     int32 storage_node_id = 1
-        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID"];
-    uint64 known_highest_glsn = 2
-        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+         (gogoproto.customname) = "StorageNodeID"];
+    uint64 next_glsn = 2
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+         (gogoproto.customname) = "NextGLSN"];
     repeated LogStreamUncommitReport uncommit = 3;
 }
 
@@ -37,16 +42,21 @@ message LocalLogStreamDescriptor {
 message GlobalLogStreamDescriptor {
     message LogStreamCommitResult {
         int32 log_stream_id = 1
-            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID"];
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+             (gogoproto.customname) = "LogStreamID"];
         uint64 committed_glsn_begin = 2
-            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+             (gogoproto.customname) = "CommittedGLSNBegin"];
         uint64 committed_glsn_end = 3
-            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+             (gogoproto.customname) = "CommittedGLSNEnd"];
     }
-    uint64 highest_glsn = 1
-        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
-    uint64 prev_highest_glsn = 2
-        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
+    uint64 next_glsn = 1
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+         (gogoproto.customname) = "NextGLSN"];
+    uint64 prev_next_glsn = 2
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+         (gogoproto.customname) = "PrevNextGLSN"];
     repeated LogStreamCommitResult commit_result = 3;
 }
 

@@ -9,10 +9,10 @@ import (
 
 func (m *MetadataDescriptor) searchStorageNode(id types.StorageNodeID) (int, bool) {
 	i := sort.Search(len(m.StorageNodes), func(i int) bool {
-		return m.StorageNodes[i].StorageNodeId >= id
+		return m.StorageNodes[i].StorageNodeID >= id
 	})
 
-	if i < len(m.StorageNodes) && m.StorageNodes[i].StorageNodeId == id {
+	if i < len(m.StorageNodes) && m.StorageNodes[i].StorageNodeID == id {
 		return i, true
 	}
 
@@ -21,10 +21,10 @@ func (m *MetadataDescriptor) searchStorageNode(id types.StorageNodeID) (int, boo
 
 func (m *MetadataDescriptor) searchLogStream(id types.LogStreamID) (int, bool) {
 	i := sort.Search(len(m.LogStreams), func(i int) bool {
-		return m.LogStreams[i].LogStreamId >= id
+		return m.LogStreams[i].LogStreamID >= id
 	})
 
-	if i < len(m.LogStreams) && m.LogStreams[i].LogStreamId == id {
+	if i < len(m.LogStreams) && m.LogStreams[i].LogStreamID == id {
 		return i, true
 	}
 
@@ -54,7 +54,7 @@ func (m *MetadataDescriptor) InsertStorageNode(sn *StorageNodeDescriptor) error 
 		return nil
 	}
 
-	idx, match := m.searchStorageNode(sn.StorageNodeId)
+	idx, match := m.searchStorageNode(sn.StorageNodeID)
 	if match {
 		return errors.New("already exist")
 	}
@@ -95,7 +95,7 @@ func (m *MetadataDescriptor) InsertLogStream(ls *LogStreamDescriptor) error {
 		return nil
 	}
 
-	idx, match := m.searchLogStream(ls.LogStreamId)
+	idx, match := m.searchLogStream(ls.LogStreamID)
 	if match {
 		return errors.New("already exist")
 	}

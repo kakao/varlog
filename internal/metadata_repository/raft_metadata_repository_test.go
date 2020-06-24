@@ -84,15 +84,15 @@ func (clus *metadataRepoCluster) closeNoErrors(t *testing.T) {
 	}
 }
 
-func makeLocalLogStream(snId types.StorageNodeID, knownHighestGlsn types.GLSN, lsId types.LogStreamID, uncommitBegin, uncommitEnd types.LLSN) *snpb.LocalLogStreamDescriptor {
+func makeLocalLogStream(snId types.StorageNodeID, knownNextGLSN types.GLSN, lsId types.LogStreamID, uncommitBegin, uncommitEnd types.LLSN) *snpb.LocalLogStreamDescriptor {
 	lls := &snpb.LocalLogStreamDescriptor{
-		StorageNodeId:    snId,
-		KnownHighestGlsn: knownHighestGlsn,
+		StorageNodeID: snId,
+		NextGLSN:      knownNextGLSN,
 	}
 	ls := &snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
-		LogStreamId:          lsId,
-		UncommittedLlsnBegin: uncommitBegin,
-		UncommittedLlsnEnd:   uncommitEnd,
+		LogStreamID:          lsId,
+		UncommittedLLSNBegin: uncommitBegin,
+		UncommittedLLSNEnd:   uncommitEnd,
 	}
 	lls.Uncommit = append(lls.Uncommit, ls)
 
@@ -271,7 +271,7 @@ func TestGlobalCut(t *testing.T) {
 			So(len(mr.smr.GlobalLogStreams), ShouldBeGreaterThan, 0)
 			gls := mr.smr.GlobalLogStreams[len(mr.smr.GlobalLogStreams)-1]
 
-			So(gls.HighestGlsn, ShouldEqual, types.GLSN(5))
+			So(gls.NextGLSN, ShouldEqual, types.GLSN(5))
 
 			Convey("LogStream should be dedup", func(ctx C) {
 				lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(3))
@@ -288,7 +288,7 @@ func TestGlobalCut(t *testing.T) {
 				So(len(mr.smr.GlobalLogStreams), ShouldBeGreaterThan, 0)
 				gls := mr.smr.GlobalLogStreams[len(mr.smr.GlobalLogStreams)-1]
 
-				So(gls.HighestGlsn, ShouldEqual, types.GLSN(5))
+				So(gls.NextGLSN, ShouldEqual, types.GLSN(5))
 			})
 
 			Convey("LogStream which have wrong GLSN but have uncommitted should cut", func(ctx C) {
@@ -306,7 +306,7 @@ func TestGlobalCut(t *testing.T) {
 				So(len(mr.smr.GlobalLogStreams), ShouldBeGreaterThan, 0)
 				gls := mr.smr.GlobalLogStreams[len(mr.smr.GlobalLogStreams)-1]
 
-				So(gls.HighestGlsn, ShouldEqual, types.GLSN(9))
+				So(gls.NextGLSN, ShouldEqual, types.GLSN(9))
 			})
 		})
 	})

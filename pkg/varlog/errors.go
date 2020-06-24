@@ -14,6 +14,9 @@ var (
 	ErrTrimmedLogEntry   = errors.New("already trimmed log entry")
 	ErrInvalidProjection = errors.New("invalid projection")
 
+	ErrInvalid = errors.New("invalid argument")
+	ErrExist   = errors.New("already exists")
+
 	ErrAlreadyExists = status.New(codes.AlreadyExists, "varlogserver: already exists").Err()
 
 	errStringToError = map[string]error{
