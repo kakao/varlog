@@ -15,6 +15,19 @@ PROTOC_HOME := $(BUILD_DIR)/protoc
 PROTOC := protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
+TEST_COUNT := 1
+TEST_FLAGS := -count=$(TEST_COUNT)
+
+TEST_FAILFAST := 0
+ifeq ($(TEST_FAILFAST),1)
+	TEST_FLAGS := $(TEST_FLAGS) -failfast
+endif
+
+TEST_VERBOSE := 1
+ifeq ($(TEST_VERBOSE),1)
+	TEST_FLAGS := $(TEST_FLAGS) -v
+endif
+
 TEST_DIRS := $(sort $(dir $(shell find . -name '*_test.go')))
 
 all : proto libvarlog storage_node metadata_repository
@@ -52,7 +65,7 @@ pkg/varlog/mock/storage_node_mock.go: $(PROTO) proto/storage_node/storage_node.p
 
 test:
 	for dir in $(TEST_DIRS); do \
-		$(GO) test $(GOFLAGS) $(GCFLAGS) -v -count=1 $$dir ; \
+		$(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS)  $$dir ; \
 	done
 
 clean :
