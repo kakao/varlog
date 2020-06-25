@@ -10,7 +10,7 @@ pipeline {
 
     stage('test') {
       steps {
-        sh 'make test'
+        sh 'make test TEST_FAILFAST=1 TEST_COUNT=10'
       }
     }
 
