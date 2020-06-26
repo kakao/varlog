@@ -25,16 +25,19 @@ type CommittedLogStreamStatus struct {
 
 type LogStreamReporter struct {
 	storageNodeID types.StorageNodeID
-	knownNextGLSN types.GLSN
+	knownNextGLSN types.AtomicGLSN
 	executors     map[types.LogStreamID]LogStreamExecutor
-	mu            sync.RWMutex // guard for LogStreamExecutors
+	mtxExecutors  sync.RWMutex
+	history       map[types.GLSN][]UncommittedLogStreamStatus
+	mtxHistory    sync.RWMutex
+	mtxCommit     sync.Mutex
 }
 
 func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter {
 	return &LogStreamReporter{
 		storageNodeID: storageNodeID,
-		knownNextGLSN: types.GLSN(0),
 		executors:     make(map[types.LogStreamID]LogStreamExecutor),
+		history:       make(map[types.GLSN][]UncommittedLogStreamStatus),
 	}
 }
 
@@ -47,8 +50,8 @@ func (r *LogStreamReporter) RegisterLogStreamExecutor(logStreamID types.LogStrea
 	if executor == nil {
 		return varlog.ErrInvalid
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mtxExecutors.Lock()
+	defer r.mtxExecutors.Unlock()
 	_, ok := r.executors[logStreamID]
 	if ok {
 		return varlog.ErrExist
@@ -61,44 +64,71 @@ func (r *LogStreamReporter) RegisterLogStreamExecutor(logStreamID types.LogStrea
 // KnownNextGLSNs from all LogStreamExecutors must be equal to the corresponding in
 // LogStreamReporter.
 func (r *LogStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatus) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mtxExecutors.RLock()
+	defer r.mtxExecutors.RUnlock()
 	reports := make([]UncommittedLogStreamStatus, len(r.executors))
 	i := 0
+	minKnownNextGLSN := types.GLSN(0)
 	for _, executor := range r.executors {
-		status := executor.GetLogStreamStatus()
+		status := executor.GetReport()
 		reports[i] = status
-		i++
-		// FIXME: invariant for KnownNextGLSN
 		if status.KnownNextGLSN == 0 {
-			// New LogStreamExecutor has no idea KnownNextGLSN.
+			// newbie: New LogStreamExecutor has no idea KnownNextGLSN.
 			continue
 		}
-		if r.knownNextGLSN != status.KnownNextGLSN {
-			panic("KnownNextGLSN mismatch")
+		if minKnownNextGLSN == 0 || minKnownNextGLSN > status.KnownNextGLSN {
+			minKnownNextGLSN = status.KnownNextGLSN
 		}
-
 	}
-	return r.knownNextGLSN, reports
+	knownNextGLSN := r.knownNextGLSN.Load()
+	if minKnownNextGLSN < knownNextGLSN {
+		// slow LSE
+		// get the past report from history map
+		// use minKnownNextGLSN as return value
+		knownNextGLSN = minKnownNextGLSN
+		r.mtxHistory.RLock()
+		if rpt, ok := r.history[knownNextGLSN]; ok {
+			reports = rpt
+		}
+		r.mtxHistory.RUnlock()
+	}
+	r.mtxHistory.Lock()
+	defer r.mtxHistory.Unlock()
+	if _, ok := r.history[knownNextGLSN]; !ok {
+		r.history[knownNextGLSN] = reports
+	}
+	// NOTE: history map will be small - most 2 elements
+	// TODO: remove this after implementing log stream-wise report
+	for nextGLSN, _ := range r.history {
+		if nextGLSN < knownNextGLSN {
+			delete(r.history, nextGLSN)
+		}
+	}
+	return knownNextGLSN, reports
 }
 
 func (r *LogStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if prevNextGLSN < r.knownNextGLSN {
-		// stale commit result
+	r.mtxCommit.Lock()
+	defer r.mtxCommit.Unlock()
+
+	knownNextGLSN := r.knownNextGLSN.Load()
+	if prevNextGLSN < knownNextGLSN {
+		// TODO: stale commit result
 		return
 	}
-	if prevNextGLSN > r.knownNextGLSN {
-		panic("missed something")
+	if prevNextGLSN > knownNextGLSN {
+		// TODO: missed something - not yet ready to commit it
+		return
 	}
-	r.knownNextGLSN = nextGLSN
 	for _, commitResult := range commitResults {
 		logStreamID := commitResult.LogStreamID
+		r.mtxExecutors.RLock()
 		executor, ok := r.executors[logStreamID]
+		r.mtxExecutors.RUnlock()
 		if !ok {
 			panic(fmt.Sprintf("no such LogStreamExecutor in this StorageNode: %d", logStreamID))
 		}
-		executor.(LogStreamExecutor).CommitLogStreamStatusResult(commitResult)
+		executor.Commit(commitResult)
 	}
+	r.knownNextGLSN.Store(nextGLSN)
 }

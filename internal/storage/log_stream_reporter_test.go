@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -17,7 +18,22 @@ type dummyLogStreamExecutor struct {
 	uncommittedEnd types.LLSN
 }
 
-func (e *dummyLogStreamExecutor) GetLogStreamStatus() UncommittedLogStreamStatus {
+func (e *dummyLogStreamExecutor) Run(ctx context.Context) {}
+func (e *dummyLogStreamExecutor) Close()                  {}
+func (e *dummyLogStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
+	return nil, nil
+}
+func (e *dummyLogStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
+	return nil, nil
+}
+func (e *dummyLogStreamExecutor) Append(ctx context.Context, data []byte) (types.GLSN, error) {
+	return 0, nil
+}
+func (e *dummyLogStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {
+	return 0, nil
+}
+
+func (e *dummyLogStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	return UncommittedLogStreamStatus{
 		LogStreamID:          e.id,
 		KnownNextGLSN:        e.knownNextGLSN,
@@ -26,9 +42,10 @@ func (e *dummyLogStreamExecutor) GetLogStreamStatus() UncommittedLogStreamStatus
 	}
 }
 
-func (e *dummyLogStreamExecutor) CommitLogStreamStatusResult(s CommittedLogStreamStatus) {
+func (e *dummyLogStreamExecutor) Commit(s CommittedLogStreamStatus) error {
 	e.knownNextGLSN = s.NextGLSN
 	e.committedEnd += types.LLSN(s.CommittedGLSNEnd - s.CommittedGLSNBegin)
+	return nil
 }
 
 func TestRegisterLogStream(t *testing.T) {
@@ -52,7 +69,7 @@ func TestGetReport(t *testing.T) {
 	Convey("GetReport should collect statuses about uncommitted log entries from each LogStreamExecutor", t, func() {
 		const nextGLSN = types.GLSN(1)
 		reporter := NewLogStreamReporter(storageNodeID)
-		reporter.knownNextGLSN = nextGLSN
+		reporter.knownNextGLSN.Store(nextGLSN)
 		var err error
 
 		lse1 := &dummyLogStreamExecutor{
