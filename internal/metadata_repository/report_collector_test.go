@@ -281,7 +281,7 @@ func TestCommit(t *testing.T) {
 
 		reportCollector.Commit(gls)
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		for _, cli := range a.m {
 			cli.mu.Lock()
@@ -299,7 +299,7 @@ func TestCommit(t *testing.T) {
 
 		reportCollector.Commit(gls)
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		for _, cli := range a.m {
 			cli.mu.Lock()
