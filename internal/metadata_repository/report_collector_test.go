@@ -284,9 +284,9 @@ func TestCommit(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 
 		for _, cli := range a.m {
-			cli.mu.RLock()
+			cli.mu.Lock()
 			So(cli.knownNextGLSN, ShouldEqual, types.GLSN(5))
-			cli.mu.RUnlock()
+			cli.mu.Unlock()
 		}
 	})
 
