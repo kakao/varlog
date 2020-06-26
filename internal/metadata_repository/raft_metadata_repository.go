@@ -27,11 +27,11 @@ type localCutInfo struct {
 }
 
 type RaftMetadataRepository struct {
-	index      int
-	nrReplica  int
-	raftState  raft.StateType
-	storageMap map[types.StorageNodeID]varlog.StorageNodeClient
-	localCuts  map[types.LogStreamID]map[types.StorageNodeID]localCutInfo
+	index           int
+	nrReplica       int
+	raftState       raft.StateType
+	localCuts       map[types.LogStreamID]map[types.StorageNodeID]localCutInfo
+	reportCollector *ReportCollector
 
 	// SMR
 	smr pb.MetadataRepositoryDescriptor
@@ -251,7 +251,7 @@ func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
 	return nil
 }
 
-func getCommitResultFromGls(gls *snpb.GlobalLogStreamDescriptor, lsId types.LogStreamID) *snpb.GlobalLogStreamDescriptor_LogStreamCommitResult {
+func getCommitResultFromGLS(gls *snpb.GlobalLogStreamDescriptor, lsId types.LogStreamID) *snpb.GlobalLogStreamDescriptor_LogStreamCommitResult {
 	i := sort.Search(len(gls.CommitResult), func(i int) bool {
 		return gls.CommitResult[i].LogStreamID >= lsId
 	})
@@ -277,7 +277,7 @@ Search:
 			panic("broken global cut consistency")
 		}
 
-		r := getCommitResultFromGls(gls, lsId)
+		r := getCommitResultFromGLS(gls, lsId)
 		if r != nil {
 			num += uint64(r.CommittedGLSNEnd - r.CommittedGLSNBegin)
 		}
