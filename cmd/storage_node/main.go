@@ -1,16 +1,6 @@
 package main
 
-import (
-	"log"
-	"net"
-	"runtime"
-
-	"github.daumkakao.com/varlog/varlog/internal/storage"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	"google.golang.org/grpc"
-)
-
+/*
 type sstorage struct{}
 
 func (s *sstorage) Read(glsn types.GLSN) ([]byte, error) {
@@ -25,7 +15,7 @@ func (s *sstorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 	panic("not yet implemented")
 }
 
-func (s *sstorage) Delete(glsn types.GLSN) error {
+func (s *sstorage) Delete(glsn types.GLSN) (uint64, error) {
 	panic("not yet implemented")
 }
 
@@ -46,3 +36,6 @@ func main() {
 		log.Fatalf("could not serve: %v", err)
 	}
 }
+*/
+
+func main() {}
