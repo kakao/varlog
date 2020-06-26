@@ -25,7 +25,7 @@
 ## 개요
 WOKL(World of Kakao Logs)은 total order를 엄격히 지키는 분산 로그 저장소이다.
 WOKL은 strong consistency를 제공하며, SMR(state machine replication),
-transaction log , consensus 등에 활용할 수 있다. 이를 확장하면 fault-tolerance, 
+transaction log , consensus 등에 활용할 수 있다. 이를 확장하면 fault-tolerance,
 recovery system, distributed lock, leader election, consistent medata storage,
 transactional database 등을 구현할 수 있다.
 WOKL은 로그를 읽고 쓰는 간단한 인터페이스를 제공한다. 여러 스토리지 노드에
@@ -55,7 +55,7 @@ WOKL의 주요 구성 요소는 Metadata Repository, Storage Node, Sequencer, Cl
 스토리지 노드는 로그를 저장하는 디스크 서버이다. 로그는 여러 대의 Storage Node에
 나누어 저장된다. Storage Node는 로그를 저장하기 위해 Log Stream이라는 추상화를
 사용한다. Storage Node는 여러 개의 Log Stream을 갖을 수 있다. Log Stream은 여러
-Log Segment의 나열로 이루어진다. Log Segment는 로그를 저장하는 파일에 대한 
+Log Segment의 나열로 이루어진다. Log Segment는 로그를 저장하는 파일에 대한
 추상화이다. Log Segment는 Log Entry의 나열로 이루어져 있으며, Log Entry는 순서를
 나타내는 고유한 값인 GLSN (Global Log Sequence Number)를 갖는다.
 
@@ -105,10 +105,10 @@ Repository를 사용한다. Storage Node의 Log Stream이 포함하는 GLSN 범�
 정보를 Projection이라고 한다. Projection을 통해 로그를 읽고 쓰기 위한
 논리적인 로그 위치 (GLSN)로 부터 Storage Node와 Log Stream 정보를 알 수 있다.
 또한 Replication을 위한 설정 정보도 포함되어 있다. Projection은 버전 정보를 붙여
-관리하며, 이 버전을 epoch라고 부른다. 
+관리하며, 이 버전을 epoch라고 부른다.
 Metadata Repository는 Projection을 포함한 클러스터의 주요 설정 정보(e.g.,
-Sequencer에 대한 정보 등)를 저장하는 ground truth storeage이다. 그러므로 
-consistent view를 제공해야하며, 이는 paxos나 raft 등을 사용하여 제공한다. 
+Sequencer에 대한 정보 등)를 저장하는 ground truth storeage이다. 그러므로
+consistent view를 제공해야하며, 이는 paxos나 raft 등을 사용하여 제공한다.
 WOKL은 이를 위해 Apache Zookeeper 혹은 etcd를 활용한다.
 
 ### Sequencer
@@ -175,7 +175,7 @@ robin 방식으로 할당되었다. Projection은 Storage Node의 구성, 각 St
 (그림 a). 더 복잡한 구조에서는 Log Stream 단위로 Replica Group을 만들 수 있다
 (그림 b).
 
-그림 a는 설계와 구현이 단순하지만, 운영상 제약이 따른다. Replica Group의 Storage 
+그림 a는 설계와 구현이 단순하지만, 운영상 제약이 따른다. Replica Group의 Storage
 Node들은 같은 수의 Log Stream을 갖는다. 성능을 고려하여 하나의 SSD에 하나의 Log
 Stream을 생성한다면, 같은 Replica Group 내의 Storage Node들은 모두 같은 수의
 SSD를 갖고 있어야 한다.
@@ -226,7 +226,7 @@ SSD를 갖고 있어야 한다.
 
 ### Append
 Client는 Sequencer에게 로그를 append할 위치(GLSN)을 알아낸다. Projection을 통해
-알고 있는 Storage Node들에게 write operation을 전달한다. 
+알고 있는 Storage Node들에게 write operation을 전달한다.
 서버는 Client가 보낸 epoch가 자신이 알고 있는 것과 다르다면 에러를 반환한다.
 만약 로그 위치가 이미 쓰여진 경우에도 에러를 반환한다.
 Replication policy에 따른 append 과정은 추후 설명한다.
@@ -270,7 +270,7 @@ append 명령어를 받은 것과 같이 반응한다.
 ### Seal
 Storage Node 구성 변경 등의 이유로 Projection이 변경이 되면, Client는 seal
 명령을 Storage Node에게 전달한다. Client는 자신의 epoch를 전달하고 Storage
-Node는 epoch가 동일한지 검사한다. Storage Node는 현재 진행 중인 명령들을 모두 
+Node는 epoch가 동일한지 검사한다. Storage Node는 현재 진행 중인 명령들을 모두
 취소한다. 그리고 자신의 epoch를 증가시키고 자신이 저장하고 있는 로그의 가장 최근
 위치와 epoch를 반환한다.
 
@@ -281,7 +281,7 @@ Storage Node들중 하나에게서만이라도 받으면 된다. 예를 들어, 
 주소에 대한 append 명령은 실패할 것이다.
 
 ### Trim
-Trim은 요청 받은 위치 이하의 로그를 삭제하는 요청이다. 
+Trim은 요청 받은 위치 이하의 로그를 삭제하는 요청이다.
 
 ### Projection 관리
 *TODO: Metadata Repository와 Client 사이에 Projection에 대한 관리*
@@ -293,7 +293,7 @@ Trim은 요청 받은 위치 이하의 로그를 삭제하는 요청이다.
 Stream을 저장할 공간을 준비(format)한다. Sequencer는 로그 위치를 0으로
 초기화한다. Metadata repository 역시 클러스터 메타데이터를 저장하기 위한 준비를
 한다. 클러스터 생성에 참여하는 모든 인스턴스는 각자의 로컬 epoch를 0으로
-초기화한다.  
+초기화한다.
 클라이언트는 먼저 metadata repository로부터 현재의 클러스터 정보(Projection)을
 얻는다. 그 이후 Reconfiguration 과정을 거친다. 이를 위해 우선 각 Storage Node에게
 seal 명령어를 전달한다. 클러스터 관리 역할을 하는 클라이언트 이므로 새로운
@@ -334,7 +334,7 @@ Stream에 저장되는지 모두 알고 있다. 즉, Projection의 버전 정보
 관리되어야 한다.
 
 ### Append / Read Failure
-Client 1은 append를 시도한다. Storage Node 1에 장애가 발생하여 append 명령에 
+Client 1은 append를 시도한다. Storage Node 1에 장애가 발생하여 append 명령에
 대한 응답을 받지 못하게 된다면, Reconfiguration 과정을 거쳐야 한다. 모든 Storage
 Node에 seal 명령어를 보낸다. 이때 새로운 epoch를 제안하고 그 epoch가 Storage
 Node의 epoch보다 크면 Storage Node의 epoch는 갱신된다. 그림에서 Storage Node 2는
@@ -401,14 +401,14 @@ Client 1이 append 하는 중간에 어떤 문제로 append를 제대로 완료�
 Stream에 대한 replica group을 형성하고 있으며, Chain Replication 순서는 Storage
 Node 1에 먼저 저장하고 성공하면 Storage Node 2에 저장한다. 2개의 replica를
 유지하며, 1개의 Storage Node에 문제가 발생해도 Availability를 제공한다고
-가정한다. (f = 1)  
+가정한다. (f = 1)
 첫번째는 Client 1이 Storage Node 1에 append는 성공했으나 Storage Node 2에는
 실패했다. 해당 로그 위치를 읽으려는 Client 2는 replication chain 상 가장
 마지막인 Storage Node 2에 read를 시도한다. 하지만 Storage Node 2에는 아직 해당
 위치에 Log Entry가 쓰여져 있지 않으므로 No Entry 에러를 반환한다. Client 2가
 해당 로그 위치를 복구할수 있다. 먼저 Replication Chain 상 가장 첫 노드인 Storage
 Node 1에 해당 위치에 대한 read를 시도한다. 이 read가 성공하면, 그 값을 사용해
-다른 Storage Node들에 append를 시도한다.  
+다른 Storage Node들에 append를 시도한다.
 두번째 경우에도 Client 1이 append 명령어 시도 중 문제가 생긴다. 하지만
 Replication Chain 상 첫번째인 Storage Node 1에 대한 append 시도부터 실패한다.
 Client 2는 해당 위치에 대해 복구를 시도하지만, Storage Node 1에서부터 Log
