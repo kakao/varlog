@@ -72,6 +72,8 @@ func TestLogStreamExecutorAppendAndRead(t *testing.T) {
 		executor1 := NewLogStreamExecutor(logStreamID1, &dummyStorage{})
 		executor2 := NewLogStreamExecutor(logStreamID2, &dummyStorage{})
 		reporter := NewLogStreamReporter(storageNodeID)
+		reporter.Run(ctx)
+		defer reporter.Close()
 
 		err = reporter.RegisterLogStreamExecutor(logStreamID1, executor1)
 		So(err, ShouldBeNil)
