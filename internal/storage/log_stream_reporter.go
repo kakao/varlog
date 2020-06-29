@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"fmt"
+	"context"
 	"sync"
 
 	"github.com/kakao/varlog/pkg/varlog"
@@ -23,6 +23,14 @@ type CommittedLogStreamStatus struct {
 	CommittedGLSNEnd   types.GLSN
 }
 
+const lsrCommitCSize = 0
+
+type lsrCommitTask struct {
+	nextGLSN      types.GLSN
+	prevNextGLSN  types.GLSN
+	commitResults []CommittedLogStreamStatus
+}
+
 type LogStreamReporter struct {
 	storageNodeID types.StorageNodeID
 	knownNextGLSN types.AtomicGLSN
@@ -30,7 +38,8 @@ type LogStreamReporter struct {
 	mtxExecutors  sync.RWMutex
 	history       map[types.GLSN][]UncommittedLogStreamStatus
 	mtxHistory    sync.RWMutex
-	mtxCommit     sync.Mutex
+	commitC       chan lsrCommitTask
+	cancel        context.CancelFunc
 }
 
 func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter {
@@ -38,6 +47,26 @@ func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter 
 		storageNodeID: storageNodeID,
 		executors:     make(map[types.LogStreamID]LogStreamExecutor),
 		history:       make(map[types.GLSN][]UncommittedLogStreamStatus),
+		commitC:       make(chan lsrCommitTask, lsrCommitCSize),
+	}
+}
+
+func (lsr *LogStreamReporter) Run(ctx context.Context) {
+	ctx, lsr.cancel = context.WithCancel(ctx)
+	go lsr.dispatchCommit(ctx)
+}
+
+func (lsr *LogStreamReporter) Close() {
+	lsr.cancel()
+}
+
+func (lsr *LogStreamReporter) dispatchCommit(ctx context.Context) {
+	for {
+		select {
+		case t := <-lsr.commitC:
+			lsr.commit(t)
+		case <-ctx.Done():
+		}
 	}
 }
 
@@ -46,30 +75,30 @@ func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter 
 // is nil, it returns varlog.ErrInvalid.
 // When the new LogStreamExecutor is registered successfully, it is received a GLSN which is
 // anticipated to be issued in the next commit - knownNextGLSN.
-func (r *LogStreamReporter) RegisterLogStreamExecutor(logStreamID types.LogStreamID, executor LogStreamExecutor) error {
+func (lsr *LogStreamReporter) RegisterLogStreamExecutor(logStreamID types.LogStreamID, executor LogStreamExecutor) error {
 	if executor == nil {
 		return varlog.ErrInvalid
 	}
-	r.mtxExecutors.Lock()
-	defer r.mtxExecutors.Unlock()
-	_, ok := r.executors[logStreamID]
+	lsr.mtxExecutors.Lock()
+	defer lsr.mtxExecutors.Unlock()
+	_, ok := lsr.executors[logStreamID]
 	if ok {
 		return varlog.ErrExist
 	}
-	r.executors[logStreamID] = executor
+	lsr.executors[logStreamID] = executor
 	return nil
 }
 
 // GetReport collects statuses about uncommitted log entries from log streams in the storage node.
 // KnownNextGLSNs from all LogStreamExecutors must be equal to the corresponding in
 // LogStreamReporter.
-func (r *LogStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatus) {
-	r.mtxExecutors.RLock()
-	defer r.mtxExecutors.RUnlock()
-	reports := make([]UncommittedLogStreamStatus, len(r.executors))
+func (lsr *LogStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatus) {
+	lsr.mtxExecutors.RLock()
+	defer lsr.mtxExecutors.RUnlock()
+	reports := make([]UncommittedLogStreamStatus, len(lsr.executors))
 	i := 0
 	minKnownNextGLSN := types.GLSN(0)
-	for _, executor := range r.executors {
+	for _, executor := range lsr.executors {
 		status := executor.GetReport()
 		reports[i] = status
 		if status.KnownNextGLSN == 0 {
@@ -80,55 +109,70 @@ func (r *LogStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatu
 			minKnownNextGLSN = status.KnownNextGLSN
 		}
 	}
-	knownNextGLSN := r.knownNextGLSN.Load()
+	knownNextGLSN := lsr.knownNextGLSN.Load()
 	if minKnownNextGLSN < knownNextGLSN {
 		// slow LSE
 		// get the past report from history map
 		// use minKnownNextGLSN as return value
 		knownNextGLSN = minKnownNextGLSN
-		r.mtxHistory.RLock()
-		if rpt, ok := r.history[knownNextGLSN]; ok {
+		lsr.mtxHistory.RLock()
+		if rpt, ok := lsr.history[knownNextGLSN]; ok {
 			reports = rpt
 		}
-		r.mtxHistory.RUnlock()
+		lsr.mtxHistory.RUnlock()
 	}
-	r.mtxHistory.Lock()
-	defer r.mtxHistory.Unlock()
-	if _, ok := r.history[knownNextGLSN]; !ok {
-		r.history[knownNextGLSN] = reports
+	lsr.mtxHistory.Lock()
+	defer lsr.mtxHistory.Unlock()
+	if _, ok := lsr.history[knownNextGLSN]; !ok {
+		lsr.history[knownNextGLSN] = reports
 	}
 	// NOTE: history map will be small - most 2 elements
 	// TODO: remove this after implementing log stream-wise report
-	for nextGLSN, _ := range r.history {
+	for nextGLSN := range lsr.history {
 		if nextGLSN < knownNextGLSN {
-			delete(r.history, nextGLSN)
+			delete(lsr.history, nextGLSN)
 		}
 	}
 	return knownNextGLSN, reports
 }
 
-func (r *LogStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus) {
-	r.mtxCommit.Lock()
-	defer r.mtxCommit.Unlock()
+func (lsr *LogStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus) {
+	if !lsr.verifyCommit(prevNextGLSN) {
+		return
+	}
+	lsr.commitC <- lsrCommitTask{
+		nextGLSN:      nextGLSN,
+		prevNextGLSN:  prevNextGLSN,
+		commitResults: commitResults,
+	}
+}
 
-	knownNextGLSN := r.knownNextGLSN.Load()
-	if prevNextGLSN < knownNextGLSN {
-		// TODO: stale commit result
+func (lsr *LogStreamReporter) commit(t lsrCommitTask) {
+	if !lsr.verifyCommit(t.prevNextGLSN) {
 		return
 	}
-	if prevNextGLSN > knownNextGLSN {
-		// TODO: missed something - not yet ready to commit it
-		return
-	}
-	for _, commitResult := range commitResults {
+	for _, commitResult := range t.commitResults {
 		logStreamID := commitResult.LogStreamID
-		r.mtxExecutors.RLock()
-		executor, ok := r.executors[logStreamID]
-		r.mtxExecutors.RUnlock()
+		lsr.mtxExecutors.RLock()
+		executor, ok := lsr.executors[logStreamID]
+		lsr.mtxExecutors.RUnlock()
 		if !ok {
-			panic(fmt.Sprintf("no such LogStreamExecutor in this StorageNode: %d", logStreamID))
+			panic("no such executor")
 		}
 		executor.Commit(commitResult)
 	}
-	r.knownNextGLSN.Store(nextGLSN)
+	lsr.knownNextGLSN.Store(t.nextGLSN)
+}
+
+func (lsr *LogStreamReporter) verifyCommit(prevNextGLSN types.GLSN) bool {
+	knownNextGLSN := lsr.knownNextGLSN.Load()
+	if prevNextGLSN < knownNextGLSN {
+		// TODO: stale commit result
+		return false
+	}
+	if prevNextGLSN > knownNextGLSN {
+		// TODO: missed something - not yet ready to commit it
+		return false
+	}
+	return true
 }
