@@ -42,10 +42,9 @@ func (e *dummyLogStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	}
 }
 
-func (e *dummyLogStreamExecutor) Commit(s CommittedLogStreamStatus) error {
+func (e *dummyLogStreamExecutor) Commit(s CommittedLogStreamStatus) {
 	e.knownNextGLSN = s.NextGLSN
 	e.committedEnd += types.LLSN(s.CommittedGLSNEnd - s.CommittedGLSNBegin)
-	return nil
 }
 
 func TestRegisterLogStream(t *testing.T) {

@@ -166,13 +166,5 @@ func (lsr *LogStreamReporter) commit(t lsrCommitTask) {
 
 func (lsr *LogStreamReporter) verifyCommit(prevNextGLSN types.GLSN) bool {
 	knownNextGLSN := lsr.knownNextGLSN.Load()
-	if prevNextGLSN < knownNextGLSN {
-		// TODO: stale commit result
-		return false
-	}
-	if prevNextGLSN > knownNextGLSN {
-		// TODO: missed something - not yet ready to commit it
-		return false
-	}
-	return true
+	return prevNextGLSN == knownNextGLSN
 }
