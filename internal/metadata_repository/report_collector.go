@@ -8,6 +8,8 @@ import (
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
+
+	"go.uber.org/zap"
 )
 
 type ReportCollectorCallbacks struct {
@@ -25,6 +27,7 @@ type ReportCollectExecutor struct {
 	mu           sync.RWMutex
 	resultC      chan *snpb.GlobalLogStreamDescriptor
 	stopC        chan struct{}
+	logger       *zap.Logger
 }
 
 type ReportCollector struct {
@@ -32,10 +35,12 @@ type ReportCollector struct {
 	cb        ReportCollectorCallbacks
 	mu        sync.RWMutex
 	wg        sync.WaitGroup
+	logger    *zap.Logger
 }
 
-func NewReportCollector(cb ReportCollectorCallbacks) *ReportCollector {
+func NewReportCollector(cb ReportCollectorCallbacks, logger *zap.Logger) *ReportCollector {
 	return &ReportCollector{
+		logger:    logger,
 		cb:        cb,
 		executors: make(map[types.StorageNodeID]*ReportCollectExecutor),
 	}
@@ -77,6 +82,7 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		sn:      sn,
 		cb:      rc.cb,
 		cli:     cli,
+		logger:  rc.logger.Named("executor"),
 	}
 
 	rc.executors[sn.StorageNodeID] = executor
@@ -120,7 +126,7 @@ Loop:
 			err := rce.getReport()
 			if err != nil {
 				//TODO:: reconnect
-				panic(err)
+				rce.logger.Panic(err.Error())
 			}
 		}
 	}
@@ -141,13 +147,13 @@ func (rce *ReportCollectExecutor) runCommit(wg *sync.WaitGroup) {
 		for nextGLSN < gls.PrevNextGLSN {
 			prev := rce.cb.getNextGLS(nextGLSN)
 			if prev == nil {
-				panic("prev gls should not be nil")
+				rce.logger.Panic("prev gls should not be nil")
 			}
 
 			err := rce.commit(prev)
 			if err != nil {
 				//TODO:: reconnect
-				panic(err)
+				rce.logger.Panic(err.Error())
 			}
 
 			nextGLSN = prev.NextGLSN
@@ -155,7 +161,7 @@ func (rce *ReportCollectExecutor) runCommit(wg *sync.WaitGroup) {
 
 		err := rce.commit(gls)
 		if err != nil {
-			panic(err)
+			rce.logger.Panic(err.Error())
 		}
 	}
 

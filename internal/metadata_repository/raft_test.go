@@ -8,6 +8,7 @@ import (
 
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
+	"go.uber.org/zap"
 )
 
 type cluster struct {
@@ -36,11 +37,18 @@ func newCluster(n int) *cluster {
 	}
 
 	for i := range clus.peers {
-		os.RemoveAll(fmt.Sprintf("raftexample-%d", i+1))
-		os.RemoveAll(fmt.Sprintf("raftexample-%d-snap", i+1))
+		os.RemoveAll(fmt.Sprintf("raft-%d", i+1))
+		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
 		clus.proposeC[i] = make(chan string, 1)
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
-		clus.commitC[i], clus.errorC[i], clus.stateC[i], _ = newRaftNode(i+1, clus.peers, false, nil, clus.proposeC[i], clus.confChangeC[i])
+		clus.commitC[i], clus.errorC[i], clus.stateC[i], _ = newRaftNode(i+1,
+			clus.peers,
+			false,
+			nil,
+			clus.proposeC[i],
+			clus.confChangeC[i],
+			zap.NewExample(),
+		)
 	}
 
 	return clus
@@ -69,8 +77,8 @@ func (clus *cluster) Close() (err error) {
 			err = erri
 		}
 		// clean intermediates
-		os.RemoveAll(fmt.Sprintf("raftexample-%d", i+1))
-		os.RemoveAll(fmt.Sprintf("raftexample-%d-snap", i+1))
+		os.RemoveAll(fmt.Sprintf("raft-%d", i+1))
+		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
 	}
 	return err
 }
