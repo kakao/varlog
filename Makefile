@@ -16,7 +16,11 @@ PROTOC := protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
 TEST_COUNT := 1
-TEST_FLAGS := -count=$(TEST_COUNT)
+TEST_FLAGS := -count $(TEST_COUNT) -p 1
+
+ifneq ($(TEST_PARALLEL),)
+	TEST_FLAGS := $(TEST_FLAGS) -parallel $(TEST_PARALLEL)
+endif
 
 TEST_FAILFAST := 0
 ifeq ($(TEST_FAILFAST),1)
@@ -64,9 +68,7 @@ pkg/varlog/mock/storage_node_mock.go: $(PROTO) proto/storage_node/storage_node.p
 		> pkg/varlog/mock/storage_node_mock.go
 
 test:
-	for dir in $(TEST_DIRS); do \
-		$(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS)  $$dir ; \
-	done
+	$(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./...
 
 clean :
 	for dir in $(SUBDIRS); do \
