@@ -13,6 +13,7 @@ import (
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/zap"
 )
 
 type dummyLogStreamReporterClient struct {
@@ -140,7 +141,7 @@ func TestRegisterStorageNode(t *testing.T) {
 			report:     mr.report,
 			getNextGLS: mr.getNextGLS,
 		}
-		reportCollector := NewReportCollector(cb)
+		reportCollector := NewReportCollector(cb, zap.NewExample())
 		defer reportCollector.Close()
 
 		err := reportCollector.RegisterStorageNode(nil)
@@ -155,7 +156,7 @@ func TestRegisterStorageNode(t *testing.T) {
 			report:     mr.report,
 			getNextGLS: mr.getNextGLS,
 		}
-		reportCollector := NewReportCollector(cb)
+		reportCollector := NewReportCollector(cb, zap.NewExample())
 		defer reportCollector.Close()
 
 		err := reportCollector.RegisterStorageNode(&varlogpb.StorageNodeDescriptor{})
@@ -177,7 +178,7 @@ func TestReport(t *testing.T) {
 			getNextGLS: mr.getNextGLS,
 		}
 
-		reportCollector := NewReportCollector(cb)
+		reportCollector := NewReportCollector(cb, zap.NewExample())
 		defer reportCollector.Close()
 
 		var wg sync.WaitGroup
@@ -261,7 +262,7 @@ func TestCommit(t *testing.T) {
 		getNextGLS: mr.getNextGLS,
 	}
 
-	reportCollector := NewReportCollector(cb)
+	reportCollector := NewReportCollector(cb, zap.NewExample())
 	defer reportCollector.Close()
 
 	for i := 0; i < nrStorage; i++ {

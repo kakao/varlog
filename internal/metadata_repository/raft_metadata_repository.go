@@ -12,6 +12,7 @@ import (
 	pb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
 	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"go.uber.org/zap"
 
 	"go.etcd.io/etcd/etcdserver/api/snap"
 	"go.etcd.io/etcd/raft"
@@ -76,6 +77,7 @@ func NewRaftMetadataRepository(index, nrRep int, peerList []string) *RaftMetadat
 		mr.getSnapshot,
 		mr.rnProposeC,
 		mr.rnConfChangeC,
+		zap.NewExample().Named("raftnode"),
 	)
 	mr.rnCommitC = commitC
 	mr.rnErrorC = errorC

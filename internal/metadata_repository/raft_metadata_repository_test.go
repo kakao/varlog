@@ -31,8 +31,8 @@ func newMetadataRepoCluster(n, nrRep int) *metadataRepoCluster {
 	}
 
 	for i := range clus.peers {
-		os.RemoveAll(fmt.Sprintf("raftexample-%d", i+1))
-		os.RemoveAll(fmt.Sprintf("raftexample-%d-snap", i+1))
+		os.RemoveAll(fmt.Sprintf("raft-%d", i+1))
+		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
 
 		clus.nodes[i] = NewRaftMetadataRepository(i, nrRep, clus.peers)
 		clus.nodes[i].Start()
@@ -46,8 +46,8 @@ func (clus *metadataRepoCluster) Close() (err error) {
 	for i := range clus.peers {
 		err = clus.nodes[i].Close()
 
-		os.RemoveAll(fmt.Sprintf("raftexample-%d", i+1))
-		os.RemoveAll(fmt.Sprintf("raftexample-%d-snap", i+1))
+		os.RemoveAll(fmt.Sprintf("raft-%d", i+1))
+		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
 	}
 	return err
 }

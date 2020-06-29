@@ -2,25 +2,27 @@ package metadata_repository
 
 import (
 	"errors"
-	"log"
 	"net"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // stoppableListener sets TCP keep-alive timeouts on accepted
 // connections and waits on stopc message
 type stoppableListener struct {
 	*net.TCPListener
-	stopc <-chan struct{}
+	stopc  <-chan struct{}
+	logger *zap.Logger
 }
 
-func newStoppableListener(addr string, stopc <-chan struct{}) (*stoppableListener, error) {
-	log.Printf("listen %v", addr)
+func newStoppableListener(addr string, stopc <-chan struct{}, logger *zap.Logger) (*stoppableListener, error) {
+	logger.Info("Listen", zap.String("addr", addr))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
-	return &stoppableListener{ln.(*net.TCPListener), stopc}, nil
+	return &stoppableListener{ln.(*net.TCPListener), stopc, logger}, nil
 }
 
 func (ln stoppableListener) Accept() (c net.Conn, err error) {

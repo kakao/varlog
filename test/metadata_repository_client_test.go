@@ -52,8 +52,8 @@ func createMetadataRepository(server *grpc.Server) metadata_repository.MetadataR
 func createRaftMetadataRepository(server *grpc.Server) metadata_repository.MetadataRepository {
 	var cluster []string
 
-	os.RemoveAll("raftexample-1")
-	os.RemoveAll("raftexample-1-snap")
+	os.RemoveAll("raft-1")
+	os.RemoveAll("raft-1-snap")
 
 	cluster = append(cluster, "http://127.0.0.1:10000")
 
