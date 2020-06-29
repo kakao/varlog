@@ -15,36 +15,32 @@ const (
 
 type GLSN uint64
 
-type AtomicGLSN struct {
-	n uint64
-}
+type AtomicGLSN uint64
 
 func (glsn *AtomicGLSN) Add(delta uint64) GLSN {
-	return GLSN(atomic.AddUint64(&glsn.n, delta))
+	return GLSN(atomic.AddUint64((*uint64)(glsn), delta))
 }
 
 func (glsn *AtomicGLSN) Load() GLSN {
-	return GLSN(atomic.LoadUint64(&glsn.n))
+	return GLSN(atomic.LoadUint64((*uint64)(glsn)))
 }
 
 func (glsn *AtomicGLSN) Store(val GLSN) {
-	atomic.StoreUint64(&glsn.n, uint64(val))
+	atomic.StoreUint64((*uint64)(glsn), uint64(val))
 }
 
 type LLSN uint64
 
-type AtomicLLSN struct {
-	n uint64
-}
+type AtomicLLSN uint64
 
 func (llsn *AtomicLLSN) Add(delta uint64) LLSN {
-	return LLSN(atomic.AddUint64(&llsn.n, delta))
+	return LLSN(atomic.AddUint64((*uint64)(llsn), delta))
 }
 
 func (llsn *AtomicLLSN) Load() LLSN {
-	return LLSN(atomic.LoadUint64(&llsn.n))
+	return LLSN(atomic.LoadUint64((*uint64)(llsn)))
 }
 
 func (llsn *AtomicLLSN) Store(val LLSN) {
-	atomic.StoreUint64(&llsn.n, uint64(val))
+	atomic.StoreUint64((*uint64)(llsn), uint64(val))
 }
