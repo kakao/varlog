@@ -14,6 +14,12 @@ func TestAtomicGLSN(t *testing.T) {
 
 		glsn.Store(20)
 		So(glsn.Load(), ShouldEqual, GLSN(20))
+
+		So(glsn.CompareAndSwap(GLSN(20), GLSN(21)), ShouldBeTrue)
+		So(glsn.Load(), ShouldEqual, GLSN(21))
+
+		So(glsn.CompareAndSwap(GLSN(20), GLSN(22)), ShouldBeFalse)
+		So(glsn.Load(), ShouldEqual, GLSN(21))
 	})
 }
 
@@ -25,5 +31,11 @@ func TestAtomicLLSN(t *testing.T) {
 
 		llsn.Store(20)
 		So(llsn.Load(), ShouldEqual, LLSN(20))
+
+		So(llsn.CompareAndSwap(LLSN(20), LLSN(21)), ShouldBeTrue)
+		So(llsn.Load(), ShouldEqual, LLSN(21))
+
+		So(llsn.CompareAndSwap(LLSN(20), LLSN(22)), ShouldBeFalse)
+		So(llsn.Load(), ShouldEqual, LLSN(21))
 	})
 }

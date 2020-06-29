@@ -17,11 +17,11 @@ var (
 	ErrInvalid = errors.New("invalid argument")
 	ErrExist   = errors.New("already exists")
 
-	ErrAlreadyExists   = status.New(codes.AlreadyExists, "varlogserver: already exists").Err()
-	ErrSealed          = status.New(codes.FailedPrecondition, "logstream: sealed").Err()
-	ErrTrimmed         = status.New(codes.NotFound, "logstream: trimmed").Err()
-	ErrInternal        = status.New(codes.Internal, "internal error").Err()
-	ErrNotYetCommitted = status.New(codes.Unavailable, "logstream: not yet committed GLSN range").Err()
+	ErrAlreadyExists = status.New(codes.AlreadyExists, "varlogserver: already exists").Err()
+	ErrSealed        = status.New(codes.FailedPrecondition, "logstream: sealed").Err()
+	ErrTrimmed       = status.New(codes.NotFound, "logstream: trimmed").Err()
+	ErrInternal      = status.New(codes.Internal, "internal error").Err()
+	ErrUndecidable   = status.New(codes.Unavailable, "logstream: undecidable whether no entry or uncommitted").Err()
 
 	errStringToError = map[string]error{
 		ErrorDesc(ErrAlreadyExists): ErrAlreadyExists,

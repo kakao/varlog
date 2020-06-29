@@ -29,6 +29,11 @@ func (glsn *AtomicGLSN) Store(val GLSN) {
 	atomic.StoreUint64((*uint64)(glsn), uint64(val))
 }
 
+func (glsn *AtomicGLSN) CompareAndSwap(old, new GLSN) (swapped bool) {
+	swapped = atomic.CompareAndSwapUint64((*uint64)(glsn), uint64(old), uint64(new))
+	return swapped
+}
+
 type LLSN uint64
 
 type AtomicLLSN uint64
@@ -43,4 +48,9 @@ func (llsn *AtomicLLSN) Load() LLSN {
 
 func (llsn *AtomicLLSN) Store(val LLSN) {
 	atomic.StoreUint64((*uint64)(llsn), uint64(val))
+}
+
+func (glsn *AtomicLLSN) CompareAndSwap(old, new LLSN) (swapped bool) {
+	swapped = atomic.CompareAndSwapUint64((*uint64)(glsn), uint64(old), uint64(new))
+	return swapped
 }

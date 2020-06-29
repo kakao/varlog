@@ -24,7 +24,7 @@ type LogStreamExecutor interface {
 	Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error)
 
 	GetReport() UncommittedLogStreamStatus
-	Commit(CommittedLogStreamStatus) error
+	Commit(CommittedLogStreamStatus)
 }
 
 type readTask struct {
@@ -41,11 +41,12 @@ type subscribeTask struct {
 }
 
 type appendTask struct {
-	data []byte
-	llsn types.LLSN
-	glsn types.GLSN
-	err  error
-	done chan struct{}
+	data    []byte
+	llsn    types.LLSN
+	glsn    types.GLSN
+	err     error
+	written bool
+	done    chan struct{}
 }
 
 type trimTask struct {
@@ -54,6 +55,13 @@ type trimTask struct {
 	nr    uint64
 	err   error
 	done  chan struct{}
+}
+
+type commitTask struct {
+	nextGLSN           types.GLSN
+	prevNextGLSN       types.GLSN
+	committedGLSNBegin types.GLSN
+	committedGLSNEnd   types.GLSN
 }
 
 type commitWaitMap struct {
@@ -86,49 +94,72 @@ func (cwm *commitWaitMap) del(llsn types.LLSN) {
 	delete(cwm.m, llsn)
 }
 
+const (
+	lseAppendCSize    = 0
+	lseReplicateCSize = 0
+	lseTrimCSize      = 0
+	lseCommitCSize    = 0
+)
+
+// TODO:
+// - handle read or subscribe operations competing with trim operations
 type logStreamExecutor struct {
 	logStreamID types.LogStreamID
 	storage     Storage
 
-	once       sync.Once
+	once sync.Once
+
+	appendC    chan *appendTask
+	replicateC chan *appendTask
+	commitC    chan commitTask
 	trimC      chan *trimTask
-	replicateC chan struct{}
 	cancel     context.CancelFunc
 
 	// lock guard for knownNextGLSN and uncommittedLLSNBegin
+	// knownNextGLSN and uncommittedLLSNBegin should be updated simultaneously.
 	mu sync.RWMutex
 
-	// knownNextGLSN
-	// read by get_report
-	// write by commit
+	// knownNextGLSN acts as a version of commit result. In the scope of the same
+	// knownNextGLSN, all the reports requested by MR have the same uncommittedLLSNBegin.
+	// Because the reports with different values of uncommittedLLSNBegin with the same
+	// knownNextGLSN can make some log entries in the log stream have no or more than one GLSN.
+	// It is read by GetReport, and written by commit.
 	knownNextGLSN types.GLSN // set by Commit
 
-	// committedLLSNEnd
-	// read & write by Commit
-	// NO NEED TO LATCH
+	// uncommittedLLSNBegin is the start of the range that is reported as uncommitted log
+	// entries. In the reports marked as the same KnownNextGLSN, uncommittedLLSNBegin of those
+	// must be the same value. Because MR calculates commit results based on the KnownNextGLSN
+	// and uncommittedLLSNBegin.
+	// After all of the commits in a commit result are completed successfully, the value of
+	// uncommittedLLSNBegin should be increased by the difference between committedGLSNEnd and
+	// committedGLSNBegin in the commit result.
+	// It is read by GetReport and written by commit.
+	uncommittedLLSNBegin types.LLSN
+
+	// committedLLSNEnd is the next position to be committed to storage. It is used only by
+	// commit function.
+	// Sometimes, it can be greater than uncommittedLLSNBegin. See the reason why below.
+	// It is read and written only by commit.
 	committedLLSNEnd types.LLSN // increased only by Commit
 
-	// uncommittedLLSNBegin
-	// read: ready by get_report
-	// write: increased by commit
-	uncommittedLLSNBegin types.LLSN // increased only by Commit
-
-	// uncommittedLLSNEnd
-	// read: read by get_report
-	// write: increased by append
-	// use atomic
-	// uncommittedLLSNEnd types.LLSN
+	// uncommittedLLSNEnd is the tail of the LogStreamExecutor. It indicates the next position
+	// for the log entry to be written. It is increased after successful writing to the storage
+	// during the append operation.
+	// It is read by GetReport, written by Append
 	uncommittedLLSNEnd types.AtomicLLSN
 
 	// atomic access
 	// committedGLSNBegin   types.GLSN // R: read & subscribe W: Trim
 	// lastCommittedGLSN types.GLSN // R: read W: Commit
-	committedGLSNBegin types.AtomicGLSN
-
-	committedGLSNEnd types.AtomicGLSN
-
-	mtxAppend sync.Mutex
-	mtxCommit sync.Mutex
+	// committedGLSNBegin and committedGLSNEnd are knowledges which are learned from Trim and
+	// Commit operations.
+	//
+	// learnedGLSNBegin and committedGLSNEnd are knowledge that is learned from Trim and
+	// Commit operations. Exact values of them are maintained in the storage. By learning
+	// these values in the LogStreamExecutor, it can be avoided to unnecessary requests to
+	// the storage.
+	learnedGLSNBegin types.AtomicGLSN
+	learnedGLSNEnd   types.AtomicGLSN
 
 	cwm *commitWaitMap
 
@@ -140,45 +171,73 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) LogStr
 		logStreamID: logStreamID,
 		storage:     storage,
 		cwm:         newCommitWaitMap(),
-		replicateC:  make(chan struct{}),
+		appendC:     make(chan *appendTask, lseAppendCSize),
+		replicateC:  make(chan *appendTask, lseReplicateCSize),
+		trimC:       make(chan *trimTask, lseTrimCSize),
+		commitC:     make(chan commitTask, lseCommitCSize),
 	}
 	return lse
 }
 
-func (e *logStreamExecutor) Run(ctx context.Context) {
+func (lse *logStreamExecutor) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
-	e.cancel = cancel
-	go e.dispatchReplicateC(ctx)
-	go e.dispatchTrimC(ctx)
+	lse.cancel = cancel
+	go lse.dispatchAppendC(ctx)
+	go lse.dispatchReplicateC(ctx)
+	go lse.dispatchTrimC(ctx)
+	go lse.dispatchCommitC(ctx)
 }
 
-func (e *logStreamExecutor) Close() {
-	e.cancel()
+func (lse *logStreamExecutor) Close() {
+	lse.cancel()
 }
 
-func (e *logStreamExecutor) isSealed() bool {
-	return atomic.LoadInt32(&e.sealed) > 0
+func (lse *logStreamExecutor) isSealed() bool {
+	return atomic.LoadInt32(&lse.sealed) > 0
 }
 
-func (e *logStreamExecutor) seal() {
-	atomic.StoreInt32(&e.sealed, 1)
+func (lse *logStreamExecutor) seal() {
+	atomic.StoreInt32(&lse.sealed, 1)
 }
 
-func (e *logStreamExecutor) dispatchReplicateC(ctx context.Context) {
+func (lse *logStreamExecutor) dispatchAppendC(ctx context.Context) {
 	for {
 		select {
-		case <-e.replicateC:
+		case t := <-lse.appendC:
+			lse.prepare(t)
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func (e *logStreamExecutor) dispatchTrimC(ctx context.Context) {
+func (lse *logStreamExecutor) dispatchReplicateC(ctx context.Context) {
 	for {
 		select {
-		case t := <-e.trimC:
-			e.trim(t)
+		case t := <-lse.replicateC:
+			lse.triggerReplication(t)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (lse *logStreamExecutor) dispatchTrimC(ctx context.Context) {
+	for {
+		select {
+		case t := <-lse.trimC:
+			lse.trim(t)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (lse *logStreamExecutor) dispatchCommitC(ctx context.Context) {
+	for {
+		select {
+		case t := <-lse.commitC:
+			lse.commit(t)
 		case <-ctx.Done():
 			return
 		}
@@ -192,21 +251,20 @@ func (e *logStreamExecutor) dispatchTrimC(ctx context.Context) {
 // - spinining early-read to decide NOENT or OK
 // - read aggregation to minimize I/O
 // - cache or not (use memstore?)
-func (e *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
-	// TODO: mutex or atomic
-	if ok, _ := e.isTrimmed(glsn); ok {
+func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
+	if ok, _ := lse.isTrimmed(glsn); ok {
 		return nil, varlog.ErrTrimmed
 	}
-	if e.isUncommitted(glsn) {
-		return nil, varlog.ErrNotYetCommitted
+	// TODO: wait until decidable or return an error
+	if lse.commitUndecidable(glsn) {
+		return nil, varlog.ErrUndecidable
 	}
-
 	done := make(chan struct{})
 	task := &readTask{
 		glsn: glsn,
 		done: done,
 	}
-	go e.read(task)
+	go lse.read(task)
 	select {
 	case <-done:
 		return task.data, task.err
@@ -215,51 +273,33 @@ func (e *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, 
 	}
 }
 
-func (e *logStreamExecutor) isTrimmed(glsn types.GLSN) (bool, types.GLSN) {
-	committedGLSNBegin := e.committedGLSNBegin.Load()
-	return glsn < committedGLSNBegin, committedGLSNBegin
-	// notTrimmed := e.committedGLSNBegin.Load() + 1
-	// notTrimmed := types.GLSN(atomic.LoadUint64((*uint64)(&e.lastTrimmedGLSN)) + 1)
-	//return glsn < notTrimmed, notTrimmed
-	/*
-		e.mu.RLock()
-		defer e.mu.RUnlock()
-		notTrimmed := e.lastTrimmedGLSN + 1
-		return glsn < notTrimmed, notTrimmed
-	*/
+func (lse *logStreamExecutor) isTrimmed(glsn types.GLSN) (bool, types.GLSN) {
+	learnedGLSNBegin := lse.learnedGLSNBegin.Load()
+	return glsn < learnedGLSNBegin, learnedGLSNBegin
 }
 
-func (e *logStreamExecutor) isUncommitted(glsn types.GLSN) bool {
-	return glsn >= e.committedGLSNEnd.Load()
-	// return glsn > types.GLSN(atomic.LoadUint64((*uint64)(&e.lastCommittedGLSN)))
-	/*
-		e.mu.RLock()
-		defer e.mu.RUnlock()
-		return glsn > e.lastCommittedGLSN
-	*/
+func (lse *logStreamExecutor) commitUndecidable(glsn types.GLSN) bool {
+	return glsn >= lse.learnedGLSNEnd.Load()
 }
 
-func (e *logStreamExecutor) read(t *readTask) {
-	t.data, t.err = e.storage.Read(t.glsn)
+func (lse *logStreamExecutor) read(t *readTask) {
+	// TODO: wait undecidable read operation
+	// for lse.commitUndecidable(t.glsn) {
+	//	runtime.Gosched()
+	//}
+	t.data, t.err = lse.storage.Read(t.glsn)
 	close(t.done)
 }
 
-func (e *logStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
-	// TODO: mutex or atomic
-	if ok, _ := e.isTrimmed(glsn); ok {
-		return nil, varlog.ErrTrimmed
-	}
+func (lse *logStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
 	out := make(chan SubscribeResult)
-	go e.subscribe(ctx, glsn, out)
+	go lse.subscribe(ctx, glsn, out)
 	return out, nil
 }
 
-func (e *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN, c chan<- SubscribeResult) {
+func (lse *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN, c chan<- SubscribeResult) {
 	defer close(c)
-	if ok, nextGLSN := e.isTrimmed(glsn); ok {
-		glsn = nextGLSN
-	}
-	scanner, err := e.storage.Scan(glsn)
+	scanner, err := lse.storage.Scan(glsn)
 	if err != nil {
 		c <- SubscribeResult{err: err}
 		return
@@ -288,66 +328,64 @@ func (e *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN, c ch
 // given GLSN.
 // If the log stream is locked, the append is failed.
 // All Appends are processed sequentially by using the appendC.
-func (e *logStreamExecutor) Append(ctx context.Context, data []byte) (types.GLSN, error) {
-	if e.isSealed() {
+func (lse *logStreamExecutor) Append(ctx context.Context, data []byte) (types.GLSN, error) {
+	if lse.isSealed() {
 		return 0, varlog.ErrSealed
 	}
-
 	done := make(chan struct{})
-	t := &appendTask{
+	t := appendTask{
 		data: data,
 		done: done,
 	}
-
-	if err := e.prepare(t); err != nil {
-		return 0, err
-	}
-
+	lse.appendC <- &t
 	<-done
-	e.cwm.del(t.llsn)
+	if t.written {
+		lse.cwm.del(t.llsn)
+	}
 	return t.glsn, t.err
 }
 
-func (e *logStreamExecutor) prepare(t *appendTask) error {
-	e.mtxAppend.Lock()
-	defer e.mtxAppend.Unlock()
-
-	if err := e.write(t); err != nil {
-		e.seal()
-		return err
+func (lse *logStreamExecutor) prepare(t *appendTask) {
+	if err := lse.write(t); err != nil {
+		lse.seal()
+		t.err = err
+		close(t.done)
+		return
 	}
-	e.triggerReplication(t)
-	return nil
+
+	lse.replicateC <- t
 }
 
 // append issues new LLSN for a LogEntry and write it to the storage. It, then, adds given
 // appendTask to the taskmap to receive commit result. It also triggers replication after a
 // successful write.
-func (e *logStreamExecutor) write(t *appendTask) error {
-	// llsn := e.uncommittedLLSNEnd
-	llsn := e.uncommittedLLSNEnd.Load()
-	if err := e.storage.Write(llsn, t.data); err != nil {
+func (lse *logStreamExecutor) write(t *appendTask) error {
+	llsn := lse.uncommittedLLSNEnd.Load()
+	if err := lse.storage.Write(llsn, t.data); err != nil {
 		return err
 	}
+	t.written = true
 	t.llsn = llsn
-	e.cwm.put(llsn, t)
-	e.uncommittedLLSNEnd.Add(1)
-	// e.uncommittedLLSNEnd++
+	lse.cwm.put(llsn, t)
+	lse.uncommittedLLSNEnd.Add(1)
 	return nil
 }
 
-func (e *logStreamExecutor) triggerReplication(t *appendTask) {
-	e.replicateC <- struct{}{}
+func (lse *logStreamExecutor) triggerReplication(t *appendTask) {
 }
 
-func (e *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {
+func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {
+	if ok, _ := lse.isTrimmed(glsn); ok {
+		return 0, varlog.ErrTrimmed
+	}
+
 	done := make(chan struct{})
 	task := &trimTask{
 		glsn:  glsn,
 		async: async,
 		done:  done,
 	}
-	e.trimC <- task
+	lse.trimC <- task
 	if async {
 		return 0, nil
 	}
@@ -355,97 +393,93 @@ func (e *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async boo
 	return task.nr, task.err
 }
 
-func (e *logStreamExecutor) trim(t *trimTask) {
+func (lse *logStreamExecutor) trim(t *trimTask) {
 	defer close(t.done)
-	if ok, _ := e.isTrimmed(t.glsn); ok {
+	if ok, _ := lse.isTrimmed(t.glsn); ok {
+		t.err = varlog.ErrTrimmed
 		return
 	}
-	t.nr, t.err = e.storage.Delete(t.glsn)
+	t.nr, t.err = lse.storage.Delete(t.glsn)
 	if t.err == nil {
-		e.committedGLSNBegin.Store(t.glsn + 1)
-		//atomic.StoreUint64((*uint64)(&e.lastTrimmedGLSN), (uint64)(t.glsn))
-		//e.mu.Lock()
-		//e.lastTrimmedGLSN = t.glsn
-		//e.mu.Unlock()
+		lse.learnedGLSNBegin.Store(t.glsn + 1)
 	}
 }
 
-func (e *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
-	// TODO: If this is sealed, report is constant.
-	e.mu.RLock()
-	defer e.mu.RUnlock()
+func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
+	// TODO: If this is sealed, ...
+	lse.mu.RLock()
+	defer lse.mu.RUnlock()
 	return UncommittedLogStreamStatus{
-		LogStreamID:          e.logStreamID,
-		KnownNextGLSN:        e.knownNextGLSN,
-		UncommittedLLSNBegin: e.uncommittedLLSNBegin,
-		UncommittedLLSNEnd:   e.uncommittedLLSNEnd.Load(),
+		LogStreamID:          lse.logStreamID,
+		KnownNextGLSN:        lse.knownNextGLSN,
+		UncommittedLLSNBegin: lse.uncommittedLLSNBegin,
+		UncommittedLLSNEnd:   lse.uncommittedLLSNEnd.Load(),
 	}
 }
 
-func (e *logStreamExecutor) Commit(cr CommittedLogStreamStatus) error {
-	if e.logStreamID != cr.LogStreamID {
-		return varlog.ErrInvalid
+func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) {
+	if lse.logStreamID != cr.LogStreamID {
+		return
+	}
+	if lse.isSealed() {
+		return
+	}
+	if !lse.verifyCommit(cr.PrevNextGLSN) {
+		return
 	}
 
-	if e.isSealed() {
-		return varlog.ErrSealed
+	lse.commitC <- commitTask{
+		nextGLSN:           cr.NextGLSN,
+		prevNextGLSN:       cr.PrevNextGLSN,
+		committedGLSNBegin: cr.CommittedGLSNBegin,
+		committedGLSNEnd:   cr.CommittedGLSNEnd,
 	}
-
-	e.mtxCommit.Lock()
-	defer e.mtxCommit.Unlock()
-
-	// TODO: mismatched KnownNextGLSN
-	// If knownNextGLSN of LogStreamExecutor is zero, the LogStreamExecutor is in initial state.
-	e.mu.RLock()
-	badKnownNextGLSN := e.knownNextGLSN != 0 && e.knownNextGLSN != cr.PrevNextGLSN
-	e.mu.RUnlock()
-	if badKnownNextGLSN {
-		return varlog.ErrInvalid
-	}
-	return e.commit(cr)
 }
 
-func (e *logStreamExecutor) commit(cr CommittedLogStreamStatus) error {
-	var err error
-	e.mu.Lock()
-	e.knownNextGLSN = cr.NextGLSN
-	e.uncommittedLLSNBegin += types.LLSN(cr.CommittedGLSNEnd - cr.CommittedGLSNBegin)
-	e.mu.Unlock()
+func (lse *logStreamExecutor) verifyCommit(prevNextGLSN types.GLSN) bool {
+	lse.mu.RLock()
+	defer lse.mu.RUnlock()
+	// If the LSE is newbie knownNextGLSN is zero. In LSE-wise commit, it is unnecessary,
+	return lse.knownNextGLSN == 0 || lse.knownNextGLSN == prevNextGLSN
+}
 
-	glsn := cr.CommittedGLSNBegin
-	for glsn < cr.CommittedGLSNEnd {
-		llsn := e.committedLLSNEnd
-		if err := e.storage.Commit(llsn, glsn); err != nil {
+func (lse *logStreamExecutor) commit(t commitTask) {
+	if lse.isSealed() {
+		return
+	}
+	if !lse.verifyCommit(t.prevNextGLSN) {
+		return
+	}
+
+	commitOk := true
+	glsn := t.committedGLSNBegin
+	for glsn < t.committedGLSNEnd {
+		llsn := lse.committedLLSNEnd
+		if err := lse.storage.Commit(llsn, glsn); err != nil {
 			// NOTE: The LogStreamExecutor fails to commit Log entries that are
 			// assigned GLSN by MR, for example, because of the storage failure.
 			// In other replicated storage nodes, it can be okay.
 			// Should we lock, that is, finalize this log stream or need other else
 			// mechanisms?
-			e.seal()
+			commitOk = false
+			lse.seal()
 			break
 		}
-		appendT, ok := e.cwm.get(llsn)
+		appendT, ok := lse.cwm.get(llsn)
 		if ok {
 			appendT.glsn = glsn
 			close(appendT.done)
 		}
-		e.committedLLSNEnd++
+		lse.committedLLSNEnd++
 		glsn++
-		e.committedGLSNEnd.Store(glsn)
-		// atomic.StoreUint64((*uint64)(&e.lastCommittedGLSN), uint64(glsn))
-		/*
-			e.mu.Lock()
-			e.lastCommittedGLSN = glsn
-			e.mu.Unlock()
-		*/
-
+		lse.learnedGLSNEnd.Store(glsn)
 	}
 
 	// NOTE: This is a very subtle case. MR assigns GLSNs to these log entries, but the storage
 	// fails to commit it. Actually, these GLSNs are holes. See the above comments.
-	llsn := e.committedLLSNEnd
-	for glsn < cr.CommittedGLSNEnd {
-		appendT, ok := e.cwm.get(llsn)
+	llsn := lse.committedLLSNEnd
+	for glsn < t.committedGLSNEnd {
+		appendT, ok := lse.cwm.get(llsn)
 		if ok {
 			appendT.glsn = glsn
 			appendT.err = varlog.ErrInternal
@@ -455,5 +489,10 @@ func (e *logStreamExecutor) commit(cr CommittedLogStreamStatus) error {
 		llsn++
 	}
 
-	return err
+	if commitOk {
+		lse.mu.Lock()
+		lse.knownNextGLSN = t.nextGLSN
+		lse.uncommittedLLSNBegin += types.LLSN(t.committedGLSNEnd - t.committedGLSNBegin)
+		lse.mu.Unlock()
+	}
 }
