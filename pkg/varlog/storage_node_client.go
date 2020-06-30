@@ -36,23 +36,23 @@ type StorageNodeClient interface {
 }
 
 type storageNodeClient struct {
-	rpcConn   *rpcConn
+	rpcConn   *RpcConn
 	rpcClient pb.StorageNodeServiceClient
 	s         StorageNode
 }
 
 func NewStorageNodeClient(address string) (StorageNodeClient, error) {
-	rpcConn, err := newRpcConn(address)
+	rpcConn, err := NewRpcConn(address)
 	if err != nil {
 		return nil, err
 	}
 	return NewStorageNodeClientFromRpcConn(rpcConn)
 }
 
-func NewStorageNodeClientFromRpcConn(rpcConn *rpcConn) (StorageNodeClient, error) {
+func NewStorageNodeClientFromRpcConn(rpcConn *RpcConn) (StorageNodeClient, error) {
 	return &storageNodeClient{
 		rpcConn:   rpcConn,
-		rpcClient: pb.NewStorageNodeServiceClient(rpcConn.conn),
+		rpcClient: pb.NewStorageNodeServiceClient(rpcConn.Conn),
 	}, nil
 }
 
@@ -154,5 +154,5 @@ func (c *storageNodeClient) Trim(ctx context.Context, glsn types.GLSN) (uint64, 
 
 // Close closes connection to the storage node.
 func (c *storageNodeClient) Close() error {
-	return c.rpcConn.close()
+	return c.rpcConn.Close()
 }

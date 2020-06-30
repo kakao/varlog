@@ -2,18 +2,18 @@ package varlog
 
 import "google.golang.org/grpc"
 
-type rpcConn struct {
-	conn *grpc.ClientConn
+type RpcConn struct {
+	Conn *grpc.ClientConn
 }
 
-func newRpcConn(address string) (*rpcConn, error) {
+func NewRpcConn(address string) (*RpcConn, error) {
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		return nil, err
 	}
-	return &rpcConn{conn: conn}, nil
+	return &RpcConn{Conn: conn}, nil
 }
 
-func (c *rpcConn) close() error {
-	return c.conn.Close()
+func (c *RpcConn) Close() error {
+	return c.Conn.Close()
 }

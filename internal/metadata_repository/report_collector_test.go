@@ -1,6 +1,7 @@
 package metadata_repository
 
 import (
+	"context"
 	"errors"
 	"sort"
 	"sync"
@@ -39,7 +40,7 @@ func newDummyLogStreamReporterClientAllocator() *dummyLogStreamReporterClientAll
 	return a
 }
 
-func (a *dummyLogStreamReporterClientAllocator) connect(sn *varlogpb.StorageNodeDescriptor) (storage.LogStreamRepoterClient, error) {
+func (a *dummyLogStreamReporterClientAllocator) connect(sn *varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error) {
 	cli := &dummyLogStreamReporterClient{
 		storageNodeID: sn.StorageNodeID,
 		logStreamID:   types.LogStreamID(sn.StorageNodeID),
@@ -50,13 +51,13 @@ func (a *dummyLogStreamReporterClientAllocator) connect(sn *varlogpb.StorageNode
 	return cli, nil
 }
 
-func (r *dummyLogStreamReporterClient) GetReport() (snpb.LocalLogStreamDescriptor, error) {
+func (r *dummyLogStreamReporterClient) GetReport(context.Context) (*snpb.LocalLogStreamDescriptor, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.uncommittedLLSNEnd += 1
 
-	lls := snpb.LocalLogStreamDescriptor{
+	lls := &snpb.LocalLogStreamDescriptor{
 		StorageNodeID: r.storageNodeID,
 		NextGLSN:      r.knownNextGLSN,
 		Uncommit: []*snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
@@ -71,7 +72,7 @@ func (r *dummyLogStreamReporterClient) GetReport() (snpb.LocalLogStreamDescripto
 	return lls, nil
 }
 
-func (r *dummyLogStreamReporterClient) Commit(glsn snpb.GlobalLogStreamDescriptor) error {
+func (r *dummyLogStreamReporterClient) Commit(_ context.Context, glsn *snpb.GlobalLogStreamDescriptor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -90,6 +91,10 @@ func (r *dummyLogStreamReporterClient) Commit(glsn snpb.GlobalLogStreamDescripto
 		r.uncommittedLLSNBegin += types.LLSN(nrCommitted)
 	}
 
+	return nil
+}
+
+func (r *dummyLogStreamReporterClient) Close() error {
 	return nil
 }
 
