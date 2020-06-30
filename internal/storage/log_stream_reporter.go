@@ -66,6 +66,7 @@ func (lsr *LogStreamReporter) dispatchCommit(ctx context.Context) {
 		case t := <-lsr.commitC:
 			lsr.commit(t)
 		case <-ctx.Done():
+			return
 		}
 	}
 }

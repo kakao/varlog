@@ -15,28 +15,28 @@ type MetadataRepositoryClient interface {
 }
 
 type metadataRepositoryClient struct {
-	rpcConn *rpcConn
+	rpcConn *RpcConn
 	client  pb.MetadataRepositoryServiceClient
 }
 
 func NewMetadataRepositoryClient(address string) (MetadataRepositoryClient, error) {
-	rpcConn, err := newRpcConn(address)
+	rpcConn, err := NewRpcConn(address)
 	if err != nil {
 		return nil, err
 	}
 	return NewMetadataRepositoryClientFromRpcConn(rpcConn)
 }
 
-func NewMetadataRepositoryClientFromRpcConn(rpcConn *rpcConn) (MetadataRepositoryClient, error) {
+func NewMetadataRepositoryClientFromRpcConn(rpcConn *RpcConn) (MetadataRepositoryClient, error) {
 	client := &metadataRepositoryClient{
 		rpcConn: rpcConn,
-		client:  pb.NewMetadataRepositoryServiceClient(rpcConn.conn),
+		client:  pb.NewMetadataRepositoryServiceClient(rpcConn.Conn),
 	}
 	return client, nil
 }
 
 func (c *metadataRepositoryClient) Close() error {
-	return c.rpcConn.close()
+	return c.rpcConn.Close()
 }
 
 func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {

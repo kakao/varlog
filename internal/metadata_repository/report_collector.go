@@ -1,6 +1,7 @@
 package metadata_repository
 
 import (
+	"context"
 	"sync"
 
 	"github.com/kakao/varlog/internal/storage"
@@ -13,7 +14,7 @@ import (
 )
 
 type ReportCollectorCallbacks struct {
-	connect    func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamRepoterClient, error)
+	connect    func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error)
 	report     func(*snpb.LocalLogStreamDescriptor)
 	getNextGLS func(types.GLSN) *snpb.GlobalLogStreamDescriptor
 }
@@ -21,7 +22,7 @@ type ReportCollectorCallbacks struct {
 type ReportCollectExecutor struct {
 	nextGLSN     types.GLSN
 	logStreamIDs []types.LogStreamID
-	cli          storage.LogStreamRepoterClient
+	cli          storage.LogStreamReporterClient
 	sn           *varlogpb.StorageNodeDescriptor
 	cb           ReportCollectorCallbacks
 	mu           sync.RWMutex
@@ -169,7 +170,7 @@ func (rce *ReportCollectExecutor) runCommit(wg *sync.WaitGroup) {
 }
 
 func (rce *ReportCollectExecutor) getReport() error {
-	lls, err := rce.cli.GetReport()
+	lls, err := rce.cli.GetReport(context.TODO())
 	if err != nil {
 		return err
 	}
@@ -184,7 +185,7 @@ func (rce *ReportCollectExecutor) getReport() error {
 	rce.logStreamIDs = lsIDs
 	rce.mu.Unlock()
 
-	rce.cb.report(&lls)
+	rce.cb.report(lls)
 
 	return nil
 }
@@ -211,7 +212,7 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 		r.CommitResult[i] = c
 	}
 
-	err := rce.cli.Commit(r)
+	err := rce.cli.Commit(context.TODO(), &r)
 	if err != nil {
 		return err
 	}

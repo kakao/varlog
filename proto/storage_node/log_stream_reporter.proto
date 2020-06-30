@@ -60,7 +60,7 @@ message GlobalLogStreamDescriptor {
     repeated LogStreamCommitResult commit_result = 3;
 }
 
-service LogStreamReporter {
+service LogStreamReporterService {
     rpc GetReport(google.protobuf.Empty) returns (LocalLogStreamDescriptor) {}
     rpc Commit(GlobalLogStreamDescriptor) returns (google.protobuf.Empty) {}
 }
