@@ -14,8 +14,8 @@ import (
 )
 
 type ReportCollectorCallbacks struct {
-	connect    func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error)
 	report     func(*snpb.LocalLogStreamDescriptor)
+	getClient  func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error)
 	getNextGLS func(types.GLSN) *snpb.GlobalLogStreamDescriptor
 }
 
@@ -71,14 +71,13 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		return varlog.ErrExist
 	}
 
-	cli, err := rc.cb.connect(sn)
+	cli, err := rc.cb.getClient(sn)
 	if err != nil {
-		panic(err)
+		rc.logger.Panic(err.Error())
 	}
 
 	executor := &ReportCollectExecutor{
-		//TODO::
-		resultC: make(chan *snpb.GlobalLogStreamDescriptor, 1024),
+		resultC: make(chan *snpb.GlobalLogStreamDescriptor, 1),
 		stopC:   make(chan struct{}),
 		sn:      sn,
 		cb:      rc.cb,
@@ -132,37 +131,48 @@ Loop:
 		}
 	}
 
-	close(rce.resultC)
-
 	//TODO:: close cli
 }
 
 func (rce *ReportCollectExecutor) runCommit(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	for gls := range rce.resultC {
-		rce.mu.RLock()
-		nextGLSN := rce.nextGLSN
-		rce.mu.RUnlock()
+Loop:
+	for {
+		select {
+		case <-rce.stopC:
+			break Loop
+		case gls := <-rce.resultC:
+			rce.mu.RLock()
+			nextGLSN := rce.nextGLSN
+			rce.mu.RUnlock()
 
-		for nextGLSN < gls.PrevNextGLSN {
-			prev := rce.cb.getNextGLS(nextGLSN)
-			if prev == nil {
-				rce.logger.Panic("prev gls should not be nil")
+			for nextGLSN < gls.PrevNextGLSN {
+				prev := rce.cb.getNextGLS(nextGLSN)
+				if prev == nil {
+					rce.logger.Panic("prev gls should not be nil")
+				}
+
+				err := rce.commit(prev)
+				if err != nil {
+					//TODO:: reconnect
+					rce.logger.Panic(err.Error())
+				}
+
+				if prev.NextGLSN <= nextGLSN {
+					rce.logger.Panic("broken global commit consistency",
+						zap.Uint64("expected", uint64(gls.PrevNextGLSN)),
+						zap.Uint64("prev", uint64(prev.NextGLSN)),
+						zap.Uint64("cur", uint64(nextGLSN)),
+					)
+				}
+				nextGLSN = prev.NextGLSN
 			}
 
-			err := rce.commit(prev)
+			err := rce.commit(gls)
 			if err != nil {
-				//TODO:: reconnect
 				rce.logger.Panic(err.Error())
 			}
-
-			nextGLSN = prev.NextGLSN
-		}
-
-		err := rce.commit(gls)
-		if err != nil {
-			rce.logger.Panic(err.Error())
 		}
 	}
 

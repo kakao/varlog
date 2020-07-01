@@ -41,7 +41,7 @@ func newCluster(n int) *cluster {
 		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
 		clus.proposeC[i] = make(chan string, 1)
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
-		clus.commitC[i], clus.errorC[i], clus.stateC[i], _ = newRaftNode(i+1,
+		rc := newRaftNode(i+1,
 			clus.peers,
 			false,
 			nil,
@@ -49,6 +49,12 @@ func newCluster(n int) *cluster {
 			clus.confChangeC[i],
 			zap.NewExample(),
 		)
+
+		clus.commitC[i] = rc.commitC
+		clus.errorC[i] = rc.errorC
+		clus.stateC[i] = rc.stateC
+
+		go rc.startRaft()
 	}
 
 	return clus
