@@ -1,14 +1,11 @@
 package metadata_repository
 
 import (
-	"context"
-	"errors"
 	"sort"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/kakao/varlog/internal/storage"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
@@ -16,87 +13,6 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 )
-
-type dummyLogStreamReporterClient struct {
-	storageNodeID types.StorageNodeID
-	knownNextGLSN types.GLSN
-
-	logStreamID          types.LogStreamID
-	uncommittedLLSNBegin types.LLSN
-	uncommittedLLSNEnd   types.LLSN
-
-	mu sync.Mutex
-}
-
-type dummyLogStreamReporterClientAllocator struct {
-	m map[types.StorageNodeID]*dummyLogStreamReporterClient
-}
-
-func newDummyLogStreamReporterClientAllocator() *dummyLogStreamReporterClientAllocator {
-	a := &dummyLogStreamReporterClientAllocator{
-		m: make(map[types.StorageNodeID]*dummyLogStreamReporterClient),
-	}
-
-	return a
-}
-
-func (a *dummyLogStreamReporterClientAllocator) connect(sn *varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error) {
-	cli := &dummyLogStreamReporterClient{
-		storageNodeID: sn.StorageNodeID,
-		logStreamID:   types.LogStreamID(sn.StorageNodeID),
-	}
-
-	a.m[sn.StorageNodeID] = cli
-
-	return cli, nil
-}
-
-func (r *dummyLogStreamReporterClient) GetReport(context.Context) (*snpb.LocalLogStreamDescriptor, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.uncommittedLLSNEnd += 1
-
-	lls := &snpb.LocalLogStreamDescriptor{
-		StorageNodeID: r.storageNodeID,
-		NextGLSN:      r.knownNextGLSN,
-		Uncommit: []*snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
-			{
-				LogStreamID:          r.logStreamID,
-				UncommittedLLSNBegin: r.uncommittedLLSNBegin,
-				UncommittedLLSNEnd:   r.uncommittedLLSNEnd,
-			},
-		},
-	}
-
-	return lls, nil
-}
-
-func (r *dummyLogStreamReporterClient) Commit(_ context.Context, glsn *snpb.GlobalLogStreamDescriptor) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if glsn.PrevNextGLSN != r.knownNextGLSN {
-		return nil
-	}
-
-	r.knownNextGLSN = glsn.NextGLSN
-
-	for _, result := range glsn.CommitResult {
-		if result.LogStreamID != r.logStreamID {
-			return errors.New("invalid log stream ID")
-		}
-
-		nrCommitted := uint64(result.CommittedGLSNEnd - result.CommittedGLSNBegin)
-		r.uncommittedLLSNBegin += types.LLSN(nrCommitted)
-	}
-
-	return nil
-}
-
-func (r *dummyLogStreamReporterClient) Close() error {
-	return nil
-}
 
 type dummyMetadataRepository struct {
 	reportC chan *snpb.LocalLogStreamDescriptor
@@ -139,11 +55,11 @@ func (mr *dummyMetadataRepository) appendGLS(gls *snpb.GlobalLogStreamDescriptor
 
 func TestRegisterStorageNode(t *testing.T) {
 	Convey("Registering nil storage node should return an error", t, func() {
-		a := newDummyLogStreamReporterClientAllocator()
+		a := NewDummyReporterClientFactory(false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
-			connect:    a.connect,
 			report:     mr.report,
+			getClient:  a.GetClient,
 			getNextGLS: mr.getNextGLS,
 		}
 		reportCollector := NewReportCollector(cb, zap.NewExample())
@@ -154,11 +70,11 @@ func TestRegisterStorageNode(t *testing.T) {
 	})
 
 	Convey("Registering dup storage node should return an error", t, func() {
-		a := newDummyLogStreamReporterClientAllocator()
+		a := NewDummyReporterClientFactory(false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
-			connect:    a.connect,
 			report:     mr.report,
+			getClient:  a.GetClient,
 			getNextGLS: mr.getNextGLS,
 		}
 		reportCollector := NewReportCollector(cb, zap.NewExample())
@@ -175,11 +91,11 @@ func TestRegisterStorageNode(t *testing.T) {
 func TestReport(t *testing.T) {
 	Convey("ReportCollector should collect report from registered storage node", t, func() {
 		nrStorage := 5
-		a := newDummyLogStreamReporterClientAllocator()
+		a := NewDummyReporterClientFactory(false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
-			connect:    a.connect,
 			report:     mr.report,
+			getClient:  a.GetClient,
 			getNextGLS: mr.getNextGLS,
 		}
 
@@ -259,11 +175,11 @@ func newDummyGlobalLogStream(prev types.GLSN, nrStorage int) *snpb.GlobalLogStre
 func TestCommit(t *testing.T) {
 	nrStorage := 5
 
-	a := newDummyLogStreamReporterClientAllocator()
+	a := NewDummyReporterClientFactory(false)
 	mr := NewDummyMetadataRepository()
 	cb := ReportCollectorCallbacks{
-		connect:    a.connect,
 		report:     mr.report,
+		getClient:  a.GetClient,
 		getNextGLS: mr.getNextGLS,
 	}
 

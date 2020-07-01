@@ -1,20 +1,26 @@
 package metadata_repository
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	types "github.com/kakao/varlog/pkg/varlog/types"
+	pb "github.com/kakao/varlog/proto/metadata_repository"
 	snpb "github.com/kakao/varlog/proto/storage_node"
+	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"go.uber.org/zap"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 type metadataRepoCluster struct {
-	peers []string
-	nodes []*RaftMetadataRepository
+	peers             []string
+	nodes             []*RaftMetadataRepository
+	reporterClientFac ReporterClientFactory
+	logger            *zap.Logger
 }
 
 func newMetadataRepoCluster(n, nrRep int) *metadataRepoCluster {
@@ -26,19 +32,34 @@ func newMetadataRepoCluster(n, nrRep int) *metadataRepoCluster {
 	}
 
 	clus := &metadataRepoCluster{
-		peers: peers,
-		nodes: nodes,
+		peers:             peers,
+		nodes:             nodes,
+		reporterClientFac: NewDummyReporterClientFactory(true),
+		logger:            zap.NewExample(),
 	}
 
 	for i := range clus.peers {
 		os.RemoveAll(fmt.Sprintf("raft-%d", i+1))
 		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
 
-		clus.nodes[i] = NewRaftMetadataRepository(i, nrRep, clus.peers)
-		clus.nodes[i].Start()
+		config := &Config{
+			Index:             i,
+			NumRep:            nrRep,
+			PeerList:          clus.peers,
+			ReporterClientFac: clus.reporterClientFac,
+			Logger:            clus.logger,
+		}
+
+		clus.nodes[i] = NewRaftMetadataRepository(config)
 	}
 
 	return clus
+}
+
+func (clus *metadataRepoCluster) Start() {
+	for _, n := range clus.nodes {
+		n.Start()
+	}
 }
 
 // Close closes all cluster nodes
@@ -65,19 +86,6 @@ Loop:
 	}
 }
 
-func (clus *metadataRepoCluster) clearLocalCut() {
-	for _, n := range clus.nodes {
-		n.localCuts = make(map[types.LogStreamID]map[types.StorageNodeID]localCutInfo)
-	}
-}
-
-func (clus *metadataRepoCluster) clearGlobalCut() {
-	for _, n := range clus.nodes {
-		n.smr.GlobalLogStreams = nil
-		n.smr.GlobalLogStreams = append(n.smr.GlobalLogStreams, &snpb.GlobalLogStreamDescriptor{})
-	}
-}
-
 func (clus *metadataRepoCluster) closeNoErrors(t *testing.T) {
 	if err := clus.Close(); err != nil {
 		t.Fatal(err)
@@ -100,25 +108,18 @@ func makeLocalLogStream(snId types.StorageNodeID, knownNextGLSN types.GLSN, lsId
 }
 
 func TestApplyReport(t *testing.T) {
-	clus := newMetadataRepoCluster(1, 2)
-	defer clus.closeNoErrors(t)
-
-	clus.waitVote()
-
 	Convey("Report Should be applied", t, func(ctx C) {
-		clus.clearLocalCut()
+		clus := newMetadataRepoCluster(1, 2)
+		mr := clus.nodes[0]
 
 		snId := types.StorageNodeID(0)
 		lsId := types.LogStreamID(0)
 
 		// propose report
 		lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
-		clus.nodes[0].proposeReport(lls)
+		mr.applyReport(&pb.Report{LogStream: lls})
 
-		// wait commit
-		time.Sleep(10 * time.Millisecond)
-
-		m, ok := clus.nodes[0].localCuts[lsId]
+		m, ok := mr.localLogStreams[lsId]
 		So(ok, ShouldBeTrue)
 
 		lc, ok := m[snId]
@@ -128,12 +129,9 @@ func TestApplyReport(t *testing.T) {
 		Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
 			// propose report
 			lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(3))
-			clus.nodes[0].proposeReport(lls)
+			mr.applyReport(&pb.Report{LogStream: lls})
 
-			// wait commit
-			time.Sleep(10 * time.Millisecond)
-
-			m, ok := clus.nodes[0].localCuts[lsId]
+			m, ok := mr.localLogStreams[lsId]
 			So(ok, ShouldBeTrue)
 
 			lc, ok := m[snId]
@@ -144,12 +142,9 @@ func TestApplyReport(t *testing.T) {
 		Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
 			// propose report
 			lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(1))
-			clus.nodes[0].proposeReport(lls)
+			mr.applyReport(&pb.Report{LogStream: lls})
 
-			// wait commit
-			time.Sleep(10 * time.Millisecond)
-
-			m, ok := clus.nodes[0].localCuts[lsId]
+			m, ok := mr.localLogStreams[lsId]
 			So(ok, ShouldBeTrue)
 
 			lc, ok := m[snId]
@@ -159,14 +154,9 @@ func TestApplyReport(t *testing.T) {
 	})
 }
 
-func TestCalculateCut(t *testing.T) {
-	clus := newMetadataRepoCluster(1, 2)
-	defer clus.closeNoErrors(t)
-
-	clus.waitVote()
-
-	Convey("Calculate cut", t, func(ctx C) {
-		clus.clearLocalCut()
+func TestCalculateCommit(t *testing.T) {
+	Convey("Calculate commit", t, func(ctx C) {
+		clus := newMetadataRepoCluster(1, 2)
 
 		snIds := make([]types.StorageNodeID, 2)
 		for i := range snIds {
@@ -176,66 +166,70 @@ func TestCalculateCut(t *testing.T) {
 
 		mr := clus.nodes[0]
 
-		Convey("LogStream which all reports have not arrived cannot be cut", func(ctx C) {
+		Convey("LogStream which all reports have not arrived cannot be commit", func(ctx C) {
 			lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
-			mr.proposeReport(lls)
+			mr.applyReport(&pb.Report{LogStream: lls})
 
-			// wait commit
-			time.Sleep(10 * time.Millisecond)
-
-			m, ok := mr.localCuts[lsId]
+			m, ok := mr.localLogStreams[lsId]
 			So(ok, ShouldBeTrue)
 
-			_, nrCut := mr.calculateCut(m)
-			So(nrCut, ShouldEqual, 0)
+			_, nrCommit := mr.calculateCommit(m)
+			So(nrCommit, ShouldEqual, 0)
 		})
 
-		Convey("LogStream which all reports are disjoint cannot be cut", func(ctx C) {
+		Convey("LogStream which all reports are disjoint cannot be commit", func(ctx C) {
 			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.LLSN(5), types.LLSN(6))
-			mr.proposeReport(lls)
+			mr.applyReport(&pb.Report{LogStream: lls})
 
 			lls = makeLocalLogStream(snIds[1], types.GLSN(7), lsId, types.LLSN(3), types.LLSN(5))
-			mr.proposeReport(lls)
+			mr.applyReport(&pb.Report{LogStream: lls})
 
-			// wait commit
-			time.Sleep(10 * time.Millisecond)
-
-			m, ok := mr.localCuts[lsId]
+			m, ok := mr.localLogStreams[lsId]
 			So(ok, ShouldBeTrue)
 
-			_, nrCut := mr.calculateCut(m)
-			So(nrCut, ShouldEqual, 0)
+			_, nrCommit := mr.calculateCommit(m)
+			So(nrCommit, ShouldEqual, 0)
 		})
 
-		Convey("LogStream Should be cut where replication is completed", func(ctx C) {
+		Convey("LogStream Should be commit where replication is completed", func(ctx C) {
 			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.LLSN(3), types.LLSN(6))
-			mr.proposeReport(lls)
+			mr.applyReport(&pb.Report{LogStream: lls})
 
 			lls = makeLocalLogStream(snIds[1], types.GLSN(9), lsId, types.LLSN(3), types.LLSN(5))
-			mr.proposeReport(lls)
+			mr.applyReport(&pb.Report{LogStream: lls})
 
-			// wait commit
-			time.Sleep(10 * time.Millisecond)
-
-			m, ok := mr.localCuts[lsId]
+			m, ok := mr.localLogStreams[lsId]
 			So(ok, ShouldBeTrue)
 
-			glsn, nrCut := mr.calculateCut(m)
-			So(nrCut, ShouldEqual, 2)
+			glsn, nrCommit := mr.calculateCommit(m)
+			So(nrCommit, ShouldEqual, 2)
 			So(glsn, ShouldEqual, types.GLSN(10))
 		})
 	})
 }
 
-func TestGlobalCut(t *testing.T) {
-	clus := newMetadataRepoCluster(1, 2)
-	defer clus.closeNoErrors(t)
+func waitCommit(resultF func() types.GLSN, glsn types.GLSN) error {
+	t := time.After(time.Second)
 
-	clus.waitVote()
+	for {
+		select {
+		case <-t:
+			return errors.New("timeout")
+		default:
+			if resultF() == glsn {
+				return nil
+			}
 
-	Convey("Calculate cut", t, func(ctx C) {
-		clus.clearLocalCut()
-		clus.clearGlobalCut()
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func TestGlobalCommit(t *testing.T) {
+	Convey("Calculate commit", t, func(ctx C) {
+		clus := newMetadataRepoCluster(1, 2)
+		clus.Start()
+		clus.waitVote()
 
 		snIds := make([]types.StorageNodeID, 4)
 		for i := range snIds {
@@ -249,7 +243,7 @@ func TestGlobalCut(t *testing.T) {
 
 		mr := clus.nodes[0]
 
-		Convey("global cut", func(ctx C) {
+		Convey("global commit", func(ctx C) {
 			lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
 			mr.proposeReport(lls)
 
@@ -262,16 +256,8 @@ func TestGlobalCut(t *testing.T) {
 			lls = makeLocalLogStream(snIds[3], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(3))
 			mr.proposeReport(lls)
 
-			// global cut (2, 3) highest glsn: 5
-			mr.proposeCut()
-
-			// wait commit
-			time.Sleep(10 * time.Millisecond)
-
-			So(len(mr.smr.GlobalLogStreams), ShouldBeGreaterThan, 0)
-			gls := mr.smr.GlobalLogStreams[len(mr.smr.GlobalLogStreams)-1]
-
-			So(gls.NextGLSN, ShouldEqual, types.GLSN(5))
+			// global commit (2, 3) highest glsn: 5
+			So(waitCommit(mr.getNextGLSN4Test, types.GLSN(5)), ShouldBeNil)
 
 			Convey("LogStream should be dedup", func(ctx C) {
 				lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(3))
@@ -280,34 +266,61 @@ func TestGlobalCut(t *testing.T) {
 				lls = makeLocalLogStream(snIds[1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
 				mr.proposeReport(lls)
 
-				mr.proposeCut()
-
-				// wait commit
-				time.Sleep(10 * time.Millisecond)
-
-				So(len(mr.smr.GlobalLogStreams), ShouldBeGreaterThan, 0)
-				gls := mr.smr.GlobalLogStreams[len(mr.smr.GlobalLogStreams)-1]
-
-				So(gls.NextGLSN, ShouldEqual, types.GLSN(5))
+				time.Sleep(100 * time.Millisecond)
+				So(waitCommit(mr.getNextGLSN4Test, types.GLSN(5)), ShouldBeNil)
 			})
 
-			Convey("LogStream which have wrong GLSN but have uncommitted should cut", func(ctx C) {
+			Convey("LogStream which have wrong GLSN but have uncommitted should commit", func(ctx C) {
 				lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(6))
 				mr.proposeReport(lls)
 
 				lls = makeLocalLogStream(snIds[1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(6))
 				mr.proposeReport(lls)
 
-				mr.proposeCut()
-
-				// wait commit
-				time.Sleep(10 * time.Millisecond)
-
-				So(len(mr.smr.GlobalLogStreams), ShouldBeGreaterThan, 0)
-				gls := mr.smr.GlobalLogStreams[len(mr.smr.GlobalLogStreams)-1]
-
-				So(gls.NextGLSN, ShouldEqual, types.GLSN(9))
+				So(waitCommit(mr.getNextGLSN4Test, types.GLSN(9)), ShouldBeNil)
 			})
 		})
+
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+	})
+}
+
+func TestSimpleReportNCommit(t *testing.T) {
+	clus := newMetadataRepoCluster(1, 1)
+	defer clus.closeNoErrors(t)
+
+	clus.Start()
+	clus.waitVote()
+
+	snID := types.StorageNodeID(0)
+
+	sn := &varlogpb.StorageNodeDescriptor{
+		StorageNodeID: snID,
+	}
+
+	err := clus.nodes[0].RegisterStorageNode(sn)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+REGISTER_CHECK:
+	for {
+		cli := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID)
+		if cli != nil {
+			break REGISTER_CHECK
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+
+	Convey("Uncommitted LocalLogStream should be committed", t, func(ctx C) {
+		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID)
+		reporterClient.increaseUncommitted()
+
+		time.Sleep(time.Second)
+
+		So(reporterClient.numUncommitted(), ShouldBeZeroValue)
 	})
 }

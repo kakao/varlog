@@ -15,6 +15,7 @@ import (
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -27,7 +28,7 @@ type testEnv struct {
 }
 
 func createServer() (net.Listener, *grpc.Server, error) {
-	lis, err := net.Listen("tcp", ":0")
+	lis, err := net.Listen("tcp", "localhost:8000")
 	if err != nil {
 		log.Fatalf("could not listen: %v", err)
 	}
@@ -57,7 +58,15 @@ func createRaftMetadataRepository(server *grpc.Server) metadata_repository.Metad
 
 	cluster = append(cluster, "http://127.0.0.1:10000")
 
-	metaRepos := metadata_repository.NewRaftMetadataRepository(0, 1, cluster)
+	config := &metadata_repository.Config{
+		Index:             0,
+		NumRep:            1,
+		PeerList:          cluster,
+		Logger:            zap.NewExample(),
+		ReporterClientFac: metadata_repository.NewEmptyReporterClientFactory(),
+	}
+
+	metaRepos := metadata_repository.NewRaftMetadataRepository(config)
 	metaRepos.Start()
 
 	service := metadata_repository.NewMetadataRepositoryService(metaRepos)

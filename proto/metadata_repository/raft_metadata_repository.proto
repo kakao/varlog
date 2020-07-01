@@ -25,10 +25,10 @@ message Report {
         LocalLogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
 }
 
-message Cut {
+message Commit {
 }
 
-message TrimCut {
+message TrimCommit {
     uint64 glsn = 1
         [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
 }
@@ -40,8 +40,8 @@ message RaftEntry {
                 RegisterStorageNode storage_node = 1;
                 CreateLogStream log_stream = 2;
                 Report report = 3;
-                Cut cut = 4;
-                TrimCut trim_cut = 5;
+                Commit commit = 4;
+                TrimCommit trim_commit = 5;
         }
         uint64 session_num = 1;
         Request request = 2[(gogoproto.nullable) = false];
