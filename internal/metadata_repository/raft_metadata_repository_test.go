@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -41,12 +42,19 @@ func newMetadataRepoCluster(n, nrRep int) *metadataRepoCluster {
 		logger:            logger,
 	}
 
-	for i := range clus.peers {
-		os.RemoveAll(fmt.Sprintf("raft-%d", i+1))
-		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
+	for i, peer := range clus.peers {
+		url, err := url.Parse(peer)
+		if err != nil {
+			return nil
+		}
+		fmt.Printf("host %s\n", url.Host)
+		nodeID := types.NewNodeID(url.Host)
+
+		os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
+		os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
 
 		config := &Config{
-			Index:             i,
+			Index:             nodeID,
 			NumRep:            nrRep,
 			PeerList:          clus.peers,
 			ReporterClientFac: clus.reporterClientFac,

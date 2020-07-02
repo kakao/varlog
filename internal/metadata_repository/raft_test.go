@@ -3,9 +3,11 @@ package metadata_repository
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 
+	types "github.com/kakao/varlog/pkg/varlog/types"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
@@ -36,13 +38,19 @@ func newCluster(n int) *cluster {
 		confChangeC: make([]chan raftpb.ConfChange, len(peers)),
 	}
 
-	for i := range clus.peers {
-		os.RemoveAll(fmt.Sprintf("raft-%d", i+1))
-		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
+	for i, peer := range clus.peers {
+		url, err := url.Parse(peer)
+		if err != nil {
+			return nil
+		}
+		nodeID := types.NewNodeID(url.Host)
+
+		os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
+		os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
 		clus.proposeC[i] = make(chan string, 1)
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
 		logger, _ := zap.NewDevelopment()
-		rc := newRaftNode(i+1,
+		rc := newRaftNode(nodeID,
 			clus.peers,
 			false,
 			nil,
