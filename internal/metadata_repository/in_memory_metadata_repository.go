@@ -1,6 +1,7 @@
 package metadata_repository
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -28,7 +29,7 @@ func (r *InMemoryMetadataRepository) Close() error {
 	return nil
 }
 
-func (r *InMemoryMetadataRepository) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
+func (r *InMemoryMetadataRepository) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -39,7 +40,7 @@ func (r *InMemoryMetadataRepository) RegisterStorageNode(sn *varlogpb.StorageNod
 	return nil
 }
 
-func (r *InMemoryMetadataRepository) CreateLogStream(ls *varlogpb.LogStreamDescriptor) error {
+func (r *InMemoryMetadataRepository) CreateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -50,7 +51,7 @@ func (r *InMemoryMetadataRepository) CreateLogStream(ls *varlogpb.LogStreamDescr
 	return nil
 }
 
-func (r *InMemoryMetadataRepository) GetMetadata() (*varlogpb.MetadataDescriptor, error) {
+func (r *InMemoryMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

@@ -1,12 +1,14 @@
 package metadata_repository
 
 import (
+	"context"
+
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 )
 
 type MetadataRepository interface {
-	RegisterStorageNode(*varlogpb.StorageNodeDescriptor) error
-	CreateLogStream(*varlogpb.LogStreamDescriptor) error
-	GetMetadata() (*varlogpb.MetadataDescriptor, error)
+	RegisterStorageNode(context.Context, *varlogpb.StorageNodeDescriptor) error
+	CreateLogStream(context.Context, *varlogpb.LogStreamDescriptor) error
+	GetMetadata(context.Context) (*varlogpb.MetadataDescriptor, error)
 	Close() error
 }

@@ -23,7 +23,7 @@ func (s *MetadataRepositoryService) Register(server *grpc.Server) {
 }
 
 func (s *MetadataRepositoryService) RegisterStorageNode(ctx context.Context, req *pb.RegisterStorageNodeRequest) (*pb.RegisterStorageNodeResponse, error) {
-	err := s.metaRepos.RegisterStorageNode(req.StorageNode)
+	err := s.metaRepos.RegisterStorageNode(ctx, req.StorageNode)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func (s *MetadataRepositoryService) RegisterStorageNode(ctx context.Context, req
 }
 
 func (s *MetadataRepositoryService) CreateLogStream(ctx context.Context, req *pb.CreateLogStreamRequest) (*pb.CreateLogStreamResponse, error) {
-	err := s.metaRepos.CreateLogStream(req.LogStream)
+	err := s.metaRepos.CreateLogStream(ctx, req.LogStream)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (s *MetadataRepositoryService) CreateLogStream(ctx context.Context, req *pb
 }
 
 func (s *MetadataRepositoryService) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
-	metadata, err := s.metaRepos.GetMetadata()
+	metadata, err := s.metaRepos.GetMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
