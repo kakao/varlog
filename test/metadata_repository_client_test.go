@@ -58,11 +58,12 @@ func createRaftMetadataRepository(server *grpc.Server) metadata_repository.Metad
 
 	cluster = append(cluster, "http://127.0.0.1:10000")
 
+	logger, _ := zap.NewDevelopment()
 	config := &metadata_repository.Config{
 		Index:             0,
 		NumRep:            1,
 		PeerList:          cluster,
-		Logger:            zap.NewExample(),
+		Logger:            logger,
 		ReporterClientFac: metadata_repository.NewEmptyReporterClientFactory(),
 	}
 

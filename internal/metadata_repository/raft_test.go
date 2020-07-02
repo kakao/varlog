@@ -41,13 +41,14 @@ func newCluster(n int) *cluster {
 		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
 		clus.proposeC[i] = make(chan string, 1)
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
+		logger, _ := zap.NewDevelopment()
 		rc := newRaftNode(i+1,
 			clus.peers,
 			false,
 			nil,
 			clus.proposeC[i],
 			clus.confChangeC[i],
-			zap.NewExample(),
+			logger,
 		)
 
 		clus.commitC[i] = rc.commitC

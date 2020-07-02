@@ -43,8 +43,9 @@ message RaftEntry {
                 Commit commit = 4;
                 TrimCommit trim_commit = 5;
         }
-        uint64 session_num = 1;
-        Request request = 2[(gogoproto.nullable) = false];
+        int32 node_index = 1;
+        uint64 request_num = 2;
+        Request request = 3[(gogoproto.nullable) = false];
 }
 
 message MetadataRepositoryDescriptor {

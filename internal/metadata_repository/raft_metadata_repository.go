@@ -1,6 +1,7 @@
 package metadata_repository
 
 import (
+	"context"
 	"errors"
 	"math"
 	"sort"
@@ -21,7 +22,7 @@ import (
 )
 
 const DefaultNumGlobalLogStreams int = 128
-const unusedSessionNum uint64 = 0
+const unusedRequestNum uint64 = 0
 
 type Config struct {
 	Index             int
@@ -77,9 +78,9 @@ type RaftMetadataRepository struct {
 
 	nrUpdateSinceCommit uint64
 
-	// for ack to session
-	sessionNum uint64
-	sessionMap sync.Map
+	// for ack
+	requestNum uint64
+	requestMap sync.Map
 
 	// for raft
 	proposeC           chan *pb.RaftEntry
@@ -90,9 +91,6 @@ type RaftMetadataRepository struct {
 	rnErrorC           chan error
 	rnStateC           chan raft.StateType
 	rnSnapshotterReady chan *snap.Snapshotter
-
-	// for report collector
-	reportC chan *snpb.LocalLogStreamDescriptor
 
 	// for stop
 	stopC chan struct{}
@@ -118,7 +116,6 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 
 	mr.proposeC = make(chan *pb.RaftEntry, 4096)
 	mr.commitC = make(chan *pb.RaftEntry, 4096)
-	mr.reportC = make(chan *snpb.LocalLogStreamDescriptor, 4096)
 	mr.stopC = make(chan struct{})
 
 	mr.rnConfChangeC = make(chan raftpb.ConfChange)
@@ -138,7 +135,7 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 	mr.rnSnapshotterReady = mr.raftNode.snapshotterReady
 
 	cbs := ReportCollectorCallbacks{
-		report:     mr.report,
+		report:     mr.proposeReport,
 		getClient:  mr.reporterClientFac.GetClient,
 		getNextGLS: mr.getNextGLSFrom,
 	}
@@ -149,11 +146,9 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 	return mr
 }
 
-//TODO:: fix it
 func (mr *RaftMetadataRepository) Start() {
-	mr.wg.Add(6)
+	mr.wg.Add(5)
 	go mr.runReplication()
-	go mr.processReport()
 	go mr.processCommit()
 	go mr.processRNCommit()
 	go mr.processRNState()
@@ -257,31 +252,6 @@ func (mr *RaftMetadataRepository) processRNState() {
 	}
 }
 
-func (mr *RaftMetadataRepository) processReport() {
-	defer mr.wg.Done()
-
-Loop:
-	for {
-		select {
-		case r := <-mr.reportC:
-			m := make(map[types.StorageNodeID]*snpb.LocalLogStreamDescriptor)
-			m[r.StorageNodeID] = r
-
-			nrReport := len(mr.reportC)
-			for i := 0; i < nrReport; i++ {
-				r = <-mr.reportC
-				m[r.StorageNodeID] = r
-			}
-
-			for _, lls := range m {
-				mr.proposeReport(lls)
-			}
-		case <-mr.stopC:
-			break Loop
-		}
-	}
-}
-
 func (mr *RaftMetadataRepository) getSnapshot() ([]byte, error) {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -290,14 +260,21 @@ func (mr *RaftMetadataRepository) getSnapshot() ([]byte, error) {
 	return b, nil
 }
 
-func (mr *RaftMetadataRepository) sendAck(sessionNum uint64, err error) {
-	f, ok := mr.sessionMap.Load(sessionNum)
+func (mr *RaftMetadataRepository) sendAck(nodeIndex int32, requestNum uint64, err error) {
+	if mr.index != int(nodeIndex) {
+		return
+	}
+
+	f, ok := mr.requestMap.Load(requestNum)
 	if !ok {
 		return
 	}
 
 	c := f.(chan error)
-	c <- err
+	select {
+	case c <- err:
+	default:
+	}
 }
 
 func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
@@ -316,7 +293,7 @@ func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
 		err = mr.trimCommit(r)
 	}
 
-	mr.sendAck(e.SessionNum, err)
+	mr.sendAck(e.NodeIndex, e.RequestNum, err)
 }
 
 func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorageNode) error {
@@ -597,7 +574,7 @@ func (mr *RaftMetadataRepository) proposeTrimCommit() {
 	r := &pb.TrimCommit{
 		Glsn: mr.smr.GlobalLogStreams[0].NextGLSN,
 	}
-	mr.propose(r, unusedSessionNum, false)
+	mr.propose(context.TODO(), r, false)
 
 	return
 }
@@ -608,7 +585,7 @@ func (mr *RaftMetadataRepository) proposeCommit() {
 	}
 
 	r := &pb.Commit{}
-	mr.propose(r, unusedSessionNum, false)
+	mr.propose(context.TODO(), r, false)
 
 	return
 }
@@ -617,18 +594,31 @@ func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescript
 	r := &pb.Report{
 		LogStream: lls,
 	}
-	mr.propose(r, unusedSessionNum, false)
+	mr.propose(context.TODO(), r, false)
 
 	return
 }
 
-func (mr *RaftMetadataRepository) propose(r interface{}, sessionNum uint64, guarantee bool) error {
+func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, guarantee bool) error {
 	e := &pb.RaftEntry{}
 	e.Request.SetValue(r)
-	e.SessionNum = sessionNum
+	e.NodeIndex = int32(mr.index)
+	e.RequestNum = unusedRequestNum
 
 	if guarantee {
+		c := make(chan error, 1)
+		e.RequestNum = atomic.AddUint64(&mr.requestNum, 1)
+		mr.requestMap.Store(e.RequestNum, c)
+		defer mr.requestMap.Delete(e.RequestNum)
+
 		mr.proposeC <- e
+
+		select {
+		case err := <-c:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	} else {
 		select {
 		case mr.proposeC <- e:
@@ -639,42 +629,23 @@ func (mr *RaftMetadataRepository) propose(r interface{}, sessionNum uint64, guar
 	return nil
 }
 
-func (mr *RaftMetadataRepository) report(lls *snpb.LocalLogStreamDescriptor) {
-	select {
-	case mr.reportC <- lls:
-	default:
-	}
-}
-
-func (mr *RaftMetadataRepository) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
+func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {
 	r := &pb.RegisterStorageNode{
 		StorageNode: sn,
 	}
 
-	c := make(chan error, 1)
-	sessionNum := atomic.AddUint64(&mr.sessionNum, 1)
-	mr.sessionMap.Store(sessionNum, c)
-
-	mr.propose(r, sessionNum, true)
-
-	return <-c
+	return mr.propose(ctx, r, true)
 }
 
-func (mr *RaftMetadataRepository) CreateLogStream(ls *varlogpb.LogStreamDescriptor) error {
+func (mr *RaftMetadataRepository) CreateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
 	r := &pb.CreateLogStream{
 		LogStream: ls,
 	}
 
-	c := make(chan error, 1)
-	sessionNum := atomic.AddUint64(&mr.sessionNum, 1)
-	mr.sessionMap.Store(sessionNum, c)
-
-	mr.propose(r, sessionNum, true)
-
-	return <-c
+	return mr.propose(ctx, r, true)
 }
 
-func (mr *RaftMetadataRepository) GetMetadata() (*varlogpb.MetadataDescriptor, error) {
+func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 

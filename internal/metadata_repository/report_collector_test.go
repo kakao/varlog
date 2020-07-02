@@ -62,7 +62,8 @@ func TestRegisterStorageNode(t *testing.T) {
 			getClient:  a.GetClient,
 			getNextGLS: mr.getNextGLS,
 		}
-		reportCollector := NewReportCollector(cb, zap.NewExample())
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(cb, logger)
 		defer reportCollector.Close()
 
 		err := reportCollector.RegisterStorageNode(nil)
@@ -77,7 +78,8 @@ func TestRegisterStorageNode(t *testing.T) {
 			getClient:  a.GetClient,
 			getNextGLS: mr.getNextGLS,
 		}
-		reportCollector := NewReportCollector(cb, zap.NewExample())
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(cb, logger)
 		defer reportCollector.Close()
 
 		err := reportCollector.RegisterStorageNode(&varlogpb.StorageNodeDescriptor{})
@@ -99,7 +101,8 @@ func TestReport(t *testing.T) {
 			getNextGLS: mr.getNextGLS,
 		}
 
-		reportCollector := NewReportCollector(cb, zap.NewExample())
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(cb, logger)
 		defer reportCollector.Close()
 
 		var wg sync.WaitGroup
@@ -183,7 +186,8 @@ func TestCommit(t *testing.T) {
 		getNextGLS: mr.getNextGLS,
 	}
 
-	reportCollector := NewReportCollector(cb, zap.NewExample())
+	logger, _ := zap.NewDevelopment()
+	reportCollector := NewReportCollector(cb, logger)
 	defer reportCollector.Close()
 
 	for i := 0; i < nrStorage; i++ {

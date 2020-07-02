@@ -1,9 +1,11 @@
 package metadata_repository
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,11 +33,12 @@ func newMetadataRepoCluster(n, nrRep int) *metadataRepoCluster {
 		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", 10000+i)
 	}
 
+	logger, _ := zap.NewDevelopment()
 	clus := &metadataRepoCluster{
 		peers:             peers,
 		nodes:             nodes,
 		reporterClientFac: NewDummyReporterClientFactory(true),
-		logger:            zap.NewExample(),
+		logger:            logger,
 	}
 
 	for i := range clus.peers {
@@ -300,7 +303,7 @@ func TestSimpleReportNCommit(t *testing.T) {
 		StorageNodeID: snID,
 	}
 
-	err := clus.nodes[0].RegisterStorageNode(sn)
+	err := clus.nodes[0].RegisterStorageNode(context.TODO(), sn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,5 +325,97 @@ REGISTER_CHECK:
 		time.Sleep(time.Second)
 
 		So(reporterClient.numUncommitted(), ShouldBeZeroValue)
+	})
+}
+
+func TestRequestMap(t *testing.T) {
+	Convey("requestMap should have request when wait ack", t, func(ctx C) {
+		clus := newMetadataRepoCluster(1, 1)
+		mr := clus.nodes[0]
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(0),
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rctx, _ := context.WithTimeout(context.Background(), 20*time.Millisecond)
+			mr.RegisterStorageNode(rctx, sn)
+		}()
+
+		time.Sleep(10 * time.Millisecond)
+		_, ok := mr.requestMap.Load(uint64(1))
+
+		wg.Wait()
+		So(ok, ShouldBeTrue)
+	})
+
+	Convey("requestMap should ignore request that have different nodeIndex", t, func(ctx C) {
+		clus := newMetadataRepoCluster(1, 1)
+		mr := clus.nodes[0]
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(0),
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			time.Sleep(10 * time.Millisecond)
+
+			dummy := &pb.RaftEntry{
+				NodeIndex:  2,
+				RequestNum: uint64(1),
+			}
+			mr.commitC <- dummy
+		}()
+
+		rctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		err := mr.RegisterStorageNode(rctx, sn)
+
+		wg.Wait()
+		So(err, ShouldNotBeNil)
+	})
+
+	Convey("requestMap should delete request when context timeout", t, func(ctx C) {
+		clus := newMetadataRepoCluster(1, 1)
+		mr := clus.nodes[0]
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(0),
+		}
+
+		rctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		err := mr.RegisterStorageNode(rctx, sn)
+		So(err, ShouldNotBeNil)
+
+		_, ok := mr.requestMap.Load(uint64(1))
+		So(ok, ShouldBeFalse)
+	})
+
+	Convey("requestMap should delete after ack", t, func(ctx C) {
+		clus := newMetadataRepoCluster(1, 1)
+		clus.Start()
+		clus.waitVote()
+
+		mr := clus.nodes[0]
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(0),
+		}
+
+		err := mr.RegisterStorageNode(context.TODO(), sn)
+		So(err, ShouldBeNil)
+
+		_, ok := mr.requestMap.Load(uint64(1))
+		So(ok, ShouldBeFalse)
+
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
 	})
 }
