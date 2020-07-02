@@ -2,21 +2,32 @@ syntax = "proto3";
 
 package varlog;
 
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
 option go_package = "github.com/kakao/varlog/proto/storage_node";
 
 // ReplicationRequest contains LLSN (Local Log Sequence Number) that indicates 
 // a log position in the local log stream of the primary storage node.
 message ReplicationRequest {
-    bytes payload = 1;
-    uint64 llsn = 2;
+    uint64 llsn = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN",
+         (gogoproto.customname) = "LLSN"];
+    bytes payload = 2;
 }
 
 // ReplicationResponse indicates that a log entry at given LLSN is replicated.
 message ReplicationResponse {
-    uint64 llsn = 1;
+    int32 storage_node_id = 1
+    	[(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+         (gogoproto.customname) = "StorageNodeID"];
+    int32 log_stream_id = 2
+    	[(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
+    uint64 llsn = 3
+    	[(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN",
+    	 (gogoproto.customname) = "LLSN"];
 }
 
-service Replicator {
-    rpc Replicate(stream ReplicationRequest) returns (stream
-            ReplicationResponse) {}
+service ReplicatorService {
+    rpc Replicate(stream ReplicationRequest) returns (stream ReplicationResponse) {}
 }
