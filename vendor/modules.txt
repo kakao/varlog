@@ -11,13 +11,9 @@ github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 ## explicit
 github.com/coreos/pkg/capnslog
-# github.com/cosiner/argv v0.1.0
-## explicit
 # github.com/dustin/go-humanize v1.0.0
 ## explicit
 github.com/dustin/go-humanize
-# github.com/go-delve/delve v1.4.1
-## explicit
 # github.com/gogo/protobuf v1.3.1
 ## explicit
 github.com/gogo/protobuf/gogoproto
@@ -34,20 +30,12 @@ github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/google/uuid v1.1.1
-## explicit
 # github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1
 github.com/gopherjs/gopherjs/js
 # github.com/jtolds/gls v4.20.0+incompatible
 github.com/jtolds/gls
-# github.com/mattn/go-colorable v0.1.7
-## explicit
-# github.com/mattn/go-runewidth v0.0.9
-## explicit
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
-# github.com/peterh/liner v1.2.0
-## explicit
 # github.com/prometheus/client_golang v1.7.0
 ## explicit
 github.com/prometheus/client_golang/prometheus
@@ -55,7 +43,6 @@ github.com/prometheus/client_golang/prometheus/internal
 # github.com/prometheus/client_model v0.2.0
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.10.0
-## explicit
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
 github.com/prometheus/common/model
@@ -72,12 +59,7 @@ github.com/smartystreets/assertions/internal/oglematchers
 github.com/smartystreets/goconvey/convey
 github.com/smartystreets/goconvey/convey/gotest
 github.com/smartystreets/goconvey/convey/reporting
-# github.com/spf13/cobra v1.0.0
-## explicit
-# github.com/spf13/pflag v1.0.5
-## explicit
 # github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2
-## explicit
 github.com/xiang90/probing
 # go.etcd.io/etcd v0.0.0-20200520232829-54ba9589114f
 ## explicit
@@ -103,8 +85,6 @@ go.etcd.io/etcd/raft/tracker
 go.etcd.io/etcd/version
 go.etcd.io/etcd/wal
 go.etcd.io/etcd/wal/walpb
-# go.starlark.net v0.0.0-20200619143648-50ca820fafb9
-## explicit
 # go.uber.org/atomic v1.6.0
 go.uber.org/atomic
 # go.uber.org/multierr v1.5.0
@@ -117,8 +97,6 @@ go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/arch v0.0.0-20200511175325-f7c78586839d
-## explicit
 # golang.org/x/net v0.0.0-20190813141303-74dc4d7220e7
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
@@ -139,6 +117,8 @@ golang.org/x/text/unicode/norm
 # golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 ## explicit
 golang.org/x/time/rate
+# golang.org/x/tools v0.0.0-20191127201027-ecd32218bd7f
+## explicit
 # google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.26.0
