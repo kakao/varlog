@@ -25,7 +25,7 @@ const DefaultNumGlobalLogStreams int = 128
 const unusedRequestNum uint64 = 0
 
 type Config struct {
-	Index             int
+	Index             types.NodeID
 	NumRep            int
 	PeerList          []string
 	ReporterClientFac ReporterClientFactory
@@ -33,7 +33,7 @@ type Config struct {
 }
 
 func (config *Config) validate() error {
-	if config.Index < 0 {
+	if config.Index == types.InvalidNodeID {
 		return errors.New("invalid index")
 	}
 
@@ -63,7 +63,7 @@ type localLogStreamInfo struct {
 }
 
 type RaftMetadataRepository struct {
-	index             int
+	index             types.NodeID
 	nrReplica         int
 	raftState         raft.StateType
 	localLogStreams   map[types.LogStreamID]map[types.StorageNodeID]localLogStreamInfo
@@ -121,7 +121,7 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 	mr.rnConfChangeC = make(chan raftpb.ConfChange)
 	mr.rnProposeC = make(chan string)
 	mr.raftNode = newRaftNode(
-		int(config.Index)+1, // raftNode is 1-indexed
+		config.Index,
 		config.PeerList,
 		false, // not to join an existing cluster
 		mr.getSnapshot,
@@ -260,8 +260,8 @@ func (mr *RaftMetadataRepository) getSnapshot() ([]byte, error) {
 	return b, nil
 }
 
-func (mr *RaftMetadataRepository) sendAck(nodeIndex int32, requestNum uint64, err error) {
-	if mr.index != int(nodeIndex) {
+func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, err error) {
+	if mr.index != types.NodeID(nodeIndex) {
 		return
 	}
 
@@ -602,7 +602,7 @@ func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescript
 func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, guarantee bool) error {
 	e := &pb.RaftEntry{}
 	e.Request.SetValue(r)
-	e.NodeIndex = int32(mr.index)
+	e.NodeIndex = uint64(mr.index)
 	e.RequestNum = unusedRequestNum
 
 	if guarantee {

@@ -43,7 +43,7 @@ message RaftEntry {
                 Commit commit = 4;
                 TrimCommit trim_commit = 5;
         }
-        int32 node_index = 1;
+        uint64 node_index = 1;
         uint64 request_num = 2;
         Request request = 3[(gogoproto.nullable) = false];
 }

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	varlogtypes "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+
 	"go.etcd.io/etcd/etcdserver/api/rafthttp"
 	"go.etcd.io/etcd/etcdserver/api/snap"
 	stats "go.etcd.io/etcd/etcdserver/api/v2stats"
@@ -30,11 +32,11 @@ type raftNode struct {
 	errorC      chan error             // errors from raft session
 	stateC      chan raft.StateType
 
-	id          int      // client ID for raft session
-	peers       []string // raft peer URLs
-	join        bool     // node is joining an existing cluster
-	waldir      string   // path to WAL directory
-	snapdir     string   // path to snapshot directory
+	id          varlogtypes.NodeID // node ID for raft
+	peers       []string           // raft peer URLs
+	join        bool               // node is joining an existing cluster
+	waldir      string             // path to WAL directory
+	snapdir     string             // path to snapshot directory
 	getSnapshot func() ([]byte, error)
 	lastIndex   uint64 // index of log at start
 
@@ -67,7 +69,7 @@ var defaultSnapshotCount uint64 = 10000
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries. To shutdown, close proposeC and read errorC.
-func newRaftNode(id int, peers []string, join bool, getSnapshot func() ([]byte, error), proposeC chan string,
+func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, getSnapshot func() ([]byte, error), proposeC chan string,
 	confChangeC chan raftpb.ConfChange, logger *zap.Logger) *raftNode {
 
 	commitC := make(chan *string)
@@ -234,7 +236,7 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 
 // replayWAL replays WAL entries into the raft instance.
 func (rc *raftNode) replayWAL() *wal.WAL {
-	rc.logger.Info("replaying WAL", zap.Int("member", rc.id))
+	rc.logger.Info("replaying WAL", zap.Uint64("member", uint64(rc.id)))
 	snapshot := rc.loadSnapshot()
 	w := rc.openWAL(snapshot)
 	_, st, ents, err := w.ReadAll()
@@ -279,9 +281,25 @@ func (rc *raftNode) startRaft() {
 	rc.wal = rc.replayWAL()
 
 	rpeers := make([]raft.Peer, len(rc.peers))
-	for i := range rpeers {
-		rpeers[i] = raft.Peer{ID: uint64(i + 1)}
+	for i, peer := range rc.peers {
+		url, err := url.Parse(peer)
+		if err != nil {
+			rc.logger.Panic("invalid peer name",
+				zap.String("peer", peer),
+				zap.String("err", err.Error()),
+			)
+		}
+
+		nodeID := varlogtypes.NewNodeID(url.Host)
+		if nodeID == varlogtypes.InvalidNodeID {
+			rc.logger.Panic("invalid peer",
+				zap.String("peer", peer),
+			)
+		}
+
+		rpeers[i] = raft.Peer{ID: uint64(nodeID)}
 	}
+
 	c := &raft.Config{
 		Logger:                    NewRaftLogger(rc.logger.Named("core")),
 		ID:                        uint64(rc.id),
@@ -309,18 +327,22 @@ func (rc *raftNode) startRaft() {
 		ClusterID:   0x1000,
 		Raft:        rc,
 		ServerStats: stats.NewServerStats("", ""),
-		LeaderStats: stats.NewLeaderStats(strconv.Itoa(rc.id)),
+		LeaderStats: stats.NewLeaderStats(strconv.FormatUint(uint64(rc.id), 10)),
 		ErrorC:      make(chan error),
 	}
 
 	rc.transport.Start()
-	for i := range rc.peers {
-		if i+1 != rc.id {
-			rc.transport.AddPeer(types.ID(i+1), []string{rc.peers[i]})
+
+	var listenURL string
+	for i, nodeID := range rpeers {
+		if nodeID.ID == uint64(rc.id) {
+			listenURL = rc.peers[i]
+		} else {
+			rc.transport.AddPeer(types.ID(nodeID.ID), []string{rc.peers[i]})
 		}
 	}
 
-	go rc.serveRaft()
+	go rc.serveRaft(listenURL)
 	go rc.serveChannels()
 }
 
@@ -472,8 +494,8 @@ func (rc *raftNode) serveChannels() {
 	}
 }
 
-func (rc *raftNode) serveRaft() {
-	url, err := url.Parse(rc.peers[rc.id-1])
+func (rc *raftNode) serveRaft(listenURL string) {
+	url, err := url.Parse(listenURL)
 	if err != nil {
 		rc.logger.Panic("Failed parsing URL", zap.String("err", err.Error()))
 	}

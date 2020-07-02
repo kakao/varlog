@@ -53,14 +53,15 @@ func createMetadataRepository(server *grpc.Server) metadata_repository.MetadataR
 func createRaftMetadataRepository(server *grpc.Server) metadata_repository.MetadataRepository {
 	var cluster []string
 
-	os.RemoveAll("raft-1")
-	os.RemoveAll("raft-1-snap")
-
 	cluster = append(cluster, "http://127.0.0.1:10000")
+	nodeID := types.NewNodeID("127.0.0.1:10000")
+
+	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
+	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
 
 	logger, _ := zap.NewDevelopment()
 	config := &metadata_repository.Config{
-		Index:             0,
+		Index:             nodeID,
 		NumRep:            1,
 		PeerList:          cluster,
 		Logger:            logger,
