@@ -27,7 +27,7 @@ func (e *dummyLSE) Replicate(ctx context.Context, llsn types.LLSN, data []byte) 
 	e.latestLLSN.Store(llsn)
 	return nil
 }
-func (e *dummyLSE) Append(ctx context.Context, data []byte) (types.GLSN, error) {
+func (e *dummyLSE) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
 	return 0, nil
 }
 func (e *dummyLSE) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {

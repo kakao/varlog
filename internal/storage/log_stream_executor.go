@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -18,11 +19,12 @@ type LogStreamExecutor interface {
 	Run(ctx context.Context)
 	Close()
 
-	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
 	Read(ctx context.Context, glsn types.GLSN) ([]byte, error)
 	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
-	Append(ctx context.Context, data []byte) (types.GLSN, error)
+	Append(ctx context.Context, data []byte, backups ...Replica) (types.GLSN, error)
 	Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error)
+
+	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
 
 	GetReport() UncommittedLogStreamStatus
 	Commit(CommittedLogStreamStatus)
@@ -42,12 +44,18 @@ type subscribeTask struct {
 }
 
 type appendTask struct {
-	data    []byte
-	llsn    types.LLSN
-	glsn    types.GLSN
-	err     error
-	written bool
-	done    chan struct{}
+	data        []byte
+	replication bool
+	replicas    []Replica
+	llsn        types.LLSN
+	glsn        types.GLSN
+	err         error
+	written     bool
+	done        chan struct{}
+
+	writeErr     error
+	replicateErr error
+	commitErr    error
 }
 
 type trimTask struct {
@@ -96,10 +104,9 @@ func (cwm *commitWaitMap) del(llsn types.LLSN) {
 }
 
 const (
-	lseAppendCSize    = 0
-	lseReplicateCSize = 0
-	lseTrimCSize      = 0
-	lseCommitCSize    = 0
+	lseAppendCSize = 0
+	lseTrimCSize   = 0
+	lseCommitCSize = 0
 )
 
 // TODO:
@@ -107,14 +114,15 @@ const (
 type logStreamExecutor struct {
 	logStreamID types.LogStreamID
 	storage     Storage
+	replicator  *Replicator
 
 	once sync.Once
 
-	appendC    chan *appendTask
-	replicateC chan *appendTask
-	commitC    chan commitTask
-	trimC      chan *trimTask
-	cancel     context.CancelFunc
+	appendC chan *appendTask
+	//replicateC chan *appendTask
+	commitC chan commitTask
+	trimC   chan *trimTask
+	cancel  context.CancelFunc
 
 	// lock guard for knownNextGLSN and uncommittedLLSNBegin
 	// knownNextGLSN and uncommittedLLSNBegin should be updated simultaneously.
@@ -173,7 +181,6 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) LogStr
 		storage:     storage,
 		cwm:         newCommitWaitMap(),
 		appendC:     make(chan *appendTask, lseAppendCSize),
-		replicateC:  make(chan *appendTask, lseReplicateCSize),
 		trimC:       make(chan *trimTask, lseTrimCSize),
 		commitC:     make(chan commitTask, lseCommitCSize),
 	}
@@ -184,7 +191,6 @@ func (lse *logStreamExecutor) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	lse.cancel = cancel
 	go lse.dispatchAppendC(ctx)
-	go lse.dispatchReplicateC(ctx)
 	go lse.dispatchTrimC(ctx)
 	go lse.dispatchCommitC(ctx)
 }
@@ -205,23 +211,25 @@ func (lse *logStreamExecutor) dispatchAppendC(ctx context.Context) {
 	for {
 		select {
 		case t := <-lse.appendC:
-			lse.prepare(t)
+			lse.prepare(ctx, t)
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
+/*
 func (lse *logStreamExecutor) dispatchReplicateC(ctx context.Context) {
 	for {
 		select {
 		case t := <-lse.replicateC:
-			lse.triggerReplication(t)
+			lse.triggerReplication(ctx, t)
 		case <-ctx.Done():
 			return
 		}
 	}
 }
+*/
 
 func (lse *logStreamExecutor) dispatchTrimC(ctx context.Context) {
 	for {
@@ -324,7 +332,19 @@ func (lse *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN, c 
 }
 
 func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
-	panic("not yet implemented")
+	if lse.isSealed() {
+		return varlog.ErrSealed
+	}
+	done := make(chan struct{})
+	t := appendTask{
+		llsn:        llsn,
+		data:        data,
+		done:        done,
+		replication: true,
+	}
+	lse.appendC <- &t
+	<-done
+	return t.err
 }
 
 // Append appends a log entry at the end of the log stream. Append comprises of three parts -
@@ -333,14 +353,15 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 // given GLSN.
 // If the log stream is locked, the append is failed.
 // All Appends are processed sequentially by using the appendC.
-func (lse *logStreamExecutor) Append(ctx context.Context, data []byte) (types.GLSN, error) {
+func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
 	if lse.isSealed() {
 		return 0, varlog.ErrSealed
 	}
 	done := make(chan struct{})
 	t := appendTask{
-		data: data,
-		done: done,
+		data:     data,
+		replicas: replicas,
+		done:     done,
 	}
 	lse.appendC <- &t
 	<-done
@@ -350,15 +371,24 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte) (types.GL
 	return t.glsn, t.err
 }
 
-func (lse *logStreamExecutor) prepare(t *appendTask) {
+func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
+	if t.replication {
+		t.err = lse.replicateTo(t.llsn, t.data)
+		if t.err != nil {
+			lse.seal()
+		}
+		close(t.done)
+		return
+	}
 	if err := lse.write(t); err != nil {
 		lse.seal()
 		t.err = err
 		close(t.done)
 		return
 	}
-
-	lse.replicateC <- t
+	if len(t.replicas) > 0 {
+		lse.triggerReplication(ctx, t)
+	}
 }
 
 // append issues new LLSN for a LogEntry and write it to the storage. It, then, adds given
@@ -376,7 +406,34 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 	return nil
 }
 
-func (lse *logStreamExecutor) triggerReplication(t *appendTask) {
+func (lse *logStreamExecutor) replicateTo(llsn types.LLSN, data []byte) error {
+	if llsn != lse.uncommittedLLSNEnd.Load() {
+		return fmt.Errorf("LLSN mismatch")
+	}
+	if err := lse.storage.Write(llsn, data); err != nil {
+		return err
+	}
+	lse.uncommittedLLSNEnd.Add(1)
+	// TODO: cwm
+	return nil
+}
+
+func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendTask) {
+	errC := lse.replicator.Replicate(ctx, t.llsn, t.data, t.replicas)
+	go func() {
+		select {
+		case err := <-errC:
+			if err == nil {
+				return
+			}
+			// FIXME: does t have a concurrency issue?
+			t.err = err
+		case <-ctx.Done():
+			t.err = ctx.Err()
+		}
+		lse.seal()
+		close(t.done)
+	}()
 }
 
 func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {

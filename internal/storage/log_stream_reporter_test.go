@@ -29,7 +29,7 @@ func (e *dummyLogStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN)
 func (e *dummyLogStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
 	return nil
 }
-func (e *dummyLogStreamExecutor) Append(ctx context.Context, data []byte) (types.GLSN, error) {
+func (e *dummyLogStreamExecutor) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
 	return 0, nil
 }
 func (e *dummyLogStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {
