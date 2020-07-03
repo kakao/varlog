@@ -18,6 +18,7 @@ type LogStreamExecutor interface {
 	Run(ctx context.Context)
 	Close()
 
+	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
 	Read(ctx context.Context, glsn types.GLSN) ([]byte, error)
 	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
 	Append(ctx context.Context, data []byte) (types.GLSN, error)
@@ -320,6 +321,10 @@ func (lse *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN, c 
 			}
 		}
 	}
+}
+
+func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
+	panic("not yet implemented")
 }
 
 // Append appends a log entry at the end of the log stream. Append comprises of three parts -
