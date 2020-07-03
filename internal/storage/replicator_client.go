@@ -5,14 +5,41 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 )
 
+type OnlyOnce struct {
+	done int32
+	m    sync.Mutex
+}
+
+func (o *OnlyOnce) DoOrElse(f func() error, g func() error) error {
+	if atomic.LoadInt32(&o.done) == 0 {
+		return o.do(f, g)
+	}
+	return g()
+}
+
+func (o *OnlyOnce) Do(f func() error) error {
+	return o.DoOrElse(f, func() error { return nil })
+}
+
+func (o *OnlyOnce) do(f func() error, g func() error) error {
+	o.m.Lock()
+	defer o.m.Unlock()
+	if o.done == 0 {
+		defer atomic.StoreInt32(&o.done, 1)
+		return f()
+	}
+	return g()
+}
+
 type ReplicatorClient interface {
-	Run(ctx context.Context)
+	Run(ctx context.Context) error
 	Close() error
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) <-chan error
 }
@@ -20,10 +47,8 @@ type ReplicatorClient interface {
 type replicatorClient struct {
 	rpcConn   *varlog.RpcConn
 	rpcClient pb.ReplicatorServiceClient
-	once      sync.Once
-
-	cancel context.CancelFunc
-
+	once      OnlyOnce
+	cancel    context.CancelFunc
 	mu        sync.RWMutex
 	m         map[types.LLSN]chan<- error
 	stream    pb.ReplicatorService_ReplicateClient
@@ -31,40 +56,44 @@ type replicatorClient struct {
 	responseC chan *pb.ReplicationResponse
 }
 
-func NewReplicatorClient(ctx context.Context, address string) (ReplicatorClient, error) {
+func NewReplicatorClient(address string) (ReplicatorClient, error) {
 	rpcConn, err := varlog.NewRpcConn(address)
 	if err != nil {
 		return nil, err
 	}
-	return NewReplicatorClientFromRpcConn(ctx, rpcConn)
+	return NewReplicatorClientFromRpcConn(rpcConn)
 }
 
-func NewReplicatorClientFromRpcConn(ctx context.Context, rpcConn *varlog.RpcConn) (ReplicatorClient, error) {
-	rpcClient := pb.NewReplicatorServiceClient(rpcConn.Conn)
-	stream, err := rpcClient.Replicate(ctx)
-	if err != nil {
-		return nil, err
-	}
+func NewReplicatorClientFromRpcConn(rpcConn *varlog.RpcConn) (ReplicatorClient, error) {
 	return &replicatorClient{
 		rpcConn:   rpcConn,
-		rpcClient: rpcClient,
-		stream:    stream,
+		rpcClient: pb.NewReplicatorServiceClient(rpcConn.Conn),
 		m:         make(map[types.LLSN]chan<- error),
 		requestC:  make(chan *pb.ReplicationRequest),
 		responseC: make(chan *pb.ReplicationResponse),
 	}, nil
 }
 
-func (rc *replicatorClient) Run(ctx context.Context) {
-	rc.once.Do(func() {
+func (rc *replicatorClient) Run(ctx context.Context) error {
+	return rc.once.Do(func() error {
 		ctx, cancel := context.WithCancel(ctx)
 		rc.cancel = cancel
+		stream, err := rc.rpcClient.Replicate(ctx)
+		if err != nil {
+			return err
+		}
+		rc.stream = stream
+
 		go rc.dispatchRequestC(ctx)
+		go rc.dispatchResponseC(ctx)
+		return nil
 	})
 }
 
 func (rc *replicatorClient) Close() error {
-	rc.cancel()
+	if rc.cancel != nil {
+		rc.cancel()
+	}
 	return rc.rpcConn.Close()
 }
 
@@ -89,6 +118,7 @@ func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data
 
 func (rc *replicatorClient) dispatchRequestC(ctx context.Context) {
 	defer rc.stream.CloseSend()
+	defer rc.cancel()
 	for {
 		select {
 		case req := <-rc.requestC:
@@ -104,6 +134,7 @@ func (rc *replicatorClient) dispatchRequestC(ctx context.Context) {
 }
 
 func (rc *replicatorClient) dispatchResponseC(ctx context.Context) {
+	defer rc.cancel()
 LOOP:
 	for {
 		select {

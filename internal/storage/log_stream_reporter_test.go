@@ -26,6 +26,9 @@ func (e *dummyLogStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]b
 func (e *dummyLogStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
 	return nil, nil
 }
+func (e *dummyLogStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
+	return nil
+}
 func (e *dummyLogStreamExecutor) Append(ctx context.Context, data []byte) (types.GLSN, error) {
 	return 0, nil
 }
