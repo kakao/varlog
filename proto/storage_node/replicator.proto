@@ -18,14 +18,14 @@ message ReplicationRequest {
 // ReplicationResponse indicates that a log entry at given LLSN is replicated.
 message ReplicationResponse {
     int32 storage_node_id = 1
-    	[(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
          (gogoproto.customname) = "StorageNodeID"];
     int32 log_stream_id = 2
-    	[(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
          (gogoproto.customname) = "LogStreamID"];
     uint64 llsn = 3
-    	[(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN",
-    	 (gogoproto.customname) = "LLSN"];
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN",
+         (gogoproto.customname) = "LLSN"];
 }
 
 service ReplicatorService {
