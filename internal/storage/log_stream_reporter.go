@@ -6,6 +6,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 )
 
 type UncommittedLogStreamStatus struct {
@@ -40,6 +41,7 @@ type LogStreamReporter struct {
 	mtxHistory    sync.RWMutex
 	commitC       chan lsrCommitTask
 	cancel        context.CancelFunc
+	runner        runner.Runner
 }
 
 func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter {
@@ -53,11 +55,12 @@ func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter 
 
 func (lsr *LogStreamReporter) Run(ctx context.Context) {
 	ctx, lsr.cancel = context.WithCancel(ctx)
-	go lsr.dispatchCommit(ctx)
+	lsr.runner.Run(ctx, lsr.dispatchCommit)
 }
 
 func (lsr *LogStreamReporter) Close() {
 	lsr.cancel()
+	lsr.runner.CloseWait()
 }
 
 func (lsr *LogStreamReporter) dispatchCommit(ctx context.Context) {

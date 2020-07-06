@@ -7,6 +7,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil/atomicutil"
 )
 
@@ -116,7 +117,8 @@ type logStreamExecutor struct {
 	storage     Storage
 	replicator  *Replicator
 
-	once sync.Once
+	once   sync.Once
+	runner runner.Runner
 
 	appendC chan *appendTask
 	//replicateC chan *appendTask
@@ -188,15 +190,21 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) LogStr
 }
 
 func (lse *logStreamExecutor) Run(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	lse.cancel = cancel
-	go lse.dispatchAppendC(ctx)
-	go lse.dispatchTrimC(ctx)
-	go lse.dispatchCommitC(ctx)
+	lse.once.Do(func() {
+		ctx, cancel := context.WithCancel(ctx)
+		lse.cancel = cancel
+		lse.runner.Run(ctx, lse.dispatchAppendC)
+		lse.runner.Run(ctx, lse.dispatchTrimC)
+		lse.runner.Run(ctx, lse.dispatchCommitC)
+	})
 }
 
 func (lse *logStreamExecutor) Close() {
+	if lse.cancel == nil {
+		return
+	}
 	lse.cancel()
+	lse.runner.CloseWait()
 }
 
 func (lse *logStreamExecutor) isSealed() bool {

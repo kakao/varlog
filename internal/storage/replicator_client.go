@@ -8,6 +8,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil"
 	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 )
@@ -28,6 +29,7 @@ type replicatorClient struct {
 	stream    pb.ReplicatorService_ReplicateClient
 	requestC  chan *pb.ReplicationRequest
 	responseC chan *pb.ReplicationResponse
+	runner    runner.Runner
 }
 
 func NewReplicatorClient(address string) (ReplicatorClient, error) {
@@ -58,8 +60,8 @@ func (rc *replicatorClient) Run(ctx context.Context) error {
 		}
 		rc.stream = stream
 
-		go rc.dispatchRequestC(ctx)
-		go rc.dispatchResponseC(ctx)
+		rc.runner.Run(ctx, rc.dispatchRequestC)
+		rc.runner.Run(ctx, rc.dispatchResponseC)
 		return nil
 	})
 }
@@ -67,6 +69,7 @@ func (rc *replicatorClient) Run(ctx context.Context) error {
 func (rc *replicatorClient) Close() error {
 	if rc.cancel != nil {
 		rc.cancel()
+		rc.runner.CloseWait()
 	}
 	return rc.rpcConn.Close()
 }
