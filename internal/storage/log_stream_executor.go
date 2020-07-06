@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/syncutil/atomicutil"
 )
 
 type SubscribeResult struct {
@@ -172,7 +172,7 @@ type logStreamExecutor struct {
 
 	cwm *commitWaitMap
 
-	sealed int32
+	sealed atomicutil.AtomicBool
 }
 
 func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) LogStreamExecutor {
@@ -200,11 +200,11 @@ func (lse *logStreamExecutor) Close() {
 }
 
 func (lse *logStreamExecutor) isSealed() bool {
-	return atomic.LoadInt32(&lse.sealed) > 0
+	return lse.sealed.Load()
 }
 
 func (lse *logStreamExecutor) seal() {
-	atomic.StoreInt32(&lse.sealed, 1)
+	lse.sealed.Store(true)
 }
 
 func (lse *logStreamExecutor) dispatchAppendC(ctx context.Context) {

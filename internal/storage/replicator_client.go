@@ -5,38 +5,12 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/syncutil"
 	pb "github.com/kakao/varlog/proto/storage_node"
 )
-
-type OnlyOnce struct {
-	done int32
-	m    sync.Mutex
-}
-
-func (o *OnlyOnce) DoOrElse(f func() error, g func() error) error {
-	if atomic.LoadInt32(&o.done) == 0 {
-		return o.do(f, g)
-	}
-	return g()
-}
-
-func (o *OnlyOnce) Do(f func() error) error {
-	return o.DoOrElse(f, func() error { return nil })
-}
-
-func (o *OnlyOnce) do(f func() error, g func() error) error {
-	o.m.Lock()
-	defer o.m.Unlock()
-	if o.done == 0 {
-		defer atomic.StoreInt32(&o.done, 1)
-		return f()
-	}
-	return g()
-}
 
 type ReplicatorClient interface {
 	Run(ctx context.Context) error
@@ -47,7 +21,7 @@ type ReplicatorClient interface {
 type replicatorClient struct {
 	rpcConn   *varlog.RpcConn
 	rpcClient pb.ReplicatorServiceClient
-	once      OnlyOnce
+	once      syncutil.OnlyOnce
 	cancel    context.CancelFunc
 	mu        sync.RWMutex
 	m         map[types.LLSN]chan<- error
