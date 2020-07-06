@@ -527,14 +527,14 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			lse.seal()
 			break
 		}
+		lse.committedLLSNEnd++
+		lse.learnedGLSNEnd.Store(glsn + 1)
 		appendT, ok := lse.cwm.get(llsn)
 		if ok {
 			appendT.glsn = glsn
 			close(appendT.done)
 		}
-		lse.committedLLSNEnd++
 		glsn++
-		lse.learnedGLSNEnd.Store(glsn)
 	}
 
 	// NOTE: This is a very subtle case. MR assigns GLSNs to these log entries, but the storage
