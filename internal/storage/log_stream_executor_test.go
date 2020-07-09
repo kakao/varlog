@@ -2,295 +2,168 @@ package storage
 
 import (
 	"context"
-	"fmt"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/kakao/varlog/pkg/varlog"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/kakao/varlog/pkg/varlog/types"
 )
 
-type failedStorage struct {
-	nrRead   int32
-	nrScan   int32
-	nrWrite  int32
-	nrCommit int32
-	nrDelete int32
-}
-
-func (s *failedStorage) Read(glsn types.GLSN) ([]byte, error) {
-	atomic.AddInt32(&s.nrRead, 1)
-	return nil, varlog.ErrInternal
-}
-
-func (s *failedStorage) Scan(glsn types.GLSN) (Scanner, error) {
-	atomic.AddInt32(&s.nrScan, 1)
-	return nil, varlog.ErrInternal
-}
-
-func (s *failedStorage) Write(llsn types.LLSN, data []byte) error {
-	atomic.AddInt32(&s.nrWrite, 1)
-	return varlog.ErrInternal
-}
-
-func (s *failedStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
-	atomic.AddInt32(&s.nrCommit, 1)
-	return varlog.ErrInternal
-}
-
-func (s *failedStorage) Delete(glsn types.GLSN) (uint64, error) {
-	atomic.AddInt32(&s.nrDelete, 1)
-	return 0, varlog.ErrInternal
-}
-
-type dummyStorage struct {
-	logEntries     [][]byte
-	committedGLSNs []types.GLSN
-	nrRead         int32
-	nrScan         int32
-	nrWrite        int32
-	nrCommit       int32
-	nrDelete       int32
-}
-
-func (s *dummyStorage) Read(glsn types.GLSN) ([]byte, error) {
-	atomic.AddInt32(&s.nrRead, 1)
-	for glsn > s.committedGLSNs[len(s.committedGLSNs)-1] {
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	for i := len(s.committedGLSNs) - 1; i >= 0; i-- {
-		if glsn == s.committedGLSNs[i] {
-			return s.logEntries[i], nil
-		}
-		if glsn < s.committedGLSNs[i] {
-			break
-		}
-	}
-
-	return nil, fmt.Errorf("no entry")
-}
-
-func (s *dummyStorage) Scan(glsn types.GLSN) (Scanner, error) {
-	atomic.AddInt32(&s.nrScan, 1)
-	return nil, nil
-}
-
-func (s *dummyStorage) Write(llsn types.LLSN, data []byte) error {
-	atomic.AddInt32(&s.nrWrite, 1)
-	if llsn != types.LLSN(len(s.logEntries)) {
-		return fmt.Errorf("bad storage status")
-	}
-	s.logEntries = append(s.logEntries, data)
-	return nil
-}
-
-func (s *dummyStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
-	atomic.AddInt32(&s.nrCommit, 1)
-	if llsn != types.LLSN(len(s.committedGLSNs)) {
-		return fmt.Errorf("bad storage status")
-	}
-	s.committedGLSNs = append(s.committedGLSNs, glsn)
-	return nil
-}
-
-func (s *dummyStorage) Delete(glsn types.GLSN) (uint64, error) {
-	atomic.AddInt32(&s.nrDelete, 1)
-	return 0, nil
-}
-
-func TestLogStreamExecutorWithFailedStorage(t *testing.T) {
-	Convey("Given LogStreamExecutor with failed Storage", t, func() {
-		executor := NewLogStreamExecutor(types.LogStreamID(1), &failedStorage{})
-		executor.Run(context.TODO())
-		defer executor.Close()
-
-		Convey("Reading a log entry should return an error", func() {
-			So(executor.(*logStreamExecutor).isSealed(), ShouldBeFalse)
-			_, err := executor.Read(context.TODO(), 0)
+func TestLogStreamExecutorNew(t *testing.T) {
+	Convey("LogStreamExecutor", t, func() {
+		Convey("it should not be created with nil storage", func() {
+			_, err := NewLogStreamExecutor(types.LogStreamID(0), nil)
 			So(err, ShouldNotBeNil)
 		})
 
-		Convey("Appending a log entry should return an error, and the LogStreamExecutor should be sealed", func() {
-			So(executor.(*logStreamExecutor).isSealed(), ShouldBeFalse)
-			_, err := executor.Append(context.TODO(), nil)
-			So(err, ShouldNotBeNil)
-			So(executor.(*logStreamExecutor).isSealed(), ShouldBeTrue)
-		})
-
-		Convey("Committing should make it sealed", func() {
-			So(executor.(*logStreamExecutor).isSealed(), ShouldBeFalse)
-			executor.Commit(CommittedLogStreamStatus{
-				LogStreamID:        executor.(*logStreamExecutor).logStreamID,
-				NextGLSN:           1,
-				PrevNextGLSN:       0,
-				CommittedGLSNBegin: 0,
-				CommittedGLSNEnd:   1,
-			})
-			nrCommit := &executor.(*logStreamExecutor).storage.(*failedStorage).nrCommit
-			for atomic.LoadInt32(nrCommit) < 1 {
-				time.Sleep(time.Millisecond * 10)
-			}
-			So(executor.(*logStreamExecutor).isSealed(), ShouldBeTrue)
-		})
-	})
-}
-
-func TestSealedLogStreamExecutor(t *testing.T) {
-	Convey("With Sealed LogStreamExecutor", t, func() {
-		storage := &dummyStorage{}
-		executor := NewLogStreamExecutor(types.LogStreamID(1), storage)
-		executor.Run(context.TODO())
-		defer executor.Close()
-
-		executor.(*logStreamExecutor).sealed = 1
-		So(storage.Write(types.LLSN(0), []byte("log_001")), ShouldBeNil)
-		So(storage.Commit(types.LLSN(0), types.GLSN(0)), ShouldBeNil)
-		executor.(*logStreamExecutor).learnedGLSNEnd.Store(1)
-
-		Convey("Read should return written log entry", func() {
-			data, err := executor.Read(context.TODO(), types.GLSN(0))
+		Convey("it should not be sealed at first", func() {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			storage := NewMockStorage(ctrl)
+			lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage)
 			So(err, ShouldBeNil)
-			So(string(data), ShouldEqual, "log_001")
-		})
-
-		Convey("Append should return an error", func() {
-			_, err := executor.Append(context.TODO(), []byte("log_001"))
-			So(err, ShouldNotBeNil)
+			So(lse.(*logStreamExecutor).isSealed(), ShouldBeFalse)
 		})
 	})
 }
 
-func TestLogStreamExecutorAppendAndRead(t *testing.T) {
-	const (
-		storageNodeID = types.StorageNodeID(0)
-		logStreamID1  = types.LogStreamID(1)
-		logStreamID2  = types.LogStreamID(2)
-	)
-
-	sleepUntil := func(storage *dummyStorage, pred func(*dummyStorage) bool) {
-		for !pred(storage) {
-			time.Sleep(1 * time.Millisecond)
-		}
-	}
-
-	sleepUntilTargetNrWrite := func(storage *dummyStorage, targetNrWrite int32) {
-		sleepUntil(storage, func(s *dummyStorage) bool {
-			return atomic.LoadInt32(&s.nrWrite) == targetNrWrite
+func TestLogStreamExecutorRunClose(t *testing.T) {
+	Convey("LogStreamExecutor", t, func() {
+		Convey("it should be run and closed", func() {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			storage := NewMockStorage(ctrl)
+			lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage)
+			So(err, ShouldBeNil)
+			lse.Run(context.TODO())
+			lse.Close()
 		})
-	}
+	})
+}
 
-	Convey("LogStreamExecutor should append the log entry and read it", t, func() {
-		var glsn types.GLSN
-		var err error
-		var data []byte
-		ctx := context.TODO()
+func TestLogStreamExecutorOperations(t *testing.T) {
+	Convey("LogStreamExecutor", t, func() {
+		const logStreamID = types.LogStreamID(0)
+		const N = 1000
 
-		reporter := NewLogStreamReporter(storageNodeID)
-		reporter.Run(ctx)
-		defer reporter.Close()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		storage := NewMockStorage(ctrl)
+		replicator := NewMockReplicator(ctrl)
 
-		storage1 := &dummyStorage{}
-		executor1 := NewLogStreamExecutor(logStreamID1, storage1)
-		executor1.Run(context.TODO())
-		defer executor1.Close()
-		err = reporter.RegisterLogStreamExecutor(logStreamID1, executor1)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage)
 		So(err, ShouldBeNil)
+		lse.Run(context.TODO())
 
-		storage2 := &dummyStorage{}
-		executor2 := NewLogStreamExecutor(logStreamID2, storage2)
-		executor2.Run(context.TODO())
-		defer executor2.Close()
-		err = reporter.RegisterLogStreamExecutor(logStreamID2, executor2)
-		So(err, ShouldBeNil)
+		Convey("read operation should reply uncertainness if it doesn't know", func() {
+			_, err := lse.Read(context.TODO(), types.GLSN(0))
+			So(err, ShouldEqual, varlog.ErrUndecidable)
+		})
 
-		nextGLSN := types.GLSN(0)
+		Convey("read operation should reply error when the requested GLSN was already deleted", func() {
+			const trimGLSN = types.GLSN(5)
+			storage.EXPECT().Delete(gomock.Any()).Return(uint64(trimGLSN)+1, nil)
+			nr, err := lse.Trim(context.TODO(), trimGLSN, false)
+			So(err, ShouldBeNil)
+			So(nr, ShouldEqual, uint64(trimGLSN)+1)
+			for trimmedGLSN := types.GLSN(0); trimmedGLSN <= trimGLSN; trimmedGLSN++ {
+				isTrimmed, nonTrimmedGLSNBegin := lse.(*logStreamExecutor).isTrimmed(trimmedGLSN)
+				So(isTrimmed, ShouldBeTrue)
+				So(nonTrimmedGLSNBegin, ShouldEqual, trimGLSN+1)
 
-		go func() {
-			sleepUntilTargetNrWrite(storage1, 1)
-			reporter.Commit(nextGLSN+1, nextGLSN, []CommittedLogStreamStatus{
-				{
-					LogStreamID:        logStreamID1,
-					NextGLSN:           nextGLSN + 1,
-					PrevNextGLSN:       nextGLSN,
-					CommittedGLSNBegin: 0,
-					CommittedGLSNEnd:   1,
-				},
-				{
-					LogStreamID:        logStreamID2,
-					NextGLSN:           nextGLSN + 1,
-					PrevNextGLSN:       nextGLSN,
-					CommittedGLSNBegin: 0,
-					CommittedGLSNEnd:   0,
-				},
-			})
-		}()
-		glsn, err = executor1.Append(ctx, []byte("log_001"))
-		So(err, ShouldBeNil)
-		So(glsn, ShouldEqual, types.GLSN(0))
-		data, err = executor1.Read(ctx, glsn)
-		So(err, ShouldBeNil)
-		So(string(data), ShouldEqual, "log_001")
+				_, err := lse.Read(context.TODO(), trimmedGLSN)
+				So(err, ShouldEqual, varlog.ErrTrimmed)
+			}
+		})
 
-		nextGLSN++
+		Convey("read operation should reply written data", func() {
+			storage.EXPECT().Read(gomock.Any()).Return([]byte("log"), nil)
+			lse.(*logStreamExecutor).learnedGLSNBegin = 0
+			lse.(*logStreamExecutor).learnedGLSNEnd = 10
+			data, err := lse.Read(context.TODO(), types.GLSN(0))
+			So(err, ShouldBeNil)
+			So(string(data), ShouldEqual, "log")
+		})
 
-		go func() {
-			sleepUntilTargetNrWrite(storage1, 2)
-			sleepUntilTargetNrWrite(storage2, 1)
-			reporter.Commit(nextGLSN+2, nextGLSN, []CommittedLogStreamStatus{
-				{
-					LogStreamID:        logStreamID1,
-					NextGLSN:           nextGLSN + 2,
-					PrevNextGLSN:       nextGLSN,
-					CommittedGLSNBegin: 1,
-					CommittedGLSNEnd:   2,
-				},
-				{
-					LogStreamID:        logStreamID2,
-					NextGLSN:           nextGLSN + 2,
-					PrevNextGLSN:       nextGLSN,
-					CommittedGLSNBegin: 2,
-					CommittedGLSNEnd:   3,
-				},
-			})
-		}()
+		Convey("append operation should not write data when sealed", func() {
+			lse.(*logStreamExecutor).seal()
+			_, err := lse.Append(context.TODO(), []byte("never"))
+			So(err, ShouldEqual, varlog.ErrSealed)
+		})
 
-		type appendResult struct {
-			glsn types.GLSN
-			err  error
-		}
-		c1 := make(chan appendResult)
-		go func() {
-			ar := appendResult{}
-			ar.glsn, ar.err = executor1.Append(ctx, []byte("log_002"))
-			c1 <- ar
-		}()
+		Convey("append operation should not write data when the storage is failed", func() {
+			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)
+			_, err := lse.Append(context.TODO(), []byte("never"))
+			So(err, ShouldNotBeNil)
+			sealed := lse.(*logStreamExecutor).isSealed()
+			So(sealed, ShouldBeTrue)
+		})
 
-		c2 := make(chan appendResult)
-		go func() {
-			ar := appendResult{}
-			ar.glsn, ar.err = executor2.Append(ctx, []byte("log_003"))
-			c2 <- ar
-		}()
+		Convey("append operation should not write data when the replication is failed", func() {
+			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil)
+			c := make(chan error, 1)
+			c <- varlog.ErrInternal
+			replicator.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(c)
+			replicator.EXPECT().Close().AnyTimes()
+			lse.(*logStreamExecutor).replicator = replicator
+			_, err := lse.Append(context.TODO(), []byte("never"), Replica{})
+			So(err, ShouldNotBeNil)
+		})
 
-		var ar appendResult
-		ar = <-c1
-		So(ar.err, ShouldBeNil)
-		So(ar.glsn, ShouldEqual, types.GLSN(1))
+		Convey("append operation should write data", func() {
+			waitCommitDone := func(knownNextGLSN types.GLSN) {
+				for {
+					lse.(*logStreamExecutor).mu.RLock()
+					updatedKnownNextGLSN := lse.(*logStreamExecutor).knownNextGLSN
+					lse.(*logStreamExecutor).mu.RUnlock()
+					if knownNextGLSN != updatedKnownNextGLSN {
+						break
+					}
+					time.Sleep(time.Millisecond)
+				}
+			}
+			waitWriteDone := func(uncommittedLLSNEnd types.LLSN) {
+				for uncommittedLLSNEnd == lse.(*logStreamExecutor).uncommittedLLSNEnd.Load() {
+					time.Sleep(time.Millisecond)
+				}
+			}
 
-		ar = <-c2
-		So(ar.err, ShouldBeNil)
-		So(ar.glsn, ShouldEqual, types.GLSN(2))
+			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			storage.EXPECT().Commit(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			for i := types.GLSN(0); i < N; i++ {
+				lse.(*logStreamExecutor).mu.RLock()
+				knownNextGLSN := lse.(*logStreamExecutor).knownNextGLSN
+				lse.(*logStreamExecutor).mu.RUnlock()
+				uncommittedLLSNEnd := lse.(*logStreamExecutor).uncommittedLLSNEnd.Load()
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func(uncommittedLLSNEnd types.LLSN, knownNextGLSN types.GLSN) {
+					defer wg.Done()
+					waitWriteDone(uncommittedLLSNEnd)
+					t.Log("LSR committing")
+					lse.Commit(CommittedLogStreamStatus{
+						LogStreamID:        logStreamID,
+						NextGLSN:           i + 1,
+						PrevNextGLSN:       i,
+						CommittedGLSNBegin: i,
+						CommittedGLSNEnd:   i + 1,
+					})
+					waitCommitDone(knownNextGLSN)
+				}(uncommittedLLSNEnd, knownNextGLSN)
+				glsn, err := lse.Append(context.TODO(), []byte("log"))
+				So(err, ShouldBeNil)
+				So(glsn, ShouldEqual, i)
+				wg.Wait()
+				t.Logf("wrote - %d", i)
+			}
+		})
 
-		data, err = executor1.Read(ctx, types.GLSN(1))
-		So(err, ShouldBeNil)
-		So(string(data), ShouldEqual, "log_002")
-
-		data, err = executor2.Read(ctx, types.GLSN(2))
-		So(err, ShouldBeNil)
-		So(string(data), ShouldEqual, "log_003")
+		Reset(func() {
+			lse.Close()
+		})
 	})
 }

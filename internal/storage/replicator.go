@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/runner"
 )
 
 type Replica struct {
@@ -26,39 +27,47 @@ const (
 	replicateCSize = 0
 )
 
-type Replicator struct {
+type Replicator interface {
+	Run(context.Context)
+	Close()
+	Replicate(context.Context, types.LLSN, []byte, []Replica) <-chan error
+}
+
+type replicator struct {
 	rcm        map[types.StorageNodeID]ReplicatorClient
 	mtxRcm     sync.RWMutex
 	replicateC chan *replicateTask
 	once       sync.Once
 	cancel     context.CancelFunc
-	wg         sync.WaitGroup
+	runner     runner.Runner
 }
 
-func NewReplicator() *Replicator {
-	return &Replicator{
+func NewReplicator() Replicator {
+	return &replicator{
 		rcm:        make(map[types.StorageNodeID]ReplicatorClient),
 		replicateC: make(chan *replicateTask, replicateCSize),
 	}
 }
 
-func (r *Replicator) Run(ctx context.Context) {
+func (r *replicator) Run(ctx context.Context) {
 	r.once.Do(func() {
 		ctx, cancel := context.WithCancel(ctx)
 		r.cancel = cancel
-		r.wg.Add(1)
-		go r.dispatchReplicateC(ctx)
+		r.runner.Run(ctx, r.dispatchReplicateC)
 	})
 }
 
-func (r *Replicator) Close() {
+func (r *replicator) Close() {
 	if r.cancel != nil {
 		r.cancel()
+		for _, rc := range r.rcm {
+			rc.Close()
+		}
+		r.runner.CloseWait()
 	}
-	r.wg.Wait()
 }
 
-func (r *Replicator) Replicate(ctx context.Context, llsn types.LLSN, data []byte, replicas []Replica) <-chan error {
+func (r *replicator) Replicate(ctx context.Context, llsn types.LLSN, data []byte, replicas []Replica) <-chan error {
 	errC := make(chan error, 1)
 	if len(replicas) == 0 {
 		errC <- fmt.Errorf("no replicas")
@@ -80,8 +89,7 @@ func (r *Replicator) Replicate(ctx context.Context, llsn types.LLSN, data []byte
 	return errC
 }
 
-func (r *Replicator) dispatchReplicateC(ctx context.Context) {
-	defer r.wg.Done()
+func (r *replicator) dispatchReplicateC(ctx context.Context) {
 	for {
 		select {
 		case t := <-r.replicateC:
@@ -92,7 +100,7 @@ func (r *Replicator) dispatchReplicateC(ctx context.Context) {
 	}
 }
 
-func (r *Replicator) replicate(ctx context.Context, t *replicateTask) {
+func (r *replicator) replicate(ctx context.Context, t *replicateTask) {
 	errCs := make([]<-chan error, len(t.replicas))
 	for i, replica := range t.replicas {
 		rc, err := r.getOrConnect(ctx, replica)
@@ -121,7 +129,7 @@ func (r *Replicator) replicate(ctx context.Context, t *replicateTask) {
 	close(t.errC)
 }
 
-func (r *Replicator) getOrConnect(ctx context.Context, replica Replica) (ReplicatorClient, error) {
+func (r *replicator) getOrConnect(ctx context.Context, replica Replica) (ReplicatorClient, error) {
 	r.mtxRcm.RLock()
 	rc, ok := r.rcm[replica.StorageNodeID]
 	r.mtxRcm.RUnlock()

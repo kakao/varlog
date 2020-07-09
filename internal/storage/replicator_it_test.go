@@ -15,8 +15,9 @@ type dummyLSE struct {
 	latestLLSN types.AtomicLLSN
 }
 
-func (e *dummyLSE) Run(ctx context.Context) {}
-func (e *dummyLSE) Close()                  {}
+func (e *dummyLSE) LogStreamID() types.LogStreamID { return types.LogStreamID(1) }
+func (e *dummyLSE) Run(ctx context.Context)        {}
+func (e *dummyLSE) Close()                         {}
 func (e *dummyLSE) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
 	return nil, nil
 }
@@ -36,7 +37,7 @@ func (e *dummyLSE) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint6
 func (e *dummyLSE) GetReport() UncommittedLogStreamStatus {
 	panic("not implemented")
 }
-func (e *dummyLSE) Commit(CommittedLogStreamStatus) {
+func (e *dummyLSE) Commit(CommittedLogStreamStatus) error {
 	panic("not implemented")
 }
 

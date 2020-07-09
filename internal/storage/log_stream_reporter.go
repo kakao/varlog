@@ -42,6 +42,7 @@ type LogStreamReporter struct {
 	commitC       chan lsrCommitTask
 	cancel        context.CancelFunc
 	runner        runner.Runner
+	once          sync.Once
 }
 
 func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter {
@@ -54,13 +55,17 @@ func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter 
 }
 
 func (lsr *LogStreamReporter) Run(ctx context.Context) {
-	ctx, lsr.cancel = context.WithCancel(ctx)
-	lsr.runner.Run(ctx, lsr.dispatchCommit)
+	lsr.once.Do(func() {
+		ctx, lsr.cancel = context.WithCancel(ctx)
+		lsr.runner.Run(ctx, lsr.dispatchCommit)
+	})
 }
 
 func (lsr *LogStreamReporter) Close() {
-	lsr.cancel()
-	lsr.runner.CloseWait()
+	if lsr.cancel != nil {
+		lsr.cancel()
+		lsr.runner.CloseWait()
+	}
 }
 
 func (lsr *LogStreamReporter) dispatchCommit(ctx context.Context) {
@@ -79,10 +84,11 @@ func (lsr *LogStreamReporter) dispatchCommit(ctx context.Context) {
 // is nil, it returns varlog.ErrInvalid.
 // When the new LogStreamExecutor is registered successfully, it is received a GLSN which is
 // anticipated to be issued in the next commit - knownNextGLSN.
-func (lsr *LogStreamReporter) RegisterLogStreamExecutor(logStreamID types.LogStreamID, executor LogStreamExecutor) error {
+func (lsr *LogStreamReporter) RegisterLogStreamExecutor(executor LogStreamExecutor) error {
 	if executor == nil {
 		return varlog.ErrInvalid
 	}
+	logStreamID := executor.LogStreamID()
 	lsr.mtxExecutors.Lock()
 	defer lsr.mtxExecutors.Unlock()
 	_, ok := lsr.executors[logStreamID]
@@ -144,6 +150,9 @@ func (lsr *LogStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitRe
 	if !lsr.verifyCommit(prevNextGLSN) {
 		return
 	}
+	if len(commitResults) == 0 {
+		return
+	}
 	lsr.commitC <- lsrCommitTask{
 		nextGLSN:      nextGLSN,
 		prevNextGLSN:  prevNextGLSN,
@@ -163,6 +172,8 @@ func (lsr *LogStreamReporter) commit(t lsrCommitTask) {
 		if !ok {
 			panic("no such executor")
 		}
+		// TODO: check returned value, and log it
+		// TODO: run goroutine
 		executor.Commit(commitResult)
 	}
 	lsr.knownNextGLSN.Store(t.nextGLSN)

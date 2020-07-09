@@ -15,5 +15,8 @@ func NewRpcConn(address string) (*RpcConn, error) {
 }
 
 func (c *RpcConn) Close() error {
-	return c.Conn.Close()
+	if c.Conn != nil {
+		return c.Conn.Close()
+	}
+	return nil
 }
