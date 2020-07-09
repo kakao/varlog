@@ -9,20 +9,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	varlog "github.com/kakao/varlog/pkg/varlog"
 	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	pb "github.com/kakao/varlog/proto/metadata_repository"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 
-	"go.etcd.io/etcd/etcdserver/api/snap"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
 )
 
 const DefaultNumGlobalLogStreams int = 128
-const unusedRequestNum uint64 = 0
+const unusedRequestIndex uint64 = 0
 
 type Config struct {
 	Index             types.NodeID
@@ -56,46 +55,32 @@ func (config *Config) validate() error {
 	return nil
 }
 
-type localLogStreamInfo struct {
-	beginLlsn     types.LLSN
-	endLlsn       types.LLSN
-	knownNextGLSN types.GLSN
-}
-
 type RaftMetadataRepository struct {
 	index             types.NodeID
 	nrReplica         int
 	raftState         raft.StateType
-	localLogStreams   map[types.LogStreamID]map[types.StorageNodeID]localLogStreamInfo
 	reportCollector   *ReportCollector
 	logger            *zap.Logger
 	raftNode          *raftNode
 	reporterClientFac ReporterClientFactory
 
-	// SMR
-	smr pb.MetadataRepositoryDescriptor
-	mu  sync.RWMutex
-
-	nrUpdateSinceCommit uint64
+	storage *MetadataStorage
 
 	// for ack
 	requestNum uint64
 	requestMap sync.Map
 
 	// for raft
-	proposeC           chan *pb.RaftEntry
-	commitC            chan *pb.RaftEntry
-	rnConfChangeC      chan raftpb.ConfChange
-	rnProposeC         chan string
-	rnCommitC          chan *string
-	rnErrorC           chan error
-	rnStateC           chan raft.StateType
-	rnSnapshotterReady chan *snap.Snapshotter
+	proposeC      chan *pb.RaftEntry
+	commitC       chan *pb.RaftEntry
+	rnConfChangeC chan raftpb.ConfChange
+	rnProposeC    chan string
+	rnCommitC     chan *raftCommittedEntry
+	rnErrorC      chan error
+	rnStateC      chan raft.StateType
 
-	// for stop
-	stopC chan struct{}
-
-	wg sync.WaitGroup
+	runner runner.Runner
+	cancel context.CancelFunc
 }
 
 func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
@@ -110,13 +95,10 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 		reporterClientFac: config.ReporterClientFac,
 	}
 
-	mr.smr.Metadata = &varlogpb.MetadataDescriptor{}
-	//mr.smr.GlobalLogStreams = append(mr.smr.GlobalLogStreams, &snpb.GlobalLogStreamDescriptor{})
-	mr.localLogStreams = make(map[types.LogStreamID]map[types.StorageNodeID]localLogStreamInfo)
+	mr.storage = NewMetadataStorage(mr.sendAck)
 
 	mr.proposeC = make(chan *pb.RaftEntry, 4096)
 	mr.commitC = make(chan *pb.RaftEntry, 4096)
-	mr.stopC = make(chan struct{})
 
 	mr.rnConfChangeC = make(chan raftpb.ConfChange)
 	mr.rnProposeC = make(chan string)
@@ -124,7 +106,7 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 		config.Index,
 		config.PeerList,
 		false, // not to join an existing cluster
-		mr.getSnapshot,
+		mr.storage.GetSnapshot,
 		mr.rnProposeC,
 		mr.rnConfChangeC,
 		mr.logger.Named("raftnode"),
@@ -132,12 +114,11 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 	mr.rnCommitC = mr.raftNode.commitC
 	mr.rnErrorC = mr.raftNode.errorC
 	mr.rnStateC = mr.raftNode.stateC
-	mr.rnSnapshotterReady = mr.raftNode.snapshotterReady
 
 	cbs := ReportCollectorCallbacks{
 		report:     mr.proposeReport,
 		getClient:  mr.reporterClientFac.GetClient,
-		getNextGLS: mr.getNextGLSFrom,
+		getNextGLS: mr.storage.GetNextGLSFrom,
 	}
 
 	mr.reportCollector = NewReportCollector(cbs,
@@ -146,13 +127,16 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 	return mr
 }
 
-func (mr *RaftMetadataRepository) Start() {
-	mr.wg.Add(5)
-	go mr.runReplication()
-	go mr.processCommit()
-	go mr.processRNCommit()
-	go mr.processRNState()
-	go mr.runCommitTrigger()
+func (mr *RaftMetadataRepository) Run() {
+	mr.storage.Run()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	mr.cancel = cancel
+	mr.runner.Run(ctx, mr.runReplication)
+	mr.runner.Run(ctx, mr.processCommit)
+	mr.runner.Run(ctx, mr.processRNCommit)
+	mr.runner.Run(ctx, mr.processRNState)
+	mr.runner.Run(ctx, mr.runCommitTrigger)
 
 	go mr.raftNode.startRaft()
 }
@@ -161,10 +145,12 @@ func (mr *RaftMetadataRepository) Start() {
 func (mr *RaftMetadataRepository) Close() error {
 	mr.reportCollector.Close()
 
-	close(mr.stopC)
+	mr.cancel()
 	err := <-mr.rnErrorC
 
-	mr.wg.Wait()
+	mr.runner.CloseWait()
+
+	mr.storage.Close()
 
 	//TODO:: handle pendding msg
 
@@ -175,9 +161,7 @@ func (mr *RaftMetadataRepository) isLeader() bool {
 	return raft.StateLeader == raft.StateType(atomic.LoadUint64((*uint64)(&mr.raftState)))
 }
 
-func (mr *RaftMetadataRepository) runReplication() {
-	defer mr.wg.Done()
-
+func (mr *RaftMetadataRepository) runReplication(ctx context.Context) {
 Loop:
 	for {
 		select {
@@ -189,7 +173,7 @@ Loop:
 			}
 
 			mr.rnProposeC <- string(b)
-		case <-mr.stopC:
+		case <-ctx.Done():
 			break Loop
 		}
 	}
@@ -197,16 +181,14 @@ Loop:
 	close(mr.rnProposeC)
 }
 
-func (mr *RaftMetadataRepository) runCommitTrigger() {
-	defer mr.wg.Done()
-
+func (mr *RaftMetadataRepository) runCommitTrigger(ctx context.Context) {
 	ticker := time.NewTicker(time.Millisecond)
 Loop:
 	for {
 		select {
 		case <-ticker.C:
 			mr.proposeCommit()
-		case <-mr.stopC:
+		case <-ctx.Done():
 			break Loop
 		}
 	}
@@ -214,17 +196,13 @@ Loop:
 	ticker.Stop()
 }
 
-func (mr *RaftMetadataRepository) processCommit() {
-	defer mr.wg.Done()
-
+func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
 	for e := range mr.commitC {
 		mr.apply(e)
 	}
 }
 
-func (mr *RaftMetadataRepository) processRNCommit() {
-	defer mr.wg.Done()
-
+func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 	for d := range mr.rnCommitC {
 		if d == nil {
 			// TODO: handle snapshots
@@ -232,11 +210,12 @@ func (mr *RaftMetadataRepository) processRNCommit() {
 		}
 
 		e := &pb.RaftEntry{}
-		err := e.Unmarshal([]byte(*d))
+		err := e.Unmarshal([]byte(d.data))
 		if err != nil {
 			mr.logger.Error(err.Error())
 			continue
 		}
+		e.AppliedIndex = d.index
 
 		mr.commitC <- e
 	}
@@ -244,20 +223,10 @@ func (mr *RaftMetadataRepository) processRNCommit() {
 	close(mr.commitC)
 }
 
-func (mr *RaftMetadataRepository) processRNState() {
-	defer mr.wg.Done()
-
+func (mr *RaftMetadataRepository) processRNState(ctx context.Context) {
 	for d := range mr.rnStateC {
 		atomic.StoreUint64((*uint64)(&mr.raftState), uint64(d))
 	}
-}
-
-func (mr *RaftMetadataRepository) getSnapshot() ([]byte, error) {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-
-	b, _ := mr.smr.Marshal()
-	return b, nil
 }
 
 func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, err error) {
@@ -278,30 +247,27 @@ func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, e
 }
 
 func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
-	var err error
 	f := e.Request.GetValue()
 	switch r := f.(type) {
 	case *pb.RegisterStorageNode:
-		err = mr.applyRegisterStorageNode(r)
+		mr.applyRegisterStorageNode(r, e.NodeIndex, e.RequestIndex)
 	case *pb.CreateLogStream:
-		err = mr.applyCreateLogStream(r)
+		mr.applyCreateLogStream(r, e.NodeIndex, e.RequestIndex)
 	case *pb.Report:
-		err = mr.applyReport(r)
-	case *pb.Commit:
-		err = mr.commit()
+		mr.applyReport(r)
 	case *pb.TrimCommit:
-		err = mr.trimCommit(r)
+		mr.applyTrimCommit(r)
+	case *pb.Commit:
+		mr.applyCommit()
 	}
 
-	mr.sendAck(e.NodeIndex, e.RequestNum, err)
+	mr.storage.UpdateAppliedIndex(e.AppliedIndex)
 }
 
-func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorageNode) error {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
-
-	if err := mr.smr.Metadata.InsertStorageNode(r.StorageNode); err != nil {
-		return varlog.ErrAlreadyExists
+func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorageNode, nodeIndex, requestIndex uint64) error {
+	err := mr.storage.RegisterStorageNode(r.StorageNode, nodeIndex, requestIndex)
+	if err != nil {
+		return err
 	}
 
 	mr.reportCollector.RegisterStorageNode(r.StorageNode)
@@ -309,46 +275,92 @@ func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorage
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyCreateLogStream(r *pb.CreateLogStream) error {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
-
-	if err := mr.smr.Metadata.InsertLogStream(r.LogStream); err != nil {
-		return varlog.ErrAlreadyExists
+func (mr *RaftMetadataRepository) applyCreateLogStream(r *pb.CreateLogStream, nodeIndex, requestIndex uint64) error {
+	err := mr.storage.CreateLogStream(r.LogStream, nodeIndex, requestIndex)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
 func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
-	//TODO:: handle failover StorageNode
-
-	snId := r.LogStream.StorageNodeID
+	snID := r.LogStream.StorageNodeID
 	for _, l := range r.LogStream.Uncommit {
-		lsId := l.LogStreamID
-		lm, ok := mr.localLogStreams[lsId]
-		if !ok {
-			lm = make(map[types.StorageNodeID]localLogStreamInfo)
-			mr.localLogStreams[lsId] = lm
+		lsID := l.LogStreamID
+
+		u := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+			BeginLLSN:     l.UncommittedLLSNBegin,
+			EndLLSN:       l.UncommittedLLSNEnd,
+			KnownNextGLSN: r.LogStream.NextGLSN,
 		}
 
-		u := localLogStreamInfo{
-			beginLlsn:     l.UncommittedLLSNBegin,
-			endLlsn:       l.UncommittedLLSNEnd,
-			knownNextGLSN: r.LogStream.NextGLSN,
-		}
-
-		s, ok := lm[snId]
-		if !ok || s.endLlsn < u.endLlsn {
-			// 같은 SN 으로부터 받은 report 정보중에
-			// localLogStream 의 endLlsn 이 더 크다면
-			// knownNextGLSN 은 크거나 같다.
-			// knownNextGLSN 이 더 크고
-			// endLlsn 이 더 작은 localLogStream 은 있을 수 없다.
-			lm[snId] = u
-			mr.nrUpdateSinceCommit++
+		s := mr.storage.LookupLocalLogStreamReplica(lsID, snID)
+		if s == nil || s.EndLLSN < u.EndLLSN {
+			mr.storage.UpdateLocalLogStreamReplica(lsID, snID, u)
 		}
 	}
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applyTrimCommit(r *pb.TrimCommit) error {
+	return mr.storage.TrimGlobalLogStream(r.GLSN)
+}
+
+func (mr *RaftMetadataRepository) applyCommit() error {
+	curGLSN := mr.storage.GetNextGLSNNoLock()
+	newGLSN := curGLSN
+
+	gls := &snpb.GlobalLogStreamDescriptor{
+		PrevNextGLSN: curGLSN,
+	}
+
+	if mr.storage.NumUpdateSinceCommit() > 0 {
+		lsIDs := mr.storage.GetLocalLogStreamIDs()
+
+	Loop:
+		for _, lsID := range lsIDs {
+			replicas := mr.storage.LookupLocalLogStream(lsID)
+			knownGLSN, nrUncommit := mr.calculateCommit(replicas)
+			if nrUncommit == 0 {
+				continue Loop
+			}
+
+			if knownGLSN != curGLSN {
+				nrCommitted, ok := mr.numCommitSince(lsID, knownGLSN)
+				if !ok {
+					mr.logger.Panic("can not issue GLSN",
+						zap.Uint64("known", uint64(knownGLSN)),
+						zap.Uint64("uncommit", uint64(nrUncommit)),
+						zap.Uint64("cur", uint64(curGLSN)),
+					)
+				}
+
+				if nrCommitted < nrUncommit {
+					nrUncommit -= nrCommitted
+				} else {
+					continue Loop
+				}
+			}
+
+			commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
+				LogStreamID:        lsID,
+				CommittedGLSNBegin: newGLSN,
+				CommittedGLSNEnd:   newGLSN + types.GLSN(nrUncommit),
+			}
+
+			gls.CommitResult = append(gls.CommitResult, commit)
+			newGLSN = commit.CommittedGLSNEnd
+		}
+	}
+	gls.NextGLSN = newGLSN
+
+	mr.storage.AppendGlobalLogStream(gls)
+	mr.reportCollector.Commit(gls)
+	mr.proposeTrimCommit()
+
+	//TODO:: trigger next commit
 
 	return nil
 }
@@ -365,218 +377,59 @@ func getCommitResultFromGLS(gls *snpb.GlobalLogStreamDescriptor, lsId types.LogS
 	return nil
 }
 
-func (mr *RaftMetadataRepository) lookupGlobalLogStreamIdxByPrev(glsn types.GLSN) int {
-	i := sort.Search(len(mr.smr.GlobalLogStreams), func(i int) bool {
-		return mr.smr.GlobalLogStreams[i].PrevNextGLSN >= glsn
-	})
-
-	if i < len(mr.smr.GlobalLogStreams) && mr.smr.GlobalLogStreams[i].PrevNextGLSN == glsn {
-		return i
-	}
-
-	return -1
-}
-
 func (mr *RaftMetadataRepository) numCommitSince(lsId types.LogStreamID, glsn types.GLSN) (uint64, bool) {
 	var num uint64
 
-	i := mr.lookupGlobalLogStreamIdxByPrev(glsn)
-	if i < 0 {
-		return 0, false
-	}
+	highest := mr.storage.GetNextGLSNNoLock()
 
-	for ; i < len(mr.smr.GlobalLogStreams); i++ {
-		gls := mr.smr.GlobalLogStreams[i]
+	for glsn < highest {
+		gls := mr.storage.LookupGlobalLogStreamByPrev(glsn)
 
 		r := getCommitResultFromGLS(gls, lsId)
 		if r != nil {
 			num += uint64(r.CommittedGLSNEnd - r.CommittedGLSNBegin)
 		}
+
+		glsn = gls.NextGLSN
 	}
 
 	return num, true
 }
 
-func (mr *RaftMetadataRepository) commit() error {
-	prev := mr.getNextGLSN()
-	glsn := prev
+func (mr *RaftMetadataRepository) calculateCommit(replicas *pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas) (types.GLSN, uint64) {
+	var knownGLSN types.GLSN
+	var beginLLSN types.LLSN
+	var endLLSN types.LLSN = types.LLSN(math.MaxUint64)
 
-	gls := &snpb.GlobalLogStreamDescriptor{
-		PrevNextGLSN: prev,
-	}
-
-	if mr.nrUpdateSinceCommit > 0 {
-	Loop:
-		for lsId, l := range mr.localLogStreams {
-			knownGlsn, nrUncommit := mr.calculateCommit(l)
-			if nrUncommit == 0 {
-				continue Loop
-			}
-
-			if knownGlsn != prev {
-				nrCommitted, ok := mr.numCommitSince(lsId, knownGlsn)
-				if !ok {
-					mr.logger.Panic("can not issue GLSN",
-						zap.Uint64("known", uint64(knownGlsn)),
-						zap.Uint64("uncommit", uint64(nrUncommit)),
-						zap.Uint64("prev", uint64(prev)),
-					)
-				}
-
-				if nrCommitted < nrUncommit {
-					nrUncommit -= nrCommitted
-				} else {
-					continue Loop
-				}
-			}
-
-			commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
-				LogStreamID:        lsId,
-				CommittedGLSNBegin: glsn,
-				CommittedGLSNEnd:   glsn + types.GLSN(nrUncommit),
-			}
-
-			gls.CommitResult = append(gls.CommitResult, commit)
-			glsn = commit.CommittedGLSNEnd
-		}
-	}
-
-	mr.nrUpdateSinceCommit = 0
-
-	gls.NextGLSN = glsn
-	mr.appendGlobalLogStream(gls)
-	mr.reportCollector.Commit(gls)
-
-	//TODO:: trigger next commit
-
-	return nil
-}
-
-func (mr *RaftMetadataRepository) trimCommit(r *pb.TrimCommit) error {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
-
-	pos := 0
-	for idx, gls := range mr.smr.GlobalLogStreams {
-		if gls.NextGLSN <= r.Glsn {
-			pos = idx + 1
-		}
-	}
-
-	if pos > 0 {
-		mr.smr.GlobalLogStreams = mr.smr.GlobalLogStreams[pos:]
-	}
-
-	return nil
-}
-
-func (mr *RaftMetadataRepository) calculateCommit(m map[types.StorageNodeID]localLogStreamInfo) (types.GLSN, uint64) {
-	var knownGlsn types.GLSN
-	var beginLlsn types.LLSN
-	var endLlsn types.LLSN = types.LLSN(math.MaxUint64)
-
-	if len(m) < mr.nrReplica {
+	if replicas == nil {
 		return types.GLSN(0), 0
 	}
 
-	for _, l := range m {
-		if l.beginLlsn > beginLlsn {
-			beginLlsn = l.beginLlsn
+	if len(replicas.Replicas) < mr.nrReplica {
+		return types.GLSN(0), 0
+	}
+
+	for _, l := range replicas.Replicas {
+		if l.BeginLLSN > beginLLSN {
+			beginLLSN = l.BeginLLSN
 		}
 
-		if l.endLlsn < endLlsn {
-			endLlsn = l.endLlsn
+		if l.EndLLSN < endLLSN {
+			endLLSN = l.EndLLSN
 		}
 
-		if l.knownNextGLSN > knownGlsn {
+		if l.KnownNextGLSN > knownGLSN {
 			// knownNextGLSN 이 다르다면,
 			// 일부 SN 이 commitResult 를 받지 못했을 뿐이다.
-			knownGlsn = l.knownNextGLSN
+			knownGLSN = l.KnownNextGLSN
 		}
 	}
 
-	if beginLlsn > endLlsn {
-		return knownGlsn, 0
+	if beginLLSN > endLLSN {
+		return knownGLSN, 0
 	}
 
-	return knownGlsn, uint64(endLlsn - beginLlsn)
-}
-
-func (mr *RaftMetadataRepository) getLogStreamIDs() []types.LogStreamID {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-
-	if len(mr.smr.Metadata.LogStreams) == 0 {
-		return nil
-	}
-
-	lsIds := make([]types.LogStreamID, len(mr.smr.Metadata.LogStreams))
-
-	for i, l := range mr.smr.Metadata.LogStreams {
-		lsIds[i] = l.LogStreamID
-	}
-
-	return lsIds
-}
-
-func (mr *RaftMetadataRepository) getNextGLSN() types.GLSN {
-	len := len(mr.smr.GlobalLogStreams)
-	if len == 0 {
-		return 0
-	}
-
-	return mr.smr.GlobalLogStreams[len-1].NextGLSN
-}
-
-func (mr *RaftMetadataRepository) getNextGLSN4Test() types.GLSN {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-
-	return mr.getNextGLSN()
-}
-
-func (mr *RaftMetadataRepository) getNextGLSFrom(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-
-	i := mr.lookupGlobalLogStreamIdxByPrev(glsn)
-	if i < 0 {
-		return nil
-	}
-
-	return mr.smr.GlobalLogStreams[i]
-}
-
-func (mr *RaftMetadataRepository) appendGlobalLogStream(gls *snpb.GlobalLogStreamDescriptor) {
-	if len(gls.CommitResult) == 0 {
-		return
-	}
-
-	sort.Slice(gls.CommitResult, func(i, j int) bool { return gls.CommitResult[i].LogStreamID < gls.CommitResult[j].LogStreamID })
-
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
-
-	mr.smr.GlobalLogStreams = append(mr.smr.GlobalLogStreams, gls)
-	mr.proposeTrimCommit()
-}
-
-func (mr *RaftMetadataRepository) proposeTrimCommit() {
-	if !mr.isLeader() {
-		return
-	}
-
-	//TODO:: check all storage node got commit result
-	if len(mr.smr.GlobalLogStreams) <= DefaultNumGlobalLogStreams {
-		return
-	}
-
-	r := &pb.TrimCommit{
-		Glsn: mr.smr.GlobalLogStreams[0].NextGLSN,
-	}
-	mr.propose(context.TODO(), r, false)
-
-	return
+	return knownGLSN, uint64(endLLSN - beginLLSN)
 }
 
 func (mr *RaftMetadataRepository) proposeCommit() {
@@ -586,6 +439,26 @@ func (mr *RaftMetadataRepository) proposeCommit() {
 
 	r := &pb.Commit{}
 	mr.propose(context.TODO(), r, false)
+
+	return
+}
+
+func (mr *RaftMetadataRepository) proposeTrimCommit() {
+	if !mr.isLeader() {
+		return
+	}
+
+	//TODO:: check all storage node got commit result
+	/*
+		if len(mr.smr.GlobalLogStreams) <= DefaultNumGlobalLogStreams {
+			return
+		}
+
+		r := &pb.TrimCommit{
+			Glsn: mr.smr.GlobalLogStreams[0].NextGLSN,
+		}
+		mr.propose(context.TODO(), r, false)
+	*/
 
 	return
 }
@@ -603,13 +476,13 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 	e := &pb.RaftEntry{}
 	e.Request.SetValue(r)
 	e.NodeIndex = uint64(mr.index)
-	e.RequestNum = unusedRequestNum
+	e.RequestIndex = unusedRequestIndex
 
 	if guarantee {
 		c := make(chan error, 1)
-		e.RequestNum = atomic.AddUint64(&mr.requestNum, 1)
-		mr.requestMap.Store(e.RequestNum, c)
-		defer mr.requestMap.Delete(e.RequestNum)
+		e.RequestIndex = atomic.AddUint64(&mr.requestNum, 1)
+		mr.requestMap.Store(e.RequestIndex, c)
+		defer mr.requestMap.Delete(e.RequestIndex)
 
 		mr.proposeC <- e
 
@@ -646,9 +519,6 @@ func (mr *RaftMetadataRepository) CreateLogStream(ctx context.Context, ls *varlo
 }
 
 func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-
-	// TODO:: make it thread-safe
-	return mr.smr.Metadata, nil
+	m := mr.storage.GetMetadata()
+	return m, nil
 }

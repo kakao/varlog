@@ -12,6 +12,7 @@ import (
 
 func TestSnapshotMarshal(t *testing.T) {
 	smr := &mrpb.MetadataRepositoryDescriptor{}
+	smr.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 
 	for i := 0; i < 128; i++ {
 		gls := &snpb.GlobalLogStreamDescriptor{}
@@ -27,7 +28,7 @@ func TestSnapshotMarshal(t *testing.T) {
 			gls.CommitResult = append(gls.CommitResult, lls)
 		}
 
-		smr.GlobalLogStreams = append(smr.GlobalLogStreams, gls)
+		smr.LogStream.GlobalLogStreams = append(smr.LogStream.GlobalLogStreams, gls)
 	}
 
 	st := time.Now()
@@ -42,7 +43,7 @@ func TestGlobalLogStreamMarshal(t *testing.T) {
 	gls.NextGLSN = types.GLSN(1000)
 	gls.PrevNextGLSN = types.GLSN(16)
 
-	for i := 0; i < 5000; i++ {
+	for i := 0; i < 128*1024; i++ {
 		lls := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{}
 		lls.LogStreamID = types.LogStreamID(i)
 		lls.CommittedGLSNBegin = gls.PrevNextGLSN + types.GLSN(i*2)

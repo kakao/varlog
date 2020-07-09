@@ -15,7 +15,7 @@ import (
 
 type cluster struct {
 	peers       []string
-	commitC     []<-chan *string
+	commitC     []<-chan *raftCommittedEntry
 	errorC      []<-chan error
 	stateC      []<-chan raft.StateType
 	proposeC    []chan string
@@ -31,7 +31,7 @@ func newCluster(n int) *cluster {
 
 	clus := &cluster{
 		peers:       peers,
-		commitC:     make([]<-chan *string, len(peers)),
+		commitC:     make([]<-chan *raftCommittedEntry, len(peers)),
 		errorC:      make([]<-chan error, len(peers)),
 		stateC:      make([]<-chan raft.StateType, len(peers)),
 		proposeC:    make([]chan string, len(peers)),
@@ -115,7 +115,7 @@ func TestProposeOnFollower(t *testing.T) {
 	donec := make(chan struct{})
 	for i := range clus.peers {
 		// feedback for "n" committed entries, then update donec
-		go func(idx int, pC chan<- string, cC <-chan *string, eC <-chan error, sC <-chan raft.StateType) {
+		go func(idx int, pC chan<- string, cC <-chan *raftCommittedEntry, eC <-chan error, sC <-chan raft.StateType) {
 			var state raft.StateType
 
 		Loop:

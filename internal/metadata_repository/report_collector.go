@@ -7,6 +7,7 @@ import (
 	"github.com/kakao/varlog/internal/storage"
 	varlog "github.com/kakao/varlog/pkg/varlog"
 	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 
@@ -27,7 +28,6 @@ type ReportCollectExecutor struct {
 	cb           ReportCollectorCallbacks
 	mu           sync.RWMutex
 	resultC      chan *snpb.GlobalLogStreamDescriptor
-	stopC        chan struct{}
 	logger       *zap.Logger
 }
 
@@ -35,28 +35,27 @@ type ReportCollector struct {
 	executors map[types.StorageNodeID]*ReportCollectExecutor
 	cb        ReportCollectorCallbacks
 	mu        sync.RWMutex
-	wg        sync.WaitGroup
 	logger    *zap.Logger
+	runner    runner.Runner
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 func NewReportCollector(cb ReportCollectorCallbacks, logger *zap.Logger) *ReportCollector {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &ReportCollector{
 		logger:    logger,
 		cb:        cb,
+		ctx:       ctx,
+		cancel:    cancel,
 		executors: make(map[types.StorageNodeID]*ReportCollectExecutor),
 	}
 }
 
 func (rc *ReportCollector) Close() {
-	rc.mu.RLock()
-
-	for _, executor := range rc.executors {
-		close(executor.stopC)
-	}
-
-	rc.mu.RUnlock()
-
-	rc.wg.Wait()
+	rc.cancel()
+	rc.runner.CloseWait()
 }
 
 func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
@@ -78,7 +77,6 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 
 	executor := &ReportCollectExecutor{
 		resultC: make(chan *snpb.GlobalLogStreamDescriptor, 1),
-		stopC:   make(chan struct{}),
 		sn:      sn,
 		cb:      rc.cb,
 		cli:     cli,
@@ -86,7 +84,9 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 	}
 
 	rc.executors[sn.StorageNodeID] = executor
-	executor.run(&rc.wg)
+
+	rc.runner.Run(rc.ctx, executor.runCommit)
+	rc.runner.Run(rc.ctx, executor.runReport)
 
 	return nil
 }
@@ -107,20 +107,11 @@ func (rc *ReportCollector) Commit(gls *snpb.GlobalLogStreamDescriptor) {
 	}
 }
 
-func (rce *ReportCollectExecutor) run(wg *sync.WaitGroup) {
-	wg.Add(2)
-
-	go rce.runCommit(wg)
-	go rce.runReport(wg)
-}
-
-func (rce *ReportCollectExecutor) runReport(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func (rce *ReportCollectExecutor) runReport(ctx context.Context) {
 Loop:
 	for {
 		select {
-		case <-rce.stopC:
+		case <-ctx.Done():
 			break Loop
 		default:
 			err := rce.getReport()
@@ -134,13 +125,11 @@ Loop:
 	//TODO:: close cli
 }
 
-func (rce *ReportCollectExecutor) runCommit(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func (rce *ReportCollectExecutor) runCommit(ctx context.Context) {
 Loop:
 	for {
 		select {
-		case <-rce.stopC:
+		case <-ctx.Done():
 			break Loop
 		case gls := <-rce.resultC:
 			rce.mu.RLock()

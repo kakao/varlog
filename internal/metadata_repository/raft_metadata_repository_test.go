@@ -69,7 +69,7 @@ func newMetadataRepoCluster(n, nrRep int) *metadataRepoCluster {
 
 func (clus *metadataRepoCluster) Start() {
 	for _, n := range clus.nodes {
-		n.Start()
+		n.Run()
 	}
 }
 
@@ -130,24 +130,26 @@ func TestApplyReport(t *testing.T) {
 		lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
 		mr.applyReport(&pb.Report{LogStream: lls})
 
-		m, ok := mr.localLogStreams[lsId]
+		_, sm := mr.storage.getStateMachine()
+		m, ok := sm.LogStream.LocalLogStreams[lsId]
 		So(ok, ShouldBeTrue)
 
-		lc, ok := m[snId]
+		lc, ok := m.Replicas[snId]
 		So(ok, ShouldBeTrue)
-		So(lc.endLlsn, ShouldEqual, types.LLSN(2))
+		So(lc.EndLLSN, ShouldEqual, types.LLSN(2))
 
 		Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
 			// propose report
 			lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(3))
 			mr.applyReport(&pb.Report{LogStream: lls})
 
-			m, ok := mr.localLogStreams[lsId]
+			_, sm := mr.storage.getStateMachine()
+			m, ok := sm.LogStream.LocalLogStreams[lsId]
 			So(ok, ShouldBeTrue)
 
-			lc, ok := m[snId]
+			lc, ok := m.Replicas[snId]
 			So(ok, ShouldBeTrue)
-			So(lc.endLlsn, ShouldEqual, types.LLSN(3))
+			So(lc.EndLLSN, ShouldEqual, types.LLSN(3))
 		})
 
 		Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
@@ -155,12 +157,13 @@ func TestApplyReport(t *testing.T) {
 			lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(1))
 			mr.applyReport(&pb.Report{LogStream: lls})
 
-			m, ok := mr.localLogStreams[lsId]
+			_, sm := mr.storage.getStateMachine()
+			m, ok := sm.LogStream.LocalLogStreams[lsId]
 			So(ok, ShouldBeTrue)
 
-			lc, ok := m[snId]
+			lc, ok := m.Replicas[snId]
 			So(ok, ShouldBeTrue)
-			So(lc.endLlsn, ShouldNotEqual, types.LLSN(1))
+			So(lc.EndLLSN, ShouldNotEqual, types.LLSN(1))
 		})
 	})
 }
@@ -181,10 +184,8 @@ func TestCalculateCommit(t *testing.T) {
 			lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
 			mr.applyReport(&pb.Report{LogStream: lls})
 
-			m, ok := mr.localLogStreams[lsId]
-			So(ok, ShouldBeTrue)
-
-			_, nrCommit := mr.calculateCommit(m)
+			replicas := mr.storage.LookupLocalLogStream(lsId)
+			_, nrCommit := mr.calculateCommit(replicas)
 			So(nrCommit, ShouldEqual, 0)
 		})
 
@@ -195,10 +196,8 @@ func TestCalculateCommit(t *testing.T) {
 			lls = makeLocalLogStream(snIds[1], types.GLSN(7), lsId, types.LLSN(3), types.LLSN(5))
 			mr.applyReport(&pb.Report{LogStream: lls})
 
-			m, ok := mr.localLogStreams[lsId]
-			So(ok, ShouldBeTrue)
-
-			_, nrCommit := mr.calculateCommit(m)
+			replicas := mr.storage.LookupLocalLogStream(lsId)
+			_, nrCommit := mr.calculateCommit(replicas)
 			So(nrCommit, ShouldEqual, 0)
 		})
 
@@ -209,10 +208,8 @@ func TestCalculateCommit(t *testing.T) {
 			lls = makeLocalLogStream(snIds[1], types.GLSN(9), lsId, types.LLSN(3), types.LLSN(5))
 			mr.applyReport(&pb.Report{LogStream: lls})
 
-			m, ok := mr.localLogStreams[lsId]
-			So(ok, ShouldBeTrue)
-
-			glsn, nrCommit := mr.calculateCommit(m)
+			replicas := mr.storage.LookupLocalLogStream(lsId)
+			glsn, nrCommit := mr.calculateCommit(replicas)
 			So(nrCommit, ShouldEqual, 2)
 			So(glsn, ShouldEqual, types.GLSN(10))
 		})
@@ -268,7 +265,7 @@ func TestGlobalCommit(t *testing.T) {
 			mr.proposeReport(lls)
 
 			// global commit (2, 3) highest glsn: 5
-			So(waitCommit(mr.getNextGLSN4Test, types.GLSN(5)), ShouldBeNil)
+			So(waitCommit(mr.storage.GetNextGLSN, types.GLSN(5)), ShouldBeNil)
 
 			Convey("LogStream should be dedup", func(ctx C) {
 				lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(3))
@@ -278,7 +275,7 @@ func TestGlobalCommit(t *testing.T) {
 				mr.proposeReport(lls)
 
 				time.Sleep(100 * time.Millisecond)
-				So(waitCommit(mr.getNextGLSN4Test, types.GLSN(5)), ShouldBeNil)
+				So(waitCommit(mr.storage.GetNextGLSN, types.GLSN(5)), ShouldBeNil)
 			})
 
 			Convey("LogStream which have wrong GLSN but have uncommitted should commit", func(ctx C) {
@@ -288,7 +285,7 @@ func TestGlobalCommit(t *testing.T) {
 				lls = makeLocalLogStream(snIds[1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(6))
 				mr.proposeReport(lls)
 
-				So(waitCommit(mr.getNextGLSN4Test, types.GLSN(9)), ShouldBeNil)
+				So(waitCommit(mr.storage.GetNextGLSN, types.GLSN(9)), ShouldBeNil)
 			})
 		})
 
@@ -376,8 +373,8 @@ func TestRequestMap(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 
 			dummy := &pb.RaftEntry{
-				NodeIndex:  2,
-				RequestNum: uint64(1),
+				NodeIndex:    2,
+				RequestIndex: uint64(1),
 			}
 			mr.commitC <- dummy
 		}()
