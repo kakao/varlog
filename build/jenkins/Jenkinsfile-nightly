@@ -2,20 +2,27 @@ pipeline {
   agent any
 
   triggers {
-    cron('@midnight')
+    cron('@hourly')
   }
 
   stages {
 
     stage('build') {
+      when {
+        branch 'master'
+      }
+
       steps {
         sh 'make all'
       }
     }
 
     stage('test') {
+      when {
+        branch 'master'
+      }
       steps {
-        sh 'make test TEST_TIMEOUT=60m TEST_FAILFAST=1 TEST_COUNT=200'
+        sh 'make test TEST_TIMEOUT=100m TEST_PARALLEL=1 TEST_COUNT=200'
       }
     }
 
