@@ -1,0 +1,23 @@
+pipeline {
+  agent any
+
+  triggers {
+    cron('@midnight')
+  }
+
+  stages {
+
+    stage('build') {
+      steps {
+        sh 'make all'
+      }
+    }
+
+    stage('test') {
+      steps {
+        sh 'make test TEST_TIMEOUT=60m TEST_FAILFAST=1 TEST_COUNT=200'
+      }
+    }
+
+  }
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
@@ -156,6 +157,7 @@ func TestLogStreamReporterCommit(t *testing.T) {
 			defer lsr.Close()
 
 			lsr.knownNextGLSN.Store(10)
+			oldKnownNextGLSN := lsr.knownNextGLSN.Load()
 			var wg sync.WaitGroup
 			wg.Add(2)
 			lse1.EXPECT().Commit(gomock.Any()).DoAndReturn(func(CommittedLogStreamStatus) error {
@@ -184,6 +186,9 @@ func TestLogStreamReporterCommit(t *testing.T) {
 				},
 			})
 			wg.Wait()
+			for oldKnownNextGLSN == lsr.knownNextGLSN.Load() {
+				time.Sleep(time.Millisecond)
+			}
 			So(lsr.knownNextGLSN.Load(), ShouldEqual, types.GLSN(20))
 		})
 	})

@@ -16,7 +16,11 @@ PROTOC := protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
 TEST_COUNT := 1
-TEST_FLAGS := -timeout 20m -count $(TEST_COUNT) -p 1
+TEST_FLAGS := -count $(TEST_COUNT) -p 1
+
+ifneq ($(TEST_TIMEOUT),)
+	TEST_FLAGS := $(TEST_FLAG) -timeout $(TEST_TIMEOUT)
+endif
 
 ifneq ($(TEST_PARALLEL),)
 	TEST_FLAGS := $(TEST_FLAGS) -parallel $(TEST_PARALLEL)
