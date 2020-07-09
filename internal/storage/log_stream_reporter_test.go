@@ -2,121 +2,189 @@ package storage
 
 import (
 	"context"
+	"sync"
 	"testing"
 
+	gomock "github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 )
 
-const storageNodeID = types.StorageNodeID(0)
-
-type dummyLogStreamExecutor struct {
-	id             types.LogStreamID
-	knownNextGLSN  types.GLSN
-	committedBegin types.LLSN
-	committedEnd   types.LLSN
-	uncommittedEnd types.LLSN
-}
-
-func (e *dummyLogStreamExecutor) Run(ctx context.Context) {}
-func (e *dummyLogStreamExecutor) Close()                  {}
-func (e *dummyLogStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
-	return nil, nil
-}
-func (e *dummyLogStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
-	return nil, nil
-}
-func (e *dummyLogStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
-	return nil
-}
-func (e *dummyLogStreamExecutor) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
-	return 0, nil
-}
-func (e *dummyLogStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {
-	return 0, nil
-}
-
-func (e *dummyLogStreamExecutor) GetReport() UncommittedLogStreamStatus {
-	return UncommittedLogStreamStatus{
-		LogStreamID:          e.id,
-		KnownNextGLSN:        e.knownNextGLSN,
-		UncommittedLLSNBegin: e.committedEnd,
-		UncommittedLLSNEnd:   e.uncommittedEnd,
-	}
-}
-
-func (e *dummyLogStreamExecutor) Commit(s CommittedLogStreamStatus) {
-	e.knownNextGLSN = s.NextGLSN
-	e.committedEnd += types.LLSN(s.CommittedGLSNEnd - s.CommittedGLSNBegin)
-}
-
-func TestRegisterLogStream(t *testing.T) {
-	Convey("Registering a log stream without LogStreamExecutor should return an error", t, func() {
-		reporter := NewLogStreamReporter(storageNodeID)
-		err := reporter.RegisterLogStreamExecutor(types.LogStreamID(0), nil)
-		So(err, ShouldNotBeNil)
-	})
-
-	Convey("Registering the same log stream more than twice should return an error", t, func() {
-		var err error
-		reporter := NewLogStreamReporter(storageNodeID)
-		err = reporter.RegisterLogStreamExecutor(types.LogStreamID(0), &dummyLogStreamExecutor{})
-		So(err, ShouldBeNil)
-		err = reporter.RegisterLogStreamExecutor(types.LogStreamID(0), &dummyLogStreamExecutor{})
-		So(err, ShouldNotBeNil)
+func TestLogStreamReporterRunAndClose(t *testing.T) {
+	Convey("LogStreamReporter should be run and closed", t, func() {
+		lsr := NewLogStreamReporter(types.StorageNodeID(0))
+		So(func() { lsr.Run(context.TODO()) }, ShouldNotPanic)
+		So(func() { lsr.Close() }, ShouldNotPanic)
 	})
 }
 
-func WithLogStreamReporter(nrLSE int, knownNextGLSN types.GLSN, f func(reporter *LogStreamReporter)) func() {
-	return func() {
-		reporter := NewLogStreamReporter(storageNodeID)
-		reporter.knownNextGLSN.Store(knownNextGLSN)
-		lseList := []*dummyLogStreamExecutor{}
-		for i := 0; i < nrLSE; i++ {
-			lse := &dummyLogStreamExecutor{
-				id:             types.LogStreamID(i),
-				knownNextGLSN:  knownNextGLSN,
-				committedBegin: types.LLSN(0),
-				committedEnd:   types.LLSN(0),
-				uncommittedEnd: types.LLSN(0),
-			}
-			lseList = append(lseList, lse)
-			err := reporter.RegisterLogStreamExecutor(lse.id, lse)
+func TestLogStreamReporterRegister(t *testing.T) {
+	Convey("LogStreamReporter", t, func() {
+		lsr := NewLogStreamReporter(types.StorageNodeID(0))
+
+		Convey("it should not register nil executor", func() {
+			err := lsr.RegisterLogStreamExecutor(nil)
+			So(err, ShouldNotBeNil)
+		})
+
+		Convey("it should not register already existing LSE", func() {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			var err error
+			lse := NewMockLogStreamExecutor(ctrl)
+			lse.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
+			err = lsr.RegisterLogStreamExecutor(lse)
 			So(err, ShouldBeNil)
-		}
-		reporter.Run(context.TODO())
-		defer reporter.Close()
-		f(reporter)
-	}
+			err = lsr.RegisterLogStreamExecutor(lse)
+			So(err, ShouldNotBeNil)
+		})
+	})
 }
 
-func TestGetReport(t *testing.T) {
-	const (
-		nrLSE              = 10
-		firstKnownNextGLSN = types.GLSN(10)
-	)
+func TestLogStreamReporterGetReport(t *testing.T) {
+	Convey("LogStreamReporter", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	Convey("Given a LogStreamExecutor", t, WithLogStreamReporter(nrLSE, firstKnownNextGLSN, func(reporter *LogStreamReporter) {
-		Convey("GetReport should return reports from all LogStreamExecutor", func() {
-			knownNextGLSN, reports := reporter.GetReport()
-			So(knownNextGLSN, ShouldEqual, firstKnownNextGLSN)
-			So(len(reports), ShouldEqual, nrLSE)
+		lsr := NewLogStreamReporter(types.StorageNodeID(0))
+		lse1 := NewMockLogStreamExecutor(ctrl)
+		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
+		lse2 := NewMockLogStreamExecutor(ctrl)
+		lse2.EXPECT().LogStreamID().Return(types.LogStreamID(2)).AnyTimes()
+
+		Convey("it should get local stream status by using GetReport", func() {
+			lsr.RegisterLogStreamExecutor(lse1)
+			report := UncommittedLogStreamStatus{
+				LogStreamID:          lse1.LogStreamID(),
+				KnownNextGLSN:        types.GLSN(0),
+				UncommittedLLSNBegin: types.LLSN(0),
+				UncommittedLLSNEnd:   types.LLSN(10),
+			}
+			lse1.EXPECT().GetReport().Return(report)
+			knownNextGLSN, reports := lsr.GetReport()
+			So(knownNextGLSN, ShouldEqual, types.GLSN(0))
+			So(len(reports), ShouldEqual, 1)
+			So(reports[0], ShouldResemble, report)
 		})
 
-		Convey("verifyCommit received PrevNextGLSN equal to KnownNextGLSN of LogStreamReporter should return true", func() {
-			prevNextGLSN := firstKnownNextGLSN
-			ok := reporter.verifyCommit(prevNextGLSN)
-			So(ok, ShouldBeTrue)
+		Convey("it should take a minimum of knownNextGLSN getting from LSEs", func() {
+			lsr.RegisterLogStreamExecutor(lse1)
+			lsr.RegisterLogStreamExecutor(lse2)
+			lsr.knownNextGLSN.Store(types.GLSN(20))
+			report1 := UncommittedLogStreamStatus{
+				LogStreamID:          lse1.LogStreamID(),
+				KnownNextGLSN:        types.GLSN(10),
+				UncommittedLLSNBegin: types.LLSN(0),
+				UncommittedLLSNEnd:   types.LLSN(10),
+			}
+			report2 := UncommittedLogStreamStatus{
+				LogStreamID:          lse2.LogStreamID(),
+				KnownNextGLSN:        types.GLSN(20),
+				UncommittedLLSNBegin: types.LLSN(0),
+				UncommittedLLSNEnd:   types.LLSN(10),
+			}
+			lse1.EXPECT().GetReport().Return(report1)
+			lse2.EXPECT().GetReport().Return(report2)
+			knownNextGLSN, reports := lsr.GetReport()
+			So(knownNextGLSN, ShouldEqual, types.GLSN(10))
+			So(len(reports), ShouldEqual, 2)
 		})
-		Convey("verifyCommit received PrevNextGLSN not equal to KnownNextGLSN of LogStreamReporter should return true", func() {
-			prevNextGLSN := firstKnownNextGLSN - 1
-			ok := reporter.verifyCommit(prevNextGLSN)
-			So(ok, ShouldBeFalse)
 
-			prevNextGLSN = firstKnownNextGLSN + 1
-			ok = reporter.verifyCommit(prevNextGLSN)
-			So(ok, ShouldBeFalse)
+		Convey("it should ignore knownNextGLSN of new LSE which is zero", func() {
+			lsr.RegisterLogStreamExecutor(lse1)
+			lsr.RegisterLogStreamExecutor(lse2)
+			lsr.knownNextGLSN.Store(types.GLSN(20))
+			report1 := UncommittedLogStreamStatus{
+				LogStreamID:          lse1.LogStreamID(),
+				KnownNextGLSN:        types.GLSN(0),
+				UncommittedLLSNBegin: types.LLSN(0),
+				UncommittedLLSNEnd:   types.LLSN(10),
+			}
+			report2 := UncommittedLogStreamStatus{
+				LogStreamID:          lse2.LogStreamID(),
+				KnownNextGLSN:        types.GLSN(10),
+				UncommittedLLSNBegin: types.LLSN(0),
+				UncommittedLLSNEnd:   types.LLSN(10),
+			}
+			lse1.EXPECT().GetReport().Return(report1)
+			lse2.EXPECT().GetReport().Return(report2)
+			knownNextGLSN, reports := lsr.GetReport()
+			So(knownNextGLSN, ShouldEqual, types.GLSN(10))
+			So(len(reports), ShouldEqual, 2)
+		})
+	})
+}
+
+func TestLogStreamReporterCommit(t *testing.T) {
+	Convey("LogStreamReporter", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		lsr := NewLogStreamReporter(types.StorageNodeID(0))
+		lse1 := NewMockLogStreamExecutor(ctrl)
+		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
+		lse2 := NewMockLogStreamExecutor(ctrl)
+		lse2.EXPECT().LogStreamID().Return(types.LogStreamID(2)).AnyTimes()
+
+		Convey("it should reject a commit result whose prevNextGLSN is not equal to own knownNextGLSN",
+			func() {
+				lsr.knownNextGLSN.Store(10)
+				lsr.Commit(types.GLSN(10), types.GLSN(5), nil)
+				So(len(lsr.commitC), ShouldEqual, 0)
+
+				lsr.Commit(types.GLSN(20), types.GLSN(15), nil)
+				So(len(lsr.commitC), ShouldEqual, 0)
+			},
+		)
+
+		Convey("it should reject an empty commit result", func() {
+			lsr.knownNextGLSN.Store(10)
+
+			lsr.Commit(types.GLSN(15), types.GLSN(10), nil)
+			So(len(lsr.commitC), ShouldEqual, 0)
+
+			lsr.Commit(types.GLSN(15), types.GLSN(10), []CommittedLogStreamStatus{})
+			So(len(lsr.commitC), ShouldEqual, 0)
 		})
 
-	}))
+		Convey("it should change knownNextGLSN after call LSE.Commit", func() {
+			lsr.RegisterLogStreamExecutor(lse1)
+			lsr.RegisterLogStreamExecutor(lse2)
+
+			lsr.Run(context.TODO())
+			defer lsr.Close()
+
+			lsr.knownNextGLSN.Store(10)
+			var wg sync.WaitGroup
+			wg.Add(2)
+			lse1.EXPECT().Commit(gomock.Any()).DoAndReturn(func(CommittedLogStreamStatus) error {
+				defer wg.Done()
+				return nil
+			}).AnyTimes()
+			lse2.EXPECT().Commit(gomock.Any()).DoAndReturn(func(CommittedLogStreamStatus) error {
+				defer wg.Done()
+				return nil
+			}).AnyTimes()
+
+			lsr.Commit(types.GLSN(20), types.GLSN(10), []CommittedLogStreamStatus{
+				{
+					LogStreamID:        lse1.LogStreamID(),
+					NextGLSN:           types.GLSN(20),
+					PrevNextGLSN:       types.GLSN(10),
+					CommittedGLSNBegin: types.GLSN(100),
+					CommittedGLSNEnd:   types.GLSN(105),
+				},
+				{
+					LogStreamID:        lse2.LogStreamID(),
+					NextGLSN:           types.GLSN(20),
+					PrevNextGLSN:       types.GLSN(10),
+					CommittedGLSNBegin: types.GLSN(105),
+					CommittedGLSNEnd:   types.GLSN(110),
+				},
+			})
+			wg.Wait()
+			So(lsr.knownNextGLSN.Load(), ShouldEqual, types.GLSN(20))
+		})
+	})
 }

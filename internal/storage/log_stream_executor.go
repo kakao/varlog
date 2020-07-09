@@ -9,6 +9,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil/atomicutil"
+	"go.uber.org/zap"
 )
 
 type SubscribeResult struct {
@@ -20,6 +21,8 @@ type LogStreamExecutor interface {
 	Run(ctx context.Context)
 	Close()
 
+	LogStreamID() types.LogStreamID
+
 	Read(ctx context.Context, glsn types.GLSN) ([]byte, error)
 	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
 	Append(ctx context.Context, data []byte, backups ...Replica) (types.GLSN, error)
@@ -28,7 +31,7 @@ type LogStreamExecutor interface {
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
 
 	GetReport() UncommittedLogStreamStatus
-	Commit(CommittedLogStreamStatus)
+	Commit(CommittedLogStreamStatus) error
 }
 
 type readTask struct {
@@ -115,13 +118,12 @@ const (
 type logStreamExecutor struct {
 	logStreamID types.LogStreamID
 	storage     Storage
-	replicator  *Replicator
+	replicator  Replicator
 
 	once   sync.Once
 	runner runner.Runner
 
 	appendC chan *appendTask
-	//replicateC chan *appendTask
 	commitC chan commitTask
 	trimC   chan *trimTask
 	cancel  context.CancelFunc
@@ -175,18 +177,31 @@ type logStreamExecutor struct {
 	cwm *commitWaitMap
 
 	sealed atomicutil.AtomicBool
+
+	logger *zap.Logger
 }
 
-func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) LogStreamExecutor {
+func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) (LogStreamExecutor, error) {
+	logger := zap.L()
+	if storage == nil {
+		logger.Error("invalid argument", zap.Any("storage", storage))
+		return nil, varlog.ErrInvalid
+	}
 	lse := &logStreamExecutor{
 		logStreamID: logStreamID,
 		storage:     storage,
+		replicator:  NewReplicator(),
 		cwm:         newCommitWaitMap(),
 		appendC:     make(chan *appendTask, lseAppendCSize),
 		trimC:       make(chan *trimTask, lseTrimCSize),
 		commitC:     make(chan commitTask, lseCommitCSize),
+		logger:      logger,
 	}
-	return lse
+	return lse, nil
+}
+
+func (lse *logStreamExecutor) LogStreamID() types.LogStreamID {
+	return lse.logStreamID
 }
 
 func (lse *logStreamExecutor) Run(ctx context.Context) {
@@ -196,15 +211,16 @@ func (lse *logStreamExecutor) Run(ctx context.Context) {
 		lse.runner.Run(ctx, lse.dispatchAppendC)
 		lse.runner.Run(ctx, lse.dispatchTrimC)
 		lse.runner.Run(ctx, lse.dispatchCommitC)
+		lse.replicator.Run(ctx)
 	})
 }
 
 func (lse *logStreamExecutor) Close() {
-	if lse.cancel == nil {
-		return
+	if lse.cancel != nil {
+		lse.cancel()
+		lse.replicator.Close()
+		lse.runner.CloseWait()
 	}
-	lse.cancel()
-	lse.runner.CloseWait()
 }
 
 func (lse *logStreamExecutor) isSealed() bool {
@@ -225,19 +241,6 @@ func (lse *logStreamExecutor) dispatchAppendC(ctx context.Context) {
 		}
 	}
 }
-
-/*
-func (lse *logStreamExecutor) dispatchReplicateC(ctx context.Context) {
-	for {
-		select {
-		case t := <-lse.replicateC:
-			lse.triggerReplication(ctx, t)
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-*/
 
 func (lse *logStreamExecutor) dispatchTrimC(ctx context.Context) {
 	for {
@@ -487,15 +490,19 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	}
 }
 
-func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) {
+func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) error {
 	if lse.logStreamID != cr.LogStreamID {
-		return
+		lse.logger.Error("incorrect LogStreamID",
+			zap.Uint64("lse", uint64(lse.logStreamID)),
+			zap.Uint64("cr", uint64(cr.LogStreamID)))
+		return varlog.ErrInvalid
 	}
 	if lse.isSealed() {
-		return
+		lse.logger.Error("sealed")
+		return varlog.ErrSealed
 	}
 	if !lse.verifyCommit(cr.PrevNextGLSN) {
-		return
+		return varlog.ErrInvalid
 	}
 
 	lse.commitC <- commitTask{
@@ -504,13 +511,20 @@ func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) {
 		committedGLSNBegin: cr.CommittedGLSNBegin,
 		committedGLSNEnd:   cr.CommittedGLSNEnd,
 	}
+	return nil
 }
 
 func (lse *logStreamExecutor) verifyCommit(prevNextGLSN types.GLSN) bool {
 	lse.mu.RLock()
 	defer lse.mu.RUnlock()
 	// If the LSE is newbie knownNextGLSN is zero. In LSE-wise commit, it is unnecessary,
-	return lse.knownNextGLSN == 0 || lse.knownNextGLSN == prevNextGLSN
+	ret := lse.knownNextGLSN == 0 || lse.knownNextGLSN == prevNextGLSN
+	if !ret {
+		lse.logger.Error("incorrect CR",
+			zap.Uint64("known next GLSN", uint64(lse.knownNextGLSN)),
+			zap.Uint64("prev next GLSN", uint64(prevNextGLSN)))
+	}
+	return ret
 }
 
 func (lse *logStreamExecutor) commit(t commitTask) {

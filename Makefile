@@ -16,7 +16,7 @@ PROTOC := protoc
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
 
 TEST_COUNT := 1
-TEST_FLAGS := -count $(TEST_COUNT) -p 1
+TEST_FLAGS := -timeout 20m -count $(TEST_COUNT) -p 1
 
 ifneq ($(TEST_PARALLEL),)
 	TEST_FLAGS := $(TEST_FLAGS) -parallel $(TEST_PARALLEL)
@@ -58,11 +58,42 @@ subdirs : $(SUBDIRS)
 $(SUBDIRS) :
 	$(MAKE) -C $@
 
-mockgen: pkg/varlog/mock/storage_node_mock.go
+mockgen: pkg/varlog/mock/storage_node_mock.go internal/storage/storage_mock.go
+
+internal/storage/storage_mock.go: internal/storage/storage.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage 
+		-package storage \
+		-source ./internal/storage/storage.go \
+		> internal/storage/storage_mock.go
+
+internal/storage/log_stream_executor_mock.go: internal/storage/log_stream_executor.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
+		-package storage \
+		-source internal/storage/log_stream_executor.go \
+		> internal/storage/log_stream_executor_mock.go
+
+internal/storage/replicator_mock.go: internal/storage/replicator.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
+		-package storage \
+		-source internal/storage/replicator.go \
+		> internal/storage/replicator_mock.go
+
+internal/storage/replicator_client_mock.go: internal/storage/replicator_client.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
+		-package storage \
+		-source internal/storage/replicator_client.go \
+		> internal/storage/replicator_client_mock.go
+
+proto/storage_node/mock/replicator_mock.go: $(PROTO) proto/storage_node/replicator.pb.go
+	mockgen -build_flags -mod=vendor \
+		-package mock \
+		github.daumkakao.com/varlog/varlog/proto/storage_node \
+		ReplicatorServiceClient,ReplicatorServiceServer,ReplicatorService_ReplicateClient,ReplicatorService_ReplicateServer \
+		> proto/storage_node/mock/replicator_mock.go
 
 pkg/varlog/mock/storage_node_mock.go: $(PROTO) proto/storage_node/storage_node.pb.go
-	mockgen -build_flags=-mod=vendor \
-		-package=mock \
+	mockgen -build_flags -mod=vendor \
+		-package mock \
 		github.daumkakao.com/varlog/varlog/proto/storage_node \
 		StorageNodeServiceClient,StorageNodeServiceServer,StorageNodeService_SubscribeClient,StorageNodeService_SubscribeServer \
 		> pkg/varlog/mock/storage_node_mock.go
