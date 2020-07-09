@@ -69,7 +69,7 @@ func createRaftMetadataRepository(server *grpc.Server) metadata_repository.Metad
 	}
 
 	metaRepos := metadata_repository.NewRaftMetadataRepository(config)
-	metaRepos.Start()
+	metaRepos.Run()
 
 	service := metadata_repository.NewMetadataRepositoryService(metaRepos)
 	service.Register(server)

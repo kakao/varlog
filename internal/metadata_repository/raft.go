@@ -26,10 +26,10 @@ import (
 
 // A key-value stream backed by raft
 type raftNode struct {
-	proposeC    chan string            // proposed messages (k,v)
-	confChangeC chan raftpb.ConfChange // proposed cluster config changes
-	commitC     chan *string           // entries committed to log (k,v)
-	errorC      chan error             // errors from raft session
+	proposeC    chan string              // proposed messages from app
+	confChangeC chan raftpb.ConfChange   // proposed cluster config changes
+	commitC     chan *raftCommittedEntry // entries committed to app
+	errorC      chan error               // errors from raft session
 	stateC      chan raft.StateType
 
 	id          varlogtypes.NodeID // node ID for raft
@@ -37,7 +37,7 @@ type raftNode struct {
 	join        bool               // node is joining an existing cluster
 	waldir      string             // path to WAL directory
 	snapdir     string             // path to snapshot directory
-	getSnapshot func() ([]byte, error)
+	getSnapshot func() ([]byte, uint64)
 	lastIndex   uint64 // index of log at start
 
 	raftState     raft.StateType
@@ -62,6 +62,12 @@ type raftNode struct {
 	logger *zap.Logger
 }
 
+// committed entry to app
+type raftCommittedEntry struct {
+	index uint64
+	data  string
+}
+
 var defaultSnapshotCount uint64 = 10000
 
 // newRaftNode initiates a raft instance and returns a committed log entry
@@ -69,10 +75,10 @@ var defaultSnapshotCount uint64 = 10000
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries. To shutdown, close proposeC and read errorC.
-func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, getSnapshot func() ([]byte, error), proposeC chan string,
+func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, getSnapshot func() ([]byte, uint64), proposeC chan string,
 	confChangeC chan raftpb.ConfChange, logger *zap.Logger) *raftNode {
 
-	commitC := make(chan *string)
+	commitC := make(chan *raftCommittedEntry)
 	errorC := make(chan error)
 	stateC := make(chan raft.StateType)
 
@@ -145,9 +151,12 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 				// ignore empty messages
 				break
 			}
-			s := string(ents[i].Data)
+			e := &raftCommittedEntry{
+				index: ents[i].Index,
+				data:  string(ents[i].Data),
+			}
 			select {
-			case rc.commitC <- &s:
+			case rc.commitC <- e:
 			case <-rc.stopc:
 				return false
 			}
@@ -389,15 +398,18 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		return
 	}
 
+	data, appliedIndex := rc.getSnapshot()
+	if rc.snapshotIndex >= appliedIndex {
+		return
+	}
+
 	rc.logger.Info("start snapshot",
-		zap.Uint64("appliedIndex", rc.appliedIndex),
+		zap.Uint64("appliedIndex", appliedIndex),
 		zap.Uint64("lastSnapshotIndex", rc.snapshotIndex),
 	)
-	data, err := rc.getSnapshot()
-	if err != nil {
-		rc.logger.Panic(err.Error())
-	}
-	snap, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, data)
+
+	//snap, err := rc.raftStorage.CreateSnapshot(appliedIndex, &rc.confState, data)
+	snap, err := rc.raftStorage.CreateSnapshot(appliedIndex, nil, data)
 	if err != nil {
 		rc.logger.Panic(err.Error())
 	}
@@ -406,21 +418,21 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	}
 
 	compactIndex := uint64(1)
-	if rc.appliedIndex > snapshotCatchUpEntriesN {
-		compactIndex = rc.appliedIndex - snapshotCatchUpEntriesN
+	if appliedIndex > snapshotCatchUpEntriesN {
+		compactIndex = appliedIndex - snapshotCatchUpEntriesN
 	}
-	if err := rc.raftStorage.Compact(compactIndex); err != nil {
-		panic(err)
+	if err := rc.raftStorage.Compact(compactIndex); err != nil && err != raft.ErrCompacted {
+		rc.logger.Panic("storage compact fail", zap.String("err", err.Error()))
 	}
 
 	rc.logger.Info("compacted log", zap.Uint64("index", compactIndex))
-	rc.snapshotIndex = rc.appliedIndex
+	rc.snapshotIndex = appliedIndex
 }
 
 func (rc *raftNode) serveChannels() {
 	snap, err := rc.raftStorage.Snapshot()
 	if err != nil {
-		panic(err)
+		rc.logger.Panic("serve channel", zap.String("err", err.Error()))
 	}
 	rc.confState = snap.Metadata.ConfState
 	rc.snapshotIndex = snap.Metadata.Index

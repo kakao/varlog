@@ -30,7 +30,8 @@ message Commit {
 
 message TrimCommit {
     uint64 glsn = 1
-        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+        (gogoproto.customname) = "GLSN"];
 }
 
 message RaftEntry {
@@ -44,11 +45,35 @@ message RaftEntry {
                 TrimCommit trim_commit = 5;
         }
         uint64 node_index = 1;
-        uint64 request_num = 2;
-        Request request = 3[(gogoproto.nullable) = false];
+        uint64 request_index = 2;
+        uint64 applied_index = 3;
+        Request request = 4[(gogoproto.nullable) = false];
 }
 
 message MetadataRepositoryDescriptor {
+        message LocalLogStreamReplica {
+            uint64 being_llsn = 1
+                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+                 (gogoproto.customname) = "BeginLLSN"];
+            uint64 end_llsn = 2
+                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+                 (gogoproto.customname) = "EndLLSN"];
+            uint64 known_next_glsn = 3
+                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+                 (gogoproto.customname) = "KnownNextGLSN"];
+        }
+
+        message LocalLogStreamReplicas {
+            map<int32, LocalLogStreamReplica> replicas = 1[(gogoproto.castkey)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID"];
+        }
+
+        message LogStreamDescriptor {
+                uint64 trim_glsn = 1
+                    [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+                    (gogoproto.customname) = "TrimGLSN"];
+                repeated GlobalLogStreamDescriptor global_log_streams = 2[(gogoproto.nullable) = true];
+                map<uint64, LocalLogStreamReplicas> local_log_streams = 3[(gogoproto.castkey)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID"];
+        }
         MetadataDescriptor metadata = 1[(gogoproto.nullable) = true];
-        repeated GlobalLogStreamDescriptor global_log_streams = 2[(gogoproto.nullable) = true];
+        LogStreamDescriptor log_stream = 2[(gogoproto.nullable) = true];
 }
