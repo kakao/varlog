@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	reuseport "github.com/libp2p/go-reuseport"
 	"go.uber.org/zap"
 )
 
@@ -18,7 +19,8 @@ type stoppableListener struct {
 
 func newStoppableListener(addr string, stopc <-chan struct{}, logger *zap.Logger) (*stoppableListener, error) {
 	logger.Info("Listen", zap.String("addr", addr))
-	ln, err := net.Listen("tcp", addr)
+	//ln, err := net.Listen("tcp", addr)
+	ln, err := reuseport.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}

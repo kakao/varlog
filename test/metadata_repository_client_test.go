@@ -14,6 +14,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 
+	reuseport "github.com/libp2p/go-reuseport"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -28,7 +29,7 @@ type testEnv struct {
 }
 
 func createServer() (net.Listener, *grpc.Server, error) {
-	lis, err := net.Listen("tcp", "localhost:8000")
+	lis, err := reuseport.Listen("tcp", "localhost:8000")
 	if err != nil {
 		log.Fatalf("could not listen: %v", err)
 	}
