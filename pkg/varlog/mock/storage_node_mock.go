@@ -36,6 +36,26 @@ func (m *MockStorageNodeServiceClient) EXPECT() *MockStorageNodeServiceClientMoc
 	return m.recorder
 }
 
+// AddLogStream mocks base method
+func (m *MockStorageNodeServiceClient) AddLogStream(arg0 context.Context, arg1 *storage_node.AddLogStreamRequest, arg2 ...grpc.CallOption) (*storage_node.AddLogStreamResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddLogStream", varargs...)
+	ret0, _ := ret[0].(*storage_node.AddLogStreamResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddLogStream indicates an expected call of AddLogStream
+func (mr *MockStorageNodeServiceClientMockRecorder) AddLogStream(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockStorageNodeServiceClient)(nil).AddLogStream), varargs...)
+}
+
 // Append mocks base method
 func (m *MockStorageNodeServiceClient) Append(arg0 context.Context, arg1 *storage_node.AppendRequest, arg2 ...grpc.CallOption) (*storage_node.AppendResponse, error) {
 	m.ctrl.T.Helper()
@@ -137,6 +157,21 @@ func NewMockStorageNodeServiceServer(ctrl *gomock.Controller) *MockStorageNodeSe
 // EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockStorageNodeServiceServer) EXPECT() *MockStorageNodeServiceServerMockRecorder {
 	return m.recorder
+}
+
+// AddLogStream mocks base method
+func (m *MockStorageNodeServiceServer) AddLogStream(arg0 context.Context, arg1 *storage_node.AddLogStreamRequest) (*storage_node.AddLogStreamResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddLogStream", arg0, arg1)
+	ret0, _ := ret[0].(*storage_node.AddLogStreamResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddLogStream indicates an expected call of AddLogStream
+func (mr *MockStorageNodeServiceServerMockRecorder) AddLogStream(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockStorageNodeServiceServer)(nil).AddLogStream), arg0, arg1)
 }
 
 // Append mocks base method

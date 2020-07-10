@@ -61,13 +61,14 @@ func NewStorageNodeClientFromRpcConn(rpcConn *RpcConn) (StorageNodeClient, error
 // successfully,  valid GLSN is sent to the caller. When it goes wrong, zero is returned.
 func (c *storageNodeClient) Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error) {
 	req := &pb.AppendRequest{
-		Payload: data,
+		Payload:     data,
+		LogStreamID: logStreamID,
 	}
 	for _, b := range backups {
 		req.Backups = append(req.Backups, pb.AppendRequest_BackupNode{
 			StorageNodeID: b.ID,
-			LogStreamID:   logStreamID,
-			Address:       b.Addr,
+			//LogStreamID:   logStreamID,
+			Address: b.Addr,
 		})
 	}
 	rsp, err := c.rpcClient.Append(ctx, req)
@@ -88,7 +89,7 @@ func (c *storageNodeClient) Read(ctx context.Context, logStreamID types.LogStrea
 	}
 	return &LogEntry{
 		GLSN: rsp.GetGLSN(),
-		LLSN: rsp.GetLLSN(),
+		// LLSN: rsp.GetLLSN(),
 		Data: rsp.GetPayload(),
 	}, nil
 }

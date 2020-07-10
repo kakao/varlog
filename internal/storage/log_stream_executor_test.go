@@ -144,7 +144,6 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 				go func(uncommittedLLSNEnd types.LLSN, knownNextGLSN types.GLSN) {
 					defer wg.Done()
 					waitWriteDone(uncommittedLLSNEnd)
-					t.Log("LSR committing")
 					lse.Commit(CommittedLogStreamStatus{
 						LogStreamID:        logStreamID,
 						NextGLSN:           i + 1,
@@ -158,7 +157,6 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(glsn, ShouldEqual, i)
 				wg.Wait()
-				t.Logf("wrote - %d", i)
 			}
 		})
 

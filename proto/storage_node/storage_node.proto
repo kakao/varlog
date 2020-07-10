@@ -6,6 +6,16 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/storage_node";
 
+message AddLogStreamRequest {
+    int32 log_stream_id = 1
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
+}
+
+message AddLogStreamResponse {
+    // TODO: storage metadata
+}
+
 // AppendRequest is a message to send a payload to a storage node. It contains
 // a vector of storage nodes to replicate the payload.
 message AppendRequest {
@@ -13,13 +23,13 @@ message AppendRequest {
         int32 storage_node_id = 1
             [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
              (gogoproto.customname) = "StorageNodeID"];
-        int32 log_stream_id = 2
-            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
-             (gogoproto.customname) = "LogStreamID"];
-        string address = 3;
+        string address = 2;
     }
     bytes payload = 1;
-    repeated BackupNode backups = 2 [(gogoproto.nullable) = false];
+    int32 log_stream_id = 2
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
+    repeated BackupNode backups = 3 [(gogoproto.nullable) = false];
 }
 
 // AppendResponse contains GLSN (Global Log Sequence Number) that indicates log
@@ -28,6 +38,9 @@ message AppendResponse {
     uint64 glsn = 1
         [(gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
          (gogoproto.customname) = "GLSN"];
+    int32 log_stream_id = 2
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
 }
 
 // ReadRequest asks a storage node to retrieve log entry at the GLSN.
@@ -35,6 +48,9 @@ message ReadRequest {
     uint64 glsn = 1
         [(gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
          (gogoproto.customname) = "GLSN"];
+    int32 log_stream_id = 2
+        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
 }
 
 // ReadResponse contains the contents of the log entry which is retrieved by
@@ -44,9 +60,6 @@ message ReadResponse {
     uint64 glsn = 2
         [(gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
          (gogoproto.customname) = "GLSN"];
-    uint64 llsn = 3
-        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
-         (gogoproto.customname) = "LLSN"];
 }
 
 // SubscribeRequest has GLSN which indicates an inclusive starting position
@@ -86,6 +99,8 @@ message TrimResponse {
 }
 
 service StorageNodeService {
+    rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
+
     rpc Append(AppendRequest) returns (AppendResponse) {}
     rpc Read(ReadRequest) returns (ReadResponse) {}
     rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
