@@ -71,7 +71,7 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 		return &pb.ReadResponse{
 			Payload: data,
 			GLSN:    req.GetGLSN(),
-			LLSN:    sn.glsnToLLSN[req.GetGLSN()]}, nil
+		}, nil
 	}).AnyTimes()
 
 	// Subscribe
@@ -143,7 +143,6 @@ func TestBasicOperations(t *testing.T) {
 	Convey("Simple Append/Read/Subscribe/Trim operations should work", t, func() {
 		var prevGLSN types.GLSN
 		var currGLSN types.GLSN
-		var prevLLSN types.LLSN
 		var currLogEntry *LogEntry
 		var err error
 		var msg string
@@ -155,7 +154,6 @@ func TestBasicOperations(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(string(currLogEntry.Data), ShouldEqual, msg)
 		prevGLSN = currGLSN
-		prevLLSN = currLogEntry.LLSN
 
 		msg = "msg-2"
 		currGLSN, err = client.Append(context.TODO(), logStreamID, []byte(msg))
@@ -164,7 +162,6 @@ func TestBasicOperations(t *testing.T) {
 		currLogEntry, err = client.Read(context.TODO(), logStreamID, currGLSN)
 		So(err, ShouldBeNil)
 		So(string(currLogEntry.Data), ShouldEqual, msg)
-		So(currLogEntry.LLSN, ShouldEqual, prevLLSN+1)
 		prevGLSN = currGLSN
 
 		ch, err := client.Subscribe(context.TODO(), types.GLSN(0))
