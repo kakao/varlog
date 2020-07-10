@@ -19,7 +19,7 @@ TEST_COUNT := 1
 TEST_FLAGS := -count $(TEST_COUNT) -p 1
 
 ifneq ($(TEST_TIMEOUT),)
-	TEST_FLAGS := $(TEST_FLAG) -timeout $(TEST_TIMEOUT)
+	TEST_FLAGS := $(TEST_FLAGS) -timeout $(TEST_TIMEOUT)
 endif
 
 ifneq ($(TEST_PARALLEL),)
