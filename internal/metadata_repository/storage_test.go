@@ -1,11 +1,13 @@
 package metadata_repository
 
 import (
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/testutil"
 	pb "github.com/kakao/varlog/proto/metadata_repository"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
@@ -211,7 +213,9 @@ func TestMetadataCache(t *testing.T) {
 		meta := ms.GetMetadata()
 		So(meta, ShouldNotBeNil)
 		So(meta.GetStorageNode(snID), ShouldNotBeNil)
-		So(atomic.LoadInt64(&ms.nrRunning), ShouldEqual, 0)
+		So(testutil.CompareWait(func() bool {
+			return atomic.LoadInt64(&ms.nrRunning) == 0
+		}, 10*time.Millisecond), ShouldBeTrue)
 
 		Reset(func() {
 			ms.Close()
@@ -255,7 +259,9 @@ func TestMetadataCache(t *testing.T) {
 		meta2 := ms.GetMetadata()
 		So(meta2, ShouldEqual, meta)
 
-		So(atomic.LoadInt64(&ms.nrRunning), ShouldEqual, 0)
+		So(testutil.CompareWait(func() bool {
+			return atomic.LoadInt64(&ms.nrRunning) == 0
+		}, 10*time.Millisecond), ShouldBeTrue)
 
 		Reset(func() {
 			ms.Close()
@@ -301,7 +307,11 @@ func TestStateMachineMerge(t *testing.T) {
 			ms.Run()
 
 			<-ch
-			time.Sleep(time.Millisecond)
+
+			So(testutil.CompareWait(func() bool {
+				return atomic.LoadInt64(&ms.nrRunning) == 0
+			}, 10*time.Millisecond), ShouldBeTrue)
+
 			ms.mergeStateMachine()
 			So(ms.isCopyOnWrite(), ShouldBeFalse)
 
@@ -314,6 +324,50 @@ func TestStateMachineMerge(t *testing.T) {
 				ms.Close()
 			})
 		})
+	})
+
+	Convey("merge performance:: # of LocalLogStreams:1024. RepFactor:3:: ", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		for i := 0; i < 1024; i++ {
+			lsID := types.LogStreamID(i)
+
+			for j := 0; j < 3; j++ {
+				snID := types.StorageNodeID(j)
+
+				s := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+					BeginLLSN:     types.LLSN(i * 3),
+					EndLLSN:       types.LLSN(i*3 + 1),
+					KnownNextGLSN: types.GLSN(0),
+				}
+
+				ms.UpdateLocalLogStreamReplica(lsID, snID, s)
+			}
+		}
+
+		ms.setCopyOnWrite()
+
+		for i := 0; i < 1024; i++ {
+			lsID := types.LogStreamID(i)
+
+			for j := 0; j < 3; j++ {
+				snID := types.StorageNodeID(j)
+
+				s := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+					BeginLLSN:     types.LLSN(1 + i*3),
+					EndLLSN:       types.LLSN(1 + i*3 + 1),
+					KnownNextGLSN: types.GLSN(1024),
+				}
+
+				ms.UpdateLocalLogStreamReplica(lsID, snID, s)
+			}
+		}
+
+		ms.releaseCopyOnWrite()
+
+		st := time.Now()
+		ms.mergeStateMachine()
+		fmt.Println(time.Now().Sub(st))
 	})
 }
 
@@ -356,7 +410,9 @@ func TestSnapshot(t *testing.T) {
 
 		snap, _ := ms.GetSnapshot()
 		So(snap, ShouldBeNil)
-		So(atomic.LoadInt64(&ms.nrRunning), ShouldEqual, 0)
+		So(testutil.CompareWait(func() bool {
+			return atomic.LoadInt64(&ms.nrRunning) == 0
+		}, 10*time.Millisecond), ShouldBeTrue)
 
 		Convey("create snapshot should operate if no more job", func(ctx C) {
 			appliedIndex++
