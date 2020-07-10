@@ -319,14 +319,10 @@ func (ms *MetadataStorage) TrimGlobalLogStream(trimGLSN types.GLSN) error {
 func (ms *MetadataStorage) UpdateAppliedIndex(appliedIndex uint64) {
 	ms.appliedIndex = appliedIndex
 
-	ms.ssMu.RLock()
-	snapIndex := ms.snapIndex
-	ms.ssMu.RUnlock()
-
 	// make sure to merge before trigger snapshop
 	// it makes stateMachine[0] have entry with appliedIndex
 	ms.mergeStateMachine()
-	if ms.appliedIndex-snapIndex > defaultSnapshotCount {
+	if ms.appliedIndex-atomic.LoadUint64(&ms.snapIndex) > defaultSnapshotCount {
 		ms.triggerSnapshot(appliedIndex)
 	}
 }
@@ -374,7 +370,7 @@ func (ms *MetadataStorage) GetSnapshot() ([]byte, uint64) {
 	ms.ssMu.RLock()
 	defer ms.ssMu.RUnlock()
 
-	return ms.snap, ms.snapIndex
+	return ms.snap, atomic.LoadUint64(&ms.snapIndex)
 }
 
 func (ms *MetadataStorage) isCopyOnWrite() bool {
@@ -407,7 +403,7 @@ func (ms *MetadataStorage) createSnapshot(job *JobSnapshot) {
 	defer ms.ssMu.Unlock()
 
 	ms.snap = b
-	ms.snapIndex = job.appliedIndex
+	atomic.StoreUint64(&ms.snapIndex, job.appliedIndex)
 }
 
 func (ms *MetadataStorage) createMetadataCache(job *JobMetadataCache) {
