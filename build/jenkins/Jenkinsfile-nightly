@@ -6,12 +6,10 @@ pipeline {
   }
 
   stages {
-
     stage('build') {
       when {
         branch 'master'
       }
-
       steps {
         sh 'make all'
       }
@@ -22,9 +20,15 @@ pipeline {
         branch 'master'
       }
       steps {
-        sh 'make test TEST_TIMEOUT=100m TEST_PARALLEL=1 TEST_COUNT=200'
+        sh 'make test_report TEST_TIMEOUT=100m TEST_PARALLEL=1 TEST_COUNT=200'
       }
     }
-
   }
+
+  post {
+    always {
+      junit 'build/reports/*.xml'
+    }
+  }
+
 }
