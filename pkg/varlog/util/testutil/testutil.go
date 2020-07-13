@@ -12,6 +12,7 @@ func CompareWait(cmp func() bool, timeout time.Duration) bool {
 			if cmp() {
 				return true
 			}
+			time.Sleep(time.Millisecond)
 		}
 	}
 }

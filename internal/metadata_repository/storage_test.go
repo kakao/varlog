@@ -215,7 +215,7 @@ func TestMetadataCache(t *testing.T) {
 		So(meta.GetStorageNode(snID), ShouldNotBeNil)
 		So(testutil.CompareWait(func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, 10*time.Millisecond), ShouldBeTrue)
+		}, time.Second), ShouldBeTrue)
 
 		Reset(func() {
 			ms.Close()
@@ -261,7 +261,7 @@ func TestMetadataCache(t *testing.T) {
 
 		So(testutil.CompareWait(func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, 10*time.Millisecond), ShouldBeTrue)
+		}, time.Second), ShouldBeTrue)
 
 		Reset(func() {
 			ms.Close()
@@ -310,7 +310,7 @@ func TestStateMachineMerge(t *testing.T) {
 
 			So(testutil.CompareWait(func() bool {
 				return atomic.LoadInt64(&ms.nrRunning) == 0
-			}, 10*time.Millisecond), ShouldBeTrue)
+			}, time.Second), ShouldBeTrue)
 
 			ms.mergeStateMachine()
 			So(ms.isCopyOnWrite(), ShouldBeFalse)
@@ -412,7 +412,7 @@ func TestSnapshot(t *testing.T) {
 		So(snap, ShouldBeNil)
 		So(testutil.CompareWait(func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, 10*time.Millisecond), ShouldBeTrue)
+		}, time.Second), ShouldBeTrue)
 
 		Convey("create snapshot should operate if no more job", func(ctx C) {
 			appliedIndex++
