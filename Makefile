@@ -102,8 +102,14 @@ pkg/varlog/mock/storage_node_mock.go: $(PROTO) proto/storage_node/storage_node.p
 		StorageNodeServiceClient,StorageNodeServiceServer,StorageNodeService_SubscribeClient,StorageNodeService_SubscribeServer \
 		> pkg/varlog/mock/storage_node_mock.go
 
+.PHONY: test test_report
 test:
 	$(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./...
+
+test_report:
+	TERM=sh $(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./... 2>&1 > $(BUILD_DIR)/reports/test_output.txt; \
+	     cat $(BUILD_DIR)/reports/test_output.txt | go-junit-report > $(BUILD_DIR)/reports/report.xml; \
+	     cat $(BUILD_DIR)/reports/test_output.txt
 
 clean :
 	for dir in $(SUBDIRS); do \
