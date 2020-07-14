@@ -10,26 +10,26 @@ import (
 	"google.golang.org/grpc"
 )
 
-type StorageNodeService struct {
-	pb.UnimplementedStorageNodeServiceServer
+type LogIOService struct {
+	pb.UnimplementedLogIOServer
 
 	storageNodeID types.StorageNodeID
 	lseM          map[types.LogStreamID]LogStreamExecutor
 	m             sync.RWMutex
 }
 
-func NewStorageNodeService(storageNodeID types.StorageNodeID) *StorageNodeService {
-	return &StorageNodeService{
+func NewLogIOService(storageNodeID types.StorageNodeID) *LogIOService {
+	return &LogIOService{
 		storageNodeID: storageNodeID,
 		lseM:          make(map[types.LogStreamID]LogStreamExecutor),
 	}
 }
 
-func (s *StorageNodeService) Register(server *grpc.Server) {
-	pb.RegisterStorageNodeServiceServer(server, s)
+func (s *LogIOService) Register(server *grpc.Server) {
+	pb.RegisterLogIOServer(server, s)
 }
 
-func (s *StorageNodeService) AddLogStream(ctx context.Context, req *pb.AddLogStreamRequest) (*pb.AddLogStreamResponse, error) {
+func (s *LogIOService) AddLogStream(ctx context.Context, req *pb.AddLogStreamRequest) (*pb.AddLogStreamResponse, error) {
 	s.m.Lock()
 	defer s.m.Unlock()
 
@@ -48,14 +48,14 @@ func (s *StorageNodeService) AddLogStream(ctx context.Context, req *pb.AddLogStr
 	return &pb.AddLogStreamResponse{}, nil
 }
 
-func (s *StorageNodeService) getLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
+func (s *LogIOService) getLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
 	s.m.RLock()
 	defer s.m.RUnlock()
 	lse, ok := s.lseM[logStreamID]
 	return lse, ok
 }
 
-func (s *StorageNodeService) Append(ctx context.Context, req *pb.AppendRequest) (*pb.AppendResponse, error) {
+func (s *LogIOService) Append(ctx context.Context, req *pb.AppendRequest) (*pb.AppendResponse, error) {
 	lse, ok := s.getLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		return nil, varlog.ErrInvalid
@@ -69,7 +69,7 @@ func (s *StorageNodeService) Append(ctx context.Context, req *pb.AppendRequest) 
 	return &pb.AppendResponse{GLSN: glsn}, nil
 }
 
-func (s *StorageNodeService) Read(ctx context.Context, req *pb.ReadRequest) (*pb.ReadResponse, error) {
+func (s *LogIOService) Read(ctx context.Context, req *pb.ReadRequest) (*pb.ReadResponse, error) {
 	lse, ok := s.getLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		return nil, varlog.ErrInvalid
@@ -83,11 +83,11 @@ func (s *StorageNodeService) Read(ctx context.Context, req *pb.ReadRequest) (*pb
 	return &pb.ReadResponse{Payload: data, GLSN: req.GetGLSN()}, nil
 }
 
-func (s *StorageNodeService) Subscribe(*pb.SubscribeRequest, pb.StorageNodeService_SubscribeServer) error {
+func (s *LogIOService) Subscribe(*pb.SubscribeRequest, pb.LogIO_SubscribeServer) error {
 	panic("not yet implemented")
 }
 
-func (s *StorageNodeService) Trim(ctx context.Context, req *pb.TrimRequest) (*pb.TrimResponse, error) {
+func (s *LogIOService) Trim(ctx context.Context, req *pb.TrimRequest) (*pb.TrimResponse, error) {
 	s.m.RLock()
 	targetLSEs := make([]LogStreamExecutor, len(s.lseM))
 	i := 0

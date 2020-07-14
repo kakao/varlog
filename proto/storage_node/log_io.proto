@@ -98,7 +98,7 @@ message TrimResponse {
     uint64 num_trimmed = 1;
 }
 
-service StorageNodeService {
+service LogIO {
     rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
 
     rpc Append(AppendRequest) returns (AppendResponse) {}

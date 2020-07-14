@@ -10,9 +10,9 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog/mock"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	pb "github.com/kakao/varlog/proto/storage_node"
+	"github.com/kakao/varlog/proto/storage_node/mock"
 )
 
 type byGLSN []types.GLSN
@@ -38,8 +38,8 @@ func newStorageNode() storageNode {
 	}
 }
 
-func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *mock.MockStorageNodeServiceClient {
-	mockClient := mock.NewMockStorageNodeServiceClient(ctrl)
+func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *mock.MockLogIOClient {
+	mockClient := mock.NewMockLogIOClient(ctrl)
 
 	// Append
 	mockClient.EXPECT().Append(
@@ -78,9 +78,9 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 	mockClient.EXPECT().Subscribe(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *pb.SubscribeRequest) (pb.StorageNodeService_SubscribeClient, error) {
+	).DoAndReturn(func(_ context.Context, req *pb.SubscribeRequest) (pb.LogIO_SubscribeClient, error) {
 		nextGLSN := req.GetGLSN()
-		stream := mock.NewMockStorageNodeService_SubscribeClient(ctrl)
+		stream := mock.NewMockLogIO_SubscribeClient(ctrl)
 		stream.EXPECT().Recv().DoAndReturn(
 			func() (*pb.SubscribeResponse, error) {
 				sn.mu.Lock()
@@ -139,7 +139,7 @@ func TestBasicOperations(t *testing.T) {
 	mockClient := newMockStorageNodeServiceClient(ctrl, &sn)
 
 	const logStreamID = types.LogStreamID(0)
-	client := &storageNodeClient{rpcClient: mockClient}
+	client := &logIOClient{rpcClient: mockClient}
 	Convey("Simple Append/Read/Subscribe/Trim operations should work", t, func() {
 		var prevGLSN types.GLSN
 		var currGLSN types.GLSN

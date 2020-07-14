@@ -30,7 +30,7 @@ type varlog struct {
 	logStreams     []types.LogStreamID
 	storageNodes   []types.StorageNodeID
 	replicationMap map[types.LogStreamID][]types.StorageNodeID
-	storageMap     map[types.StorageNodeID]StorageNodeClient
+	storageMap     map[types.StorageNodeID]LogIOClient
 
 	metaReposClient MetadataRepositoryClient
 	metadata        *varlogpb.MetadataDescriptor

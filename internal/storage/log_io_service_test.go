@@ -13,7 +13,7 @@ import (
 
 func TestStorageNodeServiceAddLogStream(t *testing.T) {
 	Convey("AddLogStream should add a LogStream", t, func() {
-		s := NewStorageNodeService(types.StorageNodeID(1))
+		s := NewLogIOService(types.StorageNodeID(1))
 		logStreamID := types.LogStreamID(1)
 		_, err := s.AddLogStream(context.TODO(), &pb.AddLogStreamRequest{
 			LogStreamID: logStreamID,
@@ -35,7 +35,7 @@ func TestStorageNodeServiceAppend(t *testing.T) {
 		defer ctrl.Finish()
 
 		const logStreamID = types.LogStreamID(1)
-		s := NewStorageNodeService(types.StorageNodeID(1))
+		s := NewLogIOService(types.StorageNodeID(1))
 
 		Convey("it should return error if the LogStream does not exist", func() {
 			_, err := s.Append(context.TODO(), &pb.AppendRequest{
@@ -86,7 +86,7 @@ func TestStorageNodeServiceRead(t *testing.T) {
 		defer ctrl.Finish()
 
 		const logStreamID = types.LogStreamID(1)
-		s := NewStorageNodeService(types.StorageNodeID(1))
+		s := NewLogIOService(types.StorageNodeID(1))
 
 		Convey("it should return error if the LogStream does not exist", func() {
 			_, err := s.Read(context.TODO(), &pb.ReadRequest{
@@ -141,7 +141,7 @@ func TestStorageNodeServiceTrim(t *testing.T) {
 
 		const nrLSEs = 10
 
-		s := NewStorageNodeService(types.StorageNodeID(1))
+		s := NewLogIOService(types.StorageNodeID(1))
 
 		Convey("it should return the number of log entries removed", func() {
 			for i := 0; i < nrLSEs; i++ {

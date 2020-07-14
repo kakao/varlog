@@ -25,9 +25,9 @@ type SubscribeResult struct {
 	Error error
 }
 
-// StorageNodeClient contains methods to use basic operations - append, read, subscribe, trim of
+// LogIOClient contains methods to use basic operations - append, read, subscribe, trim of
 // single storage node.
-type StorageNodeClient interface {
+type LogIOClient interface {
 	Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error)
 	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) (*LogEntry, error)
 	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
@@ -35,31 +35,31 @@ type StorageNodeClient interface {
 	Close() error
 }
 
-type storageNodeClient struct {
+type logIOClient struct {
 	rpcConn   *RpcConn
-	rpcClient pb.StorageNodeServiceClient
+	rpcClient pb.LogIOClient
 	s         StorageNode
 }
 
-func NewStorageNodeClient(address string) (StorageNodeClient, error) {
+func NewLogIOClient(address string) (LogIOClient, error) {
 	rpcConn, err := NewRpcConn(address)
 	if err != nil {
 		return nil, err
 	}
-	return NewStorageNodeClientFromRpcConn(rpcConn)
+	return NewLogIOClientFromRpcConn(rpcConn)
 }
 
-func NewStorageNodeClientFromRpcConn(rpcConn *RpcConn) (StorageNodeClient, error) {
-	return &storageNodeClient{
+func NewLogIOClientFromRpcConn(rpcConn *RpcConn) (LogIOClient, error) {
+	return &logIOClient{
 		rpcConn:   rpcConn,
-		rpcClient: pb.NewStorageNodeServiceClient(rpcConn.Conn),
+		rpcClient: pb.NewLogIOClient(rpcConn.Conn),
 	}, nil
 }
 
 // Append sends given data to the log stream in the storage node. To replicate the data, it
 // provides argument backups that indicate backup storage nodes. If append operation completes
 // successfully,  valid GLSN is sent to the caller. When it goes wrong, zero is returned.
-func (c *storageNodeClient) Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error) {
+func (c *logIOClient) Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error) {
 	req := &pb.AppendRequest{
 		Payload:     data,
 		LogStreamID: logStreamID,
@@ -79,7 +79,7 @@ func (c *storageNodeClient) Append(ctx context.Context, logStreamID types.LogStr
 }
 
 // Read operation asks the storage node to retrieve data at a given log position in the log stream.
-func (c *storageNodeClient) Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) (*LogEntry, error) {
+func (c *logIOClient) Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) (*LogEntry, error) {
 	req := &pb.ReadRequest{
 		GLSN: glsn,
 	}
@@ -96,7 +96,7 @@ func (c *storageNodeClient) Read(ctx context.Context, logStreamID types.LogStrea
 
 // Subscribe gets log entries continuously from the storage node. It guarantees that LLSNs of log
 // entries taken are sequential.
-func (c *storageNodeClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
+func (c *logIOClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
 	req := &pb.SubscribeRequest{GLSN: glsn}
 	stream, err := c.rpcClient.Subscribe(ctx, req)
 	if err != nil {
@@ -141,7 +141,7 @@ func (c *storageNodeClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-c
 
 // Trim deletes log entries greater than or equal to given GLSN in the storage node. The number of
 // deleted log entries are returned.
-func (c *storageNodeClient) Trim(ctx context.Context, glsn types.GLSN) (uint64, error) {
+func (c *logIOClient) Trim(ctx context.Context, glsn types.GLSN) (uint64, error) {
 	req := &pb.TrimRequest{
 		GLSN:  glsn,
 		Async: false,
@@ -154,6 +154,6 @@ func (c *storageNodeClient) Trim(ctx context.Context, glsn types.GLSN) (uint64, 
 }
 
 // Close closes connection to the storage node.
-func (c *storageNodeClient) Close() error {
+func (c *logIOClient) Close() error {
 	return c.rpcConn.Close()
 }
