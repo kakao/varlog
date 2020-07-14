@@ -2,6 +2,7 @@ package metadata_repository
 
 import (
 	"fmt"
+	"math/rand"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -440,6 +441,110 @@ func TestSnapshot(t *testing.T) {
 			So(u.Metadata.GetStorageNode(snID), ShouldNotBeNil)
 			So(u.Metadata.GetStorageNode(snID2), ShouldBeNil)
 		})
+
+		Reset(func() {
+			ms.Close()
+		})
+	})
+}
+
+func TestSnapshotRace(t *testing.T) {
+	Convey("create snapshot", t, func(ctx C) {
+		defaultSnapshotCount = uint64(100 + rand.Int31n(64))
+
+		ms := NewMetadataStorage(nil)
+		ms.Run()
+
+		n := 10000
+		numLS := 128
+		numRep := 3
+
+		appliedIndex := uint64(0)
+		checkGLS := 0
+		checkLS := 0
+
+		for i := 0; i < n; i++ {
+			preGLSN := types.GLSN(i * numLS)
+			newGLSN := types.GLSN((i + 1) * numLS)
+			gls := &snpb.GlobalLogStreamDescriptor{
+				PrevNextGLSN: preGLSN,
+				NextGLSN:     newGLSN,
+			}
+
+			for j := 0; j < numLS; j++ {
+				lsID := types.LogStreamID(j)
+
+				for k := 0; k < numRep; k++ {
+					snID := types.StorageNodeID(j*numRep + k)
+
+					r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+						BeginLLSN:     types.LLSN(i),
+						EndLLSN:       types.LLSN(i + 1),
+						KnownNextGLSN: preGLSN,
+					}
+
+					ms.UpdateLocalLogStreamReplica(lsID, snID, r)
+
+					appliedIndex++
+					ms.UpdateAppliedIndex(appliedIndex)
+				}
+
+				commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
+					LogStreamID:        lsID,
+					CommittedGLSNBegin: preGLSN,
+					CommittedGLSNEnd:   newGLSN,
+				}
+				gls.CommitResult = append(gls.CommitResult, commit)
+			}
+
+			ms.AppendGlobalLogStream(gls)
+
+			appliedIndex++
+			ms.UpdateAppliedIndex(appliedIndex)
+
+			gls = ms.GetNextGLSFrom(preGLSN)
+			if gls != nil &&
+				gls.NextGLSN == newGLSN &&
+				ms.GetNextGLSN() == newGLSN {
+				checkGLS++
+			}
+
+		CHECKLS:
+			for j := 0; j < numLS; j++ {
+				lsID := types.LogStreamID(j)
+				ls := ms.LookupLocalLogStream(lsID)
+				if ls == nil {
+					continue CHECKLS
+				}
+
+				for k := 0; k < numRep; k++ {
+					snID := types.StorageNodeID(j*numRep + k)
+
+					r, ok := ls.Replicas[snID]
+					if ok &&
+						r.KnownNextGLSN == preGLSN {
+						checkLS++
+					}
+				}
+			}
+		}
+
+		So(checkGLS, ShouldEqual, n)
+		So(checkLS, ShouldEqual, n*numLS*numRep)
+
+		So(testutil.CompareWait(func() bool {
+			return atomic.LoadInt64(&ms.nrRunning) == 0
+		}, 10*time.Second), ShouldBeTrue)
+
+		ms.mergeStateMachine()
+		ms.triggerSnapshot(appliedIndex)
+
+		So(testutil.CompareWait(func() bool {
+			return atomic.LoadInt64(&ms.nrRunning) == 0
+		}, 10*time.Second), ShouldBeTrue)
+
+		_, recv := ms.GetSnapshot()
+		So(recv, ShouldEqual, appliedIndex)
 
 		Reset(func() {
 			ms.Close()

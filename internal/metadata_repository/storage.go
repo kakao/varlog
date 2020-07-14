@@ -32,13 +32,14 @@ type StorageAsyncJob struct {
 }
 
 type MetadataStorage struct {
-	// make stateMachine[0] immutable
-	// and entries are applied to stateMachine[1]
+	// make orig immutable
+	// and entries are applied to diff
 	// while copyOnWrite set true
-	stateMachine [2]*pb.MetadataRepositoryDescriptor
-	copyOnWrite  atomicutil.AtomicBool
+	origStateMachine *pb.MetadataRepositoryDescriptor
+	diffStateMachine *pb.MetadataRepositoryDescriptor
+	copyOnWrite      atomicutil.AtomicBool
 
-	// snapshot stateMachine[0] for raft
+	// snapshot orig for raft
 	snap []byte
 	// the largest index of the entry already applied to the snapshot
 	snapIndex uint64
@@ -73,12 +74,15 @@ type MetadataStorage struct {
 func NewMetadataStorage(cb func(uint64, uint64, error)) *MetadataStorage {
 	ms := &MetadataStorage{cacheCompleteCB: cb}
 
-	for i := 0; i < 2; i++ {
-		ms.stateMachine[i] = &pb.MetadataRepositoryDescriptor{}
-		ms.stateMachine[i].Metadata = &varlogpb.MetadataDescriptor{}
-		ms.stateMachine[i].LogStream = &pb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
-		ms.stateMachine[i].LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
-	}
+	ms.origStateMachine = &pb.MetadataRepositoryDescriptor{}
+	ms.origStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
+	ms.origStateMachine.LogStream = &pb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
+	ms.origStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+
+	ms.diffStateMachine = &pb.MetadataRepositoryDescriptor{}
+	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
+	ms.diffStateMachine.LogStream = &pb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
+	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 
 	ms.jobC = make(chan *StorageAsyncJob, 4096)
 
@@ -320,7 +324,7 @@ func (ms *MetadataStorage) UpdateAppliedIndex(appliedIndex uint64) {
 	ms.appliedIndex = appliedIndex
 
 	// make sure to merge before trigger snapshop
-	// it makes stateMachine[0] have entry with appliedIndex
+	// it makes orig have entry with appliedIndex
 	ms.mergeStateMachine()
 	if ms.appliedIndex-atomic.LoadUint64(&ms.snapIndex) > defaultSnapshotCount {
 		ms.triggerSnapshot(appliedIndex)
@@ -328,17 +332,17 @@ func (ms *MetadataStorage) UpdateAppliedIndex(appliedIndex uint64) {
 }
 
 func (ms *MetadataStorage) GetNextGLSNNoLock() types.GLSN {
-	n := len(ms.stateMachine[1].LogStream.GlobalLogStreams)
+	n := len(ms.diffStateMachine.LogStream.GlobalLogStreams)
 	if n > 0 {
-		return ms.stateMachine[1].LogStream.GlobalLogStreams[n-1].NextGLSN
+		return ms.diffStateMachine.LogStream.GlobalLogStreams[n-1].NextGLSN
 	}
 
-	n = len(ms.stateMachine[0].LogStream.GlobalLogStreams)
+	n = len(ms.origStateMachine.LogStream.GlobalLogStreams)
 	if n == 0 {
 		return 0
 	}
 
-	return ms.stateMachine[0].LogStream.GlobalLogStreams[n-1].NextGLSN
+	return ms.origStateMachine.LogStream.GlobalLogStreams[n-1].NextGLSN
 }
 
 func (ms *MetadataStorage) GetNextGLSN() types.GLSN {
@@ -386,18 +390,18 @@ func (ms *MetadataStorage) releaseCopyOnWrite() {
 }
 
 func (ms *MetadataStorage) getStateMachine() (*pb.MetadataRepositoryDescriptor, *pb.MetadataRepositoryDescriptor) {
-	pre := ms.stateMachine[0]
-	cur := ms.stateMachine[0]
+	pre := ms.origStateMachine
+	cur := ms.origStateMachine
 
 	if ms.isCopyOnWrite() {
-		cur = ms.stateMachine[1]
+		cur = ms.diffStateMachine
 	}
 
 	return pre, cur
 }
 
 func (ms *MetadataStorage) createSnapshot(job *JobSnapshot) {
-	b, _ := ms.stateMachine[0].Marshal()
+	b, _ := ms.origStateMachine.Marshal()
 
 	ms.ssMu.Lock()
 	defer ms.ssMu.Unlock()
@@ -417,16 +421,16 @@ func (ms *MetadataStorage) createMetadataCache(job *JobMetadataCache) {
 		return
 	}
 
-	cache := proto.Clone(ms.stateMachine[0].Metadata).(*varlogpb.MetadataDescriptor)
+	cache := proto.Clone(ms.origStateMachine.Metadata).(*varlogpb.MetadataDescriptor)
 
 	ms.mtMu.RLock()
 	defer ms.mtMu.RUnlock()
 
-	for _, sn := range ms.stateMachine[1].Metadata.StorageNodes {
+	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
 		cache.InsertStorageNode(sn)
 	}
 
-	for _, ls := range ms.stateMachine[1].Metadata.LogStreams {
+	for _, ls := range ms.diffStateMachine.Metadata.LogStreams {
 		cache.InsertLogStream(ls)
 	}
 
@@ -438,30 +442,30 @@ func (ms *MetadataStorage) createMetadataCache(job *JobMetadataCache) {
 }
 
 func (ms *MetadataStorage) mergeMetadata() {
-	if len(ms.stateMachine[1].Metadata.StorageNodes) == 0 &&
-		len(ms.stateMachine[1].Metadata.LogStreams) == 0 {
+	if len(ms.diffStateMachine.Metadata.StorageNodes) == 0 &&
+		len(ms.diffStateMachine.Metadata.LogStreams) == 0 {
 		return
 	}
 
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	for _, sn := range ms.stateMachine[1].Metadata.StorageNodes {
-		ms.stateMachine[0].Metadata.InsertStorageNode(sn)
+	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
+		ms.origStateMachine.Metadata.InsertStorageNode(sn)
 	}
 
-	for _, ls := range ms.stateMachine[1].Metadata.LogStreams {
-		ms.stateMachine[0].Metadata.InsertLogStream(ls)
+	for _, ls := range ms.diffStateMachine.Metadata.LogStreams {
+		ms.origStateMachine.Metadata.InsertLogStream(ls)
 	}
 
-	ms.stateMachine[1].Metadata = &varlogpb.MetadataDescriptor{}
+	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
 }
 
 func (ms *MetadataStorage) mergeLogStream() {
-	for lsID, lm := range ms.stateMachine[1].LogStream.LocalLogStreams {
-		plm, ok := ms.stateMachine[0].LogStream.LocalLogStreams[lsID]
+	for lsID, lm := range ms.diffStateMachine.LogStream.LocalLogStreams {
+		plm, ok := ms.origStateMachine.LogStream.LocalLogStreams[lsID]
 		if !ok {
-			ms.stateMachine[0].LogStream.LocalLogStreams[lsID] = lm
+			ms.origStateMachine.LogStream.LocalLogStreams[lsID] = lm
 			continue
 		}
 
@@ -470,24 +474,24 @@ func (ms *MetadataStorage) mergeLogStream() {
 		}
 	}
 
-	if len(ms.stateMachine[0].LogStream.LocalLogStreams) > 0 {
-		ms.stateMachine[1].LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+	if len(ms.diffStateMachine.LogStream.LocalLogStreams) > 0 {
+		ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 	}
 
 	ms.lsMu.Lock()
 	defer ms.lsMu.Unlock()
 
-	if ms.stateMachine[0].LogStream.TrimGLSN < ms.stateMachine[1].LogStream.TrimGLSN {
-		ms.stateMachine[0].LogStream.TrimGLSN = ms.stateMachine[1].LogStream.TrimGLSN
+	if ms.origStateMachine.LogStream.TrimGLSN < ms.diffStateMachine.LogStream.TrimGLSN {
+		ms.origStateMachine.LogStream.TrimGLSN = ms.diffStateMachine.LogStream.TrimGLSN
 	}
 
-	ms.stateMachine[0].LogStream.GlobalLogStreams = append(ms.stateMachine[0].LogStream.GlobalLogStreams, ms.stateMachine[1].LogStream.GlobalLogStreams...)
-	ms.stateMachine[1].LogStream.GlobalLogStreams = nil
+	ms.origStateMachine.LogStream.GlobalLogStreams = append(ms.origStateMachine.LogStream.GlobalLogStreams, ms.diffStateMachine.LogStream.GlobalLogStreams...)
+	ms.diffStateMachine.LogStream.GlobalLogStreams = nil
 	ms.trimGlobalLogStream()
 }
 
 func (ms *MetadataStorage) trimGlobalLogStream() {
-	s := ms.stateMachine[0]
+	s := ms.origStateMachine
 	i := sort.Search(len(s.LogStream.GlobalLogStreams), func(i int) bool {
 		return s.LogStream.GlobalLogStreams[i].NextGLSN >= s.LogStream.TrimGLSN
 	})
@@ -513,7 +517,7 @@ func (ms *MetadataStorage) triggerSnapshot(appliedIndex uint64) {
 	if !atomic.CompareAndSwapInt64(&ms.nrRunning, 0, 1) {
 		// While other snapshots are running,
 		// there is no quarantee that an entry
-		// with appliedIndex has been applied to stateMachine[0]
+		// with appliedIndex has been applied to origStateMachine
 		return
 	}
 
