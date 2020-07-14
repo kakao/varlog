@@ -10,6 +10,7 @@ Storage Node는 Client의 요청을 받아 Log Entry를 읽고 쓴다. 그리고
 
 RPC Service는 제공하는 기능에 따라 ~~Storage Node Service~~Log I/O Service, Storage Node Admin Service, Replicator Service, Log Stream Reporter Service 등으로 구성된다. Log Stream Service는 Metadata Repository 로부터 Report 요청과 Commit 결과 전달을 핸들링하고 Log Stream Reporter를 호출한다. Log Stream Reporter는 Log Stream Executor 에게 Report 를 받아 Metadata Repository에게 전달하거나 Metadata Repository로부터 전달받은 Commit 결과를 Log Stream Executor에게 알려준다. Log Stream Executor는 Storage Node의 핵심 모듈로써 Client로 부터 받은 Log I/O 요청을 수행하거나 Log Stream Executor에게 요청 받은 Report 전달 및 Commit 처리를 수행한다. 그 외의 서비스들은 나중에 설명을 하도록 한다.
 
+
        +--MetadataRepository------------+
        |                                |
        |  +--------------------------+  |
@@ -93,6 +94,7 @@ RPC Service는 제공하는 기능에 따라 ~~Storage Node Service~~Log I/O Ser
                |                                                                                              |
                +----------------------------------------------------------------------------------------------+
 
+
 ## RPC Services
 
 ### Log I/O Service
@@ -132,6 +134,7 @@ Varlog의 Replication 방식은 Primary/Backup을 사용한다. Primary Log Stre
 # Log I/O Client ~~Storage Node Client~~
 
 Client 라이브러리가 Storage Node에 Log Entry를 읽고 쓰거나 지우기 위해서는 Log I/O Client 를 사용한다. Log I/O Client는 Client 라이브러리 사용자가 알 필요는 없다. 그저 Client 라이브러리를 구현하기 위해서 필요한 모듈이다.
+
 
     +----------------------+
     |Varlog Client Library |

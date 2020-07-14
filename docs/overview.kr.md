@@ -5,6 +5,7 @@ Varlog는 strongly-consistency와 total-order를 제공하는 분산 로그 스�
 
 Varlog는 Client, Storage Node, Metadata Repository 로 구성된다. Storage Node는 Log Entry를 저장하며, Metadata Repository는 Global Log의 total order를 생성한다. Client는 Read, Subscribe, Append, Trim 등 단순한 API를 통해 로그를 읽고 쓴다.
 
+
                             +-------------+
                             | StorageNode |
                             +-------------+
@@ -28,3 +29,4 @@ Varlog는 Client, Storage Node, Metadata Repository 로 구성된다. Storage No
                             +-------------+
                             | StorageNode |
                             +-------------+
+
