@@ -16,7 +16,7 @@ type InMemoryMetadataRepository struct {
 	globalLogStream []*snpb.GlobalLogStreamDescriptor
 	penddingC       chan *snpb.LocalLogStreamDescriptor
 	commitC         chan *snpb.GlobalLogStreamDescriptor
-	storageMap      map[types.StorageNodeID]varlog.StorageNodeClient
+	storageMap      map[types.StorageNodeID]varlog.LogIOClient
 	mu              sync.RWMutex
 }
 

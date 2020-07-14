@@ -62,45 +62,50 @@ subdirs : $(SUBDIRS)
 $(SUBDIRS) :
 	$(MAKE) -C $@
 
-mockgen: pkg/varlog/mock/storage_node_mock.go internal/storage/storage_mock.go
+mockgen: internal/storage/storage_mock.go \
+	internal/storage/log_stream_executor_mock.go \
+	internal/storage/replicator_mock.go \
+	internal/storage/replicator_client_mock.go \
+	proto/storage_node/mock/replicator_mock.go \
+	proto/storage_node/mock/log_io_mock.go
 
 internal/storage/storage_mock.go: internal/storage/storage.go
 	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage 
 		-package storage \
-		-source ./internal/storage/storage.go \
-		> internal/storage/storage_mock.go
+		-source $< \
+		-destination $@
 
 internal/storage/log_stream_executor_mock.go: internal/storage/log_stream_executor.go
 	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
 		-package storage \
-		-source internal/storage/log_stream_executor.go \
-		> internal/storage/log_stream_executor_mock.go
+		-source $< \
+		-destination $@
 
 internal/storage/replicator_mock.go: internal/storage/replicator.go
 	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
 		-package storage \
-		-source internal/storage/replicator.go \
-		> internal/storage/replicator_mock.go
+		-source $< \
+		-destination $@
 
 internal/storage/replicator_client_mock.go: internal/storage/replicator_client.go
 	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
 		-package storage \
-		-source internal/storage/replicator_client.go \
-		> internal/storage/replicator_client_mock.go
+		-source $< \
+		-destination $@
 
 proto/storage_node/mock/replicator_mock.go: $(PROTO) proto/storage_node/replicator.pb.go
 	mockgen -build_flags -mod=vendor \
 		-package mock \
+		-destination $@ \
 		github.daumkakao.com/varlog/varlog/proto/storage_node \
-		ReplicatorServiceClient,ReplicatorServiceServer,ReplicatorService_ReplicateClient,ReplicatorService_ReplicateServer \
-		> proto/storage_node/mock/replicator_mock.go
+		ReplicatorServiceClient,ReplicatorServiceServer,ReplicatorService_ReplicateClient,ReplicatorService_ReplicateServer
 
-pkg/varlog/mock/storage_node_mock.go: $(PROTO) proto/storage_node/storage_node.pb.go
+proto/storage_node/mock/log_io_mock.go: $(PROTO) proto/storage_node/log_io.pb.go
 	mockgen -build_flags -mod=vendor \
 		-package mock \
+		-destination $@ \
 		github.daumkakao.com/varlog/varlog/proto/storage_node \
-		StorageNodeServiceClient,StorageNodeServiceServer,StorageNodeService_SubscribeClient,StorageNodeService_SubscribeServer \
-		> pkg/varlog/mock/storage_node_mock.go
+		LogIOClient,LogIOServer,LogIO_SubscribeClient,LogIO_SubscribeServer
 
 .PHONY: test test_report
 test:
