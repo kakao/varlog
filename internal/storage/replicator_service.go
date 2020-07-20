@@ -22,15 +22,13 @@ const (
 
 type ReplicatorService struct {
 	storageNodeID types.StorageNodeID
-	logStreamID   types.LogStreamID
 	lse           LogStreamExecutor
 	pb.UnimplementedReplicatorServiceServer
 }
 
-func NewReplicatorService(storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lse LogStreamExecutor) *ReplicatorService {
+func NewReplicatorService(storageNodeID types.StorageNodeID, lse LogStreamExecutor) *ReplicatorService {
 	return &ReplicatorService{
 		storageNodeID: storageNodeID,
-		logStreamID:   logStreamID,
 		lse:           lse,
 	}
 }
@@ -112,7 +110,7 @@ func (s *ReplicatorService) send(ctx context.Context, stream pb.ReplicatorServic
 			if repCtx.err == nil {
 				err = stream.Send(&pb.ReplicationResponse{
 					StorageNodeID: s.storageNodeID,
-					LogStreamID:   s.logStreamID,
+					LogStreamID:   s.lse.LogStreamID(),
 					LLSN:          repCtx.req.GetLLSN(),
 				})
 				repCtx.err = err

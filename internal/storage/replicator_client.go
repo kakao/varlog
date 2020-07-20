@@ -116,11 +116,11 @@ LOOP:
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			break LOOP
 		default:
 			rsp, err := rc.stream.Recv()
 			if err == io.EOF {
-				return
+				break LOOP
 			}
 			if err != nil {
 				break LOOP
@@ -138,11 +138,10 @@ func (rc *replicatorClient) propagateError(llsn types.LLSN, err error) {
 		delete(rc.m, llsn)
 	}
 	rc.mu.Unlock()
-	if !ok {
-		panic("no such LLSN")
+	if ok {
+		errC <- err
+		close(errC)
 	}
-	errC <- err
-	close(errC)
 }
 
 func (rc *replicatorClient) propagateAllError() {

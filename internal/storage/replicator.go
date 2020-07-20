@@ -131,6 +131,8 @@ func (r *replicator) replicate(ctx context.Context, t *replicateTask) {
 
 func (r *replicator) getOrConnect(ctx context.Context, replica Replica) (ReplicatorClient, error) {
 	r.mtxRcm.RLock()
+	// NOTE: This implies that all of the replicas in a Log Stream is running on different
+	// Storage Nodes. Is this a good assumption?
 	rc, ok := r.rcm[replica.StorageNodeID]
 	r.mtxRcm.RUnlock()
 	if ok {
