@@ -178,7 +178,7 @@ func TestBasicOperations(t *testing.T) {
 		So(subRes.LLSN, ShouldEqual, types.LLSN(1))
 		So(string(subRes.Data), ShouldEqual, "msg-2")
 
-		num, err := client.Trim(context.TODO(), types.GLSN(0))
+		num, err := client.Trim(context.TODO(), types.GLSN(0), false)
 		So(subRes.Error, ShouldBeNil)
 		So(num, ShouldEqual, 1)
 

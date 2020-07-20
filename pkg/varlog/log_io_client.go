@@ -2,7 +2,6 @@ package varlog
 
 import (
 	"context"
-	"io"
 
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	pb "github.com/kakao/varlog/proto/storage_node"
@@ -31,7 +30,7 @@ type LogIOClient interface {
 	Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error)
 	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) (*LogEntry, error)
 	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
-	Trim(ctx context.Context, glsn types.GLSN) (uint64, error)
+	Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error)
 	Close() error
 }
 
@@ -67,8 +66,7 @@ func (c *logIOClient) Append(ctx context.Context, logStreamID types.LogStreamID,
 	for _, b := range backups {
 		req.Backups = append(req.Backups, pb.AppendRequest_BackupNode{
 			StorageNodeID: b.ID,
-			//LogStreamID:   logStreamID,
-			Address: b.Addr,
+			Address:       b.Addr,
 		})
 	}
 	rsp, err := c.rpcClient.Append(ctx, req)
@@ -81,7 +79,8 @@ func (c *logIOClient) Append(ctx context.Context, logStreamID types.LogStreamID,
 // Read operation asks the storage node to retrieve data at a given log position in the log stream.
 func (c *logIOClient) Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) (*LogEntry, error) {
 	req := &pb.ReadRequest{
-		GLSN: glsn,
+		GLSN:        glsn,
+		LogStreamID: logStreamID,
 	}
 	rsp, err := c.rpcClient.Read(ctx, req)
 	if err != nil {
@@ -89,7 +88,6 @@ func (c *logIOClient) Read(ctx context.Context, logStreamID types.LogStreamID, g
 	}
 	return &LogEntry{
 		GLSN: rsp.GetGLSN(),
-		// LLSN: rsp.GetLLSN(),
 		Data: rsp.GetPayload(),
 	}, nil
 }
@@ -110,29 +108,28 @@ func (c *logIOClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan Su
 		pllsn := types.LLSN(0)
 		for {
 			rsp, err := stream.Recv()
-			if err == io.EOF {
-				break
+			if err == nil && !first && pllsn+1 != rsp.GetLLSN() {
+				err = ErrUnordered
 			}
 			result := SubscribeResult{Error: err}
-			cllsn := rsp.GetLLSN()
-			if !first && pllsn+1 != cllsn {
-				// TODO: set out of order stream error to result
-				panic("not yet implemented")
+			if err == nil {
+				result.LogEntry = &LogEntry{
+					GLSN: rsp.GetGLSN(),
+					LLSN: rsp.GetLLSN(),
+					Data: rsp.GetPayload(),
+				}
 			}
 			if first {
 				first = false
 			}
-			pllsn = cllsn
-			if result.Error == nil {
-				result.LogEntry = &LogEntry{
-					GLSN: rsp.GetGLSN(),
-					LLSN: cllsn,
-					Data: rsp.GetPayload(),
-				}
-			}
+			pllsn = rsp.GetLLSN()
 			select {
 			case out <- result:
+				if err != nil {
+					return
+				}
 			case <-ctx.Done():
+				return
 			}
 		}
 	}(ctx)
@@ -141,10 +138,10 @@ func (c *logIOClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan Su
 
 // Trim deletes log entries greater than or equal to given GLSN in the storage node. The number of
 // deleted log entries are returned.
-func (c *logIOClient) Trim(ctx context.Context, glsn types.GLSN) (uint64, error) {
+func (c *logIOClient) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {
 	req := &pb.TrimRequest{
 		GLSN:  glsn,
-		Async: false,
+		Async: async,
 	}
 	rsp, err := c.rpcClient.Trim(ctx, req)
 	if err != nil {

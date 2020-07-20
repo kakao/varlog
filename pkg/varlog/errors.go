@@ -9,13 +9,16 @@ import (
 )
 
 var (
-	ErrNoEntry = errors.New("unwritten log entry")
+	ErrNoEntry           = errors.New("unwritten log entry")
 	ErrWrittenLogEntry   = errors.New("already written log entry")
 	ErrTrimmedLogEntry   = errors.New("already trimmed log entry")
 	ErrInvalidProjection = errors.New("invalid projection")
 
 	ErrInvalid = errors.New("invalid argument")
 	ErrExist   = errors.New("already exists")
+
+	// LogIOClient
+	ErrUnordered = errors.New("unordered log stream")
 
 	ErrAlreadyExists = status.New(codes.AlreadyExists, "varlogserver: already exists").Err()
 	ErrSealed        = status.New(codes.FailedPrecondition, "logstream: sealed").Err()
