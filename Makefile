@@ -109,12 +109,16 @@ proto/storage_node/mock/log_io_mock.go: $(PROTO) proto/storage_node/log_io.pb.go
 
 .PHONY: test test_report
 test:
-	$(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./...
+	tmpfile=$$(mktemp); \
+	(TERM=sh $(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./... 2>&1; echo $$? > $$tmpfile) | \
+	tee $(BUILD_DIR)/reports/test_output.txt; \
+	ret=$$(cat $$tmpfile); \
+	rm -f $$tmpfile; \
+	exit $$ret
 
 test_report:
-	TERM=sh $(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./... 2>&1 > $(BUILD_DIR)/reports/test_output.txt; \
-	     cat $(BUILD_DIR)/reports/test_output.txt | go-junit-report > $(BUILD_DIR)/reports/report.xml; \
-	     cat $(BUILD_DIR)/reports/test_output.txt
+	cat $(BUILD_DIR)/reports/test_output.txt | \
+		go-junit-report > $(BUILD_DIR)/reports/report.xml
 
 clean :
 	for dir in $(SUBDIRS); do \
