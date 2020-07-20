@@ -9,9 +9,8 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil/conveyutil"
+	"google.golang.org/grpc"
 )
-
-var f = conveyutil.WithServiceServer
 
 func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 	Convey("Given that a LogIOService is running", t, func() {
@@ -26,7 +25,7 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 		service.lseM[lsid] = lse
 		service.m.Unlock()
 
-		Convey("And a LogIOClient tries to append a log entry to a LogStream in the LogIOService", f(service, func(addr string) {
+		Convey("And a LogIOClient tries to append a log entry to a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 			cli, err := varlog.NewLogIOClient(addr)
 			So(err, ShouldBeNil)
 
@@ -88,7 +87,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 		service.lseM[lsid] = lse
 		service.m.Unlock()
 
-		Convey("And a LogIOClient tries to read a log entry from a LogStream in the LogIOService", f(service, func(addr string) {
+		Convey("And a LogIOClient tries to read a log entry from a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 			cli, err := varlog.NewLogIOClient(addr)
 			So(err, ShouldBeNil)
 
@@ -133,7 +132,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 				})
 			})
 
-			Convey("when the underlying LogStreamExecutor reads the log entry", f(service, func(addr string) {
+			Convey("when the underlying LogStreamExecutor reads the log entry", func() {
 				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return([]byte("foo"), nil)
 
 				Convey("Then the LogIOClient should return the log entry", func() {
@@ -141,7 +140,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(ent.Data, ShouldResemble, []byte("foo"))
 				})
-			}))
+			})
 		}))
 	})
 }
@@ -159,7 +158,7 @@ func TestLogIOClientLogIOServiceSubscirbe(t *testing.T) {
 		service.lseM[lsid] = lse
 		service.m.Unlock()
 
-		Convey("And a LogIOClient tries to subscribe to log entries of a LogStream in the LogIOService", f(service, func(addr string) {
+		Convey("And a LogIOClient tries to subscribe to log entries of a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 			cli, err := varlog.NewLogIOClient(addr)
 			So(err, ShouldBeNil)
 
@@ -215,7 +214,7 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 		service.lseM[lse2.LogStreamID()] = lse2
 		service.m.Unlock()
 
-		Convey("And a LogIOClient tries to trim log entries of a LogStream in the LogIOService", f(service, func(addr string) {
+		Convey("And a LogIOClient tries to trim log entries of a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 
 			cli, err := varlog.NewLogIOClient(addr)
 			So(err, ShouldBeNil)
