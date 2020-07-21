@@ -11,6 +11,7 @@ import (
 	"time"
 
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
 	pb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
 	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
@@ -342,19 +343,27 @@ func TestRequestMap(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
+		T := 100 * time.Millisecond
+
 		var wg sync.WaitGroup
+		var st sync.WaitGroup
+
+		st.Add(1)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rctx, _ := context.WithTimeout(context.Background(), 20*time.Millisecond)
+			rctx, _ := context.WithTimeout(context.Background(), T)
+			st.Done()
 			mr.RegisterStorageNode(rctx, sn)
 		}()
 
-		time.Sleep(10 * time.Millisecond)
-		_, ok := mr.requestMap.Load(uint64(1))
+		st.Wait()
+		So(testutil.CompareWait(func() bool {
+			_, ok := mr.requestMap.Load(uint64(1))
+			return ok
+		}, T), ShouldBeTrue)
 
 		wg.Wait()
-		So(ok, ShouldBeTrue)
 	})
 
 	Convey("requestMap should ignore request that have different nodeIndex", t, func(ctx C) {
@@ -365,12 +374,18 @@ func TestRequestMap(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
+		var st sync.WaitGroup
 		var wg sync.WaitGroup
+		st.Add(1)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			st.Done()
 
-			time.Sleep(10 * time.Millisecond)
+			testutil.CompareWait(func() bool {
+				_, ok := mr.requestMap.Load(uint64(1))
+				return ok
+			}, time.Second)
 
 			dummy := &pb.RaftEntry{
 				NodeIndex:    2,
@@ -379,7 +394,8 @@ func TestRequestMap(t *testing.T) {
 			mr.commitC <- dummy
 		}()
 
-		rctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		st.Wait()
+		rctx, _ := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		err := mr.RegisterStorageNode(rctx, sn)
 
 		wg.Wait()
