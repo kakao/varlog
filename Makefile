@@ -64,10 +64,13 @@ $(SUBDIRS) :
 
 mockgen: internal/storage/storage_mock.go \
 	internal/storage/log_stream_executor_mock.go \
+	internal/storage/log_stream_reporter_mock.go \
+	internal/storage/log_stream_reporter_client_mock.go \
 	internal/storage/replicator_mock.go \
 	internal/storage/replicator_client_mock.go \
 	proto/storage_node/mock/replicator_mock.go \
-	proto/storage_node/mock/log_io_mock.go
+	proto/storage_node/mock/log_io_mock.go \
+	proto/storage_node/mock/log_stream_reporter_mock.go
 
 internal/storage/storage_mock.go: internal/storage/storage.go
 	mockgen -self_package github.com/kakao/varlog/internal/storage 
@@ -76,6 +79,18 @@ internal/storage/storage_mock.go: internal/storage/storage.go
 		-destination $@
 
 internal/storage/log_stream_executor_mock.go: internal/storage/log_stream_executor.go
+	mockgen -self_package github.com/kakao/varlog/internal/storage \
+		-package storage \
+		-source $< \
+		-destination $@
+
+internal/storage/log_stream_reporter_mock.go: internal/storage/log_stream_reporter.go
+	mockgen -self_package github.com/kakao/varlog/internal/storage \
+		-package storage \
+		-source $< \
+		-destination $@
+
+internal/storage/log_stream_reporter_client_mock.go: internal/storage/log_stream_reporter_client.go
 	mockgen -self_package github.com/kakao/varlog/internal/storage \
 		-package storage \
 		-source $< \
@@ -106,6 +121,13 @@ proto/storage_node/mock/log_io_mock.go: $(PROTO) proto/storage_node/log_io.pb.go
 		-destination $@ \
 		github.com/kakao/varlog/proto/storage_node \
 		LogIOClient,LogIOServer,LogIO_SubscribeClient,LogIO_SubscribeServer
+
+proto/storage_node/mock/log_stream_reporter_mock.go: $(PROTO) proto/storage_node/log_stream_reporter.pb.go
+	mockgen -build_flags -mod=vendor \
+		-package mock \
+		-destination $@ \
+		github.com/kakao/varlog/proto/storage_node \
+		LogStreamReporterServiceClient,LogStreamReporterServiceServer
 
 .PHONY: test test_report
 test:

@@ -48,7 +48,7 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		lsr := NewLogStreamReporter(types.StorageNodeID(0))
+		lsr := NewLogStreamReporter(types.StorageNodeID(0)).(*logStreamReporter)
 		lse1 := NewMockLogStreamExecutor(ctrl)
 		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
 		lse2 := NewMockLogStreamExecutor(ctrl)
@@ -122,7 +122,7 @@ func TestLogStreamReporterCommit(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		lsr := NewLogStreamReporter(types.StorageNodeID(0))
+		lsr := NewLogStreamReporter(types.StorageNodeID(0)).(*logStreamReporter)
 		lse1 := NewMockLogStreamExecutor(ctrl)
 		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
 		lse2 := NewMockLogStreamExecutor(ctrl)

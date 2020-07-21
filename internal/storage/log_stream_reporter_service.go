@@ -9,10 +9,10 @@ import (
 )
 
 type LogStreamReporterService struct {
-	*LogStreamReporter
+	LogStreamReporter
 }
 
-func NewLogStreamReporterService(lsr *LogStreamReporter) *LogStreamReporterService {
+func NewLogStreamReporterService(lsr LogStreamReporter) *LogStreamReporterService {
 	return &LogStreamReporterService{lsr}
 }
 
@@ -22,7 +22,7 @@ func (s *LogStreamReporterService) Register(server *grpc.Server) {
 
 func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty) (*pb.LocalLogStreamDescriptor, error) {
 	reportPb := &pb.LocalLogStreamDescriptor{
-		StorageNodeID: s.storageNodeID,
+		StorageNodeID: s.StorageNodeID(),
 	}
 	knownNextGLSN, reports := s.LogStreamReporter.GetReport()
 	reportPb.Uncommit = make([]*pb.LocalLogStreamDescriptor_LogStreamUncommitReport, len(reports))
