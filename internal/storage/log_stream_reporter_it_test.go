@@ -1,57 +1,43 @@
 package storage
 
 import (
-	"context"
-	"fmt"
-	"net"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil/conveyutil"
 	"google.golang.org/grpc"
 )
 
-func TestLogStreamReporterConnect(t *testing.T) {
-	Convey("LogStreamReporter's service should listen to new connections from clients", t, func(c C) {
+func TestLogStreamReporterClientLogStreamReporterService(t *testing.T) {
+	Convey("Given that a LogStreamReporterService is running", t, func() {
 		const storageNodeID = types.StorageNodeID(0)
 
-		lis, err := net.Listen("tcp", ":0")
-		So(err, ShouldBeNil)
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-		addr := lis.Addr()
-		tcpAddr := addr.(*net.TCPAddr)
-		address := fmt.Sprintf("localhost:%d", tcpAddr.Port)
-		So(address, ShouldNotEndWith, "localhost:")
+		lsr := NewMockLogStreamReporter(ctrl)
+		service := NewLogStreamReporterService(lsr)
 
-		server := grpc.NewServer()
-		service := NewLogStreamReporterService(NewLogStreamReporter(storageNodeID))
-		service.Register(server)
-		go func() {
-			err := server.Serve(lis)
-			c.So(err, ShouldBeNil)
-		}()
-		defer server.GracefulStop()
-
-		Convey("LogStreamReporter's client should connect to its service", func() {
-			cli, err := NewLogStreamReporterClient(address)
+		Convey("And a LogStreamReporterClient calls GetReport", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
+			_, err := NewLogStreamReporterClient(addr)
 			So(err, ShouldBeNil)
-
-			Convey("LogStreamReporterClient should receive reports from service by using GetReport", func() {
-				lls, err := cli.GetReport(context.TODO())
-				So(err, ShouldBeNil)
-				So(lls, ShouldNotBeNil)
-				So(lls.GetStorageNodeID(), ShouldEqual, storageNodeID)
+			Convey("When the LogStreamReporterService is timed out", func() {
+				Convey("Then the LogStreamReporterClient should return error", func() {
+					Convey("This isn't yet implemented", nil)
+				})
 			})
+		}))
 
-			Convey("LogStreamReporterClient should send commit to service by using Commit", func() {
-				err := cli.Commit(context.TODO(), &pb.GlobalLogStreamDescriptor{})
-				So(err, ShouldBeNil)
+		Convey("And a LogStreamReporterClient calls Commit", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
+			_, err := NewLogStreamReporterClient(addr)
+			So(err, ShouldBeNil)
+			Convey("When the LogStreamReporterService is timed out", func() {
+				Convey("Then the LogStreamReporterClient should return error", func() {
+					Convey("This isn't yet implemented", nil)
+				})
 			})
-
-			Reset(func() {
-				So(cli.Close(), ShouldBeNil)
-			})
-		})
+		}))
 	})
 }

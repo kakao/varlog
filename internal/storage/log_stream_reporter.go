@@ -32,7 +32,16 @@ type lsrCommitTask struct {
 	commitResults []CommittedLogStreamStatus
 }
 
-type LogStreamReporter struct {
+type LogStreamReporter interface {
+	Run(ctx context.Context)
+	Close()
+	StorageNodeID() types.StorageNodeID
+	RegisterLogStreamExecutor(executor LogStreamExecutor) error
+	GetReport() (types.GLSN, []UncommittedLogStreamStatus)
+	Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus)
+}
+
+type logStreamReporter struct {
 	storageNodeID types.StorageNodeID
 	knownNextGLSN types.AtomicGLSN
 	executors     map[types.LogStreamID]LogStreamExecutor
@@ -45,8 +54,8 @@ type LogStreamReporter struct {
 	once          sync.Once
 }
 
-func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter {
-	return &LogStreamReporter{
+func NewLogStreamReporter(storageNodeID types.StorageNodeID) LogStreamReporter {
+	return &logStreamReporter{
 		storageNodeID: storageNodeID,
 		executors:     make(map[types.LogStreamID]LogStreamExecutor),
 		history:       make(map[types.GLSN][]UncommittedLogStreamStatus),
@@ -54,21 +63,25 @@ func NewLogStreamReporter(storageNodeID types.StorageNodeID) *LogStreamReporter 
 	}
 }
 
-func (lsr *LogStreamReporter) Run(ctx context.Context) {
+func (lsr *logStreamReporter) StorageNodeID() types.StorageNodeID {
+	return lsr.storageNodeID
+}
+
+func (lsr *logStreamReporter) Run(ctx context.Context) {
 	lsr.once.Do(func() {
 		ctx, lsr.cancel = context.WithCancel(ctx)
 		lsr.runner.Run(ctx, lsr.dispatchCommit)
 	})
 }
 
-func (lsr *LogStreamReporter) Close() {
+func (lsr *logStreamReporter) Close() {
 	if lsr.cancel != nil {
 		lsr.cancel()
 		lsr.runner.CloseWait()
 	}
 }
 
-func (lsr *LogStreamReporter) dispatchCommit(ctx context.Context) {
+func (lsr *logStreamReporter) dispatchCommit(ctx context.Context) {
 	for {
 		select {
 		case t := <-lsr.commitC:
@@ -84,7 +97,7 @@ func (lsr *LogStreamReporter) dispatchCommit(ctx context.Context) {
 // is nil, it returns varlog.ErrInvalid.
 // When the new LogStreamExecutor is registered successfully, it is received a GLSN which is
 // anticipated to be issued in the next commit - knownNextGLSN.
-func (lsr *LogStreamReporter) RegisterLogStreamExecutor(executor LogStreamExecutor) error {
+func (lsr *logStreamReporter) RegisterLogStreamExecutor(executor LogStreamExecutor) error {
 	if executor == nil {
 		return varlog.ErrInvalid
 	}
@@ -102,7 +115,7 @@ func (lsr *LogStreamReporter) RegisterLogStreamExecutor(executor LogStreamExecut
 // GetReport collects statuses about uncommitted log entries from log streams in the storage node.
 // KnownNextGLSNs from all LogStreamExecutors must be equal to the corresponding in
 // LogStreamReporter.
-func (lsr *LogStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatus) {
+func (lsr *logStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatus) {
 	lsr.mtxExecutors.RLock()
 	defer lsr.mtxExecutors.RUnlock()
 	reports := make([]UncommittedLogStreamStatus, len(lsr.executors))
@@ -146,7 +159,7 @@ func (lsr *LogStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamSta
 	return knownNextGLSN, reports
 }
 
-func (lsr *LogStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus) {
+func (lsr *logStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus) {
 	if !lsr.verifyCommit(prevNextGLSN) {
 		return
 	}
@@ -160,7 +173,7 @@ func (lsr *LogStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitRe
 	}
 }
 
-func (lsr *LogStreamReporter) commit(t lsrCommitTask) {
+func (lsr *logStreamReporter) commit(t lsrCommitTask) {
 	if !lsr.verifyCommit(t.prevNextGLSN) {
 		return
 	}
@@ -179,7 +192,7 @@ func (lsr *LogStreamReporter) commit(t lsrCommitTask) {
 	lsr.knownNextGLSN.Store(t.nextGLSN)
 }
 
-func (lsr *LogStreamReporter) verifyCommit(prevNextGLSN types.GLSN) bool {
+func (lsr *logStreamReporter) verifyCommit(prevNextGLSN types.GLSN) bool {
 	knownNextGLSN := lsr.knownNextGLSN.Load()
 	return prevNextGLSN == knownNextGLSN
 }
