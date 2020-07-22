@@ -10,7 +10,7 @@ pipeline {
 
     stage('test') {
       steps {
-        sh 'make test TEST_FAILFAST=1 TEST_COUNT=10'
+        sh 'make test TEST_FAILFAST=1 TEST_COUNT=10 TEST_COVERAGE=1'
       }
     }
 
@@ -18,7 +18,9 @@ pipeline {
   post {
     always {
       sh 'make test_report'
+      sh 'make coverage_report'
       junit 'build/reports/*.xml'
+      cobertura coberturaReportFile: "build/reports/coverage.xml"
     }
   }
 }

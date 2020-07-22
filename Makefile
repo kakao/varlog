@@ -26,6 +26,11 @@ ifneq ($(TEST_PARALLEL),)
 	TEST_FLAGS := $(TEST_FLAGS) -parallel $(TEST_PARALLEL)
 endif
 
+TEST_COVERAGE := 0
+ifeq ($(TEST_COVERAGE),1)
+	TEST_FLAGS := $(TEST_FLAGS) -coverprofile=$(BUILD_DIR)/reports/coverage.out
+endif
+
 TEST_FAILFAST := 0
 ifeq ($(TEST_FAILFAST),1)
 	TEST_FLAGS := $(TEST_FLAGS) -failfast
@@ -129,7 +134,8 @@ proto/storage_node/mock/log_stream_reporter_mock.go: $(PROTO) proto/storage_node
 		github.daumkakao.com/varlog/varlog/proto/storage_node \
 		LogStreamReporterServiceClient,LogStreamReporterServiceServer
 
-.PHONY: test test_report
+.PHONY: test test_report coverage_report
+
 test:
 	tmpfile=$$(mktemp); \
 	(TERM=sh $(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./... 2>&1; echo $$? > $$tmpfile) | \
@@ -141,6 +147,9 @@ test:
 test_report:
 	cat $(BUILD_DIR)/reports/test_output.txt | \
 		go-junit-report > $(BUILD_DIR)/reports/report.xml
+
+coverage_report:
+	gocov convert $(BUILD_DIR)/reports/coverage.out | gocov-xml > $(BUILD_DIR)/reports/coverage.xml
 
 clean :
 	for dir in $(SUBDIRS); do \
