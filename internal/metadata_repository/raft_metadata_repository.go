@@ -270,7 +270,7 @@ func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorage
 		return err
 	}
 
-	mr.reportCollector.RegisterStorageNode(r.StorageNode)
+	mr.reportCollector.RegisterStorageNode(r.StorageNode, mr.storage.GetNextGLSN())
 
 	return nil
 }

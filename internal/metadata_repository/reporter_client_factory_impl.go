@@ -110,7 +110,8 @@ func (r *DummyReporterClient) Commit(ctx context.Context, glsn *snpb.GlobalLogSt
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if glsn.PrevNextGLSN != r.knownNextGLSN {
+	if r.knownNextGLSN != types.GLSN(0) &&
+		glsn.PrevNextGLSN != r.knownNextGLSN {
 		return nil
 	}
 

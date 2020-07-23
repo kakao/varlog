@@ -58,7 +58,7 @@ func (rc *ReportCollector) Close() {
 	rc.runner.CloseWait()
 }
 
-func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
+func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor, glsn types.GLSN) error {
 	if sn == nil {
 		return varlog.ErrInvalid
 	}
@@ -76,11 +76,12 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 	}
 
 	executor := &ReportCollectExecutor{
-		resultC: make(chan *snpb.GlobalLogStreamDescriptor, 1),
-		sn:      sn,
-		cb:      rc.cb,
-		cli:     cli,
-		logger:  rc.logger.Named("executor"),
+		resultC:  make(chan *snpb.GlobalLogStreamDescriptor, 1),
+		nextGLSN: glsn,
+		sn:       sn,
+		cb:       rc.cb,
+		cli:      cli,
+		logger:   rc.logger.Named("executor"),
 	}
 
 	rc.executors[sn.StorageNodeID] = executor
@@ -105,6 +106,23 @@ func (rc *ReportCollector) Commit(gls *snpb.GlobalLogStreamDescriptor) {
 		default:
 		}
 	}
+}
+
+func (rc *ReportCollector) GetTrimmableNextGLSN() types.GLSN {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+
+	first := true
+	min := types.GLSN(0)
+	for _, executor := range rc.executors {
+		glsn := executor.getNextGLSN()
+		if first || glsn < min {
+			min = glsn
+		}
+		first = false
+	}
+
+	return min
 }
 
 func (rce *ReportCollectExecutor) runReport(ctx context.Context) {
@@ -139,7 +157,11 @@ Loop:
 			for nextGLSN < gls.PrevNextGLSN {
 				prev := rce.cb.getNextGLS(nextGLSN)
 				if prev == nil {
-					rce.logger.Panic("prev gls should not be nil")
+					rce.logger.Panic("prev gls should not be nil",
+						zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
+						zap.Uint64("FROM", uint64(nextGLSN)),
+						zap.Uint64("CUR", uint64(gls.NextGLSN)),
+					)
 				}
 
 				err := rce.commit(prev)
@@ -150,6 +172,7 @@ Loop:
 
 				if prev.NextGLSN <= nextGLSN {
 					rce.logger.Panic("broken global commit consistency",
+						zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
 						zap.Uint64("expected", uint64(gls.PrevNextGLSN)),
 						zap.Uint64("prev", uint64(prev.NextGLSN)),
 						zap.Uint64("cur", uint64(nextGLSN)),
@@ -180,7 +203,9 @@ func (rce *ReportCollectExecutor) getReport() error {
 	}
 
 	rce.mu.Lock()
-	rce.nextGLSN = lls.NextGLSN
+	if lls.NextGLSN > rce.nextGLSN {
+		rce.nextGLSN = lls.NextGLSN
+	}
 	rce.logStreamIDs = lsIDs
 	rce.mu.Unlock()
 
@@ -217,4 +242,10 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 	}
 
 	return nil
+}
+
+func (rce *ReportCollectExecutor) getNextGLSN() types.GLSN {
+	rce.mu.RLock()
+	defer rce.mu.RUnlock()
+	return rce.nextGLSN
 }

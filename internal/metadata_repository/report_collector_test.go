@@ -7,6 +7,7 @@ import (
 	"time"
 
 	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/testutil"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 
@@ -17,15 +18,12 @@ import (
 type dummyMetadataRepository struct {
 	reportC chan *snpb.LocalLogStreamDescriptor
 	m       []*snpb.GlobalLogStreamDescriptor
+	mt      sync.Mutex
 }
 
 func NewDummyMetadataRepository() *dummyMetadataRepository {
-	m := make([]*snpb.GlobalLogStreamDescriptor, 1)
-	m[0] = &snpb.GlobalLogStreamDescriptor{}
-
 	return &dummyMetadataRepository{
 		reportC: make(chan *snpb.LocalLogStreamDescriptor),
-		m:       m,
 	}
 }
 
@@ -37,6 +35,9 @@ func (mr *dummyMetadataRepository) report(lls *snpb.LocalLogStreamDescriptor) {
 }
 
 func (mr *dummyMetadataRepository) getNextGLS(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
+	mr.mt.Lock()
+	defer mr.mt.Unlock()
+
 	i := sort.Search(len(mr.m), func(i int) bool {
 		return mr.m[i].PrevNextGLSN >= glsn
 	})
@@ -49,8 +50,23 @@ func (mr *dummyMetadataRepository) getNextGLS(glsn types.GLSN) *snpb.GlobalLogSt
 }
 
 func (mr *dummyMetadataRepository) appendGLS(gls *snpb.GlobalLogStreamDescriptor) {
+	mr.mt.Lock()
+	defer mr.mt.Unlock()
+
 	mr.m = append(mr.m, gls)
 	sort.Slice(mr.m, func(i, j int) bool { return mr.m[i].NextGLSN < mr.m[j].NextGLSN })
+}
+
+func (mr *dummyMetadataRepository) trimGLS(glsn types.GLSN) {
+	mr.mt.Lock()
+	defer mr.mt.Unlock()
+
+	for i, gls := range mr.m {
+		if glsn == gls.NextGLSN {
+			mr.m = mr.m[i:]
+			return
+		}
+	}
 }
 
 func TestRegisterStorageNode(t *testing.T) {
@@ -66,7 +82,7 @@ func TestRegisterStorageNode(t *testing.T) {
 		reportCollector := NewReportCollector(cb, logger)
 		defer reportCollector.Close()
 
-		err := reportCollector.RegisterStorageNode(nil)
+		err := reportCollector.RegisterStorageNode(nil, types.GLSN(0))
 		So(err, ShouldNotBeNil)
 	})
 
@@ -82,10 +98,10 @@ func TestRegisterStorageNode(t *testing.T) {
 		reportCollector := NewReportCollector(cb, logger)
 		defer reportCollector.Close()
 
-		err := reportCollector.RegisterStorageNode(&varlogpb.StorageNodeDescriptor{})
+		err := reportCollector.RegisterStorageNode(&varlogpb.StorageNodeDescriptor{}, types.GLSN(0))
 		So(err, ShouldBeNil)
 
-		err = reportCollector.RegisterStorageNode(&varlogpb.StorageNodeDescriptor{})
+		err = reportCollector.RegisterStorageNode(&varlogpb.StorageNodeDescriptor{}, types.GLSN(0))
 		So(err, ShouldNotBeNil)
 	})
 }
@@ -144,7 +160,7 @@ func TestReport(t *testing.T) {
 				StorageNodeID: types.StorageNodeID(i),
 			}
 
-			err := reportCollector.RegisterStorageNode(sn)
+			err := reportCollector.RegisterStorageNode(sn, types.GLSN(0))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -177,6 +193,7 @@ func newDummyGlobalLogStream(prev types.GLSN, nrStorage int) *snpb.GlobalLogStre
 
 func TestCommit(t *testing.T) {
 	nrStorage := 5
+	knownGLSN := types.GLSN(0)
 
 	a := NewDummyReporterClientFactory(false)
 	mr := NewDummyMetadataRepository()
@@ -195,42 +212,83 @@ func TestCommit(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(i),
 		}
 
-		err := reportCollector.RegisterStorageNode(sn)
+		err := reportCollector.RegisterStorageNode(sn, types.GLSN(0))
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	Convey("ReportCollector should broadcast commit result to registered storage node", t, func() {
-		gls := newDummyGlobalLogStream(types.GLSN(0), nrStorage)
+		gls := newDummyGlobalLogStream(knownGLSN, nrStorage)
 		mr.appendGLS(gls)
+		knownGLSN = gls.NextGLSN
 
 		reportCollector.Commit(gls)
 
-		time.Sleep(100 * time.Millisecond)
-
 		for _, cli := range a.m {
-			cli.mu.Lock()
-			So(cli.knownNextGLSN, ShouldEqual, types.GLSN(5))
-			cli.mu.Unlock()
+			So(testutil.CompareWait(func() bool {
+				cli.mu.Lock()
+				defer cli.mu.Unlock()
+
+				return cli.knownNextGLSN == knownGLSN
+			}, 100*time.Millisecond), ShouldBeTrue)
 		}
+
+		So(testutil.CompareWait(func() bool {
+			return reportCollector.GetTrimmableNextGLSN() == knownGLSN
+		}, 100*time.Millisecond), ShouldBeTrue)
 	})
 
 	Convey("ReportCollector should send ordered commit result to registered storage node", t, func() {
-		gls := newDummyGlobalLogStream(types.GLSN(5), nrStorage)
+		gls := newDummyGlobalLogStream(knownGLSN, nrStorage)
 		mr.appendGLS(gls)
+		knownGLSN = gls.NextGLSN
 
-		gls = newDummyGlobalLogStream(types.GLSN(10), nrStorage)
+		gls = newDummyGlobalLogStream(knownGLSN, nrStorage)
 		mr.appendGLS(gls)
+		knownGLSN = gls.NextGLSN
 
 		reportCollector.Commit(gls)
 
-		time.Sleep(100 * time.Millisecond)
+		for _, cli := range a.m {
+			So(testutil.CompareWait(func() bool {
+				cli.mu.Lock()
+				defer cli.mu.Unlock()
+
+				return cli.knownNextGLSN == knownGLSN
+			}, 100*time.Millisecond), ShouldBeTrue)
+		}
+
+		So(testutil.CompareWait(func() bool {
+			return reportCollector.GetTrimmableNextGLSN() == knownGLSN
+		}, 100*time.Millisecond), ShouldBeTrue)
+	})
+
+	Convey("ReportCollector should send proper commit against new StorageNode", t, func() {
+		mr.trimGLS(knownGLSN)
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(nrStorage),
+		}
+
+		err := reportCollector.RegisterStorageNode(sn, knownGLSN)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gls := newDummyGlobalLogStream(knownGLSN, nrStorage+1)
+		mr.appendGLS(gls)
+		knownGLSN = gls.NextGLSN
+
+		reportCollector.Commit(gls)
 
 		for _, cli := range a.m {
-			cli.mu.Lock()
-			So(cli.knownNextGLSN, ShouldEqual, types.GLSN(15))
-			cli.mu.Unlock()
+			So(testutil.CompareWait(func() bool {
+				cli.mu.Lock()
+				defer cli.mu.Unlock()
+
+				return cli.knownNextGLSN == knownGLSN
+			}, 100*time.Millisecond), ShouldBeTrue)
 		}
 	})
 }
