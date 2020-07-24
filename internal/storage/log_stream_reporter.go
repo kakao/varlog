@@ -24,7 +24,16 @@ type CommittedLogStreamStatus struct {
 	CommittedGLSNEnd   types.GLSN
 }
 
-const lsrCommitCSize = 0
+const (
+	lsrCommitCSize = 0
+	lsrReportCSize = 0
+)
+
+type lsrReportTask struct {
+	knownNextGLSN types.GLSN
+	reports       []UncommittedLogStreamStatus
+	done          chan struct{}
+}
 
 type lsrCommitTask struct {
 	nextGLSN      types.GLSN
@@ -47,7 +56,7 @@ type logStreamReporter struct {
 	executors     map[types.LogStreamID]LogStreamExecutor
 	mtxExecutors  sync.RWMutex
 	history       map[types.GLSN][]UncommittedLogStreamStatus
-	mtxHistory    sync.RWMutex
+	reportC       chan *lsrReportTask
 	commitC       chan lsrCommitTask
 	cancel        context.CancelFunc
 	runner        runner.Runner
@@ -59,6 +68,7 @@ func NewLogStreamReporter(storageNodeID types.StorageNodeID) LogStreamReporter {
 		storageNodeID: storageNodeID,
 		executors:     make(map[types.LogStreamID]LogStreamExecutor),
 		history:       make(map[types.GLSN][]UncommittedLogStreamStatus),
+		reportC:       make(chan *lsrReportTask, lsrReportCSize),
 		commitC:       make(chan lsrCommitTask, lsrCommitCSize),
 	}
 }
@@ -71,6 +81,7 @@ func (lsr *logStreamReporter) Run(ctx context.Context) {
 	lsr.once.Do(func() {
 		ctx, lsr.cancel = context.WithCancel(ctx)
 		lsr.runner.Run(ctx, lsr.dispatchCommit)
+		lsr.runner.Run(ctx, lsr.dispatchReport)
 	})
 }
 
@@ -78,6 +89,17 @@ func (lsr *logStreamReporter) Close() {
 	if lsr.cancel != nil {
 		lsr.cancel()
 		lsr.runner.CloseWait()
+	}
+}
+
+func (lsr *logStreamReporter) dispatchReport(ctx context.Context) {
+	for {
+		select {
+		case t := <-lsr.reportC:
+			lsr.report(t)
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -116,47 +138,53 @@ func (lsr *logStreamReporter) RegisterLogStreamExecutor(executor LogStreamExecut
 // KnownNextGLSNs from all LogStreamExecutors must be equal to the corresponding in
 // LogStreamReporter.
 func (lsr *logStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatus) {
+	t := lsrReportTask{done: make(chan struct{})}
+	lsr.reportC <- &t
+	<-t.done
+	return t.knownNextGLSN, t.reports
+}
+
+func (lsr *logStreamReporter) report(t *lsrReportTask) {
 	lsr.mtxExecutors.RLock()
-	defer lsr.mtxExecutors.RUnlock()
-	reports := make([]UncommittedLogStreamStatus, len(lsr.executors))
-	i := 0
-	minKnownNextGLSN := types.GLSN(0)
+	reports := make([]UncommittedLogStreamStatus, 0, len(lsr.executors))
+	knownNextGLSN := types.GLSN(0)
 	for _, executor := range lsr.executors {
 		status := executor.GetReport()
-		reports[i] = status
-		if status.KnownNextGLSN == 0 {
-			// newbie: New LogStreamExecutor has no idea KnownNextGLSN.
-			continue
+		// get non-zero, minimum KnwonNextGLSN (zero means just added LS)
+		if status.KnownNextGLSN > 0 && (knownNextGLSN == 0 || knownNextGLSN > status.KnownNextGLSN) {
+			knownNextGLSN = status.KnownNextGLSN
 		}
-		if minKnownNextGLSN == 0 || minKnownNextGLSN > status.KnownNextGLSN {
-			minKnownNextGLSN = status.KnownNextGLSN
+		// To decrease the size of reports, it can discard the reports not having
+		// uncommitted log entries
+		if status.UncommittedLLSNBegin < status.UncommittedLLSNEnd {
+			reports = append(reports, status)
 		}
 	}
-	knownNextGLSN := lsr.knownNextGLSN.Load()
-	if minKnownNextGLSN < knownNextGLSN {
-		// slow LSE
-		// get the past report from history map
-		// use minKnownNextGLSN as return value
-		knownNextGLSN = minKnownNextGLSN
-		lsr.mtxHistory.RLock()
-		if rpt, ok := lsr.history[knownNextGLSN]; ok {
-			reports = rpt
+	lsr.mtxExecutors.RUnlock()
+
+	if len(reports) > 0 { // skip when no meaningful statuses in reports
+		// for simplicity, it uses old reports as possible
+		// TODO (jun.song)
+		// 1) old and new reports can be merged when they have the same KnownNextGLSN
+		// 2) after implementing LSE-wise KnownNextGLSN, history won't be needed any longer
+		oldReports, ok := lsr.history[knownNextGLSN]
+		if !ok {
+			lsr.history[knownNextGLSN] = reports
+			goto out
 		}
-		lsr.mtxHistory.RUnlock()
+		reports = oldReports
 	}
-	lsr.mtxHistory.Lock()
-	defer lsr.mtxHistory.Unlock()
-	if _, ok := lsr.history[knownNextGLSN]; !ok {
-		lsr.history[knownNextGLSN] = reports
-	}
-	// NOTE: history map will be small - most 2 elements
-	// TODO: remove this after implementing log stream-wise report
+
+out:
+	t.reports = reports
+	t.knownNextGLSN = knownNextGLSN
+	close(t.done)
+
 	for nextGLSN := range lsr.history {
 		if nextGLSN < knownNextGLSN {
 			delete(lsr.history, nextGLSN)
 		}
 	}
-	return knownNextGLSN, reports
 }
 
 func (lsr *logStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus) {
