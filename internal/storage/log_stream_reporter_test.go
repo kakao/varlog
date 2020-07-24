@@ -8,18 +8,20 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 )
 
-func TestLogStreamReporterRunAndClose(t *testing.T) {
+func TestLogStreamReporterRunClose(t *testing.T) {
 	Convey("LogStreamReporter should be run and closed", t, func() {
 		lsr := NewLogStreamReporter(types.StorageNodeID(0))
 		So(func() { lsr.Run(context.TODO()) }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
+		So(func() { lsr.Close() }, ShouldNotPanic)
 	})
 }
 
-func TestLogStreamReporterRegister(t *testing.T) {
+func TestLogStreamReporterRegisterLogStreamExecutor(t *testing.T) {
 	Convey("LogStreamReporter", t, func() {
 		lsr := NewLogStreamReporter(types.StorageNodeID(0))
 
@@ -38,81 +40,183 @@ func TestLogStreamReporterRegister(t *testing.T) {
 			err = lsr.RegisterLogStreamExecutor(lse)
 			So(err, ShouldBeNil)
 			err = lsr.RegisterLogStreamExecutor(lse)
-			So(err, ShouldNotBeNil)
+			So(err, ShouldResemble, varlog.ErrExist)
 		})
 	})
 }
 
 func TestLogStreamReporterGetReport(t *testing.T) {
-	Convey("LogStreamReporter", t, func() {
+	Convey("Given a LogStreamReporter", t, func() {
+		const N = 3
+
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		lsr := NewLogStreamReporter(types.StorageNodeID(0)).(*logStreamReporter)
-		lse1 := NewMockLogStreamExecutor(ctrl)
-		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
-		lse2 := NewMockLogStreamExecutor(ctrl)
-		lse2.EXPECT().LogStreamID().Return(types.LogStreamID(2)).AnyTimes()
+		lsr.Run(context.TODO())
 
-		Convey("it should get local stream status by using GetReport", func() {
-			lsr.RegisterLogStreamExecutor(lse1)
-			report := UncommittedLogStreamStatus{
-				LogStreamID:          lse1.LogStreamID(),
-				KnownNextGLSN:        types.GLSN(0),
-				UncommittedLLSNBegin: types.LLSN(0),
-				UncommittedLLSNEnd:   types.LLSN(10),
-			}
-			lse1.EXPECT().GetReport().Return(report)
-			knownNextGLSN, reports := lsr.GetReport()
-			So(knownNextGLSN, ShouldEqual, types.GLSN(0))
-			So(len(reports), ShouldEqual, 1)
-			So(reports[0], ShouldResemble, report)
+		lseList := []LogStreamExecutor{}
+		for i := 1; i <= N; i++ {
+			lse := NewMockLogStreamExecutor(ctrl)
+			lse.EXPECT().LogStreamID().Return(types.LogStreamID(i)).AnyTimes()
+			So(lsr.RegisterLogStreamExecutor(lse), ShouldBeNil)
+			lseList = append(lseList, lse)
+		}
+
+		Reset(func() {
+			lsr.Close()
 		})
 
-		Convey("it should take a minimum of knownNextGLSN getting from LSEs", func() {
-			lsr.RegisterLogStreamExecutor(lse1)
-			lsr.RegisterLogStreamExecutor(lse2)
-			lsr.knownNextGLSN.Store(types.GLSN(20))
-			report1 := UncommittedLogStreamStatus{
-				LogStreamID:          lse1.LogStreamID(),
-				KnownNextGLSN:        types.GLSN(10),
-				UncommittedLLSNBegin: types.LLSN(0),
-				UncommittedLLSNEnd:   types.LLSN(10),
+		// The zero value of KnownNextGLSN of LogStreamExecutor means that the LogStream is
+		// just added to StorageNode.
+		Convey("When KnownNextGLSNs of every LogStreamExecutors are zero", func() {
+			for _, lse := range lseList {
+				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+					UncommittedLogStreamStatus{
+						LogStreamID:          lse.LogStreamID(),
+						KnownNextGLSN:        types.GLSN(0),
+						UncommittedLLSNBegin: types.LLSN(0),
+						UncommittedLLSNEnd:   types.LLSN(10),
+					},
+				)
 			}
-			report2 := UncommittedLogStreamStatus{
-				LogStreamID:          lse2.LogStreamID(),
-				KnownNextGLSN:        types.GLSN(20),
-				UncommittedLLSNBegin: types.LLSN(0),
-				UncommittedLLSNEnd:   types.LLSN(10),
-			}
-			lse1.EXPECT().GetReport().Return(report1)
-			lse2.EXPECT().GetReport().Return(report2)
-			knownNextGLSN, reports := lsr.GetReport()
-			So(knownNextGLSN, ShouldEqual, types.GLSN(10))
-			So(len(reports), ShouldEqual, 2)
+
+			Convey("Then KnownNextGLSN of the report should be zero", func() {
+				knownNextGLSN, reports := lsr.GetReport()
+				So(knownNextGLSN, ShouldEqual, types.GLSN(0))
+				So(len(reports), ShouldEqual, len(lseList))
+
+				Convey("And the report should be stored in history", func() {
+					lsr.Close()
+					r, ok := lsr.history[knownNextGLSN]
+					So(ok, ShouldBeTrue)
+					So(r, ShouldResemble, reports)
+				})
+			})
 		})
 
-		Convey("it should ignore knownNextGLSN of new LSE which is zero", func() {
-			lsr.RegisterLogStreamExecutor(lse1)
-			lsr.RegisterLogStreamExecutor(lse2)
-			lsr.knownNextGLSN.Store(types.GLSN(20))
-			report1 := UncommittedLogStreamStatus{
-				LogStreamID:          lse1.LogStreamID(),
-				KnownNextGLSN:        types.GLSN(0),
-				UncommittedLLSNBegin: types.LLSN(0),
-				UncommittedLLSNEnd:   types.LLSN(10),
+		Convey("When KnownNextGLSNs of every LogStreamExecutors are different", func() {
+			for i, lse := range lseList {
+				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+					UncommittedLogStreamStatus{
+						LogStreamID:          lse.LogStreamID(),
+						KnownNextGLSN:        types.GLSN(10 * i),
+						UncommittedLLSNBegin: types.LLSN(0),
+						UncommittedLLSNEnd:   types.LLSN(10),
+					},
+				)
 			}
-			report2 := UncommittedLogStreamStatus{
-				LogStreamID:          lse2.LogStreamID(),
-				KnownNextGLSN:        types.GLSN(10),
-				UncommittedLLSNBegin: types.LLSN(0),
-				UncommittedLLSNEnd:   types.LLSN(10),
+
+			Convey("Then the KnownNextGLSN of the report should be minimum, not zero", func() {
+				knownNextGLSN, reports := lsr.GetReport()
+				So(knownNextGLSN, ShouldEqual, types.GLSN(10))
+				So(len(reports), ShouldEqual, len(lseList))
+
+				Convey("And the report should be stored in history", func() {
+					lsr.Close()
+					r, ok := lsr.history[knownNextGLSN]
+					So(ok, ShouldBeTrue)
+					So(r, ShouldResemble, reports)
+				})
+			})
+		})
+
+		//  It is an optional optimization to shrink the size of the report.
+		Convey("When UncommittedLLSNBegin and UncommittedLLSNEnd of every LogStreamExecutors are the same respectively", func() {
+			for i, lse := range lseList {
+				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+					UncommittedLogStreamStatus{
+						LogStreamID:          lse.LogStreamID(),
+						KnownNextGLSN:        types.GLSN(10 * i),
+						UncommittedLLSNBegin: types.LLSN(10 * i),
+						UncommittedLLSNEnd:   types.LLSN(10 * i),
+					},
+				)
 			}
-			lse1.EXPECT().GetReport().Return(report1)
-			lse2.EXPECT().GetReport().Return(report2)
-			knownNextGLSN, reports := lsr.GetReport()
-			So(knownNextGLSN, ShouldEqual, types.GLSN(10))
-			So(len(reports), ShouldEqual, 2)
+
+			Convey("Then the report should be empty", func() {
+				knownNextGLSN, reports := lsr.GetReport()
+				So(len(reports), ShouldBeZeroValue)
+				So(knownNextGLSN, ShouldEqual, types.GLSN(10))
+
+				Convey("And the empty report should not be stored in history", func() {
+					lsr.Close()
+					_, ok := lsr.history[knownNextGLSN]
+					So(ok, ShouldBeFalse)
+				})
+			})
+
+		})
+
+		Convey("When KnownNextGLSN of the report is computed again", func() {
+			for i, lse := range lseList {
+				first := lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+					UncommittedLogStreamStatus{
+						LogStreamID:          lse.LogStreamID(),
+						KnownNextGLSN:        types.GLSN(10),
+						UncommittedLLSNBegin: types.LLSN(0),
+						UncommittedLLSNEnd:   types.LLSN(10),
+					},
+				)
+				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+					UncommittedLogStreamStatus{
+						LogStreamID:          lse.LogStreamID(),
+						KnownNextGLSN:        types.GLSN(10),
+						UncommittedLLSNBegin: types.LLSN(0),
+						UncommittedLLSNEnd:   types.LLSN(10 * i),
+					},
+				).After(first)
+			}
+
+			Convey("Then the history should have the past non-empty report with the same KnownNextGLSN", func() {
+				knownNextGLSN1, reports1 := lsr.GetReport()
+				So(len(reports1), ShouldEqual, len(lseList))
+				So(knownNextGLSN1, ShouldEqual, types.GLSN(10))
+
+				knownNextGLSN2, reports2 := lsr.GetReport()
+				So(len(reports2), ShouldEqual, len(lseList))
+				So(knownNextGLSN2, ShouldEqual, types.GLSN(10))
+
+				So(knownNextGLSN1, ShouldEqual, knownNextGLSN2)
+				So(reports1, ShouldResemble, reports2)
+			})
+		})
+
+		Convey("When KnownNextGLSN of the report is computed", func() {
+			for _, lse := range lseList {
+				first := lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+					UncommittedLogStreamStatus{
+						LogStreamID:          lse.LogStreamID(),
+						KnownNextGLSN:        types.GLSN(10),
+						UncommittedLLSNBegin: types.LLSN(0),
+						UncommittedLLSNEnd:   types.LLSN(10),
+					},
+				)
+				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+					UncommittedLogStreamStatus{
+						LogStreamID:          lse.LogStreamID(),
+						KnownNextGLSN:        types.GLSN(100),
+						UncommittedLLSNBegin: types.LLSN(10),
+						UncommittedLLSNEnd:   types.LLSN(20),
+					},
+				).After(first)
+			}
+
+			Convey("Then past reports whose KnownNextGLSNs are less than the KnownNextGLSN just computed should be deleted", func() {
+				knownNextGLSN1, reports1 := lsr.GetReport()
+				So(len(reports1), ShouldEqual, len(lseList))
+				So(knownNextGLSN1, ShouldEqual, types.GLSN(10))
+
+				knownNextGLSN2, reports2 := lsr.GetReport()
+				So(len(reports2), ShouldEqual, len(lseList))
+				So(knownNextGLSN2, ShouldEqual, types.GLSN(100))
+
+				lsr.Close()
+				_, ok := lsr.history[knownNextGLSN2]
+				So(ok, ShouldBeTrue)
+				_, ok = lsr.history[knownNextGLSN1]
+				So(ok, ShouldBeFalse)
+			})
 		})
 	})
 }
