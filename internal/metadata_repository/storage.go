@@ -120,7 +120,21 @@ Loop:
 	}
 }
 
+func (ms *MetadataStorage) lookupStorageNode(snID types.StorageNodeID) *varlogpb.StorageNodeDescriptor {
+	pre, cur := ms.getStateMachine()
+	if pre != cur {
+		sn := pre.Metadata.GetStorageNode(snID)
+		if sn != nil {
+			return sn
+		}
+	}
+
+	return cur.Metadata.GetStorageNode(snID)
+}
+
 func (ms *MetadataStorage) registerStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
+	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
+
 	pre, cur := ms.getStateMachine()
 	if pre != cur {
 		if pre.Metadata.GetStorageNode(sn.StorageNodeID) != nil {
@@ -134,8 +148,6 @@ func (ms *MetadataStorage) registerStorageNode(sn *varlogpb.StorageNodeDescripto
 	if err := cur.Metadata.InsertStorageNode(sn); err != nil {
 		return varlog.ErrAlreadyExists
 	}
-
-	ms.metaAppliedIndex++
 
 	return nil
 }
@@ -153,7 +165,19 @@ func (ms *MetadataStorage) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 	return nil
 }
 
-func (ms *MetadataStorage) createLogStream(ls *varlogpb.LogStreamDescriptor) error {
+func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) error {
+	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
+
+	if len(ls.Replicas) == 0 {
+		return varlog.ErrInvalidArgument
+	}
+
+	for _, r := range ls.Replicas {
+		if ms.lookupStorageNode(r.StorageNodeID) == nil {
+			return varlog.ErrInvalidArgument
+		}
+	}
+
 	pre, cur := ms.getStateMachine()
 	if pre != cur {
 		if pre.Metadata.GetLogStream(ls.LogStreamID) != nil {
@@ -168,13 +192,85 @@ func (ms *MetadataStorage) createLogStream(ls *varlogpb.LogStreamDescriptor) err
 		return varlog.ErrAlreadyExists
 	}
 
-	ms.metaAppliedIndex++
+	lm := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
+		Replicas: make(map[types.StorageNodeID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplica),
+		Status:   varlogpb.LogStreamStatusNormal,
+	}
+
+	for _, r := range ls.Replicas {
+		lm.Replicas[r.StorageNodeID] = &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{}
+	}
+
+	cur.LogStream.LocalLogStreams[ls.LogStreamID] = lm
 
 	return nil
 }
 
-func (ms *MetadataStorage) CreateLogStream(ls *varlogpb.LogStreamDescriptor, nodeIndex, requestIndex uint64) error {
-	err := ms.createLogStream(ls)
+func (ms *MetadataStorage) RegisterLogStream(ls *varlogpb.LogStreamDescriptor, nodeIndex, requestIndex uint64) error {
+	err := ms.registerLogStream(ls)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
+		}
+		return err
+	}
+
+	ms.triggerMetadataCache(nodeIndex, requestIndex)
+	return nil
+}
+
+func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) error {
+	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
+
+	if len(ls.Replicas) == 0 {
+		return varlog.ErrInvalidArgument
+	}
+
+	for _, r := range ls.Replicas {
+		if ms.lookupStorageNode(r.StorageNodeID) == nil {
+			return varlog.ErrInvalidArgument
+		}
+	}
+
+	pre, cur := ms.getStateMachine()
+
+	ms.mtMu.Lock()
+	defer ms.mtMu.Unlock()
+
+	exist := cur.Metadata.GetLogStream(ls.LogStreamID) != nil
+	if !exist && pre.Metadata.GetLogStream(ls.LogStreamID) == nil {
+		return varlog.ErrNotExist
+	}
+
+	if exist {
+		cur.Metadata.UpdateLogStream(ls)
+	} else {
+		cur.Metadata.InsertLogStream(ls)
+	}
+
+	new := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
+		Replicas: make(map[types.StorageNodeID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplica),
+	}
+
+	old, _ := cur.LogStream.LocalLogStreams[ls.LogStreamID]
+
+	for _, r := range ls.Replicas {
+		if o, ok := old.Replicas[r.StorageNodeID]; ok {
+			new.Replicas[r.StorageNodeID] = o
+		} else {
+			new.Replicas[r.StorageNodeID] = &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{}
+		}
+	}
+
+	new.Status = old.Status
+
+	cur.LogStream.LocalLogStreams[ls.LogStreamID] = new
+
+	return nil
+}
+
+func (ms *MetadataStorage) UpdateLogStream(ls *varlogpb.LogStreamDescriptor, nodeIndex, requestIndex uint64) error {
+	err := ms.updateLogStream(ls)
 	if err != nil {
 		if ms.cacheCompleteCB != nil {
 			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
@@ -213,26 +309,14 @@ func (ms *MetadataStorage) LookupGlobalLogStreamByPrev(glsn types.GLSN) *snpb.Gl
 func (ms *MetadataStorage) LookupLocalLogStream(lsID types.LogStreamID) *pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas {
 	pre, cur := ms.getStateMachine()
 
-	p, _ := pre.LogStream.LocalLogStreams[lsID]
 	c, _ := cur.LogStream.LocalLogStreams[lsID]
 
-	replicas := make(map[types.StorageNodeID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplica)
-
-	if p != nil {
-		for snID, l := range p.Replicas {
-			replicas[snID] = l
-		}
+	if c != nil {
+		return c
 	}
 
-	if c != nil && pre != cur {
-		for snID, l := range c.Replicas {
-			replicas[snID] = l
-		}
-	}
-
-	return &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
-		Replicas: replicas,
-	}
+	p, _ := pre.LogStream.LocalLogStreams[lsID]
+	return p
 }
 
 func (ms *MetadataStorage) LookupLocalLogStreamReplica(lsID types.LogStreamID, snID types.StorageNodeID) *pb.MetadataRepositoryDescriptor_LocalLogStreamReplica {
@@ -258,18 +342,31 @@ func (ms *MetadataStorage) LookupLocalLogStreamReplica(lsID types.LogStreamID, s
 }
 
 func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, snID types.StorageNodeID, s *pb.MetadataRepositoryDescriptor_LocalLogStreamReplica) {
-	_, cur := ms.getStateMachine()
+	pre, cur := ms.getStateMachine()
 
 	lm, ok := cur.LogStream.LocalLogStreams[lsID]
 	if !ok {
-		lm = &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
-			Replicas: make(map[types.StorageNodeID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplica),
+		o, ok := pre.LogStream.LocalLogStreams[lsID]
+		if !ok {
+			// ignore
+			return
 		}
 
+		lm = proto.Clone(o).(*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 		cur.LogStream.LocalLogStreams[lsID] = lm
 	}
 
+	if lm.Status != varlogpb.LogStreamStatusNormal {
+		return
+	}
+
+	if _, ok := lm.Replicas[snID]; !ok {
+		// ignore
+		return
+	}
+
 	lm.Replicas[snID] = s
+
 	ms.nrUpdateSinceCommit++
 }
 
@@ -363,6 +460,23 @@ func (ms *MetadataStorage) GetNextGLSFrom(glsn types.GLSN) *snpb.GlobalLogStream
 	return ms.LookupGlobalLogStreamByPrev(glsn)
 }
 
+func (ms *MetadataStorage) GetGLS() *snpb.GlobalLogStreamDescriptor {
+	ms.lsMu.RLock()
+	defer ms.lsMu.RUnlock()
+
+	n := len(ms.diffStateMachine.LogStream.GlobalLogStreams)
+	if n > 0 {
+		return ms.diffStateMachine.LogStream.GlobalLogStreams[n-1]
+	}
+
+	n = len(ms.origStateMachine.LogStream.GlobalLogStreams)
+	if n == 0 {
+		return nil
+	}
+
+	return ms.origStateMachine.LogStream.GlobalLogStreams[n-1]
+}
+
 func (ms *MetadataStorage) GetMetadata() *varlogpb.MetadataDescriptor {
 	ms.mcMu.RLock()
 	defer ms.mcMu.RUnlock()
@@ -438,7 +552,7 @@ func (ms *MetadataStorage) createMetadataCache(job *JobMetadataCache) {
 	defer ms.mcMu.Unlock()
 
 	ms.metaCache = cache
-	ms.metaCacheIndex = ms.metaAppliedIndex
+	ms.metaCacheIndex = atomic.LoadUint64(&ms.metaAppliedIndex)
 }
 
 func (ms *MetadataStorage) mergeMetadata() {
@@ -532,7 +646,7 @@ func (ms *MetadataStorage) triggerMetadataCache(nodeIndex, requestIndex uint64) 
 	ms.setCopyOnWrite()
 
 	job := &JobMetadataCache{
-		appliedIndex: ms.metaAppliedIndex,
+		appliedIndex: atomic.LoadUint64(&ms.metaAppliedIndex),
 		nodeIndex:    nodeIndex,
 		requestIndex: requestIndex,
 	}

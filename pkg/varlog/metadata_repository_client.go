@@ -9,7 +9,8 @@ import (
 
 type MetadataRepositoryClient interface {
 	RegisterStorageNode(context.Context, *varlogpb.StorageNodeDescriptor) error
-	CreateLogStream(context.Context, *varlogpb.LogStreamDescriptor) error
+	RegisterLogStream(context.Context, *varlogpb.LogStreamDescriptor) error
+	UpdateLogStream(context.Context, *varlogpb.LogStreamDescriptor) error
 	GetMetadata(context.Context) (*varlogpb.MetadataDescriptor, error)
 	Close() error
 }
@@ -40,7 +41,7 @@ func (c *metadataRepositoryClient) Close() error {
 }
 
 func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {
-	req := &pb.RegisterStorageNodeRequest{
+	req := &pb.StorageNodeRequest{
 		StorageNode: sn,
 	}
 
@@ -48,11 +49,19 @@ func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *
 	return toErr(ctx, err)
 }
 
-func (c *metadataRepositoryClient) CreateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
-	req := &pb.CreateLogStreamRequest{
+func (c *metadataRepositoryClient) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
+	req := &pb.LogStreamRequest{
 		LogStream: ls,
 	}
-	_, err := c.client.CreateLogStream(ctx, req)
+	_, err := c.client.RegisterLogStream(ctx, req)
+	return toErr(ctx, err)
+}
+
+func (c *metadataRepositoryClient) UpdateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
+	req := &pb.LogStreamRequest{
+		LogStream: ls,
+	}
+	_, err := c.client.UpdateLogStream(ctx, req)
 	return toErr(ctx, err)
 }
 

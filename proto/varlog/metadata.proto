@@ -15,7 +15,7 @@ enum LogStreamStatus {
 
         NONE = 0 [(gogoproto.enumvalue_customname) = "LogStreamStatusNone"];
         NORMAL = 1 [(gogoproto.enumvalue_customname) = "LogStreamStatusNormal"];
-        FINALIZED = 2 [(gogoproto.enumvalue_customname) = "LogStreamStatusFinalized"];
+        SEALED = 2 [(gogoproto.enumvalue_customname) = "LogStreamStatusSealed"];
 }
 
 message StorageDescriptor {

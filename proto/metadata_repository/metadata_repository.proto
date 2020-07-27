@@ -4,6 +4,7 @@ package varlog;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "varlog/metadata.proto";
+import "google/protobuf/empty.proto";
 
 option go_package = "github.com/kakao/varlog/proto/metadata_repository";
 
@@ -17,22 +18,48 @@ message GetMetadataResponse {
         MetadataDescriptor metadata = 1;
 }
 
-message RegisterStorageNodeRequest {
+message StorageNodeRequest {
         StorageNodeDescriptor storage_node = 1[(gogoproto.nullable) = true];
 }
 
-message RegisterStorageNodeResponse {
-}
-
-message CreateLogStreamRequest {
+message LogStreamRequest {
         LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
 }
 
-message CreateLogStreamResponse {
+message SealRequest {
+        int32 cluster_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+            (gogoproto.customname) = "ClusterID"];
+        int32 log_stream_id = 2
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            (gogoproto.customname) = "LogStreamID"];
+}
+
+message SealResponse {
+        LogStreamStatus status = 1;
+        uint64 last_committed_glsn = 2
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
+            (gogoproto.customname) = "LastCommittedGLSN"];
+}
+
+message UnsealRequest {
+        int32 cluster_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+            (gogoproto.customname) = "ClusterID"];
+        int32 log_stream_id = 2
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            (gogoproto.customname) = "LogStreamID"];
+}
+
+message UnsealResponse {
+        LogStreamStatus status = 1;
 }
 
 service MetadataRepositoryService {
-        rpc RegisterStorageNode(RegisterStorageNodeRequest) returns (RegisterStorageNodeResponse) {}
-        rpc CreateLogStream(CreateLogStreamRequest) returns (CreateLogStreamResponse) {}
+        rpc RegisterStorageNode(StorageNodeRequest) returns (google.protobuf.Empty) {}
+        rpc RegisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
+        rpc UpdateLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
         rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
+        rpc Seal(SealRequest) returns (SealResponse) {}
+        rpc Unseal(UnsealRequest) returns (UnsealResponse) {}
 }

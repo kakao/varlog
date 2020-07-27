@@ -20,14 +20,18 @@ var (
 	// LogIOClient
 	ErrUnordered = errors.New("unordered log stream")
 
-	ErrAlreadyExists = status.New(codes.AlreadyExists, "varlogserver: already exists").Err()
-	ErrSealed        = status.New(codes.FailedPrecondition, "logstream: sealed").Err()
-	ErrTrimmed       = status.New(codes.NotFound, "logstream: trimmed").Err()
-	ErrInternal      = status.New(codes.Internal, "internal error").Err()
-	ErrUndecidable   = status.New(codes.Unavailable, "logstream: undecidable whether no entry or uncommitted").Err()
+	ErrInvalidArgument = status.New(codes.InvalidArgument, "invalid argument").Err()
+	ErrAlreadyExists   = status.New(codes.AlreadyExists, "varlogserver: already exists").Err()
+	ErrNotExist        = status.New(codes.NotFound, "not exist").Err()
+	ErrSealed          = status.New(codes.FailedPrecondition, "logstream: sealed").Err()
+	ErrTrimmed         = status.New(codes.NotFound, "logstream: trimmed").Err()
+	ErrInternal        = status.New(codes.Internal, "internal error").Err()
+	ErrUndecidable     = status.New(codes.Unavailable, "logstream: undecidable whether no entry or uncommitted").Err()
 
 	errStringToError = map[string]error{
-		ErrorDesc(ErrAlreadyExists): ErrAlreadyExists,
+		ErrorDesc(ErrInvalidArgument): ErrInvalidArgument,
+		ErrorDesc(ErrAlreadyExists):   ErrAlreadyExists,
+		ErrorDesc(ErrNotExist):        ErrNotExist,
 	}
 )
 
@@ -108,4 +112,12 @@ func IsAlreadyExistsErr(err error) bool {
 	}
 
 	return err.Error() == Error(ErrAlreadyExists).Error()
+}
+
+func IsNotExistErr(err error) bool {
+	if _, ok := err.(VarlogError); !ok {
+		return false
+	}
+
+	return err.Error() == Error(ErrNotExist).Error()
 }

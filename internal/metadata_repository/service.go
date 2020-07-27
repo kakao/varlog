@@ -3,6 +3,7 @@ package metadata_repository
 import (
 	"context"
 
+	"github.com/gogo/protobuf/types"
 	pb "github.com/kakao/varlog/proto/metadata_repository"
 	"google.golang.org/grpc"
 )
@@ -22,23 +23,29 @@ func (s *MetadataRepositoryService) Register(server *grpc.Server) {
 	pb.RegisterMetadataRepositoryServiceServer(server, s)
 }
 
-func (s *MetadataRepositoryService) RegisterStorageNode(ctx context.Context, req *pb.RegisterStorageNodeRequest) (*pb.RegisterStorageNodeResponse, error) {
+func (s *MetadataRepositoryService) RegisterStorageNode(ctx context.Context, req *pb.StorageNodeRequest) (*types.Empty, error) {
 	err := s.metaRepos.RegisterStorageNode(ctx, req.StorageNode)
 	if err != nil {
-		return nil, err
+		return &types.Empty{}, err
 	}
 
-	rsp := &pb.RegisterStorageNodeResponse{}
-	return rsp, nil
+	return &types.Empty{}, nil
 }
 
-func (s *MetadataRepositoryService) CreateLogStream(ctx context.Context, req *pb.CreateLogStreamRequest) (*pb.CreateLogStreamResponse, error) {
-	err := s.metaRepos.CreateLogStream(ctx, req.LogStream)
+func (s *MetadataRepositoryService) RegisterLogStream(ctx context.Context, req *pb.LogStreamRequest) (*types.Empty, error) {
+	err := s.metaRepos.RegisterLogStream(ctx, req.LogStream)
 	if err != nil {
-		return nil, err
+		return &types.Empty{}, err
 	}
-	rsp := &pb.CreateLogStreamResponse{}
-	return rsp, nil
+	return &types.Empty{}, nil
+}
+
+func (s *MetadataRepositoryService) UpdateLogStream(ctx context.Context, req *pb.LogStreamRequest) (*types.Empty, error) {
+	err := s.metaRepos.UpdateLogStream(ctx, req.LogStream)
+	if err != nil {
+		return &types.Empty{}, err
+	}
+	return &types.Empty{}, nil
 }
 
 func (s *MetadataRepositoryService) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {

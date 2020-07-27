@@ -137,39 +137,17 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 		sn.Storages = append(sn.Storages, s)
 
 		err := env.cli.RegisterStorageNode(context.TODO(), sn)
-		So(err, ShouldEqual, nil)
+		So(err, ShouldBeNil)
 
 		Convey("Get Storage Node info from Metadata", func(ctx C) {
 			meta, err := env.cli.GetMetadata(context.TODO())
-			So(err, ShouldEqual, nil)
+			So(err, ShouldBeNil)
 			So(meta.GetStorageNode(snId), ShouldNotEqual, nil)
 		})
 
 		Convey("Register Exist Storage Node", func(ctx C) {
 			err := env.cli.RegisterStorageNode(context.TODO(), sn)
-			So(varlog.IsAlreadyExistsErr(err), ShouldEqual, true)
-		})
-	})
-
-	Convey("Create Log Stream", t, func(ctx C) {
-		lsId := types.LogStreamID(time.Now().UnixNano())
-
-		ls := &varlogpb.LogStreamDescriptor{
-			LogStreamID: lsId,
-		}
-
-		err := env.cli.CreateLogStream(context.TODO(), ls)
-		So(err, ShouldEqual, nil)
-
-		Convey("Get Log Steam info from Metadata", func(ctx C) {
-			meta, err := env.cli.GetMetadata(context.TODO())
-			So(err, ShouldEqual, nil)
-			So(meta.GetLogStream(lsId), ShouldNotEqual, nil)
-		})
-
-		Convey("Create Exist Log Steam", func(ctx C) {
-			err := env.cli.CreateLogStream(context.TODO(), ls)
-			So(varlog.IsAlreadyExistsErr(err), ShouldEqual, true)
+			So(varlog.IsAlreadyExistsErr(err), ShouldBeTrue)
 		})
 	})
 }

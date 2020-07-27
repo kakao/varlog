@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 )
 
+type ClusterID int32
+
 type StorageNodeID int32
 
 type LogStreamID int32

@@ -49,6 +49,10 @@ func (m *MetadataDescriptor) insertLogStreamAt(idx int, ls *LogStreamDescriptor)
 	m.LogStreams = l
 }
 
+func (m *MetadataDescriptor) updateLogStreamAt(idx int, ls *LogStreamDescriptor) {
+	m.LogStreams[idx] = ls
+}
+
 func (m *MetadataDescriptor) InsertStorageNode(sn *StorageNodeDescriptor) error {
 	if m == nil || sn == nil {
 		return nil
@@ -101,6 +105,20 @@ func (m *MetadataDescriptor) InsertLogStream(ls *LogStreamDescriptor) error {
 	}
 
 	m.insertLogStreamAt(idx, ls)
+	return nil
+}
+
+func (m *MetadataDescriptor) UpdateLogStream(ls *LogStreamDescriptor) error {
+	if m == nil || ls == nil {
+		return errors.New("not exist")
+	}
+
+	idx, match := m.searchLogStream(ls.LogStreamID)
+	if !match {
+		return errors.New("not exist")
+	}
+
+	m.updateLogStreamAt(idx, ls)
 	return nil
 }
 
