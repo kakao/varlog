@@ -251,8 +251,10 @@ func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
 	switch r := f.(type) {
 	case *pb.RegisterStorageNode:
 		mr.applyRegisterStorageNode(r, e.NodeIndex, e.RequestIndex)
-	case *pb.CreateLogStream:
-		mr.applyCreateLogStream(r, e.NodeIndex, e.RequestIndex)
+	case *pb.RegisterLogStream:
+		mr.applyRegisterLogStream(r, e.NodeIndex, e.RequestIndex)
+	case *pb.UpdateLogStream:
+		mr.applyUpdateLogStream(r, e.NodeIndex, e.RequestIndex)
 	case *pb.Report:
 		mr.applyReport(r)
 	case *pb.TrimCommit:
@@ -275,8 +277,17 @@ func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorage
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyCreateLogStream(r *pb.CreateLogStream, nodeIndex, requestIndex uint64) error {
-	err := mr.storage.CreateLogStream(r.LogStream, nodeIndex, requestIndex)
+func (mr *RaftMetadataRepository) applyRegisterLogStream(r *pb.RegisterLogStream, nodeIndex, requestIndex uint64) error {
+	err := mr.storage.RegisterLogStream(r.LogStream, nodeIndex, requestIndex)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applyUpdateLogStream(r *pb.UpdateLogStream, nodeIndex, requestIndex uint64) error {
+	err := mr.storage.UpdateLogStream(r.LogStream, nodeIndex, requestIndex)
 	if err != nil {
 		return err
 	}
@@ -319,13 +330,9 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 	if mr.storage.NumUpdateSinceCommit() > 0 {
 		lsIDs := mr.storage.GetLocalLogStreamIDs()
 
-	Loop:
 		for _, lsID := range lsIDs {
 			replicas := mr.storage.LookupLocalLogStream(lsID)
 			knownGLSN, nrUncommit := mr.calculateCommit(replicas)
-			if nrUncommit == 0 {
-				continue Loop
-			}
 
 			if knownGLSN != curGLSN {
 				nrCommitted, ok := mr.numCommitSince(lsID, knownGLSN)
@@ -337,11 +344,17 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 					)
 				}
 
-				if nrCommitted < nrUncommit {
-					nrUncommit -= nrCommitted
-				} else {
-					continue Loop
+				if nrCommitted > nrUncommit {
+					mr.logger.Panic("# of uncommit should be bigger than # of commit",
+						zap.Uint64("lsID", uint64(lsID)),
+						zap.Uint64("known", uint64(knownGLSN)),
+						zap.Uint64("cur", uint64(curGLSN)),
+						zap.Uint64("uncommit", uint64(nrUncommit)),
+						zap.Uint64("commit", uint64(nrCommitted)),
+					)
 				}
+
+				nrUncommit -= nrCommitted
 			}
 
 			commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
@@ -356,7 +369,9 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 	}
 	gls.NextGLSN = newGLSN
 
-	mr.storage.AppendGlobalLogStream(gls)
+	if newGLSN > curGLSN {
+		mr.storage.AppendGlobalLogStream(gls)
+	}
 	mr.reportCollector.Commit(gls)
 	mr.proposeTrimCommit()
 
@@ -432,6 +447,20 @@ func (mr *RaftMetadataRepository) calculateCommit(replicas *pb.MetadataRepositor
 	return knownGLSN, uint64(endLLSN - beginLLSN)
 }
 
+func (mr *RaftMetadataRepository) getLastCommitted(lsId types.LogStreamID) types.GLSN {
+	gls := mr.storage.GetGLS()
+	if gls == nil {
+		return types.GLSN(0)
+	}
+
+	r := getCommitResultFromGLS(gls, lsId)
+	if r == nil {
+		mr.logger.Panic("get last committed")
+	}
+
+	return r.CommittedGLSNEnd
+}
+
 func (mr *RaftMetadataRepository) proposeCommit() {
 	if !mr.isLeader() {
 		return
@@ -439,8 +468,6 @@ func (mr *RaftMetadataRepository) proposeCommit() {
 
 	r := &pb.Commit{}
 	mr.propose(context.TODO(), r, false)
-
-	return
 }
 
 func (mr *RaftMetadataRepository) proposeTrimCommit() {
@@ -459,8 +486,6 @@ func (mr *RaftMetadataRepository) proposeTrimCommit() {
 		}
 		mr.propose(context.TODO(), r, false)
 	*/
-
-	return
 }
 
 func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescriptor) {
@@ -468,8 +493,6 @@ func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescript
 		LogStream: lls,
 	}
 	mr.propose(context.TODO(), r, false)
-
-	return
 }
 
 func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, guarantee bool) error {
@@ -510,8 +533,16 @@ func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *v
 	return mr.propose(ctx, r, true)
 }
 
-func (mr *RaftMetadataRepository) CreateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
-	r := &pb.CreateLogStream{
+func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
+	r := &pb.RegisterLogStream{
+		LogStream: ls,
+	}
+
+	return mr.propose(ctx, r, true)
+}
+
+func (mr *RaftMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
+	r := &pb.UpdateLogStream{
 		LogStream: ls,
 	}
 
@@ -521,4 +552,29 @@ func (mr *RaftMetadataRepository) CreateLogStream(ctx context.Context, ls *varlo
 func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	m := mr.storage.GetMetadata()
 	return m, nil
+}
+
+func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStreamID) (types.GLSN, error) {
+	return types.GLSN(0), errors.New("not yet implemanted")
+
+	r := &pb.Seal{
+		LogStreamID: lsID,
+	}
+
+	err := mr.propose(ctx, r, true)
+	if err != nil {
+		return types.GLSN(0), err
+	}
+
+	return mr.getLastCommitted(lsID), nil
+}
+
+func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStreamID) error {
+	return errors.New("not yet implemanted")
+
+	r := &pb.Unseal{
+		LogStreamID: lsID,
+	}
+
+	return mr.propose(ctx, r, true)
 }

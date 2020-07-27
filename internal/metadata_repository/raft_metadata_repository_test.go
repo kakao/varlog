@@ -2,7 +2,6 @@ package metadata_repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -48,7 +47,6 @@ func newMetadataRepoCluster(n, nrRep int) *metadataRepoCluster {
 		if err != nil {
 			return nil
 		}
-		fmt.Printf("host %s\n", url.Host)
 		nodeID := types.NewNodeID(url.Host)
 
 		os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
@@ -119,52 +117,97 @@ func makeLocalLogStream(snId types.StorageNodeID, knownNextGLSN types.GLSN, lsId
 	return lls
 }
 
+func makeLogStream(lsID types.LogStreamID, snIDs []types.StorageNodeID) *varlogpb.LogStreamDescriptor {
+	ls := &varlogpb.LogStreamDescriptor{
+		LogStreamID: lsID,
+		Status:      varlogpb.LogStreamStatusNormal,
+	}
+
+	for _, snID := range snIDs {
+		r := &varlogpb.ReplicaDescriptor{
+			StorageNodeID: snID,
+		}
+
+		ls.Replicas = append(ls.Replicas, r)
+	}
+
+	return ls
+}
+
 func TestApplyReport(t *testing.T) {
-	Convey("Report Should be applied", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 2)
+
+	Convey("Report Should not be applied if not register LogStream", t, func(ctx C) {
+		rep := 2
+		clus := newMetadataRepoCluster(1, rep)
 		mr := clus.nodes[0]
 
-		snId := types.StorageNodeID(0)
-		lsId := types.LogStreamID(0)
+		snIds := make([]types.StorageNodeID, rep)
+		for i := range snIds {
+			snIds[i] = types.StorageNodeID(i)
 
-		// propose report
-		lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIds[i],
+			}
+
+			err := mr.storage.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+		lsId := types.LogStreamID(0)
+		notExistSnID := types.StorageNodeID(rep)
+
+		lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
 		mr.applyReport(&pb.Report{LogStream: lls})
 
-		_, sm := mr.storage.getStateMachine()
-		m, ok := sm.LogStream.LocalLogStreams[lsId]
-		So(ok, ShouldBeTrue)
+		for _, snId := range snIds {
+			r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+			So(r, ShouldBeNil)
+		}
 
-		lc, ok := m.Replicas[snId]
-		So(ok, ShouldBeTrue)
-		So(lc.EndLLSN, ShouldEqual, types.LLSN(2))
+		Convey("LocalLogStream should register when register LogStream", func(ctx C) {
+			ls := makeLogStream(lsId, snIds)
+			err := mr.storage.registerLogStream(ls)
+			So(err, ShouldBeNil)
 
-		Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
-			// propose report
-			lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(3))
-			mr.applyReport(&pb.Report{LogStream: lls})
+			for _, snId := range snIds {
+				r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+				So(r, ShouldNotBeNil)
+			}
 
-			_, sm := mr.storage.getStateMachine()
-			m, ok := sm.LogStream.LocalLogStreams[lsId]
-			So(ok, ShouldBeTrue)
+			Convey("Report should not apply if snID is not exist in LocalLogStream", func(ctx C) {
+				lls := makeLocalLogStream(notExistSnID, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
+				mr.applyReport(&pb.Report{LogStream: lls})
 
-			lc, ok := m.Replicas[snId]
-			So(ok, ShouldBeTrue)
-			So(lc.EndLLSN, ShouldEqual, types.LLSN(3))
-		})
+				r := mr.storage.LookupLocalLogStreamReplica(lsId, notExistSnID)
+				So(r, ShouldBeNil)
+			})
 
-		Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
-			// propose report
-			lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(1))
-			mr.applyReport(&pb.Report{LogStream: lls})
+			Convey("Report should apply if snID is exist in LocalLogStream", func(ctx C) {
+				snId := snIds[0]
+				lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
+				mr.applyReport(&pb.Report{LogStream: lls})
 
-			_, sm := mr.storage.getStateMachine()
-			m, ok := sm.LogStream.LocalLogStreams[lsId]
-			So(ok, ShouldBeTrue)
+				r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+				So(r, ShouldNotBeNil)
+				So(r.EndLLSN, ShouldEqual, types.LLSN(2))
 
-			lc, ok := m.Replicas[snId]
-			So(ok, ShouldBeTrue)
-			So(lc.EndLLSN, ShouldNotEqual, types.LLSN(1))
+				Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
+					lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(3))
+					mr.applyReport(&pb.Report{LogStream: lls})
+
+					r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+					So(r, ShouldNotBeNil)
+					So(r.EndLLSN, ShouldEqual, types.LLSN(3))
+				})
+
+				Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
+					lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(1))
+					mr.applyReport(&pb.Report{LogStream: lls})
+
+					r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+					So(r, ShouldNotBeNil)
+					So(r.EndLLSN, ShouldNotEqual, types.LLSN(1))
+				})
+			})
 		})
 	})
 }
@@ -172,14 +215,22 @@ func TestApplyReport(t *testing.T) {
 func TestCalculateCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
 		clus := newMetadataRepoCluster(1, 2)
+		mr := clus.nodes[0]
 
 		snIds := make([]types.StorageNodeID, 2)
 		for i := range snIds {
 			snIds[i] = types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIds[i],
+			}
+
+			err := mr.storage.registerStorageNode(sn)
+			So(err, ShouldBeNil)
 		}
 		lsId := types.LogStreamID(0)
-
-		mr := clus.nodes[0]
+		ls := makeLogStream(lsId, snIds)
+		err := mr.storage.registerLogStream(ls)
+		So(err, ShouldBeNil)
 
 		Convey("LogStream which all reports have not arrived cannot be commit", func(ctx C) {
 			lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
@@ -217,32 +268,32 @@ func TestCalculateCommit(t *testing.T) {
 	})
 }
 
-func waitCommit(resultF func() types.GLSN, glsn types.GLSN) error {
-	t := time.After(time.Second)
-
-	for {
-		select {
-		case <-t:
-			return errors.New("timeout")
-		default:
-			if resultF() == glsn {
-				return nil
-			}
-
-			time.Sleep(time.Millisecond)
-		}
-	}
-}
-
 func TestGlobalCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 2)
+		rep := 2
+		clus := newMetadataRepoCluster(1, rep)
 		clus.Start()
 		clus.waitVote()
 
-		snIds := make([]types.StorageNodeID, 4)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
+		mr := clus.nodes[0]
+
+		snIds := make([][]types.StorageNodeID, 2)
 		for i := range snIds {
-			snIds[i] = types.StorageNodeID(i)
+			snIds[i] = make([]types.StorageNodeID, rep)
+			for j := range snIds[i] {
+				snIds[i][j] = types.StorageNodeID(i*2 + j)
+
+				sn := &varlogpb.StorageNodeDescriptor{
+					StorageNodeID: snIds[i][j],
+				}
+
+				err := mr.storage.registerStorageNode(sn)
+				So(err, ShouldBeNil)
+			}
 		}
 
 		lsIds := make([]types.LogStreamID, 2)
@@ -250,87 +301,96 @@ func TestGlobalCommit(t *testing.T) {
 			lsIds[i] = types.LogStreamID(i)
 		}
 
-		mr := clus.nodes[0]
+		for i, lsId := range lsIds {
+			ls := makeLogStream(lsId, snIds[i])
+			err := mr.storage.registerLogStream(ls)
+			So(err, ShouldBeNil)
+		}
 
 		Convey("global commit", func(ctx C) {
-			lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+			lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
 			mr.proposeReport(lls)
 
-			lls = makeLocalLogStream(snIds[1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+			lls = makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
 			mr.proposeReport(lls)
 
-			lls = makeLocalLogStream(snIds[2], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4))
+			lls = makeLocalLogStream(snIds[1][0], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4))
 			mr.proposeReport(lls)
 
-			lls = makeLocalLogStream(snIds[3], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(3))
+			lls = makeLocalLogStream(snIds[1][1], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(3))
 			mr.proposeReport(lls)
 
 			// global commit (2, 3) highest glsn: 5
-			So(waitCommit(mr.storage.GetNextGLSN, types.GLSN(5)), ShouldBeNil)
+			So(testutil.CompareWait(func() bool {
+				return mr.storage.GetNextGLSN() == types.GLSN(5)
+			}, time.Second), ShouldBeTrue)
 
 			Convey("LogStream should be dedup", func(ctx C) {
-				lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(3))
+				lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(3))
 				mr.proposeReport(lls)
 
-				lls = makeLocalLogStream(snIds[1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+				lls = makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
 				mr.proposeReport(lls)
 
 				time.Sleep(100 * time.Millisecond)
-				So(waitCommit(mr.storage.GetNextGLSN, types.GLSN(5)), ShouldBeNil)
+
+				So(testutil.CompareWait(func() bool {
+					return mr.storage.GetNextGLSN() == types.GLSN(5)
+				}, time.Second), ShouldBeTrue)
 			})
 
 			Convey("LogStream which have wrong GLSN but have uncommitted should commit", func(ctx C) {
-				lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(6))
+				lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(6))
 				mr.proposeReport(lls)
 
-				lls = makeLocalLogStream(snIds[1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(6))
+				lls = makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(6))
 				mr.proposeReport(lls)
 
-				So(waitCommit(mr.storage.GetNextGLSN, types.GLSN(9)), ShouldBeNil)
+				So(testutil.CompareWait(func() bool {
+					return mr.storage.GetNextGLSN() == types.GLSN(9)
+				}, time.Second), ShouldBeTrue)
 			})
-		})
-
-		Reset(func() {
-			clus.closeNoErrors(t)
 		})
 	})
 }
 
 func TestSimpleReportNCommit(t *testing.T) {
-	clus := newMetadataRepoCluster(1, 1)
-	defer clus.closeNoErrors(t)
+	Convey("Uncommitted LocalLogStream should be committed", t, func(ctx C) {
+		clus := newMetadataRepoCluster(1, 1)
+		clus.Start()
+		clus.waitVote()
 
-	clus.Start()
-	clus.waitVote()
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
 
-	snID := types.StorageNodeID(0)
+		snID := types.StorageNodeID(0)
+		snIDs := make([]types.StorageNodeID, 1)
+		snIDs = append(snIDs, snID)
 
-	sn := &varlogpb.StorageNodeDescriptor{
-		StorageNodeID: snID,
-	}
+		lsID := types.LogStreamID(snID)
 
-	err := clus.nodes[0].RegisterStorageNode(context.TODO(), sn)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-REGISTER_CHECK:
-	for {
-		cli := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID)
-		if cli != nil {
-			break REGISTER_CHECK
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: snID,
 		}
 
-		time.Sleep(time.Millisecond)
-	}
+		err := clus.nodes[0].RegisterStorageNode(context.TODO(), sn)
+		So(err, ShouldBeNil)
 
-	Convey("Uncommitted LocalLogStream should be committed", t, func(ctx C) {
+		So(testutil.CompareWait(func() bool {
+			return clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID) != nil
+		}, time.Second), ShouldBeTrue)
+
+		ls := makeLogStream(lsID, snIDs)
+		err = clus.nodes[0].RegisterLogStream(context.TODO(), ls)
+		So(err, ShouldBeNil)
+
 		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID)
 		reporterClient.increaseUncommitted()
 
-		time.Sleep(time.Second)
-
-		So(reporterClient.numUncommitted(), ShouldBeZeroValue)
+		So(testutil.CompareWait(func() bool {
+			return reporterClient.numUncommitted() == 0
+		}, time.Second), ShouldBeTrue)
 	})
 }
 
@@ -423,6 +483,10 @@ func TestRequestMap(t *testing.T) {
 		clus.Start()
 		clus.waitVote()
 
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
 		mr := clus.nodes[0]
 
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -434,9 +498,5 @@ func TestRequestMap(t *testing.T) {
 
 		_, ok := mr.requestMap.Load(uint64(1))
 		So(ok, ShouldBeFalse)
-
-		Reset(func() {
-			clus.closeNoErrors(t)
-		})
 	})
 }

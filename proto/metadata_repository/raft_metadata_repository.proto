@@ -17,7 +17,11 @@ message RegisterStorageNode {
         StorageNodeDescriptor storage_node = 1[(gogoproto.nullable) = true];
 }
 
-message CreateLogStream {
+message RegisterLogStream {
+        LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
+}
+
+message UpdateLogStream {
         LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
 }
 
@@ -34,15 +38,28 @@ message TrimCommit {
         (gogoproto.customname) = "GLSN"];
 }
 
+message Seal {
+        int32 log_stream_id = 1
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            (gogoproto.customname) = "LogStreamID"];
+}
+
+message Unseal {
+        int32 log_stream_id = 1
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            (gogoproto.customname) = "LogStreamID"];
+}
+
 message RaftEntry {
         message Request {
                 option (gogoproto.onlyone) = true;
 
-                RegisterStorageNode storage_node = 1;
-                CreateLogStream log_stream = 2;
-                Report report = 3;
-                Commit commit = 4;
-                TrimCommit trim_commit = 5;
+                RegisterStorageNode register_storage_node = 1;
+                RegisterLogStream register_log_stream = 2;
+                UpdateLogStream update_log_stream = 3;
+                Report report = 4;
+                Commit commit = 5;
+                TrimCommit trim_commit = 6;
         }
         uint64 node_index = 1;
         uint64 request_index = 2;
@@ -64,7 +81,8 @@ message MetadataRepositoryDescriptor {
         }
 
         message LocalLogStreamReplicas {
-            map<int32, LocalLogStreamReplica> replicas = 1[(gogoproto.castkey)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID"];
+                map<int32, LocalLogStreamReplica> replicas = 1[(gogoproto.castkey)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID"];
+                LogStreamStatus status = 2;
         }
 
         message LogStreamDescriptor {

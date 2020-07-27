@@ -40,7 +40,7 @@ func (r *InMemoryMetadataRepository) RegisterStorageNode(ctx context.Context, sn
 	return nil
 }
 
-func (r *InMemoryMetadataRepository) CreateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
+func (r *InMemoryMetadataRepository) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -51,11 +51,30 @@ func (r *InMemoryMetadataRepository) CreateLogStream(ctx context.Context, ls *va
 	return nil
 }
 
+func (r *InMemoryMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if err := r.metadata.UpdateLogStream(ls); err != nil {
+		return varlog.ErrNotExist
+	}
+
+	return nil
+}
+
 func (r *InMemoryMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	return &r.metadata, nil
+}
+
+func (r *InMemoryMetadataRepository) Seal(ctx context.Context, lsID types.LogStreamID) (types.GLSN, error) {
+	return types.GLSN(0), errors.New("not yet implemented")
+}
+
+func (r *InMemoryMetadataRepository) Unseal(ctx context.Context, lsID types.LogStreamID) error {
+	return errors.New("not yet implemented")
 }
 
 func (r *InMemoryMetadataRepository) aggregator() {

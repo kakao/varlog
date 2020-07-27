@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	varlog "github.daumkakao.com/varlog/varlog/pkg/varlog"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
 	pb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
@@ -16,7 +17,192 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestCopyOnWrite(t *testing.T) {
+func TestStorageRegisterSN(t *testing.T) {
+	Convey("SN should be registered", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+		snID := types.StorageNodeID(time.Now().UnixNano())
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: snID,
+		}
+
+		err := ms.registerStorageNode(sn)
+		So(err, ShouldBeNil)
+
+		Convey("SN should not be registered if arleady exist", func(ctx C) {
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldResemble, varlog.ErrAlreadyExists)
+		})
+	})
+}
+
+func TestStorageRegisterLS(t *testing.T) {
+	Convey("LS which has no SN should not be registerd", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		ls := makeLogStream(lsID, nil)
+
+		err := ms.registerLogStream(ls)
+		So(err, ShouldResemble, varlog.ErrInvalidArgument)
+	})
+
+	Convey("LS should not be registerd if not exist proper SN", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		rep := 2
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		tmp := types.StorageNodeID(time.Now().UnixNano())
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = tmp + types.StorageNodeID(i)
+		}
+		ls := makeLogStream(lsID, snIDs)
+
+		err := ms.registerLogStream(ls)
+		So(err, ShouldResemble, varlog.ErrInvalidArgument)
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: snIDs[0],
+		}
+
+		err = ms.registerStorageNode(sn)
+		So(err, ShouldBeNil)
+
+		err = ms.registerLogStream(ls)
+		So(err, ShouldResemble, varlog.ErrInvalidArgument)
+
+		Convey("LS should be registerd if exist all SN", func(ctx C) {
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[1],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+
+			err = ms.registerLogStream(ls)
+			So(err, ShouldBeNil)
+
+			Convey("registered LS should be lookuped", func(ctx C) {
+				for i := 0; i < rep; i++ {
+					So(ms.LookupLocalLogStreamReplica(lsID, snIDs[i]), ShouldNotBeNil)
+				}
+			})
+		})
+	})
+}
+
+func TestStorageUpdateLS(t *testing.T) {
+	Convey("LS should not be updated if not exist proper SN", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		rep := 2
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+		ls := makeLogStream(lsID, snIDs)
+
+		err := ms.registerLogStream(ls)
+		So(err, ShouldBeNil)
+
+		updateSnIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			updateSnIDs[i] = snIDs[i] + types.StorageNodeID(rep)
+		}
+		updateLS := makeLogStream(lsID, updateSnIDs)
+
+		err = ms.updateLogStream(updateLS)
+		So(err, ShouldResemble, varlog.ErrInvalidArgument)
+
+		Convey("LS should be updated if exist all SN", func(ctx C) {
+			for i := 0; i < rep; i++ {
+				sn := &varlogpb.StorageNodeDescriptor{
+					StorageNodeID: updateSnIDs[i],
+				}
+
+				err := ms.registerStorageNode(sn)
+				So(err, ShouldBeNil)
+			}
+
+			err = ms.updateLogStream(updateLS)
+			So(err, ShouldBeNil)
+			Convey("updated LS should be lookuped", func(ctx C) {
+				for i := 0; i < rep; i++ {
+					So(ms.LookupLocalLogStreamReplica(lsID, snIDs[i]), ShouldBeNil)
+					So(ms.LookupLocalLogStreamReplica(lsID, updateSnIDs[i]), ShouldNotBeNil)
+				}
+			})
+		})
+	})
+}
+
+func TestStorageReport(t *testing.T) {
+	Convey("storage should not apply report if not registered LS", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		rep := 2
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		tmp := types.StorageNodeID(time.Now().UnixNano())
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = tmp + types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+		notExistSnID := tmp + types.StorageNodeID(rep)
+
+		r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+			BeginLLSN:     types.LLSN(0),
+			EndLLSN:       types.LLSN(5),
+			KnownNextGLSN: types.GLSN(0),
+		}
+
+		for i := 0; i < rep; i++ {
+			ms.UpdateLocalLogStreamReplica(lsID, snIDs[i], r)
+			So(ms.LookupLocalLogStreamReplica(lsID, snIDs[i]), ShouldBeNil)
+		}
+
+		Convey("storage should not apply report if snID is not exist in LS", func(ctx C) {
+			ls := makeLogStream(lsID, snIDs)
+			ms.registerLogStream(ls)
+
+			r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+				BeginLLSN:     types.LLSN(0),
+				EndLLSN:       types.LLSN(5),
+				KnownNextGLSN: types.GLSN(0),
+			}
+
+			ms.UpdateLocalLogStreamReplica(lsID, notExistSnID, r)
+			So(ms.LookupLocalLogStreamReplica(lsID, notExistSnID), ShouldBeNil)
+
+			Convey("storage should apply report if snID is exist in LS", func(ctx C) {
+				r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+					BeginLLSN:     types.LLSN(0),
+					EndLLSN:       types.LLSN(5),
+					KnownNextGLSN: types.GLSN(0),
+				}
+
+				for i := 0; i < rep; i++ {
+					ms.UpdateLocalLogStreamReplica(lsID, snIDs[i], r)
+					So(ms.LookupLocalLogStreamReplica(lsID, snIDs[i]), ShouldNotBeNil)
+				}
+			})
+		})
+	})
+}
+
+func TestStorageCopyOnWrite(t *testing.T) {
 	Convey("storage should returns different stateMachine while copyOnWrite", t, func(ctx C) {
 		ms := NewMetadataStorage(nil)
 
@@ -76,12 +262,24 @@ func TestCopyOnWrite(t *testing.T) {
 	Convey("copyOnWrite storage should give the same response for createLogStream", t, func(ctx C) {
 		ms := NewMetadataStorage(nil)
 
+		rep := 2
 		lsID := types.LogStreamID(time.Now().UnixNano())
-		ls := &varlogpb.LogStreamDescriptor{
-			LogStreamID: lsID,
-		}
+		lsID2 := lsID + types.LogStreamID(1)
 
-		err := ms.CreateLogStream(ls, 0, 0)
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+		ls := makeLogStream(lsID, snIDs)
+		ls2 := makeLogStream(lsID2, snIDs)
+
+		err := ms.RegisterLogStream(ls, 0, 0)
 		So(err, ShouldBeNil)
 		So(ms.isCopyOnWrite(), ShouldBeTrue)
 
@@ -89,15 +287,10 @@ func TestCopyOnWrite(t *testing.T) {
 		So(pre.Metadata.GetLogStream(lsID), ShouldNotBeNil)
 		So(cur.Metadata.GetLogStream(lsID), ShouldBeNil)
 
-		err = ms.CreateLogStream(ls, 0, 0)
-		So(err, ShouldNotBeNil)
+		err = ms.RegisterLogStream(ls, 0, 0)
+		So(err, ShouldResemble, varlog.ErrAlreadyExists)
 
-		lsID2 := lsID + types.LogStreamID(1)
-		ls = &varlogpb.LogStreamDescriptor{
-			LogStreamID: lsID2,
-		}
-
-		err = ms.CreateLogStream(ls, 0, 0)
+		err = ms.RegisterLogStream(ls2, 0, 0)
 		So(err, ShouldBeNil)
 
 		So(pre.Metadata.GetLogStream(lsID2), ShouldBeNil)
@@ -107,36 +300,46 @@ func TestCopyOnWrite(t *testing.T) {
 	Convey("update LocalLogStream does not make storage copyOnWrite", t, func(ctx C) {
 		ms := NewMetadataStorage(nil)
 
+		rep := 2
 		lsID := types.LogStreamID(time.Now().UnixNano())
-		snID := types.StorageNodeID(time.Now().UnixNano())
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+		ls := makeLogStream(lsID, snIDs)
+		ms.registerLogStream(ls)
+
 		r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 			BeginLLSN:     types.LLSN(0),
 			EndLLSN:       types.LLSN(5),
 			KnownNextGLSN: types.GLSN(10),
 		}
-		ms.UpdateLocalLogStreamReplica(lsID, snID, r)
+		ms.UpdateLocalLogStreamReplica(lsID, snIDs[0], r)
 		So(ms.isCopyOnWrite(), ShouldBeFalse)
-		So(ms.LookupLocalLogStreamReplica(lsID, snID), ShouldNotBeNil)
+
+		for i := 0; i < rep; i++ {
+			So(ms.LookupLocalLogStreamReplica(lsID, snIDs[i]), ShouldNotBeNil)
+		}
 
 		Convey("lookup LocalLogStream with copyOnWrite should give merged response", func(ctx C) {
 			ms.setCopyOnWrite()
 
-			snID2 := snID + types.StorageNodeID(1)
 			r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 				BeginLLSN:     types.LLSN(0),
 				EndLLSN:       types.LLSN(5),
 				KnownNextGLSN: types.GLSN(10),
 			}
-			ms.UpdateLocalLogStreamReplica(lsID, snID2, r)
-			So(ms.LookupLocalLogStreamReplica(lsID, snID), ShouldNotBeNil)
-			So(ms.LookupLocalLogStreamReplica(lsID, snID2), ShouldNotBeNil)
+			ms.UpdateLocalLogStreamReplica(lsID, snIDs[1], r)
 
-			replicas := ms.LookupLocalLogStream(lsID)
-			So(replicas, ShouldNotBeNil)
-			_, ok := replicas.Replicas[snID]
-			So(ok, ShouldBeTrue)
-			_, ok = replicas.Replicas[snID2]
-			So(ok, ShouldBeTrue)
+			for i := 0; i < rep; i++ {
+				So(ms.LookupLocalLogStreamReplica(lsID, snIDs[i]), ShouldNotBeNil)
+			}
 		})
 	})
 
@@ -184,7 +387,7 @@ func TestCopyOnWrite(t *testing.T) {
 	})
 }
 
-func TestMetadataCache(t *testing.T) {
+func TestStorageMetadataCache(t *testing.T) {
 	Convey("cacheCompleteCB should return after make cache", t, func(ctx C) {
 		ch := make(chan struct{}, 1)
 		cb := func(uint64, uint64, error) {
@@ -270,7 +473,7 @@ func TestMetadataCache(t *testing.T) {
 	})
 }
 
-func TestStateMachineMerge(t *testing.T) {
+func TestStorageStateMachineMerge(t *testing.T) {
 	Convey("merge stateMachine should not operate while job running", t, func(ctx C) {
 		ch := make(chan struct{}, 1)
 		cb := func(uint64, uint64, error) {
@@ -372,7 +575,7 @@ func TestStateMachineMerge(t *testing.T) {
 	})
 }
 
-func TestSnapshot(t *testing.T) {
+func TestStorageSnapshot(t *testing.T) {
 	Convey("create snapshot should not operate while job running", t, func(ctx C) {
 		ch := make(chan struct{}, 1)
 		cb := func(uint64, uint64, error) {
@@ -448,7 +651,7 @@ func TestSnapshot(t *testing.T) {
 	})
 }
 
-func TestSnapshotRace(t *testing.T) {
+func TestStorageSnapshotRace(t *testing.T) {
 	Convey("create snapshot", t, func(ctx C) {
 		defaultSnapshotCount = uint64(100 + rand.Int31n(64))
 
@@ -458,6 +661,27 @@ func TestSnapshotRace(t *testing.T) {
 		n := 10000
 		numLS := 128
 		numRep := 3
+
+		lsIDs := make([]types.LogStreamID, numLS)
+		snIDs := make([][]types.StorageNodeID, numLS)
+		for i := 0; i < numLS; i++ {
+			lsIDs[i] = types.LogStreamID(i)
+			snIDs[i] = make([]types.StorageNodeID, numRep)
+			for j := 0; j < numRep; j++ {
+				snIDs[i][j] = types.StorageNodeID(i*numRep + j)
+
+				sn := &varlogpb.StorageNodeDescriptor{
+					StorageNodeID: snIDs[i][j],
+				}
+
+				err := ms.registerStorageNode(sn)
+				So(err, ShouldBeNil)
+			}
+
+			ls := makeLogStream(lsIDs[i], snIDs[i])
+			err := ms.RegisterLogStream(ls, 0, 0)
+			So(err, ShouldBeNil)
+		}
 
 		appliedIndex := uint64(0)
 		checkGLS := 0
