@@ -11,24 +11,6 @@ import (
 	pb "github.com/kakao/varlog/proto/storage_node"
 )
 
-func TestStorageNodeServiceAddLogStream(t *testing.T) {
-	Convey("AddLogStream should add a LogStream", t, func() {
-		s := NewLogIOService(types.StorageNodeID(1))
-		logStreamID := types.LogStreamID(1)
-		_, err := s.AddLogStream(context.TODO(), &pb.AddLogStreamRequest{
-			LogStreamID: logStreamID,
-		})
-		So(err, ShouldBeNil)
-
-		Convey("it should return error if the LogStream already exists", func() {
-			_, err := s.AddLogStream(context.TODO(), &pb.AddLogStreamRequest{
-				LogStreamID: logStreamID,
-			})
-			So(err, ShouldNotBeNil)
-		})
-	})
-}
-
 func TestStorageNodeServiceAppend(t *testing.T) {
 	Convey("Append", t, func() {
 		ctrl := gomock.NewController(t)

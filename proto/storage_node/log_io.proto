@@ -6,16 +6,6 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "github.com/kakao/varlog/proto/storage_node";
 
-message AddLogStreamRequest {
-    int32 log_stream_id = 1
-        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
-         (gogoproto.customname) = "LogStreamID"];
-}
-
-message AddLogStreamResponse {
-    // TODO: storage metadata
-}
-
 // AppendRequest is a message to send a payload to a storage node. It contains
 // a vector of storage nodes to replicate the payload.
 message AppendRequest {
@@ -99,8 +89,6 @@ message TrimResponse {
 }
 
 service LogIO {
-    rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
-
     rpc Append(AppendRequest) returns (AppendResponse) {}
     rpc Read(ReadRequest) returns (ReadResponse) {}
     rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}

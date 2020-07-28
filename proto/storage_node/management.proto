@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package varlog;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/empty.proto";
+import "varlog/metadata.proto";
+
+option go_package = "github.com/kakao/varlog/proto/storage_node";
+
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+
+enum MetadataType {
+    option (gogoproto.goproto_enum_prefix) = false;
+    CONFIGS = 0 [(gogoproto.enumvalue_customname) = "MetadataTypeConfigs"];
+    STATS = 1 [(gogoproto.enumvalue_customname) = "MetadataTypeStats"];
+    LOG_STREAMS = 2 [(gogoproto.enumvalue_customname) = "MetadataTypeLogStreams"];
+}
+
+message GetMetadataRequest {
+    MetadataType metadata_type = 1;
+}
+
+message GetMetadataResponse {
+    varlog.StorageNodeDescriptor storage_node = 1;
+    repeated varlog.LogStreamDescriptor log_streams = 2;
+}
+
+message AddLogStreamRequest {
+    int32 cluster_id = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+         (gogoproto.customname) = "ClusterID"];
+    int32 storage_node_id = 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+         (gogoproto.customname) = "StorageNodeID"];
+    int32 log_stream_id = 3
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
+    varlog.StorageDescriptor storage = 4;
+}
+message AddLogStreamResponse {
+    varlog.LogStreamDescriptor log_stream = 1;
+}
+
+message RemoveLogStreamRequest {
+    int32 cluster_id = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+         (gogoproto.customname) = "ClusterID"];
+    int32 storage_node_id = 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+         (gogoproto.customname) = "StorageNodeID"];
+    int32 log_stream_id = 3
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
+}
+
+message SealRequest {
+    int32 cluster_id = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+         (gogoproto.customname) = "ClusterID"];
+    int32 storage_node_id = 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+         (gogoproto.customname) = "StorageNodeID"];
+    int32 log_stream_id = 3
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
+    uint64 last_committed_glsn = 4
+        [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+         (gogoproto.customname) = "LastCommittedGLSN"];
+}
+
+message SealResponse {
+    varlog.LogStreamStatus status = 1;
+    uint64 last_committed_glsn = 2
+        [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+         (gogoproto.customname) = "LastCommittedGLSN"];
+}
+
+message UnsealRequest {
+    int32 cluster_id = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+         (gogoproto.customname) = "ClusterID"];
+    int32 storage_node_id = 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+         (gogoproto.customname) = "StorageNodeID"];
+    int32 log_stream_id = 3
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
+}
+
+enum SyncStatus {
+    option (gogoproto.goproto_enum_prefix) = false;
+    INPROGRESS = 0 [(gogoproto.enumvalue_customname) = "SyncStatusInProgress"];
+    COMPLETE = 1 [(gogoproto.enumvalue_customname) = "SyncStatusComplete"];
+}
+
+message SyncRequest {
+    int32 cluster_id = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+         (gogoproto.customname) = "ClusterID"];
+    int32 storage_node_id = 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+         (gogoproto.customname) = "StorageNodeID"];
+    int32 log_stream_id = 3
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
+    // Replicas (varlog.ReplicaDescriptor ?)
+}
+
+message SyncResponse {
+    SyncStatus status = 1;
+}
+
+service Management {
+    rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
+    rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
+    rpc RemoveLogStream(RemoveLogStreamRequest) returns (google.protobuf.Empty) {}
+    rpc Seal(SealRequest) returns (SealResponse) {}
+    rpc Unseal(UnsealRequest) returns (google.protobuf.Empty) {}
+    rpc Sync(SyncRequest) returns (SyncResponse) {}
+}
