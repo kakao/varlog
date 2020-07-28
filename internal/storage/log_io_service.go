@@ -29,25 +29,6 @@ func (s *LogIOService) Register(server *grpc.Server) {
 	pb.RegisterLogIOServer(server, s)
 }
 
-func (s *LogIOService) AddLogStream(ctx context.Context, req *pb.AddLogStreamRequest) (*pb.AddLogStreamResponse, error) {
-	s.m.Lock()
-	defer s.m.Unlock()
-
-	id := req.GetLogStreamID()
-	_, ok := s.lseM[id]
-	if ok {
-		// already exists
-		return nil, varlog.ErrInvalid
-	}
-	storage := NewInMemoryStorage()
-	lse, err := NewLogStreamExecutor(id, storage)
-	if err != nil {
-		return nil, err
-	}
-	s.lseM[id] = lse
-	return &pb.AddLogStreamResponse{}, nil
-}
-
 func (s *LogIOService) getLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
 	s.m.RLock()
 	defer s.m.RUnlock()

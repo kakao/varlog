@@ -1,4 +1,4 @@
-SRC := log_io.proto log_stream_reporter.proto replicator.proto
+SRC := log_io.proto log_stream_reporter.proto replicator.proto management.proto
 TARGET := $(SRC:.proto=.pb.go)
 
 $(TARGET): $(SRC)
