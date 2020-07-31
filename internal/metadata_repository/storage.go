@@ -574,7 +574,7 @@ func (ms *MetadataStorage) GetNextGLSNNoLock() types.GLSN {
 
 	n = len(ms.origStateMachine.LogStream.GlobalLogStreams)
 	if n == 0 {
-		return 0
+		return types.GLSN(0)
 	}
 
 	return ms.origStateMachine.LogStream.GlobalLogStreams[n-1].NextGLSN
@@ -721,15 +721,7 @@ func (ms *MetadataStorage) mergeMetadata() {
 
 func (ms *MetadataStorage) mergeLogStream() {
 	for lsID, lm := range ms.diffStateMachine.LogStream.LocalLogStreams {
-		plm, ok := ms.origStateMachine.LogStream.LocalLogStreams[lsID]
-		if !ok {
-			ms.origStateMachine.LogStream.LocalLogStreams[lsID] = lm
-			continue
-		}
-
-		for snID, r := range lm.Replicas {
-			plm.Replicas[snID] = r
-		}
+		ms.origStateMachine.LogStream.LocalLogStreams[lsID] = lm
 	}
 
 	if len(ms.diffStateMachine.LogStream.LocalLogStreams) > 0 {
