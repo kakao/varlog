@@ -15,7 +15,7 @@ import (
 )
 
 type ReportCollectorCallbacks struct {
-	report     func(*snpb.LocalLogStreamDescriptor)
+	report     func(*snpb.LocalLogStreamDescriptor) error
 	getClient  func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error)
 	getNextGLS func(types.GLSN) *snpb.GlobalLogStreamDescriptor
 }

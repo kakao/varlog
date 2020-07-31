@@ -16,6 +16,7 @@ var (
 
 	ErrInvalid = errors.New("invalid argument")
 	ErrExist   = errors.New("already exists")
+	ErrIgnore  = errors.New("ignore")
 
 	// LogIOClient
 	ErrUnordered = errors.New("unordered log stream")

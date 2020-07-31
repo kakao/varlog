@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	varlog "github.com/kakao/varlog/pkg/varlog"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	pb "github.com/kakao/varlog/proto/metadata_repository"
@@ -261,6 +262,10 @@ func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
 		mr.applyTrimCommit(r)
 	case *pb.Commit:
 		mr.applyCommit()
+	case *pb.Seal:
+		mr.applySeal(r, e.NodeIndex, e.RequestIndex)
+	case *pb.Unseal:
+		mr.applyUnseal(r, e.NodeIndex, e.RequestIndex)
 	}
 
 	mr.storage.UpdateAppliedIndex(e.AppliedIndex)
@@ -363,8 +368,14 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 				CommittedGLSNEnd:   newGLSN + types.GLSN(nrUncommit),
 			}
 
+			if nrUncommit > 0 {
+				newGLSN = commit.CommittedGLSNEnd
+			} else {
+				commit.CommittedGLSNBegin = mr.getLastCommitted(lsID)
+				commit.CommittedGLSNEnd = commit.CommittedGLSNBegin
+			}
+
 			gls.CommitResult = append(gls.CommitResult, commit)
-			newGLSN = commit.CommittedGLSNEnd
 		}
 	}
 	gls.NextGLSN = newGLSN
@@ -376,6 +387,25 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 	mr.proposeTrimCommit()
 
 	//TODO:: trigger next commit
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applySeal(r *pb.Seal, nodeIndex, requestIndex uint64) error {
+	mr.applyCommit()
+	err := mr.storage.SealLogStream(r.LogStreamID, nodeIndex, requestIndex)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applyUnseal(r *pb.Unseal, nodeIndex, requestIndex uint64) error {
+	err := mr.storage.UnsealLogStream(r.LogStreamID, nodeIndex, requestIndex)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -447,13 +477,13 @@ func (mr *RaftMetadataRepository) calculateCommit(replicas *pb.MetadataRepositor
 	return knownGLSN, uint64(endLLSN - beginLLSN)
 }
 
-func (mr *RaftMetadataRepository) getLastCommitted(lsId types.LogStreamID) types.GLSN {
+func (mr *RaftMetadataRepository) getLastCommitted(lsID types.LogStreamID) types.GLSN {
 	gls := mr.storage.GetGLS()
 	if gls == nil {
 		return types.GLSN(0)
 	}
 
-	r := getCommitResultFromGLS(gls, lsId)
+	r := getCommitResultFromGLS(gls, lsID)
 	if r == nil {
 		mr.logger.Panic("get last committed")
 	}
@@ -488,11 +518,12 @@ func (mr *RaftMetadataRepository) proposeTrimCommit() {
 	*/
 }
 
-func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescriptor) {
+func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescriptor) error {
 	r := &pb.Report{
 		LogStream: lls,
 	}
-	mr.propose(context.TODO(), r, false)
+
+	return mr.propose(context.TODO(), r, false)
 }
 
 func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, guarantee bool) error {
@@ -519,6 +550,7 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 		select {
 		case mr.proposeC <- e:
 		default:
+			return varlog.ErrIgnore
 		}
 	}
 
@@ -555,14 +587,12 @@ func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.Me
 }
 
 func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStreamID) (types.GLSN, error) {
-	return types.GLSN(0), errors.New("not yet implemanted")
-
 	r := &pb.Seal{
 		LogStreamID: lsID,
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != nil {
+	if err != nil && err != varlog.ErrIgnore {
 		return types.GLSN(0), err
 	}
 
@@ -570,11 +600,14 @@ func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStream
 }
 
 func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStreamID) error {
-	return errors.New("not yet implemanted")
-
 	r := &pb.Unseal{
 		LogStreamID: lsID,
 	}
 
-	return mr.propose(ctx, r, true)
+	err := mr.propose(ctx, r, true)
+	if err != nil && err != varlog.ErrIgnore {
+		return err
+	}
+
+	return nil
 }

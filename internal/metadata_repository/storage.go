@@ -45,6 +45,7 @@ type MetadataStorage struct {
 	snapIndex uint64
 	// the largest index of the entry already applied to the stateMachine
 	appliedIndex uint64
+	snapCount    uint64
 
 	// immutable metadata cache for client request
 	metaCache *varlogpb.MetadataDescriptor
@@ -60,7 +61,7 @@ type MetadataStorage struct {
 	nrUpdateSinceCommit uint64
 
 	lsMu sync.RWMutex // mutex for GlobalLogStream
-	mtMu sync.RWMutex // mitex for Metadata
+	mtMu sync.RWMutex // mutex for Metadata
 	ssMu sync.RWMutex // mutex for Snapshot
 	mcMu sync.RWMutex // mutex for Metadata Cache
 
@@ -73,6 +74,7 @@ type MetadataStorage struct {
 
 func NewMetadataStorage(cb func(uint64, uint64, error)) *MetadataStorage {
 	ms := &MetadataStorage{cacheCompleteCB: cb}
+	ms.snapCount = defaultSnapshotCount
 
 	ms.origStateMachine = &pb.MetadataRepositoryDescriptor{}
 	ms.origStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
@@ -234,13 +236,13 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 
 	pre, cur := ms.getStateMachine()
 
-	ms.mtMu.Lock()
-	defer ms.mtMu.Unlock()
-
 	exist := cur.Metadata.GetLogStream(ls.LogStreamID) != nil
 	if !exist && pre.Metadata.GetLogStream(ls.LogStreamID) == nil {
 		return varlog.ErrNotExist
 	}
+
+	ms.mtMu.Lock()
+	defer ms.mtMu.Unlock()
 
 	if exist {
 		cur.Metadata.UpdateLogStream(ls)
@@ -248,11 +250,25 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 		cur.Metadata.InsertLogStream(ls)
 	}
 
+	return nil
+}
+
+func (ms *MetadataStorage) updateLocalLogStream(ls *varlogpb.LogStreamDescriptor) error {
+	pre, cur := ms.getStateMachine()
+
 	new := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
 		Replicas: make(map[types.StorageNodeID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplica),
 	}
 
-	old, _ := cur.LogStream.LocalLogStreams[ls.LogStreamID]
+	old, ok := cur.LogStream.LocalLogStreams[ls.LogStreamID]
+	if !ok {
+		tmp, ok := pre.LogStream.LocalLogStreams[ls.LogStreamID]
+		if !ok {
+			return varlog.ErrInternal
+		}
+
+		old = proto.Clone(tmp).(*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+	}
 
 	for _, r := range ls.Replicas {
 		if o, ok := old.Replicas[r.StorageNodeID]; ok {
@@ -262,7 +278,7 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 		}
 	}
 
-	new.Status = old.Status
+	new.Status = ls.Status
 
 	cur.LogStream.LocalLogStreams[ls.LogStreamID] = new
 
@@ -278,7 +294,129 @@ func (ms *MetadataStorage) UpdateLogStream(ls *varlogpb.LogStreamDescriptor, nod
 		return err
 	}
 
+	err = ms.updateLocalLogStream(ls)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
+		}
+		return err
+	}
+
 	ms.triggerMetadataCache(nodeIndex, requestIndex)
+	return nil
+}
+
+func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status varlogpb.LogStreamStatus) error {
+	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
+
+	pre, cur := ms.getStateMachine()
+
+	ls := cur.Metadata.GetLogStream(lsID)
+	if ls == nil {
+		tmp := pre.Metadata.GetLogStream(lsID)
+		if tmp == nil {
+			return varlog.ErrNotExist
+		}
+
+		ls = proto.Clone(tmp).(*varlogpb.LogStreamDescriptor)
+
+		ms.mtMu.Lock()
+		cur.Metadata.InsertLogStream(ls)
+		ms.mtMu.Unlock()
+	}
+
+	if ls.Status == status {
+		return varlog.ErrIgnore
+	}
+
+	ms.mtMu.Lock()
+	defer ms.mtMu.Unlock()
+
+	ls.Status = status
+
+	return nil
+}
+
+func (ms *MetadataStorage) updateLocalLogStreamStatus(lsID types.LogStreamID, status varlogpb.LogStreamStatus) error {
+	pre, cur := ms.getStateMachine()
+
+	lls, ok := cur.LogStream.LocalLogStreams[lsID]
+	if !ok {
+		o, ok := pre.LogStream.LocalLogStreams[lsID]
+		if !ok {
+			return varlog.ErrInternal
+		}
+
+		lls = proto.Clone(o).(*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+		cur.LogStream.LocalLogStreams[lsID] = lls
+	}
+
+	if lls.Status == status {
+		return varlog.ErrIgnore
+	}
+
+	if status == varlogpb.LogStreamStatusSealed {
+		var min types.LLSN
+		first := true
+		for _, r := range lls.Replicas {
+			if first || min > r.EndLLSN {
+				min = r.EndLLSN
+			}
+
+			first = false
+		}
+
+		for _, r := range lls.Replicas {
+			r.EndLLSN = min
+		}
+	}
+
+	lls.Status = status
+
+	return nil
+}
+
+func (ms *MetadataStorage) SealLogStream(lsID types.LogStreamID, nodeIndex, requestIndex uint64) error {
+	err := ms.updateLogStreamStatus(lsID, varlogpb.LogStreamStatusSealed)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
+		}
+		return err
+	}
+
+	err = ms.updateLocalLogStreamStatus(lsID, varlogpb.LogStreamStatusSealed)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
+		}
+		return err
+	}
+
+	ms.triggerMetadataCache(nodeIndex, requestIndex)
+
+	return nil
+}
+
+func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, requestIndex uint64) error {
+	err := ms.updateLogStreamStatus(lsID, varlogpb.LogStreamStatusNormal)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
+		}
+		return err
+	}
+
+	err = ms.updateLocalLogStreamStatus(lsID, varlogpb.LogStreamStatusNormal)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
+		}
+		return err
+	}
+
+	ms.triggerMetadataCache(nodeIndex, requestIndex)
+
 	return nil
 }
 
@@ -423,7 +561,7 @@ func (ms *MetadataStorage) UpdateAppliedIndex(appliedIndex uint64) {
 	// make sure to merge before trigger snapshop
 	// it makes orig have entry with appliedIndex
 	ms.mergeStateMachine()
-	if ms.appliedIndex-atomic.LoadUint64(&ms.snapIndex) > defaultSnapshotCount {
+	if ms.appliedIndex-atomic.LoadUint64(&ms.snapIndex) > ms.snapCount {
 		ms.triggerSnapshot(appliedIndex)
 	}
 }
@@ -541,11 +679,14 @@ func (ms *MetadataStorage) createMetadataCache(job *JobMetadataCache) {
 	defer ms.mtMu.RUnlock()
 
 	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
+		//TODO:: UpdateStorageNode
 		cache.InsertStorageNode(sn)
 	}
 
 	for _, ls := range ms.diffStateMachine.Metadata.LogStreams {
-		cache.InsertLogStream(ls)
+		if cache.InsertLogStream(ls) != nil {
+			cache.UpdateLogStream(ls)
+		}
 	}
 
 	ms.mcMu.Lock()
@@ -565,11 +706,14 @@ func (ms *MetadataStorage) mergeMetadata() {
 	defer ms.mtMu.Unlock()
 
 	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
+		//TODO:: UpdateStorageNode
 		ms.origStateMachine.Metadata.InsertStorageNode(sn)
 	}
 
 	for _, ls := range ms.diffStateMachine.Metadata.LogStreams {
-		ms.origStateMachine.Metadata.InsertLogStream(ls)
+		if ms.origStateMachine.Metadata.InsertLogStream(ls) != nil {
+			ms.origStateMachine.Metadata.UpdateLogStream(ls)
+		}
 	}
 
 	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}

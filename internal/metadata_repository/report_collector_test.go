@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	varlog "github.com/kakao/varlog/pkg/varlog"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
 	snpb "github.com/kakao/varlog/proto/storage_node"
@@ -27,11 +28,14 @@ func NewDummyMetadataRepository() *dummyMetadataRepository {
 	}
 }
 
-func (mr *dummyMetadataRepository) report(lls *snpb.LocalLogStreamDescriptor) {
+func (mr *dummyMetadataRepository) report(lls *snpb.LocalLogStreamDescriptor) error {
 	select {
 	case mr.reportC <- lls:
 	default:
+		return varlog.ErrIgnore
 	}
+
+	return nil
 }
 
 func (mr *dummyMetadataRepository) getNextGLS(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
