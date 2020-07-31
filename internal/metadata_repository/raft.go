@@ -404,7 +404,8 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	}
 
 	rc.logger.Info("start snapshot",
-		zap.Uint64("appliedIndex", appliedIndex),
+		zap.Uint64("snapshotAppliedIndex", appliedIndex),
+		zap.Uint64("rc.appliedIndex", rc.appliedIndex),
 		zap.Uint64("lastSnapshotIndex", rc.snapshotIndex),
 	)
 

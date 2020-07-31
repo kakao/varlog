@@ -60,6 +60,8 @@ message RaftEntry {
                 Report report = 4;
                 Commit commit = 5;
                 TrimCommit trim_commit = 6;
+                Seal seal = 7;
+                Unseal unseal = 8;
         }
         uint64 node_index = 1;
         uint64 request_index = 2;

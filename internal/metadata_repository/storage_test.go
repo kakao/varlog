@@ -94,6 +94,11 @@ func TestStorageRegisterLS(t *testing.T) {
 func TestStorageUpdateLS(t *testing.T) {
 	Convey("LS should not be updated if not exist proper SN", t, func(ctx C) {
 		ms := NewMetadataStorage(nil)
+		ms.Run()
+
+		Reset(func() {
+			ms.Close()
+		})
 
 		rep := 2
 		lsID := types.LogStreamID(time.Now().UnixNano())
@@ -118,7 +123,7 @@ func TestStorageUpdateLS(t *testing.T) {
 		}
 		updateLS := makeLogStream(lsID, updateSnIDs)
 
-		err = ms.updateLogStream(updateLS)
+		err = ms.UpdateLogStream(updateLS, 0, 0)
 		So(err, ShouldResemble, varlog.ErrInvalidArgument)
 
 		Convey("LS should be updated if exist all SN", func(ctx C) {
@@ -131,13 +136,218 @@ func TestStorageUpdateLS(t *testing.T) {
 				So(err, ShouldBeNil)
 			}
 
-			err = ms.updateLogStream(updateLS)
+			err = ms.UpdateLogStream(updateLS, 0, 0)
 			So(err, ShouldBeNil)
 			Convey("updated LS should be lookuped", func(ctx C) {
 				for i := 0; i < rep; i++ {
 					So(ms.LookupLocalLogStreamReplica(lsID, snIDs[i]), ShouldBeNil)
 					So(ms.LookupLocalLogStreamReplica(lsID, updateSnIDs[i]), ShouldNotBeNil)
 				}
+
+				So(testutil.CompareWait(func() bool {
+					return atomic.LoadInt64(&ms.nrRunning) == 0
+				}, time.Second), ShouldBeTrue)
+
+				meta := ms.GetMetadata()
+				So(meta, ShouldNotBeNil)
+
+				ls := meta.GetLogStream(lsID)
+				So(ls, ShouldNotBeNil)
+
+				for _, r := range ls.Replicas {
+					exist := false
+					for i := 0; i < rep; i++ {
+						So(r.StorageNodeID, ShouldNotEqual, snIDs[i])
+						if !exist {
+							exist = r.StorageNodeID == updateSnIDs[i]
+						}
+					}
+					So(exist, ShouldBeTrue)
+				}
+			})
+		})
+	})
+}
+
+func TestStorageSealLS(t *testing.T) {
+	Convey("LS should not be sealed if not exist", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		err := ms.SealLogStream(lsID, 0, 0)
+		So(err, ShouldResemble, varlog.ErrNotExist)
+	})
+
+	Convey("For resigtered LS", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+		ms.Run()
+
+		Reset(func() {
+			ms.Close()
+		})
+
+		rep := 2
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+		ls := makeLogStream(lsID, snIDs)
+
+		err := ms.registerLogStream(ls)
+		So(err, ShouldBeNil)
+
+		Convey("Seal should be success", func(ctx C) {
+			err = ms.SealLogStream(lsID, 0, 0)
+			So(err, ShouldBeNil)
+
+			So(testutil.CompareWait(func() bool {
+				return atomic.LoadInt64(&ms.nrRunning) == 0
+			}, time.Second), ShouldBeTrue)
+
+			Convey("Sealed LS should have LogStreamStatusSealed", func(ctx C) {
+				meta := ms.GetMetadata()
+				So(meta, ShouldNotBeNil)
+
+				ls := meta.GetLogStream(lsID)
+				So(ls, ShouldNotBeNil)
+				So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+			})
+
+			Convey("Seal to LS which is already Sealed should return ErrIgnore", func(ctx C) {
+				err := ms.SealLogStream(lsID, 0, 0)
+				So(err, ShouldResemble, varlog.ErrIgnore)
+			})
+		})
+
+		Convey("Sealed LocalLogStreamReplica should have same EndLLSN", func(ctx C) {
+			So(testutil.CompareWait(func() bool {
+				return atomic.LoadInt64(&ms.nrRunning) == 0
+			}, time.Second), ShouldBeTrue)
+
+			for i := 0; i < rep; i++ {
+				r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+					BeginLLSN:     types.LLSN(0),
+					EndLLSN:       types.LLSN(i),
+					KnownNextGLSN: types.GLSN(0),
+				}
+
+				ms.UpdateLocalLogStreamReplica(lsID, snIDs[i], r)
+				rr := ms.LookupLocalLogStreamReplica(lsID, snIDs[i])
+				So(rr, ShouldNotBeNil)
+				So(r.EndLLSN, ShouldEqual, types.LLSN(i))
+			}
+
+			err = ms.SealLogStream(lsID, 0, 0)
+			So(err, ShouldBeNil)
+
+			for i := 0; i < rep; i++ {
+				r := ms.LookupLocalLogStreamReplica(lsID, snIDs[i])
+				So(r.EndLLSN, ShouldEqual, types.LLSN(0))
+			}
+
+			Convey("Sealed LocalLogStreamReplica should ignore report", func(ctx C) {
+				for i := 0; i < rep; i++ {
+					r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+						BeginLLSN:     types.LLSN(0),
+						EndLLSN:       types.LLSN(i + 1),
+						KnownNextGLSN: types.GLSN(0),
+					}
+
+					ms.UpdateLocalLogStreamReplica(lsID, snIDs[i], r)
+					rr := ms.LookupLocalLogStreamReplica(lsID, snIDs[i])
+					So(rr, ShouldNotBeNil)
+					So(rr.EndLLSN, ShouldEqual, types.LLSN(0))
+				}
+			})
+		})
+	})
+}
+
+func TestStorageUnsealLS(t *testing.T) {
+	Convey("Storage should return ErrNotExsit if Unseal to not exist LS", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		err := ms.UnsealLogStream(lsID, 0, 0)
+		So(err, ShouldResemble, varlog.ErrNotExist)
+	})
+
+	Convey("For resigtered LS", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+		ms.Run()
+
+		Reset(func() {
+			ms.Close()
+		})
+
+		rep := 2
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+		ls := makeLogStream(lsID, snIDs)
+
+		err := ms.registerLogStream(ls)
+		So(err, ShouldBeNil)
+
+		Convey("Unseal to LS which is already Sealed should return ErrIgnore", func(ctx C) {
+			err := ms.UnsealLogStream(lsID, 0, 0)
+			So(err, ShouldResemble, varlog.ErrIgnore)
+
+			So(testutil.CompareWait(func() bool {
+				return atomic.LoadInt64(&ms.nrRunning) == 0
+			}, time.Second), ShouldBeTrue)
+
+			Convey("Unsealed to sealed LS should be success", func(ctx C) {
+				err := ms.SealLogStream(lsID, 0, 0)
+				So(err, ShouldBeNil)
+
+				So(testutil.CompareWait(func() bool {
+					return atomic.LoadInt64(&ms.nrRunning) == 0
+				}, time.Second), ShouldBeTrue)
+
+				err = ms.UnsealLogStream(lsID, 0, 0)
+				So(err, ShouldBeNil)
+
+				So(testutil.CompareWait(func() bool {
+					return atomic.LoadInt64(&ms.nrRunning) == 0
+				}, time.Second), ShouldBeTrue)
+
+				meta := ms.GetMetadata()
+				So(meta, ShouldNotBeNil)
+
+				ls := meta.GetLogStream(lsID)
+				So(ls, ShouldNotBeNil)
+				So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusNormal)
+
+				Convey("Unsealed LS should update report", func(ctx C) {
+					for i := 0; i < rep; i++ {
+						r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+							BeginLLSN:     types.LLSN(0),
+							EndLLSN:       types.LLSN(i),
+							KnownNextGLSN: types.GLSN(0),
+						}
+
+						ms.UpdateLocalLogStreamReplica(lsID, snIDs[i], r)
+						rr := ms.LookupLocalLogStreamReplica(lsID, snIDs[i])
+						So(rr, ShouldNotBeNil)
+						So(r.EndLLSN, ShouldEqual, types.LLSN(i))
+					}
+				})
 			})
 		})
 	})
@@ -653,9 +863,9 @@ func TestStorageSnapshot(t *testing.T) {
 
 func TestStorageSnapshotRace(t *testing.T) {
 	Convey("create snapshot", t, func(ctx C) {
-		defaultSnapshotCount = uint64(100 + rand.Int31n(64))
-
 		ms := NewMetadataStorage(nil)
+		ms.snapCount = uint64(100 + rand.Int31n(64))
+
 		ms.Run()
 
 		n := 10000
