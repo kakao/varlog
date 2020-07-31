@@ -169,6 +169,76 @@ func TestStorageUpdateLS(t *testing.T) {
 	})
 }
 
+func TestStorageUpdateLSUnderCOW(t *testing.T) {
+	Convey("update LS to COW storage should applyed after merge", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		rep := 2
+
+		// register LS
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+		ls := makeLogStream(lsID, snIDs)
+
+		err := ms.registerLogStream(ls)
+		So(err, ShouldBeNil)
+
+		// set COW
+		ms.setCopyOnWrite()
+
+		// update LS
+		updateSnIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			updateSnIDs[i] = snIDs[i] + types.StorageNodeID(rep)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: updateSnIDs[i],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+
+		updateLS := makeLogStream(lsID, updateSnIDs)
+
+		err = ms.UpdateLogStream(updateLS, 0, 0)
+		So(err, ShouldBeNil)
+		So(ms.isCopyOnWrite(), ShouldBeTrue)
+
+		// compare
+		diffls := ms.diffStateMachine.Metadata.GetLogStream(lsID)
+		difflls, _ := ms.diffStateMachine.LogStream.LocalLogStreams[lsID]
+
+		origls := ms.origStateMachine.Metadata.GetLogStream(lsID)
+		origlls, _ := ms.origStateMachine.LogStream.LocalLogStreams[lsID]
+
+		So(diffls.Equal(origls), ShouldBeFalse)
+		So(difflls.Equal(origlls), ShouldBeFalse)
+
+		// merge
+		ms.mergeMetadata()
+		ms.mergeLogStream()
+
+		ms.releaseCopyOnWrite()
+
+		// compare
+		mergedls := ms.origStateMachine.Metadata.GetLogStream(lsID)
+		mergedlls, _ := ms.origStateMachine.LogStream.LocalLogStreams[lsID]
+
+		So(diffls.Equal(mergedls), ShouldBeTrue)
+		So(difflls.Equal(mergedlls), ShouldBeTrue)
+	})
+}
+
 func TestStorageSealLS(t *testing.T) {
 	Convey("LS should not be sealed if not exist", t, func(ctx C) {
 		ms := NewMetadataStorage(nil)
@@ -267,6 +337,64 @@ func TestStorageSealLS(t *testing.T) {
 				}
 			})
 		})
+	})
+}
+
+func TestStorageSealLSUnderCOW(t *testing.T) {
+	Convey("seal LS to COW storage should applyed after merge", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		rep := 2
+
+		// register LS
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+		ls := makeLogStream(lsID, snIDs)
+
+		err := ms.registerLogStream(ls)
+		So(err, ShouldBeNil)
+
+		// set COW
+		ms.setCopyOnWrite()
+
+		// seal
+		err = ms.SealLogStream(lsID, 0, 0)
+		So(err, ShouldBeNil)
+
+		// compare
+		diffls := ms.diffStateMachine.Metadata.GetLogStream(lsID)
+		difflls, _ := ms.diffStateMachine.LogStream.LocalLogStreams[lsID]
+
+		origls := ms.origStateMachine.Metadata.GetLogStream(lsID)
+		origlls, _ := ms.origStateMachine.LogStream.LocalLogStreams[lsID]
+
+		So(diffls.Equal(origls), ShouldBeFalse)
+		So(difflls.Equal(origlls), ShouldBeFalse)
+
+		// merge
+		ms.mergeMetadata()
+		ms.mergeLogStream()
+
+		ms.releaseCopyOnWrite()
+
+		// compare
+		mergedls := ms.origStateMachine.Metadata.GetLogStream(lsID)
+		mergedlls, _ := ms.origStateMachine.LogStream.LocalLogStreams[lsID]
+
+		So(diffls.Equal(mergedls), ShouldBeTrue)
+		So(difflls.Equal(mergedlls), ShouldBeTrue)
+
+		So(mergedls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+		So(mergedlls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 	})
 }
 

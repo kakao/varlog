@@ -71,6 +71,8 @@ message RaftEntry {
 
 message MetadataRepositoryDescriptor {
         message LocalLogStreamReplica {
+            option (gogoproto.equal) = true;
+
             uint64 being_llsn = 1
                 [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN",
                  (gogoproto.customname) = "BeginLLSN"];
@@ -83,6 +85,8 @@ message MetadataRepositoryDescriptor {
         }
 
         message LocalLogStreamReplicas {
+                option (gogoproto.equal) = true;
+
                 map<int32, LocalLogStreamReplica> replicas = 1[(gogoproto.castkey)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID"];
                 LogStreamStatus status = 2;
         }

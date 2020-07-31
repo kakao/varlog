@@ -33,6 +33,8 @@ message StorageNodeDescriptor {
 }
 
 message ReplicaDescriptor {
+        option (gogoproto.equal) = true;
+
         int32 storage_node_id = 1
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
              (gogoproto.customname) = "StorageNodeID"];
@@ -40,6 +42,8 @@ message ReplicaDescriptor {
 }
 
 message LogStreamDescriptor {
+        option (gogoproto.equal) = true;
+
         int32 log_stream_id = 1
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
              (gogoproto.customname) = "LogStreamID"];
