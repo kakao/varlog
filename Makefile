@@ -67,7 +67,9 @@ subdirs : $(SUBDIRS)
 $(SUBDIRS) :
 	$(MAKE) -C $@
 
-mockgen: internal/storage/storage_mock.go \
+mockgen: \
+	internal/storage/storage_node_mock.go \
+	internal/storage/storage_mock.go \
 	internal/storage/log_stream_executor_mock.go \
 	internal/storage/log_stream_reporter_mock.go \
 	internal/storage/log_stream_reporter_client_mock.go \
@@ -75,10 +77,17 @@ mockgen: internal/storage/storage_mock.go \
 	internal/storage/replicator_client_mock.go \
 	proto/storage_node/mock/replicator_mock.go \
 	proto/storage_node/mock/log_io_mock.go \
-	proto/storage_node/mock/log_stream_reporter_mock.go
+	proto/storage_node/mock/log_stream_reporter_mock.go \
+	proto/storage_node/mock/management_mock.go
+
+internal/storage/storage_node_mock.go: internal/storage/storage_node.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
+		-package storage \
+		-source $< \
+		-destination $@
 
 internal/storage/storage_mock.go: internal/storage/storage.go
-	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage 
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
 		-package storage \
 		-source $< \
 		-destination $@
@@ -133,6 +142,13 @@ proto/storage_node/mock/log_stream_reporter_mock.go: $(PROTO) proto/storage_node
 		-destination $@ \
 		github.daumkakao.com/varlog/varlog/proto/storage_node \
 		LogStreamReporterServiceClient,LogStreamReporterServiceServer
+
+proto/storage_node/mock/management_mock.go: $(PROTO) proto/storage_node/management.pb.go
+	mockgen -build_flags -mod=vendor \
+		-package mock \
+		-destination $@ \
+		github.daumkakao.com/varlog/varlog/proto/storage_node \
+		ManagementClient,ManagementServer
 
 .PHONY: test test_report coverage_report
 
