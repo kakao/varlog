@@ -7,7 +7,9 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/types"
 	pb "github.com/kakao/varlog/proto/storage_node"
+	vpb "github.com/kakao/varlog/proto/varlog"
 )
 
 func TestManagementServiceAddLogStream(t *testing.T) {
@@ -104,6 +106,106 @@ func TestManagementServiceRemoveLogStream(t *testing.T) {
 			mock.EXPECT().RemoveLogStream(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			Convey("Then the ManagementService should not return an error", func() {
 				_, err := service.RemoveLogStream(context.TODO(), &pb.RemoveLogStreamRequest{})
+				So(err, ShouldBeNil)
+			})
+		})
+	})
+}
+
+func TestManagementServiceSeal(t *testing.T) {
+	Convey("Given that a ManagementService handles Seal RPC call", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mock := NewMockManagement(ctrl)
+		service := managementService{m: mock}
+
+		Convey("When the underlying Management failed to seal the LogStream", func() {
+			mock.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(vpb.LogStreamStatusNormal, types.GLSN(1), varlog.ErrInternal)
+			Convey("Then the ManagementService should return an error", func() {
+				_, err := service.Seal(context.TODO(), &pb.SealRequest{})
+				So(err, ShouldNotBeNil)
+			})
+		})
+
+		Convey("When the underlying Management is timed out", func() {
+			Convey("Then the ManagementService should return a timeout error", func() {
+				Convey("This isn't yet implemented", nil)
+			})
+		})
+
+		Convey("When the passed ClusterID is invalid", func() {
+			Convey("Then the ManagementService should return an error", func() {
+				Convey("This isn't yet implemented", nil)
+			})
+		})
+
+		Convey("When the passed StorageNodeID is invalid", func() {
+			Convey("Then the ManagementService should return an error", func() {
+				Convey("This isn't yet implemented", nil)
+			})
+		})
+
+		Convey("When the passed LogStreamID is invalid", func() {
+			Convey("Then the ManagementService should return an error", func() {
+				Convey("This isn't yet implemented", nil)
+			})
+		})
+
+		Convey("When the underlying Management succeeds to seal the LogStream", func() {
+			mock.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(vpb.LogStreamStatusSealed, types.GLSN(1), nil)
+			Convey("Then the ManagementService should not return an error", func() {
+				_, err := service.Seal(context.TODO(), &pb.SealRequest{})
+				So(err, ShouldBeNil)
+			})
+		})
+	})
+}
+
+func TestManagementServiceUnseal(t *testing.T) {
+	Convey("Given that a ManagementService handles Unseal RPC call", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mock := NewMockManagement(ctrl)
+		service := managementService{m: mock}
+
+		Convey("When the underlying Management failed to unseal the LogStream", func() {
+			mock.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)
+			Convey("Then the ManagementService should return an error", func() {
+				_, err := service.Unseal(context.TODO(), &pb.UnsealRequest{})
+				So(err, ShouldNotBeNil)
+			})
+		})
+
+		Convey("When the underlying Management is timed out", func() {
+			Convey("Then the ManagementService should return a timeout error", func() {
+				Convey("This isn't yet implemented", nil)
+			})
+		})
+
+		Convey("When the passed ClusterID is invalid", func() {
+			Convey("Then the ManagementService should return an error", func() {
+				Convey("This isn't yet implemented", nil)
+			})
+		})
+
+		Convey("When the passed StorageNodeID is invalid", func() {
+			Convey("Then the ManagementService should return an error", func() {
+				Convey("This isn't yet implemented", nil)
+			})
+		})
+
+		Convey("When the passed LogStreamID is invalid", func() {
+			Convey("Then the ManagementService should return an error", func() {
+				Convey("This isn't yet implemented", nil)
+			})
+		})
+
+		Convey("When the underlying Management succeeds to unseal the LogStream", func() {
+			mock.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+			Convey("Then the ManagementService should not return an error", func() {
+				_, err := service.Unseal(context.TODO(), &pb.UnsealRequest{})
 				So(err, ShouldBeNil)
 			})
 		})

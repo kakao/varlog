@@ -7,6 +7,7 @@ package storage
 import (
 	gomock "github.com/golang/mock/gomock"
 	types "github.com/kakao/varlog/pkg/varlog/types"
+	varlog "github.com/kakao/varlog/proto/varlog"
 	reflect "reflect"
 )
 
@@ -60,4 +61,34 @@ func (m *MockManagement) RemoveLogStream(clusterID types.ClusterID, storageNodeI
 func (mr *MockManagementMockRecorder) RemoveLogStream(clusterID, storageNodeID, logStreamID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStream", reflect.TypeOf((*MockManagement)(nil).RemoveLogStream), clusterID, storageNodeID, logStreamID)
+}
+
+// Seal mocks base method
+func (m *MockManagement) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlog.LogStreamStatus, types.GLSN, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Seal", clusterID, storageNodeID, logStreamID, lastCommittedGLSN)
+	ret0, _ := ret[0].(varlog.LogStreamStatus)
+	ret1, _ := ret[1].(types.GLSN)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Seal indicates an expected call of Seal
+func (mr *MockManagementMockRecorder) Seal(clusterID, storageNodeID, logStreamID, lastCommittedGLSN interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockManagement)(nil).Seal), clusterID, storageNodeID, logStreamID, lastCommittedGLSN)
+}
+
+// Unseal mocks base method
+func (m *MockManagement) Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Unseal", clusterID, storageNodeID, logStreamID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Unseal indicates an expected call of Unseal
+func (mr *MockManagementMockRecorder) Unseal(clusterID, storageNodeID, logStreamID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockManagement)(nil).Unseal), clusterID, storageNodeID, logStreamID)
 }

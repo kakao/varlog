@@ -49,12 +49,25 @@ func (c *managementClient) RemoveLogStream(ctx context.Context, cid types.Cluste
 	return err
 }
 
-func (c *managementClient) Seal(ctx context.Context) error {
-	panic("not yet implemented")
+func (c *managementClient) Seal(ctx context.Context, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error) {
+	// TODO(jun): Check ranges CID, SNID and LSID
+	rsp, err := c.rpcClient.Seal(ctx, &pb.SealRequest{
+		ClusterID:         cid,
+		StorageNodeID:     snid,
+		LogStreamID:       lsid,
+		LastCommittedGLSN: lastCommittedGLSN,
+	})
+	return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), err
 }
 
-func (c *managementClient) Unseal(ctx context.Context) error {
-	panic("not yet implemented")
+func (c *managementClient) Unseal(ctx context.Context, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID) error {
+	// TODO(jun): Check ranges CID, SNID and LSID
+	_, err := c.rpcClient.Unseal(ctx, &pb.UnsealRequest{
+		ClusterID:     cid,
+		StorageNodeID: snid,
+		LogStreamID:   lsid,
+	})
+	return err
 }
 
 func (c *managementClient) Sync(ctx context.Context) error {
