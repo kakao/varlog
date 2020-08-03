@@ -121,7 +121,7 @@ func TestManagementServiceSeal(t *testing.T) {
 		service := managementService{m: mock}
 
 		Convey("When the underlying Management failed to seal the LogStream", func() {
-			mock.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(vpb.LogStreamStatusNormal, types.GLSN(1), varlog.ErrInternal)
+			mock.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(vpb.LogStreamStatusRunning, types.GLSN(1), varlog.ErrInternal)
 			Convey("Then the ManagementService should return an error", func() {
 				_, err := service.Seal(context.TODO(), &pb.SealRequest{})
 				So(err, ShouldNotBeNil)

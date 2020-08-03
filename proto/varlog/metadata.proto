@@ -13,8 +13,8 @@ option (gogoproto.unmarshaler_all) = true;
 enum LogStreamStatus {
         option (gogoproto.goproto_enum_prefix) = false;
 
-        NONE = 0 [(gogoproto.enumvalue_customname) = "LogStreamStatusNone"];
-        NORMAL = 1 [(gogoproto.enumvalue_customname) = "LogStreamStatusNormal"];
+        RUNNING = 0 [(gogoproto.enumvalue_customname) = "LogStreamStatusRunning"];
+        SEALING = 1 [(gogoproto.enumvalue_customname) = "LogStreamStatusSealing"];
         SEALED = 2 [(gogoproto.enumvalue_customname) = "LogStreamStatusSealed"];
 }
 

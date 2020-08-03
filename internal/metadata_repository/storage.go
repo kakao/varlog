@@ -196,7 +196,7 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 
 	lm := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
 		Replicas: make(map[types.StorageNodeID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplica),
-		Status:   varlogpb.LogStreamStatusNormal,
+		Status:   varlogpb.LogStreamStatusRunning,
 	}
 
 	for _, r := range ls.Replicas {
@@ -399,7 +399,7 @@ func (ms *MetadataStorage) SealLogStream(lsID types.LogStreamID, nodeIndex, requ
 }
 
 func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, requestIndex uint64) error {
-	err := ms.updateLogStreamStatus(lsID, varlogpb.LogStreamStatusNormal)
+	err := ms.updateLogStreamStatus(lsID, varlogpb.LogStreamStatusRunning)
 	if err != nil {
 		if ms.cacheCompleteCB != nil {
 			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
@@ -407,7 +407,7 @@ func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, re
 		return err
 	}
 
-	err = ms.updateLocalLogStreamStatus(lsID, varlogpb.LogStreamStatusNormal)
+	err = ms.updateLocalLogStreamStatus(lsID, varlogpb.LogStreamStatusRunning)
 	if err != nil {
 		if ms.cacheCompleteCB != nil {
 			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
@@ -494,7 +494,7 @@ func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, s
 		cur.LogStream.LocalLogStreams[lsID] = lm
 	}
 
-	if lm.Status != varlogpb.LogStreamStatusNormal {
+	if lm.Status.Sealed() {
 		return
 	}
 
