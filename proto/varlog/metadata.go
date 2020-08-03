@@ -7,6 +7,14 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 )
 
+func (s LogStreamStatus) Running() bool {
+	return s == LogStreamStatusRunning
+}
+
+func (s LogStreamStatus) Sealed() bool {
+	return !s.Running()
+}
+
 func (m *MetadataDescriptor) searchStorageNode(id types.StorageNodeID) (int, bool) {
 	i := sort.Search(len(m.StorageNodes), func(i int) bool {
 		return m.StorageNodes[i].StorageNodeID >= id

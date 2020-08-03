@@ -460,7 +460,7 @@ func TestStorageUnsealLS(t *testing.T) {
 
 				ls := meta.GetLogStream(lsID)
 				So(ls, ShouldNotBeNil)
-				So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusNormal)
+				So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusRunning)
 
 				Convey("Unsealed LS should update report", func(ctx C) {
 					for i := 0; i < rep; i++ {

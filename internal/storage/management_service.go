@@ -31,7 +31,7 @@ func (s *managementService) AddLogStream(ctx context.Context, req *pb.AddLogStre
 	return &pb.AddLogStreamResponse{
 		LogStream: &vpb.LogStreamDescriptor{
 			LogStreamID: req.GetLogStreamID(),
-			Status:      vpb.LogStreamStatusNormal,
+			Status:      vpb.LogStreamStatusRunning,
 			Replicas: []*vpb.ReplicaDescriptor{{
 				StorageNodeID: req.GetStorageNodeID(),
 				Path:          path,

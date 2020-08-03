@@ -120,7 +120,7 @@ func makeLocalLogStream(snId types.StorageNodeID, knownNextGLSN types.GLSN, lsId
 func makeLogStream(lsID types.LogStreamID, snIDs []types.StorageNodeID) *varlogpb.LogStreamDescriptor {
 	ls := &varlogpb.LogStreamDescriptor{
 		LogStreamID: lsID,
-		Status:      varlogpb.LogStreamStatusNormal,
+		Status:      varlogpb.LogStreamStatusRunning,
 	}
 
 	for _, snID := range snIDs {
