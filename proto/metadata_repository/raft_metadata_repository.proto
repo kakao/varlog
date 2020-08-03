@@ -39,13 +39,13 @@ message TrimCommit {
 }
 
 message Seal {
-        int32 log_stream_id = 1
+        uint32 log_stream_id = 1
             [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
             (gogoproto.customname) = "LogStreamID"];
 }
 
 message Unseal {
-        int32 log_stream_id = 1
+        uint32 log_stream_id = 1
             [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
             (gogoproto.customname) = "LogStreamID"];
 }

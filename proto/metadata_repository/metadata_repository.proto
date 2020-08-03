@@ -27,10 +27,10 @@ message LogStreamRequest {
 }
 
 message SealRequest {
-        int32 cluster_id = 1
+        uint32 cluster_id = 1
             [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
             (gogoproto.customname) = "ClusterID"];
-        int32 log_stream_id = 2
+        uint32 log_stream_id = 2
             [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
             (gogoproto.customname) = "LogStreamID"];
 }
@@ -43,10 +43,10 @@ message SealResponse {
 }
 
 message UnsealRequest {
-        int32 cluster_id = 1
+        uint32 cluster_id = 1
             [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
             (gogoproto.customname) = "ClusterID"];
-        int32 log_stream_id = 2
+        uint32 log_stream_id = 2
             [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
             (gogoproto.customname) = "LogStreamID"];
 }

@@ -17,10 +17,10 @@ message ReplicationRequest {
 
 // ReplicationResponse indicates that a log entry at given LLSN is replicated.
 message ReplicationResponse {
-    int32 storage_node_id = 1
+    uint32 storage_node_id = 1
         [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
          (gogoproto.customname) = "StorageNodeID"];
-    int32 log_stream_id = 2
+    uint32 log_stream_id = 2
         [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
          (gogoproto.customname) = "LogStreamID"];
     uint64 llsn = 3
