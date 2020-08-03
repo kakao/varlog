@@ -16,6 +16,16 @@ type LogStreamID uint32
 
 type GLSN uint64
 
+const (
+	InvalidGLSN = GLSN(0)
+	MinGLSN     = GLSN(1)
+	MaxGLSN     = GLSN(math.MaxUint64)
+)
+
+func (glsn GLSN) Invalid() bool {
+	return glsn == InvalidGLSN
+}
+
 type AtomicGLSN uint64
 
 func (glsn *AtomicGLSN) Add(delta uint64) GLSN {
@@ -36,6 +46,16 @@ func (glsn *AtomicGLSN) CompareAndSwap(old, new GLSN) (swapped bool) {
 }
 
 type LLSN uint64
+
+const (
+	InvalidLLSN = LLSN(0)
+	MinLLSN     = LLSN(1)
+	MaxLLSN     = LLSN(math.MaxUint64)
+)
+
+func (llsn LLSN) Invalid() bool {
+	return llsn == InvalidLLSN
+}
 
 type AtomicLLSN uint64
 
