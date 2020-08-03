@@ -8,15 +8,11 @@ import (
 	"sync/atomic"
 )
 
-type ClusterID int32
+type ClusterID uint32
 
-type StorageNodeID int32
+type StorageNodeID uint32
 
-type LogStreamID int32
-
-const (
-	InvalidLogStreamID = LogStreamID(math.MinInt32)
-)
+type LogStreamID uint32
 
 type GLSN uint64
 
