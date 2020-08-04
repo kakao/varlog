@@ -18,20 +18,33 @@ message LocalLogStreamDescriptor {
         uint64 log_stream_id = 1
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
              (gogoproto.customname) = "LogStreamID"];
-        uint64 uncommitted_llsn_begin = 2
+        uint64 first_written_llsn = 2
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN",
-             (gogoproto.customname) = "UncommittedLLSNBegin"];
-        uint64 uncommitted_llsn_end = 3
+             (gogoproto.customname) = "FirstWrittenLLSN"];
+        uint64 last_written_llsn = 3
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN",
-             (gogoproto.customname) = "UncommittedLLSNEnd"];
+             (gogoproto.customname) = "LastWrittenLLSN"];
+
+        uint64 uncommitted_llsn_begin = 4
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN",
+             (gogoproto.customname) = "UncommittedLLSNBegin",
+             deprecated = true];
+        uint64 uncommitted_llsn_end = 5
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LLSN",
+             (gogoproto.customname) = "UncommittedLLSNEnd",
+             deprecated = true];
     }
     uint32 storage_node_id = 1
         [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
          (gogoproto.customname) = "StorageNodeID"];
-    uint64 next_glsn = 2
-        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
-         (gogoproto.customname) = "NextGLSN"];
+    uint64 high_watermark= 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
     repeated LogStreamUncommitReport uncommit = 3;
+
+    uint64 next_glsn = 4
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
+         (gogoproto.customname) = "NextGLSN",
+         deprecated = true];
 }
 
 // GlobalLogStreamDescriptor is a committing result against with
@@ -44,20 +57,36 @@ message GlobalLogStreamDescriptor {
         uint32 log_stream_id = 1
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
              (gogoproto.customname) = "LogStreamID"];
-        uint64 committed_glsn_begin = 2
+        uint64 first_committed_glsn = 2
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
-             (gogoproto.customname) = "CommittedGLSNBegin"];
-        uint64 committed_glsn_end = 3
+             (gogoproto.customname) = "FirstCommittedGLSN"];
+        uint64 last_committed_glsn = 3
             [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
-             (gogoproto.customname) = "CommittedGLSNEnd"];
+             (gogoproto.customname) = "LastCommittedGLSN"];
+
+        uint64 committed_glsn_begin = 4
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
+             (gogoproto.customname) = "CommittedGLSNBegin",
+             deprecated = true];
+        uint64 committed_glsn_end = 5
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
+             (gogoproto.customname) = "CommittedGLSNEnd",
+             deprecated = true];
     }
-    uint64 next_glsn = 1
-        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
-         (gogoproto.customname) = "NextGLSN"];
-    uint64 prev_next_glsn = 2
-        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
-         (gogoproto.customname) = "PrevNextGLSN"];
+    uint64 high_watermark = 1
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
+    uint64 prev_high_watermark = 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN"];
     repeated LogStreamCommitResult commit_result = 3;
+
+    uint64 next_glsn = 4
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
+         (gogoproto.customname) = "NextGLSN",
+         deprecated = true];
+    uint64 prev_next_glsn = 5
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.GLSN",
+         (gogoproto.customname) = "PrevNextGLSN",
+         deprecated = true];
 }
 
 service LogStreamReporterService {
