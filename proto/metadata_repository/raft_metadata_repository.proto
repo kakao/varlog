@@ -17,8 +17,20 @@ message RegisterStorageNode {
         StorageNodeDescriptor storage_node = 1[(gogoproto.nullable) = true];
 }
 
+message UnregisterStorageNode {
+        uint32 storage_node_id = 1
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+             (gogoproto.customname) = "StorageNodeID"];
+}
+
 message RegisterLogStream {
         LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
+}
+
+message UnregisterLogStream {
+        uint32 log_stream_id = 1
+            [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+             (gogoproto.customname) = "LogStreamID"];
 }
 
 message UpdateLogStream {

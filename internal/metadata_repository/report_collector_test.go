@@ -102,11 +102,55 @@ func TestRegisterStorageNode(t *testing.T) {
 		reportCollector := NewReportCollector(cb, logger)
 		defer reportCollector.Close()
 
-		err := reportCollector.RegisterStorageNode(&varlogpb.StorageNodeDescriptor{}, types.GLSN(0))
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(time.Now().UnixNano()),
+		}
+
+		err := reportCollector.RegisterStorageNode(sn, types.GLSN(0))
 		So(err, ShouldBeNil)
 
-		err = reportCollector.RegisterStorageNode(&varlogpb.StorageNodeDescriptor{}, types.GLSN(0))
+		reportCollector.mu.RLock()
+
+		_, ok := reportCollector.executors[sn.StorageNodeID]
+		So(ok, ShouldBeTrue)
+
+		reportCollector.mu.RUnlock()
+
+		err = reportCollector.RegisterStorageNode(sn, types.GLSN(0))
 		So(err, ShouldNotBeNil)
+	})
+}
+
+func TestUnregisterStorageNode(t *testing.T) {
+	Convey("Registering dup storage node should return an error", t, func() {
+		a := NewDummyReporterClientFactory(false)
+		mr := NewDummyMetadataRepository()
+		cb := ReportCollectorCallbacks{
+			report:     mr.report,
+			getClient:  a.GetClient,
+			getNextGLS: mr.getNextGLS,
+		}
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(cb, logger)
+		defer reportCollector.Close()
+
+		snID := types.StorageNodeID(time.Now().UnixNano())
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: snID,
+		}
+
+		err := reportCollector.RegisterStorageNode(sn, types.GLSN(0))
+		So(err, ShouldBeNil)
+
+		err = reportCollector.UnregisterStorageNode(snID)
+		So(err, ShouldBeNil)
+
+		reportCollector.mu.RLock()
+
+		_, ok := reportCollector.executors[sn.StorageNodeID]
+		So(ok, ShouldBeFalse)
+
+		reportCollector.mu.RUnlock()
 	})
 }
 

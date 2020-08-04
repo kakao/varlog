@@ -30,8 +30,8 @@ func (r *InMemoryMetadataRepository) Close() error {
 }
 
 func (r *InMemoryMetadataRepository) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	if err := r.metadata.InsertStorageNode(sn); err != nil {
 		return varlog.ErrAlreadyExists
@@ -40,9 +40,18 @@ func (r *InMemoryMetadataRepository) RegisterStorageNode(ctx context.Context, sn
 	return nil
 }
 
+func (r *InMemoryMetadataRepository) UnregisterStorageNode(ctx context.Context, snID types.StorageNodeID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.metadata.DeleteStorageNode(snID)
+
+	return nil
+}
+
 func (r *InMemoryMetadataRepository) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	if err := r.metadata.InsertLogStream(ls); err != nil {
 		return varlog.ErrAlreadyExists
@@ -51,9 +60,18 @@ func (r *InMemoryMetadataRepository) RegisterLogStream(ctx context.Context, ls *
 	return nil
 }
 
+func (r *InMemoryMetadataRepository) UnregisterLogStream(ctx context.Context, lsID types.LogStreamID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.metadata.DeleteLogStream(lsID)
+
+	return nil
+}
+
 func (r *InMemoryMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	if err := r.metadata.UpdateLogStream(ls); err != nil {
 		return varlog.ErrNotExist

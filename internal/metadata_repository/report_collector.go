@@ -29,6 +29,7 @@ type ReportCollectExecutor struct {
 	mu           sync.RWMutex
 	resultC      chan *snpb.GlobalLogStreamDescriptor
 	logger       *zap.Logger
+	cancel       context.CancelFunc
 }
 
 type ReportCollector struct {
@@ -83,11 +84,28 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		cli:      cli,
 		logger:   rc.logger.Named("executor"),
 	}
+	ctx, cancel := context.WithCancel(rc.ctx)
+	executor.cancel = cancel
 
 	rc.executors[sn.StorageNodeID] = executor
 
-	rc.runner.Run(rc.ctx, executor.runCommit)
-	rc.runner.Run(rc.ctx, executor.runReport)
+	rc.runner.Run(ctx, executor.runCommit)
+	rc.runner.Run(ctx, executor.runReport)
+
+	return nil
+}
+
+func (rc *ReportCollector) UnregisterStorageNode(snID types.StorageNodeID) error {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	executor, ok := rc.executors[snID]
+	if !ok {
+		return varlog.ErrNotExist
+	}
+
+	delete(rc.executors, snID)
+	executor.cancel()
 
 	return nil
 }
