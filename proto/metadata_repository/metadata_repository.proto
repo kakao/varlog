@@ -57,7 +57,9 @@ message UnsealResponse {
 
 service MetadataRepositoryService {
         rpc RegisterStorageNode(StorageNodeRequest) returns (google.protobuf.Empty) {}
+        rpc UnregisterStorageNode(StorageNodeRequest) returns (google.protobuf.Empty) {}
         rpc RegisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
+        rpc UnregisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
         rpc UpdateLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
         rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
         rpc Seal(SealRequest) returns (SealResponse) {}

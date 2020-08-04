@@ -35,6 +35,65 @@ func TestStorageRegisterSN(t *testing.T) {
 	})
 }
 
+func TestStoragUnregisterSN(t *testing.T) {
+	Convey("Given a MetadataStorage", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+		snID := types.StorageNodeID(time.Now().UnixNano())
+
+		Convey("When SN is not exist", func(ctx C) {
+			Convey("Then it should not be registered", func(ctx C) {
+				err := ms.unregisterStorageNode(snID)
+				So(err, ShouldResemble, varlog.ErrNotExist)
+			})
+		})
+
+		Convey("Wnen SN is exist", func(ctx C) {
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snID,
+			}
+
+			err := ms.RegisterStorageNode(sn, 0, 0)
+			So(err, ShouldBeNil)
+
+			So(ms.isCopyOnWrite(), ShouldBeTrue)
+
+			Convey("Then it should be unregistered", func(ctx C) {
+				err = ms.unregisterStorageNode(snID)
+				So(err, ShouldBeNil)
+
+				So(ms.lookupStorageNode(snID), ShouldBeNil)
+
+				Convey("unregistered SN should not be found after merge", func(ctx C) {
+					ms.mergeMetadata()
+					ms.mergeLogStream()
+
+					ms.releaseCopyOnWrite()
+
+					So(ms.lookupStorageNode(snID), ShouldBeNil)
+				})
+			})
+
+			Convey("And LS which have the SN as replica is exist", func(ctx C) {
+				rep := 1
+				lsID := types.LogStreamID(time.Now().UnixNano())
+				snIDs := make([]types.StorageNodeID, rep)
+				for i := 0; i < rep; i++ {
+					snIDs[i] = snID + types.StorageNodeID(i)
+				}
+				ls := makeLogStream(lsID, snIDs)
+
+				err := ms.registerLogStream(ls)
+				So(err, ShouldBeNil)
+
+				Convey("Then SN should not be unregistered", func(ctx C) {
+					err := ms.unregisterStorageNode(snID)
+					So(err, ShouldResemble, varlog.ErrInvalidArgument)
+				})
+			})
+		})
+	})
+}
+
 func TestStorageRegisterLS(t *testing.T) {
 	Convey("LS which has no SN should not be registerd", t, func(ctx C) {
 		ms := NewMetadataStorage(nil)
@@ -86,6 +145,58 @@ func TestStorageRegisterLS(t *testing.T) {
 				for i := 0; i < rep; i++ {
 					So(ms.LookupLocalLogStreamReplica(lsID, snIDs[i]), ShouldNotBeNil)
 				}
+			})
+		})
+	})
+}
+
+func TestStoragUnregisterLS(t *testing.T) {
+	Convey("LS which is not exist should not be unregistered", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		lsID := types.LogStreamID(time.Now().UnixNano())
+
+		err := ms.unregisterLogStream(lsID)
+		So(err, ShouldResemble, varlog.ErrNotExist)
+
+		Convey("LS which is exist should be unregistered", func(ctx C) {
+			rep := 1
+			snIDs := make([]types.StorageNodeID, rep)
+			tmp := types.StorageNodeID(time.Now().UnixNano())
+			for i := 0; i < rep; i++ {
+				snIDs[i] = tmp + types.StorageNodeID(i)
+
+				sn := &varlogpb.StorageNodeDescriptor{
+					StorageNodeID: snIDs[i],
+				}
+
+				err := ms.registerStorageNode(sn)
+				So(err, ShouldBeNil)
+			}
+			ls := makeLogStream(lsID, snIDs)
+
+			err := ms.RegisterLogStream(ls, 0, 0)
+			So(err, ShouldBeNil)
+			So(len(ms.GetLocalLogStreamIDs()), ShouldEqual, 1)
+
+			So(ms.isCopyOnWrite(), ShouldBeTrue)
+
+			err = ms.unregisterLogStream(lsID)
+			So(err, ShouldBeNil)
+
+			So(ms.lookupLogStream(lsID), ShouldBeNil)
+			So(ms.LookupLocalLogStream(lsID), ShouldBeNil)
+			So(len(ms.GetLocalLogStreamIDs()), ShouldEqual, 0)
+
+			Convey("unregistered SN should not be found after merge", func(ctx C) {
+				ms.mergeMetadata()
+				ms.mergeLogStream()
+
+				ms.releaseCopyOnWrite()
+
+				So(ms.lookupLogStream(lsID), ShouldBeNil)
+				So(ms.LookupLocalLogStream(lsID), ShouldBeNil)
+				So(len(ms.GetLocalLogStreamIDs()), ShouldEqual, 0)
 			})
 		})
 	})

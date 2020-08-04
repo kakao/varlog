@@ -252,8 +252,12 @@ func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
 	switch r := f.(type) {
 	case *pb.RegisterStorageNode:
 		mr.applyRegisterStorageNode(r, e.NodeIndex, e.RequestIndex)
+	case *pb.UnregisterStorageNode:
+		mr.applyUnregisterStorageNode(r, e.NodeIndex, e.RequestIndex)
 	case *pb.RegisterLogStream:
 		mr.applyRegisterLogStream(r, e.NodeIndex, e.RequestIndex)
+	case *pb.UnregisterLogStream:
+		mr.applyUnregisterLogStream(r, e.NodeIndex, e.RequestIndex)
 	case *pb.UpdateLogStream:
 		mr.applyUpdateLogStream(r, e.NodeIndex, e.RequestIndex)
 	case *pb.Report:
@@ -282,8 +286,28 @@ func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorage
 	return nil
 }
 
+func (mr *RaftMetadataRepository) applyUnregisterStorageNode(r *pb.UnregisterStorageNode, nodeIndex, requestIndex uint64) error {
+	err := mr.storage.UnregisterStorageNode(r.StorageNodeID, nodeIndex, requestIndex)
+	if err != nil {
+		return err
+	}
+
+	mr.reportCollector.UnregisterStorageNode(r.StorageNodeID)
+
+	return nil
+}
+
 func (mr *RaftMetadataRepository) applyRegisterLogStream(r *pb.RegisterLogStream, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.RegisterLogStream(r.LogStream, nodeIndex, requestIndex)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applyUnregisterLogStream(r *pb.UnregisterLogStream, nodeIndex, requestIndex uint64) error {
+	err := mr.storage.UnregisterLogStream(r.LogStreamID, nodeIndex, requestIndex)
 	if err != nil {
 		return err
 	}
@@ -565,9 +589,25 @@ func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *v
 	return mr.propose(ctx, r, true)
 }
 
+func (mr *RaftMetadataRepository) UnregisterStorageNode(ctx context.Context, snID types.StorageNodeID) error {
+	r := &pb.UnregisterStorageNode{
+		StorageNodeID: snID,
+	}
+
+	return mr.propose(ctx, r, true)
+}
+
 func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
 	r := &pb.RegisterLogStream{
 		LogStream: ls,
+	}
+
+	return mr.propose(ctx, r, true)
+}
+
+func (mr *RaftMetadataRepository) UnregisterLogStream(ctx context.Context, lsID types.LogStreamID) error {
+	r := &pb.UnregisterLogStream{
+		LogStreamID: lsID,
 	}
 
 	return mr.propose(ctx, r, true)

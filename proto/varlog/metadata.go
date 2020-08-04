@@ -7,12 +7,24 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 )
 
+func (s LogStreamStatus) Deleted() bool {
+	return s == LogStreamStatusDeleted
+}
+
 func (s LogStreamStatus) Running() bool {
 	return s == LogStreamStatusRunning
 }
 
 func (s LogStreamStatus) Sealed() bool {
-	return !s.Running()
+	return !s.Running() && !s.Deleted()
+}
+
+func (s StorageNodeStatus) Running() bool {
+	return s == StorageNodeStatusRunning
+}
+
+func (s StorageNodeStatus) Deleted() bool {
+	return s == StorageNodeStatusDeleted
 }
 
 func (m *MetadataDescriptor) searchStorageNode(id types.StorageNodeID) (int, bool) {
@@ -57,6 +69,10 @@ func (m *MetadataDescriptor) insertLogStreamAt(idx int, ls *LogStreamDescriptor)
 	m.LogStreams = l
 }
 
+func (m *MetadataDescriptor) updateStorageNodeAt(idx int, sn *StorageNodeDescriptor) {
+	m.StorageNodes[idx] = sn
+}
+
 func (m *MetadataDescriptor) updateLogStreamAt(idx int, ls *LogStreamDescriptor) {
 	m.LogStreams[idx] = ls
 }
@@ -75,18 +91,44 @@ func (m *MetadataDescriptor) InsertStorageNode(sn *StorageNodeDescriptor) error 
 	return nil
 }
 
-func (m *MetadataDescriptor) DeleteStorageNode(id types.StorageNodeID) {
+func (m *MetadataDescriptor) UpdateStorageNode(sn *StorageNodeDescriptor) error {
+	if m == nil || sn == nil {
+		return errors.New("invalid argument")
+	}
+
+	idx, match := m.searchStorageNode(sn.StorageNodeID)
+	if !match {
+		return errors.New("not exist")
+	}
+
+	m.updateStorageNodeAt(idx, sn)
+	return nil
+}
+
+func (m *MetadataDescriptor) UpsertStorageNode(sn *StorageNodeDescriptor) error {
+	if err := m.InsertStorageNode(sn); err != nil {
+		return m.UpdateStorageNode(sn)
+	}
+
+	return nil
+}
+
+func (m *MetadataDescriptor) DeleteStorageNode(id types.StorageNodeID) error {
 	if m == nil {
-		return
+		return nil
 	}
 
 	idx, match := m.searchStorageNode(id)
-	if match {
-		l := m.StorageNodes
-
-		copy(l[idx:], l[idx+1:])
-		m.StorageNodes = l[:len(l)-1]
+	if !match {
+		return errors.New("not exists")
 	}
+
+	l := m.StorageNodes
+
+	copy(l[idx:], l[idx+1:])
+	m.StorageNodes = l[:len(l)-1]
+
+	return nil
 }
 
 func (m *MetadataDescriptor) GetStorageNode(id types.StorageNodeID) *StorageNodeDescriptor {
@@ -130,18 +172,30 @@ func (m *MetadataDescriptor) UpdateLogStream(ls *LogStreamDescriptor) error {
 	return nil
 }
 
-func (m *MetadataDescriptor) DeleteLogStream(id types.LogStreamID) {
+func (m *MetadataDescriptor) UpsertLogStream(ls *LogStreamDescriptor) error {
+	if err := m.InsertLogStream(ls); err != nil {
+		return m.UpdateLogStream(ls)
+	}
+
+	return nil
+}
+
+func (m *MetadataDescriptor) DeleteLogStream(id types.LogStreamID) error {
 	if m == nil {
-		return
+		return nil
 	}
 
 	idx, match := m.searchLogStream(id)
-	if match {
-		l := m.LogStreams
-
-		copy(l[idx:], l[idx+1:])
-		m.LogStreams = l[:len(l)-1]
+	if !match {
+		return errors.New("not exists")
 	}
+
+	l := m.LogStreams
+
+	copy(l[idx:], l[idx+1:])
+	m.LogStreams = l[:len(l)-1]
+
+	return nil
 }
 
 func (m *MetadataDescriptor) GetLogStream(id types.LogStreamID) *LogStreamDescriptor {
@@ -155,4 +209,16 @@ func (m *MetadataDescriptor) GetLogStream(id types.LogStreamID) *LogStreamDescri
 	}
 
 	return nil
+}
+
+func (m *MetadataDescriptor) UnregistableStorageNode(snID types.StorageNodeID) bool {
+	for _, ls := range m.LogStreams {
+		for _, r := range ls.Replicas {
+			if r.StorageNodeID == snID {
+				return false
+			}
+		}
+	}
+
+	return true
 }

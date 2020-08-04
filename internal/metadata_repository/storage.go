@@ -124,38 +124,104 @@ Loop:
 
 func (ms *MetadataStorage) lookupStorageNode(snID types.StorageNodeID) *varlogpb.StorageNodeDescriptor {
 	pre, cur := ms.getStateMachine()
-	if pre != cur {
-		sn := pre.Metadata.GetStorageNode(snID)
-		if sn != nil {
+	sn := cur.Metadata.GetStorageNode(snID)
+	if sn != nil {
+		if sn.Status.Deleted() {
+			return nil
+		} else {
 			return sn
 		}
 	}
 
-	return cur.Metadata.GetStorageNode(snID)
+	if pre == cur {
+		return nil
+	}
+
+	return pre.Metadata.GetStorageNode(snID)
+}
+
+func (ms *MetadataStorage) lookupLogStream(lsID types.LogStreamID) *varlogpb.LogStreamDescriptor {
+	pre, cur := ms.getStateMachine()
+	ls := cur.Metadata.GetLogStream(lsID)
+	if ls != nil {
+		if ls.Status.Deleted() {
+			return nil
+		} else {
+			return ls
+		}
+	}
+
+	if pre == cur {
+		return nil
+	}
+
+	return pre.Metadata.GetLogStream(lsID)
 }
 
 func (ms *MetadataStorage) registerStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
 	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
 
-	pre, cur := ms.getStateMachine()
-	if pre != cur {
-		if pre.Metadata.GetStorageNode(sn.StorageNodeID) != nil {
-			return varlog.ErrAlreadyExists
+	if ms.lookupStorageNode(sn.StorageNodeID) != nil {
+		return varlog.ErrAlreadyExists
+	}
+
+	_, cur := ms.getStateMachine()
+
+	ms.mtMu.Lock()
+	defer ms.mtMu.Unlock()
+
+	return cur.Metadata.UpsertStorageNode(sn)
+}
+
+func (ms *MetadataStorage) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor, nodeIndex, requestIndex uint64) error {
+	err := ms.registerStorageNode(sn)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
 		}
+		return err
+	}
+
+	ms.triggerMetadataCache(nodeIndex, requestIndex)
+	return nil
+}
+
+func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error {
+	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
+
+	pre, cur := ms.getStateMachine()
+
+	if cur.Metadata.GetStorageNode(snID) == nil &&
+		(pre == cur || pre.Metadata.GetStorageNode(snID) == nil) {
+		return varlog.ErrNotExist
+	}
+
+	if !cur.Metadata.UnregistableStorageNode(snID) {
+		return varlog.ErrInvalidArgument
+	}
+
+	if cur != pre && !pre.Metadata.UnregistableStorageNode(snID) {
+		return varlog.ErrInvalidArgument
 	}
 
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	if err := cur.Metadata.InsertStorageNode(sn); err != nil {
-		return varlog.ErrAlreadyExists
+	cur.Metadata.DeleteStorageNode(snID)
+	if pre != cur {
+		deleted := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: snID,
+			Status:        varlogpb.StorageNodeStatusDeleted,
+		}
+
+		cur.Metadata.InsertStorageNode(deleted)
 	}
 
 	return nil
 }
 
-func (ms *MetadataStorage) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor, nodeIndex, requestIndex uint64) error {
-	err := ms.registerStorageNode(sn)
+func (ms *MetadataStorage) UnregisterStorageNode(snID types.StorageNodeID, nodeIndex, requestIndex uint64) error {
+	err := ms.unregisterStorageNode(snID)
 	if err != nil {
 		if ms.cacheCompleteCB != nil {
 			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
@@ -180,18 +246,17 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 		}
 	}
 
-	pre, cur := ms.getStateMachine()
-	if pre != cur {
-		if pre.Metadata.GetLogStream(ls.LogStreamID) != nil {
-			return varlog.ErrAlreadyExists
-		}
+	if ms.lookupLogStream(ls.LogStreamID) != nil {
+		return varlog.ErrAlreadyExists
 	}
+
+	_, cur := ms.getStateMachine()
 
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	if err := cur.Metadata.InsertLogStream(ls); err != nil {
-		return varlog.ErrAlreadyExists
+	if err := cur.Metadata.UpsertLogStream(ls); err != nil {
+		return err
 	}
 
 	lm := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
@@ -221,6 +286,53 @@ func (ms *MetadataStorage) RegisterLogStream(ls *varlogpb.LogStreamDescriptor, n
 	return nil
 }
 
+func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
+	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
+
+	pre, cur := ms.getStateMachine()
+
+	if cur.Metadata.GetLogStream(lsID) == nil &&
+		(pre == cur || pre.Metadata.GetLogStream(lsID) == nil) {
+		return varlog.ErrNotExist
+	}
+
+	ms.mtMu.Lock()
+	defer ms.mtMu.Unlock()
+
+	cur.Metadata.DeleteLogStream(lsID)
+	delete(cur.LogStream.LocalLogStreams, lsID)
+
+	if pre != cur {
+		deleted := &varlogpb.LogStreamDescriptor{
+			LogStreamID: lsID,
+			Status:      varlogpb.LogStreamStatusDeleted,
+		}
+
+		cur.Metadata.InsertLogStream(deleted)
+
+		lm := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
+			Status: varlogpb.LogStreamStatusDeleted,
+		}
+
+		cur.LogStream.LocalLogStreams[lsID] = lm
+	}
+
+	return nil
+}
+
+func (ms *MetadataStorage) UnregisterLogStream(lsID types.LogStreamID, nodeIndex, requestIndex uint64) error {
+	err := ms.unregisterLogStream(lsID)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
+		}
+		return err
+	}
+
+	ms.triggerMetadataCache(nodeIndex, requestIndex)
+	return nil
+}
+
 func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) error {
 	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
 
@@ -236,21 +348,15 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 
 	pre, cur := ms.getStateMachine()
 
-	exist := cur.Metadata.GetLogStream(ls.LogStreamID) != nil
-	if !exist && pre.Metadata.GetLogStream(ls.LogStreamID) == nil {
+	if cur.Metadata.GetLogStream(ls.LogStreamID) == nil &&
+		pre.Metadata.GetLogStream(ls.LogStreamID) == nil {
 		return varlog.ErrNotExist
 	}
 
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	if exist {
-		cur.Metadata.UpdateLogStream(ls)
-	} else {
-		cur.Metadata.InsertLogStream(ls)
-	}
-
-	return nil
+	return cur.Metadata.UpsertLogStream(ls)
 }
 
 func (ms *MetadataStorage) updateLocalLogStream(ls *varlogpb.LogStreamDescriptor) error {
@@ -448,8 +554,11 @@ func (ms *MetadataStorage) LookupLocalLogStream(lsID types.LogStreamID) *pb.Meta
 	pre, cur := ms.getStateMachine()
 
 	c, _ := cur.LogStream.LocalLogStreams[lsID]
-
 	if c != nil {
+		if c.Status.Deleted() {
+			return nil
+		}
+
 		return c
 	}
 
@@ -461,6 +570,10 @@ func (ms *MetadataStorage) LookupLocalLogStreamReplica(lsID types.LogStreamID, s
 	pre, cur := ms.getStateMachine()
 
 	if lm, ok := cur.LogStream.LocalLogStreams[lsID]; ok {
+		if lm.Status.Deleted() {
+			return nil
+		}
+
 		if s, ok := lm.Replicas[snID]; ok {
 			return s
 		}
@@ -494,7 +607,7 @@ func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, s
 		cur.LogStream.LocalLogStreams[lsID] = lm
 	}
 
-	if lm.Status.Sealed() {
+	if lm.Status.Deleted() || lm.Status.Sealed() {
 		return
 	}
 
@@ -512,14 +625,27 @@ func (ms *MetadataStorage) GetLocalLogStreamIDs() []types.LogStreamID {
 	pre, cur := ms.getStateMachine()
 
 	uniq := make(map[types.LogStreamID]struct{})
-	for lsID := range pre.LogStream.LocalLogStreams {
-		uniq[lsID] = struct{}{}
+	var deleted []types.LogStreamID
+	for lsID, lls := range pre.LogStream.LocalLogStreams {
+		if lls.Status.Deleted() {
+			deleted = append(deleted, lsID)
+		} else {
+			uniq[lsID] = struct{}{}
+		}
 	}
 
 	if pre != cur {
-		for lsID := range cur.LogStream.LocalLogStreams {
-			uniq[lsID] = struct{}{}
+		for lsID, lls := range cur.LogStream.LocalLogStreams {
+			if lls.Status.Deleted() {
+				deleted = append(deleted, lsID)
+			} else {
+				uniq[lsID] = struct{}{}
+			}
 		}
+	}
+
+	for _, lsID := range deleted {
+		delete(uniq, lsID)
 	}
 
 	lsIDs := make([]types.LogStreamID, 0, len(uniq))
@@ -707,11 +833,17 @@ func (ms *MetadataStorage) mergeMetadata() {
 
 	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
 		//TODO:: UpdateStorageNode
-		ms.origStateMachine.Metadata.InsertStorageNode(sn)
+		if sn.Status.Deleted() {
+			ms.origStateMachine.Metadata.DeleteStorageNode(sn.StorageNodeID)
+		} else {
+			ms.origStateMachine.Metadata.InsertStorageNode(sn)
+		}
 	}
 
 	for _, ls := range ms.diffStateMachine.Metadata.LogStreams {
-		if ms.origStateMachine.Metadata.InsertLogStream(ls) != nil {
+		if ls.Status.Deleted() {
+			ms.origStateMachine.Metadata.DeleteLogStream(ls.LogStreamID)
+		} else if ms.origStateMachine.Metadata.InsertLogStream(ls) != nil {
 			ms.origStateMachine.Metadata.UpdateLogStream(ls)
 		}
 	}
@@ -721,7 +853,11 @@ func (ms *MetadataStorage) mergeMetadata() {
 
 func (ms *MetadataStorage) mergeLogStream() {
 	for lsID, lm := range ms.diffStateMachine.LogStream.LocalLogStreams {
-		ms.origStateMachine.LogStream.LocalLogStreams[lsID] = lm
+		if lm.Status.Deleted() {
+			delete(ms.origStateMachine.LogStream.LocalLogStreams, lsID)
+		} else {
+			ms.origStateMachine.LogStream.LocalLogStreams[lsID] = lm
+		}
 	}
 
 	if len(ms.diffStateMachine.LogStream.LocalLogStreams) > 0 {
@@ -737,6 +873,7 @@ func (ms *MetadataStorage) mergeLogStream() {
 
 	ms.origStateMachine.LogStream.GlobalLogStreams = append(ms.origStateMachine.LogStream.GlobalLogStreams, ms.diffStateMachine.LogStream.GlobalLogStreams...)
 	ms.diffStateMachine.LogStream.GlobalLogStreams = nil
+
 	ms.trimGlobalLogStream()
 }
 

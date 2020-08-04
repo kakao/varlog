@@ -25,36 +25,36 @@ func (s *MetadataRepositoryService) Register(server *grpc.Server) {
 
 func (s *MetadataRepositoryService) RegisterStorageNode(ctx context.Context, req *pb.StorageNodeRequest) (*types.Empty, error) {
 	err := s.metaRepos.RegisterStorageNode(ctx, req.StorageNode)
-	if err != nil {
-		return &types.Empty{}, err
-	}
+	return &types.Empty{}, err
+}
 
-	return &types.Empty{}, nil
+func (s *MetadataRepositoryService) UnregisterStorageNode(ctx context.Context, req *pb.StorageNodeRequest) (*types.Empty, error) {
+	err := s.metaRepos.UnregisterStorageNode(ctx, req.StorageNode.StorageNodeID)
+	return &types.Empty{}, err
 }
 
 func (s *MetadataRepositoryService) RegisterLogStream(ctx context.Context, req *pb.LogStreamRequest) (*types.Empty, error) {
 	err := s.metaRepos.RegisterLogStream(ctx, req.LogStream)
-	if err != nil {
-		return &types.Empty{}, err
-	}
-	return &types.Empty{}, nil
+	return &types.Empty{}, err
+}
+
+func (s *MetadataRepositoryService) UnregisterLogStream(ctx context.Context, req *pb.LogStreamRequest) (*types.Empty, error) {
+	err := s.metaRepos.UnregisterLogStream(ctx, req.LogStream.LogStreamID)
+	return &types.Empty{}, err
 }
 
 func (s *MetadataRepositoryService) UpdateLogStream(ctx context.Context, req *pb.LogStreamRequest) (*types.Empty, error) {
 	err := s.metaRepos.UpdateLogStream(ctx, req.LogStream)
-	if err != nil {
-		return &types.Empty{}, err
-	}
-	return &types.Empty{}, nil
+	return &types.Empty{}, err
 }
 
 func (s *MetadataRepositoryService) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
 	metadata, err := s.metaRepos.GetMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return &pb.GetMetadataResponse{}, err
 	}
-	rsp := &pb.GetMetadataResponse{
+
+	return &pb.GetMetadataResponse{
 		Metadata: metadata,
-	}
-	return rsp, nil
+	}, nil
 }
