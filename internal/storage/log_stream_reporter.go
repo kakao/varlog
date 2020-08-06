@@ -154,11 +154,7 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 		if status.KnownNextGLSN > 0 && (knownNextGLSN == 0 || knownNextGLSN > status.KnownNextGLSN) {
 			knownNextGLSN = status.KnownNextGLSN
 		}
-		// To decrease the size of reports, it can discard the reports not having
-		// uncommitted log entries
-		if status.UncommittedLLSNBegin < status.UncommittedLLSNEnd {
-			reports = append(reports, status)
-		}
+		reports = append(reports, status)
 	}
 	lsr.mtxExecutors.RUnlock()
 
