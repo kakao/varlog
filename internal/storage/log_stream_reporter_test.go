@@ -121,33 +121,6 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 			})
 		})
 
-		//  It is an optional optimization to shrink the size of the report.
-		Convey("When UncommittedLLSNBegin and UncommittedLLSNEnd of every LogStreamExecutors are the same respectively", func() {
-			for i, lse := range lseList {
-				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
-					UncommittedLogStreamStatus{
-						LogStreamID:          lse.LogStreamID(),
-						KnownNextGLSN:        types.GLSN(10 * i),
-						UncommittedLLSNBegin: types.LLSN(10 * i),
-						UncommittedLLSNEnd:   types.LLSN(10 * i),
-					},
-				)
-			}
-
-			Convey("Then the report should be empty", func() {
-				knownNextGLSN, reports := lsr.GetReport()
-				So(len(reports), ShouldBeZeroValue)
-				So(knownNextGLSN, ShouldEqual, types.GLSN(10))
-
-				Convey("And the empty report should not be stored in history", func() {
-					lsr.Close()
-					_, ok := lsr.history[knownNextGLSN]
-					So(ok, ShouldBeFalse)
-				})
-			})
-
-		})
-
 		Convey("When KnownNextGLSN of the report is computed again", func() {
 			for i, lse := range lseList {
 				first := lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
