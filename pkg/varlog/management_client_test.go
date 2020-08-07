@@ -12,6 +12,32 @@ import (
 	"github.com/kakao/varlog/proto/storage_node/mock"
 )
 
+func TestManagementClientGetMetadata(t *testing.T) {
+	Convey("Given that a ManagementClient calls GetMetadata to a ManagementService", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockClient := mock.NewMockManagementClient(ctrl)
+		mc := &managementClient{rpcClient: mockClient}
+
+		Convey("When the ManagementService returns an error", func() {
+			mockClient.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, ErrInternal)
+			Convey("Then the ManagementClient should return the error", func() {
+				_, err := mc.GetMetadata(context.TODO(), pb.MetadataTypeHeartbeat)
+				So(err, ShouldNotBeNil)
+			})
+		})
+
+		Convey("Whyen the ManagementService succeeds to get metadata", func() {
+			mockClient.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(&pb.GetMetadataResponse{}, nil)
+			Convey("Then the ManagementClient should return the metadata", func() {
+				_, err := mc.GetMetadata(context.TODO(), pb.MetadataTypeHeartbeat)
+				So(err, ShouldBeNil)
+			})
+		})
+	})
+}
+
 func TestManagementClientAddLogStream(t *testing.T) {
 	Convey("Given that a ManagementClient calls AddLogStream to a ManagementService", t, func() {
 		ctrl := gomock.NewController(t)

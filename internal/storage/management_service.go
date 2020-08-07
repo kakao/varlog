@@ -16,8 +16,12 @@ type managementService struct {
 	m Management
 }
 
-func (s *managementService) GetMetadata(context.Context, *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
-	panic("not yet implemented")
+func (s *managementService) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
+	metadata, err := s.m.GetMetadata(req.GetClusterID(), req.GetMetadataType())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.GetMetadataResponse{StorageNodeMetadata: metadata}, nil
 }
 
 func (s *managementService) AddLogStream(ctx context.Context, req *pb.AddLogStreamRequest) (*pb.AddLogStreamResponse, error) {

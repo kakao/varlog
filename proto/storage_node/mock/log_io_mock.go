@@ -36,26 +36,6 @@ func (m *MockLogIOClient) EXPECT() *MockLogIOClientMockRecorder {
 	return m.recorder
 }
 
-// AddLogStream mocks base method
-func (m *MockLogIOClient) AddLogStream(arg0 context.Context, arg1 *storage_node.AddLogStreamRequest, arg2 ...grpc.CallOption) (*storage_node.AddLogStreamResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1}
-	for _, a := range arg2 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "AddLogStream", varargs...)
-	ret0, _ := ret[0].(*storage_node.AddLogStreamResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddLogStream indicates an expected call of AddLogStream
-func (mr *MockLogIOClientMockRecorder) AddLogStream(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockLogIOClient)(nil).AddLogStream), varargs...)
-}
-
 // Append mocks base method
 func (m *MockLogIOClient) Append(arg0 context.Context, arg1 *storage_node.AppendRequest, arg2 ...grpc.CallOption) (*storage_node.AppendResponse, error) {
 	m.ctrl.T.Helper()
@@ -157,21 +137,6 @@ func NewMockLogIOServer(ctrl *gomock.Controller) *MockLogIOServer {
 // EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockLogIOServer) EXPECT() *MockLogIOServerMockRecorder {
 	return m.recorder
-}
-
-// AddLogStream mocks base method
-func (m *MockLogIOServer) AddLogStream(arg0 context.Context, arg1 *storage_node.AddLogStreamRequest) (*storage_node.AddLogStreamResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddLogStream", arg0, arg1)
-	ret0, _ := ret[0].(*storage_node.AddLogStreamResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddLogStream indicates an expected call of AddLogStream
-func (mr *MockLogIOServerMockRecorder) AddLogStream(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockLogIOServer)(nil).AddLogStream), arg0, arg1)
 }
 
 // Append mocks base method
