@@ -67,54 +67,54 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 			lsr.Close()
 		})
 
-		// The zero value of KnownNextGLSN of LogStreamExecutor means that the LogStream is
-		// just added to StorageNode.
-		Convey("When KnownNextGLSNs of every LogStreamExecutors are zero", func() {
+		// The zero value of KnownHighWatermark of LogStreamExecutor means that
+		// the LogStream is just added to StorageNode.
+		Convey("When KnownHighWatermark of every LogStreamExecutors are zero", func() {
 			for _, lse := range lseList {
 				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
-						LogStreamID:          lse.LogStreamID(),
-						KnownNextGLSN:        types.GLSN(0),
-						UncommittedLLSNBegin: types.LLSN(0),
-						UncommittedLLSNEnd:   types.LLSN(10),
+						LogStreamID:           lse.LogStreamID(),
+						KnownHighWatermark:    types.InvalidGLSN,
+						UncommittedLLSNOffset: types.MinLLSN,
+						UncommittedLLSNLength: 10,
 					},
 				)
 			}
 
-			Convey("Then KnownNextGLSN of the report should be zero", func() {
-				knownNextGLSN, reports := lsr.GetReport()
-				So(knownNextGLSN, ShouldEqual, types.GLSN(0))
+			Convey("Then KnownHighWatermark of the report should be zero", func() {
+				knownHighWatermark, reports := lsr.GetReport()
+				So(knownHighWatermark, ShouldEqual, types.InvalidGLSN)
 				So(len(reports), ShouldEqual, len(lseList))
 
 				Convey("And the report should be stored in history", func() {
 					lsr.Close()
-					r, ok := lsr.history[knownNextGLSN]
+					r, ok := lsr.history[knownHighWatermark]
 					So(ok, ShouldBeTrue)
 					So(r, ShouldResemble, reports)
 				})
 			})
 		})
 
-		Convey("When KnownNextGLSNs of every LogStreamExecutors are different", func() {
+		Convey("When KnownHighWatermark of every LogStreamExecutors are different", func() {
 			for i, lse := range lseList {
 				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
-						LogStreamID:          lse.LogStreamID(),
-						KnownNextGLSN:        types.GLSN(10 * i),
-						UncommittedLLSNBegin: types.LLSN(0),
-						UncommittedLLSNEnd:   types.LLSN(10),
+						LogStreamID:           lse.LogStreamID(),
+						KnownHighWatermark:    types.GLSN(10 * i),
+						UncommittedLLSNOffset: types.MinLLSN,
+						UncommittedLLSNLength: 10,
 					},
 				)
 			}
 
-			Convey("Then the KnownNextGLSN of the report should be minimum, not zero", func() {
-				knownNextGLSN, reports := lsr.GetReport()
-				So(knownNextGLSN, ShouldEqual, types.GLSN(10))
+			Convey("Then the KnownHighWatermark of the report should be minimum, not zero", func() {
+				knownHighWatermark, reports := lsr.GetReport()
+				So(knownHighWatermark, ShouldEqual, types.GLSN(10))
 				So(len(reports), ShouldEqual, len(lseList))
 
 				Convey("And the report should be stored in history", func() {
 					lsr.Close()
-					r, ok := lsr.history[knownNextGLSN]
+					r, ok := lsr.history[knownHighWatermark]
 					So(ok, ShouldBeTrue)
 					So(r, ShouldResemble, reports)
 				})
@@ -125,69 +125,69 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 			for i, lse := range lseList {
 				first := lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
-						LogStreamID:          lse.LogStreamID(),
-						KnownNextGLSN:        types.GLSN(10),
-						UncommittedLLSNBegin: types.LLSN(0),
-						UncommittedLLSNEnd:   types.LLSN(10),
+						LogStreamID:           lse.LogStreamID(),
+						KnownHighWatermark:    types.GLSN(10),
+						UncommittedLLSNOffset: types.MinLLSN,
+						UncommittedLLSNLength: 10,
 					},
 				)
 				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
-						LogStreamID:          lse.LogStreamID(),
-						KnownNextGLSN:        types.GLSN(10),
-						UncommittedLLSNBegin: types.LLSN(0),
-						UncommittedLLSNEnd:   types.LLSN(10 * i),
+						LogStreamID:           lse.LogStreamID(),
+						KnownHighWatermark:    types.GLSN(10),
+						UncommittedLLSNOffset: types.MinLLSN,
+						UncommittedLLSNLength: uint64(10 * i),
 					},
 				).After(first)
 			}
 
-			Convey("Then the history should have the past non-empty report with the same KnownNextGLSN", func() {
-				knownNextGLSN1, reports1 := lsr.GetReport()
+			Convey("Then the history should have the past non-empty report with the same KnownHighWatermark", func() {
+				knownHighWatermark1, reports1 := lsr.GetReport()
 				So(len(reports1), ShouldEqual, len(lseList))
-				So(knownNextGLSN1, ShouldEqual, types.GLSN(10))
+				So(knownHighWatermark1, ShouldEqual, types.GLSN(10))
 
-				knownNextGLSN2, reports2 := lsr.GetReport()
+				knownHighWatermark2, reports2 := lsr.GetReport()
 				So(len(reports2), ShouldEqual, len(lseList))
-				So(knownNextGLSN2, ShouldEqual, types.GLSN(10))
+				So(knownHighWatermark2, ShouldEqual, types.GLSN(10))
 
-				So(knownNextGLSN1, ShouldEqual, knownNextGLSN2)
+				So(knownHighWatermark1, ShouldEqual, knownHighWatermark2)
 				So(reports1, ShouldResemble, reports2)
 			})
 		})
 
-		Convey("When KnownNextGLSN of the report is computed", func() {
+		Convey("When KnownHighWatermark of the report is computed", func() {
 			for _, lse := range lseList {
 				first := lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
-						LogStreamID:          lse.LogStreamID(),
-						KnownNextGLSN:        types.GLSN(10),
-						UncommittedLLSNBegin: types.LLSN(0),
-						UncommittedLLSNEnd:   types.LLSN(10),
+						LogStreamID:           lse.LogStreamID(),
+						KnownHighWatermark:    types.GLSN(10),
+						UncommittedLLSNOffset: types.MinLLSN,
+						UncommittedLLSNLength: 10,
 					},
 				)
 				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
-						LogStreamID:          lse.LogStreamID(),
-						KnownNextGLSN:        types.GLSN(100),
-						UncommittedLLSNBegin: types.LLSN(10),
-						UncommittedLLSNEnd:   types.LLSN(20),
+						LogStreamID:           lse.LogStreamID(),
+						KnownHighWatermark:    types.GLSN(100),
+						UncommittedLLSNOffset: types.LLSN(10),
+						UncommittedLLSNLength: 20,
 					},
 				).After(first)
 			}
 
-			Convey("Then past reports whose KnownNextGLSNs are less than the KnownNextGLSN just computed should be deleted", func() {
-				knownNextGLSN1, reports1 := lsr.GetReport()
+			Convey("Then past reports whose KnownHighWatermark are less than the KnownHighWatermark just computed should be deleted", func() {
+				knownHighWatermark1, reports1 := lsr.GetReport()
 				So(len(reports1), ShouldEqual, len(lseList))
-				So(knownNextGLSN1, ShouldEqual, types.GLSN(10))
+				So(knownHighWatermark1, ShouldEqual, types.GLSN(10))
 
-				knownNextGLSN2, reports2 := lsr.GetReport()
+				knownHighWatermark2, reports2 := lsr.GetReport()
 				So(len(reports2), ShouldEqual, len(lseList))
-				So(knownNextGLSN2, ShouldEqual, types.GLSN(100))
+				So(knownHighWatermark2, ShouldEqual, types.GLSN(100))
 
 				lsr.Close()
-				_, ok := lsr.history[knownNextGLSN2]
+				_, ok := lsr.history[knownHighWatermark2]
 				So(ok, ShouldBeTrue)
-				_, ok = lsr.history[knownNextGLSN1]
+				_, ok = lsr.history[knownHighWatermark1]
 				So(ok, ShouldBeFalse)
 			})
 		})
@@ -207,7 +207,7 @@ func TestLogStreamReporterCommit(t *testing.T) {
 
 		Convey("it should reject a commit result whose prevNextGLSN is not equal to own knownNextGLSN",
 			func() {
-				lsr.knownNextGLSN.Store(10)
+				lsr.knownHighWatermark.Store(10)
 				lsr.Commit(types.GLSN(10), types.GLSN(5), nil)
 				So(len(lsr.commitC), ShouldEqual, 0)
 
@@ -217,7 +217,7 @@ func TestLogStreamReporterCommit(t *testing.T) {
 		)
 
 		Convey("it should reject an empty commit result", func() {
-			lsr.knownNextGLSN.Store(10)
+			lsr.knownHighWatermark.Store(10)
 
 			lsr.Commit(types.GLSN(15), types.GLSN(10), nil)
 			So(len(lsr.commitC), ShouldEqual, 0)
@@ -233,8 +233,8 @@ func TestLogStreamReporterCommit(t *testing.T) {
 			lsr.Run(context.TODO())
 			defer lsr.Close()
 
-			lsr.knownNextGLSN.Store(10)
-			oldKnownNextGLSN := lsr.knownNextGLSN.Load()
+			lsr.knownHighWatermark.Store(10)
+			oldKnownNextGLSN := lsr.knownHighWatermark.Load()
 			var wg sync.WaitGroup
 			wg.Add(2)
 			lse1.EXPECT().Commit(gomock.Any()).DoAndReturn(func(CommittedLogStreamStatus) error {
@@ -248,25 +248,25 @@ func TestLogStreamReporterCommit(t *testing.T) {
 
 			lsr.Commit(types.GLSN(20), types.GLSN(10), []CommittedLogStreamStatus{
 				{
-					LogStreamID:        lse1.LogStreamID(),
-					NextGLSN:           types.GLSN(20),
-					PrevNextGLSN:       types.GLSN(10),
-					CommittedGLSNBegin: types.GLSN(100),
-					CommittedGLSNEnd:   types.GLSN(105),
+					LogStreamID:         lse1.LogStreamID(),
+					HighWatermark:       types.GLSN(20),
+					PrevHighWatermark:   types.GLSN(10),
+					CommittedGLSNOffset: types.GLSN(100),
+					CommittedGLSNLength: 5,
 				},
 				{
-					LogStreamID:        lse2.LogStreamID(),
-					NextGLSN:           types.GLSN(20),
-					PrevNextGLSN:       types.GLSN(10),
-					CommittedGLSNBegin: types.GLSN(105),
-					CommittedGLSNEnd:   types.GLSN(110),
+					LogStreamID:         lse2.LogStreamID(),
+					HighWatermark:       types.GLSN(20),
+					PrevHighWatermark:   types.GLSN(10),
+					CommittedGLSNOffset: types.GLSN(105),
+					CommittedGLSNLength: 5,
 				},
 			})
 			wg.Wait()
-			for oldKnownNextGLSN == lsr.knownNextGLSN.Load() {
+			for oldKnownNextGLSN == lsr.knownHighWatermark.Load() {
 				time.Sleep(time.Millisecond)
 			}
-			So(lsr.knownNextGLSN.Load(), ShouldEqual, types.GLSN(20))
+			So(lsr.knownHighWatermark.Load(), ShouldEqual, types.GLSN(20))
 		})
 	})
 }

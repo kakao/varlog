@@ -118,7 +118,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 			waitCommitDone := func(knownNextGLSN types.GLSN) {
 				for {
 					lse.(*logStreamExecutor).mu.RLock()
-					updatedKnownNextGLSN := lse.(*logStreamExecutor).knownNextGLSN
+					updatedKnownNextGLSN := lse.(*logStreamExecutor).knownHighWatermark
 					lse.(*logStreamExecutor).mu.RUnlock()
 					if knownNextGLSN != updatedKnownNextGLSN {
 						break
@@ -134,9 +134,9 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 
 			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			storage.EXPECT().Commit(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-			for i := types.GLSN(0); i < N; i++ {
+			for i := types.MinGLSN; i < N; i++ {
 				lse.(*logStreamExecutor).mu.RLock()
-				knownNextGLSN := lse.(*logStreamExecutor).knownNextGLSN
+				knownNextGLSN := lse.(*logStreamExecutor).knownHighWatermark
 				lse.(*logStreamExecutor).mu.RUnlock()
 				uncommittedLLSNEnd := lse.(*logStreamExecutor).uncommittedLLSNEnd.Load()
 				var wg sync.WaitGroup
@@ -145,11 +145,11 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 					defer wg.Done()
 					waitWriteDone(uncommittedLLSNEnd)
 					lse.Commit(CommittedLogStreamStatus{
-						LogStreamID:        logStreamID,
-						NextGLSN:           i + 1,
-						PrevNextGLSN:       i,
-						CommittedGLSNBegin: i,
-						CommittedGLSNEnd:   i + 1,
+						LogStreamID:         logStreamID,
+						HighWatermark:       i + 1,
+						PrevHighWatermark:   i,
+						CommittedGLSNOffset: i,
+						CommittedGLSNLength: 1,
 					})
 					waitCommitDone(knownNextGLSN)
 				}(uncommittedLLSNEnd, knownNextGLSN)
