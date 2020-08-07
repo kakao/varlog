@@ -44,12 +44,6 @@ message Report {
 message Commit {
 }
 
-message TrimCommit {
-    uint64 glsn = 1
-        [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
-        (gogoproto.customname) = "GLSN"];
-}
-
 message Seal {
         uint32 log_stream_id = 1
             [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
@@ -71,9 +65,8 @@ message RaftEntry {
                 UpdateLogStream update_log_stream = 3;
                 Report report = 4;
                 Commit commit = 5;
-                TrimCommit trim_commit = 6;
-                Seal seal = 7;
-                Unseal unseal = 8;
+                Seal seal = 6;
+                Unseal unseal = 7;
         }
         uint64 node_index = 1;
         uint64 request_index = 2;
@@ -85,15 +78,26 @@ message MetadataRepositoryDescriptor {
         message LocalLogStreamReplica {
             option (gogoproto.equal) = true;
 
-            uint64 being_llsn = 1
+            uint64 uncommitted_llsn_offfset = 1
                 [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
-                 (gogoproto.customname) = "BeginLLSN"];
-            uint64 end_llsn = 2
+                 (gogoproto.customname) = "UncommittedLLSNOffset"];
+            uint64 uncommitted_llsn_length = 2
+                [(gogoproto.customname) = "UncommittedLLSNLength"];
+            uint64 known_high_watermark = 3
+                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
+
+            uint64 begin_llsn = 4
                 [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
-                 (gogoproto.customname) = "EndLLSN"];
-            uint64 known_next_glsn = 3
+                 (gogoproto.customname) = "BeginLLSN",
+                deprecated = true];
+            uint64 end_llsn = 5
+                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+                 (gogoproto.customname) = "EndLLSN",
+                deprecated = true];
+            uint64 known_next_glsn = 6
                 [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
-                 (gogoproto.customname) = "KnownNextGLSN"];
+                 (gogoproto.customname) = "KnownNextGLSN",
+                deprecated = true];
         }
 
         message LocalLogStreamReplicas {

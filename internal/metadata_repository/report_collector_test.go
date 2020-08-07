@@ -38,15 +38,15 @@ func (mr *dummyMetadataRepository) report(lls *snpb.LocalLogStreamDescriptor) er
 	return nil
 }
 
-func (mr *dummyMetadataRepository) getNextGLS(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
+func (mr *dummyMetadataRepository) lookupNextGLS(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
 	mr.mt.Lock()
 	defer mr.mt.Unlock()
 
 	i := sort.Search(len(mr.m), func(i int) bool {
-		return mr.m[i].PrevNextGLSN >= glsn
+		return mr.m[i].PrevHighWatermark >= glsn
 	})
 
-	if i < len(mr.m) && mr.m[i].PrevNextGLSN == glsn {
+	if i < len(mr.m) && mr.m[i].PrevHighWatermark == glsn {
 		return mr.m[i]
 	}
 
@@ -58,7 +58,7 @@ func (mr *dummyMetadataRepository) appendGLS(gls *snpb.GlobalLogStreamDescriptor
 	defer mr.mt.Unlock()
 
 	mr.m = append(mr.m, gls)
-	sort.Slice(mr.m, func(i, j int) bool { return mr.m[i].NextGLSN < mr.m[j].NextGLSN })
+	sort.Slice(mr.m, func(i, j int) bool { return mr.m[i].HighWatermark < mr.m[j].HighWatermark })
 }
 
 func (mr *dummyMetadataRepository) trimGLS(glsn types.GLSN) {
@@ -66,7 +66,7 @@ func (mr *dummyMetadataRepository) trimGLS(glsn types.GLSN) {
 	defer mr.mt.Unlock()
 
 	for i, gls := range mr.m {
-		if glsn == gls.NextGLSN {
+		if glsn == gls.HighWatermark {
 			mr.m = mr.m[i:]
 			return
 		}
@@ -78,9 +78,9 @@ func TestRegisterStorageNode(t *testing.T) {
 		a := NewDummyReporterClientFactory(false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
-			report:     mr.report,
-			getClient:  a.GetClient,
-			getNextGLS: mr.getNextGLS,
+			report:        mr.report,
+			getClient:     a.GetClient,
+			lookupNextGLS: mr.lookupNextGLS,
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
@@ -94,9 +94,9 @@ func TestRegisterStorageNode(t *testing.T) {
 		a := NewDummyReporterClientFactory(false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
-			report:     mr.report,
-			getClient:  a.GetClient,
-			getNextGLS: mr.getNextGLS,
+			report:        mr.report,
+			getClient:     a.GetClient,
+			lookupNextGLS: mr.lookupNextGLS,
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
@@ -126,9 +126,9 @@ func TestUnregisterStorageNode(t *testing.T) {
 		a := NewDummyReporterClientFactory(false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
-			report:     mr.report,
-			getClient:  a.GetClient,
-			getNextGLS: mr.getNextGLS,
+			report:        mr.report,
+			getClient:     a.GetClient,
+			lookupNextGLS: mr.lookupNextGLS,
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
@@ -160,9 +160,9 @@ func TestReport(t *testing.T) {
 		a := NewDummyReporterClientFactory(false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
-			report:     mr.report,
-			getClient:  a.GetClient,
-			getNextGLS: mr.getNextGLS,
+			report:        mr.report,
+			getClient:     a.GetClient,
+			lookupNextGLS: mr.lookupNextGLS,
 		}
 
 		logger, _ := zap.NewDevelopment()
@@ -220,16 +220,16 @@ func TestReport(t *testing.T) {
 
 func newDummyGlobalLogStream(prev types.GLSN, nrStorage int) *snpb.GlobalLogStreamDescriptor {
 	gls := &snpb.GlobalLogStreamDescriptor{
-		NextGLSN:     prev + types.GLSN(nrStorage),
-		PrevNextGLSN: prev,
+		HighWatermark:     prev + types.GLSN(nrStorage),
+		PrevHighWatermark: prev,
 	}
-	glsn := prev
+	glsn := prev + types.GLSN(1)
 
 	for i := 0; i < nrStorage; i++ {
 		lls := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
-			LogStreamID:        types.LogStreamID(i),
-			CommittedGLSNBegin: glsn,
-			CommittedGLSNEnd:   glsn + 1,
+			LogStreamID:         types.LogStreamID(i),
+			CommittedGLSNOffset: glsn,
+			CommittedGLSNLength: 1,
 		}
 		glsn += 1
 
@@ -241,14 +241,14 @@ func newDummyGlobalLogStream(prev types.GLSN, nrStorage int) *snpb.GlobalLogStre
 
 func TestCommit(t *testing.T) {
 	nrStorage := 5
-	knownGLSN := types.GLSN(0)
+	knownHWM := types.InvalidGLSN
 
 	a := NewDummyReporterClientFactory(false)
 	mr := NewDummyMetadataRepository()
 	cb := ReportCollectorCallbacks{
-		report:     mr.report,
-		getClient:  a.GetClient,
-		getNextGLS: mr.getNextGLS,
+		report:        mr.report,
+		getClient:     a.GetClient,
+		lookupNextGLS: mr.lookupNextGLS,
 	}
 
 	logger, _ := zap.NewDevelopment()
@@ -267,9 +267,9 @@ func TestCommit(t *testing.T) {
 	}
 
 	Convey("ReportCollector should broadcast commit result to registered storage node", t, func() {
-		gls := newDummyGlobalLogStream(knownGLSN, nrStorage)
+		gls := newDummyGlobalLogStream(knownHWM, nrStorage)
 		mr.appendGLS(gls)
-		knownGLSN = gls.NextGLSN
+		knownHWM = gls.HighWatermark
 
 		reportCollector.Commit(gls)
 
@@ -278,23 +278,23 @@ func TestCommit(t *testing.T) {
 				cli.mu.Lock()
 				defer cli.mu.Unlock()
 
-				return cli.knownNextGLSN == knownGLSN
+				return cli.knownHighWatermark == knownHWM
 			}, 100*time.Millisecond), ShouldBeTrue)
 		}
 
 		So(testutil.CompareWait(func() bool {
-			return reportCollector.GetTrimmableNextGLSN() == knownGLSN
+			return reportCollector.getMinHighWatermark() == knownHWM
 		}, 100*time.Millisecond), ShouldBeTrue)
 	})
 
 	Convey("ReportCollector should send ordered commit result to registered storage node", t, func() {
-		gls := newDummyGlobalLogStream(knownGLSN, nrStorage)
+		gls := newDummyGlobalLogStream(knownHWM, nrStorage)
 		mr.appendGLS(gls)
-		knownGLSN = gls.NextGLSN
+		knownHWM = gls.HighWatermark
 
-		gls = newDummyGlobalLogStream(knownGLSN, nrStorage)
+		gls = newDummyGlobalLogStream(knownHWM, nrStorage)
 		mr.appendGLS(gls)
-		knownGLSN = gls.NextGLSN
+		knownHWM = gls.HighWatermark
 
 		reportCollector.Commit(gls)
 
@@ -303,30 +303,30 @@ func TestCommit(t *testing.T) {
 				cli.mu.Lock()
 				defer cli.mu.Unlock()
 
-				return cli.knownNextGLSN == knownGLSN
+				return cli.knownHighWatermark == knownHWM
 			}, 100*time.Millisecond), ShouldBeTrue)
 		}
 
 		So(testutil.CompareWait(func() bool {
-			return reportCollector.GetTrimmableNextGLSN() == knownGLSN
+			return reportCollector.getMinHighWatermark() == knownHWM
 		}, 100*time.Millisecond), ShouldBeTrue)
 	})
 
 	Convey("ReportCollector should send proper commit against new StorageNode", t, func() {
-		mr.trimGLS(knownGLSN)
+		mr.trimGLS(knownHWM)
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: types.StorageNodeID(nrStorage),
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, knownGLSN)
+		err := reportCollector.RegisterStorageNode(sn, knownHWM)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		gls := newDummyGlobalLogStream(knownGLSN, nrStorage+1)
+		gls := newDummyGlobalLogStream(knownHWM, nrStorage+1)
 		mr.appendGLS(gls)
-		knownGLSN = gls.NextGLSN
+		knownHWM = gls.HighWatermark
 
 		reportCollector.Commit(gls)
 
@@ -335,7 +335,7 @@ func TestCommit(t *testing.T) {
 				cli.mu.Lock()
 				defer cli.mu.Unlock()
 
-				return cli.knownNextGLSN == knownGLSN
+				return cli.knownHighWatermark == knownHWM
 			}, 100*time.Millisecond), ShouldBeTrue)
 		}
 	})
