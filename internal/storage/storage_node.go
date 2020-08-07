@@ -5,10 +5,12 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 )
 
 type Management interface {
+	GetMetadata(clusterID types.ClusterID, metadataType pb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error)
 	AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) (string, error)
 	RemoveLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
 	Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error)
@@ -33,6 +35,19 @@ func (sn *StorageNode) Run() error {
 
 func (sn *StorageNode) Close() error {
 	panic("not yet implemented")
+}
+
+func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType pb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
+	if !sn.verifyClusterID(cid) {
+		return nil, varlog.ErrInvalidArgument
+	}
+	ret := &vpb.StorageNodeMetadataDescriptor{
+		ClusterID: sn.ClusterID,
+		StorageNode: &vpb.StorageNodeDescriptor{
+			StorageNodeID: sn.StorageNodeID,
+		},
+	}
+	return ret, nil
 }
 
 func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, path string) (string, error) {

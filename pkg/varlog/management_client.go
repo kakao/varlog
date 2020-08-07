@@ -17,8 +17,14 @@ type managementClient struct {
 	rpcClient pb.ManagementClient
 }
 
-func (c *managementClient) GetMetadata(ctx context.Context) error {
-	panic("not yet implemented")
+func (c *managementClient) GetMetadata(ctx context.Context, metadataType pb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
+	rsp, err := c.rpcClient.GetMetadata(ctx, &pb.GetMetadataRequest{
+		MetadataType: metadataType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return rsp.GetStorageNodeMetadata(), nil
 }
 
 func (c *managementClient) AddLogStream(ctx context.Context, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, path string) error {

@@ -61,6 +61,16 @@ message LogStreamDescriptor {
         repeated ReplicaDescriptor replicas = 3[(gogoproto.nullable) = true];
 }
 
+message StorageNodeMetadataDescriptor {
+    uint32 cluster_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+        (gogoproto.customname) = "ClusterID"
+    ];
+    StorageNodeDescriptor storage_node = 2;
+    repeated LogStreamDescriptor log_streams = 3;
+}
+
 message MetadataDescriptor {
         repeated StorageNodeDescriptor storage_nodes = 1 [(gogoproto.nullable) = true];
         repeated LogStreamDescriptor log_streams = 2 [(gogoproto.nullable) = true];

@@ -12,6 +12,32 @@ import (
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 )
 
+func TestManagementServiceGetMetadata(t *testing.T) {
+	Convey("Given that a ManagementService handles GetMetadata RPC call", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mock := NewMockManagement(ctrl)
+		service := managementService{m: mock}
+
+		Convey("When the underlying Management failed to get metadata", func() {
+			mock.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, varlog.ErrInternal)
+			Convey("Then the ManagementService should return an error", func() {
+				_, err := service.GetMetadata(context.TODO(), &pb.GetMetadataRequest{})
+				So(err, ShouldNotBeNil)
+			})
+		})
+
+		Convey("When the underlying Management succeeds to get metadata", func() {
+			mock.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(&vpb.StorageNodeMetadataDescriptor{}, nil)
+			Convey("Then the ManagementService should return the metadata", func() {
+				_, err := service.GetMetadata(context.TODO(), &pb.GetMetadataRequest{})
+				So(err, ShouldBeNil)
+			})
+		})
+	})
+}
+
 func TestManagementServiceAddLogStream(t *testing.T) {
 	Convey("Given that a ManagementService handles AddLogStream RPC call", t, func() {
 		ctrl := gomock.NewController(t)

@@ -7,6 +7,7 @@ package storage
 import (
 	gomock "github.com/golang/mock/gomock"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	storage_node "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	varlog "github.daumkakao.com/varlog/varlog/proto/varlog"
 	reflect "reflect"
 )
@@ -32,6 +33,21 @@ func NewMockManagement(ctrl *gomock.Controller) *MockManagement {
 // EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockManagement) EXPECT() *MockManagementMockRecorder {
 	return m.recorder
+}
+
+// GetMetadata mocks base method
+func (m *MockManagement) GetMetadata(clusterID types.ClusterID, metadataType storage_node.MetadataType) (*varlog.StorageNodeMetadataDescriptor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMetadata", clusterID, metadataType)
+	ret0, _ := ret[0].(*varlog.StorageNodeMetadataDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMetadata indicates an expected call of GetMetadata
+func (mr *MockManagementMockRecorder) GetMetadata(clusterID, metadataType interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockManagement)(nil).GetMetadata), clusterID, metadataType)
 }
 
 // AddLogStream mocks base method
