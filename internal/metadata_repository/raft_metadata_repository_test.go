@@ -74,11 +74,17 @@ func (clus *metadataRepoCluster) Start() {
 
 // Close closes all cluster nodes
 func (clus *metadataRepoCluster) Close() (err error) {
-	for i := range clus.peers {
+	for i, peer := range clus.peers {
 		err = clus.nodes[i].Close()
 
-		os.RemoveAll(fmt.Sprintf("raft-%d", i+1))
-		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
+		url, err := url.Parse(peer)
+		if err != nil {
+			return nil
+		}
+		nodeID := types.NewNodeID(url.Host)
+
+		os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
+		os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
 	}
 	return err
 }
@@ -102,15 +108,15 @@ func (clus *metadataRepoCluster) closeNoErrors(t *testing.T) {
 	}
 }
 
-func makeLocalLogStream(snId types.StorageNodeID, knownNextGLSN types.GLSN, lsId types.LogStreamID, uncommitBegin, uncommitEnd types.LLSN) *snpb.LocalLogStreamDescriptor {
+func makeLocalLogStream(snID types.StorageNodeID, knownHighWatermark types.GLSN, lsID types.LogStreamID, offset types.LLSN, length uint64) *snpb.LocalLogStreamDescriptor {
 	lls := &snpb.LocalLogStreamDescriptor{
-		StorageNodeID: snId,
-		NextGLSN:      knownNextGLSN,
+		StorageNodeID: snID,
+		HighWatermark: knownHighWatermark,
 	}
 	ls := &snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
-		LogStreamID:          lsId,
-		UncommittedLLSNBegin: uncommitBegin,
-		UncommittedLLSNEnd:   uncommitEnd,
+		LogStreamID:           lsID,
+		UncommittedLLSNOffset: offset,
+		UncommittedLLSNLength: length,
 	}
 	lls.Uncommit = append(lls.Uncommit, ls)
 
@@ -155,7 +161,7 @@ func TestMRApplyReport(t *testing.T) {
 		lsId := types.LogStreamID(0)
 		notExistSnID := types.StorageNodeID(rep)
 
-		lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
+		lls := makeLocalLogStream(snIds[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
 		mr.applyReport(&pb.Report{LogStream: lls})
 
 		for _, snId := range snIds {
@@ -174,7 +180,7 @@ func TestMRApplyReport(t *testing.T) {
 			}
 
 			Convey("Report should not apply if snID is not exist in LocalLogStream", func(ctx C) {
-				lls := makeLocalLogStream(notExistSnID, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
+				lls := makeLocalLogStream(notExistSnID, types.InvalidGLSN, lsId, types.MinLLSN, 2)
 				mr.applyReport(&pb.Report{LogStream: lls})
 
 				r := mr.storage.LookupLocalLogStreamReplica(lsId, notExistSnID)
@@ -183,29 +189,29 @@ func TestMRApplyReport(t *testing.T) {
 
 			Convey("Report should apply if snID is exist in LocalLogStream", func(ctx C) {
 				snId := snIds[0]
-				lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
+				lls := makeLocalLogStream(snId, types.InvalidGLSN, lsId, types.MinLLSN, 2)
 				mr.applyReport(&pb.Report{LogStream: lls})
 
 				r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
 				So(r, ShouldNotBeNil)
-				So(r.EndLLSN, ShouldEqual, types.LLSN(2))
+				So(r.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN+types.LLSN(2))
 
 				Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
-					lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(3))
+					lls := makeLocalLogStream(snId, types.InvalidGLSN, lsId, types.MinLLSN, 3)
 					mr.applyReport(&pb.Report{LogStream: lls})
 
 					r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
 					So(r, ShouldNotBeNil)
-					So(r.EndLLSN, ShouldEqual, types.LLSN(3))
+					So(r.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN+types.LLSN(3))
 				})
 
 				Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
-					lls := makeLocalLogStream(snId, types.GLSN(0), lsId, types.LLSN(0), types.LLSN(1))
+					lls := makeLocalLogStream(snId, types.InvalidGLSN, lsId, types.MinLLSN, 1)
 					mr.applyReport(&pb.Report{LogStream: lls})
 
 					r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
 					So(r, ShouldNotBeNil)
-					So(r.EndLLSN, ShouldNotEqual, types.LLSN(1))
+					So(r.UncommittedLLSNEnd(), ShouldNotEqual, types.MinLLSN+types.LLSN(1))
 				})
 			})
 		})
@@ -233,37 +239,41 @@ func TestMRCalculateCommit(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		Convey("LogStream which all reports have not arrived cannot be commit", func(ctx C) {
-			lls := makeLocalLogStream(snIds[0], types.GLSN(0), lsId, types.LLSN(0), types.LLSN(2))
+			lls := makeLocalLogStream(snIds[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
 			mr.applyReport(&pb.Report{LogStream: lls})
 
 			replicas := mr.storage.LookupLocalLogStream(lsId)
-			_, nrCommit := mr.calculateCommit(replicas)
+			_, minHWM, nrCommit := mr.calculateCommit(replicas)
 			So(nrCommit, ShouldEqual, 0)
+			So(minHWM, ShouldEqual, types.InvalidGLSN)
 		})
 
 		Convey("LogStream which all reports are disjoint cannot be commit", func(ctx C) {
-			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.LLSN(5), types.LLSN(6))
+			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(5), 1)
 			mr.applyReport(&pb.Report{LogStream: lls})
 
-			lls = makeLocalLogStream(snIds[1], types.GLSN(7), lsId, types.LLSN(3), types.LLSN(5))
+			lls = makeLocalLogStream(snIds[1], types.GLSN(7), lsId, types.MinLLSN+types.LLSN(3), 2)
 			mr.applyReport(&pb.Report{LogStream: lls})
 
 			replicas := mr.storage.LookupLocalLogStream(lsId)
-			_, nrCommit := mr.calculateCommit(replicas)
+			knownHWM, minHWM, nrCommit := mr.calculateCommit(replicas)
 			So(nrCommit, ShouldEqual, 0)
+			So(knownHWM, ShouldEqual, types.GLSN(10))
+			So(minHWM, ShouldEqual, types.GLSN(7))
 		})
 
 		Convey("LogStream Should be commit where replication is completed", func(ctx C) {
-			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.LLSN(3), types.LLSN(6))
+			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(3), 3)
 			mr.applyReport(&pb.Report{LogStream: lls})
 
-			lls = makeLocalLogStream(snIds[1], types.GLSN(9), lsId, types.LLSN(3), types.LLSN(5))
+			lls = makeLocalLogStream(snIds[1], types.GLSN(9), lsId, types.MinLLSN+types.LLSN(3), 2)
 			mr.applyReport(&pb.Report{LogStream: lls})
 
 			replicas := mr.storage.LookupLocalLogStream(lsId)
-			glsn, nrCommit := mr.calculateCommit(replicas)
+			knownHWM, minHWM, nrCommit := mr.calculateCommit(replicas)
 			So(nrCommit, ShouldEqual, 2)
-			So(glsn, ShouldEqual, types.GLSN(10))
+			So(minHWM, ShouldEqual, types.GLSN(9))
+			So(knownHWM, ShouldEqual, types.GLSN(10))
 		})
 	})
 }
@@ -309,61 +319,61 @@ func TestMRGlobalCommit(t *testing.T) {
 
 		Convey("global commit", func(ctx C) {
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+				lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+				lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[1][0], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4))
+				lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[1][1], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(3))
+				lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			// global commit (2, 3) highest glsn: 5
 			So(testutil.CompareWait(func() bool {
-				return mr.storage.GetNextGLSN() == types.GLSN(5)
+				return mr.storage.GetHighWatermark() == types.GLSN(5)
 			}, time.Second), ShouldBeTrue)
 
 			Convey("LogStream should be dedup", func(ctx C) {
 				So(testutil.CompareWait(func() bool {
-					lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(3))
+					lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 3)
 					return mr.proposeReport(lls) == nil
 				}, time.Second), ShouldBeTrue)
 
 				So(testutil.CompareWait(func() bool {
-					lls := makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+					lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 					return mr.proposeReport(lls) == nil
 				}, time.Second), ShouldBeTrue)
 
 				time.Sleep(100 * time.Millisecond)
 
 				So(testutil.CompareWait(func() bool {
-					return mr.storage.GetNextGLSN() == types.GLSN(5)
+					return mr.storage.GetHighWatermark() == types.GLSN(5)
 				}, time.Second), ShouldBeTrue)
 			})
 
 			Convey("LogStream which have wrong GLSN but have uncommitted should commit", func(ctx C) {
 				So(testutil.CompareWait(func() bool {
-					lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(6))
+					lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 6)
 					return mr.proposeReport(lls) == nil
 				}, time.Second), ShouldBeTrue)
 
 				So(testutil.CompareWait(func() bool {
-					lls := makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(6))
+					lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 6)
 					return mr.proposeReport(lls) == nil
 				}, time.Second), ShouldBeTrue)
 
 				So(testutil.CompareWait(func() bool {
-					return mr.storage.GetNextGLSN() == types.GLSN(9)
+					return mr.storage.GetHighWatermark() == types.GLSN(9)
 				}, time.Second), ShouldBeTrue)
 			})
 		})
@@ -558,28 +568,28 @@ func TestMRGetLastCommitted(t *testing.T) {
 
 		Convey("getLastCommitted should return last committed GLSN", func(ctx C) {
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+				lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+				lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[1][0], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4))
+				lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[1][1], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(3))
+				lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			// global commit (2, 3) highest glsn: 5
 			So(testutil.CompareWait(func() bool {
-				return mr.storage.GetNextGLSN() == types.GLSN(5)
+				return mr.storage.GetHighWatermark() == types.GLSN(5)
 			}, time.Second), ShouldBeTrue)
 
 			So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(2))
@@ -588,17 +598,17 @@ func TestMRGetLastCommitted(t *testing.T) {
 			Convey("getLastCommitted should return same if not committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
 					So(testutil.CompareWait(func() bool {
-						lls := makeLocalLogStream(snIds[1][0], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4+i))
+						lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 						return mr.proposeReport(lls) == nil
 					}, time.Second), ShouldBeTrue)
 
 					So(testutil.CompareWait(func() bool {
-						lls := makeLocalLogStream(snIds[1][1], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4+i))
+						lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 						return mr.proposeReport(lls) == nil
 					}, time.Second), ShouldBeTrue)
 
 					So(testutil.CompareWait(func() bool {
-						return mr.storage.GetNextGLSN() == types.GLSN(6+i)
+						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 					}, time.Second), ShouldBeTrue)
 
 					So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(2))
@@ -613,27 +623,27 @@ func TestMRGetLastCommitted(t *testing.T) {
 
 				for i := 0; i < 10; i++ {
 					So(testutil.CompareWait(func() bool {
-						lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(3+i))
+						lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, uint64(3+i))
 						return mr.proposeReport(lls) == nil
 					}, time.Second), ShouldBeTrue)
 
 					So(testutil.CompareWait(func() bool {
-						lls := makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(3+i))
+						lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, uint64(3+i))
 						return mr.proposeReport(lls) == nil
 					}, time.Second), ShouldBeTrue)
 
 					So(testutil.CompareWait(func() bool {
-						lls := makeLocalLogStream(snIds[1][0], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4+i))
+						lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 						return mr.proposeReport(lls) == nil
 					}, time.Second), ShouldBeTrue)
 
 					So(testutil.CompareWait(func() bool {
-						lls := makeLocalLogStream(snIds[1][1], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4+i))
+						lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 						return mr.proposeReport(lls) == nil
 					}, time.Second), ShouldBeTrue)
 
 					So(testutil.CompareWait(func() bool {
-						return mr.storage.GetNextGLSN() == types.GLSN(6+i)
+						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 					}, time.Second), ShouldBeTrue)
 
 					So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(6+i))
@@ -685,22 +695,22 @@ func TestMRSeal(t *testing.T) {
 
 		Convey("Seal should commit and return last committed", func(ctx C) {
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+				lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+				lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[1][0], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4))
+				lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
 			So(testutil.CompareWait(func() bool {
-				lls := makeLocalLogStream(snIds[1][1], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(3))
+				lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
@@ -761,22 +771,22 @@ func TestMRUnseal(t *testing.T) {
 		}
 
 		So(testutil.CompareWait(func() bool {
-			lls := makeLocalLogStream(snIds[0][0], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+			lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 			return mr.proposeReport(lls) == nil
 		}, time.Second), ShouldBeTrue)
 
 		So(testutil.CompareWait(func() bool {
-			lls := makeLocalLogStream(snIds[0][1], types.GLSN(0), lsIds[0], types.LLSN(0), types.LLSN(2))
+			lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 			return mr.proposeReport(lls) == nil
 		}, time.Second), ShouldBeTrue)
 
 		So(testutil.CompareWait(func() bool {
-			lls := makeLocalLogStream(snIds[1][0], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4))
+			lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
 			return mr.proposeReport(lls) == nil
 		}, time.Second), ShouldBeTrue)
 
 		So(testutil.CompareWait(func() bool {
-			lls := makeLocalLogStream(snIds[1][1], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(3))
+			lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
 			return mr.proposeReport(lls) == nil
 		}, time.Second), ShouldBeTrue)
 
@@ -792,17 +802,17 @@ func TestMRUnseal(t *testing.T) {
 
 			for i := 0; i < 10; i++ {
 				So(testutil.CompareWait(func() bool {
-					lls := makeLocalLogStream(snIds[1][0], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4+i))
+					lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 					return mr.proposeReport(lls) == nil
 				}, time.Second), ShouldBeTrue)
 
 				So(testutil.CompareWait(func() bool {
-					lls := makeLocalLogStream(snIds[1][1], types.GLSN(0), lsIds[1], types.LLSN(0), types.LLSN(4+i))
+					lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 					return mr.proposeReport(lls) == nil
 				}, time.Second), ShouldBeTrue)
 
 				So(testutil.CompareWait(func() bool {
-					return mr.storage.GetNextGLSN() == types.GLSN(6+i)
+					return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 				}, time.Second), ShouldBeTrue)
 
 				So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(6+i))

@@ -15,21 +15,21 @@ import (
 )
 
 type ReportCollectorCallbacks struct {
-	report     func(*snpb.LocalLogStreamDescriptor) error
-	getClient  func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error)
-	getNextGLS func(types.GLSN) *snpb.GlobalLogStreamDescriptor
+	report        func(*snpb.LocalLogStreamDescriptor) error
+	getClient     func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error)
+	lookupNextGLS func(types.GLSN) *snpb.GlobalLogStreamDescriptor
 }
 
 type ReportCollectExecutor struct {
-	nextGLSN     types.GLSN
-	logStreamIDs []types.LogStreamID
-	cli          storage.LogStreamReporterClient
-	sn           *varlogpb.StorageNodeDescriptor
-	cb           ReportCollectorCallbacks
-	mu           sync.RWMutex
-	resultC      chan *snpb.GlobalLogStreamDescriptor
-	logger       *zap.Logger
-	cancel       context.CancelFunc
+	highWatermark types.GLSN
+	logStreamIDs  []types.LogStreamID
+	cli           storage.LogStreamReporterClient
+	sn            *varlogpb.StorageNodeDescriptor
+	cb            ReportCollectorCallbacks
+	mu            sync.RWMutex
+	resultC       chan *snpb.GlobalLogStreamDescriptor
+	logger        *zap.Logger
+	cancel        context.CancelFunc
 }
 
 type ReportCollector struct {
@@ -77,12 +77,12 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 	}
 
 	executor := &ReportCollectExecutor{
-		resultC:  make(chan *snpb.GlobalLogStreamDescriptor, 1),
-		nextGLSN: glsn,
-		sn:       sn,
-		cb:       rc.cb,
-		cli:      cli,
-		logger:   rc.logger.Named("executor"),
+		resultC:       make(chan *snpb.GlobalLogStreamDescriptor, 1),
+		highWatermark: glsn,
+		sn:            sn,
+		cb:            rc.cb,
+		cli:           cli,
+		logger:        rc.logger.Named("executor"),
 	}
 	ctx, cancel := context.WithCancel(rc.ctx)
 	executor.cancel = cancel
@@ -126,23 +126,6 @@ func (rc *ReportCollector) Commit(gls *snpb.GlobalLogStreamDescriptor) {
 	}
 }
 
-func (rc *ReportCollector) GetTrimmableNextGLSN() types.GLSN {
-	rc.mu.RLock()
-	defer rc.mu.RUnlock()
-
-	first := true
-	min := types.GLSN(0)
-	for _, executor := range rc.executors {
-		glsn := executor.getNextGLSN()
-		if first || glsn < min {
-			min = glsn
-		}
-		first = false
-	}
-
-	return min
-}
-
 func (rce *ReportCollectExecutor) runReport(ctx context.Context) {
 Loop:
 	for {
@@ -169,16 +152,16 @@ Loop:
 			break Loop
 		case gls := <-rce.resultC:
 			rce.mu.RLock()
-			nextGLSN := rce.nextGLSN
+			highWatermark := rce.highWatermark
 			rce.mu.RUnlock()
 
-			for nextGLSN < gls.PrevNextGLSN {
-				prev := rce.cb.getNextGLS(nextGLSN)
+			for highWatermark < gls.PrevHighWatermark {
+				prev := rce.cb.lookupNextGLS(highWatermark)
 				if prev == nil {
 					rce.logger.Panic("prev gls should not be nil",
 						zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
-						zap.Uint64("FROM", uint64(nextGLSN)),
-						zap.Uint64("CUR", uint64(gls.NextGLSN)),
+						zap.Uint64("FROM", uint64(highWatermark)),
+						zap.Uint64("CUR", uint64(gls.HighWatermark)),
 					)
 				}
 
@@ -188,15 +171,15 @@ Loop:
 					rce.logger.Panic(err.Error())
 				}
 
-				if prev.NextGLSN <= nextGLSN {
+				if prev.HighWatermark <= highWatermark {
 					rce.logger.Panic("broken global commit consistency",
 						zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
-						zap.Uint64("expected", uint64(gls.PrevNextGLSN)),
-						zap.Uint64("prev", uint64(prev.NextGLSN)),
-						zap.Uint64("cur", uint64(nextGLSN)),
+						zap.Uint64("expected", uint64(gls.PrevHighWatermark)),
+						zap.Uint64("prev", uint64(prev.HighWatermark)),
+						zap.Uint64("cur", uint64(highWatermark)),
 					)
 				}
-				nextGLSN = prev.NextGLSN
+				highWatermark = prev.HighWatermark
 			}
 
 			err := rce.commit(gls)
@@ -220,10 +203,18 @@ func (rce *ReportCollectExecutor) getReport() error {
 		lsIDs[i] = u.LogStreamID
 	}
 
-	rce.mu.Lock()
-	if lls.NextGLSN > rce.nextGLSN {
-		rce.nextGLSN = lls.NextGLSN
+	if lls.HighWatermark.Invalid() {
+		lls.HighWatermark = rce.highWatermark
+	} else if lls.HighWatermark < rce.highWatermark {
+		rce.logger.Panic("invalid GLSN",
+			zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
+			zap.Uint64("REPORT", uint64(lls.HighWatermark)),
+			zap.Uint64("CUR", uint64(rce.highWatermark)),
+		)
 	}
+
+	rce.mu.Lock()
+	rce.highWatermark = lls.HighWatermark
 	rce.logStreamIDs = lsIDs
 	rce.mu.Unlock()
 
@@ -234,8 +225,8 @@ func (rce *ReportCollectExecutor) getReport() error {
 
 func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) error {
 	r := snpb.GlobalLogStreamDescriptor{
-		NextGLSN:     gls.NextGLSN,
-		PrevNextGLSN: gls.PrevNextGLSN,
+		HighWatermark:     gls.HighWatermark,
+		PrevHighWatermark: gls.PrevHighWatermark,
 	}
 
 	rce.mu.RLock()
@@ -262,8 +253,25 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 	return nil
 }
 
-func (rce *ReportCollectExecutor) getNextGLSN() types.GLSN {
+func (rc *ReportCollector) getMinHighWatermark() types.GLSN {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+
+	min := types.InvalidGLSN
+
+	for _, e := range rc.executors {
+		hwm := e.getHighWatermark()
+		if min.Invalid() || hwm < min {
+			min = hwm
+		}
+	}
+
+	return min
+}
+
+func (rce *ReportCollectExecutor) getHighWatermark() types.GLSN {
 	rce.mu.RLock()
 	defer rce.mu.RUnlock()
-	return rce.nextGLSN
+
+	return rce.highWatermark
 }

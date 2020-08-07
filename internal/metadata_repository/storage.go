@@ -17,17 +17,17 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-type JobSnapshot struct {
+type jobSnapshot struct {
 	appliedIndex uint64
 }
 
-type JobMetadataCache struct {
+type jobMetadataCache struct {
 	appliedIndex uint64
 	nodeIndex    uint64
 	requestIndex uint64
 }
 
-type StorageAsyncJob struct {
+type storageAsyncJob struct {
 	job interface{}
 }
 
@@ -66,7 +66,7 @@ type MetadataStorage struct {
 	mcMu sync.RWMutex // mutex for Metadata Cache
 
 	// async job (snapshot, cache)
-	jobC chan *StorageAsyncJob
+	jobC chan *storageAsyncJob
 
 	runner runner.Runner
 	cancel context.CancelFunc
@@ -86,7 +86,7 @@ func NewMetadataStorage(cb func(uint64, uint64, error)) *MetadataStorage {
 	ms.diffStateMachine.LogStream = &pb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 
-	ms.jobC = make(chan *StorageAsyncJob, 4096)
+	ms.jobC = make(chan *storageAsyncJob, 4096)
 
 	return ms
 }
@@ -109,9 +109,9 @@ Loop:
 		select {
 		case f := <-ms.jobC:
 			switch r := f.job.(type) {
-			case *JobSnapshot:
+			case *jobSnapshot:
 				ms.createSnapshot(r)
-			case *JobMetadataCache:
+			case *jobMetadataCache:
 				ms.createMetadataCache(r)
 			}
 
@@ -265,7 +265,10 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 	}
 
 	for _, r := range ls.Replicas {
-		lm.Replicas[r.StorageNodeID] = &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{}
+		lm.Replicas[r.StorageNodeID] = &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+			UncommittedLLSNOffset: types.MinLLSN,
+			UncommittedLLSNLength: 0,
+		}
 	}
 
 	cur.LogStream.LocalLogStreams[ls.LogStreamID] = lm
@@ -380,7 +383,10 @@ func (ms *MetadataStorage) updateLocalLogStream(ls *varlogpb.LogStreamDescriptor
 		if o, ok := old.Replicas[r.StorageNodeID]; ok {
 			new.Replicas[r.StorageNodeID] = o
 		} else {
-			new.Replicas[r.StorageNodeID] = &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{}
+			new.Replicas[r.StorageNodeID] = &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+				UncommittedLLSNOffset: types.MinLLSN,
+				UncommittedLLSNLength: 0,
+			}
 		}
 	}
 
@@ -462,18 +468,17 @@ func (ms *MetadataStorage) updateLocalLogStreamStatus(lsID types.LogStreamID, st
 	}
 
 	if status == varlogpb.LogStreamStatusSealed {
-		var min types.LLSN
-		first := true
+		min := types.InvalidLLSN
 		for _, r := range lls.Replicas {
-			if first || min > r.EndLLSN {
-				min = r.EndLLSN
+			if min.Invalid() || min > r.UncommittedLLSNEnd() {
+				min = r.UncommittedLLSNEnd()
 			}
-
-			first = false
 		}
 
 		for _, r := range lls.Replicas {
-			r.EndLLSN = min
+			if r.Seal(min) == types.InvalidLLSN {
+				return varlog.ErrInternal
+			}
 		}
 	}
 
@@ -526,28 +531,25 @@ func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, re
 	return nil
 }
 
-func lookupGlobalLogStreamByPrev(s *pb.MetadataRepositoryDescriptor, glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
-	i := sort.Search(len(s.LogStream.GlobalLogStreams), func(i int) bool {
-		return s.LogStream.GlobalLogStreams[i].PrevNextGLSN >= glsn
-	})
-
-	if i < len(s.LogStream.GlobalLogStreams) && s.LogStream.GlobalLogStreams[i].PrevNextGLSN == glsn {
-		return s.LogStream.GlobalLogStreams[i]
-	}
-
-	return nil
-}
-
-func (ms *MetadataStorage) LookupGlobalLogStreamByPrev(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
+func (ms *MetadataStorage) lookupNextGLSNoLock(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
 	pre, cur := ms.getStateMachine()
 	if pre != cur {
-		r := lookupGlobalLogStreamByPrev(cur, glsn)
+		r := cur.LookupGlobalLogStreamByPrev(glsn)
 		if r != nil {
 			return r
 		}
 	}
 
-	return lookupGlobalLogStreamByPrev(pre, glsn)
+	return pre.LookupGlobalLogStreamByPrev(glsn)
+}
+
+func (ms *MetadataStorage) getLastGLSNoLock() *snpb.GlobalLogStreamDescriptor {
+	gls := ms.diffStateMachine.GetLastGlobalLogStream()
+	if gls != nil {
+		return gls
+	}
+
+	return ms.origStateMachine.GetLastGlobalLogStream()
 }
 
 func (ms *MetadataStorage) LookupLocalLogStream(lsID types.LogStreamID) *pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas {
@@ -677,7 +679,9 @@ func (ms *MetadataStorage) AppendGlobalLogStream(gls *snpb.GlobalLogStreamDescri
 
 func (ms *MetadataStorage) TrimGlobalLogStream(trimGLSN types.GLSN) error {
 	_, cur := ms.getStateMachine()
-	cur.LogStream.TrimGLSN = trimGLSN
+	if cur.LogStream.TrimGLSN < trimGLSN {
+		cur.LogStream.TrimGLSN = trimGLSN
+	}
 	return nil
 }
 
@@ -692,53 +696,38 @@ func (ms *MetadataStorage) UpdateAppliedIndex(appliedIndex uint64) {
 	}
 }
 
-func (ms *MetadataStorage) GetNextGLSNNoLock() types.GLSN {
-	n := len(ms.diffStateMachine.LogStream.GlobalLogStreams)
-	if n > 0 {
-		return ms.diffStateMachine.LogStream.GlobalLogStreams[n-1].NextGLSN
+func (ms *MetadataStorage) getHighWatermarkNoLock() types.GLSN {
+	gls := ms.getLastGLSNoLock()
+	if gls == nil {
+		return types.InvalidGLSN
 	}
 
-	n = len(ms.origStateMachine.LogStream.GlobalLogStreams)
-	if n == 0 {
-		return types.GLSN(0)
-	}
-
-	return ms.origStateMachine.LogStream.GlobalLogStreams[n-1].NextGLSN
+	return gls.HighWatermark
 }
 
-func (ms *MetadataStorage) GetNextGLSN() types.GLSN {
+func (ms *MetadataStorage) GetHighWatermark() types.GLSN {
 	ms.lsMu.RLock()
 	defer ms.lsMu.RUnlock()
 
-	return ms.GetNextGLSNNoLock()
+	return ms.getHighWatermarkNoLock()
 }
 
 func (ms *MetadataStorage) NumUpdateSinceCommit() uint64 {
 	return ms.nrUpdateSinceCommit
 }
 
-func (ms *MetadataStorage) GetNextGLSFrom(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
+func (ms *MetadataStorage) LookupNextGLS(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
 	ms.lsMu.RLock()
 	defer ms.lsMu.RUnlock()
 
-	return ms.LookupGlobalLogStreamByPrev(glsn)
+	return ms.lookupNextGLSNoLock(glsn)
 }
 
-func (ms *MetadataStorage) GetGLS() *snpb.GlobalLogStreamDescriptor {
+func (ms *MetadataStorage) GetLastGLS() *snpb.GlobalLogStreamDescriptor {
 	ms.lsMu.RLock()
 	defer ms.lsMu.RUnlock()
 
-	n := len(ms.diffStateMachine.LogStream.GlobalLogStreams)
-	if n > 0 {
-		return ms.diffStateMachine.LogStream.GlobalLogStreams[n-1]
-	}
-
-	n = len(ms.origStateMachine.LogStream.GlobalLogStreams)
-	if n == 0 {
-		return nil
-	}
-
-	return ms.origStateMachine.LogStream.GlobalLogStreams[n-1]
+	return ms.getLastGLSNoLock()
 }
 
 func (ms *MetadataStorage) GetMetadata() *varlogpb.MetadataDescriptor {
@@ -778,7 +767,7 @@ func (ms *MetadataStorage) getStateMachine() (*pb.MetadataRepositoryDescriptor, 
 	return pre, cur
 }
 
-func (ms *MetadataStorage) createSnapshot(job *JobSnapshot) {
+func (ms *MetadataStorage) createSnapshot(job *jobSnapshot) {
 	b, _ := ms.origStateMachine.Marshal()
 
 	ms.ssMu.Lock()
@@ -788,7 +777,7 @@ func (ms *MetadataStorage) createSnapshot(job *JobSnapshot) {
 	atomic.StoreUint64(&ms.snapIndex, job.appliedIndex)
 }
 
-func (ms *MetadataStorage) createMetadataCache(job *JobMetadataCache) {
+func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 	defer func() {
 		if ms.cacheCompleteCB != nil {
 			ms.cacheCompleteCB(job.nodeIndex, job.requestIndex, nil)
@@ -880,10 +869,10 @@ func (ms *MetadataStorage) mergeLogStream() {
 func (ms *MetadataStorage) trimGlobalLogStream() {
 	s := ms.origStateMachine
 	i := sort.Search(len(s.LogStream.GlobalLogStreams), func(i int) bool {
-		return s.LogStream.GlobalLogStreams[i].NextGLSN >= s.LogStream.TrimGLSN
+		return s.LogStream.GlobalLogStreams[i].HighWatermark >= s.LogStream.TrimGLSN
 	})
 
-	if i > 0 && i < len(s.LogStream.GlobalLogStreams) && s.LogStream.GlobalLogStreams[i].NextGLSN == s.LogStream.TrimGLSN {
+	if i < len(s.LogStream.GlobalLogStreams) && s.LogStream.GlobalLogStreams[i].HighWatermark == s.LogStream.TrimGLSN {
 		s.LogStream.GlobalLogStreams = s.LogStream.GlobalLogStreams[i:]
 	}
 }
@@ -910,18 +899,18 @@ func (ms *MetadataStorage) triggerSnapshot(appliedIndex uint64) {
 
 	ms.setCopyOnWrite()
 
-	job := &JobSnapshot{appliedIndex: appliedIndex}
-	ms.jobC <- &StorageAsyncJob{job: job}
+	job := &jobSnapshot{appliedIndex: appliedIndex}
+	ms.jobC <- &storageAsyncJob{job: job}
 }
 
 func (ms *MetadataStorage) triggerMetadataCache(nodeIndex, requestIndex uint64) {
 	atomic.AddInt64(&ms.nrRunning, 1)
 	ms.setCopyOnWrite()
 
-	job := &JobMetadataCache{
+	job := &jobMetadataCache{
 		appliedIndex: atomic.LoadUint64(&ms.metaAppliedIndex),
 		nodeIndex:    nodeIndex,
 		requestIndex: requestIndex,
 	}
-	ms.jobC <- &StorageAsyncJob{job: job}
+	ms.jobC <- &storageAsyncJob{job: job}
 }

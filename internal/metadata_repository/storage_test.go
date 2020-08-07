@@ -414,15 +414,15 @@ func TestStorageSealLS(t *testing.T) {
 
 			for i := 0; i < rep; i++ {
 				r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-					BeginLLSN:     types.LLSN(0),
-					EndLLSN:       types.LLSN(i),
-					KnownNextGLSN: types.GLSN(0),
+					UncommittedLLSNOffset: types.MinLLSN,
+					UncommittedLLSNLength: uint64(i),
+					KnownHighWatermark:    types.InvalidGLSN,
 				}
 
 				ms.UpdateLocalLogStreamReplica(lsID, snIDs[i], r)
 				rr := ms.LookupLocalLogStreamReplica(lsID, snIDs[i])
 				So(rr, ShouldNotBeNil)
-				So(r.EndLLSN, ShouldEqual, types.LLSN(i))
+				So(r.UncommittedLLSNEnd(), ShouldEqual, r.UncommittedLLSNEnd())
 			}
 
 			err = ms.SealLogStream(lsID, 0, 0)
@@ -430,21 +430,21 @@ func TestStorageSealLS(t *testing.T) {
 
 			for i := 0; i < rep; i++ {
 				r := ms.LookupLocalLogStreamReplica(lsID, snIDs[i])
-				So(r.EndLLSN, ShouldEqual, types.LLSN(0))
+				So(r.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN)
 			}
 
 			Convey("Sealed LocalLogStreamReplica should ignore report", func(ctx C) {
 				for i := 0; i < rep; i++ {
 					r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-						BeginLLSN:     types.LLSN(0),
-						EndLLSN:       types.LLSN(i + 1),
-						KnownNextGLSN: types.GLSN(0),
+						UncommittedLLSNOffset: types.MinLLSN,
+						UncommittedLLSNLength: uint64(i + 1),
+						KnownHighWatermark:    types.InvalidGLSN,
 					}
 
 					ms.UpdateLocalLogStreamReplica(lsID, snIDs[i], r)
 					rr := ms.LookupLocalLogStreamReplica(lsID, snIDs[i])
 					So(rr, ShouldNotBeNil)
-					So(rr.EndLLSN, ShouldEqual, types.LLSN(0))
+					So(rr.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN)
 				}
 			})
 		})
@@ -576,18 +576,53 @@ func TestStorageUnsealLS(t *testing.T) {
 				Convey("Unsealed LS should update report", func(ctx C) {
 					for i := 0; i < rep; i++ {
 						r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-							BeginLLSN:     types.LLSN(0),
-							EndLLSN:       types.LLSN(i),
-							KnownNextGLSN: types.GLSN(0),
+							UncommittedLLSNOffset: types.MinLLSN,
+							UncommittedLLSNLength: uint64(i),
+							KnownHighWatermark:    types.InvalidGLSN,
 						}
 
 						ms.UpdateLocalLogStreamReplica(lsID, snIDs[i], r)
 						rr := ms.LookupLocalLogStreamReplica(lsID, snIDs[i])
 						So(rr, ShouldNotBeNil)
-						So(r.EndLLSN, ShouldEqual, types.LLSN(i))
+						So(rr.UncommittedLLSNEnd(), ShouldEqual, r.UncommittedLLSNEnd())
 					}
 				})
 			})
+		})
+	})
+}
+
+func TestStorageTrim(t *testing.T) {
+	Convey("Given a GlobalLogStreams", t, func(ctx C) {
+		ms := NewMetadataStorage(nil)
+
+		for hwm := types.MinGLSN; hwm < types.GLSN(1024); hwm++ {
+			gls := &snpb.GlobalLogStreamDescriptor{
+				HighWatermark:     hwm,
+				PrevHighWatermark: hwm - types.GLSN(1),
+			}
+
+			gls.CommitResult = append(gls.CommitResult, &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
+				CommittedGLSNOffset: hwm,
+				CommittedGLSNLength: 1,
+			})
+
+			ms.AppendGlobalLogStream(gls)
+		}
+
+		Convey("When operate trim, trimmed gls should not be found", func(ctx C) {
+			for trim := types.InvalidGLSN; trim < types.GLSN(1024); trim++ {
+				ms.TrimGlobalLogStream(trim)
+				ms.trimGlobalLogStream()
+
+				if trim != types.InvalidGLSN {
+					So(ms.lookupNextGLSNoLock(trim-types.GLSN(1)), ShouldNotBeNil)
+				}
+
+				if trim > types.MinGLSN {
+					So(ms.lookupNextGLSNoLock(trim-types.GLSN(2)), ShouldBeNil)
+				}
+			}
 		})
 	})
 }
@@ -612,9 +647,9 @@ func TestStorageReport(t *testing.T) {
 		notExistSnID := tmp + types.StorageNodeID(rep)
 
 		r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-			BeginLLSN:     types.LLSN(0),
-			EndLLSN:       types.LLSN(5),
-			KnownNextGLSN: types.GLSN(0),
+			UncommittedLLSNOffset: types.MinLLSN,
+			UncommittedLLSNLength: 5,
+			KnownHighWatermark:    types.InvalidGLSN,
 		}
 
 		for i := 0; i < rep; i++ {
@@ -627,9 +662,9 @@ func TestStorageReport(t *testing.T) {
 			ms.registerLogStream(ls)
 
 			r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-				BeginLLSN:     types.LLSN(0),
-				EndLLSN:       types.LLSN(5),
-				KnownNextGLSN: types.GLSN(0),
+				UncommittedLLSNOffset: types.MinLLSN,
+				UncommittedLLSNLength: 5,
+				KnownHighWatermark:    types.InvalidGLSN,
 			}
 
 			ms.UpdateLocalLogStreamReplica(lsID, notExistSnID, r)
@@ -637,9 +672,9 @@ func TestStorageReport(t *testing.T) {
 
 			Convey("storage should apply report if snID is exist in LS", func(ctx C) {
 				r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-					BeginLLSN:     types.LLSN(0),
-					EndLLSN:       types.LLSN(5),
-					KnownNextGLSN: types.GLSN(0),
+					UncommittedLLSNOffset: types.MinLLSN,
+					UncommittedLLSNLength: 5,
+					KnownHighWatermark:    types.InvalidGLSN,
 				}
 
 				for i := 0; i < rep; i++ {
@@ -765,9 +800,9 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		ms.registerLogStream(ls)
 
 		r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-			BeginLLSN:     types.LLSN(0),
-			EndLLSN:       types.LLSN(5),
-			KnownNextGLSN: types.GLSN(10),
+			UncommittedLLSNOffset: types.MinLLSN,
+			UncommittedLLSNLength: 5,
+			KnownHighWatermark:    types.GLSN(10),
 		}
 		ms.UpdateLocalLogStreamReplica(lsID, snIDs[0], r)
 		So(ms.isCopyOnWrite(), ShouldBeFalse)
@@ -780,9 +815,9 @@ func TestStorageCopyOnWrite(t *testing.T) {
 			ms.setCopyOnWrite()
 
 			r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-				BeginLLSN:     types.LLSN(0),
-				EndLLSN:       types.LLSN(5),
-				KnownNextGLSN: types.GLSN(10),
+				UncommittedLLSNOffset: types.MinLLSN,
+				UncommittedLLSNLength: 5,
+				KnownHighWatermark:    types.GLSN(10),
 			}
 			ms.UpdateLocalLogStreamReplica(lsID, snIDs[1], r)
 
@@ -796,42 +831,42 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		ms := NewMetadataStorage(nil)
 
 		gls := &snpb.GlobalLogStreamDescriptor{
-			PrevNextGLSN: types.GLSN(5),
-			NextGLSN:     types.GLSN(10),
+			PrevHighWatermark: types.GLSN(5),
+			HighWatermark:     types.GLSN(10),
 		}
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
-			LogStreamID:        lsID,
-			CommittedGLSNBegin: types.GLSN(5),
-			CommittedGLSNEnd:   types.GLSN(10),
+			LogStreamID:         lsID,
+			CommittedGLSNOffset: types.GLSN(6),
+			CommittedGLSNLength: 5,
 		}
 		gls.CommitResult = append(gls.CommitResult, commit)
 
 		ms.AppendGlobalLogStream(gls)
 		So(ms.isCopyOnWrite(), ShouldBeFalse)
-		So(ms.LookupGlobalLogStreamByPrev(types.GLSN(5)), ShouldNotBeNil)
-		So(ms.GetNextGLSN(), ShouldEqual, types.GLSN(10))
+		So(ms.LookupNextGLS(types.GLSN(5)), ShouldNotBeNil)
+		So(ms.GetHighWatermark(), ShouldEqual, types.GLSN(10))
 
 		Convey("lookup GlobalLogStream with copyOnWrite should give merged response", func(ctx C) {
 			ms.setCopyOnWrite()
 
 			gls := &snpb.GlobalLogStreamDescriptor{
-				PrevNextGLSN: types.GLSN(10),
-				NextGLSN:     types.GLSN(15),
+				PrevHighWatermark: types.GLSN(10),
+				HighWatermark:     types.GLSN(15),
 			}
 
 			commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
-				LogStreamID:        lsID,
-				CommittedGLSNBegin: types.GLSN(10),
-				CommittedGLSNEnd:   types.GLSN(15),
+				LogStreamID:         lsID,
+				CommittedGLSNOffset: types.GLSN(11),
+				CommittedGLSNLength: 5,
 			}
 			gls.CommitResult = append(gls.CommitResult, commit)
 
 			ms.AppendGlobalLogStream(gls)
-			So(ms.LookupGlobalLogStreamByPrev(types.GLSN(5)), ShouldNotBeNil)
-			So(ms.LookupGlobalLogStreamByPrev(types.GLSN(10)), ShouldNotBeNil)
-			So(ms.GetNextGLSN(), ShouldEqual, types.GLSN(15))
+			So(ms.LookupNextGLS(types.GLSN(5)), ShouldNotBeNil)
+			So(ms.LookupNextGLS(types.GLSN(10)), ShouldNotBeNil)
+			So(ms.GetHighWatermark(), ShouldEqual, types.GLSN(15))
 		})
 	})
 }
@@ -989,9 +1024,9 @@ func TestStorageStateMachineMerge(t *testing.T) {
 				snID := types.StorageNodeID(j)
 
 				s := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-					BeginLLSN:     types.LLSN(i * 3),
-					EndLLSN:       types.LLSN(i*3 + 1),
-					KnownNextGLSN: types.GLSN(0),
+					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*3),
+					UncommittedLLSNLength: 1,
+					KnownHighWatermark:    types.InvalidGLSN,
 				}
 
 				ms.UpdateLocalLogStreamReplica(lsID, snID, s)
@@ -1007,9 +1042,9 @@ func TestStorageStateMachineMerge(t *testing.T) {
 				snID := types.StorageNodeID(j)
 
 				s := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-					BeginLLSN:     types.LLSN(1 + i*3),
-					EndLLSN:       types.LLSN(1 + i*3 + 1),
-					KnownNextGLSN: types.GLSN(1024),
+					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(1+i*3),
+					UncommittedLLSNLength: 1,
+					KnownHighWatermark:    types.GLSN(1024),
 				}
 
 				ms.UpdateLocalLogStreamReplica(lsID, snID, s)
@@ -1140,8 +1175,8 @@ func TestStorageSnapshotRace(t *testing.T) {
 			preGLSN := types.GLSN(i * numLS)
 			newGLSN := types.GLSN((i + 1) * numLS)
 			gls := &snpb.GlobalLogStreamDescriptor{
-				PrevNextGLSN: preGLSN,
-				NextGLSN:     newGLSN,
+				PrevHighWatermark: preGLSN,
+				HighWatermark:     newGLSN,
 			}
 
 			for j := 0; j < numLS; j++ {
@@ -1151,9 +1186,9 @@ func TestStorageSnapshotRace(t *testing.T) {
 					snID := types.StorageNodeID(j*numRep + k)
 
 					r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-						BeginLLSN:     types.LLSN(i),
-						EndLLSN:       types.LLSN(i + 1),
-						KnownNextGLSN: preGLSN,
+						UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i),
+						UncommittedLLSNLength: 1,
+						KnownHighWatermark:    preGLSN,
 					}
 
 					ms.UpdateLocalLogStreamReplica(lsID, snID, r)
@@ -1163,9 +1198,9 @@ func TestStorageSnapshotRace(t *testing.T) {
 				}
 
 				commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
-					LogStreamID:        lsID,
-					CommittedGLSNBegin: preGLSN,
-					CommittedGLSNEnd:   newGLSN,
+					LogStreamID:         lsID,
+					CommittedGLSNOffset: preGLSN + types.GLSN(1),
+					CommittedGLSNLength: uint64(numLS),
 				}
 				gls.CommitResult = append(gls.CommitResult, commit)
 			}
@@ -1175,10 +1210,10 @@ func TestStorageSnapshotRace(t *testing.T) {
 			appliedIndex++
 			ms.UpdateAppliedIndex(appliedIndex)
 
-			gls = ms.GetNextGLSFrom(preGLSN)
+			gls = ms.LookupNextGLS(preGLSN)
 			if gls != nil &&
-				gls.NextGLSN == newGLSN &&
-				ms.GetNextGLSN() == newGLSN {
+				gls.HighWatermark == newGLSN &&
+				ms.GetHighWatermark() == newGLSN {
 				checkGLS++
 			}
 
@@ -1195,7 +1230,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 
 					r, ok := ls.Replicas[snID]
 					if ok &&
-						r.KnownNextGLSN == preGLSN {
+						r.KnownHighWatermark == preGLSN {
 						checkLS++
 					}
 				}

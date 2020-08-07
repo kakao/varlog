@@ -3,7 +3,6 @@ package metadata_repository
 import (
 	"context"
 	"errors"
-	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -117,9 +116,9 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 	mr.rnStateC = mr.raftNode.stateC
 
 	cbs := ReportCollectorCallbacks{
-		report:     mr.proposeReport,
-		getClient:  mr.reporterClientFac.GetClient,
-		getNextGLS: mr.storage.GetNextGLSFrom,
+		report:        mr.proposeReport,
+		getClient:     mr.reporterClientFac.GetClient,
+		lookupNextGLS: mr.storage.LookupNextGLS,
 	}
 
 	mr.reportCollector = NewReportCollector(cbs,
@@ -262,8 +261,6 @@ func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
 		mr.applyUpdateLogStream(r, e.NodeIndex, e.RequestIndex)
 	case *pb.Report:
 		mr.applyReport(r)
-	case *pb.TrimCommit:
-		mr.applyTrimCommit(r)
 	case *pb.Commit:
 		mr.applyCommit()
 	case *pb.Seal:
@@ -281,7 +278,7 @@ func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorage
 		return err
 	}
 
-	mr.reportCollector.RegisterStorageNode(r.StorageNode, mr.storage.GetNextGLSN())
+	mr.reportCollector.RegisterStorageNode(r.StorageNode, mr.storage.GetHighWatermark())
 
 	return nil
 }
@@ -330,13 +327,13 @@ func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
 		lsID := l.LogStreamID
 
 		u := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
-			BeginLLSN:     l.UncommittedLLSNBegin,
-			EndLLSN:       l.UncommittedLLSNEnd,
-			KnownNextGLSN: r.LogStream.NextGLSN,
+			UncommittedLLSNOffset: l.UncommittedLLSNOffset,
+			UncommittedLLSNLength: l.UncommittedLLSNLength,
+			KnownHighWatermark:    r.LogStream.HighWatermark,
 		}
 
 		s := mr.storage.LookupLocalLogStreamReplica(lsID, snID)
-		if s == nil || s.EndLLSN < u.EndLLSN {
+		if s == nil || s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd() {
 			mr.storage.UpdateLocalLogStreamReplica(lsID, snID, u)
 		}
 	}
@@ -344,16 +341,14 @@ func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyTrimCommit(r *pb.TrimCommit) error {
-	return mr.storage.TrimGlobalLogStream(r.GLSN)
-}
-
 func (mr *RaftMetadataRepository) applyCommit() error {
-	curGLSN := mr.storage.GetNextGLSNNoLock()
-	newGLSN := curGLSN
+	curHWM := mr.storage.getHighWatermarkNoLock()
+	trimHWM := types.MaxGLSN
+	committedOffset := curHWM + types.GLSN(1)
+	nrCommitted := uint64(0)
 
 	gls := &snpb.GlobalLogStreamDescriptor{
-		PrevNextGLSN: curGLSN,
+		PrevHighWatermark: curHWM,
 	}
 
 	if mr.storage.NumUpdateSinceCommit() > 0 {
@@ -361,23 +356,18 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 
 		for _, lsID := range lsIDs {
 			replicas := mr.storage.LookupLocalLogStream(lsID)
-			knownGLSN, nrUncommit := mr.calculateCommit(replicas)
+			knownHWM, minHWM, nrUncommit := mr.calculateCommit(replicas)
+			if minHWM < trimHWM {
+				trimHWM = minHWM
+			}
 
-			if knownGLSN != curGLSN {
-				nrCommitted, ok := mr.numCommitSince(lsID, knownGLSN)
-				if !ok {
-					mr.logger.Panic("can not issue GLSN",
-						zap.Uint64("known", uint64(knownGLSN)),
-						zap.Uint64("uncommit", uint64(nrUncommit)),
-						zap.Uint64("cur", uint64(curGLSN)),
-					)
-				}
-
+			if knownHWM != curHWM {
+				nrCommitted := mr.numCommitSince(lsID, knownHWM)
 				if nrCommitted > nrUncommit {
 					mr.logger.Panic("# of uncommit should be bigger than # of commit",
 						zap.Uint64("lsID", uint64(lsID)),
-						zap.Uint64("known", uint64(knownGLSN)),
-						zap.Uint64("cur", uint64(curGLSN)),
+						zap.Uint64("known", uint64(knownHWM)),
+						zap.Uint64("cur", uint64(curHWM)),
 						zap.Uint64("uncommit", uint64(nrUncommit)),
 						zap.Uint64("commit", uint64(nrCommitted)),
 					)
@@ -387,28 +377,36 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 			}
 
 			commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
-				LogStreamID:        lsID,
-				CommittedGLSNBegin: newGLSN,
-				CommittedGLSNEnd:   newGLSN + types.GLSN(nrUncommit),
+				LogStreamID:         lsID,
+				CommittedGLSNOffset: committedOffset,
+				CommittedGLSNLength: nrUncommit,
 			}
 
 			if nrUncommit > 0 {
-				newGLSN = commit.CommittedGLSNEnd
+				committedOffset = commit.CommittedGLSNOffset + types.GLSN(commit.CommittedGLSNLength)
 			} else {
-				commit.CommittedGLSNBegin = mr.getLastCommitted(lsID)
-				commit.CommittedGLSNEnd = commit.CommittedGLSNBegin
+				commit.CommittedGLSNOffset = mr.getLastCommitted(lsID)
+				commit.CommittedGLSNLength = 0
 			}
 
 			gls.CommitResult = append(gls.CommitResult, commit)
+
+			nrCommitted += nrUncommit
 		}
 	}
-	gls.NextGLSN = newGLSN
+	gls.HighWatermark = curHWM + types.GLSN(nrCommitted)
 
-	if newGLSN > curGLSN {
+	//fmt.Printf("commit %+v\n", gls)
+
+	if nrCommitted > 0 {
 		mr.storage.AppendGlobalLogStream(gls)
 	}
+
+	if !trimHWM.Invalid() {
+		mr.storage.TrimGlobalLogStream(trimHWM)
+	}
+
 	mr.reportCollector.Commit(gls)
-	mr.proposeTrimCommit()
 
 	//TODO:: trigger next commit
 
@@ -446,73 +444,98 @@ func getCommitResultFromGLS(gls *snpb.GlobalLogStreamDescriptor, lsId types.LogS
 	return nil
 }
 
-func (mr *RaftMetadataRepository) numCommitSince(lsId types.LogStreamID, glsn types.GLSN) (uint64, bool) {
+func (mr *RaftMetadataRepository) numCommitSince(lsID types.LogStreamID, glsn types.GLSN) uint64 {
 	var num uint64
 
-	highest := mr.storage.GetNextGLSNNoLock()
+	highest := mr.storage.getHighWatermarkNoLock()
 
 	for glsn < highest {
-		gls := mr.storage.LookupGlobalLogStreamByPrev(glsn)
-
-		r := getCommitResultFromGLS(gls, lsId)
-		if r != nil {
-			num += uint64(r.CommittedGLSNEnd - r.CommittedGLSNBegin)
+		gls := mr.storage.lookupNextGLSNoLock(glsn)
+		if gls == nil {
+			mr.logger.Panic("gls should be exist",
+				zap.Uint64("highest", uint64(highest)),
+				zap.Uint64("cur", uint64(glsn)),
+			)
 		}
 
-		glsn = gls.NextGLSN
+		r := getCommitResultFromGLS(gls, lsID)
+		if r == nil {
+			mr.logger.Panic("ls should be exist",
+				zap.Uint64("lsID", uint64(lsID)),
+				zap.Uint64("highest", uint64(highest)),
+				zap.Uint64("cur", uint64(glsn)),
+			)
+		}
+
+		num += uint64(r.CommittedGLSNLength)
+		glsn = gls.HighWatermark
 	}
 
-	return num, true
+	return num
 }
 
-func (mr *RaftMetadataRepository) calculateCommit(replicas *pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas) (types.GLSN, uint64) {
-	var knownGLSN types.GLSN
-	var beginLLSN types.LLSN
-	var endLLSN types.LLSN = types.LLSN(math.MaxUint64)
+func (mr *RaftMetadataRepository) calculateCommit(replicas *pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas) (types.GLSN, types.GLSN, uint64) {
+	var trimHWM types.GLSN = types.MaxGLSN
+	var knownHWM types.GLSN = types.InvalidGLSN
+	var beginLLSN types.LLSN = types.InvalidLLSN
+	var endLLSN types.LLSN = types.InvalidLLSN
 
 	if replicas == nil {
-		return types.GLSN(0), 0
+		return types.InvalidGLSN, types.InvalidGLSN, 0
 	}
 
 	if len(replicas.Replicas) < mr.nrReplica {
-		return types.GLSN(0), 0
+		return types.InvalidGLSN, types.InvalidGLSN, 0
 	}
 
 	for _, l := range replicas.Replicas {
-		if l.BeginLLSN > beginLLSN {
-			beginLLSN = l.BeginLLSN
+		if beginLLSN.Invalid() || l.UncommittedLLSNOffset > beginLLSN {
+			beginLLSN = l.UncommittedLLSNOffset
 		}
 
-		if l.EndLLSN < endLLSN {
-			endLLSN = l.EndLLSN
+		if endLLSN.Invalid() || l.UncommittedLLSNEnd() < endLLSN {
+			endLLSN = l.UncommittedLLSNEnd()
 		}
 
-		if l.KnownNextGLSN > knownGLSN {
-			// knownNextGLSN 이 다르다면,
+		if knownHWM.Invalid() || l.KnownHighWatermark > knownHWM {
+			// knownHighWatermark 이 다르다면,
 			// 일부 SN 이 commitResult 를 받지 못했을 뿐이다.
-			knownGLSN = l.KnownNextGLSN
+			knownHWM = l.KnownHighWatermark
 		}
+
+		if l.KnownHighWatermark < trimHWM {
+			trimHWM = l.KnownHighWatermark
+		}
+	}
+
+	if trimHWM == types.MaxGLSN {
+		trimHWM = types.InvalidGLSN
 	}
 
 	if beginLLSN > endLLSN {
-		return knownGLSN, 0
+		return knownHWM, trimHWM, 0
 	}
 
-	return knownGLSN, uint64(endLLSN - beginLLSN)
+	return knownHWM, trimHWM, uint64(endLLSN - beginLLSN)
 }
 
 func (mr *RaftMetadataRepository) getLastCommitted(lsID types.LogStreamID) types.GLSN {
-	gls := mr.storage.GetGLS()
+	gls := mr.storage.GetLastGLS()
 	if gls == nil {
-		return types.GLSN(0)
+		return types.InvalidGLSN
 	}
 
 	r := getCommitResultFromGLS(gls, lsID)
 	if r == nil {
-		mr.logger.Panic("get last committed")
+		// newbie
+		return types.InvalidGLSN
 	}
 
-	return r.CommittedGLSNEnd
+	if r.CommittedGLSNLength == 0 {
+		return r.CommittedGLSNOffset
+	}
+
+	return r.CommittedGLSNOffset + types.GLSN(r.CommittedGLSNLength-1)
 }
 
 func (mr *RaftMetadataRepository) proposeCommit() {
@@ -522,24 +545,6 @@ func (mr *RaftMetadataRepository) proposeCommit() {
 
 	r := &pb.Commit{}
 	mr.propose(context.TODO(), r, false)
-}
-
-func (mr *RaftMetadataRepository) proposeTrimCommit() {
-	if !mr.isLeader() {
-		return
-	}
-
-	//TODO:: check all storage node got commit result
-	/*
-		if len(mr.smr.GlobalLogStreams) <= DefaultNumGlobalLogStreams {
-			return
-		}
-
-		r := &pb.TrimCommit{
-			Glsn: mr.smr.GlobalLogStreams[0].NextGLSN,
-		}
-		mr.propose(context.TODO(), r, false)
-	*/
 }
 
 func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescriptor) error {
@@ -633,7 +638,7 @@ func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStream
 
 	err := mr.propose(ctx, r, true)
 	if err != nil && err != varlog.ErrIgnore {
-		return types.GLSN(0), err
+		return types.InvalidGLSN, err
 	}
 
 	return mr.getLastCommitted(lsID), nil
