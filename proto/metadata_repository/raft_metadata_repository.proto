@@ -38,7 +38,7 @@ message UpdateLogStream {
 }
 
 message Report {
-        LocalLogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
+        varlog.storagenode.LocalLogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
 }
 
 message Commit {
@@ -111,7 +111,7 @@ message MetadataRepositoryDescriptor {
                 uint64 trim_glsn = 1
                     [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
                     (gogoproto.customname) = "TrimGLSN"];
-                repeated GlobalLogStreamDescriptor global_log_streams = 2[(gogoproto.nullable) = true];
+                repeated varlog.storagenode.GlobalLogStreamDescriptor global_log_streams = 2[(gogoproto.nullable) = true];
                 map<uint64, LocalLogStreamReplicas> local_log_streams = 3[(gogoproto.castkey)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID"];
         }
         MetadataDescriptor metadata = 1[(gogoproto.nullable) = true];
