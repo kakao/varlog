@@ -28,9 +28,9 @@ func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty
 	reportPb.Uncommit = make([]*pb.LocalLogStreamDescriptor_LogStreamUncommitReport, len(reports))
 	for i, rpt := range reports {
 		reportPb.Uncommit[i] = &pb.LocalLogStreamDescriptor_LogStreamUncommitReport{
-			LogStreamID:          rpt.LogStreamID,
-			UncommittedLLSNBegin: rpt.UncommittedLLSNBegin,
-			UncommittedLLSNEnd:   rpt.UncommittedLLSNEnd,
+			LogStreamID:           rpt.LogStreamID,
+			UncommittedLLSNOffset: rpt.UncommittedLLSNOffset,
+			UncommittedLLSNLength: rpt.UncommittedLLSNLength,
 		}
 	}
 	reportPb.NextGLSN = knownNextGLSN
@@ -46,10 +46,10 @@ func (s *LogStreamReporterService) Commit(ctx context.Context, req *pb.GlobalLog
 	commitResults := make([]CommittedLogStreamStatus, len(req.CommitResult))
 	for i, cr := range req.CommitResult {
 		commitResults[i].LogStreamID = cr.LogStreamID
-		commitResults[i].NextGLSN = nextGLSN
-		commitResults[i].PrevNextGLSN = prevNextGLSN
-		commitResults[i].CommittedGLSNBegin = cr.CommittedGLSNBegin
-		commitResults[i].CommittedGLSNEnd = cr.CommittedGLSNEnd
+		commitResults[i].HighWatermark = nextGLSN
+		commitResults[i].PrevHighWatermark = prevNextGLSN
+		commitResults[i].CommittedGLSNOffset = cr.CommittedGLSNOffset
+		commitResults[i].CommittedGLSNLength = cr.CommittedGLSNLength
 	}
 	s.LogStreamReporter.Commit(nextGLSN, prevNextGLSN, commitResults)
 	return &types.Empty{}, nil

@@ -10,18 +10,18 @@ import (
 )
 
 type UncommittedLogStreamStatus struct {
-	LogStreamID          types.LogStreamID
-	KnownNextGLSN        types.GLSN
-	UncommittedLLSNBegin types.LLSN
-	UncommittedLLSNEnd   types.LLSN
+	LogStreamID           types.LogStreamID
+	KnownHighWatermark    types.GLSN
+	UncommittedLLSNOffset types.LLSN
+	UncommittedLLSNLength uint64
 }
 
 type CommittedLogStreamStatus struct {
-	LogStreamID        types.LogStreamID
-	NextGLSN           types.GLSN
-	PrevNextGLSN       types.GLSN
-	CommittedGLSNBegin types.GLSN
-	CommittedGLSNEnd   types.GLSN
+	LogStreamID         types.LogStreamID
+	HighWatermark       types.GLSN
+	PrevHighWatermark   types.GLSN
+	CommittedGLSNOffset types.GLSN
+	CommittedGLSNLength uint64
 }
 
 const (
@@ -30,15 +30,15 @@ const (
 )
 
 type lsrReportTask struct {
-	knownNextGLSN types.GLSN
-	reports       []UncommittedLogStreamStatus
-	done          chan struct{}
+	knownHighWatermark types.GLSN
+	reports            []UncommittedLogStreamStatus
+	done               chan struct{}
 }
 
 type lsrCommitTask struct {
-	nextGLSN      types.GLSN
-	prevNextGLSN  types.GLSN
-	commitResults []CommittedLogStreamStatus
+	highWatermark     types.GLSN
+	prevHighWatermark types.GLSN
+	commitResults     []CommittedLogStreamStatus
 }
 
 type LogStreamReporter interface {
@@ -47,20 +47,20 @@ type LogStreamReporter interface {
 	StorageNodeID() types.StorageNodeID
 	RegisterLogStreamExecutor(executor LogStreamExecutor) error
 	GetReport() (types.GLSN, []UncommittedLogStreamStatus)
-	Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus)
+	Commit(highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus)
 }
 
 type logStreamReporter struct {
-	storageNodeID types.StorageNodeID
-	knownNextGLSN types.AtomicGLSN
-	executors     map[types.LogStreamID]LogStreamExecutor
-	mtxExecutors  sync.RWMutex
-	history       map[types.GLSN][]UncommittedLogStreamStatus
-	reportC       chan *lsrReportTask
-	commitC       chan lsrCommitTask
-	cancel        context.CancelFunc
-	runner        runner.Runner
-	once          sync.Once
+	storageNodeID      types.StorageNodeID
+	knownHighWatermark types.AtomicGLSN
+	executors          map[types.LogStreamID]LogStreamExecutor
+	mtxExecutors       sync.RWMutex
+	history            map[types.GLSN][]UncommittedLogStreamStatus
+	reportC            chan *lsrReportTask
+	commitC            chan lsrCommitTask
+	cancel             context.CancelFunc
+	runner             runner.Runner
+	once               sync.Once
 }
 
 func NewLogStreamReporter(storageNodeID types.StorageNodeID) LogStreamReporter {
@@ -141,18 +141,18 @@ func (lsr *logStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamSta
 	t := lsrReportTask{done: make(chan struct{})}
 	lsr.reportC <- &t
 	<-t.done
-	return t.knownNextGLSN, t.reports
+	return t.knownHighWatermark, t.reports
 }
 
 func (lsr *logStreamReporter) report(t *lsrReportTask) {
 	lsr.mtxExecutors.RLock()
 	reports := make([]UncommittedLogStreamStatus, 0, len(lsr.executors))
-	knownNextGLSN := types.GLSN(0)
+	knownHighWatermark := types.InvalidGLSN
 	for _, executor := range lsr.executors {
 		status := executor.GetReport()
 		// get non-zero, minimum KnwonNextGLSN (zero means just added LS)
-		if status.KnownNextGLSN > 0 && (knownNextGLSN == 0 || knownNextGLSN > status.KnownNextGLSN) {
-			knownNextGLSN = status.KnownNextGLSN
+		if !status.KnownHighWatermark.Invalid() && (knownHighWatermark.Invalid() || knownHighWatermark > status.KnownHighWatermark) {
+			knownHighWatermark = status.KnownHighWatermark
 		}
 		reports = append(reports, status)
 	}
@@ -163,9 +163,9 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 		// TODO (jun.song)
 		// 1) old and new reports can be merged when they have the same KnownNextGLSN
 		// 2) after implementing LSE-wise KnownNextGLSN, history won't be needed any longer
-		oldReports, ok := lsr.history[knownNextGLSN]
+		oldReports, ok := lsr.history[knownHighWatermark]
 		if !ok {
-			lsr.history[knownNextGLSN] = reports
+			lsr.history[knownHighWatermark] = reports
 			goto out
 		}
 		reports = oldReports
@@ -173,32 +173,32 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 
 out:
 	t.reports = reports
-	t.knownNextGLSN = knownNextGLSN
+	t.knownHighWatermark = knownHighWatermark
 	close(t.done)
 
 	for nextGLSN := range lsr.history {
-		if nextGLSN < knownNextGLSN {
+		if nextGLSN < knownHighWatermark {
 			delete(lsr.history, nextGLSN)
 		}
 	}
 }
 
-func (lsr *logStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus) {
-	if !lsr.verifyCommit(prevNextGLSN) {
+func (lsr *logStreamReporter) Commit(highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) {
+	if !lsr.verifyCommit(prevHighWatermark) {
 		return
 	}
 	if len(commitResults) == 0 {
 		return
 	}
 	lsr.commitC <- lsrCommitTask{
-		nextGLSN:      nextGLSN,
-		prevNextGLSN:  prevNextGLSN,
-		commitResults: commitResults,
+		highWatermark:     highWatermark,
+		prevHighWatermark: prevHighWatermark,
+		commitResults:     commitResults,
 	}
 }
 
 func (lsr *logStreamReporter) commit(t lsrCommitTask) {
-	if !lsr.verifyCommit(t.prevNextGLSN) {
+	if !lsr.verifyCommit(t.prevHighWatermark) {
 		return
 	}
 	for _, commitResult := range t.commitResults {
@@ -213,10 +213,9 @@ func (lsr *logStreamReporter) commit(t lsrCommitTask) {
 		// TODO: run goroutine
 		executor.Commit(commitResult)
 	}
-	lsr.knownNextGLSN.Store(t.nextGLSN)
+	lsr.knownHighWatermark.Store(t.highWatermark)
 }
 
-func (lsr *logStreamReporter) verifyCommit(prevNextGLSN types.GLSN) bool {
-	knownNextGLSN := lsr.knownNextGLSN.Load()
-	return prevNextGLSN == knownNextGLSN
+func (lsr *logStreamReporter) verifyCommit(prevHighWatermark types.GLSN) bool {
+	return prevHighWatermark == lsr.knownHighWatermark.Load()
 }

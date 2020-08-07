@@ -71,8 +71,8 @@ type trimTask struct {
 }
 
 type commitTask struct {
-	nextGLSN           types.GLSN
-	prevNextGLSN       types.GLSN
+	highWatermark      types.GLSN
+	prevHighWatermark  types.GLSN
 	committedGLSNBegin types.GLSN
 	committedGLSNEnd   types.GLSN
 }
@@ -132,12 +132,13 @@ type logStreamExecutor struct {
 	// knownNextGLSN and uncommittedLLSNBegin should be updated simultaneously.
 	mu sync.RWMutex
 
-	// knownNextGLSN acts as a version of commit result. In the scope of the same
-	// knownNextGLSN, all the reports requested by MR have the same uncommittedLLSNBegin.
+	// knownHighWatermark acts as a version of commit result. In the scope of the same
+	// knownHighWatermark, all the reports requested by MR have the same uncommittedLLSNBegin.
 	// Because the reports with different values of uncommittedLLSNBegin with the same
-	// knownNextGLSN can make some log entries in the log stream have no or more than one GLSN.
+	// knownHighWatermark can make some log entries in the log stream have no or more than one GLSN.
 	// It is read by GetReport, and written by commit.
-	knownNextGLSN types.GLSN // set by Commit
+	knownHighWatermark types.GLSN // set by Commit
+	// knownNextGLSN types.GLSN // set by Commit
 
 	// uncommittedLLSNBegin is the start of the range that is reported as uncommitted log
 	// entries. In the reports marked as the same KnownNextGLSN, uncommittedLLSNBegin of those
@@ -188,14 +189,18 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) (LogSt
 		return nil, varlog.ErrInvalid
 	}
 	lse := &logStreamExecutor{
-		logStreamID: logStreamID,
-		storage:     storage,
-		replicator:  NewReplicator(),
-		cwm:         newCommitWaitMap(),
-		appendC:     make(chan *appendTask, lseAppendCSize),
-		trimC:       make(chan *trimTask, lseTrimCSize),
-		commitC:     make(chan commitTask, lseCommitCSize),
-		logger:      logger,
+		logStreamID:          logStreamID,
+		storage:              storage,
+		replicator:           NewReplicator(),
+		cwm:                  newCommitWaitMap(),
+		appendC:              make(chan *appendTask, lseAppendCSize),
+		trimC:                make(chan *trimTask, lseTrimCSize),
+		commitC:              make(chan commitTask, lseCommitCSize),
+		knownHighWatermark:   types.InvalidGLSN,
+		uncommittedLLSNBegin: types.MinLLSN,
+		uncommittedLLSNEnd:   types.AtomicLLSN(types.MinLLSN),
+		committedLLSNEnd:     types.MinLLSN,
+		logger:               logger,
 	}
 	return lse, nil
 }
@@ -481,12 +486,13 @@ func (lse *logStreamExecutor) trim(t *trimTask) {
 func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	// TODO: If this is sealed, ...
 	lse.mu.RLock()
-	defer lse.mu.RUnlock()
+	offset := lse.uncommittedLLSNBegin
+	lse.mu.RUnlock()
 	return UncommittedLogStreamStatus{
-		LogStreamID:          lse.logStreamID,
-		KnownNextGLSN:        lse.knownNextGLSN,
-		UncommittedLLSNBegin: lse.uncommittedLLSNBegin,
-		UncommittedLLSNEnd:   lse.uncommittedLLSNEnd.Load(),
+		LogStreamID:           lse.logStreamID,
+		KnownHighWatermark:    lse.knownHighWatermark,
+		UncommittedLLSNOffset: offset,
+		UncommittedLLSNLength: uint64(lse.uncommittedLLSNEnd.Load() - offset),
 	}
 }
 
@@ -501,28 +507,28 @@ func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) error {
 		lse.logger.Error("sealed")
 		return varlog.ErrSealed
 	}
-	if !lse.verifyCommit(cr.PrevNextGLSN) {
+	if !lse.verifyCommit(cr.PrevHighWatermark) {
 		return varlog.ErrInvalid
 	}
 
 	lse.commitC <- commitTask{
-		nextGLSN:           cr.NextGLSN,
-		prevNextGLSN:       cr.PrevNextGLSN,
-		committedGLSNBegin: cr.CommittedGLSNBegin,
-		committedGLSNEnd:   cr.CommittedGLSNEnd,
+		highWatermark:      cr.HighWatermark,
+		prevHighWatermark:  cr.PrevHighWatermark,
+		committedGLSNBegin: cr.CommittedGLSNOffset,
+		committedGLSNEnd:   cr.CommittedGLSNOffset + types.GLSN(cr.CommittedGLSNLength),
 	}
 	return nil
 }
 
-func (lse *logStreamExecutor) verifyCommit(prevNextGLSN types.GLSN) bool {
+func (lse *logStreamExecutor) verifyCommit(prevHighWatermark types.GLSN) bool {
 	lse.mu.RLock()
 	defer lse.mu.RUnlock()
 	// If the LSE is newbie knownNextGLSN is zero. In LSE-wise commit, it is unnecessary,
-	ret := lse.knownNextGLSN == 0 || lse.knownNextGLSN == prevNextGLSN
+	ret := lse.knownHighWatermark.Invalid() || lse.knownHighWatermark == prevHighWatermark
 	if !ret {
 		lse.logger.Error("incorrect CR",
-			zap.Uint64("known next GLSN", uint64(lse.knownNextGLSN)),
-			zap.Uint64("prev next GLSN", uint64(prevNextGLSN)))
+			zap.Uint64("known next GLSN", uint64(lse.knownHighWatermark)),
+			zap.Uint64("prev next GLSN", uint64(prevHighWatermark)))
 	}
 	return ret
 }
@@ -531,7 +537,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 	if lse.isSealed() {
 		return
 	}
-	if !lse.verifyCommit(t.prevNextGLSN) {
+	if !lse.verifyCommit(t.prevHighWatermark) {
 		return
 	}
 
@@ -575,7 +581,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 
 	if commitOk {
 		lse.mu.Lock()
-		lse.knownNextGLSN = t.nextGLSN
+		lse.knownHighWatermark = t.highWatermark
 		lse.uncommittedLLSNBegin += types.LLSN(t.committedGLSNEnd - t.committedGLSNBegin)
 		lse.mu.Unlock()
 	}
