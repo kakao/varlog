@@ -400,10 +400,12 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 
 	if nrCommitted > 0 {
 		mr.storage.AppendGlobalLogStream(gls)
-	}
 
-	if !trimHWM.Invalid() {
-		mr.storage.TrimGlobalLogStream(trimHWM)
+		if !trimHWM.Invalid() {
+			mr.logger.Info("trim", zap.Uint64("hwm", uint64(trimHWM)))
+			mr.storage.TrimGlobalLogStream(trimHWM)
+		}
+
 	}
 
 	mr.reportCollector.Commit(gls)

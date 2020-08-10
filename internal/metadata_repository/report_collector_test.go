@@ -349,6 +349,60 @@ func TestCommit(t *testing.T) {
 	})
 }
 
+func TestCatchupRace(t *testing.T) {
+	Convey("Given reportCollectExecutor", t, func(ctx C) {
+		nrStorage := 5
+		knownHWM := types.InvalidGLSN
+
+		mr := NewDummyMetadataRepository()
+		clientFac := NewDummyReporterClientFactory(false)
+		cb := ReportCollectorCallbacks{
+			report:        mr.report,
+			getClient:     clientFac.GetClient,
+			lookupNextGLS: mr.lookupNextGLS,
+		}
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(0),
+		}
+
+		logger, _ := zap.NewDevelopment()
+
+		executor := &ReportCollectExecutor{
+			resultC:       make(chan *snpb.GlobalLogStreamDescriptor, 1),
+			highWatermark: knownHWM,
+			sn:            sn,
+			cb:            cb,
+			logger:        logger,
+		}
+
+		Convey("When HWM Update during commit", func(ctx C) {
+			gls := newDummyGlobalLogStream(knownHWM, nrStorage)
+			mr.appendGLS(gls)
+			knownHWM = gls.HighWatermark
+
+			gls = newDummyGlobalLogStream(knownHWM, nrStorage)
+			mr.appendGLS(gls)
+			knownHWM = gls.HighWatermark
+
+			executor.lsmu.Lock()
+			executor.highWatermark = knownHWM
+			executor.lsmu.Unlock()
+
+			mr.trimGLS(knownHWM)
+
+			gls = newDummyGlobalLogStream(knownHWM, nrStorage)
+			mr.appendGLS(gls)
+			knownHWM = gls.HighWatermark
+
+			Convey("Then catchup should not panic", func(ctx C) {
+				err := executor.catchup(types.InvalidGLSN, gls)
+				So(err, ShouldBeNil)
+			})
+		})
+	})
+}
+
 func TestRPCFail(t *testing.T) {
 	Convey("Given ReportCollector", t, func(ctx C) {
 		//knownHWM := types.InvalidGLSN
@@ -423,7 +477,6 @@ func TestRPCFail(t *testing.T) {
 
 func TestReporterClientReconnect(t *testing.T) {
 	Convey("Given Reporter Client", t, func(ctx C) {
-
 		clientFac := NewDummyReporterClientFactory(false)
 		cb := ReportCollectorCallbacks{
 			getClient: clientFac.GetClient,

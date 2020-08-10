@@ -152,42 +152,19 @@ Loop:
 		case <-ctx.Done():
 			break Loop
 		case gls := <-rce.resultC:
-			rce.lsmu.RLock()
-			highWatermark := rce.highWatermark
-			rce.lsmu.RUnlock()
+			highWatermark := rce.getHighWatermark()
 
-			for highWatermark < gls.PrevHighWatermark {
-				prev := rce.cb.lookupNextGLS(highWatermark)
-				if prev == nil {
-					rce.logger.Panic("prev gls should not be nil",
-						zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
-						zap.Uint64("FROM", uint64(highWatermark)),
-						zap.Uint64("CUR", uint64(gls.HighWatermark)),
-					)
-				}
-
-				err := rce.commit(prev)
-				if err != nil {
-					rce.logger.Error("commit fail",
-						zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
-						zap.String("ADDR", rce.sn.Address),
-						zap.String("err", err.Error()),
-					)
-					continue Loop
-				}
-
-				if prev.HighWatermark <= highWatermark {
-					rce.logger.Panic("broken global commit consistency",
-						zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
-						zap.Uint64("expected", uint64(gls.PrevHighWatermark)),
-						zap.Uint64("prev", uint64(prev.HighWatermark)),
-						zap.Uint64("cur", uint64(highWatermark)),
-					)
-				}
-				highWatermark = prev.HighWatermark
+			err := rce.catchup(highWatermark, gls)
+			if err != nil {
+				rce.logger.Error("commit fail",
+					zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
+					zap.String("ADDR", rce.sn.Address),
+					zap.String("err", err.Error()),
+				)
+				continue Loop
 			}
 
-			err := rce.commit(gls)
+			err = rce.commit(gls)
 			if err != nil {
 				rce.logger.Error("commit fail",
 					zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
@@ -270,6 +247,43 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 	if err != nil {
 		rce.closeClient(cli)
 		return err
+	}
+
+	return nil
+}
+
+func (rce *ReportCollectExecutor) catchup(highWatermark types.GLSN, gls *snpb.GlobalLogStreamDescriptor) error {
+Loop:
+	for highWatermark < gls.HighWatermark {
+		prev := rce.cb.lookupNextGLS(highWatermark)
+		if prev == nil {
+			tmp := rce.getHighWatermark()
+			if tmp <= highWatermark {
+				rce.logger.Panic("prev gls should not be nil",
+					zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
+					zap.Uint64("FROM", uint64(highWatermark)),
+					zap.Uint64("CUR", uint64(gls.HighWatermark)),
+				)
+			} else {
+				highWatermark = tmp
+				continue Loop
+			}
+		}
+
+		err := rce.commit(prev)
+		if err != nil {
+			return err
+		}
+
+		if prev.HighWatermark <= highWatermark {
+			rce.logger.Panic("broken global commit consistency",
+				zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
+				zap.Uint64("expected", uint64(gls.PrevHighWatermark)),
+				zap.Uint64("prev", uint64(prev.HighWatermark)),
+				zap.Uint64("cur", uint64(highWatermark)),
+			)
+		}
+		highWatermark = prev.HighWatermark
 	}
 
 	return nil
