@@ -26,7 +26,8 @@ type ReportCollectExecutor struct {
 	cli           storage.LogStreamReporterClient
 	sn            *varlogpb.StorageNodeDescriptor
 	cb            ReportCollectorCallbacks
-	mu            sync.RWMutex
+	lsmu          sync.RWMutex
+	clmu          sync.RWMutex
 	resultC       chan *snpb.GlobalLogStreamDescriptor
 	logger        *zap.Logger
 	cancel        context.CancelFunc
@@ -71,17 +72,11 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		return varlog.ErrExist
 	}
 
-	cli, err := rc.cb.getClient(sn)
-	if err != nil {
-		rc.logger.Panic(err.Error())
-	}
-
 	executor := &ReportCollectExecutor{
 		resultC:       make(chan *snpb.GlobalLogStreamDescriptor, 1),
 		highWatermark: glsn,
 		sn:            sn,
 		cb:            rc.cb,
-		cli:           cli,
 		logger:        rc.logger.Named("executor"),
 	}
 	ctx, cancel := context.WithCancel(rc.ctx)
@@ -135,13 +130,19 @@ Loop:
 		default:
 			err := rce.getReport()
 			if err != nil {
-				//TODO:: reconnect
-				rce.logger.Panic(err.Error())
+				/*
+					rce.logger.Error("getReport fail",
+						zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
+						zap.String("ADDR", rce.sn.Address),
+						zap.String("err", err.Error()),
+					)
+				*/
+				continue Loop
 			}
 		}
 	}
 
-	//TODO:: close cli
+	rce.closeClient(nil)
 }
 
 func (rce *ReportCollectExecutor) runCommit(ctx context.Context) {
@@ -151,9 +152,9 @@ Loop:
 		case <-ctx.Done():
 			break Loop
 		case gls := <-rce.resultC:
-			rce.mu.RLock()
+			rce.lsmu.RLock()
 			highWatermark := rce.highWatermark
-			rce.mu.RUnlock()
+			rce.lsmu.RUnlock()
 
 			for highWatermark < gls.PrevHighWatermark {
 				prev := rce.cb.lookupNextGLS(highWatermark)
@@ -167,8 +168,12 @@ Loop:
 
 				err := rce.commit(prev)
 				if err != nil {
-					//TODO:: reconnect
-					rce.logger.Panic(err.Error())
+					rce.logger.Error("commit fail",
+						zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
+						zap.String("ADDR", rce.sn.Address),
+						zap.String("err", err.Error()),
+					)
+					continue Loop
 				}
 
 				if prev.HighWatermark <= highWatermark {
@@ -184,17 +189,28 @@ Loop:
 
 			err := rce.commit(gls)
 			if err != nil {
-				rce.logger.Panic(err.Error())
+				rce.logger.Error("commit fail",
+					zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
+					zap.String("ADDR", rce.sn.Address),
+					zap.String("err", err.Error()),
+				)
+				continue Loop
 			}
 		}
 	}
 
-	//TODO:: close cli
+	rce.closeClient(nil)
 }
 
 func (rce *ReportCollectExecutor) getReport() error {
-	lls, err := rce.cli.GetReport(context.TODO())
+	cli, err := rce.getClient()
 	if err != nil {
+		return err
+	}
+
+	lls, err := cli.GetReport(context.TODO())
+	if err != nil {
+		rce.closeClient(cli)
 		return err
 	}
 
@@ -213,10 +229,10 @@ func (rce *ReportCollectExecutor) getReport() error {
 		)
 	}
 
-	rce.mu.Lock()
+	rce.lsmu.Lock()
 	rce.highWatermark = lls.HighWatermark
 	rce.logStreamIDs = lsIDs
-	rce.mu.Unlock()
+	rce.lsmu.Unlock()
 
 	rce.cb.report(lls)
 
@@ -224,14 +240,19 @@ func (rce *ReportCollectExecutor) getReport() error {
 }
 
 func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) error {
+	cli, err := rce.getClient()
+	if err != nil {
+		return err
+	}
+
 	r := snpb.GlobalLogStreamDescriptor{
 		HighWatermark:     gls.HighWatermark,
 		PrevHighWatermark: gls.PrevHighWatermark,
 	}
 
-	rce.mu.RLock()
+	rce.lsmu.RLock()
 	lsIDs := rce.logStreamIDs
-	rce.mu.RUnlock()
+	rce.lsmu.RUnlock()
 
 	r.CommitResult = make([]*snpb.GlobalLogStreamDescriptor_LogStreamCommitResult, len(lsIDs))
 
@@ -245,8 +266,9 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 		r.CommitResult[i] = c
 	}
 
-	err := rce.cli.Commit(context.TODO(), &r)
+	err = cli.Commit(context.TODO(), &r)
 	if err != nil {
+		rce.closeClient(cli)
 		return err
 	}
 
@@ -270,8 +292,37 @@ func (rc *ReportCollector) getMinHighWatermark() types.GLSN {
 }
 
 func (rce *ReportCollectExecutor) getHighWatermark() types.GLSN {
-	rce.mu.RLock()
-	defer rce.mu.RUnlock()
+	rce.lsmu.RLock()
+	defer rce.lsmu.RUnlock()
 
 	return rce.highWatermark
+}
+
+func (rce *ReportCollectExecutor) closeClient(cli storage.LogStreamReporterClient) {
+	rce.clmu.Lock()
+	defer rce.clmu.Unlock()
+
+	if rce.cli != nil &&
+		(rce.cli == cli || cli == nil) {
+		rce.cli.Close()
+		rce.cli = nil
+	}
+}
+
+func (rce *ReportCollectExecutor) getClient() (storage.LogStreamReporterClient, error) {
+	rce.clmu.RLock()
+	cli := rce.cli
+	rce.clmu.RUnlock()
+
+	if cli != nil {
+		return cli, nil
+	}
+
+	rce.clmu.Lock()
+	defer rce.clmu.Unlock()
+
+	var err error
+
+	rce.cli, err = rce.cb.getClient(rce.sn)
+	return rce.cli, err
 }

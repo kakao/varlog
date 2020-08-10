@@ -1,11 +1,13 @@
 package metadata_repository
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/kakao/varlog/internal/storage"
 	varlog "github.com/kakao/varlog/pkg/varlog"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
@@ -24,7 +26,7 @@ type dummyMetadataRepository struct {
 
 func NewDummyMetadataRepository() *dummyMetadataRepository {
 	return &dummyMetadataRepository{
-		reportC: make(chan *snpb.LocalLogStreamDescriptor),
+		reportC: make(chan *snpb.LocalLogStreamDescriptor, 4096),
 	}
 }
 
@@ -86,7 +88,7 @@ func TestRegisterStorageNode(t *testing.T) {
 		reportCollector := NewReportCollector(cb, logger)
 		defer reportCollector.Close()
 
-		err := reportCollector.RegisterStorageNode(nil, types.GLSN(0))
+		err := reportCollector.RegisterStorageNode(nil, types.InvalidGLSN)
 		So(err, ShouldNotBeNil)
 	})
 
@@ -106,7 +108,7 @@ func TestRegisterStorageNode(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(time.Now().UnixNano()),
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, types.GLSN(0))
+		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
 		So(err, ShouldBeNil)
 
 		reportCollector.mu.RLock()
@@ -116,7 +118,7 @@ func TestRegisterStorageNode(t *testing.T) {
 
 		reportCollector.mu.RUnlock()
 
-		err = reportCollector.RegisterStorageNode(sn, types.GLSN(0))
+		err = reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
 		So(err, ShouldNotBeNil)
 	})
 }
@@ -139,7 +141,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 			StorageNodeID: snID,
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, types.GLSN(0))
+		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
 		So(err, ShouldBeNil)
 
 		err = reportCollector.UnregisterStorageNode(snID)
@@ -208,7 +210,7 @@ func TestReport(t *testing.T) {
 				StorageNodeID: types.StorageNodeID(i),
 			}
 
-			err := reportCollector.RegisterStorageNode(sn, types.GLSN(0))
+			err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -260,7 +262,7 @@ func TestCommit(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(i),
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, types.GLSN(0))
+		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -273,14 +275,16 @@ func TestCommit(t *testing.T) {
 
 		reportCollector.Commit(gls)
 
-		for _, cli := range a.m {
+		a.m.Range(func(k, v interface{}) bool {
+			cli := v.(*DummyReporterClient)
 			So(testutil.CompareWait(func() bool {
 				cli.mu.Lock()
 				defer cli.mu.Unlock()
 
 				return cli.knownHighWatermark == knownHWM
 			}, 100*time.Millisecond), ShouldBeTrue)
-		}
+			return true
+		})
 
 		So(testutil.CompareWait(func() bool {
 			return reportCollector.getMinHighWatermark() == knownHWM
@@ -298,14 +302,16 @@ func TestCommit(t *testing.T) {
 
 		reportCollector.Commit(gls)
 
-		for _, cli := range a.m {
+		a.m.Range(func(k, v interface{}) bool {
+			cli := v.(*DummyReporterClient)
 			So(testutil.CompareWait(func() bool {
 				cli.mu.Lock()
 				defer cli.mu.Unlock()
 
 				return cli.knownHighWatermark == knownHWM
 			}, 100*time.Millisecond), ShouldBeTrue)
-		}
+			return true
+		})
 
 		So(testutil.CompareWait(func() bool {
 			return reportCollector.getMinHighWatermark() == knownHWM
@@ -330,13 +336,150 @@ func TestCommit(t *testing.T) {
 
 		reportCollector.Commit(gls)
 
-		for _, cli := range a.m {
+		a.m.Range(func(k, v interface{}) bool {
+			cli := v.(*DummyReporterClient)
 			So(testutil.CompareWait(func() bool {
 				cli.mu.Lock()
 				defer cli.mu.Unlock()
 
 				return cli.knownHighWatermark == knownHWM
 			}, 100*time.Millisecond), ShouldBeTrue)
+			return true
+		})
+	})
+}
+
+func TestRPCFail(t *testing.T) {
+	Convey("Given ReportCollector", t, func(ctx C) {
+		//knownHWM := types.InvalidGLSN
+
+		clientFac := NewDummyReporterClientFactory(false)
+		mr := NewDummyMetadataRepository()
+		cb := ReportCollectorCallbacks{
+			report:        mr.report,
+			getClient:     clientFac.GetClient,
+			lookupNextGLS: mr.lookupNextGLS,
 		}
+
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(cb, logger)
+		Reset(func() {
+			reportCollector.Close()
+		})
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(0),
+		}
+
+		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+		So(err, ShouldBeNil)
+
+		So(testutil.CompareWait(func() bool {
+			return clientFac.lookupClient(sn.StorageNodeID) != nil
+		}, 100*time.Millisecond), ShouldBeTrue)
+
+		Convey("When reporter is crashed", func(ctx C) {
+			clientFac.crashRPC(sn.StorageNodeID)
+
+			// clear reportC
+			nrReport := len(mr.reportC)
+			for i := 0; i < nrReport; i++ {
+				<-mr.reportC
+			}
+
+			select {
+			case <-mr.reportC:
+			case <-time.After(100 * time.Millisecond):
+			}
+
+			Convey("reportCollector should not callback report", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					select {
+					case <-mr.reportC:
+						return false
+					case <-time.After(100 * time.Millisecond):
+						return true
+					}
+				}, 100*time.Millisecond), ShouldBeTrue)
+			})
+
+			Convey("When repoter recover", func(ctx C) {
+				clientFac.recoverRPC(sn.StorageNodeID)
+
+				Convey("reportCollector should callback report", func(ctx C) {
+					So(testutil.CompareWait(func() bool {
+						select {
+						case <-mr.reportC:
+							return true
+						default:
+							return false
+						}
+					}, 100*time.Millisecond), ShouldBeTrue)
+				})
+			})
+		})
+	})
+}
+
+func TestReporterClientReconnect(t *testing.T) {
+	Convey("Given Reporter Client", t, func(ctx C) {
+
+		clientFac := NewDummyReporterClientFactory(false)
+		cb := ReportCollectorCallbacks{
+			getClient: clientFac.GetClient,
+		}
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(0),
+		}
+
+		logger, _ := zap.NewDevelopment()
+
+		executor := &ReportCollectExecutor{
+			resultC:       make(chan *snpb.GlobalLogStreamDescriptor, 1),
+			highWatermark: types.MinGLSN,
+			sn:            sn,
+			cb:            cb,
+			logger:        logger,
+		}
+
+		cli := make([]storage.LogStreamReporterClient, 2)
+		for i := 0; i < 2; i++ {
+			var err error
+
+			cli[i], err = executor.getClient()
+			So(err, ShouldBeNil)
+		}
+
+		So(cli[0], ShouldEqual, cli[1])
+
+		Convey("When cli[0] reconnect", func(ctx C) {
+			var err error
+
+			executor.closeClient(cli[0])
+			cli[0], err = executor.getClient()
+			So(err, ShouldBeNil)
+			So(cli[0], ShouldNotEqual, cli[1])
+
+			_, err = cli[0].GetReport(context.TODO())
+			So(err, ShouldBeNil)
+
+			_, err = cli[1].GetReport(context.TODO())
+			So(err, ShouldNotBeNil)
+
+			Convey("Then closeClient(cli[1]) should not closed the client", func(ctx C) {
+				executor.closeClient(cli[1])
+
+				_, err = cli[0].GetReport(context.TODO())
+				So(err, ShouldBeNil)
+
+				cli[1], err = executor.getClient()
+				So(err, ShouldBeNil)
+				So(cli[0], ShouldEqual, cli[1])
+
+				_, err = cli[0].GetReport(context.TODO())
+				So(err, ShouldBeNil)
+			})
+		})
 	})
 }
