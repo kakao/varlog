@@ -8,7 +8,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil/atomicutil"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 	"go.uber.org/zap"
 )
 
@@ -20,6 +20,7 @@ type SubscribeResult struct {
 type LogStreamExecutor interface {
 	Run(ctx context.Context)
 	Close()
+	Status() varlogpb.LogStreamStatus
 
 	LogStreamID() types.LogStreamID
 
@@ -177,7 +178,8 @@ type logStreamExecutor struct {
 
 	cwm *commitWaitMap
 
-	sealed atomicutil.AtomicBool
+	status    varlogpb.LogStreamStatus
+	mtxStatus sync.RWMutex
 
 	logger *zap.Logger
 }
@@ -200,6 +202,7 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) (LogSt
 		uncommittedLLSNBegin: types.MinLLSN,
 		uncommittedLLSNEnd:   types.AtomicLLSN(types.MinLLSN),
 		committedLLSNEnd:     types.MinLLSN,
+		status:               varlogpb.LogStreamStatusRunning,
 		logger:               logger,
 	}
 	return lse, nil
@@ -228,12 +231,20 @@ func (lse *logStreamExecutor) Close() {
 	}
 }
 
+func (lse *logStreamExecutor) Status() varlogpb.LogStreamStatus {
+	lse.mtxStatus.RLock()
+	defer lse.mtxStatus.RUnlock()
+	return lse.status
+}
+
 func (lse *logStreamExecutor) isSealed() bool {
-	return lse.sealed.Load()
+	return lse.Status().Sealed()
 }
 
 func (lse *logStreamExecutor) seal() {
-	lse.sealed.Store(true)
+	lse.mtxStatus.Lock()
+	lse.status = varlogpb.LogStreamStatusSealing
+	lse.mtxStatus.Unlock()
 }
 
 func (lse *logStreamExecutor) dispatchAppendC(ctx context.Context) {

@@ -8,6 +8,7 @@ import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	varlog "github.daumkakao.com/varlog/varlog/proto/varlog"
 	reflect "reflect"
 )
 
@@ -56,6 +57,20 @@ func (m *MockLogStreamExecutor) Close() {
 func (mr *MockLogStreamExecutorMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockLogStreamExecutor)(nil).Close))
+}
+
+// Status mocks base method
+func (m *MockLogStreamExecutor) Status() varlog.LogStreamStatus {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Status")
+	ret0, _ := ret[0].(varlog.LogStreamStatus)
+	return ret0
+}
+
+// Status indicates an expected call of Status
+func (mr *MockLogStreamExecutorMockRecorder) Status() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockLogStreamExecutor)(nil).Status))
 }
 
 // LogStreamID mocks base method
