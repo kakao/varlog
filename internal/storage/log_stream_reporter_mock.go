@@ -102,13 +102,13 @@ func (mr *MockLogStreamReporterMockRecorder) GetReport() *gomock.Call {
 }
 
 // Commit mocks base method
-func (m *MockLogStreamReporter) Commit(nextGLSN, prevNextGLSN types.GLSN, commitResults []CommittedLogStreamStatus) {
+func (m *MockLogStreamReporter) Commit(highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Commit", nextGLSN, prevNextGLSN, commitResults)
+	m.ctrl.Call(m, "Commit", highWatermark, prevHighWatermark, commitResults)
 }
 
 // Commit indicates an expected call of Commit
-func (mr *MockLogStreamReporterMockRecorder) Commit(nextGLSN, prevNextGLSN, commitResults interface{}) *gomock.Call {
+func (mr *MockLogStreamReporterMockRecorder) Commit(highWatermark, prevHighWatermark, commitResults interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporter)(nil).Commit), nextGLSN, prevNextGLSN, commitResults)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporter)(nil).Commit), highWatermark, prevHighWatermark, commitResults)
 }
