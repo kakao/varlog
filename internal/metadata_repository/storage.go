@@ -679,7 +679,7 @@ func (ms *MetadataStorage) AppendGlobalLogStream(gls *snpb.GlobalLogStreamDescri
 
 func (ms *MetadataStorage) TrimGlobalLogStream(trimGLSN types.GLSN) error {
 	_, cur := ms.getStateMachine()
-	if cur.LogStream.TrimGLSN < trimGLSN {
+	if trimGLSN != types.MaxGLSN && cur.LogStream.TrimGLSN < trimGLSN {
 		cur.LogStream.TrimGLSN = trimGLSN
 	}
 	return nil
