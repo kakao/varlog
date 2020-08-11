@@ -187,6 +187,9 @@ func (rce *ReportCollectExecutor) getReport() error {
 
 	lls, err := cli.GetReport(context.TODO())
 	if err != nil {
+		rce.logger.Error("getReport",
+			zap.String("err", err.Error()),
+		)
 		rce.closeClient(cli)
 		return err
 	}
@@ -245,6 +248,9 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 
 	err = cli.Commit(context.TODO(), &r)
 	if err != nil {
+		rce.logger.Error("commit",
+			zap.String("err", err.Error()),
+		)
 		rce.closeClient(cli)
 		return err
 	}
@@ -293,11 +299,11 @@ func (rc *ReportCollector) getMinHighWatermark() types.GLSN {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
-	min := types.InvalidGLSN
+	min := types.MaxGLSN
 
 	for _, e := range rc.executors {
 		hwm := e.getHighWatermark()
-		if min.Invalid() || hwm < min {
+		if hwm < min {
 			min = hwm
 		}
 	}

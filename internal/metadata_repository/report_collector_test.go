@@ -242,109 +242,119 @@ func newDummyGlobalLogStream(prev types.GLSN, nrStorage int) *snpb.GlobalLogStre
 }
 
 func TestCommit(t *testing.T) {
-	nrStorage := 5
-	knownHWM := types.InvalidGLSN
+	Convey("Given ReportCollector", t, func() {
+		nrStorage := 5
+		knownHWM := types.InvalidGLSN
 
-	a := NewDummyReporterClientFactory(false)
-	mr := NewDummyMetadataRepository()
-	cb := ReportCollectorCallbacks{
-		report:        mr.report,
-		getClient:     a.GetClient,
-		lookupNextGLS: mr.lookupNextGLS,
-	}
-
-	logger, _ := zap.NewDevelopment()
-	reportCollector := NewReportCollector(cb, logger)
-	defer reportCollector.Close()
-
-	for i := 0; i < nrStorage; i++ {
-		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: types.StorageNodeID(i),
+		a := NewDummyReporterClientFactory(false)
+		mr := NewDummyMetadataRepository()
+		cb := ReportCollectorCallbacks{
+			report:        mr.report,
+			getClient:     a.GetClient,
+			lookupNextGLS: mr.lookupNextGLS,
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	Convey("ReportCollector should broadcast commit result to registered storage node", t, func() {
-		gls := newDummyGlobalLogStream(knownHWM, nrStorage)
-		mr.appendGLS(gls)
-		knownHWM = gls.HighWatermark
-
-		reportCollector.Commit(gls)
-
-		a.m.Range(func(k, v interface{}) bool {
-			cli := v.(*DummyReporterClient)
-			So(testutil.CompareWait(func() bool {
-				cli.mu.Lock()
-				defer cli.mu.Unlock()
-
-				return cli.knownHighWatermark == knownHWM
-			}, 100*time.Millisecond), ShouldBeTrue)
-			return true
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(cb, logger)
+		Reset(func() {
+			reportCollector.Close()
 		})
 
-		So(testutil.CompareWait(func() bool {
-			return reportCollector.getMinHighWatermark() == knownHWM
-		}, 100*time.Millisecond), ShouldBeTrue)
-	})
+		for i := 0; i < nrStorage; i++ {
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: types.StorageNodeID(i),
+			}
 
-	Convey("ReportCollector should send ordered commit result to registered storage node", t, func() {
-		gls := newDummyGlobalLogStream(knownHWM, nrStorage)
-		mr.appendGLS(gls)
-		knownHWM = gls.HighWatermark
-
-		gls = newDummyGlobalLogStream(knownHWM, nrStorage)
-		mr.appendGLS(gls)
-		knownHWM = gls.HighWatermark
-
-		reportCollector.Commit(gls)
-
-		a.m.Range(func(k, v interface{}) bool {
-			cli := v.(*DummyReporterClient)
-			So(testutil.CompareWait(func() bool {
-				cli.mu.Lock()
-				defer cli.mu.Unlock()
-
-				return cli.knownHighWatermark == knownHWM
-			}, 100*time.Millisecond), ShouldBeTrue)
-			return true
-		})
-
-		So(testutil.CompareWait(func() bool {
-			return reportCollector.getMinHighWatermark() == knownHWM
-		}, 100*time.Millisecond), ShouldBeTrue)
-	})
-
-	Convey("ReportCollector should send proper commit against new StorageNode", t, func() {
-		mr.trimGLS(knownHWM)
-
-		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: types.StorageNodeID(nrStorage),
+			err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, knownHWM)
-		if err != nil {
-			t.Fatal(err)
-		}
+		Convey("ReportCollector should broadcast commit result to registered storage node", func() {
+			gls := newDummyGlobalLogStream(knownHWM, nrStorage)
+			mr.appendGLS(gls)
+			knownHWM = gls.HighWatermark
 
-		gls := newDummyGlobalLogStream(knownHWM, nrStorage+1)
-		mr.appendGLS(gls)
-		knownHWM = gls.HighWatermark
+			reportCollector.Commit(gls)
 
-		reportCollector.Commit(gls)
+			a.m.Range(func(k, v interface{}) bool {
+				cli := v.(*DummyReporterClient)
+				So(testutil.CompareWait(func() bool {
+					reportCollector.Commit(gls)
 
-		a.m.Range(func(k, v interface{}) bool {
-			cli := v.(*DummyReporterClient)
+					cli.mu.Lock()
+					defer cli.mu.Unlock()
+
+					return cli.knownHighWatermark == knownHWM
+				}, 100*time.Millisecond), ShouldBeTrue)
+				return true
+			})
+
 			So(testutil.CompareWait(func() bool {
-				cli.mu.Lock()
-				defer cli.mu.Unlock()
-
-				return cli.knownHighWatermark == knownHWM
+				return reportCollector.getMinHighWatermark() == knownHWM
 			}, 100*time.Millisecond), ShouldBeTrue)
-			return true
+
+			Convey("ReportCollector should send ordered commit result to registered storage node", func() {
+				gls := newDummyGlobalLogStream(knownHWM, nrStorage)
+				mr.appendGLS(gls)
+				knownHWM = gls.HighWatermark
+
+				gls = newDummyGlobalLogStream(knownHWM, nrStorage)
+				mr.appendGLS(gls)
+				knownHWM = gls.HighWatermark
+
+				reportCollector.Commit(gls)
+
+				a.m.Range(func(k, v interface{}) bool {
+					cli := v.(*DummyReporterClient)
+					So(testutil.CompareWait(func() bool {
+						reportCollector.Commit(gls)
+
+						cli.mu.Lock()
+						defer cli.mu.Unlock()
+
+						return cli.knownHighWatermark == knownHWM
+					}, 100*time.Millisecond), ShouldBeTrue)
+					return true
+				})
+
+				So(testutil.CompareWait(func() bool {
+					return reportCollector.getMinHighWatermark() == knownHWM
+				}, 100*time.Millisecond), ShouldBeTrue)
+
+				Convey("ReportCollector should send proper commit against new StorageNode", func() {
+					mr.trimGLS(knownHWM)
+
+					sn := &varlogpb.StorageNodeDescriptor{
+						StorageNodeID: types.StorageNodeID(nrStorage),
+					}
+
+					err := reportCollector.RegisterStorageNode(sn, knownHWM)
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					gls := newDummyGlobalLogStream(knownHWM, nrStorage+1)
+					mr.appendGLS(gls)
+					knownHWM = gls.HighWatermark
+
+					reportCollector.Commit(gls)
+
+					a.m.Range(func(k, v interface{}) bool {
+						cli := v.(*DummyReporterClient)
+						So(testutil.CompareWait(func() bool {
+							reportCollector.Commit(gls)
+
+							cli.mu.Lock()
+							defer cli.mu.Unlock()
+
+							return cli.knownHighWatermark == knownHWM
+						}, 100*time.Millisecond), ShouldBeTrue)
+						return true
+					})
+				})
+			})
 		})
 	})
 }

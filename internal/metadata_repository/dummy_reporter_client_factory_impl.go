@@ -155,8 +155,8 @@ func (r *DummyReporterClient) Close() error {
 	defer r.mu.Unlock()
 
 	if r.status != DUMMY_REPORTERCLIENT_STATUS_CRASH {
-		r.status = DUMMY_REPORTERCLIENT_STATUS_CLOSED
 		r.factory.m.Delete(r.storageNodeID)
+		r.status = DUMMY_REPORTERCLIENT_STATUS_CLOSED
 	}
 
 	return nil
