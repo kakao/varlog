@@ -71,7 +71,7 @@ func (c *logIOClient) Append(ctx context.Context, logStreamID types.LogStreamID,
 	}
 	rsp, err := c.rpcClient.Append(ctx, req)
 	if err != nil {
-		return 0, err
+		return types.InvalidGLSN, err
 	}
 	return rsp.GetGLSN(), nil
 }

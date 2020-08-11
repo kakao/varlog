@@ -382,7 +382,7 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 // All Appends are processed sequentially by using the appendC.
 func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
 	if lse.isSealed() {
-		return 0, varlog.ErrSealed
+		return types.InvalidGLSN, varlog.ErrSealed
 	}
 	done := make(chan struct{})
 	t := appendTask{
