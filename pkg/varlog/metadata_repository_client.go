@@ -46,7 +46,7 @@ func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *
 	}
 
 	_, err := c.client.RegisterStorageNode(ctx, req)
-	return toErr(ctx, err)
+	return ToErr(ctx, err)
 }
 
 func (c *metadataRepositoryClient) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
@@ -54,7 +54,7 @@ func (c *metadataRepositoryClient) RegisterLogStream(ctx context.Context, ls *va
 		LogStream: ls,
 	}
 	_, err := c.client.RegisterLogStream(ctx, req)
-	return toErr(ctx, err)
+	return ToErr(ctx, err)
 }
 
 func (c *metadataRepositoryClient) UpdateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
@@ -62,13 +62,13 @@ func (c *metadataRepositoryClient) UpdateLogStream(ctx context.Context, ls *varl
 		LogStream: ls,
 	}
 	_, err := c.client.UpdateLogStream(ctx, req)
-	return toErr(ctx, err)
+	return ToErr(ctx, err)
 }
 
 func (c *metadataRepositoryClient) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	rsp, err := c.client.GetMetadata(ctx, &pb.GetMetadataRequest{})
 	if err != nil {
-		return nil, toErr(ctx, err)
+		return nil, ToErr(ctx, err)
 	}
 	return rsp.GetMetadata(), nil
 }

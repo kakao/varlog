@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
@@ -41,14 +42,30 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 			})
 
 			Convey("When the underlying LogStreamExecutor is timed out", func() {
+				lse.EXPECT().Append(gomock.Any(), gomock.Any()).Return(types.InvalidGLSN, context.DeadlineExceeded)
 				Convey("Then the LogIOClient should return timeout error", func() {
-					Convey("This isn't yet implemented", nil)
+					_, err := cli.Append(context.TODO(), lsid, nil)
+					// TODO: below code is not ok
+					// So(varlog.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
+					So(err, ShouldNotBeNil)
 				})
 			})
 
 			Convey("When the LogIOClient is timed out", func() {
+				stop := make(chan struct{})
+				defer close(stop)
+				lse.EXPECT().Append(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, []byte) (types.GLSN, error) {
+						<-stop
+						return types.InvalidGLSN, varlog.ErrInternal
+					},
+				).MaxTimes(1)
+
 				Convey("Then the LogIOClient should return timeout error", func() {
-					Convey("This isn't yet implemented", nil)
+					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
+					defer cancel()
+					_, err := cli.Append(ctx, lsid, nil)
+					So(varlog.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 
@@ -103,14 +120,28 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 			})
 
 			Convey("When the underlying LogStreamExecutor is timed out", func() {
+				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(nil, context.DeadlineExceeded)
 				Convey("Then the LogIOClient should return timeout error", func() {
-					Convey("This isn't yet implemented", nil)
+					_, err := cli.Read(context.TODO(), lsid, types.MinGLSN)
+					So(err, ShouldNotBeNil)
 				})
 			})
 
 			Convey("When the LogIOClient is timed out", func() {
+				stop := make(chan struct{})
+				defer close(stop)
+				lse.EXPECT().Read(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, types.GLSN) ([]byte, error) {
+						<-stop
+						return nil, varlog.ErrInternal
+					},
+				).MaxTimes(1)
+
 				Convey("Then the LogIOClient should return timeout error", func() {
-					Convey("This isn't yet implemented", nil)
+					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
+					defer cancel()
+					_, err := cli.Read(ctx, lsid, types.MinGLSN)
+					So(varlog.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 
@@ -224,14 +255,35 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 			})
 
 			Convey("When the underlying LogStreamExecutor is timed out", func() {
+				lse1.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(0), context.DeadlineExceeded)
+				lse2.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(0), context.DeadlineExceeded)
 				Convey("Then the LogIOClient should return timeout error", func() {
-					Convey("This isn't yet implemented", nil)
+					_, err := cli.Trim(context.TODO(), types.MinGLSN, false)
+					So(err, ShouldNotBeNil)
 				})
 			})
 
 			Convey("When the LogIOClient is timed out", func() {
+				stop := make(chan struct{})
+				defer close(stop)
+				lse1.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, types.GLSN, bool) (uint64, error) {
+						<-stop
+						return uint64(0), varlog.ErrInternal
+					},
+				).MaxTimes(1)
+				lse2.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, types.GLSN, bool) (uint64, error) {
+						<-stop
+						return uint64(0), varlog.ErrInternal
+					},
+				).MaxTimes(1)
+
 				Convey("Then the LogIOClient should return timeout error", func() {
-					Convey("This isn't yet implemented", nil)
+					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
+					defer cancel()
+					_, err := cli.Trim(ctx, types.MinGLSN, false)
+					So(varlog.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 

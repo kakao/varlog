@@ -75,7 +75,7 @@ func ErrorDesc(err error) string {
 	return err.Error()
 }
 
-func toErr(ctx context.Context, err error) error {
+func ToErr(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
 	}
