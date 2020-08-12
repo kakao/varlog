@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   triggers {
-    cron('@hourly')
+    cron('@midnight')
   }
 
   stages {
@@ -20,7 +20,7 @@ pipeline {
         branch 'master'
       }
       steps {
-        sh 'make test TEST_FAILFAST=1 TEST_TIMEOUT=100m TEST_PARALLEL=1 TEST_COUNT=200 TEST_COVERAGE=1'
+        sh 'make test TEST_FAILFAST=1 TEST_TIMEOUT=12h TEST_PARALLEL=1 TEST_COUNT=1000 TEST_COVERAGE=1'
       }
     }
   }
