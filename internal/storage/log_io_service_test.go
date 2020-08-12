@@ -41,10 +41,6 @@ func TestStorageNodeServiceAppend(t *testing.T) {
 			So(err, ShouldNotBeNil)
 		})
 
-		Convey("it should return error if the LogStreamExecutor is timed out", func() {
-			// TODO
-		})
-
 		Convey("it should write a log entry", func() {
 			lse := NewMockLogStreamExecutor(ctrl)
 			s.m.Lock()

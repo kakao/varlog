@@ -58,6 +58,8 @@ type appendTask struct {
 	written     bool
 	done        chan struct{}
 
+	mu sync.Mutex
+
 	writeErr     error
 	replicateErr error
 	commitErr    error
@@ -390,12 +392,29 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 		replicas: replicas,
 		done:     done,
 	}
-	lse.appendC <- &t
-	<-done
+	select {
+	case lse.appendC <- &t:
+	case <-ctx.Done():
+		return types.InvalidGLSN, ctx.Err()
+	}
+
+	var glsn types.GLSN = types.InvalidGLSN
+	var err error = nil
+	select {
+	case <-done:
+		t.mu.Lock()
+		glsn = t.glsn
+		err = t.err
+		t.mu.Unlock()
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+	t.mu.Lock()
 	if t.written {
 		lse.cwm.del(t.llsn)
 	}
-	return t.glsn, t.err
+	t.mu.Unlock()
+	return glsn, err
 }
 
 func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
@@ -409,7 +428,6 @@ func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 	}
 	if err := lse.write(t); err != nil {
 		lse.seal()
-		t.err = err
 		close(t.done)
 		return
 	}
@@ -423,11 +441,18 @@ func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 // successful write.
 func (lse *logStreamExecutor) write(t *appendTask) error {
 	llsn := lse.uncommittedLLSNEnd.Load()
-	if err := lse.storage.Write(llsn, t.data); err != nil {
+	err := lse.storage.Write(llsn, t.data)
+	t.mu.Lock()
+	if err != nil {
+		t.err = err
+	} else {
+		t.written = true
+		t.llsn = llsn
+	}
+	t.mu.Unlock()
+	if err != nil {
 		return err
 	}
-	t.written = true
-	t.llsn = llsn
 	lse.cwm.put(llsn, t)
 	lse.uncommittedLLSNEnd.Add(1)
 	return nil
@@ -448,16 +473,18 @@ func (lse *logStreamExecutor) replicateTo(llsn types.LLSN, data []byte) error {
 func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendTask) {
 	errC := lse.replicator.Replicate(ctx, t.llsn, t.data, t.replicas)
 	go func() {
+		var err error
 		select {
-		case err := <-errC:
-			if err == nil {
-				return
-			}
-			// FIXME: does t have a concurrency issue?
-			t.err = err
+		case err = <-errC:
 		case <-ctx.Done():
-			t.err = ctx.Err()
+			err = ctx.Err()
 		}
+		if err == nil {
+			return
+		}
+		t.mu.Lock()
+		t.err = err
+		t.mu.Unlock()
 		lse.seal()
 		close(t.done)
 	}()
@@ -570,7 +597,9 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		lse.learnedGLSNEnd.Store(glsn + 1)
 		appendT, ok := lse.cwm.get(llsn)
 		if ok {
+			appendT.mu.Lock()
 			appendT.glsn = glsn
+			appendT.mu.Unlock()
 			close(appendT.done)
 		}
 		glsn++
@@ -582,8 +611,10 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 	for glsn < t.committedGLSNEnd {
 		appendT, ok := lse.cwm.get(llsn)
 		if ok {
+			appendT.mu.Lock()
 			appendT.glsn = glsn
 			appendT.err = varlog.ErrInternal
+			appendT.mu.Unlock()
 			close(appendT.done)
 		}
 		glsn++

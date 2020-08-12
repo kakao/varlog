@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -162,6 +163,204 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 
 		Reset(func() {
 			lse.Close()
+		})
+	})
+}
+
+func TestLogStreamExecutorAppend(t *testing.T) {
+	Convey("Given that a LogStreamExecutor.Append is called", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		storage := NewMockStorage(ctrl)
+		replicator := NewMockReplicator(ctrl)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		So(err, ShouldBeNil)
+
+		lse.(*logStreamExecutor).replicator = replicator
+		replicator.EXPECT().Run(gomock.Any()).AnyTimes()
+		replicator.EXPECT().Close().AnyTimes()
+
+		lse.Run(context.TODO())
+
+		Reset(func() {
+			lse.Close()
+		})
+
+		Convey("When the context passed to the Append is cancelled", func() {
+			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil).MaxTimes(1)
+
+			rC := make(chan error, 1)
+			rC <- nil
+			replicator.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(rC).MaxTimes(1)
+
+			// FIXME: This is a very ugly test because it is not deterministic.
+			Convey("Then the LogStreamExecutor should return cancellation error", func(c C) {
+				ctx, cancel := context.WithCancel(context.TODO())
+				stop := make(chan struct{})
+				go func() {
+					_, err := lse.Append(ctx, nil, Replica{})
+					c.So(err, ShouldResemble, context.Canceled)
+					close(stop)
+				}()
+				time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+				cancel()
+				<-stop
+			})
+		})
+
+		Convey("When the appendC in the LogStreamExecutor is blocked", func() {
+			lse.Close()
+
+			Convey("And the Append is blocked more than configured", func() {
+				Convey("Then the LogStreamExecutor should return timeout error", func() {
+					Convey("This isn't yet implemented", nil)
+				})
+			})
+
+			Convey("And the context passed to the Append is cancelled", func() {
+				ctx, cancel := context.WithCancel(context.TODO())
+				cancel()
+				Convey("Then the LogStreamExecutor should return cancellation error", func() {
+					_, err := lse.Append(ctx, nil)
+					So(err, ShouldResemble, context.Canceled)
+				})
+			})
+		})
+
+		Convey("When the Storage.Write operation is blocked", func() {
+			stop := make(chan struct{})
+			block := func(f func()) {
+				storage.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(types.LLSN, []byte) error {
+						f()
+						<-stop
+						return nil
+					},
+				)
+			}
+
+			Reset(func() {
+				close(stop)
+			})
+
+			Convey("And the Append is blocked more than configured", func() {
+				Convey("Then the LogStreamExecutor should return timeout error", func() {
+					Convey("This isn't yet implemented", nil)
+				})
+			})
+
+			Convey("And the context passed to the Append is cancelled", func() {
+				ctx, cancel := context.WithCancel(context.TODO())
+				block(func() {
+					cancel()
+				})
+
+				Convey("Then the LogStreamExecutor should return cancellation error", func() {
+					_, err := lse.Append(ctx, nil)
+					So(err, ShouldResemble, context.Canceled)
+				})
+			})
+		})
+
+		Convey("When the replication is blocked", func() {
+			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			stop := make(chan struct{})
+			block := func(f func()) {
+				replicator.EXPECT().Replicate(
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				).DoAndReturn(
+					func(context.Context, types.LLSN, []byte, []Replica) <-chan error {
+						f()
+						<-stop
+						c := make(chan error, 1)
+						c <- nil
+						return c
+					},
+				)
+			}
+
+			Reset(func() {
+				close(stop)
+			})
+
+			Convey("And the Append is blocked more than configured", func() {
+				Convey("Then the LogStreamExecutor should return timeout error", func() {
+					Convey("This isn't yet implemented", nil)
+				})
+			})
+
+			Convey("And the context passed to the Append is cancelled", func() {
+				ctx, cancel := context.WithCancel(context.TODO())
+				block(func() {
+					cancel()
+				})
+
+				Convey("Then the LogStreamExecutor should return cancellation error", func() {
+					_, err := lse.Append(ctx, nil, Replica{})
+					So(err, ShouldResemble, context.Canceled)
+				})
+			})
+		})
+
+		Convey("When the commit is not notified", func() {
+			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			replicator.EXPECT().Replicate(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).DoAndReturn(
+				func(context.Context, types.LLSN, []byte, []Replica) <-chan error {
+					defer func() {
+						lse.Commit(CommittedLogStreamStatus{
+							LogStreamID:         lse.LogStreamID(),
+							HighWatermark:       types.MinGLSN,
+							PrevHighWatermark:   types.InvalidGLSN,
+							CommittedGLSNOffset: types.MinGLSN,
+							CommittedGLSNLength: 1,
+						})
+					}()
+					c := make(chan error, 1)
+					c <- nil
+					return c
+				},
+			).AnyTimes()
+
+			stop := make(chan struct{})
+			block := func(f func()) {
+				storage.EXPECT().Commit(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(types.LLSN, types.GLSN) error {
+						f()
+						<-stop
+						return nil
+					},
+				)
+			}
+
+			Reset(func() {
+				close(stop)
+			})
+
+			Convey("And the Append is blocked more than configured", func() {
+				Convey("Then the LogStreamExecutor should return timeout error", func() {
+					Convey("This isn't yet implemented", nil)
+				})
+			})
+
+			Convey("And the context passed to the Append is cancelled", func() {
+				ctx, cancel := context.WithCancel(context.TODO())
+				block(func() {
+					cancel()
+				})
+
+				Convey("Then the LogStreamExecutor should return cancellation error", func(c C) {
+					wait := make(chan struct{})
+					go func() {
+						_, err := lse.Append(ctx, nil, Replica{})
+						c.So(err, ShouldResemble, context.Canceled)
+						close(wait)
+					}()
+					<-wait
+				})
+			})
 		})
 	})
 }
