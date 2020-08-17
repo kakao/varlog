@@ -364,3 +364,53 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 		})
 	})
 }
+
+func TestLogStreamExecutorRead(t *testing.T) {
+	Convey("Given that a LogStreamExecutor.Read is called", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		storage := NewMockStorage(ctrl)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		So(err, ShouldBeNil)
+
+		lse.Run(context.TODO())
+
+		Reset(func() {
+			lse.Close()
+		})
+
+		Convey("When the context passed to the Read is cancelled", func() {
+			lse.(*logStreamExecutor).learnedGLSNEnd.Store(types.MaxGLSN)
+
+			stop := make(chan struct{})
+			storage.EXPECT().Read(gomock.Any()).DoAndReturn(func(types.GLSN) ([]byte, error) {
+				<-stop
+				return []byte("foo"), nil
+			}).MaxTimes(1)
+
+			Reset(func() {
+				close(stop)
+			})
+
+			Convey("Then the LogStreamExecutor should return cancellation error", func(c C) {
+				wait := make(chan struct{})
+				ctx, cancel := context.WithCancel(context.TODO())
+				go func() {
+					_, err := lse.Read(ctx, types.MinGLSN)
+					c.So(err, ShouldResemble, context.Canceled)
+					close(wait)
+				}()
+				time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
+				cancel()
+				<-wait
+			})
+		})
+
+		Convey("When the operation is blocked more than configured", func() {
+			Convey("Then the LogStreamExecutor should return timeout error", func() {
+				Convey("This isn't yet implemented", nil)
+			})
+		})
+	})
+}
