@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/kakao/varlog/internal/storage"
 	types "github.com/kakao/varlog/pkg/varlog/types"
@@ -40,6 +41,8 @@ func (rcf *EmptyReporterClientFactory) GetClient(*varlogpb.StorageNodeDescriptor
 
 type DummyReporterClientStatus int32
 
+const DefaultDelay time.Duration = 500 * time.Microsecond
+
 const (
 	DUMMY_REPORTERCLIENT_STATUS_RUNNING DummyReporterClientStatus = iota
 	DUMMY_REPORTERCLIENT_STATUS_CLOSED
@@ -59,6 +62,24 @@ type DummyReporterClient struct {
 
 	status  DummyReporterClientStatus
 	factory *DummyReporterClientFactory
+
+	ref int
+}
+
+func (r *DummyReporterClient) incrRef() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.ref += 1
+}
+
+func (r *DummyReporterClient) descRef() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.ref > 0 {
+		r.ref -= 1
+	}
 }
 
 type DummyReporterClientFactory struct {
@@ -89,10 +110,15 @@ func (a *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescripto
 
 	f, _ := a.m.LoadOrStore(sn.StorageNodeID, cli)
 
-	return f.(*DummyReporterClient), nil
+	cli = f.(*DummyReporterClient)
+	cli.incrRef()
+
+	return cli, nil
 }
 
 func (r *DummyReporterClient) GetReport(ctx context.Context) (*snpb.LocalLogStreamDescriptor, error) {
+	time.Sleep(DefaultDelay)
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -122,6 +148,8 @@ func (r *DummyReporterClient) GetReport(ctx context.Context) (*snpb.LocalLogStre
 }
 
 func (r *DummyReporterClient) Commit(ctx context.Context, glsn *snpb.GlobalLogStreamDescriptor) error {
+	time.Sleep(DefaultDelay)
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -151,10 +179,13 @@ func (r *DummyReporterClient) Commit(ctx context.Context, glsn *snpb.GlobalLogSt
 }
 
 func (r *DummyReporterClient) Close() error {
+	r.descRef()
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.status != DUMMY_REPORTERCLIENT_STATUS_CRASH {
+	if r.status != DUMMY_REPORTERCLIENT_STATUS_CRASH &&
+		r.ref == 0 {
 		r.factory.m.Delete(r.storageNodeID)
 		r.status = DUMMY_REPORTERCLIENT_STATUS_CLOSED
 	}
@@ -183,6 +214,13 @@ func (r *DummyReporterClient) numUncommitted() uint64 {
 	defer r.mu.Unlock()
 
 	return r.uncommittedLLSNLength
+}
+
+func (r *DummyReporterClient) getKnownHighWatermark() types.GLSN {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.knownHighWatermark
 }
 
 func (a *DummyReporterClientFactory) crashRPC(snID types.StorageNodeID) {

@@ -1,12 +1,16 @@
 package metadata_repository
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
+	. "github.com/smartystreets/goconvey/convey"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -20,6 +24,7 @@ type cluster struct {
 	stateC      []<-chan raft.StateType
 	proposeC    []chan string
 	confChangeC []chan raftpb.ConfChange
+	running     []bool
 }
 
 // newCluster creates a cluster of n nodes
@@ -36,6 +41,7 @@ func newCluster(n int) *cluster {
 		stateC:      make([]<-chan raft.StateType, len(peers)),
 		proposeC:    make([]chan string, len(peers)),
 		confChangeC: make([]chan raftpb.ConfChange, len(peers)),
+		running:     make([]bool, len(peers)),
 	}
 
 	for i, peer := range clus.peers {
@@ -49,7 +55,8 @@ func newCluster(n int) *cluster {
 		os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
 		clus.proposeC[i] = make(chan string, 1)
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
-		logger, _ := zap.NewDevelopment()
+		//logger, _ := zap.NewDevelopment()
+		logger := zap.NewNop()
 		rc := newRaftNode(nodeID,
 			clus.peers,
 			false,
@@ -62,6 +69,7 @@ func newCluster(n int) *cluster {
 		clus.commitC[i] = rc.commitC
 		clus.errorC[i] = rc.errorC
 		clus.stateC[i] = rc.stateC
+		clus.running[i] = true
 
 		go rc.startRaft()
 	}
@@ -80,22 +88,40 @@ func (clus *cluster) sinkReplay() {
 	}
 }
 
+func (clus *cluster) close(i int) (err error) {
+	if !clus.running[i] {
+		return nil
+	}
+
+	close(clus.proposeC[i])
+	for range clus.commitC[i] {
+		// drain pending commits
+	}
+	// wait for channel to close
+	if erri := <-clus.errorC[i]; erri != nil {
+		err = erri
+	}
+	// clean intermediates
+	url, _ := url.Parse(clus.peers[i])
+	nodeID := types.NewNodeID(url.Host)
+
+	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
+	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
+
+	clus.running[i] = false
+
+	return
+}
+
 // Close closes all cluster nodes and returns an error if any failed.
 func (clus *cluster) Close() (err error) {
 	for i := range clus.peers {
-		close(clus.proposeC[i])
-		for range clus.commitC[i] {
-			// drain pending commits
-		}
-		// wait for channel to close
-		if erri := <-clus.errorC[i]; erri != nil {
+		if erri := clus.close(i); erri != nil {
 			err = erri
 		}
-		// clean intermediates
-		os.RemoveAll(fmt.Sprintf("raft-%d", i+1))
-		os.RemoveAll(fmt.Sprintf("raft-%d-snap", i+1))
 	}
-	return err
+
+	return
 }
 
 func (clus *cluster) closeNoErrors(t *testing.T) {
@@ -152,31 +178,69 @@ func TestProposeOnFollower(t *testing.T) {
 	}
 }
 
-/*
-// TestCloseProposerBeforeReplay tests closing the producer before raft starts.
-func TestCloseProposerBeforeReplay(t *testing.T) {
-	clus := newCluster(1)
-	// close before replay so raft never starts
-	defer clus.closeNoErrors(t)
+func TestFailoverLeaderElection(t *testing.T) {
+	Convey("Given Raft Cluster", t, func(ctx C) {
+		clus := newCluster(3)
+		defer clus.closeNoErrors(t)
+
+		clus.sinkReplay()
+
+		voteC := make(chan int)
+		cancels := make([]context.CancelFunc, 3)
+
+		var wg sync.WaitGroup
+
+		for i := range clus.peers {
+			wg.Add(1)
+			ctx, cancel := context.WithCancel(context.TODO())
+			cancels[i] = cancel
+			// feedback for "n" committed entries, then update donec
+			go func(ctx context.Context, idx int, pC chan<- string, cC <-chan *raftCommittedEntry, eC <-chan error, sC <-chan raft.StateType) {
+				defer wg.Done()
+				var state raft.StateType
+
+			Loop:
+				for {
+					select {
+					case <-ctx.Done():
+						break Loop
+					case <-cC:
+					case state = <-sC:
+						if state == raft.StateLeader {
+							voteC <- idx
+						}
+					case <-eC:
+					}
+				}
+			}(ctx, i, clus.proposeC[i], clus.commitC[i], clus.errorC[i], clus.stateC[i])
+		}
+
+		leader := -1
+		select {
+		case leader = <-voteC:
+		case <-time.After(time.Second):
+		}
+
+		So(leader, ShouldBeGreaterThan, -1)
+
+		Convey("When leader crash", func(ctx C) {
+			cancels[leader]()
+			clus.close(leader)
+
+			Convey("Then raft should elect", func(ctx C) {
+				leader := -1
+				select {
+				case leader = <-voteC:
+				case <-time.After(time.Second):
+				}
+				So(leader, ShouldBeGreaterThan, -1)
+
+				for i := range clus.peers {
+					cancels[i]()
+				}
+
+				wg.Wait()
+			})
+		})
+	})
 }
-
-// TestCloseProposerInflight tests closing the producer while
-// committed messages are being published to the client.
-func TestCloseProposerInflight(t *testing.T) {
-	clus := newCluster(1)
-	defer clus.closeNoErrors(t)
-
-	clus.sinkReplay()
-
-	// some inflight ops
-	go func() {
-		clus.proposeC[0] <- "foo"
-		clus.proposeC[0] <- "bar"
-	}()
-
-	// wait for one message
-	if c, ok := <-clus.commitC[0]; *c != "foo" || !ok {
-		t.Fatalf("Commit failed")
-	}
-}
-*/

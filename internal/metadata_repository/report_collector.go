@@ -156,21 +156,25 @@ Loop:
 
 			err := rce.catchup(highWatermark, gls)
 			if err != nil {
-				rce.logger.Error("commit fail",
-					zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
-					zap.String("ADDR", rce.sn.Address),
-					zap.String("err", err.Error()),
-				)
+				/*
+					rce.logger.Debug("commit fail",
+						zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
+						zap.String("ADDR", rce.sn.Address),
+						zap.String("err", err.Error()),
+					)
+				*/
 				continue Loop
 			}
 
 			err = rce.commit(gls)
 			if err != nil {
-				rce.logger.Error("commit fail",
-					zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
-					zap.String("ADDR", rce.sn.Address),
-					zap.String("err", err.Error()),
-				)
+				/*
+					rce.logger.Debug("commit fail",
+						zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
+						zap.String("ADDR", rce.sn.Address),
+						zap.String("err", err.Error()),
+					)
+				*/
 				continue Loop
 			}
 		}
@@ -187,9 +191,11 @@ func (rce *ReportCollectExecutor) getReport() error {
 
 	lls, err := cli.GetReport(context.TODO())
 	if err != nil {
-		rce.logger.Error("getReport",
-			zap.String("err", err.Error()),
-		)
+		/*
+			rce.logger.Debug("getReport",
+				zap.String("err", err.Error()),
+			)
+		*/
 		rce.closeClient(cli)
 		return err
 	}
@@ -248,9 +254,11 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 
 	err = cli.Commit(context.TODO(), &r)
 	if err != nil {
-		rce.logger.Error("commit",
-			zap.String("err", err.Error()),
-		)
+		/*
+			rce.logger.Debug("commit",
+				zap.String("err", err.Error()),
+			)
+		*/
 		rce.closeClient(cli)
 		return err
 	}
