@@ -3,6 +3,7 @@ package metadata_repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -109,7 +110,8 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 		mr.storage.GetSnapshot,
 		mr.rnProposeC,
 		mr.rnConfChangeC,
-		mr.logger.Named("raftnode"),
+		//mr.logger.Named("raftnode"),
+		mr.logger.Named(fmt.Sprintf("%v", config.Index)),
 	)
 	mr.rnCommitC = mr.raftNode.commitC
 	mr.rnErrorC = mr.raftNode.errorC
@@ -145,12 +147,17 @@ func (mr *RaftMetadataRepository) Run() {
 func (mr *RaftMetadataRepository) Close() error {
 	mr.reportCollector.Close()
 
-	mr.cancel()
-	err := <-mr.rnErrorC
+	var err error
+	if mr.cancel != nil {
+		mr.cancel()
+		err = <-mr.rnErrorC
 
-	mr.runner.CloseWait()
+		mr.runner.CloseWait()
 
-	mr.storage.Close()
+		mr.storage.Close()
+	}
+
+	mr.setFollower()
 
 	//TODO:: handle pendding msg
 
@@ -159,6 +166,10 @@ func (mr *RaftMetadataRepository) Close() error {
 
 func (mr *RaftMetadataRepository) isLeader() bool {
 	return raft.StateLeader == raft.StateType(atomic.LoadUint64((*uint64)(&mr.raftState)))
+}
+
+func (mr *RaftMetadataRepository) setFollower() {
+	atomic.StoreUint64((*uint64)(&mr.raftState), uint64(raft.StateFollower))
 }
 
 func (mr *RaftMetadataRepository) runReplication(ctx context.Context) {

@@ -2,6 +2,7 @@ package metadata_repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -20,13 +21,14 @@ import (
 )
 
 type metadataRepoCluster struct {
+	nrRep             int
 	peers             []string
 	nodes             []*RaftMetadataRepository
 	reporterClientFac ReporterClientFactory
 	logger            *zap.Logger
 }
 
-func newMetadataRepoCluster(n, nrRep int) *metadataRepoCluster {
+func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoCluster {
 	peers := make([]string, n)
 	nodes := make([]*RaftMetadataRepository, n)
 
@@ -34,72 +36,126 @@ func newMetadataRepoCluster(n, nrRep int) *metadataRepoCluster {
 		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", 10000+i)
 	}
 
-	logger, _ := zap.NewDevelopment()
+	//logger, _ := zap.NewDevelopment()
+	logger := zap.NewNop()
 	clus := &metadataRepoCluster{
+		nrRep:             nrRep,
 		peers:             peers,
 		nodes:             nodes,
-		reporterClientFac: NewDummyReporterClientFactory(true),
+		reporterClientFac: NewDummyReporterClientFactory(!increseUncommit),
 		logger:            logger,
 	}
 
-	for i, peer := range clus.peers {
-		url, err := url.Parse(peer)
-		if err != nil {
-			return nil
-		}
-		nodeID := types.NewNodeID(url.Host)
-
-		os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
-		os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
-
-		config := &Config{
-			Index:             nodeID,
-			NumRep:            nrRep,
-			PeerList:          clus.peers,
-			ReporterClientFac: clus.reporterClientFac,
-			Logger:            clus.logger,
-		}
-
-		clus.nodes[i] = NewRaftMetadataRepository(config)
+	for i := range clus.peers {
+		clus.createMetadataRepo(i)
 	}
 
 	return clus
 }
 
+func (clus *metadataRepoCluster) createMetadataRepo(idx int) error {
+	if idx < 0 || idx > len(clus.nodes) {
+		return errors.New("out or range")
+	}
+
+	url, _ := url.Parse(clus.peers[idx])
+	nodeID := types.NewNodeID(url.Host)
+
+	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
+	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
+
+	config := &Config{
+		Index:             nodeID,
+		NumRep:            clus.nrRep,
+		PeerList:          clus.peers,
+		ReporterClientFac: clus.reporterClientFac,
+		Logger:            clus.logger,
+	}
+
+	clus.nodes[idx] = NewRaftMetadataRepository(config)
+	return nil
+}
+
+func (clus *metadataRepoCluster) appendMetadataRepo() error {
+	idx := len(clus.nodes)
+	clus.peers = append(clus.peers, fmt.Sprintf("http://127.0.0.1:%d", 10000+idx))
+	clus.nodes = append(clus.nodes, nil)
+
+	return clus.createMetadataRepo(idx)
+}
+
+func (clus *metadataRepoCluster) start(idx int) error {
+	if idx < 0 || idx > len(clus.nodes) {
+		return errors.New("out or range")
+	}
+
+	clus.nodes[idx].Run()
+
+	return nil
+}
+
 func (clus *metadataRepoCluster) Start() {
-	for _, n := range clus.nodes {
-		n.Run()
+	for i := range clus.nodes {
+		clus.start(i)
 	}
 }
 
+func (clus *metadataRepoCluster) stop(idx int) error {
+	if idx < 0 || idx > len(clus.nodes) {
+		return errors.New("out or range")
+	}
+
+	return clus.nodes[idx].Close()
+}
+
+func (clus *metadataRepoCluster) close(idx int) error {
+	if idx < 0 || idx > len(clus.nodes) {
+		return errors.New("out or range")
+	}
+
+	err := clus.stop(idx)
+
+	nodeID := clus.nodes[idx].index
+	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
+	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
+
+	return err
+}
+
 // Close closes all cluster nodes
-func (clus *metadataRepoCluster) Close() (err error) {
-	for i, peer := range clus.peers {
-		err = clus.nodes[i].Close()
-
-		url, err := url.Parse(peer)
-		if err != nil {
-			return nil
+func (clus *metadataRepoCluster) Close() error {
+	var err error
+	for i := range clus.peers {
+		if erri := clus.close(i); erri != nil {
+			err = erri
 		}
-		nodeID := types.NewNodeID(url.Host)
-
-		os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
-		os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
 	}
 	return err
 }
 
-func (clus *metadataRepoCluster) waitVote() {
-Loop:
-	for {
-		for _, n := range clus.nodes {
-			if n.isLeader() {
-				break Loop
-			}
+func (clus *metadataRepoCluster) leader() int {
+	leader := -1
+	for i, n := range clus.nodes {
+		if n.isLeader() {
+			leader = i
 		}
-
-		time.Sleep(10 * time.Millisecond)
 	}
+
+	return leader
+}
+
+func (clus *metadataRepoCluster) leaderElected() bool {
+	return clus.leader() >= 0
+}
+
+func (clus *metadataRepoCluster) leaderFail() bool {
+	leader := clus.leader()
+	if leader < 0 {
+		return false
+	}
+
+	clus.stop(leader)
+	return true
 }
 
 func (clus *metadataRepoCluster) closeNoErrors(t *testing.T) {
@@ -144,7 +200,10 @@ func TestMRApplyReport(t *testing.T) {
 
 	Convey("Report Should not be applied if not register LogStream", t, func(ctx C) {
 		rep := 2
-		clus := newMetadataRepoCluster(1, rep)
+		clus := newMetadataRepoCluster(1, rep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
 		mr := clus.nodes[0]
 
 		snIds := make([]types.StorageNodeID, rep)
@@ -220,7 +279,10 @@ func TestMRApplyReport(t *testing.T) {
 
 func TestMRCalculateCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 2)
+		clus := newMetadataRepoCluster(1, 2, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
 		mr := clus.nodes[0]
 
 		snIds := make([]types.StorageNodeID, 2)
@@ -281,13 +343,15 @@ func TestMRCalculateCommit(t *testing.T) {
 func TestMRGlobalCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
 		rep := 2
-		clus := newMetadataRepoCluster(1, rep)
-		clus.Start()
-		clus.waitVote()
-
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
+
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -382,13 +446,14 @@ func TestMRGlobalCommit(t *testing.T) {
 
 func TestMRSimpleReportNCommit(t *testing.T) {
 	Convey("Uncommitted LocalLogStream should be committed", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1)
-		clus.Start()
-		clus.waitVote()
-
+		clus := newMetadataRepoCluster(1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
 
 		snID := types.StorageNodeID(0)
 		snIDs := make([]types.StorageNodeID, 1)
@@ -422,7 +487,10 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 
 func TestMRRequestMap(t *testing.T) {
 	Convey("requestMap should have request when wait ack", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1)
+		clus := newMetadataRepoCluster(1, 1, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
 		mr := clus.nodes[0]
 
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -453,7 +521,10 @@ func TestMRRequestMap(t *testing.T) {
 	})
 
 	Convey("requestMap should ignore request that have different nodeIndex", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1)
+		clus := newMetadataRepoCluster(1, 1, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
 		mr := clus.nodes[0]
 
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -489,7 +560,10 @@ func TestMRRequestMap(t *testing.T) {
 	})
 
 	Convey("requestMap should delete request when context timeout", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1)
+		clus := newMetadataRepoCluster(1, 1, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
 		mr := clus.nodes[0]
 
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -505,13 +579,14 @@ func TestMRRequestMap(t *testing.T) {
 	})
 
 	Convey("requestMap should delete after ack", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1)
-		clus.Start()
-		clus.waitVote()
-
+		clus := newMetadataRepoCluster(1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -530,13 +605,14 @@ func TestMRRequestMap(t *testing.T) {
 func TestMRGetLastCommitted(t *testing.T) {
 	Convey("getLastCommitted", t, func(ctx C) {
 		rep := 2
-		clus := newMetadataRepoCluster(1, rep)
-		clus.Start()
-		clus.waitVote()
-
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -657,13 +733,14 @@ func TestMRGetLastCommitted(t *testing.T) {
 func TestMRSeal(t *testing.T) {
 	Convey("seal", t, func(ctx C) {
 		rep := 2
-		clus := newMetadataRepoCluster(1, rep)
-		clus.Start()
-		clus.waitVote()
-
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -734,13 +811,14 @@ func TestMRSeal(t *testing.T) {
 func TestMRUnseal(t *testing.T) {
 	Convey("unseal", t, func(ctx C) {
 		rep := 2
-		clus := newMetadataRepoCluster(1, rep)
-		clus.Start()
-		clus.waitVote()
-
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -817,6 +895,61 @@ func TestMRUnseal(t *testing.T) {
 
 				So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(6+i))
 			}
+		})
+	})
+}
+
+func TestMRFailoverLeaderElection(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		nrRep := 1
+		nrNode := 3
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, true)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		snIDs := make([]types.StorageNodeID, nrRep)
+		for i := range snIDs {
+			snIDs[i] = types.StorageNodeID(i)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := clus.nodes[0].RegisterStorageNode(context.TODO(), sn)
+			So(err, ShouldBeNil)
+		}
+
+		lsID := types.LogStreamID(0)
+
+		ls := makeLogStream(lsID, snIDs)
+		err := clus.nodes[0].RegisterLogStream(context.TODO(), ls)
+		So(err, ShouldBeNil)
+
+		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[0])
+		So(testutil.CompareWait(func() bool {
+			return !reporterClient.getKnownHighWatermark().Invalid()
+		}, time.Second), ShouldBeTrue)
+
+		Convey("When node fail", func(ctx C) {
+			So(clus.leaderFail(), ShouldBeTrue)
+
+			Convey("Then MR Cluster should elect", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					return clus.leaderElected()
+				}, time.Second), ShouldBeTrue)
+
+				prev := reporterClient.getKnownHighWatermark()
+
+				So(testutil.CompareWait(func() bool {
+					return reporterClient.getKnownHighWatermark() > prev
+				}, time.Second), ShouldBeTrue)
+			})
 		})
 	})
 }
