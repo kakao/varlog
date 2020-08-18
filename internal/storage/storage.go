@@ -1,11 +1,12 @@
 package storage
 
 import (
+	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 )
 
 type Scanner interface {
-	Next() ([]byte, error)
+	Next() (varlog.LogEntry, error)
 }
 
 type Storage interface {

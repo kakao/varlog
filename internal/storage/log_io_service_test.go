@@ -9,6 +9,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	"github.daumkakao.com/varlog/varlog/proto/storage_node/mock"
 )
 
 func TestStorageNodeServiceAppend(t *testing.T) {
@@ -105,7 +106,19 @@ func TestStorageNodeServiceRead(t *testing.T) {
 }
 
 func TestStorageNodeServiceSubscribe(t *testing.T) {
-	t.Skip()
+	Convey("Given LogIOService.Subscribe", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		s := NewLogIOService(types.StorageNodeID(1))
+
+		Convey("When requested LogStreamID is not in the StorageNode", func() {
+			Convey("Then LogIOService.Subscribe should return an error", func() {
+				err := s.Subscribe(&pb.SubscribeRequest{}, mock.NewMockLogIO_SubscribeServer(ctrl))
+				So(err, ShouldNotBeNil)
+			})
+		})
+	})
 }
 
 func TestStorageNodeServiceTrim(t *testing.T) {

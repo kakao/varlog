@@ -9,7 +9,7 @@ require (
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/gogo/protobuf v1.3.1
-	github.com/golang/mock v1.4.3
+	github.com/golang/mock v1.4.4
 	github.com/kisielk/errcheck v1.4.0 // indirect
 	github.com/libp2p/go-reuseport v0.0.1
 	github.com/nsf/gocode v0.0.0-20190302080247-5bee97b48836 // indirect
@@ -23,4 +23,5 @@ require (
 	golang.org/x/tools v0.0.0-20200729194436-6467de6f59a7 // indirect
 	google.golang.org/grpc v1.26.0
 	gopkg.in/yaml.v2 v2.3.0 // indirect
+	rsc.io/quote/v3 v3.1.0 // indirect
 )

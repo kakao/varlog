@@ -64,8 +64,33 @@ func (s *LogIOService) Read(ctx context.Context, req *pb.ReadRequest) (*pb.ReadR
 	return &pb.ReadResponse{Payload: data, GLSN: req.GetGLSN()}, nil
 }
 
-func (s *LogIOService) Subscribe(*pb.SubscribeRequest, pb.LogIO_SubscribeServer) error {
-	panic("not yet implemented")
+func (s *LogIOService) Subscribe(req *pb.SubscribeRequest, stream pb.LogIO_SubscribeServer) error {
+	// FIXME: wrap error code by using grpc.status package
+	//
+	lse, ok := s.getLogStreamExecutor(req.GetLogStreamID())
+	if !ok {
+		return varlog.ErrInvalid
+	}
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+	c, err := lse.Subscribe(ctx, req.GetGLSN())
+	if err != nil {
+		return err
+	}
+	for r := range c {
+		if r.err != nil {
+			return r.err
+		}
+		err := stream.Send(&pb.SubscribeResponse{
+			GLSN:    r.logEntry.GLSN,
+			LLSN:    r.logEntry.LLSN,
+			Payload: r.logEntry.Data,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
 }
 
 func (s *LogIOService) Trim(ctx context.Context, req *pb.TrimRequest) (*pb.TrimResponse, error) {
