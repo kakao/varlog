@@ -15,6 +15,55 @@ import (
 	"github.com/kakao/varlog/proto/storage_node/mock"
 )
 
+func TestReplicatorClientReplicate(t *testing.T) {
+	Convey("Given that a ReplicatorClient.Replicate is blocked", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		rpcConn := varlog.RpcConn{}
+		rc, err := NewReplicatorClientFromRpcConn(&rpcConn)
+		So(err, ShouldBeNil)
+		mockClient := mock.NewMockReplicatorServiceClient(ctrl)
+		rc.(*replicatorClient).rpcClient = mockClient
+
+		stop := make(chan struct{})
+		mockStream := mock.NewMockReplicatorService_ReplicateClient(ctrl)
+		mockStream.EXPECT().Recv().DoAndReturn(func() (*pb.ReplicationResponse, error) {
+			<-stop
+			return nil, io.EOF
+		}).AnyTimes()
+		mockStream.EXPECT().CloseSend().AnyTimes()
+		mockStream.EXPECT().Send(gomock.Any()).DoAndReturn(
+			func(*pb.ReplicationRequest) error {
+				<-stop
+				return nil
+			},
+		).AnyTimes()
+
+		mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
+			func(context.Context) (pb.ReplicatorService_ReplicateClient, error) {
+				return mockStream, nil
+			},
+		).AnyTimes()
+
+		err = rc.Run(context.TODO())
+		So(err, ShouldBeNil)
+
+		Reset(func() {
+			close(stop)
+
+			err := rc.Close()
+			So(err, ShouldBeNil)
+		})
+
+		Convey("When it is blocked more than configured time", func() {
+			Convey("Then the ReplicatorClient should return timeout error", func() {
+				Convey("Not yet implemented", nil)
+			})
+		})
+	})
+}
+
 func TestReplicatorClient(t *testing.T) {
 	Convey("ReplicatorClient", t, func() {
 		const N = 100

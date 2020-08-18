@@ -371,7 +371,11 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 		done:        done,
 		replication: true,
 	}
-	lse.appendC <- &t
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case lse.appendC <- &t:
+	}
 	<-done
 	return t.err
 }
@@ -419,10 +423,13 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 
 func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 	if t.replication {
-		t.err = lse.replicateTo(t.llsn, t.data)
-		if t.err != nil {
+		err := lse.replicateTo(t.llsn, t.data)
+		if err != nil {
 			lse.seal()
 		}
+		t.mu.Lock()
+		t.err = err
+		t.mu.Unlock()
 		close(t.done)
 		return
 	}
