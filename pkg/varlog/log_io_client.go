@@ -13,12 +13,6 @@ type StorageNode struct {
 	Addr string
 }
 
-type LogEntry struct {
-	GLSN types.GLSN
-	LLSN types.LLSN
-	Data []byte
-}
-
 type SubscribeResult struct {
 	*LogEntry
 	Error error
@@ -104,13 +98,8 @@ func (c *logIOClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan Su
 	out := make(chan SubscribeResult)
 	go func(ctx context.Context) {
 		defer close(out)
-		first := true
-		pllsn := types.LLSN(0)
 		for {
 			rsp, err := stream.Recv()
-			if err == nil && !first && pllsn+1 != rsp.GetLLSN() {
-				err = ErrUnordered
-			}
 			result := SubscribeResult{Error: err}
 			if err == nil {
 				result.LogEntry = &LogEntry{
@@ -119,10 +108,6 @@ func (c *logIOClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan Su
 					Data: rsp.GetPayload(),
 				}
 			}
-			if first {
-				first = false
-			}
-			pllsn = rsp.GetLLSN()
 			select {
 			case out <- result:
 				if err != nil {

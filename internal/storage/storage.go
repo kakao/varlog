@@ -1,11 +1,12 @@
 package storage
 
 import (
+	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 )
 
 type Scanner interface {
-	Next() ([]byte, error)
+	Next() (varlog.LogEntry, error)
 }
 
 type Storage interface {

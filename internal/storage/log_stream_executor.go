@@ -13,8 +13,8 @@ import (
 )
 
 type SubscribeResult struct {
-	data []byte
-	err  error
+	logEntry varlog.LogEntry
+	err      error
 }
 
 type LogStreamExecutor interface {
@@ -40,12 +40,6 @@ type readTask struct {
 	data []byte
 	err  error
 	done chan struct{}
-}
-
-type subscribeTask struct {
-	glsn types.GLSN
-	data []byte
-	err  error
 }
 
 type appendTask struct {
@@ -330,34 +324,49 @@ func (lse *logStreamExecutor) read(t *readTask) {
 }
 
 func (lse *logStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
-	out := make(chan SubscribeResult)
-	go lse.subscribe(ctx, glsn, out)
-	return out, nil
+	// TODO: verify glsn
+	return lse.subscribe(ctx, glsn), nil
 }
 
-func (lse *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN, c chan<- SubscribeResult) {
-	defer close(c)
-	scanner, err := lse.storage.Scan(glsn)
-	if err != nil {
-		c <- SubscribeResult{err: err}
-		return
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			c <- SubscribeResult{err: ctx.Err()}
+func (lse *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN) <-chan SubscribeResult {
+	c := make(chan SubscribeResult)
+	go func() {
+		defer close(c)
+		scanner, err := lse.storage.Scan(glsn)
+		if err != nil {
+			c <- SubscribeResult{err: err}
 			return
-		default:
-			data, err := scanner.Next()
-			c <- SubscribeResult{
-				data: data,
-				err:  err,
-			}
-			if err != nil {
+		}
+		entry, err := scanner.Next()
+		c <- SubscribeResult{logEntry: entry, err: err}
+		if err != nil {
+			return
+		}
+		llsn := entry.LLSN
+		for {
+			select {
+			case <-ctx.Done():
+				c <- SubscribeResult{err: ctx.Err()}
 				return
+			default:
+				res := SubscribeResult{logEntry: varlog.InvalidLogEntry}
+				entry, err := scanner.Next()
+				if llsn+1 != entry.LLSN {
+					res.err = varlog.ErrUnordered
+					c <- res
+					return
+				}
+				res.logEntry = entry
+				res.err = err
+				llsn = entry.LLSN
+				c <- res
+				if err != nil {
+					return
+				}
 			}
 		}
-	}
+	}()
+	return c
 }
 
 func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {

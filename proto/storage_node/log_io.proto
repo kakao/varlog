@@ -58,6 +58,9 @@ message SubscribeRequest {
     uint64 glsn = 1
         [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/varlog/types.GLSN",
          (gogoproto.customname) = "GLSN"];
+    uint32 log_stream_id = 2
+        [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+         (gogoproto.customname) = "LogStreamID"];
 }
 
 // SubscribeResponse comprises the contents of the log entry and its GLSN.

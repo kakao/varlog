@@ -460,3 +460,80 @@ func TestLogStreamExecutorReplicate(t *testing.T) {
 		})
 	})
 }
+
+func TestLogStreamExecutorSubscribe(t *testing.T) {
+	Convey("Given LogStreamExecutor.Subscribe", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		storage := NewMockStorage(ctrl)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		So(err, ShouldBeNil)
+
+		lse.Run(context.TODO())
+
+		Reset(func() {
+			lse.Close()
+		})
+
+		Convey("When the GLSN passed to it is less than LowWatermark", func() {
+			Convey("Then the LogStreamExecutor.Subscribe should return an error", func() {
+				// ErrAlreadyTrimmed
+				Convey("Not yet implemented", nil)
+			})
+		})
+
+		Convey("When Storage.Scan returns an error", func() {
+			storage.EXPECT().Scan(gomock.Any()).Return(nil, varlog.ErrInternal)
+			Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
+				c, err := lse.Subscribe(context.TODO(), types.MinGLSN)
+				So(err, ShouldBeNil)
+				So((<-c).err, ShouldNotBeNil)
+			})
+		})
+
+		Convey("When Storage.Scan returns a valid scanner", func() {
+			scanner := NewMockScanner(ctrl)
+			storage.EXPECT().Scan(gomock.Any()).Return(scanner, nil)
+
+			Convey("And the Scanner.Next returns an error", func() {
+				scanner.EXPECT().Next().Return(varlog.InvalidLogEntry, varlog.ErrInternal)
+
+				Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
+					c, err := lse.Subscribe(context.TODO(), types.MinGLSN)
+					So(err, ShouldBeNil)
+					So((<-c).err, ShouldNotBeNil)
+
+				})
+			})
+
+			Convey("And the Scannext.Next returns log entries out of order", func() {
+				const repeat = 3
+				var cs []*gomock.Call
+				for i := 0; i < repeat; i++ {
+					logEntry := varlog.LogEntry{
+						LLSN: types.MinLLSN + types.LLSN(i),
+						GLSN: types.MinGLSN + types.GLSN(i),
+					}
+					if i == repeat-1 {
+						logEntry.LLSN += types.LLSN(1)
+					}
+					c := scanner.EXPECT().Next().Return(logEntry, nil)
+					cs = append(cs, c)
+				}
+				for i := len(cs) - 1; i > 0; i-- {
+					cs[i].After(cs[i-1])
+				}
+				Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
+					c, err := lse.Subscribe(context.TODO(), types.MinGLSN)
+					So(err, ShouldBeNil)
+					for i := 0; i < repeat-1; i++ {
+						So((<-c).err, ShouldBeNil)
+					}
+					So((<-c).err, ShouldNotBeNil)
+				})
+			})
+		})
+
+	})
+}
