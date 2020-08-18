@@ -137,6 +137,10 @@ func (s *InMemoryStorage) Delete(glsn types.GLSN) (uint64, error) {
 	return numTrimmed, nil
 }
 
+func (s *InMemoryStorage) Close() error {
+	return nil
+}
+
 func (s *InMemoryStorage) assert() {
 	if s.committedEndIdx > s.uncommittedEndIdx {
 		goto out
