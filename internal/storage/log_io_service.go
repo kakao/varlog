@@ -89,6 +89,11 @@ func (s *LogIOService) Trim(ctx context.Context, req *pb.TrimRequest) (*pb.TrimR
 		err error
 	}
 
+	// NOTE: When a trimTask is enqueued, it can't be canceled by using the context passed by
+	// the RPC handler. We have below options:
+	// - Use the context (or its child context) to delete log entries
+	// - All trim operations are asyncrhonous - use tombstone!
+	// - Jus wait!
 	c := make(chan result, len(s.lseM))
 	var wg sync.WaitGroup
 	wg.Add(len(targetLSEs))

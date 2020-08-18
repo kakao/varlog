@@ -414,3 +414,28 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		})
 	})
 }
+
+func TestLogStreamExecutorTrim(t *testing.T) {
+	Convey("Given that a LogStreamExecutor.Trim is called", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		storage := NewMockStorage(ctrl)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		So(err, ShouldBeNil)
+
+		Convey("When the context passed to the Trim is cancelled before enqueueing the trimTask", func() {
+			Convey("Then the LogStreamExecutor should return cancellation error", func() {
+				ctx, cancel := context.WithCancel(context.TODO())
+				cancel()
+
+				var err error
+				_, err = lse.Trim(ctx, types.MinGLSN, true)
+				So(err, ShouldResemble, context.Canceled)
+
+				_, err = lse.Trim(ctx, types.MinGLSN, false)
+				So(err, ShouldResemble, context.Canceled)
+			})
+		})
+	})
+}

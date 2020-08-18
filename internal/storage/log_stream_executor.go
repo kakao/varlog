@@ -501,7 +501,12 @@ func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async b
 		async: async,
 		done:  done,
 	}
-	lse.trimC <- task
+
+	select {
+	case lse.trimC <- task:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
 	if async {
 		return 0, nil
 	}
