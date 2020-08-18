@@ -439,3 +439,24 @@ func TestLogStreamExecutorTrim(t *testing.T) {
 		})
 	})
 }
+
+func TestLogStreamExecutorReplicate(t *testing.T) {
+	Convey("Given that LogStreamExecutor.Replicate is called", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		storage := NewMockStorage(ctrl)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		So(err, ShouldBeNil)
+
+		Convey("When the context passed to Replicate is canceled before calling storage.Write", func() {
+			ctx, cancel := context.WithCancel(context.TODO())
+			cancel()
+
+			Convey("Then the Replicate should return cancellation error", func() {
+				err := lse.Replicate(ctx, types.MinLLSN, []byte("foo"))
+				So(err, ShouldResemble, context.Canceled)
+			})
+		})
+	})
+}
