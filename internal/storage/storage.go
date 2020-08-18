@@ -15,4 +15,5 @@ type Storage interface {
 	Write(llsn types.LLSN, data []byte) error
 	Commit(llsn types.LLSN, glsn types.GLSN) error
 	Delete(glsn types.GLSN) (uint64, error)
+	Close() error
 }
