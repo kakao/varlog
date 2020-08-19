@@ -21,11 +21,11 @@ import (
 	"go.uber.org/zap"
 )
 
-const DefaultNumGlobalLogStreams int = 128
 const unusedRequestIndex uint64 = 0
 
 type Config struct {
 	Index             types.NodeID
+	Join              bool
 	NumRep            int
 	PeerList          []string
 	ReporterClientFac ReporterClientFactory
@@ -106,7 +106,8 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 	mr.raftNode = newRaftNode(
 		config.Index,
 		config.PeerList,
-		false, // not to join an existing cluster
+		//false, // not to join an existing cluster
+		config.Join,
 		mr.storage.GetSnapshot,
 		mr.rnProposeC,
 		mr.rnConfChangeC,
@@ -183,13 +184,20 @@ Loop:
 				continue
 			}
 
-			mr.rnProposeC <- string(b)
+			select {
+			case mr.rnProposeC <- string(b):
+			case <-ctx.Done():
+				mr.sendAck(e.NodeIndex, e.RequestIndex, ctx.Err())
+			}
 		case <-ctx.Done():
 			break Loop
 		}
 	}
 
 	close(mr.rnProposeC)
+
+	// fix me
+	close(mr.raftNode.stopc)
 }
 
 func (mr *RaftMetadataRepository) runCommitTrigger(ctx context.Context) {
@@ -599,6 +607,16 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 	return nil
 }
 
+func (mr *RaftMetadataRepository) proposeConfChange(ctx context.Context, r raftpb.ConfChange) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case mr.rnConfChangeC <- r:
+	}
+
+	return nil
+}
+
 func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {
 	r := &pb.RegisterStorageNode{
 		StorageNode: sn,
@@ -668,4 +686,27 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 	}
 
 	return nil
+}
+
+func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {
+	r := raftpb.ConfChange{
+		Type:    raftpb.ConfChangeAddNode,
+		NodeID:  uint64(nodeID),
+		Context: []byte(url),
+	}
+
+	return mr.proposeConfChange(ctx, r)
+}
+
+func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
+	r := raftpb.ConfChange{
+		Type:   raftpb.ConfChangeRemoveNode,
+		NodeID: uint64(nodeID),
+	}
+
+	return mr.proposeConfChange(ctx, r)
+}
+
+func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (types.NodeID, []string, error) {
+	return mr.raftNode.GetNodeID(), mr.raftNode.GetMembership(), nil
 }

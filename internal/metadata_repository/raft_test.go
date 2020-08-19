@@ -24,6 +24,7 @@ type cluster struct {
 	stateC      []<-chan raft.StateType
 	proposeC    []chan string
 	confChangeC []chan raftpb.ConfChange
+	stopC       []chan struct{}
 	running     []bool
 }
 
@@ -41,6 +42,7 @@ func newCluster(n int) *cluster {
 		stateC:      make([]<-chan raft.StateType, len(peers)),
 		proposeC:    make([]chan string, len(peers)),
 		confChangeC: make([]chan raftpb.ConfChange, len(peers)),
+		stopC:       make([]chan struct{}, len(peers)),
 		running:     make([]bool, len(peers)),
 	}
 
@@ -69,6 +71,7 @@ func newCluster(n int) *cluster {
 		clus.commitC[i] = rc.commitC
 		clus.errorC[i] = rc.errorC
 		clus.stateC[i] = rc.stateC
+		clus.stopC[i] = rc.stopc
 		clus.running[i] = true
 
 		go rc.startRaft()
@@ -94,6 +97,7 @@ func (clus *cluster) close(i int) (err error) {
 	}
 
 	close(clus.proposeC[i])
+	close(clus.stopC[i])
 	for range clus.commitC[i] {
 		// drain pending commits
 	}

@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package varlog;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/kakao/varlog/proto/metadata_repository";
+
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+message AddPeerRequest {
+    uint32 cluster_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+        (gogoproto.customname) = "ClusterID"
+    ];
+
+    uint64 node_id = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.NodeID",
+        (gogoproto.customname) = "NodeID"
+    ];
+
+    string url = 3;
+}
+
+message RemovePeerRequest {
+    uint32 cluster_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+        (gogoproto.customname) = "ClusterID"
+    ];
+
+    uint64 node_id = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.NodeID",
+        (gogoproto.customname) = "NodeID"
+    ];
+}
+
+message GetClusterInfoRequest {
+    uint32 cluster_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+        (gogoproto.customname) = "ClusterID"
+    ];
+}
+
+message GetClusterInfoResponse {
+    uint32 cluster_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+        (gogoproto.customname) = "ClusterID"
+    ];
+
+    uint64 node_id = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.NodeID",
+        (gogoproto.customname) = "NodeID"
+    ];
+
+    repeated string urls = 3;
+}
+
+service ManagementService {
+        rpc AddPeer(AddPeerRequest) returns (google.protobuf.Empty) {}
+        rpc RemovePeer(RemovePeerRequest) returns (google.protobuf.Empty) {}
+        rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse) {}
+}
