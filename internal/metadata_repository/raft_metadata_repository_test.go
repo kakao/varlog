@@ -47,13 +47,13 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoClu
 	}
 
 	for i := range clus.peers {
-		clus.createMetadataRepo(i)
+		clus.createMetadataRepo(i, false)
 	}
 
 	return clus
 }
 
-func (clus *metadataRepoCluster) createMetadataRepo(idx int) error {
+func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 	if idx < 0 || idx > len(clus.nodes) {
 		return errors.New("out or range")
 	}
@@ -66,6 +66,7 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int) error {
 
 	config := &Config{
 		Index:             nodeID,
+		Join:              join,
 		NumRep:            clus.nrRep,
 		PeerList:          clus.peers,
 		ReporterClientFac: clus.reporterClientFac,
@@ -81,7 +82,7 @@ func (clus *metadataRepoCluster) appendMetadataRepo() error {
 	clus.peers = append(clus.peers, fmt.Sprintf("http://127.0.0.1:%d", 10000+idx))
 	clus.nodes = append(clus.nodes, nil)
 
-	return clus.createMetadataRepo(idx)
+	return clus.createMetadataRepo(idx, true)
 }
 
 func (clus *metadataRepoCluster) start(idx int) error {
@@ -160,7 +161,7 @@ func (clus *metadataRepoCluster) leaderFail() bool {
 
 func (clus *metadataRepoCluster) closeNoErrors(t *testing.T) {
 	if err := clus.Close(); err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 }
 
@@ -949,6 +950,138 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 				So(testutil.CompareWait(func() bool {
 					return reporterClient.getKnownHighWatermark() > prev
 				}, time.Second), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestMRFailoverJoinNewNode(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		nrRep := 1
+		nrNode := 3
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		snIDs := make([]types.StorageNodeID, nrRep)
+		for i := range snIDs {
+			snIDs[i] = types.StorageNodeID(i)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := clus.nodes[0].RegisterStorageNode(context.TODO(), sn)
+			So(err, ShouldBeNil)
+		}
+
+		lsID := types.LogStreamID(0)
+
+		ls := makeLogStream(lsID, snIDs)
+		err := clus.nodes[0].RegisterLogStream(context.TODO(), ls)
+		So(err, ShouldBeNil)
+
+		Convey("When new node join", func(ctx C) {
+			newNode := nrNode
+			So(clus.appendMetadataRepo(), ShouldBeNil)
+			So(clus.nodes[0].AddPeer(context.TODO(),
+				types.InvalidNodeID,
+				clus.nodes[newNode].index,
+				clus.peers[newNode]), ShouldBeNil)
+			So(clus.start(newNode), ShouldBeNil)
+			nrNode += 1
+
+			Convey("Then getMeta from new node should be success", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					meta, err := clus.nodes[newNode].GetMetadata(context.TODO())
+					if err != nil {
+						return false
+					}
+
+					return meta.GetStorageNode(snIDs[0]) != nil
+				}, time.Second), ShouldBeTrue)
+
+				Convey("Register to new node should be success", func(ctx C) {
+					snID := snIDs[nrRep-1] + types.StorageNodeID(1)
+
+					sn := &varlogpb.StorageNodeDescriptor{
+						StorageNodeID: snID,
+					}
+
+					err := clus.nodes[newNode].RegisterStorageNode(context.TODO(), sn)
+					So(err, ShouldBeNil)
+
+					meta, err := clus.nodes[newNode].GetMetadata(context.TODO())
+					So(err, ShouldBeNil)
+					So(meta.GetStorageNode(snID), ShouldNotBeNil)
+				})
+			})
+		})
+
+		Convey("When new nodes joining", func(ctx C) {
+			newNode := nrNode
+			So(clus.appendMetadataRepo(), ShouldBeNil)
+
+			So(clus.nodes[0].AddPeer(context.TODO(),
+				types.InvalidNodeID,
+				clus.nodes[newNode].index,
+				clus.peers[newNode]), ShouldBeNil)
+			So(clus.start(newNode), ShouldBeNil)
+			nrNode += 1
+
+			Convey("Then proposal should be operated", func(ctx C) {
+				snID := snIDs[nrRep-1] + types.StorageNodeID(1)
+
+				sn := &varlogpb.StorageNodeDescriptor{
+					StorageNodeID: snID,
+				}
+
+				err := clus.nodes[newNode].RegisterStorageNode(context.TODO(), sn)
+				So(err, ShouldBeNil)
+			})
+		})
+	})
+}
+
+func TestMRFailoverLeaveNode(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		nrRep := 1
+		nrNode := 3
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		leader := clus.leader()
+
+		Convey("When a node leave", func(ctx C) {
+			leaveNode := (leader + 1) % nrNode
+			checkNode := (leaveNode + 1) % nrNode
+			So(clus.nodes[checkNode].RemovePeer(context.TODO(),
+				types.InvalidNodeID,
+				clus.nodes[leaveNode].index), ShouldBeNil)
+			clus.stop(leaveNode)
+
+			Convey("Then GetMembership should return 2 peers", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+					if err != nil {
+						return false
+					}
+
+					return len(membership) == nrNode-1
+				}, 5*time.Second), ShouldBeTrue)
 			})
 		})
 	})

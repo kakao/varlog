@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	varlogtypes "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
@@ -33,7 +34,8 @@ type raftNode struct {
 	stateC      chan raft.StateType
 
 	id          varlogtypes.NodeID // node ID for raft
-	peers       []string           // raft peer URLs
+	bpeers      []string           // raft bootstrap peer URLs
+	membership  *raftMembership    // raft membership
 	join        bool               // node is joining an existing cluster
 	waldir      string             // path to WAL directory
 	snapdir     string             // path to snapshot directory
@@ -68,6 +70,16 @@ type raftCommittedEntry struct {
 	data  string
 }
 
+type raftMembership struct {
+	peers map[varlogtypes.NodeID]raftPeer // raft peer map
+	mu    sync.RWMutex
+}
+
+type raftPeer struct {
+	raft.Peer
+	commit bool
+}
+
 var defaultSnapshotCount uint64 = 10000
 
 // newRaftNode initiates a raft instance and returns a committed log entry
@@ -89,7 +101,8 @@ func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, getSnapshot f
 		errorC:      errorC,
 		stateC:      stateC,
 		id:          id,
-		peers:       peers,
+		bpeers:      peers,
+		membership:  newRaftMemebership(),
 		join:        join,
 		waldir:      fmt.Sprintf("raft-%d", id),
 		snapdir:     fmt.Sprintf("raft-%d-snap", id),
@@ -163,19 +176,30 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
-			cc.Unmarshal(ents[i].Data)
+			err := cc.Unmarshal(ents[i].Data)
+			if err != nil {
+				rc.logger.Panic("ConfChange Unmarshal fail", zap.String("err", err.Error()))
+			}
+
 			rc.confState = *rc.node.ApplyConfChange(cc)
 			switch cc.Type {
 			case raftpb.ConfChangeAddNode:
-				if len(cc.Context) > 0 {
+				if len(cc.Context) > 0 && cc.NodeID != uint64(rc.id) {
 					rc.transport.AddPeer(types.ID(cc.NodeID), []string{string(cc.Context)})
+					rc.membership.addPeer(varlogtypes.NodeID(cc.NodeID), string(cc.Context))
 				}
+
+				if !rc.membership.commitPeer(varlogtypes.NodeID(cc.NodeID)) {
+					rc.logger.Panic("membership:: commit unadded peer", zap.Uint64("nodeID", cc.NodeID))
+				}
+
 			case raftpb.ConfChangeRemoveNode:
 				if cc.NodeID == uint64(rc.id) {
 					rc.logger.Info("I've been removed from the cluster! Shutting down.")
 					return false
 				}
 				rc.transport.RemovePeer(types.ID(cc.NodeID))
+				rc.membership.removePeer(varlogtypes.NodeID(cc.NodeID))
 			}
 		}
 
@@ -289,8 +313,8 @@ func (rc *raftNode) startRaft() {
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL()
 
-	rpeers := make([]raft.Peer, len(rc.peers))
-	for i, peer := range rc.peers {
+	rpeers := make([]raft.Peer, len(rc.bpeers))
+	for i, peer := range rc.bpeers {
 		url, err := url.Parse(peer)
 		if err != nil {
 			rc.logger.Panic("invalid peer name",
@@ -325,9 +349,10 @@ func (rc *raftNode) startRaft() {
 	} else {
 		startPeers := rpeers
 		if rc.join {
-			startPeers = nil
+			rc.node = raft.RestartNode(c)
+		} else {
+			rc.node = raft.StartNode(c, startPeers)
 		}
-		rc.node = raft.StartNode(c, startPeers)
 	}
 
 	rc.transport = &rafthttp.Transport{
@@ -343,12 +368,14 @@ func (rc *raftNode) startRaft() {
 	rc.transport.Start()
 
 	var listenURL string
-	for i, nodeID := range rpeers {
-		if nodeID.ID == uint64(rc.id) {
-			listenURL = rc.peers[i]
+	for i, peer := range rpeers {
+		if peer.ID == uint64(rc.id) {
+			listenURL = rc.bpeers[i]
 		} else {
-			rc.transport.AddPeer(types.ID(nodeID.ID), []string{rc.peers[i]})
+			rc.transport.AddPeer(types.ID(peer.ID), []string{rc.bpeers[i]})
 		}
+
+		rc.membership.addPeer(varlogtypes.NodeID(peer.ID), rc.bpeers[i])
 	}
 
 	go rc.serveRaft(listenURL)
@@ -469,7 +496,7 @@ func (rc *raftNode) serveChannels() {
 			}
 		}
 		// client closed channel; shutdown raft if not already
-		close(rc.stopc)
+		// close(rc.stopc)
 	}()
 
 	// event loop on raft state machine updates
@@ -533,3 +560,68 @@ func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
 func (rc *raftNode) IsIDRemoved(id uint64) bool                           { return false }
 func (rc *raftNode) ReportUnreachable(id uint64)                          {}
 func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {}
+func (rc *raftNode) GetNodeID() varlogtypes.NodeID                        { return rc.id }
+func (rc *raftNode) GetMembership() []string {
+	return rc.membership.getActivePeers()
+}
+
+func newRaftMemebership() *raftMembership {
+	return &raftMembership{
+		peers: make(map[varlogtypes.NodeID]raftPeer),
+	}
+}
+
+func (rm *raftMembership) addPeer(nodeID varlogtypes.NodeID, url string) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	rm.peers[nodeID] = raftPeer{
+		Peer: raft.Peer{
+			ID:      uint64(nodeID),
+			Context: []byte(url),
+		},
+	}
+}
+
+func (rm *raftMembership) commitPeer(nodeID varlogtypes.NodeID) bool {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	peer, ok := rm.peers[nodeID]
+	if !ok {
+		return false
+	}
+
+	peer.commit = true
+	rm.peers[nodeID] = peer
+
+	return true
+}
+
+func (rm *raftMembership) removePeer(nodeID varlogtypes.NodeID) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	_, ok := rm.peers[nodeID]
+	if !ok {
+		return
+	}
+
+	delete(rm.peers, nodeID)
+}
+
+func (rm *raftMembership) getActivePeers() []string {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	r := make([]string, 0, len(rm.peers))
+	for _, peer := range rm.peers {
+		if !peer.commit {
+			continue
+		}
+
+		r = append(r, string(peer.Peer.Context))
+	}
+
+	return r
+}
