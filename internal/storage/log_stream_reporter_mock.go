@@ -6,59 +6,60 @@ package storage
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	reflect "reflect"
 )
 
-// MockLogStreamReporter is a mock of LogStreamReporter interface
+// MockLogStreamReporter is a mock of LogStreamReporter interface.
 type MockLogStreamReporter struct {
 	ctrl     *gomock.Controller
 	recorder *MockLogStreamReporterMockRecorder
 }
 
-// MockLogStreamReporterMockRecorder is the mock recorder for MockLogStreamReporter
+// MockLogStreamReporterMockRecorder is the mock recorder for MockLogStreamReporter.
 type MockLogStreamReporterMockRecorder struct {
 	mock *MockLogStreamReporter
 }
 
-// NewMockLogStreamReporter creates a new mock instance
+// NewMockLogStreamReporter creates a new mock instance.
 func NewMockLogStreamReporter(ctrl *gomock.Controller) *MockLogStreamReporter {
 	mock := &MockLogStreamReporter{ctrl: ctrl}
 	mock.recorder = &MockLogStreamReporterMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockLogStreamReporter) EXPECT() *MockLogStreamReporterMockRecorder {
 	return m.recorder
 }
 
-// Run mocks base method
+// Run mocks base method.
 func (m *MockLogStreamReporter) Run(ctx context.Context) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Run", ctx)
 }
 
-// Run indicates an expected call of Run
+// Run indicates an expected call of Run.
 func (mr *MockLogStreamReporterMockRecorder) Run(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockLogStreamReporter)(nil).Run), ctx)
 }
 
-// Close mocks base method
+// Close mocks base method.
 func (m *MockLogStreamReporter) Close() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Close")
 }
 
-// Close indicates an expected call of Close
+// Close indicates an expected call of Close.
 func (mr *MockLogStreamReporterMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockLogStreamReporter)(nil).Close))
 }
 
-// StorageNodeID mocks base method
+// StorageNodeID mocks base method.
 func (m *MockLogStreamReporter) StorageNodeID() types.StorageNodeID {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StorageNodeID")
@@ -66,27 +67,13 @@ func (m *MockLogStreamReporter) StorageNodeID() types.StorageNodeID {
 	return ret0
 }
 
-// StorageNodeID indicates an expected call of StorageNodeID
+// StorageNodeID indicates an expected call of StorageNodeID.
 func (mr *MockLogStreamReporterMockRecorder) StorageNodeID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StorageNodeID", reflect.TypeOf((*MockLogStreamReporter)(nil).StorageNodeID))
 }
 
-// RegisterLogStreamExecutor mocks base method
-func (m *MockLogStreamReporter) RegisterLogStreamExecutor(executor LogStreamExecutor) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterLogStreamExecutor", executor)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RegisterLogStreamExecutor indicates an expected call of RegisterLogStreamExecutor
-func (mr *MockLogStreamReporterMockRecorder) RegisterLogStreamExecutor(executor interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterLogStreamExecutor", reflect.TypeOf((*MockLogStreamReporter)(nil).RegisterLogStreamExecutor), executor)
-}
-
-// GetReport mocks base method
+// GetReport mocks base method.
 func (m *MockLogStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatus) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReport")
@@ -95,19 +82,19 @@ func (m *MockLogStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamS
 	return ret0, ret1
 }
 
-// GetReport indicates an expected call of GetReport
+// GetReport indicates an expected call of GetReport.
 func (mr *MockLogStreamReporterMockRecorder) GetReport() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockLogStreamReporter)(nil).GetReport))
 }
 
-// Commit mocks base method
+// Commit mocks base method.
 func (m *MockLogStreamReporter) Commit(highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Commit", highWatermark, prevHighWatermark, commitResults)
 }
 
-// Commit indicates an expected call of Commit
+// Commit indicates an expected call of Commit.
 func (mr *MockLogStreamReporterMockRecorder) Commit(highWatermark, prevHighWatermark, commitResults interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporter)(nil).Commit), highWatermark, prevHighWatermark, commitResults)

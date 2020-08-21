@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 )
@@ -45,7 +44,6 @@ type LogStreamReporter interface {
 	Run(ctx context.Context)
 	Close()
 	StorageNodeID() types.StorageNodeID
-	RegisterLogStreamExecutor(executor LogStreamExecutor) error
 	GetReport() (types.GLSN, []UncommittedLogStreamStatus)
 	Commit(highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus)
 }
@@ -53,8 +51,7 @@ type LogStreamReporter interface {
 type logStreamReporter struct {
 	storageNodeID      types.StorageNodeID
 	knownHighWatermark types.AtomicGLSN
-	executors          map[types.LogStreamID]LogStreamExecutor
-	mtxExecutors       sync.RWMutex
+	lseGetter          LogStreamExecutorGetter
 	history            map[types.GLSN][]UncommittedLogStreamStatus
 	reportC            chan *lsrReportTask
 	commitC            chan lsrCommitTask
@@ -63,13 +60,14 @@ type logStreamReporter struct {
 	once               sync.Once
 }
 
-func NewLogStreamReporter(storageNodeID types.StorageNodeID) LogStreamReporter {
+func NewLogStreamReporter(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter) LogStreamReporter {
 	return &logStreamReporter{
 		storageNodeID: storageNodeID,
-		executors:     make(map[types.LogStreamID]LogStreamExecutor),
-		history:       make(map[types.GLSN][]UncommittedLogStreamStatus),
-		reportC:       make(chan *lsrReportTask, lsrReportCSize),
-		commitC:       make(chan lsrCommitTask, lsrCommitCSize),
+		lseGetter:     lseGetter,
+		// executors:     make(map[types.LogStreamID]LogStreamExecutor),
+		history: make(map[types.GLSN][]UncommittedLogStreamStatus),
+		reportC: make(chan *lsrReportTask, lsrReportCSize),
+		commitC: make(chan lsrCommitTask, lsrCommitCSize),
 	}
 }
 
@@ -114,26 +112,6 @@ func (lsr *logStreamReporter) dispatchCommit(ctx context.Context) {
 	}
 }
 
-// RegisterLogStreamExecutor adds new LogStreamExecutor to LogStreamReporter. If a
-// LogStreamReporter is added redundant, it returns varlog.ErrExist. If a given LogStreamExecutor
-// is nil, it returns varlog.ErrInvalid.
-// When the new LogStreamExecutor is registered successfully, it is received a GLSN which is
-// anticipated to be issued in the next commit - knownNextGLSN.
-func (lsr *logStreamReporter) RegisterLogStreamExecutor(executor LogStreamExecutor) error {
-	if executor == nil {
-		return varlog.ErrInvalid
-	}
-	logStreamID := executor.LogStreamID()
-	lsr.mtxExecutors.Lock()
-	defer lsr.mtxExecutors.Unlock()
-	_, ok := lsr.executors[logStreamID]
-	if ok {
-		return varlog.ErrExist
-	}
-	lsr.executors[logStreamID] = executor
-	return nil
-}
-
 // GetReport collects statuses about uncommitted log entries from log streams in the storage node.
 // KnownNextGLSNs from all LogStreamExecutors must be equal to the corresponding in
 // LogStreamReporter.
@@ -145,10 +123,10 @@ func (lsr *logStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamSta
 }
 
 func (lsr *logStreamReporter) report(t *lsrReportTask) {
-	lsr.mtxExecutors.RLock()
-	reports := make([]UncommittedLogStreamStatus, 0, len(lsr.executors))
+	executors := lsr.lseGetter.GetLogStreamExecutors()
+	reports := make([]UncommittedLogStreamStatus, 0, len(executors))
 	knownHighWatermark := types.InvalidGLSN
-	for _, executor := range lsr.executors {
+	for _, executor := range executors {
 		status := executor.GetReport()
 		// get non-zero, minimum KnwonNextGLSN (zero means just added LS)
 		if !status.KnownHighWatermark.Invalid() && (knownHighWatermark.Invalid() || knownHighWatermark > status.KnownHighWatermark) {
@@ -156,7 +134,6 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 		}
 		reports = append(reports, status)
 	}
-	lsr.mtxExecutors.RUnlock()
 
 	if len(reports) > 0 { // skip when no meaningful statuses in reports
 		// for simplicity, it uses old reports as possible
@@ -203,9 +180,7 @@ func (lsr *logStreamReporter) commit(t lsrCommitTask) {
 	}
 	for _, commitResult := range t.commitResults {
 		logStreamID := commitResult.LogStreamID
-		lsr.mtxExecutors.RLock()
-		executor, ok := lsr.executors[logStreamID]
-		lsr.mtxExecutors.RUnlock()
+		executor, ok := lsr.lseGetter.GetLogStreamExecutor(logStreamID)
 		if !ok {
 			panic("no such executor")
 		}
