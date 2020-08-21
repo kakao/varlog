@@ -17,7 +17,7 @@ import (
 func TestLogStreamExecutorNew(t *testing.T) {
 	Convey("LogStreamExecutor", t, func() {
 		Convey("it should not be created with nil storage", func() {
-			_, err := NewLogStreamExecutor(types.LogStreamID(0), nil)
+			_, err := NewLogStreamExecutor(types.LogStreamID(0), nil, &LogStreamExecutorOptions{})
 			So(err, ShouldNotBeNil)
 		})
 
@@ -25,7 +25,7 @@ func TestLogStreamExecutorNew(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			storage := NewMockStorage(ctrl)
-			lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage)
+			lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
 			So(lse.(*logStreamExecutor).isSealed(), ShouldBeFalse)
 		})
@@ -38,7 +38,7 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			storage := NewMockStorage(ctrl)
-			lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage)
+			lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
 			lse.Run(context.TODO())
 			lse.Close()
@@ -56,7 +56,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		storage := NewMockStorage(ctrl)
 		replicator := NewMockReplicator(ctrl)
 
-		lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 		lse.Run(context.TODO())
 
@@ -174,7 +174,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 		storage := NewMockStorage(ctrl)
 		replicator := NewMockReplicator(ctrl)
-		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		lse.(*logStreamExecutor).replicator = replicator
@@ -371,7 +371,7 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		lse.Run(context.TODO())
@@ -421,7 +421,7 @@ func TestLogStreamExecutorTrim(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		Convey("When the context passed to the Trim is cancelled before enqueueing the trimTask", func() {
@@ -446,7 +446,7 @@ func TestLogStreamExecutorReplicate(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		Convey("When the context passed to Replicate is canceled before calling storage.Write", func() {
@@ -467,7 +467,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage)
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		lse.Run(context.TODO())
