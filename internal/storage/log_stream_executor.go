@@ -104,12 +104,6 @@ func (cwm *commitWaitMap) del(llsn types.LLSN) {
 	delete(cwm.m, llsn)
 }
 
-const (
-	lseAppendCSize = 0
-	lseTrimCSize   = 0
-	lseCommitCSize = 0
-)
-
 // TODO:
 // - handle read or subscribe operations competing with trim operations
 type logStreamExecutor struct {
@@ -177,10 +171,11 @@ type logStreamExecutor struct {
 	status    varlogpb.LogStreamStatus
 	mtxStatus sync.RWMutex
 
-	logger *zap.Logger
+	logger  *zap.Logger
+	options *LogStreamExecutorOptions
 }
 
-func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) (LogStreamExecutor, error) {
+func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage, options *LogStreamExecutorOptions) (LogStreamExecutor, error) {
 	logger := zap.L()
 	if storage == nil {
 		logger.Error("invalid argument", zap.Any("storage", storage))
@@ -191,15 +186,16 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage) (LogSt
 		storage:              storage,
 		replicator:           NewReplicator(),
 		cwm:                  newCommitWaitMap(),
-		appendC:              make(chan *appendTask, lseAppendCSize),
-		trimC:                make(chan *trimTask, lseTrimCSize),
-		commitC:              make(chan commitTask, lseCommitCSize),
+		appendC:              make(chan *appendTask, options.AppendCSize),
+		trimC:                make(chan *trimTask, options.TrimCSize),
+		commitC:              make(chan commitTask, options.CommitCSize),
 		knownHighWatermark:   types.InvalidGLSN,
 		uncommittedLLSNBegin: types.MinLLSN,
 		uncommittedLLSNEnd:   types.AtomicLLSN(types.MinLLSN),
 		committedLLSNEnd:     types.MinLLSN,
 		status:               varlogpb.LogStreamStatusRunning,
 		logger:               logger,
+		options:              options,
 	}
 	return lse, nil
 }
