@@ -3,7 +3,6 @@ package metadata_repository
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/url"
 	"os"
 	"sync"
@@ -12,20 +11,23 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"go.etcd.io/etcd/raft"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
 )
 
+type stopFunc func(bool)
+type leaderFunc func() uint64
+
 type cluster struct {
 	peers       []string
+	peerToIdx   map[uint64]int
 	commitC     []<-chan *raftCommittedEntry
-	errorC      []<-chan error
-	stateC      []<-chan raft.StateType
 	proposeC    []chan string
 	confChangeC []chan raftpb.ConfChange
-	stopC       []chan struct{}
 	running     []bool
+	stop        []stopFunc
+	leader      []leaderFunc
 }
 
 // newCluster creates a cluster of n nodes
@@ -37,13 +39,13 @@ func newCluster(n int) *cluster {
 
 	clus := &cluster{
 		peers:       peers,
+		peerToIdx:   make(map[uint64]int),
 		commitC:     make([]<-chan *raftCommittedEntry, len(peers)),
-		errorC:      make([]<-chan error, len(peers)),
-		stateC:      make([]<-chan raft.StateType, len(peers)),
 		proposeC:    make([]chan string, len(peers)),
 		confChangeC: make([]chan raftpb.ConfChange, len(peers)),
-		stopC:       make([]chan struct{}, len(peers)),
 		running:     make([]bool, len(peers)),
+		stop:        make([]stopFunc, len(peers)),
+		leader:      make([]leaderFunc, len(peers)),
 	}
 
 	for i, peer := range clus.peers {
@@ -69,12 +71,12 @@ func newCluster(n int) *cluster {
 		)
 
 		clus.commitC[i] = rc.commitC
-		clus.errorC[i] = rc.errorC
-		clus.stateC[i] = rc.stateC
-		clus.stopC[i] = rc.stopc
 		clus.running[i] = true
+		clus.stop[i] = rc.stop
+		clus.leader[i] = rc.membership.getLeader
+		clus.peerToIdx[uint64(nodeID)] = i
 
-		go rc.startRaft()
+		go rc.start()
 	}
 
 	return clus
@@ -96,15 +98,11 @@ func (clus *cluster) close(i int) (err error) {
 		return nil
 	}
 
-	close(clus.proposeC[i])
-	close(clus.stopC[i])
+	clus.stop[i](false)
 	for range clus.commitC[i] {
 		// drain pending commits
 	}
-	// wait for channel to close
-	if erri := <-clus.errorC[i]; erri != nil {
-		err = erri
-	}
+
 	// clean intermediates
 	url, _ := url.Parse(clus.peers[i])
 	nodeID := types.NewNodeID(url.Host)
@@ -140,26 +138,16 @@ func TestProposeOnFollower(t *testing.T) {
 
 	clus.sinkReplay()
 
-	vote := false
-
 	donec := make(chan struct{})
 	for i := range clus.peers {
 		// feedback for "n" committed entries, then update donec
-		go func(idx int, pC chan<- string, cC <-chan *raftCommittedEntry, eC <-chan error, sC <-chan raft.StateType) {
-			var state raft.StateType
+		go func(pC chan<- string, cC <-chan *raftCommittedEntry) {
 
 		Loop:
 			for {
 				select {
 				case <-cC:
 					break Loop
-				case state = <-sC:
-					log.Printf("[%d] state %#v", idx, state)
-					if state == raft.StateLeader {
-						vote = true
-					}
-				case err := <-eC:
-					t.Errorf("eC message (%v)", err)
 				}
 			}
 			donec <- struct{}{}
@@ -167,18 +155,14 @@ func TestProposeOnFollower(t *testing.T) {
 				// acknowledge the commits from other nodes so
 				// raft continues to make progress
 			}
-		}(i+1, clus.proposeC[i], clus.commitC[i], clus.errorC[i], clus.stateC[i])
+		}(clus.proposeC[i], clus.commitC[i])
 
 		// one message feedback per node
-		go func(i int) { clus.proposeC[i] <- fmt.Sprintf("%d", i+1) }(i)
+		go func(i int) { clus.proposeC[i] <- fmt.Sprintf("%d", i) }(i)
 	}
 
 	for range clus.peers {
 		<-donec
-	}
-
-	if vote != true {
-		t.Error(vote)
 	}
 }
 
@@ -189,7 +173,6 @@ func TestFailoverLeaderElection(t *testing.T) {
 
 		clus.sinkReplay()
 
-		voteC := make(chan int)
 		cancels := make([]context.CancelFunc, 3)
 
 		var wg sync.WaitGroup
@@ -199,9 +182,8 @@ func TestFailoverLeaderElection(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.TODO())
 			cancels[i] = cancel
 			// feedback for "n" committed entries, then update donec
-			go func(ctx context.Context, idx int, pC chan<- string, cC <-chan *raftCommittedEntry, eC <-chan error, sC <-chan raft.StateType) {
+			go func(ctx context.Context, idx int, pC chan<- string, cC <-chan *raftCommittedEntry) {
 				defer wg.Done()
-				var state raft.StateType
 
 			Loop:
 				for {
@@ -209,35 +191,26 @@ func TestFailoverLeaderElection(t *testing.T) {
 					case <-ctx.Done():
 						break Loop
 					case <-cC:
-					case state = <-sC:
-						if state == raft.StateLeader {
-							voteC <- idx
-						}
-					case <-eC:
 					}
 				}
-			}(ctx, i, clus.proposeC[i], clus.commitC[i], clus.errorC[i], clus.stateC[i])
+			}(ctx, i, clus.proposeC[i], clus.commitC[i])
 		}
 
-		leader := -1
-		select {
-		case leader = <-voteC:
-		case <-time.After(time.Second):
-		}
+		So(testutil.CompareWait(func() bool {
+			return clus.leader[0]() != 0
+		}, time.Second), ShouldBeTrue)
 
-		So(leader, ShouldBeGreaterThan, -1)
+		leader, ok := clus.peerToIdx[clus.leader[0]()]
+		So(ok, ShouldBeTrue)
 
 		Convey("When leader crash", func(ctx C) {
 			cancels[leader]()
 			clus.close(leader)
 
 			Convey("Then raft should elect", func(ctx C) {
-				leader := -1
-				select {
-				case leader = <-voteC:
-				case <-time.After(time.Second):
-				}
-				So(leader, ShouldBeGreaterThan, -1)
+				So(testutil.CompareWait(func() bool {
+					return clus.leader[(leader+1)%len(clus.peers)]() != 0
+				}, time.Second), ShouldBeTrue)
 
 				for i := range clus.peers {
 					cancels[i]()

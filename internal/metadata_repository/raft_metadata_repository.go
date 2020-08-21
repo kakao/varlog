@@ -77,8 +77,6 @@ type RaftMetadataRepository struct {
 	rnConfChangeC chan raftpb.ConfChange
 	rnProposeC    chan string
 	rnCommitC     chan *raftCommittedEntry
-	rnErrorC      chan error
-	rnStateC      chan raft.StateType
 
 	runner runner.Runner
 	cancel context.CancelFunc
@@ -115,8 +113,6 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 		mr.logger.Named(fmt.Sprintf("%v", config.Index)),
 	)
 	mr.rnCommitC = mr.raftNode.commitC
-	mr.rnErrorC = mr.raftNode.errorC
-	mr.rnStateC = mr.raftNode.stateC
 
 	cbs := ReportCollectorCallbacks{
 		report:        mr.proposeReport,
@@ -138,39 +134,39 @@ func (mr *RaftMetadataRepository) Run() {
 	mr.runner.Run(ctx, mr.runReplication)
 	mr.runner.Run(ctx, mr.processCommit)
 	mr.runner.Run(ctx, mr.processRNCommit)
-	mr.runner.Run(ctx, mr.processRNState)
 	mr.runner.Run(ctx, mr.runCommitTrigger)
 
-	go mr.raftNode.startRaft()
+	go mr.raftNode.start()
 }
 
-//TODO:: fix it
+//TODO:: handle pendding msg
 func (mr *RaftMetadataRepository) Close() error {
 	mr.reportCollector.Close()
 
-	var err error
 	if mr.cancel != nil {
 		mr.cancel()
-		err = <-mr.rnErrorC
-
+		mr.raftNode.stop(true)
 		mr.runner.CloseWait()
-
 		mr.storage.Close()
+
+		close(mr.proposeC)
+		close(mr.rnProposeC)
+		close(mr.rnConfChangeC)
+
+		mr.cancel = nil
 	}
 
 	mr.setFollower()
 
-	//TODO:: handle pendding msg
-
-	return err
+	return nil
 }
 
 func (mr *RaftMetadataRepository) isLeader() bool {
-	return raft.StateLeader == raft.StateType(atomic.LoadUint64((*uint64)(&mr.raftState)))
+	return mr.raftNode.membership.isLeader()
 }
 
 func (mr *RaftMetadataRepository) setFollower() {
-	atomic.StoreUint64((*uint64)(&mr.raftState), uint64(raft.StateFollower))
+	mr.raftNode.membership.setFollower()
 }
 
 func (mr *RaftMetadataRepository) runReplication(ctx context.Context) {
@@ -193,11 +189,6 @@ Loop:
 			break Loop
 		}
 	}
-
-	close(mr.rnProposeC)
-
-	// fix me
-	close(mr.raftNode.stopc)
 }
 
 func (mr *RaftMetadataRepository) runCommitTrigger(ctx context.Context) {
@@ -240,12 +231,6 @@ func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 	}
 
 	close(mr.commitC)
-}
-
-func (mr *RaftMetadataRepository) processRNState(ctx context.Context) {
-	for d := range mr.rnStateC {
-		atomic.StoreUint64((*uint64)(&mr.raftState), uint64(d))
-	}
 }
 
 func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, err error) {

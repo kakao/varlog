@@ -1,6 +1,7 @@
 package metadata_repository
 
 import (
+	"context"
 	"errors"
 	"net"
 	"time"
@@ -13,18 +14,18 @@ import (
 // connections and waits on stopc message
 type stoppableListener struct {
 	*net.TCPListener
-	stopc  <-chan struct{}
+	ctx    context.Context
 	logger *zap.Logger
 }
 
-func newStoppableListener(addr string, stopc <-chan struct{}, logger *zap.Logger) (*stoppableListener, error) {
+func newStoppableListener(ctx context.Context, addr string, logger *zap.Logger) (*stoppableListener, error) {
 	logger.Info("Listen", zap.String("addr", addr))
 	//ln, err := net.Listen("tcp", addr)
 	ln, err := reuseport.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
-	return &stoppableListener{ln.(*net.TCPListener), stopc, logger}, nil
+	return &stoppableListener{ln.(*net.TCPListener), ctx, logger}, nil
 }
 
 func (ln stoppableListener) Accept() (c net.Conn, err error) {
@@ -39,7 +40,7 @@ func (ln stoppableListener) Accept() (c net.Conn, err error) {
 		connc <- tc
 	}()
 	select {
-	case <-ln.stopc:
+	case <-ln.ctx.Done():
 		return nil, errors.New("server stopped")
 	case err := <-errc:
 		return nil, err

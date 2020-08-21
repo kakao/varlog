@@ -8,9 +8,11 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	varlogtypes "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 
 	"go.etcd.io/etcd/etcdserver/api/rafthttp"
 	"go.etcd.io/etcd/etcdserver/api/snap"
@@ -30,12 +32,12 @@ type raftNode struct {
 	proposeC    chan string              // proposed messages from app
 	confChangeC chan raftpb.ConfChange   // proposed cluster config changes
 	commitC     chan *raftCommittedEntry // entries committed to app
-	errorC      chan error               // errors from raft session
-	stateC      chan raft.StateType
 
 	id          varlogtypes.NodeID // node ID for raft
 	bpeers      []string           // raft bootstrap peer URLs
+	url         string             // raft listen url
 	membership  *raftMembership    // raft membership
+	raftTick    time.Duration      // raft tick
 	join        bool               // node is joining an existing cluster
 	waldir      string             // path to WAL directory
 	snapdir     string             // path to snapshot directory
@@ -57,11 +59,14 @@ type raftNode struct {
 
 	snapCount uint64
 	transport *rafthttp.Transport
-	stopc     chan struct{} // signals proposal channel closed
-	httpstopc chan struct{} // signals http server to shutdown
-	httpdonec chan struct{} // signals http server shutdown complete
 
 	logger *zap.Logger
+
+	runner runner.Runner
+	cancel context.CancelFunc
+
+	httprunner runner.Runner
+	httpcancel context.CancelFunc
 }
 
 // committed entry to app
@@ -71,8 +76,10 @@ type raftCommittedEntry struct {
 }
 
 type raftMembership struct {
-	peers map[varlogtypes.NodeID]raftPeer // raft peer map
-	mu    sync.RWMutex
+	state  raft.StateType                  // raft state
+	leader types.ID                        // raft leader
+	peers  map[varlogtypes.NodeID]raftPeer // raft peer map
+	mu     sync.RWMutex
 }
 
 type raftPeer struct {
@@ -81,36 +88,31 @@ type raftPeer struct {
 }
 
 var defaultSnapshotCount uint64 = 10000
+var snapshotCatchUpEntriesN uint64 = 10000
 
 // newRaftNode initiates a raft instance and returns a committed log entry
 // channel and error channel. Proposals for log updates are sent over the
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
-// current), then new log entries. To shutdown, close proposeC and read errorC.
+// current), then new log entries.
 func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, getSnapshot func() ([]byte, uint64), proposeC chan string,
 	confChangeC chan raftpb.ConfChange, logger *zap.Logger) *raftNode {
 
 	commitC := make(chan *raftCommittedEntry)
-	errorC := make(chan error)
-	stateC := make(chan raft.StateType)
 
 	rc := &raftNode{
 		proposeC:    proposeC,
 		confChangeC: confChangeC,
 		commitC:     commitC,
-		errorC:      errorC,
-		stateC:      stateC,
 		id:          id,
 		bpeers:      peers,
 		membership:  newRaftMemebership(),
+		raftTick:    10 * time.Millisecond,
 		join:        join,
 		waldir:      fmt.Sprintf("raft-%d", id),
 		snapdir:     fmt.Sprintf("raft-%d-snap", id),
 		getSnapshot: getSnapshot,
 		snapCount:   defaultSnapshotCount,
-		stopc:       make(chan struct{}),
-		httpstopc:   make(chan struct{}),
-		httpdonec:   make(chan struct{}),
 
 		snapshotterReady: make(chan *snap.Snapshotter, 1),
 		// rest of structure populated after WAL replay
@@ -156,7 +158,7 @@ func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 
 // publishEntries writes committed log entries to commit channel and returns
 // whether all entries could be published.
-func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
+func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) bool {
 	for i := range ents {
 		switch ents[i].Type {
 		case raftpb.EntryNormal:
@@ -170,7 +172,7 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 			}
 			select {
 			case rc.commitC <- e:
-			case <-rc.stopc:
+			case <-ctx.Done():
 				return false
 			}
 
@@ -198,8 +200,9 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 					rc.logger.Info("I've been removed from the cluster! Shutting down.")
 					return false
 				}
-				rc.transport.RemovePeer(types.ID(cc.NodeID))
-				rc.membership.removePeer(varlogtypes.NodeID(cc.NodeID))
+				if rc.membership.removePeer(varlogtypes.NodeID(cc.NodeID)) {
+					rc.transport.RemovePeer(types.ID(cc.NodeID))
+				}
 			}
 		}
 
@@ -210,23 +213,12 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 		if ents[i].Index == rc.lastIndex {
 			select {
 			case rc.commitC <- nil:
-			case <-rc.stopc:
+			case <-ctx.Done():
 				return false
 			}
 		}
 	}
 	return true
-}
-
-func (rc *raftNode) updateState(state *raft.SoftState) {
-	if state == nil {
-		return
-	}
-
-	if rc.raftState != state.RaftState {
-		rc.raftState = state.RaftState
-		rc.stateC <- state.RaftState
-	}
 }
 
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
@@ -293,15 +285,7 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 	return w
 }
 
-func (rc *raftNode) writeError(err error) {
-	rc.stopHTTP()
-	close(rc.commitC)
-	rc.errorC <- err
-	close(rc.errorC)
-	rc.node.Stop()
-}
-
-func (rc *raftNode) startRaft() {
+func (rc *raftNode) start() {
 	if !fileutil.Exist(rc.snapdir) {
 		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
 			rc.logger.Panic("cannot create dir for snapshot", zap.String("err", err.Error()))
@@ -367,10 +351,9 @@ func (rc *raftNode) startRaft() {
 
 	rc.transport.Start()
 
-	var listenURL string
 	for i, peer := range rpeers {
 		if peer.ID == uint64(rc.id) {
-			listenURL = rc.bpeers[i]
+			rc.url = rc.bpeers[i]
 		} else {
 			rc.transport.AddPeer(types.ID(peer.ID), []string{rc.bpeers[i]})
 		}
@@ -378,23 +361,96 @@ func (rc *raftNode) startRaft() {
 		rc.membership.addPeer(varlogtypes.NodeID(peer.ID), rc.bpeers[i])
 	}
 
-	go rc.serveRaft(listenURL)
-	go rc.serveChannels()
+	httpctx, httpcancel := context.WithCancel(context.Background())
+	rc.httpcancel = httpcancel
+	rc.httprunner.Run(httpctx, rc.runRaft)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rc.cancel = cancel
+	rc.runner.Run(ctx, rc.processCommit)
+	rc.runner.Run(ctx, rc.processPropose)
+}
+
+func (rc *raftNode) longestConnected() (types.ID, bool) {
+	var longest types.ID
+	var oldest time.Time
+
+	membs := rc.membership.getActivePeerIDs()
+	for _, id := range membs {
+		if types.ID(rc.id) == id {
+			continue
+		}
+
+		tm := rc.transport.ActiveSince(id)
+		if tm.IsZero() { // inactive
+			continue
+		}
+
+		if oldest.IsZero() { // first longest candidate
+			oldest = tm
+			longest = id
+		}
+
+		if tm.Before(oldest) {
+			oldest = tm
+			longest = id
+		}
+	}
+	if uint64(longest) == 0 {
+		return longest, false
+	}
+	return longest, true
+}
+
+func (rc *raftNode) transferLeadership() error {
+	if !rc.membership.isLeader() {
+		return nil
+	}
+
+	transferee, ok := rc.longestConnected()
+	if !ok {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*rc.raftTick)
+	defer cancel()
+
+	rc.node.TransferLeadership(ctx, uint64(rc.membership.getLeader()), uint64(transferee))
+	for uint64(rc.membership.getLeader()) != uint64(transferee) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(rc.raftTick):
+		}
+	}
+
+	return nil
+}
+
+func (rc *raftNode) stop(transfer bool) {
+	if transfer {
+		// for leader election test without transferring leader
+		if err := rc.transferLeadership(); err != nil {
+			rc.logger.Warn("transfer leader fail", zap.Uint64("ID", uint64(rc.id)))
+		}
+	}
+
+	rc.cancel()
+	rc.runner.CloseWait()
+
+	close(rc.commitC)
 }
 
 // stop closes http, closes all channels, and stops raft.
-func (rc *raftNode) stop() {
+func (rc *raftNode) stopRaft() {
 	rc.stopHTTP()
-	close(rc.commitC)
-	close(rc.errorC)
-	close(rc.stateC)
 	rc.node.Stop()
 }
 
 func (rc *raftNode) stopHTTP() {
+	rc.httpcancel()
 	rc.transport.Stop()
-	close(rc.httpstopc)
-	<-rc.httpdonec
+	rc.httprunner.CloseWait()
 }
 
 func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
@@ -417,8 +473,6 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	rc.snapshotIndex = snapshotToSave.Metadata.Index
 	rc.appliedIndex = snapshotToSave.Metadata.Index
 }
-
-var snapshotCatchUpEntriesN uint64 = 10000
 
 func (rc *raftNode) maybeTriggerSnapshot() {
 	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
@@ -457,7 +511,34 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	rc.snapshotIndex = appliedIndex
 }
 
-func (rc *raftNode) serveChannels() {
+func (rc *raftNode) processPropose(ctx context.Context) {
+	confChangeCount := uint64(0)
+
+Loop:
+	for {
+		select {
+		case prop, ok := <-rc.proposeC:
+			if !ok {
+				break Loop
+			}
+
+			// blocks until accepted by raft state machine
+			rc.node.Propose(context.TODO(), []byte(prop))
+		case cc, ok := <-rc.confChangeC:
+			if !ok {
+				break Loop
+			}
+
+			confChangeCount++
+			cc.ID = confChangeCount
+			rc.node.ProposeConfChange(context.TODO(), cc)
+		case <-ctx.Done():
+			break Loop
+		}
+	}
+}
+
+func (rc *raftNode) processCommit(ctx context.Context) {
 	snap, err := rc.raftStorage.Snapshot()
 	if err != nil {
 		rc.logger.Panic("serve channel", zap.String("err", err.Error()))
@@ -468,36 +549,8 @@ func (rc *raftNode) serveChannels() {
 
 	defer rc.wal.Close()
 
-	ticker := time.NewTicker(10 * time.Millisecond)
+	ticker := time.NewTicker(rc.raftTick)
 	defer ticker.Stop()
-
-	// send proposals over raft
-	go func() {
-		confChangeCount := uint64(0)
-
-		for rc.proposeC != nil && rc.confChangeC != nil {
-			select {
-			case prop, ok := <-rc.proposeC:
-				if !ok {
-					rc.proposeC = nil
-				} else {
-					// blocks until accepted by raft state machine
-					rc.node.Propose(context.TODO(), []byte(prop))
-				}
-
-			case cc, ok := <-rc.confChangeC:
-				if !ok {
-					rc.confChangeC = nil
-				} else {
-					confChangeCount++
-					cc.ID = confChangeCount
-					rc.node.ProposeConfChange(context.TODO(), cc)
-				}
-			}
-		}
-		// client closed channel; shutdown raft if not already
-		// close(rc.stopc)
-	}()
 
 	// event loop on raft state machine updates
 	for {
@@ -507,7 +560,7 @@ func (rc *raftNode) serveChannels() {
 
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-rc.node.Ready():
-			rc.updateState(rd.SoftState)
+			rc.membership.updateState(rd.SoftState)
 			rc.wal.Save(rd.HardState, rd.Entries)
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				rc.saveSnap(rd.Snapshot)
@@ -516,42 +569,38 @@ func (rc *raftNode) serveChannels() {
 			}
 			rc.raftStorage.Append(rd.Entries)
 			rc.transport.Send(rd.Messages)
-			if ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries)); !ok {
-				rc.stop()
-				return
+			if ok := rc.publishEntries(ctx, rc.entriesToApply(rd.CommittedEntries)); ok {
+				rc.maybeTriggerSnapshot()
+				rc.node.Advance()
 			}
-			rc.maybeTriggerSnapshot()
-			rc.node.Advance()
 
 		case err := <-rc.transport.ErrorC:
-			rc.writeError(err)
-			return
+			rc.logger.Panic("transport error", zap.String("err", err.Error()))
 
-		case <-rc.stopc:
-			rc.stop()
+		case <-ctx.Done():
+			rc.stopRaft()
 			return
 		}
 	}
 }
 
-func (rc *raftNode) serveRaft(listenURL string) {
-	url, err := url.Parse(listenURL)
+func (rc *raftNode) runRaft(ctx context.Context) {
+	url, err := url.Parse(rc.url)
 	if err != nil {
 		rc.logger.Panic("Failed parsing URL", zap.String("err", err.Error()))
 	}
 
-	ln, err := newStoppableListener(url.Host, rc.httpstopc, rc.logger.Named("listener"))
+	ln, err := newStoppableListener(ctx, url.Host, rc.logger.Named("listener"))
 	if err != nil {
 		rc.logger.Panic("Failed to listen rafthttp", zap.String("err", err.Error()))
 	}
 
 	err = (&http.Server{Handler: rc.transport.Handler()}).Serve(ln)
 	select {
-	case <-rc.httpstopc:
+	case <-ctx.Done():
 	default:
 		rc.logger.Panic("Failed to serve rafthttp", zap.String("err", err.Error()))
 	}
-	close(rc.httpdonec)
 }
 
 func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
@@ -598,16 +647,17 @@ func (rm *raftMembership) commitPeer(nodeID varlogtypes.NodeID) bool {
 	return true
 }
 
-func (rm *raftMembership) removePeer(nodeID varlogtypes.NodeID) {
+func (rm *raftMembership) removePeer(nodeID varlogtypes.NodeID) bool {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
 	_, ok := rm.peers[nodeID]
 	if !ok {
-		return
+		return false
 	}
 
 	delete(rm.peers, nodeID)
+	return true
 }
 
 func (rm *raftMembership) getActivePeers() []string {
@@ -624,4 +674,48 @@ func (rm *raftMembership) getActivePeers() []string {
 	}
 
 	return r
+}
+
+func (rm *raftMembership) getActivePeerIDs() []types.ID {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	r := make([]types.ID, 0, len(rm.peers))
+	for _, peer := range rm.peers {
+		if !peer.commit {
+			continue
+		}
+
+		r = append(r, types.ID(peer.ID))
+	}
+
+	return r
+}
+
+func (rm *raftMembership) updateState(state *raft.SoftState) {
+	if state == nil {
+		return
+	}
+
+	if state.Lead != raft.None {
+		atomic.StoreUint64((*uint64)(&rm.leader), uint64(state.Lead))
+	}
+
+	atomic.StoreUint64((*uint64)(&rm.state), uint64(state.RaftState))
+}
+
+func (rm *raftMembership) isLeader() bool {
+	return raft.StateLeader == raft.StateType(atomic.LoadUint64((*uint64)(&rm.state)))
+}
+
+func (rm *raftMembership) hasLeader() bool {
+	return rm.getLeader() != raft.None
+}
+
+func (rm *raftMembership) getLeader() uint64 {
+	return atomic.LoadUint64((*uint64)(&rm.leader))
+}
+
+func (rm *raftMembership) setFollower() {
+	atomic.StoreUint64((*uint64)(&rm.state), uint64(raft.StateFollower))
 }
