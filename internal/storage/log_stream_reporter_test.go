@@ -8,40 +8,19 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 )
 
 func TestLogStreamReporterRunClose(t *testing.T) {
 	Convey("LogStreamReporter should be run and closed", t, func() {
-		lsr := NewLogStreamReporter(types.StorageNodeID(0))
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter)
 		So(func() { lsr.Run(context.TODO()) }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
-	})
-}
-
-func TestLogStreamReporterRegisterLogStreamExecutor(t *testing.T) {
-	Convey("LogStreamReporter", t, func() {
-		lsr := NewLogStreamReporter(types.StorageNodeID(0))
-
-		Convey("it should not register nil executor", func() {
-			err := lsr.RegisterLogStreamExecutor(nil)
-			So(err, ShouldNotBeNil)
-		})
-
-		Convey("it should not register already existing LSE", func() {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			var err error
-			lse := NewMockLogStreamExecutor(ctrl)
-			lse.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
-			err = lsr.RegisterLogStreamExecutor(lse)
-			So(err, ShouldBeNil)
-			err = lsr.RegisterLogStreamExecutor(lse)
-			So(err, ShouldResemble, varlog.ErrExist)
-		})
 	})
 }
 
@@ -52,16 +31,17 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		lsr := NewLogStreamReporter(types.StorageNodeID(0)).(*logStreamReporter)
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter).(*logStreamReporter)
 		lsr.Run(context.TODO())
 
-		lseList := []LogStreamExecutor{}
+		var lseList []LogStreamExecutor
 		for i := 1; i <= N; i++ {
 			lse := NewMockLogStreamExecutor(ctrl)
 			lse.EXPECT().LogStreamID().Return(types.LogStreamID(i)).AnyTimes()
-			So(lsr.RegisterLogStreamExecutor(lse), ShouldBeNil)
 			lseList = append(lseList, lse)
 		}
+		setLseGetter(lseGetter, lseList...)
 
 		Reset(func() {
 			lsr.Close()
@@ -199,11 +179,14 @@ func TestLogStreamReporterCommit(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		lsr := NewLogStreamReporter(types.StorageNodeID(0)).(*logStreamReporter)
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter).(*logStreamReporter)
 		lse1 := NewMockLogStreamExecutor(ctrl)
 		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
 		lse2 := NewMockLogStreamExecutor(ctrl)
 		lse2.EXPECT().LogStreamID().Return(types.LogStreamID(2)).AnyTimes()
+
+		setLseGetter(lseGetter, lse1, lse2)
 
 		Convey("it should reject a commit result whose prevNextGLSN is not equal to own knownNextGLSN",
 			func() {
@@ -227,9 +210,6 @@ func TestLogStreamReporterCommit(t *testing.T) {
 		})
 
 		Convey("it should change knownNextGLSN after call LSE.Commit", func() {
-			lsr.RegisterLogStreamExecutor(lse1)
-			lsr.RegisterLogStreamExecutor(lse2)
-
 			lsr.Run(context.TODO())
 			defer lsr.Close()
 

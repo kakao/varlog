@@ -12,16 +12,14 @@ import (
 
 type LogIOService struct {
 	pb.UnimplementedLogIOServer
-
 	storageNodeID types.StorageNodeID
-	lseM          map[types.LogStreamID]LogStreamExecutor
-	m             sync.RWMutex
+	lseGetter     LogStreamExecutorGetter
 }
 
-func NewLogIOService(storageNodeID types.StorageNodeID) *LogIOService {
+func NewLogIOService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter) *LogIOService {
 	return &LogIOService{
 		storageNodeID: storageNodeID,
-		lseM:          make(map[types.LogStreamID]LogStreamExecutor),
+		lseGetter:     lseGetter,
 	}
 }
 
@@ -29,15 +27,8 @@ func (s *LogIOService) Register(server *grpc.Server) {
 	pb.RegisterLogIOServer(server, s)
 }
 
-func (s *LogIOService) getLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
-	s.m.RLock()
-	defer s.m.RUnlock()
-	lse, ok := s.lseM[logStreamID]
-	return lse, ok
-}
-
 func (s *LogIOService) Append(ctx context.Context, req *pb.AppendRequest) (*pb.AppendResponse, error) {
-	lse, ok := s.getLogStreamExecutor(req.GetLogStreamID())
+	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		return nil, varlog.ErrInvalid
 	}
@@ -51,7 +42,7 @@ func (s *LogIOService) Append(ctx context.Context, req *pb.AppendRequest) (*pb.A
 }
 
 func (s *LogIOService) Read(ctx context.Context, req *pb.ReadRequest) (*pb.ReadResponse, error) {
-	lse, ok := s.getLogStreamExecutor(req.GetLogStreamID())
+	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		return nil, varlog.ErrInvalid
 	}
@@ -67,7 +58,7 @@ func (s *LogIOService) Read(ctx context.Context, req *pb.ReadRequest) (*pb.ReadR
 func (s *LogIOService) Subscribe(req *pb.SubscribeRequest, stream pb.LogIO_SubscribeServer) error {
 	// FIXME: wrap error code by using grpc.status package
 	//
-	lse, ok := s.getLogStreamExecutor(req.GetLogStreamID())
+	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		return varlog.ErrInvalid
 	}
@@ -94,14 +85,7 @@ func (s *LogIOService) Subscribe(req *pb.SubscribeRequest, stream pb.LogIO_Subsc
 }
 
 func (s *LogIOService) Trim(ctx context.Context, req *pb.TrimRequest) (*pb.TrimResponse, error) {
-	s.m.RLock()
-	targetLSEs := make([]LogStreamExecutor, len(s.lseM))
-	i := 0
-	for _, lse := range s.lseM {
-		targetLSEs[i] = lse
-		i++
-	}
-	s.m.RUnlock()
+	targetLSEs := s.lseGetter.GetLogStreamExecutors()
 
 	// NOTE: subtle case
 	// If the trim operation will remove very large GLSN that is not stored yet, current LSEs
@@ -119,7 +103,7 @@ func (s *LogIOService) Trim(ctx context.Context, req *pb.TrimRequest) (*pb.TrimR
 	// - Use the context (or its child context) to delete log entries
 	// - All trim operations are asyncrhonous - use tombstone!
 	// - Jus wait!
-	c := make(chan result, len(s.lseM))
+	c := make(chan result, len(targetLSEs))
 	var wg sync.WaitGroup
 	wg.Add(len(targetLSEs))
 	for _, lse := range targetLSEs {

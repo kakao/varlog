@@ -20,11 +20,18 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service := NewLogIOService(types.StorageNodeID(0))
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		service := NewLogIOService(types.StorageNodeID(0), lseGetter)
 		lse := NewMockLogStreamExecutor(ctrl)
-		service.m.Lock()
-		service.lseM[lsid] = lse
-		service.m.Unlock()
+
+		lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
+			func(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
+				if logStreamID == lsid {
+					return lse, true
+				}
+				return nil, false
+			},
+		).AnyTimes()
 
 		Convey("And a LogIOClient tries to append a log entry to a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 			cli, err := varlog.NewLogIOClient(addr)
@@ -98,11 +105,18 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service := NewLogIOService(types.StorageNodeID(0))
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		service := NewLogIOService(types.StorageNodeID(0), lseGetter)
 		lse := NewMockLogStreamExecutor(ctrl)
-		service.m.Lock()
-		service.lseM[lsid] = lse
-		service.m.Unlock()
+
+		lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
+			func(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
+				if logStreamID == lsid {
+					return lse, true
+				}
+				return nil, false
+			},
+		).AnyTimes()
 
 		Convey("And a LogIOClient tries to read a log entry from a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 			cli, err := varlog.NewLogIOClient(addr)
@@ -183,11 +197,18 @@ func TestLogIOClientLogIOServiceSubscirbe(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service := NewLogIOService(types.StorageNodeID(0))
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		service := NewLogIOService(types.StorageNodeID(0), lseGetter)
 		lse := NewMockLogStreamExecutor(ctrl)
-		service.m.Lock()
-		service.lseM[lsid] = lse
-		service.m.Unlock()
+
+		lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
+			func(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
+				if logStreamID == lsid {
+					return lse, true
+				}
+				return nil, false
+			},
+		).AnyTimes()
 
 		Convey("And a LogIOClient tries to subscribe to log entries of a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 			cli, err := varlog.NewLogIOClient(addr)
@@ -235,15 +256,25 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service := NewLogIOService(types.StorageNodeID(0))
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		service := NewLogIOService(types.StorageNodeID(0), lseGetter)
 		lse1 := NewMockLogStreamExecutor(ctrl)
 		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
 		lse2 := NewMockLogStreamExecutor(ctrl)
 		lse2.EXPECT().LogStreamID().Return(types.LogStreamID(2)).AnyTimes()
-		service.m.Lock()
-		service.lseM[lse1.LogStreamID()] = lse1
-		service.lseM[lse2.LogStreamID()] = lse2
-		service.m.Unlock()
+
+		lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
+			func(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
+				if logStreamID == lse1.LogStreamID() {
+					return lse1, true
+				}
+				if logStreamID == lse2.LogStreamID() {
+					return lse2, true
+				}
+				return nil, false
+			},
+		).AnyTimes()
+		lseGetter.EXPECT().GetLogStreamExecutors().Return([]LogStreamExecutor{lse1, lse2}).AnyTimes()
 
 		Convey("And a LogIOClient tries to trim log entries of a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 

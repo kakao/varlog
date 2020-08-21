@@ -5,6 +5,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/pkg/varlog/types"
@@ -23,7 +24,11 @@ func checkConnection(ctx context.Context, addr string, t *testing.T) {
 
 func TestWithServiceServer(t *testing.T) {
 	Convey("Given a service", t, func() {
-		s := storage.NewLogIOService(types.StorageNodeID(1))
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		lseGetter := storage.NewMockLogStreamExecutorGetter(ctrl)
+		s := storage.NewLogIOService(types.StorageNodeID(1), lseGetter)
 		lis, err := net.Listen("tcp", ":0")
 		So(err, ShouldBeNil)
 

@@ -17,6 +17,11 @@ type Management interface {
 	Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
 }
 
+type LogStreamExecutorGetter interface {
+	GetLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool)
+	GetLogStreamExecutors() []LogStreamExecutor
+}
+
 type StorageNode struct {
 	ClusterID     types.ClusterID
 	StorageNodeID types.StorageNodeID
@@ -91,6 +96,23 @@ func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.Stora
 
 func (sn *StorageNode) Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
 	panic("")
+}
+
+func (sn *StorageNode) GetLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
+	sn.lseMtx.RLock()
+	defer sn.lseMtx.RUnlock()
+	lse, ok := sn.lseMap[logStreamID]
+	return lse, ok
+}
+
+func (sn *StorageNode) GetLogStreamExecutors() []LogStreamExecutor {
+	var ret []LogStreamExecutor
+	sn.lseMtx.RLock()
+	for _, lse := range sn.lseMap {
+		ret = append(ret, lse)
+	}
+	sn.lseMtx.RUnlock()
+	return ret
 }
 
 func (sn *StorageNode) verifyClusterID(cid types.ClusterID) bool {
