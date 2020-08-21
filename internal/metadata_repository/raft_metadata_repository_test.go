@@ -1065,16 +1065,38 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 
 		leader := clus.leader()
 
-		Convey("When a node leave", func(ctx C) {
+		Convey("When follower leave", func(ctx C) {
 			leaveNode := (leader + 1) % nrNode
 			checkNode := (leaveNode + 1) % nrNode
-			So(clus.nodes[checkNode].RemovePeer(context.TODO(),
-				types.InvalidNodeID,
-				clus.nodes[leaveNode].index), ShouldBeNil)
 			clus.stop(leaveNode)
 
 			Convey("Then GetMembership should return 2 peers", func(ctx C) {
 				So(testutil.CompareWait(func() bool {
+					clus.nodes[checkNode].RemovePeer(context.TODO(),
+						types.InvalidNodeID,
+						clus.nodes[leaveNode].index)
+
+					_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+					if err != nil {
+						return false
+					}
+
+					return len(membership) == nrNode-1
+				}, 5*time.Second), ShouldBeTrue)
+			})
+		})
+
+		Convey("When leader leave", func(ctx C) {
+			leaveNode := leader
+			checkNode := (leaveNode + 1) % nrNode
+			clus.stop(leaveNode)
+
+			Convey("Then GetMembership should return 2 peers", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+
+					clus.nodes[checkNode].RemovePeer(context.TODO(),
+						types.InvalidNodeID,
+						clus.nodes[leaveNode].index)
 					_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
