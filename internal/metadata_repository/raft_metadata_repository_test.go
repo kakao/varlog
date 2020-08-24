@@ -47,15 +47,16 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoClu
 	}
 
 	for i := range clus.peers {
+		clus.clear(i)
 		clus.createMetadataRepo(i, false)
 	}
 
 	return clus
 }
 
-func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
-	if idx < 0 || idx > len(clus.nodes) {
-		return errors.New("out or range")
+func (clus *metadataRepoCluster) clear(idx int) {
+	if idx < 0 || idx >= len(clus.nodes) {
+		return
 	}
 
 	url, _ := url.Parse(clus.peers[idx])
@@ -63,6 +64,17 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 
 	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
 	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
+
+	return
+}
+
+func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
+	if idx < 0 || idx >= len(clus.nodes) {
+		return errors.New("out of range")
+	}
+
+	url, _ := url.Parse(clus.peers[idx])
+	nodeID := types.NewNodeID(url.Host)
 
 	config := &Config{
 		Index:             nodeID,
@@ -82,12 +94,14 @@ func (clus *metadataRepoCluster) appendMetadataRepo() error {
 	clus.peers = append(clus.peers, fmt.Sprintf("http://127.0.0.1:%d", 10000+idx))
 	clus.nodes = append(clus.nodes, nil)
 
+	clus.clear(idx)
+
 	return clus.createMetadataRepo(idx, true)
 }
 
 func (clus *metadataRepoCluster) start(idx int) error {
-	if idx < 0 || idx > len(clus.nodes) {
-		return errors.New("out or range")
+	if idx < 0 || idx >= len(clus.nodes) {
+		return errors.New("out of range")
 	}
 
 	clus.nodes[idx].Run()
@@ -102,23 +116,30 @@ func (clus *metadataRepoCluster) Start() {
 }
 
 func (clus *metadataRepoCluster) stop(idx int) error {
-	if idx < 0 || idx > len(clus.nodes) {
+	if idx < 0 || idx >= len(clus.nodes) {
 		return errors.New("out or range")
 	}
 
 	return clus.nodes[idx].Close()
 }
 
+func (clus *metadataRepoCluster) restart(idx int) error {
+	if idx < 0 || idx >= len(clus.nodes) {
+		return errors.New("out of range")
+	}
+
+	clus.stop(idx)
+	clus.createMetadataRepo(idx, false)
+	return clus.start(idx)
+}
+
 func (clus *metadataRepoCluster) close(idx int) error {
-	if idx < 0 || idx > len(clus.nodes) {
+	if idx < 0 || idx >= len(clus.nodes) {
 		return errors.New("out or range")
 	}
 
 	err := clus.stop(idx)
-
-	nodeID := clus.nodes[idx].index
-	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
-	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
+	clus.clear(idx)
 
 	return err
 }
@@ -1107,6 +1128,81 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 				_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 				So(err, ShouldBeNil)
 				So(len(membership), ShouldEqual, nrNode-1)
+			})
+		})
+	})
+}
+
+func TestMRFailoverRestart(t *testing.T) {
+	Convey("Given MR cluster with 5 peers", t, func(ctx C) {
+		nrRep := 1
+		nrNode := 5
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		leader := clus.leader()
+
+		Convey("When follower restart and new node joined", func(ctx C) {
+			restartNode := (leader + 1) % nrNode
+			clus.restart(restartNode)
+
+			newNode := nrNode
+			So(clus.appendMetadataRepo(), ShouldBeNil)
+
+			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			So(clus.nodes[leader].AddPeer(rctx,
+				types.InvalidNodeID,
+				clus.nodes[newNode].index,
+				clus.peers[newNode]), ShouldBeNil)
+			So(clus.start(newNode), ShouldBeNil)
+			nrNode += 1
+
+			Convey("Then GetMembership should return 6 peers", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
+					if err != nil {
+						return false
+					}
+					return len(membership) == nrNode
+				}, time.Second), ShouldBeTrue)
+			})
+		})
+
+		Convey("When follower restart and some node leave", func(ctx C) {
+			restartNode := (leader + 1) % nrNode
+			leaveNode := (leader + 2) % nrNode
+
+			clus.stop(restartNode)
+			clus.stop(leaveNode)
+
+			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			So(clus.nodes[leader].RemovePeer(rctx,
+				types.InvalidNodeID,
+				clus.nodes[leaveNode].index), ShouldBeNil)
+
+			nrNode -= 1
+
+			clus.restart(restartNode)
+
+			Convey("Then GetMembership should return 4 peers", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
+					if err != nil {
+						return false
+					}
+					return len(membership) == nrNode
+				}, time.Second), ShouldBeTrue)
 			})
 		})
 	})
