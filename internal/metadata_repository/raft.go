@@ -200,6 +200,7 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 					rc.logger.Info("I've been removed from the cluster! Shutting down.")
 					return false
 				}
+
 				if rc.membership.removePeer(varlogtypes.NodeID(cc.NodeID)) {
 					rc.transport.RemovePeer(types.ID(cc.NodeID))
 				}
@@ -328,15 +329,10 @@ func (rc *raftNode) start() {
 		MaxUncommittedEntriesSize: 1 << 30,
 	}
 
-	if oldwal {
+	if oldwal || rc.join {
 		rc.node = raft.RestartNode(c)
 	} else {
-		startPeers := rpeers
-		if rc.join {
-			rc.node = raft.RestartNode(c)
-		} else {
-			rc.node = raft.StartNode(c, startPeers)
-		}
+		rc.node = raft.StartNode(c, rpeers)
 	}
 
 	rc.transport = &rafthttp.Transport{
