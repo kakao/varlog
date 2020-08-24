@@ -376,9 +376,12 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 		done:        done,
 		replication: true,
 	}
+
+	tctx, cancel := context.WithTimeout(ctx, lse.options.AppendCTimeout)
+	defer cancel()
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-tctx.Done():
+		return tctx.Err()
 	case lse.appendC <- &t:
 	}
 	<-done
@@ -401,22 +404,26 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 		replicas: replicas,
 		done:     done,
 	}
+	tctxAC, cancelAC := context.WithTimeout(ctx, lse.options.AppendCTimeout)
+	defer cancelAC()
 	select {
 	case lse.appendC <- &t:
-	case <-ctx.Done():
-		return types.InvalidGLSN, ctx.Err()
+	case <-tctxAC.Done():
+		return types.InvalidGLSN, tctxAC.Err()
 	}
 
 	var glsn types.GLSN = types.InvalidGLSN
 	var err error = nil
+	tctxCW, cancelCW := context.WithTimeout(ctx, lse.options.CommitWaitTimeout)
+	defer cancelCW()
 	select {
 	case <-done:
 		t.mu.Lock()
 		glsn = t.glsn
 		err = t.err
 		t.mu.Unlock()
-	case <-ctx.Done():
-		err = ctx.Err()
+	case <-tctxCW.Done():
+		err = tctxCW.Err()
 	}
 	t.mu.Lock()
 	if t.written {
@@ -434,13 +441,22 @@ func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 		}
 		t.mu.Lock()
 		t.err = err
+		if t.done != nil {
+			close(t.done)
+			t.done = nil
+		}
 		t.mu.Unlock()
-		close(t.done)
+
 		return
 	}
 	if err := lse.write(t); err != nil {
 		lse.seal()
-		close(t.done)
+		t.mu.Lock()
+		if t.done != nil {
+			close(t.done)
+			t.done = nil
+		}
+		t.mu.Unlock()
 		return
 	}
 	if len(t.replicas) > 0 {
@@ -485,6 +501,7 @@ func (lse *logStreamExecutor) replicateTo(llsn types.LLSN, data []byte) error {
 func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendTask) {
 	errC := lse.replicator.Replicate(ctx, t.llsn, t.data, t.replicas)
 	go func() {
+		// NOTE(jun): does it need timeout?
 		var err error
 		select {
 		case err = <-errC:
@@ -496,9 +513,12 @@ func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendT
 		}
 		t.mu.Lock()
 		t.err = err
+		if t.done != nil {
+			close(t.done)
+			t.done = nil
+		}
 		t.mu.Unlock()
 		lse.seal()
-		close(t.done)
 	}()
 }
 
@@ -514,10 +534,13 @@ func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async b
 		done:  done,
 	}
 
+	tctx, cancel := context.WithTimeout(ctx, lse.options.TrimCTimeout)
+	defer cancel()
+
 	select {
 	case lse.trimC <- task:
-	case <-ctx.Done():
-		return 0, ctx.Err()
+	case <-tctx.Done():
+		return 0, tctx.Err()
 	}
 	if async {
 		return 0, nil
@@ -566,11 +589,19 @@ func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) error {
 		return varlog.ErrInvalid
 	}
 
-	lse.commitC <- commitTask{
+	ct := commitTask{
 		highWatermark:      cr.HighWatermark,
 		prevHighWatermark:  cr.PrevHighWatermark,
 		committedGLSNBegin: cr.CommittedGLSNOffset,
 		committedGLSNEnd:   cr.CommittedGLSNOffset + types.GLSN(cr.CommittedGLSNLength),
+	}
+
+	tctx, cancel := context.WithTimeout(context.Background(), lse.options.CommitCTimeout)
+	defer cancel()
+	select {
+	case lse.commitC <- ct:
+	case <-tctx.Done():
+		return tctx.Err()
 	}
 	return nil
 }
@@ -616,8 +647,11 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		if ok {
 			appendT.mu.Lock()
 			appendT.glsn = glsn
+			if appendT.done != nil {
+				close(appendT.done)
+				appendT.done = nil
+			}
 			appendT.mu.Unlock()
-			close(appendT.done)
 		}
 		glsn++
 	}
@@ -631,8 +665,11 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			appendT.mu.Lock()
 			appendT.glsn = glsn
 			appendT.err = varlog.ErrInternal
+			if appendT.done != nil {
+				close(appendT.done)
+				appendT.done = nil
+			}
 			appendT.mu.Unlock()
-			close(appendT.done)
 		}
 		glsn++
 		llsn++

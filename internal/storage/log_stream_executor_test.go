@@ -56,9 +56,19 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		storage := NewMockStorage(ctrl)
 		replicator := NewMockReplicator(ctrl)
 
-		lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
+		lse, err := NewLogStreamExecutor(types.LogStreamID(0), storage, &LogStreamExecutorOptions{
+			AppendCTimeout:    DefaultLSEAppendCTimeout,
+			CommitWaitTimeout: DefaultLSECommitWaitTimeout,
+			TrimCTimeout:      DefaultLSETrimCTimeout,
+			CommitCTimeout:    DefaultLSECommitCTimeout,
+		})
 		So(err, ShouldBeNil)
+
 		lse.Run(context.TODO())
+
+		Reset(func() {
+			lse.Close()
+		})
 
 		Convey("read operation should reply uncertainness if it doesn't know", func() {
 			_, err := lse.Read(context.TODO(), types.GLSN(0))
@@ -160,10 +170,6 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 				wg.Wait()
 			}
 		})
-
-		Reset(func() {
-			lse.Close()
-		})
 	})
 }
 
@@ -174,7 +180,12 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 		storage := NewMockStorage(ctrl)
 		replicator := NewMockReplicator(ctrl)
-		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
+		lse, err := NewLogStreamExecutor(types.LogStreamID(1), storage, &LogStreamExecutorOptions{
+			AppendCTimeout:    DefaultLSEAppendCTimeout,
+			CommitWaitTimeout: DefaultLSECommitWaitTimeout,
+			TrimCTimeout:      DefaultLSETrimCTimeout,
+			CommitCTimeout:    DefaultLSECommitCTimeout,
+		})
 		So(err, ShouldBeNil)
 
 		lse.(*logStreamExecutor).replicator = replicator
@@ -213,8 +224,10 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 			lse.Close()
 
 			Convey("And the Append is blocked more than configured", func() {
+				lse.(*logStreamExecutor).options.AppendCTimeout = time.Duration(0)
 				Convey("Then the LogStreamExecutor should return timeout error", func() {
-					Convey("This isn't yet implemented", nil)
+					_, err := lse.Append(context.TODO(), nil)
+					So(err, ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 
@@ -237,7 +250,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 						<-stop
 						return nil
 					},
-				)
+				).MaxTimes(1)
 			}
 
 			Reset(func() {
@@ -245,8 +258,12 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 			})
 
 			Convey("And the Append is blocked more than configured", func() {
+				lse.(*logStreamExecutor).options.AppendCTimeout = time.Duration(0)
+				lse.(*logStreamExecutor).options.CommitWaitTimeout = time.Duration(0)
+				block(func() {})
 				Convey("Then the LogStreamExecutor should return timeout error", func() {
-					Convey("This isn't yet implemented", nil)
+					_, err := lse.Append(context.TODO(), nil)
+					So(err, ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 
@@ -284,7 +301,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 				close(stop)
 			})
 
-			Convey("And the Append is blocked more than configured", func() {
+			Convey("And it is blocked more than configured", func() {
 				Convey("Then the LogStreamExecutor should return timeout error", func() {
 					Convey("This isn't yet implemented", nil)
 				})
@@ -332,7 +349,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 						<-stop
 						return nil
 					},
-				)
+				).MaxTimes(1)
 			}
 
 			Reset(func() {
@@ -340,8 +357,12 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 			})
 
 			Convey("And the Append is blocked more than configured", func() {
+				lse.(*logStreamExecutor).options.CommitCTimeout = time.Duration(0)
+				lse.(*logStreamExecutor).options.CommitWaitTimeout = time.Duration(0)
+				block(func() {})
 				Convey("Then the LogStreamExecutor should return timeout error", func() {
-					Convey("This isn't yet implemented", nil)
+					_, err := lse.Append(context.TODO(), nil, Replica{})
+					So(err, ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 
@@ -404,12 +425,6 @@ func TestLogStreamExecutorRead(t *testing.T) {
 				time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 				cancel()
 				<-wait
-			})
-		})
-
-		Convey("When the operation is blocked more than configured", func() {
-			Convey("Then the LogStreamExecutor should return timeout error", func() {
-				Convey("This isn't yet implemented", nil)
 			})
 		})
 	})
