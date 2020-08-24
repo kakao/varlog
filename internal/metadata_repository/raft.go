@@ -624,6 +624,10 @@ func (rm *raftMembership) addPeer(nodeID varlogtypes.NodeID, url string) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
+	if _, ok := rm.peers[nodeID]; ok {
+		return
+	}
+
 	rm.peers[nodeID] = raftPeer{
 		Peer: raft.Peer{
 			ID:      uint64(nodeID),
@@ -641,8 +645,10 @@ func (rm *raftMembership) commitPeer(nodeID varlogtypes.NodeID) bool {
 		return false
 	}
 
-	peer.commit = true
-	rm.peers[nodeID] = peer
+	if !peer.commit {
+		peer.commit = true
+		rm.peers[nodeID] = peer
+	}
 
 	return true
 }
@@ -658,6 +664,18 @@ func (rm *raftMembership) removePeer(nodeID varlogtypes.NodeID) bool {
 
 	delete(rm.peers, nodeID)
 	return true
+}
+
+func (rm *raftMembership) existPeer(nodeID varlogtypes.NodeID) bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	peer, ok := rm.peers[nodeID]
+	if !ok {
+		return false
+	}
+
+	return peer.commit
 }
 
 func (rm *raftMembership) getActivePeers() []string {

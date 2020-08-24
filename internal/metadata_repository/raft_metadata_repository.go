@@ -680,7 +680,19 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.C
 		Context: []byte(url),
 	}
 
-	return mr.proposeConfChange(ctx, r)
+	for !mr.raftNode.membership.existPeer(nodeID) {
+		if err := mr.proposeConfChange(ctx, r); err != nil {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(mr.raftNode.raftTick):
+		}
+	}
+
+	return nil
 }
 
 func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
@@ -689,7 +701,19 @@ func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID type
 		NodeID: uint64(nodeID),
 	}
 
-	return mr.proposeConfChange(ctx, r)
+	for mr.raftNode.membership.existPeer(nodeID) {
+		if err := mr.proposeConfChange(ctx, r); err != nil {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(mr.raftNode.raftTick):
+		}
+	}
+
+	return nil
 }
 
 func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (types.NodeID, []string, error) {

@@ -990,7 +990,11 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 		Convey("When new node join", func(ctx C) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
-			So(clus.nodes[0].AddPeer(context.TODO(),
+
+			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			So(clus.nodes[0].AddPeer(rctx,
 				types.InvalidNodeID,
 				clus.nodes[newNode].index,
 				clus.peers[newNode]), ShouldBeNil)
@@ -1028,7 +1032,10 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 
-			So(clus.nodes[0].AddPeer(context.TODO(),
+			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			So(clus.nodes[0].AddPeer(rctx,
 				types.InvalidNodeID,
 				clus.nodes[newNode].index,
 				clus.peers[newNode]), ShouldBeNil)
@@ -1070,19 +1077,17 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			checkNode := (leaveNode + 1) % nrNode
 			clus.stop(leaveNode)
 
+			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			So(clus.nodes[checkNode].RemovePeer(rctx,
+				types.InvalidNodeID,
+				clus.nodes[leaveNode].index), ShouldBeNil)
+
 			Convey("Then GetMembership should return 2 peers", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
-					clus.nodes[checkNode].RemovePeer(context.TODO(),
-						types.InvalidNodeID,
-						clus.nodes[leaveNode].index)
-
-					_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
-					if err != nil {
-						return false
-					}
-
-					return len(membership) == nrNode-1
-				}, 5*time.Second), ShouldBeTrue)
+				_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+				So(err, ShouldBeNil)
+				So(len(membership), ShouldEqual, nrNode-1)
 			})
 		})
 
@@ -1091,19 +1096,17 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			checkNode := (leaveNode + 1) % nrNode
 			clus.stop(leaveNode)
 
+			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			So(clus.nodes[checkNode].RemovePeer(rctx,
+				types.InvalidNodeID,
+				clus.nodes[leaveNode].index), ShouldBeNil)
+
 			Convey("Then GetMembership should return 2 peers", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
-
-					clus.nodes[checkNode].RemovePeer(context.TODO(),
-						types.InvalidNodeID,
-						clus.nodes[leaveNode].index)
-					_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
-					if err != nil {
-						return false
-					}
-
-					return len(membership) == nrNode-1
-				}, 5*time.Second), ShouldBeTrue)
+				_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+				So(err, ShouldBeNil)
+				So(len(membership), ShouldEqual, nrNode-1)
 			})
 		})
 	})
