@@ -4,19 +4,21 @@ import (
 	"time"
 
 	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/timeutil"
 )
 
-var (
+const (
 	DefaultRPCBindAddress = "0.0.0.0:9091"
 
-	DefaultLSEAppendCSize    = uint32(0)
-	DefaultLSEAppendCTimeout = time.Duration(0)
+	DefaultLSEAppendCSize       = uint32(0)
+	DefaultLSEAppendCTimeout    = timeutil.MaxDuration
+	DefaultLSECommitWaitTimeout = timeutil.MaxDuration
 
 	DefaultLSECommitCSize    = uint32(0)
-	DefaultLSECommitCTimeout = time.Duration(0)
+	DefaultLSECommitCTimeout = timeutil.MaxDuration
 
 	DefaultLSETrimCSize    = uint32(0)
-	DefaultLSETrimCTimeout = time.Duration(0)
+	DefaultLSETrimCTimeout = timeutil.MaxDuration
 )
 
 type StorageNodeOptions struct {
@@ -32,8 +34,9 @@ type RPCOptions struct {
 }
 
 type LogStreamExecutorOptions struct {
-	AppendCSize    uint32
-	AppendCTimeout time.Duration
+	AppendCSize       uint32
+	AppendCTimeout    time.Duration
+	CommitWaitTimeout time.Duration
 
 	TrimCSize    uint32
 	TrimCTimeout time.Duration

@@ -105,7 +105,7 @@ func (lsr *logStreamReporter) dispatchCommit(ctx context.Context) {
 	for {
 		select {
 		case t := <-lsr.commitC:
-			lsr.commit(t)
+			lsr.commit(ctx, t)
 		case <-ctx.Done():
 			return
 		}
@@ -174,7 +174,7 @@ func (lsr *logStreamReporter) Commit(highWatermark, prevHighWatermark types.GLSN
 	}
 }
 
-func (lsr *logStreamReporter) commit(t lsrCommitTask) {
+func (lsr *logStreamReporter) commit(ctx context.Context, t lsrCommitTask) {
 	if !lsr.verifyCommit(t.prevHighWatermark) {
 		return
 	}
@@ -186,6 +186,7 @@ func (lsr *logStreamReporter) commit(t lsrCommitTask) {
 		}
 		// TODO: check returned value, and log it
 		// TODO: run goroutine
+		// TODO: use context
 		executor.Commit(commitResult)
 	}
 	lsr.knownHighWatermark.Store(t.highWatermark)
