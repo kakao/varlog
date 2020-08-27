@@ -28,6 +28,8 @@ type metadataRepoCluster struct {
 	logger            *zap.Logger
 }
 
+var testSnapCount uint64
+
 func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoCluster {
 	peers := make([]string, n)
 	nodes := make([]*RaftMetadataRepository, n)
@@ -79,6 +81,7 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 	config := &Config{
 		Index:             nodeID,
 		Join:              join,
+		SnapCount:         testSnapCount,
 		NumRep:            clus.nrRep,
 		PeerList:          clus.peers,
 		ReporterClientFac: clus.reporterClientFac,
@@ -160,6 +163,7 @@ func (clus *metadataRepoCluster) leader() int {
 	for i, n := range clus.nodes {
 		if n.isLeader() {
 			leader = i
+			break
 		}
 	}
 
@@ -167,7 +171,15 @@ func (clus *metadataRepoCluster) leader() int {
 }
 
 func (clus *metadataRepoCluster) leaderElected() bool {
-	return clus.leader() >= 0
+	//return clus.leader() >= 0
+
+	for _, n := range clus.nodes {
+		if !n.hasLeader() {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (clus *metadataRepoCluster) leaderFail() bool {
@@ -1092,6 +1104,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 		}, time.Second), ShouldBeTrue)
 
 		leader := clus.leader()
+		So(leader, ShouldBeGreaterThan, -1)
 
 		Convey("When follower leave", func(ctx C) {
 			leaveNode := (leader + 1) % nrNode
@@ -1148,6 +1161,7 @@ func TestMRFailoverRestart(t *testing.T) {
 		}, time.Second), ShouldBeTrue)
 
 		leader := clus.leader()
+		So(leader, ShouldBeGreaterThan, -1)
 
 		Convey("When follower restart and new node joined", func(ctx C) {
 			restartNode := (leader + 1) % nrNode
@@ -1198,6 +1212,130 @@ func TestMRFailoverRestart(t *testing.T) {
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
 				So(testutil.CompareWait(func() bool {
 					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
+					if err != nil {
+						return false
+					}
+					return len(membership) == nrNode
+				}, time.Second), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestMRLoadSnapshop(t *testing.T) {
+	Convey("Given MR cluster which have snapshot", t, func(ctx C) {
+		testSnapCount = 10
+		defer func() { testSnapCount = 0 }()
+		nrRep := 1
+		nrNode := 3
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
+		clus.Start()
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		leader := clus.leader()
+		So(leader, ShouldBeGreaterThan, -1)
+		restartNode := (leader + 1) % nrNode
+
+		snIDs := make([]types.StorageNodeID, nrRep)
+		for i := range snIDs {
+			snIDs[i] = types.StorageNodeID(i)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := clus.nodes[leader].RegisterStorageNode(context.TODO(), sn)
+			So(err, ShouldBeNil)
+		}
+
+		So(testutil.CompareWait(func() bool {
+			snap := clus.nodes[restartNode].raftNode.loadSnapshot()
+			return snap != nil
+		}, time.Second), ShouldBeTrue)
+
+		Convey("When follower restart", func(ctx C) {
+			clus.restart(restartNode)
+			So(testutil.CompareWait(func() bool {
+				_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
+				if err != nil {
+					return false
+				}
+				return len(membership) == nrNode
+			}, time.Second), ShouldBeTrue)
+
+			Convey("Then GetMembership should recover metadata", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					meta, err := clus.nodes[restartNode].GetMetadata(context.TODO())
+					if err != nil {
+						return false
+					}
+
+					return meta.GetStorageNode(snIDs[0]) != nil
+				}, time.Second), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestMRRemoteSnapshop(t *testing.T) {
+	Convey("Given MR cluster which have snapshot", t, func(ctx C) {
+		testSnapCount = 10
+		defer func() { testSnapCount = 0 }()
+		nrRep := 1
+		nrNode := 3
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
+		clus.Start()
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		leader := clus.leader()
+		So(leader, ShouldBeGreaterThan, -1)
+
+		snIDs := make([]types.StorageNodeID, nrRep)
+		for i := range snIDs {
+			snIDs[i] = types.StorageNodeID(i)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := clus.nodes[leader].RegisterStorageNode(context.TODO(), sn)
+			So(err, ShouldBeNil)
+		}
+
+		So(testutil.CompareWait(func() bool {
+			snap := clus.nodes[leader].raftNode.loadSnapshot()
+			return snap != nil
+		}, time.Second), ShouldBeTrue)
+
+		Convey("When new node join", func(ctx C) {
+			newNode := nrNode
+			So(clus.appendMetadataRepo(), ShouldBeNil)
+
+			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			So(clus.nodes[leader].AddPeer(rctx,
+				types.InvalidNodeID,
+				clus.nodes[newNode].index,
+				clus.peers[newNode]), ShouldBeNil)
+			So(clus.start(newNode), ShouldBeNil)
+			nrNode += 1
+
+			Convey("Then GetMembership should recover metadata", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					_, membership, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}

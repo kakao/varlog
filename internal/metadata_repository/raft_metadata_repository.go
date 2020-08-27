@@ -27,6 +27,7 @@ type Config struct {
 	Index             types.NodeID
 	Join              bool
 	NumRep            int
+	SnapCount         uint64
 	PeerList          []string
 	ReporterClientFac ReporterClientFactory
 	Logger            *zap.Logger
@@ -51,6 +52,10 @@ func (config *Config) validate() error {
 
 	if config.Logger == nil {
 		return errors.New("logger should not be nil")
+	}
+
+	if config.SnapCount == 0 {
+		config.SnapCount = defaultSnapshotCount
 	}
 
 	return nil
@@ -94,7 +99,7 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 		reporterClientFac: config.ReporterClientFac,
 	}
 
-	mr.storage = NewMetadataStorage(mr.sendAck)
+	mr.storage = NewMetadataStorage(mr.sendAck, config.SnapCount)
 
 	mr.proposeC = make(chan *pb.RaftEntry, 4096)
 	mr.commitC = make(chan *pb.RaftEntry, 4096)
@@ -106,6 +111,7 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 		config.PeerList,
 		//false, // not to join an existing cluster
 		config.Join,
+		config.SnapCount,
 		mr.storage.GetSnapshot,
 		mr.rnProposeC,
 		mr.rnConfChangeC,
@@ -136,7 +142,7 @@ func (mr *RaftMetadataRepository) Run() {
 	mr.runner.Run(ctx, mr.processRNCommit)
 	mr.runner.Run(ctx, mr.runCommitTrigger)
 
-	go mr.raftNode.start()
+	mr.raftNode.start()
 }
 
 //TODO:: handle pendding msg
@@ -162,7 +168,11 @@ func (mr *RaftMetadataRepository) Close() error {
 }
 
 func (mr *RaftMetadataRepository) isLeader() bool {
-	return mr.raftNode.membership.isLeader()
+	return mr.raftNode.membership.getLeader() == uint64(mr.index)
+}
+
+func (mr *RaftMetadataRepository) hasLeader() bool {
+	return mr.raftNode.membership.hasLeader()
 }
 
 func (mr *RaftMetadataRepository) setFollower() {
@@ -208,24 +218,66 @@ Loop:
 
 func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
 	for e := range mr.commitC {
+		if e == nil {
+			snap := mr.raftNode.loadSnapshot()
+			if snap != nil {
+				err := mr.storage.LoadSnapshot(snap.Data, snap.Metadata.Index)
+				if err != nil {
+					mr.logger.Panic("load snapshot fail")
+				}
+			}
+			//TODO:: recover reportCollector
+
+			continue
+		}
+
 		mr.apply(e)
 	}
 }
 
 func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 	for d := range mr.rnCommitC {
-		if d == nil {
-			// TODO: handle snapshots
-			continue
-		}
+		var e *pb.RaftEntry
 
-		e := &pb.RaftEntry{}
-		err := e.Unmarshal([]byte(d.data))
-		if err != nil {
-			mr.logger.Error(err.Error())
-			continue
+		if d != nil {
+			e = &pb.RaftEntry{}
+			switch d.entryType {
+			case raftpb.EntryNormal:
+				err := e.Unmarshal(d.data)
+				if err != nil {
+					mr.logger.Error(err.Error())
+					continue
+				}
+			case raftpb.EntryConfChange:
+				var cc raftpb.ConfChange
+				err := cc.Unmarshal(d.data)
+				if err != nil {
+					mr.logger.Error(err.Error())
+					continue
+				}
+
+				switch cc.Type {
+				case raftpb.ConfChangeAddNode:
+					p := &pb.AddPeer{
+						NodeID: types.NodeID(cc.NodeID),
+						Url:    string(cc.Context),
+					}
+
+					e.Request.SetValue(p)
+				case raftpb.ConfChangeRemoveNode:
+					p := &pb.RemovePeer{
+						NodeID: types.NodeID(cc.NodeID),
+					}
+
+					e.Request.SetValue(p)
+				default:
+					mr.logger.Panic("unknown type")
+				}
+			default:
+				mr.logger.Panic("unknown type")
+			}
+			e.AppliedIndex = d.index
 		}
-		e.AppliedIndex = d.index
 
 		mr.commitC <- e
 	}
@@ -271,6 +323,10 @@ func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
 		mr.applySeal(r, e.NodeIndex, e.RequestIndex)
 	case *pb.Unseal:
 		mr.applyUnseal(r, e.NodeIndex, e.RequestIndex)
+	case *pb.AddPeer:
+		mr.applyAddPeer(r)
+	case *pb.RemovePeer:
+		mr.applyRemovePeer(r)
 	}
 
 	mr.storage.UpdateAppliedIndex(e.AppliedIndex)
@@ -400,8 +456,6 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 	}
 	gls.HighWatermark = curHWM + types.GLSN(nrCommitted)
 
-	//fmt.Printf("commit %+v\n", gls)
-
 	if nrCommitted > 0 {
 		mr.storage.AppendGlobalLogStream(gls)
 
@@ -431,6 +485,24 @@ func (mr *RaftMetadataRepository) applySeal(r *pb.Seal, nodeIndex, requestIndex 
 
 func (mr *RaftMetadataRepository) applyUnseal(r *pb.Unseal, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.UnsealLogStream(r.LogStreamID, nodeIndex, requestIndex)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applyAddPeer(r *pb.AddPeer) error {
+	err := mr.storage.AddPeer(r.NodeID, r.Url)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applyRemovePeer(r *pb.RemovePeer) error {
+	err := mr.storage.RemovePeer(r.NodeID)
 	if err != nil {
 		return err
 	}
@@ -674,13 +746,17 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 }
 
 func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {
+	if mr.raftNode.membership.isMember(nodeID) {
+		return varlog.ErrAlreadyExists
+	}
+
 	r := raftpb.ConfChange{
 		Type:    raftpb.ConfChangeAddNode,
 		NodeID:  uint64(nodeID),
 		Context: []byte(url),
 	}
 
-	for !mr.raftNode.membership.existPeer(nodeID) {
+	for !mr.raftNode.membership.isMember(nodeID) {
 		if err := mr.proposeConfChange(ctx, r); err != nil {
 			return err
 		}
@@ -696,12 +772,16 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.C
 }
 
 func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
+	if !mr.raftNode.membership.isMember(nodeID) {
+		return varlog.ErrNotExist
+	}
+
 	r := raftpb.ConfChange{
 		Type:   raftpb.ConfChangeRemoveNode,
 		NodeID: uint64(nodeID),
 	}
 
-	for mr.raftNode.membership.existPeer(nodeID) {
+	for mr.raftNode.membership.isMember(nodeID) {
 		if err := mr.proposeConfChange(ctx, r); err != nil {
 			return err
 		}
