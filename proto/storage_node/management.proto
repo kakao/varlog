@@ -154,12 +154,20 @@ message SyncResponse {
     SyncStatus status = 1;
 }
 
+// Management defines the public APIs for managing StorageNode.
 service Management {
+    // GetMetadata returns metadata of StorageNode.
     rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
+    // AddLogStream adds a new LogStream to StorageNode.
     rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
+    // RemoveLogStream removes a LogStream from StorageNode.
     rpc RemoveLogStream(RemoveLogStreamRequest)
         returns (google.protobuf.Empty) {}
+    // Seal changes the status of LogStreamExecutor to LogStreamStatusSealing or
+    // LogStreamStatusSealed.
     rpc Seal(SealRequest) returns (SealResponse) {}
+    // Unseal changes the status of LogStreamExecutor to LogStreamStatusRunning.
     rpc Unseal(UnsealRequest) returns (google.protobuf.Empty) {}
+    // Sync starts mirroring between two StorageNodes.
     rpc Sync(SyncRequest) returns (SyncResponse) {}
 }

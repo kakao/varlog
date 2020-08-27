@@ -16,6 +16,7 @@ type managementService struct {
 	m Management
 }
 
+// GetMetadata implements the ManagementServer GetMetadata method.
 func (s *managementService) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
 	metadata, err := s.m.GetMetadata(req.GetClusterID(), req.GetMetadataType())
 	if err != nil {
@@ -24,6 +25,7 @@ func (s *managementService) GetMetadata(ctx context.Context, req *pb.GetMetadata
 	return &pb.GetMetadataResponse{StorageNodeMetadata: metadata}, nil
 }
 
+// AddLogStream implements the ManagementServer AddLogStream method.
 func (s *managementService) AddLogStream(ctx context.Context, req *pb.AddLogStreamRequest) (*pb.AddLogStreamResponse, error) {
 	if !verifyIDs(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID()) {
 		return nil, varlog.ErrInvalidArgument
@@ -44,6 +46,7 @@ func (s *managementService) AddLogStream(ctx context.Context, req *pb.AddLogStre
 	}, nil
 }
 
+// RemoveLogStream implements the ManagementServer RemoveLogStream method.
 func (s *managementService) RemoveLogStream(ctx context.Context, req *pb.RemoveLogStreamRequest) (*pbtypes.Empty, error) {
 	if !verifyIDs(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID()) {
 		return nil, varlog.ErrInvalidArgument
@@ -55,6 +58,7 @@ func (s *managementService) RemoveLogStream(ctx context.Context, req *pb.RemoveL
 	return &pbtypes.Empty{}, nil
 }
 
+// Seal implements the ManagementServer Seal method.
 func (s *managementService) Seal(ctx context.Context, req *pb.SealRequest) (*pb.SealResponse, error) {
 	if !verifyIDs(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID()) {
 		return nil, varlog.ErrInvalidArgument
@@ -69,6 +73,7 @@ func (s *managementService) Seal(ctx context.Context, req *pb.SealRequest) (*pb.
 	}, nil
 }
 
+// Unseal implements the ManagementServer Unseal method.
 func (s *managementService) Unseal(ctx context.Context, req *pb.UnsealRequest) (*pbtypes.Empty, error) {
 	if !verifyIDs(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID()) {
 		return nil, varlog.ErrInvalidArgument
@@ -80,6 +85,7 @@ func (s *managementService) Unseal(ctx context.Context, req *pb.UnsealRequest) (
 	return &pbtypes.Empty{}, nil
 }
 
+// Sync implements the ManagementServer Sync method.
 func (s *managementService) Sync(context.Context, *pb.SyncRequest) (*pb.SyncResponse, error) {
 	panic("not yet implemented")
 }

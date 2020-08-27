@@ -9,11 +9,24 @@ import (
 	vpb "github.com/kakao/varlog/proto/varlog"
 )
 
+// Management is the interface that wraps methods for managing StorageNode.
 type Management interface {
+	// GetMetadata returns metadata of StorageNode. The metadata contains
+	// configurations and statistics for StorageNode.
 	GetMetadata(clusterID types.ClusterID, metadataType pb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error)
+
+	// AddLogStream adds a new LogStream to StorageNode.
 	AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) (string, error)
+
+	// RemoveLogStream removes a LogStream from StorageNode.
 	RemoveLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+
+	// Seal changes status of LogStreamExecutor corresponding to the
+	// LogStreamID to LogStreamStatusSealing or LogStreamStatusSealed.
 	Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error)
+
+	// Unseal changes status of LogStreamExecutor corresponding to the
+	// LogStreamID to LogStreamStatusRunning.
 	Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
 }
 
@@ -42,6 +55,7 @@ func (sn *StorageNode) Close() error {
 	panic("not yet implemented")
 }
 
+// GetMeGetMetadata implements the Management GetMetadata method.
 func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType pb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
 	if !sn.verifyClusterID(cid) {
 		return nil, varlog.ErrInvalidArgument
@@ -55,6 +69,7 @@ func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType pb.Metadata
 	return ret, nil
 }
 
+// AddLogStream implements the Management AddLogStream method.
 func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, path string) (string, error) {
 	if !sn.verifyClusterID(cid) || !sn.verifyStorageNodeID(snid) {
 		return "", varlog.ErrInvalidArgument
@@ -77,6 +92,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 	return stgPath, nil
 }
 
+// RemoveLogStream implements the Management RemoveLogStream method.
 func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID) error {
 	if !sn.verifyClusterID(cid) || !sn.verifyStorageNodeID(snid) {
 		return varlog.ErrInvalidArgument
@@ -91,10 +107,12 @@ func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNo
 	return nil
 }
 
+// Seal implements the Management Seal method.
 func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error) {
 	panic("")
 }
 
+// Unseal implements the Management Unseal method.
 func (sn *StorageNode) Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
 	panic("")
 }
