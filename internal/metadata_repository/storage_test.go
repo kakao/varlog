@@ -1,6 +1,7 @@
 package metadata_repository
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"sync/atomic"
@@ -19,7 +20,7 @@ import (
 
 func TestStorageRegisterSN(t *testing.T) {
 	Convey("SN should be registered", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: snID,
@@ -37,7 +38,7 @@ func TestStorageRegisterSN(t *testing.T) {
 
 func TestStoragUnregisterSN(t *testing.T) {
 	Convey("Given a MetadataStorage", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 		snID := types.StorageNodeID(time.Now().UnixNano())
 
 		Convey("When SN is not exist", func(ctx C) {
@@ -96,7 +97,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 
 func TestStorageRegisterLS(t *testing.T) {
 	Convey("LS which has no SN should not be registerd", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		ls := makeLogStream(lsID, nil)
@@ -106,7 +107,7 @@ func TestStorageRegisterLS(t *testing.T) {
 	})
 
 	Convey("LS should not be registerd if not exist proper SN", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		rep := 2
 		lsID := types.LogStreamID(time.Now().UnixNano())
@@ -152,7 +153,7 @@ func TestStorageRegisterLS(t *testing.T) {
 
 func TestStoragUnregisterLS(t *testing.T) {
 	Convey("LS which is not exist should not be unregistered", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 
@@ -204,7 +205,7 @@ func TestStoragUnregisterLS(t *testing.T) {
 
 func TestStorageUpdateLS(t *testing.T) {
 	Convey("LS should not be updated if not exist proper SN", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 		ms.Run()
 
 		Reset(func() {
@@ -282,7 +283,7 @@ func TestStorageUpdateLS(t *testing.T) {
 
 func TestStorageUpdateLSUnderCOW(t *testing.T) {
 	Convey("update LS to COW storage should applyed after merge", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		rep := 2
 
@@ -352,7 +353,7 @@ func TestStorageUpdateLSUnderCOW(t *testing.T) {
 
 func TestStorageSealLS(t *testing.T) {
 	Convey("LS should not be sealed if not exist", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		err := ms.SealLogStream(lsID, 0, 0)
@@ -360,7 +361,7 @@ func TestStorageSealLS(t *testing.T) {
 	})
 
 	Convey("For resigtered LS", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 		ms.Run()
 
 		Reset(func() {
@@ -453,7 +454,7 @@ func TestStorageSealLS(t *testing.T) {
 
 func TestStorageSealLSUnderCOW(t *testing.T) {
 	Convey("seal LS to COW storage should applyed after merge", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		rep := 2
 
@@ -511,7 +512,7 @@ func TestStorageSealLSUnderCOW(t *testing.T) {
 
 func TestStorageUnsealLS(t *testing.T) {
 	Convey("Storage should return ErrNotExsit if Unseal to not exist LS", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		err := ms.UnsealLogStream(lsID, 0, 0)
@@ -519,7 +520,7 @@ func TestStorageUnsealLS(t *testing.T) {
 	})
 
 	Convey("For resigtered LS", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 		ms.Run()
 
 		Reset(func() {
@@ -594,7 +595,7 @@ func TestStorageUnsealLS(t *testing.T) {
 
 func TestStorageTrim(t *testing.T) {
 	Convey("Given a GlobalLogStreams", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		for hwm := types.MinGLSN; hwm < types.GLSN(1024); hwm++ {
 			gls := &snpb.GlobalLogStreamDescriptor{
@@ -629,7 +630,7 @@ func TestStorageTrim(t *testing.T) {
 
 func TestStorageReport(t *testing.T) {
 	Convey("storage should not apply report if not registered LS", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		rep := 2
 		lsID := types.LogStreamID(time.Now().UnixNano())
@@ -688,7 +689,7 @@ func TestStorageReport(t *testing.T) {
 
 func TestStorageCopyOnWrite(t *testing.T) {
 	Convey("storage should returns different stateMachine while copyOnWrite", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		pre, cur := ms.getStateMachine()
 		So(pre == cur, ShouldBeTrue)
@@ -700,7 +701,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 	})
 
 	Convey("update matadata should make storage copyOnWrite", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -713,7 +714,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 	})
 
 	Convey("copyOnWrite storage should give the same response for registerStorageNode", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -744,7 +745,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 	})
 
 	Convey("copyOnWrite storage should give the same response for createLogStream", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		rep := 2
 		lsID := types.LogStreamID(time.Now().UnixNano())
@@ -782,7 +783,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 	})
 
 	Convey("update LocalLogStream does not make storage copyOnWrite", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		rep := 2
 		lsID := types.LogStreamID(time.Now().UnixNano())
@@ -828,7 +829,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 	})
 
 	Convey("update GlobalLogStream does not make storage copyOnWrite", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		gls := &snpb.GlobalLogStreamDescriptor{
 			PrevHighWatermark: types.GLSN(5),
@@ -878,7 +879,7 @@ func TestStorageMetadataCache(t *testing.T) {
 			ch <- struct{}{}
 		}
 
-		ms := NewMetadataStorage(cb)
+		ms := NewMetadataStorage(cb, defaultSnapshotCount)
 		ms.Run()
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -916,7 +917,7 @@ func TestStorageMetadataCache(t *testing.T) {
 			ch <- struct{}{}
 		}
 
-		ms := NewMetadataStorage(cb)
+		ms := NewMetadataStorage(cb, defaultSnapshotCount)
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -964,7 +965,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			ch <- struct{}{}
 		}
 
-		ms := NewMetadataStorage(cb)
+		ms := NewMetadataStorage(cb, defaultSnapshotCount)
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -1015,7 +1016,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 	})
 
 	Convey("merge performance:: # of LocalLogStreams:1024. RepFactor:3:: ", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 
 		for i := 0; i < 1024; i++ {
 			lsID := types.LogStreamID(i)
@@ -1066,7 +1067,7 @@ func TestStorageSnapshot(t *testing.T) {
 			ch <- struct{}{}
 		}
 
-		ms := NewMetadataStorage(cb)
+		ms := NewMetadataStorage(cb, defaultSnapshotCount)
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -1083,6 +1084,9 @@ func TestStorageSnapshot(t *testing.T) {
 		ms.triggerSnapshot(appliedIndex)
 
 		ms.Run()
+		Reset(func() {
+			ms.Close()
+		})
 
 		<-ch
 
@@ -1128,16 +1132,80 @@ func TestStorageSnapshot(t *testing.T) {
 			So(u.Metadata.GetStorageNode(snID), ShouldNotBeNil)
 			So(u.Metadata.GetStorageNode(snID2), ShouldBeNil)
 		})
+	})
+}
 
+func TestStorageLoadSnapshot(t *testing.T) {
+	Convey("Given MetadataStorage Snapshop", t, func(ctx C) {
+		ch := make(chan struct{}, 1)
+		cb := func(uint64, uint64, error) {
+			ch <- struct{}{}
+		}
+
+		ms := NewMetadataStorage(cb, defaultSnapshotCount)
+		ms.Run()
 		Reset(func() {
 			ms.Close()
+		})
+
+		appliedIndex := uint64(0)
+
+		snID := types.StorageNodeID(time.Now().UnixNano())
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: snID,
+		}
+
+		err := ms.RegisterStorageNode(sn, 0, 0)
+		So(err, ShouldBeNil)
+
+		appliedIndex++
+		ms.UpdateAppliedIndex(appliedIndex)
+
+		<-ch
+
+		snID = snID + types.StorageNodeID(1)
+		sn = &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: snID,
+		}
+
+		err = ms.RegisterStorageNode(sn, 0, 0)
+		So(err, ShouldBeNil)
+
+		appliedIndex++
+		ms.UpdateAppliedIndex(appliedIndex)
+
+		<-ch
+
+		ms.mergeStateMachine()
+		ms.triggerSnapshot(appliedIndex)
+
+		So(testutil.CompareWait(func() bool {
+			return atomic.LoadInt64(&ms.nrRunning) == 0
+		}, time.Second), ShouldBeTrue)
+
+		snap, snapIndex := ms.GetSnapshot()
+		So(snap, ShouldNotBeNil)
+
+		Convey("When new MetadataStorage which load snapshot", func(ctx C) {
+			loaded := NewMetadataStorage(cb, defaultSnapshotCount)
+			So(loaded.LoadSnapshot(snap, snapIndex), ShouldBeNil)
+
+			Convey("Then MetadataStorage should have same data", func(ctx C) {
+				lsnap, lsnapIndex := loaded.GetSnapshot()
+				So(snapIndex, ShouldEqual, lsnapIndex)
+				So(bytes.Compare(snap, lsnap), ShouldEqual, 0)
+
+				meta := ms.GetMetadata()
+				lmeta := loaded.GetMetadata()
+				So(meta.Equal(lmeta), ShouldBeTrue)
+			})
 		})
 	})
 }
 
 func TestStorageSnapshotRace(t *testing.T) {
 	Convey("create snapshot", t, func(ctx C) {
-		ms := NewMetadataStorage(nil)
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 		ms.snapCount = uint64(100 + rand.Int31n(64))
 
 		ms.Run()

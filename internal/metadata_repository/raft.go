@@ -1,6 +1,7 @@
 package metadata_repository
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	varlogtypes "github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
+	pb "github.com/kakao/varlog/proto/metadata_repository"
 
 	"go.etcd.io/etcd/etcdserver/api/rafthttp"
 	"go.etcd.io/etcd/etcdserver/api/snap"
@@ -54,10 +56,9 @@ type raftNode struct {
 	raftStorage *raft.MemoryStorage
 	wal         *wal.WAL
 
-	snapshotter      *snap.Snapshotter
-	snapshotterReady chan *snap.Snapshotter // signals when snapshotter is ready
+	snapshotter *snap.Snapshotter
+	snapCount   uint64
 
-	snapCount uint64
 	transport *rafthttp.Transport
 
 	logger *zap.Logger
@@ -71,20 +72,17 @@ type raftNode struct {
 
 // committed entry to app
 type raftCommittedEntry struct {
-	index uint64
-	data  string
+	entryType raftpb.EntryType
+	index     uint64
+	data      []byte
 }
 
 type raftMembership struct {
-	state  raft.StateType                  // raft state
-	leader types.ID                        // raft leader
-	peers  map[varlogtypes.NodeID]raftPeer // raft peer map
-	mu     sync.RWMutex
-}
-
-type raftPeer struct {
-	raft.Peer
-	commit bool
+	state   raft.StateType                // raft state
+	leader  types.ID                      // raft leader
+	members map[varlogtypes.NodeID]string // raft member map
+	peers   map[varlogtypes.NodeID]string // raft known peer map
+	mu      sync.RWMutex
 }
 
 var defaultSnapshotCount uint64 = 10000
@@ -95,7 +93,7 @@ var snapshotCatchUpEntriesN uint64 = 10000
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries.
-func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, getSnapshot func() ([]byte, uint64), proposeC chan string,
+func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, snapCount uint64, getSnapshot func() ([]byte, uint64), proposeC chan string,
 	confChangeC chan raftpb.ConfChange, logger *zap.Logger) *raftNode {
 
 	commitC := make(chan *raftCommittedEntry)
@@ -112,11 +110,8 @@ func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, getSnapshot f
 		waldir:      fmt.Sprintf("raft-%d", id),
 		snapdir:     fmt.Sprintf("raft-%d-snap", id),
 		getSnapshot: getSnapshot,
-		snapCount:   defaultSnapshotCount,
-
-		snapshotterReady: make(chan *snap.Snapshotter, 1),
-		// rest of structure populated after WAL replay
-		logger: logger,
+		snapCount:   snapCount,
+		logger:      logger,
 	}
 
 	return rc
@@ -160,23 +155,9 @@ func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 // whether all entries could be published.
 func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) bool {
 	for i := range ents {
-		switch ents[i].Type {
-		case raftpb.EntryNormal:
-			if len(ents[i].Data) == 0 {
-				// ignore empty messages
-				break
-			}
-			e := &raftCommittedEntry{
-				index: ents[i].Index,
-				data:  string(ents[i].Data),
-			}
-			select {
-			case rc.commitC <- e:
-			case <-ctx.Done():
-				return false
-			}
+		data := ents[i].Data
 
-		case raftpb.EntryConfChange:
+		if ents[i].Type == raftpb.EntryConfChange {
 			var cc raftpb.ConfChange
 			err := cc.Unmarshal(ents[i].Data)
 			if err != nil {
@@ -186,14 +167,22 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 			rc.confState = *rc.node.ApplyConfChange(cc)
 			switch cc.Type {
 			case raftpb.ConfChangeAddNode:
-				if len(cc.Context) > 0 && cc.NodeID != uint64(rc.id) {
-					rc.transport.AddPeer(types.ID(cc.NodeID), []string{string(cc.Context)})
-					rc.membership.addPeer(varlogtypes.NodeID(cc.NodeID), string(cc.Context))
+				if len(cc.Context) == 0 {
+					cc.Context = rc.membership.getPeer(varlogtypes.NodeID(cc.NodeID))
+					if cc.Context == nil {
+						rc.logger.Panic("unknown peer", zap.Uint64("nodeID", cc.NodeID))
+					}
+
+					data, err = cc.Marshal()
+					if err != nil {
+						rc.logger.Panic("ConfChange re-marshal fail", zap.String("err", err.Error()))
+					}
 				}
 
-				if !rc.membership.commitPeer(varlogtypes.NodeID(cc.NodeID)) {
-					rc.logger.Panic("membership:: commit unadded peer", zap.Uint64("nodeID", cc.NodeID))
+				if cc.NodeID != uint64(rc.id) {
+					rc.transport.AddPeer(types.ID(cc.NodeID), []string{string(cc.Context)})
 				}
+				rc.membership.addMember(varlogtypes.NodeID(cc.NodeID), string(cc.Context))
 
 			case raftpb.ConfChangeRemoveNode:
 				if cc.NodeID == uint64(rc.id) {
@@ -207,17 +196,36 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 			}
 		}
 
-		// after commit, update appliedIndex
-		rc.appliedIndex = ents[i].Index
-
-		// special nil commit to signal replay has finished
-		if ents[i].Index == rc.lastIndex {
+		if len(data) > 0 &&
+			(ents[i].Type == raftpb.EntryNormal ||
+				ents[i].Type == raftpb.EntryConfChange) {
+			e := &raftCommittedEntry{
+				entryType: ents[i].Type,
+				index:     ents[i].Index,
+				data:      data,
+			}
 			select {
-			case rc.commitC <- nil:
+			case rc.commitC <- e:
 			case <-ctx.Done():
 				return false
 			}
 		}
+
+		// after commit, update appliedIndex
+		rc.appliedIndex = ents[i].Index
+
+		//TODO:: check neccessary whether send signal replay WAL complete
+		/*
+			// special nil commit to signal replay has finished
+			if ents[i].Index == rc.lastIndex {
+				fmt.Printf("[%v] publishEntry:: signal load snap[%v]\n", rc.id, len(ents))
+				select {
+				case rc.commitC <- nil:
+				case <-ctx.Done():
+					return false
+				}
+			}
+		*/
 	}
 	return true
 }
@@ -261,9 +269,8 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 }
 
 // replayWAL replays WAL entries into the raft instance.
-func (rc *raftNode) replayWAL() *wal.WAL {
+func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	rc.logger.Info("replaying WAL", zap.Uint64("member", uint64(rc.id)))
-	snapshot := rc.loadSnapshot()
 	w := rc.openWAL(snapshot)
 	_, st, ents, err := w.ReadAll()
 	if err != nil {
@@ -272,17 +279,19 @@ func (rc *raftNode) replayWAL() *wal.WAL {
 	rc.raftStorage = raft.NewMemoryStorage()
 	if snapshot != nil {
 		rc.raftStorage.ApplySnapshot(*snapshot)
+		rc.publishSnapshot(*snapshot)
 	}
 	rc.raftStorage.SetHardState(st)
+
+	//TODO:: WAL replay to state machine
 
 	// append to storage so raft starts at the right place in log
 	rc.raftStorage.Append(ents)
 	// send nil once lastIndex is published so client knows commit channel is current
 	if len(ents) > 0 {
 		rc.lastIndex = ents[len(ents)-1].Index
-	} else {
-		rc.commitC <- nil
 	}
+	//TODO:: check neccessary whether send signal replay WAL complete
 	return w
 }
 
@@ -293,10 +302,10 @@ func (rc *raftNode) start() {
 		}
 	}
 	rc.snapshotter = snap.New(rc.logger.Named("snapshot"), rc.snapdir)
-	rc.snapshotterReady <- rc.snapshotter
+	snapshot := rc.loadSnapshot()
 
 	oldwal := wal.Exist(rc.waldir)
-	rc.wal = rc.replayWAL()
+	rc.wal = rc.replayWAL(snapshot)
 
 	rpeers := make([]raft.Peer, len(rc.bpeers))
 	for i, peer := range rc.bpeers {
@@ -340,6 +349,7 @@ func (rc *raftNode) start() {
 		ID:          types.ID(rc.id),
 		ClusterID:   0x1000,
 		Raft:        rc,
+		Snapshotter: rc.snapshotter,
 		ServerStats: stats.NewServerStats("", ""),
 		LeaderStats: stats.NewLeaderStats(strconv.FormatUint(uint64(rc.id), 10)),
 		ErrorC:      make(chan error),
@@ -347,14 +357,17 @@ func (rc *raftNode) start() {
 
 	rc.transport.Start()
 
-	for i, peer := range rpeers {
-		if peer.ID == uint64(rc.id) {
-			rc.url = rc.bpeers[i]
-		} else {
-			rc.transport.AddPeer(types.ID(peer.ID), []string{rc.bpeers[i]})
+	if snapshot == nil {
+		for i, peer := range rpeers {
+			if peer.ID == uint64(rc.id) {
+				rc.url = rc.bpeers[i]
+			} else {
+				rc.transport.AddPeer(types.ID(peer.ID), []string{rc.bpeers[i]})
+			}
+			rc.membership.addPeer(varlogtypes.NodeID(peer.ID), rc.bpeers[i])
 		}
-
-		rc.membership.addPeer(varlogtypes.NodeID(peer.ID), rc.bpeers[i])
+	} else {
+		rc.recoverMembership(*snapshot)
 	}
 
 	httpctx, httpcancel := context.WithCancel(context.Background())
@@ -371,7 +384,7 @@ func (rc *raftNode) longestConnected() (types.ID, bool) {
 	var longest types.ID
 	var oldest time.Time
 
-	membs := rc.membership.getActivePeerIDs()
+	membs := rc.membership.getMembers()
 	for _, id := range membs {
 		if types.ID(rc.id) == id {
 			continue
@@ -449,6 +462,31 @@ func (rc *raftNode) stopHTTP() {
 	rc.httprunner.CloseWait()
 }
 
+type snapReaderCloser struct{ *bytes.Reader }
+
+func (s snapReaderCloser) Close() error { return nil }
+
+func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
+	if !rc.membership.isLeader() {
+		return ms
+	}
+
+	for i, _ := range ms {
+		if ms[i].Type == raftpb.MsgSnap {
+
+			snapshot, _ := rc.raftStorage.Snapshot()
+			if !raft.IsEmptySnap(snapshot) {
+				snapshot.Metadata.ConfState = rc.confState
+				ms[i].Snapshot = snapshot
+				rc.transport.SendSnapshot(*snap.NewMessage(ms[i], snapReaderCloser{bytes.NewReader(nil)}, 0))
+				ms[i].To = 0
+			}
+		}
+	}
+
+	return ms
+}
+
 func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	if raft.IsEmptySnap(snapshotToSave) {
 		return
@@ -491,6 +529,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	if err != nil {
 		rc.logger.Panic(err.Error())
 	}
+
 	if err := rc.saveSnap(snap); err != nil {
 		rc.logger.Panic(err.Error())
 	}
@@ -499,6 +538,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	if appliedIndex > snapshotCatchUpEntriesN {
 		compactIndex = appliedIndex - snapshotCatchUpEntriesN
 	}
+
 	if err := rc.raftStorage.Compact(compactIndex); err != nil && err != raft.ErrCompacted {
 		rc.logger.Panic("storage compact fail", zap.String("err", err.Error()))
 	}
@@ -562,9 +602,11 @@ func (rc *raftNode) processCommit(ctx context.Context) {
 				rc.saveSnap(rd.Snapshot)
 				rc.raftStorage.ApplySnapshot(rd.Snapshot)
 				rc.publishSnapshot(rd.Snapshot)
+				rc.recoverMembership(rd.Snapshot)
 			}
+
 			rc.raftStorage.Append(rd.Entries)
-			rc.transport.Send(rd.Messages)
+			rc.transport.Send(rc.processMessages(rd.Messages))
 			if ok := rc.publishEntries(ctx, rc.entriesToApply(rd.CommittedEntries)); ok {
 				rc.maybeTriggerSnapshot()
 				rc.node.Advance()
@@ -607,13 +649,54 @@ func (rc *raftNode) ReportUnreachable(id uint64)                          {}
 func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {}
 func (rc *raftNode) GetNodeID() varlogtypes.NodeID                        { return rc.id }
 func (rc *raftNode) GetMembership() []string {
-	return rc.membership.getActivePeers()
+	return rc.membership.getMemberUrls()
 }
 
 func newRaftMemebership() *raftMembership {
 	return &raftMembership{
-		peers: make(map[varlogtypes.NodeID]raftPeer),
+		peers:   make(map[varlogtypes.NodeID]string),
+		members: make(map[varlogtypes.NodeID]string),
 	}
+}
+
+func (rc *raftNode) recoverMembership(snapshot raftpb.Snapshot) {
+	if raft.IsEmptySnap(snapshot) {
+		return
+	}
+
+	stateMachine := &pb.MetadataRepositoryDescriptor{}
+	err := stateMachine.Unmarshal(snapshot.Data)
+	if err != nil {
+		rc.logger.Panic("invalid snapshot",
+			zap.String("err", err.Error()),
+		)
+	}
+
+	rc.transport.RemoveAllPeers()
+	rc.membership.removeAllPeers()
+
+	for nodeID, peer := range stateMachine.Peers {
+		if nodeID == rc.id {
+			rc.url = peer
+		} else {
+			rc.transport.AddPeer(types.ID(nodeID), []string{peer})
+		}
+		rc.membership.addMember(nodeID, peer)
+	}
+
+	return
+}
+
+func (rm *raftMembership) addMember(nodeID varlogtypes.NodeID, url string) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	if _, ok := rm.members[nodeID]; ok {
+		return
+	}
+
+	rm.peers[nodeID] = url
+	rm.members[nodeID] = url
 }
 
 func (rm *raftMembership) addPeer(nodeID varlogtypes.NodeID, url string) {
@@ -624,29 +707,7 @@ func (rm *raftMembership) addPeer(nodeID varlogtypes.NodeID, url string) {
 		return
 	}
 
-	rm.peers[nodeID] = raftPeer{
-		Peer: raft.Peer{
-			ID:      uint64(nodeID),
-			Context: []byte(url),
-		},
-	}
-}
-
-func (rm *raftMembership) commitPeer(nodeID varlogtypes.NodeID) bool {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	peer, ok := rm.peers[nodeID]
-	if !ok {
-		return false
-	}
-
-	if !peer.commit {
-		peer.commit = true
-		rm.peers[nodeID] = peer
-	}
-
-	return true
+	rm.peers[nodeID] = url
 }
 
 func (rm *raftMembership) removePeer(nodeID varlogtypes.NodeID) bool {
@@ -659,51 +720,60 @@ func (rm *raftMembership) removePeer(nodeID varlogtypes.NodeID) bool {
 	}
 
 	delete(rm.peers, nodeID)
+	delete(rm.members, nodeID)
 	return true
 }
 
-func (rm *raftMembership) existPeer(nodeID varlogtypes.NodeID) bool {
+func (rm *raftMembership) getMemberUrls() []string {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	m := make([]string, 0, len(rm.members))
+	for _, url := range rm.members {
+		m = append(m, url)
+	}
+
+	return m
+}
+
+func (rm *raftMembership) getMembers() []types.ID {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	m := make([]types.ID, 0, len(rm.members))
+	for nodeID, _ := range rm.members {
+		m = append(m, types.ID(nodeID))
+	}
+
+	return m
+}
+
+func (rm *raftMembership) removeAllPeers() {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	rm.peers = make(map[varlogtypes.NodeID]string)
+	rm.members = make(map[varlogtypes.NodeID]string)
+}
+
+func (rm *raftMembership) isMember(nodeID varlogtypes.NodeID) bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	_, ok := rm.members[nodeID]
+	return ok
+}
+
+func (rm *raftMembership) getPeer(nodeID varlogtypes.NodeID) []byte {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
 	peer, ok := rm.peers[nodeID]
 	if !ok {
-		return false
+		return nil
 	}
 
-	return peer.commit
-}
-
-func (rm *raftMembership) getActivePeers() []string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
-	r := make([]string, 0, len(rm.peers))
-	for _, peer := range rm.peers {
-		if !peer.commit {
-			continue
-		}
-
-		r = append(r, string(peer.Peer.Context))
-	}
-
-	return r
-}
-
-func (rm *raftMembership) getActivePeerIDs() []types.ID {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
-	r := make([]types.ID, 0, len(rm.peers))
-	for _, peer := range rm.peers {
-		if !peer.commit {
-			continue
-		}
-
-		r = append(r, types.ID(peer.ID))
-	}
-
-	return r
+	return []byte(peer)
 }
 
 func (rm *raftMembership) updateState(state *raft.SoftState) {

@@ -64,6 +64,7 @@ func newCluster(n int) *cluster {
 		rc := newRaftNode(nodeID,
 			clus.peers,
 			false,
+			defaultSnapshotCount,
 			nil,
 			clus.proposeC[i],
 			clus.confChangeC[i],
@@ -76,21 +77,10 @@ func newCluster(n int) *cluster {
 		clus.leader[i] = rc.membership.getLeader
 		clus.peerToIdx[uint64(nodeID)] = i
 
-		go rc.start()
+		rc.start()
 	}
 
 	return clus
-}
-
-// sinkReplay reads all commits in each node's local log.
-func (clus *cluster) sinkReplay() {
-	for i := range clus.peers {
-		for s := range clus.commitC[i] {
-			if s == nil {
-				break
-			}
-		}
-	}
 }
 
 func (clus *cluster) close(i int) (err error) {
@@ -136,8 +126,6 @@ func TestProposeOnFollower(t *testing.T) {
 	clus := newCluster(3)
 	defer clus.closeNoErrors(t)
 
-	clus.sinkReplay()
-
 	donec := make(chan struct{})
 	for i := range clus.peers {
 		// feedback for "n" committed entries, then update donec
@@ -170,8 +158,6 @@ func TestFailoverLeaderElection(t *testing.T) {
 	Convey("Given Raft Cluster", t, func(ctx C) {
 		clus := newCluster(3)
 		defer clus.closeNoErrors(t)
-
-		clus.sinkReplay()
 
 		cancels := make([]context.CancelFunc, 3)
 

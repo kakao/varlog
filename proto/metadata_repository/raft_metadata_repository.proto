@@ -56,6 +56,19 @@ message Unseal {
             (gogoproto.customname) = "LogStreamID"];
 }
 
+message AddPeer {
+        uint64 node_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.NodeID",
+             (gogoproto.customname) = "NodeID"];
+        string url = 2;
+}
+
+message RemovePeer {
+        uint64 node_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.NodeID",
+             (gogoproto.customname) = "NodeID"];
+}
+
 message RaftEntry {
         message Request {
                 option (gogoproto.onlyone) = true;
@@ -67,6 +80,8 @@ message RaftEntry {
                 Commit commit = 5;
                 Seal seal = 6;
                 Unseal unseal = 7;
+                AddPeer add_peer = 8;
+                RemovePeer remove_peer = 9;
         }
         uint64 node_index = 1;
         uint64 request_index = 2;
@@ -114,6 +129,8 @@ message MetadataRepositoryDescriptor {
                 repeated varlog.storagenode.GlobalLogStreamDescriptor global_log_streams = 2[(gogoproto.nullable) = true];
                 map<uint64, LocalLogStreamReplicas> local_log_streams = 3[(gogoproto.castkey)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID"];
         }
+
         MetadataDescriptor metadata = 1[(gogoproto.nullable) = true];
         LogStreamDescriptor log_stream = 2[(gogoproto.nullable) = true];
+        map<uint64, string> peers = 3[(gogoproto.castkey)="github.com/kakao/varlog/pkg/varlog/types.NodeID"]; 
 }

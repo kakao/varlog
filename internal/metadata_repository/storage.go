@@ -2,6 +2,7 @@ package metadata_repository
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -64,6 +65,7 @@ type MetadataStorage struct {
 	mtMu sync.RWMutex // mutex for Metadata
 	ssMu sync.RWMutex // mutex for Snapshot
 	mcMu sync.RWMutex // mutex for Metadata Cache
+	prMu sync.RWMutex // mutex for Peers
 
 	// async job (snapshot, cache)
 	jobC chan *storageAsyncJob
@@ -72,9 +74,9 @@ type MetadataStorage struct {
 	cancel context.CancelFunc
 }
 
-func NewMetadataStorage(cb func(uint64, uint64, error)) *MetadataStorage {
+func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64) *MetadataStorage {
 	ms := &MetadataStorage{cacheCompleteCB: cb}
-	ms.snapCount = defaultSnapshotCount
+	ms.snapCount = snapCount
 
 	ms.origStateMachine = &pb.MetadataRepositoryDescriptor{}
 	ms.origStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
@@ -85,6 +87,9 @@ func NewMetadataStorage(cb func(uint64, uint64, error)) *MetadataStorage {
 	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
 	ms.diffStateMachine.LogStream = &pb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+
+	ms.origStateMachine.Peers = make(map[types.NodeID]string)
+	ms.diffStateMachine.Peers = make(map[types.NodeID]string)
 
 	ms.jobC = make(chan *storageAsyncJob, 4096)
 
@@ -99,8 +104,11 @@ func (ms *MetadataStorage) Run() {
 }
 
 func (ms *MetadataStorage) Close() {
-	ms.cancel()
-	ms.runner.CloseWait()
+	if ms.cancel != nil {
+		ms.cancel()
+		ms.runner.CloseWait()
+		ms.cancel = nil
+	}
 }
 
 func (ms *MetadataStorage) processSnapshot(ctx context.Context) {
@@ -119,6 +127,19 @@ Loop:
 		case <-ctx.Done():
 			break Loop
 		}
+	}
+
+	close(ms.jobC)
+
+	for f := range ms.jobC {
+		switch r := f.job.(type) {
+		case *jobMetadataCache:
+			if ms.cacheCompleteCB != nil {
+				ms.cacheCompleteCB(r.nodeIndex, r.requestIndex, ctx.Err())
+			}
+		}
+
+		atomic.AddInt64(&ms.nrRunning, -1)
 	}
 }
 
@@ -531,6 +552,31 @@ func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, re
 	return nil
 }
 
+func (ms *MetadataStorage) AddPeer(nodeID types.NodeID, url string) error {
+	ms.prMu.Lock()
+	defer ms.prMu.Unlock()
+
+	_, cur := ms.getStateMachine()
+	cur.Peers[nodeID] = url
+
+	return nil
+}
+
+func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID) error {
+	ms.prMu.Lock()
+	defer ms.prMu.Unlock()
+
+	_, cur := ms.getStateMachine()
+
+	if cur == ms.origStateMachine {
+		delete(cur.Peers, nodeID)
+	} else {
+		cur.Peers[nodeID] = ""
+	}
+
+	return nil
+}
+
 func (ms *MetadataStorage) lookupNextGLSNoLock(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
 	pre, cur := ms.getStateMachine()
 	if pre != cur {
@@ -744,6 +790,51 @@ func (ms *MetadataStorage) GetSnapshot() ([]byte, uint64) {
 	return ms.snap, atomic.LoadUint64(&ms.snapIndex)
 }
 
+func (ms *MetadataStorage) LoadSnapshot(snap []byte, snapIndex uint64) error {
+	if snapIndex < ms.appliedIndex {
+		return errors.New("outdated snapshot")
+	}
+
+	stateMachine := &pb.MetadataRepositoryDescriptor{}
+	err := stateMachine.Unmarshal(snap)
+	if err != nil {
+		return err
+	}
+
+	ms.Close()
+
+	ms.ssMu.Lock()
+	ms.snap = snap
+	ms.ssMu.Unlock()
+
+	atomic.StoreUint64(&ms.snapIndex, snapIndex)
+
+	cache := proto.Clone(stateMachine.Metadata).(*varlogpb.MetadataDescriptor)
+
+	ms.mcMu.Lock()
+	ms.metaCache = cache
+	ms.mcMu.Unlock()
+
+	atomic.StoreUint64(&ms.metaAppliedIndex, snapIndex)
+	atomic.StoreUint64(&ms.metaCacheIndex, snapIndex)
+
+	ms.origStateMachine = stateMachine
+
+	ms.diffStateMachine = &pb.MetadataRepositoryDescriptor{}
+	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
+	ms.diffStateMachine.LogStream = &pb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
+	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+	ms.diffStateMachine.Peers = make(map[types.NodeID]string)
+
+	// make nrUpdateSinceCommit > 0 to enable commit
+	ms.nrUpdateSinceCommit = 1
+
+	ms.jobC = make(chan *storageAsyncJob, 4096)
+	ms.Run()
+
+	return nil
+}
+
 func (ms *MetadataStorage) isCopyOnWrite() bool {
 	return ms.copyOnWrite.Load()
 }
@@ -866,6 +957,21 @@ func (ms *MetadataStorage) mergeLogStream() {
 	ms.trimGlobalLogStream()
 }
 
+func (ms *MetadataStorage) mergePeers() {
+	ms.prMu.Lock()
+	defer ms.prMu.Unlock()
+
+	for nodeID, url := range ms.diffStateMachine.Peers {
+		if url == "" {
+			delete(ms.origStateMachine.Peers, nodeID)
+		} else {
+			ms.origStateMachine.Peers[nodeID] = url
+		}
+	}
+
+	ms.diffStateMachine.Peers = make(map[types.NodeID]string)
+}
+
 func (ms *MetadataStorage) trimGlobalLogStream() {
 	s := ms.origStateMachine
 	i := sort.Search(len(s.LogStream.GlobalLogStreams), func(i int) bool {
@@ -885,6 +991,7 @@ func (ms *MetadataStorage) mergeStateMachine() {
 
 	ms.mergeMetadata()
 	ms.mergeLogStream()
+	ms.mergePeers()
 
 	ms.releaseCopyOnWrite()
 }
