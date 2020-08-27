@@ -44,19 +44,14 @@ type readTask struct {
 
 type appendTask struct {
 	data        []byte
-	replication bool
 	replicas    []Replica
+	err         error
 	llsn        types.LLSN
 	glsn        types.GLSN
-	err         error
-	written     bool
 	done        chan struct{}
-
-	mu sync.Mutex
-
-	writeErr     error
-	replicateErr error
-	commitErr    error
+	mu          sync.Mutex
+	replication bool
+	written     bool
 }
 
 type trimTask struct {
@@ -72,36 +67,6 @@ type commitTask struct {
 	prevHighWatermark  types.GLSN
 	committedGLSNBegin types.GLSN
 	committedGLSNEnd   types.GLSN
-}
-
-type commitWaitMap struct {
-	m  map[types.LLSN]*appendTask
-	mu sync.RWMutex
-}
-
-func newCommitWaitMap() *commitWaitMap {
-	return &commitWaitMap{
-		m: make(map[types.LLSN]*appendTask),
-	}
-}
-
-func (cwm *commitWaitMap) get(llsn types.LLSN) (*appendTask, bool) {
-	cwm.mu.RLock()
-	defer cwm.mu.RUnlock()
-	t, ok := cwm.m[llsn]
-	return t, ok
-}
-
-func (cwm *commitWaitMap) put(llsn types.LLSN, t *appendTask) {
-	cwm.mu.Lock()
-	defer cwm.mu.Unlock()
-	cwm.m[llsn] = t
-}
-
-func (cwm *commitWaitMap) del(llsn types.LLSN) {
-	cwm.mu.Lock()
-	defer cwm.mu.Unlock()
-	delete(cwm.m, llsn)
 }
 
 // TODO:
@@ -166,7 +131,7 @@ type logStreamExecutor struct {
 	learnedGLSNBegin types.AtomicGLSN
 	learnedGLSNEnd   types.AtomicGLSN
 
-	cwm *commitWaitMap
+	trackers commitTrackerMap
 
 	status    varlogpb.LogStreamStatus
 	mtxStatus sync.RWMutex
@@ -182,10 +147,11 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage, option
 		return nil, varlog.ErrInvalid
 	}
 	lse := &logStreamExecutor{
-		logStreamID:          logStreamID,
-		storage:              storage,
-		replicator:           NewReplicator(),
-		cwm:                  newCommitWaitMap(),
+		logStreamID: logStreamID,
+		storage:     storage,
+		replicator:  NewReplicator(),
+		// cwm:                  newCommitWaitMap(),
+		trackers:             newCommitTracker(),
 		appendC:              make(chan *appendTask, options.AppendCSize),
 		trimC:                make(chan *trimTask, options.TrimCSize),
 		commitC:              make(chan commitTask, options.CommitCSize),
@@ -206,12 +172,12 @@ func (lse *logStreamExecutor) LogStreamID() types.LogStreamID {
 
 func (lse *logStreamExecutor) Run(ctx context.Context) {
 	lse.once.Do(func() {
-		ctx, cancel := context.WithCancel(ctx)
+		cctx, cancel := context.WithCancel(ctx)
 		lse.cancel = cancel
-		lse.runner.Run(ctx, lse.dispatchAppendC)
-		lse.runner.Run(ctx, lse.dispatchTrimC)
-		lse.runner.Run(ctx, lse.dispatchCommitC)
-		lse.replicator.Run(ctx)
+		lse.runner.Run(cctx, lse.dispatchAppendC)
+		lse.runner.Run(cctx, lse.dispatchTrimC)
+		lse.runner.Run(cctx, lse.dispatchCommitC)
+		lse.replicator.Run(cctx)
 	})
 }
 
@@ -427,7 +393,7 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 	}
 	t.mu.Lock()
 	if t.written {
-		lse.cwm.del(t.llsn)
+		lse.trackers.del(t.llsn)
 	}
 	t.mu.Unlock()
 	return glsn, err
@@ -481,7 +447,7 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 	if err != nil {
 		return err
 	}
-	lse.cwm.put(llsn, t)
+	lse.trackers.put(t)
 	lse.uncommittedLLSNEnd.Add(1)
 	return nil
 }
@@ -643,7 +609,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		}
 		lse.committedLLSNEnd++
 		lse.learnedGLSNEnd.Store(glsn + 1)
-		appendT, ok := lse.cwm.get(llsn)
+		appendT, ok := lse.trackers.get(llsn)
 		if ok {
 			appendT.mu.Lock()
 			appendT.glsn = glsn
@@ -660,7 +626,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 	// fails to commit it. Actually, these GLSNs are holes. See the above comments.
 	llsn := lse.committedLLSNEnd
 	for glsn < t.committedGLSNEnd {
-		appendT, ok := lse.cwm.get(llsn)
+		appendT, ok := lse.trackers.get(llsn)
 		if ok {
 			appendT.mu.Lock()
 			appendT.glsn = glsn
