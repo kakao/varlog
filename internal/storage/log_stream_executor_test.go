@@ -147,7 +147,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 			storage.EXPECT().Commit(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			for i := types.MinGLSN; i < N; i++ {
 				lse.(*logStreamExecutor).mu.RLock()
-				knownNextGLSN := lse.(*logStreamExecutor).knownHighWatermark
+				knownHWM := lse.(*logStreamExecutor).knownHighWatermark
 				lse.(*logStreamExecutor).mu.RUnlock()
 				uncommittedLLSNEnd := lse.(*logStreamExecutor).uncommittedLLSNEnd.Load()
 				var wg sync.WaitGroup
@@ -157,13 +157,13 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 					waitWriteDone(uncommittedLLSNEnd)
 					lse.Commit(CommittedLogStreamStatus{
 						LogStreamID:         logStreamID,
-						HighWatermark:       i + 1,
-						PrevHighWatermark:   i,
+						HighWatermark:       i,
+						PrevHighWatermark:   i - 1,
 						CommittedGLSNOffset: i,
 						CommittedGLSNLength: 1,
 					})
 					waitCommitDone(knownNextGLSN)
-				}(uncommittedLLSNEnd, knownNextGLSN)
+				}(uncommittedLLSNEnd, knownHWM)
 				glsn, err := lse.Append(context.TODO(), []byte("log"))
 				So(err, ShouldBeNil)
 				So(glsn, ShouldEqual, i)

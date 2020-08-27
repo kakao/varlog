@@ -42,18 +42,6 @@ type readTask struct {
 	done chan struct{}
 }
 
-type appendTask struct {
-	data        []byte
-	replicas    []Replica
-	err         error
-	llsn        types.LLSN
-	glsn        types.GLSN
-	done        chan struct{}
-	mu          sync.Mutex
-	replication bool
-	written     bool
-}
-
 type trimTask struct {
 	glsn  types.GLSN
 	async bool
@@ -131,7 +119,7 @@ type logStreamExecutor struct {
 	learnedGLSNBegin types.AtomicGLSN
 	learnedGLSNEnd   types.AtomicGLSN
 
-	trackers commitTrackerMap
+	trackers appendTaskTracker
 
 	status    varlogpb.LogStreamStatus
 	mtxStatus sync.RWMutex
@@ -147,11 +135,10 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage, option
 		return nil, varlog.ErrInvalid
 	}
 	lse := &logStreamExecutor{
-		logStreamID: logStreamID,
-		storage:     storage,
-		replicator:  NewReplicator(),
-		// cwm:                  newCommitWaitMap(),
-		trackers:             newCommitTracker(),
+		logStreamID:          logStreamID,
+		storage:              storage,
+		replicator:           NewReplicator(),
+		trackers:             newAppendTracker(),
 		appendC:              make(chan *appendTask, options.AppendCSize),
 		trimC:                make(chan *trimTask, options.TrimCSize),
 		commitC:              make(chan commitTask, options.CommitCSize),
@@ -335,23 +322,13 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 	if lse.isSealed() {
 		return varlog.ErrSealed
 	}
-	done := make(chan struct{})
-	t := appendTask{
-		llsn:        llsn,
-		data:        data,
-		done:        done,
-		replication: true,
+
+	appendTask := newAppendTask(data, nil, llsn, &lse.trackers)
+	if err := lse.addAppendC(ctx, appendTask); err != nil {
+		return err
 	}
 
-	tctx, cancel := context.WithTimeout(ctx, lse.options.AppendCTimeout)
-	defer cancel()
-	select {
-	case <-tctx.Done():
-		return tctx.Err()
-	case lse.appendC <- &t:
-	}
-	<-done
-	return t.err
+	return appendTask.wait(ctx)
 }
 
 // Append appends a log entry at the end of the log stream. Append comprises of three parts -
@@ -364,68 +341,39 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 	if lse.isSealed() {
 		return types.InvalidGLSN, varlog.ErrSealed
 	}
-	done := make(chan struct{})
-	t := appendTask{
-		data:     data,
-		replicas: replicas,
-		done:     done,
-	}
-	tctxAC, cancelAC := context.WithTimeout(ctx, lse.options.AppendCTimeout)
-	defer cancelAC()
-	select {
-	case lse.appendC <- &t:
-	case <-tctxAC.Done():
-		return types.InvalidGLSN, tctxAC.Err()
+
+	appendTask := newAppendTask(data, replicas, types.InvalidLLSN, &lse.trackers)
+	if err := lse.addAppendC(ctx, appendTask); err != nil {
+		return types.InvalidGLSN, err
 	}
 
-	var glsn types.GLSN = types.InvalidGLSN
-	var err error = nil
-	tctxCW, cancelCW := context.WithTimeout(ctx, lse.options.CommitWaitTimeout)
-	defer cancelCW()
+	tctx, cancel := context.WithTimeout(ctx, lse.options.CommitWaitTimeout)
+	defer cancel()
+	err := appendTask.wait(tctx)
+	appendTask.close()
+	return appendTask.getGLSN(), err
+}
+
+func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) error {
+	tctx, cancel := context.WithTimeout(ctx, lse.options.AppendCTimeout)
+	defer cancel()
 	select {
-	case <-done:
-		t.mu.Lock()
-		glsn = t.glsn
-		err = t.err
-		t.mu.Unlock()
-	case <-tctxCW.Done():
-		err = tctxCW.Err()
+	case lse.appendC <- t:
+		return nil
+	case <-tctx.Done():
+		return tctx.Err()
 	}
-	t.mu.Lock()
-	if t.written {
-		lse.trackers.del(t.llsn)
-	}
-	t.mu.Unlock()
-	return glsn, err
 }
 
 func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
-	if t.replication {
-		err := lse.replicateTo(t.llsn, t.data)
-		if err != nil {
-			lse.seal()
-		}
-		t.mu.Lock()
-		t.err = err
-		if t.done != nil {
-			close(t.done)
-			t.done = nil
-		}
-		t.mu.Unlock()
-
-		return
-	}
-	if err := lse.write(t); err != nil {
+	err := lse.write(t)
+	if err != nil {
+		t.notify(err)
 		lse.seal()
-		t.mu.Lock()
-		if t.done != nil {
-			close(t.done)
-			t.done = nil
-		}
-		t.mu.Unlock()
 		return
 	}
-	if len(t.replicas) > 0 {
+
+	if t.isPrimary() {
 		lse.triggerReplication(ctx, t)
 	}
 }
@@ -434,38 +382,34 @@ func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 // appendTask to the taskmap to receive commit result. It also triggers replication after a
 // successful write.
 func (lse *logStreamExecutor) write(t *appendTask) error {
-	llsn := lse.uncommittedLLSNEnd.Load()
-	err := lse.storage.Write(llsn, t.data)
-	t.mu.Lock()
-	if err != nil {
-		t.err = err
-	} else {
-		t.written = true
-		t.llsn = llsn
+	llsn, data, _ := t.getParams()
+	primary := t.isPrimary()
+	if primary {
+		llsn = lse.uncommittedLLSNEnd.Load()
 	}
-	t.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	lse.trackers.put(t)
-	lse.uncommittedLLSNEnd.Add(1)
-	return nil
-}
-
-func (lse *logStreamExecutor) replicateTo(llsn types.LLSN, data []byte) error {
 	if llsn != lse.uncommittedLLSNEnd.Load() {
 		return fmt.Errorf("LLSN mismatch")
 	}
+
 	if err := lse.storage.Write(llsn, data); err != nil {
 		return err
 	}
+
+	if primary {
+		t.markWritten(llsn)
+		lse.trackers.track(llsn, t)
+	}
+
 	lse.uncommittedLLSNEnd.Add(1)
-	// TODO: cwm
 	return nil
 }
 
 func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendTask) {
-	errC := lse.replicator.Replicate(ctx, t.llsn, t.data, t.replicas)
+	llsn, data, replicas := t.getParams()
+	if len(replicas) == 0 {
+		return
+	}
+	errC := lse.replicator.Replicate(ctx, llsn, data, replicas)
 	go func() {
 		// NOTE(jun): does it need timeout?
 		var err error
@@ -474,17 +418,10 @@ func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendT
 		case <-ctx.Done():
 			err = ctx.Err()
 		}
-		if err == nil {
-			return
+		if err != nil {
+			t.notify(err)
+			lse.seal()
 		}
-		t.mu.Lock()
-		t.err = err
-		if t.done != nil {
-			close(t.done)
-			t.done = nil
-		}
-		t.mu.Unlock()
-		lse.seal()
 	}()
 }
 
@@ -611,13 +548,8 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		lse.learnedGLSNEnd.Store(glsn + 1)
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
-			appendT.mu.Lock()
-			appendT.glsn = glsn
-			if appendT.done != nil {
-				close(appendT.done)
-				appendT.done = nil
-			}
-			appendT.mu.Unlock()
+			appendT.setGLSN(glsn)
+			appendT.notify(nil)
 		}
 		glsn++
 	}
@@ -628,14 +560,8 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 	for glsn < t.committedGLSNEnd {
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
-			appendT.mu.Lock()
-			appendT.glsn = glsn
-			appendT.err = varlog.ErrInternal
-			if appendT.done != nil {
-				close(appendT.done)
-				appendT.done = nil
-			}
-			appendT.mu.Unlock()
+			appendT.setGLSN(glsn)
+			appendT.notify(varlog.ErrInternal)
 		}
 		glsn++
 		llsn++
