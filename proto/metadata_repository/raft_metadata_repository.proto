@@ -14,47 +14,67 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
 message MetadataRepositoryDescriptor {
-        message LocalLogStreamReplica {
-            option (gogoproto.equal) = true;
+    message LocalLogStreamReplica {
+        option (gogoproto.equal) = true;
 
-            uint64 uncommitted_llsn_offfset = 1
-                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
-                 (gogoproto.customname) = "UncommittedLLSNOffset"];
-            uint64 uncommitted_llsn_length = 2
-                [(gogoproto.customname) = "UncommittedLLSNLength"];
-            uint64 known_high_watermark = 3
-                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
+        uint64 uncommitted_llsn_offfset = 1 [
+            (gogoproto.casttype) =
+                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+            (gogoproto.customname) = "UncommittedLLSNOffset"
+        ];
+        uint64 uncommitted_llsn_length = 2
+            [(gogoproto.customname) = "UncommittedLLSNLength"];
+        uint64 known_high_watermark = 3
+            [(gogoproto.casttype) =
+                 "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
 
-            uint64 begin_llsn = 4
-                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
-                 (gogoproto.customname) = "BeginLLSN",
-                deprecated = true];
-            uint64 end_llsn = 5
-                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
-                 (gogoproto.customname) = "EndLLSN",
-                deprecated = true];
-            uint64 known_next_glsn = 6
-                [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
-                 (gogoproto.customname) = "KnownNextGLSN",
-                deprecated = true];
-        }
+        uint64 begin_llsn = 4 [
+            (gogoproto.casttype) =
+                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+            (gogoproto.customname) = "BeginLLSN",
+            deprecated = true
+        ];
+        uint64 end_llsn = 5 [
+            (gogoproto.casttype) =
+                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+            (gogoproto.customname) = "EndLLSN",
+            deprecated = true
+        ];
+        uint64 known_next_glsn = 6 [
+            (gogoproto.casttype) =
+                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+            (gogoproto.customname) = "KnownNextGLSN",
+            deprecated = true
+        ];
+    }
 
-        message LocalLogStreamReplicas {
-                option (gogoproto.equal) = true;
+    message LocalLogStreamReplicas {
+        option (gogoproto.equal) = true;
 
-                map<int32, LocalLogStreamReplica> replicas = 1[(gogoproto.castkey)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID"];
-                LogStreamStatus status = 2;
-        }
+        map<int32, LocalLogStreamReplica> replicas = 1 [
+            (gogoproto.castkey) =
+                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID"
+        ];
+        LogStreamStatus status = 2;
+    }
 
-        message LogStreamDescriptor {
-                uint64 trim_glsn = 1
-                    [(gogoproto.casttype)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
-                    (gogoproto.customname) = "TrimGLSN"];
-                repeated varlog.storagenode.GlobalLogStreamDescriptor global_log_streams = 2[(gogoproto.nullable) = true];
-                map<uint64, LocalLogStreamReplicas> local_log_streams = 3[(gogoproto.castkey)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID"];
-        }
+    message LogStreamDescriptor {
+        uint64 trim_glsn = 1 [
+            (gogoproto.casttype) =
+                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+            (gogoproto.customname) = "TrimGLSN"
+        ];
+        repeated varlog.storagenode.GlobalLogStreamDescriptor
+            global_log_streams = 2 [(gogoproto.nullable) = true];
+        map<uint64, LocalLogStreamReplicas> local_log_streams = 3 [
+            (gogoproto.castkey) =
+                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID"
+        ];
+    }
 
-        MetadataDescriptor metadata = 1[(gogoproto.nullable) = true];
-        LogStreamDescriptor log_stream = 2[(gogoproto.nullable) = true];
-        map<uint64, string> peers = 3[(gogoproto.castkey)="github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"]; 
+    MetadataDescriptor metadata = 1 [(gogoproto.nullable) = true];
+    LogStreamDescriptor log_stream = 2 [(gogoproto.nullable) = true];
+    map<uint64, string> peers = 3
+        [(gogoproto.castkey) =
+             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
 }
