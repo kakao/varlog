@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package varlog;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+import "varlog/metadata.proto";
+import "storage_node/log_stream_reporter.proto";
+
+option go_package = "github.com/kakao/varlog/proto/metadata_repository";
+
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+message RegisterStorageNode {
+        StorageNodeDescriptor storage_node = 1[(gogoproto.nullable) = true];
+}
+
+message UnregisterStorageNode {
+        uint32 storage_node_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+             (gogoproto.customname) = "StorageNodeID"];
+}
+
+message RegisterLogStream {
+        LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
+}
+
+message UnregisterLogStream {
+        uint32 log_stream_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+             (gogoproto.customname) = "LogStreamID"];
+}
+
+message UpdateLogStream {
+        LogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
+}
+
+message Report {
+        varlog.storagenode.LocalLogStreamDescriptor log_stream = 1[(gogoproto.nullable) = true];
+}
+
+message Commit {
+}
+
+message Seal {
+        uint32 log_stream_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            (gogoproto.customname) = "LogStreamID"];
+}
+
+message Unseal {
+        uint32 log_stream_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            (gogoproto.customname) = "LogStreamID"];
+}
+
+message AddPeer {
+        uint64 node_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.NodeID",
+             (gogoproto.customname) = "NodeID"];
+        string url = 2;
+}
+
+message RemovePeer {
+        uint64 node_id = 1
+            [(gogoproto.casttype)="github.com/kakao/varlog/pkg/varlog/types.NodeID",
+             (gogoproto.customname) = "NodeID"];
+}
+
+message RaftEntry {
+        message Request {
+                option (gogoproto.onlyone) = true;
+
+                RegisterStorageNode register_storage_node = 1;
+                RegisterLogStream register_log_stream = 2;
+                UpdateLogStream update_log_stream = 3;
+                Report report = 4;
+                Commit commit = 5;
+                Seal seal = 6;
+                Unseal unseal = 7;
+                AddPeer add_peer = 8;
+                RemovePeer remove_peer = 9;
+        }
+        uint64 node_index = 1;
+        uint64 request_index = 2;
+        uint64 applied_index = 3;
+        Request request = 4[(gogoproto.nullable) = false];
+}
+

@@ -14,12 +14,14 @@ import (
 	pb "github.com/kakao/varlog/proto/metadata_repository"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/gogo/protobuf/proto"
 )
 
 type jobSnapshot struct {
 	appliedIndex uint64
+	confState    *raftpb.ConfState
 }
 
 type jobMetadataCache struct {
@@ -30,6 +32,11 @@ type jobMetadataCache struct {
 
 type storageAsyncJob struct {
 	job interface{}
+}
+
+type committedEntry struct {
+	entry     *pb.RaftEntry
+	confState *raftpb.ConfState
 }
 
 type MetadataStorage struct {
@@ -43,9 +50,11 @@ type MetadataStorage struct {
 	// snapshot orig for raft
 	snap []byte
 	// the largest index of the entry already applied to the snapshot
-	snapIndex uint64
+	snapIndex     uint64
+	snapConfState *raftpb.ConfState
 	// the largest index of the entry already applied to the stateMachine
 	appliedIndex uint64
+	confState    *raftpb.ConfState
 	snapCount    uint64
 
 	// immutable metadata cache for client request
@@ -552,17 +561,19 @@ func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, re
 	return nil
 }
 
-func (ms *MetadataStorage) AddPeer(nodeID types.NodeID, url string) error {
+func (ms *MetadataStorage) AddPeer(nodeID types.NodeID, url string, cs *raftpb.ConfState) error {
 	ms.prMu.Lock()
 	defer ms.prMu.Unlock()
 
 	_, cur := ms.getStateMachine()
 	cur.Peers[nodeID] = url
 
+	ms.confState = cs
+
 	return nil
 }
 
-func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID) error {
+func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID, cs *raftpb.ConfState) error {
 	ms.prMu.Lock()
 	defer ms.prMu.Unlock()
 
@@ -573,6 +584,8 @@ func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID) error {
 	} else {
 		cur.Peers[nodeID] = ""
 	}
+
+	ms.confState = cs
 
 	return nil
 }
@@ -783,14 +796,14 @@ func (ms *MetadataStorage) GetMetadata() *varlogpb.MetadataDescriptor {
 	return ms.metaCache
 }
 
-func (ms *MetadataStorage) GetSnapshot() ([]byte, uint64) {
+func (ms *MetadataStorage) GetSnapshot() ([]byte, *raftpb.ConfState, uint64) {
 	ms.ssMu.RLock()
 	defer ms.ssMu.RUnlock()
 
-	return ms.snap, atomic.LoadUint64(&ms.snapIndex)
+	return ms.snap, ms.snapConfState, atomic.LoadUint64(&ms.snapIndex)
 }
 
-func (ms *MetadataStorage) LoadSnapshot(snap []byte, snapIndex uint64) error {
+func (ms *MetadataStorage) LoadSnapshot(snap []byte, snapConfState *raftpb.ConfState, snapIndex uint64) error {
 	if snapIndex < ms.appliedIndex {
 		return errors.New("outdated snapshot")
 	}
@@ -805,18 +818,17 @@ func (ms *MetadataStorage) LoadSnapshot(snap []byte, snapIndex uint64) error {
 
 	ms.ssMu.Lock()
 	ms.snap = snap
-	ms.ssMu.Unlock()
-
+	ms.snapConfState = snapConfState
 	atomic.StoreUint64(&ms.snapIndex, snapIndex)
+	ms.ssMu.Unlock()
 
 	cache := proto.Clone(stateMachine.Metadata).(*varlogpb.MetadataDescriptor)
 
 	ms.mcMu.Lock()
 	ms.metaCache = cache
-	ms.mcMu.Unlock()
-
 	atomic.StoreUint64(&ms.metaAppliedIndex, snapIndex)
 	atomic.StoreUint64(&ms.metaCacheIndex, snapIndex)
+	ms.mcMu.Unlock()
 
 	ms.origStateMachine = stateMachine
 
@@ -865,6 +877,7 @@ func (ms *MetadataStorage) createSnapshot(job *jobSnapshot) {
 	defer ms.ssMu.Unlock()
 
 	ms.snap = b
+	ms.snapConfState = job.confState
 	atomic.StoreUint64(&ms.snapIndex, job.appliedIndex)
 }
 
@@ -1006,7 +1019,10 @@ func (ms *MetadataStorage) triggerSnapshot(appliedIndex uint64) {
 
 	ms.setCopyOnWrite()
 
-	job := &jobSnapshot{appliedIndex: appliedIndex}
+	job := &jobSnapshot{
+		appliedIndex: appliedIndex,
+		confState:    ms.confState,
+	}
 	ms.jobC <- &storageAsyncJob{job: job}
 }
 

@@ -43,11 +43,10 @@ type raftNode struct {
 	join        bool               // node is joining an existing cluster
 	waldir      string             // path to WAL directory
 	snapdir     string             // path to snapshot directory
-	getSnapshot func() ([]byte, uint64)
+	getSnapshot func() ([]byte, *raftpb.ConfState, uint64)
 	lastIndex   uint64 // index of log at start
 
 	raftState     raft.StateType
-	confState     raftpb.ConfState
 	snapshotIndex uint64
 	appliedIndex  uint64
 
@@ -75,6 +74,7 @@ type raftCommittedEntry struct {
 	entryType raftpb.EntryType
 	index     uint64
 	data      []byte
+	confState *raftpb.ConfState
 }
 
 type raftMembership struct {
@@ -93,7 +93,7 @@ var snapshotCatchUpEntriesN uint64 = 10000
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries.
-func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, snapCount uint64, getSnapshot func() ([]byte, uint64), proposeC chan string,
+func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, snapCount uint64, getSnapshot func() ([]byte, *raftpb.ConfState, uint64), proposeC chan string,
 	confChangeC chan raftpb.ConfChange, logger *zap.Logger) *raftNode {
 
 	commitC := make(chan *raftCommittedEntry)
@@ -155,6 +155,7 @@ func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 // whether all entries could be published.
 func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) bool {
 	for i := range ents {
+		var cs *raftpb.ConfState
 		data := ents[i].Data
 
 		if ents[i].Type == raftpb.EntryConfChange {
@@ -164,7 +165,7 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 				rc.logger.Panic("ConfChange Unmarshal fail", zap.String("err", err.Error()))
 			}
 
-			rc.confState = *rc.node.ApplyConfChange(cc)
+			cs = rc.node.ApplyConfChange(cc)
 			switch cc.Type {
 			case raftpb.ConfChangeAddNode:
 				if len(cc.Context) == 0 {
@@ -203,7 +204,9 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 				entryType: ents[i].Type,
 				index:     ents[i].Index,
 				data:      data,
+				confState: cs,
 			}
+
 			select {
 			case rc.commitC <- e:
 			case <-ctx.Done():
@@ -476,7 +479,6 @@ func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 
 			snapshot, _ := rc.raftStorage.Snapshot()
 			if !raft.IsEmptySnap(snapshot) {
-				snapshot.Metadata.ConfState = rc.confState
 				ms[i].Snapshot = snapshot
 				rc.transport.SendSnapshot(*snap.NewMessage(ms[i], snapReaderCloser{bytes.NewReader(nil)}, 0))
 				ms[i].To = 0
@@ -492,8 +494,11 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 		return
 	}
 
-	rc.logger.Info("publishing snapshot", zap.Uint64("snapshotIndex", rc.snapshotIndex))
-	defer rc.logger.Info("finished publishing snapshot", zap.Uint64("snapshotIndex", rc.snapshotIndex))
+	rc.logger.Info("publishing snapshot",
+		zap.Uint64("snapIdx", snapshotToSave.Metadata.Index),
+		zap.Uint64("preSnapIdx", rc.snapshotIndex),
+		zap.Uint64("appliedIdx", rc.appliedIndex),
+		zap.Int("voter", len(snapshotToSave.Metadata.ConfState.Voters)))
 
 	if snapshotToSave.Metadata.Index <= rc.appliedIndex {
 		rc.logger.Panic("snapshot index should > progress.appliedIndex",
@@ -503,9 +508,12 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	}
 	rc.commitC <- nil // trigger kvstore to load snapshot
 
-	rc.confState = snapshotToSave.Metadata.ConfState
 	rc.snapshotIndex = snapshotToSave.Metadata.Index
 	rc.appliedIndex = snapshotToSave.Metadata.Index
+
+	rc.logger.Info("finish snapshot",
+		zap.Uint64("snapIdx", rc.snapshotIndex),
+		zap.Uint64("appliedIdx", rc.appliedIndex))
 }
 
 func (rc *raftNode) maybeTriggerSnapshot() {
@@ -513,7 +521,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		return
 	}
 
-	data, appliedIndex := rc.getSnapshot()
+	data, confState, appliedIndex := rc.getSnapshot()
 	if rc.snapshotIndex >= appliedIndex {
 		return
 	}
@@ -524,8 +532,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		zap.Uint64("lastSnapshotIndex", rc.snapshotIndex),
 	)
 
-	//snap, err := rc.raftStorage.CreateSnapshot(appliedIndex, &rc.confState, data)
-	snap, err := rc.raftStorage.CreateSnapshot(appliedIndex, nil, data)
+	snap, err := rc.raftStorage.CreateSnapshot(appliedIndex, confState, data)
 	if err != nil {
 		rc.logger.Panic(err.Error())
 	}
@@ -579,7 +586,6 @@ func (rc *raftNode) processCommit(ctx context.Context) {
 	if err != nil {
 		rc.logger.Panic("serve channel", zap.String("err", err.Error()))
 	}
-	rc.confState = snap.Metadata.ConfState
 	rc.snapshotIndex = snap.Metadata.Index
 	rc.appliedIndex = snap.Metadata.Index
 

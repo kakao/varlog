@@ -1100,7 +1100,7 @@ func TestStorageSnapshot(t *testing.T) {
 
 		<-ch
 
-		snap, _ := ms.GetSnapshot()
+		snap, _, _ := ms.GetSnapshot()
 		So(snap, ShouldBeNil)
 		So(testutil.CompareWait(func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
@@ -1121,7 +1121,7 @@ func TestStorageSnapshot(t *testing.T) {
 
 			<-ch
 
-			snap, snapIndex := ms.GetSnapshot()
+			snap, _, snapIndex := ms.GetSnapshot()
 			So(snap, ShouldNotBeNil)
 			So(snapIndex, ShouldEqual, appliedIndex)
 
@@ -1183,15 +1183,15 @@ func TestStorageLoadSnapshot(t *testing.T) {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
 		}, time.Second), ShouldBeTrue)
 
-		snap, snapIndex := ms.GetSnapshot()
+		snap, confState, snapIndex := ms.GetSnapshot()
 		So(snap, ShouldNotBeNil)
 
 		Convey("When new MetadataStorage which load snapshot", func(ctx C) {
 			loaded := NewMetadataStorage(cb, defaultSnapshotCount)
-			So(loaded.LoadSnapshot(snap, snapIndex), ShouldBeNil)
+			So(loaded.LoadSnapshot(snap, confState, snapIndex), ShouldBeNil)
 
 			Convey("Then MetadataStorage should have same data", func(ctx C) {
-				lsnap, lsnapIndex := loaded.GetSnapshot()
+				lsnap, _, lsnapIndex := loaded.GetSnapshot()
 				So(snapIndex, ShouldEqual, lsnapIndex)
 				So(bytes.Compare(snap, lsnap), ShouldEqual, 0)
 
@@ -1319,7 +1319,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
 		}, 10*time.Second), ShouldBeTrue)
 
-		_, recv := ms.GetSnapshot()
+		_, _, recv := ms.GetSnapshot()
 		So(recv, ShouldEqual, appliedIndex)
 
 		Reset(func() {

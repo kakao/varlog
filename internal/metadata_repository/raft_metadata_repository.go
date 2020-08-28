@@ -78,7 +78,7 @@ type RaftMetadataRepository struct {
 
 	// for raft
 	proposeC      chan *pb.RaftEntry
-	commitC       chan *pb.RaftEntry
+	commitC       chan *committedEntry
 	rnConfChangeC chan raftpb.ConfChange
 	rnProposeC    chan string
 	rnCommitC     chan *raftCommittedEntry
@@ -102,7 +102,7 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 	mr.storage = NewMetadataStorage(mr.sendAck, config.SnapCount)
 
 	mr.proposeC = make(chan *pb.RaftEntry, 4096)
-	mr.commitC = make(chan *pb.RaftEntry, 4096)
+	mr.commitC = make(chan *committedEntry, 4096)
 
 	mr.rnConfChangeC = make(chan raftpb.ConfChange)
 	mr.rnProposeC = make(chan string)
@@ -217,11 +217,11 @@ Loop:
 }
 
 func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
-	for e := range mr.commitC {
-		if e == nil {
+	for c := range mr.commitC {
+		if c == nil {
 			snap := mr.raftNode.loadSnapshot()
 			if snap != nil {
-				err := mr.storage.LoadSnapshot(snap.Data, snap.Metadata.Index)
+				err := mr.storage.LoadSnapshot(snap.Data, &snap.Metadata.ConfState, snap.Metadata.Index)
 				if err != nil {
 					mr.logger.Panic("load snapshot fail")
 				}
@@ -231,12 +231,13 @@ func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
 			continue
 		}
 
-		mr.apply(e)
+		mr.apply(c)
 	}
 }
 
 func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 	for d := range mr.rnCommitC {
+		var c *committedEntry
 		var e *pb.RaftEntry
 
 		if d != nil {
@@ -247,6 +248,9 @@ func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 				if err != nil {
 					mr.logger.Error(err.Error())
 					continue
+				}
+				c = &committedEntry{
+					entry: e,
 				}
 			case raftpb.EntryConfChange:
 				var cc raftpb.ConfChange
@@ -273,13 +277,18 @@ func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 				default:
 					mr.logger.Panic("unknown type")
 				}
+
+				c = &committedEntry{
+					entry:     e,
+					confState: d.confState,
+				}
 			default:
 				mr.logger.Panic("unknown type")
 			}
 			e.AppliedIndex = d.index
 		}
 
-		mr.commitC <- e
+		mr.commitC <- c
 	}
 
 	close(mr.commitC)
@@ -302,7 +311,8 @@ func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, e
 	}
 }
 
-func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
+func (mr *RaftMetadataRepository) apply(c *committedEntry) {
+	e := c.entry
 	f := e.Request.GetValue()
 	switch r := f.(type) {
 	case *pb.RegisterStorageNode:
@@ -324,9 +334,9 @@ func (mr *RaftMetadataRepository) apply(e *pb.RaftEntry) {
 	case *pb.Unseal:
 		mr.applyUnseal(r, e.NodeIndex, e.RequestIndex)
 	case *pb.AddPeer:
-		mr.applyAddPeer(r)
+		mr.applyAddPeer(r, c.confState)
 	case *pb.RemovePeer:
-		mr.applyRemovePeer(r)
+		mr.applyRemovePeer(r, c.confState)
 	}
 
 	mr.storage.UpdateAppliedIndex(e.AppliedIndex)
@@ -492,8 +502,8 @@ func (mr *RaftMetadataRepository) applyUnseal(r *pb.Unseal, nodeIndex, requestIn
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyAddPeer(r *pb.AddPeer) error {
-	err := mr.storage.AddPeer(r.NodeID, r.Url)
+func (mr *RaftMetadataRepository) applyAddPeer(r *pb.AddPeer, cs *raftpb.ConfState) error {
+	err := mr.storage.AddPeer(r.NodeID, r.Url, cs)
 	if err != nil {
 		return err
 	}
@@ -501,8 +511,8 @@ func (mr *RaftMetadataRepository) applyAddPeer(r *pb.AddPeer) error {
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyRemovePeer(r *pb.RemovePeer) error {
-	err := mr.storage.RemovePeer(r.NodeID)
+func (mr *RaftMetadataRepository) applyRemovePeer(r *pb.RemovePeer, cs *raftpb.ConfState) error {
+	err := mr.storage.RemovePeer(r.NodeID, cs)
 	if err != nil {
 		return err
 	}
