@@ -147,6 +147,14 @@ func (clus *metadataRepoCluster) close(idx int) error {
 	return err
 }
 
+func (clus *metadataRepoCluster) hasSnapshot(idx int) (bool, error) {
+	if idx < 0 || idx >= len(clus.nodes) {
+		return false, errors.New("out or range")
+	}
+
+	return clus.nodes[idx].raftNode.loadSnapshot() != nil, nil
+}
+
 // Close closes all cluster nodes
 func (clus *metadataRepoCluster) Close() error {
 	var err error
@@ -578,9 +586,11 @@ func TestMRRequestMap(t *testing.T) {
 				return ok
 			}, time.Second)
 
-			dummy := &pb.RaftEntry{
-				NodeIndex:    2,
-				RequestIndex: uint64(1),
+			dummy := &committedEntry{
+				entry: &pb.RaftEntry{
+					NodeIndex:    2,
+					RequestIndex: uint64(1),
+				},
 			}
 			mr.commitC <- dummy
 		}()
@@ -1170,7 +1180,7 @@ func TestMRFailoverRestart(t *testing.T) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 
-			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			So(clus.nodes[leader].AddPeer(rctx,
@@ -1187,7 +1197,7 @@ func TestMRFailoverRestart(t *testing.T) {
 						return false
 					}
 					return len(membership) == nrNode
-				}, time.Second), ShouldBeTrue)
+				}, 5*time.Second), ShouldBeTrue)
 			})
 		})
 
@@ -1198,7 +1208,7 @@ func TestMRFailoverRestart(t *testing.T) {
 			clus.stop(restartNode)
 			clus.stop(leaveNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			So(clus.nodes[leader].RemovePeer(rctx,
@@ -1216,7 +1226,7 @@ func TestMRFailoverRestart(t *testing.T) {
 						return false
 					}
 					return len(membership) == nrNode
-				}, time.Second), ShouldBeTrue)
+				}, 5*time.Second), ShouldBeTrue)
 			})
 		})
 	})
@@ -1341,6 +1351,61 @@ func TestMRRemoteSnapshop(t *testing.T) {
 					}
 					return len(membership) == nrNode
 				}, time.Second), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestMRFailoverRestartWithSnapshot(t *testing.T) {
+	Convey("Given MR cluster with 5 peers", t, func(ctx C) {
+		nrRep := 1
+		nrNode := 5
+		testSnapCount = 10
+		defer func() { testSnapCount = 0 }()
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		leader := clus.leader()
+		So(leader, ShouldBeGreaterThan, -1)
+
+		Convey("When follower restart with snapshot and some node leave", func(ctx C) {
+			restartNode := (leader + 1) % nrNode
+			leaveNode := (leader + 2) % nrNode
+
+			So(testutil.CompareWait(func() bool {
+				hasSnapshot, _ := clus.hasSnapshot(restartNode)
+				return hasSnapshot
+			}, 5*time.Second), ShouldBeTrue)
+
+			clus.stop(restartNode)
+			clus.stop(leaveNode)
+
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			So(clus.nodes[leader].RemovePeer(rctx,
+				types.InvalidNodeID,
+				clus.nodes[leaveNode].index), ShouldBeNil)
+
+			nrNode -= 1
+
+			clus.restart(restartNode)
+
+			Convey("Then GetMembership should return 4 peers", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
+					if err != nil {
+						return false
+					}
+					return len(membership) == nrNode
+				}, 5*time.Second), ShouldBeTrue)
 			})
 		})
 	})

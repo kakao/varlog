@@ -1,4 +1,4 @@
-SRC := metadata_repository.proto raft_metadata_repository.proto management.proto
+SRC := metadata_repository.proto raft_metadata_repository.proto management.proto raft_entry.proto
 TARGET := $(SRC:.proto=.pb.go)
 
 $(TARGET): $(SRC)
