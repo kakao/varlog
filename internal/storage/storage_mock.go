@@ -35,7 +35,7 @@ func (m *MockScanner) EXPECT() *MockScannerMockRecorder {
 	return m.recorder
 }
 
-// Next mocks base method
+// Next mocks base method.
 func (m *MockScanner) Next() (varlog.LogEntry, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Next")

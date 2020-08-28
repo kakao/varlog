@@ -2,16 +2,17 @@ package storage
 
 import (
 	"context"
-	"sync"
 
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+
 	"google.golang.org/grpc"
 )
 
 type LogIOService struct {
-	pb.UnimplementedLogIOServer
+	snpb.UnimplementedLogIOServer
 	storageNodeID types.StorageNodeID
 	lseGetter     LogStreamExecutorGetter
 }
@@ -24,10 +25,10 @@ func NewLogIOService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecu
 }
 
 func (s *LogIOService) Register(server *grpc.Server) {
-	pb.RegisterLogIOServer(server, s)
+	snpb.RegisterLogIOServer(server, s)
 }
 
-func (s *LogIOService) Append(ctx context.Context, req *pb.AppendRequest) (*pb.AppendResponse, error) {
+func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.AppendResponse, error) {
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		return nil, varlog.ErrInvalid
@@ -38,10 +39,10 @@ func (s *LogIOService) Append(ctx context.Context, req *pb.AppendRequest) (*pb.A
 	if err != nil {
 		return nil, err
 	}
-	return &pb.AppendResponse{GLSN: glsn}, nil
+	return &snpb.AppendResponse{GLSN: glsn}, nil
 }
 
-func (s *LogIOService) Read(ctx context.Context, req *pb.ReadRequest) (*pb.ReadResponse, error) {
+func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.ReadResponse, error) {
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		return nil, varlog.ErrInvalid
@@ -52,10 +53,10 @@ func (s *LogIOService) Read(ctx context.Context, req *pb.ReadRequest) (*pb.ReadR
 	if err != nil {
 		return nil, err
 	}
-	return &pb.ReadResponse{Payload: data, GLSN: req.GetGLSN()}, nil
+	return &snpb.ReadResponse{Payload: data, GLSN: req.GetGLSN()}, nil
 }
 
-func (s *LogIOService) Subscribe(req *pb.SubscribeRequest, stream pb.LogIO_SubscribeServer) error {
+func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) error {
 	// FIXME: wrap error code by using grpc.status package
 	//
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
@@ -72,7 +73,7 @@ func (s *LogIOService) Subscribe(req *pb.SubscribeRequest, stream pb.LogIO_Subsc
 		if r.err != nil {
 			return r.err
 		}
-		err := stream.Send(&pb.SubscribeResponse{
+		err := stream.Send(&snpb.SubscribeResponse{
 			GLSN:    r.logEntry.GLSN,
 			LLSN:    r.logEntry.LLSN,
 			Payload: r.logEntry.Data,
@@ -84,43 +85,12 @@ func (s *LogIOService) Subscribe(req *pb.SubscribeRequest, stream pb.LogIO_Subsc
 	return ctx.Err()
 }
 
-func (s *LogIOService) Trim(ctx context.Context, req *pb.TrimRequest) (*pb.TrimResponse, error) {
-	targetLSEs := s.lseGetter.GetLogStreamExecutors()
-
-	// NOTE: subtle case
-	// If the trim operation will remove very large GLSN that is not stored yet, current LSEs
-	// remove all log entries. After replied the trim operation, log entries within the scope
-	// of removing will be saved again.
-
-	// TODO: create child context by using operation timeout
-	type result struct {
-		num uint64
-		err error
-	}
-
-	// NOTE: When a trimTask is enqueued, it can't be canceled by using the context passed by
-	// the RPC handler. We have below options:
-	// - Use the context (or its child context) to delete log entries
-	// - All trim operations are asyncrhonous - use tombstone!
-	// - Jus wait!
-	c := make(chan result, len(targetLSEs))
-	var wg sync.WaitGroup
-	wg.Add(len(targetLSEs))
-	for _, lse := range targetLSEs {
-		go func(lse LogStreamExecutor) {
-			defer wg.Done()
-			cnt, err := lse.Trim(ctx, req.GetGLSN(), req.GetAsync())
-			c <- result{cnt, err}
-		}(lse)
-	}
-	wg.Wait()
-	close(c)
-	rsp := &pb.TrimResponse{}
-	for res := range c {
-		rsp.NumTrimmed += res.num
-		if res.err != nil {
-			return nil, res.err
+func (s *LogIOService) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtypes.Empty, error) {
+	var err error
+	for _, lse := range s.lseGetter.GetLogStreamExecutors() {
+		if e := lse.Trim(ctx, req.GetGLSN()); e != nil {
+			err = e
 		}
 	}
-	return rsp, nil
+	return &pbtypes.Empty{}, err
 }
