@@ -71,20 +71,26 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		})
 
 		Convey("read operation should reply uncertainness if it doesn't know", func() {
-			_, err := lse.Read(context.TODO(), types.GLSN(0))
+			_, err := lse.Read(context.TODO(), types.MinGLSN)
 			So(err, ShouldEqual, varlog.ErrUndecidable)
 		})
 
 		Convey("read operation should reply error when the requested GLSN was already deleted", func() {
 			const trimGLSN = types.GLSN(5)
-			storage.EXPECT().Delete(gomock.Any()).Return(uint64(trimGLSN)+1, nil)
-			nr, err := lse.Trim(context.TODO(), trimGLSN, false)
+			var wg sync.WaitGroup
+			wg.Add(1)
+			storage.EXPECT().Delete(gomock.Any()).DoAndReturn(
+				func(types.GLSN) (uint64, error) {
+					defer wg.Done()
+					return uint64(trimGLSN), nil
+				},
+			)
+			err := lse.Trim(context.TODO(), trimGLSN)
 			So(err, ShouldBeNil)
-			So(nr, ShouldEqual, uint64(trimGLSN)+1)
-			for trimmedGLSN := types.GLSN(0); trimmedGLSN <= trimGLSN; trimmedGLSN++ {
-				isTrimmed, nonTrimmedGLSNBegin := lse.(*logStreamExecutor).isTrimmed(trimmedGLSN)
+			wg.Wait()
+			for trimmedGLSN := types.MinGLSN; trimmedGLSN <= trimGLSN; trimmedGLSN++ {
+				isTrimmed := lse.(*logStreamExecutor).isTrimmed(trimmedGLSN)
 				So(isTrimmed, ShouldBeTrue)
-				So(nonTrimmedGLSNBegin, ShouldEqual, trimGLSN+1)
 
 				_, err := lse.Read(context.TODO(), trimmedGLSN)
 				So(err, ShouldEqual, varlog.ErrTrimmed)
@@ -93,8 +99,8 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 
 		Convey("read operation should reply written data", func() {
 			storage.EXPECT().Read(gomock.Any()).Return([]byte("log"), nil)
-			lse.(*logStreamExecutor).learnedGLSNBegin = 0
-			lse.(*logStreamExecutor).learnedGLSNEnd = 10
+			lse.(*logStreamExecutor).localLowWatermark = 0
+			lse.(*logStreamExecutor).localHighWatermark = 10
 			data, err := lse.Read(context.TODO(), types.GLSN(0))
 			So(err, ShouldBeNil)
 			So(string(data), ShouldEqual, "log")
@@ -129,7 +135,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 			waitCommitDone := func(knownNextGLSN types.GLSN) {
 				for {
 					lse.(*logStreamExecutor).mu.RLock()
-					updatedKnownNextGLSN := lse.(*logStreamExecutor).knownHighWatermark
+					updatedKnownNextGLSN := lse.(*logStreamExecutor).globalHighwatermark
 					lse.(*logStreamExecutor).mu.RUnlock()
 					if knownNextGLSN != updatedKnownNextGLSN {
 						break
@@ -147,7 +153,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 			storage.EXPECT().Commit(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			for i := types.MinGLSN; i < N; i++ {
 				lse.(*logStreamExecutor).mu.RLock()
-				knownHWM := lse.(*logStreamExecutor).knownHighWatermark
+				knownHWM := lse.(*logStreamExecutor).globalHighwatermark
 				lse.(*logStreamExecutor).mu.RUnlock()
 				uncommittedLLSNEnd := lse.(*logStreamExecutor).uncommittedLLSNEnd.Load()
 				var wg sync.WaitGroup
@@ -402,7 +408,7 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		})
 
 		Convey("When the context passed to the Read is cancelled", func() {
-			lse.(*logStreamExecutor).learnedGLSNEnd.Store(types.MaxGLSN)
+			lse.(*logStreamExecutor).localHighWatermark.Store(types.MaxGLSN)
 
 			stop := make(chan struct{})
 			storage.EXPECT().Read(gomock.Any()).DoAndReturn(func(types.GLSN) ([]byte, error) {
@@ -445,10 +451,10 @@ func TestLogStreamExecutorTrim(t *testing.T) {
 				cancel()
 
 				var err error
-				_, err = lse.Trim(ctx, types.MinGLSN, true)
+				err = lse.Trim(ctx, types.MinGLSN)
 				So(err, ShouldResemble, context.Canceled)
 
-				_, err = lse.Trim(ctx, types.MinGLSN, false)
+				err = lse.Trim(ctx, types.MinGLSN)
 				So(err, ShouldResemble, context.Canceled)
 			})
 		})

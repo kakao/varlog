@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	types "github.com/kakao/varlog/pkg/varlog/types"
@@ -111,7 +112,7 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 	mockClient.EXPECT().Trim(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *pb.TrimRequest) (*pb.TrimResponse, error) {
+	).DoAndReturn(func(_ context.Context, req *pb.TrimRequest) (*pbtypes.Empty, error) {
 		sn.mu.Lock()
 		defer sn.mu.Unlock()
 		var num uint64 = 0
@@ -123,9 +124,7 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 			delete(sn.glsnToLLSN, glsn)
 			num++
 		}
-		return &pb.TrimResponse{
-			NumTrimmed: num,
-		}, nil
+		return &pbtypes.Empty{}, nil
 	})
 
 	return mockClient
@@ -178,9 +177,8 @@ func TestBasicOperations(t *testing.T) {
 		So(subRes.LLSN, ShouldEqual, types.LLSN(1))
 		So(string(subRes.Data), ShouldEqual, "msg-2")
 
-		num, err := client.Trim(context.TODO(), types.GLSN(0), false)
+		err = client.Trim(context.TODO(), types.GLSN(0))
 		So(subRes.Error, ShouldBeNil)
-		So(num, ShouldEqual, 1)
 
 		currLogEntry, err = client.Read(context.TODO(), logStreamID, types.GLSN(0))
 		So(err, ShouldNotBeNil)

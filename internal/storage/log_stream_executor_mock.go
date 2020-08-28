@@ -6,60 +6,61 @@ package storage
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	varlog "github.com/kakao/varlog/proto/varlog"
-	reflect "reflect"
 )
 
-// MockLogStreamExecutor is a mock of LogStreamExecutor interface
+// MockLogStreamExecutor is a mock of LogStreamExecutor interface.
 type MockLogStreamExecutor struct {
 	ctrl     *gomock.Controller
 	recorder *MockLogStreamExecutorMockRecorder
 }
 
-// MockLogStreamExecutorMockRecorder is the mock recorder for MockLogStreamExecutor
+// MockLogStreamExecutorMockRecorder is the mock recorder for MockLogStreamExecutor.
 type MockLogStreamExecutorMockRecorder struct {
 	mock *MockLogStreamExecutor
 }
 
-// NewMockLogStreamExecutor creates a new mock instance
+// NewMockLogStreamExecutor creates a new mock instance.
 func NewMockLogStreamExecutor(ctrl *gomock.Controller) *MockLogStreamExecutor {
 	mock := &MockLogStreamExecutor{ctrl: ctrl}
 	mock.recorder = &MockLogStreamExecutorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockLogStreamExecutor) EXPECT() *MockLogStreamExecutorMockRecorder {
 	return m.recorder
 }
 
-// Run mocks base method
+// Run mocks base method.
 func (m *MockLogStreamExecutor) Run(ctx context.Context) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Run", ctx)
 }
 
-// Run indicates an expected call of Run
+// Run indicates an expected call of Run.
 func (mr *MockLogStreamExecutorMockRecorder) Run(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockLogStreamExecutor)(nil).Run), ctx)
 }
 
-// Close mocks base method
+// Close mocks base method.
 func (m *MockLogStreamExecutor) Close() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Close")
 }
 
-// Close indicates an expected call of Close
+// Close indicates an expected call of Close.
 func (mr *MockLogStreamExecutorMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockLogStreamExecutor)(nil).Close))
 }
 
-// Status mocks base method
+// Status mocks base method.
 func (m *MockLogStreamExecutor) Status() varlog.LogStreamStatus {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Status")
@@ -67,13 +68,13 @@ func (m *MockLogStreamExecutor) Status() varlog.LogStreamStatus {
 	return ret0
 }
 
-// Status indicates an expected call of Status
+// Status indicates an expected call of Status.
 func (mr *MockLogStreamExecutorMockRecorder) Status() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockLogStreamExecutor)(nil).Status))
 }
 
-// LogStreamID mocks base method
+// LogStreamID mocks base method.
 func (m *MockLogStreamExecutor) LogStreamID() types.LogStreamID {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LogStreamID")
@@ -81,13 +82,13 @@ func (m *MockLogStreamExecutor) LogStreamID() types.LogStreamID {
 	return ret0
 }
 
-// LogStreamID indicates an expected call of LogStreamID
+// LogStreamID indicates an expected call of LogStreamID.
 func (mr *MockLogStreamExecutorMockRecorder) LogStreamID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamID", reflect.TypeOf((*MockLogStreamExecutor)(nil).LogStreamID))
 }
 
-// Read mocks base method
+// Read mocks base method.
 func (m *MockLogStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", ctx, glsn)
@@ -96,13 +97,13 @@ func (m *MockLogStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]by
 	return ret0, ret1
 }
 
-// Read indicates an expected call of Read
+// Read indicates an expected call of Read.
 func (mr *MockLogStreamExecutorMockRecorder) Read(ctx, glsn interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockLogStreamExecutor)(nil).Read), ctx, glsn)
 }
 
-// Subscribe mocks base method
+// Subscribe mocks base method.
 func (m *MockLogStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Subscribe", ctx, glsn)
@@ -111,13 +112,13 @@ func (m *MockLogStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) 
 	return ret0, ret1
 }
 
-// Subscribe indicates an expected call of Subscribe
+// Subscribe indicates an expected call of Subscribe.
 func (mr *MockLogStreamExecutorMockRecorder) Subscribe(ctx, glsn interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLogStreamExecutor)(nil).Subscribe), ctx, glsn)
 }
 
-// Append mocks base method
+// Append mocks base method.
 func (m *MockLogStreamExecutor) Append(ctx context.Context, data []byte, backups ...Replica) (types.GLSN, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, data}
@@ -130,29 +131,28 @@ func (m *MockLogStreamExecutor) Append(ctx context.Context, data []byte, backups
 	return ret0, ret1
 }
 
-// Append indicates an expected call of Append
+// Append indicates an expected call of Append.
 func (mr *MockLogStreamExecutorMockRecorder) Append(ctx, data interface{}, backups ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, data}, backups...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Append", reflect.TypeOf((*MockLogStreamExecutor)(nil).Append), varargs...)
 }
 
-// Trim mocks base method
-func (m *MockLogStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {
+// Trim mocks base method.
+func (m *MockLogStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Trim", ctx, glsn, async)
-	ret0, _ := ret[0].(uint64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "Trim", ctx, glsn)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// Trim indicates an expected call of Trim
-func (mr *MockLogStreamExecutorMockRecorder) Trim(ctx, glsn, async interface{}) *gomock.Call {
+// Trim indicates an expected call of Trim.
+func (mr *MockLogStreamExecutorMockRecorder) Trim(ctx, glsn interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockLogStreamExecutor)(nil).Trim), ctx, glsn, async)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockLogStreamExecutor)(nil).Trim), ctx, glsn)
 }
 
-// Replicate mocks base method
+// Replicate mocks base method.
 func (m *MockLogStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Replicate", ctx, llsn, data)
@@ -160,13 +160,13 @@ func (m *MockLogStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, 
 	return ret0
 }
 
-// Replicate indicates an expected call of Replicate
+// Replicate indicates an expected call of Replicate.
 func (mr *MockLogStreamExecutorMockRecorder) Replicate(ctx, llsn, data interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockLogStreamExecutor)(nil).Replicate), ctx, llsn, data)
 }
 
-// GetReport mocks base method
+// GetReport mocks base method.
 func (m *MockLogStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReport")
@@ -174,13 +174,13 @@ func (m *MockLogStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	return ret0
 }
 
-// GetReport indicates an expected call of GetReport
+// GetReport indicates an expected call of GetReport.
 func (mr *MockLogStreamExecutorMockRecorder) GetReport() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockLogStreamExecutor)(nil).GetReport))
 }
 
-// Commit mocks base method
+// Commit mocks base method.
 func (m *MockLogStreamExecutor) Commit(arg0 CommittedLogStreamStatus) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Commit", arg0)
@@ -188,7 +188,7 @@ func (m *MockLogStreamExecutor) Commit(arg0 CommittedLogStreamStatus) error {
 	return ret0
 }
 
-// Commit indicates an expected call of Commit
+// Commit indicates an expected call of Commit.
 func (mr *MockLogStreamExecutorMockRecorder) Commit(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamExecutor)(nil).Commit), arg0)

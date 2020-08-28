@@ -153,14 +153,13 @@ func TestStorageNodeServiceTrim(t *testing.T) {
 				lse := NewMockLogStreamExecutor(ctrl)
 				lse.EXPECT().LogStreamID().Return(types.LogStreamID(i)).AnyTimes()
 				lses = append(lses, lse)
-				lse.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(10), nil)
+				lse.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(nil)
 			}
 			setLseGetter(lseGetter, lses...)
-			rsp, err := s.Trim(context.TODO(), &pb.TrimRequest{
+			_, err := s.Trim(context.TODO(), &pb.TrimRequest{
 				GLSN: types.GLSN(10000),
 			})
 			So(err, ShouldBeNil)
-			So(rsp.GetNumTrimmed(), ShouldEqual, 10*nrLSEs)
 		})
 
 	})

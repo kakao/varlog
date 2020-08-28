@@ -3,6 +3,7 @@ syntax = "proto3";
 package varlog.storagenode;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/empty.proto";
 
 option go_package = "github.com/kakao/varlog/proto/storage_node";
 
@@ -81,19 +82,11 @@ message TrimRequest {
     uint64 glsn = 1
         [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/varlog/types.GLSN",
          (gogoproto.customname) = "GLSN"];
-    bool async = 2;
-}
-
-// TrimResponse indicates how many log entries are deleted by using the
-// num_trimmed field. In the case of an asynchronous request, the num_trimmed
-// is zero.
-message TrimResponse {
-    uint64 num_trimmed = 1;
 }
 
 service LogIO {
     rpc Append(AppendRequest) returns (AppendResponse) {}
     rpc Read(ReadRequest) returns (ReadResponse) {}
     rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
-    rpc Trim(TrimRequest) returns (TrimResponse) {}
+    rpc Trim(TrimRequest) returns (google.protobuf.Empty) {}
 }

@@ -286,10 +286,10 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 			})
 
 			Convey("When the underlying LogStreamExecutor is timed out", func() {
-				lse1.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(0), context.DeadlineExceeded)
-				lse2.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(0), context.DeadlineExceeded)
+				lse1.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(context.DeadlineExceeded)
+				lse2.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(context.DeadlineExceeded)
 				Convey("Then the LogIOClient should return timeout error", func() {
-					_, err := cli.Trim(context.TODO(), types.MinGLSN, false)
+					err := cli.Trim(context.TODO(), types.MinGLSN)
 					So(err, ShouldNotBeNil)
 				})
 			})
@@ -297,53 +297,51 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 			Convey("When the LogIOClient is timed out", func() {
 				stop := make(chan struct{})
 				defer close(stop)
-				lse1.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-					func(context.Context, types.GLSN, bool) (uint64, error) {
+				lse1.EXPECT().Trim(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, types.GLSN) error {
 						<-stop
-						return uint64(0), varlog.ErrInternal
+						return varlog.ErrInternal
 					},
 				).MaxTimes(1)
-				lse2.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-					func(context.Context, types.GLSN, bool) (uint64, error) {
+				lse2.EXPECT().Trim(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, types.GLSN) error {
 						<-stop
-						return uint64(0), varlog.ErrInternal
+						return varlog.ErrInternal
 					},
 				).MaxTimes(1)
 
 				Convey("Then the LogIOClient should return timeout error", func() {
 					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
 					defer cancel()
-					_, err := cli.Trim(ctx, types.MinGLSN, false)
+					err := cli.Trim(ctx, types.MinGLSN)
 					So(varlog.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 
 			Convey("When some of the underlying LogStreamExecutor return errors", func() {
-				lse1.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(0), varlog.ErrInternal)
-				lse2.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(10), nil)
+				lse1.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)
+				lse2.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(nil)
 				Convey("Then the LogIOClient should return an error", func() {
-					_, err := cli.Trim(context.TODO(), types.GLSN(20), false)
+					err := cli.Trim(context.TODO(), types.GLSN(20))
 					So(err, ShouldNotBeNil)
 				})
 			})
 
 			Convey("When the request is in asynchronous mode", func() {
-				lse1.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(0), nil)
-				lse2.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(0), nil)
+				lse1.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(nil)
+				lse2.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(nil)
 				Convey("Then the number of trimmed log entries should be zero", func() {
-					num, err := cli.Trim(context.TODO(), types.GLSN(20), true)
+					err := cli.Trim(context.TODO(), types.GLSN(20))
 					So(err, ShouldBeNil)
-					So(num, ShouldBeZeroValue)
 				})
 			})
 
 			Convey("When the request is in synchronous mode", func() {
-				lse1.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(5), nil)
-				lse2.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(5), nil)
+				lse1.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(nil)
+				lse2.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(nil)
 				Convey("Then the number of trimmed log entries should be equal to the value which is trimmed by the underlying LogStreamExecutor", func() {
-					num, err := cli.Trim(context.TODO(), types.GLSN(20), false)
+					err := cli.Trim(context.TODO(), types.GLSN(20))
 					So(err, ShouldBeNil)
-					So(num, ShouldEqual, uint64(10))
 				})
 			})
 		}))

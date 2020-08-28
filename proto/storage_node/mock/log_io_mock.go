@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	types "github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
 	storage_node "github.com/kakao/varlog/proto/storage_node"
 	grpc "google.golang.org/grpc"
@@ -98,14 +99,14 @@ func (mr *MockLogIOClientMockRecorder) Subscribe(arg0, arg1 interface{}, arg2 ..
 }
 
 // Trim mocks base method.
-func (m *MockLogIOClient) Trim(arg0 context.Context, arg1 *storage_node.TrimRequest, arg2 ...grpc.CallOption) (*storage_node.TrimResponse, error) {
+func (m *MockLogIOClient) Trim(arg0 context.Context, arg1 *storage_node.TrimRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Trim", varargs...)
-	ret0, _ := ret[0].(*storage_node.TrimResponse)
+	ret0, _ := ret[0].(*types.Empty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -185,10 +186,10 @@ func (mr *MockLogIOServerMockRecorder) Subscribe(arg0, arg1 interface{}) *gomock
 }
 
 // Trim mocks base method.
-func (m *MockLogIOServer) Trim(arg0 context.Context, arg1 *storage_node.TrimRequest) (*storage_node.TrimResponse, error) {
+func (m *MockLogIOServer) Trim(arg0 context.Context, arg1 *storage_node.TrimRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Trim", arg0, arg1)
-	ret0, _ := ret[0].(*storage_node.TrimResponse)
+	ret0, _ := ret[0].(*types.Empty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

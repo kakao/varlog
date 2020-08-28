@@ -27,7 +27,7 @@ type LogStreamExecutor interface {
 	Read(ctx context.Context, glsn types.GLSN) ([]byte, error)
 	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
 	Append(ctx context.Context, data []byte, backups ...Replica) (types.GLSN, error)
-	Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error)
+	Trim(ctx context.Context, glsn types.GLSN) error
 
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
 
@@ -43,11 +43,7 @@ type readTask struct {
 }
 
 type trimTask struct {
-	glsn  types.GLSN
-	async bool
-	nr    uint64
-	err   error
-	done  chan struct{}
+	glsn types.GLSN
 }
 
 type commitTask struct {
@@ -76,12 +72,12 @@ type logStreamExecutor struct {
 	// knownNextGLSN and uncommittedLLSNBegin should be updated simultaneously.
 	mu sync.RWMutex
 
-	// knownHighWatermark acts as a version of commit result. In the scope of the same
-	// knownHighWatermark, all the reports requested by MR have the same uncommittedLLSNBegin.
+	// globalHighwatermark acts as a version of commit result. In the scope of the same
+	// globalHighwatermark, all the reports requested by MR have the same uncommittedLLSNBegin.
 	// Because the reports with different values of uncommittedLLSNBegin with the same
-	// knownHighWatermark can make some log entries in the log stream have no or more than one GLSN.
+	// globalHighwatermark can make some log entries in the log stream have no or more than one GLSN.
 	// It is read by GetReport, and written by commit.
-	knownHighWatermark types.GLSN // set by Commit
+	globalHighwatermark types.GLSN // set by Commit
 	// knownNextGLSN types.GLSN // set by Commit
 
 	// uncommittedLLSNBegin is the start of the range that is reported as uncommitted log
@@ -112,12 +108,12 @@ type logStreamExecutor struct {
 	// committedGLSNBegin and committedGLSNEnd are knowledges which are learned from Trim and
 	// Commit operations.
 	//
-	// learnedGLSNBegin and committedGLSNEnd are knowledge that is learned from Trim and
+	// localLowWatermark and committedGLSNEnd are knowledge that is learned from Trim and
 	// Commit operations. Exact values of them are maintained in the storage. By learning
 	// these values in the LogStreamExecutor, it can be avoided to unnecessary requests to
 	// the storage.
-	learnedGLSNBegin types.AtomicGLSN
-	learnedGLSNEnd   types.AtomicGLSN
+	localLowWatermark  types.AtomicGLSN
+	localHighWatermark types.AtomicGLSN
 
 	trackers appendTaskTracker
 
@@ -142,10 +138,12 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage, option
 		appendC:              make(chan *appendTask, options.AppendCSize),
 		trimC:                make(chan *trimTask, options.TrimCSize),
 		commitC:              make(chan commitTask, options.CommitCSize),
-		knownHighWatermark:   types.InvalidGLSN,
+		globalHighwatermark:  types.InvalidGLSN,
 		uncommittedLLSNBegin: types.MinLLSN,
 		uncommittedLLSNEnd:   types.AtomicLLSN(types.MinLLSN),
 		committedLLSNEnd:     types.MinLLSN,
+		localLowWatermark:    types.AtomicGLSN(types.InvalidGLSN),
+		localHighWatermark:   types.AtomicGLSN(types.InvalidGLSN),
 		status:               varlogpb.LogStreamStatusRunning,
 		logger:               logger,
 		options:              options,
@@ -233,7 +231,7 @@ func (lse *logStreamExecutor) dispatchCommitC(ctx context.Context) {
 // - read aggregation to minimize I/O
 // - cache or not (use memstore?)
 func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
-	if ok, _ := lse.isTrimmed(glsn); ok {
+	if lse.isTrimmed(glsn) {
 		return nil, varlog.ErrTrimmed
 	}
 	// TODO: wait until decidable or return an error
@@ -254,13 +252,12 @@ func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte
 	}
 }
 
-func (lse *logStreamExecutor) isTrimmed(glsn types.GLSN) (bool, types.GLSN) {
-	learnedGLSNBegin := lse.learnedGLSNBegin.Load()
-	return glsn < learnedGLSNBegin, learnedGLSNBegin
+func (lse *logStreamExecutor) isTrimmed(glsn types.GLSN) bool {
+	return glsn < lse.localLowWatermark.Load()
 }
 
 func (lse *logStreamExecutor) commitUndecidable(glsn types.GLSN) bool {
-	return glsn >= lse.learnedGLSNEnd.Load()
+	return glsn > lse.localHighWatermark.Load()
 }
 
 func (lse *logStreamExecutor) read(t *readTask) {
@@ -425,42 +422,27 @@ func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendT
 	}()
 }
 
-func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {
-	if ok, _ := lse.isTrimmed(glsn); ok {
-		return 0, varlog.ErrTrimmed
+func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
+	if lse.isTrimmed(glsn) {
+		return varlog.ErrTrimmed
 	}
-
-	done := make(chan struct{})
-	task := &trimTask{
-		glsn:  glsn,
-		async: async,
-		done:  done,
-	}
-
 	tctx, cancel := context.WithTimeout(ctx, lse.options.TrimCTimeout)
 	defer cancel()
-
 	select {
-	case lse.trimC <- task:
+	case lse.trimC <- &trimTask{glsn: glsn}:
 	case <-tctx.Done():
-		return 0, tctx.Err()
+		return tctx.Err()
 	}
-	if async {
-		return 0, nil
-	}
-	<-done
-	return task.nr, task.err
+	return nil
 }
 
 func (lse *logStreamExecutor) trim(t *trimTask) {
-	defer close(t.done)
-	if ok, _ := lse.isTrimmed(t.glsn); ok {
-		t.err = varlog.ErrTrimmed
+	if lse.isTrimmed(t.glsn) {
 		return
 	}
-	t.nr, t.err = lse.storage.Delete(t.glsn)
-	if t.err == nil {
-		lse.learnedGLSNBegin.Store(t.glsn + 1)
+	lse.localLowWatermark.Store(t.glsn + 1)
+	if _, err := lse.storage.Delete(t.glsn); err != nil {
+		lse.logger.Error("could not delete logs: %v", zap.Error(err))
 	}
 }
 
@@ -471,7 +453,7 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	lse.mu.RUnlock()
 	return UncommittedLogStreamStatus{
 		LogStreamID:           lse.logStreamID,
-		KnownHighWatermark:    lse.knownHighWatermark,
+		KnownHighWatermark:    lse.globalHighwatermark,
 		UncommittedLLSNOffset: offset,
 		UncommittedLLSNLength: uint64(lse.uncommittedLLSNEnd.Load() - offset),
 	}
@@ -513,10 +495,10 @@ func (lse *logStreamExecutor) verifyCommit(prevHighWatermark types.GLSN) bool {
 	lse.mu.RLock()
 	defer lse.mu.RUnlock()
 	// If the LSE is newbie knownNextGLSN is zero. In LSE-wise commit, it is unnecessary,
-	ret := lse.knownHighWatermark.Invalid() || lse.knownHighWatermark == prevHighWatermark
+	ret := lse.globalHighwatermark.Invalid() || lse.globalHighwatermark == prevHighWatermark
 	if !ret {
 		lse.logger.Error("incorrect CR",
-			zap.Uint64("known next GLSN", uint64(lse.knownHighWatermark)),
+			zap.Uint64("known next GLSN", uint64(lse.globalHighwatermark)),
 			zap.Uint64("prev next GLSN", uint64(prevHighWatermark)))
 	}
 	return ret
@@ -545,7 +527,12 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			break
 		}
 		lse.committedLLSNEnd++
-		lse.learnedGLSNEnd.Store(glsn + 1)
+		// NB: Mutating localHighWatermark here is somewhat nasty.
+		// Read operation to the log entry before getting a response
+		// of appending it might succeed. To mitigate the subtle case,
+		// we can mutate the localHighWatermark just before replying
+		// to the append operation. But it is not a perfect solution.
+		lse.localHighWatermark.Store(glsn)
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
 			appendT.setGLSN(glsn)
@@ -569,7 +556,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 
 	if commitOk {
 		lse.mu.Lock()
-		lse.knownHighWatermark = t.highWatermark
+		lse.globalHighwatermark = t.highWatermark
 		lse.uncommittedLLSNBegin += types.LLSN(t.committedGLSNEnd - t.committedGLSNBegin)
 		lse.mu.Unlock()
 	}

@@ -24,7 +24,7 @@ type LogIOClient interface {
 	Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error)
 	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) (*LogEntry, error)
 	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
-	Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error)
+	Trim(ctx context.Context, glsn types.GLSN) error
 	Close() error
 }
 
@@ -123,16 +123,10 @@ func (c *logIOClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan Su
 
 // Trim deletes log entries greater than or equal to given GLSN in the storage node. The number of
 // deleted log entries are returned.
-func (c *logIOClient) Trim(ctx context.Context, glsn types.GLSN, async bool) (uint64, error) {
-	req := &pb.TrimRequest{
-		GLSN:  glsn,
-		Async: async,
-	}
-	rsp, err := c.rpcClient.Trim(ctx, req)
-	if err != nil {
-		return 0, err
-	}
-	return rsp.GetNumTrimmed(), nil
+func (c *logIOClient) Trim(ctx context.Context, glsn types.GLSN) error {
+	req := &pb.TrimRequest{GLSN: glsn}
+	_, err := c.rpcClient.Trim(ctx, req)
+	return err
 }
 
 // Close closes connection to the storage node.
