@@ -109,12 +109,27 @@ func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNo
 
 // Seal implements the Management Seal method.
 func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error) {
-	panic("")
+	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
+		return vpb.LogStreamStatusRunning, types.InvalidGLSN, varlog.ErrInvalidArgument
+	}
+	lse, ok := sn.GetLogStreamExecutor(logStreamID)
+	if !ok {
+		return vpb.LogStreamStatusRunning, types.InvalidGLSN, varlog.ErrInvalidArgument
+	}
+	status, hwm := lse.Seal(lastCommittedGLSN)
+	return status, hwm, nil
 }
 
 // Unseal implements the Management Unseal method.
 func (sn *StorageNode) Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
-	panic("")
+	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
+		return varlog.ErrInvalidArgument
+	}
+	lse, ok := sn.GetLogStreamExecutor(logStreamID)
+	if !ok {
+		return varlog.ErrInvalidArgument
+	}
+	return lse.Unseal()
 }
 
 func (sn *StorageNode) GetLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {

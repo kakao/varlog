@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 )
 
 func TestLogStreamExecutorNew(t *testing.T) {
@@ -107,7 +107,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		})
 
 		Convey("append operation should not write data when sealed", func() {
-			lse.(*logStreamExecutor).seal()
+			lse.(*logStreamExecutor).sealItself()
 			_, err := lse.Append(context.TODO(), []byte("never"))
 			So(err, ShouldEqual, varlog.ErrSealed)
 		})
@@ -553,6 +553,59 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 					}
 					So((<-c).err, ShouldNotBeNil)
 				})
+			})
+		})
+
+	})
+}
+
+func TestLogStreamExecutorSeal(t *testing.T) {
+	Convey("Given LogStreamExecutor", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		const lsid = types.LogStreamID(1)
+		storage := NewMockStorage(ctrl)
+		lseI, err := NewLogStreamExecutor(lsid, storage, DefaultLogStreamExecutorOptions)
+		So(err, ShouldBeNil)
+		lse := lseI.(*logStreamExecutor)
+
+		Convey("When LogStreamExecutor.sealItself is called", func() {
+			lse.sealItself()
+
+			Convey("Then status of the LogStreamExecutor is SEALING", func() {
+				sealed := lse.isSealed()
+				So(sealed, ShouldBeTrue)
+				lse.mtxStatus.RLock()
+				status := lse.status
+				lse.mtxStatus.RUnlock()
+				So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
+			})
+		})
+
+		Convey("When LogStreamExecutor.Seal is called (localHWM < lastCommittedGLSN)", func() {
+			lse.localHighWatermark.Store(types.MinGLSN)
+
+			Convey("Then status of LogStreamExecutor is SEALING", func() {
+				status, _ := lse.Seal(types.MaxGLSN)
+				So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
+			})
+		})
+
+		Convey("When LogStreamExecutor.Seal is called (localHWM = lastCommittedGLSN)", func() {
+			lse.localHighWatermark.Store(types.MinGLSN)
+
+			Convey("Then status of LogStreamExecutor is SEALING", func() {
+				status, _ := lse.Seal(types.MinGLSN)
+				So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+			})
+		})
+
+		Convey("When LogStreamExecutor.Seal is called (localHWM > lastCommittedGLSN)", func() {
+			lse.localHighWatermark.Store(types.MaxGLSN)
+
+			Convey("Then panic is occurred", func() {
+				So(func() { lse.Seal(types.MinGLSN) }, ShouldPanic)
 			})
 		})
 

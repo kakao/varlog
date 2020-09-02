@@ -52,6 +52,16 @@ type LogStreamExecutorOptions struct {
 	CommitCTimeout time.Duration
 }
 
+var DefaultLogStreamExecutorOptions = &LogStreamExecutorOptions{
+	AppendCSize:       DefaultLSEAppendCSize,
+	AppendCTimeout:    DefaultLSEAppendCTimeout,
+	CommitWaitTimeout: DefaultLSECommitWaitTimeout,
+	TrimCSize:         DefaultLSETrimCSize,
+	TrimCTimeout:      DefaultLSETrimCTimeout,
+	CommitCSize:       DefaultLSECommitCSize,
+	CommitCTimeout:    DefaultLSECommitCTimeout,
+}
+
 type LogStreamReporterOptions struct {
 	CommitCSize    uint32
 	CommitCTimeout time.Duration
