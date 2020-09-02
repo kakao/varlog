@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
 )
@@ -23,11 +24,6 @@ type CommittedLogStreamStatus struct {
 	CommittedGLSNLength uint64
 }
 
-const (
-	lsrCommitCSize = 0
-	lsrReportCSize = 0
-)
-
 type lsrReportTask struct {
 	knownHighWatermark types.GLSN
 	reports            []UncommittedLogStreamStatus
@@ -44,8 +40,8 @@ type LogStreamReporter interface {
 	Run(ctx context.Context)
 	Close()
 	StorageNodeID() types.StorageNodeID
-	GetReport() (types.GLSN, []UncommittedLogStreamStatus)
-	Commit(highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus)
+	GetReport(ctx context.Context) (types.GLSN, []UncommittedLogStreamStatus, error)
+	Commit(ctx context.Context, highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) error
 }
 
 type logStreamReporter struct {
@@ -58,16 +54,17 @@ type logStreamReporter struct {
 	cancel             context.CancelFunc
 	runner             runner.Runner
 	once               sync.Once
+	options            *LogStreamReporterOptions
 }
 
-func NewLogStreamReporter(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter) LogStreamReporter {
+func NewLogStreamReporter(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, options *LogStreamReporterOptions) LogStreamReporter {
 	return &logStreamReporter{
 		storageNodeID: storageNodeID,
 		lseGetter:     lseGetter,
-		// executors:     make(map[types.LogStreamID]LogStreamExecutor),
-		history: make(map[types.GLSN][]UncommittedLogStreamStatus),
-		reportC: make(chan *lsrReportTask, lsrReportCSize),
-		commitC: make(chan lsrCommitTask, lsrCommitCSize),
+		history:       make(map[types.GLSN][]UncommittedLogStreamStatus),
+		reportC:       make(chan *lsrReportTask, options.ReportCSize),
+		commitC:       make(chan lsrCommitTask, options.CommitCSize),
+		options:       options,
 	}
 }
 
@@ -115,11 +112,30 @@ func (lsr *logStreamReporter) dispatchCommit(ctx context.Context) {
 // GetReport collects statuses about uncommitted log entries from log streams in the storage node.
 // KnownNextGLSNs from all LogStreamExecutors must be equal to the corresponding in
 // LogStreamReporter.
-func (lsr *logStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatus) {
+func (lsr *logStreamReporter) GetReport(ctx context.Context) (types.GLSN, []UncommittedLogStreamStatus, error) {
 	t := lsrReportTask{done: make(chan struct{})}
-	lsr.reportC <- &t
-	<-t.done
-	return t.knownHighWatermark, t.reports
+	if err := lsr.addReportC(ctx, &t); err != nil {
+		return types.InvalidGLSN, nil, err
+	}
+	tctx, cancel := context.WithTimeout(ctx, lsr.options.ReportWaitTimeout)
+	defer cancel()
+	select {
+	case <-t.done:
+	case <-tctx.Done():
+		return types.InvalidGLSN, nil, tctx.Err()
+	}
+	return t.knownHighWatermark, t.reports, nil
+}
+
+func (lsr *logStreamReporter) addReportC(ctx context.Context, t *lsrReportTask) error {
+	tctx, cancel := context.WithTimeout(ctx, lsr.options.ReportCTimeout)
+	defer cancel()
+	select {
+	case lsr.reportC <- t:
+	case <-tctx.Done():
+		return tctx.Err()
+	}
+	return nil
 }
 
 func (lsr *logStreamReporter) report(t *lsrReportTask) {
@@ -160,17 +176,26 @@ out:
 	}
 }
 
-func (lsr *logStreamReporter) Commit(highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) {
+func (lsr *logStreamReporter) Commit(ctx context.Context, highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) error {
 	if !lsr.verifyCommit(prevHighWatermark) {
-		return
+		return varlog.ErrInternal
 	}
 	if len(commitResults) == 0 {
-		return
+		return varlog.ErrInternal
 	}
-	lsr.commitC <- lsrCommitTask{
+
+	t := lsrCommitTask{
 		highWatermark:     highWatermark,
 		prevHighWatermark: prevHighWatermark,
 		commitResults:     commitResults,
+	}
+	tctx, cancel := context.WithTimeout(ctx, lsr.options.CommitCTimeout)
+	defer cancel()
+	select {
+	case lsr.commitC <- t:
+		return nil
+	case <-tctx.Done():
+		return tctx.Err()
 	}
 }
 

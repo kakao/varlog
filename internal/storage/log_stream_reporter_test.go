@@ -17,10 +17,50 @@ func TestLogStreamReporterRunClose(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter)
+		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, DefaultLogStreamReporterOptions)
 		So(func() { lsr.Run(context.TODO()) }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
+	})
+}
+
+func TestLogStreamReporterGetReportTimeout(t *testing.T) {
+	Convey("Given LogStremReporter", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		opts := *DefaultLogStreamReporterOptions
+		opts.ReportCTimeout = time.Duration(0)
+		opts.ReportWaitTimeout = time.Duration(0)
+
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, &opts)
+
+		lse := NewMockLogStreamExecutor(ctrl)
+		lse.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
+		setLseGetter(lseGetter, lse)
+
+		lsr.Run(context.TODO())
+
+		Reset(func() {
+			lsr.Close()
+		})
+
+		Convey("When LogStreamReporter.GetReport is timed out", func() {
+			wait := make(chan struct{})
+			lse.EXPECT().GetReport().DoAndReturn(
+				func() UncommittedLogStreamStatus {
+					<-wait
+					return UncommittedLogStreamStatus{}
+				},
+			).MaxTimes(1)
+
+			Convey("Then LogStreamReporter.GetReport should return timeout error", func() {
+				_, _, err := lsr.GetReport(context.TODO())
+				So(err, ShouldResemble, context.DeadlineExceeded)
+				close(wait)
+			})
+		})
 	})
 }
 
@@ -32,10 +72,10 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter).(*logStreamReporter)
+		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, DefaultLogStreamReporterOptions).(*logStreamReporter)
 		lsr.Run(context.TODO())
 
-		var lseList []LogStreamExecutor
+		var lseList []*MockLogStreamExecutor
 		for i := 1; i <= N; i++ {
 			lse := NewMockLogStreamExecutor(ctrl)
 			lse.EXPECT().LogStreamID().Return(types.LogStreamID(i)).AnyTimes()
@@ -51,7 +91,7 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 		// the LogStream is just added to StorageNode.
 		Convey("When KnownHighWatermark of every LogStreamExecutors are zero", func() {
 			for _, lse := range lseList {
-				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+				lse.EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
 						LogStreamID:           lse.LogStreamID(),
 						KnownHighWatermark:    types.InvalidGLSN,
@@ -62,7 +102,8 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 			}
 
 			Convey("Then KnownHighWatermark of the report should be zero", func() {
-				knownHighWatermark, reports := lsr.GetReport()
+				knownHighWatermark, reports, err := lsr.GetReport(context.TODO())
+				So(err, ShouldBeNil)
 				So(knownHighWatermark, ShouldEqual, types.InvalidGLSN)
 				So(len(reports), ShouldEqual, len(lseList))
 
@@ -77,7 +118,7 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 
 		Convey("When KnownHighWatermark of every LogStreamExecutors are different", func() {
 			for i, lse := range lseList {
-				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+				lse.EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
 						LogStreamID:           lse.LogStreamID(),
 						KnownHighWatermark:    types.GLSN(10 * i),
@@ -88,7 +129,8 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 			}
 
 			Convey("Then the KnownHighWatermark of the report should be minimum, not zero", func() {
-				knownHighWatermark, reports := lsr.GetReport()
+				knownHighWatermark, reports, err := lsr.GetReport(context.TODO())
+				So(err, ShouldBeNil)
 				So(knownHighWatermark, ShouldEqual, types.GLSN(10))
 				So(len(reports), ShouldEqual, len(lseList))
 
@@ -103,7 +145,7 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 
 		Convey("When KnownNextGLSN of the report is computed again", func() {
 			for i, lse := range lseList {
-				first := lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+				first := lse.EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
 						LogStreamID:           lse.LogStreamID(),
 						KnownHighWatermark:    types.GLSN(10),
@@ -111,7 +153,7 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 						UncommittedLLSNLength: 10,
 					},
 				)
-				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+				lse.EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
 						LogStreamID:           lse.LogStreamID(),
 						KnownHighWatermark:    types.GLSN(10),
@@ -122,11 +164,13 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 			}
 
 			Convey("Then the history should have the past non-empty report with the same KnownHighWatermark", func() {
-				knownHighWatermark1, reports1 := lsr.GetReport()
+				knownHighWatermark1, reports1, err := lsr.GetReport(context.TODO())
+				So(err, ShouldBeNil)
 				So(len(reports1), ShouldEqual, len(lseList))
 				So(knownHighWatermark1, ShouldEqual, types.GLSN(10))
 
-				knownHighWatermark2, reports2 := lsr.GetReport()
+				knownHighWatermark2, reports2, err := lsr.GetReport(context.TODO())
+				So(err, ShouldBeNil)
 				So(len(reports2), ShouldEqual, len(lseList))
 				So(knownHighWatermark2, ShouldEqual, types.GLSN(10))
 
@@ -137,7 +181,7 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 
 		Convey("When KnownHighWatermark of the report is computed", func() {
 			for _, lse := range lseList {
-				first := lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+				first := lse.EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
 						LogStreamID:           lse.LogStreamID(),
 						KnownHighWatermark:    types.GLSN(10),
@@ -145,7 +189,7 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 						UncommittedLLSNLength: 10,
 					},
 				)
-				lse.(*MockLogStreamExecutor).EXPECT().GetReport().Return(
+				lse.EXPECT().GetReport().Return(
 					UncommittedLogStreamStatus{
 						LogStreamID:           lse.LogStreamID(),
 						KnownHighWatermark:    types.GLSN(100),
@@ -156,11 +200,13 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 			}
 
 			Convey("Then past reports whose KnownHighWatermark are less than the KnownHighWatermark just computed should be deleted", func() {
-				knownHighWatermark1, reports1 := lsr.GetReport()
+				knownHighWatermark1, reports1, err := lsr.GetReport(context.TODO())
+				So(err, ShouldBeNil)
 				So(len(reports1), ShouldEqual, len(lseList))
 				So(knownHighWatermark1, ShouldEqual, types.GLSN(10))
 
-				knownHighWatermark2, reports2 := lsr.GetReport()
+				knownHighWatermark2, reports2, err := lsr.GetReport(context.TODO())
+				So(err, ShouldBeNil)
 				So(len(reports2), ShouldEqual, len(lseList))
 				So(knownHighWatermark2, ShouldEqual, types.GLSN(100))
 
@@ -174,13 +220,68 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 	})
 }
 
+func TestLogStreamReporterCommitTimeout(t *testing.T) {
+	Convey("Given LogStreamReporter", t, func() {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		opts := *DefaultLogStreamReporterOptions
+		opts.CommitCSize = 0
+		opts.CommitCTimeout = time.Duration(0)
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, &opts)
+
+		lse := NewMockLogStreamExecutor(ctrl)
+		lse.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
+		setLseGetter(lseGetter, lse)
+
+		lsr.Run(context.TODO())
+
+		Reset(func() {
+			lsr.Close()
+		})
+
+		Convey("When LogStreamReporter.Commit is timed out", func() {
+			wait := make(chan struct{})
+			lse.EXPECT().Commit(gomock.Any()).DoAndReturn(func(CommittedLogStreamStatus) error {
+				<-wait
+				return nil
+			}).MaxTimes(1)
+
+			Convey("Then LogStreamReporter.Commit should return timeout error", func(c C) {
+				var wg sync.WaitGroup
+				wg.Add(2)
+				errs := make([]error, 2)
+				commitF := func(idx int) {
+					defer wg.Done()
+					errs[idx] = lsr.Commit(context.TODO(), types.MinGLSN, types.InvalidGLSN, []CommittedLogStreamStatus{
+						{
+							LogStreamID:         lse.LogStreamID(),
+							HighWatermark:       types.MinGLSN,
+							PrevHighWatermark:   types.InvalidGLSN,
+							CommittedGLSNOffset: types.MinGLSN,
+							CommittedGLSNLength: 1,
+						},
+					})
+				}
+				go commitF(0)
+				go commitF(1)
+				wg.Wait()
+				So(errs, ShouldContain, context.DeadlineExceeded)
+				close(wait)
+			})
+		})
+
+	})
+}
+
 func TestLogStreamReporterCommit(t *testing.T) {
 	Convey("LogStreamReporter", t, func() {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter).(*logStreamReporter)
+		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, DefaultLogStreamReporterOptions).(*logStreamReporter)
 		lse1 := NewMockLogStreamExecutor(ctrl)
 		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
 		lse2 := NewMockLogStreamExecutor(ctrl)
@@ -191,10 +292,12 @@ func TestLogStreamReporterCommit(t *testing.T) {
 		Convey("it should reject a commit result whose prevNextGLSN is not equal to own knownNextGLSN",
 			func() {
 				lsr.knownHighWatermark.Store(10)
-				lsr.Commit(types.GLSN(10), types.GLSN(5), nil)
+				err := lsr.Commit(context.TODO(), types.GLSN(10), types.GLSN(5), nil)
+				So(err, ShouldNotBeNil)
 				So(len(lsr.commitC), ShouldEqual, 0)
 
-				lsr.Commit(types.GLSN(20), types.GLSN(15), nil)
+				err = lsr.Commit(context.TODO(), types.GLSN(20), types.GLSN(15), nil)
+				So(err, ShouldNotBeNil)
 				So(len(lsr.commitC), ShouldEqual, 0)
 			},
 		)
@@ -202,10 +305,12 @@ func TestLogStreamReporterCommit(t *testing.T) {
 		Convey("it should reject an empty commit result", func() {
 			lsr.knownHighWatermark.Store(10)
 
-			lsr.Commit(types.GLSN(15), types.GLSN(10), nil)
+			err := lsr.Commit(context.TODO(), types.GLSN(15), types.GLSN(10), nil)
+			So(err, ShouldNotBeNil)
 			So(len(lsr.commitC), ShouldEqual, 0)
 
-			lsr.Commit(types.GLSN(15), types.GLSN(10), []CommittedLogStreamStatus{})
+			err = lsr.Commit(context.TODO(), types.GLSN(15), types.GLSN(10), []CommittedLogStreamStatus{})
+			So(err, ShouldNotBeNil)
 			So(len(lsr.commitC), ShouldEqual, 0)
 		})
 
@@ -226,7 +331,7 @@ func TestLogStreamReporterCommit(t *testing.T) {
 				return nil
 			}).AnyTimes()
 
-			lsr.Commit(types.GLSN(20), types.GLSN(10), []CommittedLogStreamStatus{
+			err := lsr.Commit(context.TODO(), types.GLSN(20), types.GLSN(10), []CommittedLogStreamStatus{
 				{
 					LogStreamID:         lse1.LogStreamID(),
 					HighWatermark:       types.GLSN(20),
@@ -242,6 +347,7 @@ func TestLogStreamReporterCommit(t *testing.T) {
 					CommittedGLSNLength: 5,
 				},
 			})
+			So(err, ShouldBeNil)
 			wg.Wait()
 			for oldKnownNextGLSN == lsr.knownHighWatermark.Load() {
 				time.Sleep(time.Millisecond)

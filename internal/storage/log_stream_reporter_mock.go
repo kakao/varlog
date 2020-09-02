@@ -74,28 +74,31 @@ func (mr *MockLogStreamReporterMockRecorder) StorageNodeID() *gomock.Call {
 }
 
 // GetReport mocks base method.
-func (m *MockLogStreamReporter) GetReport() (types.GLSN, []UncommittedLogStreamStatus) {
+func (m *MockLogStreamReporter) GetReport(ctx context.Context) (types.GLSN, []UncommittedLogStreamStatus, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReport")
+	ret := m.ctrl.Call(m, "GetReport", ctx)
 	ret0, _ := ret[0].(types.GLSN)
 	ret1, _ := ret[1].([]UncommittedLogStreamStatus)
-	return ret0, ret1
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetReport indicates an expected call of GetReport.
-func (mr *MockLogStreamReporterMockRecorder) GetReport() *gomock.Call {
+func (mr *MockLogStreamReporterMockRecorder) GetReport(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockLogStreamReporter)(nil).GetReport))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockLogStreamReporter)(nil).GetReport), ctx)
 }
 
 // Commit mocks base method.
-func (m *MockLogStreamReporter) Commit(highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) {
+func (m *MockLogStreamReporter) Commit(ctx context.Context, highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Commit", highWatermark, prevHighWatermark, commitResults)
+	ret := m.ctrl.Call(m, "Commit", ctx, highWatermark, prevHighWatermark, commitResults)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Commit indicates an expected call of Commit.
-func (mr *MockLogStreamReporterMockRecorder) Commit(highWatermark, prevHighWatermark, commitResults interface{}) *gomock.Call {
+func (mr *MockLogStreamReporterMockRecorder) Commit(ctx, highWatermark, prevHighWatermark, commitResults interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporter)(nil).Commit), highWatermark, prevHighWatermark, commitResults)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporter)(nil).Commit), ctx, highWatermark, prevHighWatermark, commitResults)
 }
