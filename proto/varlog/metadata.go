@@ -16,7 +16,7 @@ func (s LogStreamStatus) Running() bool {
 }
 
 func (s LogStreamStatus) Sealed() bool {
-	return !s.Running() && !s.Deleted()
+	return s == LogStreamStatusSealing || s == LogStreamStatusSealed
 }
 
 func (s StorageNodeStatus) Running() bool {
