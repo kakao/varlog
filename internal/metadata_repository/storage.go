@@ -79,6 +79,7 @@ type MetadataStorage struct {
 	// async job (snapshot, cache)
 	jobC chan *storageAsyncJob
 
+	rnMu   sync.RWMutex // mutex for Runner
 	runner runner.Runner
 	cancel context.CancelFunc
 }
@@ -106,17 +107,27 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64) *Metad
 }
 
 func (ms *MetadataStorage) Run() {
-	ctx, cancel := context.WithCancel(context.Background())
-	ms.cancel = cancel
+	ms.rnMu.Lock()
+	defer ms.rnMu.Unlock()
 
-	ms.runner.Run(ctx, ms.processSnapshot)
+	if ms.cancel == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		ms.cancel = cancel
+		ms.runner.Run(ctx, ms.processSnapshot)
+	} else {
+		panic("metadataStorage run twice")
+	}
 }
 
 func (ms *MetadataStorage) Close() {
+	ms.rnMu.Lock()
+	defer ms.rnMu.Unlock()
+
 	if ms.cancel != nil {
 		ms.cancel()
-		ms.runner.CloseWait()
 		ms.cancel = nil
+
+		ms.runner.CloseWait()
 	}
 }
 
@@ -170,6 +181,13 @@ func (ms *MetadataStorage) lookupStorageNode(snID types.StorageNodeID) *varlogpb
 	return pre.Metadata.GetStorageNode(snID)
 }
 
+func (ms *MetadataStorage) LookupStorageNode(snID types.StorageNodeID) *varlogpb.StorageNodeDescriptor {
+	ms.mtMu.RLock()
+	defer ms.mtMu.RUnlock()
+
+	return ms.lookupStorageNode(snID)
+}
+
 func (ms *MetadataStorage) lookupLogStream(lsID types.LogStreamID) *varlogpb.LogStreamDescriptor {
 	pre, cur := ms.getStateMachine()
 	ls := cur.Metadata.GetLogStream(lsID)
@@ -186,6 +204,13 @@ func (ms *MetadataStorage) lookupLogStream(lsID types.LogStreamID) *varlogpb.Log
 	}
 
 	return pre.Metadata.GetLogStream(lsID)
+}
+
+func (ms *MetadataStorage) LookupLogStream(lsID types.LogStreamID) *varlogpb.LogStreamDescriptor {
+	ms.mtMu.RLock()
+	defer ms.mtMu.RUnlock()
+
+	return ms.lookupLogStream(lsID)
 }
 
 func (ms *MetadataStorage) registerStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
@@ -803,7 +828,7 @@ func (ms *MetadataStorage) GetSnapshot() ([]byte, *raftpb.ConfState, uint64) {
 	return ms.snap, ms.snapConfState, atomic.LoadUint64(&ms.snapIndex)
 }
 
-func (ms *MetadataStorage) LoadSnapshot(snap []byte, snapConfState *raftpb.ConfState, snapIndex uint64) error {
+func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.ConfState, snapIndex uint64) error {
 	if snapIndex < ms.appliedIndex {
 		return errors.New("outdated snapshot")
 	}
@@ -845,6 +870,37 @@ func (ms *MetadataStorage) LoadSnapshot(snap []byte, snapConfState *raftpb.ConfS
 	ms.Run()
 
 	return nil
+}
+
+func (ms *MetadataStorage) GetAllStorageNodes() []*varlogpb.StorageNodeDescriptor {
+	o := ms.origStateMachine.Metadata.GetAllStorageNodes()
+	d := ms.diffStateMachine.Metadata.GetAllStorageNodes()
+
+	if len(d) == 0 {
+		return o
+	} else if len(o) == 0 {
+		return d
+	}
+
+	for _, sn := range d {
+		i := sort.Search(len(o), func(i int) bool {
+			return o[i].StorageNodeID >= sn.StorageNodeID
+		})
+
+		if i < len(o) && o[i].StorageNodeID == sn.StorageNodeID {
+			if sn.Status.Deleted() {
+				copy(o[i:], o[i+1:])
+				o = o[:len(o)-1]
+			}
+		} else {
+			o = append(o, &varlogpb.StorageNodeDescriptor{})
+			copy(o[i+1:], o[i:])
+
+			o[i] = sn
+		}
+	}
+
+	return o
 }
 
 func (ms *MetadataStorage) isCopyOnWrite() bool {

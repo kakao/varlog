@@ -14,9 +14,11 @@ var (
 	ErrTrimmedLogEntry   = errors.New("already trimmed log entry")
 	ErrInvalidProjection = errors.New("invalid projection")
 
-	ErrInvalid = errors.New("invalid argument")
-	ErrExist   = errors.New("already exists")
-	ErrIgnore  = errors.New("ignore")
+	ErrInvalid    = errors.New("invalid argument")
+	ErrExist      = errors.New("already exists")
+	ErrIgnore     = errors.New("ignore")
+	ErrInprogress = errors.New("inprogress")
+	ErrNeedRetry  = errors.New("need retry")
 
 	// LogIOClient
 	ErrUnordered = errors.New("unordered log stream")

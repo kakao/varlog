@@ -86,6 +86,7 @@ func TestRegisterStorageNode(t *testing.T) {
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
+		reportCollector.Run()
 		defer reportCollector.Close()
 
 		err := reportCollector.RegisterStorageNode(nil, types.InvalidGLSN)
@@ -102,6 +103,7 @@ func TestRegisterStorageNode(t *testing.T) {
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
+		reportCollector.Run()
 		defer reportCollector.Close()
 
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -134,6 +136,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
+		reportCollector.Run()
 		defer reportCollector.Close()
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -156,6 +159,75 @@ func TestUnregisterStorageNode(t *testing.T) {
 	})
 }
 
+func TestRecoverStorageNode(t *testing.T) {
+	Convey("Given ReportCollector", t, func() {
+		a := NewDummyReporterClientFactory(false)
+		mr := NewDummyMetadataRepository()
+		cb := ReportCollectorCallbacks{
+			report:        mr.report,
+			getClient:     a.GetClient,
+			lookupNextGLS: mr.lookupNextGLS,
+		}
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(cb, logger)
+		reportCollector.Run()
+		defer reportCollector.Close()
+
+		nrSN := 5
+		hwm := types.MinGLSN
+		var SNs []*varlogpb.StorageNodeDescriptor
+
+		for i := 0; i < nrSN; i++ {
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: types.StorageNodeID(time.Now().UnixNano()),
+			}
+
+			SNs = append(SNs, sn)
+
+			err := reportCollector.RegisterStorageNode(sn, hwm)
+			So(err, ShouldBeNil)
+		}
+
+		for i := 0; i < nrSN; i++ {
+			reportCollector.mu.RLock()
+
+			_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+			So(ok, ShouldBeTrue)
+
+			reportCollector.mu.RUnlock()
+		}
+
+		Convey("When ReportCollector Close", func(ctx C) {
+			reportCollector.Close()
+
+			Convey("Then there shoulb be no ReportCollectExecutor", func(ctx C) {
+				for i := 0; i < nrSN; i++ {
+					reportCollector.mu.RLock()
+
+					_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+					So(ok, ShouldBeFalse)
+
+					reportCollector.mu.RUnlock()
+				}
+
+				Convey("When ReportCollector Recover", func(ctx C) {
+					reportCollector.Recover(SNs, hwm)
+					Convey("Then there shoulb be no ReportCollectExecutor", func(ctx C) {
+						for i := 0; i < nrSN; i++ {
+							reportCollector.mu.RLock()
+
+							_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+							So(ok, ShouldBeTrue)
+
+							reportCollector.mu.RUnlock()
+						}
+					})
+				})
+			})
+		})
+	})
+}
+
 func TestReport(t *testing.T) {
 	Convey("ReportCollector should collect report from registered storage node", t, func() {
 		nrStorage := 5
@@ -169,6 +241,7 @@ func TestReport(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
+		reportCollector.Run()
 		defer reportCollector.Close()
 
 		var wg sync.WaitGroup
@@ -256,6 +329,7 @@ func TestCommit(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
+		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()
 		})
@@ -427,6 +501,7 @@ func TestRPCFail(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
+		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()
 		})
