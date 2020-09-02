@@ -165,34 +165,6 @@ func TestManagementClientSeal(t *testing.T) {
 		mockClient := mock.NewMockManagementClient(ctrl)
 		mc := &managementClient{rpcClient: mockClient}
 
-		Convey("When the ManagementClient is timed out", func() {
-			Convey("Then the ManagementClient should return timeout error", func() {
-			})
-		})
-
-		Convey("When the ManagementService is timed out", func() {
-			Convey("Then the ManagementClient should return timeout error", func() {
-			})
-		})
-
-		Convey("When the passed ClusterID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed StorageNodeID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed LogStreamID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(nil, ErrInternal)
 			Convey("Then the ManagementClient should return the error", func() {
@@ -201,7 +173,7 @@ func TestManagementClientSeal(t *testing.T) {
 			})
 		})
 
-		Convey("When the ManagementService succeeds to remove the LogStream", func() {
+		Convey("When the ManagementService succeeds to seal the LogStream", func() {
 			mockClient.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(&pb.SealResponse{}, nil)
 			Convey("Then the ManagementClient should not return an error", func() {
 				_, _, err := mc.Seal(context.TODO(), types.ClusterID(1), types.StorageNodeID(1), types.LogStreamID(1), types.GLSN(1))
@@ -219,34 +191,6 @@ func TestManagementClientUnseal(t *testing.T) {
 		mockClient := mock.NewMockManagementClient(ctrl)
 		mc := &managementClient{rpcClient: mockClient}
 
-		Convey("When the ManagementClient is timed out", func() {
-			Convey("Then the ManagementClient should return timeout error", func() {
-			})
-		})
-
-		Convey("When the ManagementService is timed out", func() {
-			Convey("Then the ManagementClient should return timeout error", func() {
-			})
-		})
-
-		Convey("When the passed ClusterID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed StorageNodeID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed LogStreamID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(nil, ErrInternal)
 			Convey("Then the ManagementClient should return the error", func() {
@@ -255,7 +199,7 @@ func TestManagementClientUnseal(t *testing.T) {
 			})
 		})
 
-		Convey("When the ManagementService succeeds to remove the LogStream", func() {
+		Convey("When the ManagementService succeeds to unseal the LogStream", func() {
 			mockClient.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(&pbtypes.Empty{}, nil)
 			Convey("Then the ManagementClient should not return an error", func() {
 				err := mc.Unseal(context.TODO(), types.ClusterID(1), types.StorageNodeID(1), types.LogStreamID(1))

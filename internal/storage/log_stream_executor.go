@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -17,10 +18,17 @@ type SubscribeResult struct {
 	err      error
 }
 
+type Sealer interface {
+	Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN)
+}
+
+type Unsealer interface {
+	Unseal() error
+}
+
 type LogStreamExecutor interface {
 	Run(ctx context.Context)
 	Close()
-	Status() varlogpb.LogStreamStatus
 
 	LogStreamID() types.LogStreamID
 
@@ -33,6 +41,9 @@ type LogStreamExecutor interface {
 
 	GetReport() UncommittedLogStreamStatus
 	Commit(CommittedLogStreamStatus) error
+
+	Sealer
+	Unsealer
 }
 
 type readTask struct {
@@ -174,20 +185,45 @@ func (lse *logStreamExecutor) Close() {
 	}
 }
 
-func (lse *logStreamExecutor) Status() varlogpb.LogStreamStatus {
+func (lse *logStreamExecutor) isSealed() bool {
 	lse.mtxStatus.RLock()
 	defer lse.mtxStatus.RUnlock()
-	return lse.status
+	return lse.status.Sealed()
 }
 
-func (lse *logStreamExecutor) isSealed() bool {
-	return lse.Status().Sealed()
+func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN) {
+	localHWM := lse.localHighWatermark.Load()
+	if localHWM > lastCommittedGLSN {
+		panic("local Highwatermark above last committed GLSN")
+	}
+	status := varlogpb.LogStreamStatusSealed
+	if localHWM < lastCommittedGLSN {
+		status = varlogpb.LogStreamStatusSealing
+	}
+	lse.seal(status, false)
+	return status, localHWM
 }
 
-func (lse *logStreamExecutor) seal() {
+func (lse *logStreamExecutor) Unseal() error {
 	lse.mtxStatus.Lock()
-	lse.status = varlogpb.LogStreamStatusSealing
-	lse.mtxStatus.Unlock()
+	defer lse.mtxStatus.RUnlock()
+	if lse.status == varlogpb.LogStreamStatusSealed {
+		lse.status = varlogpb.LogStreamStatusRunning
+		return nil
+	}
+	return errors.New("invalid status")
+}
+
+func (lse *logStreamExecutor) sealItself() {
+	lse.seal(varlogpb.LogStreamStatusSealing, true)
+}
+
+func (lse *logStreamExecutor) seal(status varlogpb.LogStreamStatus, itself bool) {
+	lse.mtxStatus.Lock()
+	defer lse.mtxStatus.Unlock()
+	if !itself || lse.status.Running() {
+		lse.status = status
+	}
 }
 
 func (lse *logStreamExecutor) dispatchAppendC(ctx context.Context) {
@@ -366,7 +402,7 @@ func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 	err := lse.write(t)
 	if err != nil {
 		t.notify(err)
-		lse.seal()
+		lse.sealItself()
 		return
 	}
 
@@ -417,7 +453,7 @@ func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendT
 		}
 		if err != nil {
 			t.notify(err)
-			lse.seal()
+			lse.sealItself()
 		}
 	}()
 }
@@ -523,7 +559,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			// Should we lock, that is, finalize this log stream or need other else
 			// mechanisms?
 			commitOk = false
-			lse.seal()
+			lse.sealItself()
 			break
 		}
 		lse.committedLLSNEnd++

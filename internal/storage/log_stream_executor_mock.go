@@ -13,6 +13,81 @@ import (
 	varlog "github.com/kakao/varlog/proto/varlog"
 )
 
+// MockSealer is a mock of Sealer interface.
+type MockSealer struct {
+	ctrl     *gomock.Controller
+	recorder *MockSealerMockRecorder
+}
+
+// MockSealerMockRecorder is the mock recorder for MockSealer.
+type MockSealerMockRecorder struct {
+	mock *MockSealer
+}
+
+// NewMockSealer creates a new mock instance.
+func NewMockSealer(ctrl *gomock.Controller) *MockSealer {
+	mock := &MockSealer{ctrl: ctrl}
+	mock.recorder = &MockSealerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSealer) EXPECT() *MockSealerMockRecorder {
+	return m.recorder
+}
+
+// Seal mocks base method.
+func (m *MockSealer) Seal(lastCommittedGLSN types.GLSN) (varlog.LogStreamStatus, types.GLSN) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Seal", lastCommittedGLSN)
+	ret0, _ := ret[0].(varlog.LogStreamStatus)
+	ret1, _ := ret[1].(types.GLSN)
+	return ret0, ret1
+}
+
+// Seal indicates an expected call of Seal.
+func (mr *MockSealerMockRecorder) Seal(lastCommittedGLSN interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockSealer)(nil).Seal), lastCommittedGLSN)
+}
+
+// MockUnsealer is a mock of Unsealer interface.
+type MockUnsealer struct {
+	ctrl     *gomock.Controller
+	recorder *MockUnsealerMockRecorder
+}
+
+// MockUnsealerMockRecorder is the mock recorder for MockUnsealer.
+type MockUnsealerMockRecorder struct {
+	mock *MockUnsealer
+}
+
+// NewMockUnsealer creates a new mock instance.
+func NewMockUnsealer(ctrl *gomock.Controller) *MockUnsealer {
+	mock := &MockUnsealer{ctrl: ctrl}
+	mock.recorder = &MockUnsealerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockUnsealer) EXPECT() *MockUnsealerMockRecorder {
+	return m.recorder
+}
+
+// Unseal mocks base method.
+func (m *MockUnsealer) Unseal() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Unseal")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Unseal indicates an expected call of Unseal.
+func (mr *MockUnsealerMockRecorder) Unseal() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockUnsealer)(nil).Unseal))
+}
+
 // MockLogStreamExecutor is a mock of LogStreamExecutor interface.
 type MockLogStreamExecutor struct {
 	ctrl     *gomock.Controller
@@ -58,20 +133,6 @@ func (m *MockLogStreamExecutor) Close() {
 func (mr *MockLogStreamExecutorMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockLogStreamExecutor)(nil).Close))
-}
-
-// Status mocks base method.
-func (m *MockLogStreamExecutor) Status() varlog.LogStreamStatus {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Status")
-	ret0, _ := ret[0].(varlog.LogStreamStatus)
-	return ret0
-}
-
-// Status indicates an expected call of Status.
-func (mr *MockLogStreamExecutorMockRecorder) Status() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockLogStreamExecutor)(nil).Status))
 }
 
 // LogStreamID mocks base method.
@@ -192,4 +253,33 @@ func (m *MockLogStreamExecutor) Commit(arg0 CommittedLogStreamStatus) error {
 func (mr *MockLogStreamExecutorMockRecorder) Commit(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamExecutor)(nil).Commit), arg0)
+}
+
+// Seal mocks base method.
+func (m *MockLogStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlog.LogStreamStatus, types.GLSN) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Seal", lastCommittedGLSN)
+	ret0, _ := ret[0].(varlog.LogStreamStatus)
+	ret1, _ := ret[1].(types.GLSN)
+	return ret0, ret1
+}
+
+// Seal indicates an expected call of Seal.
+func (mr *MockLogStreamExecutorMockRecorder) Seal(lastCommittedGLSN interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockLogStreamExecutor)(nil).Seal), lastCommittedGLSN)
+}
+
+// Unseal mocks base method.
+func (m *MockLogStreamExecutor) Unseal() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Unseal")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Unseal indicates an expected call of Unseal.
+func (mr *MockLogStreamExecutorMockRecorder) Unseal() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockLogStreamExecutor)(nil).Unseal))
 }

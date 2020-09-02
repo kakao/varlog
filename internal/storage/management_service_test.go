@@ -154,30 +154,6 @@ func TestManagementServiceSeal(t *testing.T) {
 			})
 		})
 
-		Convey("When the underlying Management is timed out", func() {
-			Convey("Then the ManagementService should return a timeout error", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed ClusterID is invalid", func() {
-			Convey("Then the ManagementService should return an error", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed StorageNodeID is invalid", func() {
-			Convey("Then the ManagementService should return an error", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed LogStreamID is invalid", func() {
-			Convey("Then the ManagementService should return an error", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
 		Convey("When the underlying Management succeeds to seal the LogStream", func() {
 			mock.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(vpb.LogStreamStatusSealed, types.GLSN(1), nil)
 			Convey("Then the ManagementService should not return an error", func() {
@@ -201,30 +177,6 @@ func TestManagementServiceUnseal(t *testing.T) {
 			Convey("Then the ManagementService should return an error", func() {
 				_, err := service.Unseal(context.TODO(), &pb.UnsealRequest{})
 				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("When the underlying Management is timed out", func() {
-			Convey("Then the ManagementService should return a timeout error", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed ClusterID is invalid", func() {
-			Convey("Then the ManagementService should return an error", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed StorageNodeID is invalid", func() {
-			Convey("Then the ManagementService should return an error", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed LogStreamID is invalid", func() {
-			Convey("Then the ManagementService should return an error", func() {
-				Convey("This isn't yet implemented", nil)
 			})
 		})
 
