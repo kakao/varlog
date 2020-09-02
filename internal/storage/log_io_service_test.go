@@ -12,7 +12,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/storage_node/mock"
 )
 
-func setLseGetter(lseGetterMock *MockLogStreamExecutorGetter, lses ...LogStreamExecutor) {
+func setLseGetter(lseGetterMock *MockLogStreamExecutorGetter, lses ...*MockLogStreamExecutor) {
 	lseGetterMock.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
 		func(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
 			for _, lse := range lses {
@@ -23,7 +23,11 @@ func setLseGetter(lseGetterMock *MockLogStreamExecutorGetter, lses ...LogStreamE
 			return nil, false
 		},
 	).AnyTimes()
-	lseGetterMock.EXPECT().GetLogStreamExecutors().Return(lses).AnyTimes()
+	var lseList []LogStreamExecutor
+	for _, lse := range lses {
+		lseList = append(lseList, lse)
+	}
+	lseGetterMock.EXPECT().GetLogStreamExecutors().Return(lseList).AnyTimes()
 }
 
 func TestStorageNodeServiceAppend(t *testing.T) {
@@ -148,7 +152,7 @@ func TestStorageNodeServiceTrim(t *testing.T) {
 		s := NewLogIOService(types.StorageNodeID(1), lseGetter)
 
 		Convey("it should return the number of log entries removed", func() {
-			var lses []LogStreamExecutor
+			var lses []*MockLogStreamExecutor
 			for i := 0; i < nrLSEs; i++ {
 				lse := NewMockLogStreamExecutor(ctrl)
 				lse.EXPECT().LogStreamID().Return(types.LogStreamID(i)).AnyTimes()

@@ -24,7 +24,10 @@ func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty
 	reportPb := &pb.LocalLogStreamDescriptor{
 		StorageNodeID: s.StorageNodeID(),
 	}
-	knownNextGLSN, reports := s.LogStreamReporter.GetReport()
+	knownNextGLSN, reports, err := s.LogStreamReporter.GetReport(ctx)
+	if err != nil {
+		return nil, err
+	}
 	reportPb.Uncommit = make([]*pb.LocalLogStreamDescriptor_LogStreamUncommitReport, len(reports))
 	for i, rpt := range reports {
 		reportPb.Uncommit[i] = &pb.LocalLogStreamDescriptor_LogStreamUncommitReport{
@@ -51,6 +54,6 @@ func (s *LogStreamReporterService) Commit(ctx context.Context, req *pb.GlobalLog
 		commitResults[i].CommittedGLSNOffset = cr.CommittedGLSNOffset
 		commitResults[i].CommittedGLSNLength = cr.CommittedGLSNLength
 	}
-	s.LogStreamReporter.Commit(nextGLSN, prevNextGLSN, commitResults)
-	return &types.Empty{}, nil
+	err := s.LogStreamReporter.Commit(ctx, nextGLSN, prevNextGLSN, commitResults)
+	return &types.Empty{}, err
 }

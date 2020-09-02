@@ -19,6 +19,13 @@ const (
 
 	DefaultLSETrimCSize    = uint32(0)
 	DefaultLSETrimCTimeout = timeutil.MaxDuration
+
+	DefaultLSRCommitCSize    = uint32(0)
+	DefaultLSRCommitCTimeout = timeutil.MaxDuration
+
+	DefaultLSRReportCSize       = uint32(0)
+	DefaultLSRReportCTimeout    = timeutil.MaxDuration
+	DefaultLSRReportWaitTimeout = timeutil.MaxDuration
 )
 
 type StorageNodeOptions struct {
@@ -43,4 +50,21 @@ type LogStreamExecutorOptions struct {
 
 	CommitCSize    uint32
 	CommitCTimeout time.Duration
+}
+
+type LogStreamReporterOptions struct {
+	CommitCSize    uint32
+	CommitCTimeout time.Duration
+
+	ReportCSize       uint32
+	ReportCTimeout    time.Duration
+	ReportWaitTimeout time.Duration
+}
+
+var DefaultLogStreamReporterOptions = &LogStreamReporterOptions{
+	CommitCSize:       DefaultLSRCommitCSize,
+	CommitCTimeout:    DefaultLSRCommitCTimeout,
+	ReportCSize:       DefaultLSRReportCSize,
+	ReportCTimeout:    DefaultLSRReportCTimeout,
+	ReportWaitTimeout: DefaultLSRReportWaitTimeout,
 }
