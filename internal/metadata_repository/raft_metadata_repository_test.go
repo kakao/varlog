@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -113,9 +114,11 @@ func (clus *metadataRepoCluster) start(idx int) error {
 }
 
 func (clus *metadataRepoCluster) Start() {
+	clus.logger.Info("cluster start")
 	for i := range clus.nodes {
 		clus.start(i)
 	}
+	clus.logger.Info("cluster complete")
 }
 
 func (clus *metadataRepoCluster) stop(idx int) error {
@@ -143,6 +146,8 @@ func (clus *metadataRepoCluster) close(idx int) error {
 
 	err := clus.stop(idx)
 	clus.clear(idx)
+
+	clus.logger.Info("cluster node stop", zap.Int("idx", idx))
 
 	return err
 }
@@ -201,9 +206,11 @@ func (clus *metadataRepoCluster) leaderFail() bool {
 }
 
 func (clus *metadataRepoCluster) closeNoErrors(t *testing.T) {
+	clus.logger.Info("cluster stop")
 	if err := clus.Close(); err != nil {
 		t.Log(err)
 	}
+	clus.logger.Info("cluster stop complete")
 }
 
 func makeLocalLogStream(snID types.StorageNodeID, knownHighWatermark types.GLSN, lsID types.LogStreamID, offset types.LLSN, length uint64) *snpb.LocalLogStreamDescriptor {
@@ -507,7 +514,10 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 			StorageNodeID: snID,
 		}
 
-		err := clus.nodes[0].RegisterStorageNode(context.TODO(), sn)
+		rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := clus.nodes[0].RegisterStorageNode(rctx, sn)
 		So(err, ShouldBeNil)
 
 		So(testutil.CompareWait(func() bool {
@@ -515,7 +525,9 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 		}, time.Second), ShouldBeTrue)
 
 		ls := makeLogStream(lsID, snIDs)
-		err = clus.nodes[0].RegisterLogStream(context.TODO(), ls)
+		rctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = clus.nodes[0].RegisterLogStream(rctx, ls)
 		So(err, ShouldBeNil)
 
 		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID)
@@ -548,7 +560,8 @@ func TestMRRequestMap(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rctx, _ := context.WithTimeout(context.Background(), T)
+			rctx, cancel := context.WithTimeout(context.Background(), T)
+			defer cancel()
 			st.Done()
 			mr.RegisterStorageNode(rctx, sn)
 		}()
@@ -596,7 +609,8 @@ func TestMRRequestMap(t *testing.T) {
 		}()
 
 		st.Wait()
-		rctx, _ := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		rctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
 		err := mr.RegisterStorageNode(rctx, sn)
 
 		wg.Wait()
@@ -614,7 +628,8 @@ func TestMRRequestMap(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
-		rctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		rctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
 		err := mr.RegisterStorageNode(rctx, sn)
 		So(err, ShouldNotBeNil)
 
@@ -965,14 +980,19 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 				StorageNodeID: snIDs[i],
 			}
 
-			err := clus.nodes[0].RegisterStorageNode(context.TODO(), sn)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			err := clus.nodes[0].RegisterStorageNode(rctx, sn)
 			So(err, ShouldBeNil)
 		}
 
 		lsID := types.LogStreamID(0)
 
 		ls := makeLogStream(lsID, snIDs)
-		err := clus.nodes[0].RegisterLogStream(context.TODO(), ls)
+		rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := clus.nodes[0].RegisterLogStream(rctx, ls)
 		So(err, ShouldBeNil)
 
 		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[0])
@@ -1020,14 +1040,19 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 				StorageNodeID: snIDs[i],
 			}
 
-			err := clus.nodes[0].RegisterStorageNode(context.TODO(), sn)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			err := clus.nodes[0].RegisterStorageNode(rctx, sn)
 			So(err, ShouldBeNil)
 		}
 
 		lsID := types.LogStreamID(0)
 
 		ls := makeLogStream(lsID, snIDs)
-		err := clus.nodes[0].RegisterLogStream(context.TODO(), ls)
+		rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := clus.nodes[0].RegisterLogStream(rctx, ls)
 		So(err, ShouldBeNil)
 
 		Convey("When new node join", func(ctx C) {
@@ -1061,7 +1086,13 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 						StorageNodeID: snID,
 					}
 
-					err := clus.nodes[newNode].RegisterStorageNode(context.TODO(), sn)
+					rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+
+					err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
+					if rctx.Err() != nil {
+						clus.logger.Info("complete with ctx error", zap.String("err", rctx.Err().Error()))
+					}
 					So(err, ShouldBeNil)
 
 					meta, err := clus.nodes[newNode].GetMetadata(context.TODO())
@@ -1092,7 +1123,13 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 					StorageNodeID: snID,
 				}
 
-				err := clus.nodes[newNode].RegisterStorageNode(context.TODO(), sn)
+				rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
+				if rctx.Err() != nil {
+					clus.logger.Info("complete with ctx error", zap.String("err", rctx.Err().Error()))
+				}
 				So(err, ShouldBeNil)
 			})
 		})
@@ -1119,6 +1156,12 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 		Convey("When follower leave", func(ctx C) {
 			leaveNode := (leader + 1) % nrNode
 			checkNode := (leaveNode + 1) % nrNode
+
+			So(testutil.CompareWait(func() bool {
+				_, membership, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+				return len(membership) == nrNode
+			}, time.Second), ShouldBeTrue)
+
 			clus.stop(leaveNode)
 
 			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -1138,6 +1181,12 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 		Convey("When leader leave", func(ctx C) {
 			leaveNode := leader
 			checkNode := (leaveNode + 1) % nrNode
+
+			So(testutil.CompareWait(func() bool {
+				_, membership, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+				return len(membership) == nrNode
+			}, time.Second), ShouldBeTrue)
+
 			clus.stop(leaveNode)
 
 			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -1260,7 +1309,10 @@ func TestMRLoadSnapshop(t *testing.T) {
 				StorageNodeID: snIDs[i],
 			}
 
-			err := clus.nodes[leader].RegisterStorageNode(context.TODO(), sn)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
 			So(err, ShouldBeNil)
 		}
 
@@ -1320,7 +1372,10 @@ func TestMRRemoteSnapshop(t *testing.T) {
 				StorageNodeID: snIDs[i],
 			}
 
-			err := clus.nodes[leader].RegisterStorageNode(context.TODO(), sn)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
 			So(err, ShouldBeNil)
 		}
 
@@ -1406,6 +1461,127 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 					}
 					return len(membership) == nrNode
 				}, 5*time.Second), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestMRFailoverRecoverReportCollector(t *testing.T) {
+	Convey("Given MR cluster with 3 peers, 5 StorageNodes", t, func(ctx C) {
+		nrRep := 1
+		nrNode := 3
+		nrStorageNode := 3
+		testSnapCount = 10
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+			testSnapCount = 0
+		})
+		clus.Start()
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		leader := clus.leader()
+		So(leader, ShouldBeGreaterThan, -1)
+
+		snIds := make([][]types.StorageNodeID, nrStorageNode)
+		for i := range snIds {
+			snIds[i] = make([]types.StorageNodeID, nrRep)
+			for j := range snIds[i] {
+				snIds[i][j] = types.StorageNodeID(i*nrStorageNode + j)
+
+				sn := &varlogpb.StorageNodeDescriptor{
+					StorageNodeID: snIds[i][j],
+				}
+
+				rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
+				So(err, ShouldBeNil)
+			}
+		}
+
+		Convey("When follower restart with snapshot", func(ctx C) {
+			restartNode := (leader + 1) % nrNode
+
+			So(testutil.CompareWait(func() bool {
+				hasSnapshot, _ := clus.hasSnapshot(restartNode)
+				return hasSnapshot
+			}, 5*time.Second), ShouldBeTrue)
+
+			clus.stop(restartNode)
+			clus.restart(restartNode)
+
+			Convey("Then ReportCollector should recover", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					clus.nodes[restartNode].reportCollector.mu.RLock()
+					defer clus.nodes[restartNode].reportCollector.mu.RUnlock()
+
+					return len(clus.nodes[restartNode].reportCollector.executors) == nrStorageNode
+				}, 5*time.Second), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestMRProposeTimeout(t *testing.T) {
+	Convey("Given MR which is not running", t, func(ctx C) {
+		clus := newMetadataRepoCluster(1, 1, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		mr := clus.nodes[0]
+
+		Convey("When cli register SN with timeout", func(ctx C) {
+			snID := types.StorageNodeID(time.Now().UnixNano())
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: types.StorageNodeID(snID),
+			}
+
+			rctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			err := mr.RegisterStorageNode(rctx, sn)
+			Convey("Then it should be timed out", func(ctx C) {
+				So(err, ShouldResemble, context.DeadlineExceeded)
+			})
+		})
+	})
+}
+
+func TestMRProposeRetry(t *testing.T) {
+	Convey("Given MR", t, func(ctx C) {
+		clus := newMetadataRepoCluster(3, 1, false)
+		clus.Start()
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
+		So(testutil.CompareWait(func() bool {
+			return clus.leaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		Convey("When cli register SN & transfer leader for dropping propose", func(ctx C) {
+			leader := clus.leader()
+			clus.nodes[leader].raftNode.transferLeadership(false)
+
+			snID := types.StorageNodeID(time.Now().UnixNano())
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: types.StorageNodeID(snID),
+			}
+
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
+
+			Convey("Then it should be success", func(ctx C) {
+				So(err, ShouldBeNil)
+				So(atomic.LoadUint64(&clus.nodes[leader].requestNum), ShouldBeGreaterThan, 1)
+				So(testutil.CompareWait(func() bool {
+					return clus.leader() != leader
+				}, time.Second), ShouldBeTrue)
 			})
 		})
 	})

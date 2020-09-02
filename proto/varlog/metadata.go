@@ -222,3 +222,16 @@ func (m *MetadataDescriptor) UnregistableStorageNode(snID types.StorageNodeID) b
 
 	return true
 }
+
+func (m *MetadataDescriptor) GetAllStorageNodes() []*StorageNodeDescriptor {
+	if len(m.StorageNodes) == 0 {
+		return nil
+	}
+
+	r := make([]*StorageNodeDescriptor, 0, len(m.StorageNodes))
+	for _, sn := range m.StorageNodes {
+		r = append(r, sn)
+	}
+
+	return r
+}

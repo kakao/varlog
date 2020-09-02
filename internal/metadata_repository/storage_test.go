@@ -95,6 +95,72 @@ func TestStoragUnregisterSN(t *testing.T) {
 	})
 }
 
+func TestStoragGetAllSN(t *testing.T) {
+	Convey("Given a MetadataStorage", t, func(ctx C) {
+		ms := NewMetadataStorage(nil, defaultSnapshotCount)
+
+		Convey("When SN is not exist", func(ctx C) {
+			Convey("Then it returns nil", func(ctx C) {
+				So(ms.GetAllStorageNodes(), ShouldBeNil)
+			})
+		})
+
+		Convey("Wnen SN register", func(ctx C) {
+			snID := types.StorageNodeID(time.Now().UnixNano())
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snID,
+			}
+
+			err := ms.RegisterStorageNode(sn, 0, 0)
+			So(err, ShouldBeNil)
+
+			Convey("Then it should return 1 SN", func(ctx C) {
+				sns := ms.GetAllStorageNodes()
+				So(len(sns), ShouldEqual, 1)
+
+				Convey("Wnen one more SN register to diff", func(ctx C) {
+					So(ms.isCopyOnWrite(), ShouldBeTrue)
+					snID2 := types.StorageNodeID(time.Now().UnixNano())
+					sn := &varlogpb.StorageNodeDescriptor{
+						StorageNodeID: snID2,
+					}
+
+					err := ms.RegisterStorageNode(sn, 0, 0)
+					So(err, ShouldBeNil)
+
+					Convey("Then it should return 2 SNs", func(ctx C) {
+						sns := ms.GetAllStorageNodes()
+						So(len(sns), ShouldEqual, 2)
+
+						Convey("When unregister SN which registered orig", func(ctx C) {
+							err = ms.unregisterStorageNode(snID)
+							So(err, ShouldBeNil)
+
+							So(ms.lookupStorageNode(snID), ShouldBeNil)
+
+							Convey("Then it should returns 1 SNs", func(ctx C) {
+								sns := ms.GetAllStorageNodes()
+								So(len(sns), ShouldEqual, 1)
+
+								Convey("When merge Metadata", func(ctx C) {
+									ms.mergeMetadata()
+
+									ms.releaseCopyOnWrite()
+
+									Convey("Then it should returns 1 SNs", func(ctx C) {
+										sns := ms.GetAllStorageNodes()
+										So(len(sns), ShouldEqual, 1)
+									})
+								})
+							})
+						})
+					})
+				})
+			})
+		})
+	})
+}
+
 func TestStorageRegisterLS(t *testing.T) {
 	Convey("LS which has no SN should not be registerd", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, defaultSnapshotCount)
@@ -207,7 +273,6 @@ func TestStorageUpdateLS(t *testing.T) {
 	Convey("LS should not be updated if not exist proper SN", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 		ms.Run()
-
 		Reset(func() {
 			ms.Close()
 		})
@@ -363,7 +428,6 @@ func TestStorageSealLS(t *testing.T) {
 	Convey("For resigtered LS", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 		ms.Run()
-
 		Reset(func() {
 			ms.Close()
 		})
@@ -522,7 +586,6 @@ func TestStorageUnsealLS(t *testing.T) {
 	Convey("For resigtered LS", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, defaultSnapshotCount)
 		ms.Run()
-
 		Reset(func() {
 			ms.Close()
 		})
@@ -881,6 +944,9 @@ func TestStorageMetadataCache(t *testing.T) {
 
 		ms := NewMetadataStorage(cb, defaultSnapshotCount)
 		ms.Run()
+		Reset(func() {
+			ms.Close()
+		})
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -905,10 +971,6 @@ func TestStorageMetadataCache(t *testing.T) {
 		So(testutil.CompareWait(func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
 		}, time.Second), ShouldBeTrue)
-
-		Reset(func() {
-			ms.Close()
-		})
 	})
 
 	Convey("createMetadataCache should dedup", t, func(ctx C) {
@@ -936,6 +998,9 @@ func TestStorageMetadataCache(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		ms.Run()
+		Reset(func() {
+			ms.Close()
+		})
 
 		<-ch
 		meta := ms.GetMetadata()
@@ -951,10 +1016,6 @@ func TestStorageMetadataCache(t *testing.T) {
 		So(testutil.CompareWait(func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
 		}, time.Second), ShouldBeTrue)
-
-		Reset(func() {
-			ms.Close()
-		})
 	})
 }
 
@@ -994,6 +1055,9 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			So(cur.Metadata.GetStorageNode(snID), ShouldNotBeNil)
 
 			ms.Run()
+			Reset(func() {
+				ms.Close()
+			})
 
 			<-ch
 
@@ -1008,10 +1072,6 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			So(pre == cur, ShouldBeTrue)
 			So(pre.Metadata.GetStorageNode(snID), ShouldNotBeNil)
 			So(cur.Metadata.GetStorageNode(snID), ShouldNotBeNil)
-
-			Reset(func() {
-				ms.Close()
-			})
 		})
 	})
 
@@ -1135,7 +1195,7 @@ func TestStorageSnapshot(t *testing.T) {
 	})
 }
 
-func TestStorageLoadSnapshot(t *testing.T) {
+func TestStorageApplySnapshot(t *testing.T) {
 	Convey("Given MetadataStorage Snapshop", t, func(ctx C) {
 		ch := make(chan struct{}, 1)
 		cb := func(uint64, uint64, error) {
@@ -1188,7 +1248,10 @@ func TestStorageLoadSnapshot(t *testing.T) {
 
 		Convey("When new MetadataStorage which load snapshot", func(ctx C) {
 			loaded := NewMetadataStorage(cb, defaultSnapshotCount)
-			So(loaded.LoadSnapshot(snap, confState, snapIndex), ShouldBeNil)
+			So(loaded.ApplySnapshot(snap, confState, snapIndex), ShouldBeNil)
+			Reset(func() {
+				loaded.Close()
+			})
 
 			Convey("Then MetadataStorage should have same data", func(ctx C) {
 				lsnap, _, lsnapIndex := loaded.GetSnapshot()
@@ -1209,6 +1272,9 @@ func TestStorageSnapshotRace(t *testing.T) {
 		ms.snapCount = uint64(100 + rand.Int31n(64))
 
 		ms.Run()
+		Reset(func() {
+			ms.Close()
+		})
 
 		n := 10000
 		numLS := 128
@@ -1321,9 +1387,5 @@ func TestStorageSnapshotRace(t *testing.T) {
 
 		_, _, recv := ms.GetSnapshot()
 		So(recv, ShouldEqual, appliedIndex)
-
-		Reset(func() {
-			ms.Close()
-		})
 	})
 }

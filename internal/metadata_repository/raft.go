@@ -290,6 +290,7 @@ func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 
 	// append to storage so raft starts at the right place in log
 	rc.raftStorage.Append(ents)
+
 	// send nil once lastIndex is published so client knows commit channel is current
 	if len(ents) > 0 {
 		rc.lastIndex = ents[len(ents)-1].Index
@@ -414,7 +415,7 @@ func (rc *raftNode) longestConnected() (types.ID, bool) {
 	return longest, true
 }
 
-func (rc *raftNode) transferLeadership() error {
+func (rc *raftNode) transferLeadership(wait bool) error {
 	if !rc.membership.isLeader() {
 		return nil
 	}
@@ -428,7 +429,7 @@ func (rc *raftNode) transferLeadership() error {
 	defer cancel()
 
 	rc.node.TransferLeadership(ctx, uint64(rc.membership.getLeader()), uint64(transferee))
-	for uint64(rc.membership.getLeader()) != uint64(transferee) {
+	for wait && uint64(rc.membership.getLeader()) != uint64(transferee) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -442,7 +443,7 @@ func (rc *raftNode) transferLeadership() error {
 func (rc *raftNode) stop(transfer bool) {
 	if transfer {
 		// for leader election test without transferring leader
-		if err := rc.transferLeadership(); err != nil {
+		if err := rc.transferLeadership(true); err != nil {
 			rc.logger.Warn("transfer leader fail", zap.Uint64("ID", uint64(rc.id)))
 		}
 	}
@@ -566,7 +567,11 @@ Loop:
 			}
 
 			// blocks until accepted by raft state machine
-			rc.node.Propose(context.TODO(), []byte(prop))
+			// TODO:: handle dropped proposal
+			err := rc.node.Propose(context.TODO(), []byte(prop))
+			if err != nil {
+				rc.logger.Warn("proposal fail", zap.String("err", err.Error()))
+			}
 		case cc, ok := <-rc.confChangeC:
 			if !ok {
 				break Loop

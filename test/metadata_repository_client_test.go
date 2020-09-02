@@ -147,7 +147,7 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 
 		Convey("Register Exist Storage Node", func(ctx C) {
 			err := env.cli.RegisterStorageNode(context.TODO(), sn)
-			So(varlog.IsAlreadyExistsErr(err), ShouldBeTrue)
+			So(err, ShouldBeNil)
 		})
 	})
 }

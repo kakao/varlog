@@ -22,6 +22,7 @@ import (
 )
 
 const unusedRequestIndex uint64 = 0
+const DefaultProposeTimeout time.Duration = time.Second
 
 type Config struct {
 	Index             types.NodeID
@@ -134,6 +135,7 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 
 func (mr *RaftMetadataRepository) Run() {
 	mr.storage.Run()
+	mr.reportCollector.Run()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	mr.cancel = cancel
@@ -148,7 +150,6 @@ func (mr *RaftMetadataRepository) Run() {
 //TODO:: handle pendding msg
 func (mr *RaftMetadataRepository) Close() error {
 	mr.reportCollector.Close()
-
 	if mr.cancel != nil {
 		mr.cancel()
 		mr.raftNode.stop(true)
@@ -221,12 +222,20 @@ func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
 		if c == nil {
 			snap := mr.raftNode.loadSnapshot()
 			if snap != nil {
-				err := mr.storage.LoadSnapshot(snap.Data, &snap.Metadata.ConfState, snap.Metadata.Index)
+				mr.reportCollector.Close()
+
+				err := mr.storage.ApplySnapshot(snap.Data, &snap.Metadata.ConfState, snap.Metadata.Index)
 				if err != nil {
 					mr.logger.Panic("load snapshot fail")
 				}
+
+				err = mr.reportCollector.Recover(
+					mr.storage.GetAllStorageNodes(),
+					mr.storage.GetHighWatermark())
+				if err != nil {
+					mr.logger.Panic("recover report collector fail")
+				}
 			}
-			//TODO:: recover reportCollector
 
 			continue
 		}
@@ -655,7 +664,11 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 		mr.requestMap.Store(e.RequestIndex, c)
 		defer mr.requestMap.Delete(e.RequestIndex)
 
-		mr.proposeC <- e
+		select {
+		case mr.proposeC <- e:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 
 		select {
 		case err := <-c:
@@ -674,6 +687,24 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 	return nil
 }
 
+func (mr *RaftMetadataRepository) blockingPropose(ctx context.Context, r interface{}) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	rctx, cancel := context.WithTimeout(ctx, DefaultProposeTimeout)
+	defer cancel()
+
+	err := mr.propose(rctx, r, true)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	} else if errors.Is(err, context.DeadlineExceeded) {
+		return varlog.ErrNeedRetry
+	}
+
+	return err
+}
+
 func (mr *RaftMetadataRepository) proposeConfChange(ctx context.Context, r raftpb.ConfChange) error {
 	select {
 	case <-ctx.Done():
@@ -689,7 +720,14 @@ func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *v
 		StorageNode: sn,
 	}
 
-	return mr.propose(ctx, r, true)
+	for {
+		err := mr.blockingPropose(ctx, r)
+		if err == varlog.ErrAlreadyExists {
+			return nil
+		} else if err != varlog.ErrNeedRetry {
+			return err
+		}
+	}
 }
 
 func (mr *RaftMetadataRepository) UnregisterStorageNode(ctx context.Context, snID types.StorageNodeID) error {
@@ -697,7 +735,14 @@ func (mr *RaftMetadataRepository) UnregisterStorageNode(ctx context.Context, snI
 		StorageNodeID: snID,
 	}
 
-	return mr.propose(ctx, r, true)
+	for {
+		err := mr.blockingPropose(ctx, r)
+		if err == varlog.ErrNotExist {
+			return nil
+		} else if err != varlog.ErrNeedRetry {
+			return err
+		}
+	}
 }
 
 func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
@@ -705,7 +750,14 @@ func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *var
 		LogStream: ls,
 	}
 
-	return mr.propose(ctx, r, true)
+	for {
+		err := mr.blockingPropose(ctx, r)
+		if err == varlog.ErrAlreadyExists {
+			return nil
+		} else if err != varlog.ErrNeedRetry {
+			return err
+		}
+	}
 }
 
 func (mr *RaftMetadataRepository) UnregisterLogStream(ctx context.Context, lsID types.LogStreamID) error {
@@ -713,7 +765,14 @@ func (mr *RaftMetadataRepository) UnregisterLogStream(ctx context.Context, lsID 
 		LogStreamID: lsID,
 	}
 
-	return mr.propose(ctx, r, true)
+	for {
+		err := mr.blockingPropose(ctx, r)
+		if err == varlog.ErrNotExist {
+			return nil
+		} else if err != varlog.ErrNeedRetry {
+			return err
+		}
+	}
 }
 
 func (mr *RaftMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
@@ -721,7 +780,12 @@ func (mr *RaftMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlo
 		LogStream: ls,
 	}
 
-	return mr.propose(ctx, r, true)
+	for {
+		err := mr.blockingPropose(ctx, r)
+		if err != varlog.ErrNeedRetry {
+			return err
+		}
+	}
 }
 
 func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
@@ -734,9 +798,14 @@ func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStream
 		LogStreamID: lsID,
 	}
 
-	err := mr.propose(ctx, r, true)
-	if err != nil && err != varlog.ErrIgnore {
-		return types.InvalidGLSN, err
+Loop:
+	for {
+		err := mr.blockingPropose(ctx, r)
+		if err == nil || err == varlog.ErrIgnore {
+			break Loop
+		} else if err != varlog.ErrNeedRetry {
+			return types.InvalidGLSN, err
+		}
 	}
 
 	return mr.getLastCommitted(lsID), nil
@@ -747,12 +816,14 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 		LogStreamID: lsID,
 	}
 
-	err := mr.propose(ctx, r, true)
-	if err != nil && err != varlog.ErrIgnore {
-		return err
+	for {
+		err := mr.blockingPropose(ctx, r)
+		if err == varlog.ErrIgnore {
+			return nil
+		} else if err != varlog.ErrNeedRetry {
+			return err
+		}
 	}
-
-	return nil
 }
 
 func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {

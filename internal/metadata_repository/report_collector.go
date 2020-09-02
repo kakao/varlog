@@ -45,7 +45,6 @@ type ReportCollector struct {
 
 func NewReportCollector(cb ReportCollectorCallbacks, logger *zap.Logger) *ReportCollector {
 	ctx, cancel := context.WithCancel(context.Background())
-
 	return &ReportCollector{
 		logger:    logger,
 		cb:        cb,
@@ -55,9 +54,40 @@ func NewReportCollector(cb ReportCollectorCallbacks, logger *zap.Logger) *Report
 	}
 }
 
+func (rc *ReportCollector) Run() {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	if rc.ctx == nil {
+		rc.ctx, rc.cancel = context.WithCancel(context.Background())
+	}
+}
+
 func (rc *ReportCollector) Close() {
-	rc.cancel()
+	rc.mu.Lock()
+	if rc.cancel != nil {
+		rc.cancel()
+
+		rc.ctx = nil
+		rc.cancel = nil
+	}
+	rc.executors = make(map[types.StorageNodeID]*ReportCollectExecutor)
+	rc.mu.Unlock()
+
 	rc.runner.CloseWait()
+}
+
+func (rc *ReportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, highWatermark types.GLSN) error {
+	rc.Run()
+
+	for _, sn := range sns {
+		err := rc.RegisterStorageNode(sn, highWatermark)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor, glsn types.GLSN) error {
@@ -67,6 +97,10 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
+
+	if rc.ctx == nil {
+		return varlog.ErrInternal
+	}
 
 	if _, ok := rc.executors[sn.StorageNodeID]; ok {
 		return varlog.ErrExist
@@ -93,6 +127,10 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 func (rc *ReportCollector) UnregisterStorageNode(snID types.StorageNodeID) error {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
+
+	if rc.ctx == nil {
+		return varlog.ErrInternal
+	}
 
 	executor, ok := rc.executors[snID]
 	if !ok {
