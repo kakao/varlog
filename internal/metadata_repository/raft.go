@@ -25,7 +25,6 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/wal"
 	"go.etcd.io/etcd/wal/walpb"
-
 	"go.uber.org/zap"
 )
 
@@ -34,6 +33,7 @@ type raftNode struct {
 	proposeC    chan string              // proposed messages from app
 	confChangeC chan raftpb.ConfChange   // proposed cluster config changes
 	commitC     chan *raftCommittedEntry // entries committed to app
+	snapshotC   chan struct{}            // snapshot trigger
 
 	id          varlogtypes.NodeID // node ID for raft
 	bpeers      []string           // raft bootstrap peer URLs
@@ -97,9 +97,11 @@ func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, snapCount uin
 	confChangeC chan raftpb.ConfChange, logger *zap.Logger) *raftNode {
 
 	commitC := make(chan *raftCommittedEntry)
+	snapshotC := make(chan struct{})
 
 	rc := &raftNode{
 		proposeC:    proposeC,
+		snapshotC:   snapshotC,
 		confChangeC: confChangeC,
 		commitC:     commitC,
 		id:          id,
@@ -380,7 +382,8 @@ func (rc *raftNode) start() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	rc.cancel = cancel
-	rc.runner.Run(ctx, rc.processCommit)
+	rc.runner.Run(ctx, rc.processSnapshot)
+	rc.runner.Run(ctx, rc.processRaftEvent)
 	rc.runner.Run(ctx, rc.processPropose)
 }
 
@@ -452,6 +455,7 @@ func (rc *raftNode) stop(transfer bool) {
 	rc.runner.CloseWait()
 
 	close(rc.commitC)
+	close(rc.snapshotC)
 }
 
 // stop closes http, closes all channels, and stops raft.
@@ -497,7 +501,7 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 
 	rc.logger.Info("publishing snapshot",
 		zap.Uint64("snapIdx", snapshotToSave.Metadata.Index),
-		zap.Uint64("preSnapIdx", rc.snapshotIndex),
+		zap.Uint64("preSnapIdx", atomic.LoadUint64(&rc.snapshotIndex)),
 		zap.Uint64("appliedIdx", rc.appliedIndex),
 		zap.Int("voter", len(snapshotToSave.Metadata.ConfState.Voters)))
 
@@ -509,28 +513,36 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	}
 	rc.commitC <- nil // trigger kvstore to load snapshot
 
-	rc.snapshotIndex = snapshotToSave.Metadata.Index
+	atomic.StoreUint64(&rc.snapshotIndex, snapshotToSave.Metadata.Index)
 	rc.appliedIndex = snapshotToSave.Metadata.Index
 
 	rc.logger.Info("finish snapshot",
-		zap.Uint64("snapIdx", rc.snapshotIndex),
+		zap.Uint64("snapIdx", snapshotToSave.Metadata.Index),
 		zap.Uint64("appliedIdx", rc.appliedIndex))
 }
 
 func (rc *raftNode) maybeTriggerSnapshot() {
-	if rc.appliedIndex-rc.snapshotIndex <= rc.snapCount {
+	if rc.appliedIndex-atomic.LoadUint64(&rc.snapshotIndex) <= rc.snapCount {
 		return
 	}
 
+	select {
+	case rc.snapshotC <- struct{}{}:
+	default:
+	}
+}
+
+func (rc *raftNode) doSnapshot() {
+	snapshotIndex := atomic.LoadUint64(&rc.snapshotIndex)
+
 	data, confState, appliedIndex := rc.getSnapshot()
-	if rc.snapshotIndex >= appliedIndex {
+	if snapshotIndex >= appliedIndex {
 		return
 	}
 
 	rc.logger.Info("start snapshot",
 		zap.Uint64("snapshotAppliedIndex", appliedIndex),
-		zap.Uint64("rc.appliedIndex", rc.appliedIndex),
-		zap.Uint64("lastSnapshotIndex", rc.snapshotIndex),
+		zap.Uint64("lastSnapshotIndex", snapshotIndex),
 	)
 
 	snap, err := rc.raftStorage.CreateSnapshot(appliedIndex, confState, data)
@@ -552,7 +564,19 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	}
 
 	rc.logger.Info("compacted log", zap.Uint64("index", compactIndex))
-	rc.snapshotIndex = appliedIndex
+	atomic.StoreUint64(&rc.snapshotIndex, appliedIndex)
+}
+
+func (rc *raftNode) processSnapshot(ctx context.Context) {
+Loop:
+	for {
+		select {
+		case <-rc.snapshotC:
+			rc.doSnapshot()
+		case <-ctx.Done():
+			break Loop
+		}
+	}
 }
 
 func (rc *raftNode) processPropose(ctx context.Context) {
@@ -586,12 +610,12 @@ Loop:
 	}
 }
 
-func (rc *raftNode) processCommit(ctx context.Context) {
+func (rc *raftNode) processRaftEvent(ctx context.Context) {
 	snap, err := rc.raftStorage.Snapshot()
 	if err != nil {
 		rc.logger.Panic("serve channel", zap.String("err", err.Error()))
 	}
-	rc.snapshotIndex = snap.Metadata.Index
+	atomic.StoreUint64(&rc.snapshotIndex, snap.Metadata.Index)
 	rc.appliedIndex = snap.Metadata.Index
 
 	defer rc.wal.Close()
