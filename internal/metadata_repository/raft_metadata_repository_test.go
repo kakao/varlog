@@ -1345,7 +1345,7 @@ func TestMRLoadSnapshop(t *testing.T) {
 	})
 }
 
-func TestMRRemoteSnapshop(t *testing.T) {
+func TestMRRemoteSnapshot(t *testing.T) {
 	Convey("Given MR cluster which have snapshot", t, func(ctx C) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
@@ -1406,6 +1406,25 @@ func TestMRRemoteSnapshop(t *testing.T) {
 					}
 					return len(membership) == nrNode
 				}, time.Second), ShouldBeTrue)
+
+				Convey("Then replication should be operate", func(ctx C) {
+					for i := range snIDs {
+						rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+						defer cancel()
+
+						err := clus.nodes[leader].UnregisterStorageNode(rctx, snIDs[i])
+						So(err, ShouldBeNil)
+					}
+				})
+			})
+		})
+	})
+}
+
+func TestMRRemoteSnapshotFail(t *testing.T) {
+	Convey("Given MR cluster which have snapshot", t, func(ctx C) {
+		Convey("When new node join but sendSnapshot fail", func(ctx C) {
+			Convey("Then replication should be operate", func(ctx C) {
 			})
 		})
 	})

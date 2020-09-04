@@ -86,14 +86,16 @@ message RaftEntry {
         option (gogoproto.onlyone) = true;
 
         RegisterStorageNode register_storage_node = 1;
-        RegisterLogStream register_log_stream = 2;
-        UpdateLogStream update_log_stream = 3;
-        Report report = 4;
-        Commit commit = 5;
-        Seal seal = 6;
-        Unseal unseal = 7;
-        AddPeer add_peer = 8;
-        RemovePeer remove_peer = 9;
+        UnregisterStorageNode unregister_storage_node = 2;
+        RegisterLogStream register_log_stream = 3;
+        UnregisterLogStream unregister_log_stream = 4;
+        UpdateLogStream update_log_stream = 5;
+        Report report = 6;
+        Commit commit = 7;
+        Seal seal = 8;
+        Unseal unseal = 9;
+        AddPeer add_peer = 10;
+        RemovePeer remove_peer = 11;
     }
     uint64 node_index = 1;
     uint64 request_index = 2;
