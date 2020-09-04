@@ -323,6 +323,7 @@ func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, e
 func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 	e := c.entry
 	f := e.Request.GetValue()
+
 	switch r := f.(type) {
 	case *pb.RegisterStorageNode:
 		mr.applyRegisterStorageNode(r, e.NodeIndex, e.RequestIndex)

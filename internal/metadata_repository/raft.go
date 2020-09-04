@@ -475,17 +475,28 @@ type snapReaderCloser struct{ *bytes.Reader }
 func (s snapReaderCloser) Close() error { return nil }
 
 func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
-	if !rc.membership.isLeader() {
-		return ms
-	}
+	sentAppResp := false
+	for i := len(ms) - 1; i >= 0; i-- {
+		if ms[i].Type == raftpb.MsgAppResp {
+			if sentAppResp {
+				ms[i].To = 0
+			} else {
+				sentAppResp = true
+			}
+		}
 
-	for i, _ := range ms {
 		if ms[i].Type == raftpb.MsgSnap {
 
 			snapshot, _ := rc.raftStorage.Snapshot()
 			if !raft.IsEmptySnap(snapshot) {
 				ms[i].Snapshot = snapshot
-				rc.transport.SendSnapshot(*snap.NewMessage(ms[i], snapReaderCloser{bytes.NewReader(nil)}, 0))
+				sm := snap.NewMessage(ms[i], snapReaderCloser{bytes.NewReader(nil)}, 0)
+
+				//TODO:: concurrency limit
+				rc.runner.Run(nil, func(context.Context) {
+					rc.transport.SendSnapshot(*sm)
+				})
+
 				ms[i].To = 0
 			}
 		}
@@ -500,7 +511,8 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 	}
 
 	rc.logger.Info("publishing snapshot",
-		zap.Uint64("snapIdx", snapshotToSave.Metadata.Index),
+		zap.Uint64("Idx", snapshotToSave.Metadata.Index),
+		zap.Uint64("Term", snapshotToSave.Metadata.Term),
 		zap.Uint64("preSnapIdx", atomic.LoadUint64(&rc.snapshotIndex)),
 		zap.Uint64("appliedIdx", rc.appliedIndex),
 		zap.Int("voter", len(snapshotToSave.Metadata.ConfState.Voters)))
@@ -679,10 +691,21 @@ func (rc *raftNode) runRaft(ctx context.Context) {
 func (rc *raftNode) Process(ctx context.Context, m raftpb.Message) error {
 	return rc.node.Step(ctx, m)
 }
-func (rc *raftNode) IsIDRemoved(id uint64) bool                           { return false }
-func (rc *raftNode) ReportUnreachable(id uint64)                          {}
-func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {}
-func (rc *raftNode) GetNodeID() varlogtypes.NodeID                        { return rc.id }
+
+func (rc *raftNode) IsIDRemoved(id uint64) bool {
+	return false
+}
+
+func (rc *raftNode) ReportUnreachable(id uint64) {
+	rc.node.ReportUnreachable(id)
+}
+
+func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
+	fmt.Printf("reportSnap:: to:%v, status:%v\n", id, status)
+	rc.node.ReportSnapshot(id, status)
+}
+
+func (rc *raftNode) GetNodeID() varlogtypes.NodeID { return rc.id }
 func (rc *raftNode) GetMembership() []string {
 	return rc.membership.getMemberUrls()
 }
