@@ -9,7 +9,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.daumkakao.com/varlog/varlog/internal/storage"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
 	"google.golang.org/grpc"
 )
 
@@ -50,7 +50,8 @@ func TestWithServiceServer(t *testing.T) {
 					cancel()
 				}()
 
-				addr := testutil.GetLocalAddress(lis)
+				addr, err := netutil.GetListenerLocalAddr(lis)
+				So(err, ShouldBeNil)
 				checkConnection(ctx, addr, t)
 			})
 		})

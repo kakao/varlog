@@ -5,7 +5,6 @@ import (
 
 	"github.com/smartystreets/goconvey/convey"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
 	"google.golang.org/grpc"
 )
 
@@ -17,7 +16,8 @@ func WithServiceServer(s service, testf func(server *grpc.Server, addr string)) 
 	return func(c convey.C) {
 		lis, err := netutil.Listen("tcp", ":0")
 		convey.So(err, convey.ShouldBeNil)
-		addr := testutil.GetLocalAddress(lis)
+		addr, err := netutil.GetListenerLocalAddr(lis)
+		convey.So(err, convey.ShouldBeNil)
 
 		server := grpc.NewServer()
 		s.Register(server)
