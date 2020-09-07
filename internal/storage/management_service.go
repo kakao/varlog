@@ -6,27 +6,36 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"google.golang.org/grpc"
 )
 
 type managementService struct {
-	pb.UnimplementedManagementServer
+	snpb.UnimplementedManagementServer
 
 	m Management
 }
 
+func NewManagementService(m Management) *managementService {
+	return &managementService{m: m}
+}
+
+func (s *managementService) Register(server *grpc.Server) {
+	snpb.RegisterManagementServer(server, s)
+}
+
 // GetMetadata implements the ManagementServer GetMetadata method.
-func (s *managementService) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
+func (s *managementService) GetMetadata(ctx context.Context, req *snpb.GetMetadataRequest) (*snpb.GetMetadataResponse, error) {
 	metadata, err := s.m.GetMetadata(req.GetClusterID(), req.GetMetadataType())
 	if err != nil {
 		return nil, err
 	}
-	return &pb.GetMetadataResponse{StorageNodeMetadata: metadata}, nil
+	return &snpb.GetMetadataResponse{StorageNodeMetadata: metadata}, nil
 }
 
 // AddLogStream implements the ManagementServer AddLogStream method.
-func (s *managementService) AddLogStream(ctx context.Context, req *pb.AddLogStreamRequest) (*pb.AddLogStreamResponse, error) {
+func (s *managementService) AddLogStream(ctx context.Context, req *snpb.AddLogStreamRequest) (*snpb.AddLogStreamResponse, error) {
 	if !verifyIDs(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID()) {
 		return nil, varlog.ErrInvalidArgument
 	}
@@ -34,7 +43,7 @@ func (s *managementService) AddLogStream(ctx context.Context, req *pb.AddLogStre
 	if err != nil {
 		return nil, err
 	}
-	return &pb.AddLogStreamResponse{
+	return &snpb.AddLogStreamResponse{
 		LogStream: &vpb.LogStreamDescriptor{
 			LogStreamID: req.GetLogStreamID(),
 			Status:      vpb.LogStreamStatusRunning,
@@ -47,7 +56,7 @@ func (s *managementService) AddLogStream(ctx context.Context, req *pb.AddLogStre
 }
 
 // RemoveLogStream implements the ManagementServer RemoveLogStream method.
-func (s *managementService) RemoveLogStream(ctx context.Context, req *pb.RemoveLogStreamRequest) (*pbtypes.Empty, error) {
+func (s *managementService) RemoveLogStream(ctx context.Context, req *snpb.RemoveLogStreamRequest) (*pbtypes.Empty, error) {
 	if !verifyIDs(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID()) {
 		return nil, varlog.ErrInvalidArgument
 	}
@@ -59,7 +68,7 @@ func (s *managementService) RemoveLogStream(ctx context.Context, req *pb.RemoveL
 }
 
 // Seal implements the ManagementServer Seal method.
-func (s *managementService) Seal(ctx context.Context, req *pb.SealRequest) (*pb.SealResponse, error) {
+func (s *managementService) Seal(ctx context.Context, req *snpb.SealRequest) (*snpb.SealResponse, error) {
 	if !verifyIDs(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID()) {
 		return nil, varlog.ErrInvalidArgument
 	}
@@ -67,14 +76,14 @@ func (s *managementService) Seal(ctx context.Context, req *pb.SealRequest) (*pb.
 	if err != nil {
 		return nil, err
 	}
-	return &pb.SealResponse{
+	return &snpb.SealResponse{
 		Status:            status,
 		LastCommittedGLSN: maxGLSN,
 	}, nil
 }
 
 // Unseal implements the ManagementServer Unseal method.
-func (s *managementService) Unseal(ctx context.Context, req *pb.UnsealRequest) (*pbtypes.Empty, error) {
+func (s *managementService) Unseal(ctx context.Context, req *snpb.UnsealRequest) (*pbtypes.Empty, error) {
 	if !verifyIDs(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID()) {
 		return nil, varlog.ErrInvalidArgument
 	}
@@ -86,7 +95,7 @@ func (s *managementService) Unseal(ctx context.Context, req *pb.UnsealRequest) (
 }
 
 // Sync implements the ManagementServer Sync method.
-func (s *managementService) Sync(context.Context, *pb.SyncRequest) (*pb.SyncResponse, error) {
+func (s *managementService) Sync(context.Context, *snpb.SyncRequest) (*snpb.SyncResponse, error) {
 	panic("not yet implemented")
 }
 

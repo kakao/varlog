@@ -566,7 +566,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 		const lsid = types.LogStreamID(1)
 		storage := NewMockStorage(ctrl)
-		lseI, err := NewLogStreamExecutor(lsid, storage, DefaultLogStreamExecutorOptions)
+		lseI, err := NewLogStreamExecutor(lsid, storage, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 		lse := lseI.(*logStreamExecutor)
 

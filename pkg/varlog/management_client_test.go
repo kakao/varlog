@@ -23,7 +23,7 @@ func TestManagementClientGetMetadata(t *testing.T) {
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, ErrInternal)
 			Convey("Then the ManagementClient should return the error", func() {
-				_, err := mc.GetMetadata(context.TODO(), pb.MetadataTypeHeartbeat)
+				_, err := mc.GetMetadata(context.TODO(), types.ClusterID(1), pb.MetadataTypeHeartbeat)
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -31,7 +31,7 @@ func TestManagementClientGetMetadata(t *testing.T) {
 		Convey("Whyen the ManagementService succeeds to get metadata", func() {
 			mockClient.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(&pb.GetMetadataResponse{}, nil)
 			Convey("Then the ManagementClient should return the metadata", func() {
-				_, err := mc.GetMetadata(context.TODO(), pb.MetadataTypeHeartbeat)
+				_, err := mc.GetMetadata(context.TODO(), types.ClusterID(1), pb.MetadataTypeHeartbeat)
 				So(err, ShouldBeNil)
 			})
 		})

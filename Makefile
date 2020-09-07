@@ -10,6 +10,9 @@ LDFLAGS :=
 GOFLAGS := -race
 GCFLAGS := -gcflags=all='-N -l'
 
+PKG_SRCS := $(abspath $(shell find . -name '*.go'))
+INTERNAL_SRCS := $(abspath $(shell find . -name '*.go'))
+
 PROTOC_VERSION := 3.12.3
 PROTOC_HOME := $(BUILD_DIR)/protoc
 PROTOC := protoc
@@ -43,7 +46,7 @@ endif
 
 TEST_DIRS := $(sort $(dir $(shell find . -name '*_test.go')))
 
-all : proto libvarlog storage_node metadata_repository
+all : proto libvarlog storagenode metadata_repository
 
 SOLAR_PROTO := proto/varlog
 STORAGE_NODE_PROTO := proto/storage_node
@@ -52,8 +55,8 @@ PROTO := $(SOLAR_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO)
 
 proto : check_protoc gogoproto $(PROTO)
 
-STORAGE_NODE := cmd/storage_node
-storage_node : $(STORAGE_NODE_PROTO) $(STORAGE_NODE)
+STORAGE_NODE := cmd/storagenode
+storagenode : $(STORAGE_NODE_PROTO) $(STORAGE_NODE)
 
 LIBVARLOG := pkg/varlog
 libvarlog : $(LIBVARLOG)
