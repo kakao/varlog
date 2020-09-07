@@ -1,19 +1,27 @@
 package storage
 
 import (
+	"context"
+	"net"
 	"sync"
 
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
-	pb "github.com/kakao/varlog/proto/storage_node"
+	"github.com/kakao/varlog/pkg/varlog/util/netutil"
+	"github.com/kakao/varlog/pkg/varlog/util/runner"
+	"github.com/kakao/varlog/pkg/varlog/util/runner/stopwaiter"
+	"github.com/kakao/varlog/pkg/varlog/util/syncutil"
+	snpb "github.com/kakao/varlog/proto/storage_node"
 	vpb "github.com/kakao/varlog/proto/varlog"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 // Management is the interface that wraps methods for managing StorageNode.
 type Management interface {
 	// GetMetadata returns metadata of StorageNode. The metadata contains
 	// configurations and statistics for StorageNode.
-	GetMetadata(clusterID types.ClusterID, metadataType pb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(clusterID types.ClusterID, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error)
 
 	// AddLogStream adds a new LogStream to StorageNode.
 	AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) (string, error)
@@ -36,34 +44,97 @@ type LogStreamExecutorGetter interface {
 }
 
 type StorageNode struct {
-	ClusterID     types.ClusterID
-	StorageNodeID types.StorageNodeID
+	clusterID     types.ClusterID
+	storageNodeID types.StorageNodeID
 
 	lseMtx sync.RWMutex
 	lseMap map[types.LogStreamID]LogStreamExecutor
+
+	lsr LogStreamReporter
+
+	options *StorageNodeOptions
+	logger  *zap.Logger
+
+	sw     *stopwaiter.StopWaiter
+	runner runner.Runner
+	cancel context.CancelFunc
+	once   syncutil.OnlyOnce
+
+	server *grpc.Server
+
+	// FIXME (jun): serverAddr is not necessary, it is needed only for tests.
+	serverAddr string
 }
 
-func NewStorageNode() (*StorageNode, error) {
-	panic("not yet implemented")
+func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
+	sn := &StorageNode{
+		clusterID:     options.ClusterID,
+		storageNodeID: options.StorageNodeID,
+		lseMap:        make(map[types.LogStreamID]LogStreamExecutor),
+		options:       options,
+		logger:        options.Logger,
+		sw:            stopwaiter.New(),
+	}
+	sn.lsr = NewLogStreamReporter(sn.storageNodeID, sn, &options.LogStreamReporterOptions)
+	sn.server = grpc.NewServer()
+
+	NewLogStreamReporterService(sn.lsr).Register(sn.server)
+	NewLogIOService(sn.storageNodeID, sn).Register(sn.server)
+	NewManagementService(sn).Register(sn.server)
+
+	return sn, nil
 }
 
 func (sn *StorageNode) Run() error {
-	panic("not yet implemented")
+	return sn.once.Do(func() error {
+		ctx, cancel := context.WithCancel(context.Background())
+		sn.cancel = cancel
+		sn.runner.Run(ctx, sn.lsr.Run)
+
+		sn.logger.Info("listening", zap.String("address", sn.options.RPCBindAddress))
+		lis, err := net.Listen("tcp", sn.options.RPCBindAddress)
+		if err != nil {
+			sn.logger.Error("could not listen", zap.Error(err))
+			return err
+		}
+		sn.serverAddr, _ = netutil.GetListenerLocalAddr(lis)
+
+		go func() {
+			if err := sn.server.Serve(lis); err != nil {
+				sn.logger.Error("could not serve", zap.Error(err))
+				sn.Close()
+			}
+		}()
+
+		sn.logger.Info("starting storagenode")
+		return nil
+	})
 }
 
 func (sn *StorageNode) Close() error {
-	panic("not yet implemented")
+	if sn.cancel != nil {
+		sn.cancel()
+		sn.runner.CloseWait()
+		sn.sw.Stop()
+	}
+	return nil
+}
+
+func (sn *StorageNode) Wait() {
+	sn.sw.Wait()
 }
 
 // GetMeGetMetadata implements the Management GetMetadata method.
-func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType pb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
+func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
 	if !sn.verifyClusterID(cid) {
 		return nil, varlog.ErrInvalidArgument
 	}
 	ret := &vpb.StorageNodeMetadataDescriptor{
-		ClusterID: sn.ClusterID,
+		ClusterID: sn.clusterID,
 		StorageNode: &vpb.StorageNodeDescriptor{
-			StorageNodeID: sn.StorageNodeID,
+			StorageNodeID: sn.storageNodeID,
+			Address:       sn.serverAddr,
+			Status:        vpb.StorageNodeStatusRunning,
 		},
 	}
 	return ret, nil
@@ -81,7 +152,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 		return "", varlog.ErrExist // FIXME: ErrExist or ErrAlreadyExists
 	}
 	// TODO(jun): Create Storage and add new LSE
-	var stg Storage
+	var stg Storage = NewInMemoryStorage()
 	var stgPath string
 	var options LogStreamExecutorOptions
 	lse, err := NewLogStreamExecutor(lsid, stg, &options)
@@ -150,9 +221,9 @@ func (sn *StorageNode) GetLogStreamExecutors() []LogStreamExecutor {
 }
 
 func (sn *StorageNode) verifyClusterID(cid types.ClusterID) bool {
-	return sn.ClusterID == cid
+	return sn.clusterID == cid
 }
 
 func (sn *StorageNode) verifyStorageNodeID(snid types.StorageNodeID) bool {
-	return sn.StorageNodeID == snid
+	return sn.storageNodeID == snid
 }

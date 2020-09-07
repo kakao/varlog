@@ -10,7 +10,7 @@ import (
 )
 
 type ManagementClient interface {
-	GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
 	AddLogStream(ctx context.Context, clusterID types.ClusterID,
 		storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) error
 	RemoveLogStream(ctx context.Context, clusterID types.ClusterID,
@@ -38,8 +38,9 @@ func NewManagementClient(address string) (ManagementClient, error) {
 	}, nil
 }
 
-func (c *managementClient) GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (c *managementClient) GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
+		ClusterID:    clusterID,
 		MetadataType: metadataType,
 	})
 	if err != nil {
