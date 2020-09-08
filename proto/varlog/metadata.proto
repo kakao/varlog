@@ -84,7 +84,7 @@ message StorageNodeMetadataDescriptor {
         (gogoproto.customname) = "ClusterID"
     ];
     StorageNodeDescriptor storage_node = 2;
-    repeated LogStreamDescriptor log_streams = 3;
+    repeated LogStreamDescriptor log_streams = 3 [(gogoproto.nullable) = false];
 }
 
 message MetadataDescriptor {

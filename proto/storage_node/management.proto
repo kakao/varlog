@@ -16,19 +16,18 @@ enum MetadataType {
     option (gogoproto.goproto_enum_prefix) = false;
 
     HEARTBEAT = 0 [(gogoproto.enumvalue_customname) = "MetadataTypeHeartbeat"];
-    CONFIGS = 1 [(gogoproto.enumvalue_customname) = "MetadataTypeConfigs"];
-    STATS = 2 [(gogoproto.enumvalue_customname) = "MetadataTypeStats"];
-    LOG_STREAMS = 4
+    LOG_STREAMS = 1
         [(gogoproto.enumvalue_customname) = "MetadataTypeLogStreams"];
+    STATS = 2 [(gogoproto.enumvalue_customname) = "MetadataTypeStats"];
 }
 
 message GetMetadataRequest {
-    MetadataType metadata_type = 1;
-    uint32 cluster_id = 2 [
+    uint32 cluster_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
+    MetadataType metadata_type = 2;
 }
 
 message GetMetadataResponse {

@@ -149,6 +149,20 @@ func (mr *MockLogStreamExecutorMockRecorder) LogStreamID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamID", reflect.TypeOf((*MockLogStreamExecutor)(nil).LogStreamID))
 }
 
+// Status mocks base method.
+func (m *MockLogStreamExecutor) Status() varlog.LogStreamStatus {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Status")
+	ret0, _ := ret[0].(varlog.LogStreamStatus)
+	return ret0
+}
+
+// Status indicates an expected call of Status.
+func (mr *MockLogStreamExecutorMockRecorder) Status() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockLogStreamExecutor)(nil).Status))
+}
+
 // Read mocks base method.
 func (m *MockLogStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
 	m.ctrl.T.Helper()
