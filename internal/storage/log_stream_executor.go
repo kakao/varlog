@@ -407,8 +407,8 @@ func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) err
 func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 	err := lse.write(t)
 	if err != nil {
-		t.notify(err)
 		lse.sealItself()
+		t.notify(err)
 		return
 	}
 
@@ -458,8 +458,8 @@ func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendT
 			err = ctx.Err()
 		}
 		if err != nil {
-			t.notify(err)
 			lse.sealItself()
+			t.notify(err)
 		}
 	}()
 }
