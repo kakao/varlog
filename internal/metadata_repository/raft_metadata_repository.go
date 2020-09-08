@@ -11,63 +11,25 @@ import (
 
 	varlog "github.daumkakao.com/varlog/varlog/pkg/varlog"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner/stopwaiter"
 	pb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
 	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"google.golang.org/grpc"
 
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
 )
 
-const unusedRequestIndex uint64 = 0
-const DefaultProposeTimeout time.Duration = time.Second
-
-type Config struct {
-	Index             types.NodeID
-	Join              bool
-	NumRep            int
-	SnapCount         uint64
-	PeerList          []string
-	ReporterClientFac ReporterClientFactory
-	Logger            *zap.Logger
-}
-
-func (config *Config) validate() error {
-	if config.Index == types.InvalidNodeID {
-		return errors.New("invalid index")
-	}
-
-	if config.NumRep < 1 {
-		return errors.New("NumRep should be bigger than 0")
-	}
-
-	if len(config.PeerList) < 1 {
-		return errors.New("# of PeerList should be bigger than 0")
-	}
-
-	if config.ReporterClientFac == nil {
-		return errors.New("reporterClientFac should not be nil")
-	}
-
-	if config.Logger == nil {
-		return errors.New("logger should not be nil")
-	}
-
-	if config.SnapCount == 0 {
-		config.SnapCount = defaultSnapshotCount
-	}
-
-	return nil
-}
-
 type RaftMetadataRepository struct {
-	index             types.NodeID
+	clusterID         types.ClusterID
+	nodeID            types.NodeID
 	nrReplica         int
 	raftState         raft.StateType
 	reportCollector   *ReportCollector
-	logger            *zap.Logger
 	raftNode          *raftNode
 	reporterClientFac ReporterClientFactory
 
@@ -84,23 +46,33 @@ type RaftMetadataRepository struct {
 	rnProposeC    chan string
 	rnCommitC     chan *raftCommittedEntry
 
+	options *MetadataRepositoryOptions
+	logger  *zap.Logger
+
+	sw     *stopwaiter.StopWaiter
 	runner runner.Runner
 	cancel context.CancelFunc
+
+	server     *grpc.Server
+	serverAddr string
 }
 
-func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
-	if err := config.validate(); err != nil {
+func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadataRepository {
+	if err := options.validate(); err != nil {
 		panic(err)
 	}
 
 	mr := &RaftMetadataRepository{
-		index:             config.Index,
-		nrReplica:         config.NumRep,
-		logger:            config.Logger,
-		reporterClientFac: config.ReporterClientFac,
+		clusterID:         options.ClusterID,
+		nodeID:            options.NodeID,
+		nrReplica:         options.NumRep,
+		logger:            options.Logger,
+		reporterClientFac: options.ReporterClientFac,
+		options:           options,
+		sw:                stopwaiter.New(),
 	}
 
-	mr.storage = NewMetadataStorage(mr.sendAck, config.SnapCount)
+	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount)
 
 	mr.proposeC = make(chan *pb.RaftEntry, 4096)
 	mr.commitC = make(chan *committedEntry, 4096)
@@ -108,16 +80,16 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 	mr.rnConfChangeC = make(chan raftpb.ConfChange)
 	mr.rnProposeC = make(chan string)
 	mr.raftNode = newRaftNode(
-		config.Index,
-		config.PeerList,
+		options.NodeID,
+		options.PeerList.Value(),
 		//false, // not to join an existing cluster
-		config.Join,
-		config.SnapCount,
+		options.Join,
+		options.SnapCount,
 		mr.storage.GetSnapshot,
 		mr.rnProposeC,
 		mr.rnConfChangeC,
 		//mr.logger.Named("raftnode"),
-		mr.logger.Named(fmt.Sprintf("%v", config.Index)),
+		mr.logger.Named(fmt.Sprintf("%v", options.NodeID)),
 	)
 	mr.rnCommitC = mr.raftNode.commitC
 
@@ -129,6 +101,10 @@ func NewRaftMetadataRepository(config *Config) *RaftMetadataRepository {
 
 	mr.reportCollector = NewReportCollector(cbs,
 		mr.logger.Named("report"))
+
+	mr.server = grpc.NewServer()
+	NewMetadataRepositoryService(mr).Register(mr.server)
+	NewManagementService(mr).Register(mr.server)
 
 	return mr
 }
@@ -145,10 +121,30 @@ func (mr *RaftMetadataRepository) Run() {
 	mr.runner.Run(ctx, mr.runCommitTrigger)
 
 	mr.raftNode.start()
+
+	mr.logger.Info("listening", zap.String("address", mr.options.RPCBindAddress))
+	lis, err := netutil.NewStoppableListener(ctx, mr.options.RPCBindAddress)
+	if err != nil {
+		mr.logger.Panic("could not listen", zap.Error(err))
+	}
+
+	mr.serverAddr, _ = netutil.GetListenerLocalAddr(lis)
+
+	mr.runner.Run(ctx, func(ctx context.Context) {
+		//TODO:: graceful shutdown
+		if err := mr.server.Serve(lis); err != nil && err != varlog.ErrStopped {
+			mr.logger.Panic("could not serve", zap.Error(err))
+			//r.Close()
+		}
+	})
+
+	mr.logger.Info("starting metadata repository")
 }
 
 //TODO:: handle pendding msg
 func (mr *RaftMetadataRepository) Close() error {
+	defer mr.sw.Stop()
+
 	mr.reportCollector.Close()
 	if mr.cancel != nil {
 		mr.cancel()
@@ -168,8 +164,12 @@ func (mr *RaftMetadataRepository) Close() error {
 	return nil
 }
 
+func (mr *RaftMetadataRepository) Wait() {
+	mr.sw.Wait()
+}
+
 func (mr *RaftMetadataRepository) isLeader() bool {
-	return mr.raftNode.membership.getLeader() == uint64(mr.index)
+	return mr.raftNode.membership.getLeader() == uint64(mr.nodeID)
 }
 
 func (mr *RaftMetadataRepository) hasLeader() bool {
@@ -295,6 +295,7 @@ func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 				mr.logger.Panic("unknown type")
 			}
 			e.AppliedIndex = d.index
+
 		}
 
 		mr.commitC <- c
@@ -304,7 +305,7 @@ func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 }
 
 func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, err error) {
-	if mr.index != types.NodeID(nodeIndex) {
+	if mr.nodeID != types.NodeID(nodeIndex) {
 		return
 	}
 
@@ -656,8 +657,8 @@ func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescript
 func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, guarantee bool) error {
 	e := &pb.RaftEntry{}
 	e.Request.SetValue(r)
-	e.NodeIndex = uint64(mr.index)
-	e.RequestIndex = unusedRequestIndex
+	e.NodeIndex = uint64(mr.nodeID)
+	e.RequestIndex = UnusedRequestIndex
 
 	if guarantee {
 		c := make(chan error, 1)
@@ -880,4 +881,8 @@ func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID type
 
 func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (types.NodeID, []string, error) {
 	return mr.raftNode.GetNodeID(), mr.raftNode.GetMembership(), nil
+}
+
+func (mr *RaftMetadataRepository) GetServerAddr() string {
+	return mr.serverAddr
 }

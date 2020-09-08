@@ -13,6 +13,7 @@ import (
 	"time"
 
 	varlogtypes "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	pb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
 
@@ -84,9 +85,6 @@ type raftMembership struct {
 	peers   map[varlogtypes.NodeID]string // raft known peer map
 	mu      sync.RWMutex
 }
-
-var defaultSnapshotCount uint64 = 10000
-var snapshotCatchUpEntriesN uint64 = 10000
 
 // newRaftNode initiates a raft instance and returns a committed log entry
 // channel and error channel. Proposals for log updates are sent over the
@@ -567,8 +565,8 @@ func (rc *raftNode) doSnapshot() {
 	}
 
 	compactIndex := uint64(1)
-	if appliedIndex > snapshotCatchUpEntriesN {
-		compactIndex = appliedIndex - snapshotCatchUpEntriesN
+	if appliedIndex > DefaultSnapshotCatchUpEntriesN {
+		compactIndex = appliedIndex - DefaultSnapshotCatchUpEntriesN
 	}
 
 	if err := rc.raftStorage.Compact(compactIndex); err != nil && err != raft.ErrCompacted {
@@ -675,7 +673,7 @@ func (rc *raftNode) runRaft(ctx context.Context) {
 		rc.logger.Panic("Failed parsing URL", zap.String("err", err.Error()))
 	}
 
-	ln, err := newStoppableListener(ctx, url.Host, rc.logger.Named("listener"))
+	ln, err := netutil.NewStoppableListener(ctx, url.Host)
 	if err != nil {
 		rc.logger.Panic("Failed to listen rafthttp", zap.String("err", err.Error()))
 	}
@@ -701,7 +699,6 @@ func (rc *raftNode) ReportUnreachable(id uint64) {
 }
 
 func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
-	fmt.Printf("reportSnap:: to:%v, status:%v\n", id, status)
 	rc.node.ReportSnapshot(id, status)
 }
 

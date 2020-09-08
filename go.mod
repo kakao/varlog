@@ -9,7 +9,6 @@ require (
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/mock v1.4.4
-	github.com/libp2p/go-reuseport v0.0.1
 	github.com/prometheus/client_golang v1.7.0 // indirect
 	github.com/smartystreets/goconvey v1.6.4
 	github.com/urfave/cli/v2 v2.2.0

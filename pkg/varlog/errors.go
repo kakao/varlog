@@ -19,6 +19,7 @@ var (
 	ErrIgnore     = errors.New("ignore")
 	ErrInprogress = errors.New("inprogress")
 	ErrNeedRetry  = errors.New("need retry")
+	ErrStopped    = errors.New("stopped")
 
 	// LogIOClient
 	ErrUnordered = errors.New("unordered log stream")
