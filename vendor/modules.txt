@@ -11,8 +11,6 @@ github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 ## explicit
 github.com/coreos/pkg/capnslog
-# github.com/cpuguy83/go-md2man v1.0.10
-## explicit
 # github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d
 github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/dustin/go-humanize v1.0.0
@@ -28,7 +26,6 @@ github.com/gogo/protobuf/types
 # github.com/golang/mock v1.4.4
 ## explicit
 github.com/golang/mock/gomock
-github.com/golang/mock/mockgen/model
 # github.com/golang/protobuf v1.4.2
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
@@ -39,13 +36,8 @@ github.com/golang/protobuf/ptypes/timestamp
 github.com/gopherjs/gopherjs/js
 # github.com/jtolds/gls v4.20.0+incompatible
 github.com/jtolds/gls
-# github.com/libp2p/go-reuseport v0.0.1
-## explicit
-github.com/libp2p/go-reuseport
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
-# github.com/pkg/errors v0.8.1
-github.com/pkg/errors
 # github.com/prometheus/client_golang v1.7.0
 ## explicit
 github.com/prometheus/client_golang/prometheus

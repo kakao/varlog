@@ -13,6 +13,12 @@ type ManagementService struct {
 	m Management
 }
 
+func NewManagementService(m Management) *ManagementService {
+	return &ManagementService{
+		m: m,
+	}
+}
+
 func (s *ManagementService) Register(server *grpc.Server) {
 	pb.RegisterManagementServiceServer(server, s)
 }

@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"net"
 	"os"
 	"testing"
 	"time"
@@ -14,33 +12,16 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 
-	reuseport "github.com/libp2p/go-reuseport"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 type testEnv struct {
 	addr string
-	lis  net.Listener
-	srv  *grpc.Server
 	cli  varlog.MetadataRepositoryClient
 	mr   metadata_repository.MetadataRepository
-}
-
-func createServer() (net.Listener, *grpc.Server, error) {
-	lis, err := reuseport.Listen("tcp", "localhost:8000")
-	if err != nil {
-		log.Fatalf("could not listen: %v", err)
-	}
-	server := grpc.NewServer()
-	return lis, server, err
-}
-
-func startServer(lis net.Listener, server *grpc.Server) {
-	if err := server.Serve(lis); err != nil {
-		log.Fatalf("could not serve: %v", err)
-	}
 }
 
 func createMetadataRepository(server *grpc.Server) metadata_repository.MetadataRepository {
@@ -51,7 +32,7 @@ func createMetadataRepository(server *grpc.Server) metadata_repository.MetadataR
 	return metaRepos
 }
 
-func createRaftMetadataRepository(server *grpc.Server) metadata_repository.MetadataRepository {
+func createRaftMetadataRepository(addr string) metadata_repository.MetadataRepository {
 	var cluster []string
 
 	cluster = append(cluster, "http://127.0.0.1:10000")
@@ -61,45 +42,32 @@ func createRaftMetadataRepository(server *grpc.Server) metadata_repository.Metad
 	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
 
 	logger, _ := zap.NewDevelopment()
-	config := &metadata_repository.Config{
-		Index:             nodeID,
+	options := &metadata_repository.MetadataRepositoryOptions{
+		NodeID:            nodeID,
 		NumRep:            1,
-		PeerList:          cluster,
+		PeerList:          *cli.NewStringSlice(cluster...),
+		RPCBindAddress:    addr,
 		Logger:            logger,
 		ReporterClientFac: metadata_repository.NewEmptyReporterClientFactory(),
 	}
 
-	metaRepos := metadata_repository.NewRaftMetadataRepository(config)
+	metaRepos := metadata_repository.NewRaftMetadataRepository(options)
 	metaRepos.Run()
-
-	service := metadata_repository.NewMetadataRepositoryService(metaRepos)
-	service.Register(server)
 
 	return metaRepos
 }
 
 func CreateEnv(t *testing.T) *testEnv {
-	lis, srv, err := createServer()
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr := lis.Addr()
-	tcpAddr := addr.(*net.TCPAddr)
-	address := fmt.Sprintf("localhost:%d", tcpAddr.Port)
+	mr := createRaftMetadataRepository(":0")
+	addr := mr.(*metadata_repository.RaftMetadataRepository).GetServerAddr()
 
-	//mr = createMetadataRepository(srv)
-	mr := createRaftMetadataRepository(srv)
-	go startServer(lis, srv)
-
-	cli, err := varlog.NewMetadataRepositoryClient(address)
+	cli, err := varlog.NewMetadataRepositoryClient(addr)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	env := &testEnv{
-		addr: address,
-		lis:  lis,
-		srv:  srv,
+		addr: addr,
 		cli:  cli,
 		mr:   mr,
 	}
@@ -109,8 +77,6 @@ func CreateEnv(t *testing.T) *testEnv {
 
 func (env *testEnv) Close() {
 	env.cli.Close()
-	env.srv.GracefulStop()
-	env.lis.Close()
 	env.mr.Close()
 }
 

@@ -8,7 +8,9 @@ import (
 	"net"
 	"strconv"
 	"syscall"
+	"time"
 
+	"github.com/kakao/varlog/pkg/varlog"
 	"golang.org/x/sys/unix"
 )
 
@@ -16,6 +18,42 @@ var (
 	errNotSupportedNetwork = errors.New("not supported network")
 	errNotLocalAdddress    = errors.New("not local address")
 )
+
+type StoppableListener struct {
+	*net.TCPListener
+	ctx context.Context
+}
+
+func NewStoppableListener(ctx context.Context, addr string) (*StoppableListener, error) {
+	ln, err := Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	return &StoppableListener{ln.(*net.TCPListener), ctx}, nil
+}
+
+func (ln StoppableListener) Accept() (c net.Conn, err error) {
+	connc := make(chan *net.TCPConn, 1)
+	errc := make(chan error, 1)
+	go func() {
+		tc, err := ln.AcceptTCP()
+		if err != nil {
+			errc <- err
+			return
+		}
+		connc <- tc
+	}()
+	select {
+	case <-ln.ctx.Done():
+		return nil, varlog.ErrStopped
+	case err := <-errc:
+		return nil, err
+	case tc := <-connc:
+		tc.SetKeepAlive(true)
+		tc.SetKeepAlivePeriod(3 * time.Minute)
+		return tc, nil
+	}
+}
 
 func Listen(network, address string) (net.Listener, error) {
 	lc := net.ListenConfig{

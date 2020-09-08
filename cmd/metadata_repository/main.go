@@ -1,23 +1,16 @@
 package main
 
 import (
-	"log"
-	"runtime"
+	"os"
+
+	"github.com/kakao/varlog/cmd/metadata_repository/app"
+	"github.com/kakao/varlog/internal/metadata_repository"
 )
 
 func main() {
-	log.Printf("GOMAXPROCS: %v\n", runtime.GOMAXPROCS(0))
-	/*
-		lis, err := net.Listen("tcp", ":9091")
-		if err != nil {
-			log.Fatalf("could not listen: %v", err)
-		}
-		metaRepos := metadata_repository.NewInMemoryMetadataRepository()
-		service := metadata_repository.NewMetadataRepositoryService(metaRepos)
-		s := grpc.NewServer()
-		pb.RegisterMetadataRepositoryServiceServer(s, service)
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("could not serve: %v", err)
-		}
-	*/
+	options := &metadata_repository.MetadataRepositoryOptions{}
+	app := app.InitCLI(options)
+	if err := app.Run(os.Args); err != nil {
+		os.Exit(1)
+	}
 }

@@ -64,7 +64,7 @@ func newCluster(n int) *cluster {
 		rc := newRaftNode(nodeID,
 			clus.peers,
 			false,
-			defaultSnapshotCount,
+			DefaultSnapshotCount,
 			nil,
 			clus.proposeC[i],
 			clus.confChangeC[i],
