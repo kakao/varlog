@@ -58,10 +58,25 @@ func (ln StoppableListener) Accept() (c net.Conn, err error) {
 func Listen(network, address string) (net.Listener, error) {
 	lc := net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {
-			return c.Control(func(fd uintptr) {
-				unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
-				unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1)
+			var ret error
+			err := c.Control(func(fd uintptr) {
+				setSockOpt := func(opt int) error {
+					return unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, opt, 1)
+				}
+				if err := setSockOpt(unix.SO_REUSEPORT); err != nil {
+					ret = err
+				}
+				if err := setSockOpt(unix.SO_REUSEADDR); err != nil {
+					ret = err
+				}
 			})
+			if ret != nil {
+				return ret
+			}
+			if err != nil {
+				return err
+			}
+			return nil
 		},
 	}
 	return lc.Listen(context.Background(), network, address)
