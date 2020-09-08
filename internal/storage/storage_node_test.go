@@ -42,7 +42,7 @@ func TestStorageNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	meta, err := mcl.GetMetadata(context.TODO(), clusterID, snpb.MetadataTypeConfigs)
+	meta, err := mcl.GetMetadata(context.TODO(), clusterID, snpb.MetadataTypeHeartbeat)
 	if err != nil {
 		t.Error(err)
 	}
@@ -53,7 +53,7 @@ func TestStorageNode(t *testing.T) {
 		t.Error(err)
 	}
 
-	meta, err = mcl.GetMetadata(context.TODO(), clusterID, snpb.MetadataTypeConfigs)
+	meta, err = mcl.GetMetadata(context.TODO(), clusterID, snpb.MetadataTypeHeartbeat)
 	if err != nil {
 		t.Error(err)
 	}

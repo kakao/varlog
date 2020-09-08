@@ -129,15 +129,47 @@ func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.Metada
 	if !sn.verifyClusterID(cid) {
 		return nil, varlog.ErrInvalidArgument
 	}
+
 	ret := &vpb.StorageNodeMetadataDescriptor{
 		ClusterID: sn.clusterID,
 		StorageNode: &vpb.StorageNodeDescriptor{
 			StorageNodeID: sn.storageNodeID,
 			Address:       sn.serverAddr,
-			Status:        vpb.StorageNodeStatusRunning,
+			Status:        vpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping
 		},
 	}
+	if metadataType == snpb.MetadataTypeHeartbeat {
+		return ret, nil
+	}
+
+	ret.LogStreams = sn.logStreamDescriptors()
 	return ret, nil
+
+	// TODO (jun): add statistics to the response of GetMetadata
+}
+
+func (sn *StorageNode) logStreamDescriptors() []vpb.LogStreamDescriptor {
+	lseList := sn.GetLogStreamExecutors()
+	if len(lseList) == 0 {
+		return nil
+	}
+	lsdList := make([]vpb.LogStreamDescriptor, len(lseList))
+	for i, lse := range lseList {
+		lse.LogStreamID()
+		lsdList[i] = vpb.LogStreamDescriptor{
+			LogStreamID: lse.LogStreamID(),
+			Status:      lse.Status(),
+			Replicas: []*vpb.ReplicaDescriptor{
+				{
+					StorageNodeID: sn.storageNodeID,
+					// TODO (jun): path represents disk-based storage and
+					// memory-based storage
+					// Path: lse.Path(),
+				},
+			},
+		}
+	}
+	return lsdList
 }
 
 // AddLogStream implements the Management AddLogStream method.
@@ -211,8 +243,8 @@ func (sn *StorageNode) GetLogStreamExecutor(logStreamID types.LogStreamID) (LogS
 }
 
 func (sn *StorageNode) GetLogStreamExecutors() []LogStreamExecutor {
-	var ret []LogStreamExecutor
 	sn.lseMtx.RLock()
+	ret := make([]LogStreamExecutor, 0, len(sn.lseMap))
 	for _, lse := range sn.lseMap {
 		ret = append(ret, lse)
 	}

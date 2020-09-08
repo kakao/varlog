@@ -9,7 +9,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	vpb "github.com/kakao/varlog/proto/varlog"
 	"go.uber.org/zap"
 )
 
@@ -19,7 +19,7 @@ type SubscribeResult struct {
 }
 
 type Sealer interface {
-	Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN)
+	Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN)
 }
 
 type Unsealer interface {
@@ -31,6 +31,7 @@ type LogStreamExecutor interface {
 	Close()
 
 	LogStreamID() types.LogStreamID
+	Status() vpb.LogStreamStatus
 
 	Read(ctx context.Context, glsn types.GLSN) ([]byte, error)
 	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
@@ -128,7 +129,7 @@ type logStreamExecutor struct {
 
 	trackers appendTaskTracker
 
-	status    varlogpb.LogStreamStatus
+	status    vpb.LogStreamStatus
 	mtxStatus sync.RWMutex
 
 	logger  *zap.Logger
@@ -155,7 +156,7 @@ func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage, option
 		committedLLSNEnd:     types.MinLLSN,
 		localLowWatermark:    types.AtomicGLSN(types.InvalidGLSN),
 		localHighWatermark:   types.AtomicGLSN(types.InvalidGLSN),
-		status:               varlogpb.LogStreamStatusRunning,
+		status:               vpb.LogStreamStatusRunning,
 		logger:               logger,
 		options:              options,
 	}
@@ -185,20 +186,25 @@ func (lse *logStreamExecutor) Close() {
 	}
 }
 
-func (lse *logStreamExecutor) isSealed() bool {
+func (lse *logStreamExecutor) Status() vpb.LogStreamStatus {
 	lse.mtxStatus.RLock()
 	defer lse.mtxStatus.RUnlock()
-	return lse.status.Sealed()
+	return lse.status
 }
 
-func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN) {
+func (lse *logStreamExecutor) isSealed() bool {
+	status := lse.Status()
+	return status.Sealed()
+}
+
+func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN) {
 	localHWM := lse.localHighWatermark.Load()
 	if localHWM > lastCommittedGLSN {
 		panic("local Highwatermark above last committed GLSN")
 	}
-	status := varlogpb.LogStreamStatusSealed
+	status := vpb.LogStreamStatusSealed
 	if localHWM < lastCommittedGLSN {
-		status = varlogpb.LogStreamStatusSealing
+		status = vpb.LogStreamStatusSealing
 	}
 	lse.seal(status, false)
 	return status, localHWM
@@ -207,18 +213,18 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogSt
 func (lse *logStreamExecutor) Unseal() error {
 	lse.mtxStatus.Lock()
 	defer lse.mtxStatus.RUnlock()
-	if lse.status == varlogpb.LogStreamStatusSealed {
-		lse.status = varlogpb.LogStreamStatusRunning
+	if lse.status == vpb.LogStreamStatusSealed {
+		lse.status = vpb.LogStreamStatusRunning
 		return nil
 	}
 	return errors.New("invalid status")
 }
 
 func (lse *logStreamExecutor) sealItself() {
-	lse.seal(varlogpb.LogStreamStatusSealing, true)
+	lse.seal(vpb.LogStreamStatusSealing, true)
 }
 
-func (lse *logStreamExecutor) seal(status varlogpb.LogStreamStatus, itself bool) {
+func (lse *logStreamExecutor) seal(status vpb.LogStreamStatus, itself bool) {
 	lse.mtxStatus.Lock()
 	defer lse.mtxStatus.Unlock()
 	if !itself || lse.status.Running() {
