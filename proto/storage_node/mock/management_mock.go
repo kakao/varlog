@@ -6,38 +6,37 @@ package mock
 
 import (
 	context "context"
-	reflect "reflect"
-
 	types "github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
 	storage_node "github.com/kakao/varlog/proto/storage_node"
 	grpc "google.golang.org/grpc"
+	reflect "reflect"
 )
 
-// MockManagementClient is a mock of ManagementClient interface.
+// MockManagementClient is a mock of ManagementClient interface
 type MockManagementClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockManagementClientMockRecorder
 }
 
-// MockManagementClientMockRecorder is the mock recorder for MockManagementClient.
+// MockManagementClientMockRecorder is the mock recorder for MockManagementClient
 type MockManagementClientMockRecorder struct {
 	mock *MockManagementClient
 }
 
-// NewMockManagementClient creates a new mock instance.
+// NewMockManagementClient creates a new mock instance
 func NewMockManagementClient(ctrl *gomock.Controller) *MockManagementClient {
 	mock := &MockManagementClient{ctrl: ctrl}
 	mock.recorder = &MockManagementClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockManagementClient) EXPECT() *MockManagementClientMockRecorder {
 	return m.recorder
 }
 
-// AddLogStream mocks base method.
+// AddLogStream mocks base method
 func (m *MockManagementClient) AddLogStream(arg0 context.Context, arg1 *storage_node.AddLogStreamRequest, arg2 ...grpc.CallOption) (*storage_node.AddLogStreamResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -50,14 +49,14 @@ func (m *MockManagementClient) AddLogStream(arg0 context.Context, arg1 *storage_
 	return ret0, ret1
 }
 
-// AddLogStream indicates an expected call of AddLogStream.
+// AddLogStream indicates an expected call of AddLogStream
 func (mr *MockManagementClientMockRecorder) AddLogStream(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockManagementClient)(nil).AddLogStream), varargs...)
 }
 
-// GetMetadata mocks base method.
+// GetMetadata mocks base method
 func (m *MockManagementClient) GetMetadata(arg0 context.Context, arg1 *storage_node.GetMetadataRequest, arg2 ...grpc.CallOption) (*storage_node.GetMetadataResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -70,14 +69,14 @@ func (m *MockManagementClient) GetMetadata(arg0 context.Context, arg1 *storage_n
 	return ret0, ret1
 }
 
-// GetMetadata indicates an expected call of GetMetadata.
+// GetMetadata indicates an expected call of GetMetadata
 func (mr *MockManagementClientMockRecorder) GetMetadata(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockManagementClient)(nil).GetMetadata), varargs...)
 }
 
-// RemoveLogStream mocks base method.
+// RemoveLogStream mocks base method
 func (m *MockManagementClient) RemoveLogStream(arg0 context.Context, arg1 *storage_node.RemoveLogStreamRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -90,14 +89,14 @@ func (m *MockManagementClient) RemoveLogStream(arg0 context.Context, arg1 *stora
 	return ret0, ret1
 }
 
-// RemoveLogStream indicates an expected call of RemoveLogStream.
+// RemoveLogStream indicates an expected call of RemoveLogStream
 func (mr *MockManagementClientMockRecorder) RemoveLogStream(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStream", reflect.TypeOf((*MockManagementClient)(nil).RemoveLogStream), varargs...)
 }
 
-// Seal mocks base method.
+// Seal mocks base method
 func (m *MockManagementClient) Seal(arg0 context.Context, arg1 *storage_node.SealRequest, arg2 ...grpc.CallOption) (*storage_node.SealResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -110,14 +109,14 @@ func (m *MockManagementClient) Seal(arg0 context.Context, arg1 *storage_node.Sea
 	return ret0, ret1
 }
 
-// Seal indicates an expected call of Seal.
+// Seal indicates an expected call of Seal
 func (mr *MockManagementClientMockRecorder) Seal(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockManagementClient)(nil).Seal), varargs...)
 }
 
-// Sync mocks base method.
+// Sync mocks base method
 func (m *MockManagementClient) Sync(arg0 context.Context, arg1 *storage_node.SyncRequest, arg2 ...grpc.CallOption) (*storage_node.SyncResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -130,14 +129,14 @@ func (m *MockManagementClient) Sync(arg0 context.Context, arg1 *storage_node.Syn
 	return ret0, ret1
 }
 
-// Sync indicates an expected call of Sync.
+// Sync indicates an expected call of Sync
 func (mr *MockManagementClientMockRecorder) Sync(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManagementClient)(nil).Sync), varargs...)
 }
 
-// Unseal mocks base method.
+// Unseal mocks base method
 func (m *MockManagementClient) Unseal(arg0 context.Context, arg1 *storage_node.UnsealRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -150,37 +149,37 @@ func (m *MockManagementClient) Unseal(arg0 context.Context, arg1 *storage_node.U
 	return ret0, ret1
 }
 
-// Unseal indicates an expected call of Unseal.
+// Unseal indicates an expected call of Unseal
 func (mr *MockManagementClientMockRecorder) Unseal(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockManagementClient)(nil).Unseal), varargs...)
 }
 
-// MockManagementServer is a mock of ManagementServer interface.
+// MockManagementServer is a mock of ManagementServer interface
 type MockManagementServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockManagementServerMockRecorder
 }
 
-// MockManagementServerMockRecorder is the mock recorder for MockManagementServer.
+// MockManagementServerMockRecorder is the mock recorder for MockManagementServer
 type MockManagementServerMockRecorder struct {
 	mock *MockManagementServer
 }
 
-// NewMockManagementServer creates a new mock instance.
+// NewMockManagementServer creates a new mock instance
 func NewMockManagementServer(ctrl *gomock.Controller) *MockManagementServer {
 	mock := &MockManagementServer{ctrl: ctrl}
 	mock.recorder = &MockManagementServerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockManagementServer) EXPECT() *MockManagementServerMockRecorder {
 	return m.recorder
 }
 
-// AddLogStream mocks base method.
+// AddLogStream mocks base method
 func (m *MockManagementServer) AddLogStream(arg0 context.Context, arg1 *storage_node.AddLogStreamRequest) (*storage_node.AddLogStreamResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddLogStream", arg0, arg1)
@@ -189,13 +188,13 @@ func (m *MockManagementServer) AddLogStream(arg0 context.Context, arg1 *storage_
 	return ret0, ret1
 }
 
-// AddLogStream indicates an expected call of AddLogStream.
+// AddLogStream indicates an expected call of AddLogStream
 func (mr *MockManagementServerMockRecorder) AddLogStream(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockManagementServer)(nil).AddLogStream), arg0, arg1)
 }
 
-// GetMetadata mocks base method.
+// GetMetadata mocks base method
 func (m *MockManagementServer) GetMetadata(arg0 context.Context, arg1 *storage_node.GetMetadataRequest) (*storage_node.GetMetadataResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadata", arg0, arg1)
@@ -204,13 +203,13 @@ func (m *MockManagementServer) GetMetadata(arg0 context.Context, arg1 *storage_n
 	return ret0, ret1
 }
 
-// GetMetadata indicates an expected call of GetMetadata.
+// GetMetadata indicates an expected call of GetMetadata
 func (mr *MockManagementServerMockRecorder) GetMetadata(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockManagementServer)(nil).GetMetadata), arg0, arg1)
 }
 
-// RemoveLogStream mocks base method.
+// RemoveLogStream mocks base method
 func (m *MockManagementServer) RemoveLogStream(arg0 context.Context, arg1 *storage_node.RemoveLogStreamRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveLogStream", arg0, arg1)
@@ -219,13 +218,13 @@ func (m *MockManagementServer) RemoveLogStream(arg0 context.Context, arg1 *stora
 	return ret0, ret1
 }
 
-// RemoveLogStream indicates an expected call of RemoveLogStream.
+// RemoveLogStream indicates an expected call of RemoveLogStream
 func (mr *MockManagementServerMockRecorder) RemoveLogStream(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStream", reflect.TypeOf((*MockManagementServer)(nil).RemoveLogStream), arg0, arg1)
 }
 
-// Seal mocks base method.
+// Seal mocks base method
 func (m *MockManagementServer) Seal(arg0 context.Context, arg1 *storage_node.SealRequest) (*storage_node.SealResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seal", arg0, arg1)
@@ -234,13 +233,13 @@ func (m *MockManagementServer) Seal(arg0 context.Context, arg1 *storage_node.Sea
 	return ret0, ret1
 }
 
-// Seal indicates an expected call of Seal.
+// Seal indicates an expected call of Seal
 func (mr *MockManagementServerMockRecorder) Seal(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockManagementServer)(nil).Seal), arg0, arg1)
 }
 
-// Sync mocks base method.
+// Sync mocks base method
 func (m *MockManagementServer) Sync(arg0 context.Context, arg1 *storage_node.SyncRequest) (*storage_node.SyncResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", arg0, arg1)
@@ -249,13 +248,13 @@ func (m *MockManagementServer) Sync(arg0 context.Context, arg1 *storage_node.Syn
 	return ret0, ret1
 }
 
-// Sync indicates an expected call of Sync.
+// Sync indicates an expected call of Sync
 func (mr *MockManagementServerMockRecorder) Sync(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManagementServer)(nil).Sync), arg0, arg1)
 }
 
-// Unseal mocks base method.
+// Unseal mocks base method
 func (m *MockManagementServer) Unseal(arg0 context.Context, arg1 *storage_node.UnsealRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Unseal", arg0, arg1)
@@ -264,7 +263,7 @@ func (m *MockManagementServer) Unseal(arg0 context.Context, arg1 *storage_node.U
 	return ret0, ret1
 }
 
-// Unseal indicates an expected call of Unseal.
+// Unseal indicates an expected call of Unseal
 func (mr *MockManagementServerMockRecorder) Unseal(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockManagementServer)(nil).Unseal), arg0, arg1)
