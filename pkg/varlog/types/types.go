@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/url"
 	"strconv"
 	"sync/atomic"
 )
@@ -79,9 +80,9 @@ func (glsn *AtomicLLSN) CompareAndSwap(old, new LLSN) (swapped bool) {
 type NodeID uint64
 
 const (
-	InvalidNodeID = 0
-	MinNodeID     = 1
-	MaxNodeID     = math.MaxUint64
+	InvalidNodeID = NodeID(0)
+	MinNodeID     = NodeID(1)
+	MaxNodeID     = NodeID(math.MaxUint64)
 )
 
 // convert string(ip:port) to uint64
@@ -114,6 +115,15 @@ func NewNodeID(addr string) NodeID {
 	}
 	id |= (uint64(port) & 0xffff) << 16
 	return NodeID(id)
+}
+
+func NewNodeIDFromURL(rawurl string) NodeID {
+	url, err := url.Parse(rawurl)
+	if err != nil {
+		return InvalidNodeID
+	}
+
+	return NewNodeID(url.Host)
 }
 
 func (nid NodeID) String() string {

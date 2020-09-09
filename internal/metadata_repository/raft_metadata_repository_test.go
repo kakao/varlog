@@ -1066,7 +1066,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			defer cancel()
 
 			So(clus.nodes[0].AddPeer(rctx,
-				types.InvalidNodeID,
+				types.ClusterID(0),
 				clus.nodes[newNode].nodeID,
 				clus.peers[newNode]), ShouldBeNil)
 			So(clus.start(newNode), ShouldBeNil)
@@ -1113,7 +1113,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			defer cancel()
 
 			So(clus.nodes[0].AddPeer(rctx,
-				types.InvalidNodeID,
+				types.ClusterID(0),
 				clus.nodes[newNode].nodeID,
 				clus.peers[newNode]), ShouldBeNil)
 			So(clus.start(newNode), ShouldBeNil)
@@ -1171,7 +1171,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			defer cancel()
 
 			So(clus.nodes[checkNode].RemovePeer(rctx,
-				types.InvalidNodeID,
+				types.ClusterID(0),
 				clus.nodes[leaveNode].nodeID), ShouldBeNil)
 
 			Convey("Then GetMembership should return 2 peers", func(ctx C) {
@@ -1196,7 +1196,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			defer cancel()
 
 			So(clus.nodes[checkNode].RemovePeer(rctx,
-				types.InvalidNodeID,
+				types.ClusterID(0),
 				clus.nodes[leaveNode].nodeID), ShouldBeNil)
 
 			Convey("Then GetMembership should return 2 peers", func(ctx C) {
@@ -1236,7 +1236,7 @@ func TestMRFailoverRestart(t *testing.T) {
 			defer cancel()
 
 			So(clus.nodes[leader].AddPeer(rctx,
-				types.InvalidNodeID,
+				types.ClusterID(0),
 				clus.nodes[newNode].nodeID,
 				clus.peers[newNode]), ShouldBeNil)
 			So(clus.start(newNode), ShouldBeNil)
@@ -1264,7 +1264,7 @@ func TestMRFailoverRestart(t *testing.T) {
 			defer cancel()
 
 			So(clus.nodes[leader].RemovePeer(rctx,
-				types.InvalidNodeID,
+				types.ClusterID(0),
 				clus.nodes[leaveNode].nodeID), ShouldBeNil)
 
 			nrNode -= 1
@@ -1395,7 +1395,7 @@ func TestMRRemoteSnapshot(t *testing.T) {
 			defer cancel()
 
 			So(clus.nodes[leader].AddPeer(rctx,
-				types.InvalidNodeID,
+				types.ClusterID(0),
 				clus.nodes[newNode].nodeID,
 				clus.peers[newNode]), ShouldBeNil)
 			So(clus.start(newNode), ShouldBeNil)
@@ -1468,7 +1468,7 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 			defer cancel()
 
 			So(clus.nodes[leader].RemovePeer(rctx,
-				types.InvalidNodeID,
+				types.ClusterID(0),
 				clus.nodes[leaveNode].nodeID), ShouldBeNil)
 
 			nrNode -= 1

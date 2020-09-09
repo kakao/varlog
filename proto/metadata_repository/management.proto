@@ -65,7 +65,7 @@ message GetClusterInfoResponse {
     repeated string urls = 3;
 }
 
-service ManagementService {
+service Management {
     rpc AddPeer(AddPeerRequest) returns (google.protobuf.Empty) {}
     rpc RemovePeer(RemovePeerRequest) returns (google.protobuf.Empty) {}
     rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse) {

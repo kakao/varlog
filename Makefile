@@ -81,7 +81,9 @@ mockgen: \
 	proto/storage_node/mock/replicator_mock.go \
 	proto/storage_node/mock/log_io_mock.go \
 	proto/storage_node/mock/log_stream_reporter_mock.go \
-	proto/storage_node/mock/management_mock.go
+	proto/storage_node/mock/management_mock.go \
+	proto/metadata_repository/mock/management_mock.go \
+	proto/metadata_repository/mock/metadata_repository_mock.go
 
 internal/storage/storage_node_mock.go: internal/storage/storage_node.go
 	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
@@ -152,6 +154,20 @@ proto/storage_node/mock/management_mock.go: $(PROTO) proto/storage_node/manageme
 		-destination $@ \
 		github.daumkakao.com/varlog/varlog/proto/storage_node \
 		ManagementClient,ManagementServer
+
+proto/metadata_repository/mock/management_mock.go: $(PROTO) proto/metadata_repository/management.pb.go
+	mockgen -build_flags -mod=vendor \
+		-package mock \
+		-destination $@ \
+		github.daumkakao.com/varlog/varlog/proto/metadata_repository \
+		ManagementClient,ManagementServer
+
+proto/metadata_repository/mock/metadata_repository_mock.go: $(PROTO) proto/metadata_repository/metadata_repository.pb.go
+	mockgen -build_flags -mod=vendor \
+		-package mock \
+		-destination $@ \
+		github.daumkakao.com/varlog/varlog/proto/metadata_repository \
+		MetadataRepositoryServiceClient,MetadataRepositoryServiceServer
 
 .PHONY: test test_report coverage_report
 

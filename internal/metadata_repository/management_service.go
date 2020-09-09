@@ -9,7 +9,7 @@ import (
 )
 
 type ManagementService struct {
-	pb.UnimplementedManagementServiceServer
+	pb.UnimplementedManagementServer
 	m Management
 }
 
@@ -20,7 +20,7 @@ func NewManagementService(m Management) *ManagementService {
 }
 
 func (s *ManagementService) Register(server *grpc.Server) {
-	pb.RegisterManagementServiceServer(server, s)
+	pb.RegisterManagementServer(server, s)
 }
 
 func (s *ManagementService) AddPeer(ctx context.Context, req *pb.AddPeerRequest) (*types.Empty, error) {
