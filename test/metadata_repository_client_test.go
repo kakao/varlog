@@ -18,6 +18,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+const testAddr = "127.0.0.1:10000"
+
 type testEnv struct {
 	addr string
 	cli  varlog.MetadataRepositoryClient
@@ -35,8 +37,8 @@ func createMetadataRepository(server *grpc.Server) metadata_repository.MetadataR
 func createRaftMetadataRepository(addr string) metadata_repository.MetadataRepository {
 	var cluster []string
 
-	cluster = append(cluster, "http://127.0.0.1:10000")
-	nodeID := types.NewNodeID("127.0.0.1:10000")
+	cluster = append(cluster, fmt.Sprintf("http://%s", testAddr))
+	nodeID := types.NewNodeID(testAddr)
 
 	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
 	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
@@ -78,6 +80,11 @@ func CreateEnv(t *testing.T) *testEnv {
 func (env *testEnv) Close() {
 	env.cli.Close()
 	env.mr.Close()
+
+	nodeID := types.NewNodeID(testAddr)
+
+	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
+	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
 }
 
 func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
