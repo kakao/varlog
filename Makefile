@@ -182,6 +182,7 @@ test:
 test_report:
 	cat $(BUILD_DIR)/reports/test_output.txt | \
 		go-junit-report > $(BUILD_DIR)/reports/report.xml
+	rm $(BUILD_DIR)/reports/test_output.txt
 
 coverage_report:
 	gocov convert $(BUILD_DIR)/reports/coverage.out | gocov-xml > $(BUILD_DIR)/reports/coverage.xml
