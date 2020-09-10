@@ -39,6 +39,7 @@ func initStartCommand(options *storage.StorageNodeOptions) *cli.Command {
 	}
 	startCmd.Flags = append(startCmd.Flags, initRPCFlags(&options.RPCOptions)...)
 	startCmd.Flags = append(startCmd.Flags, initLSEFlags(&options.LogStreamExecutorOptions)...)
+	startCmd.Flags = append(startCmd.Flags, initLSRFlags(&options.LogStreamReporterOptions)...)
 	return startCmd
 }
 
@@ -105,6 +106,54 @@ func initLSEFlags(options *storage.LogStreamExecutorOptions) []cli.Flag {
 			Usage:       "Timeout for trim channel in LogStreamExecutor",
 			EnvVars:     []string{"LSE_TRIMC_TIMEOUT"},
 			Destination: &options.TrimCTimeout,
+		},
+	}
+}
+
+func initLSRFlags(options *storage.LogStreamReporterOptions) []cli.Flag {
+	return []cli.Flag{
+		&cli.UintFlag{
+			Name:        "lsr-commitc-size",
+			Aliases:     []string{},
+			Value:       storage.DefaultLSRCommitCSize,
+			Usage:       "Size of commit channel in LogStreamReporter",
+			EnvVars:     []string{"LSR_COMMITC_SIZE"},
+			Destination: &options.CommitCSize,
+		},
+		&cli.DurationFlag{
+			Name:        "lsr-commitc-timeout",
+			Aliases:     []string{},
+			Value:       storage.DefaultLSRCommitCTimeout,
+			Usage:       "Timeout for commit channel in LogStreamReporter",
+			EnvVars:     []string{"LSR_COMMITC_TIMEOUT"},
+			DefaultText: "infinity",
+			Destination: &options.CommitCTimeout,
+		},
+		&cli.UintFlag{
+			Name:        "lsr-reportc-size",
+			Aliases:     []string{},
+			Value:       storage.DefaultLSRReportCSize,
+			Usage:       "Size of report channel in LogStreamReporter",
+			EnvVars:     []string{"LSR_REPORTC_SIZE"},
+			Destination: &options.ReportCSize,
+		},
+		&cli.DurationFlag{
+			Name:        "lsr-reportc-timeout",
+			Aliases:     []string{},
+			Value:       storage.DefaultLSRReportCTimeout,
+			Usage:       "Timeout for report channel in LogStreamReporter",
+			EnvVars:     []string{"LSR_REPORTC_TIMEOUT"},
+			DefaultText: "infinity",
+			Destination: &options.ReportCTimeout,
+		},
+		&cli.DurationFlag{
+			Name:        "lsr-report-wait-timeout",
+			Aliases:     []string{},
+			Value:       storage.DefaultLSRReportWaitTimeout,
+			Usage:       "Timeout for waiting report LogStreamReporter",
+			EnvVars:     []string{"LSR_REPORT_WAIT_TIMEOUT"},
+			DefaultText: "infinity",
+			Destination: &options.ReportWaitTimeout,
 		},
 	}
 }
