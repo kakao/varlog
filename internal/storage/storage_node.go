@@ -57,8 +57,11 @@ type StorageNode struct {
 
 	sw     *stopwaiter.StopWaiter
 	runner runner.Runner
-	cancel context.CancelFunc
-	once   syncutil.OnlyOnce
+	// FIXME (jun): remove context
+	runnerContext context.Context
+	cancel        context.CancelFunc
+	muCancel      sync.Mutex
+	once          syncutil.OnlyOnce
 
 	server *grpc.Server
 
@@ -88,7 +91,10 @@ func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
 func (sn *StorageNode) Run() error {
 	return sn.once.Do(func() error {
 		ctx, cancel := context.WithCancel(context.Background())
+		sn.runnerContext = ctx
+		sn.muCancel.Lock()
 		sn.cancel = cancel
+		sn.muCancel.Unlock()
 		sn.runner.Run(ctx, sn.lsr.Run)
 
 		sn.logger.Info("listening", zap.String("address", sn.options.RPCBindAddress))
@@ -112,8 +118,14 @@ func (sn *StorageNode) Run() error {
 }
 
 func (sn *StorageNode) Close() error {
+	sn.muCancel.Lock()
+	defer sn.muCancel.Unlock()
 	if sn.cancel != nil {
 		sn.cancel()
+		sn.lsr.Close()
+		for _, lse := range sn.GetLogStreamExecutors() {
+			lse.Close()
+		}
 		sn.runner.CloseWait()
 		sn.sw.Stop()
 	}
@@ -191,6 +203,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 		return "", err
 	}
 	sn.lseMap[lsid] = lse
+	sn.runner.Run(sn.runnerContext, lse.Run)
 	return stgPath, nil
 }
 

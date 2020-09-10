@@ -78,7 +78,9 @@ type logStreamExecutor struct {
 	appendC chan *appendTask
 	commitC chan commitTask
 	trimC   chan *trimTask
-	cancel  context.CancelFunc
+
+	muCancel sync.Mutex
+	cancel   context.CancelFunc
 
 	// lock guard for knownNextGLSN and uncommittedLLSNBegin
 	// knownNextGLSN and uncommittedLLSNBegin should be updated simultaneously.
@@ -170,7 +172,9 @@ func (lse *logStreamExecutor) LogStreamID() types.LogStreamID {
 func (lse *logStreamExecutor) Run(ctx context.Context) {
 	lse.once.Do(func() {
 		cctx, cancel := context.WithCancel(ctx)
+		lse.muCancel.Lock()
 		lse.cancel = cancel
+		lse.muCancel.Unlock()
 		lse.runner.Run(cctx, lse.dispatchAppendC)
 		lse.runner.Run(cctx, lse.dispatchTrimC)
 		lse.runner.Run(cctx, lse.dispatchCommitC)
@@ -179,6 +183,8 @@ func (lse *logStreamExecutor) Run(ctx context.Context) {
 }
 
 func (lse *logStreamExecutor) Close() {
+	lse.muCancel.Lock()
+	defer lse.muCancel.Unlock()
 	if lse.cancel != nil {
 		lse.cancel()
 		lse.replicator.Close()

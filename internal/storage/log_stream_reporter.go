@@ -52,6 +52,7 @@ type logStreamReporter struct {
 	reportC            chan *lsrReportTask
 	commitC            chan lsrCommitTask
 	cancel             context.CancelFunc
+	muCancel           sync.Mutex
 	runner             runner.Runner
 	once               sync.Once
 	options            *LogStreamReporterOptions
@@ -74,13 +75,17 @@ func (lsr *logStreamReporter) StorageNodeID() types.StorageNodeID {
 
 func (lsr *logStreamReporter) Run(ctx context.Context) {
 	lsr.once.Do(func() {
+		lsr.muCancel.Lock()
 		ctx, lsr.cancel = context.WithCancel(ctx)
+		lsr.muCancel.Unlock()
 		lsr.runner.Run(ctx, lsr.dispatchCommit)
 		lsr.runner.Run(ctx, lsr.dispatchReport)
 	})
 }
 
 func (lsr *logStreamReporter) Close() {
+	lsr.muCancel.Lock()
+	defer lsr.muCancel.Unlock()
 	if lsr.cancel != nil {
 		lsr.cancel()
 		lsr.runner.CloseWait()
