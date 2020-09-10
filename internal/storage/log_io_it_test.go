@@ -48,16 +48,6 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 				})
 			})
 
-			Convey("When the underlying LogStreamExecutor is timed out", func() {
-				lse.EXPECT().Append(gomock.Any(), gomock.Any()).Return(types.InvalidGLSN, context.DeadlineExceeded)
-				Convey("Then the LogIOClient should return timeout error", func() {
-					_, err := cli.Append(context.TODO(), lsid, nil)
-					// TODO: below code is not ok
-					// So(varlog.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
-					So(err, ShouldNotBeNil)
-				})
-			})
-
 			Convey("When the LogIOClient is timed out", func() {
 				stop := make(chan struct{})
 				defer close(stop)
@@ -129,14 +119,6 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 			Convey("When the LogStream is not registered", func() {
 				Convey("Then the LogIOClient should return an error", func() {
 					_, err = cli.Read(context.TODO(), types.LogStreamID(2), types.GLSN(0))
-					So(err, ShouldNotBeNil)
-				})
-			})
-
-			Convey("When the underlying LogStreamExecutor is timed out", func() {
-				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(nil, context.DeadlineExceeded)
-				Convey("Then the LogIOClient should return timeout error", func() {
-					_, err := cli.Read(context.TODO(), lsid, types.MinGLSN)
 					So(err, ShouldNotBeNil)
 				})
 			})
@@ -283,15 +265,6 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 
 			Reset(func() {
 				So(cli.Close(), ShouldBeNil)
-			})
-
-			Convey("When the underlying LogStreamExecutor is timed out", func() {
-				lse1.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(context.DeadlineExceeded)
-				lse2.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(context.DeadlineExceeded)
-				Convey("Then the LogIOClient should return timeout error", func() {
-					err := cli.Trim(context.TODO(), types.MinGLSN)
-					So(err, ShouldNotBeNil)
-				})
 			})
 
 			Convey("When the LogIOClient is timed out", func() {

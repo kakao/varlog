@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package varlog;
+
+option go_package = "github.com/kakao/varlog/proto/varlog";
+
+message ErrorDetail {
+    string desc = 1;
+    bool is_varlog_error = 2;
+}

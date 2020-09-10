@@ -84,17 +84,22 @@ func (s *InMemoryStorage) Read(glsn types.GLSN) ([]byte, error) {
 	defer s.muCommitted.RUnlock()
 	if len(s.committed) == 0 {
 		return nil, varlog.ErrNoEntry
+		// return nil, errors.WithMessagef(errNotExist, "no committed entries: glsn=%v", glsn)
+		// return nil, errNotFound
 	}
 
 	first := s.committed[0]
 	last := s.committed[len(s.committed)-1]
 	if first.glsn > glsn || last.glsn < glsn {
 		return nil, varlog.ErrNoEntry
+		// return nil, errors.WithMessagef(errNotExist, "out of boundaries: first=%v last=%v glsn=%v", first.glsn, last.glsn, glsn)
+		//return nil, errNotFound
 	}
 
 	i, _, err := s.searchCommittedEntry(glsn)
 	if err != nil {
 		return nil, varlog.ErrNoEntry
+		// return nil, errNotFound
 	}
 	// NB: The LLSN of the first entry of written and committed should be same.
 	// NB: committedEntry[i] and writtenEntry[i] are the same log entry.

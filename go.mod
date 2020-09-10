@@ -8,6 +8,7 @@ require (
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.4.4
 	github.com/prometheus/client_golang v1.7.0 // indirect
 	github.com/smartystreets/goconvey v1.6.4

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"testing"
@@ -72,7 +73,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 
 		Convey("read operation should reply uncertainness if it doesn't know", func() {
 			_, err := lse.Read(context.TODO(), types.MinGLSN)
-			So(err, ShouldEqual, varlog.ErrUndecidable)
+			So(errors.Is(err, varlog.ErrUndecidable), ShouldBeTrue)
 		})
 
 		Convey("read operation should reply error when the requested GLSN was already deleted", func() {
@@ -90,10 +91,10 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 			wg.Wait()
 			for trimmedGLSN := types.MinGLSN; trimmedGLSN <= trimGLSN; trimmedGLSN++ {
 				isTrimmed := lse.(*logStreamExecutor).isTrimmed(trimmedGLSN)
-				So(isTrimmed, ShouldBeTrue)
+				So(isTrimmed, ShouldNotBeNil)
 
 				_, err := lse.Read(context.TODO(), trimmedGLSN)
-				So(err, ShouldEqual, varlog.ErrTrimmed)
+				So(errors.Is(err, varlog.ErrTrimmed), ShouldBeTrue)
 			}
 		})
 
