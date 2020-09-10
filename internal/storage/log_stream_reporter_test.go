@@ -9,6 +9,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/kakao/varlog/pkg/varlog/types"
+	"go.uber.org/zap"
 )
 
 func TestLogStreamReporterRunClose(t *testing.T) {
@@ -17,7 +18,7 @@ func TestLogStreamReporterRunClose(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, &DefaultLogStreamReporterOptions)
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &DefaultLogStreamReporterOptions)
 		So(func() { lsr.Run(context.TODO()) }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
@@ -34,7 +35,7 @@ func TestLogStreamReporterGetReportTimeout(t *testing.T) {
 		opts.ReportWaitTimeout = time.Duration(0)
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, &opts)
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &opts)
 
 		lse := NewMockLogStreamExecutor(ctrl)
 		lse.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
@@ -72,7 +73,7 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, &DefaultLogStreamReporterOptions).(*logStreamReporter)
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &DefaultLogStreamReporterOptions).(*logStreamReporter)
 		lsr.Run(context.TODO())
 
 		var lseList []*MockLogStreamExecutor
@@ -229,7 +230,7 @@ func TestLogStreamReporterCommitTimeout(t *testing.T) {
 		opts.CommitCSize = 0
 		opts.CommitCTimeout = time.Duration(0)
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, &opts)
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &opts)
 
 		lse := NewMockLogStreamExecutor(ctrl)
 		lse.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
@@ -281,7 +282,7 @@ func TestLogStreamReporterCommit(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(types.StorageNodeID(0), lseGetter, &DefaultLogStreamReporterOptions).(*logStreamReporter)
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &DefaultLogStreamReporterOptions).(*logStreamReporter)
 		lse1 := NewMockLogStreamExecutor(ctrl)
 		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
 		lse2 := NewMockLogStreamExecutor(ctrl)

@@ -8,17 +8,19 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	vpb "github.com/kakao/varlog/proto/varlog"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 type managementService struct {
 	snpb.UnimplementedManagementServer
 
-	m Management
+	logger *zap.Logger
+	m      Management
 }
 
-func NewManagementService(m Management) *managementService {
-	return &managementService{m: m}
+func NewManagementService(logger *zap.Logger, m Management) *managementService {
+	return &managementService{logger: logger, m: m}
 }
 
 func (s *managementService) Register(server *grpc.Server) {
@@ -29,6 +31,7 @@ func (s *managementService) Register(server *grpc.Server) {
 func (s *managementService) GetMetadata(ctx context.Context, req *snpb.GetMetadataRequest) (*snpb.GetMetadataResponse, error) {
 	metadata, err := s.m.GetMetadata(req.GetClusterID(), req.GetMetadataType())
 	if err != nil {
+		s.logger.Error("could not get metadata", zap.Error(err))
 		return nil, err
 	}
 	return &snpb.GetMetadataResponse{StorageNodeMetadata: metadata}, nil
@@ -41,6 +44,7 @@ func (s *managementService) AddLogStream(ctx context.Context, req *snpb.AddLogSt
 	}
 	path, err := s.m.AddLogStream(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID(), req.GetStorage().GetPath())
 	if err != nil {
+		s.logger.Error("could not add logstream", zap.Error(err))
 		return nil, err
 	}
 	return &snpb.AddLogStreamResponse{
@@ -62,6 +66,7 @@ func (s *managementService) RemoveLogStream(ctx context.Context, req *snpb.Remov
 	}
 	err := s.m.RemoveLogStream(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID())
 	if err != nil {
+		s.logger.Error("could not remove logstream", zap.Error(err))
 		return nil, err
 	}
 	return &pbtypes.Empty{}, nil
@@ -74,6 +79,7 @@ func (s *managementService) Seal(ctx context.Context, req *snpb.SealRequest) (*s
 	}
 	status, maxGLSN, err := s.m.Seal(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID(), req.GetLastCommittedGLSN())
 	if err != nil {
+		s.logger.Error("could not seal", zap.Error(err))
 		return nil, err
 	}
 	return &snpb.SealResponse{
@@ -89,6 +95,7 @@ func (s *managementService) Unseal(ctx context.Context, req *snpb.UnsealRequest)
 	}
 	err := s.m.Unseal(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID())
 	if err != nil {
+		s.logger.Error("could not unseal", zap.Error(err))
 		return nil, err
 	}
 	return &pbtypes.Empty{}, nil
