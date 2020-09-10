@@ -7,6 +7,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
+	"go.uber.org/zap"
 )
 
 type UncommittedLogStreamStatus struct {
@@ -56,9 +57,10 @@ type logStreamReporter struct {
 	runner             runner.Runner
 	once               sync.Once
 	options            *LogStreamReporterOptions
+	logger             *zap.Logger
 }
 
-func NewLogStreamReporter(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, options *LogStreamReporterOptions) LogStreamReporter {
+func NewLogStreamReporter(logger *zap.Logger, storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, options *LogStreamReporterOptions) LogStreamReporter {
 	return &logStreamReporter{
 		storageNodeID: storageNodeID,
 		lseGetter:     lseGetter,
@@ -66,6 +68,7 @@ func NewLogStreamReporter(storageNodeID types.StorageNodeID, lseGetter LogStream
 		reportC:       make(chan *lsrReportTask, options.ReportCSize),
 		commitC:       make(chan lsrCommitTask, options.CommitCSize),
 		options:       options,
+		logger:        logger,
 	}
 }
 

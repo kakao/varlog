@@ -137,8 +137,7 @@ type logStreamExecutor struct {
 	options *LogStreamExecutorOptions
 }
 
-func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage, options *LogStreamExecutorOptions) (LogStreamExecutor, error) {
-	logger := zap.L()
+func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, storage Storage, options *LogStreamExecutorOptions) (LogStreamExecutor, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("logstream: no storage")
 	}
@@ -405,6 +404,9 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 	tctx, cancel := context.WithTimeout(ctx, lse.options.CommitWaitTimeout)
 	defer cancel()
 	err := appendTask.wait(tctx)
+	if err != nil {
+		lse.logger.Error("could not wait appendTask", zap.Error(err))
+	}
 	appendTask.close()
 	return appendTask.getGLSN(), err
 }
@@ -416,6 +418,7 @@ func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) err
 	case lse.appendC <- t:
 		return nil
 	case <-tctx.Done():
+		lse.logger.Error("could not add appendTask to appendC", zap.Error(tctx.Err()))
 		return tctx.Err()
 	}
 }

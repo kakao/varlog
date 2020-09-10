@@ -78,12 +78,12 @@ func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
 		logger:        options.Logger,
 		sw:            stopwaiter.New(),
 	}
-	sn.lsr = NewLogStreamReporter(sn.storageNodeID, sn, &options.LogStreamReporterOptions)
+	sn.lsr = NewLogStreamReporter(sn.logger, sn.storageNodeID, sn, &options.LogStreamReporterOptions)
 	sn.server = grpc.NewServer()
 
 	NewLogStreamReporterService(sn.lsr).Register(sn.server)
 	NewLogIOService(sn.storageNodeID, sn).Register(sn.server)
-	NewManagementService(sn).Register(sn.server)
+	NewManagementService(sn.logger, sn).Register(sn.server)
 
 	return sn, nil
 }
@@ -198,7 +198,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 	// TODO(jun): Create Storage and add new LSE
 	var stg Storage = NewInMemoryStorage()
 	var stgPath string
-	lse, err := NewLogStreamExecutor(lsid, stg, &sn.options.LogStreamExecutorOptions)
+	lse, err := NewLogStreamExecutor(sn.logger, lsid, stg, &sn.options.LogStreamExecutorOptions)
 	if err != nil {
 		return "", err
 	}
