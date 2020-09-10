@@ -513,10 +513,11 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	// TODO: If this is sealed, ...
 	lse.mu.RLock()
 	offset := lse.uncommittedLLSNBegin
+	hwm := lse.globalHighwatermark
 	lse.mu.RUnlock()
 	return UncommittedLogStreamStatus{
 		LogStreamID:           lse.logStreamID,
-		KnownHighWatermark:    lse.globalHighwatermark,
+		KnownHighWatermark:    hwm,
 		UncommittedLLSNOffset: offset,
 		UncommittedLLSNLength: uint64(lse.uncommittedLLSNEnd.Load() - offset),
 	}
