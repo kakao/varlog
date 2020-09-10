@@ -34,9 +34,9 @@ func (s *ManagementService) RemovePeer(ctx context.Context, req *pb.RemovePeerRe
 }
 
 func (s *ManagementService) GetClusterInfo(ctx context.Context, req *pb.GetClusterInfoRequest) (*pb.GetClusterInfoResponse, error) {
-	nodeID, urls, err := s.m.GetClusterInfo(ctx, req.ClusterID)
+	leader, urls, err := s.m.GetClusterInfo(ctx, req.ClusterID)
 	return &pb.GetClusterInfoResponse{
-		NodeID: nodeID,
+		Leader: leader,
 		Urls:   urls,
 	}, err
 }

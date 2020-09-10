@@ -55,6 +55,8 @@ type RaftMetadataRepository struct {
 
 	server     *grpc.Server
 	serverAddr string
+
+	nrReport uint64
 }
 
 func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadataRepository {
@@ -403,6 +405,8 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *pb.UpdateLogStream, no
 }
 
 func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
+	atomic.AddUint64(&mr.nrReport, 1)
+
 	snID := r.LogStream.StorageNodeID
 	for _, l := range r.LogStream.Uncommit {
 		lsID := l.LogStreamID
@@ -880,9 +884,13 @@ func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID type
 }
 
 func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (types.NodeID, []string, error) {
-	return mr.raftNode.GetNodeID(), mr.raftNode.GetMembership(), nil
+	return types.NodeID(mr.raftNode.membership.getLeader()), mr.raftNode.GetMembership(), nil
 }
 
 func (mr *RaftMetadataRepository) GetServerAddr() string {
 	return mr.serverAddr
+}
+
+func (mr *RaftMetadataRepository) GetReportCount() uint64 {
+	return atomic.LoadUint64(&mr.nrReport)
 }

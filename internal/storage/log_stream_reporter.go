@@ -124,6 +124,7 @@ func (lsr *logStreamReporter) GetReport(ctx context.Context) (types.GLSN, []Unco
 	case <-tctx.Done():
 		return types.InvalidGLSN, nil, tctx.Err()
 	}
+
 	return t.knownHighWatermark, t.reports, nil
 }
 

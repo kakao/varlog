@@ -3,6 +3,7 @@ package metadata_repository
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/kakao/varlog/internal/storage"
 	varlog "github.com/kakao/varlog/pkg/varlog"
@@ -13,6 +14,8 @@ import (
 
 	"go.uber.org/zap"
 )
+
+const RPC_TIMEOUT = 100 * time.Millisecond
 
 type ReportCollectorCallbacks struct {
 	report        func(*snpb.LocalLogStreamDescriptor) error
@@ -227,7 +230,9 @@ func (rce *ReportCollectExecutor) getReport() error {
 		return err
 	}
 
-	lls, err := cli.GetReport(context.TODO())
+	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	defer cancel()
+	lls, err := cli.GetReport(ctx)
 	if err != nil {
 		/*
 			rce.logger.Debug("getReport",
@@ -258,6 +263,11 @@ func (rce *ReportCollectExecutor) getReport() error {
 	rce.logStreamIDs = lsIDs
 	rce.lsmu.Unlock()
 
+	rce.logger.Debug("report",
+		zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
+		zap.Uint64("HWM", uint64(lls.HighWatermark)),
+		zap.Int("UNCOMMIT", len(lls.Uncommit)),
+	)
 	rce.cb.report(lls)
 
 	return nil
@@ -278,19 +288,22 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 	lsIDs := rce.logStreamIDs
 	rce.lsmu.RUnlock()
 
-	r.CommitResult = make([]*snpb.GlobalLogStreamDescriptor_LogStreamCommitResult, len(lsIDs))
+	r.CommitResult = make([]*snpb.GlobalLogStreamDescriptor_LogStreamCommitResult, 0, len(lsIDs))
 
-	for i, lsID := range lsIDs {
+	for _, lsID := range lsIDs {
 		c := getCommitResultFromGLS(gls, lsID)
-		if c == nil {
-			c = &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
-				LogStreamID: lsID,
-			}
+		if c != nil {
+			r.CommitResult = append(r.CommitResult, c)
 		}
-		r.CommitResult[i] = c
 	}
 
-	err = cli.Commit(context.TODO(), &r)
+	if len(r.CommitResult) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	defer cancel()
+	err = cli.Commit(ctx, &r)
 	if err != nil {
 		/*
 			rce.logger.Debug("commit",

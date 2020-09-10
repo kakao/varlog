@@ -17,7 +17,7 @@ message MetadataRepositoryDescriptor {
     message LocalLogStreamReplica {
         option (gogoproto.equal) = true;
 
-        uint64 uncommitted_llsn_offfset = 1 [
+        uint64 uncommitted_llsn_offset = 1 [
             (gogoproto.casttype) =
                 "github.com/kakao/varlog/pkg/varlog/types.LLSN",
             (gogoproto.customname) = "UncommittedLLSNOffset"
