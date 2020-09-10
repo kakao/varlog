@@ -82,5 +82,5 @@ func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context,
 		return types.InvalidNodeID, nil, ToErr(ctx, err)
 	}
 
-	return rsp.NodeID, rsp.GetUrls(), nil
+	return rsp.Leader, rsp.GetUrls(), nil
 }

@@ -56,11 +56,9 @@ message GetClusterInfoResponse {
         (gogoproto.customname) = "ClusterID"
     ];
 
-    uint64 node_id = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID",
-        (gogoproto.customname) = "NodeID"
-    ];
+    uint64 leader = 2
+        [(gogoproto.casttype) =
+             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
 
     repeated string urls = 3;
 }
