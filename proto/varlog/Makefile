@@ -1,4 +1,4 @@
-SRC := metadata.proto
+SRC := metadata.proto errors.proto
 TARGET := $(SRC:.proto=.pb.go)
 
 $(TARGET): $(SRC)

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -141,8 +140,7 @@ type logStreamExecutor struct {
 func NewLogStreamExecutor(logStreamID types.LogStreamID, storage Storage, options *LogStreamExecutorOptions) (LogStreamExecutor, error) {
 	logger := zap.L()
 	if storage == nil {
-		logger.Error("invalid argument", zap.Any("storage", storage))
-		return nil, varlog.ErrInvalid
+		return nil, fmt.Errorf("logstream: no storage")
 	}
 	lse := &logStreamExecutor{
 		logStreamID:          logStreamID,
@@ -223,7 +221,7 @@ func (lse *logStreamExecutor) Unseal() error {
 		lse.status = vpb.LogStreamStatusRunning
 		return nil
 	}
-	return errors.New("invalid status")
+	return fmt.Errorf("logstream: unseal error (status=%v)", lse.status)
 }
 
 func (lse *logStreamExecutor) sealItself() {
@@ -279,12 +277,12 @@ func (lse *logStreamExecutor) dispatchCommitC(ctx context.Context) {
 // - read aggregation to minimize I/O
 // - cache or not (use memstore?)
 func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
-	if lse.isTrimmed(glsn) {
-		return nil, varlog.ErrTrimmed
+	if err := lse.isTrimmed(glsn); err != nil {
+		return nil, err
 	}
 	// TODO: wait until decidable or return an error
-	if lse.commitUndecidable(glsn) {
-		return nil, varlog.ErrUndecidable
+	if err := lse.commitUndecidable(glsn); err != nil {
+		return nil, err
 	}
 	done := make(chan struct{})
 	task := &readTask{
@@ -300,20 +298,31 @@ func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte
 	}
 }
 
-func (lse *logStreamExecutor) isTrimmed(glsn types.GLSN) bool {
-	return glsn < lse.localLowWatermark.Load()
+func (lse *logStreamExecutor) isTrimmed(glsn types.GLSN) error {
+	lwm := lse.localLowWatermark.Load()
+	if glsn < lwm {
+		return errTrimmed(glsn, lwm)
+	}
+	return nil
 }
 
-func (lse *logStreamExecutor) commitUndecidable(glsn types.GLSN) bool {
-	return glsn > lse.localHighWatermark.Load()
+func (lse *logStreamExecutor) commitUndecidable(glsn types.GLSN) error {
+	hwm := lse.localHighWatermark.Load()
+	if glsn > hwm {
+		return errUndecidable(glsn, hwm)
+	}
+	return nil
+	//return glsn > lse.localHighWatermark.Load()
 }
 
 func (lse *logStreamExecutor) read(t *readTask) {
-	// TODO: wait undecidable read operation
-	// for lse.commitUndecidable(t.glsn) {
-	//	runtime.Gosched()
-	//}
-	t.data, t.err = lse.storage.Read(t.glsn)
+	data, err := lse.storage.Read(t.glsn)
+	if err != nil {
+		// t.err = newVarlogError(err, "read error: %v", t.glsn)
+		t.err = fmt.Errorf("logstreamexecutor read error (glsn=%v): %w", t.glsn, err)
+	}
+	t.data = data
+	// t.data, t.err = lse.storage.Read(t.glsn)
 	close(t.done)
 }
 
@@ -346,7 +355,8 @@ func (lse *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN) <-
 				res := SubscribeResult{logEntry: varlog.InvalidLogEntry}
 				entry, err := scanner.Next()
 				if llsn+1 != entry.LLSN {
-					res.err = varlog.ErrUnordered
+					res.err = varlog.NewSimpleErrorf(varlog.ErrUnordered, "llsn next=%v read=%v", llsn+1, entry.LLSN)
+					// res.err = fmt.Errorf("%w (LLSN next=%v read=%v)", varlog.ErrUnordered, llsn+1, entry.LLSN)
 					c <- res
 					return
 				}
@@ -433,7 +443,8 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 		llsn = lse.uncommittedLLSNEnd.Load()
 	}
 	if llsn != lse.uncommittedLLSNEnd.Load() {
-		return fmt.Errorf("LLSN mismatch")
+		// return newVarlogError(ErrLogStreamCorrupt, "llsn=%v uncommittedLLSNEnd=%v", llsn, lse.uncommittedLLSNEnd.Load())
+		return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", varlog.ErrCorruptLogStream, llsn, lse.uncommittedLLSNEnd.Load())
 	}
 
 	if err := lse.storage.Write(llsn, data); err != nil {
@@ -471,8 +482,8 @@ func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendT
 }
 
 func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
-	if lse.isTrimmed(glsn) {
-		return varlog.ErrTrimmed
+	if err := lse.isTrimmed(glsn); err != nil {
+		return err
 	}
 	tctx, cancel := context.WithTimeout(ctx, lse.options.TrimCTimeout)
 	defer cancel()
@@ -485,12 +496,13 @@ func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
 }
 
 func (lse *logStreamExecutor) trim(t *trimTask) {
-	if lse.isTrimmed(t.glsn) {
+	if err := lse.isTrimmed(t.glsn); err != nil {
+		lse.logger.Error("could not trim", zap.Error(err))
 		return
 	}
 	lse.localLowWatermark.Store(t.glsn + 1)
 	if _, err := lse.storage.Delete(t.glsn); err != nil {
-		lse.logger.Error("could not delete logs: %v", zap.Error(err))
+		lse.logger.Error("could not trim", zap.Error(err))
 	}
 }
 
@@ -508,18 +520,11 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 }
 
 func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) error {
-	if lse.logStreamID != cr.LogStreamID {
-		lse.logger.Error("incorrect LogStreamID",
-			zap.Uint64("lse", uint64(lse.logStreamID)),
-			zap.Uint64("cr", uint64(cr.LogStreamID)))
-		return varlog.ErrInvalid
-	}
 	if lse.isSealed() {
-		lse.logger.Error("sealed")
 		return varlog.ErrSealed
 	}
-	if !lse.verifyCommit(cr.PrevHighWatermark) {
-		return varlog.ErrInvalid
+	if err := lse.verifyCommit(cr.PrevHighWatermark); err != nil {
+		return err
 	}
 
 	ct := commitTask{
@@ -539,24 +544,40 @@ func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) error {
 	return nil
 }
 
-func (lse *logStreamExecutor) verifyCommit(prevHighWatermark types.GLSN) bool {
+func (lse *logStreamExecutor) verifyCommit(prevHighWatermark types.GLSN) error {
 	lse.mu.RLock()
 	defer lse.mu.RUnlock()
-	// If the LSE is newbie knownNextGLSN is zero. In LSE-wise commit, it is unnecessary,
-	ret := lse.globalHighwatermark.Invalid() || lse.globalHighwatermark == prevHighWatermark
-	if !ret {
-		lse.logger.Error("incorrect CR",
-			zap.Uint64("known next GLSN", uint64(lse.globalHighwatermark)),
-			zap.Uint64("prev next GLSN", uint64(prevHighWatermark)))
+
+	if lse.globalHighwatermark.Invalid() {
+		return nil
+		// return true
 	}
-	return ret
+	if lse.globalHighwatermark == prevHighWatermark {
+		return nil
+		// return true
+	}
+	return fmt.Errorf("logstream: highwatermark mismatch (globalHighwatermark=%v prevHighWatermark=%v)", lse.globalHighwatermark, prevHighWatermark)
+	// return false
+
+	// If the LSE is newbie knownNextGLSN is zero. In LSE-wise commit, it is unnecessary,
+	/*
+		ret := lse.globalHighwatermark.Invalid() || lse.globalHighwatermark == prevHighWatermark
+		if !ret {
+			lse.logger.Error("incorrect CR",
+				zap.Uint64("known next GLSN", uint64(lse.globalHighwatermark)),
+				zap.Uint64("prev next GLSN", uint64(prevHighWatermark)))
+		}
+		return ret
+	*/
 }
 
 func (lse *logStreamExecutor) commit(t commitTask) {
 	if lse.isSealed() {
+		lse.logger.Error("could not commit: sealed")
 		return
 	}
-	if !lse.verifyCommit(t.prevHighWatermark) {
+	if err := lse.verifyCommit(t.prevHighWatermark); err != nil {
+		lse.logger.Error("could not commit", zap.Error(err))
 		return
 	}
 
@@ -596,7 +617,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
 			appendT.setGLSN(glsn)
-			appendT.notify(varlog.ErrInternal)
+			appendT.notify(fmt.Errorf("%w: commit error (llsn=%v glsn=%v)", varlog.ErrCorruptLogStream, llsn, glsn))
 		}
 		glsn++
 		llsn++
