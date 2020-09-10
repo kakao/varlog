@@ -39,6 +39,7 @@ type replicator struct {
 	replicateC chan *replicateTask
 	once       sync.Once
 	cancel     context.CancelFunc
+	muCancel   sync.Mutex
 	runner     runner.Runner
 }
 
@@ -52,12 +53,16 @@ func NewReplicator() Replicator {
 func (r *replicator) Run(ctx context.Context) {
 	r.once.Do(func() {
 		ctx, cancel := context.WithCancel(ctx)
+		r.muCancel.Lock()
 		r.cancel = cancel
+		r.muCancel.Unlock()
 		r.runner.Run(ctx, r.dispatchReplicateC)
 	})
 }
 
 func (r *replicator) Close() {
+	r.muCancel.Lock()
+	defer r.muCancel.Unlock()
 	if r.cancel != nil {
 		r.cancel()
 		for _, rc := range r.rcm {
