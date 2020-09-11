@@ -343,6 +343,10 @@ func TestCommit(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			So(testutil.CompareWait(func() bool {
+				return a.lookupClient(sn.StorageNodeID) != nil
+			}, 100*time.Millisecond), ShouldBeTrue)
 		}
 
 		Convey("ReportCollector should broadcast commit result to registered storage node", func() {
