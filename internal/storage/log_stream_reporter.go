@@ -218,10 +218,7 @@ func (lsr *logStreamReporter) commit(ctx context.Context, t lsrCommitTask) {
 		if !ok {
 			panic("no such executor")
 		}
-		// TODO: check returned value, and log it
-		// TODO: run goroutine
-		// TODO: use context
-		executor.Commit(commitResult)
+		go executor.Commit(ctx, commitResult)
 	}
 	lsr.knownHighWatermark.Store(t.highWatermark)
 }

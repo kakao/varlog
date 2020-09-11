@@ -40,7 +40,7 @@ type LogStreamExecutor interface {
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
 
 	GetReport() UncommittedLogStreamStatus
-	Commit(CommittedLogStreamStatus) error
+	Commit(ctx context.Context, commitResult CommittedLogStreamStatus)
 
 	Sealer
 	Unsealer
@@ -523,12 +523,13 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	}
 }
 
-func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) error {
+func (lse *logStreamExecutor) Commit(ctx context.Context, cr CommittedLogStreamStatus) {
 	if lse.isSealed() {
-		return varlog.ErrSealed
+		return
 	}
 	if err := lse.verifyCommit(cr.PrevHighWatermark); err != nil {
-		return err
+		lse.logger.Error("could not commit", zap.Error(err))
+		return
 	}
 
 	ct := commitTask{
@@ -538,14 +539,13 @@ func (lse *logStreamExecutor) Commit(cr CommittedLogStreamStatus) error {
 		committedGLSNEnd:   cr.CommittedGLSNOffset + types.GLSN(cr.CommittedGLSNLength),
 	}
 
-	tctx, cancel := context.WithTimeout(context.Background(), lse.options.CommitCTimeout)
+	tctx, cancel := context.WithTimeout(ctx, lse.options.CommitCTimeout)
 	defer cancel()
 	select {
 	case lse.commitC <- ct:
 	case <-tctx.Done():
-		return tctx.Err()
+		lse.logger.Error("could not send commitTask to commitC", zap.Error(tctx.Err()))
 	}
-	return nil
 }
 
 func (lse *logStreamExecutor) verifyCommit(prevHighWatermark types.GLSN) error {
