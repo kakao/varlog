@@ -14,7 +14,7 @@ const (
 	DefaultSnapshotCount           uint64        = 10000
 	DefaultSnapshotCatchUpEntriesN uint64        = 10000
 	DefaultLogReplicationFactor    int           = 1
-	DefaultProposeTimeout          time.Duration = time.Second
+	DefaultProposeTimeout          time.Duration = 100 * time.Millisecond
 
 	UnusedRequestIndex uint64 = 0
 )
