@@ -524,9 +524,6 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 }
 
 func (lse *logStreamExecutor) Commit(ctx context.Context, cr CommittedLogStreamStatus) {
-	if lse.isSealed() {
-		return
-	}
 	if err := lse.verifyCommit(cr.PrevHighWatermark); err != nil {
 		lse.logger.Error("could not commit", zap.Error(err))
 		return
@@ -576,10 +573,6 @@ func (lse *logStreamExecutor) verifyCommit(prevHighWatermark types.GLSN) error {
 }
 
 func (lse *logStreamExecutor) commit(t commitTask) {
-	if lse.isSealed() {
-		lse.logger.Error("could not commit: sealed")
-		return
-	}
 	if err := lse.verifyCommit(t.prevHighWatermark); err != nil {
 		lse.logger.Error("could not commit", zap.Error(err))
 		return
