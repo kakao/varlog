@@ -221,61 +221,6 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 	})
 }
 
-func TestLogStreamReporterCommitTimeout(t *testing.T) {
-	Convey("Given LogStreamReporter", t, func() {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		opts := DefaultLogStreamReporterOptions
-		opts.CommitCSize = 0
-		opts.CommitCTimeout = time.Duration(0)
-		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &opts)
-
-		lse := NewMockLogStreamExecutor(ctrl)
-		lse.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
-		setLseGetter(lseGetter, lse)
-
-		lsr.Run(context.TODO())
-
-		Reset(func() {
-			lsr.Close()
-		})
-
-		Convey("When LogStreamReporter.Commit is timed out", func() {
-			wait := make(chan struct{})
-			lse.EXPECT().Commit(gomock.Any()).DoAndReturn(func(CommittedLogStreamStatus) error {
-				<-wait
-				return nil
-			}).MaxTimes(1)
-
-			Convey("Then LogStreamReporter.Commit should return timeout error", func(c C) {
-				var wg sync.WaitGroup
-				wg.Add(2)
-				errs := make([]error, 2)
-				commitF := func(idx int) {
-					defer wg.Done()
-					errs[idx] = lsr.Commit(context.TODO(), types.MinGLSN, types.InvalidGLSN, []CommittedLogStreamStatus{
-						{
-							LogStreamID:         lse.LogStreamID(),
-							HighWatermark:       types.MinGLSN,
-							PrevHighWatermark:   types.InvalidGLSN,
-							CommittedGLSNOffset: types.MinGLSN,
-							CommittedGLSNLength: 1,
-						},
-					})
-				}
-				go commitF(0)
-				go commitF(1)
-				wg.Wait()
-				So(errs, ShouldContain, context.DeadlineExceeded)
-				close(wait)
-			})
-		})
-
-	})
-}
-
 func TestLogStreamReporterCommit(t *testing.T) {
 	Convey("LogStreamReporter", t, func() {
 		ctrl := gomock.NewController(t)
@@ -323,13 +268,11 @@ func TestLogStreamReporterCommit(t *testing.T) {
 			oldKnownNextGLSN := lsr.knownHighWatermark.Load()
 			var wg sync.WaitGroup
 			wg.Add(2)
-			lse1.EXPECT().Commit(gomock.Any()).DoAndReturn(func(CommittedLogStreamStatus) error {
+			lse1.EXPECT().Commit(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, CommittedLogStreamStatus) {
 				defer wg.Done()
-				return nil
 			}).AnyTimes()
-			lse2.EXPECT().Commit(gomock.Any()).DoAndReturn(func(CommittedLogStreamStatus) error {
+			lse2.EXPECT().Commit(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, CommittedLogStreamStatus) {
 				defer wg.Done()
-				return nil
 			}).AnyTimes()
 
 			err := lsr.Commit(context.TODO(), types.GLSN(20), types.GLSN(10), []CommittedLogStreamStatus{

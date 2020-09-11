@@ -256,17 +256,15 @@ func (mr *MockLogStreamExecutorMockRecorder) GetReport() *gomock.Call {
 }
 
 // Commit mocks base method.
-func (m *MockLogStreamExecutor) Commit(arg0 CommittedLogStreamStatus) error {
+func (m *MockLogStreamExecutor) Commit(ctx context.Context, commitResult CommittedLogStreamStatus) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Commit", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "Commit", ctx, commitResult)
 }
 
 // Commit indicates an expected call of Commit.
-func (mr *MockLogStreamExecutorMockRecorder) Commit(arg0 interface{}) *gomock.Call {
+func (mr *MockLogStreamExecutorMockRecorder) Commit(ctx, commitResult interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamExecutor)(nil).Commit), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamExecutor)(nil).Commit), ctx, commitResult)
 }
 
 // Seal mocks base method.

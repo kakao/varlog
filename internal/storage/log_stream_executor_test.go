@@ -163,7 +163,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 				go func(uncommittedLLSNEnd types.LLSN, knownNextGLSN types.GLSN) {
 					defer wg.Done()
 					waitWriteDone(uncommittedLLSNEnd)
-					lse.Commit(CommittedLogStreamStatus{
+					lse.Commit(context.TODO(), CommittedLogStreamStatus{
 						LogStreamID:         logStreamID,
 						HighWatermark:       i,
 						PrevHighWatermark:   i - 1,
@@ -335,7 +335,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 			).DoAndReturn(
 				func(context.Context, types.LLSN, []byte, []Replica) <-chan error {
 					defer func() {
-						lse.Commit(CommittedLogStreamStatus{
+						lse.Commit(context.TODO(), CommittedLogStreamStatus{
 							LogStreamID:         lse.LogStreamID(),
 							HighWatermark:       types.MinGLSN,
 							PrevHighWatermark:   types.InvalidGLSN,
