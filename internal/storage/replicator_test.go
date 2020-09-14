@@ -8,6 +8,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"go.uber.org/zap"
 )
 
 func TestReplicator(t *testing.T) {
@@ -23,7 +24,7 @@ func TestReplicator(t *testing.T) {
 			rcs[i] = NewMockReplicatorClient(ctrl)
 		}
 
-		r := NewReplicator()
+		r := NewReplicator(zap.NewNop())
 
 		Convey("it should be run and closed", func() {
 			r.Run(context.TODO())

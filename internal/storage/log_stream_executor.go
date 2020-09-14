@@ -72,7 +72,7 @@ type logStreamExecutor struct {
 	replicator  Replicator
 
 	once   sync.Once
-	runner runner.Runner
+	runner *runner.Runner
 
 	appendC chan *appendTask
 	commitC chan commitTask
@@ -144,7 +144,8 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 	lse := &logStreamExecutor{
 		logStreamID:          logStreamID,
 		storage:              storage,
-		replicator:           NewReplicator(),
+		replicator:           NewReplicator(logger),
+		runner:               runner.New(fmt.Sprintf("logstreamexecutor-%v", logStreamID), logger),
 		trackers:             newAppendTracker(),
 		appendC:              make(chan *appendTask, options.AppendCSize),
 		trimC:                make(chan *trimTask, options.TrimCSize),
@@ -168,14 +169,14 @@ func (lse *logStreamExecutor) LogStreamID() types.LogStreamID {
 
 func (lse *logStreamExecutor) Run(ctx context.Context) {
 	lse.once.Do(func() {
-		cctx, cancel := context.WithCancel(ctx)
+		mctx, cancel := lse.runner.WithManagedCancel(ctx)
 		lse.muCancel.Lock()
 		lse.cancel = cancel
 		lse.muCancel.Unlock()
-		lse.runner.RunDeprecated(cctx, lse.dispatchAppendC)
-		lse.runner.RunDeprecated(cctx, lse.dispatchTrimC)
-		lse.runner.RunDeprecated(cctx, lse.dispatchCommitC)
-		lse.replicator.Run(cctx)
+		lse.runner.RunC(mctx, lse.dispatchAppendC)
+		lse.runner.RunC(mctx, lse.dispatchTrimC)
+		lse.runner.RunC(mctx, lse.dispatchCommitC)
+		lse.replicator.Run(mctx)
 	})
 }
 
@@ -185,7 +186,7 @@ func (lse *logStreamExecutor) Close() {
 	if lse.cancel != nil {
 		lse.cancel()
 		lse.replicator.Close()
-		lse.runner.CloseWaitDeprecated()
+		lse.runner.Stop()
 	}
 }
 

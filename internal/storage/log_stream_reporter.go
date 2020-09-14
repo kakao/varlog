@@ -54,7 +54,7 @@ type logStreamReporter struct {
 	commitC            chan lsrCommitTask
 	cancel             context.CancelFunc
 	muCancel           sync.Mutex
-	runner             runner.Runner
+	runner             *runner.Runner
 	once               sync.Once
 	options            *LogStreamReporterOptions
 	logger             *zap.Logger
@@ -67,6 +67,7 @@ func NewLogStreamReporter(logger *zap.Logger, storageNodeID types.StorageNodeID,
 		history:       make(map[types.GLSN][]UncommittedLogStreamStatus),
 		reportC:       make(chan *lsrReportTask, options.ReportCSize),
 		commitC:       make(chan lsrCommitTask, options.CommitCSize),
+		runner:        runner.New("logstreamreporter", logger),
 		options:       options,
 		logger:        logger,
 	}
@@ -79,10 +80,12 @@ func (lsr *logStreamReporter) StorageNodeID() types.StorageNodeID {
 func (lsr *logStreamReporter) Run(ctx context.Context) {
 	lsr.once.Do(func() {
 		lsr.muCancel.Lock()
-		ctx, lsr.cancel = context.WithCancel(ctx)
+		// ctx, lsr.cancel = context.WithCancel(ctx)
+		mctx, cancel := lsr.runner.WithManagedCancel(ctx)
+		lsr.cancel = cancel
 		lsr.muCancel.Unlock()
-		lsr.runner.RunDeprecated(ctx, lsr.dispatchCommit)
-		lsr.runner.RunDeprecated(ctx, lsr.dispatchReport)
+		lsr.runner.RunC(mctx, lsr.dispatchCommit)
+		lsr.runner.RunC(mctx, lsr.dispatchReport)
 	})
 }
 
@@ -91,7 +94,7 @@ func (lsr *logStreamReporter) Close() {
 	defer lsr.muCancel.Unlock()
 	if lsr.cancel != nil {
 		lsr.cancel()
-		lsr.runner.CloseWaitDeprecated()
+		lsr.runner.Stop()
 	}
 }
 

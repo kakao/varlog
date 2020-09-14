@@ -7,6 +7,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
+	"go.uber.org/zap"
 )
 
 type Replica struct {
@@ -40,23 +41,26 @@ type replicator struct {
 	once       sync.Once
 	cancel     context.CancelFunc
 	muCancel   sync.Mutex
-	runner     runner.Runner
+	runner     *runner.Runner
+	logger     *zap.Logger
 }
 
-func NewReplicator() Replicator {
+func NewReplicator(logger *zap.Logger) Replicator {
 	return &replicator{
 		rcm:        make(map[types.StorageNodeID]ReplicatorClient),
 		replicateC: make(chan *replicateTask, replicateCSize),
+		runner:     runner.New("replicator", logger),
+		logger:     logger,
 	}
 }
 
 func (r *replicator) Run(ctx context.Context) {
 	r.once.Do(func() {
-		ctx, cancel := context.WithCancel(ctx)
+		mctx, cancel := r.runner.WithManagedCancel(ctx)
 		r.muCancel.Lock()
 		r.cancel = cancel
 		r.muCancel.Unlock()
-		r.runner.RunDeprecated(ctx, r.dispatchReplicateC)
+		r.runner.RunC(mctx, r.dispatchReplicateC)
 	})
 }
 
@@ -68,7 +72,7 @@ func (r *replicator) Close() {
 		for _, rc := range r.rcm {
 			rc.Close()
 		}
-		r.runner.CloseWaitDeprecated()
+		r.runner.Stop()
 	}
 }
 
@@ -150,7 +154,7 @@ func (r *replicator) getOrConnect(ctx context.Context, replica Replica) (Replica
 	if ok {
 		return rc, nil
 	}
-	rc, err := NewReplicatorClient(replica.Address)
+	rc, err := NewReplicatorClient(replica.Address, r.logger)
 	if err != nil {
 		return nil, err
 	}
