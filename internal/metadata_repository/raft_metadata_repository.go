@@ -129,7 +129,8 @@ func (mr *RaftMetadataRepository) Run() {
 		mr.logger.Panic("could not listen", zap.Error(err))
 	}
 
-	mr.serverAddr, _ = netutil.GetListenerLocalAddr(lis)
+	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
+	mr.serverAddr = addrs[0]
 
 	mr.runner.RunDeprecated(ctx, func(ctx context.Context) {
 		//TODO:: graceful shutdown

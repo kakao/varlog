@@ -29,7 +29,7 @@ func TestWithServiceServer(t *testing.T) {
 
 		lseGetter := storage.NewMockLogStreamExecutorGetter(ctrl)
 		s := storage.NewLogIOService(types.StorageNodeID(1), lseGetter)
-		lis, err := net.Listen("tcp", ":0")
+		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		So(err, ShouldBeNil)
 
 		server := grpc.NewServer()
@@ -50,8 +50,9 @@ func TestWithServiceServer(t *testing.T) {
 					cancel()
 				}()
 
-				addr, err := netutil.GetListenerLocalAddr(lis)
+				addrs, err := netutil.GetListenerAddrs(lis.Addr())
 				So(err, ShouldBeNil)
+				addr := addrs[0]
 				checkConnection(ctx, addr, t)
 			})
 		})
