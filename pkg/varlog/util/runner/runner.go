@@ -2,26 +2,203 @@ package runner
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
+
+	"go.uber.org/zap"
+)
+
+type RunnerState int
+
+const (
+	RunnerInvalid RunnerState = iota
+	RunnerRunning
+	RunnerStopping
+	RunnerStopped
 )
 
 type Runner struct {
+	name string
+
 	wg sync.WaitGroup
-	m  sync.Mutex
+
+	oldWg   sync.WaitGroup
+	muOldWg sync.RWMutex
+
+	mu      sync.RWMutex
+	taskID  uint64
+	cancels map[uint64]context.CancelFunc
+	state   RunnerState
+
+	numTasks uint64
+
+	logger *zap.Logger
 }
 
-func (r *Runner) Run(ctx context.Context, f func(context.Context)) {
-	r.m.Lock()
-	defer r.m.Unlock()
+func New(name string, logger *zap.Logger) *Runner {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return &Runner{
+		name:    name,
+		cancels: make(map[uint64]context.CancelFunc),
+		state:   RunnerRunning,
+		logger:  logger,
+	}
+}
+
+// WithManagedCancel returns a copy of parent with a new Done channel. The returned context's Done
+// channel is closed when the returned cancel function is called or when the parent context's Done
+// channel is closed, whichever happens first.
+// Moreover, the returned context is managed by runner, thus, if the runner is stopped, the context
+// is also canceled.
+//
+// Canceling this context releases resources associated with it, so code should call cancel as soon
+// as the operations running in this Context complete.
+func (r *Runner) WithManagedCancel(parent context.Context) (context.Context, context.CancelFunc) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(parent)
+
+	if r.state != RunnerRunning {
+		cancel()
+		return ctx, cancel
+	}
+
+	taskID := atomic.AddUint64(&r.taskID, 1)
+	managedCancel := func() {
+		cancel()
+		r.mu.Lock()
+		delete(r.cancels, taskID)
+		r.mu.Unlock()
+	}
+	r.cancels[taskID] = managedCancel
+	return ctx, managedCancel
+}
+
+func (r *Runner) RunC(ctx context.Context, f func(context.Context)) error {
+	state := r.State()
+	switch state {
+	case RunnerInvalid:
+		return errors.New("invalid runner")
+	case RunnerStopping, RunnerStopped:
+		return fmt.Errorf("runner %v: stopping or stopped (%v)", r.name, state)
+	}
+
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
+		r.plusTask()
+		f(ctx)
+		r.minusTask()
+	}()
+	return nil
+}
+
+// Run executes f in a goroutine. It returns context.CancelFunc and error.
+func (r *Runner) Run(f func(context.Context)) (context.CancelFunc, error) {
+	ctx, cancel := r.WithManagedCancel(context.Background())
+	if err := r.RunC(ctx, f); err != nil {
+		cancel()
+		return nil, err
+	}
+	return cancel, nil
+}
+
+// RunDeprecated executs f in a goroutine.
+// Deprecated
+// If RunDeprecated is called when stopping runner, there is no way to prevent from executing f.
+func (r *Runner) RunDeprecated(ctx context.Context, f func(context.Context)) {
+	state := r.State()
+	switch state {
+	case RunnerInvalid, RunnerStopping, RunnerStopped:
+		if r.logger == nil {
+			r.logger, _ = zap.NewDevelopment()
+		}
+		r.logger.Warn("deprecated, just for compatibility", zap.Any("state", state))
+	}
+
+	r.muOldWg.RLock()
+	r.oldWg.Add(1)
+	r.muOldWg.RUnlock()
+	go func() {
+		defer r.oldWg.Done()
 		f(ctx)
 	}()
 }
 
-func (r *Runner) CloseWait() {
-	r.m.Lock()
-	defer r.m.Unlock()
+// Stop stops tasks in this runner.
+func (r *Runner) Stop() {
+	r.mu.Lock()
+	state := r.state
+	if r.state == RunnerRunning {
+		r.state = RunnerStopping
+	}
+	r.mu.Unlock()
+
+	if state != RunnerRunning {
+		return
+	}
+
+	r.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(r.cancels))
+	for _, cancel := range r.cancels {
+		cancels = append(cancels, cancel)
+	}
+	r.mu.Unlock()
+
+	for _, cancel := range cancels {
+		cancel()
+	}
+
 	r.wg.Wait()
+
+	r.mu.Lock()
+	r.state = RunnerStopped
+	r.mu.Unlock()
+}
+
+// CloseWaitDeprecated is aliases for Stop.
+func (r *Runner) CloseWaitDeprecated() {
+	r.Stop()
+
+	// HACK: for tasks executed by Run when calling CloseWait by other goroutines
+	r.muOldWg.Lock()
+	r.oldWg.Wait()
+	r.muOldWg.Unlock()
+}
+
+func (r *Runner) State() RunnerState {
+	if r == nil {
+		return RunnerInvalid
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.state
+}
+
+func (r *Runner) NumTasks() uint64 {
+	if r == nil {
+		return 0
+	}
+	return atomic.LoadUint64(&r.numTasks)
+}
+
+func (r *Runner) plusTask() {
+	atomic.AddUint64(&r.numTasks, 1)
+}
+
+func (r *Runner) minusTask() {
+	atomic.AddUint64(&r.numTasks, ^uint64(0))
+}
+
+func (r *Runner) String() string {
+	if r == nil {
+		return "invalid runner"
+	}
+	numTasks := r.NumTasks()
+	return fmt.Sprintf("runner %v: tasks=%v", r.name, numTasks)
 }

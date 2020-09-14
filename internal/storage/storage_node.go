@@ -95,7 +95,7 @@ func (sn *StorageNode) Run() error {
 		sn.muCancel.Lock()
 		sn.cancel = cancel
 		sn.muCancel.Unlock()
-		sn.runner.Run(ctx, sn.lsr.Run)
+		sn.runner.RunDeprecated(ctx, sn.lsr.Run)
 
 		sn.logger.Info("listening", zap.String("address", sn.options.RPCBindAddress))
 		lis, err := net.Listen("tcp", sn.options.RPCBindAddress)
@@ -126,7 +126,7 @@ func (sn *StorageNode) Close() error {
 		for _, lse := range sn.GetLogStreamExecutors() {
 			lse.Close()
 		}
-		sn.runner.CloseWait()
+		sn.runner.CloseWaitDeprecated()
 		sn.sw.Stop()
 	}
 	return nil
@@ -203,7 +203,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 		return "", err
 	}
 	sn.lseMap[lsid] = lse
-	sn.runner.Run(sn.runnerContext, lse.Run)
+	sn.runner.RunDeprecated(sn.runnerContext, lse.Run)
 	return stgPath, nil
 }
 

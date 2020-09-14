@@ -113,7 +113,7 @@ func (ms *MetadataStorage) Run() {
 	if ms.cancel == nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		ms.cancel = cancel
-		ms.runner.Run(ctx, ms.processSnapshot)
+		ms.runner.RunDeprecated(ctx, ms.processSnapshot)
 	} else {
 		panic("metadataStorage run twice")
 	}
@@ -127,7 +127,7 @@ func (ms *MetadataStorage) Close() {
 		ms.cancel()
 		ms.cancel = nil
 
-		ms.runner.CloseWait()
+		ms.runner.CloseWaitDeprecated()
 	}
 }
 

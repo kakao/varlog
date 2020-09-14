@@ -81,8 +81,8 @@ func (lsr *logStreamReporter) Run(ctx context.Context) {
 		lsr.muCancel.Lock()
 		ctx, lsr.cancel = context.WithCancel(ctx)
 		lsr.muCancel.Unlock()
-		lsr.runner.Run(ctx, lsr.dispatchCommit)
-		lsr.runner.Run(ctx, lsr.dispatchReport)
+		lsr.runner.RunDeprecated(ctx, lsr.dispatchCommit)
+		lsr.runner.RunDeprecated(ctx, lsr.dispatchReport)
 	})
 }
 
@@ -91,7 +91,7 @@ func (lsr *logStreamReporter) Close() {
 	defer lsr.muCancel.Unlock()
 	if lsr.cancel != nil {
 		lsr.cancel()
-		lsr.runner.CloseWait()
+		lsr.runner.CloseWaitDeprecated()
 	}
 }
 

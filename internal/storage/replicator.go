@@ -56,7 +56,7 @@ func (r *replicator) Run(ctx context.Context) {
 		r.muCancel.Lock()
 		r.cancel = cancel
 		r.muCancel.Unlock()
-		r.runner.Run(ctx, r.dispatchReplicateC)
+		r.runner.RunDeprecated(ctx, r.dispatchReplicateC)
 	})
 }
 
@@ -68,7 +68,7 @@ func (r *replicator) Close() {
 		for _, rc := range r.rcm {
 			rc.Close()
 		}
-		r.runner.CloseWait()
+		r.runner.CloseWaitDeprecated()
 	}
 }
 

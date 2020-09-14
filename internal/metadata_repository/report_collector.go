@@ -77,7 +77,7 @@ func (rc *ReportCollector) Close() {
 	rc.executors = make(map[types.StorageNodeID]*ReportCollectExecutor)
 	rc.mu.Unlock()
 
-	rc.runner.CloseWait()
+	rc.runner.CloseWaitDeprecated()
 }
 
 func (rc *ReportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, highWatermark types.GLSN) error {
@@ -121,8 +121,8 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 
 	rc.executors[sn.StorageNodeID] = executor
 
-	rc.runner.Run(ctx, executor.runCommit)
-	rc.runner.Run(ctx, executor.runReport)
+	rc.runner.RunDeprecated(ctx, executor.runCommit)
+	rc.runner.RunDeprecated(ctx, executor.runReport)
 
 	return nil
 }
