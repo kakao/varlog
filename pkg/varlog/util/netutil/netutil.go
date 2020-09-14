@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	errNotSupportedNetwork = errors.New("not supported network")
-	errNotLocalAdddress    = errors.New("not local address")
+	errNotSupportedNetwork     = errors.New("not supported network")
+	errNotLocalAdddress        = errors.New("not local address")
+	errNotGlobalUnicastAddress = errors.New("not global unicast address")
 )
 
 type StoppableListener struct {
@@ -82,32 +83,54 @@ func Listen(network, address string) (net.Listener, error) {
 	return lc.Listen(context.Background(), network, address)
 }
 
-// GetListenerAddr returns ip address of given net.Listener. If the net.Listener is not TCP
-// listener, GetListenerAddr returns errNotSupportedNetwork.
-func GetListenerAddr(lis net.Listener) (string, error) {
-	addr, err := getTCPListenerAddr(lis)
+// GetListenerAddrs returns ip address of given net.Listener. If the net.Listener is not TCP
+// listener, GetListenerAddrs returns errNotSupportedNetwork.
+func GetListenerAddrs(addr net.Addr) ([]string, error) {
+	tcpAddr, err := getTCPListenerAddr(addr)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return addr.String(), nil
+
+	var ips []net.IP
+	if tcpAddr.IP.IsUnspecified() {
+		ips = getIPs()
+	} else if tcpAddr.IP.IsLoopback() {
+		ips = append(ips, tcpAddr.IP)
+	} else if ip, err := getIP(tcpAddr); err != nil {
+		ips = append(ips, ip)
+	}
+
+	port := strconv.Itoa(tcpAddr.Port)
+	ret := make([]string, len(ips))
+	for i, ip := range ips {
+		ret[i] = net.JoinHostPort(ip.String(), port)
+	}
+	return ret, nil
 }
 
-// GetListenerLocalAddr is  returns local ip address of given net.Listener. If the net.Listener is
-// not TCP listener, GetListenerLocalAddr returns errNotSupportedNetwork. If the net.Listener does
-// not bind loopback, GetListenerLocalAddr returns errNotLocalAdddress.
-func GetListenerLocalAddr(lis net.Listener) (string, error) {
-	addr, err := getTCPListenerAddr(lis)
-	if err != nil {
-		return "", err
+func getIP(addr net.Addr) (net.IP, error) {
+	ip, _, _ := net.ParseCIDR(addr.String())
+	if !ip.IsGlobalUnicast() {
+		return nil, errNotGlobalUnicastAddress
 	}
-	if addr.IP.IsUnspecified() || addr.IP.IsLoopback() {
-		return net.JoinHostPort("127.0.0.1", strconv.Itoa(addr.Port)), nil
-	}
-	return "", errNotLocalAdddress
+	return ip, nil
 }
 
-func getTCPListenerAddr(lis net.Listener) (*net.TCPAddr, error) {
-	addr := lis.Addr()
+func getIPs() []net.IP {
+	var ret []net.IP
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ret
+	}
+	for _, addr := range addrs {
+		if ip, err := getIP(addr); err == nil {
+			ret = append(ret, ip)
+		}
+	}
+	return ret
+}
+
+func getTCPListenerAddr(addr net.Addr) (*net.TCPAddr, error) {
 	if addr.Network() != "tcp" {
 		return nil, errNotSupportedNetwork
 	}

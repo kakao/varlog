@@ -103,7 +103,9 @@ func (sn *StorageNode) Run() error {
 			sn.logger.Error("could not listen", zap.Error(err))
 			return err
 		}
-		sn.serverAddr, _ = netutil.GetListenerLocalAddr(lis)
+		// sn.serverAddr = lis.Addr()
+		addrs, _ := netutil.GetListenerAddrs(lis.Addr())
+		sn.serverAddr = addrs[0]
 
 		go func() {
 			if err := sn.server.Serve(lis); err != nil {

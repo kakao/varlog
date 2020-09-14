@@ -14,10 +14,11 @@ type service interface {
 
 func WithServiceServer(s service, testf func(server *grpc.Server, addr string)) func(c convey.C) {
 	return func(c convey.C) {
-		lis, err := netutil.Listen("tcp", ":0")
+		lis, err := netutil.Listen("tcp", "127.0.0.1:0")
 		convey.So(err, convey.ShouldBeNil)
-		addr, err := netutil.GetListenerLocalAddr(lis)
+		addrs, err := netutil.GetListenerAddrs(lis.Addr())
 		convey.So(err, convey.ShouldBeNil)
+		addr := addrs[0]
 
 		server := grpc.NewServer()
 		s.Register(server)
