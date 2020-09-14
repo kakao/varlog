@@ -11,6 +11,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	"github.com/kakao/varlog/pkg/varlog/util/syncutil"
 	pb "github.com/kakao/varlog/proto/storage_node"
+	"go.uber.org/zap"
 )
 
 type ReplicatorClient interface {
@@ -29,39 +30,41 @@ type replicatorClient struct {
 	stream    pb.ReplicatorService_ReplicateClient
 	requestC  chan *pb.ReplicationRequest
 	responseC chan *pb.ReplicationResponse
-	runner    runner.Runner
+	runner    *runner.Runner
+	logger    *zap.Logger
 }
 
-func NewReplicatorClient(address string) (ReplicatorClient, error) {
+func NewReplicatorClient(address string, logger *zap.Logger) (ReplicatorClient, error) {
 	rpcConn, err := varlog.NewRpcConn(address)
 	if err != nil {
 		return nil, err
 	}
-	return NewReplicatorClientFromRpcConn(rpcConn)
+	return NewReplicatorClientFromRpcConn(rpcConn, logger)
 }
 
-func NewReplicatorClientFromRpcConn(rpcConn *varlog.RpcConn) (ReplicatorClient, error) {
+func NewReplicatorClientFromRpcConn(rpcConn *varlog.RpcConn, logger *zap.Logger) (ReplicatorClient, error) {
 	return &replicatorClient{
 		rpcConn:   rpcConn,
 		rpcClient: pb.NewReplicatorServiceClient(rpcConn.Conn),
 		m:         make(map[types.LLSN]chan<- error),
 		requestC:  make(chan *pb.ReplicationRequest),
 		responseC: make(chan *pb.ReplicationResponse),
+		runner:    runner.New("replicatorclient", logger),
 	}, nil
 }
 
 func (rc *replicatorClient) Run(ctx context.Context) error {
 	return rc.once.Do(func() error {
-		ctx, cancel := context.WithCancel(ctx)
+		mctx, cancel := rc.runner.WithManagedCancel(ctx)
 		rc.cancel = cancel
-		stream, err := rc.rpcClient.Replicate(ctx)
+		stream, err := rc.rpcClient.Replicate(mctx)
 		if err != nil {
 			return err
 		}
 		rc.stream = stream
 
-		rc.runner.RunDeprecated(ctx, rc.dispatchRequestC)
-		rc.runner.RunDeprecated(ctx, rc.dispatchResponseC)
+		rc.runner.RunC(mctx, rc.dispatchRequestC)
+		rc.runner.RunC(mctx, rc.dispatchResponseC)
 		return nil
 	})
 }
@@ -69,7 +72,7 @@ func (rc *replicatorClient) Run(ctx context.Context) error {
 func (rc *replicatorClient) Close() error {
 	if rc.cancel != nil {
 		rc.cancel()
-		rc.runner.CloseWaitDeprecated()
+		rc.runner.Stop()
 	}
 	return rc.rpcConn.Close()
 }

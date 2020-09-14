@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 
@@ -56,12 +57,11 @@ type StorageNode struct {
 	logger  *zap.Logger
 
 	sw     *stopwaiter.StopWaiter
-	runner runner.Runner
+	runner *runner.Runner
 	// FIXME (jun): remove context
-	runnerContext context.Context
-	cancel        context.CancelFunc
-	muCancel      sync.Mutex
-	once          syncutil.OnlyOnce
+	cancel   context.CancelFunc
+	muCancel sync.Mutex
+	once     syncutil.OnlyOnce
 
 	server *grpc.Server
 
@@ -77,6 +77,7 @@ func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
 		options:       options,
 		logger:        options.Logger,
 		sw:            stopwaiter.New(),
+		runner:        runner.New(fmt.Sprintf("storagenode-%v", options.StorageNodeID), options.Logger),
 	}
 	sn.lsr = NewLogStreamReporter(sn.logger, sn.storageNodeID, sn, &options.LogStreamReporterOptions)
 	sn.server = grpc.NewServer()
@@ -90,12 +91,13 @@ func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
 
 func (sn *StorageNode) Run() error {
 	return sn.once.Do(func() error {
-		ctx, cancel := context.WithCancel(context.Background())
-		sn.runnerContext = ctx
+		ctx, cancel := sn.runner.WithManagedCancel(context.Background())
 		sn.muCancel.Lock()
 		sn.cancel = cancel
 		sn.muCancel.Unlock()
-		sn.runner.RunDeprecated(ctx, sn.lsr.Run)
+		if err := sn.runner.RunC(ctx, sn.lsr.Run); err != nil {
+			return err
+		}
 
 		sn.logger.Info("listening", zap.String("address", sn.options.RPCBindAddress))
 		lis, err := net.Listen("tcp", sn.options.RPCBindAddress)
@@ -103,8 +105,8 @@ func (sn *StorageNode) Run() error {
 			sn.logger.Error("could not listen", zap.Error(err))
 			return err
 		}
-		// sn.serverAddr = lis.Addr()
 		addrs, _ := netutil.GetListenerAddrs(lis.Addr())
+		// TODO (jun): choose best address
 		sn.serverAddr = addrs[0]
 
 		go func() {
@@ -128,7 +130,7 @@ func (sn *StorageNode) Close() error {
 		for _, lse := range sn.GetLogStreamExecutors() {
 			lse.Close()
 		}
-		sn.runner.CloseWaitDeprecated()
+		sn.runner.Stop()
 		sn.sw.Stop()
 	}
 	return nil
@@ -205,7 +207,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 		return "", err
 	}
 	sn.lseMap[lsid] = lse
-	sn.runner.RunDeprecated(sn.runnerContext, lse.Run)
+	sn.runner.Run(lse.Run)
 	return stgPath, nil
 }
 

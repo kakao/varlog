@@ -9,6 +9,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil/conveyutil"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -37,7 +38,7 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 		rs := NewReplicatorService(types.StorageNodeID(1), lse)
 
 		Convey("And a ReplicatorClient tries to replicate data to it", conveyutil.WithServiceServer(rs, func(server *grpc.Server, addr string) {
-			rc, err := NewReplicatorClient(addr)
+			rc, err := NewReplicatorClient(addr, zap.NewNop())
 			So(err, ShouldBeNil)
 
 			ctx, cancel := context.WithCancel(context.TODO())
@@ -144,7 +145,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 					Address:       "1.2.3.4:5", // fake address
 				})
 
-				r := NewReplicator()
+				r := NewReplicator(zap.NewNop())
 				r.(*replicator).mtxRcm.Lock()
 				r.(*replicator).rcm[types.StorageNodeID(2)] = rc2
 				r.(*replicator).mtxRcm.Unlock()

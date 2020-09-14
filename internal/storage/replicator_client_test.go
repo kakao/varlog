@@ -13,6 +13,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 	pb "github.com/kakao/varlog/proto/storage_node"
 	"github.com/kakao/varlog/proto/storage_node/mock"
+	"go.uber.org/zap"
 )
 
 func TestReplicatorClientReplicate(t *testing.T) {
@@ -21,7 +22,7 @@ func TestReplicatorClientReplicate(t *testing.T) {
 		defer ctrl.Finish()
 
 		rpcConn := varlog.RpcConn{}
-		rc, err := NewReplicatorClientFromRpcConn(&rpcConn)
+		rc, err := NewReplicatorClientFromRpcConn(&rpcConn, zap.NewNop())
 		So(err, ShouldBeNil)
 		mockClient := mock.NewMockReplicatorServiceClient(ctrl)
 		rc.(*replicatorClient).rpcClient = mockClient
@@ -72,7 +73,7 @@ func TestReplicatorClient(t *testing.T) {
 		defer ctrl.Finish()
 
 		rpcConn := varlog.RpcConn{}
-		rc, err := NewReplicatorClientFromRpcConn(&rpcConn)
+		rc, err := NewReplicatorClientFromRpcConn(&rpcConn, zap.NewNop())
 		So(err, ShouldBeNil)
 		mockClient := mock.NewMockReplicatorServiceClient(ctrl)
 		rc.(*replicatorClient).rpcClient = mockClient
