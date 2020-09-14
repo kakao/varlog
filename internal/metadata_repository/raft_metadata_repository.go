@@ -116,10 +116,10 @@ func (mr *RaftMetadataRepository) Run() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	mr.cancel = cancel
-	mr.runner.Run(ctx, mr.runReplication)
-	mr.runner.Run(ctx, mr.processCommit)
-	mr.runner.Run(ctx, mr.processRNCommit)
-	mr.runner.Run(ctx, mr.runCommitTrigger)
+	mr.runner.RunDeprecated(ctx, mr.runReplication)
+	mr.runner.RunDeprecated(ctx, mr.processCommit)
+	mr.runner.RunDeprecated(ctx, mr.processRNCommit)
+	mr.runner.RunDeprecated(ctx, mr.runCommitTrigger)
 
 	mr.raftNode.start()
 
@@ -131,7 +131,7 @@ func (mr *RaftMetadataRepository) Run() {
 
 	mr.serverAddr, _ = netutil.GetListenerLocalAddr(lis)
 
-	mr.runner.Run(ctx, func(ctx context.Context) {
+	mr.runner.RunDeprecated(ctx, func(ctx context.Context) {
 		//TODO:: graceful shutdown
 		if err := mr.server.Serve(lis); err != nil && err != varlog.ErrStopped {
 			mr.logger.Panic("could not serve", zap.Error(err))
@@ -150,7 +150,7 @@ func (mr *RaftMetadataRepository) Close() error {
 	if mr.cancel != nil {
 		mr.cancel()
 		mr.raftNode.stop(true)
-		mr.runner.CloseWait()
+		mr.runner.CloseWaitDeprecated()
 		mr.storage.Close()
 
 		close(mr.proposeC)

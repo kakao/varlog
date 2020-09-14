@@ -60,8 +60,8 @@ func (rc *replicatorClient) Run(ctx context.Context) error {
 		}
 		rc.stream = stream
 
-		rc.runner.Run(ctx, rc.dispatchRequestC)
-		rc.runner.Run(ctx, rc.dispatchResponseC)
+		rc.runner.RunDeprecated(ctx, rc.dispatchRequestC)
+		rc.runner.RunDeprecated(ctx, rc.dispatchResponseC)
 		return nil
 	})
 }
@@ -69,7 +69,7 @@ func (rc *replicatorClient) Run(ctx context.Context) error {
 func (rc *replicatorClient) Close() error {
 	if rc.cancel != nil {
 		rc.cancel()
-		rc.runner.CloseWait()
+		rc.runner.CloseWaitDeprecated()
 	}
 	return rc.rpcConn.Close()
 }

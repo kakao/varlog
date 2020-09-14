@@ -172,9 +172,9 @@ func (lse *logStreamExecutor) Run(ctx context.Context) {
 		lse.muCancel.Lock()
 		lse.cancel = cancel
 		lse.muCancel.Unlock()
-		lse.runner.Run(cctx, lse.dispatchAppendC)
-		lse.runner.Run(cctx, lse.dispatchTrimC)
-		lse.runner.Run(cctx, lse.dispatchCommitC)
+		lse.runner.RunDeprecated(cctx, lse.dispatchAppendC)
+		lse.runner.RunDeprecated(cctx, lse.dispatchTrimC)
+		lse.runner.RunDeprecated(cctx, lse.dispatchCommitC)
 		lse.replicator.Run(cctx)
 	})
 }
@@ -185,7 +185,7 @@ func (lse *logStreamExecutor) Close() {
 	if lse.cancel != nil {
 		lse.cancel()
 		lse.replicator.Close()
-		lse.runner.CloseWait()
+		lse.runner.CloseWaitDeprecated()
 	}
 }
 

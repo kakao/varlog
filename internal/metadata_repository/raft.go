@@ -376,13 +376,13 @@ func (rc *raftNode) start() {
 
 	httpctx, httpcancel := context.WithCancel(context.Background())
 	rc.httpcancel = httpcancel
-	rc.httprunner.Run(httpctx, rc.runRaft)
+	rc.httprunner.RunDeprecated(httpctx, rc.runRaft)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	rc.cancel = cancel
-	rc.runner.Run(ctx, rc.processSnapshot)
-	rc.runner.Run(ctx, rc.processRaftEvent)
-	rc.runner.Run(ctx, rc.processPropose)
+	rc.runner.RunDeprecated(ctx, rc.processSnapshot)
+	rc.runner.RunDeprecated(ctx, rc.processRaftEvent)
+	rc.runner.RunDeprecated(ctx, rc.processPropose)
 }
 
 func (rc *raftNode) longestConnected() (types.ID, bool) {
@@ -450,7 +450,7 @@ func (rc *raftNode) stop(transfer bool) {
 	}
 
 	rc.cancel()
-	rc.runner.CloseWait()
+	rc.runner.CloseWaitDeprecated()
 
 	close(rc.commitC)
 	close(rc.snapshotC)
@@ -465,7 +465,7 @@ func (rc *raftNode) stopRaft() {
 func (rc *raftNode) stopHTTP() {
 	rc.httpcancel()
 	rc.transport.Stop()
-	rc.httprunner.CloseWait()
+	rc.httprunner.CloseWaitDeprecated()
 }
 
 type snapReaderCloser struct{ *bytes.Reader }
@@ -491,7 +491,7 @@ func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 				sm := snap.NewMessage(ms[i], snapReaderCloser{bytes.NewReader(nil)}, 0)
 
 				//TODO:: concurrency limit
-				rc.runner.Run(nil, func(context.Context) {
+				rc.runner.RunDeprecated(nil, func(context.Context) {
 					rc.transport.SendSnapshot(*sm)
 				})
 
