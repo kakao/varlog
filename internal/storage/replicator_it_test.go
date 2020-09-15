@@ -2,12 +2,15 @@ package storage
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/netutil"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil/conveyutil"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -30,7 +33,10 @@ func init() {
 
 func TestReplicatorClientReplicatorService(t *testing.T) {
 	Convey("Given that a ReplicatorService is running", t, func() {
-		const logStreamID = types.LogStreamID(1)
+		const (
+			storageNodeID = types.StorageNodeID(1)
+			logStreamID   = types.LogStreamID(1)
+		)
 
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -51,7 +57,7 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 		rs := NewReplicatorService(types.StorageNodeID(1), lseGetter)
 
 		Convey("And a ReplicatorClient tries to replicate data to it", conveyutil.WithServiceServer(rs, func(server *grpc.Server, addr string) {
-			rc, err := NewReplicatorClient(logStreamID, addr, zap.NewNop())
+			rc, err := NewReplicatorClient(storageNodeID, logStreamID, addr, zap.NewNop())
 			So(err, ShouldBeNil)
 
 			ctx, cancel := context.WithCancel(context.TODO())
@@ -61,9 +67,9 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 				So(rc.Close(), ShouldBeNil)
 				cancel()
 
-				rc.(*replicatorClient).mu.RLock()
-				mlen := len(rc.(*replicatorClient).m)
-				rc.(*replicatorClient).mu.RUnlock()
+				rc.(*replicatorClient).muErrCs.Lock()
+				mlen := len(rc.(*replicatorClient).errCs)
+				rc.(*replicatorClient).muErrCs.Unlock()
 				So(mlen, ShouldBeZeroValue)
 			})
 
@@ -90,7 +96,6 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 					defer close(wait)
 					lse.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 						func(context.Context, types.LLSN, []byte) error {
-
 							<-wait
 							return nil
 						},
@@ -128,6 +133,113 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 	})
 }
 
+func TestReplicatorIntegration(t *testing.T) {
+	Convey("Given that many LSEs for the same LS are running", t, func(c C) {
+		const (
+			logStreamID = types.LogStreamID(1)
+			numSNs      = 3
+			repeat      = 100
+		)
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		logger, err := zap.NewDevelopment()
+		So(err, ShouldBeNil)
+
+		var servers []*grpc.Server
+		var rsList []*ReplicatorService
+		var replicas []Replica
+		var lseList []*MockLogStreamExecutor
+		for i := 0; i < numSNs; i++ {
+			// StorageNodeID
+			storageNodeID := types.StorageNodeID(i + 1)
+
+			// LogStreamExecutor
+			lse := NewMockLogStreamExecutor(ctrl)
+			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
+			lseList = append(lseList, lse)
+
+			// LSEGetter (like StorageNode)
+			lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+			lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).Return(lse, true).AnyTimes()
+
+			// ReplicatorService
+			rs := NewReplicatorService(storageNodeID, lseGetter)
+			rsList = append(rsList, rs)
+
+			// RPC Server
+			lis, err := net.Listen("tcp", "127.0.0.1:0")
+			So(err, ShouldBeNil)
+			addrs, err := netutil.GetListenerAddrs(lis.Addr())
+			So(err, ShouldBeNil)
+
+			// Replica Info
+			replicas = append(replicas, Replica{
+				StorageNodeID: storageNodeID,
+				LogStreamID:   logStreamID,
+				Address:       addrs[0],
+			})
+
+			server := grpc.NewServer()
+			rs.Register(server)
+
+			servers = append(servers, server)
+			go func() {
+				err = server.Serve(lis)
+				c.So(err, ShouldBeNil)
+				logger.Info("StorageNode is stopped", zap.Any("snid", rs.storageNodeID))
+			}()
+		}
+
+		replicator := NewReplicator(logger)
+		replicator.Run(context.TODO())
+
+		Reset(func() {
+			// Replicator (Primary)
+			replicator.Close()
+
+			// ReplicatorService gRPC Server (Backup)
+			for _, server := range servers {
+				server.Stop()
+			}
+		})
+
+		Convey("Replicate logs, kill a server, and then replicate a log", func() {
+			// Replicator logs
+			for llsn := types.MinLLSN; llsn < types.LLSN(repeat); llsn++ {
+				data := fmt.Sprintf("log_%v", llsn)
+				for _, lse := range lseList {
+					lse.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+						func(ctx context.Context, aLLSN types.LLSN, aData []byte) error {
+							c.So(aLLSN, ShouldEqual, llsn)
+							c.So(string(aData), ShouldEqual, data)
+							return nil
+						},
+					)
+				}
+				errC := replicator.Replicate(context.TODO(), llsn, []byte(data), replicas)
+				So(<-errC, ShouldBeNil)
+			}
+
+			for _, lse := range lseList {
+				lse.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(ctx context.Context, llsn types.LLSN, data []byte) error {
+						return nil
+					},
+				).MaxTimes(1)
+			}
+
+			// first LS is failed
+			servers[0].Stop()
+
+			errC := replicator.Replicate(context.TODO(), types.LLSN(repeat), []byte("never"), replicas)
+			So(<-errC, ShouldNotBeNil)
+		})
+
+	})
+}
+
 func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 	Convey("Given that a ReplicatorService is running", t, func() {
 		const logStreamID = types.LogStreamID(1)
@@ -160,6 +272,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 			})
 
 			rc2 := NewMockReplicatorClient(ctrl)
+			rc2.EXPECT().StorageNodeID().Return(types.StorageNodeID(2)).AnyTimes()
 			rc2.EXPECT().Close().AnyTimes()
 
 			Convey("And a Replicator tries to replicate data to them", func() {
@@ -171,7 +284,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 
 				r := NewReplicator(zap.NewNop())
 				r.(*replicator).mtxRcm.Lock()
-				r.(*replicator).rcm[types.StorageNodeID(2)] = rc2
+				r.(*replicator).rcm[rc2.StorageNodeID()] = rc2
 				r.(*replicator).mtxRcm.Unlock()
 
 				ctx, cancel := context.WithCancel(context.TODO())
