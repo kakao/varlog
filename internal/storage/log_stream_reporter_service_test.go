@@ -55,8 +55,8 @@ func TestLogStreamReporterServiceCommit(t *testing.T) {
 			Convey("Then LogStreamReporterService.Commit should return an error", func() {
 				_, err := service.Commit(context.TODO(),
 					&pb.GlobalLogStreamDescriptor{
-						NextGLSN:     types.MinGLSN,
-						PrevNextGLSN: types.InvalidGLSN,
+						HighWatermark:     types.MinGLSN,
+						PrevHighWatermark: types.InvalidGLSN,
 						CommitResult: []*pb.GlobalLogStreamDescriptor_LogStreamCommitResult{
 							{
 								LogStreamID:         types.LogStreamID(0),

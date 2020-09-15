@@ -27,20 +27,8 @@ message LocalLogStreamDescriptor {
         ];
         uint64 uncommitted_llsn_length = 3
             [(gogoproto.customname) = "UncommittedLLSNLength"];
-
-        uint64 uncommitted_llsn_begin = 4 [
-            (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
-            (gogoproto.customname) = "UncommittedLLSNBegin",
-            deprecated = true
-        ];
-        uint64 uncommitted_llsn_end = 5 [
-            (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
-            (gogoproto.customname) = "UncommittedLLSNEnd",
-            deprecated = true
-        ];
     }
+
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
@@ -50,13 +38,6 @@ message LocalLogStreamDescriptor {
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
     repeated LogStreamUncommitReport uncommit = 3;
-
-    uint64 next_glsn = 4 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
-        (gogoproto.customname) = "NextGLSN",
-        deprecated = true
-    ];
 }
 
 // GlobalLogStreamDescriptor is a committing result against with
@@ -78,20 +59,8 @@ message GlobalLogStreamDescriptor {
         ];
         uint64 committed_glsn_length = 3
             [(gogoproto.customname) = "CommittedGLSNLength"];
-
-        uint64 committed_glsn_begin = 4 [
-            (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
-            (gogoproto.customname) = "CommittedGLSNBegin",
-            deprecated = true
-        ];
-        uint64 committed_glsn_end = 5 [
-            (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
-            (gogoproto.customname) = "CommittedGLSNEnd",
-            deprecated = true
-        ];
     }
+
     uint64 high_watermark = 1
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
@@ -99,19 +68,6 @@ message GlobalLogStreamDescriptor {
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
     repeated LogStreamCommitResult commit_result = 3;
-
-    uint64 next_glsn = 4 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
-        (gogoproto.customname) = "NextGLSN",
-        deprecated = true
-    ];
-    uint64 prev_next_glsn = 5 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
-        (gogoproto.customname) = "PrevNextGLSN",
-        deprecated = true
-    ];
 }
 
 service LogStreamReporterService {
