@@ -48,8 +48,9 @@ type StorageNode struct {
 	clusterID     types.ClusterID
 	storageNodeID types.StorageNodeID
 
-	lseMtx sync.RWMutex
-	lseMap map[types.LogStreamID]LogStreamExecutor
+	lseMtx       sync.RWMutex
+	lseMap       map[types.LogStreamID]LogStreamExecutor
+	lseCancelers map[types.LogStreamID]context.CancelFunc
 
 	lsr LogStreamReporter
 
@@ -74,6 +75,7 @@ func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
 		clusterID:     options.ClusterID,
 		storageNodeID: options.StorageNodeID,
 		lseMap:        make(map[types.LogStreamID]LogStreamExecutor),
+		lseCancelers:  make(map[types.LogStreamID]context.CancelFunc),
 		options:       options,
 		logger:        options.Logger,
 		sw:            stopwaiter.New(),
@@ -85,6 +87,7 @@ func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
 	NewLogStreamReporterService(sn.lsr).Register(sn.server)
 	NewLogIOService(sn.storageNodeID, sn).Register(sn.server)
 	NewManagementService(sn.logger, sn).Register(sn.server)
+	NewReplicatorService(sn.storageNodeID, sn).Register(sn.server)
 
 	return sn, nil
 }
@@ -206,8 +209,13 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 	if err != nil {
 		return "", err
 	}
+	cancel, err := sn.runner.Run(lse.Run)
+	if err != nil {
+		return "", err
+	}
+
 	sn.lseMap[lsid] = lse
-	sn.runner.Run(lse.Run)
+	sn.lseCancelers[lsid] = cancel
 	return stgPath, nil
 }
 

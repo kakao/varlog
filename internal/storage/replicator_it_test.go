@@ -30,15 +30,28 @@ func init() {
 
 func TestReplicatorClientReplicatorService(t *testing.T) {
 	Convey("Given that a ReplicatorService is running", t, func() {
+		const logStreamID = types.LogStreamID(1)
+
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		lse := NewMockLogStreamExecutor(ctrl)
-		lse.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
-		rs := NewReplicatorService(types.StorageNodeID(1), lse)
+		lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
+
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
+			func(lsid types.LogStreamID) (LogStreamExecutor, bool) {
+				if lsid == lse.LogStreamID() {
+					return lse, true
+				}
+				return nil, false
+			},
+		).AnyTimes()
+
+		rs := NewReplicatorService(types.StorageNodeID(1), lseGetter)
 
 		Convey("And a ReplicatorClient tries to replicate data to it", conveyutil.WithServiceServer(rs, func(server *grpc.Server, addr string) {
-			rc, err := NewReplicatorClient(addr, zap.NewNop())
+			rc, err := NewReplicatorClient(logStreamID, addr, zap.NewNop())
 			So(err, ShouldBeNil)
 
 			ctx, cancel := context.WithCancel(context.TODO())
@@ -117,7 +130,7 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 
 func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 	Convey("Given that a ReplicatorService is running", t, func() {
-		const lsID = types.LogStreamID(1)
+		const logStreamID = types.LogStreamID(1)
 
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -125,13 +138,24 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 		replicas := []Replica{}
 
 		lse1 := NewMockLogStreamExecutor(ctrl)
-		lse1.EXPECT().LogStreamID().Return(lsID).AnyTimes()
-		rs1 := NewReplicatorService(types.StorageNodeID(1), lse1)
+		lse1.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
+
+		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
+		lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
+			func(lsid types.LogStreamID) (LogStreamExecutor, bool) {
+				if lsid == logStreamID {
+					return lse1, true
+				}
+				return nil, false
+			},
+		).AnyTimes()
+
+		rs1 := NewReplicatorService(types.StorageNodeID(1), lseGetter)
 
 		Convey("And another Replicator is running", conveyutil.WithServiceServer(rs1, func(server *grpc.Server, addr string) {
 			replicas = append(replicas, Replica{
 				StorageNodeID: types.StorageNodeID(1),
-				LogStreamID:   lsID,
+				LogStreamID:   logStreamID,
 				Address:       addr,
 			})
 
@@ -141,7 +165,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 			Convey("And a Replicator tries to replicate data to them", func() {
 				replicas = append(replicas, Replica{
 					StorageNodeID: types.StorageNodeID(2),
-					LogStreamID:   lsID,
+					LogStreamID:   logStreamID,
 					Address:       "1.2.3.4:5", // fake address
 				})
 

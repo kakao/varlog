@@ -21,35 +21,37 @@ type ReplicatorClient interface {
 }
 
 type replicatorClient struct {
-	rpcConn   *varlog.RpcConn
-	rpcClient pb.ReplicatorServiceClient
-	once      syncutil.OnlyOnce
-	cancel    context.CancelFunc
-	mu        sync.RWMutex
-	m         map[types.LLSN]chan<- error
-	stream    pb.ReplicatorService_ReplicateClient
-	requestC  chan *pb.ReplicationRequest
-	responseC chan *pb.ReplicationResponse
-	runner    *runner.Runner
-	logger    *zap.Logger
+	logStreamID types.LogStreamID
+	rpcConn     *varlog.RpcConn
+	rpcClient   pb.ReplicatorServiceClient
+	once        syncutil.OnlyOnce
+	cancel      context.CancelFunc
+	mu          sync.RWMutex
+	m           map[types.LLSN]chan<- error
+	stream      pb.ReplicatorService_ReplicateClient
+	requestC    chan *pb.ReplicationRequest
+	responseC   chan *pb.ReplicationResponse
+	runner      *runner.Runner
+	logger      *zap.Logger
 }
 
-func NewReplicatorClient(address string, logger *zap.Logger) (ReplicatorClient, error) {
+func NewReplicatorClient(logStreamID types.LogStreamID, address string, logger *zap.Logger) (ReplicatorClient, error) {
 	rpcConn, err := varlog.NewRpcConn(address)
 	if err != nil {
 		return nil, err
 	}
-	return NewReplicatorClientFromRpcConn(rpcConn, logger)
+	return NewReplicatorClientFromRpcConn(logStreamID, rpcConn, logger)
 }
 
-func NewReplicatorClientFromRpcConn(rpcConn *varlog.RpcConn, logger *zap.Logger) (ReplicatorClient, error) {
+func NewReplicatorClientFromRpcConn(logStreamID types.LogStreamID, rpcConn *varlog.RpcConn, logger *zap.Logger) (ReplicatorClient, error) {
 	return &replicatorClient{
-		rpcConn:   rpcConn,
-		rpcClient: pb.NewReplicatorServiceClient(rpcConn.Conn),
-		m:         make(map[types.LLSN]chan<- error),
-		requestC:  make(chan *pb.ReplicationRequest),
-		responseC: make(chan *pb.ReplicationResponse),
-		runner:    runner.New("replicatorclient", logger),
+		logStreamID: logStreamID,
+		rpcConn:     rpcConn,
+		rpcClient:   pb.NewReplicatorServiceClient(rpcConn.Conn),
+		m:           make(map[types.LLSN]chan<- error),
+		requestC:    make(chan *pb.ReplicationRequest),
+		responseC:   make(chan *pb.ReplicationResponse),
+		runner:      runner.New("replicatorclient", logger),
 	}, nil
 }
 
@@ -79,8 +81,9 @@ func (rc *replicatorClient) Close() error {
 
 func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data []byte) <-chan error {
 	req := &pb.ReplicationRequest{
-		LLSN:    llsn,
-		Payload: data,
+		LogStreamID: rc.logStreamID,
+		LLSN:        llsn,
+		Payload:     data,
 	}
 	errC := make(chan error, 1)
 	rc.mu.Lock()
