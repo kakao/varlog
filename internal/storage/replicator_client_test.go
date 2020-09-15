@@ -18,11 +18,13 @@ import (
 
 func TestReplicatorClientReplicate(t *testing.T) {
 	Convey("Given that a ReplicatorClient.Replicate is blocked", t, func() {
+		const logStreamID = types.LogStreamID(1)
+
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		rpcConn := varlog.RpcConn{}
-		rc, err := NewReplicatorClientFromRpcConn(&rpcConn, zap.NewNop())
+		rc, err := NewReplicatorClientFromRpcConn(logStreamID, &rpcConn, zap.NewNop())
 		So(err, ShouldBeNil)
 		mockClient := mock.NewMockReplicatorServiceClient(ctrl)
 		rc.(*replicatorClient).rpcClient = mockClient
@@ -67,13 +69,16 @@ func TestReplicatorClientReplicate(t *testing.T) {
 
 func TestReplicatorClient(t *testing.T) {
 	Convey("ReplicatorClient", t, func() {
-		const N = 100
+		const (
+			N           = 100
+			logStreamID = types.LogStreamID(1)
+		)
 
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
 		rpcConn := varlog.RpcConn{}
-		rc, err := NewReplicatorClientFromRpcConn(&rpcConn, zap.NewNop())
+		rc, err := NewReplicatorClientFromRpcConn(logStreamID, &rpcConn, zap.NewNop())
 		So(err, ShouldBeNil)
 		mockClient := mock.NewMockReplicatorServiceClient(ctrl)
 		rc.(*replicatorClient).rpcClient = mockClient

@@ -22,14 +22,14 @@ const (
 
 type ReplicatorService struct {
 	storageNodeID types.StorageNodeID
-	lse           LogStreamExecutor
+	lseGetter     LogStreamExecutorGetter
 	pb.UnimplementedReplicatorServiceServer
 }
 
-func NewReplicatorService(storageNodeID types.StorageNodeID, lse LogStreamExecutor) *ReplicatorService {
+func NewReplicatorService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter) *ReplicatorService {
 	return &ReplicatorService{
 		storageNodeID: storageNodeID,
-		lse:           lse,
+		lseGetter:     lseGetter,
 	}
 }
 
@@ -85,7 +85,12 @@ func (s *ReplicatorService) replicate(ctx context.Context, repCtxC <-chan *repli
 		var err error
 		for repCtx := range repCtxC {
 			if repCtx.err == nil {
-				err = s.lse.Replicate(ctx, repCtx.req.GetLLSN(), repCtx.req.GetPayload())
+				lsid := repCtx.req.GetLogStreamID()
+				if lse, ok := s.lseGetter.GetLogStreamExecutor(lsid); ok {
+					err = lse.Replicate(ctx, repCtx.req.GetLLSN(), repCtx.req.GetPayload())
+				} else {
+					err = fmt.Errorf("no logstreamexecutor: %v", lsid)
+				}
 				repCtx.err = err
 			}
 			select {
@@ -110,7 +115,7 @@ func (s *ReplicatorService) send(ctx context.Context, stream pb.ReplicatorServic
 			if repCtx.err == nil {
 				err = stream.Send(&pb.ReplicationResponse{
 					StorageNodeID: s.storageNodeID,
-					LogStreamID:   s.lse.LogStreamID(),
+					LogStreamID:   repCtx.req.GetLogStreamID(),
 					LLSN:          repCtx.req.GetLLSN(),
 				})
 				repCtx.err = err

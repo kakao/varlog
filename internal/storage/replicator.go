@@ -154,7 +154,7 @@ func (r *replicator) getOrConnect(ctx context.Context, replica Replica) (Replica
 	if ok {
 		return rc, nil
 	}
-	rc, err := NewReplicatorClient(replica.Address, r.logger)
+	rc, err := NewReplicatorClient(replica.LogStreamID, replica.Address, r.logger)
 	if err != nil {
 		return nil, err
 	}
