@@ -22,6 +22,7 @@ func TestReplicator(t *testing.T) {
 		rcs := make([]*MockReplicatorClient, numRCs)
 		for i := 0; i < numRCs; i++ {
 			rcs[i] = NewMockReplicatorClient(ctrl)
+			rcs[i].EXPECT().StorageNodeID().Return(types.StorageNodeID(i)).AnyTimes()
 		}
 
 		r := NewReplicator(zap.NewNop())
@@ -29,7 +30,7 @@ func TestReplicator(t *testing.T) {
 		Convey("it should be run and closed", func() {
 			r.Run(context.TODO())
 			for i := 0; i < numRCs; i++ {
-				r.(*replicator).rcm[types.StorageNodeID(i)] = rcs[i]
+				r.(*replicator).rcm[rcs[i].StorageNodeID()] = rcs[i]
 				rcs[i].EXPECT().Close().AnyTimes()
 			}
 		})
