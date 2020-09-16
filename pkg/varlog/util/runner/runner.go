@@ -24,9 +24,6 @@ type Runner struct {
 
 	wg sync.WaitGroup
 
-	oldWg   sync.WaitGroup
-	muOldWg sync.RWMutex
-
 	mu      sync.RWMutex
 	taskID  uint64
 	cancels map[uint64]context.CancelFunc
@@ -80,12 +77,13 @@ func (r *Runner) WithManagedCancel(parent context.Context) (context.Context, con
 }
 
 func (r *Runner) RunC(ctx context.Context, f func(context.Context)) error {
-	state := r.State()
-	switch state {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	switch r.state {
 	case RunnerInvalid:
 		return errors.New("invalid runner")
 	case RunnerStopping, RunnerStopped:
-		return fmt.Errorf("runner %v: stopping or stopped (%v)", r.name, state)
+		return fmt.Errorf("runner %v: stopping or stopped (%v)", r.name, r.state)
 	}
 
 	r.wg.Add(1)
@@ -106,28 +104,6 @@ func (r *Runner) Run(f func(context.Context)) (context.CancelFunc, error) {
 		return nil, err
 	}
 	return cancel, nil
-}
-
-// RunDeprecated executs f in a goroutine.
-// Deprecated
-// If RunDeprecated is called when stopping runner, there is no way to prevent from executing f.
-func (r *Runner) RunDeprecated(ctx context.Context, f func(context.Context)) {
-	state := r.State()
-	switch state {
-	case RunnerInvalid, RunnerStopping, RunnerStopped:
-		if r.logger == nil {
-			r.logger, _ = zap.NewDevelopment()
-		}
-		r.logger.Warn("deprecated, just for compatibility", zap.Any("state", state))
-	}
-
-	r.muOldWg.RLock()
-	r.oldWg.Add(1)
-	r.muOldWg.RUnlock()
-	go func() {
-		defer r.oldWg.Done()
-		f(ctx)
-	}()
 }
 
 // Stop stops tasks in this runner.
@@ -159,16 +135,6 @@ func (r *Runner) Stop() {
 	r.mu.Lock()
 	r.state = RunnerStopped
 	r.mu.Unlock()
-}
-
-// CloseWaitDeprecated is aliases for Stop.
-func (r *Runner) CloseWaitDeprecated() {
-	r.Stop()
-
-	// HACK: for tasks executed by Run when calling CloseWait by other goroutines
-	r.muOldWg.Lock()
-	r.oldWg.Wait()
-	r.muOldWg.Unlock()
 }
 
 func (r *Runner) State() RunnerState {

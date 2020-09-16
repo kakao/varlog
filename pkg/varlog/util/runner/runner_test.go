@@ -18,25 +18,25 @@ func TestRunner(t *testing.T) {
 		r := New("test-runner", logger)
 
 		Reset(func() {
-			r.CloseWaitDeprecated()
+			r.Stop()
 			So(r.State(), ShouldEqual, RunnerStopped)
 		})
 
 		Convey("state of runner should be RunnerRunning before calling Stop, and RunnerStopped after calling Stop", func() {
 			So(r.State(), ShouldEqual, RunnerRunning)
-			r.CloseWaitDeprecated()
+			r.Stop()
 			So(r.State(), ShouldEqual, RunnerStopped)
 		})
 
 		Convey("state of runner should be RunnerStopped after calling Stop more than two times", func() {
 			for i := 0; i < 3; i++ {
-				r.CloseWaitDeprecated()
+				r.Stop()
 				So(r.State(), ShouldEqual, RunnerStopped)
 			}
 		})
 
 		Convey("stopped runner should not run any task", func() {
-			r.CloseWaitDeprecated()
+			r.Stop()
 			So(r.State(), ShouldEqual, RunnerStopped)
 			_, err := r.Run(func(ctx context.Context) {})
 			So(err, ShouldNotBeNil)
@@ -89,7 +89,7 @@ func TestRunner(t *testing.T) {
 				})
 				So(err, ShouldBeNil)
 			}
-			r.CloseWaitDeprecated()
+			r.Stop()
 			So(cnt, ShouldEqual, repeat)
 			So(len(r.cancels), ShouldBeZeroValue)
 		})
