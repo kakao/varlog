@@ -40,17 +40,17 @@ spec:
           failureThreshold: 5
         env:
         - name: JAVA_OPTS
-          value: '-Xmx4096m'
+          value: '-Xmx6144m'
         volumeMounts:
         - mountPath: /var/jenkins_home
           name: jenkins-home
         resources:
           limits:
-            cpu: 4000m
-            memory: 4096Mi
+            cpu: 7000m
+            memory: 7000Mi
           requests:
-            cpu: 4000m
-            memory: 4096Mi
+            cpu: 7000m
+            memory: 7000Mi
       securityContext:
         fsGroup: 1000
         runAsUser: 0
