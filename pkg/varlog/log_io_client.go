@@ -57,6 +57,7 @@ func (c *logIOClient) Append(ctx context.Context, logStreamID types.LogStreamID,
 		Payload:     data,
 		LogStreamID: logStreamID,
 	}
+
 	for _, b := range backups {
 		req.Backups = append(req.Backups, pb.AppendRequest_BackupNode{
 			StorageNodeID: b.ID,

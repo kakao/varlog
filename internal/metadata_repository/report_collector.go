@@ -9,6 +9,7 @@ import (
 	varlog "github.com/kakao/varlog/pkg/varlog"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
+	"github.com/kakao/varlog/pkg/varlog/util/syncutil/atomicutil"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 
@@ -41,43 +42,36 @@ type ReportCollector struct {
 	cb        ReportCollectorCallbacks
 	mu        sync.RWMutex
 	logger    *zap.Logger
-	runner    runner.Runner
-	ctx       context.Context
 	cancel    context.CancelFunc
+	runner    *runner.Runner
+	running   atomicutil.AtomicBool
 }
 
 func NewReportCollector(cb ReportCollectorCallbacks, logger *zap.Logger) *ReportCollector {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &ReportCollector{
 		logger:    logger,
 		cb:        cb,
-		ctx:       ctx,
-		cancel:    cancel,
 		executors: make(map[types.StorageNodeID]*ReportCollectExecutor),
 	}
 }
 
 func (rc *ReportCollector) Run() {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-
-	if rc.ctx == nil {
-		rc.ctx, rc.cancel = context.WithCancel(context.Background())
+	if !rc.running.Load() {
+		rc.runner = runner.New("rc", rc.logger)
+		rc.running.Store(true)
 	}
 }
 
 func (rc *ReportCollector) Close() {
-	rc.mu.Lock()
-	if rc.cancel != nil {
-		rc.cancel()
+	if rc.running.Load() {
+		rc.running.Store(false)
 
-		rc.ctx = nil
-		rc.cancel = nil
+		rc.mu.Lock()
+		rc.executors = make(map[types.StorageNodeID]*ReportCollectExecutor)
+		rc.mu.Unlock()
+
+		rc.runner.Stop()
 	}
-	rc.executors = make(map[types.StorageNodeID]*ReportCollectExecutor)
-	rc.mu.Unlock()
-
-	rc.runner.CloseWaitDeprecated()
 }
 
 func (rc *ReportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, highWatermark types.GLSN) error {
@@ -98,12 +92,12 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		return varlog.ErrInvalid
 	}
 
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-
-	if rc.ctx == nil {
+	if !rc.running.Load() {
 		return varlog.ErrInternal
 	}
+
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
 
 	if _, ok := rc.executors[sn.StorageNodeID]; ok {
 		return varlog.ErrExist
@@ -116,24 +110,30 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		cb:            rc.cb,
 		logger:        rc.logger.Named("executor"),
 	}
-	ctx, cancel := context.WithCancel(rc.ctx)
+	ctx, cancel := rc.runner.WithManagedCancel(context.Background())
 	executor.cancel = cancel
 
-	rc.executors[sn.StorageNodeID] = executor
+	if err := rc.runner.RunC(ctx, executor.runCommit); err != nil {
+		executor.cancel()
+		return err
+	}
+	if err := rc.runner.RunC(ctx, executor.runReport); err != nil {
+		executor.cancel()
+		return err
+	}
 
-	rc.runner.RunDeprecated(ctx, executor.runCommit)
-	rc.runner.RunDeprecated(ctx, executor.runReport)
+	rc.executors[sn.StorageNodeID] = executor
 
 	return nil
 }
 
 func (rc *ReportCollector) UnregisterStorageNode(snID types.StorageNodeID) error {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-
-	if rc.ctx == nil {
+	if !rc.running.Load() {
 		return varlog.ErrInternal
 	}
+
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
 
 	executor, ok := rc.executors[snID]
 	if !ok {
@@ -301,6 +301,10 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 		return nil
 	}
 
+	rce.logger.Debug("commit",
+		zap.Uint64("hwm", uint64(r.HighWatermark)),
+		zap.Int("result", len(r.CommitResult)))
+
 	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
 	defer cancel()
 	err = cli.Commit(ctx, &r)
@@ -401,7 +405,8 @@ func (rce *ReportCollectExecutor) getClient() (storage.LogStreamReporterClient, 
 	defer rce.clmu.Unlock()
 
 	var err error
-
-	rce.cli, err = rce.cb.getClient(rce.sn)
+	if rce.cli == nil {
+		rce.cli, err = rce.cb.getClient(rce.sn)
+	}
 	return rce.cli, err
 }

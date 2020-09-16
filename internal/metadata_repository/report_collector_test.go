@@ -365,13 +365,13 @@ func TestCommit(t *testing.T) {
 					defer cli.mu.Unlock()
 
 					return cli.knownHighWatermark == knownHWM
-				}, 100*time.Millisecond), ShouldBeTrue)
+				}, time.Second), ShouldBeTrue)
 				return true
 			})
 
 			So(testutil.CompareWait(func() bool {
 				return reportCollector.getMinHighWatermark() == knownHWM
-			}, 100*time.Millisecond), ShouldBeTrue)
+			}, time.Second), ShouldBeTrue)
 
 			Convey("ReportCollector should send ordered commit result to registered storage node", func() {
 				gls := newDummyGlobalLogStream(knownHWM, nrStorage)
@@ -393,13 +393,13 @@ func TestCommit(t *testing.T) {
 						defer cli.mu.Unlock()
 
 						return cli.knownHighWatermark == knownHWM
-					}, 100*time.Millisecond), ShouldBeTrue)
+					}, time.Second), ShouldBeTrue)
 					return true
 				})
 
 				So(testutil.CompareWait(func() bool {
 					return reportCollector.getMinHighWatermark() == knownHWM
-				}, 100*time.Millisecond), ShouldBeTrue)
+				}, time.Second), ShouldBeTrue)
 
 				Convey("ReportCollector should send proper commit against new StorageNode", func() {
 					mr.trimGLS(knownHWM)
@@ -428,7 +428,7 @@ func TestCommit(t *testing.T) {
 							defer cli.mu.Unlock()
 
 							return cli.knownHighWatermark == knownHWM
-						}, 100*time.Millisecond), ShouldBeTrue)
+						}, time.Second), ShouldBeTrue)
 						return true
 					})
 				})

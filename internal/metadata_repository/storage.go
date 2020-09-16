@@ -15,6 +15,7 @@ import (
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
 	"go.etcd.io/etcd/raft/raftpb"
+	"go.uber.org/zap"
 
 	"github.com/gogo/protobuf/proto"
 )
@@ -79,13 +80,15 @@ type MetadataStorage struct {
 	// async job (snapshot, cache)
 	jobC chan *storageAsyncJob
 
-	rnMu   sync.RWMutex // mutex for Runner
-	runner runner.Runner
-	cancel context.CancelFunc
+	runner  *runner.Runner
+	running atomicutil.AtomicBool
+	cancel  context.CancelFunc
 }
 
 func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64) *MetadataStorage {
-	ms := &MetadataStorage{cacheCompleteCB: cb}
+	ms := &MetadataStorage{
+		cacheCompleteCB: cb,
+	}
 	ms.snapCount = snapCount
 
 	ms.origStateMachine = &pb.MetadataRepositoryDescriptor{}
@@ -107,27 +110,17 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64) *Metad
 }
 
 func (ms *MetadataStorage) Run() {
-	ms.rnMu.Lock()
-	defer ms.rnMu.Unlock()
-
-	if ms.cancel == nil {
-		ctx, cancel := context.WithCancel(context.Background())
-		ms.cancel = cancel
-		ms.runner.RunDeprecated(ctx, ms.processSnapshot)
-	} else {
-		panic("metadataStorage run twice")
+	if !ms.running.Load() {
+		ms.runner = runner.New("mr-storage", zap.NewNop())
+		ms.runner.Run(ms.processSnapshot)
+		ms.running.Store(true)
 	}
 }
 
 func (ms *MetadataStorage) Close() {
-	ms.rnMu.Lock()
-	defer ms.rnMu.Unlock()
-
-	if ms.cancel != nil {
-		ms.cancel()
-		ms.cancel = nil
-
-		ms.runner.CloseWaitDeprecated()
+	if ms.running.Load() {
+		ms.runner.Stop()
+		ms.running.Store(false)
 	}
 }
 
