@@ -731,7 +731,8 @@ func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *v
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore {
+	if err != varlog.ErrIgnore &&
+		err != varlog.ErrAlreadyExists {
 		return err
 	}
 
@@ -744,7 +745,8 @@ func (mr *RaftMetadataRepository) UnregisterStorageNode(ctx context.Context, snI
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore {
+	if err != varlog.ErrIgnore &&
+		err != varlog.ErrNotExist {
 		return err
 	}
 
@@ -757,7 +759,8 @@ func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *var
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore {
+	if err != varlog.ErrIgnore &&
+		err != varlog.ErrAlreadyExists {
 		return err
 	}
 
@@ -770,7 +773,8 @@ func (mr *RaftMetadataRepository) UnregisterLogStream(ctx context.Context, lsID 
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore {
+	if err != varlog.ErrIgnore &&
+		err != varlog.ErrNotExist {
 		return err
 	}
 

@@ -10,8 +10,16 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	"github.com/kakao/varlog/pkg/varlog/util/syncutil"
 	"github.com/kakao/varlog/pkg/varlog/util/syncutil/atomicutil"
+	"github.com/kakao/varlog/pkg/varlog/util/timeutil"
 	pb "github.com/kakao/varlog/proto/storage_node"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
+
+// TODO (jun): add options
+const (
+	rcRequestCSize    = 0
+	rcRequestCTimeout = timeutil.MaxDuration
 )
 
 var errNotRunning = errors.New("replicatorclient: not running")
@@ -36,15 +44,15 @@ type replicatorClient struct {
 	muErrCs sync.Mutex
 	errCs   map[types.LLSN]chan<- error
 
-	// muRequestC: mutex to avoid race between sending data to requestC and closing the
-	// requestC - need more concise implementation
-	requestC   chan *pb.ReplicationRequest
-	muRequestC sync.Mutex
+	requestC chan *pb.ReplicationRequest
 
 	runner *runner.Runner
 	logger *zap.Logger
 
 	running atomicutil.AtomicBool
+
+	onceReplicateStop sync.Once
+	replicateStop     chan struct{}
 }
 
 // Add more detailed peer info (e.g., storage node id)
@@ -63,9 +71,10 @@ func NewReplicatorClientFromRpcConn(storageNodeID types.StorageNodeID, logStream
 		rpcConn:       rpcConn,
 		rpcClient:     pb.NewReplicatorServiceClient(rpcConn.Conn),
 		errCs:         make(map[types.LLSN]chan<- error),
-		requestC:      make(chan *pb.ReplicationRequest),
+		requestC:      make(chan *pb.ReplicationRequest, rcRequestCSize),
 		runner:        runner.New("replicatorclient", logger),
 		logger:        logger,
+		replicateStop: make(chan struct{}),
 	}, nil
 }
 
@@ -99,29 +108,18 @@ func (rc *replicatorClient) Close() error {
 	rc.logger.Info("replicatorclient: close", zap.Any("snid", rc.StorageNodeID()))
 	rc.running.Store(false)
 	if rc.cancel != nil {
+		rc.stopReplicate()
 		rc.cancel()
 		rc.runner.Stop()
-		rc.exhaustRequestC()
 		rc.propagateAllError()
 	}
 	return rc.rpcConn.Close()
 }
 
-func (rc *replicatorClient) exhaustRequestC() {
-	// mutex guard: prevent from sending message to rc.requestC
-	rc.muRequestC.Lock()
-	defer rc.muRequestC.Unlock()
-	if rc.requestC == nil {
-		return
-	}
-	close(rc.requestC)
-	cnt := 0
-	for req := range rc.requestC {
-		cnt++
-		rc.logger.Info("replicatorclient: exhaust requestC", zap.Any("request", req), zap.Any("snid", rc.storageNodeID))
-	}
-	rc.logger.Info("replicatorclient: complete to exhaust requestC", zap.Int("count", cnt), zap.Any("snid", rc.storageNodeID))
-	rc.requestC = nil
+func (rc *replicatorClient) stopReplicate() {
+	rc.onceReplicateStop.Do(func() {
+		close(rc.replicateStop)
+	})
 }
 
 func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data []byte) <-chan error {
@@ -130,17 +128,6 @@ func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data
 	// NOTE (jun): If Replicate() is called before calling Run(), Replicate() returns
 	// errNotRunning.
 	if !rc.running.Load() {
-		errC <- errNotRunning
-		close(errC)
-		return errC
-	}
-
-	// mutex guard: prevent from closing rc.requestC
-	rc.muRequestC.Lock()
-	defer rc.muRequestC.Unlock()
-
-	// check if the requestC is exhausted
-	if rc.requestC == nil {
 		errC <- errNotRunning
 		close(errC)
 		return errC
@@ -156,15 +143,30 @@ func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data
 	rc.errCs[llsn] = errC
 	rc.muErrCs.Unlock()
 
-	// TODO (jun): timeout for enqueueing req into requestC
+	if err := rc.addRequestC(ctx, req); err != nil {
+		rc.propagateError(llsn, err)
+	}
+	return errC
+}
+
+func (rc *replicatorClient) addRequestC(ctx context.Context, req *pb.ReplicationRequest) error {
+	tctx, cancel := context.WithTimeout(ctx, rcRequestCTimeout)
+	defer cancel()
+
+	var err error
 	select {
 	case rc.requestC <- req:
-		rc.logger.Debug("replicatorclient: sent ReplicationRequest to requestC", zap.Any("request", req), zap.Any("snid", rc.storageNodeID))
-		return errC
-	case <-ctx.Done():
+	case <-tctx.Done():
+		err = tctx.Err()
+	case <-rc.replicateStop:
+		err = errNotRunning
 	}
-	rc.propagateError(llsn, ctx.Err())
-	return errC
+	if err == nil {
+		rc.logger.Debug("replicatorclient: sent ReplicationRequest to requestC", zap.Any("request", req), zap.Any("snid", rc.storageNodeID))
+	} else {
+		rc.logger.Error("replicatorclient: stop Replicate", zap.Any("request", req), zap.Any("snid", rc.storageNodeID), zap.Error(err))
+	}
+	return err
 }
 
 func (rc *replicatorClient) dispatchRequestC(ctx context.Context) {
@@ -186,8 +188,9 @@ LOOP:
 	if err := rc.stream.CloseSend(); err != nil {
 		rc.logger.Error("replicatorclient: CloseSend error", zap.Error(err), zap.Any("snid", rc.storageNodeID))
 	}
+
+	rc.stopReplicate()
 	rc.cancel()
-	rc.exhaustRequestC()
 	rc.propagateAllError()
 }
 
@@ -207,15 +210,30 @@ LOOP:
 		}
 	}
 
+	rc.stopReplicate()
 	rc.cancel()
 	rc.propagateAllError()
 }
 
 func (rc *replicatorClient) propagateError(llsn types.LLSN, err error) {
+	const (
+		errorPropagation = "replicatorclient: propagate error"
+		okPropagation    = "replicatorclient: propagate ok"
+	)
+
+	var msg string
+	if err == nil {
+		msg = okPropagation
+	} else {
+		msg = errorPropagation
+	}
+
 	rc.muErrCs.Lock()
 	defer rc.muErrCs.Unlock()
 	if errC, ok := rc.errCs[llsn]; ok {
-		rc.logger.Debug("replicatorclient: propagate error", zap.Any("llsn", llsn), zap.Error(err), zap.Any("snid", rc.storageNodeID))
+		if ce := rc.logger.Check(zapcore.DebugLevel, msg); ce != nil {
+			ce.Write(zap.Any("llsn", llsn), zap.Any("snid", rc.storageNodeID), zap.Error(err))
+		}
 		delete(rc.errCs, llsn)
 		errC <- err
 		close(errC)

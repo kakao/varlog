@@ -137,6 +137,7 @@ func TestReplicatorIntegration(t *testing.T) {
 	Convey("Given that many LSEs for the same LS are running", t, func(c C) {
 		const (
 			logStreamID = types.LogStreamID(1)
+			numLSs      = 2
 			numSNs      = 3
 			repeat      = 100
 		)
@@ -147,22 +148,19 @@ func TestReplicatorIntegration(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		So(err, ShouldBeNil)
 
-		var servers []*grpc.Server
+		// single instance per SN (variable[storageNodeIdx])
 		var rsList []*ReplicatorService
-		var replicas []Replica
-		var lseList []*MockLogStreamExecutor
-		for i := 0; i < numSNs; i++ {
-			// StorageNodeID
-			storageNodeID := types.StorageNodeID(i + 1)
+		var servers []*grpc.Server
+		var lseGetterList []*MockLogStreamExecutorGetter
+		var addrList []string
 
-			// LogStreamExecutor
-			lse := NewMockLogStreamExecutor(ctrl)
-			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
-			lseList = append(lseList, lse)
+		for snIdx := 0; snIdx < numSNs; snIdx++ {
+			// StorageNodeID
+			storageNodeID := types.StorageNodeID(snIdx + 1)
 
 			// LSEGetter (like StorageNode)
 			lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-			lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).Return(lse, true).AnyTimes()
+			lseGetterList = append(lseGetterList, lseGetter)
 
 			// ReplicatorService
 			rs := NewReplicatorService(storageNodeID, lseGetter)
@@ -173,14 +171,9 @@ func TestReplicatorIntegration(t *testing.T) {
 			So(err, ShouldBeNil)
 			addrs, err := netutil.GetListenerAddrs(lis.Addr())
 			So(err, ShouldBeNil)
+			addrList = append(addrList, addrs[0])
 
-			// Replica Info
-			replicas = append(replicas, Replica{
-				StorageNodeID: storageNodeID,
-				LogStreamID:   logStreamID,
-				Address:       addrs[0],
-			})
-
+			// Register ReplicatorService
 			server := grpc.NewServer()
 			rs.Register(server)
 
@@ -192,12 +185,71 @@ func TestReplicatorIntegration(t *testing.T) {
 			}()
 		}
 
-		replicator := NewReplicator(logger)
-		replicator.Run(context.TODO())
+		// for the same LogStream (variable[logStreamIdx][storageNodeIdx])
+		var replicasList [][]Replica
+		var lseLists [][]*MockLogStreamExecutor
+
+		for lsIdx := 0; lsIdx < numLSs; lsIdx++ {
+			logStreamID := types.LogStreamID(lsIdx + 1)
+
+			// List of LogStreamExecutors for the same LogStream
+			var lseList []*MockLogStreamExecutor
+			var replicas []Replica
+
+			for snIdx := 0; snIdx < numSNs; snIdx++ {
+				// StorageNodeID
+				storageNodeID := types.StorageNodeID(snIdx + 1)
+
+				// LogStreamExecutor
+				lse := NewMockLogStreamExecutor(ctrl)
+				lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
+				lseList = append(lseList, lse)
+
+				// Replica Info
+				replicas = append(replicas, Replica{
+					StorageNodeID: storageNodeID,
+					LogStreamID:   logStreamID,
+					Address:       addrList[snIdx],
+				})
+
+			}
+
+			lseLists = append(lseLists, lseList)
+			replicasList = append(replicasList, replicas)
+		}
+
+		for snIdx := 0; snIdx < numSNs; snIdx++ {
+			// LSEGetter (like StorageNode)
+			lseGetter := lseGetterList[snIdx]
+			var lseList []*MockLogStreamExecutor
+			for lsIdx := 0; lsIdx < numLSs; lsIdx++ {
+				lse := lseLists[lsIdx][snIdx]
+				lseList = append(lseList, lse)
+			}
+			lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
+				func(lsid types.LogStreamID) (LogStreamExecutor, bool) {
+					for _, lse := range lseList {
+						if lse.LogStreamID() == lsid {
+							return lse, true
+						}
+					}
+					return nil, false
+				},
+			).AnyTimes()
+		}
+
+		var replicatorList []Replicator
+		for lsIdx := 0; lsIdx < numLSs; lsIdx++ {
+			replicator := NewReplicator(logger)
+			replicatorList = append(replicatorList, replicator)
+			replicator.Run(context.TODO())
+		}
 
 		Reset(func() {
 			// Replicator (Primary)
-			replicator.Close()
+			for _, replicator := range replicatorList {
+				replicator.Close()
+			}
 
 			// ReplicatorService gRPC Server (Backup)
 			for _, server := range servers {
@@ -209,32 +261,43 @@ func TestReplicatorIntegration(t *testing.T) {
 			// Replicator logs
 			for llsn := types.MinLLSN; llsn < types.LLSN(repeat); llsn++ {
 				data := fmt.Sprintf("log_%v", llsn)
-				for _, lse := range lseList {
-					lse.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-						func(ctx context.Context, aLLSN types.LLSN, aData []byte) error {
-							c.So(aLLSN, ShouldEqual, llsn)
-							c.So(string(aData), ShouldEqual, data)
-							return nil
-						},
-					)
-				}
-				errC := replicator.Replicate(context.TODO(), llsn, []byte(data), replicas)
-				So(<-errC, ShouldBeNil)
-			}
+				for lsIdx, lseList := range lseLists {
+					for _, lse := range lseList {
+						lse.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+							func(ctx context.Context, aLLSN types.LLSN, aData []byte) error {
+								c.So(aLLSN, ShouldEqual, llsn)
+								c.So(string(aData), ShouldEqual, data)
+								return nil
+							},
+						)
+					}
 
-			for _, lse := range lseList {
-				lse.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-					func(ctx context.Context, llsn types.LLSN, data []byte) error {
-						return nil
-					},
-				).MaxTimes(1)
+					replicator := replicatorList[lsIdx]
+					replicas := replicasList[lsIdx]
+					errC := replicator.Replicate(context.TODO(), llsn, []byte(data), replicas)
+					So(<-errC, ShouldBeNil)
+				}
+
 			}
 
 			// first LS is failed
 			servers[0].Stop()
 
-			errC := replicator.Replicate(context.TODO(), types.LLSN(repeat), []byte("never"), replicas)
-			So(<-errC, ShouldNotBeNil)
+			for lsIdx, lseList := range lseLists {
+				for _, lse := range lseList {
+					lse.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+						func(ctx context.Context, llsn types.LLSN, data []byte) error {
+							return nil
+						},
+					).MaxTimes(1)
+				}
+
+				replicator := replicatorList[lsIdx]
+				replicas := replicasList[lsIdx]
+
+				errC := replicator.Replicate(context.TODO(), types.LLSN(repeat), []byte("never"), replicas)
+				So(<-errC, ShouldNotBeNil)
+			}
 		})
 
 	})
