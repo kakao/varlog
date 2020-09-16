@@ -154,16 +154,20 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 	executors := lsr.lseGetter.GetLogStreamExecutors()
 	reports := make([]UncommittedLogStreamStatus, 0, len(executors))
 	knownHighWatermark := types.InvalidGLSN
+	nrUncommitted := uint64(0)
 	for _, executor := range executors {
 		status := executor.GetReport()
+
 		// get non-zero, minimum KnwonNextGLSN (zero means just added LS)
 		if !status.KnownHighWatermark.Invalid() && (knownHighWatermark.Invalid() || knownHighWatermark > status.KnownHighWatermark) {
 			knownHighWatermark = status.KnownHighWatermark
 		}
 		reports = append(reports, status)
+		nrUncommitted += status.UncommittedLLSNLength
 	}
 
-	if len(reports) > 0 { // skip when no meaningful statuses in reports
+	//if len(reports) > 0 { // skip when no meaningful statuses in reports
+	if nrUncommitted > 0 { // skip when no meaningful statuses in reports
 		// for simplicity, it uses old reports as possible
 		// TODO (jun.song)
 		// 1) old and new reports can be merged when they have the same KnownNextGLSN

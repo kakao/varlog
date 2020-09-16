@@ -7,6 +7,10 @@ import "google/protobuf/empty.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/storage_node";
 
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 // AppendRequest is a message to send a payload to a storage node. It contains
 // a vector of storage nodes to replicate the payload.
 message AppendRequest {

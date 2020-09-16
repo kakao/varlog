@@ -34,8 +34,15 @@ func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*sn
 		return nil, varlog.ErrInvalidArgument
 	}
 	// TODO: create child context by using operation timeout
-	// TODO: create replicas by using request
-	glsn, err := lse.Append(ctx, req.GetPayload())
+	var backups []Replica
+	for _, b := range req.Backups {
+		backups = append(backups, Replica{
+			StorageNodeID: b.StorageNodeID,
+			Address:       b.Address,
+			LogStreamID:   req.GetLogStreamID(),
+		})
+	}
+	glsn, err := lse.Append(ctx, req.GetPayload(), backups...)
 	if err != nil {
 		return nil, varlog.ToStatusError(err)
 	}

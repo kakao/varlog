@@ -434,6 +434,8 @@ func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 
 	if t.isPrimary() {
 		lse.triggerReplication(ctx, t)
+	} else {
+		t.notify(err)
 	}
 }
 
@@ -446,6 +448,7 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 	if primary {
 		llsn = lse.uncommittedLLSNEnd.Load()
 	}
+
 	if llsn != lse.uncommittedLLSNEnd.Load() {
 		// return newVarlogError(ErrLogStreamCorrupt, "llsn=%v uncommittedLLSNEnd=%v", llsn, lse.uncommittedLLSNEnd.Load())
 		return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", varlog.ErrCorruptLogStream, llsn, lse.uncommittedLLSNEnd.Load())
@@ -516,6 +519,7 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	offset := lse.uncommittedLLSNBegin
 	hwm := lse.globalHighwatermark
 	lse.mu.RUnlock()
+
 	return UncommittedLogStreamStatus{
 		LogStreamID:           lse.logStreamID,
 		KnownHighWatermark:    hwm,

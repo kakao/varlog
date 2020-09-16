@@ -49,7 +49,7 @@ type RaftMetadataRepository struct {
 	logger  *zap.Logger
 
 	sw     *stopwaiter.StopWaiter
-	runner runner.Runner
+	runner *runner.Runner
 	cancel context.CancelFunc
 
 	server     *grpc.Server
@@ -70,6 +70,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		logger:            options.Logger,
 		reporterClientFac: options.ReporterClientFac,
 		options:           options,
+		runner:            runner.New("mr", options.Logger),
 		sw:                stopwaiter.New(),
 	}
 
@@ -114,17 +115,26 @@ func (mr *RaftMetadataRepository) Run() {
 	mr.storage.Run()
 	mr.reportCollector.Run()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	mctx, cancel := mr.runner.WithManagedCancel(context.Background())
+
 	mr.cancel = cancel
-	mr.runner.RunDeprecated(ctx, mr.runReplication)
-	mr.runner.RunDeprecated(ctx, mr.processCommit)
-	mr.runner.RunDeprecated(ctx, mr.processRNCommit)
-	mr.runner.RunDeprecated(ctx, mr.runCommitTrigger)
+	if err := mr.runner.RunC(mctx, mr.runReplication); err != nil {
+		mr.logger.Panic("could not run", zap.Error(err))
+	}
+	if err := mr.runner.RunC(mctx, mr.processCommit); err != nil {
+		mr.logger.Panic("could not run", zap.Error(err))
+	}
+	if err := mr.runner.RunC(mctx, mr.processRNCommit); err != nil {
+		mr.logger.Panic("could not run", zap.Error(err))
+	}
+	if err := mr.runner.RunC(mctx, mr.runCommitTrigger); err != nil {
+		mr.logger.Panic("could not run", zap.Error(err))
+	}
 
 	mr.raftNode.start()
 
 	mr.logger.Info("listening", zap.String("address", mr.options.RPCBindAddress))
-	lis, err := netutil.NewStoppableListener(ctx, mr.options.RPCBindAddress)
+	lis, err := netutil.NewStoppableListener(mctx, mr.options.RPCBindAddress)
 	if err != nil {
 		mr.logger.Panic("could not listen", zap.Error(err))
 	}
@@ -132,13 +142,15 @@ func (mr *RaftMetadataRepository) Run() {
 	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
 	mr.serverAddr = addrs[0]
 
-	mr.runner.RunDeprecated(ctx, func(ctx context.Context) {
+	if err := mr.runner.RunC(mctx, func(ctx context.Context) {
 		//TODO:: graceful shutdown
 		if err := mr.server.Serve(lis); err != nil && err != varlog.ErrStopped {
 			mr.logger.Panic("could not serve", zap.Error(err))
 			//r.Close()
 		}
-	})
+	}); err != nil {
+		mr.logger.Panic("could not run", zap.Error(err))
+	}
 
 	mr.logger.Info("starting metadata repository")
 }
@@ -151,7 +163,7 @@ func (mr *RaftMetadataRepository) Close() error {
 	if mr.cancel != nil {
 		mr.cancel()
 		mr.raftNode.stop(true)
-		mr.runner.CloseWaitDeprecated()
+		mr.runner.Stop()
 		mr.storage.Close()
 
 		close(mr.proposeC)

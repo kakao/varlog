@@ -304,3 +304,16 @@ func (clus *VarlogCluster) AddLS() error {
 
 	return clus.MRs[0].RegisterLogStream(context.TODO(), ls)
 }
+
+func (clus *VarlogCluster) LookupSN(snID types.StorageNodeID) *storage.StorageNode {
+	sn, _ := clus.SNs[snID]
+	return sn
+}
+
+func (clus *VarlogCluster) GetMR() *metadata_repository.RaftMetadataRepository {
+	if len(clus.MRs) == 0 {
+		return nil
+	}
+
+	return clus.MRs[0]
+}

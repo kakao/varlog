@@ -63,10 +63,10 @@ type raftNode struct {
 
 	logger *zap.Logger
 
-	runner runner.Runner
+	runner *runner.Runner
 	cancel context.CancelFunc
 
-	httprunner runner.Runner
+	httprunner *runner.Runner
 	httpcancel context.CancelFunc
 }
 
@@ -112,6 +112,8 @@ func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, snapCount uin
 		getSnapshot: getSnapshot,
 		snapCount:   snapCount,
 		logger:      logger,
+		runner:      runner.New("raft-node", logger),
+		httprunner:  runner.New("http", logger),
 	}
 
 	return rc
@@ -374,15 +376,23 @@ func (rc *raftNode) start() {
 		rc.recoverMembership(*snapshot)
 	}
 
-	httpctx, httpcancel := context.WithCancel(context.Background())
+	httpctx, httpcancel := rc.httprunner.WithManagedCancel(context.Background())
 	rc.httpcancel = httpcancel
-	rc.httprunner.RunDeprecated(httpctx, rc.runRaft)
+	if err := rc.httprunner.RunC(httpctx, rc.runRaft); err != nil {
+		rc.logger.Panic("could not run", zap.Error(err))
+	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := rc.runner.WithManagedCancel(context.Background())
 	rc.cancel = cancel
-	rc.runner.RunDeprecated(ctx, rc.processSnapshot)
-	rc.runner.RunDeprecated(ctx, rc.processRaftEvent)
-	rc.runner.RunDeprecated(ctx, rc.processPropose)
+	if err := rc.runner.RunC(ctx, rc.processSnapshot); err != nil {
+		rc.logger.Panic("could not run", zap.Error(err))
+	}
+	if err := rc.runner.RunC(ctx, rc.processRaftEvent); err != nil {
+		rc.logger.Panic("could not run", zap.Error(err))
+	}
+	if err := rc.runner.RunC(ctx, rc.processPropose); err != nil {
+		rc.logger.Panic("could not run", zap.Error(err))
+	}
 }
 
 func (rc *raftNode) longestConnected() (types.ID, bool) {
@@ -450,7 +460,7 @@ func (rc *raftNode) stop(transfer bool) {
 	}
 
 	rc.cancel()
-	rc.runner.CloseWaitDeprecated()
+	rc.runner.Stop()
 
 	close(rc.commitC)
 	close(rc.snapshotC)
@@ -465,7 +475,7 @@ func (rc *raftNode) stopRaft() {
 func (rc *raftNode) stopHTTP() {
 	rc.httpcancel()
 	rc.transport.Stop()
-	rc.httprunner.CloseWaitDeprecated()
+	rc.httprunner.Stop()
 }
 
 type snapReaderCloser struct{ *bytes.Reader }
@@ -491,7 +501,7 @@ func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 				sm := snap.NewMessage(ms[i], snapReaderCloser{bytes.NewReader(nil)}, 0)
 
 				//TODO:: concurrency limit
-				rc.runner.RunDeprecated(nil, func(context.Context) {
+				rc.runner.Run(func(context.Context) {
 					rc.transport.SendSnapshot(*sm)
 				})
 
