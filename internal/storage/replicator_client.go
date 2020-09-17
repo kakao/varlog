@@ -28,15 +28,16 @@ type ReplicatorClient interface {
 	Run(ctx context.Context) error
 	Close() error
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) <-chan error
-	StorageNodeID() types.StorageNodeID
+	PeerStorageNodeID() types.StorageNodeID
 }
 
 type replicatorClient struct {
-	storageNodeID types.StorageNodeID
-	logStreamID   types.LogStreamID
-	rpcConn       *varlog.RpcConn
-	rpcClient     pb.ReplicatorServiceClient
-	stream        pb.ReplicatorService_ReplicateClient
+	peerStorageNodeID types.StorageNodeID
+	peerLogStreamID   types.LogStreamID
+
+	rpcConn   *varlog.RpcConn
+	rpcClient pb.ReplicatorServiceClient
+	stream    pb.ReplicatorService_ReplicateClient
 
 	once   syncutil.OnlyOnce
 	cancel context.CancelFunc
@@ -56,30 +57,34 @@ type replicatorClient struct {
 }
 
 // Add more detailed peer info (e.g., storage node id)
-func NewReplicatorClient(storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, address string, logger *zap.Logger) (ReplicatorClient, error) {
-	rpcConn, err := varlog.NewRpcConn(address)
+func NewReplicatorClient(peerStorageNodeID types.StorageNodeID, peerLogStreamID types.LogStreamID, peerAddress string, logger *zap.Logger) (ReplicatorClient, error) {
+	rpcConn, err := varlog.NewRpcConn(peerAddress)
 	if err != nil {
 		return nil, err
 	}
-	return NewReplicatorClientFromRpcConn(storageNodeID, logStreamID, rpcConn, logger)
+	return NewReplicatorClientFromRpcConn(peerStorageNodeID, peerLogStreamID, rpcConn, logger)
 }
 
-func NewReplicatorClientFromRpcConn(storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, rpcConn *varlog.RpcConn, logger *zap.Logger) (ReplicatorClient, error) {
+func NewReplicatorClientFromRpcConn(peerStorageNodeID types.StorageNodeID, peerLogStreamID types.LogStreamID, rpcConn *varlog.RpcConn, logger *zap.Logger) (ReplicatorClient, error) {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("replicatorclient").With(zap.Any("peer_snid", peerStorageNodeID))
 	return &replicatorClient{
-		storageNodeID: storageNodeID,
-		logStreamID:   logStreamID,
-		rpcConn:       rpcConn,
-		rpcClient:     pb.NewReplicatorServiceClient(rpcConn.Conn),
-		errCs:         make(map[types.LLSN]chan<- error),
-		requestC:      make(chan *pb.ReplicationRequest, rcRequestCSize),
-		runner:        runner.New("replicatorclient", logger),
-		logger:        logger,
-		replicateStop: make(chan struct{}),
+		peerStorageNodeID: peerStorageNodeID,
+		peerLogStreamID:   peerLogStreamID,
+		rpcConn:           rpcConn,
+		rpcClient:         pb.NewReplicatorServiceClient(rpcConn.Conn),
+		errCs:             make(map[types.LLSN]chan<- error),
+		requestC:          make(chan *pb.ReplicationRequest, rcRequestCSize),
+		runner:            runner.New("replicatorclient", logger),
+		logger:            logger,
+		replicateStop:     make(chan struct{}),
 	}, nil
 }
 
-func (rc *replicatorClient) StorageNodeID() types.StorageNodeID {
-	return rc.storageNodeID
+func (rc *replicatorClient) PeerStorageNodeID() types.StorageNodeID {
+	return rc.peerStorageNodeID
 }
 
 func (rc *replicatorClient) Run(ctx context.Context) error {
@@ -105,7 +110,6 @@ func (rc *replicatorClient) Run(ctx context.Context) error {
 }
 
 func (rc *replicatorClient) Close() error {
-	rc.logger.Info("replicatorclient: close", zap.Any("snid", rc.StorageNodeID()))
 	rc.running.Store(false)
 	if rc.cancel != nil {
 		rc.stopReplicate()
@@ -113,6 +117,7 @@ func (rc *replicatorClient) Close() error {
 		rc.runner.Stop()
 		rc.propagateAllError()
 	}
+	rc.logger.Info("close")
 	return rc.rpcConn.Close()
 }
 
@@ -134,7 +139,7 @@ func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data
 	}
 
 	req := &pb.ReplicationRequest{
-		LogStreamID: rc.logStreamID,
+		LogStreamID: rc.peerLogStreamID,
 		LLSN:        llsn,
 		Payload:     data,
 	}
@@ -162,9 +167,9 @@ func (rc *replicatorClient) addRequestC(ctx context.Context, req *pb.Replication
 		err = errNotRunning
 	}
 	if err == nil {
-		rc.logger.Debug("replicatorclient: sent ReplicationRequest to requestC", zap.Any("request", req), zap.Any("snid", rc.storageNodeID))
+		rc.logger.Debug("sent ReplicationRequest to requestC", zap.Any("request", req))
 	} else {
-		rc.logger.Error("replicatorclient: stop Replicate", zap.Any("request", req), zap.Any("snid", rc.storageNodeID), zap.Error(err))
+		rc.logger.Error("stop Replicate", zap.Any("request", req), zap.Error(err))
 	}
 	return err
 }
@@ -176,7 +181,7 @@ LOOP:
 		case req := <-rc.requestC:
 			err := rc.stream.Send(req)
 			if err != nil {
-				rc.logger.Error("replicatorclient: could not send", zap.Error(err), zap.Any("snid", rc.storageNodeID), zap.Any("request", req))
+				rc.logger.Error("could not send", zap.Error(err), zap.Any("request", req))
 				rc.propagateError(req.GetLLSN(), err)
 				break LOOP
 			}
@@ -186,7 +191,7 @@ LOOP:
 	}
 
 	if err := rc.stream.CloseSend(); err != nil {
-		rc.logger.Error("replicatorclient: CloseSend error", zap.Error(err), zap.Any("snid", rc.storageNodeID))
+		rc.logger.Error("CloseSend error", zap.Error(err))
 	}
 
 	rc.stopReplicate()
@@ -203,7 +208,7 @@ LOOP:
 		default:
 			rsp, err := rc.stream.Recv()
 			if err != nil {
-				rc.logger.Info("replicatorclient: could not recv", zap.Error(err), zap.Any("snid", rc.storageNodeID))
+				rc.logger.Info("could not recv", zap.Error(err))
 				break LOOP
 			}
 			rc.propagateError(rsp.GetLLSN(), err)
@@ -217,8 +222,8 @@ LOOP:
 
 func (rc *replicatorClient) propagateError(llsn types.LLSN, err error) {
 	const (
-		errorPropagation = "replicatorclient: propagate error"
-		okPropagation    = "replicatorclient: propagate ok"
+		errorPropagation = "propagate error"
+		okPropagation    = "propagate ok"
 	)
 
 	var msg string
@@ -232,14 +237,14 @@ func (rc *replicatorClient) propagateError(llsn types.LLSN, err error) {
 	defer rc.muErrCs.Unlock()
 	if errC, ok := rc.errCs[llsn]; ok {
 		if ce := rc.logger.Check(zapcore.DebugLevel, msg); ce != nil {
-			ce.Write(zap.Any("llsn", llsn), zap.Any("snid", rc.storageNodeID), zap.Error(err))
+			ce.Write(zap.Any("llsn", llsn), zap.Error(err))
 		}
 		delete(rc.errCs, llsn)
 		errC <- err
 		close(errC)
 		return
 	}
-	rc.logger.Error("replicatorclient: could not propagate error", zap.Any("llsn", llsn), zap.Error(err), zap.Any("snid", rc.storageNodeID))
+	rc.logger.Error("could not propagate error", zap.Any("llsn", llsn), zap.Error(err))
 }
 
 func (rc *replicatorClient) propagateAllError() {
@@ -248,7 +253,7 @@ func (rc *replicatorClient) propagateAllError() {
 	defer rc.muErrCs.Unlock()
 	for llsn, errC := range rc.errCs {
 		err := errNotRunning
-		rc.logger.Info("replicatorclient: propagate error", zap.Any("llsn", llsn), zap.Any("snid", rc.storageNodeID), zap.Error(err))
+		rc.logger.Info("propagate error", zap.Any("llsn", llsn), zap.Error(err))
 		delete(rc.errCs, llsn)
 		errC <- err
 		close(errC)

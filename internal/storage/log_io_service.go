@@ -7,7 +7,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	snpb "github.com/kakao/varlog/proto/storage_node"
-
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -15,22 +15,30 @@ type LogIOService struct {
 	snpb.UnimplementedLogIOServer
 	storageNodeID types.StorageNodeID
 	lseGetter     LogStreamExecutorGetter
+	logger        *zap.Logger
 }
 
-func NewLogIOService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter) *LogIOService {
+func NewLogIOService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, logger *zap.Logger) *LogIOService {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("logioservice")
 	return &LogIOService{
 		storageNodeID: storageNodeID,
 		lseGetter:     lseGetter,
+		logger:        logger,
 	}
 }
 
 func (s *LogIOService) Register(server *grpc.Server) {
+	s.logger.Info("register to rpc server")
 	snpb.RegisterLogIOServer(server, s)
 }
 
 func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.AppendResponse, error) {
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
+		s.logger.Error("no logstreamexecutor", zap.Any("request", req))
 		return nil, varlog.ErrInvalidArgument
 	}
 	// TODO: create child context by using operation timeout
@@ -44,6 +52,7 @@ func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*sn
 	}
 	glsn, err := lse.Append(ctx, req.GetPayload(), backups...)
 	if err != nil {
+		s.logger.Error("could not append", zap.Any("request", req), zap.Error(err))
 		return nil, varlog.ToStatusError(err)
 	}
 	return &snpb.AppendResponse{GLSN: glsn}, nil
@@ -52,28 +61,30 @@ func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*sn
 func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.ReadResponse, error) {
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
+		s.logger.Error("no logstreamexecutor", zap.Any("request", req))
 		return nil, varlog.ErrInvalid
 	}
 
 	// TODO: create child context by using operation timeout
 	data, err := lse.Read(ctx, req.GetGLSN())
 	if err != nil {
+		s.logger.Error("could not read", zap.Any("request", req), zap.Error(err))
 		return nil, varlog.ToStatusError(err)
 	}
 	return &snpb.ReadResponse{Payload: data, GLSN: req.GetGLSN()}, nil
 }
 
 func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) error {
-	// FIXME: wrap error code by using grpc.status package
-	//
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
+		s.logger.Error("no logstreamexecutor", zap.Any("request", req))
 		return varlog.ErrInvalid
 	}
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	c, err := lse.Subscribe(ctx, req.GetGLSN())
 	if err != nil {
+		s.logger.Error("could not subscribe", zap.Any("request", req), zap.Error(err))
 		return varlog.ToStatusError(err)
 	}
 	for r := range c {

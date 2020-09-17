@@ -77,16 +77,16 @@ func (mr *MockReplicatorClientMockRecorder) Replicate(ctx, llsn, data interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockReplicatorClient)(nil).Replicate), ctx, llsn, data)
 }
 
-// StorageNodeID mocks base method.
-func (m *MockReplicatorClient) StorageNodeID() types.StorageNodeID {
+// PeerStorageNodeID mocks base method.
+func (m *MockReplicatorClient) PeerStorageNodeID() types.StorageNodeID {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StorageNodeID")
+	ret := m.ctrl.Call(m, "PeerStorageNodeID")
 	ret0, _ := ret[0].(types.StorageNodeID)
 	return ret0
 }
 
-// StorageNodeID indicates an expected call of StorageNodeID.
-func (mr *MockReplicatorClientMockRecorder) StorageNodeID() *gomock.Call {
+// PeerStorageNodeID indicates an expected call of PeerStorageNodeID.
+func (mr *MockReplicatorClientMockRecorder) PeerStorageNodeID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StorageNodeID", reflect.TypeOf((*MockReplicatorClient)(nil).StorageNodeID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeerStorageNodeID", reflect.TypeOf((*MockReplicatorClient)(nil).PeerStorageNodeID))
 }

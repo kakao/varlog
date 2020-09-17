@@ -29,54 +29,80 @@ const replicateCSize = 0
 var errNoReplicas = errors.New("replicator: no replicas")
 
 type Replicator interface {
-	Run(context.Context)
+	Run(context.Context) error
 	Close()
 	Replicate(context.Context, types.LLSN, []byte, []Replica) <-chan error
 }
 
 type replicator struct {
-	rcm        map[types.StorageNodeID]ReplicatorClient
-	mtxRcm     sync.RWMutex
-	replicateC chan *replicateTask
-	once       sync.Once
-	cancel     context.CancelFunc
-	muCancel   sync.Mutex
+	logStreamID types.LogStreamID
+	rcm         map[types.StorageNodeID]ReplicatorClient
+	mtxRcm      sync.RWMutex
+
+	running   bool
+	muRunning sync.Mutex
+	cancel    context.CancelFunc
+
 	runner     *runner.Runner
-	logger     *zap.Logger
+	replicateC chan *replicateTask
+
+	logger *zap.Logger
 }
 
-func NewReplicator(logger *zap.Logger) Replicator {
+func NewReplicator(logStreamID types.LogStreamID, logger *zap.Logger) Replicator {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("replicator")
 	return &replicator{
-		rcm:        make(map[types.StorageNodeID]ReplicatorClient),
-		replicateC: make(chan *replicateTask, replicateCSize),
-		runner:     runner.New("replicator", logger),
-		logger:     logger,
+		logStreamID: logStreamID,
+		rcm:         make(map[types.StorageNodeID]ReplicatorClient),
+		replicateC:  make(chan *replicateTask, replicateCSize),
+		runner:      runner.New("replicator", logger),
+		logger:      logger,
 	}
 }
 
-func (r *replicator) Run(ctx context.Context) {
-	r.once.Do(func() {
-		mctx, cancel := r.runner.WithManagedCancel(ctx)
-		r.muCancel.Lock()
-		r.cancel = cancel
-		r.muCancel.Unlock()
-		r.runner.RunC(mctx, r.dispatchReplicateC)
-	})
+func (r *replicator) Run(ctx context.Context) error {
+	r.muRunning.Lock()
+	defer r.muRunning.Unlock()
+
+	if r.running {
+		return nil
+	}
+	r.running = true
+
+	mctx, cancel := r.runner.WithManagedCancel(ctx)
+	r.cancel = cancel
+
+	if err := r.runner.RunC(mctx, r.dispatchReplicateC); err != nil {
+		cancel()
+		r.runner.Stop()
+		return err
+	}
+	r.logger.Info("start")
+	return nil
 }
 
 func (r *replicator) Close() {
-	r.muCancel.Lock()
-	defer r.muCancel.Unlock()
+	r.muRunning.Lock()
+	defer r.muRunning.Unlock()
+
+	if !r.running {
+		return
+	}
+	r.running = false
 	if r.cancel != nil {
 		r.cancel()
-		r.mtxRcm.Lock()
-		for _, rc := range r.rcm {
-			rc.Close()
-			delete(r.rcm, rc.StorageNodeID())
-		}
-		r.mtxRcm.Unlock()
-		r.runner.Stop()
 	}
+	r.mtxRcm.Lock()
+	for _, rc := range r.rcm {
+		rc.Close()
+		delete(r.rcm, rc.PeerStorageNodeID())
+	}
+	r.mtxRcm.Unlock()
+	r.runner.Stop()
+	r.logger.Info("close")
 }
 
 func (r *replicator) Replicate(ctx context.Context, llsn types.LLSN, data []byte, replicas []Replica) <-chan error {
@@ -153,7 +179,7 @@ func (r *replicator) replicate(ctx context.Context, t *replicateTask) {
 	r.mtxRcm.Lock()
 	for _, errRc := range errRcs {
 		errRc.Close()
-		delete(r.rcm, errRc.StorageNodeID())
+		delete(r.rcm, errRc.PeerStorageNodeID())
 	}
 	r.mtxRcm.Unlock()
 }

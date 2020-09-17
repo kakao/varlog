@@ -19,7 +19,7 @@ func TestManagementServiceGetMetadata(t *testing.T) {
 		defer ctrl.Finish()
 
 		mock := NewMockManagement(ctrl)
-		service := NewManagementService(zap.NewNop(), mock)
+		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to get metadata", func() {
 			mock.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, varlog.ErrInternal)
@@ -45,7 +45,7 @@ func TestManagementServiceAddLogStream(t *testing.T) {
 		defer ctrl.Finish()
 
 		mock := NewMockManagement(ctrl)
-		service := NewManagementService(zap.NewNop(), mock)
+		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to add the LogStream", func() {
 			mock.EXPECT().AddLogStream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("", varlog.ErrInternal)
@@ -95,7 +95,7 @@ func TestManagementServiceRemoveLogStream(t *testing.T) {
 		defer ctrl.Finish()
 
 		mock := NewMockManagement(ctrl)
-		service := NewManagementService(zap.NewNop(), mock)
+		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to remove the LogStream", func() {
 			mock.EXPECT().RemoveLogStream(gomock.Any(), gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)
@@ -145,7 +145,7 @@ func TestManagementServiceSeal(t *testing.T) {
 		defer ctrl.Finish()
 
 		mock := NewMockManagement(ctrl)
-		service := NewManagementService(zap.NewNop(), mock)
+		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to seal the LogStream", func() {
 			mock.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(vpb.LogStreamStatusRunning, types.GLSN(1), varlog.ErrInternal)
@@ -171,7 +171,7 @@ func TestManagementServiceUnseal(t *testing.T) {
 		defer ctrl.Finish()
 
 		mock := NewMockManagement(ctrl)
-		service := NewManagementService(zap.NewNop(), mock)
+		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to unseal the LogStream", func() {
 			mock.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)

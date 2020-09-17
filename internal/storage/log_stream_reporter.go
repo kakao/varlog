@@ -38,7 +38,7 @@ type lsrCommitTask struct {
 }
 
 type LogStreamReporter interface {
-	Run(ctx context.Context)
+	Run(ctx context.Context) error
 	Close()
 	StorageNodeID() types.StorageNodeID
 	GetReport(ctx context.Context) (types.GLSN, []UncommittedLogStreamStatus, error)
@@ -50,17 +50,24 @@ type logStreamReporter struct {
 	knownHighWatermark types.AtomicGLSN
 	lseGetter          LogStreamExecutorGetter
 	history            map[types.GLSN][]UncommittedLogStreamStatus
-	reportC            chan *lsrReportTask
-	commitC            chan lsrCommitTask
-	cancel             context.CancelFunc
-	muCancel           sync.Mutex
-	runner             *runner.Runner
-	once               sync.Once
-	options            *LogStreamReporterOptions
-	logger             *zap.Logger
+
+	running   bool
+	muRunning sync.Mutex
+
+	cancel  context.CancelFunc
+	runner  *runner.Runner
+	reportC chan *lsrReportTask
+	commitC chan lsrCommitTask
+
+	options *LogStreamReporterOptions
+	logger  *zap.Logger
 }
 
 func NewLogStreamReporter(logger *zap.Logger, storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, options *LogStreamReporterOptions) LogStreamReporter {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("logstreamreporter")
 	return &logStreamReporter{
 		storageNodeID: storageNodeID,
 		lseGetter:     lseGetter,
@@ -77,25 +84,48 @@ func (lsr *logStreamReporter) StorageNodeID() types.StorageNodeID {
 	return lsr.storageNodeID
 }
 
-func (lsr *logStreamReporter) Run(ctx context.Context) {
-	lsr.once.Do(func() {
-		lsr.muCancel.Lock()
-		// ctx, lsr.cancel = context.WithCancel(ctx)
-		mctx, cancel := lsr.runner.WithManagedCancel(ctx)
-		lsr.cancel = cancel
-		lsr.muCancel.Unlock()
-		lsr.runner.RunC(mctx, lsr.dispatchCommit)
-		lsr.runner.RunC(mctx, lsr.dispatchReport)
-	})
+func (lsr *logStreamReporter) Run(ctx context.Context) error {
+	lsr.muRunning.Lock()
+	defer lsr.muRunning.Unlock()
+
+	if lsr.running {
+		return nil
+	}
+	lsr.running = true
+
+	mctx, cancel := lsr.runner.WithManagedCancel(ctx)
+	lsr.cancel = cancel
+
+	var err error
+	if err = lsr.runner.RunC(mctx, lsr.dispatchCommit); err != nil {
+		lsr.logger.Error("could not run dispatchCommit", zap.Error(err))
+		goto err_out
+	}
+	if err = lsr.runner.RunC(mctx, lsr.dispatchReport); err != nil {
+		lsr.logger.Error("could not run dispatchReport", zap.Error(err))
+		goto err_out
+	}
+	return nil
+
+err_out:
+	cancel()
+	lsr.runner.Stop()
+	return err
 }
 
 func (lsr *logStreamReporter) Close() {
-	lsr.muCancel.Lock()
-	defer lsr.muCancel.Unlock()
+	lsr.muRunning.Lock()
+	defer lsr.muRunning.Unlock()
+
+	if !lsr.running {
+		return
+	}
+	lsr.running = false
 	if lsr.cancel != nil {
 		lsr.cancel()
-		lsr.runner.Stop()
 	}
+	lsr.runner.Stop()
+	lsr.logger.Info("stop")
 }
 
 func (lsr *logStreamReporter) dispatchReport(ctx context.Context) {

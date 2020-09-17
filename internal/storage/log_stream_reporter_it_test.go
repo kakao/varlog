@@ -33,7 +33,7 @@ func TestLogStreamReporterClientLogStreamReporterService(t *testing.T) {
 		defer ctrl.Finish()
 
 		lsr := NewMockLogStreamReporter(ctrl)
-		service := NewLogStreamReporterService(lsr)
+		service := NewLogStreamReporterService(lsr, nil)
 
 		Convey("And a LogStreamReporterClient calls GetReport", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 			lsr, err := NewLogStreamReporterClient(addr)

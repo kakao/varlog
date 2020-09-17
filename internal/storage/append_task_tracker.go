@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/kakao/varlog/pkg/varlog/types"
-	"go.uber.org/zap"
 )
 
 type commitWatcher struct {
@@ -111,9 +110,8 @@ func (t *appendTask) close() {
 }
 
 type appendTaskTracker struct {
-	mu     sync.RWMutex
-	m      map[types.LLSN]*appendTask
-	logger *zap.Logger
+	mu sync.RWMutex
+	m  map[types.LLSN]*appendTask
 }
 
 func newAppendTracker() appendTaskTracker {

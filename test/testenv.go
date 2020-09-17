@@ -182,9 +182,7 @@ func (clus *VarlogCluster) Close() error {
 
 	for _, sn := range clus.SNs {
 		// TODO:: sn.Close() does not close connect
-		if erri := sn.Close(); erri != nil {
-			err = erri
-		}
+		sn.Close()
 	}
 
 	return err

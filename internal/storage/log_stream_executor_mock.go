@@ -112,9 +112,11 @@ func (m *MockLogStreamExecutor) EXPECT() *MockLogStreamExecutorMockRecorder {
 }
 
 // Run mocks base method.
-func (m *MockLogStreamExecutor) Run(ctx context.Context) {
+func (m *MockLogStreamExecutor) Run(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Run", ctx)
+	ret := m.ctrl.Call(m, "Run", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Run indicates an expected call of Run.
