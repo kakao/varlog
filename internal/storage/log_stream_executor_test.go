@@ -42,7 +42,10 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 			storage := NewMockStorage(ctrl)
 			lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
-			lse.Run(context.TODO())
+
+			err = lse.Run(context.TODO())
+			So(err, ShouldBeNil)
+
 			lse.Close()
 		})
 	})
@@ -66,7 +69,8 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		})
 		So(err, ShouldBeNil)
 
-		lse.Run(context.TODO())
+		err = lse.Run(context.TODO())
+		So(err, ShouldBeNil)
 
 		Reset(func() {
 			lse.Close()
@@ -200,7 +204,8 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 		replicator.EXPECT().Run(gomock.Any()).AnyTimes()
 		replicator.EXPECT().Close().AnyTimes()
 
-		lse.Run(context.TODO())
+		err = lse.Run(context.TODO())
+		So(err, ShouldBeNil)
 
 		Reset(func() {
 			lse.Close()
@@ -403,7 +408,8 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
-		lse.Run(context.TODO())
+		err = lse.Run(context.TODO())
+		So(err, ShouldBeNil)
 
 		Reset(func() {
 			lse.Close()
@@ -493,7 +499,8 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
-		lse.Run(context.TODO())
+		err = lse.Run(context.TODO())
+		So(err, ShouldBeNil)
 
 		Reset(func() {
 			lse.Close()

@@ -54,7 +54,7 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 			},
 		).AnyTimes()
 
-		rs := NewReplicatorService(types.StorageNodeID(1), lseGetter)
+		rs := NewReplicatorService(types.StorageNodeID(1), lseGetter, nil)
 
 		Convey("And a ReplicatorClient tries to replicate data to it", conveyutil.WithServiceServer(rs, func(server *grpc.Server, addr string) {
 			rc, err := NewReplicatorClient(storageNodeID, logStreamID, addr, zap.NewNop())
@@ -163,7 +163,7 @@ func TestReplicatorIntegration(t *testing.T) {
 			lseGetterList = append(lseGetterList, lseGetter)
 
 			// ReplicatorService
-			rs := NewReplicatorService(storageNodeID, lseGetter)
+			rs := NewReplicatorService(storageNodeID, lseGetter, nil)
 			rsList = append(rsList, rs)
 
 			// RPC Server
@@ -240,7 +240,8 @@ func TestReplicatorIntegration(t *testing.T) {
 
 		var replicatorList []Replicator
 		for lsIdx := 0; lsIdx < numLSs; lsIdx++ {
-			replicator := NewReplicator(logger)
+			logStreamID := types.LogStreamID(lsIdx + 1)
+			replicator := NewReplicator(logStreamID, logger)
 			replicatorList = append(replicatorList, replicator)
 			replicator.Run(context.TODO())
 		}
@@ -325,7 +326,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 			},
 		).AnyTimes()
 
-		rs1 := NewReplicatorService(types.StorageNodeID(1), lseGetter)
+		rs1 := NewReplicatorService(types.StorageNodeID(1), lseGetter, nil)
 
 		Convey("And another Replicator is running", conveyutil.WithServiceServer(rs1, func(server *grpc.Server, addr string) {
 			replicas = append(replicas, Replica{
@@ -335,7 +336,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 			})
 
 			rc2 := NewMockReplicatorClient(ctrl)
-			rc2.EXPECT().StorageNodeID().Return(types.StorageNodeID(2)).AnyTimes()
+			rc2.EXPECT().PeerStorageNodeID().Return(types.StorageNodeID(2)).AnyTimes()
 			rc2.EXPECT().Close().AnyTimes()
 
 			Convey("And a Replicator tries to replicate data to them", func() {
@@ -345,9 +346,9 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 					Address:       "1.2.3.4:5", // fake address
 				})
 
-				r := NewReplicator(zap.NewNop())
+				r := NewReplicator(logStreamID, zap.NewNop())
 				r.(*replicator).mtxRcm.Lock()
-				r.(*replicator).rcm[rc2.StorageNodeID()] = rc2
+				r.(*replicator).rcm[rc2.PeerStorageNodeID()] = rc2
 				r.(*replicator).mtxRcm.Unlock()
 
 				ctx, cancel := context.WithCancel(context.TODO())

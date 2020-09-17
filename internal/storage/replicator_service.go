@@ -7,6 +7,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -24,16 +25,23 @@ type ReplicatorService struct {
 	storageNodeID types.StorageNodeID
 	lseGetter     LogStreamExecutorGetter
 	pb.UnimplementedReplicatorServiceServer
+	logger *zap.Logger
 }
 
-func NewReplicatorService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter) *ReplicatorService {
+func NewReplicatorService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, logger *zap.Logger) *ReplicatorService {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("replicatorservice")
 	return &ReplicatorService{
 		storageNodeID: storageNodeID,
 		lseGetter:     lseGetter,
+		logger:        logger,
 	}
 }
 
 func (s *ReplicatorService) Register(server *grpc.Server) {
+	s.logger.Info("register to rpc server")
 	pb.RegisterReplicatorServiceServer(server, s)
 }
 

@@ -5,18 +5,25 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 type LogStreamReporterService struct {
+	logger *zap.Logger
 	LogStreamReporter
 }
 
-func NewLogStreamReporterService(lsr LogStreamReporter) *LogStreamReporterService {
-	return &LogStreamReporterService{lsr}
+func NewLogStreamReporterService(lsr LogStreamReporter, logger *zap.Logger) *LogStreamReporterService {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("logstreamreporterservice")
+	return &LogStreamReporterService{LogStreamReporter: lsr, logger: logger}
 }
 
 func (s *LogStreamReporterService) Register(server *grpc.Server) {
+	s.logger.Info("register to rpc server")
 	pb.RegisterLogStreamReporterServiceServer(server, s)
 }
 
@@ -26,6 +33,7 @@ func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty
 	}
 	knownHighWatermark, reports, err := s.LogStreamReporter.GetReport(ctx)
 	if err != nil {
+		s.logger.Error("could not get report", zap.Error(err))
 		return nil, err
 	}
 	rsp.Uncommit = make([]*pb.LocalLogStreamDescriptor_LogStreamUncommitReport, len(reports))
@@ -42,6 +50,7 @@ func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty
 
 func (s *LogStreamReporterService) Commit(ctx context.Context, req *pb.GlobalLogStreamDescriptor) (*types.Empty, error) {
 	if len(req.CommitResult) == 0 {
+		s.logger.Error("no commit result in Commit")
 		return &types.Empty{}, nil
 	}
 	hwm := req.GetHighWatermark()

@@ -19,7 +19,7 @@ func TestLogStreamReporterServiceGetReport(t *testing.T) {
 
 		lsrMock := NewMockLogStreamReporter(ctrl)
 		lsrMock.EXPECT().StorageNodeID().Return(types.StorageNodeID(1)).AnyTimes()
-		service := NewLogStreamReporterService(lsrMock)
+		service := NewLogStreamReporterService(lsrMock, nil)
 
 		Convey("When LogStreamReporter.GetReport returns an error", func() {
 			lsrMock.EXPECT().GetReport(gomock.Any()).Return(
@@ -46,7 +46,7 @@ func TestLogStreamReporterServiceCommit(t *testing.T) {
 
 		lsrMock := NewMockLogStreamReporter(ctrl)
 		lsrMock.EXPECT().StorageNodeID().Return(types.StorageNodeID(1)).AnyTimes()
-		service := NewLogStreamReporterService(lsrMock)
+		service := NewLogStreamReporterService(lsrMock, nil)
 
 		Convey("When LogStreamReporter.Commit returns an error", func() {
 			lsrMock.EXPECT().Commit(gomock.Any(), gomock.Any(), gomock.Any(),

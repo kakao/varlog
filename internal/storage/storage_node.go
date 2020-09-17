@@ -9,9 +9,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner/stopwaiter"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil"
 	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 	"go.uber.org/zap"
@@ -48,26 +46,20 @@ type StorageNode struct {
 	clusterID     types.ClusterID
 	storageNodeID types.StorageNodeID
 
-	lseMtx       sync.RWMutex
-	lseMap       map[types.LogStreamID]LogStreamExecutor
-	lseCancelers map[types.LogStreamID]context.CancelFunc
+	server     *grpc.Server
+	serverAddr string
+
+	running   bool
+	muRunning sync.Mutex
+	sw        *stopwaiter.StopWaiter
+
+	lseMtx sync.RWMutex
+	lseMap map[types.LogStreamID]LogStreamExecutor
 
 	lsr LogStreamReporter
 
 	options *StorageNodeOptions
 	logger  *zap.Logger
-
-	sw     *stopwaiter.StopWaiter
-	runner *runner.Runner
-	// FIXME (jun): remove context
-	cancel   context.CancelFunc
-	muCancel sync.Mutex
-	once     syncutil.OnlyOnce
-
-	server *grpc.Server
-
-	// FIXME (jun): serverAddr is not necessary, it is needed only for tests.
-	serverAddr string
 }
 
 func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
@@ -75,68 +67,84 @@ func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
 		clusterID:     options.ClusterID,
 		storageNodeID: options.StorageNodeID,
 		lseMap:        make(map[types.LogStreamID]LogStreamExecutor),
-		lseCancelers:  make(map[types.LogStreamID]context.CancelFunc),
 		options:       options,
 		logger:        options.Logger,
 		sw:            stopwaiter.New(),
-		runner:        runner.New(fmt.Sprintf("storagenode-%v", options.StorageNodeID), options.Logger),
 	}
+	if sn.logger == nil {
+		sn.logger = zap.NewNop()
+	}
+	sn.logger = sn.logger.Named(fmt.Sprintf("storagenode")).With(zap.Any("cid", sn.clusterID), zap.Any("snid", sn.storageNodeID))
 	sn.lsr = NewLogStreamReporter(sn.logger, sn.storageNodeID, sn, &options.LogStreamReporterOptions)
 	sn.server = grpc.NewServer()
 
-	NewLogStreamReporterService(sn.lsr).Register(sn.server)
-	NewLogIOService(sn.storageNodeID, sn).Register(sn.server)
-	NewManagementService(sn.logger, sn).Register(sn.server)
-	NewReplicatorService(sn.storageNodeID, sn).Register(sn.server)
+	NewLogStreamReporterService(sn.lsr, sn.logger).Register(sn.server)
+	NewLogIOService(sn.storageNodeID, sn, sn.logger).Register(sn.server)
+	NewManagementService(sn, sn.logger).Register(sn.server)
+	NewReplicatorService(sn.storageNodeID, sn, sn.logger).Register(sn.server)
 
 	return sn, nil
 }
 
 func (sn *StorageNode) Run() error {
-	return sn.once.Do(func() error {
-		ctx, cancel := sn.runner.WithManagedCancel(context.Background())
-		sn.muCancel.Lock()
-		sn.cancel = cancel
-		sn.muCancel.Unlock()
-		if err := sn.runner.RunC(ctx, sn.lsr.Run); err != nil {
-			return err
-		}
+	sn.muRunning.Lock()
+	defer sn.muRunning.Unlock()
 
-		sn.logger.Info("listening", zap.String("address", sn.options.RPCBindAddress))
-		lis, err := net.Listen("tcp", sn.options.RPCBindAddress)
-		if err != nil {
-			sn.logger.Error("could not listen", zap.Error(err))
-			return err
-		}
-		addrs, _ := netutil.GetListenerAddrs(lis.Addr())
-		// TODO (jun): choose best address
-		sn.serverAddr = addrs[0]
-
-		go func() {
-			if err := sn.server.Serve(lis); err != nil {
-				sn.logger.Error("could not serve", zap.Error(err))
-				sn.Close()
-			}
-		}()
-
-		sn.logger.Info("starting storagenode")
+	if sn.running {
 		return nil
-	})
+	}
+	sn.running = true
+
+	// LogStreamReporter
+	if err := sn.lsr.Run(context.Background()); err != nil {
+		return err
+	}
+
+	// Listener
+	lis, err := net.Listen("tcp", sn.options.RPCBindAddress)
+	if err != nil {
+		sn.logger.Error("could not listen", zap.Error(err))
+		return err
+	}
+	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
+	// TODO (jun): choose best address
+	sn.serverAddr = addrs[0]
+
+	// RPC Server
+	go func() {
+		if err := sn.server.Serve(lis); err != nil {
+			sn.logger.Error("could not serve", zap.Error(err))
+			sn.Close()
+		}
+	}()
+
+	sn.logger.Info("start")
+	return nil
 }
 
-func (sn *StorageNode) Close() error {
-	sn.muCancel.Lock()
-	defer sn.muCancel.Unlock()
-	if sn.cancel != nil {
-		sn.cancel()
-		sn.lsr.Close()
-		for _, lse := range sn.GetLogStreamExecutors() {
-			lse.Close()
-		}
-		sn.runner.Stop()
-		sn.sw.Stop()
+func (sn *StorageNode) Close() {
+	sn.muRunning.Lock()
+	defer sn.muRunning.Unlock()
+
+	if !sn.running {
+		return
 	}
-	return nil
+	sn.running = false
+
+	// LogStreamReporter
+	sn.lsr.Close()
+
+	// LogStreamExecutors
+	for _, lse := range sn.GetLogStreamExecutors() {
+		lse.Close()
+	}
+
+	// RPC Server
+	// FIXME (jun): Use GracefulStop
+	sn.server.Stop()
+
+	sn.sw.Stop()
+	sn.logger.Info("stop")
 }
 
 func (sn *StorageNode) Wait() {
@@ -209,13 +217,13 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 	if err != nil {
 		return "", err
 	}
-	cancel, err := sn.runner.Run(lse.Run)
-	if err != nil {
+
+	if err := lse.Run(context.Background()); err != nil {
+		lse.Close()
 		return "", err
 	}
 
 	sn.lseMap[lsid] = lse
-	sn.lseCancelers[lsid] = cancel
 	return stgPath, nil
 }
 

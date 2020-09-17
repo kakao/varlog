@@ -37,7 +37,7 @@ func TestStorageNodeServiceAppend(t *testing.T) {
 
 		const logStreamID = types.LogStreamID(1)
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		s := NewLogIOService(types.StorageNodeID(1), lseGetter)
+		s := NewLogIOService(types.StorageNodeID(1), lseGetter, nil)
 
 		Convey("it should return error if the LogStream does not exist", func() {
 			setLseGetter(lseGetter)
@@ -84,7 +84,7 @@ func TestStorageNodeServiceRead(t *testing.T) {
 
 		const logStreamID = types.LogStreamID(1)
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		s := NewLogIOService(types.StorageNodeID(1), lseGetter)
+		s := NewLogIOService(types.StorageNodeID(1), lseGetter, nil)
 
 		Convey("it should return error if the LogStream does not exist", func() {
 			setLseGetter(lseGetter)
@@ -129,7 +129,7 @@ func TestStorageNodeServiceSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		s := NewLogIOService(types.StorageNodeID(1), lseGetter)
+		s := NewLogIOService(types.StorageNodeID(1), lseGetter, nil)
 
 		Convey("When requested LogStreamID is not in the StorageNode", func() {
 			setLseGetter(lseGetter)
@@ -149,7 +149,7 @@ func TestStorageNodeServiceTrim(t *testing.T) {
 		const nrLSEs = 10
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		s := NewLogIOService(types.StorageNodeID(1), lseGetter)
+		s := NewLogIOService(types.StorageNodeID(1), lseGetter, nil)
 
 		Convey("it should return the number of log entries removed", func() {
 			var lses []*MockLogStreamExecutor

@@ -22,15 +22,15 @@ func TestReplicator(t *testing.T) {
 		rcs := make([]*MockReplicatorClient, numRCs)
 		for i := 0; i < numRCs; i++ {
 			rcs[i] = NewMockReplicatorClient(ctrl)
-			rcs[i].EXPECT().StorageNodeID().Return(types.StorageNodeID(i)).AnyTimes()
+			rcs[i].EXPECT().PeerStorageNodeID().Return(types.StorageNodeID(i)).AnyTimes()
 		}
 
-		r := NewReplicator(zap.NewNop())
+		r := NewReplicator(types.LogStreamID(1), zap.NewNop())
 
 		Convey("it should be run and closed", func() {
 			r.Run(context.TODO())
 			for i := 0; i < numRCs; i++ {
-				r.(*replicator).rcm[rcs[i].StorageNodeID()] = rcs[i]
+				r.(*replicator).rcm[rcs[i].PeerStorageNodeID()] = rcs[i]
 				rcs[i].EXPECT().Close().AnyTimes()
 			}
 		})

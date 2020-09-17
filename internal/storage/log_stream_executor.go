@@ -26,7 +26,7 @@ type Unsealer interface {
 }
 
 type LogStreamExecutor interface {
-	Run(ctx context.Context)
+	Run(ctx context.Context) error
 	Close()
 
 	LogStreamID() types.LogStreamID
@@ -71,15 +71,14 @@ type logStreamExecutor struct {
 	storage     Storage
 	replicator  Replicator
 
-	once   sync.Once
-	runner *runner.Runner
+	running   bool
+	muRunning sync.Mutex
+	cancel    context.CancelFunc
+	runner    *runner.Runner
 
 	appendC chan *appendTask
 	commitC chan commitTask
 	trimC   chan *trimTask
-
-	muCancel sync.Mutex
-	cancel   context.CancelFunc
 
 	// lock guard for knownNextGLSN and uncommittedLLSNBegin
 	// knownNextGLSN and uncommittedLLSNBegin should be updated simultaneously.
@@ -141,10 +140,15 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 	if storage == nil {
 		return nil, fmt.Errorf("logstream: no storage")
 	}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("logstreamexecutor").With(zap.Any("lsid", logStreamID))
+
 	lse := &logStreamExecutor{
 		logStreamID:          logStreamID,
 		storage:              storage,
-		replicator:           NewReplicator(logger),
+		replicator:           NewReplicator(logStreamID, logger),
 		runner:               runner.New(fmt.Sprintf("logstreamexecutor-%v", logStreamID), logger),
 		trackers:             newAppendTracker(),
 		appendC:              make(chan *appendTask, options.AppendCSize),
@@ -167,27 +171,57 @@ func (lse *logStreamExecutor) LogStreamID() types.LogStreamID {
 	return lse.logStreamID
 }
 
-func (lse *logStreamExecutor) Run(ctx context.Context) {
-	lse.once.Do(func() {
-		mctx, cancel := lse.runner.WithManagedCancel(ctx)
-		lse.muCancel.Lock()
-		lse.cancel = cancel
-		lse.muCancel.Unlock()
-		lse.runner.RunC(mctx, lse.dispatchAppendC)
-		lse.runner.RunC(mctx, lse.dispatchTrimC)
-		lse.runner.RunC(mctx, lse.dispatchCommitC)
-		lse.replicator.Run(mctx)
-	})
+func (lse *logStreamExecutor) Run(ctx context.Context) error {
+	lse.muRunning.Lock()
+	defer lse.muRunning.Unlock()
+
+	if lse.running {
+		return nil
+	}
+	lse.running = true
+
+	mctx, cancel := lse.runner.WithManagedCancel(ctx)
+	lse.cancel = cancel
+
+	var err error
+	if err = lse.runner.RunC(mctx, lse.dispatchAppendC); err != nil {
+		lse.logger.Error("could not run dispatchAppendC", zap.Error(err))
+		goto err_out
+	}
+	if err = lse.runner.RunC(mctx, lse.dispatchTrimC); err != nil {
+		lse.logger.Error("could not run dispatchTrimC", zap.Error(err))
+		goto err_out
+	}
+	if err = lse.runner.RunC(mctx, lse.dispatchCommitC); err != nil {
+		lse.logger.Error("could not run dispatchCommitC", zap.Error(err))
+		goto err_out
+	}
+	if err = lse.replicator.Run(mctx); err != nil {
+		lse.logger.Error("could not run replicator", zap.Error(err))
+		goto err_out
+	}
+	return nil
+
+err_out:
+	cancel()
+	lse.runner.Stop()
+	return err
 }
 
 func (lse *logStreamExecutor) Close() {
-	lse.muCancel.Lock()
-	defer lse.muCancel.Unlock()
+	lse.muRunning.Lock()
+	defer lse.muRunning.Unlock()
+
+	if !lse.running {
+		return
+	}
+	lse.running = false
 	if lse.cancel != nil {
 		lse.cancel()
-		lse.replicator.Close()
-		lse.runner.Stop()
 	}
+	lse.replicator.Close()
+	lse.runner.Stop()
+	lse.logger.Info("stop")
 }
 
 func (lse *logStreamExecutor) Status() vpb.LogStreamStatus {

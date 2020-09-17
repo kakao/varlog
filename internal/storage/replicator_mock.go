@@ -36,9 +36,11 @@ func (m *MockReplicator) EXPECT() *MockReplicatorMockRecorder {
 }
 
 // Run mocks base method.
-func (m *MockReplicator) Run(arg0 context.Context) {
+func (m *MockReplicator) Run(arg0 context.Context) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Run", arg0)
+	ret := m.ctrl.Call(m, "Run", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Run indicates an expected call of Run.

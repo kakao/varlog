@@ -28,7 +28,7 @@ func TestWithServiceServer(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := storage.NewMockLogStreamExecutorGetter(ctrl)
-		s := storage.NewLogIOService(types.StorageNodeID(1), lseGetter)
+		s := storage.NewLogIOService(types.StorageNodeID(1), lseGetter, nil)
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		So(err, ShouldBeNil)
 

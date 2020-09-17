@@ -21,7 +21,7 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		service := NewLogIOService(types.StorageNodeID(0), lseGetter)
+		service := NewLogIOService(types.StorageNodeID(0), lseGetter, nil)
 		lse := NewMockLogStreamExecutor(ctrl)
 
 		lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
@@ -96,7 +96,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		service := NewLogIOService(types.StorageNodeID(0), lseGetter)
+		service := NewLogIOService(types.StorageNodeID(0), lseGetter, nil)
 		lse := NewMockLogStreamExecutor(ctrl)
 
 		lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
@@ -180,7 +180,7 @@ func TestLogIOClientLogIOServiceSubscirbe(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		service := NewLogIOService(types.StorageNodeID(0), lseGetter)
+		service := NewLogIOService(types.StorageNodeID(0), lseGetter, nil)
 		lse := NewMockLogStreamExecutor(ctrl)
 
 		lseGetter.EXPECT().GetLogStreamExecutor(gomock.Any()).DoAndReturn(
@@ -239,7 +239,7 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		service := NewLogIOService(types.StorageNodeID(0), lseGetter)
+		service := NewLogIOService(types.StorageNodeID(0), lseGetter, nil)
 		lse1 := NewMockLogStreamExecutor(ctrl)
 		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
 		lse2 := NewMockLogStreamExecutor(ctrl)
