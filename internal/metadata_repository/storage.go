@@ -523,8 +523,9 @@ func (ms *MetadataStorage) updateLocalLogStreamStatus(lsID types.LogStreamID, st
 			}
 		}
 
+		hwm := ms.getHighWatermarkNoLock()
 		for _, r := range lls.Replicas {
-			if r.Seal(min) == types.InvalidLLSN {
+			if r.Seal(min, hwm) == types.InvalidLLSN {
 				return varlog.ErrInternal
 			}
 		}
@@ -629,6 +630,10 @@ func (ms *MetadataStorage) getLastGLSNoLock() *snpb.GlobalLogStreamDescriptor {
 	return ms.origStateMachine.GetLastGlobalLogStream()
 }
 
+func (ms *MetadataStorage) getFirstGLSNoLock() *snpb.GlobalLogStreamDescriptor {
+	return ms.origStateMachine.GetFirstGlobalLogStream()
+}
+
 func (ms *MetadataStorage) LookupLocalLogStream(lsID types.LogStreamID) *pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas {
 	pre, cur := ms.getStateMachine()
 
@@ -686,17 +691,26 @@ func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, s
 		cur.LogStream.LocalLogStreams[lsID] = lm
 	}
 
-	if lm.Status.Deleted() || lm.Status.Sealed() {
+	if lm.Status.Deleted() {
 		return
 	}
 
-	if _, ok := lm.Replicas[snID]; !ok {
+	r, ok := lm.Replicas[snID]
+	if !ok {
 		// ignore
 		return
 	}
 
-	lm.Replicas[snID] = s
+	if lm.Status.Sealed() {
+		if r.KnownHighWatermark >= s.KnownHighWatermark {
+			return
+		}
 
+		s.UncommittedLLSNOffset = r.UncommittedLLSNOffset
+		s.UncommittedLLSNLength = r.UncommittedLLSNLength
+	}
+
+	lm.Replicas[snID] = s
 	ms.nrUpdateSinceCommit++
 }
 
@@ -787,6 +801,18 @@ func (ms *MetadataStorage) GetHighWatermark() types.GLSN {
 	defer ms.lsMu.RUnlock()
 
 	return ms.getHighWatermarkNoLock()
+}
+
+func (ms *MetadataStorage) GetMinHighWatermark() types.GLSN {
+	ms.lsMu.RLock()
+	defer ms.lsMu.RUnlock()
+
+	gls := ms.getFirstGLSNoLock()
+	if gls == nil {
+		return types.InvalidGLSN
+	}
+
+	return gls.HighWatermark
 }
 
 func (ms *MetadataStorage) NumUpdateSinceCommit() uint64 {

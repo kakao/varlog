@@ -27,25 +27,6 @@ message MetadataRepositoryDescriptor {
         uint64 known_high_watermark = 3
             [(gogoproto.casttype) =
                  "github.com/kakao/varlog/pkg/varlog/types.GLSN"];
-
-        uint64 begin_llsn = 4 [
-            (gogoproto.casttype) =
-                "github.com/kakao/varlog/pkg/varlog/types.LLSN",
-            (gogoproto.customname) = "BeginLLSN",
-            deprecated = true
-        ];
-        uint64 end_llsn = 5 [
-            (gogoproto.casttype) =
-                "github.com/kakao/varlog/pkg/varlog/types.LLSN",
-            (gogoproto.customname) = "EndLLSN",
-            deprecated = true
-        ];
-        uint64 known_next_glsn = 6 [
-            (gogoproto.casttype) =
-                "github.com/kakao/varlog/pkg/varlog/types.GLSN",
-            (gogoproto.customname) = "KnownNextGLSN",
-            deprecated = true
-        ];
     }
 
     message LocalLogStreamReplicas {

@@ -29,6 +29,15 @@ func (s *MetadataRepositoryDescriptor) GetLastGlobalLogStream() *snpb.GlobalLogS
 	return s.LogStream.GlobalLogStreams[n-1]
 }
 
+func (s *MetadataRepositoryDescriptor) GetFirstGlobalLogStream() *snpb.GlobalLogStreamDescriptor {
+	n := len(s.LogStream.GlobalLogStreams)
+	if n == 0 {
+		return nil
+	}
+
+	return s.LogStream.GlobalLogStreams[0]
+}
+
 func (l *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Deleted() bool {
 	return l.Status == varlogpb.LogStreamStatusDeleted
 }
@@ -42,7 +51,7 @@ func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) UncommittedLLSNEnd(
 	return r.UncommittedLLSNOffset + types.LLSN(r.UncommittedLLSNLength)
 }
 
-func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) Seal(end types.LLSN) types.LLSN {
+func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) Seal(end types.LLSN, hwm types.GLSN) types.LLSN {
 	if r == nil {
 		return types.InvalidLLSN
 	}
@@ -55,7 +64,9 @@ func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) Seal(end types.LLSN
 		return types.InvalidLLSN
 	}
 
-	r.UncommittedLLSNLength = uint64(end - r.UncommittedLLSNOffset)
+	r.KnownHighWatermark = hwm
+	r.UncommittedLLSNOffset = end
+	r.UncommittedLLSNLength = 0
 
 	return r.UncommittedLLSNEnd()
 }

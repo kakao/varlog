@@ -346,3 +346,157 @@ func TestVarlogSeal(t *testing.T) {
 		})
 	})
 }
+
+func TestVarlogTrimGLS(t *testing.T) {
+	Convey("Given Varlog cluster", t, func(ctx C) {
+		nrLS := 2
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             1,
+			SnapCount:         10,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		So(testutil.CompareWait(func() bool {
+			return env.LeaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		mr := env.GetMR()
+
+		err := env.AddSN()
+		So(err, ShouldBeNil)
+
+		for i := 0; i < nrLS; i++ {
+			err = env.AddLS()
+			So(err, ShouldBeNil)
+		}
+
+		meta, err := mr.GetMetadata(context.TODO())
+		So(err, ShouldBeNil)
+		So(meta, ShouldNotBeNil)
+
+		So(len(meta.StorageNodes), ShouldBeGreaterThan, 0)
+		So(len(meta.LogStreams), ShouldBeGreaterThan, 0)
+
+		Convey("When Append Log", func(ctx C) {
+			r := meta.LogStreams[0].Replicas[0]
+			sn := env.LookupSN(r.StorageNodeID)
+			So(sn, ShouldNotBeNil)
+
+			snMeta, err := sn.GetMetadata(env.ClusterID, storage_node.MetadataTypeHeartbeat)
+			So(err, ShouldBeNil)
+
+			cli, err := varlog.NewLogIOClient(snMeta.StorageNode.Address)
+			defer cli.Close()
+
+			glsn := types.InvalidGLSN
+			for i := 0; i < 10; i++ {
+				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+				defer cancel()
+				glsn, _ = cli.Append(rctx, meta.LogStreams[0].LogStreamID, []byte("foo"))
+				So(glsn, ShouldNotEqual, types.InvalidGLSN)
+			}
+
+			for i := 0; i < 10; i++ {
+				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+				defer cancel()
+				glsn, _ = cli.Append(rctx, meta.LogStreams[1].LogStreamID, []byte("foo"))
+				So(glsn, ShouldNotEqual, types.InvalidGLSN)
+			}
+
+			hwm := mr.GetHighWatermark()
+			So(hwm, ShouldEqual, glsn)
+
+			Convey("Then GLS history of MR should be trimmed", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					return mr.GetMinHighWatermark() == hwm-types.GLSN(1)
+				}, time.Second), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
+	Convey("Given Varlog cluster", t, func(ctx C) {
+		nrLS := 2
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             1,
+			SnapCount:         10,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		So(testutil.CompareWait(func() bool {
+			return env.LeaderElected()
+		}, time.Second), ShouldBeTrue)
+
+		mr := env.GetMR()
+
+		err := env.AddSN()
+		So(err, ShouldBeNil)
+
+		for i := 0; i < nrLS; i++ {
+			err = env.AddLS()
+			So(err, ShouldBeNil)
+		}
+
+		meta, err := mr.GetMetadata(context.TODO())
+		So(err, ShouldBeNil)
+		So(meta, ShouldNotBeNil)
+
+		So(len(meta.StorageNodes), ShouldBeGreaterThan, 0)
+		So(len(meta.LogStreams), ShouldBeGreaterThan, 0)
+
+		Convey("When Append Log", func(ctx C) {
+			r := meta.LogStreams[0].Replicas[0]
+			sn := env.LookupSN(r.StorageNodeID)
+			So(sn, ShouldNotBeNil)
+
+			snMeta, err := sn.GetMetadata(env.ClusterID, storage_node.MetadataTypeHeartbeat)
+			So(err, ShouldBeNil)
+
+			cli, err := varlog.NewLogIOClient(snMeta.StorageNode.Address)
+			defer cli.Close()
+
+			glsn := types.InvalidGLSN
+
+			for i := 0; i < 32; i++ {
+				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+				defer cancel()
+				glsn, _ = cli.Append(rctx, meta.LogStreams[i%nrLS].LogStreamID, []byte("foo"))
+				So(glsn, ShouldNotEqual, types.InvalidGLSN)
+			}
+
+			sealedLS := meta.LogStreams[0]
+			runningLS := meta.LogStreams[1]
+
+			sealedGLSN, err := mr.Seal(context.TODO(), sealedLS.LogStreamID)
+			So(err, ShouldBeNil)
+
+			_, _, err = sn.Seal(env.ClusterID, r.StorageNodeID, sealedLS.LogStreamID, sealedGLSN)
+			So(err, ShouldBeNil)
+
+			for i := 0; i < 10; i++ {
+				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+				defer cancel()
+				glsn, _ = cli.Append(rctx, runningLS.LogStreamID, []byte("foo"))
+				So(glsn, ShouldNotEqual, types.InvalidGLSN)
+			}
+
+			hwm := mr.GetHighWatermark()
+			So(hwm, ShouldEqual, glsn)
+
+			Convey("Then GLS history of MR should be trimmed", func(ctx C) {
+				So(testutil.CompareWait(func() bool {
+					return mr.GetMinHighWatermark() == hwm-types.GLSN(1)
+				}, time.Second), ShouldBeTrue)
+			})
+		})
+	})
+}
