@@ -430,7 +430,9 @@ func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
 		}
 
 		s := mr.storage.LookupLocalLogStreamReplica(lsID, snID)
-		if s == nil || s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd() {
+		if s == nil ||
+			s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd() ||
+			s.KnownHighWatermark < u.KnownHighWatermark {
 			mr.storage.UpdateLocalLogStreamReplica(lsID, snID, u)
 		}
 	}
@@ -495,12 +497,11 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 
 	if nrCommitted > 0 {
 		mr.storage.AppendGlobalLogStream(gls)
+	}
 
-		if !trimHWM.Invalid() {
-			mr.logger.Info("trim", zap.Uint64("hwm", uint64(trimHWM)))
-			mr.storage.TrimGlobalLogStream(trimHWM)
-		}
-
+	if !trimHWM.Invalid() {
+		mr.logger.Info("trim", zap.Uint64("hwm", uint64(trimHWM)))
+		mr.storage.TrimGlobalLogStream(trimHWM)
 	}
 
 	mr.reportCollector.Commit(gls)
@@ -886,4 +887,12 @@ func (mr *RaftMetadataRepository) GetServerAddr() string {
 
 func (mr *RaftMetadataRepository) GetReportCount() uint64 {
 	return atomic.LoadUint64(&mr.nrReport)
+}
+
+func (mr *RaftMetadataRepository) GetHighWatermark() types.GLSN {
+	return mr.storage.GetHighWatermark()
+}
+
+func (mr *RaftMetadataRepository) GetMinHighWatermark() types.GLSN {
+	return mr.storage.GetMinHighWatermark()
 }
