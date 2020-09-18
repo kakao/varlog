@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/kakao/varlog/pkg/varlog"
@@ -27,7 +28,7 @@ type CommittedLogStreamStatus struct {
 
 type lsrReportTask struct {
 	knownHighWatermark types.GLSN
-	reports            []UncommittedLogStreamStatus
+	reports            map[types.LogStreamID]UncommittedLogStreamStatus
 	done               chan struct{}
 }
 
@@ -41,15 +42,17 @@ type LogStreamReporter interface {
 	Run(ctx context.Context) error
 	Close()
 	StorageNodeID() types.StorageNodeID
-	GetReport(ctx context.Context) (types.GLSN, []UncommittedLogStreamStatus, error)
+	GetReport(ctx context.Context) (types.GLSN, map[types.LogStreamID]UncommittedLogStreamStatus, error)
 	Commit(ctx context.Context, highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) error
 }
 
 type logStreamReporter struct {
-	storageNodeID      types.StorageNodeID
+	storageNodeID types.StorageNodeID
+	lseGetter     LogStreamExecutorGetter
+
 	knownHighWatermark types.AtomicGLSN
-	lseGetter          LogStreamExecutorGetter
-	history            map[types.GLSN][]UncommittedLogStreamStatus
+	history            map[types.GLSN]map[types.LogStreamID]UncommittedLogStreamStatus
+	lastReportedHWM    types.GLSN
 
 	running   bool
 	muRunning sync.Mutex
@@ -71,7 +74,7 @@ func NewLogStreamReporter(logger *zap.Logger, storageNodeID types.StorageNodeID,
 	return &logStreamReporter{
 		storageNodeID: storageNodeID,
 		lseGetter:     lseGetter,
-		history:       make(map[types.GLSN][]UncommittedLogStreamStatus),
+		history:       make(map[types.GLSN]map[types.LogStreamID]UncommittedLogStreamStatus),
 		reportC:       make(chan *lsrReportTask, options.ReportCSize),
 		commitC:       make(chan lsrCommitTask, options.CommitCSize),
 		runner:        runner.New("logstreamreporter", logger),
@@ -105,6 +108,7 @@ func (lsr *logStreamReporter) Run(ctx context.Context) error {
 		lsr.logger.Error("could not run dispatchReport", zap.Error(err))
 		goto err_out
 	}
+	lsr.logger.Info("run")
 	return nil
 
 err_out:
@@ -153,7 +157,7 @@ func (lsr *logStreamReporter) dispatchCommit(ctx context.Context) {
 // GetReport collects statuses about uncommitted log entries from log streams in the storage node.
 // KnownNextGLSNs from all LogStreamExecutors must be equal to the corresponding in
 // LogStreamReporter.
-func (lsr *logStreamReporter) GetReport(ctx context.Context) (types.GLSN, []UncommittedLogStreamStatus, error) {
+func (lsr *logStreamReporter) GetReport(ctx context.Context) (types.GLSN, map[types.LogStreamID]UncommittedLogStreamStatus, error) {
 	t := lsrReportTask{done: make(chan struct{})}
 	if err := lsr.addReportC(ctx, &t); err != nil {
 		return types.InvalidGLSN, nil, err
@@ -166,6 +170,7 @@ func (lsr *logStreamReporter) GetReport(ctx context.Context) (types.GLSN, []Unco
 		return types.InvalidGLSN, nil, tctx.Err()
 	}
 
+	lsr.logger.Debug("contents of report", zap.Any("KnownHighWatermark", t.knownHighWatermark), zap.Reflect("reports", t.reports))
 	return t.knownHighWatermark, t.reports, nil
 }
 
@@ -182,51 +187,64 @@ func (lsr *logStreamReporter) addReportC(ctx context.Context, t *lsrReportTask) 
 
 func (lsr *logStreamReporter) report(t *lsrReportTask) {
 	executors := lsr.lseGetter.GetLogStreamExecutors()
-	reports := make([]UncommittedLogStreamStatus, 0, len(executors))
-	knownHighWatermark := types.InvalidGLSN
-	nrUncommitted := uint64(0)
+	if len(executors) == 0 {
+		close(t.done)
+		return
+	}
+
+	reports := make(map[types.LogStreamID]UncommittedLogStreamStatus)
+	knownHighWatermark := types.MaxGLSN
 	for _, executor := range executors {
 		status := executor.GetReport()
 
-		// get non-zero, minimum KnwonNextGLSN (zero means just added LS)
-		if !status.KnownHighWatermark.Invalid() && (knownHighWatermark.Invalid() || knownHighWatermark > status.KnownHighWatermark) {
+		// If lastReportedHWM is zero, zero values of knownHighWatermark of
+		// LogStreamExecutors are okay, since there is no way to discriminate the
+		// LogStreamExecutors are newbies or slow-updaters.
+		// If lastReportedHWM is not zero, zero values of knownHighWatermark of
+		// LogStreamExecutors are ignored, since they must be newbies.
+		if (lsr.lastReportedHWM.Invalid() || !status.KnownHighWatermark.Invalid()) &&
+			(knownHighWatermark > status.KnownHighWatermark) {
 			knownHighWatermark = status.KnownHighWatermark
 		}
-		reports = append(reports, status)
-		nrUncommitted += status.UncommittedLLSNLength
+		reports[status.LogStreamID] = status
 	}
 
-	//if len(reports) > 0 { // skip when no meaningful statuses in reports
-	if nrUncommitted > 0 { // skip when no meaningful statuses in reports
-		// for simplicity, it uses old reports as possible
-		// TODO (jun.song)
-		// 1) old and new reports can be merged when they have the same KnownNextGLSN
-		// 2) after implementing LSE-wise KnownNextGLSN, history won't be needed any longer
-		oldReports, ok := lsr.history[knownHighWatermark]
-		if !ok {
-			lsr.history[knownHighWatermark] = reports
-			goto out
+	if oldReports, ok := lsr.history[knownHighWatermark]; ok {
+		for logStreamID, newReport := range reports {
+			if oldReport, ok := oldReports[logStreamID]; ok {
+				newReport.UncommittedLLSNLength += uint64(newReport.UncommittedLLSNOffset - oldReport.UncommittedLLSNOffset)
+				newReport.UncommittedLLSNOffset = oldReport.UncommittedLLSNOffset
+
+				reports[logStreamID] = newReport
+				// NOTE (jun): reports[logStreamID].KnownHighWatermark is overridden
+				// by LogStreamReporterService.
+				// This field is needed only after implementing LS-wise
+				// HighWatermark.
+			}
+
 		}
-		reports = oldReports
 	}
+	lsr.history[knownHighWatermark] = reports
+	lsr.lastReportedHWM = knownHighWatermark
 
-out:
 	t.reports = reports
 	t.knownHighWatermark = knownHighWatermark
 	close(t.done)
 
-	for nextGLSN := range lsr.history {
-		if nextGLSN < knownHighWatermark {
-			delete(lsr.history, nextGLSN)
+	for hwm := range lsr.history {
+		if hwm < knownHighWatermark {
+			delete(lsr.history, hwm)
 		}
 	}
 }
 
 func (lsr *logStreamReporter) Commit(ctx context.Context, highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) error {
-	if !lsr.verifyCommit(prevHighWatermark) {
+	if err := lsr.verifyCommit(prevHighWatermark); err != nil {
+		lsr.logger.Error("could not try to commit: verification error", zap.Error(err))
 		return varlog.ErrInternal
 	}
 	if len(commitResults) == 0 {
+		lsr.logger.Error("could not try to commit: no commit results")
 		return varlog.ErrInternal
 	}
 
@@ -241,12 +259,14 @@ func (lsr *logStreamReporter) Commit(ctx context.Context, highWatermark, prevHig
 	case lsr.commitC <- t:
 		return nil
 	case <-tctx.Done():
+		lsr.logger.Error("could not try to commit: failed to append commitTask to commitC", zap.Error(tctx.Err()))
 		return tctx.Err()
 	}
 }
 
 func (lsr *logStreamReporter) commit(ctx context.Context, t lsrCommitTask) {
-	if !lsr.verifyCommit(t.prevHighWatermark) {
+	if err := lsr.verifyCommit(t.prevHighWatermark); err != nil {
+		lsr.logger.Error("could not try to commit: verification error", zap.Error(err))
 		return
 	}
 	for _, commitResult := range t.commitResults {
@@ -255,11 +275,16 @@ func (lsr *logStreamReporter) commit(ctx context.Context, t lsrCommitTask) {
 		if !ok {
 			panic("no such executor")
 		}
+		lsr.logger.Debug("try to commit", zap.Reflect("commit", commitResult))
 		go executor.Commit(ctx, commitResult)
 	}
 	lsr.knownHighWatermark.Store(t.highWatermark)
 }
 
-func (lsr *logStreamReporter) verifyCommit(prevHighWatermark types.GLSN) bool {
-	return prevHighWatermark == lsr.knownHighWatermark.Load()
+func (lsr *logStreamReporter) verifyCommit(prevHighWatermark types.GLSN) error {
+	knownHighWatermark := lsr.knownHighWatermark.Load()
+	if knownHighWatermark != prevHighWatermark {
+		return fmt.Errorf("logstreamreporter: invalid commit argument (LSR.knownHighWatermark(%v) != CR.prevHighWatermark(%v)", knownHighWatermark, prevHighWatermark)
+	}
+	return nil
 }

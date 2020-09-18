@@ -36,13 +36,15 @@ func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty
 		s.logger.Error("could not get report", zap.Error(err))
 		return nil, err
 	}
-	rsp.Uncommit = make([]*pb.LocalLogStreamDescriptor_LogStreamUncommitReport, len(reports))
-	for i, report := range reports {
-		rsp.Uncommit[i] = &pb.LocalLogStreamDescriptor_LogStreamUncommitReport{
-			LogStreamID:           report.LogStreamID,
-			UncommittedLLSNOffset: report.UncommittedLLSNOffset,
-			UncommittedLLSNLength: report.UncommittedLLSNLength,
-		}
+	rsp.Uncommit = make([]*pb.LocalLogStreamDescriptor_LogStreamUncommitReport, 0, len(reports))
+	for _, report := range reports {
+		rsp.Uncommit = append(rsp.Uncommit,
+			&pb.LocalLogStreamDescriptor_LogStreamUncommitReport{
+				LogStreamID:           report.LogStreamID,
+				UncommittedLLSNOffset: report.UncommittedLLSNOffset,
+				UncommittedLLSNLength: report.UncommittedLLSNLength,
+			},
+		)
 	}
 	rsp.HighWatermark = knownHighWatermark
 	return rsp, nil

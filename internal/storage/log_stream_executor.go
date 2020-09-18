@@ -428,22 +428,24 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 // All Appends are processed sequentially by using the appendC.
 func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
 	if lse.isSealed() {
+		lse.logger.Debug("could not append", zap.Error(varlog.ErrSealed))
 		return types.InvalidGLSN, varlog.ErrSealed
 	}
 
-	appendTask := newAppendTask(data, replicas, types.InvalidLLSN, &lse.trackers)
-	if err := lse.addAppendC(ctx, appendTask); err != nil {
+	appendT := newAppendTask(data, replicas, types.InvalidLLSN, &lse.trackers)
+	if err := lse.addAppendC(ctx, appendT); err != nil {
+		lse.logger.Debug("could not add appendTask to appendC", zap.Error(err))
 		return types.InvalidGLSN, err
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, lse.options.CommitWaitTimeout)
 	defer cancel()
-	err := appendTask.wait(tctx)
+	err := appendT.wait(tctx)
 	if err != nil {
 		lse.logger.Error("could not wait appendTask", zap.Error(err))
 	}
-	appendTask.close()
-	return appendTask.getGLSN(), err
+	appendT.close()
+	return appendT.getGLSN(), err
 }
 
 func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) error {
@@ -622,6 +624,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 	for glsn < t.committedGLSNEnd {
 		llsn := lse.committedLLSNEnd
 		if err := lse.storage.Commit(llsn, glsn); err != nil {
+			lse.logger.Error("could not commit", zap.Error(err))
 			// NOTE: The LogStreamExecutor fails to commit Log entries that are
 			// assigned GLSN by MR, for example, because of the storage failure.
 			// In other replicated storage nodes, it can be okay.
@@ -644,6 +647,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			appendT.notify(nil)
 		}
 		glsn++
+		lse.logger.Debug("committed", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 	}
 
 	// NOTE: This is a very subtle case. MR assigns GLSNs to these log entries, but the storage
@@ -657,12 +661,24 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		}
 		glsn++
 		llsn++
+		lse.logger.Debug("commit failed", zap.Any("llsn", llsn))
 	}
 
 	if commitOk {
 		lse.mu.Lock()
 		lse.globalHighwatermark = t.highWatermark
 		lse.uncommittedLLSNBegin += types.LLSN(t.committedGLSNEnd - t.committedGLSNBegin)
+		if t.committedGLSNEnd-t.committedGLSNBegin > 0 {
+			lse.logger.Debug("commit batch",
+				zap.Any("glsn_begin", t.committedGLSNBegin),
+				zap.Any("glsn_end", t.committedGLSNEnd),
+				zap.Any("old_hwm", lse.globalHighwatermark-t.highWatermark),
+				zap.Any("new_hwm", lse.globalHighwatermark),
+				zap.Any("new_committed_llsn_end", lse.committedLLSNEnd),
+			)
+		} else {
+			lse.logger.Debug("empty commit batch")
+		}
 		lse.mu.Unlock()
 	}
 }

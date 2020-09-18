@@ -76,11 +76,11 @@ func (mr *MockLogStreamReporterMockRecorder) StorageNodeID() *gomock.Call {
 }
 
 // GetReport mocks base method.
-func (m *MockLogStreamReporter) GetReport(ctx context.Context) (types.GLSN, []UncommittedLogStreamStatus, error) {
+func (m *MockLogStreamReporter) GetReport(ctx context.Context) (types.GLSN, map[types.LogStreamID]UncommittedLogStreamStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReport", ctx)
 	ret0, _ := ret[0].(types.GLSN)
-	ret1, _ := ret[1].([]UncommittedLogStreamStatus)
+	ret1, _ := ret[1].(map[types.LogStreamID]UncommittedLogStreamStatus)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }

@@ -23,7 +23,7 @@ func TestLogStreamReporterServiceGetReport(t *testing.T) {
 
 		Convey("When LogStreamReporter.GetReport returns an error", func() {
 			lsrMock.EXPECT().GetReport(gomock.Any()).Return(
-				types.MinGLSN, []UncommittedLogStreamStatus{}, varlog.ErrInternal)
+				types.MinGLSN, map[types.LogStreamID]UncommittedLogStreamStatus{}, varlog.ErrInternal)
 
 			Convey("Then LogStreamReporterService.GetReport should return an error", func() {
 				_, err := service.GetReport(context.TODO(), &pbtypes.Empty{})
