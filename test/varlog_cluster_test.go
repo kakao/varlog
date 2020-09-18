@@ -396,14 +396,16 @@ func TestVarlogTrimGLS(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
 				defer cancel()
-				glsn, _ = cli.Append(rctx, meta.LogStreams[0].LogStreamID, []byte("foo"))
+				glsn, err = cli.Append(rctx, meta.LogStreams[0].LogStreamID, []byte("foo"))
+				So(err, ShouldBeNil)
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
 
 			for i := 0; i < 10; i++ {
 				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
 				defer cancel()
-				glsn, _ = cli.Append(rctx, meta.LogStreams[1].LogStreamID, []byte("foo"))
+				glsn, err = cli.Append(rctx, meta.LogStreams[1].LogStreamID, []byte("foo"))
+				So(err, ShouldBeNil)
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
 
@@ -469,7 +471,8 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 			for i := 0; i < 32; i++ {
 				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
 				defer cancel()
-				glsn, _ = cli.Append(rctx, meta.LogStreams[i%nrLS].LogStreamID, []byte("foo"))
+				glsn, err = cli.Append(rctx, meta.LogStreams[i%nrLS].LogStreamID, []byte("foo"))
+				So(err, ShouldBeNil)
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
 
@@ -485,7 +488,8 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
 				defer cancel()
-				glsn, _ = cli.Append(rctx, runningLS.LogStreamID, []byte("foo"))
+				glsn, err = cli.Append(rctx, runningLS.LogStreamID, []byte("foo"))
+				So(err, ShouldBeNil)
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
 
