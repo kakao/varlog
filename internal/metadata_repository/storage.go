@@ -523,9 +523,8 @@ func (ms *MetadataStorage) updateLocalLogStreamStatus(lsID types.LogStreamID, st
 			}
 		}
 
-		hwm := ms.getHighWatermarkNoLock()
 		for _, r := range lls.Replicas {
-			if r.Seal(min, hwm) == types.InvalidLLSN {
+			if r.Seal(min) == types.InvalidLLSN {
 				return varlog.ErrInternal
 			}
 		}
@@ -697,17 +696,16 @@ func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, s
 
 	r, ok := lm.Replicas[snID]
 	if !ok {
-		// ignore
 		return
 	}
 
 	if lm.Status.Sealed() {
-		if r.KnownHighWatermark >= s.KnownHighWatermark {
+		if r.KnownHighWatermark >= s.KnownHighWatermark ||
+			s.UncommittedLLSNOffset > r.UncommittedLLSNEnd() {
 			return
 		}
 
-		s.UncommittedLLSNOffset = r.UncommittedLLSNOffset
-		s.UncommittedLLSNLength = r.UncommittedLLSNLength
+		s.UncommittedLLSNLength = uint64(r.UncommittedLLSNEnd() - s.UncommittedLLSNOffset)
 	}
 
 	lm.Replicas[snID] = s

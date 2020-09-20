@@ -302,6 +302,7 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 	}
 
 	rce.logger.Debug("commit",
+		zap.Int32("snid", int32(rce.sn.StorageNodeID)),
 		zap.Uint64("hwm", uint64(r.HighWatermark)),
 		zap.Int("result", len(r.CommitResult)))
 

@@ -51,7 +51,7 @@ func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) UncommittedLLSNEnd(
 	return r.UncommittedLLSNOffset + types.LLSN(r.UncommittedLLSNLength)
 }
 
-func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) Seal(end types.LLSN, hwm types.GLSN) types.LLSN {
+func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) Seal(end types.LLSN) types.LLSN {
 	if r == nil {
 		return types.InvalidLLSN
 	}
@@ -64,9 +64,7 @@ func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) Seal(end types.LLSN
 		return types.InvalidLLSN
 	}
 
-	r.KnownHighWatermark = hwm
-	r.UncommittedLLSNOffset = end
-	r.UncommittedLLSNLength = 0
+	r.UncommittedLLSNLength = uint64(end - r.UncommittedLLSNOffset)
 
 	return r.UncommittedLLSNEnd()
 }
