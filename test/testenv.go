@@ -13,6 +13,7 @@ import (
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/proto/storage_node"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	vpb "github.com/kakao/varlog/proto/varlog"
 
@@ -221,7 +222,7 @@ func (clus *VarlogCluster) LeaderFail() bool {
 	return true
 }
 
-func (clus *VarlogCluster) AddSN() error {
+func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 	snID := clus.snID
 	clus.snID += types.StorageNodeID(1)
 
@@ -237,18 +238,18 @@ func (clus *VarlogCluster) AddSN() error {
 
 	sn, err := storage.NewStorageNode(opts)
 	if err != nil {
-		return err
+		return types.StorageNodeID(0), err
 	}
 	err = sn.Run()
 	if err != nil {
-		return err
+		return types.StorageNodeID(0), err
 	}
 
 	clus.SNs[snID] = sn
 
 	meta, err := sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
 	if err != nil {
-		return err
+		return types.StorageNodeID(0), err
 	}
 
 	snd := &vpb.StorageNodeDescriptor{
@@ -264,12 +265,13 @@ func (clus *VarlogCluster) AddSN() error {
 		},
 	}
 
-	return clus.MRs[0].RegisterStorageNode(context.TODO(), snd)
+	err = clus.MRs[0].RegisterStorageNode(context.TODO(), snd)
+	return snID, err
 }
 
-func (clus *VarlogCluster) AddLS() error {
+func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 	if len(clus.SNs) < clus.NrRep {
-		return varlog.ErrInvalid
+		return types.LogStreamID(0), varlog.ErrInvalid
 	}
 
 	lsID := clus.lsID
@@ -291,7 +293,7 @@ func (clus *VarlogCluster) AddLS() error {
 	for _, r := range replicas {
 		sn, _ := clus.SNs[r.StorageNodeID]
 		if _, err := sn.AddLogStream(clus.ClusterID, r.StorageNodeID, lsID, "tmp"); err != nil {
-			return err
+			return types.LogStreamID(0), err
 		}
 	}
 
@@ -300,7 +302,8 @@ func (clus *VarlogCluster) AddLS() error {
 		Replicas:    replicas,
 	}
 
-	return clus.MRs[0].RegisterLogStream(context.TODO(), ls)
+	err := clus.MRs[0].RegisterLogStream(context.TODO(), ls)
+	return lsID, err
 }
 
 func (clus *VarlogCluster) LookupSN(snID types.StorageNodeID) *storage.StorageNode {
@@ -314,4 +317,53 @@ func (clus *VarlogCluster) GetMR() *metadata_repository.RaftMetadataRepository {
 	}
 
 	return clus.MRs[0]
+}
+
+func (clus *VarlogCluster) getSN(lsID types.LogStreamID, idx int) (*storage.StorageNode, error) {
+	if len(clus.MRs) == 0 {
+		return nil, varlog.ErrInvalid
+	}
+
+	meta, err := clus.MRs[0].GetMetadata(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+
+	ls := meta.GetLogStream(lsID)
+	if ls == nil {
+		return nil, varlog.ErrNotExist
+	}
+
+	if len(ls.Replicas) < idx+1 {
+		return nil, varlog.ErrInvalid
+	}
+
+	sn := clus.LookupSN(ls.Replicas[idx].StorageNodeID)
+	if sn == nil {
+		return nil, varlog.ErrInternal
+	}
+
+	return sn, nil
+}
+
+func (clus *VarlogCluster) GetPrimarySN(lsID types.LogStreamID) (*storage.StorageNode, error) {
+	return clus.getSN(lsID, 0)
+}
+
+func (clus *VarlogCluster) GetBackupSN(lsID types.LogStreamID) (*storage.StorageNode, error) {
+	return clus.getSN(lsID, 1)
+}
+
+func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (varlog.LogIOClient, error) {
+	sn, err := clus.GetPrimarySN(lsID)
+	if err != nil {
+		return nil, err
+	}
+
+	snMeta, err := sn.GetMetadata(clus.ClusterID, storage_node.MetadataTypeHeartbeat)
+	if err != nil {
+		return nil, err
+	}
+
+	return varlog.NewLogIOClient(snMeta.StorageNode.Address)
 }
