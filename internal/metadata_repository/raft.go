@@ -462,6 +462,10 @@ func (rc *raftNode) stop(transfer bool) {
 	rc.cancel()
 	rc.runner.Stop()
 
+	if rc.wal != nil {
+		rc.wal.Close()
+	}
+
 	close(rc.commitC)
 	close(rc.snapshotC)
 }
@@ -637,8 +641,6 @@ func (rc *raftNode) processRaftEvent(ctx context.Context) {
 	}
 	atomic.StoreUint64(&rc.snapshotIndex, snap.Metadata.Index)
 	rc.appliedIndex = snap.Metadata.Index
-
-	defer rc.wal.Close()
 
 	ticker := time.NewTicker(rc.raftTick)
 	defer ticker.Stop()
