@@ -35,14 +35,27 @@ func TestInMemoryStorage(t *testing.T) {
 				So(err, ShouldNotBeNil)
 			})
 
+			Convey("it should delete uncommitted data", func() {
+				err := s.DeleteUncommitted(types.MinLLSN)
+				So(err, ShouldBeNil)
+
+				err = s.Commit(types.MinLLSN, types.GLSN(1))
+				So(err, ShouldNotBeNil)
+			})
+
 			Convey("it should commit written data", func() {
 				err := s.Commit(types.MinLLSN, types.GLSN(2))
 				So(err, ShouldBeNil)
 
+				Convey("it should not delete committed data by LLSN", func() {
+					err := s.DeleteUncommitted(types.MinLLSN)
+					So(err, ShouldNotBeNil)
+				})
+
 				Convey("it should read committed data", func() {
-					data, err := s.Read(types.GLSN(2))
+					logEntry, err := s.Read(types.GLSN(2))
 					So(err, ShouldBeNil)
-					So(string(data), ShouldEqual, "log_001")
+					So(string(logEntry.Data), ShouldEqual, "log_001")
 				})
 
 				Convey("it should not read uncommitted data", func() {
@@ -51,9 +64,8 @@ func TestInMemoryStorage(t *testing.T) {
 				})
 
 				Convey("it should delete written data with the same GLSN", func() {
-					num, err := s.Delete(types.GLSN(2))
+					err := s.DeleteCommitted(types.GLSN(2))
 					So(err, ShouldBeNil)
-					So(num, ShouldEqual, 1)
 
 					Convey("it should not read deleted data", func() {
 						_, err := s.Read(types.GLSN(2))

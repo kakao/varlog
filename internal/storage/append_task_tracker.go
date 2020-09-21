@@ -81,6 +81,12 @@ func (t *appendTask) isPrimary() bool {
 	return t.primary
 }
 
+func (t *appendTask) getLLSN() types.LLSN {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.llsn
+}
+
 func (t *appendTask) setGLSN(glsn types.GLSN) {
 	t.mu.Lock()
 	t.glsn = glsn
@@ -135,4 +141,12 @@ func (trk *appendTaskTracker) untrack(llsn types.LLSN) {
 	trk.mu.Lock()
 	delete(trk.m, llsn)
 	trk.mu.Unlock()
+}
+
+func (trk *appendTaskTracker) foreach(f func(*appendTask)) {
+	trk.mu.Lock()
+	defer trk.mu.Unlock()
+	for _, appendT := range trk.m {
+		f(appendT)
+	}
 }
