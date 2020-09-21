@@ -129,8 +129,9 @@ type logStreamExecutor struct {
 
 	trackers appendTaskTracker
 
-	status    vpb.LogStreamStatus
-	mtxStatus sync.RWMutex
+	status   vpb.LogStreamStatus
+	muStatus sync.RWMutex
+	muSeal   sync.Mutex
 
 	logger  *zap.Logger
 	options *LogStreamExecutorOptions
@@ -225,8 +226,8 @@ func (lse *logStreamExecutor) Close() {
 }
 
 func (lse *logStreamExecutor) Status() vpb.LogStreamStatus {
-	lse.mtxStatus.RLock()
-	defer lse.mtxStatus.RUnlock()
+	lse.muStatus.RLock()
+	defer lse.muStatus.RUnlock()
 	return lse.status
 }
 
@@ -236,21 +237,51 @@ func (lse *logStreamExecutor) isSealed() bool {
 }
 
 func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN) {
+	// process seal request one by one
+	lse.muSeal.Lock()
+	defer lse.muSeal.Unlock()
+
 	localHWM := lse.localHighWatermark.Load()
 	if localHWM > lastCommittedGLSN {
-		panic("local Highwatermark above last committed GLSN")
+		lse.logger.Panic("localHighWatermark > lastCommittedGLSN",
+			zap.Any("localHighWatermark", localHWM),
+			zap.Any("lastCommittedGLSN", lastCommittedGLSN),
+		)
 	}
 	status := vpb.LogStreamStatusSealed
 	if localHWM < lastCommittedGLSN {
 		status = vpb.LogStreamStatusSealing
 	}
 	lse.seal(status, false)
+
+	// delete uncommitted logs those positions are larger than lastCommittedGLSN
+	if status == vpb.LogStreamStatusSealed {
+		// Find lastCommittedLLSN by using lastCommittedGLSN
+		logEntry, err := lse.storage.Read(lastCommittedGLSN)
+		if err != nil {
+			// MR may be ahead of LSE.
+			lse.logger.Debug("could not read lastCommittedGLSN",
+				zap.Any("lastCommittedGLSN", lastCommittedGLSN), zap.Error(err),
+			)
+		}
+		lastCommittedLLSN := logEntry.LLSN
+
+		// notify error to appenders whose positions are larger than lastCommittedGLSN
+		lse.trackers.foreach(func(appendT *appendTask) {
+			llsn := appendT.getLLSN()
+			if llsn > lastCommittedLLSN {
+				appendT.notify(varlog.ErrSealed)
+			}
+		})
+
+		lse.deleteUncommitted(lastCommittedLLSN)
+	}
 	return status, localHWM
 }
 
 func (lse *logStreamExecutor) Unseal() error {
-	lse.mtxStatus.Lock()
-	defer lse.mtxStatus.RUnlock()
+	lse.muStatus.Lock()
+	defer lse.muStatus.Unlock()
 	if lse.status == vpb.LogStreamStatusSealed {
 		lse.status = vpb.LogStreamStatusRunning
 		return nil
@@ -263,10 +294,17 @@ func (lse *logStreamExecutor) sealItself() {
 }
 
 func (lse *logStreamExecutor) seal(status vpb.LogStreamStatus, itself bool) {
-	lse.mtxStatus.Lock()
-	defer lse.mtxStatus.Unlock()
+	lse.muStatus.Lock()
+	defer lse.muStatus.Unlock()
 	if !itself || lse.status.Running() {
 		lse.status = status
+	}
+}
+
+func (lse *logStreamExecutor) deleteUncommitted(lastCommittedLLSN types.LLSN) {
+	lse.logger.Debug("delete written logs > lastCommittedLLSN", zap.Any("lastCommittedLLSN", lastCommittedLLSN))
+	if err := lse.storage.DeleteUncommitted(lastCommittedLLSN + 1); err != nil {
+		lse.logger.Panic("could not delete uncommitted logs", zap.Any("begin", lastCommittedLLSN+1), zap.Error(err))
 	}
 }
 
@@ -350,12 +388,12 @@ func (lse *logStreamExecutor) commitUndecidable(glsn types.GLSN) error {
 }
 
 func (lse *logStreamExecutor) read(t *readTask) {
-	data, err := lse.storage.Read(t.glsn)
+	logEntry, err := lse.storage.Read(t.glsn)
 	if err != nil {
 		// t.err = newVarlogError(err, "read error: %v", t.glsn)
 		t.err = fmt.Errorf("logstreamexecutor read error (glsn=%v): %w", t.glsn, err)
 	}
-	t.data = data
+	t.data = logEntry.Data
 	// t.data, t.err = lse.storage.Read(t.glsn)
 	close(t.done)
 }
@@ -449,6 +487,10 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 }
 
 func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) error {
+	if lse.isSealed() {
+		lse.logger.Debug("could not append or replicate", zap.Error(varlog.ErrSealed))
+		return varlog.ErrSealed
+	}
 	tctx, cancel := context.WithTimeout(ctx, lse.options.AppendCTimeout)
 	defer cancel()
 	select {
@@ -461,6 +503,12 @@ func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) err
 }
 
 func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
+	if lse.isSealed() {
+		lse.logger.Debug("could not append or replicate", zap.Error(varlog.ErrSealed))
+		t.notify(varlog.ErrSealed)
+		return
+	}
+
 	err := lse.write(t)
 	if err != nil {
 		lse.sealItself()
@@ -478,6 +526,8 @@ func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 // append issues new LLSN for a LogEntry and write it to the storage. It, then, adds given
 // appendTask to the taskmap to receive commit result. It also triggers replication after a
 // successful write.
+// In case of append, that is primary, it tries to add appendTask to tracker. If adding the
+// appendTask to tracker is failed, write method fails.
 func (lse *logStreamExecutor) write(t *appendTask) error {
 	llsn, data, _ := t.getParams()
 	primary := t.isPrimary()
@@ -486,7 +536,6 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 	}
 
 	if llsn != lse.uncommittedLLSNEnd.Load() {
-		// return newVarlogError(ErrLogStreamCorrupt, "llsn=%v uncommittedLLSNEnd=%v", llsn, lse.uncommittedLLSNEnd.Load())
 		return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", varlog.ErrCorruptLogStream, llsn, lse.uncommittedLLSNEnd.Load())
 	}
 
@@ -494,12 +543,19 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 		return err
 	}
 
+	lse.uncommittedLLSNEnd.Add(1)
+
 	if primary {
 		t.markWritten(llsn)
-		lse.trackers.track(llsn, t)
+		lse.muStatus.RLock()
+		defer lse.muStatus.RUnlock()
+		if lse.status == vpb.LogStreamStatusRunning {
+			lse.trackers.track(llsn, t)
+			return nil
+		}
+		return fmt.Errorf("could not add appendTask to tracker (status=%v llsn=%v)", lse.status, llsn)
 	}
 
-	lse.uncommittedLLSNEnd.Add(1)
 	return nil
 }
 
@@ -526,6 +582,12 @@ func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendT
 
 func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
 	if err := lse.isTrimmed(glsn); err != nil {
+		// already trimmed, no problem
+		return nil
+	}
+	if err := lse.commitUndecidable(glsn); err != nil {
+		// In case of Trim, errUndecidable means that the given glsn is larger than
+		// localHighWatermark.
 		return err
 	}
 	tctx, cancel := context.WithTimeout(ctx, lse.options.TrimCTimeout)
@@ -540,11 +602,10 @@ func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
 
 func (lse *logStreamExecutor) trim(t *trimTask) {
 	if err := lse.isTrimmed(t.glsn); err != nil {
-		lse.logger.Error("could not trim", zap.Error(err))
 		return
 	}
 	lse.localLowWatermark.Store(t.glsn + 1)
-	if _, err := lse.storage.Delete(t.glsn); err != nil {
+	if err := lse.storage.DeleteCommitted(t.glsn); err != nil {
 		lse.logger.Error("could not trim", zap.Error(err))
 	}
 }
@@ -646,8 +707,8 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			appendT.setGLSN(glsn)
 			appendT.notify(nil)
 		}
-		glsn++
 		lse.logger.Debug("committed", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
+		glsn++
 	}
 
 	// NOTE: This is a very subtle case. MR assigns GLSNs to these log entries, but the storage

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 
@@ -76,36 +77,36 @@ func (s *InMemoryStorage) searchCommittedEntry(glsn types.GLSN) (int, committedE
 	return i, s.committed[i], varlog.ErrNoEntry
 }
 
-func (s *InMemoryStorage) Read(glsn types.GLSN) ([]byte, error) {
+func (s *InMemoryStorage) Read(glsn types.GLSN) (varlog.LogEntry, error) {
 	s.assert()
 	defer s.assert()
 
 	s.muCommitted.RLock()
 	defer s.muCommitted.RUnlock()
 	if len(s.committed) == 0 {
-		return nil, varlog.ErrNoEntry
-		// return nil, errors.WithMessagef(errNotExist, "no committed entries: glsn=%v", glsn)
-		// return nil, errNotFound
+		return varlog.InvalidLogEntry, varlog.ErrNoEntry
 	}
 
 	first := s.committed[0]
 	last := s.committed[len(s.committed)-1]
 	if first.glsn > glsn || last.glsn < glsn {
-		return nil, varlog.ErrNoEntry
-		// return nil, errors.WithMessagef(errNotExist, "out of boundaries: first=%v last=%v glsn=%v", first.glsn, last.glsn, glsn)
-		//return nil, errNotFound
+		return varlog.InvalidLogEntry, varlog.ErrNoEntry
 	}
 
 	i, _, err := s.searchCommittedEntry(glsn)
 	if err != nil {
-		return nil, varlog.ErrNoEntry
-		// return nil, errNotFound
+		return varlog.InvalidLogEntry, varlog.ErrNoEntry
 	}
 	// NB: The LLSN of the first entry of written and committed should be same.
 	// NB: committedEntry[i] and writtenEntry[i] are the same log entry.
 	s.muWritten.RLock()
 	defer s.muWritten.RUnlock()
-	return s.written[i].data, nil
+	went := s.written[i]
+	return varlog.LogEntry{
+		GLSN: glsn,
+		LLSN: went.llsn,
+		Data: went.data,
+	}, nil
 }
 
 func (s *InMemoryStorage) Scan(glsn types.GLSN) (Scanner, error) {
@@ -173,7 +174,7 @@ func (s *InMemoryStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 	return nil
 }
 
-func (s *InMemoryStorage) Delete(glsn types.GLSN) (uint64, error) {
+func (s *InMemoryStorage) DeleteCommitted(glsn types.GLSN) error {
 	s.assert()
 	defer s.assert()
 
@@ -181,12 +182,13 @@ func (s *InMemoryStorage) Delete(glsn types.GLSN) (uint64, error) {
 	defer s.muCommitted.Unlock()
 
 	if len(s.committed) == 0 {
-		return 0, varlog.ErrNoEntry
+		// no committed entries
+		return nil
 	}
 	first := s.committed[0]
-	last := s.committed[len(s.committed)-1]
-	if first.glsn > glsn || last.glsn < glsn {
-		return 0, varlog.ErrNoEntry
+	if glsn < first.glsn {
+		// no entries to delete
+		return nil
 	}
 
 	i, _, err := s.searchCommittedEntry(glsn)
@@ -197,7 +199,28 @@ func (s *InMemoryStorage) Delete(glsn types.GLSN) (uint64, error) {
 	s.muWritten.Lock()
 	s.written = s.written[i:]
 	s.muWritten.Unlock()
-	return uint64(i), nil
+	return nil
+}
+
+func (s *InMemoryStorage) DeleteUncommitted(llsn types.LLSN) error {
+	s.muCommitted.Lock()
+	defer s.muCommitted.Unlock()
+	s.muWritten.Lock()
+	defer s.muWritten.Unlock()
+	i := sort.Search(len(s.written), func(i int) bool { return s.written[i].llsn >= llsn })
+	if i >= len(s.written) {
+		// no such entry, but no problem
+		return nil
+	}
+	if s.written[i].llsn != llsn {
+		panic("LLSN hole")
+	}
+	if i < len(s.committed) {
+		// committed
+		return fmt.Errorf("storage: could not delete committed (llsn=%v glsn=%v)", llsn, s.committed[i].glsn)
+	}
+	s.written = s.written[:i]
+	return nil
 }
 
 func (s *InMemoryStorage) Close() error {

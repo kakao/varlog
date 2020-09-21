@@ -74,10 +74,10 @@ func (m *MockStorage) EXPECT() *MockStorageMockRecorder {
 }
 
 // Read mocks base method.
-func (m *MockStorage) Read(glsn types.GLSN) ([]byte, error) {
+func (m *MockStorage) Read(glsn types.GLSN) (varlog.LogEntry, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", glsn)
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(varlog.LogEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -131,19 +131,32 @@ func (mr *MockStorageMockRecorder) Commit(llsn, glsn interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockStorage)(nil).Commit), llsn, glsn)
 }
 
-// Delete mocks base method.
-func (m *MockStorage) Delete(glsn types.GLSN) (uint64, error) {
+// DeleteCommitted mocks base method.
+func (m *MockStorage) DeleteCommitted(glsn types.GLSN) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", glsn)
-	ret0, _ := ret[0].(uint64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "DeleteCommitted", glsn)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// Delete indicates an expected call of Delete.
-func (mr *MockStorageMockRecorder) Delete(glsn interface{}) *gomock.Call {
+// DeleteCommitted indicates an expected call of DeleteCommitted.
+func (mr *MockStorageMockRecorder) DeleteCommitted(glsn interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockStorage)(nil).Delete), glsn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCommitted", reflect.TypeOf((*MockStorage)(nil).DeleteCommitted), glsn)
+}
+
+// DeleteUncommitted mocks base method.
+func (m *MockStorage) DeleteUncommitted(llsn types.LLSN) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteUncommitted", llsn)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteUncommitted indicates an expected call of DeleteUncommitted.
+func (mr *MockStorageMockRecorder) DeleteUncommitted(llsn interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUncommitted", reflect.TypeOf((*MockStorage)(nil).DeleteUncommitted), llsn)
 }
 
 // Close mocks base method.

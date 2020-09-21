@@ -3,8 +3,10 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,7 +14,9 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/testutil"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
+	vpb "github.com/kakao/varlog/proto/varlog"
 	"go.uber.org/zap"
 )
 
@@ -53,7 +57,7 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 
 func TestLogStreamExecutorOperations(t *testing.T) {
 	Convey("LogStreamExecutor", t, func() {
-		const logStreamID = types.LogStreamID(0)
+		const logStreamID = types.LogStreamID(1)
 		const N = 1000
 
 		ctrl := gomock.NewController(t)
@@ -61,12 +65,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		storage := NewMockStorage(ctrl)
 		replicator := NewMockReplicator(ctrl)
 
-		lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{
-			AppendCTimeout:    DefaultLSEAppendCTimeout,
-			CommitWaitTimeout: DefaultLSECommitWaitTimeout,
-			TrimCTimeout:      DefaultLSETrimCTimeout,
-			CommitCTimeout:    DefaultLSECommitCTimeout,
-		})
+		lse, err := NewLogStreamExecutor(zap.NewNop(), logStreamID, storage, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 
 		err = lse.Run(context.TODO())
@@ -81,30 +80,8 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 			So(errors.Is(err, varlog.ErrUndecidable), ShouldBeTrue)
 		})
 
-		Convey("read operation should reply error when the requested GLSN was already deleted", func() {
-			const trimGLSN = types.GLSN(5)
-			var wg sync.WaitGroup
-			wg.Add(1)
-			storage.EXPECT().Delete(gomock.Any()).DoAndReturn(
-				func(types.GLSN) (uint64, error) {
-					defer wg.Done()
-					return uint64(trimGLSN), nil
-				},
-			)
-			err := lse.Trim(context.TODO(), trimGLSN)
-			So(err, ShouldBeNil)
-			wg.Wait()
-			for trimmedGLSN := types.MinGLSN; trimmedGLSN <= trimGLSN; trimmedGLSN++ {
-				isTrimmed := lse.(*logStreamExecutor).isTrimmed(trimmedGLSN)
-				So(isTrimmed, ShouldNotBeNil)
-
-				_, err := lse.Read(context.TODO(), trimmedGLSN)
-				So(errors.Is(err, varlog.ErrTrimmed), ShouldBeTrue)
-			}
-		})
-
 		Convey("read operation should reply written data", func() {
-			storage.EXPECT().Read(gomock.Any()).Return([]byte("log"), nil)
+			storage.EXPECT().Read(gomock.Any()).Return(varlog.LogEntry{Data: []byte("log")}, nil)
 			lse.(*logStreamExecutor).localLowWatermark = 0
 			lse.(*logStreamExecutor).localHighWatermark = 10
 			data, err := lse.Read(context.TODO(), types.GLSN(0))
@@ -457,13 +434,13 @@ func TestLogStreamExecutorTrim(t *testing.T) {
 			Convey("Then the LogStreamExecutor should return cancellation error", func() {
 				ctx, cancel := context.WithCancel(context.TODO())
 				cancel()
+				<-ctx.Done()
 
-				var err error
-				err = lse.Trim(ctx, types.MinGLSN)
-				So(err, ShouldResemble, context.Canceled)
+				lse.(*logStreamExecutor).localLowWatermark.Store(1)
+				lse.(*logStreamExecutor).localHighWatermark.Store(10)
 
-				err = lse.Trim(ctx, types.MinGLSN)
-				So(err, ShouldResemble, context.Canceled)
+				err := lse.Trim(ctx, 2)
+				So(err, ShouldNotBeNil)
 			})
 		})
 	})
@@ -585,9 +562,9 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 			Convey("Then status of the LogStreamExecutor is SEALING", func() {
 				sealed := lse.isSealed()
 				So(sealed, ShouldBeTrue)
-				lse.mtxStatus.RLock()
+				lse.muStatus.RLock()
 				status := lse.status
-				lse.mtxStatus.RUnlock()
+				lse.muStatus.RUnlock()
 				So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
 			})
 		})
@@ -603,8 +580,9 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 		Convey("When LogStreamExecutor.Seal is called (localHWM = lastCommittedGLSN)", func() {
 			lse.localHighWatermark.Store(types.MinGLSN)
-
-			Convey("Then status of LogStreamExecutor is SEALING", func() {
+			storage.EXPECT().Read(gomock.Any()).Return(varlog.LogEntry{}, nil)
+			storage.EXPECT().DeleteUncommitted(gomock.Any()).Return(nil)
+			Convey("Then status of LogStreamExecutor is SEALED", func() {
 				status, _ := lse.Seal(types.MinGLSN)
 				So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 			})
@@ -617,6 +595,241 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 				So(func() { lse.Seal(types.MinGLSN) }, ShouldPanic)
 			})
 		})
+
+	})
+}
+
+func TestLogStreamExecutorAndStorage(t *testing.T) {
+	Convey("LogStreamExecutor and Storage", t, func(c C) {
+		const (
+			logStreamID = types.LogStreamID(1)
+			repeat      = 10
+		)
+
+		logger, err := zap.NewDevelopment()
+		So(err, ShouldBeNil)
+		defer logger.Sync()
+
+		stg := NewInMemoryStorage()
+		lse, err := NewLogStreamExecutor(logger, logStreamID, stg, &DefaultLogStreamExecutorOptions)
+		So(err, ShouldBeNil)
+
+		lse.Run(context.TODO())
+		defer lse.Close()
+
+		// check initial state
+		So(lse.GetReport().KnownHighWatermark, ShouldEqual, 0)
+
+		waitForCommitted := func(highWatermark, prevHighWatermark, committedGLSNOffset types.GLSN, committedGLSNLength uint64) <-chan error {
+			c := make(chan error, 1)
+			go func() {
+				defer close(c)
+				for {
+					status := lse.GetReport()
+
+					// commit ok
+					if status.KnownHighWatermark == highWatermark {
+						c <- nil
+						return
+					}
+
+					// bad lse
+					if status.KnownHighWatermark > highWatermark {
+						c <- errors.New("bad LSE status")
+						return
+					}
+
+					// no written entry
+					if status.UncommittedLLSNLength < 1 {
+						time.Sleep(time.Millisecond)
+						continue
+					}
+
+					// send commit
+					lse.Commit(context.TODO(), CommittedLogStreamStatus{
+						LogStreamID:         logStreamID,
+						HighWatermark:       highWatermark,
+						PrevHighWatermark:   prevHighWatermark,
+						CommittedGLSNOffset: committedGLSNOffset,
+						CommittedGLSNLength: committedGLSNLength,
+					})
+				}
+			}()
+			return c
+		}
+
+		for hwm := types.GLSN(1); hwm <= repeat; hwm++ {
+			expectedData := []byte(fmt.Sprintf("log-%03d", hwm))
+			// Trim future GLSN
+			err = lse.Trim(context.TODO(), hwm)
+			So(err, ShouldNotBeNil)
+
+			// Append
+			errC := waitForCommitted(hwm, hwm-1, hwm, 1)
+			glsn, err := lse.Append(context.TODO(), expectedData)
+			So(err, ShouldBeNil)
+			So(glsn, ShouldEqual, hwm)
+			So(<-errC, ShouldBeNil)
+
+			// Read
+			actualData, err := lse.Read(context.TODO(), hwm)
+			So(err, ShouldBeNil)
+			So(expectedData, ShouldResemble, actualData)
+		}
+
+		// Trim
+		_, err = lse.Read(context.TODO(), 3)
+		So(err, ShouldBeNil)
+		err = lse.Trim(context.TODO(), 3)
+		So(err, ShouldBeNil)
+		// Trim is async, so wait until it is complete
+		testutil.CompareWait(func() bool {
+			_, err = lse.Read(context.TODO(), 3)
+			return err != nil
+		}, time.Minute)
+		err = lse.Trim(context.TODO(), 3)
+		So(err, ShouldBeNil)
+
+		// Now, no appending
+		So(lse.GetReport().UncommittedLLSNLength, ShouldEqual, 0)
+
+		// 3 written, but not committed failed logs
+		cctx, ccancel := context.WithCancel(context.TODO())
+		defer ccancel()
+		var wgClient sync.WaitGroup
+		stoppedClient := int32(0)
+		stoppedClientRetC := make(chan struct {
+			glsn types.GLSN
+			err  error
+		}, 3)
+		for i := 0; i < 3; i++ {
+			wgClient.Add(1)
+			go func(i int) {
+				defer wgClient.Done()
+				data := []byte(fmt.Sprintf("uncommitted-%03d", i))
+				glsn, err := lse.Append(cctx, data)
+				stoppedClientRetC <- struct {
+					glsn types.GLSN
+					err  error
+				}{
+					glsn: glsn,
+					err:  err,
+				}
+				atomic.AddInt32(&stoppedClient, 1)
+			}(i)
+		}
+		for {
+			status := lse.GetReport()
+			if status.UncommittedLLSNLength == 3 {
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
+
+		// Client status check: clients are stuck with append request
+		So(atomic.LoadInt32(&stoppedClient), ShouldEqual, 0)
+
+		// LSE status check: 3 written/not-committed logs
+		// NOTE (jun): When clients cancel their append request, the LSE doesn't change
+		// status, it is still LogStreamStatusRunning.
+		So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
+		So(lse.GetReport().UncommittedLLSNLength, ShouldEqual, 3)
+
+		// LSE
+		// GLSN(4), GLSN(5), GLSN(6), ..., GLSN(10=repeat)
+		// LLSN(4), LLSN(5), LLSN(6), ..., LLSN(10), LLSN(11), LLSN(12), LLSN(13)
+		// FIXME (jun): This is a very bad assertion: use public or interface method to
+		// check storage status.
+		written := stg.(*InMemoryStorage).written
+		So(written[len(written)-1].llsn, ShouldEqual, 13)
+
+		Convey("MR is behind of LSE", func() {
+			So(func() { lse.Seal(9) }, ShouldPanic)
+			ccancel()
+		})
+
+		Convey("MR is ahead of LSE", func() {
+			status, sealedGLSN := lse.Seal(11)
+			So(status, ShouldEqual, vpb.LogStreamStatusSealing)
+			So(sealedGLSN, ShouldEqual, 10)
+
+			// FIXME (jun): See above.
+			// LogStreamStatusSealing can't delete uncommitted logs.
+			written = stg.(*InMemoryStorage).written
+			So(written[len(written)-1].llsn, ShouldEqual, 13)
+
+			// LogStreamStatusSealing can't unseal
+			err = lse.Unseal()
+			So(err, ShouldNotBeNil)
+			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusSealing)
+
+			errC := waitForCommitted(11, 10, 11, 1)
+			So(<-errC, ShouldBeNil)
+
+			// append request of 1 client succeeds.
+			testutil.CompareWait(func() bool {
+				return atomic.LoadInt32(&stoppedClient) == 1
+			}, time.Minute)
+
+			stoppedClientRet := <-stoppedClientRetC
+			So(stoppedClientRet.err, ShouldBeNil)
+			So(stoppedClientRet.glsn, ShouldEqual, 11)
+
+			status, sealedGLSN = lse.Seal(11)
+			So(status, ShouldEqual, vpb.LogStreamStatusSealed)
+			So(sealedGLSN, ShouldEqual, 11)
+
+			// wait for appending clients to fail
+			testutil.CompareWait(func() bool {
+				return atomic.LoadInt32(&stoppedClient) == 3
+			}, time.Minute)
+
+			close(stoppedClientRetC)
+			for stoppedClientRet := range stoppedClientRetC {
+				So(stoppedClientRet.err, ShouldNotBeNil)
+			}
+
+			// append after sealing is failed.
+			_, err := lse.Append(context.TODO(), []byte("never"))
+			So(err, ShouldNotBeNil)
+
+			// LogStreamStatusSealed can unseal
+			err = lse.Unseal()
+			So(err, ShouldBeNil)
+			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
+		})
+
+		Convey("MR and LSE are on the same line", func() {
+			status, sealedGLSN := lse.Seal(10)
+			So(status, ShouldEqual, vpb.LogStreamStatusSealed)
+			So(sealedGLSN, ShouldEqual, 10)
+
+			// FIXME (jun): See above.
+			// LogStreamStatusSealed can delete uncommitted logs.
+			written = stg.(*InMemoryStorage).written
+			So(written[len(written)-1].llsn, ShouldEqual, 10)
+
+			// wait for appending clients to fail
+			testutil.CompareWait(func() bool {
+				return atomic.LoadInt32(&stoppedClient) == 3
+			}, time.Minute)
+
+			close(stoppedClientRetC)
+			for stoppedClientRet := range stoppedClientRetC {
+				So(stoppedClientRet.err, ShouldNotBeNil)
+			}
+
+			// append after sealing is failed.
+			_, err := lse.Append(context.TODO(), []byte("never"))
+			So(err, ShouldNotBeNil)
+
+			// LogStreamStatusSealing can unseal
+			err = lse.Unseal()
+			So(err, ShouldBeNil)
+			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
+		})
+
+		wgClient.Wait()
 
 	})
 }
