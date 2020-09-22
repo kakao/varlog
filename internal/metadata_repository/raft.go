@@ -867,6 +867,8 @@ func (rm *raftMembership) getLeader() uint64 {
 	return atomic.LoadUint64((*uint64)(&rm.leader))
 }
 
-func (rm *raftMembership) setFollower() {
+func (rm *raftMembership) clearMembership() {
+	atomic.StoreUint64((*uint64)(&rm.leader), raft.None)
 	atomic.StoreUint64((*uint64)(&rm.state), uint64(raft.StateFollower))
+	rm.removeAllPeers()
 }

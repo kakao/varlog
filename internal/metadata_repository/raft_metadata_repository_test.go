@@ -473,7 +473,7 @@ func TestMRGlobalCommit(t *testing.T) {
 
 				So(testutil.CompareWait(func() bool {
 					return mr.storage.GetHighWatermark() == types.GLSN(5)
-				}, time.Second), ShouldBeTrue)
+				}, 5*time.Second), ShouldBeTrue)
 			})
 
 			Convey("LogStream which have wrong GLSN but have uncommitted should commit", func(ctx C) {
@@ -524,7 +524,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 
 		So(testutil.CompareWait(func() bool {
 			return clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID) != nil
-		}, time.Second), ShouldBeTrue)
+		}, 5*time.Second), ShouldBeTrue)
 
 		ls := makeLogStream(lsID, snIDs)
 		rctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
@@ -537,7 +537,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 
 		So(testutil.CompareWait(func() bool {
 			return reporterClient.numUncommitted() == 0
-		}, time.Second), ShouldBeTrue)
+		}, 5*time.Second), ShouldBeTrue)
 	})
 }
 
@@ -599,7 +599,7 @@ func TestMRRequestMap(t *testing.T) {
 			testutil.CompareWait(func() bool {
 				_, ok := mr.requestMap.Load(uint64(1))
 				return ok
-			}, time.Second)
+			}, 5*time.Second)
 
 			dummy := &committedEntry{
 				entry: &pb.RaftEntry{
@@ -647,7 +647,7 @@ func TestMRRequestMap(t *testing.T) {
 		clus.Start()
 		So(testutil.CompareWait(func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}, 5*time.Second), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -746,7 +746,7 @@ func TestMRGetLastCommitted(t *testing.T) {
 
 					So(testutil.CompareWait(func() bool {
 						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
-					}, time.Second), ShouldBeTrue)
+					}, 5*time.Second), ShouldBeTrue)
 
 					So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(2))
 					So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(6+i))
@@ -754,7 +754,7 @@ func TestMRGetLastCommitted(t *testing.T) {
 			})
 
 			Convey("getLastCommitted should return same for sealed LS", func(ctx C) {
-				rctx, _ := context.WithTimeout(context.Background(), time.Second)
+				rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 				_, err := mr.Seal(rctx, lsIds[1])
 				So(err, ShouldBeNil)
 
@@ -852,14 +852,14 @@ func TestMRSeal(t *testing.T) {
 				return mr.proposeReport(lls) == nil
 			}, time.Second), ShouldBeTrue)
 
-			rctx, _ := context.WithTimeout(context.Background(), time.Second)
+			rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 			lc, err := mr.Seal(rctx, lsIds[1])
 			So(err, ShouldBeNil)
 			So(lc, ShouldEqual, types.GLSN(5))
 
 			Convey("Seal should return same last committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
-					rctx, _ := context.WithTimeout(context.Background(), time.Second)
+					rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 					lc, err := mr.Seal(rctx, lsIds[1])
 					So(err, ShouldBeNil)
 					So(lc, ShouldEqual, types.GLSN(5))
@@ -929,13 +929,13 @@ func TestMRUnseal(t *testing.T) {
 			return mr.proposeReport(lls) == nil
 		}, time.Second), ShouldBeTrue)
 
-		rctx, _ := context.WithTimeout(context.Background(), time.Second)
+		rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 		lc, err := mr.Seal(rctx, lsIds[1])
 		So(err, ShouldBeNil)
 		So(lc, ShouldEqual, types.GLSN(5))
 
 		Convey("Unealed LS should update report", func(ctx C) {
-			rctx, _ := context.WithTimeout(context.Background(), time.Second)
+			rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 			err := mr.Unseal(rctx, lsIds[1])
 			So(err, ShouldBeNil)
 
@@ -1000,21 +1000,23 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[0])
 		So(testutil.CompareWait(func() bool {
 			return !reporterClient.getKnownHighWatermark().Invalid()
-		}, time.Second), ShouldBeTrue)
+		}, 5*time.Second), ShouldBeTrue)
 
 		Convey("When node fail", func(ctx C) {
+			leader := clus.leader()
+
 			So(clus.leaderFail(), ShouldBeTrue)
 
 			Convey("Then MR Cluster should elect", func(ctx C) {
 				So(testutil.CompareWait(func() bool {
-					return clus.leaderElected()
-				}, time.Second), ShouldBeTrue)
+					return leader != clus.leader()
+				}, 5*time.Second), ShouldBeTrue)
 
 				prev := reporterClient.getKnownHighWatermark()
 
 				So(testutil.CompareWait(func() bool {
 					return reporterClient.getKnownHighWatermark() > prev
-				}, time.Second), ShouldBeTrue)
+				}, 5*time.Second), ShouldBeTrue)
 			})
 		})
 	})
@@ -1061,7 +1063,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 
-			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			So(clus.nodes[0].AddPeer(rctx,
@@ -1079,7 +1081,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 					}
 
 					return meta.GetStorageNode(snIDs[0]) != nil
-				}, time.Second), ShouldBeTrue)
+				}, 5*time.Second), ShouldBeTrue)
 
 				Convey("Register to new node should be success", func(ctx C) {
 					snID := snIDs[nrRep-1] + types.StorageNodeID(1)
@@ -1108,7 +1110,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 
-			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			So(clus.nodes[0].AddPeer(rctx,
@@ -1162,11 +1164,11 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			So(testutil.CompareWait(func() bool {
 				_, membership, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 				return len(membership) == nrNode
-			}, time.Second), ShouldBeTrue)
+			}, 5*time.Second), ShouldBeTrue)
 
 			clus.stop(leaveNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			So(clus.nodes[checkNode].RemovePeer(rctx,
@@ -1187,11 +1189,11 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			So(testutil.CompareWait(func() bool {
 				_, membership, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 				return len(membership) == nrNode
-			}, time.Second), ShouldBeTrue)
+			}, 5*time.Second), ShouldBeTrue)
 
 			clus.stop(leaveNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			So(clus.nodes[checkNode].RemovePeer(rctx,
@@ -1321,7 +1323,7 @@ func TestMRLoadSnapshop(t *testing.T) {
 		So(testutil.CompareWait(func() bool {
 			snap := clus.nodes[restartNode].raftNode.loadSnapshot()
 			return snap != nil
-		}, time.Second), ShouldBeTrue)
+		}, 5*time.Second), ShouldBeTrue)
 
 		Convey("When follower restart", func(ctx C) {
 			clus.restart(restartNode)
@@ -1331,7 +1333,7 @@ func TestMRLoadSnapshop(t *testing.T) {
 					return false
 				}
 				return len(membership) == nrNode
-			}, time.Second), ShouldBeTrue)
+			}, 5*time.Second), ShouldBeTrue)
 
 			Convey("Then GetMembership should recover metadata", func(ctx C) {
 				So(testutil.CompareWait(func() bool {
@@ -1341,7 +1343,7 @@ func TestMRLoadSnapshop(t *testing.T) {
 					}
 
 					return meta.GetStorageNode(snIDs[0]) != nil
-				}, time.Second), ShouldBeTrue)
+				}, 5*time.Second), ShouldBeTrue)
 			})
 		})
 	})
@@ -1384,13 +1386,13 @@ func TestMRRemoteSnapshot(t *testing.T) {
 		So(testutil.CompareWait(func() bool {
 			snap := clus.nodes[leader].raftNode.loadSnapshot()
 			return snap != nil
-		}, time.Second), ShouldBeTrue)
+		}, 5*time.Second), ShouldBeTrue)
 
 		Convey("When new node join", func(ctx C) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 
-			rctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			So(clus.nodes[leader].AddPeer(rctx,
@@ -1407,7 +1409,7 @@ func TestMRRemoteSnapshot(t *testing.T) {
 						return false
 					}
 					return len(membership) == nrNode
-				}, time.Second), ShouldBeTrue)
+				}, 5*time.Second), ShouldBeTrue)
 
 				Convey("Then replication should be operate", func(ctx C) {
 					for i := range snIDs {
@@ -1562,7 +1564,7 @@ func TestMRProposeTimeout(t *testing.T) {
 				StorageNodeID: types.StorageNodeID(snID),
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			err := mr.RegisterStorageNode(rctx, sn)
 			Convey("Then it should be timed out", func(ctx C) {

@@ -1236,6 +1236,10 @@ func TestStorageApplySnapshot(t *testing.T) {
 
 		<-ch
 
+		So(testutil.CompareWait(func() bool {
+			return atomic.LoadInt64(&ms.nrRunning) == 0
+		}, time.Second), ShouldBeTrue)
+
 		ms.mergeStateMachine()
 		ms.triggerSnapshot(appliedIndex)
 
@@ -1245,6 +1249,7 @@ func TestStorageApplySnapshot(t *testing.T) {
 
 		snap, confState, snapIndex := ms.GetSnapshot()
 		So(snap, ShouldNotBeNil)
+		So(snapIndex, ShouldEqual, appliedIndex)
 
 		Convey("When new MetadataStorage which load snapshot", func(ctx C) {
 			loaded := NewMetadataStorage(cb, DefaultSnapshotCount)

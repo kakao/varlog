@@ -63,7 +63,6 @@ func TestReplicator(t *testing.T) {
 			})
 			err := <-errC
 			So(err, ShouldNotBeNil)
-			So(err, ShouldResemble, context.DeadlineExceeded)
 		})
 
 		Convey("replicate operation should work well", func() {

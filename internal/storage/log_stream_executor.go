@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -10,6 +11,10 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 	"go.uber.org/zap"
+)
+
+var (
+	errLSEKilled = errors.New("killed logstreamexecutor")
 )
 
 type SubscribeResult struct {
@@ -71,10 +76,12 @@ type logStreamExecutor struct {
 	storage     Storage
 	replicator  Replicator
 
-	running   bool
-	muRunning sync.Mutex
-	cancel    context.CancelFunc
-	runner    *runner.Runner
+	running     bool
+	muRunning   sync.Mutex
+	cancel      context.CancelFunc
+	runner      *runner.Runner
+	stopped     chan struct{}
+	onceStopped sync.Once
 
 	appendC chan *appendTask
 	commitC chan commitTask
@@ -150,6 +157,7 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 		logStreamID:          logStreamID,
 		storage:              storage,
 		replicator:           NewReplicator(logStreamID, logger),
+		stopped:              make(chan struct{}),
 		runner:               runner.New(fmt.Sprintf("logstreamexecutor-%v", logStreamID), logger),
 		trackers:             newAppendTracker(),
 		appendC:              make(chan *appendTask, options.AppendCSize),
@@ -222,7 +230,24 @@ func (lse *logStreamExecutor) Close() {
 	}
 	lse.replicator.Close()
 	lse.runner.Stop()
+	lse.stop()
+	lse.exhaustAppendTrackers()
 	lse.logger.Info("stop")
+}
+
+func (lse *logStreamExecutor) stop() {
+	lse.onceStopped.Do(func() {
+		lse.logger.Info("stopped rpc handlers")
+		close(lse.stopped)
+	})
+}
+
+func (lse *logStreamExecutor) exhaustAppendTrackers() {
+	lse.logger.Info("exhaust pending append tasks")
+	lse.trackers.foreach(func(appendT *appendTask) {
+		lse.logger.Debug("discard append task", zap.Any("llsn", appendT.getLLSN()))
+		appendT.notify(errLSEKilled)
+	})
 }
 
 func (lse *logStreamExecutor) Status() vpb.LogStreamStatus {
@@ -367,6 +392,8 @@ func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte
 		return task.data, task.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-lse.stopped:
+		return nil, errLSEKilled
 	}
 }
 
@@ -403,6 +430,7 @@ func (lse *logStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<
 	return lse.subscribe(ctx, glsn), nil
 }
 
+// FIXME (jun): Use stopped channel
 func (lse *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN) <-chan SubscribeResult {
 	c := make(chan SubscribeResult)
 	go func() {
@@ -499,6 +527,8 @@ func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) err
 	case <-tctx.Done():
 		lse.logger.Error("could not add appendTask to appendC", zap.Error(tctx.Err()))
 		return tctx.Err()
+	case <-lse.stopped:
+		return errLSEKilled
 	}
 }
 
@@ -553,7 +583,8 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 			lse.trackers.track(llsn, t)
 			return nil
 		}
-		return fmt.Errorf("could not add appendTask to tracker (status=%v llsn=%v)", lse.status, llsn)
+		lse.logger.Error("could not add appendTask to tracker", zap.Any("status", lse.status), zap.Any("llsn", llsn))
+		return varlog.ErrSealed
 	}
 
 	return nil
@@ -596,6 +627,8 @@ func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
 	case lse.trimC <- &trimTask{glsn: glsn}:
 	case <-tctx.Done():
 		return tctx.Err()
+	case <-lse.stopped:
+		return errLSEKilled
 	}
 	return nil
 }
@@ -644,6 +677,8 @@ func (lse *logStreamExecutor) Commit(ctx context.Context, cr CommittedLogStreamS
 	case lse.commitC <- ct:
 	case <-tctx.Done():
 		lse.logger.Error("could not send commitTask to commitC", zap.Error(tctx.Err()))
+	case <-lse.stopped:
+		lse.logger.Error("could not send commitTask to commitC", zap.Error(errLSEKilled))
 	}
 }
 
