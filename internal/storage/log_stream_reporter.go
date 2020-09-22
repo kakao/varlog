@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -9,6 +10,10 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	"go.uber.org/zap"
+)
+
+var (
+	errLSRKilled = errors.New("killed logstreamreporter")
 )
 
 type UncommittedLogStreamStatus struct {
@@ -54,8 +59,10 @@ type logStreamReporter struct {
 	history            map[types.GLSN]map[types.LogStreamID]UncommittedLogStreamStatus
 	lastReportedHWM    types.GLSN
 
-	running   bool
-	muRunning sync.Mutex
+	running     bool
+	muRunning   sync.Mutex
+	stopped     chan struct{}
+	onceStopped sync.Once
 
 	cancel  context.CancelFunc
 	runner  *runner.Runner
@@ -78,6 +85,7 @@ func NewLogStreamReporter(logger *zap.Logger, storageNodeID types.StorageNodeID,
 		reportC:       make(chan *lsrReportTask, options.ReportCSize),
 		commitC:       make(chan lsrCommitTask, options.CommitCSize),
 		runner:        runner.New("logstreamreporter", logger),
+		stopped:       make(chan struct{}),
 		options:       options,
 		logger:        logger,
 	}
@@ -129,7 +137,15 @@ func (lsr *logStreamReporter) Close() {
 		lsr.cancel()
 	}
 	lsr.runner.Stop()
+	lsr.stop()
 	lsr.logger.Info("stop")
+}
+
+func (lsr *logStreamReporter) stop() {
+	lsr.onceStopped.Do(func() {
+		lsr.logger.Info("stopped rpc handlers")
+		close(lsr.stopped)
+	})
 }
 
 func (lsr *logStreamReporter) dispatchReport(ctx context.Context) {
@@ -181,6 +197,8 @@ func (lsr *logStreamReporter) addReportC(ctx context.Context, t *lsrReportTask) 
 	case lsr.reportC <- t:
 	case <-tctx.Done():
 		return tctx.Err()
+	case <-lsr.stopped:
+		return errLSRKilled
 	}
 	return nil
 }
@@ -261,6 +279,8 @@ func (lsr *logStreamReporter) Commit(ctx context.Context, highWatermark, prevHig
 	case <-tctx.Done():
 		lsr.logger.Error("could not try to commit: failed to append commitTask to commitC", zap.Error(tctx.Err()))
 		return tctx.Err()
+	case <-lsr.stopped:
+		return errLSRKilled
 	}
 }
 

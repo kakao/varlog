@@ -173,7 +173,7 @@ func (mr *RaftMetadataRepository) Close() error {
 		mr.cancel = nil
 	}
 
-	mr.setFollower()
+	mr.clearMembership()
 
 	return nil
 }
@@ -190,8 +190,8 @@ func (mr *RaftMetadataRepository) hasLeader() bool {
 	return mr.raftNode.membership.hasLeader()
 }
 
-func (mr *RaftMetadataRepository) setFollower() {
-	mr.raftNode.membership.setFollower()
+func (mr *RaftMetadataRepository) clearMembership() {
+	mr.raftNode.membership.clearMembership()
 }
 
 func (mr *RaftMetadataRepository) runReplication(ctx context.Context) {
@@ -499,8 +499,7 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 		mr.storage.AppendGlobalLogStream(gls)
 	}
 
-	if !trimHWM.Invalid() {
-		mr.logger.Info("trim", zap.Uint64("hwm", uint64(trimHWM)))
+	if !trimHWM.Invalid() && trimHWM != types.MaxGLSN {
 		mr.storage.TrimGlobalLogStream(trimHWM)
 	}
 

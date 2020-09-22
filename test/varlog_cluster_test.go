@@ -198,6 +198,9 @@ func TestVarlogReplicateLog(t *testing.T) {
 					defer cancel()
 
 					glsn, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
+					if varlog.IsTransientErr(err) {
+						continue
+					}
 					So(err, ShouldBeNil)
 					So(glsn, ShouldEqual, types.GLSN(i+1))
 				}
@@ -370,7 +373,7 @@ func TestVarlogTrimGLS(t *testing.T) {
 
 			Convey("Then GLS history of MR should be trimmed", func(ctx C) {
 				So(testutil.CompareWait(func() bool {
-					return mr.GetMinHighWatermark() == hwm-types.GLSN(1)
+					return mr.GetMinHighWatermark() == hwm
 				}, 5*time.Second), ShouldBeTrue)
 			})
 		})
@@ -448,7 +451,7 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 
 			Convey("Then GLS history of MR should be trimmed", func(ctx C) {
 				So(testutil.CompareWait(func() bool {
-					return mr.GetMinHighWatermark() == hwm-types.GLSN(1)
+					return mr.GetMinHighWatermark() == hwm
 				}, 5*time.Second), ShouldBeTrue)
 			})
 		})
@@ -469,6 +472,8 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 		So(testutil.CompareWait(func() bool {
 			return env.LeaderElected()
 		}, time.Second), ShouldBeTrue)
+
+		leader := env.Leader()
 
 		_, err := env.AddSN()
 		So(err, ShouldBeNil)
@@ -528,6 +533,11 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 					if !stopped && maxGLSN > triggerGLSN {
 						So(env.LeaderFail(), ShouldBeTrue)
 						stopped = true
+
+						So(testutil.CompareWait(func() bool {
+							return env.Leader() != leader
+						}, 5*time.Second), ShouldBeTrue)
+
 					} else if maxGLSN > goalGLSN {
 						break Loop
 					}
@@ -610,6 +620,9 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					glsn, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
 					cancel()
 					if err != nil {
+						if varlog.IsTransientErr(err) {
+							continue
+						}
 						errC <- err
 						return
 					} else {

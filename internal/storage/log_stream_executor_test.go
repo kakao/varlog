@@ -65,7 +65,10 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		storage := NewMockStorage(ctrl)
 		replicator := NewMockReplicator(ctrl)
 
-		lse, err := NewLogStreamExecutor(zap.NewNop(), logStreamID, storage, &DefaultLogStreamExecutorOptions)
+		logger, err := zap.NewDevelopment()
+		So(err, ShouldBeNil)
+
+		lse, err := NewLogStreamExecutor(logger, logStreamID, storage, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 
 		err = lse.Run(context.TODO())
@@ -169,7 +172,9 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 		storage := NewMockStorage(ctrl)
 		replicator := NewMockReplicator(ctrl)
-		lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{
+		logger, err := zap.NewDevelopment()
+		So(err, ShouldBeNil)
+		lse, err := NewLogStreamExecutor(logger, types.LogStreamID(1), storage, &LogStreamExecutorOptions{
 			AppendCTimeout:    DefaultLSEAppendCTimeout,
 			CommitWaitTimeout: DefaultLSECommitWaitTimeout,
 			TrimCTimeout:      DefaultLSETrimCTimeout,
@@ -211,8 +216,17 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 		})
 
 		Convey("When the appendC in the LogStreamExecutor is blocked", func() {
-			lse.Close()
+			stop := make(chan struct{})
+			storage.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(types.LLSN, []byte) error {
+					<-stop
+					return nil
+				},
+			).AnyTimes()
+			defer close(stop)
 
+			// add dummy appendtask to block next requests
+			lse.(*logStreamExecutor).appendC <- newAppendTask(nil, nil, types.MinLLSN, &lse.(*logStreamExecutor).trackers)
 			Convey("And the Append is blocked more than configured", func() {
 				lse.(*logStreamExecutor).options.AppendCTimeout = time.Duration(0)
 				Convey("Then the LogStreamExecutor should return timeout error", func() {

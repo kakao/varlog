@@ -26,7 +26,10 @@ type replicateTask struct {
 
 const replicateCSize = 0
 
-var errNoReplicas = errors.New("replicator: no replicas")
+var (
+	errRepKilled  = errors.New("killed replicator")
+	errNoReplicas = errors.New("replicator: no replicas")
+)
 
 type Replicator interface {
 	Run(context.Context) error
@@ -39,9 +42,11 @@ type replicator struct {
 	rcm         map[types.StorageNodeID]ReplicatorClient
 	mtxRcm      sync.RWMutex
 
-	running   bool
-	muRunning sync.Mutex
-	cancel    context.CancelFunc
+	running     bool
+	muRunning   sync.Mutex
+	cancel      context.CancelFunc
+	stopped     chan struct{}
+	onceStopped sync.Once
 
 	runner     *runner.Runner
 	replicateC chan *replicateTask
@@ -59,6 +64,7 @@ func NewReplicator(logStreamID types.LogStreamID, logger *zap.Logger) Replicator
 		rcm:         make(map[types.StorageNodeID]ReplicatorClient),
 		replicateC:  make(chan *replicateTask, replicateCSize),
 		runner:      runner.New("replicator", logger),
+		stopped:     make(chan struct{}),
 		logger:      logger,
 	}
 }
@@ -102,7 +108,15 @@ func (r *replicator) Close() {
 	}
 	r.mtxRcm.Unlock()
 	r.runner.Stop()
+	r.stop()
 	r.logger.Info("close")
+}
+
+func (r *replicator) stop() {
+	r.onceStopped.Do(func() {
+		r.logger.Info("stopped rpc handlers")
+		close(r.stopped)
+	})
 }
 
 func (r *replicator) Replicate(ctx context.Context, llsn types.LLSN, data []byte, replicas []Replica) <-chan error {
@@ -122,6 +136,9 @@ func (r *replicator) Replicate(ctx context.Context, llsn types.LLSN, data []byte
 	case r.replicateC <- task:
 	case <-ctx.Done():
 		errC <- ctx.Err()
+		close(errC)
+	case <-r.stopped:
+		errC <- errRepKilled
 		close(errC)
 	}
 	return errC
