@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -390,22 +389,7 @@ func TestLogStreamReporterCommit(t *testing.T) {
 
 		setLseGetter(lseGetter, lse1, lse2)
 
-		Convey("it should reject a commit result whose prevNextGLSN is not equal to own knownNextGLSN",
-			func() {
-				lsr.knownHighWatermark.Store(10)
-				err := lsr.Commit(context.TODO(), types.GLSN(10), types.GLSN(5), nil)
-				So(err, ShouldNotBeNil)
-				So(len(lsr.commitC), ShouldEqual, 0)
-
-				err = lsr.Commit(context.TODO(), types.GLSN(20), types.GLSN(15), nil)
-				So(err, ShouldNotBeNil)
-				So(len(lsr.commitC), ShouldEqual, 0)
-			},
-		)
-
 		Convey("it should reject an empty commit result", func() {
-			lsr.knownHighWatermark.Store(10)
-
 			err := lsr.Commit(context.TODO(), types.GLSN(15), types.GLSN(10), nil)
 			So(err, ShouldNotBeNil)
 			So(len(lsr.commitC), ShouldEqual, 0)
@@ -413,45 +397,6 @@ func TestLogStreamReporterCommit(t *testing.T) {
 			err = lsr.Commit(context.TODO(), types.GLSN(15), types.GLSN(10), []CommittedLogStreamStatus{})
 			So(err, ShouldNotBeNil)
 			So(len(lsr.commitC), ShouldEqual, 0)
-		})
-
-		Convey("it should change knownNextGLSN after call LSE.Commit", func() {
-			lsr.Run(context.TODO())
-			defer lsr.Close()
-
-			lsr.knownHighWatermark.Store(10)
-			oldKnownNextGLSN := lsr.knownHighWatermark.Load()
-			var wg sync.WaitGroup
-			wg.Add(2)
-			lse1.EXPECT().Commit(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, CommittedLogStreamStatus) {
-				defer wg.Done()
-			}).AnyTimes()
-			lse2.EXPECT().Commit(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, CommittedLogStreamStatus) {
-				defer wg.Done()
-			}).AnyTimes()
-
-			err := lsr.Commit(context.TODO(), types.GLSN(20), types.GLSN(10), []CommittedLogStreamStatus{
-				{
-					LogStreamID:         lse1.LogStreamID(),
-					HighWatermark:       types.GLSN(20),
-					PrevHighWatermark:   types.GLSN(10),
-					CommittedGLSNOffset: types.GLSN(100),
-					CommittedGLSNLength: 5,
-				},
-				{
-					LogStreamID:         lse2.LogStreamID(),
-					HighWatermark:       types.GLSN(20),
-					PrevHighWatermark:   types.GLSN(10),
-					CommittedGLSNOffset: types.GLSN(105),
-					CommittedGLSNLength: 5,
-				},
-			})
-			So(err, ShouldBeNil)
-			wg.Wait()
-			for oldKnownNextGLSN == lsr.knownHighWatermark.Load() {
-				time.Sleep(time.Millisecond)
-			}
-			So(lsr.knownHighWatermark.Load(), ShouldEqual, types.GLSN(20))
 		})
 	})
 }

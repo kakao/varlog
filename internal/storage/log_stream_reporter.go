@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/kakao/varlog/pkg/varlog"
@@ -55,9 +54,8 @@ type logStreamReporter struct {
 	storageNodeID types.StorageNodeID
 	lseGetter     LogStreamExecutorGetter
 
-	knownHighWatermark types.AtomicGLSN
-	history            map[types.GLSN]map[types.LogStreamID]UncommittedLogStreamStatus
-	lastReportedHWM    types.GLSN
+	history         map[types.GLSN]map[types.LogStreamID]UncommittedLogStreamStatus
+	lastReportedHWM types.GLSN
 
 	running     bool
 	muRunning   sync.Mutex
@@ -257,10 +255,6 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 }
 
 func (lsr *logStreamReporter) Commit(ctx context.Context, highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) error {
-	if err := lsr.verifyCommit(prevHighWatermark); err != nil {
-		lsr.logger.Error("could not try to commit: verification error", zap.Error(err))
-		return varlog.ErrInternal
-	}
 	if len(commitResults) == 0 {
 		lsr.logger.Error("could not try to commit: no commit results")
 		return varlog.ErrInternal
@@ -285,26 +279,13 @@ func (lsr *logStreamReporter) Commit(ctx context.Context, highWatermark, prevHig
 }
 
 func (lsr *logStreamReporter) commit(ctx context.Context, t lsrCommitTask) {
-	if err := lsr.verifyCommit(t.prevHighWatermark); err != nil {
-		lsr.logger.Error("could not try to commit: verification error", zap.Error(err))
-		return
-	}
 	for _, commitResult := range t.commitResults {
 		logStreamID := commitResult.LogStreamID
 		executor, ok := lsr.lseGetter.GetLogStreamExecutor(logStreamID)
 		if !ok {
-			panic("no such executor")
+			lsr.logger.Panic("no such executor", zap.Any("target_lsid", "logStreamID"))
 		}
 		lsr.logger.Debug("try to commit", zap.Reflect("commit", commitResult))
 		go executor.Commit(ctx, commitResult)
 	}
-	lsr.knownHighWatermark.Store(t.highWatermark)
-}
-
-func (lsr *logStreamReporter) verifyCommit(prevHighWatermark types.GLSN) error {
-	knownHighWatermark := lsr.knownHighWatermark.Load()
-	if knownHighWatermark != prevHighWatermark {
-		return fmt.Errorf("logstreamreporter: invalid commit argument (LSR.knownHighWatermark(%v) != CR.prevHighWatermark(%v)", knownHighWatermark, prevHighWatermark)
-	}
-	return nil
 }
