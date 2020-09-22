@@ -688,25 +688,11 @@ func (lse *logStreamExecutor) verifyCommit(prevHighWatermark types.GLSN) error {
 
 	if lse.globalHighwatermark.Invalid() {
 		return nil
-		// return true
 	}
 	if lse.globalHighwatermark == prevHighWatermark {
 		return nil
-		// return true
 	}
 	return fmt.Errorf("logstream: highwatermark mismatch (globalHighwatermark=%v prevHighWatermark=%v)", lse.globalHighwatermark, prevHighWatermark)
-	// return false
-
-	// If the LSE is newbie knownNextGLSN is zero. In LSE-wise commit, it is unnecessary,
-	/*
-		ret := lse.globalHighwatermark.Invalid() || lse.globalHighwatermark == prevHighWatermark
-		if !ret {
-			lse.logger.Error("incorrect CR",
-				zap.Uint64("known next GLSN", uint64(lse.globalHighwatermark)),
-				zap.Uint64("prev next GLSN", uint64(prevHighWatermark)))
-		}
-		return ret
-	*/
 }
 
 func (lse *logStreamExecutor) commit(t commitTask) {
