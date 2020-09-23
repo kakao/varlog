@@ -83,11 +83,19 @@ type MetadataStorage struct {
 	runner  *runner.Runner
 	running atomicutil.AtomicBool
 	cancel  context.CancelFunc
+
+	logger *zap.Logger
 }
 
-func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64) *MetadataStorage {
+func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger *zap.Logger) *MetadataStorage {
+	if logger == nil {
+		logger, _ = zap.NewDevelopment()
+		logger = logger.Named("storage")
+	}
+
 	ms := &MetadataStorage{
 		cacheCompleteCB: cb,
+		logger:          logger,
 	}
 	ms.snapCount = snapCount
 
@@ -620,6 +628,18 @@ func (ms *MetadataStorage) lookupNextGLSNoLock(glsn types.GLSN) *snpb.GlobalLogS
 	return pre.LookupGlobalLogStreamByPrev(glsn)
 }
 
+func (ms *MetadataStorage) lookupGLSNoLock(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
+	pre, cur := ms.getStateMachine()
+	if pre != cur {
+		r := cur.LookupGlobalLogStream(glsn)
+		if r != nil {
+			return r
+		}
+	}
+
+	return pre.LookupGlobalLogStream(glsn)
+}
+
 func (ms *MetadataStorage) getLastGLSNoLock() *snpb.GlobalLogStreamDescriptor {
 	gls := ms.diffStateMachine.GetLastGlobalLogStream()
 	if gls != nil {
@@ -630,7 +650,12 @@ func (ms *MetadataStorage) getLastGLSNoLock() *snpb.GlobalLogStreamDescriptor {
 }
 
 func (ms *MetadataStorage) getFirstGLSNoLock() *snpb.GlobalLogStreamDescriptor {
-	return ms.origStateMachine.GetFirstGlobalLogStream()
+	gls := ms.origStateMachine.GetFirstGlobalLogStream()
+	if gls != nil {
+		return gls
+	}
+
+	return ms.diffStateMachine.GetFirstGlobalLogStream()
 }
 
 func (ms *MetadataStorage) LookupLocalLogStream(lsID types.LogStreamID) *pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas {
@@ -675,6 +700,23 @@ func (ms *MetadataStorage) LookupLocalLogStreamReplica(lsID types.LogStreamID, s
 	return nil
 }
 
+func (ms *MetadataStorage) verifyLocalLogStream(s *pb.MetadataRepositoryDescriptor_LocalLogStreamReplica) bool {
+	fgls := ms.getFirstGLSNoLock()
+	lgls := ms.getLastGLSNoLock()
+
+	if fgls == nil {
+		return true
+	}
+
+	if fgls.PrevHighWatermark > s.KnownHighWatermark ||
+		lgls.HighWatermark < s.KnownHighWatermark {
+		return false
+	}
+
+	return s.KnownHighWatermark == fgls.PrevHighWatermark ||
+		ms.lookupGLSNoLock(s.KnownHighWatermark) != nil
+}
+
 func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, snID types.StorageNodeID, s *pb.MetadataRepositoryDescriptor_LocalLogStreamReplica) {
 	pre, cur := ms.getStateMachine()
 
@@ -682,7 +724,6 @@ func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, s
 	if !ok {
 		o, ok := pre.LogStream.LocalLogStreams[lsID]
 		if !ok {
-			// ignore
 			return
 		}
 
@@ -696,6 +737,17 @@ func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, s
 
 	r, ok := lm.Replicas[snID]
 	if !ok {
+		return
+	}
+
+	if !ms.verifyLocalLogStream(s) {
+		ms.logger.Warn("could not apply report: invalid hwm",
+			zap.Uint32("lsid", uint32(lsID)),
+			zap.Uint32("snid", uint32(snID)),
+			zap.Uint64("knownHWM", uint64(s.KnownHighWatermark)),
+			zap.Uint64("first", uint64(ms.getFirstGLSNoLock().GetHighWatermark())),
+			zap.Uint64("last", uint64(ms.getLastGLSNoLock().GetHighWatermark())),
+		)
 		return
 	}
 

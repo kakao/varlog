@@ -20,6 +20,18 @@ func (s *MetadataRepositoryDescriptor) LookupGlobalLogStreamByPrev(glsn types.GL
 	return nil
 }
 
+func (s *MetadataRepositoryDescriptor) LookupGlobalLogStream(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
+	i := sort.Search(len(s.LogStream.GlobalLogStreams), func(i int) bool {
+		return s.LogStream.GlobalLogStreams[i].HighWatermark >= glsn
+	})
+
+	if i < len(s.LogStream.GlobalLogStreams) && s.LogStream.GlobalLogStreams[i].HighWatermark == glsn {
+		return s.LogStream.GlobalLogStreams[i]
+	}
+
+	return nil
+}
+
 func (s *MetadataRepositoryDescriptor) GetLastGlobalLogStream() *snpb.GlobalLogStreamDescriptor {
 	n := len(s.LogStream.GlobalLogStreams)
 	if n == 0 {
