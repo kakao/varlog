@@ -573,18 +573,32 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 		return err
 	}
 
-	lse.uncommittedLLSNEnd.Add(1)
-
+	// NOTE (jun): Tracking the appendTask MUST be starting before incrementing
+	// uncommittedLLSNEnd.
+	// Let's assume that incrementing uncommittedLLSNEnd is happened before tracking the
+	// appendTask. If GetReport request is arrived and context switch is occurred, it may be
+	// replied that the LS has the new uncommitted log, however it is not tracked yet.
+	// If, moreover, Commit corresponded to the report is arrived, its content contains the
+	// uncommitted log whose appendTask is not tracked. In this case, client of that append
+	// request may wait forever.
+	defer lse.uncommittedLLSNEnd.Add(1)
 	if primary {
 		t.markWritten(llsn)
+
 		lse.muStatus.RLock()
 		defer lse.muStatus.RUnlock()
-		if lse.status == vpb.LogStreamStatusRunning {
+
+		switch lse.status {
+		case vpb.LogStreamStatusRunning:
 			lse.trackers.track(llsn, t)
 			return nil
+		case vpb.LogStreamStatusDeleted:
+			lse.logger.Panic("invalid LogStreamStatus", zap.Any("status", lse.status))
+			return varlog.ErrInternal
+		default:
+			lse.logger.Error("could not add appendTask to tracker", zap.Any("status", lse.status), zap.Any("llsn", llsn))
+			return varlog.ErrSealed
 		}
-		lse.logger.Error("could not add appendTask to tracker", zap.Any("status", lse.status), zap.Any("llsn", llsn))
-		return varlog.ErrSealed
 	}
 
 	return nil
@@ -727,6 +741,8 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		if ok {
 			appendT.setGLSN(glsn)
 			appendT.notify(nil)
+		} else {
+			lse.logger.Warn("committed, but cannot notify since no appendTask", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 		}
 		lse.logger.Debug("committed", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 		glsn++
@@ -740,6 +756,8 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		if ok {
 			appendT.setGLSN(glsn)
 			appendT.notify(fmt.Errorf("%w: commit error (llsn=%v glsn=%v)", varlog.ErrCorruptLogStream, llsn, glsn))
+		} else {
+			lse.logger.Warn("failed to commit, but cannot notify since no appendTask", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 		}
 		glsn++
 		llsn++
