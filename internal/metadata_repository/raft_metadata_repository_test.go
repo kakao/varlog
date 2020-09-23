@@ -39,8 +39,7 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoClu
 		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", 10000+i)
 	}
 
-	//logger, _ := zap.NewDevelopment()
-	logger := zap.NewNop()
+	logger, _ := zap.NewDevelopment(zap.IncreaseLevel(zap.WarnLevel))
 	clus := &metadataRepoCluster{
 		nrRep:             nrRep,
 		peers:             peers,

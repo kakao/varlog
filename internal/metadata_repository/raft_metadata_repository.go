@@ -74,7 +74,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		sw:                stopwaiter.New(),
 	}
 
-	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount)
+	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
 
 	mr.proposeC = make(chan *pb.RaftEntry, 4096)
 	mr.commitC = make(chan *committedEntry, 4096)
@@ -469,6 +469,8 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 						zap.Uint64("cur", uint64(curHWM)),
 						zap.Uint64("uncommit", uint64(nrUncommit)),
 						zap.Uint64("commit", uint64(nrCommitted)),
+						zap.Uint64("first", uint64(mr.storage.getFirstGLSNoLock().GetHighWatermark())),
+						zap.Uint64("last", uint64(mr.storage.getLastGLSNoLock().GetHighWatermark())),
 					)
 				}
 
@@ -484,7 +486,7 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 			if nrUncommit > 0 {
 				committedOffset = commit.CommittedGLSNOffset + types.GLSN(commit.CommittedGLSNLength)
 			} else {
-				commit.CommittedGLSNOffset = mr.getLastCommitted(lsID)
+				commit.CommittedGLSNOffset = mr.getLastCommitted(lsID) + types.GLSN(1)
 				commit.CommittedGLSNLength = 0
 			}
 
@@ -570,6 +572,8 @@ func (mr *RaftMetadataRepository) numCommitSince(lsID types.LogStreamID, glsn ty
 			mr.logger.Panic("gls should be exist",
 				zap.Uint64("highest", uint64(highest)),
 				zap.Uint64("cur", uint64(glsn)),
+				zap.Uint64("first", uint64(mr.storage.getFirstGLSNoLock().GetHighWatermark())),
+				zap.Uint64("last", uint64(mr.storage.getLastGLSNoLock().GetHighWatermark())),
 			)
 		}
 
@@ -646,11 +650,11 @@ func (mr *RaftMetadataRepository) getLastCommitted(lsID types.LogStreamID) types
 		return types.InvalidGLSN
 	}
 
-	if r.CommittedGLSNLength == 0 {
-		return r.CommittedGLSNOffset
+	if r.CommittedGLSNOffset+types.GLSN(r.CommittedGLSNLength) == types.InvalidGLSN {
+		return types.InvalidGLSN
 	}
 
-	return r.CommittedGLSNOffset + types.GLSN(r.CommittedGLSNLength-1)
+	return r.CommittedGLSNOffset + types.GLSN(r.CommittedGLSNLength) - types.GLSN(1)
 }
 
 func (mr *RaftMetadataRepository) proposeCommit() {

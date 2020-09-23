@@ -53,8 +53,7 @@ func NewVarlogCluster(opts VarlogClusterOptions) *VarlogCluster {
 		mrPeers[i] = fmt.Sprintf("http://127.0.0.1:%d", MR_PORT_BASE+i)
 	}
 
-	logger := zap.NewNop()
-	//logger, _ := zap.NewDevelopment()
+	logger, _ := zap.NewDevelopment(zap.IncreaseLevel(zap.WarnLevel))
 	clus := &VarlogCluster{
 		VarlogClusterOptions: opts,
 		logger:               logger,
