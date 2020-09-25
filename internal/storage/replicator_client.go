@@ -29,6 +29,7 @@ type ReplicatorClient interface {
 	Close() error
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) <-chan error
 	PeerStorageNodeID() types.StorageNodeID
+	SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current pb.SyncPosition, data []byte) error
 }
 
 type replicatorClient struct {
@@ -258,4 +259,16 @@ func (rc *replicatorClient) propagateAllError() {
 		errC <- err
 		close(errC)
 	}
+}
+
+func (rc *replicatorClient) SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current pb.SyncPosition, data []byte) error {
+	req := &pb.SyncReplicateRequest{
+		First:       first,
+		Last:        last,
+		Current:     current,
+		Data:        data,
+		LogStreamID: logStreamID,
+	}
+	_, err := rc.rpcClient.SyncReplicate(ctx, req)
+	return err
 }

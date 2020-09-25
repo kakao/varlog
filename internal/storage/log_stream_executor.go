@@ -9,6 +9,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
+	snpb "github.com/kakao/varlog/proto/storage_node"
 	vpb "github.com/kakao/varlog/proto/varlog"
 	"go.uber.org/zap"
 )
@@ -30,6 +31,22 @@ type Unsealer interface {
 	Unseal() error
 }
 
+type SyncTaskStatus struct {
+	Replica Replica
+	State   snpb.SyncState
+	First   snpb.SyncPosition
+	Last    snpb.SyncPosition
+	Current snpb.SyncPosition
+	Err     error
+	cancel  context.CancelFunc
+	mu      sync.RWMutex
+}
+
+type Syncer interface {
+	Sync(ctx context.Context, replica Replica, lastGLSN types.GLSN) (*SyncTaskStatus, error)
+	SyncReplicate(ctx context.Context, first, last, current snpb.SyncPosition, data []byte) error
+}
+
 type LogStreamExecutor interface {
 	Run(ctx context.Context) error
 	Close()
@@ -37,7 +54,7 @@ type LogStreamExecutor interface {
 	LogStreamID() types.LogStreamID
 	Status() vpb.LogStreamStatus
 
-	Read(ctx context.Context, glsn types.GLSN) ([]byte, error)
+	Read(ctx context.Context, glsn types.GLSN) (varlog.LogEntry, error)
 	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
 	Append(ctx context.Context, data []byte, backups ...Replica) (types.GLSN, error)
 	Trim(ctx context.Context, glsn types.GLSN) error
@@ -49,13 +66,14 @@ type LogStreamExecutor interface {
 
 	Sealer
 	Unsealer
+	Syncer
 }
 
 type readTask struct {
-	glsn types.GLSN
-	data []byte
-	err  error
-	done chan struct{}
+	glsn     types.GLSN
+	logEntry varlog.LogEntry
+	err      error
+	done     chan struct{}
 }
 
 type trimTask struct {
@@ -140,6 +158,9 @@ type logStreamExecutor struct {
 	muStatus sync.RWMutex
 	muSeal   sync.Mutex
 
+	syncTracker   map[types.StorageNodeID]*SyncTaskStatus
+	muSyncTracker sync.Mutex
+
 	logger  *zap.Logger
 	options *LogStreamExecutorOptions
 }
@@ -167,9 +188,10 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 		uncommittedLLSNBegin: types.MinLLSN,
 		uncommittedLLSNEnd:   types.AtomicLLSN(types.MinLLSN),
 		committedLLSNEnd:     types.MinLLSN,
-		localLowWatermark:    types.AtomicGLSN(types.InvalidGLSN),
+		localLowWatermark:    types.AtomicGLSN(types.MinGLSN),
 		localHighWatermark:   types.AtomicGLSN(types.InvalidGLSN),
 		status:               vpb.LogStreamStatusRunning,
+		syncTracker:          make(map[types.StorageNodeID]*SyncTaskStatus),
 		logger:               logger,
 		options:              options,
 	}
@@ -281,6 +303,7 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamS
 
 	// delete uncommitted logs those positions are larger than lastCommittedGLSN
 	if status == vpb.LogStreamStatusSealed {
+		lastCommittedLLSN := types.InvalidLLSN
 		// Find lastCommittedLLSN by using lastCommittedGLSN
 		logEntry, err := lse.storage.Read(lastCommittedGLSN)
 		if err != nil {
@@ -288,8 +311,9 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamS
 			lse.logger.Debug("could not read lastCommittedGLSN",
 				zap.Any("lastCommittedGLSN", lastCommittedGLSN), zap.Error(err),
 			)
+		} else {
+			lastCommittedLLSN = logEntry.LLSN
 		}
-		lastCommittedLLSN := logEntry.LLSN
 
 		// notify error to appenders whose positions are larger than lastCommittedGLSN
 		lse.trackers.foreach(func(appendT *appendTask) {
@@ -373,27 +397,28 @@ func (lse *logStreamExecutor) dispatchCommitC(ctx context.Context) {
 // - spinining early-read to decide NOENT or OK
 // - read aggregation to minimize I/O
 // - cache or not (use memstore?)
-func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) ([]byte, error) {
+func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) (varlog.LogEntry, error) {
 	if err := lse.isTrimmed(glsn); err != nil {
-		return nil, err
+		return varlog.InvalidLogEntry, err
 	}
 	// TODO: wait until decidable or return an error
 	if err := lse.commitUndecidable(glsn); err != nil {
-		return nil, err
+		return varlog.InvalidLogEntry, err
 	}
 	done := make(chan struct{})
 	task := &readTask{
-		glsn: glsn,
-		done: done,
+		logEntry: varlog.InvalidLogEntry,
+		glsn:     glsn,
+		done:     done,
 	}
 	go lse.read(task)
 	select {
 	case <-done:
-		return task.data, task.err
+		return task.logEntry, task.err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return varlog.InvalidLogEntry, ctx.Err()
 	case <-lse.stopped:
-		return nil, errLSEKilled
+		return varlog.InvalidLogEntry, errLSEKilled
 	}
 }
 
@@ -417,11 +442,9 @@ func (lse *logStreamExecutor) commitUndecidable(glsn types.GLSN) error {
 func (lse *logStreamExecutor) read(t *readTask) {
 	logEntry, err := lse.storage.Read(t.glsn)
 	if err != nil {
-		// t.err = newVarlogError(err, "read error: %v", t.glsn)
 		t.err = fmt.Errorf("logstreamexecutor read error (glsn=%v): %w", t.glsn, err)
 	}
-	t.data = logEntry.Data
-	// t.data, t.err = lse.storage.Read(t.glsn)
+	t.logEntry = logEntry
 	close(t.done)
 }
 
@@ -781,4 +804,142 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		}
 		lse.mu.Unlock()
 	}
+}
+
+func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLSN types.GLSN) (*SyncTaskStatus, error) {
+	// TODO (jun): Delete SyncTaskStatus, but when?
+	if status := lse.Status(); status != vpb.LogStreamStatusSealed {
+		lse.logger.Error("bad status to sync", zap.Any("status", status))
+		return nil, fmt.Errorf("bad status (%v) to sync", status)
+	}
+
+	lse.muSyncTracker.Lock()
+	defer lse.muSyncTracker.Unlock()
+
+	if sts, ok := lse.syncTracker[replica.StorageNodeID]; ok {
+		sts.mu.RLock()
+		defer sts.mu.RUnlock()
+		return &SyncTaskStatus{
+			Replica: sts.Replica,
+			State:   sts.State,
+			First:   sts.First,
+			Last:    sts.Last,
+			Current: sts.Current,
+		}, nil
+	}
+
+	firstGLSN := lse.localLowWatermark.Load()
+	firstLLSN, err := lse.getLogPosition(firstGLSN)
+	if err != nil {
+		return nil, err
+	}
+	lastLLSN, err := lse.getLogPosition(lastGLSN)
+	if err != nil {
+		return nil, err
+	}
+
+	first := snpb.SyncPosition{LLSN: firstLLSN, GLSN: firstGLSN}
+	last := snpb.SyncPosition{LLSN: lastLLSN, GLSN: lastGLSN}
+	current := snpb.SyncPosition{LLSN: types.InvalidLLSN, GLSN: types.InvalidGLSN}
+
+	mctx, cancel := lse.runner.WithManagedCancel(context.Background())
+	sts := &SyncTaskStatus{
+		Replica: replica,
+		State:   snpb.SyncStateInProgress,
+		First:   first,
+		Last:    last,
+		Current: current,
+		cancel:  cancel,
+	}
+	lse.syncTracker[replica.StorageNodeID] = sts
+	if err := lse.runner.RunC(mctx, func(ctx context.Context) {
+		defer cancel()
+		var err error
+		for llsn := firstLLSN; llsn <= lastLLSN; llsn++ {
+			if err = ctx.Err(); err != nil {
+				break
+			}
+
+			// TODO (jun): Use scan for optimization
+			var logEntry varlog.LogEntry
+			logEntry, err = lse.storage.ReadByLLSN(llsn)
+			if err != nil {
+				break
+			}
+
+			current := snpb.SyncPosition{LLSN: llsn, GLSN: logEntry.GLSN}
+			if err = lse.replicator.SyncReplicate(ctx, replica, first, last, current, logEntry.Data); err != nil {
+				break
+			}
+
+			// update status
+			sts.mu.Lock()
+			sts.Current = current
+			sts.mu.Unlock()
+		}
+		sts.mu.Lock()
+		if err == nil {
+			lse.logger.Info("syncer complete", zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
+			sts.State = snpb.SyncStateComplete
+		} else {
+			lse.logger.Error("syncer failure", zap.Error(err), zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
+			sts.State = snpb.SyncStateError
+		}
+		sts.Err = err
+		sts.mu.Unlock()
+	}); err != nil {
+		lse.logger.Error("could not run syncer", zap.Error(err))
+		delete(lse.syncTracker, replica.StorageNodeID)
+		return nil, err
+	}
+
+	return sts, nil
+}
+
+func (lse *logStreamExecutor) getLogPosition(glsn types.GLSN) (types.LLSN, error) {
+	if glsn == types.InvalidGLSN {
+		return types.InvalidLLSN, errors.New("invalid argument")
+	}
+	logEntry, err := lse.storage.Read(glsn)
+	if err != nil {
+		return types.InvalidLLSN, err
+	}
+	return logEntry.LLSN, nil
+
+}
+
+func (lse *logStreamExecutor) SyncReplicate(ctx context.Context, first, last, current snpb.SyncPosition, data []byte) error {
+	// TODO (jun): prevent from triggering Sync from multiple sources
+	if status := lse.Status(); status != vpb.LogStreamStatusSealing {
+		lse.logger.Error("bad status to syncreplicate", zap.Any("status", status))
+		return fmt.Errorf("bad status (%v) to syncreplicate", status)
+	}
+
+	if err := lse.storage.Write(current.GetLLSN(), data); err != nil {
+		lse.logger.Error("syncreplicate: could not write", zap.Error(err))
+		return err
+	}
+
+	if err := lse.storage.Commit(current.GetLLSN(), current.GetGLSN()); err != nil {
+		lse.logger.Error("syncreplicate: could not commit", zap.Error(err))
+		return err
+	}
+
+	lse.logger.Debug("syncreplicate", zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
+
+	// FIXME (jun): use more safe and better method to reset all state variables
+	if current.Equal(last) {
+		lse.logger.Debug("syncreplate complete")
+		lse.mu.Lock()
+		defer lse.mu.Unlock()
+		lse.globalHighwatermark = current.GetGLSN()
+		lse.uncommittedLLSNBegin = current.GetLLSN() + 1
+
+		lse.committedLLSNEnd = current.GetLLSN() + 1
+		lse.uncommittedLLSNEnd.Store(current.GetLLSN() + 1)
+		lse.localLowWatermark.Store(first.GetGLSN())
+		lse.localHighWatermark.Store(last.GetGLSN())
+	}
+
+	return nil
 }

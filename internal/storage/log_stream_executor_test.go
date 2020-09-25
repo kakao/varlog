@@ -15,7 +15,6 @@ import (
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
 	vpb "github.com/kakao/varlog/proto/varlog"
 	"go.uber.org/zap"
 )
@@ -57,6 +56,7 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 
 func TestLogStreamExecutorOperations(t *testing.T) {
 	Convey("LogStreamExecutor", t, func() {
+		const storageNodeID = types.StorageNodeID(1)
 		const logStreamID = types.LogStreamID(1)
 		const N = 1000
 
@@ -87,9 +87,9 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 			storage.EXPECT().Read(gomock.Any()).Return(varlog.LogEntry{Data: []byte("log")}, nil)
 			lse.(*logStreamExecutor).localLowWatermark = 0
 			lse.(*logStreamExecutor).localHighWatermark = 10
-			data, err := lse.Read(context.TODO(), types.GLSN(0))
+			logEntry, err := lse.Read(context.TODO(), types.GLSN(0))
 			So(err, ShouldBeNil)
-			So(string(data), ShouldEqual, "log")
+			So(string(logEntry.Data), ShouldEqual, "log")
 		})
 
 		Convey("append operation should not write data when sealed", func() {
@@ -579,7 +579,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 				lse.muStatus.RLock()
 				status := lse.status
 				lse.muStatus.RUnlock()
-				So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
+				So(status, ShouldEqual, vpb.LogStreamStatusSealing)
 			})
 		})
 
@@ -588,7 +588,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 			Convey("Then status of LogStreamExecutor is SEALING", func() {
 				status, _ := lse.Seal(types.MaxGLSN)
-				So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
+				So(status, ShouldEqual, vpb.LogStreamStatusSealing)
 			})
 		})
 
@@ -598,7 +598,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 			storage.EXPECT().DeleteUncommitted(gomock.Any()).Return(nil)
 			Convey("Then status of LogStreamExecutor is SEALED", func() {
 				status, _ := lse.Seal(types.MinGLSN)
-				So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+				So(status, ShouldEqual, vpb.LogStreamStatusSealed)
 			})
 		})
 
@@ -614,6 +614,23 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 }
 
 func TestLogStreamExecutorAndStorage(t *testing.T) {
+	Convey("Sealing initial LS with InvalidGLSN", t, func() {
+		logger, err := zap.NewDevelopment()
+		So(err, ShouldBeNil)
+		defer logger.Sync()
+
+		stg := NewInMemoryStorage()
+		lse, err := NewLogStreamExecutor(logger, logStreamID, stg, &DefaultLogStreamExecutorOptions)
+		So(err, ShouldBeNil)
+
+		lse.Run(context.TODO())
+		defer lse.Close()
+
+		status, sealedGLSN := lse.Seal(types.InvalidGLSN)
+		So(status, ShouldEqual, vpb.LogStreamStatusSealed)
+		So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
+	})
+
 	Convey("LogStreamExecutor and Storage", t, func(c C) {
 		const (
 			logStreamID = types.LogStreamID(1)
@@ -686,9 +703,9 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			So(<-errC, ShouldBeNil)
 
 			// Read
-			actualData, err := lse.Read(context.TODO(), hwm)
+			actualLogEntry, err := lse.Read(context.TODO(), hwm)
 			So(err, ShouldBeNil)
-			So(expectedData, ShouldResemble, actualData)
+			So(expectedData, ShouldResemble, actualLogEntry.Data)
 		}
 
 		// Trim
@@ -756,6 +773,11 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		// check storage status.
 		written := stg.(*InMemoryStorage).written
 		So(written[len(written)-1].llsn, ShouldEqual, 13)
+
+		Convey("Sealing the LS with InvalidGLSN", func() {
+			So(func() { lse.Seal(types.InvalidGLSN) }, ShouldPanic)
+			ccancel()
+		})
 
 		Convey("MR is behind of LSE", func() {
 			So(func() { lse.Seal(9) }, ShouldPanic)
@@ -844,6 +866,5 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		})
 
 		wgClient.Wait()
-
 	})
 }

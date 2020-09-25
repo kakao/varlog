@@ -5,6 +5,7 @@
 package storage
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -108,6 +109,21 @@ func (m *MockManagement) Unseal(clusterID types.ClusterID, storageNodeID types.S
 func (mr *MockManagementMockRecorder) Unseal(clusterID, storageNodeID, logStreamID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockManagement)(nil).Unseal), clusterID, storageNodeID, logStreamID)
+}
+
+// Sync mocks base method.
+func (m *MockManagement) Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (storage_node.SyncState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Sync", ctx, clusterID, storageNodeID, logStreamID, replica, lastGLSN)
+	ret0, _ := ret[0].(storage_node.SyncState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Sync indicates an expected call of Sync.
+func (mr *MockManagementMockRecorder) Sync(ctx, clusterID, storageNodeID, logStreamID, replica, lastGLSN interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManagement)(nil).Sync), ctx, clusterID, storageNodeID, logStreamID, replica, lastGLSN)
 }
 
 // MockLogStreamExecutorGetter is a mock of LogStreamExecutorGetter interface.

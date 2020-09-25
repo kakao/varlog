@@ -100,7 +100,7 @@ func TestStorageNodeServiceRead(t *testing.T) {
 			lse := NewMockLogStreamExecutor(ctrl)
 			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
 			setLseGetter(lseGetter, lse)
-			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(nil, varlog.ErrInternal)
+			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.InvalidLogEntry, varlog.ErrInternal)
 			_, err := s.Read(context.TODO(), &pb.ReadRequest{
 				LogStreamID: logStreamID,
 				GLSN:        types.GLSN(10),
@@ -112,7 +112,7 @@ func TestStorageNodeServiceRead(t *testing.T) {
 			lse := NewMockLogStreamExecutor(ctrl)
 			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
 			setLseGetter(lseGetter, lse)
-			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return([]byte("log"), nil)
+			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.LogEntry{Data: []byte("log")}, nil)
 			rsp, err := s.Read(context.TODO(), &pb.ReadRequest{
 				LogStreamID: logStreamID,
 				GLSN:        types.GLSN(10),

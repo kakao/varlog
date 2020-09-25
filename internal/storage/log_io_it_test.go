@@ -142,7 +142,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 			})
 
 			Convey("When the underlying LogStreamExecutor returns ErrTrimmed", func() {
-				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(nil, varlog.ErrTrimmed)
+				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.InvalidLogEntry, varlog.ErrTrimmed)
 
 				Convey("Then the LogIOClient should return ErrTrimmed error", func() {
 					_, err := cli.Read(context.TODO(), lsid, types.GLSN(0))
@@ -151,7 +151,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 			})
 
 			Convey("When the underlying LogStreamExecutor returns ErrUndeciadable", func() {
-				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(nil, varlog.ErrUndecidable)
+				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.InvalidLogEntry, varlog.ErrUndecidable)
 
 				Convey("Then the LogIOClient should return ErrUndecidable error", func() {
 					_, err := cli.Read(context.TODO(), lsid, types.GLSN(0))
@@ -160,7 +160,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 			})
 
 			Convey("when the underlying LogStreamExecutor reads the log entry", func() {
-				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return([]byte("foo"), nil)
+				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.LogEntry{Data: []byte("foo")}, nil)
 
 				Convey("Then the LogIOClient should return the log entry", func() {
 					ent, err := cli.Read(context.TODO(), lsid, types.GLSN(0))

@@ -6,6 +6,10 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "github.com/kakao/varlog/proto/storage_node";
 
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 // ReplicationRequest contains LLSN (Local Log Sequence Number) that indicates
 // a log position in the local log stream of the primary storage node.
 message ReplicationRequest {
@@ -41,7 +45,51 @@ message ReplicationResponse {
     ];
 }
 
+enum SyncState {
+    option (gogoproto.goproto_enum_prefix) = false;
+    option (gogoproto.goproto_enum_stringer) = false;
+    option (gogoproto.enum_stringer) = true;
+
+    ERROR = 0 [(gogoproto.enumvalue_customname) = "SyncStateError"];
+    IN_PROGRESS = 1 [(gogoproto.enumvalue_customname) = "SyncStateInProgress"];
+    COMPLETE = 2 [(gogoproto.enumvalue_customname) = "SyncStateComplete"];
+}
+
+message SyncPosition {
+    option (gogoproto.equal) = true;
+    uint64 llsn = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.LLSN",
+        (gogoproto.customname) = "LLSN"
+    ];
+    uint64 glsn = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+        (gogoproto.customname) = "GLSN"
+    ];
+}
+
+message SyncReplicateRequest {
+    SyncPosition first = 1 [(gogoproto.nullable) = false];
+    SyncPosition last = 2 [(gogoproto.nullable) = false];
+    SyncPosition current = 3 [(gogoproto.nullable) = false];
+    bytes data = 4;
+    uint32 log_stream_id = 5 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+}
+
+message SyncReplicateResponse {
+    SyncState state = 1;
+    SyncPosition first = 2 [(gogoproto.nullable) = false];
+    SyncPosition last = 3 [(gogoproto.nullable) = false];
+    SyncPosition current = 4 [(gogoproto.nullable) = false];
+}
+
 service ReplicatorService {
     rpc Replicate(stream ReplicationRequest)
         returns (stream ReplicationResponse) {}
+    rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}
 }

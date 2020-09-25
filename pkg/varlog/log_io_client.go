@@ -83,6 +83,7 @@ func (c *logIOClient) Read(ctx context.Context, logStreamID types.LogStreamID, g
 	}
 	return &LogEntry{
 		GLSN: rsp.GetGLSN(),
+		LLSN: rsp.GetLLSN(),
 		Data: rsp.GetPayload(),
 	}, nil
 }

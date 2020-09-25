@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	types "github.com/kakao/varlog/pkg/varlog/types"
+	storage_node "github.com/kakao/varlog/proto/storage_node"
 )
 
 // MockReplicator is a mock of Replicator interface.
@@ -73,4 +74,18 @@ func (m *MockReplicator) Replicate(arg0 context.Context, arg1 types.LLSN, arg2 [
 func (mr *MockReplicatorMockRecorder) Replicate(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockReplicator)(nil).Replicate), arg0, arg1, arg2, arg3)
+}
+
+// SyncReplicate mocks base method.
+func (m *MockReplicator) SyncReplicate(ctx context.Context, replica Replica, first, last, current storage_node.SyncPosition, data []byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncReplicate", ctx, replica, first, last, current, data)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SyncReplicate indicates an expected call of SyncReplicate.
+func (mr *MockReplicatorMockRecorder) SyncReplicate(ctx, replica, first, last, current, data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicator)(nil).SyncReplicate), ctx, replica, first, last, current, data)
 }

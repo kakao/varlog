@@ -35,6 +35,8 @@ type Management interface {
 	// Unseal changes status of LogStreamExecutor corresponding to the
 	// LogStreamID to LogStreamStatusRunning.
 	Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+
+	Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (snpb.SyncState, error)
 }
 
 type LogStreamExecutorGetter interface {
@@ -265,6 +267,22 @@ func (sn *StorageNode) Unseal(clusterID types.ClusterID, storageNodeID types.Sto
 		return varlog.ErrInvalidArgument
 	}
 	return lse.Unseal()
+}
+
+func (sn *StorageNode) Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (snpb.SyncState, error) {
+	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
+		return snpb.SyncStateError, varlog.ErrInvalidArgument
+	}
+	lse, ok := sn.GetLogStreamExecutor(logStreamID)
+	if !ok {
+		sn.logger.Error("could not get LSE")
+		return snpb.SyncStateError, varlog.ErrInvalidArgument
+	}
+	sts, err := lse.Sync(ctx, replica, lastGLSN)
+	if err != nil {
+		return snpb.SyncStateError, err
+	}
+	return sts.State, err
 }
 
 func (sn *StorageNode) GetLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {

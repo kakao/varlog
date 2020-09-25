@@ -11,5 +11,5 @@ func errTrimmed(glsn, lwm types.GLSN) error {
 }
 
 func errUndecidable(glsn, hwm types.GLSN) error {
-	return varlog.NewErrorf(varlog.ErrUndecidable, codes.Unavailable, "glsn=%v lwm=%v", glsn, hwm)
+	return varlog.NewErrorf(varlog.ErrUndecidable, codes.Unavailable, "glsn=%v hwm=%v", glsn, hwm)
 }

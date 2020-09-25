@@ -140,3 +140,12 @@ func (s *ReplicatorService) send(ctx context.Context, stream pb.ReplicatorServic
 	}()
 	return c
 }
+
+func (s *ReplicatorService) SyncReplicate(ctx context.Context, req *pb.SyncReplicateRequest) (*pb.SyncReplicateResponse, error) {
+	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
+	if !ok {
+		return nil, fmt.Errorf("no logstreamexecutor: %v", req.GetLogStreamID())
+	}
+	err := lse.SyncReplicate(ctx, req.GetFirst(), req.GetLast(), req.GetCurrent(), req.GetData())
+	return &pb.SyncReplicateResponse{}, err
+}
