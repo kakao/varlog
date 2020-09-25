@@ -55,6 +55,17 @@ func (mr *dummyMetadataRepository) lookupNextGLS(glsn types.GLSN) *snpb.GlobalLo
 	return nil
 }
 
+func (mr *dummyMetadataRepository) getOldestGLS() *snpb.GlobalLogStreamDescriptor {
+	mr.mt.Lock()
+	defer mr.mt.Unlock()
+
+	if len(mr.m) == 0 {
+		return nil
+	}
+
+	return mr.m[0]
+}
+
 func (mr *dummyMetadataRepository) appendGLS(gls *snpb.GlobalLogStreamDescriptor) {
 	mr.mt.Lock()
 	defer mr.mt.Unlock()
@@ -83,6 +94,7 @@ func TestRegisterStorageNode(t *testing.T) {
 			report:        mr.report,
 			getClient:     a.GetClient,
 			lookupNextGLS: mr.lookupNextGLS,
+			getOldestGLS:  mr.getOldestGLS,
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
@@ -100,6 +112,7 @@ func TestRegisterStorageNode(t *testing.T) {
 			report:        mr.report,
 			getClient:     a.GetClient,
 			lookupNextGLS: mr.lookupNextGLS,
+			getOldestGLS:  mr.getOldestGLS,
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
@@ -133,6 +146,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 			report:        mr.report,
 			getClient:     a.GetClient,
 			lookupNextGLS: mr.lookupNextGLS,
+			getOldestGLS:  mr.getOldestGLS,
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
@@ -167,6 +181,7 @@ func TestRecoverStorageNode(t *testing.T) {
 			report:        mr.report,
 			getClient:     a.GetClient,
 			lookupNextGLS: mr.lookupNextGLS,
+			getOldestGLS:  mr.getOldestGLS,
 		}
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(cb, logger)
@@ -237,6 +252,7 @@ func TestReport(t *testing.T) {
 			report:        mr.report,
 			getClient:     a.GetClient,
 			lookupNextGLS: mr.lookupNextGLS,
+			getOldestGLS:  mr.getOldestGLS,
 		}
 
 		logger, _ := zap.NewDevelopment()
@@ -325,6 +341,7 @@ func TestCommit(t *testing.T) {
 			report:        mr.report,
 			getClient:     a.GetClient,
 			lookupNextGLS: mr.lookupNextGLS,
+			getOldestGLS:  mr.getOldestGLS,
 		}
 
 		logger, _ := zap.NewDevelopment()
@@ -448,6 +465,7 @@ func TestCatchupRace(t *testing.T) {
 			report:        mr.report,
 			getClient:     clientFac.GetClient,
 			lookupNextGLS: mr.lookupNextGLS,
+			getOldestGLS:  mr.getOldestGLS,
 		}
 
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -501,6 +519,7 @@ func TestRPCFail(t *testing.T) {
 			report:        mr.report,
 			getClient:     clientFac.GetClient,
 			lookupNextGLS: mr.lookupNextGLS,
+			getOldestGLS:  mr.getOldestGLS,
 		}
 
 		logger, _ := zap.NewDevelopment()
