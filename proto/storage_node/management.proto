@@ -5,6 +5,7 @@ package varlog.storagenode;
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
 import "varlog/metadata.proto";
+import "storage_node/replicator.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/storage_node";
 
@@ -124,13 +125,15 @@ message UnsealRequest {
     ];
 }
 
-enum SyncStatus {
-    option (gogoproto.goproto_enum_prefix) = false;
-    INPROGRESS = 0 [(gogoproto.enumvalue_customname) = "SyncStatusInProgress"];
-    COMPLETE = 1 [(gogoproto.enumvalue_customname) = "SyncStatusComplete"];
-}
-
 message SyncRequest {
+    message BackupNode {
+        uint32 storage_node_id = 1 [
+            (gogoproto.casttype) =
+                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+            (gogoproto.customname) = "StorageNodeID"
+        ];
+        string address = 2;
+    }
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
@@ -146,11 +149,19 @@ message SyncRequest {
             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    // Replicas (varlog.ReplicaDescriptor ?)
+    BackupNode backup = 4 [(gogoproto.nullable) = true];
+    uint64 last_glsn = 5 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+        (gogoproto.customname) = "LastGLSN"
+    ];
 }
 
 message SyncResponse {
-    SyncStatus status = 1;
+    SyncState state = 1;
+    SyncPosition first = 2 [(gogoproto.nullable) = false];
+    SyncPosition last = 3 [(gogoproto.nullable) = false];
+    SyncPosition current = 4 [(gogoproto.nullable) = false];
 }
 
 // Management defines the public APIs for managing StorageNode.

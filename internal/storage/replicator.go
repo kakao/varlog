@@ -7,6 +7,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
+	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	"go.uber.org/zap"
 )
 
@@ -35,6 +36,7 @@ type Replicator interface {
 	Run(context.Context) error
 	Close()
 	Replicate(context.Context, types.LLSN, []byte, []Replica) <-chan error
+	SyncReplicate(ctx context.Context, replica Replica, first, last, current snpb.SyncPosition, data []byte) error
 }
 
 type replicator struct {
@@ -226,4 +228,12 @@ func (r *replicator) getOrConnect(ctx context.Context, replica Replica) (Replica
 	}
 	r.rcm[replica.StorageNodeID] = rc
 	return rc, nil
+}
+
+func (r *replicator) SyncReplicate(ctx context.Context, replica Replica, first, last, current snpb.SyncPosition, data []byte) error {
+	rc, err := r.getOrConnect(ctx, replica)
+	if err != nil {
+		return err
+	}
+	return rc.SyncReplicate(ctx, r.logStreamID, first, last, current, data)
 }

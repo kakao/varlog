@@ -109,6 +109,28 @@ func (s *InMemoryStorage) Read(glsn types.GLSN) (varlog.LogEntry, error) {
 	}, nil
 }
 
+func (s *InMemoryStorage) ReadByLLSN(llsn types.LLSN) (varlog.LogEntry, error) {
+	s.assert()
+	defer s.assert()
+
+	s.muCommitted.RLock()
+	defer s.muCommitted.RUnlock()
+
+	s.muWritten.RLock()
+	defer s.muWritten.RUnlock()
+
+	i, went, err := s.searchWrittenEnry(llsn)
+	if err != nil {
+		return varlog.InvalidLogEntry, err
+	}
+	cent := s.committed[i]
+	return varlog.LogEntry{
+		GLSN: cent.glsn,
+		LLSN: llsn,
+		Data: went.data,
+	}, nil
+}
+
 func (s *InMemoryStorage) Scan(glsn types.GLSN) (Scanner, error) {
 	s.assert()
 	defer s.assert()
@@ -142,12 +164,15 @@ func (s *InMemoryStorage) Write(llsn types.LLSN, data []byte) error {
 	return nil
 }
 
-func (s *InMemoryStorage) searchWrittenEnry(llsn types.LLSN) (writtenEntry, error) {
+func (s *InMemoryStorage) searchWrittenEnry(llsn types.LLSN) (int, writtenEntry, error) {
 	i := sort.Search(len(s.written), func(i int) bool { return s.written[i].llsn >= llsn })
-	if i < len(s.written) && s.written[i].llsn == llsn {
-		return s.written[i], nil
+	if i >= len(s.written) {
+		return i, writtenEntry{}, varlog.ErrNoEntry
 	}
-	return writtenEntry{}, varlog.ErrNoEntry
+	if s.written[i].llsn == llsn {
+		return i, s.written[i], nil
+	}
+	return i, s.written[i], varlog.ErrNoEntry
 }
 
 func (s *InMemoryStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
@@ -155,7 +180,7 @@ func (s *InMemoryStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 	defer s.assert()
 
 	s.muWritten.RLock()
-	_, err := s.searchWrittenEnry(llsn)
+	_, _, err := s.searchWrittenEnry(llsn)
 	s.muWritten.RUnlock()
 	if err != nil {
 		return err
@@ -203,6 +228,9 @@ func (s *InMemoryStorage) DeleteCommitted(glsn types.GLSN) error {
 }
 
 func (s *InMemoryStorage) DeleteUncommitted(llsn types.LLSN) error {
+	s.assert()
+	defer s.assert()
+
 	s.muCommitted.Lock()
 	defer s.muCommitted.Unlock()
 	s.muWritten.Lock()

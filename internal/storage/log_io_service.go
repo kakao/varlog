@@ -66,12 +66,12 @@ func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.R
 	}
 
 	// TODO: create child context by using operation timeout
-	data, err := lse.Read(ctx, req.GetGLSN())
+	logEntry, err := lse.Read(ctx, req.GetGLSN())
 	if err != nil {
 		s.logger.Error("could not read", zap.Any("request", req), zap.Error(err))
 		return nil, varlog.ToStatusError(err)
 	}
-	return &snpb.ReadResponse{Payload: data, GLSN: req.GetGLSN()}, nil
+	return &snpb.ReadResponse{Payload: logEntry.Data, GLSN: req.GetGLSN(), LLSN: logEntry.LLSN}, nil
 }
 
 func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) error {

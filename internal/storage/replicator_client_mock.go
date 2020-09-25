@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	storage_node "github.daumkakao.com/varlog/varlog/proto/storage_node"
 )
 
 // MockReplicatorClient is a mock of ReplicatorClient interface.
@@ -89,4 +90,18 @@ func (m *MockReplicatorClient) PeerStorageNodeID() types.StorageNodeID {
 func (mr *MockReplicatorClientMockRecorder) PeerStorageNodeID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeerStorageNodeID", reflect.TypeOf((*MockReplicatorClient)(nil).PeerStorageNodeID))
+}
+
+// SyncReplicate mocks base method.
+func (m *MockReplicatorClient) SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current storage_node.SyncPosition, data []byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncReplicate", ctx, logStreamID, first, last, current, data)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SyncReplicate indicates an expected call of SyncReplicate.
+func (mr *MockReplicatorClientMockRecorder) SyncReplicate(ctx, logStreamID, first, last, current, data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicatorClient)(nil).SyncReplicate), ctx, logStreamID, first, last, current, data)
 }

@@ -57,6 +57,26 @@ func (mr *MockReplicatorServiceClientMockRecorder) Replicate(arg0 interface{}, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockReplicatorServiceClient)(nil).Replicate), varargs...)
 }
 
+// SyncReplicate mocks base method.
+func (m *MockReplicatorServiceClient) SyncReplicate(arg0 context.Context, arg1 *storage_node.SyncReplicateRequest, arg2 ...grpc.CallOption) (*storage_node.SyncReplicateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncReplicate", varargs...)
+	ret0, _ := ret[0].(*storage_node.SyncReplicateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncReplicate indicates an expected call of SyncReplicate.
+func (mr *MockReplicatorServiceClientMockRecorder) SyncReplicate(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicatorServiceClient)(nil).SyncReplicate), varargs...)
+}
+
 // MockReplicatorServiceServer is a mock of ReplicatorServiceServer interface.
 type MockReplicatorServiceServer struct {
 	ctrl     *gomock.Controller
@@ -92,6 +112,21 @@ func (m *MockReplicatorServiceServer) Replicate(arg0 storage_node.ReplicatorServ
 func (mr *MockReplicatorServiceServerMockRecorder) Replicate(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockReplicatorServiceServer)(nil).Replicate), arg0)
+}
+
+// SyncReplicate mocks base method.
+func (m *MockReplicatorServiceServer) SyncReplicate(arg0 context.Context, arg1 *storage_node.SyncReplicateRequest) (*storage_node.SyncReplicateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncReplicate", arg0, arg1)
+	ret0, _ := ret[0].(*storage_node.SyncReplicateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncReplicate indicates an expected call of SyncReplicate.
+func (mr *MockReplicatorServiceServerMockRecorder) SyncReplicate(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicatorServiceServer)(nil).SyncReplicate), arg0, arg1)
 }
 
 // MockReplicatorService_ReplicateClient is a mock of ReplicatorService_ReplicateClient interface.

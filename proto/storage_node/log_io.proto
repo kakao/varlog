@@ -69,6 +69,11 @@ message ReadResponse {
             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
+    uint64 llsn = 3 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+        (gogoproto.customname) = "LLSN"
+    ];
 }
 
 // SubscribeRequest has GLSN which indicates an inclusive starting position

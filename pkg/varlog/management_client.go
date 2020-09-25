@@ -6,20 +6,22 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/stringsutil"
 	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 )
 
 type ManagementClient interface {
-	GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error)
 	AddLogStream(ctx context.Context, clusterID types.ClusterID,
 		storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) error
 	RemoveLogStream(ctx context.Context, clusterID types.ClusterID,
 		storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
 	Seal(ctx context.Context, clusterID types.ClusterID,
 		storageNodeID types.StorageNodeID, logStreamID types.LogStreamID,
-		lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
+		lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error)
 	Unseal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID,
 		logStreamID types.LogStreamID) error
+	Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (snpb.SyncState, error)
+	Close() error
 }
 
 type managementClient struct {
@@ -38,7 +40,7 @@ func NewManagementClient(address string) (ManagementClient, error) {
 	}, nil
 }
 
-func (c *managementClient) GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (c *managementClient) GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
 		ClusterID:    clusterID,
 		MetadataType: metadataType,
@@ -59,7 +61,7 @@ func (c *managementClient) AddLogStream(ctx context.Context, cid types.ClusterID
 		ClusterID:     cid,
 		StorageNodeID: snid,
 		LogStreamID:   lsid,
-		Storage: &varlogpb.StorageDescriptor{
+		Storage: &vpb.StorageDescriptor{
 			Path: path,
 		},
 	})
@@ -77,7 +79,7 @@ func (c *managementClient) RemoveLogStream(ctx context.Context, cid types.Cluste
 	return err
 }
 
-func (c *managementClient) Seal(ctx context.Context, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
+func (c *managementClient) Seal(ctx context.Context, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error) {
 	// TODO(jun): Check ranges CID, SNID and LSID
 	rsp, err := c.rpcClient.Seal(ctx, &snpb.SealRequest{
 		ClusterID:         cid,
@@ -98,6 +100,21 @@ func (c *managementClient) Unseal(ctx context.Context, cid types.ClusterID, snid
 	return err
 }
 
-func (c *managementClient) Sync(ctx context.Context) error {
-	panic("not yet implemented")
+func (c *managementClient) Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (snpb.SyncState, error) {
+	rsp, err := c.rpcClient.Sync(ctx, &snpb.SyncRequest{
+		ClusterID:     clusterID,
+		StorageNodeID: storageNodeID,
+		LogStreamID:   logStreamID,
+		Backup: &snpb.SyncRequest_BackupNode{
+			StorageNodeID: backupStorageNodeID,
+			Address:       backupAddress,
+		},
+		LastGLSN: lastGLSN,
+	})
+	return rsp.GetState(), err
+}
+
+// Close closes connection to the storage node.
+func (c *managementClient) Close() error {
+	return c.rpcConn.Close()
 }

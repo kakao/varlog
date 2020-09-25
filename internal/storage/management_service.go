@@ -93,6 +93,16 @@ func (s *managementService) Unseal(ctx context.Context, req *snpb.UnsealRequest)
 }
 
 // Sync implements the ManagementServer Sync method.
-func (s *managementService) Sync(context.Context, *snpb.SyncRequest) (*snpb.SyncResponse, error) {
-	panic("not yet implemented")
+func (s *managementService) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncResponse, error) {
+	replica := Replica{
+		StorageNodeID: req.GetBackup().GetStorageNodeID(),
+		LogStreamID:   req.GetLogStreamID(),
+		Address:       req.GetBackup().GetAddress(),
+	}
+	state, err := s.m.Sync(ctx, req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID(), replica, req.GetLastGLSN())
+	if err != nil {
+		s.logger.Error("could not sync", zap.Error(err), zap.Reflect("request", req))
+		return nil, err
+	}
+	return &snpb.SyncResponse{State: state}, nil
 }
