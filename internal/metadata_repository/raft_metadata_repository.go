@@ -99,6 +99,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		report:        mr.proposeReport,
 		getClient:     mr.reporterClientFac.GetClient,
 		lookupNextGLS: mr.storage.LookupNextGLS,
+		getOldestGLS:  mr.storage.GetFirstGLS,
 	}
 
 	mr.reportCollector = NewReportCollector(cbs,

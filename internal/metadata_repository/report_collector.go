@@ -22,6 +22,7 @@ type ReportCollectorCallbacks struct {
 	report        func(*snpb.LocalLogStreamDescriptor) error
 	getClient     func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error)
 	lookupNextGLS func(types.GLSN) *snpb.GlobalLogStreamDescriptor
+	getOldestGLS  func() *snpb.GlobalLogStreamDescriptor
 }
 
 type ReportCollectExecutor struct {
@@ -108,7 +109,7 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		highWatermark: glsn,
 		sn:            sn,
 		cb:            rc.cb,
-		logger:        rc.logger.Named("executor"),
+		logger:        rc.logger.Named("executor").With(zap.Uint32("snid", uint32(sn.StorageNodeID))),
 	}
 	ctx, cancel := rc.runner.WithManagedCancel(context.Background())
 	executor.cancel = cancel
@@ -252,7 +253,6 @@ func (rce *ReportCollectExecutor) getReport() error {
 		lls.HighWatermark = rce.highWatermark
 	} else if lls.HighWatermark < rce.highWatermark {
 		rce.logger.Panic("invalid GLSN",
-			zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
 			zap.Uint64("REPORT", uint64(lls.HighWatermark)),
 			zap.Uint64("CUR", uint64(rce.highWatermark)),
 		)
@@ -264,9 +264,7 @@ func (rce *ReportCollectExecutor) getReport() error {
 	rce.lsmu.Unlock()
 
 	rce.logger.Debug("report",
-		zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
-		zap.Uint64("HWM", uint64(lls.HighWatermark)),
-		zap.Int("UNCOMMIT", len(lls.Uncommit)),
+		zap.Uint64("hwm", uint64(lls.HighWatermark)),
 	)
 	rce.cb.report(lls)
 
@@ -302,9 +300,8 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 	}
 
 	rce.logger.Debug("commit",
-		zap.Int32("snid", int32(rce.sn.StorageNodeID)),
 		zap.Uint64("hwm", uint64(r.HighWatermark)),
-		zap.Int("result", len(r.CommitResult)))
+	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
 	defer cancel()
@@ -323,20 +320,25 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 }
 
 func (rce *ReportCollectExecutor) catchup(highWatermark types.GLSN, gls *snpb.GlobalLogStreamDescriptor) error {
-Loop:
 	for highWatermark < gls.HighWatermark {
 		prev := rce.cb.lookupNextGLS(highWatermark)
 		if prev == nil {
-			tmp := rce.getHighWatermark()
-			if tmp <= highWatermark {
-				rce.logger.Panic("prev gls should not be nil",
-					zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
-					zap.Uint64("FROM", uint64(highWatermark)),
-					zap.Uint64("CUR", uint64(gls.HighWatermark)),
+			prev = rce.cb.getOldestGLS()
+			if prev == nil || prev.PrevHighWatermark < highWatermark {
+				rce.logger.Warn("could not catchup",
+					zap.Uint64("known hwm", uint64(highWatermark)),
+					zap.Uint64("first prev hwm", uint64(prev.GetPrevHighWatermark())),
 				)
-			} else {
-				highWatermark = tmp
-				continue Loop
+				return nil
+			}
+
+			rce.logger.Debug("send commit result skipping the sequence",
+				zap.Uint64("known hwm", uint64(highWatermark)),
+				zap.Uint64("first prev hwm", uint64(prev.GetPrevHighWatermark())),
+			)
+
+			if prev.HighWatermark == gls.HighWatermark {
+				return nil
 			}
 		}
 
@@ -345,14 +347,6 @@ Loop:
 			return err
 		}
 
-		if prev.HighWatermark <= highWatermark {
-			rce.logger.Panic("broken global commit consistency",
-				zap.Int32("SNID", int32(rce.sn.StorageNodeID)),
-				zap.Uint64("expected", uint64(gls.PrevHighWatermark)),
-				zap.Uint64("prev", uint64(prev.HighWatermark)),
-				zap.Uint64("cur", uint64(highWatermark)),
-			)
-		}
 		highWatermark = prev.HighWatermark
 	}
 

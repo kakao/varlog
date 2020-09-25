@@ -876,6 +876,13 @@ func (ms *MetadataStorage) LookupNextGLS(glsn types.GLSN) *snpb.GlobalLogStreamD
 	return ms.lookupNextGLSNoLock(glsn)
 }
 
+func (ms *MetadataStorage) GetFirstGLS() *snpb.GlobalLogStreamDescriptor {
+	ms.lsMu.RLock()
+	defer ms.lsMu.RUnlock()
+
+	return ms.getFirstGLSNoLock()
+}
+
 func (ms *MetadataStorage) GetLastGLS() *snpb.GlobalLogStreamDescriptor {
 	ms.lsMu.RLock()
 	defer ms.lsMu.RUnlock()
