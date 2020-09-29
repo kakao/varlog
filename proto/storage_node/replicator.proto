@@ -69,6 +69,13 @@ message SyncPosition {
     ];
 }
 
+message SyncStatus {
+    SyncState state = 1;
+    SyncPosition first = 2 [(gogoproto.nullable) = false];
+    SyncPosition last = 3 [(gogoproto.nullable) = false];
+    SyncPosition current = 4 [(gogoproto.nullable) = false];
+}
+
 message SyncReplicateRequest {
     SyncPosition first = 1 [(gogoproto.nullable) = false];
     SyncPosition last = 2 [(gogoproto.nullable) = false];
@@ -82,6 +89,7 @@ message SyncReplicateRequest {
 }
 
 message SyncReplicateResponse {
+    // TODO (jun): use SyncStatus
     SyncState state = 1;
     SyncPosition first = 2 [(gogoproto.nullable) = false];
     SyncPosition last = 3 [(gogoproto.nullable) = false];

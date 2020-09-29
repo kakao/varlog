@@ -171,31 +171,27 @@ func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.Metada
 		return ret, nil
 	}
 
-	ret.LogStreams = sn.logStreamDescriptors()
+	ret.LogStreams = sn.logStreamMetadataDescriptors()
 	return ret, nil
 
 	// TODO (jun): add statistics to the response of GetMetadata
 }
 
-func (sn *StorageNode) logStreamDescriptors() []vpb.LogStreamDescriptor {
+func (sn *StorageNode) logStreamMetadataDescriptors() []vpb.LogStreamMetadataDescriptor {
 	lseList := sn.GetLogStreamExecutors()
 	if len(lseList) == 0 {
 		return nil
 	}
-	lsdList := make([]vpb.LogStreamDescriptor, len(lseList))
+	lsdList := make([]vpb.LogStreamMetadataDescriptor, len(lseList))
 	for i, lse := range lseList {
 		lse.LogStreamID()
-		lsdList[i] = vpb.LogStreamDescriptor{
+		lsdList[i] = vpb.LogStreamMetadataDescriptor{
 			LogStreamID: lse.LogStreamID(),
 			Status:      lse.Status(),
-			Replicas: []*vpb.ReplicaDescriptor{
-				{
-					StorageNodeID: sn.storageNodeID,
-					// TODO (jun): path represents disk-based storage and
-					// memory-based storage
-					// Path: lse.Path(),
-				},
-			},
+			// TODO (jun): path represents disk-based storage and
+			// memory-based storage
+			// Path: lse.Path(),
+			Path: "",
 		}
 	}
 	return lsdList

@@ -77,20 +77,50 @@ message LogStreamDescriptor {
     repeated ReplicaDescriptor replicas = 3 [(gogoproto.nullable) = true];
 }
 
-message StorageNodeMetadataDescriptor {
-    uint32 cluster_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
-    ];
-    StorageNodeDescriptor storage_node = 2;
-    repeated LogStreamDescriptor log_streams = 3 [(gogoproto.nullable) = false];
-}
-
 message MetadataDescriptor {
     option (gogoproto.equal) = true;
 
     repeated StorageNodeDescriptor storage_nodes = 1
         [(gogoproto.nullable) = true];
     repeated LogStreamDescriptor log_streams = 2 [(gogoproto.nullable) = true];
+}
+
+// StorageNodeMetadataDescriptor represents metadata of stroage node.
+message StorageNodeMetadataDescriptor {
+    // ClusterID is the identifier of the cluster that the storage node belongs
+    // to.
+    uint32 cluster_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+        (gogoproto.customname) = "ClusterID"
+    ];
+    // StorageNode is detailed information about the storage node.
+    StorageNodeDescriptor storage_node = 2;
+
+    repeated LogStreamMetadataDescriptor log_streams = 3
+        [(gogoproto.nullable) = false];
+}
+
+message LogStreamMetadataDescriptor {
+    uint32 log_stream_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+    LogStreamStatus status = 2;
+    string path = 3;
+}
+
+message LogStreamReplicaDescriptor {
+    uint32 storage_node_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+        (gogoproto.customname) = "StorageNodeID"
+    ];
+    uint32 log_stream_id = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+    string address = 3;
 }
