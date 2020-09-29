@@ -54,6 +54,7 @@ message AddLogStreamRequest {
     varlog.StorageDescriptor storage = 4;
 }
 message AddLogStreamResponse {
+    // TODO (jun): Use LogStreamMetadataDescriptor
     varlog.LogStreamDescriptor log_stream = 1;
 }
 

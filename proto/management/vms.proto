@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package varlog.management;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "varlog/metadata.proto";
+import "storage_node/replicator.proto";
+
+option go_package = "github.daumkakao.com/varlog/varlog/proto/management";
+
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+message AddStorageNodeRequest {
+    // address is IP of a node to be added to the cluster.
+    string address = 1;
+}
+
+message AddStorageNodeResponse {
+    varlog.StorageNodeMetadataDescriptor storage_node = 1;
+}
+
+message AddLogStreamRequest {}
+
+message AddLogStreamResponse {
+    varlog.LogStreamDescriptor log_stream = 1;
+}
+
+message SealRequest {
+    uint32 log_stream_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+}
+
+message SealResponse {
+    varlog.LogStreamDescriptor log_stream = 1;
+}
+
+message SyncRequest {
+    uint32 log_stream_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+}
+
+message SyncResponse {
+    storagenode.SyncStatus status = 1;
+}
+
+message UnsealRequest {
+    uint32 log_stream_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+}
+
+message UnsealResponse {
+    varlog.LogStreamDescriptor log_stream = 1;
+}
+
+service Management {
+    rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {
+    }
+
+    rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
+
+    rpc Seal(SealRequest) returns (SealResponse) {}
+
+    rpc Sync(SyncRequest) returns (SyncResponse) {}
+
+    rpc Unseal(UnsealRequest) returns (UnsealResponse) {}
+}

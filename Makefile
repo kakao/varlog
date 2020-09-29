@@ -20,7 +20,6 @@ PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendo
 
 TEST_COUNT := 1
 TEST_FLAGS := -count $(TEST_COUNT) -p 1
-#TEST_FLAGS := -count $(TEST_COUNT)
 
 ifneq ($(TEST_TIMEOUT),)
 	TEST_FLAGS := $(TEST_FLAGS) -timeout $(TEST_TIMEOUT)
@@ -49,10 +48,12 @@ TEST_DIRS := $(sort $(dir $(shell find . -name '*_test.go')))
 
 all : proto libvarlog storagenode metadata_repository
 
-SOLAR_PROTO := proto/varlog
+VARLOG_PROTO := proto/varlog
 STORAGE_NODE_PROTO := proto/storage_node
 METADATA_REPOSITORY_PROTO := proto/metadata_repository
-PROTO := $(SOLAR_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO)
+MANAGEMENT_PROTO := proto/management
+
+PROTO := $(VARLOG_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO) $(MANAGEMENT_PROTO)
 
 proto : check_protoc gogoproto $(PROTO)
 
@@ -65,7 +66,7 @@ libvarlog : $(LIBVARLOG)
 METADATA_REPOSITORY := cmd/metadata_repository
 metadata_repository : $(METADATA_REPOSITORY_PROTO) $(METADATA_REPOSITORY)
 
-SUBDIRS := $(PROTO) $(STORAGE_NODE) $(LIBSOLAR) $(METADATA_REPOSITORY)
+SUBDIRS := $(PROTO) $(STORAGE_NODE) $(LIBVARLOG) $(METADATA_REPOSITORY)
 subdirs : $(SUBDIRS)
 
 $(SUBDIRS) :
