@@ -164,7 +164,11 @@ func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.Metada
 		StorageNode: &vpb.StorageNodeDescriptor{
 			StorageNodeID: sn.storageNodeID,
 			Address:       sn.serverAddr,
-			Status:        vpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping
+			Status:        vpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
+			// FIXME (jun): add dummy storages to avoid invalid storage node
+			Storages: []*vpb.StorageDescriptor{
+				{Path: "/tmp", Used: 0, Total: 0},
+			},
 		},
 	}
 	if metadataType == snpb.MetadataTypeHeartbeat {

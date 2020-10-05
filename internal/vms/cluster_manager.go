@@ -2,33 +2,27 @@ package vms
 
 import (
 	"context"
+	"errors"
+	"net"
+	"sync"
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner/stopwaiter"
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
-
-// StorStorageNodeSelectionPolicy chooses the storage nodes to add a new log stream.
-type StorageNodeSelector interface {
-	SelectStorageNode(cluterMeta *vpb.MetadataDescriptor) []types.StorageNodeID
-}
-
-type LogStreamIDGenerator interface {
-	Generate() types.LogStreamID
-}
-
-type ClusterManagerOptions struct {
-	ReplicationFactor uint32
-}
 
 // ClusterManager manages varlog cluster.
 type ClusterManager interface {
 	// AddStorageNode adds new StorageNode to the cluster.
 	AddStorageNode(ctx context.Context, addr string) error
 
-	AddLogStream(ctx context.Context) error
+	AddLogStream(ctx context.Context) (*vpb.LogStreamDescriptor, error)
 
 	// AddLogStream adds new LogStream to the cluster.
-	AddLogStreamWith(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error
+	AddLogStreamWith(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) (*vpb.LogStreamDescriptor, error)
 
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
 	Seal(ctx context.Context, logStreamID types.LogStreamID) error
@@ -47,77 +41,210 @@ type ClusterManager interface {
 
 	// Unseal unseals the log stream replicas corresponded with the given logStreamID.
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
-}
 
-type clusterManager struct {
-	snManager      StorageNodeManager
-	mrManager      MetadataRepositoryManager
-	metaStorage    ClusterMetadataView
-	snSelector     StorageNodeSelector
-	logStreamIDGen LogStreamIDGenerator
+	Metadata(ctx context.Context) (*vpb.MetadataDescriptor, error)
 
-	options *ClusterManagerOptions
+	Run() error
+
+	Address() string
+
+	Close()
+
+	Wait()
 }
 
 var _ ClusterManager = (*clusterManager)(nil)
 
+var errCMKilled = errors.New("killed cluster manager")
+
+type clusterManagerState int
+
+const (
+	clusterManagerReady clusterManagerState = iota
+	clusterManagerRunning
+	clusterManagerClosed
+)
+
+type clusterManager struct {
+	server     *grpc.Server
+	serverAddr string
+
+	cmState   clusterManagerState
+	muCMState sync.Mutex
+	sw        *stopwaiter.StopWaiter
+
+	snMgr          StorageNodeManager
+	mrMgr          MetadataRepositoryManager
+	cmView         ClusterMetadataView
+	snSelector     StorageNodeSelector
+	logStreamIDGen LogStreamIDGenerator
+
+	logger  *zap.Logger
+	options *Options
+}
+
+func NewClusterManager(opts *Options) (ClusterManager, error) {
+	if opts.Logger == nil {
+		opts.Logger = zap.NewNop()
+	}
+	opts.Logger = opts.Logger.Named("vms")
+
+	mrMgr, err := NewMRManager(opts.MetadataRepositoryAddresses)
+	if err != nil {
+		return nil, err
+	}
+	cmView := NewClusterMetadataView(mrMgr, opts.Logger)
+	snMgr := NewStorageNodeManager(cmView, opts.Logger)
+	cm := &clusterManager{
+		sw:             stopwaiter.New(),
+		cmState:        clusterManagerReady,
+		snMgr:          snMgr,
+		mrMgr:          mrMgr,
+		cmView:         cmView,
+		snSelector:     NewRandomSNSelector(),
+		logStreamIDGen: NewLogStreamIDGenerator(),
+		logger:         opts.Logger,
+		options:        opts,
+	}
+	cm.server = grpc.NewServer()
+
+	NewClusterManagerService(cm, cm.logger).Register(cm.server)
+
+	return cm, nil
+}
+
+func (cm *clusterManager) Address() string {
+	return cm.serverAddr
+}
+
+func (cm *clusterManager) Run() error {
+	cm.muCMState.Lock()
+	defer cm.muCMState.Unlock()
+
+	switch cm.cmState {
+	case clusterManagerRunning:
+		return nil
+	case clusterManagerClosed:
+		return errCMKilled
+	}
+	cm.cmState = clusterManagerRunning
+
+	// Listener
+	lis, err := net.Listen("tcp", cm.options.RPCBindAddress)
+	if err != nil {
+		cm.logger.Error("could not listen", zap.Error(err))
+		return err
+	}
+	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
+	// TODO (jun): choose best address
+	cm.serverAddr = addrs[0]
+
+	// RPC Server
+	go func() {
+		if err := cm.server.Serve(lis); err != nil {
+			cm.logger.Error("could not serve", zap.Error(err))
+			cm.Close()
+		}
+	}()
+
+	cm.logger.Info("start")
+	return nil
+}
+
+func (cm *clusterManager) Wait() {
+	cm.sw.Wait()
+}
+
+func (cm *clusterManager) Close() {
+	cm.muCMState.Lock()
+	defer cm.muCMState.Unlock()
+
+	switch cm.cmState {
+	case clusterManagerReady:
+		cm.logger.Error("could not close not-running cluster manager")
+		return
+	case clusterManagerClosed:
+		return
+	}
+	cm.cmState = clusterManagerClosed
+
+	cm.server.Stop()
+	cm.sw.Stop()
+	cm.logger.Info("stop")
+}
+
+func (cm *clusterManager) Metadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
+	return cm.cmView.ClusterMetadata(ctx)
+}
+
 func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) error {
-	snmeta, err := cm.snManager.GetMetadataByAddr(ctx, addr)
+	snmcl, snmeta, err := cm.snMgr.GetMetadataByAddr(ctx, addr)
 	if err != nil {
 		return err
 	}
 
 	// TODO: Do something by using meta
+	// Check if it is already resitered, and compare it with existing one.
 	//
-	//
-	if err := cm.mrManager.RegisterStorageNode(ctx, snmeta.GetStorageNode()); err != nil {
+	if err := cm.mrMgr.RegisterStorageNode(ctx, snmeta.GetStorageNode()); err != nil {
 		return err
 	}
+
+	cm.snMgr.AddStorageNode(ctx, snmcl)
 	return nil
 }
 
-func (cm *clusterManager) AddLogStream(ctx context.Context) error {
-	cmeta, err := cm.metaStorage.ClusterMetadata(ctx)
+func (cm *clusterManager) AddLogStream(ctx context.Context) (*vpb.LogStreamDescriptor, error) {
+	cmeta, err := cm.cmView.ClusterMetadata(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	storageNodeIDs := cm.snSelector.SelectStorageNode(cmeta)
+	snDescList, err := cm.snSelector.SelectStorageNode(cmeta, cm.options.ReplicationFactor)
+	if err != nil {
+		return nil, err
+	}
 	logStreamID := cm.logStreamIDGen.Generate()
 	logStreamDesc := &vpb.LogStreamDescriptor{
 		LogStreamID: logStreamID,
 		Status:      vpb.LogStreamStatusRunning,
-		Replicas:    make([]*vpb.ReplicaDescriptor, 0, cm.options.ReplicationFactor),
+		Replicas:    make([]*vpb.ReplicaDescriptor, cm.options.ReplicationFactor),
 	}
-	for _, storageNodeID := range storageNodeIDs {
-		logStreamDesc.Replicas = append(logStreamDesc.Replicas, &vpb.ReplicaDescriptor{
-			StorageNodeID: storageNodeID,
+	for idx, snDesc := range snDescList {
+		logStreamDesc.Replicas[idx] = &vpb.ReplicaDescriptor{
+			StorageNodeID: snDesc.GetStorageNodeID(),
 			// TODO: snSelector can be expanded to choose path
-			Path: "",
-		})
+			Path: snDesc.GetStorages()[0].Path,
+		}
 	}
 	// TODO: Choose the primary - e.g., shuffle logStreamReplicaMetas
 	return cm.AddLogStreamWith(ctx, logStreamDesc)
 }
 
-func (cm *clusterManager) AddLogStreamWith(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error {
-	if err := cm.snManager.AddLogStream(ctx, logStreamDesc); err != nil {
-		return err
+func (cm *clusterManager) AddLogStreamWith(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) (*vpb.LogStreamDescriptor, error) {
+	if err := cm.snMgr.AddLogStream(ctx, logStreamDesc); err != nil {
+		return nil, err
 	}
-	return cm.mrManager.RegisterLogStream(ctx, logStreamDesc)
+	err := cm.mrMgr.RegisterLogStream(ctx, logStreamDesc)
+	return logStreamDesc, err
 }
 
 func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) error {
-	lastGLSN, err := cm.mrManager.Seal(ctx, logStreamID)
-	if err != nil {
-		return err
-	}
-	return cm.snManager.Seal(ctx, logStreamID, lastGLSN)
+	panic("not implemented")
+	/*
+		lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
+		if err != nil {
+			return err
+		}
+		return cm.snMgr.Seal(ctx, logStreamID, lastGLSN)
+	*/
 }
 
 func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamID) error {
-	return cm.snManager.Sync(ctx, logStreamID)
+	panic("not implemented")
+	// return cm.snMgr.Sync(ctx, logStreamID)
 }
 
 func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
-	return cm.snManager.Unseal(ctx, logStreamID)
+	panic("not implemented")
+	// return cm.snMgr.Unseal(ctx, logStreamID)
 }

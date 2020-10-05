@@ -1,7 +1,18 @@
 package main
 
-import "fmt"
+import (
+	"log"
+	"os"
+
+	"github.daumkakao.com/varlog/varlog/cmd/vms/app"
+	"github.daumkakao.com/varlog/varlog/internal/vms"
+)
 
 func main() {
-	fmt.Println("vms: varlog manager server")
+	options := &vms.Options{}
+	app := app.InitCLI(options)
+	if err := app.Run(os.Args); err != nil {
+		log.Printf("vms: %v", err)
+		os.Exit(1)
+	}
 }

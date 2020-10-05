@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-package varlog.management;
+package varlog.vms;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "varlog/metadata.proto";
 import "storage_node/replicator.proto";
 
-option go_package = "github.daumkakao.com/varlog/varlog/proto/management";
+option go_package = "github.daumkakao.com/varlog/varlog/proto/vmspb";
 
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -63,7 +63,7 @@ message UnsealResponse {
     varlog.LogStreamDescriptor log_stream = 1;
 }
 
-service Management {
+service ClusterManager {
     rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {
     }
 
