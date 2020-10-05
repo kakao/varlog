@@ -46,14 +46,14 @@ endif
 
 TEST_DIRS := $(sort $(dir $(shell find . -name '*_test.go')))
 
-all : proto libvarlog storagenode metadata_repository
+all : proto libvarlog storagenode metadata_repository vms
 
 VARLOG_PROTO := proto/varlog
 STORAGE_NODE_PROTO := proto/storage_node
 METADATA_REPOSITORY_PROTO := proto/metadata_repository
-MANAGEMENT_PROTO := proto/management
+VMSPB_PROTO := proto/vmspb
 
-PROTO := $(VARLOG_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO) $(MANAGEMENT_PROTO)
+PROTO := $(VARLOG_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO) $(VMSPB_PROTO)
 
 proto : check_protoc gogoproto $(PROTO)
 
@@ -66,7 +66,10 @@ libvarlog : $(LIBVARLOG)
 METADATA_REPOSITORY := cmd/metadata_repository
 metadata_repository : $(METADATA_REPOSITORY_PROTO) $(METADATA_REPOSITORY)
 
-SUBDIRS := $(PROTO) $(STORAGE_NODE) $(LIBVARLOG) $(METADATA_REPOSITORY)
+VMS := cmd/vms
+vms : $(PROTO) $(VMS)
+
+SUBDIRS := $(PROTO) $(STORAGE_NODE) $(LIBVARLOG) $(METADATA_REPOSITORY) $(VMS)
 subdirs : $(SUBDIRS)
 
 $(SUBDIRS) :

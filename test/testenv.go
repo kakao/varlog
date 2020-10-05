@@ -11,6 +11,7 @@ import (
 
 	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/internal/storage"
+	"github.com/kakao/varlog/internal/vms"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/proto/storage_node"
@@ -36,6 +37,7 @@ type VarlogCluster struct {
 	VarlogClusterOptions
 	MRs       []*metadata_repository.RaftMetadataRepository
 	SNs       map[types.StorageNodeID]*storage.StorageNode
+	CM        vms.ClusterManager
 	mrPeers   []string
 	mrIDs     []types.NodeID
 	snID      types.StorageNodeID
@@ -185,6 +187,10 @@ func (clus *VarlogCluster) Close() error {
 		sn.Close()
 	}
 
+	if clus.CM != nil {
+		clus.CM.Close()
+	}
+
 	return err
 }
 
@@ -268,6 +274,47 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 	return snID, err
 }
 
+func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
+	snID := clus.snID
+	clus.snID += types.StorageNodeID(1)
+
+	opts := &storage.StorageNodeOptions{
+		RPCOptions:               storage.RPCOptions{RPCBindAddress: ":0"},
+		LogStreamExecutorOptions: storage.DefaultLogStreamExecutorOptions,
+		LogStreamReporterOptions: storage.DefaultLogStreamReporterOptions,
+		ClusterID:                clus.ClusterID,
+		StorageNodeID:            snID,
+		Verbose:                  true,
+		Logger:                   clus.logger,
+	}
+	sn, err := storage.NewStorageNode(opts)
+	if err != nil {
+		return types.StorageNodeID(0), err
+	}
+
+	var meta *vpb.StorageNodeMetadataDescriptor
+	if err = sn.Run(); err != nil {
+		goto err_out
+	}
+
+	meta, err = sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
+	if err != nil {
+		goto err_out
+	}
+
+	err = clus.CM.AddStorageNode(context.TODO(), meta.StorageNode.Address)
+	if err != nil {
+		goto err_out
+	}
+
+	clus.SNs[snID] = sn
+	return meta.StorageNode.StorageNodeID, nil
+
+err_out:
+	sn.Close()
+	return types.StorageNodeID(0), err
+}
+
 func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 	if len(clus.SNs) < clus.NrRep {
 		return types.LogStreamID(0), varlog.ErrInvalid
@@ -303,6 +350,22 @@ func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 
 	err := clus.MRs[0].RegisterLogStream(context.TODO(), ls)
 	return lsID, err
+}
+
+func (clus *VarlogCluster) AddLSByVMS() (types.LogStreamID, error) {
+	if len(clus.SNs) < clus.NrRep {
+		return types.LogStreamID(0), varlog.ErrInvalid
+	}
+
+	logStreamDesc, err := clus.CM.AddLogStream(context.TODO())
+	if err != nil {
+		return types.LogStreamID(0), err
+	}
+
+	lsID := logStreamDesc.GetLogStreamID()
+	clus.lsID = lsID + types.LogStreamID(1)
+
+	return lsID, nil
 }
 
 func (clus *VarlogCluster) LookupSN(snID types.StorageNodeID) *storage.StorageNode {
@@ -365,4 +428,26 @@ func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (varlog.LogIOC
 	}
 
 	return varlog.NewLogIOClient(snMeta.StorageNode.Address)
+}
+
+func (clus *VarlogCluster) NewClusterManager(mrAddrs []string) (vms.ClusterManager, error) {
+	opts := &vms.DefaultOptions
+	if clus.VarlogClusterOptions.NrRep < 1 {
+		return nil, varlog.ErrInvalidArgument
+	}
+	opts.ReplicationFactor = uint(clus.VarlogClusterOptions.NrRep)
+	opts.Logger = clus.logger
+	opts.MetadataRepositoryAddresses = mrAddrs
+
+	cm, err := vms.NewClusterManager(opts)
+	if err != nil {
+		return nil, err
+	}
+	clus.CM = cm
+	return cm, nil
+}
+
+func (clus *VarlogCluster) NewClusterManagerClient() (varlog.ClusterManagerClient, error) {
+	addr := clus.CM.Address()
+	return varlog.NewClusterManagerClient(addr)
 }

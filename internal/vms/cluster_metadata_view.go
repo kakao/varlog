@@ -21,8 +21,10 @@ type ClusterMetadataView interface {
 }
 
 type clusterMetadataView struct {
+	meta      vpb.MetadataDescriptor
 	mrManager MetadataRepositoryManager
-	logger    *zap.Logger
+
+	logger *zap.Logger
 }
 
 var _ ClusterMetadataView = (*clusterMetadataView)(nil)
@@ -32,7 +34,10 @@ func NewClusterMetadataView(mrManager MetadataRepositoryManager, logger *zap.Log
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("clustermetadataview")
-	return &clusterMetadataView{logger: logger}
+	return &clusterMetadataView{
+		mrManager: mrManager,
+		logger:    logger,
+	}
 }
 
 func (cmv *clusterMetadataView) ClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {

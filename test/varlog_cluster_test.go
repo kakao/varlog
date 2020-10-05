@@ -682,3 +682,59 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		})
 	})
 }
+
+func TestVarlogManagerServer(t *testing.T) {
+	Convey("VMS.AddStorageNode", t, func() {
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             1,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		mr := env.MRs[0]
+		mrAddr := mr.GetServerAddr()
+
+		// VMS Server
+		cm, err := env.NewClusterManager([]string{mrAddr})
+		So(err, ShouldBeNil)
+		defer cm.Close()
+
+		// VMS Client
+		cmCli, err := env.NewClusterManagerClient()
+		So(err, ShouldBeNil)
+		defer cmCli.Close()
+
+		// Add SN
+		snid, err := env.AddSNByVMS()
+		So(err, ShouldBeNil)
+
+		// TODO (jun): It can fail if the NrMR is larger than one. It has some solutions:
+		// - MCL sends requests to only leader-MR.
+		// - MCL sends requests to any MRs, and check all of MR nodes if the request is
+		// applied.
+		meta, err := env.CM.Metadata(context.TODO())
+		So(err, ShouldBeNil)
+
+		snList := meta.GetStorageNodes()
+		So(len(snList), ShouldEqual, 1)
+
+		snDesc := meta.GetStorageNode(snid)
+		So(snDesc, ShouldNotBeNil)
+
+		Convey("VMS.AddLogStream", func() {
+			lsid, err := env.AddLSByVMS()
+			So(err, ShouldBeNil)
+
+			meta, err := env.CM.Metadata(context.TODO())
+			So(err, ShouldBeNil)
+
+			ls := meta.GetLogStream(lsid)
+			So(ls, ShouldNotBeNil)
+
+			So(ls.GetStatus(), ShouldEqual, varlogpb.LogStreamStatusRunning)
+		})
+	})
+}
