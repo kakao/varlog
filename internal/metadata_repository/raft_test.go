@@ -7,11 +7,11 @@ import (
 	"os"
 	"sync"
 	"testing"
-	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
+	"github.daumkakao.com/varlog/varlog/vtesting"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
 )
@@ -65,6 +65,7 @@ func newCluster(n int) *cluster {
 			clus.peers,
 			false,
 			DefaultSnapshotCount,
+			vtesting.TestRaftTick(),
 			nil,
 			clus.proposeC[i],
 			clus.confChangeC[i],
@@ -182,9 +183,9 @@ func TestFailoverLeaderElection(t *testing.T) {
 			}(ctx, i, clus.proposeC[i], clus.commitC[i])
 		}
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leader[0]() != 0
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		leader, ok := clus.peerToIdx[clus.leader[0]()]
 		So(ok, ShouldBeTrue)
@@ -194,9 +195,9 @@ func TestFailoverLeaderElection(t *testing.T) {
 			clus.close(leader)
 
 			Convey("Then raft should elect", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					return clus.leader[(leader+1)%len(clus.peers)]() != 0
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				for i := range clus.peers {
 					cancels[i]()

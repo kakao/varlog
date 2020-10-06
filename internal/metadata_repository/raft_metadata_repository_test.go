@@ -15,6 +15,7 @@ import (
 	pb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
 	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/vtesting"
 
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/urfave/cli/v2"
@@ -39,13 +40,12 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoClu
 		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", 10000+i)
 	}
 
-	logger, _ := zap.NewDevelopment(zap.IncreaseLevel(zap.WarnLevel))
 	clus := &metadataRepoCluster{
 		nrRep:             nrRep,
 		peers:             peers,
 		nodes:             nodes,
 		reporterClientFac: NewDummyReporterClientFactory(!increseUncommit),
-		logger:            logger,
+		logger:            zap.L(),
 	}
 
 	for i := range clus.peers {
@@ -83,6 +83,8 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 		NodeID:            nodeID,
 		Join:              join,
 		SnapCount:         testSnapCount,
+		RaftTick:          vtesting.TestRaftTick(),
+		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
 		NumRep:            clus.nrRep,
 		PeerList:          *cli.NewStringSlice(clus.peers...),
 		RPCBindAddress:    ":0",
@@ -399,9 +401,9 @@ func TestMRGlobalCommit(t *testing.T) {
 		})
 
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -432,63 +434,63 @@ func TestMRGlobalCommit(t *testing.T) {
 		}
 
 		Convey("global commit", func(ctx C) {
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			// global commit (2, 3) highest glsn: 5
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				return mr.storage.GetHighWatermark() == types.GLSN(5)
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			Convey("LogStream should be dedup", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 3)
 					return mr.proposeReport(lls) == nil
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 					return mr.proposeReport(lls) == nil
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(vtesting.TimeoutUnitTimesFactor(1))
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					return mr.storage.GetHighWatermark() == types.GLSN(5)
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 
 			Convey("LogStream which have wrong GLSN but have uncommitted should commit", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 6)
 					return mr.proposeReport(lls) == nil
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 6)
 					return mr.proposeReport(lls) == nil
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					return mr.storage.GetHighWatermark() == types.GLSN(9)
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 	})
@@ -501,9 +503,9 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		snID := types.StorageNodeID(0)
 		snIDs := make([]types.StorageNodeID, 1)
@@ -515,18 +517,18 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 			StorageNodeID: snID,
 		}
 
-		rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		defer cancel()
 
 		err := clus.nodes[0].RegisterStorageNode(rctx, sn)
 		So(err, ShouldBeNil)
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(50, func() bool {
 			return clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID) != nil
-		}, 5*time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		ls := makeLogStream(lsID, snIDs)
-		rctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		rctx, cancel = context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		defer cancel()
 		err = clus.nodes[0].RegisterLogStream(rctx, ls)
 		So(err, ShouldBeNil)
@@ -534,9 +536,9 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID)
 		reporterClient.increaseUncommitted()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(50, func() bool {
 			return reporterClient.numUncommitted() == 0
-		}, 5*time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 	})
 }
 
@@ -552,8 +554,6 @@ func TestMRRequestMap(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
-		T := 100 * time.Millisecond
-
 		var wg sync.WaitGroup
 		var st sync.WaitGroup
 
@@ -561,17 +561,17 @@ func TestMRRequestMap(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rctx, cancel := context.WithTimeout(context.Background(), T)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(1))
 			defer cancel()
 			st.Done()
 			mr.RegisterStorageNode(rctx, sn)
 		}()
 
 		st.Wait()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(1, func() bool {
 			_, ok := mr.requestMap.Load(uint64(1))
 			return ok
-		}, T), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		wg.Wait()
 	})
@@ -595,10 +595,10 @@ func TestMRRequestMap(t *testing.T) {
 			defer wg.Done()
 			st.Done()
 
-			testutil.CompareWait(func() bool {
+			testutil.CompareWaitN(50, func() bool {
 				_, ok := mr.requestMap.Load(uint64(1))
 				return ok
-			}, 5*time.Second)
+			})
 
 			dummy := &committedEntry{
 				entry: &pb.RaftEntry{
@@ -610,7 +610,7 @@ func TestMRRequestMap(t *testing.T) {
 		}()
 
 		st.Wait()
-		rctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(2))
 		defer cancel()
 		err := mr.RegisterStorageNode(rctx, sn)
 
@@ -629,7 +629,7 @@ func TestMRRequestMap(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
-		rctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(1))
 		defer cancel()
 		err := mr.RegisterStorageNode(rctx, sn)
 		So(err, ShouldNotBeNil)
@@ -644,9 +644,9 @@ func TestMRRequestMap(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(50, func() bool {
 			return clus.leaderElected()
-		}, 5*time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -670,9 +670,9 @@ func TestMRGetLastCommitted(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -703,49 +703,49 @@ func TestMRGetLastCommitted(t *testing.T) {
 		}
 
 		Convey("getLastCommitted should return last committed GLSN", func(ctx C) {
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			// global commit (2, 3) highest glsn: 5
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				return mr.storage.GetHighWatermark() == types.GLSN(5)
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(2))
 			So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(5))
 
 			Convey("getLastCommitted should return same if not committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(10, func() bool {
 						lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 						return mr.proposeReport(lls) == nil
-					}, time.Second), ShouldBeTrue)
+					}), ShouldBeTrue)
 
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(10, func() bool {
 						lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 						return mr.proposeReport(lls) == nil
-					}, time.Second), ShouldBeTrue)
+					}), ShouldBeTrue)
 
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(50, func() bool {
 						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
-					}, 5*time.Second), ShouldBeTrue)
+					}), ShouldBeTrue)
 
 					So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(2))
 					So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(6+i))
@@ -753,34 +753,34 @@ func TestMRGetLastCommitted(t *testing.T) {
 			})
 
 			Convey("getLastCommitted should return same for sealed LS", func(ctx C) {
-				rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+				rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 				_, err := mr.Seal(rctx, lsIds[1])
 				So(err, ShouldBeNil)
 
 				for i := 0; i < 10; i++ {
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(10, func() bool {
 						lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, uint64(3+i))
 						return mr.proposeReport(lls) == nil
-					}, time.Second), ShouldBeTrue)
+					}), ShouldBeTrue)
 
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(10, func() bool {
 						lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, uint64(3+i))
 						return mr.proposeReport(lls) == nil
-					}, time.Second), ShouldBeTrue)
+					}), ShouldBeTrue)
 
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(10, func() bool {
 						lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 						return mr.proposeReport(lls) == nil
-					}, time.Second), ShouldBeTrue)
+					}), ShouldBeTrue)
 
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(10, func() bool {
 						lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 						return mr.proposeReport(lls) == nil
-					}, time.Second), ShouldBeTrue)
+					}), ShouldBeTrue)
 
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(10, func() bool {
 						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
-					}, time.Second), ShouldBeTrue)
+					}), ShouldBeTrue)
 
 					So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(6+i))
 					So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(5))
@@ -798,9 +798,9 @@ func TestMRSeal(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -831,34 +831,34 @@ func TestMRSeal(t *testing.T) {
 		}
 
 		Convey("Seal should commit and return last committed", func(ctx C) {
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
 				return mr.proposeReport(lls) == nil
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
-			rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			lc, err := mr.Seal(rctx, lsIds[1])
 			So(err, ShouldBeNil)
 			So(lc, ShouldEqual, types.GLSN(5))
 
 			Convey("Seal should return same last committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
-					rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+					rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 					lc, err := mr.Seal(rctx, lsIds[1])
 					So(err, ShouldBeNil)
 					So(lc, ShouldEqual, types.GLSN(5))
@@ -876,9 +876,9 @@ func TestMRUnseal(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := clus.nodes[0]
 
@@ -908,50 +908,50 @@ func TestMRUnseal(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 			return mr.proposeReport(lls) == nil
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 			return mr.proposeReport(lls) == nil
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
 			return mr.proposeReport(lls) == nil
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
 			return mr.proposeReport(lls) == nil
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
-		rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+		rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		lc, err := mr.Seal(rctx, lsIds[1])
 		So(err, ShouldBeNil)
 		So(lc, ShouldEqual, types.GLSN(5))
 
 		Convey("Unealed LS should update report", func(ctx C) {
-			rctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			err := mr.Unseal(rctx, lsIds[1])
 			So(err, ShouldBeNil)
 
 			for i := 0; i < 10; i++ {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 					return mr.proposeReport(lls) == nil
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 					return mr.proposeReport(lls) == nil
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					return mr.storage.GetHighWatermark() == types.GLSN(6+i)
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(6+i))
 			}
@@ -969,9 +969,9 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		snIDs := make([]types.StorageNodeID, nrRep)
 		for i := range snIDs {
@@ -981,7 +981,7 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 				StorageNodeID: snIDs[i],
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			err := clus.nodes[0].RegisterStorageNode(rctx, sn)
@@ -991,15 +991,15 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 		lsID := types.LogStreamID(0)
 
 		ls := makeLogStream(lsID, snIDs)
-		rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		defer cancel()
 		err := clus.nodes[0].RegisterLogStream(rctx, ls)
 		So(err, ShouldBeNil)
 
 		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[0])
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(50, func() bool {
 			return !reporterClient.getKnownHighWatermark().Invalid()
-		}, 5*time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		Convey("When node fail", func(ctx C) {
 			leader := clus.leader()
@@ -1007,15 +1007,15 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 			So(clus.leaderFail(), ShouldBeTrue)
 
 			Convey("Then MR Cluster should elect", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					return leader != clus.leader()
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				prev := reporterClient.getKnownHighWatermark()
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					return reporterClient.getKnownHighWatermark() > prev
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 	})
@@ -1031,9 +1031,9 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		snIDs := make([]types.StorageNodeID, nrRep)
 		for i := range snIDs {
@@ -1043,7 +1043,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 				StorageNodeID: snIDs[i],
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			err := clus.nodes[0].RegisterStorageNode(rctx, sn)
@@ -1053,7 +1053,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 		lsID := types.LogStreamID(0)
 
 		ls := makeLogStream(lsID, snIDs)
-		rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		defer cancel()
 		err := clus.nodes[0].RegisterLogStream(rctx, ls)
 		So(err, ShouldBeNil)
@@ -1062,7 +1062,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			So(clus.nodes[0].AddPeer(rctx,
@@ -1073,14 +1073,14 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			nrNode += 1
 
 			Convey("Then getMeta from new node should be success", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					meta, err := clus.nodes[newNode].GetMetadata(context.TODO())
 					if err != nil {
 						return false
 					}
 
 					return meta.GetStorageNode(snIDs[0]) != nil
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				Convey("Register to new node should be success", func(ctx C) {
 					snID := snIDs[nrRep-1] + types.StorageNodeID(1)
@@ -1089,7 +1089,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 						StorageNodeID: snID,
 					}
 
-					rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 					defer cancel()
 
 					err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
@@ -1109,7 +1109,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			So(clus.nodes[0].AddPeer(rctx,
@@ -1126,7 +1126,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 					StorageNodeID: snID,
 				}
 
-				rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 				defer cancel()
 
 				err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
@@ -1149,9 +1149,9 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		leader := clus.leader()
 		So(leader, ShouldBeGreaterThan, -1)
@@ -1160,14 +1160,14 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			leaveNode := (leader + 1) % nrNode
 			checkNode := (leaveNode + 1) % nrNode
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(50, func() bool {
 				_, membership, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 				return len(membership) == nrNode
-			}, 5*time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			clus.stop(leaveNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			So(clus.nodes[checkNode].RemovePeer(rctx,
@@ -1185,14 +1185,14 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			leaveNode := leader
 			checkNode := (leaveNode + 1) % nrNode
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(50, func() bool {
 				_, membership, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 				return len(membership) == nrNode
-			}, 5*time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			clus.stop(leaveNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			So(clus.nodes[checkNode].RemovePeer(rctx,
@@ -1218,9 +1218,9 @@ func TestMRFailoverRestart(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		leader := clus.leader()
 		So(leader, ShouldBeGreaterThan, -1)
@@ -1232,7 +1232,7 @@ func TestMRFailoverRestart(t *testing.T) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			So(clus.nodes[leader].AddPeer(rctx,
@@ -1243,13 +1243,13 @@ func TestMRFailoverRestart(t *testing.T) {
 			nrNode += 1
 
 			Convey("Then GetMembership should return 6 peers", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}
 					return len(membership) == nrNode
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 
@@ -1260,7 +1260,7 @@ func TestMRFailoverRestart(t *testing.T) {
 			clus.stop(restartNode)
 			clus.stop(leaveNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			So(clus.nodes[leader].RemovePeer(rctx,
@@ -1272,13 +1272,13 @@ func TestMRFailoverRestart(t *testing.T) {
 			clus.restart(restartNode)
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}
 					return len(membership) == nrNode
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 	})
@@ -1296,9 +1296,9 @@ func TestMRLoadSnapshop(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		leader := clus.leader()
 		So(leader, ShouldBeGreaterThan, -1)
@@ -1312,37 +1312,37 @@ func TestMRLoadSnapshop(t *testing.T) {
 				StorageNodeID: snIDs[i],
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
 			So(err, ShouldBeNil)
 		}
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(50, func() bool {
 			snap := clus.nodes[restartNode].raftNode.loadSnapshot()
 			return snap != nil
-		}, 5*time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		Convey("When follower restart", func(ctx C) {
 			clus.restart(restartNode)
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(50, func() bool {
 				_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 				if err != nil {
 					return false
 				}
 				return len(membership) == nrNode
-			}, 5*time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			Convey("Then GetMembership should recover metadata", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					meta, err := clus.nodes[restartNode].GetMetadata(context.TODO())
 					if err != nil {
 						return false
 					}
 
 					return meta.GetStorageNode(snIDs[0]) != nil
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 	})
@@ -1360,9 +1360,9 @@ func TestMRRemoteSnapshot(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		leader := clus.leader()
 		So(leader, ShouldBeGreaterThan, -1)
@@ -1375,23 +1375,23 @@ func TestMRRemoteSnapshot(t *testing.T) {
 				StorageNodeID: snIDs[i],
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
 			So(err, ShouldBeNil)
 		}
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(50, func() bool {
 			snap := clus.nodes[leader].raftNode.loadSnapshot()
 			return snap != nil
-		}, 5*time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		Convey("When new node join", func(ctx C) {
 			newNode := nrNode
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			So(clus.nodes[leader].AddPeer(rctx,
@@ -1402,17 +1402,17 @@ func TestMRRemoteSnapshot(t *testing.T) {
 			nrNode += 1
 
 			Convey("Then GetMembership should recover metadata", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					_, membership, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}
 					return len(membership) == nrNode
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				Convey("Then replication should be operate", func(ctx C) {
 					for i := range snIDs {
-						rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+						rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 						defer cancel()
 
 						err := clus.nodes[leader].UnregisterStorageNode(rctx, snIDs[i])
@@ -1445,9 +1445,9 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		leader := clus.leader()
 		So(leader, ShouldBeGreaterThan, -1)
@@ -1456,15 +1456,15 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 			restartNode := (leader + 1) % nrNode
 			leaveNode := (leader + 2) % nrNode
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(50, func() bool {
 				hasSnapshot, _ := clus.hasSnapshot(restartNode)
 				return hasSnapshot
-			}, 5*time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			clus.stop(restartNode)
 			clus.stop(leaveNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
 			So(clus.nodes[leader].RemovePeer(rctx,
@@ -1476,13 +1476,13 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 			clus.restart(restartNode)
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}
 					return len(membership) == nrNode
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 	})
@@ -1501,9 +1501,9 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 			testSnapCount = 0
 		})
 		clus.Start()
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		leader := clus.leader()
 		So(leader, ShouldBeGreaterThan, -1)
@@ -1518,7 +1518,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 					StorageNodeID: snIds[i][j],
 				}
 
-				rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 				defer cancel()
 
 				err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
@@ -1529,21 +1529,21 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 		Convey("When follower restart with snapshot", func(ctx C) {
 			restartNode := (leader + 1) % nrNode
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(50, func() bool {
 				hasSnapshot, _ := clus.hasSnapshot(restartNode)
 				return hasSnapshot
-			}, 5*time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			clus.stop(restartNode)
 			clus.restart(restartNode)
 
 			Convey("Then ReportCollector should recover", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					clus.nodes[restartNode].reportCollector.mu.RLock()
 					defer clus.nodes[restartNode].reportCollector.mu.RUnlock()
 
 					return len(clus.nodes[restartNode].reportCollector.executors) == nrStorageNode
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 	})
@@ -1563,7 +1563,7 @@ func TestMRProposeTimeout(t *testing.T) {
 				StorageNodeID: types.StorageNodeID(snID),
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 			err := mr.RegisterStorageNode(rctx, sn)
 			Convey("Then it should be timed out", func(ctx C) {
@@ -1581,9 +1581,9 @@ func TestMRProposeRetry(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		Convey("When cli register SN & transfer leader for dropping propose", func(ctx C) {
 			leader := clus.leader()
@@ -1594,7 +1594,7 @@ func TestMRProposeRetry(t *testing.T) {
 				StorageNodeID: types.StorageNodeID(snID),
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 			err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
 

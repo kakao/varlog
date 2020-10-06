@@ -10,7 +10,7 @@ pipeline {
 
     stage('test') {
       steps {
-        sh 'make test TEST_FAILFAST=1 TEST_TIMEOUT=20m TEST_COUNT=10 TEST_COVERAGE=1'
+        sh 'make test TEST_FAILFAST=1 TEST_TIMEOUT=1h TEST_COUNT=2 TEST_CPU=1,2,4,8,16,32 TEST_COVERAGE=1'
       }
     }
 

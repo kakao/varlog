@@ -22,7 +22,7 @@ import (
 func TestLogStreamExecutorNew(t *testing.T) {
 	Convey("LogStreamExecutor", t, func() {
 		Convey("it should not be created with nil storage", func() {
-			_, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(0), nil, &LogStreamExecutorOptions{})
+			_, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), nil, &LogStreamExecutorOptions{})
 			So(err, ShouldNotBeNil)
 		})
 
@@ -30,7 +30,7 @@ func TestLogStreamExecutorNew(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			storage := NewMockStorage(ctrl)
-			lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
+			lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
 			So(lse.(*logStreamExecutor).isSealed(), ShouldBeFalse)
 		})
@@ -43,7 +43,7 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			storage := NewMockStorage(ctrl)
-			lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
+			lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
 
 			err = lse.Run(context.TODO())
@@ -65,10 +65,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		storage := NewMockStorage(ctrl)
 		replicator := NewMockReplicator(ctrl)
 
-		logger, err := zap.NewDevelopment()
-		So(err, ShouldBeNil)
-
-		lse, err := NewLogStreamExecutor(logger, logStreamID, storage, &DefaultLogStreamExecutorOptions)
+		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, storage, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 
 		err = lse.Run(context.TODO())
@@ -172,9 +169,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 		storage := NewMockStorage(ctrl)
 		replicator := NewMockReplicator(ctrl)
-		logger, err := zap.NewDevelopment()
-		So(err, ShouldBeNil)
-		lse, err := NewLogStreamExecutor(logger, types.LogStreamID(1), storage, &LogStreamExecutorOptions{
+		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{
 			AppendCTimeout:    DefaultLSEAppendCTimeout,
 			CommitWaitTimeout: DefaultLSECommitWaitTimeout,
 			TrimCTimeout:      DefaultLSETrimCTimeout,
@@ -396,7 +391,7 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
+		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		err = lse.Run(context.TODO())
@@ -441,7 +436,7 @@ func TestLogStreamExecutorTrim(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
+		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		Convey("When the context passed to the Trim is cancelled before enqueueing the trimTask", func() {
@@ -466,7 +461,7 @@ func TestLogStreamExecutorReplicate(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
+		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		Convey("When the context passed to Replicate is canceled before calling storage.Write", func() {
@@ -487,7 +482,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(zap.NewNop(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
+		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		err = lse.Run(context.TODO())
@@ -571,7 +566,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 		const lsid = types.LogStreamID(1)
 		storage := NewMockStorage(ctrl)
-		lseI, err := NewLogStreamExecutor(zap.NewNop(), lsid, storage, &DefaultLogStreamExecutorOptions)
+		lseI, err := NewLogStreamExecutor(zap.L(), lsid, storage, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 		lse := lseI.(*logStreamExecutor)
 
@@ -642,12 +637,8 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			repeat      = 10
 		)
 
-		logger, err := zap.NewDevelopment()
-		So(err, ShouldBeNil)
-		defer logger.Sync()
-
 		stg := NewInMemoryStorage()
-		lse, err := NewLogStreamExecutor(logger, logStreamID, stg, &DefaultLogStreamExecutorOptions)
+		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, stg, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 
 		lse.Run(context.TODO())

@@ -20,7 +20,7 @@ pipeline {
         branch 'master'
       }
       steps {
-        sh 'make test TEST_FAILFAST=1 TEST_TIMEOUT=12h TEST_PARALLEL=1 TEST_COUNT=1000 TEST_COVERAGE=1'
+        sh 'make test TEST_FAILFAST=1 TEST_TIMEOUT=12h TEST_PARALLEL=1 TEST_COUNT=100 TEST_COVERAGE=1'
       }
     }
   }

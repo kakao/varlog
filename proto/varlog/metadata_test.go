@@ -1,6 +1,8 @@
 package varlog
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestLogStreamStatus(t *testing.T) {
 	var tests = []struct {

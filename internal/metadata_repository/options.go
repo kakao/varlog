@@ -15,21 +15,26 @@ const (
 	DefaultSnapshotCatchUpEntriesN uint64        = 10000
 	DefaultLogReplicationFactor    int           = 1
 	DefaultProposeTimeout          time.Duration = 100 * time.Millisecond
+	DefaultRaftTick                time.Duration = 100 * time.Millisecond
+	DefaultRPCTimeout              time.Duration = 100 * time.Millisecond
 
 	UnusedRequestIndex uint64 = 0
 )
 
 type MetadataRepositoryOptions struct {
-	RPCBindAddress    string
-	ClusterID         types.ClusterID
-	NodeID            types.NodeID
-	Join              bool
-	Verbose           bool
-	NumRep            int
-	SnapCount         uint64
-	PeerList          cli.StringSlice
-	ReporterClientFac ReporterClientFactory
-	Logger            *zap.Logger
+	RPCBindAddress     string
+	ClusterID          types.ClusterID
+	NodeID             types.NodeID
+	Join               bool
+	Verbose            bool
+	NumRep             int
+	SnapCount          uint64
+	RaftTick           time.Duration
+	RaftProposeTimeout time.Duration
+	RPCTimeout         time.Duration
+	PeerList           cli.StringSlice
+	ReporterClientFac  ReporterClientFactory
+	Logger             *zap.Logger
 }
 
 func (options *MetadataRepositoryOptions) validate() error {
@@ -59,6 +64,18 @@ func (options *MetadataRepositoryOptions) validate() error {
 
 	if options.SnapCount == 0 {
 		options.SnapCount = DefaultSnapshotCount
+	}
+
+	if options.RaftTick == time.Duration(0) {
+		options.RaftTick = DefaultRaftTick
+	}
+
+	if options.RaftProposeTimeout == time.Duration(0) {
+		options.RaftProposeTimeout = DefaultProposeTimeout
+	}
+
+	if options.RPCTimeout == time.Duration(0) {
+		options.RPCTimeout = DefaultRPCTimeout
 	}
 
 	return nil
