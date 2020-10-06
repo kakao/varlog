@@ -498,16 +498,19 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		})
 
 		Convey("When the GLSN passed to it is less than LowWatermark", func() {
+			lse.(*logStreamExecutor).localLowWatermark.Store(2)
 			Convey("Then the LogStreamExecutor.Subscribe should return an error", func() {
-				// ErrAlreadyTrimmed
-				Convey("Not yet implemented", nil)
+				_, err := lse.Subscribe(context.TODO(), 2, 3)
+				So(err, ShouldNotBeNil)
 			})
 		})
 
 		Convey("When Storage.Scan returns an error", func() {
-			storage.EXPECT().Scan(gomock.Any()).Return(nil, varlog.ErrInternal)
+			storage.EXPECT().Scan(gomock.Any(), gomock.Any()).Return(nil, varlog.ErrInternal)
+			lse.(*logStreamExecutor).localLowWatermark.Store(1)
+			lse.(*logStreamExecutor).localHighWatermark.Store(10)
 			Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
-				c, err := lse.Subscribe(context.TODO(), types.MinGLSN)
+				c, err := lse.Subscribe(context.TODO(), 1, 11)
 				So(err, ShouldBeNil)
 				So((<-c).err, ShouldNotBeNil)
 			})
@@ -515,16 +518,18 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 
 		Convey("When Storage.Scan returns a valid scanner", func() {
 			scanner := NewMockScanner(ctrl)
-			storage.EXPECT().Scan(gomock.Any()).Return(scanner, nil)
+			storage.EXPECT().Scan(gomock.Any(), gomock.Any()).Return(scanner, nil)
+
+			lse.(*logStreamExecutor).localLowWatermark.Store(1)
+			lse.(*logStreamExecutor).localHighWatermark.Store(10)
 
 			Convey("And the Scanner.Next returns an error", func() {
 				scanner.EXPECT().Next().Return(varlog.InvalidLogEntry, varlog.ErrInternal)
 
 				Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
-					c, err := lse.Subscribe(context.TODO(), types.MinGLSN)
+					c, err := lse.Subscribe(context.TODO(), 1, 11)
 					So(err, ShouldBeNil)
 					So((<-c).err, ShouldNotBeNil)
-
 				})
 			})
 
@@ -546,7 +551,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 					cs[i].After(cs[i-1])
 				}
 				Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
-					c, err := lse.Subscribe(context.TODO(), types.MinGLSN)
+					c, err := lse.Subscribe(context.TODO(), types.MinGLSN, types.MaxGLSN)
 					So(err, ShouldBeNil)
 					for i := 0; i < repeat-1; i++ {
 						So((<-c).err, ShouldBeNil)
@@ -689,7 +694,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			return c
 		}
 
-		for hwm := types.GLSN(1); hwm <= repeat; hwm++ {
+		for hwm := types.MinGLSN; hwm <= repeat; hwm++ {
 			expectedData := []byte(fmt.Sprintf("log-%03d", hwm))
 			// Trim future GLSN
 			err = lse.Trim(context.TODO(), hwm)
@@ -708,6 +713,28 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			So(expectedData, ShouldResemble, actualLogEntry.Data)
 		}
 
+		_, err = lse.Subscribe(context.TODO(), types.MinGLSN+repeat, types.MinGLSN+repeat+1)
+		So(errors.Is(err, varlog.ErrUndecidable), ShouldBeTrue)
+
+		// Subscribe
+		mid := types.GLSN(repeat / 2)
+		subC, err := lse.Subscribe(context.TODO(), types.MinGLSN, types.MinGLSN+mid)
+		So(err, ShouldBeNil)
+
+		for expectedGLSN := types.MinGLSN; expectedGLSN < types.MinGLSN+mid; expectedGLSN++ {
+			sub := <-subC
+			t.Logf("scanned: %v", sub)
+			So(sub.err, ShouldBeNil)
+			So(sub.logEntry.GLSN, ShouldEqual, expectedGLSN)
+			So(sub.logEntry.LLSN, ShouldEqual, types.LLSN(expectedGLSN))
+		}
+		So((<-subC).err, ShouldEqual, errEndOfRange)
+		testutil.CompareWait(func() bool {
+			_, more := <-subC
+			return !more
+
+		}, time.Minute)
+
 		// Trim
 		_, err = lse.Read(context.TODO(), 3)
 		So(err, ShouldBeNil)
@@ -720,6 +747,10 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		}, time.Minute)
 		err = lse.Trim(context.TODO(), 3)
 		So(err, ShouldBeNil)
+
+		// Subscribe trimmed range
+		_, err = lse.Subscribe(context.TODO(), types.MinGLSN, 4)
+		So(errors.Is(err, varlog.ErrTrimmed), ShouldBeTrue)
 
 		// Now, no appending
 		So(lse.GetReport().UncommittedLLSNLength, ShouldEqual, 0)

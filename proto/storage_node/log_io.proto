@@ -63,28 +63,33 @@ message ReadRequest {
 // ReadResponse contains the contents of the log entry which is retrieved by
 // the ReadRequest.
 message ReadResponse {
-    bytes payload = 1;
-    uint64 glsn = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
-        (gogoproto.customname) = "GLSN"
-    ];
-    uint64 llsn = 3 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LLSN",
-        (gogoproto.customname) = "LLSN"
-    ];
-}
-
-// SubscribeRequest has GLSN which indicates an inclusive starting position
-// from which a client wants to receive.
-message SubscribeRequest {
     uint64 glsn = 1 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/varlog/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
-    uint32 log_stream_id = 2 [
+    uint64 llsn = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.LLSN",
+        (gogoproto.customname) = "LLSN"
+    ];
+    bytes payload = 3;
+}
+
+// SubscribeRequest has GLSN which indicates an inclusive starting position
+// from which a client wants to receive.
+message SubscribeRequest {
+    uint64 glsn_begin = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+        (gogoproto.customname) = "GLSNBegin"
+    ];
+    uint64 glsn_end = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+        (gogoproto.customname) = "GLSNEnd"
+    ];
+    uint32 log_stream_id = 3 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"

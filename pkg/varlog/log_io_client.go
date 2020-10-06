@@ -23,7 +23,7 @@ type SubscribeResult struct {
 type LogIOClient interface {
 	Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error)
 	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) (*LogEntry, error)
-	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
+	Subscribe(ctx context.Context, logStreamID types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error)
 	Trim(ctx context.Context, glsn types.GLSN) error
 	Close() error
 }
@@ -90,8 +90,16 @@ func (c *logIOClient) Read(ctx context.Context, logStreamID types.LogStreamID, g
 
 // Subscribe gets log entries continuously from the storage node. It guarantees that LLSNs of log
 // entries taken are sequential.
-func (c *logIOClient) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
-	req := &pb.SubscribeRequest{GLSN: glsn}
+func (c *logIOClient) Subscribe(ctx context.Context, logStreamID types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error) {
+	if begin >= end {
+		return nil, ErrInvalid
+	}
+
+	req := &pb.SubscribeRequest{
+		LogStreamID: logStreamID,
+		GLSNBegin:   begin,
+		GLSNEnd:     end,
+	}
 	stream, err := c.rpcClient.Subscribe(ctx, req)
 	if err != nil {
 		return nil, FromStatusError(ctx, err)
