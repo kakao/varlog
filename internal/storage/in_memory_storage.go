@@ -28,6 +28,8 @@ type InMemoryStorage struct {
 }
 
 type InMemoryScanner struct {
+	begin   types.GLSN
+	end     types.GLSN
 	cursor  types.LLSN
 	storage *InMemoryStorage
 }
@@ -39,12 +41,12 @@ func (s *InMemoryScanner) Next() (varlog.LogEntry, error) {
 	defer s.storage.muWritten.RUnlock()
 
 	if len(s.storage.written) == 0 || len(s.storage.committed) == 0 {
-		return varlog.LogEntry{}, varlog.ErrNoEntry
+		return varlog.InvalidLogEntry, varlog.ErrNoEntry
 	}
 
 	idx := uint64(s.cursor - s.storage.written[0].llsn)
 	if idx >= uint64(len(s.storage.committed)) {
-		return varlog.LogEntry{}, varlog.ErrNoEntry
+		return varlog.InvalidLogEntry, errEndOfRange
 	}
 
 	went := s.storage.written[idx]
@@ -53,6 +55,10 @@ func (s *InMemoryScanner) Next() (varlog.LogEntry, error) {
 		// TODO (jun): storage is broken
 		return varlog.LogEntry{}, varlog.ErrInternal
 	}
+	if cent.glsn >= s.end {
+		return varlog.InvalidLogEntry, errEndOfRange
+	}
+
 	ret := varlog.LogEntry{
 		LLSN: cent.llsn,
 		GLSN: cent.glsn,
@@ -131,22 +137,30 @@ func (s *InMemoryStorage) ReadByLLSN(llsn types.LLSN) (varlog.LogEntry, error) {
 	}, nil
 }
 
-func (s *InMemoryStorage) Scan(glsn types.GLSN) (Scanner, error) {
+func (s *InMemoryStorage) Scan(begin, end types.GLSN) (Scanner, error) {
 	s.assert()
 	defer s.assert()
+
+	// TODO (jun): consider reverse-scan
+	if begin >= end {
+		return nil, varlog.ErrInvalid
+	}
 
 	s.muCommitted.RLock()
 	defer s.muCommitted.RUnlock()
 
-	i, cent, _ := s.searchCommittedEntry(glsn)
+	i, cent, _ := s.searchCommittedEntry(begin)
 	if i >= len(s.committed) {
 		return nil, varlog.ErrNoEntry
 	}
 	scanner := &InMemoryScanner{
+		begin:   begin,
+		end:     end,
 		cursor:  cent.llsn,
 		storage: s,
 	}
 	return scanner, nil
+
 }
 
 func (s *InMemoryStorage) Write(llsn types.LLSN, data []byte) error {

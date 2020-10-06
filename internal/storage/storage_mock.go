@@ -104,18 +104,18 @@ func (mr *MockStorageMockRecorder) ReadByLLSN(llsn interface{}) *gomock.Call {
 }
 
 // Scan mocks base method.
-func (m *MockStorage) Scan(glsn types.GLSN) (Scanner, error) {
+func (m *MockStorage) Scan(begin, end types.GLSN) (Scanner, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Scan", glsn)
+	ret := m.ctrl.Call(m, "Scan", begin, end)
 	ret0, _ := ret[0].(Scanner)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Scan indicates an expected call of Scan.
-func (mr *MockStorageMockRecorder) Scan(glsn interface{}) *gomock.Call {
+func (mr *MockStorageMockRecorder) Scan(begin, end interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scan", reflect.TypeOf((*MockStorage)(nil).Scan), glsn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scan", reflect.TypeOf((*MockStorage)(nil).Scan), begin, end)
 }
 
 // Write mocks base method.

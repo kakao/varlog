@@ -235,18 +235,18 @@ func (mr *MockLogStreamExecutorMockRecorder) Read(ctx, glsn interface{}) *gomock
 }
 
 // Subscribe mocks base method.
-func (m *MockLogStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
+func (m *MockLogStreamExecutor) Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan SubscribeResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Subscribe", ctx, glsn)
+	ret := m.ctrl.Call(m, "Subscribe", ctx, begin, end)
 	ret0, _ := ret[0].(<-chan SubscribeResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Subscribe indicates an expected call of Subscribe.
-func (mr *MockLogStreamExecutorMockRecorder) Subscribe(ctx, glsn interface{}) *gomock.Call {
+func (mr *MockLogStreamExecutorMockRecorder) Subscribe(ctx, begin, end interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLogStreamExecutor)(nil).Subscribe), ctx, glsn)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLogStreamExecutor)(nil).Subscribe), ctx, begin, end)
 }
 
 // Append mocks base method.

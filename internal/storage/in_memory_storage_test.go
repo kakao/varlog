@@ -90,7 +90,7 @@ func TestInMemoryStorage(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				Convey("it should scan log entries", func() {
-					scanner, err := s.Scan(types.GLSN(1))
+					scanner, err := s.Scan(types.GLSN(1), types.GLSN(11))
 					So(err, ShouldBeNil)
 
 					ent, err := scanner.Next()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -225,6 +226,31 @@ func TestSync(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(expectedData, ShouldResemble, ent.Data)
 		}
+
+		// Subscribe
+		subC, err := oldCL.Subscribe(context.TODO(), logStreamID, types.MinGLSN, lastCommittedGLSN/2)
+		So(err, ShouldBeNil)
+		for expectedGLSN := types.MinGLSN; expectedGLSN < lastCommittedGLSN/2; expectedGLSN++ {
+			sub := <-subC
+			So(sub.Error, ShouldBeNil)
+			So(sub.GLSN, ShouldEqual, expectedGLSN)
+			So(sub.LLSN, ShouldEqual, types.LLSN(expectedGLSN))
+		}
+		So((<-subC).Error, ShouldEqual, io.EOF)
+		_, more := <-subC
+		So(more, ShouldBeFalse)
+
+		subC, err = oldCL.Subscribe(context.TODO(), logStreamID, types.MinGLSN, lastCommittedGLSN+1)
+		So(err, ShouldBeNil)
+		for expectedGLSN := types.MinGLSN; expectedGLSN < lastCommittedGLSN+1; expectedGLSN++ {
+			sub := <-subC
+			So(sub.Error, ShouldBeNil)
+			So(sub.GLSN, ShouldEqual, expectedGLSN)
+			So(sub.LLSN, ShouldEqual, types.LLSN(expectedGLSN))
+		}
+		So((<-subC).Error, ShouldEqual, io.EOF)
+		_, more = <-subC
+		So(more, ShouldBeFalse)
 
 		// seal oldSN => oldSN: SEALED
 		status, sealedGLSN, err := oldMCL.Seal(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, lastCommittedGLSN)

@@ -1,9 +1,13 @@
 package storage
 
 import (
+	"errors"
+
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 )
+
+var errEndOfRange = errors.New("storage: end of range")
 
 type Scanner interface {
 	Next() (varlog.LogEntry, error)
@@ -17,7 +21,7 @@ type Storage interface {
 	ReadByLLSN(llsn types.LLSN) (varlog.LogEntry, error)
 
 	// Scan returns Scanner that reads log entries from the glsn.
-	Scan(glsn types.GLSN) (Scanner, error)
+	Scan(begin, end types.GLSN) (Scanner, error)
 
 	// Write writes log entry at the llsn. The log entry contains data.
 	Write(llsn types.LLSN, data []byte) error

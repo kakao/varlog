@@ -80,7 +80,7 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 		gomock.Any(),
 		gomock.Any(),
 	).DoAndReturn(func(_ context.Context, req *pb.SubscribeRequest) (pb.LogIO_SubscribeClient, error) {
-		nextGLSN := req.GetGLSN()
+		nextGLSN := req.GetGLSNBegin()
 		stream := mock.NewMockLogIO_SubscribeClient(ctrl)
 		stream.EXPECT().Recv().DoAndReturn(
 			func() (*pb.SubscribeResponse, error) {
@@ -163,7 +163,7 @@ func TestBasicOperations(t *testing.T) {
 		So(string(currLogEntry.Data), ShouldEqual, msg)
 		prevGLSN = currGLSN
 
-		ch, err := client.Subscribe(context.TODO(), types.GLSN(0))
+		ch, err := client.Subscribe(context.TODO(), logStreamID, types.GLSN(0), types.GLSN(10))
 		So(err, ShouldBeNil)
 		subRes := <-ch
 		So(subRes.Error, ShouldBeNil)

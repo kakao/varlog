@@ -55,7 +55,7 @@ type LogStreamExecutor interface {
 	Status() vpb.LogStreamStatus
 
 	Read(ctx context.Context, glsn types.GLSN) (varlog.LogEntry, error)
-	Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error)
+	Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan SubscribeResult, error)
 	Append(ctx context.Context, data []byte, backups ...Replica) (types.GLSN, error)
 	Trim(ctx context.Context, glsn types.GLSN) error
 
@@ -448,48 +448,59 @@ func (lse *logStreamExecutor) read(t *readTask) {
 	close(t.done)
 }
 
-func (lse *logStreamExecutor) Subscribe(ctx context.Context, glsn types.GLSN) (<-chan SubscribeResult, error) {
-	// TODO: verify glsn
-	return lse.subscribe(ctx, glsn), nil
+func (lse *logStreamExecutor) Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan SubscribeResult, error) {
+	if begin >= end {
+		return nil, varlog.ErrInvalid
+	}
+
+	// TODO (jun): begin has special meanings:
+	// - begin == types.MinGLSN: subscribe to the earliest
+	// - begin == types.MaxGLSN: subscribe to the latest
+	if err := lse.isTrimmed(begin); err != nil {
+		return nil, err
+	}
+	if err := lse.commitUndecidable(begin); err != nil {
+		return nil, err
+	}
+
+	return lse.subscribe(ctx, begin, end), nil
 }
 
 // FIXME (jun): Use stopped channel
-func (lse *logStreamExecutor) subscribe(ctx context.Context, glsn types.GLSN) <-chan SubscribeResult {
+func (lse *logStreamExecutor) subscribe(ctx context.Context, begin, end types.GLSN) <-chan SubscribeResult {
 	c := make(chan SubscribeResult)
 	go func() {
 		defer close(c)
-		scanner, err := lse.storage.Scan(glsn)
+		scanner, err := lse.storage.Scan(begin, end)
 		if err != nil {
 			c <- SubscribeResult{err: err}
 			return
 		}
 		entry, err := scanner.Next()
+		lse.logger.Debug("scanner", zap.Any("entry", entry), zap.Error(err))
 		c <- SubscribeResult{logEntry: entry, err: err}
 		if err != nil {
+			lse.logger.Debug("scanner stopped", zap.Error(err))
 			return
 		}
 		llsn := entry.LLSN
 		for {
-			select {
-			case <-ctx.Done():
-				c <- SubscribeResult{err: ctx.Err()}
-				return
-			default:
-				res := SubscribeResult{logEntry: varlog.InvalidLogEntry}
-				entry, err := scanner.Next()
-				if llsn+1 != entry.LLSN {
-					res.err = varlog.NewSimpleErrorf(varlog.ErrUnordered, "llsn next=%v read=%v", llsn+1, entry.LLSN)
-					// res.err = fmt.Errorf("%w (LLSN next=%v read=%v)", varlog.ErrUnordered, llsn+1, entry.LLSN)
-					c <- res
-					return
-				}
-				res.logEntry = entry
-				res.err = err
-				llsn = entry.LLSN
+			res := SubscribeResult{logEntry: varlog.InvalidLogEntry}
+			entry, err := scanner.Next()
+			lse.logger.Debug("scanner", zap.Any("entry", entry), zap.Error(err))
+			if err == nil && llsn+1 != entry.LLSN {
+				res.err = varlog.NewSimpleErrorf(varlog.ErrUnordered, "llsn next=%v read=%v", llsn+1, entry.LLSN)
 				c <- res
-				if err != nil {
-					return
-				}
+				lse.logger.Debug("scanner stopped - out of order")
+				return
+			}
+			res.logEntry = entry
+			res.err = err
+			llsn = entry.LLSN
+			c <- res
+			if err != nil {
+				lse.logger.Debug("scanner stopped", zap.Error(err))
+				return
 			}
 		}
 	}()

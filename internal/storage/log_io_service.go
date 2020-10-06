@@ -75,6 +75,9 @@ func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.R
 }
 
 func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) error {
+	if req.GetGLSNBegin() >= req.GetGLSNEnd() {
+		return varlog.ErrInvalidArgument
+	}
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		s.logger.Error("no logstreamexecutor", zap.Any("request", req))
@@ -82,13 +85,16 @@ func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_S
 	}
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
-	c, err := lse.Subscribe(ctx, req.GetGLSN())
+	c, err := lse.Subscribe(ctx, req.GetGLSNBegin(), req.GetGLSNEnd())
 	if err != nil {
 		s.logger.Error("could not subscribe", zap.Any("request", req), zap.Error(err))
 		return varlog.ToStatusError(err)
 	}
 	for r := range c {
 		if r.err != nil {
+			if r.err == errEndOfRange {
+				return nil
+			}
 			return r.err
 		}
 		err := stream.Send(&snpb.SubscribeResponse{
