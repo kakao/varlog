@@ -145,8 +145,7 @@ func TestReplicatorIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		logger, err := zap.NewDevelopment()
-		So(err, ShouldBeNil)
+		logger := zap.L()
 
 		// single instance per SN (variable[storageNodeIdx])
 		var rsList []*ReplicatorService

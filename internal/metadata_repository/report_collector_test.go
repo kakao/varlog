@@ -13,6 +13,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/vtesting"
 
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
@@ -97,7 +98,7 @@ func TestRegisterStorageNode(t *testing.T) {
 			getOldestGLS:  mr.getOldestGLS,
 		}
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, logger)
+		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -115,7 +116,7 @@ func TestRegisterStorageNode(t *testing.T) {
 			getOldestGLS:  mr.getOldestGLS,
 		}
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, logger)
+		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -149,7 +150,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 			getOldestGLS:  mr.getOldestGLS,
 		}
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, logger)
+		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -184,7 +185,7 @@ func TestRecoverStorageNode(t *testing.T) {
 			getOldestGLS:  mr.getOldestGLS,
 		}
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, logger)
+		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -256,7 +257,7 @@ func TestReport(t *testing.T) {
 		}
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, logger)
+		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -266,7 +267,7 @@ func TestReport(t *testing.T) {
 			defer wg.Done()
 			m := make(map[types.StorageNodeID]int)
 
-			after := time.After(time.Second)
+			after := time.After(vtesting.TimeoutUnitTimesFactor(10))
 
 		Loop:
 			for {
@@ -345,7 +346,7 @@ func TestCommit(t *testing.T) {
 		}
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, logger)
+		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()
@@ -361,9 +362,9 @@ func TestCommit(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(1, func() bool {
 				return a.lookupClient(sn.StorageNodeID) != nil
-			}, 100*time.Millisecond), ShouldBeTrue)
+			}), ShouldBeTrue)
 		}
 
 		Convey("ReportCollector should broadcast commit result to registered storage node", func() {
@@ -375,20 +376,20 @@ func TestCommit(t *testing.T) {
 
 			a.m.Range(func(k, v interface{}) bool {
 				cli := v.(*DummyReporterClient)
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					reportCollector.Commit(gls)
 
 					cli.mu.Lock()
 					defer cli.mu.Unlock()
 
 					return cli.knownHighWatermark == knownHWM
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 				return true
 			})
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				return reportCollector.getMinHighWatermark() == knownHWM
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			Convey("ReportCollector should send ordered commit result to registered storage node", func() {
 				gls := newDummyGlobalLogStream(knownHWM, nrStorage)
@@ -403,20 +404,20 @@ func TestCommit(t *testing.T) {
 
 				a.m.Range(func(k, v interface{}) bool {
 					cli := v.(*DummyReporterClient)
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(10, func() bool {
 						reportCollector.Commit(gls)
 
 						cli.mu.Lock()
 						defer cli.mu.Unlock()
 
 						return cli.knownHighWatermark == knownHWM
-					}, time.Second), ShouldBeTrue)
+					}), ShouldBeTrue)
 					return true
 				})
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					return reportCollector.getMinHighWatermark() == knownHWM
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				Convey("ReportCollector should send proper commit against new StorageNode", func() {
 					mr.trimGLS(knownHWM)
@@ -438,14 +439,14 @@ func TestCommit(t *testing.T) {
 
 					a.m.Range(func(k, v interface{}) bool {
 						cli := v.(*DummyReporterClient)
-						So(testutil.CompareWait(func() bool {
+						So(testutil.CompareWaitN(10, func() bool {
 							reportCollector.Commit(gls)
 
 							cli.mu.Lock()
 							defer cli.mu.Unlock()
 
 							return cli.knownHighWatermark == knownHWM
-						}, time.Second), ShouldBeTrue)
+						}), ShouldBeTrue)
 						return true
 					})
 				})
@@ -523,7 +524,7 @@ func TestRPCFail(t *testing.T) {
 		}
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, logger)
+		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()
@@ -536,9 +537,9 @@ func TestRPCFail(t *testing.T) {
 		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
 		So(err, ShouldBeNil)
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(1, func() bool {
 			return clientFac.lookupClient(sn.StorageNodeID) != nil
-		}, 100*time.Millisecond), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		Convey("When reporter is crashed", func(ctx C) {
 			clientFac.crashRPC(sn.StorageNodeID)
@@ -551,32 +552,32 @@ func TestRPCFail(t *testing.T) {
 
 			select {
 			case <-mr.reportC:
-			case <-time.After(100 * time.Millisecond):
+			case <-time.After(vtesting.TimeoutUnitTimesFactor(1)):
 			}
 
 			Convey("reportCollector should not callback report", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(1, func() bool {
 					select {
 					case <-mr.reportC:
 						return false
-					case <-time.After(100 * time.Millisecond):
+					case <-time.After(vtesting.TimeoutUnitTimesFactor(1)):
 						return true
 					}
-				}, 100*time.Millisecond), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 
 			Convey("When repoter recover", func(ctx C) {
 				clientFac.recoverRPC(sn.StorageNodeID)
 
 				Convey("reportCollector should callback report", func(ctx C) {
-					So(testutil.CompareWait(func() bool {
+					So(testutil.CompareWaitN(1, func() bool {
 						select {
 						case <-mr.reportC:
 							return true
 						default:
 							return false
 						}
-					}, 100*time.Millisecond), ShouldBeTrue)
+					}), ShouldBeTrue)
 				})
 			})
 		})

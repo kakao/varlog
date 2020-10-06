@@ -11,6 +11,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/vtesting"
 	"go.uber.org/zap"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -27,9 +28,9 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return env.LeaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := env.MRs[0]
 		addr := mr.GetServerAddr()
@@ -75,9 +76,9 @@ func TestVarlogRegisterStorageNode(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return env.LeaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := env.GetMR()
 
@@ -95,9 +96,9 @@ func TestVarlogRegisterStorageNode(t *testing.T) {
 			So(len(meta.LogStreams), ShouldBeGreaterThan, 0)
 
 			Convey("Then nrReport of MR should be updated", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					return mr.GetReportCount() > 0
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 	})
@@ -114,9 +115,9 @@ func TestVarlogAppendLog(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return env.LeaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := env.GetMR()
 
@@ -157,9 +158,9 @@ func TestVarlogReplicateLog(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return env.LeaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := env.GetMR()
 
@@ -194,7 +195,7 @@ func TestVarlogReplicateLog(t *testing.T) {
 
 			Convey("Then it should return valid GLSN", func(ctx C) {
 				for i := 0; i < 100; i++ {
-					rctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 					defer cancel()
 
 					glsn, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
@@ -220,9 +221,9 @@ func TestVarlogSeal(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return env.LeaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := env.GetMR()
 
@@ -255,7 +256,7 @@ func TestVarlogSeal(t *testing.T) {
 					case <-actx.Done():
 						return
 					default:
-						rctx, cancel := context.WithTimeout(actx, time.Second)
+						rctx, cancel := context.WithTimeout(actx, vtesting.TimeoutUnitTimesFactor(10))
 						glsn, err := cli.Append(rctx, lsID, []byte("foo"))
 						cancel()
 						if err != nil {
@@ -277,9 +278,15 @@ func TestVarlogSeal(t *testing.T) {
 			}
 
 			sealedGLSN := types.InvalidGLSN
+
+			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
+			defer timer.Stop()
+
 		Loop:
 			for {
 				select {
+				case <-timer.C:
+					t.Fatal("timeout")
 				case glsn := <-glsnC:
 					if sealedGLSN.Invalid() && glsn > types.GLSN(10) {
 						sealedGLSN, err = mr.Seal(context.TODO(), lsID)
@@ -328,9 +335,9 @@ func TestVarlogTrimGLS(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return env.LeaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		mr := env.GetMR()
 
@@ -355,14 +362,14 @@ func TestVarlogTrimGLS(t *testing.T) {
 
 			glsn := types.InvalidGLSN
 			for i := 0; i < 10; i++ {
-				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+				rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 				defer cancel()
 				glsn, _ = cli.Append(rctx, lsIDs[0], []byte("foo"))
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
 
 			for i := 0; i < 10; i++ {
-				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+				rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 				defer cancel()
 				glsn, _ = cli.Append(rctx, lsIDs[1], []byte("foo"))
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
@@ -372,9 +379,9 @@ func TestVarlogTrimGLS(t *testing.T) {
 			So(hwm, ShouldEqual, glsn)
 
 			Convey("Then GLS history of MR should be trimmed", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					return mr.GetMinHighWatermark() == hwm
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 	})
@@ -393,9 +400,9 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return env.LeaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		snID, err := env.AddSN()
 		So(err, ShouldBeNil)
@@ -423,7 +430,7 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 			glsn := types.InvalidGLSN
 
 			for i := 0; i < 32; i++ {
-				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+				rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 				defer cancel()
 				glsn, _ = cli.Append(rctx, lsIDs[i%nrLS], []byte("foo"))
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
@@ -439,7 +446,7 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			for i := 0; i < 10; i++ {
-				rctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+				rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 				defer cancel()
 				glsn, err = cli.Append(rctx, runningLS.LogStreamID, []byte("foo"))
 				So(err, ShouldBeNil)
@@ -450,9 +457,9 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 			So(hwm, ShouldEqual, glsn)
 
 			Convey("Then GLS history of MR should be trimmed", func(ctx C) {
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					return mr.GetMinHighWatermark() == hwm
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 			})
 		})
 	})
@@ -469,9 +476,9 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return env.LeaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		leader := env.Leader()
 
@@ -497,7 +504,7 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 				case <-actx.Done():
 					return
 				default:
-					rctx, cancel := context.WithTimeout(actx, 5*time.Second)
+					rctx, cancel := context.WithTimeout(actx, vtesting.TimeoutUnitTimesFactor(50))
 					glsn, err := cli.Append(rctx, lsID, []byte("foo"))
 					cancel()
 					if err != nil {
@@ -523,9 +530,15 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 			triggerGLSN := types.GLSN(20)
 			goalGLSN := types.GLSN(3) * triggerGLSN
 			stopped := false
+
+			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
+			defer timer.Stop()
+
 		Loop:
 			for {
 				select {
+				case <-timer.C:
+					t.Fatal("timeout")
 				case glsn := <-glsnC:
 					if maxGLSN < glsn {
 						maxGLSN = glsn
@@ -534,9 +547,9 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 						So(env.LeaderFail(), ShouldBeTrue)
 						stopped = true
 
-						So(testutil.CompareWait(func() bool {
+						So(testutil.CompareWaitN(50, func() bool {
 							return env.Leader() != leader
-						}, 5*time.Second), ShouldBeTrue)
+						}), ShouldBeTrue)
 
 					} else if maxGLSN > goalGLSN {
 						break Loop
@@ -573,9 +586,9 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return env.LeaderElected()
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		for i := 0; i < nrRep; i++ {
 			_, err := env.AddSN()
@@ -616,7 +629,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 				case <-actx.Done():
 					return
 				default:
-					rctx, cancel := context.WithTimeout(actx, time.Second)
+					rctx, cancel := context.WithTimeout(actx, vtesting.TimeoutUnitTimesFactor(10))
 					glsn, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
 					cancel()
 					if err != nil {
@@ -644,9 +657,15 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		Convey("When backup SN fail", func(ctx C) {
 			errCnt := 0
 			maxGLSN := types.InvalidGLSN
+
+			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
+			defer timer.Stop()
+
 		Loop:
 			for {
 				select {
+				case <-timer.C:
+					t.Fatal("timeout")
 				case glsn := <-glsnC:
 					if maxGLSN < glsn {
 						maxGLSN = glsn
@@ -671,10 +690,10 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 				psn, _ := env.GetPrimarySN(lsID)
 				So(psn, ShouldNotBeNil)
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(50, func() bool {
 					status, _, _ := psn.Seal(env.ClusterID, ls.Replicas[0].StorageNodeID, lsID, sealedGLSN)
 					return status == varlogpb.LogStreamStatusSealed
-				}, 5*time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				_, hwm, _ := psn.Seal(env.ClusterID, ls.Replicas[0].StorageNodeID, lsID, sealedGLSN)
 				So(hwm, ShouldEqual, sealedGLSN)

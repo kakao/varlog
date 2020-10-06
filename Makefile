@@ -21,6 +21,10 @@ PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendo
 TEST_COUNT := 1
 TEST_FLAGS := -count $(TEST_COUNT) -p 1
 
+ifneq ($(TEST_CPU),)
+	TEST_FLAGS := $(TEST_FLAGS) -cpu $(TEST_CPU)
+endif
+
 ifneq ($(TEST_TIMEOUT),)
 	TEST_FLAGS := $(TEST_FLAGS) -timeout $(TEST_TIMEOUT)
 endif

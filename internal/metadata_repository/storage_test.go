@@ -2,7 +2,6 @@ package metadata_repository
 
 import (
 	"bytes"
-	"fmt"
 	"math/rand"
 	"sync/atomic"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	pb "github.com/kakao/varlog/proto/metadata_repository"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/vtesting"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -321,9 +321,9 @@ func TestStorageUpdateLS(t *testing.T) {
 					So(ms.LookupLocalLogStreamReplica(lsID, updateSnIDs[i]), ShouldNotBeNil)
 				}
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					return atomic.LoadInt64(&ms.nrRunning) == 0
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				meta := ms.GetMetadata()
 				So(meta, ShouldNotBeNil)
@@ -453,9 +453,9 @@ func TestStorageSealLS(t *testing.T) {
 			err = ms.SealLogStream(lsID, 0, 0)
 			So(err, ShouldBeNil)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				return atomic.LoadInt64(&ms.nrRunning) == 0
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			Convey("Sealed LS should have LogStreamStatusSealed", func(ctx C) {
 				meta := ms.GetMetadata()
@@ -473,9 +473,9 @@ func TestStorageSealLS(t *testing.T) {
 		})
 
 		Convey("Sealed LocalLogStreamReplica should have same EndLLSN", func(ctx C) {
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				return atomic.LoadInt64(&ms.nrRunning) == 0
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			for i := 0; i < rep; i++ {
 				r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
@@ -611,24 +611,24 @@ func TestStorageUnsealLS(t *testing.T) {
 			err := ms.UnsealLogStream(lsID, 0, 0)
 			So(err, ShouldResemble, varlog.ErrIgnore)
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				return atomic.LoadInt64(&ms.nrRunning) == 0
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			Convey("Unsealed to sealed LS should be success", func(ctx C) {
 				err := ms.SealLogStream(lsID, 0, 0)
 				So(err, ShouldBeNil)
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					return atomic.LoadInt64(&ms.nrRunning) == 0
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				err = ms.UnsealLogStream(lsID, 0, 0)
 				So(err, ShouldBeNil)
 
-				So(testutil.CompareWait(func() bool {
+				So(testutil.CompareWaitN(10, func() bool {
 					return atomic.LoadInt64(&ms.nrRunning) == 0
-				}, time.Second), ShouldBeTrue)
+				}), ShouldBeTrue)
 
 				meta := ms.GetMetadata()
 				So(meta, ShouldNotBeNil)
@@ -959,7 +959,7 @@ func TestStorageMetadataCache(t *testing.T) {
 		timeout := false
 		select {
 		case <-ch:
-		case <-time.After(time.Second):
+		case <-time.After(vtesting.TimeoutUnitTimesFactor(10)):
 			timeout = true
 		}
 
@@ -968,9 +968,9 @@ func TestStorageMetadataCache(t *testing.T) {
 		meta := ms.GetMetadata()
 		So(meta, ShouldNotBeNil)
 		So(meta.GetStorageNode(snID), ShouldNotBeNil)
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 	})
 
 	Convey("createMetadataCache should dedup", t, func(ctx C) {
@@ -1013,9 +1013,9 @@ func TestStorageMetadataCache(t *testing.T) {
 		meta2 := ms.GetMetadata()
 		So(meta2, ShouldEqual, meta)
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 	})
 }
 
@@ -1061,9 +1061,9 @@ func TestStorageStateMachineMerge(t *testing.T) {
 
 			<-ch
 
-			So(testutil.CompareWait(func() bool {
+			So(testutil.CompareWaitN(10, func() bool {
 				return atomic.LoadInt64(&ms.nrRunning) == 0
-			}, time.Second), ShouldBeTrue)
+			}), ShouldBeTrue)
 
 			ms.mergeStateMachine()
 			So(ms.isCopyOnWrite(), ShouldBeFalse)
@@ -1116,7 +1116,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 
 		st := time.Now()
 		ms.mergeStateMachine()
-		fmt.Println(time.Now().Sub(st))
+		t.Log(time.Now().Sub(st))
 	})
 }
 
@@ -1162,9 +1162,9 @@ func TestStorageSnapshot(t *testing.T) {
 
 		snap, _, _ := ms.GetSnapshot()
 		So(snap, ShouldBeNil)
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		Convey("create snapshot should operate if no more job", func(ctx C) {
 			appliedIndex++
@@ -1236,16 +1236,16 @@ func TestStorageApplySnapshot(t *testing.T) {
 
 		<-ch
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		ms.mergeStateMachine()
 		ms.triggerSnapshot(appliedIndex)
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(10, func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		snap, confState, snapIndex := ms.GetSnapshot()
 		So(snap, ShouldNotBeNil)
@@ -1379,16 +1379,16 @@ func TestStorageSnapshotRace(t *testing.T) {
 		So(checkGLS, ShouldEqual, n)
 		So(checkLS, ShouldEqual, n*numLS*numRep)
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(100, func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, 10*time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		ms.mergeStateMachine()
 		ms.triggerSnapshot(appliedIndex)
 
-		So(testutil.CompareWait(func() bool {
+		So(testutil.CompareWaitN(100, func() bool {
 			return atomic.LoadInt64(&ms.nrRunning) == 0
-		}, 10*time.Second), ShouldBeTrue)
+		}), ShouldBeTrue)
 
 		_, _, recv := ms.GetSnapshot()
 		So(recv, ShouldEqual, appliedIndex)

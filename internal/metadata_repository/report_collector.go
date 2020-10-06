@@ -16,8 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const RPC_TIMEOUT = 100 * time.Millisecond
-
 type ReportCollectorCallbacks struct {
 	report        func(*snpb.LocalLogStreamDescriptor) error
 	getClient     func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error)
@@ -31,6 +29,7 @@ type ReportCollectExecutor struct {
 	cli           storage.LogStreamReporterClient
 	sn            *varlogpb.StorageNodeDescriptor
 	cb            ReportCollectorCallbacks
+	rpcTimeout    time.Duration
 	lsmu          sync.RWMutex
 	clmu          sync.RWMutex
 	resultC       chan *snpb.GlobalLogStreamDescriptor
@@ -39,20 +38,22 @@ type ReportCollectExecutor struct {
 }
 
 type ReportCollector struct {
-	executors map[types.StorageNodeID]*ReportCollectExecutor
-	cb        ReportCollectorCallbacks
-	mu        sync.RWMutex
-	logger    *zap.Logger
-	cancel    context.CancelFunc
-	runner    *runner.Runner
-	running   atomicutil.AtomicBool
+	executors  map[types.StorageNodeID]*ReportCollectExecutor
+	cb         ReportCollectorCallbacks
+	rpcTimeout time.Duration
+	mu         sync.RWMutex
+	logger     *zap.Logger
+	cancel     context.CancelFunc
+	runner     *runner.Runner
+	running    atomicutil.AtomicBool
 }
 
-func NewReportCollector(cb ReportCollectorCallbacks, logger *zap.Logger) *ReportCollector {
+func NewReportCollector(cb ReportCollectorCallbacks, rpcTimeout time.Duration, logger *zap.Logger) *ReportCollector {
 	return &ReportCollector{
-		logger:    logger,
-		cb:        cb,
-		executors: make(map[types.StorageNodeID]*ReportCollectExecutor),
+		logger:     logger,
+		cb:         cb,
+		rpcTimeout: rpcTimeout,
+		executors:  make(map[types.StorageNodeID]*ReportCollectExecutor),
 	}
 }
 
@@ -109,6 +110,7 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		highWatermark: glsn,
 		sn:            sn,
 		cb:            rc.cb,
+		rpcTimeout:    rc.rpcTimeout,
 		logger:        rc.logger.Named("executor").With(zap.Uint32("snid", uint32(sn.StorageNodeID))),
 	}
 	ctx, cancel := rc.runner.WithManagedCancel(context.Background())
@@ -231,7 +233,7 @@ func (rce *ReportCollectExecutor) getReport() error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	ctx, cancel := context.WithTimeout(context.Background(), rce.rpcTimeout)
 	defer cancel()
 	lls, err := cli.GetReport(ctx)
 	if err != nil {
@@ -266,6 +268,7 @@ func (rce *ReportCollectExecutor) getReport() error {
 	rce.logger.Debug("report",
 		zap.Uint64("hwm", uint64(lls.HighWatermark)),
 	)
+
 	rce.cb.report(lls)
 
 	return nil
@@ -303,7 +306,7 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 		zap.Uint64("hwm", uint64(r.HighWatermark)),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	ctx, cancel := context.WithTimeout(context.Background(), rce.rpcTimeout)
 	defer cancel()
 	err = cli.Commit(ctx, &r)
 	if err != nil {

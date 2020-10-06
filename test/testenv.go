@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/urfave/cli/v2"
 	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/vms"
@@ -17,8 +18,7 @@ import (
 	"github.com/kakao/varlog/proto/storage_node"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	vpb "github.com/kakao/varlog/proto/varlog"
-
-	"github.com/urfave/cli/v2"
+	"github.com/kakao/varlog/vtesting"
 	"go.uber.org/zap"
 )
 
@@ -55,10 +55,9 @@ func NewVarlogCluster(opts VarlogClusterOptions) *VarlogCluster {
 		mrPeers[i] = fmt.Sprintf("http://127.0.0.1:%d", MR_PORT_BASE+i)
 	}
 
-	logger, _ := zap.NewDevelopment(zap.IncreaseLevel(zap.WarnLevel))
 	clus := &VarlogCluster{
 		VarlogClusterOptions: opts,
-		logger:               logger,
+		logger:               zap.L(),
 		mrPeers:              mrPeers,
 		mrIDs:                mrIDs,
 		MRs:                  MRs,
@@ -100,6 +99,8 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 		NodeID:            nodeID,
 		Join:              join,
 		SnapCount:         uint64(clus.SnapCount),
+		RaftTick:          vtesting.TestRaftTick(),
+		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
 		NumRep:            clus.NrRep,
 		PeerList:          *cli.NewStringSlice(clus.mrPeers...),
 		RPCBindAddress:    ":0",

@@ -91,7 +91,7 @@ type raftMembership struct {
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries.
-func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, snapCount uint64, getSnapshot func() ([]byte, *raftpb.ConfState, uint64), proposeC chan string,
+func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, snapCount uint64, raftTick time.Duration, getSnapshot func() ([]byte, *raftpb.ConfState, uint64), proposeC chan string,
 	confChangeC chan raftpb.ConfChange, logger *zap.Logger) *raftNode {
 
 	commitC := make(chan *raftCommittedEntry)
@@ -105,7 +105,7 @@ func newRaftNode(id varlogtypes.NodeID, peers []string, join bool, snapCount uin
 		id:          id,
 		bpeers:      peers,
 		membership:  newRaftMemebership(),
-		raftTick:    10 * time.Millisecond,
+		raftTick:    raftTick,
 		join:        join,
 		waldir:      fmt.Sprintf("raft-%d", id),
 		snapdir:     fmt.Sprintf("raft-%d-snap", id),
@@ -436,15 +436,20 @@ func (rc *raftNode) transferLeadership(wait bool) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*rc.raftTick)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*rc.raftTick)
 	defer cancel()
 
 	rc.node.TransferLeadership(ctx, uint64(rc.membership.getLeader()), uint64(transferee))
+
+	timer := time.NewTimer(rc.raftTick)
+	defer timer.Stop()
+
 	for wait && uint64(rc.membership.getLeader()) != uint64(transferee) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(rc.raftTick):
+		case <-timer.C:
+			timer.Reset(rc.raftTick)
 		}
 	}
 
@@ -503,6 +508,13 @@ func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 			if !raft.IsEmptySnap(snapshot) {
 				ms[i].Snapshot = snapshot
 				sm := snap.NewMessage(ms[i], snapReaderCloser{bytes.NewReader(nil)}, 0)
+
+				rc.logger.Info("send snapshot",
+					zap.Uint64("to", sm.To),
+					zap.Uint64("term", snapshot.Metadata.Term),
+					zap.Uint64("index", snapshot.Metadata.Index),
+					zap.Int("size", snapshot.Size()),
+				)
 
 				//TODO:: concurrency limit
 				rc.runner.Run(func(context.Context) {

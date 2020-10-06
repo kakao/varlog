@@ -245,6 +245,7 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 
 	t.reports = reports
 	t.knownHighWatermark = knownHighWatermark
+
 	close(t.done)
 
 	for hwm := range lsr.history {

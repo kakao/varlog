@@ -84,9 +84,9 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	mr.raftNode = newRaftNode(
 		options.NodeID,
 		options.PeerList.Value(),
-		//false, // not to join an existing cluster
-		options.Join,
+		options.Join, // if false, not to join an existing cluster
 		options.SnapCount,
+		options.RaftTick,
 		mr.storage.GetSnapshot,
 		mr.rnProposeC,
 		mr.rnConfChangeC,
@@ -102,7 +102,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		getOldestGLS:  mr.storage.GetFirstGLS,
 	}
 
-	mr.reportCollector = NewReportCollector(cbs,
+	mr.reportCollector = NewReportCollector(cbs, mr.options.RPCTimeout,
 		mr.logger.Named("report"))
 
 	mr.server = grpc.NewServer()
@@ -687,14 +687,14 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 		mr.requestMap.Store(e.RequestIndex, c)
 		defer mr.requestMap.Delete(e.RequestIndex)
 
-		t := time.NewTimer(DefaultProposeTimeout)
+		t := time.NewTimer(mr.options.RaftProposeTimeout)
 		defer t.Stop()
 
 	PROPOSE:
 		select {
 		case mr.proposeC <- e:
 		case <-t.C:
-			t.Reset(DefaultProposeTimeout)
+			t.Reset(mr.options.RaftProposeTimeout)
 			goto PROPOSE
 		case <-ctx.Done():
 			return ctx.Err()
@@ -704,7 +704,7 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 		case err := <-c:
 			return err
 		case <-t.C:
-			t.Reset(DefaultProposeTimeout)
+			t.Reset(mr.options.RaftProposeTimeout)
 			goto PROPOSE
 		case <-ctx.Done():
 			return ctx.Err()
@@ -841,6 +841,9 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.C
 		Context: []byte(url),
 	}
 
+	timer := time.NewTimer(mr.raftNode.raftTick)
+	defer timer.Stop()
+
 	for !mr.raftNode.membership.isMember(nodeID) {
 		if err := mr.proposeConfChange(ctx, r); err != nil {
 			return err
@@ -849,7 +852,8 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.C
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(mr.raftNode.raftTick):
+		case <-timer.C:
+			timer.Reset(mr.raftNode.raftTick)
 		}
 	}
 
@@ -866,6 +870,9 @@ func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID type
 		NodeID: uint64(nodeID),
 	}
 
+	timer := time.NewTimer(mr.raftNode.raftTick)
+	defer timer.Stop()
+
 	for mr.raftNode.membership.isMember(nodeID) {
 		if err := mr.proposeConfChange(ctx, r); err != nil {
 			return err
@@ -874,7 +881,8 @@ func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID type
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(mr.raftNode.raftTick):
+		case <-timer.C:
+			timer.Reset(mr.raftNode.raftTick)
 		}
 	}
 
