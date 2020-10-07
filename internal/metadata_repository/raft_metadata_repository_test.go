@@ -1074,12 +1074,22 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 
 			Convey("Then getMeta from new node should be success", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
-					meta, err := clus.nodes[newNode].GetMetadata(context.TODO())
+					cinfo, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), types.ClusterID(0))
 					if err != nil {
 						return false
 					}
 
-					return meta.GetStorageNode(snIDs[0]) != nil
+					if len(cinfo.Members) != nrNode {
+						return false
+					}
+
+					for _, member := range cinfo.Members {
+						if member.Endpoint == "" {
+							return false
+						}
+					}
+
+					return true
 				}), ShouldBeTrue)
 
 				Convey("Register to new node should be success", func(ctx C) {
@@ -1161,8 +1171,8 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			checkNode := (leaveNode + 1) % nrNode
 
 			So(testutil.CompareWaitN(50, func() bool {
-				_, membership, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
-				return len(membership) == nrNode
+				cinfo, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+				return len(cinfo.Members) == nrNode
 			}), ShouldBeTrue)
 
 			clus.stop(leaveNode)
@@ -1175,9 +1185,9 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 				clus.nodes[leaveNode].nodeID), ShouldBeNil)
 
 			Convey("Then GetMembership should return 2 peers", func(ctx C) {
-				_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+				cinfo, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 				So(err, ShouldBeNil)
-				So(len(membership), ShouldEqual, nrNode-1)
+				So(len(cinfo.Members), ShouldEqual, nrNode-1)
 			})
 		})
 
@@ -1186,8 +1196,8 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			checkNode := (leaveNode + 1) % nrNode
 
 			So(testutil.CompareWaitN(50, func() bool {
-				_, membership, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
-				return len(membership) == nrNode
+				cinfo, _ := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+				return len(cinfo.Members) == nrNode
 			}), ShouldBeTrue)
 
 			clus.stop(leaveNode)
@@ -1200,9 +1210,9 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 				clus.nodes[leaveNode].nodeID), ShouldBeNil)
 
 			Convey("Then GetMembership should return 2 peers", func(ctx C) {
-				_, membership, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
+				cinfo, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 				So(err, ShouldBeNil)
-				So(len(membership), ShouldEqual, nrNode-1)
+				So(len(cinfo.Members), ShouldEqual, nrNode-1)
 			})
 		})
 	})
@@ -1244,11 +1254,11 @@ func TestMRFailoverRestart(t *testing.T) {
 
 			Convey("Then GetMembership should return 6 peers", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
-					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
+					cinfo, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}
-					return len(membership) == nrNode
+					return len(cinfo.Members) == nrNode
 				}), ShouldBeTrue)
 			})
 		})
@@ -1273,11 +1283,11 @@ func TestMRFailoverRestart(t *testing.T) {
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
-					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
+					cinfo, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}
-					return len(membership) == nrNode
+					return len(cinfo.Members) == nrNode
 				}), ShouldBeTrue)
 			})
 		})
@@ -1327,11 +1337,11 @@ func TestMRLoadSnapshop(t *testing.T) {
 		Convey("When follower restart", func(ctx C) {
 			clus.restart(restartNode)
 			So(testutil.CompareWaitN(50, func() bool {
-				_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
+				cinfo, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 				if err != nil {
 					return false
 				}
-				return len(membership) == nrNode
+				return len(cinfo.Members) == nrNode
 			}), ShouldBeTrue)
 
 			Convey("Then GetMembership should recover metadata", func(ctx C) {
@@ -1403,11 +1413,11 @@ func TestMRRemoteSnapshot(t *testing.T) {
 
 			Convey("Then GetMembership should recover metadata", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
-					_, membership, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), 0)
+					cinfo, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}
-					return len(membership) == nrNode
+					return len(cinfo.Members) == nrNode
 				}), ShouldBeTrue)
 
 				Convey("Then replication should be operate", func(ctx C) {
@@ -1477,11 +1487,11 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
-					_, membership, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
+					cinfo, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}
-					return len(membership) == nrNode
+					return len(cinfo.Members) == nrNode
 				}), ShouldBeTrue)
 			})
 		})

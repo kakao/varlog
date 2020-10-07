@@ -38,12 +38,12 @@ type MetadataRepositoryOptions struct {
 }
 
 func (options *MetadataRepositoryOptions) validate() error {
-	if options.RPCBindAddress == "" {
-		options.RPCBindAddress = DefaultRPCBindAddress
+	if options.NodeID == types.InvalidNodeID {
+		return errors.New("invalid nodeID")
 	}
 
-	if options.NodeID == types.InvalidNodeID {
-		return errors.New("invalid index")
+	if options.RPCBindAddress == "" {
+		options.RPCBindAddress = DefaultRPCBindAddress
 	}
 
 	if options.NumRep < 1 {

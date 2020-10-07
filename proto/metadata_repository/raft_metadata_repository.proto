@@ -58,4 +58,7 @@ message MetadataRepositoryDescriptor {
     map<uint64, string> peers = 3
         [(gogoproto.castkey) =
              "github.com/kakao/varlog/pkg/varlog/types.NodeID"];
+    map<uint64, string> endpoints = 4
+        [(gogoproto.castkey) =
+             "github.com/kakao/varlog/pkg/varlog/types.NodeID"];
 }

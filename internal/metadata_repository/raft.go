@@ -727,7 +727,7 @@ func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
 }
 
 func (rc *raftNode) GetNodeID() varlogtypes.NodeID { return rc.id }
-func (rc *raftNode) GetMembership() []string {
+func (rc *raftNode) GetMembership() map[varlogtypes.NodeID]string {
 	return rc.membership.getMemberUrls()
 }
 
@@ -803,13 +803,13 @@ func (rm *raftMembership) removePeer(nodeID varlogtypes.NodeID) bool {
 	return true
 }
 
-func (rm *raftMembership) getMemberUrls() []string {
+func (rm *raftMembership) getMemberUrls() map[varlogtypes.NodeID]string {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
-	m := make([]string, 0, len(rm.members))
-	for _, url := range rm.members {
-		m = append(m, url)
+	m := make(map[varlogtypes.NodeID]string)
+	for nodeID, url := range rm.members {
+		m[nodeID] = url
 	}
 
 	return m
