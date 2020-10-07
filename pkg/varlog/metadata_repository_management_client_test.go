@@ -25,7 +25,7 @@ func TestMRManagementClientGetClusterInfo(t *testing.T) {
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().GetClusterInfo(gomock.Any(), gomock.Any()).Return(nil, ErrInternal)
 			Convey("Then the ManagementClient should return the error", func() {
-				_, _, err := mc.GetClusterInfo(context.TODO(), types.ClusterID(1))
+				_, err := mc.GetClusterInfo(context.TODO(), types.ClusterID(1))
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -33,7 +33,7 @@ func TestMRManagementClientGetClusterInfo(t *testing.T) {
 		Convey("When the ManagementService succeeds to get cluster info", func() {
 			mockClient.EXPECT().GetClusterInfo(gomock.Any(), gomock.Any()).Return(&pb.GetClusterInfoResponse{}, nil)
 			Convey("Then the ManagementClient should return the metadata", func() {
-				_, _, err := mc.GetClusterInfo(context.TODO(), types.ClusterID(1))
+				_, err := mc.GetClusterInfo(context.TODO(), types.ClusterID(1))
 				So(err, ShouldBeNil)
 			})
 		})

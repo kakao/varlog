@@ -198,8 +198,8 @@ func (clus *VarlogCluster) Close() error {
 func (clus *VarlogCluster) Leader() int {
 	leader := -1
 	for i, n := range clus.MRs {
-		l, _, _ := n.GetClusterInfo(context.TODO(), clus.ClusterID)
-		if l != types.InvalidNodeID && clus.mrIDs[i] == l {
+		cinfo, _ := n.GetClusterInfo(context.TODO(), clus.ClusterID)
+		if cinfo.Leader != types.InvalidNodeID && clus.mrIDs[i] == cinfo.Leader {
 			leader = i
 			break
 		}
@@ -210,7 +210,7 @@ func (clus *VarlogCluster) Leader() int {
 
 func (clus *VarlogCluster) LeaderElected() bool {
 	for _, n := range clus.MRs {
-		if l, _, _ := n.GetClusterInfo(context.TODO(), clus.ClusterID); l == types.InvalidNodeID {
+		if cinfo, _ := n.GetClusterInfo(context.TODO(), clus.ClusterID); cinfo.Leader == types.InvalidNodeID {
 			return false
 		}
 	}

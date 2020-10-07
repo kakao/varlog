@@ -10,7 +10,7 @@ import (
 type MetadataRepositoryManagementClient interface {
 	AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error
 	RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error
-	GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (types.NodeID, []string, error)
+	GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*pb.GetClusterInfoResponse, error)
 	Close() error
 }
 
@@ -72,15 +72,10 @@ func (c *metadataRepositoryManagementClient) RemovePeer(ctx context.Context, clu
 	return ToErr(ctx, err)
 }
 
-func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (types.NodeID, []string, error) {
+func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*pb.GetClusterInfoResponse, error) {
 	req := &pb.GetClusterInfoRequest{
 		ClusterID: clusterID,
 	}
 
-	rsp, err := c.client.GetClusterInfo(ctx, req)
-	if err != nil {
-		return types.InvalidNodeID, nil, ToErr(ctx, err)
-	}
-
-	return rsp.Leader, rsp.GetUrls(), nil
+	return c.client.GetClusterInfo(ctx, req)
 }

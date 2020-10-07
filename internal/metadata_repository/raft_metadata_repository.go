@@ -52,8 +52,8 @@ type RaftMetadataRepository struct {
 	runner *runner.Runner
 	cancel context.CancelFunc
 
-	server     *grpc.Server
-	serverAddr string
+	server       *grpc.Server
+	endpointAddr string
 
 	nrReport uint64
 }
@@ -132,8 +132,6 @@ func (mr *RaftMetadataRepository) Run() {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 
-	mr.raftNode.start()
-
 	mr.logger.Info("listening", zap.String("address", mr.options.RPCBindAddress))
 	lis, err := netutil.NewStoppableListener(mctx, mr.options.RPCBindAddress)
 	if err != nil {
@@ -141,7 +139,9 @@ func (mr *RaftMetadataRepository) Run() {
 	}
 
 	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
-	mr.serverAddr = addrs[0]
+	mr.endpointAddr = addrs[0]
+
+	mr.raftNode.start()
 
 	if err := mr.runner.RunC(mctx, func(ctx context.Context) {
 		//TODO:: graceful shutdown
@@ -150,6 +150,10 @@ func (mr *RaftMetadataRepository) Run() {
 			//r.Close()
 		}
 	}); err != nil {
+		mr.logger.Panic("could not run", zap.Error(err))
+	}
+
+	if err := mr.runner.RunC(mctx, mr.registerEndpoint); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 
@@ -363,6 +367,8 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 		mr.applyAddPeer(r, c.confState)
 	case *pb.RemovePeer:
 		mr.applyRemovePeer(r, c.confState)
+	case *pb.Endpoint:
+		mr.applyEndpoint(r, e.NodeIndex, e.RequestIndex)
 	}
 
 	mr.storage.UpdateAppliedIndex(e.AppliedIndex)
@@ -543,6 +549,15 @@ func (mr *RaftMetadataRepository) applyAddPeer(r *pb.AddPeer, cs *raftpb.ConfSta
 
 func (mr *RaftMetadataRepository) applyRemovePeer(r *pb.RemovePeer, cs *raftpb.ConfState) error {
 	err := mr.storage.RemovePeer(r.NodeID, cs)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applyEndpoint(r *pb.Endpoint, nodeIndex, requestIndex uint64) error {
+	err := mr.storage.RegisterEndpoint(r.NodeID, r.Url, nodeIndex, requestIndex)
 	if err != nil {
 		return err
 	}
@@ -889,12 +904,49 @@ func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID type
 	return nil
 }
 
-func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (types.NodeID, []string, error) {
-	return types.NodeID(mr.raftNode.membership.getLeader()), mr.raftNode.GetMembership(), nil
+func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
+	for ctx.Err() == nil && !mr.raftNode.membership.hasLeader() {
+		time.Sleep(mr.raftNode.raftTick)
+	}
+
+	if ctx.Err() != nil {
+		return
+	}
+
+	r := &pb.Endpoint{
+		NodeID: mr.nodeID,
+		Url:    mr.endpointAddr,
+	}
+
+	mr.propose(ctx, r, true)
+}
+
+func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*pb.ClusterInfo, error) {
+	member := mr.raftNode.GetMembership()
+
+	clusterInfo := &pb.ClusterInfo{
+		ClusterID: mr.options.ClusterID,
+		Leader:    types.NodeID(mr.raftNode.membership.getLeader()),
+	}
+
+	if len(member) > 0 {
+		clusterInfo.Members = make(map[types.NodeID]*pb.ClusterInfo_Member)
+
+		for nodeID, peer := range member {
+			member := &pb.ClusterInfo_Member{
+				Peer:     peer,
+				Endpoint: mr.storage.LookupEndpoint(nodeID),
+			}
+
+			clusterInfo.Members[nodeID] = member
+		}
+	}
+
+	return clusterInfo, nil
 }
 
 func (mr *RaftMetadataRepository) GetServerAddr() string {
-	return mr.serverAddr
+	return mr.endpointAddr
 }
 
 func (mr *RaftMetadataRepository) GetReportCount() uint64 {

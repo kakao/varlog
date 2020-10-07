@@ -49,7 +49,12 @@ message GetClusterInfoRequest {
     ];
 }
 
-message GetClusterInfoResponse {
+message ClusterInfo {
+    message Member {
+        string peer = 1;
+        string endpoint = 2;
+    }
+
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
@@ -60,7 +65,15 @@ message GetClusterInfoResponse {
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
 
-    repeated string urls = 3;
+    int32 replication_factor = 3;
+
+    map<uint64, Member> members = 4
+        [(gogoproto.castkey) =
+             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
+}
+
+message GetClusterInfoResponse {
+    ClusterInfo cluster_info = 1;
 }
 
 service Management {

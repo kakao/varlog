@@ -81,6 +81,15 @@ message RemovePeer {
     ];
 }
 
+message Endpoint {
+    uint64 node_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID",
+        (gogoproto.customname) = "NodeID"
+    ];
+    string url = 2;
+}
+
 message RaftEntry {
     message Request {
         option (gogoproto.onlyone) = true;
@@ -96,6 +105,7 @@ message RaftEntry {
         Unseal unseal = 9;
         AddPeer add_peer = 10;
         RemovePeer remove_peer = 11;
+        Endpoint endpoint = 12;
     }
     uint64 node_index = 1;
     uint64 request_index = 2;
