@@ -39,7 +39,7 @@ func (c *clusterManagerClient) Close() error {
 func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.AddStorageNode(ctx, &vmspb.AddStorageNodeRequest{Address: addr})
 	if err != nil {
-		return nil, err
+		return nil, FromStatusError(ctx, err)
 	}
 	return rsp.StorageNode, nil
 }

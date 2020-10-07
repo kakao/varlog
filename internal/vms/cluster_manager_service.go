@@ -3,6 +3,7 @@ package vms
 import (
 	"context"
 
+	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/proto/vmspb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -31,8 +32,9 @@ func (s *clusterManagerService) Register(server *grpc.Server) {
 	vmspb.RegisterClusterManagerServer(server, s)
 }
 
-func (s *clusterManagerService) AddStorageNode(context.Context, *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
-	panic("not implemented")
+func (s *clusterManagerService) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
+	snmeta, err := s.clusManager.AddStorageNode(ctx, req.GetAddress())
+	return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, varlog.ToStatusError(err)
 }
 
 func (s *clusterManagerService) AddLogStream(context.Context, *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {

@@ -2,10 +2,14 @@ package vms
 
 import (
 	"context"
-
+	"errors"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	vpb "github.com/kakao/varlog/proto/varlog"
 	"go.uber.org/zap"
+)
+
+var (
+	errCMVNoStorageNode = errors.New("cmview: no such storage node")
 )
 
 // ClusterMetadataView is the storage to store varlog cluster. It provides the latest metadata
@@ -13,6 +17,9 @@ import (
 type ClusterMetadataView interface {
 	// ClusterMetadata returns the latest metadata of the cluster.
 	ClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error)
+
+	// StorageNode returns the storage node corresponded with the storageNodeID.
+	StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeDescriptor, error)
 
 	// LogStreamReplicas returns all of the latest LogStreamReplicaMetas for the given
 	// logStreamID. The first element of the returned LogStreamReplicaMeta list is the primary
@@ -33,7 +40,7 @@ func NewClusterMetadataView(mrManager MetadataRepositoryManager, logger *zap.Log
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	logger = logger.Named("clustermetadataview")
+	logger = logger.Named("cmview")
 	return &clusterMetadataView{
 		mrManager: mrManager,
 		logger:    logger,
@@ -42,6 +49,17 @@ func NewClusterMetadataView(mrManager MetadataRepositoryManager, logger *zap.Log
 
 func (cmv *clusterMetadataView) ClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
 	return cmv.mrManager.GetClusterMetadata(ctx)
+}
+
+func (cmv *clusterMetadataView) StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeDescriptor, error) {
+	meta, err := cmv.ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if sndesc := meta.GetStorageNode(storageNodeID); sndesc != nil {
+		return sndesc, nil
+	}
+	return nil, errCMVNoStorageNode
 }
 
 func (cmv *clusterMetadataView) LogStreamReplicas(ctx context.Context, logStreamID types.LogStreamID) ([]*vpb.LogStreamMetadataDescriptor, error) {
