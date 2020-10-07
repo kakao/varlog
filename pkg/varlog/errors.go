@@ -24,6 +24,11 @@ var (
 )
 
 var (
+	ErrVMSStorageNodeExisted      = errors.New("vms: storagenode already existed")
+	ErrVMSDuplicatedStorageNodeID = errors.New("vms: duplicated storagenode id")
+)
+
+var (
 	ErrInvalid    = errors.New("invalid argument")
 	ErrExist      = errors.New("already exists")
 	ErrIgnore     = errors.New("ignore")
@@ -49,6 +54,9 @@ func init() {
 		ErrTrimmed, ErrUndecidable, ErrCorruptLogStream, ErrSealed, ErrUnordered,
 
 		ErrInvalidArgument, ErrAlreadyExists, ErrNotExist,
+
+		// vms
+		ErrVMSStorageNodeExisted, ErrVMSDuplicatedStorageNodeID,
 	)
 }
 

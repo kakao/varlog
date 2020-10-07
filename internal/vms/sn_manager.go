@@ -13,6 +13,10 @@ import (
 )
 
 type StorageNodeManager interface {
+	FindByStorageNodeID(storageNodeID types.StorageNodeID) varlog.ManagementClient
+
+	FindByAddress(addr string) varlog.ManagementClient
+
 	// GetMetadataByAddr returns metadata about a storage node. It is useful when id of the
 	// storage node is not known.
 	GetMetadataByAddr(ctx context.Context, addr string) (varlog.ManagementClient, *vpb.StorageNodeMetadataDescriptor, error)
@@ -68,13 +72,31 @@ func (sm *snManager) Close() error {
 	return err
 }
 
+func (sm *snManager) FindByStorageNodeID(storageNodeID types.StorageNodeID) varlog.ManagementClient {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	snmcl, _ := sm.cs[storageNodeID]
+	return snmcl
+}
+
+func (sm *snManager) FindByAddress(addr string) varlog.ManagementClient {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	for _, snmcl := range sm.cs {
+		if snmcl.PeerAddress() == addr {
+			return snmcl
+		}
+	}
+	return nil
+}
+
 func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (varlog.ManagementClient, *vpb.StorageNodeMetadataDescriptor, error) {
-	mc, err := varlog.NewManagementClient(addr)
+	mc, err := varlog.NewManagementClient(ctx, sm.clusterID, addr, sm.logger)
 	if err != nil {
 		sm.logger.Error("could not create storagenode management client", zap.Error(err))
 		return nil, nil, err
 	}
-	snMeta, err := mc.GetMetadata(ctx, sm.clusterID, snpb.MetadataTypeHeartbeat)
+	snMeta, err := mc.GetMetadata(ctx, snpb.MetadataTypeHeartbeat)
 	if err != nil {
 		if err := mc.Close(); err != nil {
 			sm.logger.Error("could not close storagenode management client", zap.Error(err))
@@ -86,19 +108,15 @@ func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (varlog
 }
 
 func (sm *snManager) AddStorageNode(ctx context.Context, snmcl varlog.ManagementClient) error {
-	snMeta, err := snmcl.GetMetadata(ctx, sm.clusterID, snpb.MetadataTypeHeartbeat)
-	if err != nil {
-		return err
-	}
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	if _, ok := sm.cs[snMeta.StorageNode.StorageNodeID]; ok {
-		// TODO (jun): already exists
-		// compare snMeta with already existing one, and then handle exceptional cases
-	}
 
-	sm.cs[snMeta.StorageNode.StorageNodeID] = snmcl
-	return err
+	storageNodeID := snmcl.PeerStorageNodeID()
+	if _, ok := sm.cs[storageNodeID]; ok {
+		sm.logger.Panic("already registered storagenode", zap.Any("snid", storageNodeID))
+	}
+	sm.cs[storageNodeID] = snmcl
+	return nil
 }
 
 func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error {
@@ -116,7 +134,7 @@ func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStr
 
 		// TODO (jun): Currently, it raises an error when the logStreamID already exists.
 		// It is okay?
-		snmeta, err := cli.GetMetadata(ctx, sm.clusterID, snpb.MetadataTypeLogStreams)
+		snmeta, err := cli.GetMetadata(ctx, snpb.MetadataTypeLogStreams)
 		if err != nil {
 			return err
 		}
@@ -124,7 +142,7 @@ func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStr
 			return errors.New("vms: alredy exist logstream")
 		}
 
-		if err := cli.AddLogStream(ctx, sm.clusterID, storageNodeID, logStreamID, replicaDesc.GetPath()); err != nil {
+		if err := cli.AddLogStream(ctx, logStreamID, replicaDesc.GetPath()); err != nil {
 			return err
 		}
 	}

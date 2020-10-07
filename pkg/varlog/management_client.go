@@ -7,42 +7,78 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/stringsutil"
 	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"go.uber.org/zap"
 )
 
 type ManagementClient interface {
-	GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error)
-	AddLogStream(ctx context.Context, clusterID types.ClusterID,
-		storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) error
-	RemoveLogStream(ctx context.Context, clusterID types.ClusterID,
-		storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
-	Seal(ctx context.Context, clusterID types.ClusterID,
-		storageNodeID types.StorageNodeID, logStreamID types.LogStreamID,
-		lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error)
-	Unseal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID,
-		logStreamID types.LogStreamID) error
-	Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (snpb.SyncState, error)
+	PeerAddress() string
+	PeerStorageNodeID() types.StorageNodeID
+	GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error)
+	AddLogStream(ctx context.Context, logStreamID types.LogStreamID, path string) error
+	RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error
+	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error)
+	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
+	Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (snpb.SyncState, error)
 	Close() error
 }
 
 type managementClient struct {
 	rpcConn   *RpcConn
 	rpcClient snpb.ManagementClient
+
+	clusterID     types.ClusterID
+	address       string
+	storageNodeID types.StorageNodeID
+
+	logger *zap.Logger
 }
 
-func NewManagementClient(address string) (ManagementClient, error) {
+func NewManagementClient(ctx context.Context, clusterID types.ClusterID, address string, logger *zap.Logger) (ManagementClient, error) {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("snmcl").With(zap.Any("peer_addr", address))
+
 	rpcConn, err := NewRpcConn(address)
 	if err != nil {
+		logger.Error("could not connect to storagenode", zap.Error(err))
 		return nil, err
 	}
+	rpcClient := snpb.NewManagementClient(rpcConn.Conn)
+	rsp, err := rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
+		ClusterID:    clusterID,
+		MetadataType: snpb.MetadataTypeHeartbeat,
+	})
+	if err != nil {
+		if closeErr := rpcConn.Close(); closeErr != nil {
+			logger.Error("error while closing connection to storagenode", zap.Error(err))
+		}
+		return nil, err
+	}
+	storageNodeID := rsp.GetStorageNodeMetadata().GetStorageNode().GetStorageNodeID()
+	logger = logger.With(zap.Any("peer_snid", storageNodeID))
+
 	return &managementClient{
-		rpcConn:   rpcConn,
-		rpcClient: snpb.NewManagementClient(rpcConn.Conn),
+		rpcConn:       rpcConn,
+		rpcClient:     rpcClient,
+		address:       address,
+		clusterID:     clusterID,
+		storageNodeID: storageNodeID,
+		logger:        logger,
 	}, nil
 }
 
-func (c *managementClient) GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
+func (c managementClient) PeerAddress() string {
+	return c.address
+}
+
+func (c managementClient) PeerStorageNodeID() types.StorageNodeID {
+	return c.storageNodeID
+}
+
+func (c *managementClient) GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
-		ClusterID:    clusterID,
+		ClusterID:    c.clusterID,
 		MetadataType: metadataType,
 	})
 	if err != nil {
@@ -51,15 +87,15 @@ func (c *managementClient) GetMetadata(ctx context.Context, clusterID types.Clus
 	return rsp.GetStorageNodeMetadata(), nil
 }
 
-func (c *managementClient) AddLogStream(ctx context.Context, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, path string) error {
+func (c *managementClient) AddLogStream(ctx context.Context, lsid types.LogStreamID, path string) error {
 	// TODO(jun): Check ranges CID, SNID and LSID
 	if stringsutil.Empty(path) {
 		return ErrInvalid // FIXME: ErrInvalid ErrInvalidArgument
 	}
 	// FIXME(jun): Does the return value of AddLogStream need?
 	_, err := c.rpcClient.AddLogStream(ctx, &snpb.AddLogStreamRequest{
-		ClusterID:     cid,
-		StorageNodeID: snid,
+		ClusterID:     c.clusterID,
+		StorageNodeID: c.storageNodeID,
 		LogStreamID:   lsid,
 		Storage: &vpb.StorageDescriptor{
 			Path: path,
@@ -69,41 +105,41 @@ func (c *managementClient) AddLogStream(ctx context.Context, cid types.ClusterID
 
 }
 
-func (c *managementClient) RemoveLogStream(ctx context.Context, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID) error {
+func (c *managementClient) RemoveLogStream(ctx context.Context, lsid types.LogStreamID) error {
 	// TODO(jun): Check ranges CID, SNID and LSID
 	_, err := c.rpcClient.RemoveLogStream(ctx, &snpb.RemoveLogStreamRequest{
-		ClusterID:     cid,
-		StorageNodeID: snid,
+		ClusterID:     c.clusterID,
+		StorageNodeID: c.storageNodeID,
 		LogStreamID:   lsid,
 	})
 	return err
 }
 
-func (c *managementClient) Seal(ctx context.Context, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error) {
+func (c *managementClient) Seal(ctx context.Context, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error) {
 	// TODO(jun): Check ranges CID, SNID and LSID
 	rsp, err := c.rpcClient.Seal(ctx, &snpb.SealRequest{
-		ClusterID:         cid,
-		StorageNodeID:     snid,
+		ClusterID:         c.clusterID,
+		StorageNodeID:     c.storageNodeID,
 		LogStreamID:       lsid,
 		LastCommittedGLSN: lastCommittedGLSN,
 	})
 	return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), err
 }
 
-func (c *managementClient) Unseal(ctx context.Context, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID) error {
+func (c *managementClient) Unseal(ctx context.Context, lsid types.LogStreamID) error {
 	// TODO(jun): Check ranges CID, SNID and LSID
 	_, err := c.rpcClient.Unseal(ctx, &snpb.UnsealRequest{
-		ClusterID:     cid,
-		StorageNodeID: snid,
+		ClusterID:     c.clusterID,
+		StorageNodeID: c.storageNodeID,
 		LogStreamID:   lsid,
 	})
 	return err
 }
 
-func (c *managementClient) Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (snpb.SyncState, error) {
+func (c *managementClient) Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (snpb.SyncState, error) {
 	rsp, err := c.rpcClient.Sync(ctx, &snpb.SyncRequest{
-		ClusterID:     clusterID,
-		StorageNodeID: storageNodeID,
+		ClusterID:     c.clusterID,
+		StorageNodeID: c.storageNodeID,
 		LogStreamID:   logStreamID,
 		Backup: &snpb.SyncRequest_BackupNode{
 			StorageNodeID: backupStorageNodeID,

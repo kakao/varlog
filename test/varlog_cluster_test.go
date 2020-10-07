@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
+	"github.daumkakao.com/varlog/varlog/internal/storage"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
+	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 	"go.uber.org/zap"
@@ -702,8 +705,8 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 	})
 }
 
-func TestVarlogManagerServer(t *testing.T) {
-	Convey("VMS.AddStorageNode", t, func() {
+func TestVarlogManagerServerAddStorageNode(t *testing.T) {
+	Convey("Given a varlog cluster", t, func() {
 		opts := VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
@@ -717,43 +720,43 @@ func TestVarlogManagerServer(t *testing.T) {
 		mrAddr := mr.GetServerAddr()
 
 		// VMS Server
-		cm, err := env.NewClusterManager([]string{mrAddr})
+		_, err := env.RunClusterManager([]string{mrAddr})
 		So(err, ShouldBeNil)
-		defer cm.Close()
 
 		// VMS Client
 		cmCli, err := env.NewClusterManagerClient()
 		So(err, ShouldBeNil)
 		defer cmCli.Close()
 
-		// Add SN
-		snid, err := env.AddSNByVMS()
-		So(err, ShouldBeNil)
-
-		// TODO (jun): It can fail if the NrMR is larger than one. It has some solutions:
-		// - MCL sends requests to only leader-MR.
-		// - MCL sends requests to any MRs, and check all of MR nodes if the request is
-		// applied.
-		meta, err := env.CM.Metadata(context.TODO())
-		So(err, ShouldBeNil)
-
-		snList := meta.GetStorageNodes()
-		So(len(snList), ShouldEqual, 1)
-
-		snDesc := meta.GetStorageNode(snid)
-		So(snDesc, ShouldNotBeNil)
-
-		Convey("VMS.AddLogStream", func() {
-			lsid, err := env.AddLSByVMS()
+		Convey("AddStorageNode", func() {
+			snopts := &storage.StorageNodeOptions{
+				RPCOptions:               storage.RPCOptions{RPCBindAddress: ":0"},
+				LogStreamExecutorOptions: storage.DefaultLogStreamExecutorOptions,
+				LogStreamReporterOptions: storage.DefaultLogStreamReporterOptions,
+				ClusterID:                env.ClusterID,
+				StorageNodeID:            types.StorageNodeID(1),
+				Verbose:                  true,
+				Logger:                   env.logger,
+			}
+			sn, err := storage.NewStorageNode(snopts)
 			So(err, ShouldBeNil)
+			So(sn.Run(), ShouldBeNil)
+			env.SNs[types.StorageNodeID(1)] = sn
+			defer sn.Close()
 
-			meta, err := env.CM.Metadata(context.TODO())
+			meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeHeartbeat)
 			So(err, ShouldBeNil)
+			snAddr := meta.GetStorageNode().GetAddress()
 
-			ls := meta.GetLogStream(lsid)
-			So(ls, ShouldNotBeNil)
+			snmeta, err := cmCli.AddStorageNode(context.TODO(), snAddr)
+			So(err, ShouldBeNil)
+			So(snmeta.GetStorageNode().GetStorageNodeID(), ShouldEqual, types.StorageNodeID(1))
 
-			So(ls.GetStatus(), ShouldEqual, varlogpb.LogStreamStatusRunning)
+			Convey("Duplicated AddStorageNode", func() {
+				_, err := cmCli.AddStorageNode(context.TODO(), snAddr)
+				t.Log(err)
+				So(errors.Is(err, varlog.ErrVMSStorageNodeExisted), ShouldBeTrue)
+			})
 		})
 	})
 }

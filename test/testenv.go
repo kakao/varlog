@@ -303,7 +303,7 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 		goto err_out
 	}
 
-	err = clus.CM.AddStorageNode(context.TODO(), meta.StorageNode.Address)
+	_, err = clus.CM.AddStorageNode(context.TODO(), meta.StorageNode.Address)
 	if err != nil {
 		goto err_out
 	}
@@ -431,7 +431,7 @@ func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (varlog.LogIOC
 	return varlog.NewLogIOClient(snMeta.StorageNode.Address)
 }
 
-func (clus *VarlogCluster) NewClusterManager(mrAddrs []string) (vms.ClusterManager, error) {
+func (clus *VarlogCluster) RunClusterManager(mrAddrs []string) (vms.ClusterManager, error) {
 	opts := &vms.DefaultOptions
 	if clus.VarlogClusterOptions.NrRep < 1 {
 		return nil, varlog.ErrInvalidArgument
@@ -442,6 +442,9 @@ func (clus *VarlogCluster) NewClusterManager(mrAddrs []string) (vms.ClusterManag
 
 	cm, err := vms.NewClusterManager(opts)
 	if err != nil {
+		return nil, err
+	}
+	if err := cm.Run(); err != nil {
 		return nil, err
 	}
 	clus.CM = cm

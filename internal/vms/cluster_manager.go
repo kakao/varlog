@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync"
 
+	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner/stopwaiter"
@@ -17,7 +18,7 @@ import (
 // ClusterManager manages varlog cluster.
 type ClusterManager interface {
 	// AddStorageNode adds new StorageNode to the cluster.
-	AddStorageNode(ctx context.Context, addr string) error
+	AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error)
 
 	AddLogStream(ctx context.Context) (*vpb.LogStreamDescriptor, error)
 
@@ -69,9 +70,11 @@ type clusterManager struct {
 	server     *grpc.Server
 	serverAddr string
 
-	cmState   clusterManagerState
-	muCMState sync.Mutex
-	sw        *stopwaiter.StopWaiter
+	// single large lock
+	mu sync.RWMutex
+
+	cmState clusterManagerState
+	sw      *stopwaiter.StopWaiter
 
 	snMgr          StorageNodeManager
 	mrMgr          MetadataRepositoryManager
@@ -114,12 +117,14 @@ func NewClusterManager(opts *Options) (ClusterManager, error) {
 }
 
 func (cm *clusterManager) Address() string {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
 	return cm.serverAddr
 }
 
 func (cm *clusterManager) Run() error {
-	cm.muCMState.Lock()
-	defer cm.muCMState.Unlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 
 	switch cm.cmState {
 	case clusterManagerRunning:
@@ -156,8 +161,8 @@ func (cm *clusterManager) Wait() {
 }
 
 func (cm *clusterManager) Close() {
-	cm.muCMState.Lock()
-	defer cm.muCMState.Unlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 
 	switch cm.cmState {
 	case clusterManagerReady:
@@ -174,27 +179,54 @@ func (cm *clusterManager) Close() {
 }
 
 func (cm *clusterManager) Metadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
 	return cm.cmView.ClusterMetadata(ctx)
 }
 
-func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) error {
+// FIXME: use varlog errors
+func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if cm.snMgr.FindByAddress(addr) != nil {
+		return nil, varlog.ErrVMSStorageNodeExisted
+	}
+
 	snmcl, snmeta, err := cm.snMgr.GetMetadataByAddr(ctx, addr)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	storageNodeID := snmcl.PeerStorageNodeID()
+	if cm.snMgr.FindByStorageNodeID(storageNodeID) != nil {
+		return nil, varlog.ErrVMSDuplicatedStorageNodeID
 	}
 
-	// TODO: Do something by using meta
-	// Check if it is already resitered, and compare it with existing one.
-	//
-	if err := cm.mrMgr.RegisterStorageNode(ctx, snmeta.GetStorageNode()); err != nil {
-		return err
+	_, err = cm.cmView.StorageNode(ctx, storageNodeID)
+	if err == nil {
+		cm.logger.Panic("mismatch between clusterMetadataView and snManager")
+	}
+	if err != errCMVNoStorageNode {
+		goto err_out
 	}
 
-	cm.snMgr.AddStorageNode(ctx, snmcl)
-	return nil
+	if err = cm.mrMgr.RegisterStorageNode(ctx, snmeta.GetStorageNode()); err != nil {
+		goto err_out
+	}
+
+	if err = cm.snMgr.AddStorageNode(ctx, snmcl); err == nil {
+		return snmeta, nil
+	}
+
+err_out:
+	snmcl.Close()
+	return nil, err
 }
 
 func (cm *clusterManager) AddLogStream(ctx context.Context) (*vpb.LogStreamDescriptor, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
 	cmeta, err := cm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err

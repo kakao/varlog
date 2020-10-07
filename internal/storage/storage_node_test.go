@@ -67,9 +67,9 @@ func commitAndWait(lse LogStreamExecutor, highWatermark, prevHighWatermark, comm
 
 func TestStorageNode(t *testing.T) {
 	Convey("StorageNode Integration Test", t, func() {
+		logger, _ := zap.NewDevelopment()
 		var snList []*StorageNode
 		for i := 0; i < numSN; i++ {
-			logger, _ := zap.NewDevelopment()
 			opts := &StorageNodeOptions{
 				RPCOptions:               RPCOptions{RPCBindAddress: bindAddress},
 				LogStreamExecutorOptions: DefaultLogStreamExecutorOptions,
@@ -95,7 +95,7 @@ func TestStorageNode(t *testing.T) {
 
 		var mclList []varlog.ManagementClient
 		for _, sn := range snList {
-			mcl, err := varlog.NewManagementClient(sn.serverAddr)
+			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, logger)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,16 +111,16 @@ func TestStorageNode(t *testing.T) {
 			sn := snList[i]
 			mcl := mclList[i]
 
-			meta, err := mcl.GetMetadata(context.TODO(), clusterID, snpb.MetadataTypeLogStreams)
+			meta, err := mcl.GetMetadata(context.TODO(), snpb.MetadataTypeLogStreams)
 			So(err, ShouldBeNil)
 			So(meta.GetClusterID(), ShouldEqual, clusterID)
 			So(meta.GetStorageNode().GetStorageNodeID(), ShouldEqual, sn.storageNodeID)
 			So(meta.GetLogStreams(), ShouldHaveLength, 0)
 
-			err = mcl.AddLogStream(context.TODO(), clusterID, sn.storageNodeID, logStreamID, "/tmp")
+			err = mcl.AddLogStream(context.TODO(), logStreamID, "/tmp")
 			So(err, ShouldBeNil)
 
-			meta, err = mcl.GetMetadata(context.TODO(), clusterID, snpb.MetadataTypeLogStreams)
+			meta, err = mcl.GetMetadata(context.TODO(), snpb.MetadataTypeLogStreams)
 			So(err, ShouldBeNil)
 			So(meta.GetClusterID(), ShouldEqual, clusterID)
 			So(meta.GetStorageNode().GetStorageNodeID(), ShouldEqual, sn.storageNodeID)
@@ -174,12 +174,12 @@ func TestSync(t *testing.T) {
 
 		var mclList []varlog.ManagementClient
 		for _, sn := range snList {
-			mcl, err := varlog.NewManagementClient(sn.serverAddr)
+			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, logger)
 			So(err, ShouldBeNil)
 
 			mclList = append(mclList, mcl)
 
-			err = mcl.AddLogStream(context.TODO(), clusterID, sn.storageNodeID, logStreamID, "/tmp")
+			err = mcl.AddLogStream(context.TODO(), logStreamID, "/tmp")
 			So(err, ShouldBeNil)
 		}
 		defer func() {
@@ -253,110 +253,110 @@ func TestSync(t *testing.T) {
 		So(more, ShouldBeFalse)
 
 		// seal oldSN => oldSN: SEALED
-		status, sealedGLSN, err := oldMCL.Seal(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, lastCommittedGLSN)
+		status, sealedGLSN, err := oldMCL.Seal(context.TODO(), logStreamID, lastCommittedGLSN)
 		So(err, ShouldBeNil)
 		So(status, ShouldEqual, vpb.LogStreamStatusSealed)
 		So(sealedGLSN, ShouldEqual, lastCommittedGLSN)
 
-		// FAIL: oldSN (SEALED) ---> newSN (RUNNING)
-		Convey("FAIL: SEALED LS -> RUNNING LS", func() {
+		// ERROR: oldSN (SEALED) ---> newSN (RUNNING)
+		Convey("ERROR: SEALED LS -> RUNNING LS", func() {
 			// check if the newSN (= destination SN) is running
 			lse, ok := newSN.GetLogStreamExecutor(logStreamID)
 			So(ok, ShouldBeTrue)
 			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
 
 			// start sync,
-			state, err := oldMCL.Sync(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			state, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(state, ShouldEqual, snpb.SyncStateInProgress)
 
 			// wait for changing syncstate
 			testutil.CompareWait(func() bool {
-				state, err := oldMCL.Sync(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+				state, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 				c.So(err, ShouldBeNil)
 				return state != snpb.SyncStateInProgress
 			}, time.Minute)
 
 			// eventually, it fails
-			state, err = oldMCL.Sync(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			state, err = oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(state, ShouldEqual, snpb.SyncStateError)
 		})
 
-		// FAIL: oldSN (SEALED) ---> newSN (SEALED)
-		Convey("FAIL: SEALED LS -> SEALED LS", func() {
+		// ERROR: oldSN (SEALED) ---> newSN (SEALED)
+		Convey("ERROR: SEALED LS -> SEALED LS", func() {
 			// check if the newSN (= destination SN) is running
 			lse, ok := newSN.GetLogStreamExecutor(logStreamID)
 			So(ok, ShouldBeTrue)
 			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
 
 			// make newSN SEALED (seal newSN with InvalidGLSN)
-			status, sealedGLSN, err := newMCL.Seal(context.TODO(), clusterID, newSN.storageNodeID, logStreamID, types.InvalidGLSN)
+			status, sealedGLSN, err := newMCL.Seal(context.TODO(), logStreamID, types.InvalidGLSN)
 			So(err, ShouldBeNil)
 			So(status, ShouldEqual, vpb.LogStreamStatusSealed)
 			So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 
 			// start sync,
-			state, err := oldMCL.Sync(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			state, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(state, ShouldEqual, snpb.SyncStateInProgress)
 
 			// wait for changing syncstate
 			testutil.CompareWait(func() bool {
-				state, err := oldMCL.Sync(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+				state, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 				c.So(err, ShouldBeNil)
 				return state != snpb.SyncStateInProgress
 			}, time.Minute)
 
 			// eventually, it fails
-			state, err = oldMCL.Sync(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			state, err = oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(state, ShouldEqual, snpb.SyncStateError)
 		})
 
-		// FAIL: newSN (NOT SEALED) ---> oldSN
-		Convey("FAIL: NOT SEALED LS -> ANY LS", func() {
+		// ERROR: newSN (NOT SEALED) ---> oldSN
+		Convey("ERROR: NOT SEALED LS -> ANY LS", func() {
 			// Syncing SN (= source SN) is LogStreamStatusRunning
 			lse, ok := newSN.GetLogStreamExecutor(logStreamID)
 			So(ok, ShouldBeTrue)
 			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
 
 			// Sync Error
-			_, err := newMCL.Sync(context.TODO(), clusterID, newSN.storageNodeID, logStreamID, oldSN.storageNodeID, oldSN.serverAddr, lastCommittedGLSN)
+			_, err := newMCL.Sync(context.TODO(), logStreamID, oldSN.storageNodeID, oldSN.serverAddr, lastCommittedGLSN)
 			So(err, ShouldNotBeNil)
 
 			// Syncing SN (= source SN) is LogStreamStatusSealing
-			status, sealedGLSN, err := newMCL.Seal(context.TODO(), clusterID, newSN.storageNodeID, logStreamID, lastCommittedGLSN)
+			status, sealedGLSN, err := newMCL.Seal(context.TODO(), logStreamID, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(status, ShouldEqual, vpb.LogStreamStatusSealing)
 			So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 
 			// Sync Error
-			_, err = newMCL.Sync(context.TODO(), clusterID, newSN.storageNodeID, logStreamID, oldSN.storageNodeID, oldSN.serverAddr, lastCommittedGLSN)
+			_, err = newMCL.Sync(context.TODO(), logStreamID, oldSN.storageNodeID, oldSN.serverAddr, lastCommittedGLSN)
 			So(err, ShouldNotBeNil)
 		})
 
 		// OK: oldSN (SEALED) ---> newSN (SEALING)
 		Convey("OK: SEALED LS -> SEALING LS", func() {
 			// newSN (SEALING)
-			status, sealedGLSN, err := newMCL.Seal(context.TODO(), clusterID, newSN.storageNodeID, logStreamID, lastCommittedGLSN)
+			status, sealedGLSN, err := newMCL.Seal(context.TODO(), logStreamID, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(status, ShouldEqual, vpb.LogStreamStatusSealing)
 			So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 
 			// sync
-			_, err = oldMCL.Sync(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			_, err = oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 
 			// wait for changing syncstate
 			testutil.CompareWait(func() bool {
-				state, err := oldMCL.Sync(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+				state, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 				c.So(err, ShouldBeNil)
 				return state != snpb.SyncStateInProgress
 			}, time.Minute)
 
 			// check: complete
-			state, err := oldMCL.Sync(context.TODO(), clusterID, oldSN.storageNodeID, logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			state, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(state, ShouldEqual, snpb.SyncStateComplete)
 
