@@ -698,9 +698,10 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 
 	if guarantee {
 		c := make(chan error, 1)
-		e.RequestIndex = atomic.AddUint64(&mr.requestNum, 1)
-		mr.requestMap.Store(e.RequestIndex, c)
-		defer mr.requestMap.Delete(e.RequestIndex)
+		rIdx := atomic.AddUint64(&mr.requestNum, 1)
+		e.RequestIndex = rIdx
+		mr.requestMap.Store(rIdx, c)
+		defer mr.requestMap.Delete(rIdx)
 
 		t := time.NewTimer(mr.options.RaftProposeTimeout)
 		defer t.Stop()
@@ -815,6 +816,10 @@ func (mr *RaftMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlo
 }
 
 func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
+	if !mr.raftNode.membership.isMember(mr.nodeID) {
+		return nil, varlog.ErrNotMember
+	}
+
 	m := mr.storage.GetMetadata()
 	return m, nil
 }
@@ -922,10 +927,15 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 }
 
 func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*pb.ClusterInfo, error) {
+	if !mr.raftNode.membership.isMember(mr.nodeID) {
+		return nil, varlog.ErrNotMember
+	}
+
 	member := mr.raftNode.GetMembership()
 
 	clusterInfo := &pb.ClusterInfo{
 		ClusterID: mr.options.ClusterID,
+		NodeID:    mr.nodeID,
 		Leader:    types.NodeID(mr.raftNode.membership.getLeader()),
 	}
 
@@ -959,4 +969,8 @@ func (mr *RaftMetadataRepository) GetHighWatermark() types.GLSN {
 
 func (mr *RaftMetadataRepository) GetMinHighWatermark() types.GLSN {
 	return mr.storage.GetMinHighWatermark()
+}
+
+func (mr *RaftMetadataRepository) IsMember() bool {
+	return mr.raftNode.membership.isMember(mr.nodeID)
 }

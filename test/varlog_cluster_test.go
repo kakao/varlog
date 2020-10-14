@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/internal/storage"
+	"github.com/kakao/varlog/internal/vms"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
@@ -717,6 +719,9 @@ func TestVarlogManagerServerAddStorageNode(t *testing.T) {
 		defer env.Close()
 
 		mr := env.MRs[0]
+		So(testutil.CompareWait(func() bool {
+			return mr.IsMember()
+		}, vtesting.TimeoutUnitTimesFactor(50)), ShouldBeTrue)
 		mrAddr := mr.GetServerAddr()
 
 		// VMS Server
@@ -756,6 +761,127 @@ func TestVarlogManagerServerAddStorageNode(t *testing.T) {
 				_, err := cmCli.AddStorageNode(context.TODO(), snAddr)
 				t.Log(err)
 				So(errors.Is(err, varlog.ErrVMSStorageNodeExisted), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestVarlogNewMRManager(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             1,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		mr := env.MRs[0]
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.IsMember()
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		Convey("When create MRManager with non addrs", func(ctx C) {
+			// VMS Server
+			_, err := vms.NewMRManager(types.ClusterID(0), nil)
+			Convey("Then it should be fail", func(ctx C) {
+				So(err, ShouldResemble, varlog.ErrInvalid)
+			})
+		})
+
+		Convey("When create MRManager with invalid addrs", func(ctx C) {
+			// VMS Server
+			_, err := vms.NewMRManager(types.ClusterID(0), []string{fmt.Sprintf("%s%d", mrAddr, 0)})
+			Convey("Then it should be fail", func(ctx C) {
+				So(err, ShouldNotBeNil)
+			})
+		})
+
+		Convey("When create MRManager with valid addrs", func(ctx C) {
+			// VMS Server
+			mrm, err := vms.NewMRManager(types.ClusterID(0), []string{mrAddr})
+			Convey("Then it should be success", func(ctx C) {
+				So(err, ShouldBeNil)
+
+				Convey("and it should work", func(ctx C) {
+					cinfo, err := mrm.GetClusterInfo(context.TODO())
+					So(err, ShouldBeNil)
+					So(len(cinfo.GetMembers()), ShouldEqual, 1)
+				})
+			})
+			defer mrm.Close()
+
+		})
+	})
+}
+
+func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             1,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		mr := env.MRs[0]
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.IsMember()
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		// VMS Server
+		mrm, err := vms.NewMRManager(types.ClusterID(0), []string{mrAddr})
+		So(err, ShouldBeNil)
+		defer mrm.Close()
+
+		Convey("When all the cluster configuration nodes are changed", func(ctx C) {
+			env.AppendMR()
+			err := env.StartMR(1)
+			So(err, ShouldBeNil)
+
+			nmr := env.MRs[1]
+
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			defer cancel()
+
+			err = mrm.AddPeer(rctx, env.mrIDs[1], env.mrPeers[1], env.mrRPCEndpoints[1])
+			So(err, ShouldBeNil)
+
+			So(testutil.CompareWaitN(50, func() bool {
+				return nmr.IsMember()
+			}), ShouldBeTrue)
+
+			rctx, cancel = context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			defer cancel()
+
+			err = mrm.RemovePeer(rctx, env.mrIDs[0])
+			So(err, ShouldBeNil)
+
+			So(testutil.CompareWaitN(50, func() bool {
+				return !mr.IsMember()
+			}), ShouldBeTrue)
+
+			So(testutil.CompareWaitN(50, func() bool {
+				cinfo, err := nmr.GetClusterInfo(context.TODO(), types.ClusterID(0))
+				if err != nil {
+					return false
+				}
+
+				return len(cinfo.GetMembers()) == 1
+			}), ShouldBeTrue)
+
+			Convey("Then it should be success", func(ctx C) {
+				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+				defer cancel()
+
+				cinfo, err := mrm.GetClusterInfo(rctx)
+				So(err, ShouldBeNil)
+				So(len(cinfo.GetMembers()), ShouldEqual, 1)
 			})
 		})
 	})

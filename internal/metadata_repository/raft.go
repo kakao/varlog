@@ -156,6 +156,7 @@ func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
 // publishEntries writes committed log entries to commit channel and returns
 // whether all entries could be published.
 func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) bool {
+	var shutdown bool
 	for i := range ents {
 		var cs *raftpb.ConfState
 		data := ents[i].Data
@@ -188,13 +189,14 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 				rc.membership.addMember(varlogtypes.NodeID(cc.NodeID), string(cc.Context))
 
 			case raftpb.ConfChangeRemoveNode:
-				if cc.NodeID == uint64(rc.id) {
-					rc.logger.Info("I've been removed from the cluster! Shutting down.")
-					return false
+				if rc.membership.removePeer(varlogtypes.NodeID(cc.NodeID)) &&
+					cc.NodeID != uint64(rc.id) {
+					rc.transport.RemovePeer(types.ID(cc.NodeID))
 				}
 
-				if rc.membership.removePeer(varlogtypes.NodeID(cc.NodeID)) {
-					rc.transport.RemovePeer(types.ID(cc.NodeID))
+				if cc.NodeID == uint64(rc.id) {
+					rc.logger.Info("I've been removed from the cluster! Shutting down.")
+					shutdown = true
 				}
 			}
 		}
@@ -214,6 +216,11 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 			case <-ctx.Done():
 				return false
 			}
+		}
+
+		if shutdown {
+			//TODO:: shutdown mr
+			return false
 		}
 
 		// after commit, update appliedIndex

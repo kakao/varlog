@@ -7,9 +7,11 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/kakao/varlog/pkg/varlog"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
 	pb "github.com/kakao/varlog/proto/metadata_repository"
@@ -654,10 +656,11 @@ func TestMRRequestMap(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
+		requestNum := atomic.LoadUint64(&mr.requestNum)
 		err := mr.RegisterStorageNode(context.TODO(), sn)
 		So(err, ShouldBeNil)
 
-		_, ok := mr.requestMap.Load(uint64(1))
+		_, ok := mr.requestMap.Load(requestNum + 1)
 		So(ok, ShouldBeFalse)
 	})
 }
@@ -1144,6 +1147,56 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 					clus.logger.Info("complete with ctx error", zap.String("err", rctx.Err().Error()))
 				}
 				So(err, ShouldBeNil)
+			})
+		})
+
+		Convey("When new nodes started but not yet joined", func(ctx C) {
+			newNode := nrNode
+			So(clus.appendMetadataRepo(), ShouldBeNil)
+			So(clus.start(newNode), ShouldBeNil)
+			nrNode += 1
+
+			time.Sleep(10 * time.Second)
+
+			Convey("Then it should not have member info", func(ctx C) {
+				cinfo, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), types.ClusterID(0))
+				So(err, ShouldResemble, varlog.ErrNotMember)
+
+				cinfo, err = clus.nodes[0].GetClusterInfo(context.TODO(), types.ClusterID(0))
+				So(err, ShouldBeNil)
+				So(len(cinfo.Members), ShouldBeLessThan, nrNode)
+
+				Convey("After joining, it should have member info", func(ctx C) {
+					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+					defer cancel()
+
+					So(clus.nodes[0].AddPeer(rctx,
+						types.ClusterID(0),
+						clus.nodes[newNode].nodeID,
+						clus.peers[newNode]), ShouldBeNil)
+
+					So(testutil.CompareWaitN(50, func() bool {
+						cinfo, _ := clus.nodes[newNode].GetClusterInfo(context.TODO(), types.ClusterID(0))
+						return len(cinfo.GetMembers()) == nrNode
+					}), ShouldBeTrue)
+
+					Convey("Then proposal should be operated", func(ctx C) {
+						snID := snIDs[nrRep-1] + types.StorageNodeID(1)
+
+						sn := &varlogpb.StorageNodeDescriptor{
+							StorageNodeID: snID,
+						}
+
+						rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(80))
+						defer cancel()
+
+						err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
+						if rctx.Err() != nil {
+							clus.logger.Info("complete with ctx error", zap.String("err", rctx.Err().Error()))
+						}
+						So(err, ShouldBeNil)
+					})
+				})
 			})
 		})
 	})

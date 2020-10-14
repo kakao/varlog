@@ -23,7 +23,8 @@ import (
 )
 
 const (
-	MR_PORT_BASE = 10000
+	MR_PORT_BASE     = 10000
+	MR_RPC_PORT_BASE = 11000
 )
 
 type VarlogClusterOptions struct {
@@ -35,30 +36,34 @@ type VarlogClusterOptions struct {
 
 type VarlogCluster struct {
 	VarlogClusterOptions
-	MRs       []*metadata_repository.RaftMetadataRepository
-	SNs       map[types.StorageNodeID]*storage.StorageNode
-	CM        vms.ClusterManager
-	mrPeers   []string
-	mrIDs     []types.NodeID
-	snID      types.StorageNodeID
-	lsID      types.LogStreamID
-	ClusterID types.ClusterID
-	logger    *zap.Logger
+	MRs            []*metadata_repository.RaftMetadataRepository
+	SNs            map[types.StorageNodeID]*storage.StorageNode
+	CM             vms.ClusterManager
+	mrPeers        []string
+	mrRPCEndpoints []string
+	mrIDs          []types.NodeID
+	snID           types.StorageNodeID
+	lsID           types.LogStreamID
+	ClusterID      types.ClusterID
+	logger         *zap.Logger
 }
 
 func NewVarlogCluster(opts VarlogClusterOptions) *VarlogCluster {
 	mrPeers := make([]string, opts.NrMR)
+	mrRPCEndpoints := make([]string, opts.NrMR)
 	MRs := make([]*metadata_repository.RaftMetadataRepository, opts.NrMR)
 	mrIDs := make([]types.NodeID, opts.NrMR)
 
 	for i := range mrPeers {
 		mrPeers[i] = fmt.Sprintf("http://127.0.0.1:%d", MR_PORT_BASE+i)
+		mrRPCEndpoints[i] = fmt.Sprintf("127.0.0.1:%d", MR_RPC_PORT_BASE+i)
 	}
 
 	clus := &VarlogCluster{
 		VarlogClusterOptions: opts,
 		logger:               zap.L(),
 		mrPeers:              mrPeers,
+		mrRPCEndpoints:       mrRPCEndpoints,
 		mrIDs:                mrIDs,
 		MRs:                  MRs,
 		SNs:                  make(map[types.StorageNodeID]*storage.StorageNode),
@@ -103,7 +108,7 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
 		NumRep:            clus.NrRep,
 		PeerList:          *cli.NewStringSlice(clus.mrPeers...),
-		RPCBindAddress:    ":0",
+		RPCBindAddress:    clus.mrRPCEndpoints[idx],
 		ReporterClientFac: clus.ReporterClientFac,
 		Logger:            clus.logger,
 	}
@@ -116,6 +121,7 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 func (clus *VarlogCluster) AppendMR() error {
 	idx := len(clus.MRs)
 	clus.mrPeers = append(clus.mrPeers, fmt.Sprintf("http://127.0.0.1:%d", MR_PORT_BASE+idx))
+	clus.mrRPCEndpoints = append(clus.mrRPCEndpoints, fmt.Sprintf("127.0.0.1:%d", MR_RPC_PORT_BASE+idx))
 	clus.mrIDs = append(clus.mrIDs, types.InvalidNodeID)
 	clus.MRs = append(clus.MRs, nil)
 
@@ -199,7 +205,7 @@ func (clus *VarlogCluster) Leader() int {
 	leader := -1
 	for i, n := range clus.MRs {
 		cinfo, _ := n.GetClusterInfo(context.TODO(), clus.ClusterID)
-		if cinfo.Leader != types.InvalidNodeID && clus.mrIDs[i] == cinfo.Leader {
+		if cinfo.GetLeader() != types.InvalidNodeID && clus.mrIDs[i] == cinfo.GetLeader() {
 			leader = i
 			break
 		}
@@ -210,7 +216,7 @@ func (clus *VarlogCluster) Leader() int {
 
 func (clus *VarlogCluster) LeaderElected() bool {
 	for _, n := range clus.MRs {
-		if cinfo, _ := n.GetClusterInfo(context.TODO(), clus.ClusterID); cinfo.Leader == types.InvalidNodeID {
+		if cinfo, _ := n.GetClusterInfo(context.TODO(), clus.ClusterID); cinfo.GetLeader() == types.InvalidNodeID {
 			return false
 		}
 	}
@@ -387,8 +393,16 @@ func (clus *VarlogCluster) getSN(lsID types.LogStreamID, idx int) (*storage.Stor
 		return nil, varlog.ErrInvalid
 	}
 
-	meta, err := clus.MRs[0].GetMetadata(context.TODO())
-	if err != nil {
+	var meta *vpb.MetadataDescriptor
+	var err error
+	for _, mr := range clus.MRs {
+		meta, err = mr.GetMetadata(context.TODO())
+		if meta != nil {
+			break
+		}
+	}
+
+	if meta == nil {
 		return nil, err
 	}
 

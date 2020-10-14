@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
 	vpb "github.com/kakao/varlog/proto/varlog"
@@ -29,12 +30,14 @@ var (
 )
 
 var (
-	ErrInvalid    = errors.New("invalid argument")
-	ErrExist      = errors.New("already exists")
-	ErrIgnore     = errors.New("ignore")
-	ErrInprogress = errors.New("inprogress")
-	ErrNeedRetry  = errors.New("need retry")
-	ErrStopped    = errors.New("stopped")
+	ErrInvalid       = errors.New("invalid argument")
+	ErrExist         = errors.New("already exists")
+	ErrIgnore        = errors.New("ignore")
+	ErrInprogress    = errors.New("inprogress")
+	ErrNeedRetry     = errors.New("need retry")
+	ErrStopped       = errors.New("stopped")
+	ErrNotMember     = errors.New("not member")
+	ErrNotAccessible = errors.New("not accessible")
 
 	ErrInvalidArgument = status.New(codes.InvalidArgument, "invalid argument").Err()
 	ErrAlreadyExists   = status.New(codes.AlreadyExists, "varlogserver: already exists").Err()
