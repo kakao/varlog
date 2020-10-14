@@ -61,13 +61,19 @@ message ClusterInfo {
         (gogoproto.customname) = "ClusterID"
     ];
 
-    uint64 leader = 2
+    uint64 node_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID",
+        (gogoproto.customname) = "NodeID"
+    ];
+
+    uint64 leader = 3
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
 
-    int32 replication_factor = 3;
+    int32 replication_factor = 4;
 
-    map<uint64, Member> members = 4
+    map<uint64, Member> members = 5
         [(gogoproto.castkey) =
              "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
 }

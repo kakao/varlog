@@ -92,7 +92,7 @@ func NewClusterManager(opts *Options) (ClusterManager, error) {
 	}
 	opts.Logger = opts.Logger.Named("vms")
 
-	mrMgr, err := NewMRManager(opts.MetadataRepositoryAddresses)
+	mrMgr, err := NewMRManager(opts.ClusterID, opts.MetadataRepositoryAddresses)
 	if err != nil {
 		return nil, err
 	}

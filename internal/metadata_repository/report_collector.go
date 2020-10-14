@@ -265,9 +265,9 @@ func (rce *ReportCollectExecutor) getReport() error {
 	rce.logStreamIDs = lsIDs
 	rce.lsmu.Unlock()
 
-	rce.logger.Debug("report",
-		zap.Uint64("hwm", uint64(lls.HighWatermark)),
-	)
+	//	rce.logger.Debug("report",
+	//		zap.Uint64("hwm", uint64(lls.HighWatermark)),
+	//	)
 
 	rce.cb.report(lls)
 

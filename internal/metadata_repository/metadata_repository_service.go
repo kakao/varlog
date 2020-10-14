@@ -50,11 +50,7 @@ func (s *MetadataRepositoryService) UpdateLogStream(ctx context.Context, req *pb
 
 func (s *MetadataRepositoryService) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
 	metadata, err := s.metaRepos.GetMetadata(ctx)
-	if err != nil {
-		return &pb.GetMetadataResponse{}, err
-	}
-
 	return &pb.GetMetadataResponse{
 		Metadata: metadata,
-	}, nil
+	}, err
 }
