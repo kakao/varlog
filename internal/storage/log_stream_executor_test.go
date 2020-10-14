@@ -507,24 +507,25 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 			Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
 				c, err := lse.Subscribe(context.TODO(), 1, 11)
 				So(err, ShouldBeNil)
-				So((<-c).err, ShouldNotBeNil)
+				So((<-c).Err, ShouldNotBeNil)
 			})
 		})
 
 		Convey("When Storage.Scan returns a valid scanner", func() {
 			scanner := NewMockScanner(ctrl)
+			scanner.EXPECT().Close().Return(nil).AnyTimes()
 			storage.EXPECT().Scan(gomock.Any(), gomock.Any()).Return(scanner, nil)
 
 			lse.(*logStreamExecutor).localLowWatermark.Store(1)
 			lse.(*logStreamExecutor).localHighWatermark.Store(10)
 
 			Convey("And the Scanner.Next returns an error", func() {
-				scanner.EXPECT().Next().Return(varlog.InvalidLogEntry, varlog.ErrInternal)
+				scanner.EXPECT().Next().Return(newInvalidScanResult(varlog.ErrInternal))
 
 				Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
 					c, err := lse.Subscribe(context.TODO(), 1, 11)
 					So(err, ShouldBeNil)
-					So((<-c).err, ShouldNotBeNil)
+					So((<-c).Err, ShouldNotBeNil)
 				})
 			})
 
@@ -539,7 +540,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 					if i == repeat-1 {
 						logEntry.LLSN += types.LLSN(1)
 					}
-					c := scanner.EXPECT().Next().Return(logEntry, nil)
+					c := scanner.EXPECT().Next().Return(ScanResult{LogEntry: logEntry})
 					cs = append(cs, c)
 				}
 				for i := len(cs) - 1; i > 0; i-- {
@@ -549,9 +550,9 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 					c, err := lse.Subscribe(context.TODO(), types.MinGLSN, types.MaxGLSN)
 					So(err, ShouldBeNil)
 					for i := 0; i < repeat-1; i++ {
-						So((<-c).err, ShouldBeNil)
+						So((<-c).Err, ShouldBeNil)
 					}
-					So((<-c).err, ShouldNotBeNil)
+					So((<-c).Err, ShouldNotBeNil)
 				})
 			})
 		})
@@ -615,12 +616,8 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 func TestLogStreamExecutorAndStorage(t *testing.T) {
 	Convey("Sealing initial LS with InvalidGLSN", t, func() {
-		logger, err := zap.NewDevelopment()
-		So(err, ShouldBeNil)
-		defer logger.Sync()
-
-		stg := NewInMemoryStorage()
-		lse, err := NewLogStreamExecutor(logger, logStreamID, stg, &DefaultLogStreamExecutorOptions)
+		stg := NewInMemoryStorage(zap.L())
+		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, stg, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 
 		lse.Run(context.TODO())
@@ -634,10 +631,10 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 	Convey("LogStreamExecutor and Storage", t, func(c C) {
 		const (
 			logStreamID = types.LogStreamID(1)
-			repeat      = 10
+			repeat      = 100
 		)
 
-		stg := NewInMemoryStorage()
+		stg := NewInMemoryStorage(zap.L())
 		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, stg, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 
@@ -714,12 +711,12 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 
 		for expectedGLSN := types.MinGLSN; expectedGLSN < types.MinGLSN+mid; expectedGLSN++ {
 			sub := <-subC
-			t.Logf("scanned: %v", sub)
-			So(sub.err, ShouldBeNil)
-			So(sub.logEntry.GLSN, ShouldEqual, expectedGLSN)
-			So(sub.logEntry.LLSN, ShouldEqual, types.LLSN(expectedGLSN))
+			zap.L().Debug("scanned", zap.Any("result", sub))
+			So(sub.Err, ShouldBeNil)
+			So(sub.LogEntry.GLSN, ShouldEqual, expectedGLSN)
+			So(sub.LogEntry.LLSN, ShouldEqual, types.LLSN(expectedGLSN))
 		}
-		So((<-subC).err, ShouldEqual, errEndOfRange)
+		So((<-subC).Err, ShouldEqual, errEndOfRange)
 		testutil.CompareWait(func() bool {
 			_, more := <-subC
 			return !more
@@ -789,12 +786,12 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		So(lse.GetReport().UncommittedLLSNLength, ShouldEqual, 3)
 
 		// LSE
-		// GLSN(4), GLSN(5), GLSN(6), ..., GLSN(10=repeat)
-		// LLSN(4), LLSN(5), LLSN(6), ..., LLSN(10), LLSN(11), LLSN(12), LLSN(13)
+		// GLSN(4), GLSN(5), GLSN(6), ..., GLSN(repeat)
+		// LLSN(4), LLSN(5), LLSN(6), ..., LLSN(repeat), LLSN(repeat+1), LLSN(repeat+2), LLSN(repeat+3)
 		// FIXME (jun): This is a very bad assertion: use public or interface method to
 		// check storage status.
 		written := stg.(*InMemoryStorage).written
-		So(written[len(written)-1].llsn, ShouldEqual, 13)
+		So(written[len(written)-1].llsn, ShouldEqual, repeat+3)
 
 		Convey("Sealing the LS with InvalidGLSN", func() {
 			So(func() { lse.Seal(types.InvalidGLSN) }, ShouldPanic)
@@ -802,26 +799,26 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		})
 
 		Convey("MR is behind of LSE", func() {
-			So(func() { lse.Seal(9) }, ShouldPanic)
+			So(func() { lse.Seal(repeat - 1) }, ShouldPanic)
 			ccancel()
 		})
 
 		Convey("MR is ahead of LSE", func() {
-			status, sealedGLSN := lse.Seal(11)
+			status, sealedGLSN := lse.Seal(repeat + 1)
 			So(status, ShouldEqual, vpb.LogStreamStatusSealing)
-			So(sealedGLSN, ShouldEqual, 10)
+			So(sealedGLSN, ShouldEqual, repeat)
 
 			// FIXME (jun): See above.
 			// LogStreamStatusSealing can't delete uncommitted logs.
 			written = stg.(*InMemoryStorage).written
-			So(written[len(written)-1].llsn, ShouldEqual, 13)
+			So(written[len(written)-1].llsn, ShouldEqual, repeat+3)
 
 			// LogStreamStatusSealing can't unseal
 			err = lse.Unseal()
 			So(err, ShouldNotBeNil)
 			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusSealing)
 
-			errC := waitForCommitted(11, 10, 11, 1)
+			errC := waitForCommitted(repeat+1, repeat, repeat+1, 1)
 			So(<-errC, ShouldBeNil)
 
 			// append request of 1 client succeeds.
@@ -831,11 +828,11 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 
 			stoppedClientRet := <-stoppedClientRetC
 			So(stoppedClientRet.err, ShouldBeNil)
-			So(stoppedClientRet.glsn, ShouldEqual, 11)
+			So(stoppedClientRet.glsn, ShouldEqual, repeat+1)
 
-			status, sealedGLSN = lse.Seal(11)
+			status, sealedGLSN = lse.Seal(repeat + 1)
 			So(status, ShouldEqual, vpb.LogStreamStatusSealed)
-			So(sealedGLSN, ShouldEqual, 11)
+			So(sealedGLSN, ShouldEqual, repeat+1)
 
 			// wait for appending clients to fail
 			testutil.CompareWait(func() bool {
@@ -858,14 +855,14 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		})
 
 		Convey("MR and LSE are on the same line", func() {
-			status, sealedGLSN := lse.Seal(10)
+			status, sealedGLSN := lse.Seal(repeat)
 			So(status, ShouldEqual, vpb.LogStreamStatusSealed)
-			So(sealedGLSN, ShouldEqual, 10)
+			So(sealedGLSN, ShouldEqual, repeat)
 
 			// FIXME (jun): See above.
 			// LogStreamStatusSealed can delete uncommitted logs.
 			written = stg.(*InMemoryStorage).written
-			So(written[len(written)-1].llsn, ShouldEqual, 10)
+			So(written[len(written)-1].llsn, ShouldEqual, repeat)
 
 			// wait for appending clients to fail
 			testutil.CompareWait(func() bool {

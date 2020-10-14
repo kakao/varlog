@@ -18,11 +18,6 @@ var (
 	errLSEKilled = errors.New("killed logstreamexecutor")
 )
 
-type SubscribeResult struct {
-	logEntry varlog.LogEntry
-	err      error
-}
-
 type Sealer interface {
 	Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN)
 }
@@ -55,7 +50,7 @@ type LogStreamExecutor interface {
 	Status() vpb.LogStreamStatus
 
 	Read(ctx context.Context, glsn types.GLSN) (varlog.LogEntry, error)
-	Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan SubscribeResult, error)
+	Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan ScanResult, error)
 	Append(ctx context.Context, data []byte, backups ...Replica) (types.GLSN, error)
 	Trim(ctx context.Context, glsn types.GLSN) error
 
@@ -448,7 +443,7 @@ func (lse *logStreamExecutor) read(t *readTask) {
 	close(t.done)
 }
 
-func (lse *logStreamExecutor) Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan SubscribeResult, error) {
+func (lse *logStreamExecutor) Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan ScanResult, error) {
 	if begin >= end {
 		return nil, varlog.ErrInvalid
 	}
@@ -463,48 +458,78 @@ func (lse *logStreamExecutor) Subscribe(ctx context.Context, begin, end types.GL
 		return nil, err
 	}
 
-	return lse.subscribe(ctx, begin, end), nil
+	return lse.scan(ctx, begin, end)
 }
 
 // FIXME (jun): Use stopped channel
-func (lse *logStreamExecutor) subscribe(ctx context.Context, begin, end types.GLSN) <-chan SubscribeResult {
-	c := make(chan SubscribeResult)
-	go func() {
-		defer close(c)
+func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (<-chan ScanResult, error) {
+	mctx, cancel := lse.runner.WithManagedCancel(context.Background())
+	// TODO (jun): manages cancel functions
+	resultC := make(chan ScanResult)
+	if err := lse.runner.RunC(mctx, func(ctx context.Context) {
+		defer cancel()
+		defer close(resultC)
+
 		scanner, err := lse.storage.Scan(begin, end)
 		if err != nil {
-			c <- SubscribeResult{err: err}
+			resultC <- newInvalidScanResult(err)
 			return
 		}
-		entry, err := scanner.Next()
-		lse.logger.Debug("scanner", zap.Any("entry", entry), zap.Error(err))
-		c <- SubscribeResult{logEntry: entry, err: err}
-		if err != nil {
-			lse.logger.Debug("scanner stopped", zap.Error(err))
+		defer scanner.Close()
+
+		result := scanner.Next()
+		lse.logger.Debug("scan", zap.Any("result", result))
+
+		select {
+		case resultC <- result:
+		case <-ctx.Done():
+			lse.logger.Error("scanner stopped", zap.Error(err))
 			return
 		}
-		llsn := entry.LLSN
+
+		if !result.Valid() {
+			lse.logger.Debug("scanner stopped", zap.Error(result.Err))
+			return
+		}
+
+		llsn := result.LogEntry.LLSN
 		for {
-			res := SubscribeResult{logEntry: varlog.InvalidLogEntry}
-			entry, err := scanner.Next()
-			lse.logger.Debug("scanner", zap.Any("entry", entry), zap.Error(err))
-			if err == nil && llsn+1 != entry.LLSN {
-				res.err = varlog.NewSimpleErrorf(varlog.ErrUnordered, "llsn next=%v read=%v", llsn+1, entry.LLSN)
-				c <- res
-				lse.logger.Debug("scanner stopped - out of order")
+			if ctx.Err() != nil {
+				resultC <- newInvalidScanResult(ctx.Err())
 				return
 			}
-			res.logEntry = entry
-			res.err = err
-			llsn = entry.LLSN
-			c <- res
-			if err != nil {
-				lse.logger.Debug("scanner stopped", zap.Error(err))
+
+			result := scanner.Next()
+			lse.logger.Debug("scan", zap.Any("result", result))
+
+			if result.Valid() && llsn+1 != result.LogEntry.LLSN {
+				// FIXME (jun): This situation is happened by two causes:
+				// - Storage is broken: critical issue
+				// - Trim is occurred: buggy or undecided behavior
+				// It has no guarantee that read and subscribe prevent from trimming
+				// overlapped log ranges yet. It, however, results in unexpected
+				// situation like this.
+				err := varlog.NewSimpleErrorf(varlog.ErrUnordered, "llsn next=%v read=%v", llsn+1, result.LogEntry.LLSN)
+				result = newInvalidScanResult(err)
+			}
+			select {
+			case resultC <- result:
+			case <-ctx.Done():
+				lse.logger.Error("scanner stopped", zap.Error(err))
 				return
 			}
+
+			if !result.Valid() {
+				lse.logger.Debug("scanner stopped", zap.Error(result.Err))
+				return
+			}
+			llsn = result.LogEntry.LLSN
 		}
-	}()
-	return c
+	}); err != nil {
+		close(resultC)
+		return nil, err
+	}
+	return resultC, nil
 }
 
 func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
@@ -863,23 +888,49 @@ func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLS
 		cancel:  cancel,
 	}
 	lse.syncTracker[replica.StorageNodeID] = sts
-	if err := lse.runner.RunC(mctx, func(ctx context.Context) {
-		defer cancel()
+
+	if err := lse.runner.RunC(mctx, lse.syncer(mctx, sts)); err != nil {
+		lse.logger.Error("could not run syncer", zap.Error(err))
+		delete(lse.syncTracker, replica.StorageNodeID)
+	}
+
+	return sts, nil
+}
+
+func (lse *logStreamExecutor) syncer(ctx context.Context, sts *SyncTaskStatus) func(context.Context) {
+	first, last, current := sts.First, sts.Last, sts.Current
+	replica := sts.Replica
+	return func(ctx context.Context) {
+		defer sts.cancel()
+
 		var err error
-		for llsn := firstLLSN; llsn <= lastLLSN; llsn++ {
-			if err = ctx.Err(); err != nil {
+		numLogs := types.LLSN(0)
+		resultC, err := lse.scan(ctx, first.GLSN, last.GLSN+1)
+		if err != nil {
+			// handle it
+			goto err_out
+		}
+
+		for result := range resultC {
+			if !result.Valid() {
+				err = result.Err
+				if err == errEndOfRange {
+					err = nil
+				}
 				break
 			}
 
-			// TODO (jun): Use scan for optimization
-			var logEntry varlog.LogEntry
-			logEntry, err = lse.storage.ReadByLLSN(llsn)
-			if err != nil {
+			if result.LogEntry.LLSN != first.LLSN+numLogs {
+				err = fmt.Errorf("unexpected LLSN: expected=%v actual=%v", first.LLSN+numLogs, result.LogEntry.LLSN)
 				break
 			}
+			numLogs++
 
-			current := snpb.SyncPosition{LLSN: llsn, GLSN: logEntry.GLSN}
-			if err = lse.replicator.SyncReplicate(ctx, replica, first, last, current, logEntry.Data); err != nil {
+			current = snpb.SyncPosition{
+				LLSN: result.LogEntry.LLSN,
+				GLSN: result.LogEntry.GLSN,
+			}
+			if err = lse.replicator.SyncReplicate(ctx, replica, first, last, current, result.LogEntry.Data); err != nil {
 				break
 			}
 
@@ -888,6 +939,8 @@ func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLS
 			sts.Current = current
 			sts.mu.Unlock()
 		}
+
+	err_out:
 		sts.mu.Lock()
 		if err == nil {
 			lse.logger.Info("syncer complete", zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
@@ -898,13 +951,7 @@ func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLS
 		}
 		sts.Err = err
 		sts.mu.Unlock()
-	}); err != nil {
-		lse.logger.Error("could not run syncer", zap.Error(err))
-		delete(lse.syncTracker, replica.StorageNodeID)
-		return nil, err
 	}
-
-	return sts, nil
 }
 
 func (lse *logStreamExecutor) getLogPosition(glsn types.GLSN) (types.LLSN, error) {

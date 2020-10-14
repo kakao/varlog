@@ -213,7 +213,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 		return "", varlog.ErrExist // FIXME: ErrExist or ErrAlreadyExists
 	}
 	// TODO(jun): Create Storage and add new LSE
-	var stg Storage = NewInMemoryStorage()
+	var stg Storage = NewInMemoryStorage(sn.logger)
 	var stgPath string
 	lse, err := NewLogStreamExecutor(sn.logger, lsid, stg, &sn.options.LogStreamExecutorOptions)
 	if err != nil {

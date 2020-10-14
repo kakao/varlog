@@ -7,6 +7,7 @@ import (
 
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
+	"go.uber.org/zap"
 )
 
 type writtenEntry struct {
@@ -25,51 +26,52 @@ type InMemoryStorage struct {
 
 	muCommitted sync.RWMutex
 	committed   []committedEntry
+
+	logger *zap.Logger
 }
 
 type InMemoryScanner struct {
-	begin   types.GLSN
-	end     types.GLSN
-	cursor  types.LLSN
-	storage *InMemoryStorage
+	begin             types.GLSN
+	end               types.GLSN
+	cursor            int
+	writtenSnapshot   []writtenEntry
+	committedSnapshot []committedEntry
+	storage           *InMemoryStorage
 }
 
-func (s *InMemoryScanner) Next() (varlog.LogEntry, error) {
-	s.storage.muCommitted.RLock()
-	defer s.storage.muCommitted.RUnlock()
-	s.storage.muWritten.RLock()
-	defer s.storage.muWritten.RUnlock()
-
-	if len(s.storage.written) == 0 || len(s.storage.committed) == 0 {
-		return varlog.InvalidLogEntry, varlog.ErrNoEntry
+func (s *InMemoryScanner) Next() ScanResult {
+	if s.cursor >= len(s.committedSnapshot) {
+		return newInvalidScanResult(errEndOfRange)
 	}
-
-	idx := uint64(s.cursor - s.storage.written[0].llsn)
-	if idx >= uint64(len(s.storage.committed)) {
-		return varlog.InvalidLogEntry, errEndOfRange
-	}
-
-	went := s.storage.written[idx]
-	cent := s.storage.committed[idx]
+	went := s.writtenSnapshot[s.cursor]
+	cent := s.committedSnapshot[s.cursor]
 	if went.llsn != cent.llsn {
 		// TODO (jun): storage is broken
-		return varlog.LogEntry{}, varlog.ErrInternal
-	}
-	if cent.glsn >= s.end {
-		return varlog.InvalidLogEntry, errEndOfRange
+		s.storage.logger.Panic("inconsistent storage: written != committed")
 	}
 
-	ret := varlog.LogEntry{
-		LLSN: cent.llsn,
-		GLSN: cent.glsn,
-		Data: went.data,
+	result := ScanResult{
+		LogEntry: varlog.LogEntry{
+			LLSN: s.committedSnapshot[s.cursor].llsn,
+			GLSN: s.committedSnapshot[s.cursor].glsn,
+			// TODO(jun): copy byte array
+			Data: s.writtenSnapshot[s.cursor].data,
+		},
 	}
 	s.cursor++
-	return ret, nil
+	return result
 }
 
-func NewInMemoryStorage() Storage {
-	return &InMemoryStorage{}
+func (s *InMemoryScanner) Close() error {
+	return nil
+}
+
+func NewInMemoryStorage(logger *zap.Logger) Storage {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("memstorage")
+	return &InMemoryStorage{logger: logger}
 }
 
 func (s *InMemoryStorage) searchCommittedEntry(glsn types.GLSN) (int, committedEntry, error) {
@@ -115,28 +117,6 @@ func (s *InMemoryStorage) Read(glsn types.GLSN) (varlog.LogEntry, error) {
 	}, nil
 }
 
-func (s *InMemoryStorage) ReadByLLSN(llsn types.LLSN) (varlog.LogEntry, error) {
-	s.assert()
-	defer s.assert()
-
-	s.muCommitted.RLock()
-	defer s.muCommitted.RUnlock()
-
-	s.muWritten.RLock()
-	defer s.muWritten.RUnlock()
-
-	i, went, err := s.searchWrittenEnry(llsn)
-	if err != nil {
-		return varlog.InvalidLogEntry, err
-	}
-	cent := s.committed[i]
-	return varlog.LogEntry{
-		GLSN: cent.glsn,
-		LLSN: llsn,
-		Data: went.data,
-	}, nil
-}
-
 func (s *InMemoryStorage) Scan(begin, end types.GLSN) (Scanner, error) {
 	s.assert()
 	defer s.assert()
@@ -149,15 +129,17 @@ func (s *InMemoryStorage) Scan(begin, end types.GLSN) (Scanner, error) {
 	s.muCommitted.RLock()
 	defer s.muCommitted.RUnlock()
 
-	i, cent, _ := s.searchCommittedEntry(begin)
-	if i >= len(s.committed) {
-		return nil, varlog.ErrNoEntry
-	}
+	i, _, _ := s.searchCommittedEntry(begin)
+	j, _, _ := s.searchCommittedEntry(end)
+	committedSnapshot := s.committed[i:j]
+	writtenSnapshot := s.written[i:j]
+
 	scanner := &InMemoryScanner{
-		begin:   begin,
-		end:     end,
-		cursor:  cent.llsn,
-		storage: s,
+		begin:             begin,
+		end:               end,
+		committedSnapshot: committedSnapshot,
+		writtenSnapshot:   writtenSnapshot,
+		storage:           s,
 	}
 	return scanner, nil
 
