@@ -85,22 +85,22 @@ func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_S
 	}
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
-	c, err := lse.Subscribe(ctx, req.GetGLSNBegin(), req.GetGLSNEnd())
+	resultC, err := lse.Subscribe(ctx, req.GetGLSNBegin(), req.GetGLSNEnd())
 	if err != nil {
 		s.logger.Error("could not subscribe", zap.Any("request", req), zap.Error(err))
 		return varlog.ToStatusError(err)
 	}
-	for r := range c {
-		if r.err != nil {
-			if r.err == errEndOfRange {
+	for result := range resultC {
+		if result.Err != nil {
+			if result.Err == errEndOfRange {
 				return nil
 			}
-			return r.err
+			return result.Err
 		}
 		err := stream.Send(&snpb.SubscribeResponse{
-			GLSN:    r.logEntry.GLSN,
-			LLSN:    r.logEntry.LLSN,
-			Payload: r.logEntry.Data,
+			GLSN:    result.LogEntry.GLSN,
+			LLSN:    result.LogEntry.LLSN,
+			Payload: result.LogEntry.Data,
 		})
 		if err != nil {
 			return err

@@ -36,18 +36,31 @@ func (m *MockScanner) EXPECT() *MockScannerMockRecorder {
 }
 
 // Next mocks base method.
-func (m *MockScanner) Next() (varlog.LogEntry, error) {
+func (m *MockScanner) Next() ScanResult {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Next")
-	ret0, _ := ret[0].(varlog.LogEntry)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(ScanResult)
+	return ret0
 }
 
 // Next indicates an expected call of Next.
 func (mr *MockScannerMockRecorder) Next() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockScanner)(nil).Next))
+}
+
+// Close mocks base method.
+func (m *MockScanner) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockScannerMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockScanner)(nil).Close))
 }
 
 // MockStorage is a mock of Storage interface.
@@ -86,21 +99,6 @@ func (m *MockStorage) Read(glsn types.GLSN) (varlog.LogEntry, error) {
 func (mr *MockStorageMockRecorder) Read(glsn interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockStorage)(nil).Read), glsn)
-}
-
-// ReadByLLSN mocks base method.
-func (m *MockStorage) ReadByLLSN(llsn types.LLSN) (varlog.LogEntry, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadByLLSN", llsn)
-	ret0, _ := ret[0].(varlog.LogEntry)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ReadByLLSN indicates an expected call of ReadByLLSN.
-func (mr *MockStorageMockRecorder) ReadByLLSN(llsn interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadByLLSN", reflect.TypeOf((*MockStorage)(nil).ReadByLLSN), llsn)
 }
 
 // Scan mocks base method.

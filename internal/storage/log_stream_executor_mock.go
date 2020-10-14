@@ -235,10 +235,10 @@ func (mr *MockLogStreamExecutorMockRecorder) Read(ctx, glsn interface{}) *gomock
 }
 
 // Subscribe mocks base method.
-func (m *MockLogStreamExecutor) Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan SubscribeResult, error) {
+func (m *MockLogStreamExecutor) Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan ScanResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Subscribe", ctx, begin, end)
-	ret0, _ := ret[0].(<-chan SubscribeResult)
+	ret0, _ := ret[0].(<-chan ScanResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

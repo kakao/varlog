@@ -5,11 +5,12 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"go.uber.org/zap"
 )
 
 func TestInMemoryStorage(t *testing.T) {
 	Convey("InMemoryStorage", t, func() {
-		s := NewInMemoryStorage()
+		s := NewInMemoryStorage(zap.L())
 
 		Convey("it should not read unwritten data", func() {
 			_, err := s.Read(types.MinGLSN)
@@ -93,19 +94,22 @@ func TestInMemoryStorage(t *testing.T) {
 					scanner, err := s.Scan(types.GLSN(1), types.GLSN(11))
 					So(err, ShouldBeNil)
 
-					ent, err := scanner.Next()
+					result := scanner.Next()
+					ent, err := result.LogEntry, result.Err
 					So(err, ShouldBeNil)
 					So(ent.LLSN, ShouldEqual, types.LLSN(1))
 					So(ent.GLSN, ShouldEqual, types.GLSN(2))
 					So(ent.Data, ShouldResemble, []byte("log_001"))
 
-					ent, err = scanner.Next()
+					result = scanner.Next()
+					ent, err = result.LogEntry, result.Err
 					So(err, ShouldBeNil)
 					So(ent.LLSN, ShouldEqual, types.LLSN(2))
 					So(ent.GLSN, ShouldEqual, types.GLSN(4))
 					So(ent.Data, ShouldResemble, []byte("log_002"))
 
-					_, err = scanner.Next()
+					result = scanner.Next()
+					_, err = result.LogEntry, result.Err
 					So(err, ShouldNotBeNil)
 				})
 			})

@@ -9,16 +9,36 @@ import (
 
 var errEndOfRange = errors.New("storage: end of range")
 
+// ScanResult represents a result of Scanner.Next() method. It should be immutable.
+type ScanResult struct {
+	LogEntry varlog.LogEntry
+	Err      error
+}
+
+func newInvalidScanResult(err error) ScanResult {
+	return ScanResult{
+		LogEntry: varlog.InvalidLogEntry,
+		Err:      err,
+	}
+}
+
+func (sr ScanResult) Valid() bool {
+	return sr.Err == nil
+}
+
+// Scanner scans the log entries which are range speicified by Storage.Scan() method.
 type Scanner interface {
-	Next() (varlog.LogEntry, error)
+	// Next returns log entries sequentially. If something wrong happens, it returns an error.
+	Next() ScanResult
+
+	// Close releases resources acquired by scanner.
+	Close() error
 }
 
 type Storage interface {
 	// Read reads the log entry at the glsn.
 	// If there is no entry at the given position, it returns varlog.ErrNoEntry.
 	Read(glsn types.GLSN) (varlog.LogEntry, error)
-
-	ReadByLLSN(llsn types.LLSN) (varlog.LogEntry, error)
 
 	// Scan returns Scanner that reads log entries from the glsn.
 	Scan(begin, end types.GLSN) (Scanner, error)
