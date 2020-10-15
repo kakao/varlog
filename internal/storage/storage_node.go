@@ -210,7 +210,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 	defer sn.lseMtx.Unlock()
 	_, ok := sn.lseMap[lsid]
 	if ok {
-		return "", varlog.ErrExist // FIXME: ErrExist or ErrAlreadyExists
+		return "", varlog.ErrLogStreamAlreadyExists
 	}
 	// TODO(jun): Create Storage and add new LSE
 	var stg Storage = NewInMemoryStorage(sn.logger)

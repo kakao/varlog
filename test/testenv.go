@@ -39,6 +39,7 @@ type VarlogCluster struct {
 	MRs            []*metadata_repository.RaftMetadataRepository
 	SNs            map[types.StorageNodeID]*storage.StorageNode
 	CM             vms.ClusterManager
+	CMCli          varlog.ClusterManagerClient
 	mrPeers        []string
 	mrRPCEndpoints []string
 	mrIDs          []types.NodeID
@@ -364,7 +365,7 @@ func (clus *VarlogCluster) AddLSByVMS() (types.LogStreamID, error) {
 		return types.LogStreamID(0), varlog.ErrInvalid
 	}
 
-	logStreamDesc, err := clus.CM.AddLogStream(context.TODO())
+	logStreamDesc, err := clus.CM.AddLogStream(context.TODO(), nil)
 	if err != nil {
 		return types.LogStreamID(0), err
 	}
@@ -454,7 +455,7 @@ func (clus *VarlogCluster) RunClusterManager(mrAddrs []string) (vms.ClusterManag
 	opts.Logger = clus.logger
 	opts.MetadataRepositoryAddresses = mrAddrs
 
-	cm, err := vms.NewClusterManager(opts)
+	cm, err := vms.NewClusterManager(context.TODO(), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -467,5 +468,14 @@ func (clus *VarlogCluster) RunClusterManager(mrAddrs []string) (vms.ClusterManag
 
 func (clus *VarlogCluster) NewClusterManagerClient() (varlog.ClusterManagerClient, error) {
 	addr := clus.CM.Address()
-	return varlog.NewClusterManagerClient(addr)
+	cmcli, err := varlog.NewClusterManagerClient(addr)
+	if err != nil {
+		return nil, err
+	}
+	clus.CMCli = cmcli
+	return cmcli, err
+}
+
+func (clus *VarlogCluster) GetClusterManagerClient() varlog.ClusterManagerClient {
+	return clus.CMCli
 }

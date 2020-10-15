@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
 	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 	"go.uber.org/zap"
 
@@ -707,21 +709,16 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 	})
 }
 
-func TestVarlogManagerServerAddStorageNode(t *testing.T) {
-	Convey("Given a varlog cluster", t, func() {
-		opts := VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		}
+func withTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func() {
+	return func() {
 		env := NewVarlogCluster(opts)
 		env.Start()
-		defer env.Close()
 
-		mr := env.MRs[0]
-		So(testutil.CompareWait(func() bool {
-			return mr.IsMember()
-		}, vtesting.TimeoutUnitTimesFactor(50)), ShouldBeTrue)
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.LeaderElected()
+		}), ShouldBeTrue)
+
+		mr := env.GetMR()
 		mrAddr := mr.GetServerAddr()
 
 		// VMS Server
@@ -731,39 +728,157 @@ func TestVarlogManagerServerAddStorageNode(t *testing.T) {
 		// VMS Client
 		cmCli, err := env.NewClusterManagerClient()
 		So(err, ShouldBeNil)
-		defer cmCli.Close()
 
-		Convey("AddStorageNode", func() {
+		Reset(func() {
+			env.Close()
+			cmCli.Close()
+		})
+
+		f(env)
+	}
+}
+
+func TestVarlogManagerServer(t *testing.T) {
+	opts := VarlogClusterOptions{
+		NrMR:              1,
+		NrRep:             3,
+		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+	}
+
+	Convey("AddStorageNode", t, withTestCluster(opts, func(env *VarlogCluster) {
+		nrSN := opts.NrRep
+
+		cmcli := env.GetClusterManagerClient()
+
+		for i := 0; i < nrSN; i++ {
+			storageNodeID := types.StorageNodeID(i + 1)
 			snopts := &storage.StorageNodeOptions{
 				RPCOptions:               storage.RPCOptions{RPCBindAddress: ":0"},
 				LogStreamExecutorOptions: storage.DefaultLogStreamExecutorOptions,
 				LogStreamReporterOptions: storage.DefaultLogStreamReporterOptions,
 				ClusterID:                env.ClusterID,
-				StorageNodeID:            types.StorageNodeID(1),
+				StorageNodeID:            storageNodeID,
 				Verbose:                  true,
 				Logger:                   env.logger,
 			}
 			sn, err := storage.NewStorageNode(snopts)
 			So(err, ShouldBeNil)
 			So(sn.Run(), ShouldBeNil)
-			env.SNs[types.StorageNodeID(1)] = sn
-			defer sn.Close()
+			env.SNs[storageNodeID] = sn
+		}
 
+		defer func() {
+			for _, sn := range env.SNs {
+				sn.Close()
+			}
+		}()
+
+		snAddrs := make(map[types.StorageNodeID]string, nrSN)
+		for snid, sn := range env.SNs {
 			meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeHeartbeat)
 			So(err, ShouldBeNil)
 			snAddr := meta.GetStorageNode().GetAddress()
+			So(len(snAddr), ShouldBeGreaterThan, 0)
+			snAddrs[snid] = snAddr
 
-			snmeta, err := cmCli.AddStorageNode(context.TODO(), snAddr)
+			snmeta, err := cmcli.AddStorageNode(context.TODO(), snAddr)
 			So(err, ShouldBeNil)
-			So(snmeta.GetStorageNode().GetStorageNodeID(), ShouldEqual, types.StorageNodeID(1))
+			So(snmeta.GetStorageNode().GetStorageNodeID(), ShouldEqual, snid)
+		}
 
-			Convey("Duplicated AddStorageNode", func() {
-				_, err := cmCli.AddStorageNode(context.TODO(), snAddr)
-				t.Log(err)
-				So(errors.Is(err, varlog.ErrVMSStorageNodeExisted), ShouldBeTrue)
-			})
+		Convey("Duplicated AddStorageNode", func() {
+			for _, snAddr := range snAddrs {
+				_, err := cmcli.AddStorageNode(context.TODO(), snAddr)
+				So(errors.Is(err, varlog.ErrStorageNodeAlreadyExists), ShouldBeTrue)
+			}
 		})
-	})
+
+		Convey("AddLogStream - Simple", func() {
+			logStreamDesc, err := cmcli.AddLogStream(context.TODO(), nil)
+			So(err, ShouldBeNil)
+			So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
+
+			// pass since NrRep equals to NrSN
+			var snidList []types.StorageNodeID
+			for _, replica := range logStreamDesc.GetReplicas() {
+				snidList = append(snidList, replica.GetStorageNodeID())
+			}
+			for snid := range env.SNs {
+				So(snidList, ShouldContain, snid)
+			}
+
+			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+			So(err, ShouldBeNil)
+			So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
+		})
+
+		// replicas to add log stream
+		var replicas []*vpb.ReplicaDescriptor
+		for snid := range env.SNs {
+			replica := &vpb.ReplicaDescriptor{
+				StorageNodeID: snid,
+				Path:          "/tmp",
+			}
+			replicas = append(replicas, replica)
+		}
+
+		Convey("AddLogStream - Manual", func() {
+			logStreamDesc, err := cmcli.AddLogStream(context.TODO(), replicas)
+			So(err, ShouldBeNil)
+			So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
+
+			// pass since NrRep equals to NrSN
+			var snidList []types.StorageNodeID
+			for _, replica := range logStreamDesc.GetReplicas() {
+				snidList = append(snidList, replica.GetStorageNodeID())
+			}
+			for snid := range env.SNs {
+				So(snidList, ShouldContain, snid)
+			}
+
+			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+			So(err, ShouldBeNil)
+			So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
+		})
+
+		Convey("AddLogStream - Error: no such StorageNodeID", func() {
+			rand.Seed(time.Now().UnixNano())
+			i := rand.Intn(len(replicas))
+			// invalid storage node id
+			replicas[i].StorageNodeID += types.StorageNodeID(nrSN)
+
+			_, err := cmcli.AddLogStream(context.TODO(), replicas)
+			So(err, ShouldNotBeNil)
+		})
+
+		Convey("AddLogStream - Error: duplicated, but not registered logstream", func() {
+			// Add logstream to storagenode
+			badSNID := types.StorageNodeID(1)
+			badSN := env.SNs[badSNID]
+			_, err := badSN.AddLogStream(env.ClusterID, badSNID, types.LogStreamID(1), "/tmp")
+			So(err, ShouldBeNil)
+
+			// Not registered logstream
+			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+			So(err, ShouldBeNil)
+			So(clusmeta.GetLogStream(types.LogStreamID(1)), ShouldBeNil)
+
+			_, err = cmcli.AddLogStream(context.TODO(), replicas)
+			So(err, ShouldNotBeNil)
+			So(varlog.IsTransientErr(err), ShouldBeTrue)
+
+			Convey("AddLogStreamx - OK: due to LogStreamIDGenerator.Refresh", func() {
+				logStreamDesc, err := cmcli.AddLogStream(context.TODO(), replicas)
+				So(err, ShouldBeNil)
+				So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
+
+				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+				So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
+			})
+
+		})
+	}))
 }
 
 func TestVarlogNewMRManager(t *testing.T) {
@@ -785,7 +900,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 		Convey("When create MRManager with non addrs", func(ctx C) {
 			// VMS Server
-			_, err := vms.NewMRManager(types.ClusterID(0), nil)
+			_, err := vms.NewMRManager(types.ClusterID(0), nil, zap.L())
 			Convey("Then it should be fail", func(ctx C) {
 				So(err, ShouldResemble, varlog.ErrInvalid)
 			})
@@ -793,7 +908,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 		Convey("When create MRManager with invalid addrs", func(ctx C) {
 			// VMS Server
-			_, err := vms.NewMRManager(types.ClusterID(0), []string{fmt.Sprintf("%s%d", mrAddr, 0)})
+			_, err := vms.NewMRManager(types.ClusterID(0), []string{fmt.Sprintf("%s%d", mrAddr, 0)}, zap.L())
 			Convey("Then it should be fail", func(ctx C) {
 				So(err, ShouldNotBeNil)
 			})
@@ -801,7 +916,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 		Convey("When create MRManager with valid addrs", func(ctx C) {
 			// VMS Server
-			mrm, err := vms.NewMRManager(types.ClusterID(0), []string{mrAddr})
+			mrm, err := vms.NewMRManager(types.ClusterID(0), []string{mrAddr}, zap.L())
 			Convey("Then it should be success", func(ctx C) {
 				So(err, ShouldBeNil)
 
@@ -835,7 +950,7 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 		mrAddr := mr.GetServerAddr()
 
 		// VMS Server
-		mrm, err := vms.NewMRManager(types.ClusterID(0), []string{mrAddr})
+		mrm, err := vms.NewMRManager(types.ClusterID(0), []string{mrAddr}, zap.L())
 		So(err, ShouldBeNil)
 		defer mrm.Close()
 

@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.daumkakao.com/varlog/varlog/internal/vms"
 	"go.uber.org/zap"
@@ -18,7 +20,11 @@ func Main(opts *vms.Options) error {
 
 	opts.Logger = logger
 
-	cm, err := vms.NewClusterManager(opts)
+	// TODO: add VMSInitTimeout to options
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	cm, err := vms.NewClusterManager(ctx, opts)
 	if err != nil {
 		logger.Error("could not create cluster manager server", zap.Error(err))
 		return err

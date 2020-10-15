@@ -21,6 +21,8 @@ type StorageNodeManager interface {
 	// storage node is not known.
 	GetMetadataByAddr(ctx context.Context, addr string) (varlog.ManagementClient, *vpb.StorageNodeMetadataDescriptor, error)
 
+	GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeMetadataDescriptor, error)
+
 	AddStorageNode(ctx context.Context, snmcl varlog.ManagementClient) error
 
 	AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error
@@ -107,6 +109,17 @@ func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (varlog
 	return mc, snMeta, nil
 }
 
+func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeMetadataDescriptor, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	snmcl, ok := sm.cs[storageNodeID]
+	if !ok {
+		sm.logger.Panic("no such storage node", zap.Any("snid", storageNodeID))
+	}
+	return snmcl.GetMetadata(ctx, snpb.MetadataTypeHeartbeat)
+}
+
 func (sm *snManager) AddStorageNode(ctx context.Context, snmcl varlog.ManagementClient) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -125,24 +138,33 @@ func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStr
 
 	logStreamID := logStreamDesc.GetLogStreamID()
 	replicaDescList := logStreamDesc.GetReplicas()
+
+	// Assume that some logstreams are added to storagenode, but they don't registered to MRs.
+	// At that time, the VMS is restarted. In that case, logstream id generator can generate
+	// duplicated logstreamid.
 	for _, replicaDesc := range replicaDescList {
 		storageNodeID := replicaDesc.GetStorageNodeID()
 		cli, ok := sm.cs[storageNodeID]
 		if !ok {
-			sm.logger.Panic("storagenodemanager: no such storage node", zap.Any("snid", storageNodeID))
+			sm.logger.Panic("no such storage node", zap.Any("snid", storageNodeID))
 		}
-
-		// TODO (jun): Currently, it raises an error when the logStreamID already exists.
-		// It is okay?
 		snmeta, err := cli.GetMetadata(ctx, snpb.MetadataTypeLogStreams)
 		if err != nil {
 			return err
 		}
-		if _, found := snmeta.FindLogStream(logStreamID); found {
-			return errors.New("vms: alredy exist logstream")
+		// transient error
+		if _, exists := snmeta.FindLogStream(logStreamID); exists {
+			return varlog.ErrLogStreamAlreadyExists
 		}
+	}
 
+	for _, replicaDesc := range replicaDescList {
+		storageNodeID := replicaDesc.GetStorageNodeID()
+		cli := sm.cs[storageNodeID]
 		if err := cli.AddLogStream(ctx, logStreamID, replicaDesc.GetPath()); err != nil {
+			if errors.Is(err, varlog.ErrLogStreamAlreadyExists) {
+				sm.logger.Panic("logstream should not exist", zap.Any("snid", storageNodeID), zap.Any("lsid", logStreamDesc.GetLogStreamID()), zap.Error(err))
+			}
 			return err
 		}
 	}

@@ -10,10 +10,21 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	mrpb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"go.uber.org/zap"
 )
 
-type MetadataRepositoryManager interface {
+type MetadataGetter interface {
 	GetClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error)
+}
+
+type ClusterMetadataViewGetter interface {
+	ClusterMetadataView() ClusterMetadataView
+}
+
+type MetadataRepositoryManager interface {
+	ClusterMetadataViewGetter
+
+	MetadataGetter
 
 	RegisterStorageNode(ctx context.Context, storageNodeMeta *vpb.StorageNodeDescriptor) error
 
@@ -49,19 +60,28 @@ type mrManager struct {
 	connectedNodeID types.NodeID
 	cli             varlog.MetadataRepositoryClient
 	mcli            varlog.MetadataRepositoryManagementClient
+
+	cmView ClusterMetadataView
+	logger *zap.Logger
 }
 
 const (
 	MRMANAGER_INIT_TIMEOUT time.Duration = 5 * time.Second
 )
 
-func NewMRManager(clusterID types.ClusterID, mrAddrs []string) (MetadataRepositoryManager, error) {
+func NewMRManager(clusterID types.ClusterID, mrAddrs []string, logger *zap.Logger) (MetadataRepositoryManager, error) {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("mrmanager")
+
 	if len(mrAddrs) == 0 {
 		return nil, varlog.ErrInvalid
 	}
 
 	mrm := &mrManager{
 		clusterID: clusterID,
+		logger:    logger,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), MRMANAGER_INIT_TIMEOUT)
@@ -93,6 +113,7 @@ Loop:
 
 			break
 		}
+		mrm.cmView = newClusterMetadataView(mrm, mrm.logger)
 		return mrm, nil
 	}
 
@@ -164,6 +185,10 @@ func (mrm *mrManager) Close() error {
 	return mrm.closeClient()
 }
 
+func (mrm *mrManager) ClusterMetadataView() ClusterMetadataView {
+	return mrm.cmView
+}
+
 func (mrm *mrManager) GetClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
@@ -194,7 +219,7 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 	if err != nil {
 		mrm.closeClient()
 	}
-
+	mrm.cmView.SetDirty()
 	return err
 }
 
@@ -211,7 +236,7 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 	if err != nil {
 		mrm.closeClient()
 	}
-
+	mrm.cmView.SetDirty()
 	return err
 }
 
@@ -228,7 +253,7 @@ func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *vpb.
 	if err != nil {
 		mrm.closeClient()
 	}
-
+	mrm.cmView.SetDirty()
 	return err
 }
 
@@ -245,7 +270,7 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 	if err != nil {
 		mrm.closeClient()
 	}
-
+	mrm.cmView.SetDirty()
 	return err
 }
 
@@ -262,7 +287,7 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *vpb.Lo
 	if err != nil {
 		mrm.closeClient()
 	}
-
+	mrm.cmView.SetDirty()
 	return err
 }
 
@@ -279,7 +304,7 @@ func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (
 	if err != nil {
 		mrm.closeClient()
 	}
-
+	mrm.cmView.SetDirty()
 	return glsn, err
 }
 
@@ -296,7 +321,7 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 	if err != nil {
 		mrm.closeClient()
 	}
-
+	mrm.cmView.SetDirty()
 	return err
 }
 

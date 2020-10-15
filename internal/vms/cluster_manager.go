@@ -3,6 +3,7 @@ package vms
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 
@@ -13,6 +14,7 @@ import (
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
 
 // ClusterManager manages varlog cluster.
@@ -20,10 +22,7 @@ type ClusterManager interface {
 	// AddStorageNode adds new StorageNode to the cluster.
 	AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error)
 
-	AddLogStream(ctx context.Context) (*vpb.LogStreamDescriptor, error)
-
-	// AddLogStream adds new LogStream to the cluster.
-	AddLogStreamWith(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) (*vpb.LogStreamDescriptor, error)
+	AddLogStream(ctx context.Context, replicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error)
 
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
 	Seal(ctx context.Context, logStreamID types.LogStreamID) error
@@ -86,26 +85,34 @@ type clusterManager struct {
 	options *Options
 }
 
-func NewClusterManager(opts *Options) (ClusterManager, error) {
+func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, error) {
 	if opts.Logger == nil {
 		opts.Logger = zap.NewNop()
 	}
-	opts.Logger = opts.Logger.Named("vms")
+	opts.Logger = opts.Logger.Named("vms").With(zap.Any("cid", opts.ClusterID))
 
-	mrMgr, err := NewMRManager(opts.ClusterID, opts.MetadataRepositoryAddresses)
+	mrMgr, err := NewMRManager(opts.ClusterID, opts.MetadataRepositoryAddresses, opts.Logger)
 	if err != nil {
 		return nil, err
 	}
-	cmView := NewClusterMetadataView(mrMgr, opts.Logger)
+
+	cmView := mrMgr.ClusterMetadataView()
+
 	snMgr := NewStorageNodeManager(cmView, opts.Logger)
+
+	logStreamIDGen, err := NewSequentialLogStreamIDGenerator(ctx, cmView, snMgr)
+	if err != nil {
+		return nil, err
+	}
+
 	cm := &clusterManager{
 		sw:             stopwaiter.New(),
 		cmState:        clusterManagerReady,
 		snMgr:          snMgr,
 		mrMgr:          mrMgr,
 		cmView:         cmView,
-		snSelector:     NewRandomSNSelector(),
-		logStreamIDGen: NewLogStreamIDGenerator(),
+		snSelector:     NewRandomSNSelector(cmView),
+		logStreamIDGen: logStreamIDGen,
 		logger:         opts.Logger,
 		options:        opts,
 	}
@@ -184,13 +191,12 @@ func (cm *clusterManager) Metadata(ctx context.Context) (*vpb.MetadataDescriptor
 	return cm.cmView.ClusterMetadata(ctx)
 }
 
-// FIXME: use varlog errors
 func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	if cm.snMgr.FindByAddress(addr) != nil {
-		return nil, varlog.ErrVMSStorageNodeExisted
+		return nil, varlog.ErrStorageNodeAlreadyExists
 	}
 
 	snmcl, snmeta, err := cm.snMgr.GetMetadataByAddr(ctx, addr)
@@ -199,7 +205,7 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*vpb
 	}
 	storageNodeID := snmcl.PeerStorageNodeID()
 	if cm.snMgr.FindByStorageNodeID(storageNodeID) != nil {
-		return nil, varlog.ErrVMSDuplicatedStorageNodeID
+		return nil, varlog.ErrStorageNodeAlreadyExists
 	}
 
 	_, err = cm.cmView.StorageNode(ctx, storageNodeID)
@@ -223,41 +229,78 @@ err_out:
 	return nil, err
 }
 
-func (cm *clusterManager) AddLogStream(ctx context.Context) (*vpb.LogStreamDescriptor, error) {
+func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	cmeta, err := cm.cmView.ClusterMetadata(ctx)
+	clusmeta, err := cm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
-	snDescList, err := cm.snSelector.SelectStorageNode(cmeta, cm.options.ReplicationFactor)
-	if err != nil {
-		return nil, err
+
+	if len(replicas) == 0 {
+		replicas, err = cm.snSelector.SelectStorageNodeAndPath(ctx, cm.options.ReplicationFactor)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	// See https://github.daumkakao.com/varlog/varlog/pull/198#discussion_r215602
 	logStreamID := cm.logStreamIDGen.Generate()
+	if clusmeta.GetLogStream(logStreamID) != nil {
+		err := varlog.NewErrorf(varlog.ErrLogStreamAlreadyExists, codes.Unavailable, "lsid=%v", logStreamID)
+		cm.logger.Error("mismatch between ClusterMetadataView and LogStreamIDGenerator", zap.Any("lsid", logStreamID), zap.Error(err))
+		if err := cm.logStreamIDGen.Refresh(ctx); err != nil {
+			cm.logger.Panic("could not refresh LogStreamIDGenerator", zap.Error(err))
+		}
+		return nil, err
+	}
+
 	logStreamDesc := &vpb.LogStreamDescriptor{
 		LogStreamID: logStreamID,
 		Status:      vpb.LogStreamStatusRunning,
-		Replicas:    make([]*vpb.ReplicaDescriptor, cm.options.ReplicationFactor),
+		Replicas:    replicas,
 	}
-	for idx, snDesc := range snDescList {
-		logStreamDesc.Replicas[idx] = &vpb.ReplicaDescriptor{
-			StorageNodeID: snDesc.GetStorageNodeID(),
-			// TODO: snSelector can be expanded to choose path
-			Path: snDesc.GetStorages()[0].Path,
-		}
-	}
-	// TODO: Choose the primary - e.g., shuffle logStreamReplicaMetas
-	return cm.AddLogStreamWith(ctx, logStreamDesc)
-}
 
-func (cm *clusterManager) AddLogStreamWith(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) (*vpb.LogStreamDescriptor, error) {
-	if err := cm.snMgr.AddLogStream(ctx, logStreamDesc); err != nil {
+	if err := cm.verifyLogStream(clusmeta, logStreamDesc); err != nil {
 		return nil, err
 	}
-	err := cm.mrMgr.RegisterLogStream(ctx, logStreamDesc)
-	return logStreamDesc, err
+
+	// TODO: Choose the primary - e.g., shuffle logStreamReplicaMetas
+	return cm.addLogStream(ctx, logStreamDesc)
+}
+
+func (cm *clusterManager) verifyLogStream(clusterMetadata *vpb.MetadataDescriptor, logStreamDesc *vpb.LogStreamDescriptor) error {
+	replicas := logStreamDesc.GetReplicas()
+	// the number of logstream replica
+	if uint(len(replicas)) != cm.options.ReplicationFactor {
+		return fmt.Errorf("vms: incorrect number of logstream replicas: %w", varlog.ErrInvalid)
+	}
+	// storagenode existence
+	for _, replica := range replicas {
+		if clusterMetadata.GetStorageNode(replica.GetStorageNodeID()) == nil {
+			return varlog.ErrStorageNodeNotExist
+		}
+	}
+	// logstream existence
+	if clusterMetadata.GetLogStream(logStreamDesc.GetLogStreamID()) != nil {
+		return varlog.ErrLogStreamAlreadyExists
+	}
+	return nil
+}
+
+func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) (*vpb.LogStreamDescriptor, error) {
+	if err := cm.snMgr.AddLogStream(ctx, logStreamDesc); err != nil {
+		// Unlike verifyLogStream, ErrLogStreamAlreadyExists is transient error in here.
+		if errors.Is(err, varlog.ErrLogStreamAlreadyExists) {
+			cm.logger.Warn("not registered, duplicated logstream id", zap.Error(err))
+			return nil, varlog.NewErrorf(err, codes.Unavailable, "lsid=%v", logStreamDesc.GetLogStreamID())
+		}
+		return nil, err
+	}
+
+	// NB: RegisterLogStream returns nil if the logstream already exists.
+	return logStreamDesc, cm.mrMgr.RegisterLogStream(ctx, logStreamDesc)
 }
 
 func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) error {

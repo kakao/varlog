@@ -21,7 +21,11 @@ message AddStorageNodeResponse {
     varlog.StorageNodeMetadataDescriptor storage_node = 1;
 }
 
-message AddLogStreamRequest {}
+message AddLogStreamRequest {
+    // TODO: nullable = false
+    repeated varlog.ReplicaDescriptor replicas = 1
+        [(gogoproto.nullable) = true];
+}
 
 message AddLogStreamResponse {
     varlog.LogStreamDescriptor log_stream = 1;

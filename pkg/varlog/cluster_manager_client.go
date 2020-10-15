@@ -9,7 +9,7 @@ import (
 
 type ClusterManagerClient interface {
 	AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error)
-
+	AddLogStream(ctx context.Context, logStreamReplicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error)
 	Close() error
 }
 
@@ -42,4 +42,12 @@ func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) 
 		return nil, FromStatusError(ctx, err)
 	}
 	return rsp.StorageNode, nil
+}
+
+func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error) {
+	rsp, err := c.rpcClient.AddLogStream(ctx, &vmspb.AddLogStreamRequest{Replicas: logStreamReplicas})
+	if err != nil {
+		return nil, FromStatusError(ctx, err)
+	}
+	return rsp.GetLogStream(), nil
 }
