@@ -17,6 +17,12 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+type StorageNodeEventHandler interface {
+	HeartbeatTimeout(types.StorageNodeID)
+
+	Report(*vpb.StorageNodeMetadataDescriptor)
+}
+
 // ClusterManager manages varlog cluster.
 type ClusterManager interface {
 	// AddStorageNode adds new StorageNode to the cluster.
@@ -79,6 +85,7 @@ type clusterManager struct {
 	mrMgr          MetadataRepositoryManager
 	cmView         ClusterMetadataView
 	snSelector     StorageNodeSelector
+	snWatcher      StorageNodeWatcher
 	logStreamIDGen LogStreamIDGenerator
 
 	logger  *zap.Logger
@@ -99,6 +106,9 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 	cmView := mrMgr.ClusterMetadataView()
 
 	snMgr := NewStorageNodeManager(cmView, opts.Logger)
+	if err := snMgr.Init(); err != nil {
+		return nil, err
+	}
 
 	logStreamIDGen, err := NewSequentialLogStreamIDGenerator(ctx, cmView, snMgr)
 	if err != nil {
@@ -116,6 +126,9 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		logger:         opts.Logger,
 		options:        opts,
 	}
+
+	cm.snWatcher = NewStorageNodeWatcher(opts.WatcherOptions, cmView, snMgr, cm, opts.Logger)
+
 	cm.server = grpc.NewServer()
 
 	NewClusterManagerService(cm, cm.logger).Register(cm.server)
@@ -159,6 +172,9 @@ func (cm *clusterManager) Run() error {
 		}
 	}()
 
+	// SN Watcher
+	cm.snWatcher.Run()
+
 	cm.logger.Info("start")
 	return nil
 }
@@ -179,6 +195,9 @@ func (cm *clusterManager) Close() {
 		return
 	}
 	cm.cmState = clusterManagerClosed
+
+	// SN Watcher
+	cm.snWatcher.Close()
 
 	cm.server.Stop()
 	cm.sw.Stop()
@@ -322,4 +341,12 @@ func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamI
 func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
 	panic("not implemented")
 	// return cm.snMgr.Unseal(ctx, logStreamID)
+}
+
+func (cm *clusterManager) HeartbeatTimeout(snID types.StorageNodeID) {
+	// not implemented
+}
+
+func (cm *clusterManager) Report(sn *vpb.StorageNodeMetadataDescriptor) {
+	// not implemented
 }
