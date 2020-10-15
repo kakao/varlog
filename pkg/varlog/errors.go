@@ -11,6 +11,9 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+// TODO (jun, pharrell): ErrAlreadyExists, ErrExist, ErrVMSStorageNode...
+// - Use basic error? (ErrAlreadyExists, ErrExist, ...)
+// - Use specific error? (ErrLogStreamAlreadyExists, ...)
 var (
 	ErrNoEntry        = errors.New("storage: no entry")
 	ErrCorruptStorage = errors.New("storage: corrupt")
@@ -25,8 +28,9 @@ var (
 )
 
 var (
-	ErrVMSStorageNodeExisted      = errors.New("vms: storagenode already existed")
-	ErrVMSDuplicatedStorageNodeID = errors.New("vms: duplicated storagenode id")
+	ErrLogStreamAlreadyExists   = errors.New("logstream already exists")
+	ErrStorageNodeNotExist      = errors.New("storagenode does not exist")
+	ErrStorageNodeAlreadyExists = errors.New("storagenode already exists")
 )
 
 var (
@@ -58,8 +62,7 @@ func init() {
 
 		ErrInvalidArgument, ErrAlreadyExists, ErrNotExist,
 
-		// vms
-		ErrVMSStorageNodeExisted, ErrVMSDuplicatedStorageNodeID,
+		ErrLogStreamAlreadyExists, ErrStorageNodeNotExist, ErrStorageNodeAlreadyExists,
 	)
 }
 
@@ -296,6 +299,9 @@ func IsTransientErr(err error) bool {
 	}
 	// TODO (jun): add more errors
 	if ve, ok := err.(Error); ok && ve.code == codes.Unavailable {
+		return true
+	}
+	if ve, ok := err.(*Error); ok && ve.code == codes.Unavailable {
 		return true
 	}
 	if se, ok := err.(interface{ GRPCStatus() *status.Status }); ok && se.GRPCStatus().Code() == codes.Unavailable {

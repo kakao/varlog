@@ -4,6 +4,7 @@ import (
 	"context"
 
 	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/kakao/varlog/pkg/varlog"
 	snpb "github.com/kakao/varlog/proto/storage_node"
 	vpb "github.com/kakao/varlog/proto/varlog"
 	"go.uber.org/zap"
@@ -35,7 +36,7 @@ func (s *managementService) GetMetadata(ctx context.Context, req *snpb.GetMetada
 	metadata, err := s.m.GetMetadata(req.GetClusterID(), req.GetMetadataType())
 	if err != nil {
 		s.logger.Error("could not get metadata", zap.Error(err))
-		return nil, err
+		return nil, varlog.ToStatusError(err)
 	}
 	return &snpb.GetMetadataResponse{StorageNodeMetadata: metadata}, nil
 }
@@ -45,7 +46,7 @@ func (s *managementService) AddLogStream(ctx context.Context, req *snpb.AddLogSt
 	path, err := s.m.AddLogStream(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID(), req.GetStorage().GetPath())
 	if err != nil {
 		s.logger.Error("could not add logstream", zap.Error(err))
-		return nil, err
+		return nil, varlog.ToStatusError(err)
 	}
 	return &snpb.AddLogStreamResponse{
 		LogStream: &vpb.LogStreamDescriptor{

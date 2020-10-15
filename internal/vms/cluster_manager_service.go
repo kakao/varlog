@@ -37,8 +37,9 @@ func (s *clusterManagerService) AddStorageNode(ctx context.Context, req *vmspb.A
 	return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, varlog.ToStatusError(err)
 }
 
-func (s *clusterManagerService) AddLogStream(context.Context, *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
-	panic("not implemented")
+func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
+	logStreamDesc, err := s.clusManager.AddLogStream(ctx, req.GetReplicas())
+	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, varlog.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Seal(context.Context, *vmspb.SealRequest) (*vmspb.SealResponse, error) {
