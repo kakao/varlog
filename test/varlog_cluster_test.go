@@ -1001,3 +1001,114 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 		})
 	})
 }
+
+type testSnHandler struct {
+	hbC     chan types.StorageNodeID
+	reportC chan *vpb.StorageNodeMetadataDescriptor
+}
+
+func newTestSnHandler() *testSnHandler {
+	return &testSnHandler{
+		hbC:     make(chan types.StorageNodeID),
+		reportC: make(chan *vpb.StorageNodeMetadataDescriptor),
+	}
+}
+
+func (sh *testSnHandler) HeartbeatTimeout(snID types.StorageNodeID) {
+	select {
+	case sh.hbC <- snID:
+	default:
+	}
+}
+
+func (sh *testSnHandler) Report(sn *vpb.StorageNodeMetadataDescriptor) {
+	select {
+	case sh.reportC <- sn:
+	default:
+	}
+}
+
+func TestVarlogSNWatcher(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             1,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.LeaderElected()
+		}), ShouldBeTrue)
+
+		mr := env.GetMR()
+
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.IsMember()
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		snID, err := env.AddSN()
+		So(err, ShouldBeNil)
+
+		lsID, err := env.AddLS()
+		So(err, ShouldBeNil)
+
+		mrMgr, err := vms.NewMRManager(env.ClusterID, []string{mrAddr}, env.logger)
+		So(err, ShouldBeNil)
+
+		cmView := mrMgr.ClusterMetadataView()
+		snMgr := vms.NewStorageNodeManager(cmView, zap.NewNop())
+
+		err = snMgr.Init()
+		So(err, ShouldBeNil)
+
+		snHandler := newTestSnHandler()
+
+		wopts := vms.WatcherOptions{
+			Tick:             vms.DefaultTick,
+			ReportInterval:   vms.DefaultReportInterval,
+			HeartbeatTimeout: vms.DefaultHeartbeatTimeout,
+		}
+		snWatcher := vms.NewStorageNodeWatcher(wopts, cmView, snMgr, snHandler, zap.NewNop())
+		snWatcher.Run()
+		defer snWatcher.Close()
+
+		Convey("When seal LS", func(ctx C) {
+			sn, _ := env.GetPrimarySN(lsID)
+			_, _, err := sn.Seal(env.ClusterID, snID, lsID, types.InvalidGLSN)
+			So(err, ShouldBeNil)
+
+			Convey("Then it should be reported by watcher", func(ctx C) {
+				So(testutil.CompareWaitN(50, func() bool {
+					select {
+					case meta := <-snHandler.reportC:
+						return meta.GetLogStreams()[0].GetStatus().Sealed()
+					case <-time.After(vms.DefaultTick * time.Duration(2*vms.DefaultReportInterval)):
+					}
+
+					return false
+				}), ShouldBeTrue)
+			})
+		})
+
+		Convey("When close SN", func(ctx C) {
+			sn, _ := env.GetPrimarySN(lsID)
+			sn.Close()
+
+			Convey("Then it should be heartbeat timeout", func(ctx C) {
+				So(testutil.CompareWaitN(50, func() bool {
+					select {
+					case hsnid := <-snHandler.hbC:
+						return hsnid == snID
+					case <-time.After(vms.DefaultTick * time.Duration(2*vms.DefaultHeartbeatTimeout)):
+					}
+
+					return false
+				}), ShouldBeTrue)
+			})
+		})
+	})
+}

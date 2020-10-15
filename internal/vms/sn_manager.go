@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
@@ -13,6 +14,8 @@ import (
 )
 
 type StorageNodeManager interface {
+	Init() error
+
 	FindByStorageNodeID(storageNodeID types.StorageNodeID) varlog.ManagementClient
 
 	FindByAddress(addr string) varlog.ManagementClient
@@ -58,6 +61,30 @@ func NewStorageNodeManager(cmView ClusterMetadataView, logger *zap.Logger) Stora
 		cs:     make(map[types.StorageNodeID]varlog.ManagementClient),
 		logger: logger,
 	}
+}
+
+func (sm *snManager) Init() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	meta, err := sm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, s := range meta.GetStorageNodes() {
+		snmcl, _, err := sm.GetMetadataByAddr(ctx, s.Address)
+		if err != nil {
+			return err
+		}
+		storageNodeID := snmcl.PeerStorageNodeID()
+		if sm.FindByStorageNodeID(storageNodeID) != nil {
+			continue
+		}
+
+		sm.AddStorageNode(ctx, snmcl)
+	}
+
+	return nil
 }
 
 func (sm *snManager) Close() error {
