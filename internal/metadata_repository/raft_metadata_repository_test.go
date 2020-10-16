@@ -556,6 +556,8 @@ func TestMRRequestMap(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
+		requestNum := atomic.LoadUint64(&mr.requestNum)
+
 		var wg sync.WaitGroup
 		var st sync.WaitGroup
 
@@ -571,7 +573,7 @@ func TestMRRequestMap(t *testing.T) {
 
 		st.Wait()
 		So(testutil.CompareWaitN(1, func() bool {
-			_, ok := mr.requestMap.Load(uint64(1))
+			_, ok := mr.requestMap.Load(requestNum + 1)
 			return ok
 		}), ShouldBeTrue)
 
@@ -633,10 +635,12 @@ func TestMRRequestMap(t *testing.T) {
 
 		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(1))
 		defer cancel()
+
+		requestNum := atomic.LoadUint64(&mr.requestNum)
 		err := mr.RegisterStorageNode(rctx, sn)
 		So(err, ShouldNotBeNil)
 
-		_, ok := mr.requestMap.Load(uint64(1))
+		_, ok := mr.requestMap.Load(requestNum + 1)
 		So(ok, ShouldBeFalse)
 	})
 
@@ -651,6 +655,10 @@ func TestMRRequestMap(t *testing.T) {
 		}), ShouldBeTrue)
 
 		mr := clus.nodes[0]
+
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.storage.LookupEndpoint(mr.nodeID) != ""
+		}), ShouldBeTrue)
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: types.StorageNodeID(0),

@@ -699,6 +699,7 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 	if guarantee {
 		c := make(chan error, 1)
 		rIdx := atomic.AddUint64(&mr.requestNum, 1)
+
 		e.RequestIndex = rIdx
 		mr.requestMap.Store(rIdx, c)
 		defer mr.requestMap.Delete(rIdx)
