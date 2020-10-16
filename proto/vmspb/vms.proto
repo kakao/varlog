@@ -40,7 +40,8 @@ message SealRequest {
 }
 
 message SealResponse {
-    varlog.LogStreamDescriptor log_stream = 1;
+    repeated varlog.LogStreamMetadataDescriptor log_streams = 1
+        [(gogoproto.nullable) = false];
 }
 
 message SyncRequest {

@@ -3,6 +3,7 @@ package varlog
 import (
 	"context"
 
+	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
 	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
@@ -10,6 +11,7 @@ import (
 type ClusterManagerClient interface {
 	AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error)
 	AddLogStream(ctx context.Context, logStreamReplicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error)
+	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]vpb.LogStreamMetadataDescriptor, error)
 	Close() error
 }
 
@@ -50,4 +52,12 @@ func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplic
 		return nil, FromStatusError(ctx, err)
 	}
 	return rsp.GetLogStream(), nil
+}
+
+func (c *clusterManagerClient) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]vpb.LogStreamMetadataDescriptor, error) {
+	rsp, err := c.rpcClient.Seal(ctx, &vmspb.SealRequest{LogStreamID: logStreamID})
+	if err != nil {
+		return nil, FromStatusError(ctx, err)
+	}
+	return rsp.GetLogStreams(), nil
 }
