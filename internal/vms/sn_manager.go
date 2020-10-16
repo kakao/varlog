@@ -30,7 +30,9 @@ type StorageNodeManager interface {
 
 	AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error
 
-	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) error
+	// Seal seals logstream replicas of storage nodes corresponded with the logStreamID. It
+	// passes the last committed GLSN to the logstream replicas.
+	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]vpb.LogStreamMetadataDescriptor, error)
 
 	Sync(ctx context.Context, logStreamID types.LogStreamID) error
 
@@ -198,8 +200,35 @@ func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStr
 	return nil
 }
 
-func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) error {
-	panic("not implemented")
+func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]vpb.LogStreamMetadataDescriptor, error) {
+	clusmeta, err := sm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	lsdesc := clusmeta.GetLogStream(logStreamID)
+	replicas := lsdesc.GetReplicas()
+	lsmetaDesc := make([]vpb.LogStreamMetadataDescriptor, 0, len(replicas))
+	for _, replica := range replicas {
+		storageNodeID := replica.GetStorageNodeID()
+		cli, ok := sm.cs[storageNodeID]
+		if !ok {
+			sm.logger.Panic("mismatch between clusterMetadataView and StorageNodeManager", zap.Any("snid", storageNodeID), zap.Any("lsid", logStreamID))
+		}
+		status, highWatermark, err := cli.Seal(ctx, logStreamID, lastCommittedGLSN)
+		if err != nil {
+			sm.logger.Warn("could not seal logstream replica", zap.Error(err), zap.Any("snid", storageNodeID), zap.Any("lsid", logStreamID))
+			continue
+		}
+		lsmetaDesc = append(lsmetaDesc, vpb.LogStreamMetadataDescriptor{
+			StorageNodeID: storageNodeID,
+			LogStreamID:   logStreamID,
+			Status:        status,
+			HighWatermark: highWatermark,
+			Path:          replica.GetPath(),
+		})
+		sm.logger.Debug("seal result", zap.Reflect("logstream_meta", lsmetaDesc))
+	}
+	return lsmetaDesc, nil
 }
 
 func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID) error {

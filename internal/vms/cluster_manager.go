@@ -31,7 +31,7 @@ type ClusterManager interface {
 	AddLogStream(ctx context.Context, replicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error)
 
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
-	Seal(ctx context.Context, logStreamID types.LogStreamID) error
+	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]vpb.LogStreamMetadataDescriptor, error)
 
 	// Sync copies the log entries of the src to the dst. Sync may be long-running, thus it
 	// returns immediately without waiting for the completion of sync. Callers of Sync
@@ -322,15 +322,13 @@ func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *vpb.L
 	return logStreamDesc, cm.mrMgr.RegisterLogStream(ctx, logStreamDesc)
 }
 
-func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) error {
-	panic("not implemented")
-	/*
-		lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
-		if err != nil {
-			return err
-		}
-		return cm.snMgr.Seal(ctx, logStreamID, lastGLSN)
-	*/
+func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]vpb.LogStreamMetadataDescriptor, error) {
+	lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
+	if err != nil {
+		cm.logger.Error("error while sealing by MR", zap.Error(err))
+		return nil, err
+	}
+	return cm.snMgr.Seal(ctx, logStreamID, lastGLSN)
 }
 
 func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamID) error {

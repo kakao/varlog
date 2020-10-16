@@ -54,3 +54,8 @@ func (s *MetadataRepositoryService) GetMetadata(ctx context.Context, req *pb.Get
 		Metadata: metadata,
 	}, err
 }
+
+func (s *MetadataRepositoryService) Seal(ctx context.Context, req *pb.SealRequest) (*pb.SealResponse, error) {
+	lastCommittedGLSN, err := s.metaRepos.Seal(ctx, req.GetLogStreamID())
+	return &pb.SealResponse{LastCommittedGLSN: lastCommittedGLSN}, err
+}

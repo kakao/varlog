@@ -42,8 +42,9 @@ func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.Add
 	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, varlog.ToStatusError(err)
 }
 
-func (s *clusterManagerService) Seal(context.Context, *vmspb.SealRequest) (*vmspb.SealResponse, error) {
-	panic("not implemented")
+func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {
+	lsmetaList, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
+	return &vmspb.SealResponse{LogStreams: lsmetaList}, varlog.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Sync(context.Context, *vmspb.SyncRequest) (*vmspb.SyncResponse, error) {

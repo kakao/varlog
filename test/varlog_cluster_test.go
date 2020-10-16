@@ -810,6 +810,27 @@ func TestVarlogManagerServer(t *testing.T) {
 			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 			So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
+
+			Convey("Seal", func() {
+				lsmetaList, err := cmcli.Seal(context.TODO(), logStreamDesc.GetLogStreamID())
+				So(err, ShouldBeNil)
+				So(len(lsmetaList), ShouldEqual, opts.NrRep)
+				So(lsmetaList[0].HighWatermark, ShouldEqual, types.InvalidGLSN)
+
+				// check MR metadata: sealed
+				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+				lsdesc := clusmeta.GetLogStream(logStreamDesc.GetLogStreamID())
+				So(lsdesc, ShouldNotBeNil)
+				So(lsdesc.GetStatus(), ShouldEqual, vpb.LogStreamStatusSealed)
+
+				// check SN metadata: sealed
+				for _, sn := range env.SNs {
+					snmeta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+					So(err, ShouldBeNil)
+					So(snmeta.GetLogStreams()[0].GetStatus(), ShouldEqual, vpb.LogStreamStatusSealed)
+				}
+			})
 		})
 
 		// replicas to add log stream

@@ -190,8 +190,9 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []vpb.LogStreamMetadataDes
 	for i, lse := range lseList {
 		lse.LogStreamID()
 		lsdList[i] = vpb.LogStreamMetadataDescriptor{
-			LogStreamID: lse.LogStreamID(),
-			Status:      lse.Status(),
+			StorageNodeID: sn.storageNodeID,
+			LogStreamID:   lse.LogStreamID(),
+			Status:        lse.Status(),
 			// TODO (jun): path represents disk-based storage and
 			// memory-based storage
 			// Path: lse.Path(),

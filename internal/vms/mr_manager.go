@@ -2,6 +2,7 @@ package vms
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 	"time"
@@ -13,18 +14,34 @@ import (
 	"go.uber.org/zap"
 )
 
-type MetadataGetter interface {
-	GetClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error)
+// ClusterMetadataView provides the latest metadata about the cluster.
+// TODO: It should have a way to guarantee that ClusterMetadata is the latest.
+// TODO: See https://github.com/kakao/varlog/pull/198#discussion_r215542
+type ClusterMetadataView interface {
+	// ClusterMetadata returns the latest metadata of the cluster.
+	ClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error)
+
+	// StorageNode returns the storage node corresponded with the storageNodeID.
+	StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeDescriptor, error)
+
+	// LogStreamReplicas returns all of the latest LogStreamReplicaMetas for the given
+	// logStreamID. The first element of the returned LogStreamReplicaMeta list is the primary
+	// LogStreamReplica.
+	// LogStreamReplicas(ctx context.Context, logStreamID types.LogStreamID) ([]*vpb.LogStreamMetadataDescriptor, error)
 }
 
 type ClusterMetadataViewGetter interface {
 	ClusterMetadataView() ClusterMetadataView
 }
 
+var (
+	errCMVNoStorageNode = errors.New("cmview: no such storage node")
+)
+
 type MetadataRepositoryManager interface {
 	ClusterMetadataViewGetter
-
-	MetadataGetter
+	//MetadataGetter
+	io.Closer
 
 	RegisterStorageNode(ctx context.Context, storageNodeMeta *vpb.StorageNodeDescriptor) error
 
@@ -36,6 +53,9 @@ type MetadataRepositoryManager interface {
 
 	UpdateLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error
 
+	// Seal seals logstream corresponded with the logStreamID. It marks the logstream in the
+	// cluster metadata stored in MR  as sealed. It returns the last committed GLSN that is
+	// confirmed by MR.
 	Seal(ctx context.Context, logStreamID types.LogStreamID) (lastCommittedGLSN types.GLSN, err error)
 
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
@@ -45,11 +65,13 @@ type MetadataRepositoryManager interface {
 	AddPeer(ctx context.Context, nodeID types.NodeID, peerURL, rpcURL string) error
 
 	RemovePeer(ctx context.Context, nodeID types.NodeID) error
-
-	io.Closer
 }
 
-var _ MetadataRepositoryManager = (*mrManager)(nil)
+var (
+	_ MetadataRepositoryManager = (*mrManager)(nil)
+	_ ClusterMetadataView       = (*mrManager)(nil)
+	_ ClusterMetadataViewGetter = (*mrManager)(nil)
+)
 
 type mrManager struct {
 	clusterID types.ClusterID
@@ -61,7 +83,9 @@ type mrManager struct {
 	cli             varlog.MetadataRepositoryClient
 	mcli            varlog.MetadataRepositoryManagementClient
 
-	cmView ClusterMetadataView
+	dirty bool
+	meta  *vpb.MetadataDescriptor
+
 	logger *zap.Logger
 }
 
@@ -81,6 +105,7 @@ func NewMRManager(clusterID types.ClusterID, mrAddrs []string, logger *zap.Logge
 
 	mrm := &mrManager{
 		clusterID: clusterID,
+		dirty:     true,
 		logger:    logger,
 	}
 
@@ -113,7 +138,6 @@ Loop:
 
 			break
 		}
-		mrm.cmView = newClusterMetadataView(mrm, mrm.logger)
 		return mrm, nil
 	}
 
@@ -186,13 +210,10 @@ func (mrm *mrManager) Close() error {
 }
 
 func (mrm *mrManager) ClusterMetadataView() ClusterMetadataView {
-	return mrm.cmView
+	return mrm
 }
 
-func (mrm *mrManager) GetClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
-	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
-
+func (mrm *mrManager) clusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
 	cli := mrm.c()
 	if cli == nil {
 		return nil, varlog.ErrNotAccessible
@@ -219,7 +240,7 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.cmView.SetDirty()
+	mrm.dirty = true
 	return err
 }
 
@@ -236,7 +257,7 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.cmView.SetDirty()
+	mrm.dirty = true
 	return err
 }
 
@@ -253,7 +274,7 @@ func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *vpb.
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.cmView.SetDirty()
+	mrm.dirty = true
 	return err
 }
 
@@ -270,7 +291,7 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.cmView.SetDirty()
+	mrm.dirty = true
 	return err
 }
 
@@ -287,10 +308,11 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *vpb.Lo
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.cmView.SetDirty()
+	mrm.dirty = true
 	return err
 }
 
+// It implements MetadataRepositoryManager.Seal method.
 func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (lastCommittedGLSN types.GLSN, err error) {
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
@@ -304,7 +326,7 @@ func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.cmView.SetDirty()
+	mrm.dirty = true
 	return glsn, err
 }
 
@@ -321,7 +343,7 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.cmView.SetDirty()
+	mrm.dirty = true
 	return err
 }
 
@@ -404,4 +426,30 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 	}
 
 	return nil
+}
+
+func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
+	mrm.mu.Lock()
+	defer mrm.mu.Unlock()
+
+	if mrm.dirty {
+		meta, err := mrm.clusterMetadata(ctx)
+		if err != nil {
+			return nil, err
+		}
+		mrm.meta = meta
+		mrm.dirty = false
+	}
+	return mrm.meta, nil
+}
+
+func (mrm *mrManager) StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeDescriptor, error) {
+	meta, err := mrm.ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if sndesc := meta.GetStorageNode(storageNodeID); sndesc != nil {
+		return sndesc, nil
+	}
+	return nil, errCMVNoStorageNode
 }
