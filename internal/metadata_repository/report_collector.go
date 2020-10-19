@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/internal/storage"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
@@ -18,7 +18,7 @@ import (
 
 type ReportCollectorCallbacks struct {
 	report        func(*snpb.LocalLogStreamDescriptor) error
-	getClient     func(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error)
+	getClient     func(*varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error)
 	lookupNextGLS func(types.GLSN) *snpb.GlobalLogStreamDescriptor
 	getOldestGLS  func() *snpb.GlobalLogStreamDescriptor
 }
@@ -26,7 +26,7 @@ type ReportCollectorCallbacks struct {
 type ReportCollectExecutor struct {
 	highWatermark types.GLSN
 	logStreamIDs  []types.LogStreamID
-	cli           storage.LogStreamReporterClient
+	cli           storagenode.LogStreamReporterClient
 	sn            *varlogpb.StorageNodeDescriptor
 	cb            ReportCollectorCallbacks
 	rpcTimeout    time.Duration
@@ -379,7 +379,7 @@ func (rce *ReportCollectExecutor) getHighWatermark() types.GLSN {
 	return rce.highWatermark
 }
 
-func (rce *ReportCollectExecutor) closeClient(cli storage.LogStreamReporterClient) {
+func (rce *ReportCollectExecutor) closeClient(cli storagenode.LogStreamReporterClient) {
 	rce.clmu.Lock()
 	defer rce.clmu.Unlock()
 
@@ -390,7 +390,7 @@ func (rce *ReportCollectExecutor) closeClient(cli storage.LogStreamReporterClien
 	}
 }
 
-func (rce *ReportCollectExecutor) getClient() (storage.LogStreamReporterClient, error) {
+func (rce *ReportCollectExecutor) getClient() (storagenode.LogStreamReporterClient, error) {
 	rce.clmu.RLock()
 	cli := rce.cli
 	rce.clmu.RUnlock()

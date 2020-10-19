@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
@@ -13,6 +14,7 @@ type ClusterManagerClient interface {
 	AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
+	Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*snpb.SyncStatus, error)
 	Close() error
 }
 
@@ -66,4 +68,13 @@ func (c *clusterManagerClient) Seal(ctx context.Context, logStreamID types.LogSt
 func (c *clusterManagerClient) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
 	_, err := c.rpcClient.Unseal(ctx, &vmspb.UnsealRequest{LogStreamID: logStreamID})
 	return FromStatusError(ctx, err)
+}
+
+func (c *clusterManagerClient) Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*snpb.SyncStatus, error) {
+	rsp, err := c.rpcClient.Sync(ctx, &vmspb.SyncRequest{
+		LogStreamID:      logStreamID,
+		SrcStorageNodeID: srcStorageNodeId,
+		DstStorageNodeID: dstStorageNodeId,
+	})
+	return rsp.GetStatus(), FromStatusError(ctx, err)
 }

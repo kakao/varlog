@@ -160,10 +160,7 @@ message SyncRequest {
 }
 
 message SyncResponse {
-    SyncState state = 1;
-    SyncPosition first = 2 [(gogoproto.nullable) = false];
-    SyncPosition last = 3 [(gogoproto.nullable) = false];
-    SyncPosition current = 4 [(gogoproto.nullable) = false];
+    SyncStatus status = 1;
 }
 
 // Management defines the public APIs for managing StorageNode.

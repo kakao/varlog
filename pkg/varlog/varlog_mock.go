@@ -139,10 +139,10 @@ func (mr *MockManagementClientMockRecorder) Seal(arg0, arg1, arg2 interface{}) *
 }
 
 // Sync mocks base method.
-func (m *MockManagementClient) Sync(arg0 context.Context, arg1 types.LogStreamID, arg2 types.StorageNodeID, arg3 string, arg4 types.GLSN) (snpb.SyncState, error) {
+func (m *MockManagementClient) Sync(arg0 context.Context, arg1 types.LogStreamID, arg2 types.StorageNodeID, arg3 string, arg4 types.GLSN) (*snpb.SyncStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].(snpb.SyncState)
+	ret0, _ := ret[0].(*snpb.SyncStatus)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

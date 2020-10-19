@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
-	"github.daumkakao.com/varlog/varlog/internal/storage"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/vms"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
@@ -751,16 +751,16 @@ func TestVarlogManagerServer(t *testing.T) {
 
 		for i := 0; i < nrSN; i++ {
 			storageNodeID := types.StorageNodeID(i + 1)
-			snopts := &storage.StorageNodeOptions{
-				RPCOptions:               storage.RPCOptions{RPCBindAddress: ":0"},
-				LogStreamExecutorOptions: storage.DefaultLogStreamExecutorOptions,
-				LogStreamReporterOptions: storage.DefaultLogStreamReporterOptions,
+			snopts := &storagenode.StorageNodeOptions{
+				RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
+				LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
+				LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 				ClusterID:                env.ClusterID,
 				StorageNodeID:            storageNodeID,
 				Verbose:                  true,
 				Logger:                   env.logger,
 			}
-			sn, err := storage.NewStorageNode(snopts)
+			sn, err := storagenode.NewStorageNode(snopts)
 			So(err, ShouldBeNil)
 			So(sn.Run(), ShouldBeNil)
 			env.SNs[storageNodeID] = sn

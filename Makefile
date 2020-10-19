@@ -82,13 +82,13 @@ $(SUBDIRS) :
 mockgen: \
 	pkg/varlog/varlog_mock.go \
 	internal/vms/vms_mock.go \
-	internal/storage/storage_node_mock.go \
-	internal/storage/storage_mock.go \
-	internal/storage/log_stream_executor_mock.go \
-	internal/storage/log_stream_reporter_mock.go \
-	internal/storage/log_stream_reporter_client_mock.go \
-	internal/storage/replicator_mock.go \
-	internal/storage/replicator_client_mock.go \
+	internal/storagenode/storage_node_mock.go \
+	internal/storagenode/storage_mock.go \
+	internal/storagenode/log_stream_executor_mock.go \
+	internal/storagenode/log_stream_reporter_mock.go \
+	internal/storagenode/log_stream_reporter_client_mock.go \
+	internal/storagenode/replicator_mock.go \
+	internal/storagenode/replicator_client_mock.go \
 	proto/snpb/mock/replicator_mock.go \
 	proto/snpb/mock/log_io_mock.go \
 	proto/snpb/mock/log_stream_reporter_mock.go \
@@ -113,45 +113,45 @@ internal/vms/vms_mock.go: internal/vms/cluster_manager.go
 		ClusterMetadataView
 
 
-internal/storage/storage_node_mock.go: internal/storage/storage_node.go
-	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
-		-package storage \
+internal/storagenode/storage_node_mock.go: internal/storagenode/storage_node.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storagenode \
+		-package storagenode \
 		-source $< \
 		-destination $@
 
-internal/storage/storage_mock.go: internal/storage/storage.go
-	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
-		-package storage \
+internal/storagenode/storage_mock.go: internal/storagenode/storage.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storagenode \
+		-package storagenode \
 		-source $< \
 		-destination $@
 
-internal/storage/log_stream_executor_mock.go: internal/storage/log_stream_executor.go
-	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
-		-package storage \
+internal/storagenode/log_stream_executor_mock.go: internal/storagenode/log_stream_executor.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storagenode \
+		-package storagenode \
 		-source $< \
 		-destination $@
 
-internal/storage/log_stream_reporter_mock.go: internal/storage/log_stream_reporter.go
-	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
-		-package storage \
+internal/storagenode/log_stream_reporter_mock.go: internal/storagenode/log_stream_reporter.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storagenode \
+		-package storagenode \
 		-source $< \
 		-destination $@
 
-internal/storage/log_stream_reporter_client_mock.go: internal/storage/log_stream_reporter_client.go
-	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
-		-package storage \
+internal/storagenode/log_stream_reporter_client_mock.go: internal/storagenode/log_stream_reporter_client.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storagenode \
+		-package storagenode \
 		-source $< \
 		-destination $@
 
-internal/storage/replicator_mock.go: internal/storage/replicator.go
-	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
-		-package storage \
+internal/storagenode/replicator_mock.go: internal/storagenode/replicator.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storagenode \
+		-package storagenode \
 		-source $< \
 		-destination $@
 
-internal/storage/replicator_client_mock.go: internal/storage/replicator_client.go
-	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storage \
-		-package storage \
+internal/storagenode/replicator_client_mock.go: internal/storagenode/replicator_client.go
+	mockgen -self_package github.daumkakao.com/varlog/varlog/internal/storagenode \
+		-package storagenode \
 		-source $< \
 		-destination $@
 

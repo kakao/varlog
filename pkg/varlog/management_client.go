@@ -18,7 +18,7 @@ type ManagementClient interface {
 	RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error
 	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
-	Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (snpb.SyncState, error)
+	Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
 	Close() error
 }
 
@@ -136,7 +136,7 @@ func (c *managementClient) Unseal(ctx context.Context, lsid types.LogStreamID) e
 	return err
 }
 
-func (c *managementClient) Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (snpb.SyncState, error) {
+func (c *managementClient) Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
 	rsp, err := c.rpcClient.Sync(ctx, &snpb.SyncRequest{
 		ClusterID:     c.clusterID,
 		StorageNodeID: c.storageNodeID,
@@ -147,7 +147,7 @@ func (c *managementClient) Sync(ctx context.Context, logStreamID types.LogStream
 		},
 		LastGLSN: lastGLSN,
 	})
-	return rsp.GetState(), err
+	return rsp.GetStatus(), err
 }
 
 // Close closes connection to the storage node.
