@@ -5,18 +5,18 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/stringsutil"
-	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 )
 
 type ManagementClient interface {
 	PeerAddress() string
 	PeerStorageNodeID() types.StorageNodeID
-	GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
 	AddLogStream(ctx context.Context, logStreamID types.LogStreamID, path string) error
 	RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error
-	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error)
+	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
 	Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (snpb.SyncState, error)
 	Close() error
@@ -76,7 +76,7 @@ func (c managementClient) PeerStorageNodeID() types.StorageNodeID {
 	return c.storageNodeID
 }
 
-func (c *managementClient) GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
+func (c *managementClient) GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
 		ClusterID:    c.clusterID,
 		MetadataType: metadataType,
@@ -97,7 +97,7 @@ func (c *managementClient) AddLogStream(ctx context.Context, lsid types.LogStrea
 		ClusterID:     c.clusterID,
 		StorageNodeID: c.storageNodeID,
 		LogStreamID:   lsid,
-		Storage: &vpb.StorageDescriptor{
+		Storage: &varlogpb.StorageDescriptor{
 			Path: path,
 		},
 	})
@@ -115,7 +115,7 @@ func (c *managementClient) RemoveLogStream(ctx context.Context, lsid types.LogSt
 	return err
 }
 
-func (c *managementClient) Seal(ctx context.Context, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error) {
+func (c *managementClient) Seal(ctx context.Context, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	// TODO(jun): Check ranges CID, SNID and LSID
 	rsp, err := c.rpcClient.Seal(ctx, &snpb.SealRequest{
 		ClusterID:         c.clusterID,

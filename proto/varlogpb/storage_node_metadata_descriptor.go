@@ -1,4 +1,4 @@
-package varlog
+package varlogpb
 
 import "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 

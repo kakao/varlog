@@ -1,11 +1,11 @@
-package metadata_repository
+package mrpb
 
 import (
 	"sort"
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 func (s *MetadataRepositoryDescriptor) LookupGlobalLogStreamByPrev(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {

@@ -10,7 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	storage_node "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 // MockReplicatorClient is a mock of ReplicatorClient interface.
@@ -93,7 +93,7 @@ func (mr *MockReplicatorClientMockRecorder) PeerStorageNodeID() *gomock.Call {
 }
 
 // SyncReplicate mocks base method.
-func (m *MockReplicatorClient) SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current storage_node.SyncPosition, data []byte) error {
+func (m *MockReplicatorClient) SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current snpb.SyncPosition, data []byte) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncReplicate", ctx, logStreamID, first, last, current, data)
 	ret0, _ := ret[0].(error)

@@ -7,7 +7,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"google.golang.org/grpc/codes"
 )
 
@@ -160,7 +160,7 @@ func (e Error) Status() (*status.Status, error) {
 
 	var details []proto.Message
 	for err != nil {
-		detail := &vpb.ErrorDetail{}
+		detail := &varlogpb.ErrorDetail{}
 		if ve, ok := err.(*Error); ok {
 			detail.Desc = ve.desc
 			detail.IsVarlogError = true
@@ -256,7 +256,7 @@ func fromStatus(status *status.Status) error {
 	}
 	var cause error
 	for i := len(details) - 1; i >= 0; i-- {
-		detail, ok := details[i].(*vpb.ErrorDetail)
+		detail, ok := details[i].(*varlogpb.ErrorDetail)
 		if !ok {
 			continue
 		}

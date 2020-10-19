@@ -9,8 +9,8 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
-	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 )
 
@@ -19,7 +19,7 @@ var (
 )
 
 type Sealer interface {
-	Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN)
+	Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN)
 }
 
 type Unsealer interface {
@@ -47,7 +47,7 @@ type LogStreamExecutor interface {
 	Close()
 
 	LogStreamID() types.LogStreamID
-	Status() vpb.LogStreamStatus
+	Status() varlogpb.LogStreamStatus
 
 	Read(ctx context.Context, glsn types.GLSN) (varlog.LogEntry, error)
 	Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan ScanResult, error)
@@ -149,7 +149,7 @@ type logStreamExecutor struct {
 
 	trackers appendTaskTracker
 
-	status   vpb.LogStreamStatus
+	status   varlogpb.LogStreamStatus
 	muStatus sync.RWMutex
 	muSeal   sync.Mutex
 
@@ -185,7 +185,7 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 		committedLLSNEnd:     types.MinLLSN,
 		localLowWatermark:    types.AtomicGLSN(types.MinGLSN),
 		localHighWatermark:   types.AtomicGLSN(types.InvalidGLSN),
-		status:               vpb.LogStreamStatusRunning,
+		status:               varlogpb.LogStreamStatusRunning,
 		syncTracker:          make(map[types.StorageNodeID]*SyncTaskStatus),
 		logger:               logger,
 		options:              options,
@@ -267,7 +267,7 @@ func (lse *logStreamExecutor) exhaustAppendTrackers() {
 	})
 }
 
-func (lse *logStreamExecutor) Status() vpb.LogStreamStatus {
+func (lse *logStreamExecutor) Status() varlogpb.LogStreamStatus {
 	lse.muStatus.RLock()
 	defer lse.muStatus.RUnlock()
 	return lse.status
@@ -278,7 +278,7 @@ func (lse *logStreamExecutor) isSealed() bool {
 	return status.Sealed()
 }
 
-func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN) {
+func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN) {
 	// process seal request one by one
 	lse.muSeal.Lock()
 	defer lse.muSeal.Unlock()
@@ -290,14 +290,14 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamS
 			zap.Any("lastCommittedGLSN", lastCommittedGLSN),
 		)
 	}
-	status := vpb.LogStreamStatusSealed
+	status := varlogpb.LogStreamStatusSealed
 	if localHWM < lastCommittedGLSN {
-		status = vpb.LogStreamStatusSealing
+		status = varlogpb.LogStreamStatusSealing
 	}
 	lse.seal(status, false)
 
 	// delete uncommitted logs those positions are larger than lastCommittedGLSN
-	if status == vpb.LogStreamStatusSealed {
+	if status == varlogpb.LogStreamStatusSealed {
 		lastCommittedLLSN := types.InvalidLLSN
 		// Find lastCommittedLLSN by using lastCommittedGLSN
 		logEntry, err := lse.storage.Read(lastCommittedGLSN)
@@ -326,18 +326,18 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (vpb.LogStreamS
 func (lse *logStreamExecutor) Unseal() error {
 	lse.muStatus.Lock()
 	defer lse.muStatus.Unlock()
-	if lse.status == vpb.LogStreamStatusSealed {
-		lse.status = vpb.LogStreamStatusRunning
+	if lse.status == varlogpb.LogStreamStatusSealed {
+		lse.status = varlogpb.LogStreamStatusRunning
 		return nil
 	}
 	return fmt.Errorf("logstream: unseal error (status=%v)", lse.status)
 }
 
 func (lse *logStreamExecutor) sealItself() {
-	lse.seal(vpb.LogStreamStatusSealing, true)
+	lse.seal(varlogpb.LogStreamStatusSealing, true)
 }
 
-func (lse *logStreamExecutor) seal(status vpb.LogStreamStatus, itself bool) {
+func (lse *logStreamExecutor) seal(status varlogpb.LogStreamStatus, itself bool) {
 	lse.muStatus.Lock()
 	defer lse.muStatus.Unlock()
 	if !itself || lse.status.Running() {
@@ -648,10 +648,10 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 		defer lse.muStatus.RUnlock()
 
 		switch lse.status {
-		case vpb.LogStreamStatusRunning:
+		case varlogpb.LogStreamStatusRunning:
 			lse.trackers.track(llsn, t)
 			return nil
-		case vpb.LogStreamStatusDeleted:
+		case varlogpb.LogStreamStatusDeleted:
 			lse.logger.Panic("invalid LogStreamStatus", zap.Any("status", lse.status))
 			return varlog.ErrInternal
 		default:
@@ -844,7 +844,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 
 func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLSN types.GLSN) (*SyncTaskStatus, error) {
 	// TODO (jun): Delete SyncTaskStatus, but when?
-	if status := lse.Status(); status != vpb.LogStreamStatusSealed {
+	if status := lse.Status(); status != varlogpb.LogStreamStatusSealed {
 		lse.logger.Error("bad status to sync", zap.Any("status", status))
 		return nil, fmt.Errorf("bad status (%v) to sync", status)
 	}
@@ -968,7 +968,7 @@ func (lse *logStreamExecutor) getLogPosition(glsn types.GLSN) (types.LLSN, error
 
 func (lse *logStreamExecutor) SyncReplicate(ctx context.Context, first, last, current snpb.SyncPosition, data []byte) error {
 	// TODO (jun): prevent from triggering Sync from multiple sources
-	if status := lse.Status(); status != vpb.LogStreamStatusSealing {
+	if status := lse.Status(); status != varlogpb.LogStreamStatusSealing {
 		lse.logger.Error("bad status to syncreplicate", zap.Any("status", status))
 		return fmt.Errorf("bad status (%v) to syncreplicate", status)
 	}

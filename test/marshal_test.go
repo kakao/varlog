@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	mrpb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
-	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 func TestSnapshotMarshal(t *testing.T) {

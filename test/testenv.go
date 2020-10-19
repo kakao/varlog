@@ -15,9 +15,8 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/vms"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/proto/storage_node"
-	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 	"go.uber.org/zap"
 )
@@ -265,12 +264,12 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 		return types.StorageNodeID(0), err
 	}
 
-	snd := &vpb.StorageNodeDescriptor{
+	snd := &varlogpb.StorageNodeDescriptor{
 		StorageNodeID: snID,
 		Address:       meta.StorageNode.Address,
 		Status:        meta.StorageNode.Status,
-		Storages: []*vpb.StorageDescriptor{
-			&vpb.StorageDescriptor{
+		Storages: []*varlogpb.StorageDescriptor{
+			&varlogpb.StorageDescriptor{
 				Path:  "tmp",
 				Used:  0,
 				Total: 100,
@@ -300,7 +299,7 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 		return types.StorageNodeID(0), err
 	}
 
-	var meta *vpb.StorageNodeMetadataDescriptor
+	var meta *varlogpb.StorageNodeMetadataDescriptor
 	if err = sn.Run(); err != nil {
 		goto err_out
 	}
@@ -339,9 +338,9 @@ func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(snIDs), func(i, j int) { snIDs[i], snIDs[j] = snIDs[j], snIDs[i] })
 
-	replicas := make([]*vpb.ReplicaDescriptor, 0, clus.NrRep)
+	replicas := make([]*varlogpb.ReplicaDescriptor, 0, clus.NrRep)
 	for i := 0; i < clus.NrRep; i++ {
-		replicas = append(replicas, &vpb.ReplicaDescriptor{StorageNodeID: snIDs[i], Path: "tmp"})
+		replicas = append(replicas, &varlogpb.ReplicaDescriptor{StorageNodeID: snIDs[i], Path: "tmp"})
 	}
 
 	for _, r := range replicas {
@@ -351,7 +350,7 @@ func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 		}
 	}
 
-	ls := &vpb.LogStreamDescriptor{
+	ls := &varlogpb.LogStreamDescriptor{
 		LogStreamID: lsID,
 		Replicas:    replicas,
 	}
@@ -394,7 +393,7 @@ func (clus *VarlogCluster) getSN(lsID types.LogStreamID, idx int) (*storage.Stor
 		return nil, varlog.ErrInvalid
 	}
 
-	var meta *vpb.MetadataDescriptor
+	var meta *varlogpb.MetadataDescriptor
 	var err error
 	for _, mr := range clus.MRs {
 		meta, err = mr.GetMetadata(context.TODO())
@@ -438,7 +437,7 @@ func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (varlog.LogIOC
 		return nil, err
 	}
 
-	snMeta, err := sn.GetMetadata(clus.ClusterID, storage_node.MetadataTypeHeartbeat)
+	snMeta, err := sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"math/rand"
 
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 var errNotEnoughStorageNodes = errors.New("storagenodeselector: not enough storage nodes")
@@ -13,7 +13,7 @@ var errNotEnoughStorageNodes = errors.New("storagenodeselector: not enough stora
 // StorStorageNodeSelectionPolicy chooses the storage nodes to add a new log stream.
 type StorageNodeSelector interface {
 	// TODO (jun): Choose storage nodes and their storages!
-	SelectStorageNodeAndPath(ctx context.Context, replicationFactor uint) ([]*vpb.ReplicaDescriptor, error)
+	SelectStorageNodeAndPath(ctx context.Context, replicationFactor uint) ([]*varlogpb.ReplicaDescriptor, error)
 }
 
 // TODO: randomSNSelector does not consider the capacities and load of each SNs.
@@ -25,7 +25,7 @@ func NewRandomSNSelector(cmView ClusterMetadataView) StorageNodeSelector {
 	return &randomSNSelector{cmView: cmView}
 }
 
-func (sel *randomSNSelector) SelectStorageNodeAndPath(ctx context.Context, replicationFactor uint) ([]*vpb.ReplicaDescriptor, error) {
+func (sel *randomSNSelector) SelectStorageNodeAndPath(ctx context.Context, replicationFactor uint) ([]*varlogpb.ReplicaDescriptor, error) {
 	clusmeta, err := sel.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
@@ -35,10 +35,10 @@ func (sel *randomSNSelector) SelectStorageNodeAndPath(ctx context.Context, repli
 		return nil, errNotEnoughStorageNodes
 	}
 	indices := rand.Perm(len(snDescList))[:replicationFactor]
-	ret := make([]*vpb.ReplicaDescriptor, 0, replicationFactor)
+	ret := make([]*varlogpb.ReplicaDescriptor, 0, replicationFactor)
 	for idx := range indices {
 		sndesc := snDescList[idx]
-		ret = append(ret, &vpb.ReplicaDescriptor{
+		ret = append(ret, &varlogpb.ReplicaDescriptor{
 			StorageNodeID: sndesc.GetStorageNodeID(),
 			Path:          sndesc.GetStorages()[0].Path,
 		})

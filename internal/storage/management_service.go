@@ -5,8 +5,8 @@ import (
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -49,10 +49,10 @@ func (s *managementService) AddLogStream(ctx context.Context, req *snpb.AddLogSt
 		return nil, varlog.ToStatusError(err)
 	}
 	return &snpb.AddLogStreamResponse{
-		LogStream: &vpb.LogStreamDescriptor{
+		LogStream: &varlogpb.LogStreamDescriptor{
 			LogStreamID: req.GetLogStreamID(),
-			Status:      vpb.LogStreamStatusRunning,
-			Replicas: []*vpb.ReplicaDescriptor{{
+			Status:      varlogpb.LogStreamStatusRunning,
+			Replicas: []*varlogpb.ReplicaDescriptor{{
 				StorageNodeID: req.GetStorageNodeID(),
 				Path:          path,
 			}},

@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package varlog.storagenode;
+package varlog.snpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "github.daumkakao.com/varlog/varlog/proto/storage_node";
+option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
 
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;

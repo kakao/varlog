@@ -11,8 +11,8 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	varlog "github.daumkakao.com/varlog/varlog/pkg/varlog"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	storage_node "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	varlog0 "github.daumkakao.com/varlog/varlog/proto/varlog"
+	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // MockSealer is a mock of Sealer interface.
@@ -39,10 +39,10 @@ func (m *MockSealer) EXPECT() *MockSealerMockRecorder {
 }
 
 // Seal mocks base method.
-func (m *MockSealer) Seal(lastCommittedGLSN types.GLSN) (varlog0.LogStreamStatus, types.GLSN) {
+func (m *MockSealer) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seal", lastCommittedGLSN)
-	ret0, _ := ret[0].(varlog0.LogStreamStatus)
+	ret0, _ := ret[0].(varlogpb.LogStreamStatus)
 	ret1, _ := ret[1].(types.GLSN)
 	return ret0, ret1
 }
@@ -129,7 +129,7 @@ func (mr *MockSyncerMockRecorder) Sync(ctx, replica, lastGLSN interface{}) *gomo
 }
 
 // SyncReplicate mocks base method.
-func (m *MockSyncer) SyncReplicate(ctx context.Context, first, last, current storage_node.SyncPosition, data []byte) error {
+func (m *MockSyncer) SyncReplicate(ctx context.Context, first, last, current snpb.SyncPosition, data []byte) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncReplicate", ctx, first, last, current, data)
 	ret0, _ := ret[0].(error)
@@ -206,10 +206,10 @@ func (mr *MockLogStreamExecutorMockRecorder) LogStreamID() *gomock.Call {
 }
 
 // Status mocks base method.
-func (m *MockLogStreamExecutor) Status() varlog0.LogStreamStatus {
+func (m *MockLogStreamExecutor) Status() varlogpb.LogStreamStatus {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Status")
-	ret0, _ := ret[0].(varlog0.LogStreamStatus)
+	ret0, _ := ret[0].(varlogpb.LogStreamStatus)
 	return ret0
 }
 
@@ -324,10 +324,10 @@ func (mr *MockLogStreamExecutorMockRecorder) Commit(ctx, commitResult interface{
 }
 
 // Seal mocks base method.
-func (m *MockLogStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlog0.LogStreamStatus, types.GLSN) {
+func (m *MockLogStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seal", lastCommittedGLSN)
-	ret0, _ := ret[0].(varlog0.LogStreamStatus)
+	ret0, _ := ret[0].(varlogpb.LogStreamStatus)
 	ret1, _ := ret[1].(types.GLSN)
 	return ret0, ret1
 }
@@ -368,7 +368,7 @@ func (mr *MockLogStreamExecutorMockRecorder) Sync(ctx, replica, lastGLSN interfa
 }
 
 // SyncReplicate mocks base method.
-func (m *MockLogStreamExecutor) SyncReplicate(ctx context.Context, first, last, current storage_node.SyncPosition, data []byte) error {
+func (m *MockLogStreamExecutor) SyncReplicate(ctx context.Context, first, last, current snpb.SyncPosition, data []byte) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncReplicate", ctx, first, last, current, data)
 	ret0, _ := ret[0].(error)

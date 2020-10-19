@@ -9,7 +9,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 func TestLogStreamReporterServiceGetReport(t *testing.T) {
@@ -54,10 +54,10 @@ func TestLogStreamReporterServiceCommit(t *testing.T) {
 
 			Convey("Then LogStreamReporterService.Commit should return an error", func() {
 				_, err := service.Commit(context.TODO(),
-					&pb.GlobalLogStreamDescriptor{
+					&snpb.GlobalLogStreamDescriptor{
 						HighWatermark:     types.MinGLSN,
 						PrevHighWatermark: types.InvalidGLSN,
-						CommitResult: []*pb.GlobalLogStreamDescriptor_LogStreamCommitResult{
+						CommitResult: []*snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
 							{
 								LogStreamID:         types.LogStreamID(0),
 								CommittedGLSNOffset: types.MinGLSN,

@@ -6,13 +6,13 @@ import (
 	"io"
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 type replicationContext struct {
-	req *pb.ReplicationRequest
+	req *snpb.ReplicationRequest
 	err error
 }
 
@@ -24,7 +24,7 @@ const (
 type ReplicatorService struct {
 	storageNodeID types.StorageNodeID
 	lseGetter     LogStreamExecutorGetter
-	pb.UnimplementedReplicatorServiceServer
+	snpb.UnimplementedReplicatorServiceServer
 	logger *zap.Logger
 }
 
@@ -42,10 +42,10 @@ func NewReplicatorService(storageNodeID types.StorageNodeID, lseGetter LogStream
 
 func (s *ReplicatorService) Register(server *grpc.Server) {
 	s.logger.Info("register to rpc server")
-	pb.RegisterReplicatorServiceServer(server, s)
+	snpb.RegisterReplicatorServiceServer(server, s)
 }
 
-func (s *ReplicatorService) Replicate(stream pb.ReplicatorService_ReplicateServer) error {
+func (s *ReplicatorService) Replicate(stream snpb.ReplicatorService_ReplicateServer) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := s.send(ctx, stream, s.replicate(ctx, s.recv(ctx, stream)))
@@ -61,11 +61,11 @@ func (s *ReplicatorService) Replicate(stream pb.ReplicatorService_ReplicateServe
 	return fmt.Errorf("stream is broken")
 }
 
-func (s *ReplicatorService) recv(ctx context.Context, stream pb.ReplicatorService_ReplicateServer) <-chan *replicationContext {
+func (s *ReplicatorService) recv(ctx context.Context, stream snpb.ReplicatorService_ReplicateServer) <-chan *replicationContext {
 	c := make(chan *replicationContext, replicationContextCSize)
 	go func() {
 		defer close(c)
-		var req *pb.ReplicationRequest
+		var req *snpb.ReplicationRequest
 		var err error
 		for {
 			req, err = stream.Recv()
@@ -114,14 +114,14 @@ func (s *ReplicatorService) replicate(ctx context.Context, repCtxC <-chan *repli
 	return c
 }
 
-func (s *ReplicatorService) send(ctx context.Context, stream pb.ReplicatorService_ReplicateServer, repCtxC <-chan *replicationContext) <-chan *replicationContext {
+func (s *ReplicatorService) send(ctx context.Context, stream snpb.ReplicatorService_ReplicateServer, repCtxC <-chan *replicationContext) <-chan *replicationContext {
 	c := make(chan *replicationContext, replicationContextCSize)
 	go func() {
 		defer close(c)
 		var err error
 		for repCtx := range repCtxC {
 			if repCtx.err == nil {
-				err = stream.Send(&pb.ReplicationResponse{
+				err = stream.Send(&snpb.ReplicationResponse{
 					StorageNodeID: s.storageNodeID,
 					LogStreamID:   repCtx.req.GetLogStreamID(),
 					LLSN:          repCtx.req.GetLLSN(),
@@ -141,11 +141,11 @@ func (s *ReplicatorService) send(ctx context.Context, stream pb.ReplicatorServic
 	return c
 }
 
-func (s *ReplicatorService) SyncReplicate(ctx context.Context, req *pb.SyncReplicateRequest) (*pb.SyncReplicateResponse, error) {
+func (s *ReplicatorService) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateRequest) (*snpb.SyncReplicateResponse, error) {
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		return nil, fmt.Errorf("no logstreamexecutor: %v", req.GetLogStreamID())
 	}
 	err := lse.SyncReplicate(ctx, req.GetFirst(), req.GetLast(), req.GetCurrent(), req.GetData())
-	return &pb.SyncReplicateResponse{}, err
+	return &snpb.SyncReplicateResponse{}, err
 }

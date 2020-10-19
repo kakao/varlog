@@ -3,9 +3,9 @@ package varlog
 import (
 	"context"
 
-	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	pb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
-	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type MetadataRepositoryClient interface {
@@ -22,7 +22,7 @@ type MetadataRepositoryClient interface {
 
 type metadataRepositoryClient struct {
 	rpcConn *RpcConn
-	client  pb.MetadataRepositoryServiceClient
+	client  mrpb.MetadataRepositoryServiceClient
 }
 
 func NewMetadataRepositoryClient(address string) (MetadataRepositoryClient, error) {
@@ -36,7 +36,7 @@ func NewMetadataRepositoryClient(address string) (MetadataRepositoryClient, erro
 func NewMetadataRepositoryClientFromRpcConn(rpcConn *RpcConn) (MetadataRepositoryClient, error) {
 	client := &metadataRepositoryClient{
 		rpcConn: rpcConn,
-		client:  pb.NewMetadataRepositoryServiceClient(rpcConn.Conn),
+		client:  mrpb.NewMetadataRepositoryServiceClient(rpcConn.Conn),
 	}
 	return client, nil
 }
@@ -50,7 +50,7 @@ func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *
 		return ErrInvalid
 	}
 
-	req := &pb.StorageNodeRequest{
+	req := &mrpb.StorageNodeRequest{
 		StorageNode: sn,
 	}
 
@@ -59,7 +59,7 @@ func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *
 }
 
 func (c *metadataRepositoryClient) UnregisterStorageNode(ctx context.Context, snID types.StorageNodeID) error {
-	req := &pb.StorageNodeRequest{
+	req := &mrpb.StorageNodeRequest{
 		StorageNode: &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: snID,
 		},
@@ -74,7 +74,7 @@ func (c *metadataRepositoryClient) RegisterLogStream(ctx context.Context, ls *va
 		return ErrInvalid
 	}
 
-	req := &pb.LogStreamRequest{
+	req := &mrpb.LogStreamRequest{
 		LogStream: ls,
 	}
 	_, err := c.client.RegisterLogStream(ctx, req)
@@ -82,7 +82,7 @@ func (c *metadataRepositoryClient) RegisterLogStream(ctx context.Context, ls *va
 }
 
 func (c *metadataRepositoryClient) UnregisterLogStream(ctx context.Context, lsID types.LogStreamID) error {
-	req := &pb.LogStreamRequest{
+	req := &mrpb.LogStreamRequest{
 		LogStream: &varlogpb.LogStreamDescriptor{
 			LogStreamID: lsID,
 		},
@@ -96,7 +96,7 @@ func (c *metadataRepositoryClient) UpdateLogStream(ctx context.Context, ls *varl
 		return ErrInvalid
 	}
 
-	req := &pb.LogStreamRequest{
+	req := &mrpb.LogStreamRequest{
 		LogStream: ls,
 	}
 	_, err := c.client.UpdateLogStream(ctx, req)
@@ -104,7 +104,7 @@ func (c *metadataRepositoryClient) UpdateLogStream(ctx context.Context, ls *varl
 }
 
 func (c *metadataRepositoryClient) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
-	rsp, err := c.client.GetMetadata(ctx, &pb.GetMetadataRequest{})
+	rsp, err := c.client.GetMetadata(ctx, &mrpb.GetMetadataRequest{})
 	if err != nil {
 		return nil, ToErr(ctx, err)
 	}
@@ -112,7 +112,7 @@ func (c *metadataRepositoryClient) GetMetadata(ctx context.Context) (*varlogpb.M
 }
 
 func (c *metadataRepositoryClient) Seal(ctx context.Context, lsID types.LogStreamID) (types.GLSN, error) {
-	rsp, err := c.client.Seal(ctx, &pb.SealRequest{LogStreamID: lsID})
+	rsp, err := c.client.Seal(ctx, &mrpb.SealRequest{LogStreamID: lsID})
 	if err != nil {
 		return types.InvalidGLSN, ToErr(ctx, err)
 	}
@@ -121,7 +121,7 @@ func (c *metadataRepositoryClient) Seal(ctx context.Context, lsID types.LogStrea
 }
 
 func (c *metadataRepositoryClient) Unseal(ctx context.Context, lsID types.LogStreamID) error {
-	_, err := c.client.Unseal(ctx, &pb.UnsealRequest{})
+	_, err := c.client.Unseal(ctx, &mrpb.UnsealRequest{LogStreamID: lsID})
 	if err != nil {
 		return ToErr(ctx, err)
 	}

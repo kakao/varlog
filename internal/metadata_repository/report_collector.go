@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.daumkakao.com/varlog/varlog/internal/storage"
-	varlog "github.daumkakao.com/varlog/varlog/pkg/varlog"
-	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil/atomicutil"
-	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 
 	"go.uber.org/zap"
 )

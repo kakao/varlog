@@ -15,9 +15,8 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
-	snpb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 	"go.uber.org/zap"
 
@@ -797,6 +796,7 @@ func TestVarlogManagerServer(t *testing.T) {
 			logStreamDesc, err := cmcli.AddLogStream(context.TODO(), nil)
 			So(err, ShouldBeNil)
 			So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
+			logStreamID := logStreamDesc.GetLogStreamID()
 
 			// pass since NrRep equals to NrSN
 			var snidList []types.StorageNodeID
@@ -809,10 +809,10 @@ func TestVarlogManagerServer(t *testing.T) {
 
 			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
-			So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
+			So(clusmeta.GetLogStream(logStreamID), ShouldNotBeNil)
 
 			Convey("Seal", func() {
-				lsmetaList, err := cmcli.Seal(context.TODO(), logStreamDesc.GetLogStreamID())
+				lsmetaList, err := cmcli.Seal(context.TODO(), logStreamID)
 				So(err, ShouldBeNil)
 				So(len(lsmetaList), ShouldEqual, opts.NrRep)
 				So(lsmetaList[0].HighWatermark, ShouldEqual, types.InvalidGLSN)
@@ -820,23 +820,35 @@ func TestVarlogManagerServer(t *testing.T) {
 				// check MR metadata: sealed
 				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
-				lsdesc := clusmeta.GetLogStream(logStreamDesc.GetLogStreamID())
+				lsdesc := clusmeta.GetLogStream(logStreamID)
 				So(lsdesc, ShouldNotBeNil)
-				So(lsdesc.GetStatus(), ShouldEqual, vpb.LogStreamStatusSealed)
+				So(lsdesc.GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
+				So(len(lsdesc.GetReplicas()), ShouldEqual, opts.NrRep)
 
 				// check SN metadata: sealed
 				for _, sn := range env.SNs {
 					snmeta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
 					So(err, ShouldBeNil)
-					So(snmeta.GetLogStreams()[0].GetStatus(), ShouldEqual, vpb.LogStreamStatusSealed)
+					So(snmeta.GetLogStreams()[0].GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
 				}
+
+				Convey("Unseal", func() {
+					err := cmcli.Unseal(context.TODO(), logStreamID)
+					So(err, ShouldBeNil)
+
+					clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+					So(err, ShouldBeNil)
+					lsdesc := clusmeta.GetLogStream(logStreamID)
+					So(lsdesc, ShouldNotBeNil)
+					So(lsdesc.GetStatus(), ShouldEqual, varlogpb.LogStreamStatusRunning)
+				})
 			})
 		})
 
 		// replicas to add log stream
-		var replicas []*vpb.ReplicaDescriptor
+		var replicas []*varlogpb.ReplicaDescriptor
 		for snid := range env.SNs {
-			replica := &vpb.ReplicaDescriptor{
+			replica := &varlogpb.ReplicaDescriptor{
 				StorageNodeID: snid,
 				Path:          "/tmp",
 			}
@@ -1025,13 +1037,13 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 
 type testSnHandler struct {
 	hbC     chan types.StorageNodeID
-	reportC chan *vpb.StorageNodeMetadataDescriptor
+	reportC chan *varlogpb.StorageNodeMetadataDescriptor
 }
 
 func newTestSnHandler() *testSnHandler {
 	return &testSnHandler{
 		hbC:     make(chan types.StorageNodeID),
-		reportC: make(chan *vpb.StorageNodeMetadataDescriptor),
+		reportC: make(chan *varlogpb.StorageNodeMetadataDescriptor),
 	}
 }
 
@@ -1042,7 +1054,7 @@ func (sh *testSnHandler) HeartbeatTimeout(snID types.StorageNodeID) {
 	}
 }
 
-func (sh *testSnHandler) Report(sn *vpb.StorageNodeMetadataDescriptor) {
+func (sh *testSnHandler) Report(sn *varlogpb.StorageNodeMetadataDescriptor) {
 	select {
 	case sh.reportC <- sn:
 	default:

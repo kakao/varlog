@@ -1,4 +1,4 @@
-package varlog
+package varlogpb
 
 import (
 	"errors"

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/types"
-	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -24,11 +24,11 @@ func NewLogStreamReporterService(lsr LogStreamReporter, logger *zap.Logger) *Log
 
 func (s *LogStreamReporterService) Register(server *grpc.Server) {
 	s.logger.Info("register to rpc server")
-	pb.RegisterLogStreamReporterServiceServer(server, s)
+	snpb.RegisterLogStreamReporterServiceServer(server, s)
 }
 
-func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty) (*pb.LocalLogStreamDescriptor, error) {
-	rsp := &pb.LocalLogStreamDescriptor{
+func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty) (*snpb.LocalLogStreamDescriptor, error) {
+	rsp := &snpb.LocalLogStreamDescriptor{
 		StorageNodeID: s.StorageNodeID(),
 	}
 	knownHighWatermark, reports, err := s.LogStreamReporter.GetReport(ctx)
@@ -36,10 +36,10 @@ func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty
 		s.logger.Error("could not get report", zap.Error(err))
 		return nil, err
 	}
-	rsp.Uncommit = make([]*pb.LocalLogStreamDescriptor_LogStreamUncommitReport, 0, len(reports))
+	rsp.Uncommit = make([]*snpb.LocalLogStreamDescriptor_LogStreamUncommitReport, 0, len(reports))
 	for _, report := range reports {
 		rsp.Uncommit = append(rsp.Uncommit,
-			&pb.LocalLogStreamDescriptor_LogStreamUncommitReport{
+			&snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
 				LogStreamID:           report.LogStreamID,
 				UncommittedLLSNOffset: report.UncommittedLLSNOffset,
 				UncommittedLLSNLength: report.UncommittedLLSNLength,
@@ -50,7 +50,7 @@ func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty
 	return rsp, nil
 }
 
-func (s *LogStreamReporterService) Commit(ctx context.Context, req *pb.GlobalLogStreamDescriptor) (*types.Empty, error) {
+func (s *LogStreamReporterService) Commit(ctx context.Context, req *snpb.GlobalLogStreamDescriptor) (*types.Empty, error) {
 	if len(req.CommitResult) == 0 {
 		s.logger.Error("no commit result in Commit")
 		return &types.Empty{}, nil

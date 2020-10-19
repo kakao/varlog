@@ -1,13 +1,14 @@
 syntax = "proto3";
 
-package varlog.storagenode;
+package varlog.snpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
-import "varlog/metadata.proto";
-import "storage_node/replicator.proto";
 
-option go_package = "github.daumkakao.com/varlog/varlog/proto/storage_node";
+import "varlogpb/metadata.proto";
+import "snpb/replicator.proto";
+
+option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
 
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -32,7 +33,7 @@ message GetMetadataRequest {
 }
 
 message GetMetadataResponse {
-    varlog.StorageNodeMetadataDescriptor storage_node_metadata = 1;
+    varlogpb.StorageNodeMetadataDescriptor storage_node_metadata = 1;
 }
 
 message AddLogStreamRequest {
@@ -51,11 +52,11 @@ message AddLogStreamRequest {
             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    varlog.StorageDescriptor storage = 4;
+    varlogpb.StorageDescriptor storage = 4;
 }
 message AddLogStreamResponse {
     // TODO (jun): Use LogStreamMetadataDescriptor
-    varlog.LogStreamDescriptor log_stream = 1;
+    varlogpb.LogStreamDescriptor log_stream = 1;
 }
 
 message RemoveLogStreamRequest {
@@ -100,7 +101,7 @@ message SealRequest {
 }
 
 message SealResponse {
-    varlog.LogStreamStatus status = 1;
+    varlogpb.LogStreamStatus status = 1;
     uint64 last_committed_glsn = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",

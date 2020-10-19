@@ -11,7 +11,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner/stopwaiter"
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -20,18 +20,18 @@ import (
 type StorageNodeEventHandler interface {
 	HeartbeatTimeout(types.StorageNodeID)
 
-	Report(*vpb.StorageNodeMetadataDescriptor)
+	Report(*varlogpb.StorageNodeMetadataDescriptor)
 }
 
 // ClusterManager manages varlog cluster.
 type ClusterManager interface {
 	// AddStorageNode adds new StorageNode to the cluster.
-	AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error)
+	AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
-	AddLogStream(ctx context.Context, replicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error)
+	AddLogStream(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
-	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]vpb.LogStreamMetadataDescriptor, error)
+	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
 
 	// Sync copies the log entries of the src to the dst. Sync may be long-running, thus it
 	// returns immediately without waiting for the completion of sync. Callers of Sync
@@ -48,7 +48,7 @@ type ClusterManager interface {
 	// Unseal unseals the log stream replicas corresponded with the given logStreamID.
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
 
-	Metadata(ctx context.Context) (*vpb.MetadataDescriptor, error)
+	Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error)
 
 	Run() error
 
@@ -204,13 +204,13 @@ func (cm *clusterManager) Close() {
 	cm.logger.Info("stop")
 }
 
-func (cm *clusterManager) Metadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
+func (cm *clusterManager) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.cmView.ClusterMetadata(ctx)
 }
 
-func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error) {
+func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -248,7 +248,7 @@ err_out:
 	return nil, err
 }
 
-func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error) {
+func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -275,9 +275,9 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*vpb.Repl
 		return nil, err
 	}
 
-	logStreamDesc := &vpb.LogStreamDescriptor{
+	logStreamDesc := &varlogpb.LogStreamDescriptor{
 		LogStreamID: logStreamID,
-		Status:      vpb.LogStreamStatusRunning,
+		Status:      varlogpb.LogStreamStatusRunning,
 		Replicas:    replicas,
 	}
 
@@ -289,7 +289,7 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*vpb.Repl
 	return cm.addLogStream(ctx, logStreamDesc)
 }
 
-func (cm *clusterManager) verifyLogStream(clusterMetadata *vpb.MetadataDescriptor, logStreamDesc *vpb.LogStreamDescriptor) error {
+func (cm *clusterManager) verifyLogStream(clusterMetadata *varlogpb.MetadataDescriptor, logStreamDesc *varlogpb.LogStreamDescriptor) error {
 	replicas := logStreamDesc.GetReplicas()
 	// the number of logstream replica
 	if uint(len(replicas)) != cm.options.ReplicationFactor {
@@ -308,7 +308,7 @@ func (cm *clusterManager) verifyLogStream(clusterMetadata *vpb.MetadataDescripto
 	return nil
 }
 
-func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) (*vpb.LogStreamDescriptor, error) {
+func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	if err := cm.snMgr.AddLogStream(ctx, logStreamDesc); err != nil {
 		// Unlike verifyLogStream, ErrLogStreamAlreadyExists is transient error in here.
 		if errors.Is(err, varlog.ErrLogStreamAlreadyExists) {
@@ -322,7 +322,7 @@ func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *vpb.L
 	return logStreamDesc, cm.mrMgr.RegisterLogStream(ctx, logStreamDesc)
 }
 
-func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]vpb.LogStreamMetadataDescriptor, error) {
+func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error) {
 	lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
 	if err != nil {
 		cm.logger.Error("error while sealing by MR", zap.Error(err))
@@ -333,18 +333,19 @@ func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamI
 
 func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamID) error {
 	panic("not implemented")
-	// return cm.snMgr.Sync(ctx, logStreamID)
 }
 
 func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
-	panic("not implemented")
-	// return cm.snMgr.Unseal(ctx, logStreamID)
+	if err := cm.snMgr.Unseal(ctx, logStreamID); err != nil {
+		return err
+	}
+	return cm.mrMgr.Unseal(ctx, logStreamID)
 }
 
 func (cm *clusterManager) HeartbeatTimeout(snID types.StorageNodeID) {
 	// not implemented
 }
 
-func (cm *clusterManager) Report(sn *vpb.StorageNodeMetadataDescriptor) {
+func (cm *clusterManager) Report(sn *varlogpb.StorageNodeMetadataDescriptor) {
 	// not implemented
 }

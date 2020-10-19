@@ -9,8 +9,8 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	mrpb "github.daumkakao.com/varlog/varlog/proto/metadata_repository"
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 )
 
@@ -19,10 +19,10 @@ import (
 // TODO: See https://github.daumkakao.com/varlog/varlog/pull/198#discussion_r215542
 type ClusterMetadataView interface {
 	// ClusterMetadata returns the latest metadata of the cluster.
-	ClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error)
+	ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error)
 
 	// StorageNode returns the storage node corresponded with the storageNodeID.
-	StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeDescriptor, error)
+	StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error)
 
 	// LogStreamReplicas returns all of the latest LogStreamReplicaMetas for the given
 	// logStreamID. The first element of the returned LogStreamReplicaMeta list is the primary
@@ -43,15 +43,15 @@ type MetadataRepositoryManager interface {
 	//MetadataGetter
 	io.Closer
 
-	RegisterStorageNode(ctx context.Context, storageNodeMeta *vpb.StorageNodeDescriptor) error
+	RegisterStorageNode(ctx context.Context, storageNodeMeta *varlogpb.StorageNodeDescriptor) error
 
 	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error
 
-	RegisterLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error
+	RegisterLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error
 
 	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error
 
-	UpdateLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error
+	UpdateLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error
 
 	// Seal seals logstream corresponded with the logStreamID. It marks the logstream in the
 	// cluster metadata stored in MR  as sealed. It returns the last committed GLSN that is
@@ -84,7 +84,7 @@ type mrManager struct {
 	mcli            varlog.MetadataRepositoryManagementClient
 
 	dirty bool
-	meta  *vpb.MetadataDescriptor
+	meta  *varlogpb.MetadataDescriptor
 
 	logger *zap.Logger
 }
@@ -213,7 +213,7 @@ func (mrm *mrManager) ClusterMetadataView() ClusterMetadataView {
 	return mrm
 }
 
-func (mrm *mrManager) clusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
+func (mrm *mrManager) clusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	cli := mrm.c()
 	if cli == nil {
 		return nil, varlog.ErrNotAccessible
@@ -227,7 +227,7 @@ func (mrm *mrManager) clusterMetadata(ctx context.Context) (*vpb.MetadataDescrip
 	return meta, err
 }
 
-func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *vpb.StorageNodeDescriptor) error {
+func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *varlogpb.StorageNodeDescriptor) error {
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
 
@@ -261,7 +261,7 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 	return err
 }
 
-func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error {
+func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
 
@@ -295,7 +295,7 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 	return err
 }
 
-func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error {
+func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
 
@@ -428,7 +428,7 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 	return nil
 }
 
-func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*vpb.MetadataDescriptor, error) {
+func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
 
@@ -443,7 +443,7 @@ func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*vpb.MetadataDescrip
 	return mrm.meta, nil
 }
 
-func (mrm *mrManager) StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeDescriptor, error) {
+func (mrm *mrManager) StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error) {
 	meta, err := mrm.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err

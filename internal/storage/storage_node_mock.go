@@ -10,8 +10,8 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	storage_node "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	varlog "github.daumkakao.com/varlog/varlog/proto/varlog"
+	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // MockManagement is a mock of Management interface.
@@ -38,10 +38,10 @@ func (m *MockManagement) EXPECT() *MockManagementMockRecorder {
 }
 
 // GetMetadata mocks base method.
-func (m *MockManagement) GetMetadata(clusterID types.ClusterID, metadataType storage_node.MetadataType) (*varlog.StorageNodeMetadataDescriptor, error) {
+func (m *MockManagement) GetMetadata(clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadata", clusterID, metadataType)
-	ret0, _ := ret[0].(*varlog.StorageNodeMetadataDescriptor)
+	ret0, _ := ret[0].(*varlogpb.StorageNodeMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -82,10 +82,10 @@ func (mr *MockManagementMockRecorder) RemoveLogStream(clusterID, storageNodeID, 
 }
 
 // Seal mocks base method.
-func (m *MockManagement) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlog.LogStreamStatus, types.GLSN, error) {
+func (m *MockManagement) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seal", clusterID, storageNodeID, logStreamID, lastCommittedGLSN)
-	ret0, _ := ret[0].(varlog.LogStreamStatus)
+	ret0, _ := ret[0].(varlogpb.LogStreamStatus)
 	ret1, _ := ret[1].(types.GLSN)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -112,10 +112,10 @@ func (mr *MockManagementMockRecorder) Unseal(clusterID, storageNodeID, logStream
 }
 
 // Sync mocks base method.
-func (m *MockManagement) Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (storage_node.SyncState, error) {
+func (m *MockManagement) Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (snpb.SyncState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", ctx, clusterID, storageNodeID, logStreamID, replica, lastGLSN)
-	ret0, _ := ret[0].(storage_node.SyncState)
+	ret0, _ := ret[0].(snpb.SyncState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

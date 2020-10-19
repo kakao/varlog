@@ -11,8 +11,8 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
-	"github.daumkakao.com/varlog/varlog/proto/storage_node/mock"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/snpb/mock"
 	"go.uber.org/zap"
 )
 
@@ -34,20 +34,20 @@ func TestReplicatorClientReplicate(t *testing.T) {
 
 		stop := make(chan struct{})
 		mockStream := mock.NewMockReplicatorService_ReplicateClient(ctrl)
-		mockStream.EXPECT().Recv().DoAndReturn(func() (*pb.ReplicationResponse, error) {
+		mockStream.EXPECT().Recv().DoAndReturn(func() (*snpb.ReplicationResponse, error) {
 			<-stop
 			return nil, io.EOF
 		}).AnyTimes()
 		mockStream.EXPECT().CloseSend().AnyTimes()
 		mockStream.EXPECT().Send(gomock.Any()).DoAndReturn(
-			func(*pb.ReplicationRequest) error {
+			func(*snpb.ReplicationRequest) error {
 				<-stop
 				return nil
 			},
 		).AnyTimes()
 
 		mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-			func(context.Context) (pb.ReplicatorService_ReplicateClient, error) {
+			func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
 				return mockStream, nil
 			},
 		).AnyTimes()
@@ -92,7 +92,7 @@ func TestReplicatorClient(t *testing.T) {
 			mockStream.EXPECT().Recv().Return(nil, io.EOF).AnyTimes()
 			mockStream.EXPECT().CloseSend().MinTimes(1)
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (pb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)
@@ -121,7 +121,7 @@ func TestReplicatorClient(t *testing.T) {
 			mockStream.EXPECT().Recv().Return(nil, io.EOF).AnyTimes()
 			mockStream.EXPECT().CloseSend().MinTimes(1)
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (pb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)
@@ -140,19 +140,19 @@ func TestReplicatorClient(t *testing.T) {
 
 		Convey("it should not replicate data when occurred send error", func() {
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (pb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)
 
 			stop := make(chan struct{})
 			mockStream.EXPECT().Send(gomock.Any()).DoAndReturn(
-				func(*pb.ReplicationRequest) error {
+				func(*snpb.ReplicationRequest) error {
 					defer close(stop)
 					return varlog.ErrInternal
 				},
 			).AnyTimes()
-			mockStream.EXPECT().Recv().DoAndReturn(func() (*pb.ReplicationResponse, error) {
+			mockStream.EXPECT().Recv().DoAndReturn(func() (*snpb.ReplicationResponse, error) {
 				<-stop
 				return nil, io.EOF
 			}).AnyTimes()
@@ -171,20 +171,20 @@ func TestReplicatorClient(t *testing.T) {
 
 		Convey("it should not replicate data when occurred receive error", func() {
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (pb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)
 
 			stop := make(chan struct{})
 			mockStream.EXPECT().Send(gomock.Any()).DoAndReturn(
-				func(*pb.ReplicationRequest) error {
+				func(*snpb.ReplicationRequest) error {
 					defer close(stop)
 					return nil
 				},
 			).AnyTimes()
 			mockStream.EXPECT().Recv().DoAndReturn(
-				func() (*pb.ReplicationResponse, error) {
+				func() (*snpb.ReplicationResponse, error) {
 					<-stop
 					return nil, varlog.ErrInternal
 				},
@@ -204,13 +204,13 @@ func TestReplicatorClient(t *testing.T) {
 
 		Convey("it should replicate data", func() {
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (pb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)
 			var step uint32 = 0
 			mockStream.EXPECT().Send(gomock.Any()).DoAndReturn(
-				func(*pb.ReplicationRequest) error {
+				func(*snpb.ReplicationRequest) error {
 					defer atomic.AddUint32(&step, 1)
 					for atomic.LoadUint32(&step)%2 == 1 {
 						time.Sleep(time.Millisecond)
@@ -219,7 +219,7 @@ func TestReplicatorClient(t *testing.T) {
 				},
 			).AnyTimes()
 			mockStream.EXPECT().Recv().DoAndReturn(
-				func() (*pb.ReplicationResponse, error) {
+				func() (*snpb.ReplicationResponse, error) {
 					if atomic.LoadUint32(&step) >= 2*N {
 						return nil, io.EOF
 					}
@@ -229,7 +229,7 @@ func TestReplicatorClient(t *testing.T) {
 						time.Sleep(time.Millisecond)
 					}
 
-					return &pb.ReplicationResponse{
+					return &snpb.ReplicationResponse{
 						StorageNodeID: types.StorageNodeID(0),
 						LogStreamID:   types.LogStreamID(0),
 						LLSN:          types.LLSN(atomic.LoadUint32(&step) / 2),

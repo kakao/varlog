@@ -3,8 +3,8 @@ package metadata_repository
 import (
 	"context"
 
-	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type MetadataRepository interface {

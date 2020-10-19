@@ -1,20 +1,21 @@
 syntax = "proto3";
 
-package varlog;
+package varlog.mrpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-import "varlog/metadata.proto";
-import "storage_node/log_stream_reporter.proto";
+import "varlogpb/metadata.proto";
+import "snpb/log_stream_reporter.proto";
 
-option go_package = "github.daumkakao.com/varlog/varlog/proto/metadata_repository";
+option go_package = "github.daumkakao.com/varlog/varlog/proto/mrpb";
 
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
 message RegisterStorageNode {
-    StorageNodeDescriptor storage_node = 1 [(gogoproto.nullable) = true];
+    varlogpb.StorageNodeDescriptor storage_node = 1
+        [(gogoproto.nullable) = true];
 }
 
 message UnregisterStorageNode {
@@ -26,7 +27,7 @@ message UnregisterStorageNode {
 }
 
 message RegisterLogStream {
-    LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
+    varlogpb.LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
 }
 
 message UnregisterLogStream {
@@ -38,12 +39,11 @@ message UnregisterLogStream {
 }
 
 message UpdateLogStream {
-    LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
+    varlogpb.LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
 }
 
 message Report {
-    varlog.storagenode.LocalLogStreamDescriptor log_stream = 1
-        [(gogoproto.nullable) = true];
+    snpb.LocalLogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
 }
 
 message Commit {}

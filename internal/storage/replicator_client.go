@@ -11,7 +11,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil/atomicutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/timeutil"
-	pb "github.daumkakao.com/varlog/varlog/proto/storage_node"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -29,7 +29,7 @@ type ReplicatorClient interface {
 	Close() error
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) <-chan error
 	PeerStorageNodeID() types.StorageNodeID
-	SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current pb.SyncPosition, data []byte) error
+	SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current snpb.SyncPosition, data []byte) error
 }
 
 type replicatorClient struct {
@@ -37,8 +37,8 @@ type replicatorClient struct {
 	peerLogStreamID   types.LogStreamID
 
 	rpcConn   *varlog.RpcConn
-	rpcClient pb.ReplicatorServiceClient
-	stream    pb.ReplicatorService_ReplicateClient
+	rpcClient snpb.ReplicatorServiceClient
+	stream    snpb.ReplicatorService_ReplicateClient
 
 	once   syncutil.OnlyOnce
 	cancel context.CancelFunc
@@ -46,7 +46,7 @@ type replicatorClient struct {
 	muErrCs sync.Mutex
 	errCs   map[types.LLSN]chan<- error
 
-	requestC chan *pb.ReplicationRequest
+	requestC chan *snpb.ReplicationRequest
 
 	runner *runner.Runner
 	logger *zap.Logger
@@ -75,9 +75,9 @@ func NewReplicatorClientFromRpcConn(peerStorageNodeID types.StorageNodeID, peerL
 		peerStorageNodeID: peerStorageNodeID,
 		peerLogStreamID:   peerLogStreamID,
 		rpcConn:           rpcConn,
-		rpcClient:         pb.NewReplicatorServiceClient(rpcConn.Conn),
+		rpcClient:         snpb.NewReplicatorServiceClient(rpcConn.Conn),
 		errCs:             make(map[types.LLSN]chan<- error),
-		requestC:          make(chan *pb.ReplicationRequest, rcRequestCSize),
+		requestC:          make(chan *snpb.ReplicationRequest, rcRequestCSize),
 		runner:            runner.New("replicatorclient", logger),
 		logger:            logger,
 		replicateStop:     make(chan struct{}),
@@ -139,7 +139,7 @@ func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data
 		return errC
 	}
 
-	req := &pb.ReplicationRequest{
+	req := &snpb.ReplicationRequest{
 		LogStreamID: rc.peerLogStreamID,
 		LLSN:        llsn,
 		Payload:     data,
@@ -155,7 +155,7 @@ func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data
 	return errC
 }
 
-func (rc *replicatorClient) addRequestC(ctx context.Context, req *pb.ReplicationRequest) error {
+func (rc *replicatorClient) addRequestC(ctx context.Context, req *snpb.ReplicationRequest) error {
 	tctx, cancel := context.WithTimeout(ctx, rcRequestCTimeout)
 	defer cancel()
 
@@ -261,8 +261,8 @@ func (rc *replicatorClient) propagateAllError() {
 	}
 }
 
-func (rc *replicatorClient) SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current pb.SyncPosition, data []byte) error {
-	req := &pb.SyncReplicateRequest{
+func (rc *replicatorClient) SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current snpb.SyncPosition, data []byte) error {
+	req := &snpb.SyncReplicateRequest{
 		First:       first,
 		Last:        last,
 		Current:     current,

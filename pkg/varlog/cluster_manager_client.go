@@ -3,15 +3,16 @@ package varlog
 import (
 	"context"
 
-	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	vpb "github.daumkakao.com/varlog/varlog/proto/varlog"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
 type ClusterManagerClient interface {
-	AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error)
-	AddLogStream(ctx context.Context, logStreamReplicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error)
-	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]vpb.LogStreamMetadataDescriptor, error)
+	AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
+	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
+	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
 	Close() error
 }
 
@@ -38,7 +39,7 @@ func (c *clusterManagerClient) Close() error {
 	return c.rpcConn.Close()
 }
 
-func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) (*vpb.StorageNodeMetadataDescriptor, error) {
+func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.AddStorageNode(ctx, &vmspb.AddStorageNodeRequest{Address: addr})
 	if err != nil {
 		return nil, FromStatusError(ctx, err)
@@ -46,7 +47,7 @@ func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) 
 	return rsp.StorageNode, nil
 }
 
-func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplicas []*vpb.ReplicaDescriptor) (*vpb.LogStreamDescriptor, error) {
+func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	rsp, err := c.rpcClient.AddLogStream(ctx, &vmspb.AddLogStreamRequest{Replicas: logStreamReplicas})
 	if err != nil {
 		return nil, FromStatusError(ctx, err)
@@ -54,10 +55,15 @@ func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplic
 	return rsp.GetLogStream(), nil
 }
 
-func (c *clusterManagerClient) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]vpb.LogStreamMetadataDescriptor, error) {
+func (c *clusterManagerClient) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.Seal(ctx, &vmspb.SealRequest{LogStreamID: logStreamID})
 	if err != nil {
 		return nil, FromStatusError(ctx, err)
 	}
 	return rsp.GetLogStreams(), nil
+}
+
+func (c *clusterManagerClient) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
+	_, err := c.rpcClient.Unseal(ctx, &vmspb.UnsealRequest{LogStreamID: logStreamID})
+	return FromStatusError(ctx, err)
 }
