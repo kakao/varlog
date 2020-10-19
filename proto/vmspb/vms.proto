@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package varlog.vms;
+package varlog.vmspb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-import "varlog/metadata.proto";
-import "storage_node/replicator.proto";
+import "varlogpb/metadata.proto";
+import "snpb/replicator.proto";
 
 option go_package = "github.com/kakao/varlog/proto/vmspb";
 
@@ -18,17 +18,17 @@ message AddStorageNodeRequest {
 }
 
 message AddStorageNodeResponse {
-    varlog.StorageNodeMetadataDescriptor storage_node = 1;
+    varlogpb.StorageNodeMetadataDescriptor storage_node = 1;
 }
 
 message AddLogStreamRequest {
     // TODO: nullable = false
-    repeated varlog.ReplicaDescriptor replicas = 1
+    repeated varlogpb.ReplicaDescriptor replicas = 1
         [(gogoproto.nullable) = true];
 }
 
 message AddLogStreamResponse {
-    varlog.LogStreamDescriptor log_stream = 1;
+    varlogpb.LogStreamDescriptor log_stream = 1;
 }
 
 message SealRequest {
@@ -40,7 +40,7 @@ message SealRequest {
 }
 
 message SealResponse {
-    repeated varlog.LogStreamMetadataDescriptor log_streams = 1
+    repeated varlogpb.LogStreamMetadataDescriptor log_streams = 1
         [(gogoproto.nullable) = false];
 }
 
@@ -53,7 +53,7 @@ message SyncRequest {
 }
 
 message SyncResponse {
-    storagenode.SyncStatus status = 1;
+    snpb.SyncStatus status = 1;
 }
 
 message UnsealRequest {
@@ -64,9 +64,7 @@ message UnsealRequest {
     ];
 }
 
-message UnsealResponse {
-    varlog.LogStreamDescriptor log_stream = 1;
-}
+message UnsealResponse {}
 
 service ClusterManager {
     rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {

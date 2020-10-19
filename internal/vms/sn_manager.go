@@ -8,8 +8,8 @@ import (
 
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	vpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 )
 
@@ -22,17 +22,17 @@ type StorageNodeManager interface {
 
 	// GetMetadataByAddr returns metadata about a storage node. It is useful when id of the
 	// storage node is not known.
-	GetMetadataByAddr(ctx context.Context, addr string) (varlog.ManagementClient, *vpb.StorageNodeMetadataDescriptor, error)
+	GetMetadataByAddr(ctx context.Context, addr string) (varlog.ManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error)
 
-	GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
 	AddStorageNode(ctx context.Context, snmcl varlog.ManagementClient) error
 
-	AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error
+	AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error
 
 	// Seal seals logstream replicas of storage nodes corresponded with the logStreamID. It
 	// passes the last committed GLSN to the logstream replicas.
-	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]vpb.LogStreamMetadataDescriptor, error)
+	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]varlogpb.LogStreamMetadataDescriptor, error)
 
 	Sync(ctx context.Context, logStreamID types.LogStreamID) error
 
@@ -121,7 +121,7 @@ func (sm *snManager) FindByAddress(addr string) varlog.ManagementClient {
 	return nil
 }
 
-func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (varlog.ManagementClient, *vpb.StorageNodeMetadataDescriptor, error) {
+func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (varlog.ManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error) {
 	mc, err := varlog.NewManagementClient(ctx, sm.clusterID, addr, sm.logger)
 	if err != nil {
 		sm.logger.Error("could not create storagenode management client", zap.Error(err))
@@ -138,7 +138,7 @@ func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (varlog
 	return mc, snMeta, nil
 }
 
-func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*vpb.StorageNodeMetadataDescriptor, error) {
+func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -161,7 +161,7 @@ func (sm *snManager) AddStorageNode(ctx context.Context, snmcl varlog.Management
 	return nil
 }
 
-func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStreamDescriptor) error {
+func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -200,14 +200,12 @@ func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *vpb.LogStr
 	return nil
 }
 
-func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]vpb.LogStreamMetadataDescriptor, error) {
-	clusmeta, err := sm.cmView.ClusterMetadata(ctx)
+func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]varlogpb.LogStreamMetadataDescriptor, error) {
+	replicas, err := sm.replicas(ctx, logStreamID)
 	if err != nil {
 		return nil, err
 	}
-	lsdesc := clusmeta.GetLogStream(logStreamID)
-	replicas := lsdesc.GetReplicas()
-	lsmetaDesc := make([]vpb.LogStreamMetadataDescriptor, 0, len(replicas))
+	lsmetaDesc := make([]varlogpb.LogStreamMetadataDescriptor, 0, len(replicas))
 	for _, replica := range replicas {
 		storageNodeID := replica.GetStorageNodeID()
 		cli, ok := sm.cs[storageNodeID]
@@ -219,7 +217,7 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 			sm.logger.Warn("could not seal logstream replica", zap.Error(err), zap.Any("snid", storageNodeID), zap.Any("lsid", logStreamID))
 			continue
 		}
-		lsmetaDesc = append(lsmetaDesc, vpb.LogStreamMetadataDescriptor{
+		lsmetaDesc = append(lsmetaDesc, varlogpb.LogStreamMetadataDescriptor{
 			StorageNodeID: storageNodeID,
 			LogStreamID:   logStreamID,
 			Status:        status,
@@ -236,5 +234,29 @@ func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID) er
 }
 
 func (sm *snManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
-	panic("not implemented")
+	replicas, err := sm.replicas(ctx, logStreamID)
+	if err != nil {
+		return err
+	}
+	for _, replica := range replicas {
+		storageNodeID := replica.GetStorageNodeID()
+		cli, ok := sm.cs[storageNodeID]
+		if !ok {
+			sm.logger.Panic("mismatch between clusterMetadataView and StorageNodeManager", zap.Any("snid", storageNodeID), zap.Any("lsid", logStreamID))
+		}
+		if err := cli.Unseal(ctx, logStreamID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (sm *snManager) replicas(ctx context.Context, logStreamID types.LogStreamID) ([]*varlogpb.ReplicaDescriptor, error) {
+	clusmeta, err := sm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	lsdesc := clusmeta.GetLogStream(logStreamID)
+	replicas := lsdesc.GetReplicas()
+	return replicas, nil
 }

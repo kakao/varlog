@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package varlog;
+package varlog.mrpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/kakao/varlog/proto/metadata_repository";
+option go_package = "github.com/kakao/varlog/proto/mrpb";
 
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;

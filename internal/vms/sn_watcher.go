@@ -7,8 +7,8 @@ import (
 
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	vpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 
 	"go.uber.org/zap"
 )
@@ -121,7 +121,7 @@ func (w *snWatcher) set(snID types.StorageNodeID) {
 	w.hb[snID] = time.Now()
 }
 
-func (w *snWatcher) reload(ss []*vpb.StorageNodeDescriptor) {
+func (w *snWatcher) reload(ss []*varlogpb.StorageNodeDescriptor) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

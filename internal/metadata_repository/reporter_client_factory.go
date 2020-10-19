@@ -2,7 +2,7 @@ package metadata_repository
 
 import (
 	"github.com/kakao/varlog/internal/storage"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type ReporterClientFactory interface {

@@ -4,19 +4,19 @@ import (
 	"context"
 
 	"github.com/kakao/varlog/pkg/varlog/types"
-	pb "github.com/kakao/varlog/proto/metadata_repository"
+	"github.com/kakao/varlog/proto/mrpb"
 )
 
 type MetadataRepositoryManagementClient interface {
 	AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error
 	RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error
-	GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*pb.GetClusterInfoResponse, error)
+	GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.GetClusterInfoResponse, error)
 	Close() error
 }
 
 type metadataRepositoryManagementClient struct {
 	rpcConn *RpcConn
-	client  pb.ManagementClient
+	client  mrpb.ManagementClient
 }
 
 func NewMetadataRepositoryManagementClient(address string) (MetadataRepositoryManagementClient, error) {
@@ -30,7 +30,7 @@ func NewMetadataRepositoryManagementClient(address string) (MetadataRepositoryMa
 func NewMetadataRepositoryManagementClientFromRpcConn(rpcConn *RpcConn) (MetadataRepositoryManagementClient, error) {
 	c := &metadataRepositoryManagementClient{
 		rpcConn: rpcConn,
-		client:  pb.NewManagementClient(rpcConn.Conn),
+		client:  mrpb.NewManagementClient(rpcConn.Conn),
 	}
 	return c, nil
 }
@@ -48,7 +48,7 @@ func (c *metadataRepositoryManagementClient) AddPeer(ctx context.Context, cluste
 		return ErrInvalid
 	}
 
-	req := &pb.AddPeerRequest{
+	req := &mrpb.AddPeerRequest{
 		ClusterID: clusterID,
 		NodeID:    nodeID,
 		Url:       url,
@@ -63,7 +63,7 @@ func (c *metadataRepositoryManagementClient) RemovePeer(ctx context.Context, clu
 		return ErrInvalid
 	}
 
-	req := &pb.RemovePeerRequest{
+	req := &mrpb.RemovePeerRequest{
 		ClusterID: clusterID,
 		NodeID:    nodeID,
 	}
@@ -72,8 +72,8 @@ func (c *metadataRepositoryManagementClient) RemovePeer(ctx context.Context, clu
 	return ToErr(ctx, err)
 }
 
-func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*pb.GetClusterInfoResponse, error) {
-	req := &pb.GetClusterInfoRequest{
+func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.GetClusterInfoResponse, error) {
+	req := &mrpb.GetClusterInfoRequest{
 		ClusterID: clusterID,
 	}
 

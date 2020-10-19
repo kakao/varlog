@@ -1,8 +1,8 @@
 package varlog
 
 import (
-	types "github.com/kakao/varlog/pkg/varlog/types"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type OpenMode int

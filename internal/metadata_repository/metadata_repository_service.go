@@ -4,12 +4,12 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/types"
-	pb "github.com/kakao/varlog/proto/metadata_repository"
+	"github.com/kakao/varlog/proto/mrpb"
 	"google.golang.org/grpc"
 )
 
 type MetadataRepositoryService struct {
-	pb.UnimplementedMetadataRepositoryServiceServer
+	mrpb.UnimplementedMetadataRepositoryServiceServer
 	metaRepos MetadataRepository
 }
 
@@ -20,42 +20,47 @@ func NewMetadataRepositoryService(metaRepos MetadataRepository) *MetadataReposit
 }
 
 func (s *MetadataRepositoryService) Register(server *grpc.Server) {
-	pb.RegisterMetadataRepositoryServiceServer(server, s)
+	mrpb.RegisterMetadataRepositoryServiceServer(server, s)
 }
 
-func (s *MetadataRepositoryService) RegisterStorageNode(ctx context.Context, req *pb.StorageNodeRequest) (*types.Empty, error) {
+func (s *MetadataRepositoryService) RegisterStorageNode(ctx context.Context, req *mrpb.StorageNodeRequest) (*types.Empty, error) {
 	err := s.metaRepos.RegisterStorageNode(ctx, req.StorageNode)
 	return &types.Empty{}, err
 }
 
-func (s *MetadataRepositoryService) UnregisterStorageNode(ctx context.Context, req *pb.StorageNodeRequest) (*types.Empty, error) {
+func (s *MetadataRepositoryService) UnregisterStorageNode(ctx context.Context, req *mrpb.StorageNodeRequest) (*types.Empty, error) {
 	err := s.metaRepos.UnregisterStorageNode(ctx, req.StorageNode.StorageNodeID)
 	return &types.Empty{}, err
 }
 
-func (s *MetadataRepositoryService) RegisterLogStream(ctx context.Context, req *pb.LogStreamRequest) (*types.Empty, error) {
+func (s *MetadataRepositoryService) RegisterLogStream(ctx context.Context, req *mrpb.LogStreamRequest) (*types.Empty, error) {
 	err := s.metaRepos.RegisterLogStream(ctx, req.LogStream)
 	return &types.Empty{}, err
 }
 
-func (s *MetadataRepositoryService) UnregisterLogStream(ctx context.Context, req *pb.LogStreamRequest) (*types.Empty, error) {
+func (s *MetadataRepositoryService) UnregisterLogStream(ctx context.Context, req *mrpb.LogStreamRequest) (*types.Empty, error) {
 	err := s.metaRepos.UnregisterLogStream(ctx, req.LogStream.LogStreamID)
 	return &types.Empty{}, err
 }
 
-func (s *MetadataRepositoryService) UpdateLogStream(ctx context.Context, req *pb.LogStreamRequest) (*types.Empty, error) {
+func (s *MetadataRepositoryService) UpdateLogStream(ctx context.Context, req *mrpb.LogStreamRequest) (*types.Empty, error) {
 	err := s.metaRepos.UpdateLogStream(ctx, req.LogStream)
 	return &types.Empty{}, err
 }
 
-func (s *MetadataRepositoryService) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
+func (s *MetadataRepositoryService) GetMetadata(ctx context.Context, req *mrpb.GetMetadataRequest) (*mrpb.GetMetadataResponse, error) {
 	metadata, err := s.metaRepos.GetMetadata(ctx)
-	return &pb.GetMetadataResponse{
+	return &mrpb.GetMetadataResponse{
 		Metadata: metadata,
 	}, err
 }
 
-func (s *MetadataRepositoryService) Seal(ctx context.Context, req *pb.SealRequest) (*pb.SealResponse, error) {
+func (s *MetadataRepositoryService) Seal(ctx context.Context, req *mrpb.SealRequest) (*mrpb.SealResponse, error) {
 	lastCommittedGLSN, err := s.metaRepos.Seal(ctx, req.GetLogStreamID())
-	return &pb.SealResponse{LastCommittedGLSN: lastCommittedGLSN}, err
+	return &mrpb.SealResponse{LastCommittedGLSN: lastCommittedGLSN}, err
+}
+
+func (s *MetadataRepositoryService) Unseal(ctx context.Context, req *mrpb.UnsealRequest) (*mrpb.UnsealResponse, error) {
+	err := s.metaRepos.Unseal(ctx, req.GetLogStreamID())
+	return &mrpb.UnsealResponse{}, err
 }

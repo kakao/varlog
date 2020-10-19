@@ -10,8 +10,8 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/netutil"
 	"github.com/kakao/varlog/pkg/varlog/util/runner/stopwaiter"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	vpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -20,7 +20,7 @@ import (
 type Management interface {
 	// GetMetadata returns metadata of StorageNode. The metadata contains
 	// configurations and statistics for StorageNode.
-	GetMetadata(clusterID types.ClusterID, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
 	// AddLogStream adds a new LogStream to StorageNode.
 	AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) (string, error)
@@ -30,7 +30,7 @@ type Management interface {
 
 	// Seal changes status of LogStreamExecutor corresponding to the
 	// LogStreamID to LogStreamStatusSealing or LogStreamStatusSealed.
-	Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error)
+	Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
 
 	// Unseal changes status of LogStreamExecutor corresponding to the
 	// LogStreamID to LogStreamStatusRunning.
@@ -154,19 +154,19 @@ func (sn *StorageNode) Wait() {
 }
 
 // GetMeGetMetadata implements the Management GetMetadata method.
-func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.MetadataType) (*vpb.StorageNodeMetadataDescriptor, error) {
+func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	if !sn.verifyClusterID(cid) {
 		return nil, varlog.ErrInvalidArgument
 	}
 
-	ret := &vpb.StorageNodeMetadataDescriptor{
+	ret := &varlogpb.StorageNodeMetadataDescriptor{
 		ClusterID: sn.clusterID,
-		StorageNode: &vpb.StorageNodeDescriptor{
+		StorageNode: &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: sn.storageNodeID,
 			Address:       sn.serverAddr,
-			Status:        vpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
+			Status:        varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
 			// FIXME (jun): add dummy storages to avoid invalid storage node
-			Storages: []*vpb.StorageDescriptor{
+			Storages: []*varlogpb.StorageDescriptor{
 				{Path: "/tmp", Used: 0, Total: 0},
 			},
 		},
@@ -181,15 +181,15 @@ func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.Metada
 	// TODO (jun): add statistics to the response of GetMetadata
 }
 
-func (sn *StorageNode) logStreamMetadataDescriptors() []vpb.LogStreamMetadataDescriptor {
+func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetadataDescriptor {
 	lseList := sn.GetLogStreamExecutors()
 	if len(lseList) == 0 {
 		return nil
 	}
-	lsdList := make([]vpb.LogStreamMetadataDescriptor, len(lseList))
+	lsdList := make([]varlogpb.LogStreamMetadataDescriptor, len(lseList))
 	for i, lse := range lseList {
 		lse.LogStreamID()
-		lsdList[i] = vpb.LogStreamMetadataDescriptor{
+		lsdList[i] = varlogpb.LogStreamMetadataDescriptor{
 			StorageNodeID: sn.storageNodeID,
 			LogStreamID:   lse.LogStreamID(),
 			Status:        lse.Status(),
@@ -246,13 +246,13 @@ func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNo
 }
 
 // Seal implements the Management Seal method.
-func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (vpb.LogStreamStatus, types.GLSN, error) {
+func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
-		return vpb.LogStreamStatusRunning, types.InvalidGLSN, varlog.ErrInvalidArgument
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, varlog.ErrInvalidArgument
 	}
 	lse, ok := sn.GetLogStreamExecutor(logStreamID)
 	if !ok {
-		return vpb.LogStreamStatusRunning, types.InvalidGLSN, varlog.ErrInvalidArgument
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, varlog.ErrInvalidArgument
 	}
 	status, hwm := lse.Seal(lastCommittedGLSN)
 	return status, hwm, nil

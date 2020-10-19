@@ -7,13 +7,13 @@ import (
 	"sync"
 	"sync/atomic"
 
-	varlog "github.com/kakao/varlog/pkg/varlog"
-	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	"github.com/kakao/varlog/pkg/varlog/util/syncutil/atomicutil"
-	pb "github.com/kakao/varlog/proto/metadata_repository"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/mrpb"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
 
@@ -36,7 +36,7 @@ type storageAsyncJob struct {
 }
 
 type committedEntry struct {
-	entry     *pb.RaftEntry
+	entry     *mrpb.RaftEntry
 	confState *raftpb.ConfState
 }
 
@@ -44,8 +44,8 @@ type MetadataStorage struct {
 	// make orig immutable
 	// and entries are applied to diff
 	// while copyOnWrite set true
-	origStateMachine *pb.MetadataRepositoryDescriptor
-	diffStateMachine *pb.MetadataRepositoryDescriptor
+	origStateMachine *mrpb.MetadataRepositoryDescriptor
+	diffStateMachine *mrpb.MetadataRepositoryDescriptor
 	copyOnWrite      atomicutil.AtomicBool
 
 	// snapshot orig for raft
@@ -99,15 +99,15 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger
 	}
 	ms.snapCount = snapCount
 
-	ms.origStateMachine = &pb.MetadataRepositoryDescriptor{}
+	ms.origStateMachine = &mrpb.MetadataRepositoryDescriptor{}
 	ms.origStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
-	ms.origStateMachine.LogStream = &pb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
-	ms.origStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+	ms.origStateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
+	ms.origStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 
-	ms.diffStateMachine = &pb.MetadataRepositoryDescriptor{}
+	ms.diffStateMachine = &mrpb.MetadataRepositoryDescriptor{}
 	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
-	ms.diffStateMachine.LogStream = &pb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
-	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+	ms.diffStateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
+	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 
 	ms.origStateMachine.Peers = make(map[types.NodeID]string)
 	ms.diffStateMachine.Peers = make(map[types.NodeID]string)
@@ -318,13 +318,13 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 		return err
 	}
 
-	lm := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
-		Replicas: make(map[types.StorageNodeID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplica),
+	lm := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
+		Replicas: make(map[types.StorageNodeID]*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica),
 		Status:   varlogpb.LogStreamStatusRunning,
 	}
 
 	for _, r := range ls.Replicas {
-		lm.Replicas[r.StorageNodeID] = &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+		lm.Replicas[r.StorageNodeID] = &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 0,
 		}
@@ -372,7 +372,7 @@ func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
 
 		cur.Metadata.InsertLogStream(deleted)
 
-		lm := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
+		lm := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
 			Status: varlogpb.LogStreamStatusDeleted,
 		}
 
@@ -424,8 +424,8 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 func (ms *MetadataStorage) updateLocalLogStream(ls *varlogpb.LogStreamDescriptor) error {
 	pre, cur := ms.getStateMachine()
 
-	new := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
-		Replicas: make(map[types.StorageNodeID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplica),
+	new := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas{
+		Replicas: make(map[types.StorageNodeID]*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica),
 	}
 
 	old, ok := cur.LogStream.LocalLogStreams[ls.LogStreamID]
@@ -435,14 +435,14 @@ func (ms *MetadataStorage) updateLocalLogStream(ls *varlogpb.LogStreamDescriptor
 			return varlog.ErrInternal
 		}
 
-		old = proto.Clone(tmp).(*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+		old = proto.Clone(tmp).(*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 	}
 
 	for _, r := range ls.Replicas {
 		if o, ok := old.Replicas[r.StorageNodeID]; ok {
 			new.Replicas[r.StorageNodeID] = o
 		} else {
-			new.Replicas[r.StorageNodeID] = &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+			new.Replicas[r.StorageNodeID] = &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 				UncommittedLLSNOffset: types.MinLLSN,
 				UncommittedLLSNLength: 0,
 			}
@@ -518,7 +518,7 @@ func (ms *MetadataStorage) updateLocalLogStreamStatus(lsID types.LogStreamID, st
 			return varlog.ErrInternal
 		}
 
-		lls = proto.Clone(o).(*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+		lls = proto.Clone(o).(*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 		cur.LogStream.LocalLogStreams[lsID] = lls
 	}
 
@@ -694,7 +694,7 @@ func (ms *MetadataStorage) getFirstGLSNoLock() *snpb.GlobalLogStreamDescriptor {
 	return ms.diffStateMachine.GetFirstGlobalLogStream()
 }
 
-func (ms *MetadataStorage) LookupLocalLogStream(lsID types.LogStreamID) *pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas {
+func (ms *MetadataStorage) LookupLocalLogStream(lsID types.LogStreamID) *mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas {
 	pre, cur := ms.getStateMachine()
 
 	c, _ := cur.LogStream.LocalLogStreams[lsID]
@@ -710,7 +710,7 @@ func (ms *MetadataStorage) LookupLocalLogStream(lsID types.LogStreamID) *pb.Meta
 	return p
 }
 
-func (ms *MetadataStorage) LookupLocalLogStreamReplica(lsID types.LogStreamID, snID types.StorageNodeID) *pb.MetadataRepositoryDescriptor_LocalLogStreamReplica {
+func (ms *MetadataStorage) LookupLocalLogStreamReplica(lsID types.LogStreamID, snID types.StorageNodeID) *mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica {
 	pre, cur := ms.getStateMachine()
 
 	if lm, ok := cur.LogStream.LocalLogStreams[lsID]; ok {
@@ -736,7 +736,7 @@ func (ms *MetadataStorage) LookupLocalLogStreamReplica(lsID types.LogStreamID, s
 	return nil
 }
 
-func (ms *MetadataStorage) verifyLocalLogStream(s *pb.MetadataRepositoryDescriptor_LocalLogStreamReplica) bool {
+func (ms *MetadataStorage) verifyLocalLogStream(s *mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica) bool {
 	fgls := ms.getFirstGLSNoLock()
 	lgls := ms.getLastGLSNoLock()
 
@@ -753,7 +753,7 @@ func (ms *MetadataStorage) verifyLocalLogStream(s *pb.MetadataRepositoryDescript
 		ms.lookupGLSNoLock(s.KnownHighWatermark) != nil
 }
 
-func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, snID types.StorageNodeID, s *pb.MetadataRepositoryDescriptor_LocalLogStreamReplica) {
+func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, snID types.StorageNodeID, s *mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica) {
 	pre, cur := ms.getStateMachine()
 
 	lm, ok := cur.LogStream.LocalLogStreams[lsID]
@@ -763,7 +763,7 @@ func (ms *MetadataStorage) UpdateLocalLogStreamReplica(lsID types.LogStreamID, s
 			return
 		}
 
-		lm = proto.Clone(o).(*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+		lm = proto.Clone(o).(*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 		cur.LogStream.LocalLogStreams[lsID] = lm
 	}
 
@@ -945,7 +945,7 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 		return errors.New("outdated snapshot")
 	}
 
-	stateMachine := &pb.MetadataRepositoryDescriptor{}
+	stateMachine := &mrpb.MetadataRepositoryDescriptor{}
 	err := stateMachine.Unmarshal(snap)
 	if err != nil {
 		return err
@@ -982,10 +982,10 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 
 	ms.origStateMachine = stateMachine
 
-	ms.diffStateMachine = &pb.MetadataRepositoryDescriptor{}
+	ms.diffStateMachine = &mrpb.MetadataRepositoryDescriptor{}
 	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
-	ms.diffStateMachine.LogStream = &pb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
-	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+	ms.diffStateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
+	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 	ms.diffStateMachine.Peers = make(map[types.NodeID]string)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
 
@@ -1045,7 +1045,7 @@ func (ms *MetadataStorage) releaseCopyOnWrite() {
 	ms.copyOnWrite.Store(false)
 }
 
-func (ms *MetadataStorage) getStateMachine() (*pb.MetadataRepositoryDescriptor, *pb.MetadataRepositoryDescriptor) {
+func (ms *MetadataStorage) getStateMachine() (*mrpb.MetadataRepositoryDescriptor, *mrpb.MetadataRepositoryDescriptor) {
 	pre := ms.origStateMachine
 	cur := ms.origStateMachine
 
@@ -1140,7 +1140,7 @@ func (ms *MetadataStorage) mergeLogStream() {
 	}
 
 	if len(ms.diffStateMachine.LogStream.LocalLogStreams) > 0 {
-		ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+		ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 	}
 
 	ms.lsMu.Lock()

@@ -51,6 +51,7 @@ func (s *clusterManagerService) Sync(context.Context, *vmspb.SyncRequest) (*vmsp
 	panic("not implemented")
 }
 
-func (s *clusterManagerService) Unseal(context.Context, *vmspb.UnsealRequest) (*vmspb.UnsealResponse, error) {
-	panic("not implemented")
+func (s *clusterManagerService) Unseal(ctx context.Context, req *vmspb.UnsealRequest) (*vmspb.UnsealResponse, error) {
+	err := s.clusManager.Unseal(ctx, req.GetLogStreamID())
+	return &vmspb.UnsealResponse{}, varlog.ToStatusError(err)
 }

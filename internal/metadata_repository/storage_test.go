@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	varlog "github.com/kakao/varlog/pkg/varlog"
-	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
-	pb "github.com/kakao/varlog/proto/metadata_repository"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/mrpb"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/vtesting"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -478,7 +478,7 @@ func TestStorageSealLS(t *testing.T) {
 			}), ShouldBeTrue)
 
 			for i := 0; i < rep; i++ {
-				r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+				r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 					UncommittedLLSNOffset: types.MinLLSN,
 					UncommittedLLSNLength: uint64(i),
 					KnownHighWatermark:    types.InvalidGLSN,
@@ -500,7 +500,7 @@ func TestStorageSealLS(t *testing.T) {
 
 			Convey("Sealed LocalLogStreamReplica should ignore report", func(ctx C) {
 				for i := 0; i < rep; i++ {
-					r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+					r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 						UncommittedLLSNOffset: types.MinLLSN,
 						UncommittedLLSNLength: uint64(i + 1),
 						KnownHighWatermark:    types.InvalidGLSN,
@@ -639,7 +639,7 @@ func TestStorageUnsealLS(t *testing.T) {
 
 				Convey("Unsealed LS should update report", func(ctx C) {
 					for i := 0; i < rep; i++ {
-						r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+						r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 							UncommittedLLSNOffset: types.MinLLSN,
 							UncommittedLLSNLength: uint64(i),
 							KnownHighWatermark:    types.InvalidGLSN,
@@ -710,7 +710,7 @@ func TestStorageReport(t *testing.T) {
 		}
 		notExistSnID := tmp + types.StorageNodeID(rep)
 
-		r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+		r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 5,
 			KnownHighWatermark:    types.InvalidGLSN,
@@ -725,7 +725,7 @@ func TestStorageReport(t *testing.T) {
 			ls := makeLogStream(lsID, snIDs)
 			ms.registerLogStream(ls)
 
-			r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+			r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 				UncommittedLLSNOffset: types.MinLLSN,
 				UncommittedLLSNLength: 5,
 				KnownHighWatermark:    types.InvalidGLSN,
@@ -735,7 +735,7 @@ func TestStorageReport(t *testing.T) {
 			So(ms.LookupLocalLogStreamReplica(lsID, notExistSnID), ShouldBeNil)
 
 			Convey("storage should apply report if snID is exist in LS", func(ctx C) {
-				r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+				r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 					UncommittedLLSNOffset: types.MinLLSN,
 					UncommittedLLSNLength: 5,
 					KnownHighWatermark:    types.InvalidGLSN,
@@ -863,7 +863,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		ls := makeLogStream(lsID, snIDs)
 		ms.registerLogStream(ls)
 
-		r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+		r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 5,
 			KnownHighWatermark:    types.GLSN(10),
@@ -878,7 +878,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		Convey("lookup LocalLogStream with copyOnWrite should give merged response", func(ctx C) {
 			ms.setCopyOnWrite()
 
-			r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+			r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 				UncommittedLLSNOffset: types.MinLLSN,
 				UncommittedLLSNLength: 5,
 				KnownHighWatermark:    types.GLSN(10),
@@ -1084,7 +1084,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			for j := 0; j < 3; j++ {
 				snID := types.StorageNodeID(j)
 
-				s := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+				s := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*3),
 					UncommittedLLSNLength: 1,
 					KnownHighWatermark:    types.InvalidGLSN,
@@ -1102,7 +1102,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			for j := 0; j < 3; j++ {
 				snID := types.StorageNodeID(j)
 
-				s := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+				s := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(1+i*3),
 					UncommittedLLSNLength: 1,
 					KnownHighWatermark:    types.GLSN(1024),
@@ -1185,7 +1185,7 @@ func TestStorageSnapshot(t *testing.T) {
 			So(snap, ShouldNotBeNil)
 			So(snapIndex, ShouldEqual, appliedIndex)
 
-			u := &pb.MetadataRepositoryDescriptor{}
+			u := &mrpb.MetadataRepositoryDescriptor{}
 			err = u.Unmarshal(snap)
 			So(err, ShouldBeNil)
 
@@ -1324,7 +1324,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 				for k := 0; k < numRep; k++ {
 					snID := types.StorageNodeID(j*numRep + k)
 
-					r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+					r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 						UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i),
 						UncommittedLLSNLength: 1,
 						KnownHighWatermark:    preGLSN,
@@ -1432,7 +1432,7 @@ func TestStorageVerifyReport(t *testing.T) {
 
 		Convey("When update report with valid hwm, then it should be succeed", func(ctx C) {
 			for i := 0; i < 4; i++ {
-				r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+				r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*5),
 					UncommittedLLSNLength: 5,
 					KnownHighWatermark:    types.GLSN(i*5 + 5),
@@ -1443,7 +1443,7 @@ func TestStorageVerifyReport(t *testing.T) {
 
 		Convey("When update report with invalid hwm, then it should be succeed", func(ctx C) {
 			for i := 0; i < 5; i++ {
-				r := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+				r := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*5),
 					UncommittedLLSNLength: 5,
 					KnownHighWatermark:    types.GLSN(i*5 + 5 - 1),

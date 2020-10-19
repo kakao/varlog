@@ -6,7 +6,7 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
-	snpb "github.com/kakao/varlog/proto/storage_node"
+	"github.com/kakao/varlog/proto/snpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )

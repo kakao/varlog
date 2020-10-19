@@ -15,7 +15,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
-	vpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 )
 
@@ -580,7 +580,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 				lse.muStatus.RLock()
 				status := lse.status
 				lse.muStatus.RUnlock()
-				So(status, ShouldEqual, vpb.LogStreamStatusSealing)
+				So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
 			})
 		})
 
@@ -589,7 +589,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 			Convey("Then status of LogStreamExecutor is SEALING", func() {
 				status, _ := lse.Seal(types.MaxGLSN)
-				So(status, ShouldEqual, vpb.LogStreamStatusSealing)
+				So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
 			})
 		})
 
@@ -599,7 +599,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 			storage.EXPECT().DeleteUncommitted(gomock.Any()).Return(nil)
 			Convey("Then status of LogStreamExecutor is SEALED", func() {
 				status, _ := lse.Seal(types.MinGLSN)
-				So(status, ShouldEqual, vpb.LogStreamStatusSealed)
+				So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 			})
 		})
 
@@ -624,7 +624,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		defer lse.Close()
 
 		status, sealedGLSN := lse.Seal(types.InvalidGLSN)
-		So(status, ShouldEqual, vpb.LogStreamStatusSealed)
+		So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 		So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 	})
 
@@ -782,7 +782,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		// LSE status check: 3 written/not-committed logs
 		// NOTE (jun): When clients cancel their append request, the LSE doesn't change
 		// status, it is still LogStreamStatusRunning.
-		So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
+		So(lse.Status(), ShouldEqual, varlogpb.LogStreamStatusRunning)
 		So(lse.GetReport().UncommittedLLSNLength, ShouldEqual, 3)
 
 		// LSE
@@ -805,7 +805,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 
 		Convey("MR is ahead of LSE", func() {
 			status, sealedGLSN := lse.Seal(repeat + 1)
-			So(status, ShouldEqual, vpb.LogStreamStatusSealing)
+			So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
 			So(sealedGLSN, ShouldEqual, repeat)
 
 			// FIXME (jun): See above.
@@ -816,7 +816,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			// LogStreamStatusSealing can't unseal
 			err = lse.Unseal()
 			So(err, ShouldNotBeNil)
-			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusSealing)
+			So(lse.Status(), ShouldEqual, varlogpb.LogStreamStatusSealing)
 
 			errC := waitForCommitted(repeat+1, repeat, repeat+1, 1)
 			So(<-errC, ShouldBeNil)
@@ -831,7 +831,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			So(stoppedClientRet.glsn, ShouldEqual, repeat+1)
 
 			status, sealedGLSN = lse.Seal(repeat + 1)
-			So(status, ShouldEqual, vpb.LogStreamStatusSealed)
+			So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 			So(sealedGLSN, ShouldEqual, repeat+1)
 
 			// wait for appending clients to fail
@@ -851,12 +851,12 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			// LogStreamStatusSealed can unseal
 			err = lse.Unseal()
 			So(err, ShouldBeNil)
-			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
+			So(lse.Status(), ShouldEqual, varlogpb.LogStreamStatusRunning)
 		})
 
 		Convey("MR and LSE are on the same line", func() {
 			status, sealedGLSN := lse.Seal(repeat)
-			So(status, ShouldEqual, vpb.LogStreamStatusSealed)
+			So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 			So(sealedGLSN, ShouldEqual, repeat)
 
 			// FIXME (jun): See above.
@@ -881,7 +881,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			// LogStreamStatusSealing can unseal
 			err = lse.Unseal()
 			So(err, ShouldBeNil)
-			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
+			So(lse.Status(), ShouldEqual, varlogpb.LogStreamStatusRunning)
 		})
 
 		wgClient.Wait()

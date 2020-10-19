@@ -10,7 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	types "github.com/kakao/varlog/pkg/varlog/types"
-	storage_node "github.com/kakao/varlog/proto/storage_node"
+	snpb "github.com/kakao/varlog/proto/snpb"
 )
 
 // MockReplicator is a mock of Replicator interface.
@@ -77,7 +77,7 @@ func (mr *MockReplicatorMockRecorder) Replicate(arg0, arg1, arg2, arg3 interface
 }
 
 // SyncReplicate mocks base method.
-func (m *MockReplicator) SyncReplicate(ctx context.Context, replica Replica, first, last, current storage_node.SyncPosition, data []byte) error {
+func (m *MockReplicator) SyncReplicate(ctx context.Context, replica Replica, first, last, current snpb.SyncPosition, data []byte) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncReplicate", ctx, replica, first, last, current, data)
 	ret0, _ := ret[0].(error)

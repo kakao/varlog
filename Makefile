@@ -52,12 +52,12 @@ TEST_DIRS := $(sort $(dir $(shell find . -name '*_test.go')))
 
 all : proto libvarlog storagenode metadata_repository vms
 
-VARLOG_PROTO := proto/varlog
-STORAGE_NODE_PROTO := proto/storage_node
-METADATA_REPOSITORY_PROTO := proto/metadata_repository
+VARLOGPB_PROTO := proto/varlogpb
+SNPB_PROTO := proto/snpb
+MRPB_PROTO := proto/mrpb
 VMSPB_PROTO := proto/vmspb
 
-PROTO := $(VARLOG_PROTO) $(STORAGE_NODE_PROTO) $(METADATA_REPOSITORY_PROTO) $(VMSPB_PROTO)
+PROTO := $(VARLOGPB_PROTO) $(SNPB_PROTO) $(MRPB_PROTO) $(VMSPB_PROTO)
 
 proto : check_protoc gogoproto $(PROTO)
 
@@ -80,6 +80,8 @@ $(SUBDIRS) :
 	$(MAKE) -C $@
 
 mockgen: \
+	pkg/varlog/varlog_mock.go \
+	internal/vms/vms_mock.go \
 	internal/storage/storage_node_mock.go \
 	internal/storage/storage_mock.go \
 	internal/storage/log_stream_executor_mock.go \
@@ -87,12 +89,29 @@ mockgen: \
 	internal/storage/log_stream_reporter_client_mock.go \
 	internal/storage/replicator_mock.go \
 	internal/storage/replicator_client_mock.go \
-	proto/storage_node/mock/replicator_mock.go \
-	proto/storage_node/mock/log_io_mock.go \
-	proto/storage_node/mock/log_stream_reporter_mock.go \
-	proto/storage_node/mock/management_mock.go \
-	proto/metadata_repository/mock/management_mock.go \
-	proto/metadata_repository/mock/metadata_repository_mock.go
+	proto/snpb/mock/replicator_mock.go \
+	proto/snpb/mock/log_io_mock.go \
+	proto/snpb/mock/log_stream_reporter_mock.go \
+	proto/snpb/mock/management_mock.go \
+	proto/mrpb/mock/management_mock.go \
+	proto/mrpb/mock/metadata_repository_mock.go
+
+pkg/varlog/varlog_mock.go: pkg/varlog/management_client.go
+	mockgen -build_flags -mod=vendor \
+		-self_package github.com/kakao/varlog/pkg/varlog \
+		-package varlog \
+		-destination $@ \
+		github.com/kakao/varlog/pkg/varlog \
+		ManagementClient
+
+internal/vms/vms_mock.go: internal/vms/cluster_manager.go
+	mockgen -build_flags -mod=vendor \
+		-self_package github.com/kakao/varlog/internal/vms \
+		-package vms \
+		-destination $@ \
+		github.com/kakao/varlog/internal/vms \
+		ClusterMetadataView
+
 
 internal/storage/storage_node_mock.go: internal/storage/storage_node.go
 	mockgen -self_package github.com/kakao/varlog/internal/storage \
@@ -136,46 +155,46 @@ internal/storage/replicator_client_mock.go: internal/storage/replicator_client.g
 		-source $< \
 		-destination $@
 
-proto/storage_node/mock/replicator_mock.go: $(PROTO) proto/storage_node/replicator.pb.go
+proto/snpb/mock/replicator_mock.go: $(PROTO) proto/snpb/replicator.pb.go
 	mockgen -build_flags -mod=vendor \
 		-package mock \
 		-destination $@ \
-		github.com/kakao/varlog/proto/storage_node \
+		github.com/kakao/varlog/proto/snpb \
 		ReplicatorServiceClient,ReplicatorServiceServer,ReplicatorService_ReplicateClient,ReplicatorService_ReplicateServer
 
-proto/storage_node/mock/log_io_mock.go: $(PROTO) proto/storage_node/log_io.pb.go
+proto/snpb/mock/log_io_mock.go: $(PROTO) proto/snpb/log_io.pb.go
 	mockgen -build_flags -mod=vendor \
 		-package mock \
 		-destination $@ \
-		github.com/kakao/varlog/proto/storage_node \
+		github.com/kakao/varlog/proto/snpb \
 		LogIOClient,LogIOServer,LogIO_SubscribeClient,LogIO_SubscribeServer
 
-proto/storage_node/mock/log_stream_reporter_mock.go: $(PROTO) proto/storage_node/log_stream_reporter.pb.go
+proto/snpb/mock/log_stream_reporter_mock.go: $(PROTO) proto/snpb/log_stream_reporter.pb.go
 	mockgen -build_flags -mod=vendor \
 		-package mock \
 		-destination $@ \
-		github.com/kakao/varlog/proto/storage_node \
+		github.com/kakao/varlog/proto/snpb \
 		LogStreamReporterServiceClient,LogStreamReporterServiceServer
 
-proto/storage_node/mock/management_mock.go: $(PROTO) proto/storage_node/management.pb.go
+proto/snpb/mock/management_mock.go: $(PROTO) proto/snpb/management.pb.go
 	mockgen -build_flags -mod=vendor \
 		-package mock \
 		-destination $@ \
-		github.com/kakao/varlog/proto/storage_node \
+		github.com/kakao/varlog/proto/snpb \
 		ManagementClient,ManagementServer
 
-proto/metadata_repository/mock/management_mock.go: $(PROTO) proto/metadata_repository/management.pb.go
+proto/mrpb/mock/management_mock.go: $(PROTO) proto/mrpb/management.pb.go
 	mockgen -build_flags -mod=vendor \
 		-package mock \
 		-destination $@ \
-		github.com/kakao/varlog/proto/metadata_repository \
+		github.com/kakao/varlog/proto/mrpb \
 		ManagementClient,ManagementServer
 
-proto/metadata_repository/mock/metadata_repository_mock.go: $(PROTO) proto/metadata_repository/metadata_repository.pb.go
+proto/mrpb/mock/metadata_repository_mock.go: $(PROTO) proto/mrpb/metadata_repository.pb.go
 	mockgen -build_flags -mod=vendor \
 		-package mock \
 		-destination $@ \
-		github.com/kakao/varlog/proto/metadata_repository \
+		github.com/kakao/varlog/proto/mrpb \
 		MetadataRepositoryServiceClient,MetadataRepositoryServiceServer
 
 .PHONY: test test_report coverage_report

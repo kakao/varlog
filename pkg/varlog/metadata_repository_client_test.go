@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/kakao/varlog/pkg/varlog/types"
-	pb "github.com/kakao/varlog/proto/metadata_repository"
-	"github.com/kakao/varlog/proto/metadata_repository/mock"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/mrpb"
+	"github.com/kakao/varlog/proto/mrpb/mock"
+	"github.com/kakao/varlog/proto/varlogpb"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
@@ -32,7 +32,7 @@ func TestMRClientGetMetadata(t *testing.T) {
 		})
 
 		Convey("When the MRService succeeds to get cluster info", func() {
-			mockClient.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(&pb.GetMetadataResponse{}, nil)
+			mockClient.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(&mrpb.GetMetadataResponse{}, nil)
 			Convey("Then the MRClient should return the metadata", func() {
 				_, err := mc.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
@@ -314,7 +314,7 @@ func TestMRClientSealLogStream(t *testing.T) {
 		})
 
 		Convey("When the MRService succeeds to register SN", func() {
-			mockClient.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(&pb.SealResponse{}, nil)
+			mockClient.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(&mrpb.SealResponse{}, nil)
 			Convey("Then the MRClient should return success", func() {
 				_, err := mc.Seal(context.TODO(), types.LogStreamID(1))
 				So(err, ShouldBeNil)
@@ -340,7 +340,7 @@ func TestMRClientUnsealLogStream(t *testing.T) {
 		})
 
 		Convey("When the MRService succeeds to register SN", func() {
-			mockClient.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(&pb.UnsealResponse{}, nil)
+			mockClient.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(&mrpb.UnsealResponse{}, nil)
 			Convey("Then the MRClient should return success", func() {
 				err := mc.Unseal(context.TODO(), types.LogStreamID(1))
 				So(err, ShouldBeNil)

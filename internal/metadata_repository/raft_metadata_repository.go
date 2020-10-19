@@ -8,14 +8,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	varlog "github.com/kakao/varlog/pkg/varlog"
-	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/netutil"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	"github.com/kakao/varlog/pkg/varlog/util/runner/stopwaiter"
-	pb "github.com/kakao/varlog/proto/metadata_repository"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/mrpb"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"google.golang.org/grpc"
 
 	"go.etcd.io/etcd/raft"
@@ -39,7 +39,7 @@ type RaftMetadataRepository struct {
 	requestMap sync.Map
 
 	// for raft
-	proposeC      chan *pb.RaftEntry
+	proposeC      chan *mrpb.RaftEntry
 	commitC       chan *committedEntry
 	rnConfChangeC chan raftpb.ConfChange
 	rnProposeC    chan string
@@ -76,7 +76,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 
 	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
 
-	mr.proposeC = make(chan *pb.RaftEntry, 4096)
+	mr.proposeC = make(chan *mrpb.RaftEntry, 4096)
 	mr.commitC = make(chan *committedEntry, 4096)
 
 	mr.rnConfChangeC = make(chan raftpb.ConfChange)
@@ -266,10 +266,10 @@ func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
 func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 	for d := range mr.rnCommitC {
 		var c *committedEntry
-		var e *pb.RaftEntry
+		var e *mrpb.RaftEntry
 
 		if d != nil {
-			e = &pb.RaftEntry{}
+			e = &mrpb.RaftEntry{}
 			switch d.entryType {
 			case raftpb.EntryNormal:
 				err := e.Unmarshal(d.data)
@@ -290,14 +290,14 @@ func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 
 				switch cc.Type {
 				case raftpb.ConfChangeAddNode:
-					p := &pb.AddPeer{
+					p := &mrpb.AddPeer{
 						NodeID: types.NodeID(cc.NodeID),
 						Url:    string(cc.Context),
 					}
 
 					e.Request.SetValue(p)
 				case raftpb.ConfChangeRemoveNode:
-					p := &pb.RemovePeer{
+					p := &mrpb.RemovePeer{
 						NodeID: types.NodeID(cc.NodeID),
 					}
 
@@ -345,36 +345,36 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 	f := e.Request.GetValue()
 
 	switch r := f.(type) {
-	case *pb.RegisterStorageNode:
+	case *mrpb.RegisterStorageNode:
 		mr.applyRegisterStorageNode(r, e.NodeIndex, e.RequestIndex)
-	case *pb.UnregisterStorageNode:
+	case *mrpb.UnregisterStorageNode:
 		mr.applyUnregisterStorageNode(r, e.NodeIndex, e.RequestIndex)
-	case *pb.RegisterLogStream:
+	case *mrpb.RegisterLogStream:
 		mr.applyRegisterLogStream(r, e.NodeIndex, e.RequestIndex)
-	case *pb.UnregisterLogStream:
+	case *mrpb.UnregisterLogStream:
 		mr.applyUnregisterLogStream(r, e.NodeIndex, e.RequestIndex)
-	case *pb.UpdateLogStream:
+	case *mrpb.UpdateLogStream:
 		mr.applyUpdateLogStream(r, e.NodeIndex, e.RequestIndex)
-	case *pb.Report:
+	case *mrpb.Report:
 		mr.applyReport(r)
-	case *pb.Commit:
+	case *mrpb.Commit:
 		mr.applyCommit()
-	case *pb.Seal:
+	case *mrpb.Seal:
 		mr.applySeal(r, e.NodeIndex, e.RequestIndex)
-	case *pb.Unseal:
+	case *mrpb.Unseal:
 		mr.applyUnseal(r, e.NodeIndex, e.RequestIndex)
-	case *pb.AddPeer:
+	case *mrpb.AddPeer:
 		mr.applyAddPeer(r, c.confState)
-	case *pb.RemovePeer:
+	case *mrpb.RemovePeer:
 		mr.applyRemovePeer(r, c.confState)
-	case *pb.Endpoint:
+	case *mrpb.Endpoint:
 		mr.applyEndpoint(r, e.NodeIndex, e.RequestIndex)
 	}
 
 	mr.storage.UpdateAppliedIndex(e.AppliedIndex)
 }
 
-func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorageNode, nodeIndex, requestIndex uint64) error {
+func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *mrpb.RegisterStorageNode, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.RegisterStorageNode(r.StorageNode, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -385,7 +385,7 @@ func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *pb.RegisterStorage
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyUnregisterStorageNode(r *pb.UnregisterStorageNode, nodeIndex, requestIndex uint64) error {
+func (mr *RaftMetadataRepository) applyUnregisterStorageNode(r *mrpb.UnregisterStorageNode, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.UnregisterStorageNode(r.StorageNodeID, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -396,7 +396,7 @@ func (mr *RaftMetadataRepository) applyUnregisterStorageNode(r *pb.UnregisterSto
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyRegisterLogStream(r *pb.RegisterLogStream, nodeIndex, requestIndex uint64) error {
+func (mr *RaftMetadataRepository) applyRegisterLogStream(r *mrpb.RegisterLogStream, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.RegisterLogStream(r.LogStream, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -405,7 +405,7 @@ func (mr *RaftMetadataRepository) applyRegisterLogStream(r *pb.RegisterLogStream
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyUnregisterLogStream(r *pb.UnregisterLogStream, nodeIndex, requestIndex uint64) error {
+func (mr *RaftMetadataRepository) applyUnregisterLogStream(r *mrpb.UnregisterLogStream, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.UnregisterLogStream(r.LogStreamID, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -414,7 +414,7 @@ func (mr *RaftMetadataRepository) applyUnregisterLogStream(r *pb.UnregisterLogSt
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyUpdateLogStream(r *pb.UpdateLogStream, nodeIndex, requestIndex uint64) error {
+func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.UpdateLogStream(r.LogStream, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -423,14 +423,14 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *pb.UpdateLogStream, no
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyReport(r *pb.Report) error {
+func (mr *RaftMetadataRepository) applyReport(r *mrpb.Report) error {
 	atomic.AddUint64(&mr.nrReport, 1)
 
 	snID := r.LogStream.StorageNodeID
 	for _, l := range r.LogStream.Uncommit {
 		lsID := l.LogStreamID
 
-		u := &pb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
+		u := &mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplica{
 			UncommittedLLSNOffset: l.UncommittedLLSNOffset,
 			UncommittedLLSNLength: l.UncommittedLLSNLength,
 			KnownHighWatermark:    r.LogStream.HighWatermark,
@@ -519,7 +519,7 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applySeal(r *pb.Seal, nodeIndex, requestIndex uint64) error {
+func (mr *RaftMetadataRepository) applySeal(r *mrpb.Seal, nodeIndex, requestIndex uint64) error {
 	mr.applyCommit()
 	err := mr.storage.SealLogStream(r.LogStreamID, nodeIndex, requestIndex)
 	if err != nil {
@@ -529,7 +529,7 @@ func (mr *RaftMetadataRepository) applySeal(r *pb.Seal, nodeIndex, requestIndex 
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyUnseal(r *pb.Unseal, nodeIndex, requestIndex uint64) error {
+func (mr *RaftMetadataRepository) applyUnseal(r *mrpb.Unseal, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.UnsealLogStream(r.LogStreamID, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -538,7 +538,7 @@ func (mr *RaftMetadataRepository) applyUnseal(r *pb.Unseal, nodeIndex, requestIn
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyAddPeer(r *pb.AddPeer, cs *raftpb.ConfState) error {
+func (mr *RaftMetadataRepository) applyAddPeer(r *mrpb.AddPeer, cs *raftpb.ConfState) error {
 	err := mr.storage.AddPeer(r.NodeID, r.Url, cs)
 	if err != nil {
 		return err
@@ -547,7 +547,7 @@ func (mr *RaftMetadataRepository) applyAddPeer(r *pb.AddPeer, cs *raftpb.ConfSta
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyRemovePeer(r *pb.RemovePeer, cs *raftpb.ConfState) error {
+func (mr *RaftMetadataRepository) applyRemovePeer(r *mrpb.RemovePeer, cs *raftpb.ConfState) error {
 	err := mr.storage.RemovePeer(r.NodeID, cs)
 	if err != nil {
 		return err
@@ -556,7 +556,7 @@ func (mr *RaftMetadataRepository) applyRemovePeer(r *pb.RemovePeer, cs *raftpb.C
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyEndpoint(r *pb.Endpoint, nodeIndex, requestIndex uint64) error {
+func (mr *RaftMetadataRepository) applyEndpoint(r *mrpb.Endpoint, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.RegisterEndpoint(r.NodeID, r.Url, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -609,7 +609,7 @@ func (mr *RaftMetadataRepository) numCommitSince(lsID types.LogStreamID, glsn ty
 	return num
 }
 
-func (mr *RaftMetadataRepository) calculateCommit(replicas *pb.MetadataRepositoryDescriptor_LocalLogStreamReplicas) (types.GLSN, types.GLSN, uint64) {
+func (mr *RaftMetadataRepository) calculateCommit(replicas *mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas) (types.GLSN, types.GLSN, uint64) {
 	var trimHWM types.GLSN = types.MaxGLSN
 	var knownHWM types.GLSN = types.InvalidGLSN
 	var beginLLSN types.LLSN = types.InvalidLLSN
@@ -678,12 +678,12 @@ func (mr *RaftMetadataRepository) proposeCommit() {
 		return
 	}
 
-	r := &pb.Commit{}
+	r := &mrpb.Commit{}
 	mr.propose(context.TODO(), r, false)
 }
 
 func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescriptor) error {
-	r := &pb.Report{
+	r := &mrpb.Report{
 		LogStream: lls,
 	}
 
@@ -691,7 +691,7 @@ func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescript
 }
 
 func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, guarantee bool) error {
-	e := &pb.RaftEntry{}
+	e := &mrpb.RaftEntry{}
 	e.Request.SetValue(r)
 	e.NodeIndex = uint64(mr.nodeID)
 	e.RequestIndex = UnusedRequestIndex
@@ -748,7 +748,7 @@ func (mr *RaftMetadataRepository) proposeConfChange(ctx context.Context, r raftp
 }
 
 func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {
-	r := &pb.RegisterStorageNode{
+	r := &mrpb.RegisterStorageNode{
 		StorageNode: sn,
 	}
 
@@ -762,7 +762,7 @@ func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *v
 }
 
 func (mr *RaftMetadataRepository) UnregisterStorageNode(ctx context.Context, snID types.StorageNodeID) error {
-	r := &pb.UnregisterStorageNode{
+	r := &mrpb.UnregisterStorageNode{
 		StorageNodeID: snID,
 	}
 
@@ -776,7 +776,7 @@ func (mr *RaftMetadataRepository) UnregisterStorageNode(ctx context.Context, snI
 }
 
 func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
-	r := &pb.RegisterLogStream{
+	r := &mrpb.RegisterLogStream{
 		LogStream: ls,
 	}
 
@@ -790,7 +790,7 @@ func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *var
 }
 
 func (mr *RaftMetadataRepository) UnregisterLogStream(ctx context.Context, lsID types.LogStreamID) error {
-	r := &pb.UnregisterLogStream{
+	r := &mrpb.UnregisterLogStream{
 		LogStreamID: lsID,
 	}
 
@@ -804,7 +804,7 @@ func (mr *RaftMetadataRepository) UnregisterLogStream(ctx context.Context, lsID 
 }
 
 func (mr *RaftMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
-	r := &pb.UpdateLogStream{
+	r := &mrpb.UpdateLogStream{
 		LogStream: ls,
 	}
 
@@ -826,7 +826,7 @@ func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.Me
 }
 
 func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStreamID) (types.GLSN, error) {
-	r := &pb.Seal{
+	r := &mrpb.Seal{
 		LogStreamID: lsID,
 	}
 
@@ -839,7 +839,7 @@ func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStream
 }
 
 func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStreamID) error {
-	r := &pb.Unseal{
+	r := &mrpb.Unseal{
 		LogStreamID: lsID,
 	}
 
@@ -919,7 +919,7 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 		return
 	}
 
-	r := &pb.Endpoint{
+	r := &mrpb.Endpoint{
 		NodeID: mr.nodeID,
 		Url:    mr.endpointAddr,
 	}
@@ -927,24 +927,24 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 	mr.propose(ctx, r, true)
 }
 
-func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*pb.ClusterInfo, error) {
+func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.ClusterInfo, error) {
 	if !mr.raftNode.membership.isMember(mr.nodeID) {
 		return nil, varlog.ErrNotMember
 	}
 
 	member := mr.raftNode.GetMembership()
 
-	clusterInfo := &pb.ClusterInfo{
+	clusterInfo := &mrpb.ClusterInfo{
 		ClusterID: mr.options.ClusterID,
 		NodeID:    mr.nodeID,
 		Leader:    types.NodeID(mr.raftNode.membership.getLeader()),
 	}
 
 	if len(member) > 0 {
-		clusterInfo.Members = make(map[types.NodeID]*pb.ClusterInfo_Member)
+		clusterInfo.Members = make(map[types.NodeID]*mrpb.ClusterInfo_Member)
 
 		for nodeID, peer := range member {
-			member := &pb.ClusterInfo_Member{
+			member := &mrpb.ClusterInfo_Member{
 				Peer:     peer,
 				Endpoint: mr.storage.LookupEndpoint(nodeID),
 			}

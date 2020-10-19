@@ -12,8 +12,8 @@ import (
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	vpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 )
 
@@ -255,7 +255,7 @@ func TestSync(t *testing.T) {
 		// seal oldSN => oldSN: SEALED
 		status, sealedGLSN, err := oldMCL.Seal(context.TODO(), logStreamID, lastCommittedGLSN)
 		So(err, ShouldBeNil)
-		So(status, ShouldEqual, vpb.LogStreamStatusSealed)
+		So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 		So(sealedGLSN, ShouldEqual, lastCommittedGLSN)
 
 		// ERROR: oldSN (SEALED) ---> newSN (RUNNING)
@@ -263,7 +263,7 @@ func TestSync(t *testing.T) {
 			// check if the newSN (= destination SN) is running
 			lse, ok := newSN.GetLogStreamExecutor(logStreamID)
 			So(ok, ShouldBeTrue)
-			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
+			So(lse.Status(), ShouldEqual, varlogpb.LogStreamStatusRunning)
 
 			// start sync,
 			state, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
@@ -288,12 +288,12 @@ func TestSync(t *testing.T) {
 			// check if the newSN (= destination SN) is running
 			lse, ok := newSN.GetLogStreamExecutor(logStreamID)
 			So(ok, ShouldBeTrue)
-			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
+			So(lse.Status(), ShouldEqual, varlogpb.LogStreamStatusRunning)
 
 			// make newSN SEALED (seal newSN with InvalidGLSN)
 			status, sealedGLSN, err := newMCL.Seal(context.TODO(), logStreamID, types.InvalidGLSN)
 			So(err, ShouldBeNil)
-			So(status, ShouldEqual, vpb.LogStreamStatusSealed)
+			So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 			So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 
 			// start sync,
@@ -319,7 +319,7 @@ func TestSync(t *testing.T) {
 			// Syncing SN (= source SN) is LogStreamStatusRunning
 			lse, ok := newSN.GetLogStreamExecutor(logStreamID)
 			So(ok, ShouldBeTrue)
-			So(lse.Status(), ShouldEqual, vpb.LogStreamStatusRunning)
+			So(lse.Status(), ShouldEqual, varlogpb.LogStreamStatusRunning)
 
 			// Sync Error
 			_, err := newMCL.Sync(context.TODO(), logStreamID, oldSN.storageNodeID, oldSN.serverAddr, lastCommittedGLSN)
@@ -328,7 +328,7 @@ func TestSync(t *testing.T) {
 			// Syncing SN (= source SN) is LogStreamStatusSealing
 			status, sealedGLSN, err := newMCL.Seal(context.TODO(), logStreamID, lastCommittedGLSN)
 			So(err, ShouldBeNil)
-			So(status, ShouldEqual, vpb.LogStreamStatusSealing)
+			So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
 			So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 
 			// Sync Error
@@ -341,7 +341,7 @@ func TestSync(t *testing.T) {
 			// newSN (SEALING)
 			status, sealedGLSN, err := newMCL.Seal(context.TODO(), logStreamID, lastCommittedGLSN)
 			So(err, ShouldBeNil)
-			So(status, ShouldEqual, vpb.LogStreamStatusSealing)
+			So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
 			So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 
 			// sync

@@ -1,4 +1,4 @@
-package varlog
+package varlogpb
 
 import "github.com/kakao/varlog/pkg/varlog/types"
 

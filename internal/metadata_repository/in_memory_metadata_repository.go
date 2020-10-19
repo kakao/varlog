@@ -5,10 +5,10 @@ import (
 	"errors"
 	"sync"
 
-	varlog "github.com/kakao/varlog/pkg/varlog"
-	types "github.com/kakao/varlog/pkg/varlog/types"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type InMemoryMetadataRepository struct {

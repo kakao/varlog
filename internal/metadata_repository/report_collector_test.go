@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/kakao/varlog/internal/storage"
-	varlog "github.com/kakao/varlog/pkg/varlog"
-	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/vtesting"
 
 	. "github.com/smartystreets/goconvey/convey"

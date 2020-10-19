@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	types "github.com/kakao/varlog/pkg/varlog/types"
-	pb "github.com/kakao/varlog/proto/metadata_repository"
-	"github.com/kakao/varlog/proto/metadata_repository/mock"
+	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/proto/mrpb"
+	"github.com/kakao/varlog/proto/mrpb/mock"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
@@ -31,7 +31,7 @@ func TestMRManagementClientGetClusterInfo(t *testing.T) {
 		})
 
 		Convey("When the ManagementService succeeds to get cluster info", func() {
-			mockClient.EXPECT().GetClusterInfo(gomock.Any(), gomock.Any()).Return(&pb.GetClusterInfoResponse{}, nil)
+			mockClient.EXPECT().GetClusterInfo(gomock.Any(), gomock.Any()).Return(&mrpb.GetClusterInfoResponse{}, nil)
 			Convey("Then the ManagementClient should return the metadata", func() {
 				_, err := mc.GetClusterInfo(context.TODO(), types.ClusterID(1))
 				So(err, ShouldBeNil)

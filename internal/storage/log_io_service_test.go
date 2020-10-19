@@ -8,8 +8,8 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
-	pb "github.com/kakao/varlog/proto/storage_node"
-	"github.com/kakao/varlog/proto/storage_node/mock"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/snpb/mock"
 )
 
 func setLseGetter(lseGetterMock *MockLogStreamExecutorGetter, lses ...*MockLogStreamExecutor) {
@@ -41,7 +41,7 @@ func TestStorageNodeServiceAppend(t *testing.T) {
 
 		Convey("it should return error if the LogStream does not exist", func() {
 			setLseGetter(lseGetter)
-			_, err := s.Append(context.TODO(), &pb.AppendRequest{
+			_, err := s.Append(context.TODO(), &snpb.AppendRequest{
 				LogStreamID: logStreamID,
 				Payload:     []byte("never"),
 			})
@@ -54,7 +54,7 @@ func TestStorageNodeServiceAppend(t *testing.T) {
 			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
 			setLseGetter(lseGetter, lse)
 			lse.EXPECT().Append(gomock.Any(), gomock.Any()).Return(types.GLSN(0), varlog.ErrInternal)
-			_, err := s.Append(context.TODO(), &pb.AppendRequest{
+			_, err := s.Append(context.TODO(), &snpb.AppendRequest{
 				LogStreamID: logStreamID,
 				Payload:     []byte("never"),
 			})
@@ -66,7 +66,7 @@ func TestStorageNodeServiceAppend(t *testing.T) {
 			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
 			setLseGetter(lseGetter, lse)
 			lse.EXPECT().Append(gomock.Any(), gomock.Any()).Return(types.GLSN(10), nil)
-			rsp, err := s.Append(context.TODO(), &pb.AppendRequest{
+			rsp, err := s.Append(context.TODO(), &snpb.AppendRequest{
 				LogStreamID: logStreamID,
 				Payload:     []byte("log"),
 			})
@@ -88,7 +88,7 @@ func TestStorageNodeServiceRead(t *testing.T) {
 
 		Convey("it should return error if the LogStream does not exist", func() {
 			setLseGetter(lseGetter)
-			_, err := s.Read(context.TODO(), &pb.ReadRequest{
+			_, err := s.Read(context.TODO(), &snpb.ReadRequest{
 				LogStreamID: logStreamID,
 				GLSN:        types.GLSN(10),
 			})
@@ -101,7 +101,7 @@ func TestStorageNodeServiceRead(t *testing.T) {
 			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
 			setLseGetter(lseGetter, lse)
 			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.InvalidLogEntry, varlog.ErrInternal)
-			_, err := s.Read(context.TODO(), &pb.ReadRequest{
+			_, err := s.Read(context.TODO(), &snpb.ReadRequest{
 				LogStreamID: logStreamID,
 				GLSN:        types.GLSN(10),
 			})
@@ -113,7 +113,7 @@ func TestStorageNodeServiceRead(t *testing.T) {
 			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
 			setLseGetter(lseGetter, lse)
 			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.LogEntry{Data: []byte("log")}, nil)
-			rsp, err := s.Read(context.TODO(), &pb.ReadRequest{
+			rsp, err := s.Read(context.TODO(), &snpb.ReadRequest{
 				LogStreamID: logStreamID,
 				GLSN:        types.GLSN(10),
 			})
@@ -134,7 +134,7 @@ func TestStorageNodeServiceSubscribe(t *testing.T) {
 		Convey("When requested LogStreamID is not in the StorageNode", func() {
 			setLseGetter(lseGetter)
 			Convey("Then LogIOService.Subscribe should return an error", func() {
-				err := s.Subscribe(&pb.SubscribeRequest{}, mock.NewMockLogIO_SubscribeServer(ctrl))
+				err := s.Subscribe(&snpb.SubscribeRequest{}, mock.NewMockLogIO_SubscribeServer(ctrl))
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -160,7 +160,7 @@ func TestStorageNodeServiceTrim(t *testing.T) {
 				lse.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(nil)
 			}
 			setLseGetter(lseGetter, lses...)
-			_, err := s.Trim(context.TODO(), &pb.TrimRequest{
+			_, err := s.Trim(context.TODO(), &snpb.TrimRequest{
 				GLSN: types.GLSN(10000),
 			})
 			So(err, ShouldBeNil)

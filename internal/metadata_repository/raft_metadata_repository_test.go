@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/kakao/varlog/pkg/varlog"
-	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
-	pb "github.com/kakao/varlog/proto/metadata_repository"
-	snpb "github.com/kakao/varlog/proto/storage_node"
-	varlogpb "github.com/kakao/varlog/proto/varlog"
+	"github.com/kakao/varlog/proto/mrpb"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/vtesting"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -275,7 +275,7 @@ func TestMRApplyReport(t *testing.T) {
 		notExistSnID := types.StorageNodeID(rep)
 
 		lls := makeLocalLogStream(snIds[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
-		mr.applyReport(&pb.Report{LogStream: lls})
+		mr.applyReport(&mrpb.Report{LogStream: lls})
 
 		for _, snId := range snIds {
 			r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
@@ -294,7 +294,7 @@ func TestMRApplyReport(t *testing.T) {
 
 			Convey("Report should not apply if snID is not exist in LocalLogStream", func(ctx C) {
 				lls := makeLocalLogStream(notExistSnID, types.InvalidGLSN, lsId, types.MinLLSN, 2)
-				mr.applyReport(&pb.Report{LogStream: lls})
+				mr.applyReport(&mrpb.Report{LogStream: lls})
 
 				r := mr.storage.LookupLocalLogStreamReplica(lsId, notExistSnID)
 				So(r, ShouldBeNil)
@@ -303,7 +303,7 @@ func TestMRApplyReport(t *testing.T) {
 			Convey("Report should apply if snID is exist in LocalLogStream", func(ctx C) {
 				snId := snIds[0]
 				lls := makeLocalLogStream(snId, types.InvalidGLSN, lsId, types.MinLLSN, 2)
-				mr.applyReport(&pb.Report{LogStream: lls})
+				mr.applyReport(&mrpb.Report{LogStream: lls})
 
 				r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
 				So(r, ShouldNotBeNil)
@@ -311,7 +311,7 @@ func TestMRApplyReport(t *testing.T) {
 
 				Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
 					lls := makeLocalLogStream(snId, types.InvalidGLSN, lsId, types.MinLLSN, 3)
-					mr.applyReport(&pb.Report{LogStream: lls})
+					mr.applyReport(&mrpb.Report{LogStream: lls})
 
 					r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
 					So(r, ShouldNotBeNil)
@@ -320,7 +320,7 @@ func TestMRApplyReport(t *testing.T) {
 
 				Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
 					lls := makeLocalLogStream(snId, types.InvalidGLSN, lsId, types.MinLLSN, 1)
-					mr.applyReport(&pb.Report{LogStream: lls})
+					mr.applyReport(&mrpb.Report{LogStream: lls})
 
 					r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
 					So(r, ShouldNotBeNil)
@@ -356,7 +356,7 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream which all reports have not arrived cannot be commit", func(ctx C) {
 			lls := makeLocalLogStream(snIds[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
-			mr.applyReport(&pb.Report{LogStream: lls})
+			mr.applyReport(&mrpb.Report{LogStream: lls})
 
 			replicas := mr.storage.LookupLocalLogStream(lsId)
 			_, minHWM, nrCommit := mr.calculateCommit(replicas)
@@ -366,10 +366,10 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream which all reports are disjoint cannot be commit", func(ctx C) {
 			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(5), 1)
-			mr.applyReport(&pb.Report{LogStream: lls})
+			mr.applyReport(&mrpb.Report{LogStream: lls})
 
 			lls = makeLocalLogStream(snIds[1], types.GLSN(7), lsId, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(&pb.Report{LogStream: lls})
+			mr.applyReport(&mrpb.Report{LogStream: lls})
 
 			replicas := mr.storage.LookupLocalLogStream(lsId)
 			knownHWM, minHWM, nrCommit := mr.calculateCommit(replicas)
@@ -380,10 +380,10 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream Should be commit where replication is completed", func(ctx C) {
 			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(3), 3)
-			mr.applyReport(&pb.Report{LogStream: lls})
+			mr.applyReport(&mrpb.Report{LogStream: lls})
 
 			lls = makeLocalLogStream(snIds[1], types.GLSN(9), lsId, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(&pb.Report{LogStream: lls})
+			mr.applyReport(&mrpb.Report{LogStream: lls})
 
 			replicas := mr.storage.LookupLocalLogStream(lsId)
 			knownHWM, minHWM, nrCommit := mr.calculateCommit(replicas)
@@ -605,7 +605,7 @@ func TestMRRequestMap(t *testing.T) {
 			})
 
 			dummy := &committedEntry{
-				entry: &pb.RaftEntry{
+				entry: &mrpb.RaftEntry{
 					NodeIndex:    2,
 					RequestIndex: uint64(1),
 				},

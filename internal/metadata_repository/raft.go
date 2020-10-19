@@ -15,7 +15,7 @@ import (
 	varlogtypes "github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/netutil"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
-	pb "github.com/kakao/varlog/proto/metadata_repository"
+	"github.com/kakao/varlog/proto/mrpb"
 
 	"go.etcd.io/etcd/etcdserver/api/rafthttp"
 	"go.etcd.io/etcd/etcdserver/api/snap"
@@ -750,7 +750,7 @@ func (rc *raftNode) recoverMembership(snapshot raftpb.Snapshot) {
 		return
 	}
 
-	stateMachine := &pb.MetadataRepositoryDescriptor{}
+	stateMachine := &mrpb.MetadataRepositoryDescriptor{}
 	err := stateMachine.Unmarshal(snapshot.Data)
 	if err != nil {
 		rc.logger.Panic("invalid snapshot",

@@ -1,13 +1,13 @@
 syntax = "proto3";
 
-package varlog;
+package varlog.mrpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-import "varlog/metadata.proto";
-import "storage_node/log_stream_reporter.proto";
+import "varlogpb/metadata.proto";
+import "snpb/log_stream_reporter.proto";
 
-option go_package = "github.com/kakao/varlog/proto/metadata_repository";
+option go_package = "github.com/kakao/varlog/proto/mrpb";
 
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -36,7 +36,7 @@ message MetadataRepositoryDescriptor {
             (gogoproto.castkey) =
                 "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID"
         ];
-        LogStreamStatus status = 2;
+        varlogpb.LogStreamStatus status = 2;
     }
 
     message LogStreamDescriptor {
@@ -45,15 +45,15 @@ message MetadataRepositoryDescriptor {
                 "github.com/kakao/varlog/pkg/varlog/types.GLSN",
             (gogoproto.customname) = "TrimGLSN"
         ];
-        repeated varlog.storagenode.GlobalLogStreamDescriptor
-            global_log_streams = 2 [(gogoproto.nullable) = true];
+        repeated snpb.GlobalLogStreamDescriptor global_log_streams = 2
+            [(gogoproto.nullable) = true];
         map<uint64, LocalLogStreamReplicas> local_log_streams = 3 [
             (gogoproto.castkey) =
                 "github.com/kakao/varlog/pkg/varlog/types.LogStreamID"
         ];
     }
 
-    MetadataDescriptor metadata = 1 [(gogoproto.nullable) = true];
+    varlogpb.MetadataDescriptor metadata = 1 [(gogoproto.nullable) = true];
     LogStreamDescriptor log_stream = 2 [(gogoproto.nullable) = true];
     map<uint64, string> peers = 3
         [(gogoproto.castkey) =

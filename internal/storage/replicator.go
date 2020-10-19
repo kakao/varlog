@@ -7,7 +7,7 @@ import (
 
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/runner"
-	snpb "github.com/kakao/varlog/proto/storage_node"
+	"github.com/kakao/varlog/proto/snpb"
 	"go.uber.org/zap"
 )
 

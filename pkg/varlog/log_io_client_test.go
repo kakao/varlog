@@ -11,9 +11,9 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	types "github.com/kakao/varlog/pkg/varlog/types"
-	pb "github.com/kakao/varlog/proto/storage_node"
-	"github.com/kakao/varlog/proto/storage_node/mock"
+	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/snpb/mock"
 )
 
 type byGLSN []types.GLSN
@@ -46,7 +46,7 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 	mockClient.EXPECT().Append(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(ctx context.Context, req *pb.AppendRequest) (*pb.AppendResponse, error) {
+	).DoAndReturn(func(ctx context.Context, req *snpb.AppendRequest) (*snpb.AppendResponse, error) {
 		sn.mu.Lock()
 		defer func() {
 			sn.glsn++
@@ -55,21 +55,21 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 		}()
 		sn.logEntries[sn.glsn] = req.GetPayload()
 		sn.glsnToLLSN[sn.glsn] = sn.llsn
-		return &pb.AppendResponse{GLSN: sn.glsn}, nil
+		return &snpb.AppendResponse{GLSN: sn.glsn}, nil
 	}).AnyTimes()
 
 	// Read
 	mockClient.EXPECT().Read(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *pb.ReadRequest) (*pb.ReadResponse, error) {
+	).DoAndReturn(func(_ context.Context, req *snpb.ReadRequest) (*snpb.ReadResponse, error) {
 		sn.mu.Lock()
 		defer sn.mu.Unlock()
 		data, ok := sn.logEntries[req.GetGLSN()]
 		if !ok {
 			return nil, fmt.Errorf("no entry")
 		}
-		return &pb.ReadResponse{
+		return &snpb.ReadResponse{
 			Payload: data,
 			GLSN:    req.GetGLSN(),
 		}, nil
@@ -79,11 +79,11 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 	mockClient.EXPECT().Subscribe(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *pb.SubscribeRequest) (pb.LogIO_SubscribeClient, error) {
+	).DoAndReturn(func(_ context.Context, req *snpb.SubscribeRequest) (snpb.LogIO_SubscribeClient, error) {
 		nextGLSN := req.GetGLSNBegin()
 		stream := mock.NewMockLogIO_SubscribeClient(ctrl)
 		stream.EXPECT().Recv().DoAndReturn(
-			func() (*pb.SubscribeResponse, error) {
+			func() (*snpb.SubscribeResponse, error) {
 				sn.mu.Lock()
 				defer sn.mu.Unlock()
 				var glsns []types.GLSN
@@ -96,7 +96,7 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 						continue
 					}
 					nextGLSN = glsn + 1
-					return &pb.SubscribeResponse{
+					return &snpb.SubscribeResponse{
 						GLSN:    glsn,
 						LLSN:    sn.glsnToLLSN[glsn],
 						Payload: sn.logEntries[glsn],
@@ -112,7 +112,7 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 	mockClient.EXPECT().Trim(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *pb.TrimRequest) (*pbtypes.Empty, error) {
+	).DoAndReturn(func(_ context.Context, req *snpb.TrimRequest) (*pbtypes.Empty, error) {
 		sn.mu.Lock()
 		defer sn.mu.Unlock()
 		var num uint64 = 0

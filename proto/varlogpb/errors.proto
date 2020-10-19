@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package varlog;
+package varlog.varlogpb;
 
-option go_package = "github.com/kakao/varlog/proto/varlog";
+option go_package = "github.com/kakao/varlog/proto/varlogpb";
 
 message ErrorDetail {
     string desc = 1;
