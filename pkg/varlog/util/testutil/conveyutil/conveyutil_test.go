@@ -7,7 +7,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/internal/storage"
+	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/netutil"
 	"google.golang.org/grpc"
@@ -27,8 +27,8 @@ func TestWithServiceServer(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		lseGetter := storage.NewMockLogStreamExecutorGetter(ctrl)
-		s := storage.NewLogIOService(types.StorageNodeID(1), lseGetter, nil)
+		lseGetter := storagenode.NewMockLogStreamExecutorGetter(ctrl)
+		s := storagenode.NewLogIOService(types.StorageNodeID(1), lseGetter, nil)
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		So(err, ShouldBeNil)
 

@@ -2,10 +2,10 @@ package app
 
 import (
 	"github.com/urfave/cli/v2"
-	"github.com/kakao/varlog/internal/storage"
+	"github.com/kakao/varlog/internal/storagenode"
 )
 
-func InitCLI(options *storage.StorageNodeOptions) *cli.App {
+func InitCLI(options *storagenode.StorageNodeOptions) *cli.App {
 	app := &cli.App{
 		Name:    "storagenode",
 		Usage:   "run storage node",
@@ -17,7 +17,7 @@ func InitCLI(options *storage.StorageNodeOptions) *cli.App {
 	return app
 }
 
-func initStartCommand(options *storage.StorageNodeOptions) *cli.Command {
+func initStartCommand(options *storagenode.StorageNodeOptions) *cli.Command {
 	startCmd := &cli.Command{
 		Name:    "start",
 		Aliases: []string{"s"},
@@ -43,12 +43,12 @@ func initStartCommand(options *storage.StorageNodeOptions) *cli.Command {
 	return startCmd
 }
 
-func initRPCFlags(options *storage.RPCOptions) []cli.Flag {
+func initRPCFlags(options *storagenode.RPCOptions) []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
 			Name:        "rpc-bind-address",
 			Aliases:     []string{},
-			Value:       storage.DefaultRPCBindAddress,
+			Value:       storagenode.DefaultRPCBindAddress,
 			Usage:       "RPC bind address",
 			EnvVars:     []string{"RPC_BIND_ADDRESS"},
 			Destination: &options.RPCBindAddress,
@@ -56,12 +56,12 @@ func initRPCFlags(options *storage.RPCOptions) []cli.Flag {
 	}
 }
 
-func initLSEFlags(options *storage.LogStreamExecutorOptions) []cli.Flag {
+func initLSEFlags(options *storagenode.LogStreamExecutorOptions) []cli.Flag {
 	return []cli.Flag{
 		&cli.UintFlag{
 			Name:        "lse-appendc-size",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSEAppendCSize,
+			Value:       storagenode.DefaultLSEAppendCSize,
 			Usage:       "Size of append channel in LogStreamExecutor",
 			EnvVars:     []string{"LSE_APPENDC_SIZE"},
 			Destination: &options.AppendCSize,
@@ -69,7 +69,7 @@ func initLSEFlags(options *storage.LogStreamExecutorOptions) []cli.Flag {
 		&cli.DurationFlag{
 			Name:        "lse-appendc-timeout",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSEAppendCTimeout,
+			Value:       storagenode.DefaultLSEAppendCTimeout,
 			Usage:       "Timeout for append channel in LogStreamExecutor",
 			EnvVars:     []string{"LSE_APPENDC_TIMEOUT"},
 			DefaultText: "infinity",
@@ -78,7 +78,7 @@ func initLSEFlags(options *storage.LogStreamExecutorOptions) []cli.Flag {
 		&cli.UintFlag{
 			Name:        "lse-commitc-size",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSECommitCSize,
+			Value:       storagenode.DefaultLSECommitCSize,
 			Usage:       "Size of commit channel in LogStreamExecutor",
 			EnvVars:     []string{"LSE_COMMITC_SIZE"},
 			Destination: &options.CommitCSize,
@@ -86,7 +86,7 @@ func initLSEFlags(options *storage.LogStreamExecutorOptions) []cli.Flag {
 		&cli.DurationFlag{
 			Name:        "lse-commitc-timeout",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSECommitCTimeout,
+			Value:       storagenode.DefaultLSECommitCTimeout,
 			Usage:       "Timeout for commit channel in LogStreamExecutor",
 			EnvVars:     []string{"LSE_COMMITC_TIMEOUT"},
 			Destination: &options.CommitCTimeout,
@@ -94,7 +94,7 @@ func initLSEFlags(options *storage.LogStreamExecutorOptions) []cli.Flag {
 		&cli.UintFlag{
 			Name:        "lse-trimc-size",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSETrimCSize,
+			Value:       storagenode.DefaultLSETrimCSize,
 			Usage:       "Size of trim channel in LogStreamExecutor",
 			EnvVars:     []string{"LSE_TRIMC_SIZE"},
 			Destination: &options.TrimCSize,
@@ -102,7 +102,7 @@ func initLSEFlags(options *storage.LogStreamExecutorOptions) []cli.Flag {
 		&cli.DurationFlag{
 			Name:        "lse-trimc-timeout",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSETrimCTimeout,
+			Value:       storagenode.DefaultLSETrimCTimeout,
 			Usage:       "Timeout for trim channel in LogStreamExecutor",
 			EnvVars:     []string{"LSE_TRIMC_TIMEOUT"},
 			Destination: &options.TrimCTimeout,
@@ -110,12 +110,12 @@ func initLSEFlags(options *storage.LogStreamExecutorOptions) []cli.Flag {
 	}
 }
 
-func initLSRFlags(options *storage.LogStreamReporterOptions) []cli.Flag {
+func initLSRFlags(options *storagenode.LogStreamReporterOptions) []cli.Flag {
 	return []cli.Flag{
 		&cli.UintFlag{
 			Name:        "lsr-commitc-size",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSRCommitCSize,
+			Value:       storagenode.DefaultLSRCommitCSize,
 			Usage:       "Size of commit channel in LogStreamReporter",
 			EnvVars:     []string{"LSR_COMMITC_SIZE"},
 			Destination: &options.CommitCSize,
@@ -123,7 +123,7 @@ func initLSRFlags(options *storage.LogStreamReporterOptions) []cli.Flag {
 		&cli.DurationFlag{
 			Name:        "lsr-commitc-timeout",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSRCommitCTimeout,
+			Value:       storagenode.DefaultLSRCommitCTimeout,
 			Usage:       "Timeout for commit channel in LogStreamReporter",
 			EnvVars:     []string{"LSR_COMMITC_TIMEOUT"},
 			DefaultText: "infinity",
@@ -132,7 +132,7 @@ func initLSRFlags(options *storage.LogStreamReporterOptions) []cli.Flag {
 		&cli.UintFlag{
 			Name:        "lsr-reportc-size",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSRReportCSize,
+			Value:       storagenode.DefaultLSRReportCSize,
 			Usage:       "Size of report channel in LogStreamReporter",
 			EnvVars:     []string{"LSR_REPORTC_SIZE"},
 			Destination: &options.ReportCSize,
@@ -140,7 +140,7 @@ func initLSRFlags(options *storage.LogStreamReporterOptions) []cli.Flag {
 		&cli.DurationFlag{
 			Name:        "lsr-reportc-timeout",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSRReportCTimeout,
+			Value:       storagenode.DefaultLSRReportCTimeout,
 			Usage:       "Timeout for report channel in LogStreamReporter",
 			EnvVars:     []string{"LSR_REPORTC_TIMEOUT"},
 			DefaultText: "infinity",
@@ -149,7 +149,7 @@ func initLSRFlags(options *storage.LogStreamReporterOptions) []cli.Flag {
 		&cli.DurationFlag{
 			Name:        "lsr-report-wait-timeout",
 			Aliases:     []string{},
-			Value:       storage.DefaultLSRReportWaitTimeout,
+			Value:       storagenode.DefaultLSRReportWaitTimeout,
 			Usage:       "Timeout for waiting report LogStreamReporter",
 			EnvVars:     []string{"LSR_REPORT_WAIT_TIMEOUT"},
 			DefaultText: "infinity",

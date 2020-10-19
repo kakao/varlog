@@ -11,7 +11,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"github.com/kakao/varlog/internal/metadata_repository"
-	"github.com/kakao/varlog/internal/storage"
+	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/vms"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
@@ -36,7 +36,7 @@ type VarlogClusterOptions struct {
 type VarlogCluster struct {
 	VarlogClusterOptions
 	MRs            []*metadata_repository.RaftMetadataRepository
-	SNs            map[types.StorageNodeID]*storage.StorageNode
+	SNs            map[types.StorageNodeID]*storagenode.StorageNode
 	CM             vms.ClusterManager
 	CMCli          varlog.ClusterManagerClient
 	mrPeers        []string
@@ -66,7 +66,7 @@ func NewVarlogCluster(opts VarlogClusterOptions) *VarlogCluster {
 		mrRPCEndpoints:       mrRPCEndpoints,
 		mrIDs:                mrIDs,
 		MRs:                  MRs,
-		SNs:                  make(map[types.StorageNodeID]*storage.StorageNode),
+		SNs:                  make(map[types.StorageNodeID]*storagenode.StorageNode),
 	}
 
 	for i := range clus.mrPeers {
@@ -238,17 +238,17 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 	snID := clus.snID
 	clus.snID += types.StorageNodeID(1)
 
-	opts := &storage.StorageNodeOptions{
-		RPCOptions:               storage.RPCOptions{RPCBindAddress: ":0"},
-		LogStreamExecutorOptions: storage.DefaultLogStreamExecutorOptions,
-		LogStreamReporterOptions: storage.DefaultLogStreamReporterOptions,
+	opts := &storagenode.StorageNodeOptions{
+		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
+		LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
+		LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 		ClusterID:                clus.ClusterID,
 		StorageNodeID:            snID,
 		Verbose:                  true,
 		Logger:                   clus.logger,
 	}
 
-	sn, err := storage.NewStorageNode(opts)
+	sn, err := storagenode.NewStorageNode(opts)
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
@@ -285,16 +285,16 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 	snID := clus.snID
 	clus.snID += types.StorageNodeID(1)
 
-	opts := &storage.StorageNodeOptions{
-		RPCOptions:               storage.RPCOptions{RPCBindAddress: ":0"},
-		LogStreamExecutorOptions: storage.DefaultLogStreamExecutorOptions,
-		LogStreamReporterOptions: storage.DefaultLogStreamReporterOptions,
+	opts := &storagenode.StorageNodeOptions{
+		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
+		LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
+		LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 		ClusterID:                clus.ClusterID,
 		StorageNodeID:            snID,
 		Verbose:                  true,
 		Logger:                   clus.logger,
 	}
-	sn, err := storage.NewStorageNode(opts)
+	sn, err := storagenode.NewStorageNode(opts)
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
@@ -375,7 +375,7 @@ func (clus *VarlogCluster) AddLSByVMS() (types.LogStreamID, error) {
 	return lsID, nil
 }
 
-func (clus *VarlogCluster) LookupSN(snID types.StorageNodeID) *storage.StorageNode {
+func (clus *VarlogCluster) LookupSN(snID types.StorageNodeID) *storagenode.StorageNode {
 	sn, _ := clus.SNs[snID]
 	return sn
 }
@@ -388,7 +388,7 @@ func (clus *VarlogCluster) GetMR() *metadata_repository.RaftMetadataRepository {
 	return clus.MRs[0]
 }
 
-func (clus *VarlogCluster) getSN(lsID types.LogStreamID, idx int) (*storage.StorageNode, error) {
+func (clus *VarlogCluster) getSN(lsID types.LogStreamID, idx int) (*storagenode.StorageNode, error) {
 	if len(clus.MRs) == 0 {
 		return nil, varlog.ErrInvalid
 	}
@@ -423,11 +423,11 @@ func (clus *VarlogCluster) getSN(lsID types.LogStreamID, idx int) (*storage.Stor
 	return sn, nil
 }
 
-func (clus *VarlogCluster) GetPrimarySN(lsID types.LogStreamID) (*storage.StorageNode, error) {
+func (clus *VarlogCluster) GetPrimarySN(lsID types.LogStreamID) (*storagenode.StorageNode, error) {
 	return clus.getSN(lsID, 0)
 }
 
-func (clus *VarlogCluster) GetBackupSN(lsID types.LogStreamID) (*storage.StorageNode, error) {
+func (clus *VarlogCluster) GetBackupSN(lsID types.LogStreamID) (*storagenode.StorageNode, error) {
 	return clus.getSN(lsID, 1)
 }
 

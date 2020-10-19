@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kakao/varlog/internal/storage"
+	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -35,7 +35,7 @@ func NewEmptyReporterClientFactory() *EmptyReporterClientFactory {
 	return &EmptyReporterClientFactory{}
 }
 
-func (rcf *EmptyReporterClientFactory) GetClient(*varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error) {
+func (rcf *EmptyReporterClientFactory) GetClient(*varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
 	return &EmptyReporterClient{}, nil
 }
 
@@ -95,7 +95,7 @@ func NewDummyReporterClientFactory(manual bool) *DummyReporterClientFactory {
 	return a
 }
 
-func (a *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescriptor) (storage.LogStreamReporterClient, error) {
+func (a *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
 	status := DUMMY_REPORTERCLIENT_STATUS_RUNNING
 
 	cli := &DummyReporterClient{

@@ -3,11 +3,11 @@ package app
 import (
 	"log"
 
-	"github.com/kakao/varlog/internal/storage"
+	"github.com/kakao/varlog/internal/storagenode"
 	"go.uber.org/zap"
 )
 
-func Main(opts *storage.StorageNodeOptions) error {
+func Main(opts *storagenode.StorageNodeOptions) error {
 	logger, err := zap.NewProduction()
 	if err != nil {
 		return err
@@ -16,7 +16,7 @@ func Main(opts *storage.StorageNodeOptions) error {
 
 	opts.Logger = logger
 
-	sn, err := storage.NewStorageNode(opts)
+	sn, err := storagenode.NewStorageNode(opts)
 	if err != nil {
 		log.Fatalf("could not create StorageNode: %v", err)
 		return err

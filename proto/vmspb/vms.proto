@@ -50,6 +50,16 @@ message SyncRequest {
             "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
+    uint32 src_storage_node_id = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+        (gogoproto.customname) = "SrcStorageNodeID"
+    ];
+    uint32 dst_storage_node_id = 3 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+        (gogoproto.customname) = "DstStorageNodeID"
+    ];
 }
 
 message SyncResponse {

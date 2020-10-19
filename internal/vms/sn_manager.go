@@ -34,7 +34,7 @@ type StorageNodeManager interface {
 	// passes the last committed GLSN to the logstream replicas.
 	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]varlogpb.LogStreamMetadataDescriptor, error)
 
-	Sync(ctx context.Context, logStreamID types.LogStreamID) error
+	Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
 
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
 
@@ -229,8 +229,28 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 	return lsmetaDesc, nil
 }
 
-func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID) error {
-	panic("not implemented")
+func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
+	replicas, err := sm.replicas(ctx, logStreamID)
+	if err != nil {
+		return nil, err
+	}
+	storageNodeIDs := make(map[types.StorageNodeID]bool, len(replicas))
+	for _, replica := range replicas {
+		storageNodeID := replica.GetStorageNodeID()
+		storageNodeIDs[storageNodeID] = true
+	}
+
+	if !storageNodeIDs[srcID] || !storageNodeIDs[dstID] {
+		sm.logger.Panic("no such storage node")
+	}
+
+	srcCli := sm.cs[srcID]
+	dstCli := sm.cs[dstID]
+	if srcCli == nil || dstCli == nil {
+		sm.logger.Panic("no such storage node")
+	}
+	// TODO: check cluster meta if snids exist
+	return srcCli.Sync(ctx, logStreamID, dstID, dstCli.PeerAddress(), lastGLSN)
 }
 
 func (sm *snManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {

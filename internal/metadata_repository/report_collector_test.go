@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kakao/varlog/internal/storage"
+	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/testutil"
@@ -605,7 +605,7 @@ func TestReporterClientReconnect(t *testing.T) {
 			logger:        logger,
 		}
 
-		cli := make([]storage.LogStreamReporterClient, 2)
+		cli := make([]storagenode.LogStreamReporterClient, 2)
 		for i := 0; i < 2; i++ {
 			var err error
 

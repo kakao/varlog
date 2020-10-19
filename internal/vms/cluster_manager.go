@@ -11,6 +11,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/netutil"
 	"github.com/kakao/varlog/pkg/varlog/util/runner/stopwaiter"
+	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -43,7 +44,7 @@ type ClusterManager interface {
 	// To start sync, the log stream status of the src must be LogStreamStatusSealed and the log
 	// stream status of the dst must be LogStreamStatusSealing. If either of the statuses is not
 	// correct, Sync returns ErrSyncInvalidStatus.
-	Sync(ctx context.Context, logStreamID types.LogStreamID) error
+	Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error)
 
 	// Unseal unseals the log stream replicas corresponded with the given logStreamID.
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
@@ -331,8 +332,12 @@ func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamI
 	return cm.snMgr.Seal(ctx, logStreamID, lastGLSN)
 }
 
-func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamID) error {
-	panic("not implemented")
+func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
+	lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
+	if err != nil {
+		return nil, err
+	}
+	return cm.snMgr.Sync(ctx, logStreamID, srcID, dstID, lastGLSN)
 }
 
 func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
