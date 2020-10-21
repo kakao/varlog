@@ -193,6 +193,7 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetada
 			StorageNodeID: sn.storageNodeID,
 			LogStreamID:   lse.LogStreamID(),
 			Status:        lse.Status(),
+			HighWatermark: lse.HighWatermark(),
 			// TODO (jun): path represents disk-based storage and
 			// memory-based storage
 			// Path: lse.Path(),

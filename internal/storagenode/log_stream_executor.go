@@ -48,6 +48,7 @@ type LogStreamExecutor interface {
 
 	LogStreamID() types.LogStreamID
 	Status() varlogpb.LogStreamStatus
+	HighWatermark() types.GLSN
 
 	Read(ctx context.Context, glsn types.GLSN) (varlog.LogEntry, error)
 	Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan ScanResult, error)
@@ -271,6 +272,10 @@ func (lse *logStreamExecutor) Status() varlogpb.LogStreamStatus {
 	lse.muStatus.RLock()
 	defer lse.muStatus.RUnlock()
 	return lse.status
+}
+
+func (lse *logStreamExecutor) HighWatermark() types.GLSN {
+	return lse.localHighWatermark.Load()
 }
 
 func (lse *logStreamExecutor) isSealed() bool {

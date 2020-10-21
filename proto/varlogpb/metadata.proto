@@ -80,9 +80,10 @@ message LogStreamDescriptor {
 message MetadataDescriptor {
     option (gogoproto.equal) = true;
 
-    repeated StorageNodeDescriptor storage_nodes = 1
+    uint64 applied_index = 1;
+    repeated StorageNodeDescriptor storage_nodes = 2
         [(gogoproto.nullable) = true];
-    repeated LogStreamDescriptor log_streams = 2 [(gogoproto.nullable) = true];
+    repeated LogStreamDescriptor log_streams = 3 [(gogoproto.nullable) = true];
 }
 
 // StorageNodeMetadataDescriptor represents metadata of stroage node.

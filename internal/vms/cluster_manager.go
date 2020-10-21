@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"sync"
 
 	"github.com/kakao/varlog/pkg/varlog"
@@ -19,9 +20,9 @@ import (
 )
 
 type StorageNodeEventHandler interface {
-	HeartbeatTimeout(types.StorageNodeID)
+	HandleHeartbeatTimeout(types.StorageNodeID)
 
-	Report(*varlogpb.StorageNodeMetadataDescriptor)
+	HandleReport(*varlogpb.StorageNodeMetadataDescriptor)
 }
 
 // ClusterManager manages varlog cluster.
@@ -87,6 +88,7 @@ type clusterManager struct {
 	cmView         ClusterMetadataView
 	snSelector     StorageNodeSelector
 	snWatcher      StorageNodeWatcher
+	statRepository StatRepository
 	logStreamIDGen LogStreamIDGenerator
 
 	logger  *zap.Logger
@@ -123,6 +125,7 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		mrMgr:          mrMgr,
 		cmView:         cmView,
 		snSelector:     NewRandomSNSelector(cmView),
+		statRepository: NewStatRepository(cmView),
 		logStreamIDGen: logStreamIDGen,
 		logger:         opts.Logger,
 		options:        opts,
@@ -347,10 +350,85 @@ func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStrea
 	return cm.mrMgr.Unseal(ctx, logStreamID)
 }
 
-func (cm *clusterManager) HeartbeatTimeout(snID types.StorageNodeID) {
-	// not implemented
+func (cm *clusterManager) HandleHeartbeatTimeout(snID types.StorageNodeID) {
+	meta, err := cm.cmView.ClusterMetadata(context.TODO())
+	if err != nil {
+		return
+	}
+
+	//TODO: store sn status
+	for _, ls := range meta.GetLogStreams() {
+		if ls.IsReplica(snID) {
+			cm.Seal(context.TODO(), ls.LogStreamID)
+		}
+	}
 }
 
-func (cm *clusterManager) Report(sn *varlogpb.StorageNodeMetadataDescriptor) {
-	// not implemented
+func (cm *clusterManager) HandleReport(snm *varlogpb.StorageNodeMetadataDescriptor) {
+	meta, err := cm.cmView.ClusterMetadata(context.TODO())
+	if err != nil {
+		return
+	}
+
+	cm.statRepository.Report(snm)
+
+	//Find Zombie & Sealed LS
+	for _, ls := range snm.GetLogStreams() {
+		mls := meta.GetLogStream(ls.LogStreamID)
+		if mls == nil {
+			//TODO: RemoveLogStream
+		} else {
+			if mls.Status != ls.Status &&
+				(mls.Status.Sealed() ||
+					ls.Status.Sealed()) {
+				cm.Seal(context.TODO(), ls.LogStreamID)
+			}
+		}
+	}
+
+SYNC:
+	for _, ls := range snm.GetLogStreams() {
+		if !ls.Status.Sealed() {
+			continue SYNC
+		}
+
+		min, max := types.MaxGLSN, types.InvalidGLSN
+		var src, tgt types.StorageNodeID
+
+		replicas := cm.statRepository.GetLogStream(ls.LogStreamID)
+
+		snIDs := make([]types.StorageNodeID, 0, len(replicas))
+		for snID := range replicas {
+			snIDs = append(snIDs, snID)
+		}
+		sort.Slice(snIDs, func(i, j int) bool { return snIDs[i] < snIDs[j] })
+
+		for i, snID := range snIDs {
+			r, _ := replicas[snID]
+
+			if !r.Status.Sealed() {
+				continue SYNC
+			}
+
+			if i == 0 || r.HighWatermark < min {
+				min = r.HighWatermark
+				tgt = snID
+			}
+
+			if i == 0 || r.HighWatermark > max {
+				max = r.HighWatermark
+				src = snID
+			}
+		}
+
+		if src != tgt {
+			cm.Sync(context.TODO(), ls.LogStreamID, src, tgt)
+
+			//TODO: Unseal
+			//status, _ := cm.Sync(context.TODO(), ls.LogStreamID, src, tgt)
+			//if status.GetState() == snpb.SyncStateComplete {
+			//cm.Unseal(context.TODO(), ls.LogStreamID)
+			//}
+		}
+	}
 }

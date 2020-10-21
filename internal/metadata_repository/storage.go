@@ -60,8 +60,6 @@ type MetadataStorage struct {
 
 	// immutable metadata cache for client request
 	metaCache *varlogpb.MetadataDescriptor
-	// the largest index of the entry already applied to the cache
-	metaCacheIndex uint64
 	// the largest index of the entry already applied to the stateMachine
 	metaAppliedIndex uint64
 	// callback after cache is completed
@@ -969,11 +967,11 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 	ms.ssMu.Unlock()
 
 	cache := proto.Clone(stateMachine.Metadata).(*varlogpb.MetadataDescriptor)
+	cache.AppliedIndex = snapIndex
 
 	ms.mcMu.Lock()
 	ms.metaCache = cache
 	atomic.StoreUint64(&ms.metaAppliedIndex, snapIndex)
-	atomic.StoreUint64(&ms.metaCacheIndex, snapIndex)
 	ms.mcMu.Unlock()
 
 	ms.mtMu.Lock()
@@ -1074,7 +1072,7 @@ func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 		}
 	}()
 
-	if ms.metaCacheIndex >= job.appliedIndex {
+	if ms.metaCache != nil && ms.metaCache.AppliedIndex >= job.appliedIndex {
 		return
 	}
 
@@ -1097,8 +1095,8 @@ func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 	ms.mcMu.Lock()
 	defer ms.mcMu.Unlock()
 
+	cache.AppliedIndex = atomic.LoadUint64(&ms.metaAppliedIndex)
 	ms.metaCache = cache
-	ms.metaCacheIndex = atomic.LoadUint64(&ms.metaAppliedIndex)
 }
 
 func (ms *MetadataStorage) mergeMetadata() {

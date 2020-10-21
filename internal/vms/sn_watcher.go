@@ -147,7 +147,7 @@ func (w *snWatcher) handleHeartbeat() {
 	cur := time.Now()
 	for snID, t := range w.hb {
 		if cur.Sub(t) > w.Tick*time.Duration(w.HeartbeatTimeout) {
-			w.snHandler.HeartbeatTimeout(snID)
+			w.snHandler.HandleHeartbeatTimeout(snID)
 			w.hb[snID] = time.Now()
 		}
 	}
@@ -173,6 +173,6 @@ func (w *snWatcher) report() {
 			continue
 		}
 
-		w.snHandler.Report(sn)
+		w.snHandler.HandleReport(sn)
 	}
 }

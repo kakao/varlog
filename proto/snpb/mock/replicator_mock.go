@@ -6,38 +6,37 @@ package mock
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	snpb "github.com/kakao/varlog/proto/snpb"
 	grpc "google.golang.org/grpc"
 	metadata "google.golang.org/grpc/metadata"
+	reflect "reflect"
 )
 
-// MockReplicatorServiceClient is a mock of ReplicatorServiceClient interface.
+// MockReplicatorServiceClient is a mock of ReplicatorServiceClient interface
 type MockReplicatorServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicatorServiceClientMockRecorder
 }
 
-// MockReplicatorServiceClientMockRecorder is the mock recorder for MockReplicatorServiceClient.
+// MockReplicatorServiceClientMockRecorder is the mock recorder for MockReplicatorServiceClient
 type MockReplicatorServiceClientMockRecorder struct {
 	mock *MockReplicatorServiceClient
 }
 
-// NewMockReplicatorServiceClient creates a new mock instance.
+// NewMockReplicatorServiceClient creates a new mock instance
 func NewMockReplicatorServiceClient(ctrl *gomock.Controller) *MockReplicatorServiceClient {
 	mock := &MockReplicatorServiceClient{ctrl: ctrl}
 	mock.recorder = &MockReplicatorServiceClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockReplicatorServiceClient) EXPECT() *MockReplicatorServiceClientMockRecorder {
 	return m.recorder
 }
 
-// Replicate mocks base method.
+// Replicate mocks base method
 func (m *MockReplicatorServiceClient) Replicate(arg0 context.Context, arg1 ...grpc.CallOption) (snpb.ReplicatorService_ReplicateClient, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
@@ -50,14 +49,14 @@ func (m *MockReplicatorServiceClient) Replicate(arg0 context.Context, arg1 ...gr
 	return ret0, ret1
 }
 
-// Replicate indicates an expected call of Replicate.
+// Replicate indicates an expected call of Replicate
 func (mr *MockReplicatorServiceClientMockRecorder) Replicate(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockReplicatorServiceClient)(nil).Replicate), varargs...)
 }
 
-// SyncReplicate mocks base method.
+// SyncReplicate mocks base method
 func (m *MockReplicatorServiceClient) SyncReplicate(arg0 context.Context, arg1 *snpb.SyncReplicateRequest, arg2 ...grpc.CallOption) (*snpb.SyncReplicateResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -70,37 +69,37 @@ func (m *MockReplicatorServiceClient) SyncReplicate(arg0 context.Context, arg1 *
 	return ret0, ret1
 }
 
-// SyncReplicate indicates an expected call of SyncReplicate.
+// SyncReplicate indicates an expected call of SyncReplicate
 func (mr *MockReplicatorServiceClientMockRecorder) SyncReplicate(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicatorServiceClient)(nil).SyncReplicate), varargs...)
 }
 
-// MockReplicatorServiceServer is a mock of ReplicatorServiceServer interface.
+// MockReplicatorServiceServer is a mock of ReplicatorServiceServer interface
 type MockReplicatorServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicatorServiceServerMockRecorder
 }
 
-// MockReplicatorServiceServerMockRecorder is the mock recorder for MockReplicatorServiceServer.
+// MockReplicatorServiceServerMockRecorder is the mock recorder for MockReplicatorServiceServer
 type MockReplicatorServiceServerMockRecorder struct {
 	mock *MockReplicatorServiceServer
 }
 
-// NewMockReplicatorServiceServer creates a new mock instance.
+// NewMockReplicatorServiceServer creates a new mock instance
 func NewMockReplicatorServiceServer(ctrl *gomock.Controller) *MockReplicatorServiceServer {
 	mock := &MockReplicatorServiceServer{ctrl: ctrl}
 	mock.recorder = &MockReplicatorServiceServerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockReplicatorServiceServer) EXPECT() *MockReplicatorServiceServerMockRecorder {
 	return m.recorder
 }
 
-// Replicate mocks base method.
+// Replicate mocks base method
 func (m *MockReplicatorServiceServer) Replicate(arg0 snpb.ReplicatorService_ReplicateServer) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Replicate", arg0)
@@ -108,13 +107,13 @@ func (m *MockReplicatorServiceServer) Replicate(arg0 snpb.ReplicatorService_Repl
 	return ret0
 }
 
-// Replicate indicates an expected call of Replicate.
+// Replicate indicates an expected call of Replicate
 func (mr *MockReplicatorServiceServerMockRecorder) Replicate(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockReplicatorServiceServer)(nil).Replicate), arg0)
 }
 
-// SyncReplicate mocks base method.
+// SyncReplicate mocks base method
 func (m *MockReplicatorServiceServer) SyncReplicate(arg0 context.Context, arg1 *snpb.SyncReplicateRequest) (*snpb.SyncReplicateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncReplicate", arg0, arg1)
@@ -123,36 +122,36 @@ func (m *MockReplicatorServiceServer) SyncReplicate(arg0 context.Context, arg1 *
 	return ret0, ret1
 }
 
-// SyncReplicate indicates an expected call of SyncReplicate.
+// SyncReplicate indicates an expected call of SyncReplicate
 func (mr *MockReplicatorServiceServerMockRecorder) SyncReplicate(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicatorServiceServer)(nil).SyncReplicate), arg0, arg1)
 }
 
-// MockReplicatorService_ReplicateClient is a mock of ReplicatorService_ReplicateClient interface.
+// MockReplicatorService_ReplicateClient is a mock of ReplicatorService_ReplicateClient interface
 type MockReplicatorService_ReplicateClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicatorService_ReplicateClientMockRecorder
 }
 
-// MockReplicatorService_ReplicateClientMockRecorder is the mock recorder for MockReplicatorService_ReplicateClient.
+// MockReplicatorService_ReplicateClientMockRecorder is the mock recorder for MockReplicatorService_ReplicateClient
 type MockReplicatorService_ReplicateClientMockRecorder struct {
 	mock *MockReplicatorService_ReplicateClient
 }
 
-// NewMockReplicatorService_ReplicateClient creates a new mock instance.
+// NewMockReplicatorService_ReplicateClient creates a new mock instance
 func NewMockReplicatorService_ReplicateClient(ctrl *gomock.Controller) *MockReplicatorService_ReplicateClient {
 	mock := &MockReplicatorService_ReplicateClient{ctrl: ctrl}
 	mock.recorder = &MockReplicatorService_ReplicateClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockReplicatorService_ReplicateClient) EXPECT() *MockReplicatorService_ReplicateClientMockRecorder {
 	return m.recorder
 }
 
-// CloseSend mocks base method.
+// CloseSend mocks base method
 func (m *MockReplicatorService_ReplicateClient) CloseSend() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloseSend")
@@ -160,13 +159,13 @@ func (m *MockReplicatorService_ReplicateClient) CloseSend() error {
 	return ret0
 }
 
-// CloseSend indicates an expected call of CloseSend.
+// CloseSend indicates an expected call of CloseSend
 func (mr *MockReplicatorService_ReplicateClientMockRecorder) CloseSend() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseSend", reflect.TypeOf((*MockReplicatorService_ReplicateClient)(nil).CloseSend))
 }
 
-// Context mocks base method.
+// Context mocks base method
 func (m *MockReplicatorService_ReplicateClient) Context() context.Context {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Context")
@@ -174,13 +173,13 @@ func (m *MockReplicatorService_ReplicateClient) Context() context.Context {
 	return ret0
 }
 
-// Context indicates an expected call of Context.
+// Context indicates an expected call of Context
 func (mr *MockReplicatorService_ReplicateClientMockRecorder) Context() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockReplicatorService_ReplicateClient)(nil).Context))
 }
 
-// Header mocks base method.
+// Header mocks base method
 func (m *MockReplicatorService_ReplicateClient) Header() (metadata.MD, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Header")
@@ -189,13 +188,13 @@ func (m *MockReplicatorService_ReplicateClient) Header() (metadata.MD, error) {
 	return ret0, ret1
 }
 
-// Header indicates an expected call of Header.
+// Header indicates an expected call of Header
 func (mr *MockReplicatorService_ReplicateClientMockRecorder) Header() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Header", reflect.TypeOf((*MockReplicatorService_ReplicateClient)(nil).Header))
 }
 
-// Recv mocks base method.
+// Recv mocks base method
 func (m *MockReplicatorService_ReplicateClient) Recv() (*snpb.ReplicationResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Recv")
@@ -204,13 +203,13 @@ func (m *MockReplicatorService_ReplicateClient) Recv() (*snpb.ReplicationRespons
 	return ret0, ret1
 }
 
-// Recv indicates an expected call of Recv.
+// Recv indicates an expected call of Recv
 func (mr *MockReplicatorService_ReplicateClientMockRecorder) Recv() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recv", reflect.TypeOf((*MockReplicatorService_ReplicateClient)(nil).Recv))
 }
 
-// RecvMsg mocks base method.
+// RecvMsg mocks base method
 func (m *MockReplicatorService_ReplicateClient) RecvMsg(arg0 interface{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecvMsg", arg0)
@@ -218,13 +217,13 @@ func (m *MockReplicatorService_ReplicateClient) RecvMsg(arg0 interface{}) error 
 	return ret0
 }
 
-// RecvMsg indicates an expected call of RecvMsg.
+// RecvMsg indicates an expected call of RecvMsg
 func (mr *MockReplicatorService_ReplicateClientMockRecorder) RecvMsg(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*MockReplicatorService_ReplicateClient)(nil).RecvMsg), arg0)
 }
 
-// Send mocks base method.
+// Send mocks base method
 func (m *MockReplicatorService_ReplicateClient) Send(arg0 *snpb.ReplicationRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Send", arg0)
@@ -232,13 +231,13 @@ func (m *MockReplicatorService_ReplicateClient) Send(arg0 *snpb.ReplicationReque
 	return ret0
 }
 
-// Send indicates an expected call of Send.
+// Send indicates an expected call of Send
 func (mr *MockReplicatorService_ReplicateClientMockRecorder) Send(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockReplicatorService_ReplicateClient)(nil).Send), arg0)
 }
 
-// SendMsg mocks base method.
+// SendMsg mocks base method
 func (m *MockReplicatorService_ReplicateClient) SendMsg(arg0 interface{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendMsg", arg0)
@@ -246,13 +245,13 @@ func (m *MockReplicatorService_ReplicateClient) SendMsg(arg0 interface{}) error 
 	return ret0
 }
 
-// SendMsg indicates an expected call of SendMsg.
+// SendMsg indicates an expected call of SendMsg
 func (mr *MockReplicatorService_ReplicateClientMockRecorder) SendMsg(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*MockReplicatorService_ReplicateClient)(nil).SendMsg), arg0)
 }
 
-// Trailer mocks base method.
+// Trailer mocks base method
 func (m *MockReplicatorService_ReplicateClient) Trailer() metadata.MD {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Trailer")
@@ -260,36 +259,36 @@ func (m *MockReplicatorService_ReplicateClient) Trailer() metadata.MD {
 	return ret0
 }
 
-// Trailer indicates an expected call of Trailer.
+// Trailer indicates an expected call of Trailer
 func (mr *MockReplicatorService_ReplicateClientMockRecorder) Trailer() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trailer", reflect.TypeOf((*MockReplicatorService_ReplicateClient)(nil).Trailer))
 }
 
-// MockReplicatorService_ReplicateServer is a mock of ReplicatorService_ReplicateServer interface.
+// MockReplicatorService_ReplicateServer is a mock of ReplicatorService_ReplicateServer interface
 type MockReplicatorService_ReplicateServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicatorService_ReplicateServerMockRecorder
 }
 
-// MockReplicatorService_ReplicateServerMockRecorder is the mock recorder for MockReplicatorService_ReplicateServer.
+// MockReplicatorService_ReplicateServerMockRecorder is the mock recorder for MockReplicatorService_ReplicateServer
 type MockReplicatorService_ReplicateServerMockRecorder struct {
 	mock *MockReplicatorService_ReplicateServer
 }
 
-// NewMockReplicatorService_ReplicateServer creates a new mock instance.
+// NewMockReplicatorService_ReplicateServer creates a new mock instance
 func NewMockReplicatorService_ReplicateServer(ctrl *gomock.Controller) *MockReplicatorService_ReplicateServer {
 	mock := &MockReplicatorService_ReplicateServer{ctrl: ctrl}
 	mock.recorder = &MockReplicatorService_ReplicateServerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockReplicatorService_ReplicateServer) EXPECT() *MockReplicatorService_ReplicateServerMockRecorder {
 	return m.recorder
 }
 
-// Context mocks base method.
+// Context mocks base method
 func (m *MockReplicatorService_ReplicateServer) Context() context.Context {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Context")
@@ -297,13 +296,13 @@ func (m *MockReplicatorService_ReplicateServer) Context() context.Context {
 	return ret0
 }
 
-// Context indicates an expected call of Context.
+// Context indicates an expected call of Context
 func (mr *MockReplicatorService_ReplicateServerMockRecorder) Context() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockReplicatorService_ReplicateServer)(nil).Context))
 }
 
-// Recv mocks base method.
+// Recv mocks base method
 func (m *MockReplicatorService_ReplicateServer) Recv() (*snpb.ReplicationRequest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Recv")
@@ -312,13 +311,13 @@ func (m *MockReplicatorService_ReplicateServer) Recv() (*snpb.ReplicationRequest
 	return ret0, ret1
 }
 
-// Recv indicates an expected call of Recv.
+// Recv indicates an expected call of Recv
 func (mr *MockReplicatorService_ReplicateServerMockRecorder) Recv() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recv", reflect.TypeOf((*MockReplicatorService_ReplicateServer)(nil).Recv))
 }
 
-// RecvMsg mocks base method.
+// RecvMsg mocks base method
 func (m *MockReplicatorService_ReplicateServer) RecvMsg(arg0 interface{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecvMsg", arg0)
@@ -326,13 +325,13 @@ func (m *MockReplicatorService_ReplicateServer) RecvMsg(arg0 interface{}) error 
 	return ret0
 }
 
-// RecvMsg indicates an expected call of RecvMsg.
+// RecvMsg indicates an expected call of RecvMsg
 func (mr *MockReplicatorService_ReplicateServerMockRecorder) RecvMsg(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecvMsg", reflect.TypeOf((*MockReplicatorService_ReplicateServer)(nil).RecvMsg), arg0)
 }
 
-// Send mocks base method.
+// Send mocks base method
 func (m *MockReplicatorService_ReplicateServer) Send(arg0 *snpb.ReplicationResponse) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Send", arg0)
@@ -340,13 +339,13 @@ func (m *MockReplicatorService_ReplicateServer) Send(arg0 *snpb.ReplicationRespo
 	return ret0
 }
 
-// Send indicates an expected call of Send.
+// Send indicates an expected call of Send
 func (mr *MockReplicatorService_ReplicateServerMockRecorder) Send(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockReplicatorService_ReplicateServer)(nil).Send), arg0)
 }
 
-// SendHeader mocks base method.
+// SendHeader mocks base method
 func (m *MockReplicatorService_ReplicateServer) SendHeader(arg0 metadata.MD) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendHeader", arg0)
@@ -354,13 +353,13 @@ func (m *MockReplicatorService_ReplicateServer) SendHeader(arg0 metadata.MD) err
 	return ret0
 }
 
-// SendHeader indicates an expected call of SendHeader.
+// SendHeader indicates an expected call of SendHeader
 func (mr *MockReplicatorService_ReplicateServerMockRecorder) SendHeader(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendHeader", reflect.TypeOf((*MockReplicatorService_ReplicateServer)(nil).SendHeader), arg0)
 }
 
-// SendMsg mocks base method.
+// SendMsg mocks base method
 func (m *MockReplicatorService_ReplicateServer) SendMsg(arg0 interface{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendMsg", arg0)
@@ -368,13 +367,13 @@ func (m *MockReplicatorService_ReplicateServer) SendMsg(arg0 interface{}) error 
 	return ret0
 }
 
-// SendMsg indicates an expected call of SendMsg.
+// SendMsg indicates an expected call of SendMsg
 func (mr *MockReplicatorService_ReplicateServerMockRecorder) SendMsg(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMsg", reflect.TypeOf((*MockReplicatorService_ReplicateServer)(nil).SendMsg), arg0)
 }
 
-// SetHeader mocks base method.
+// SetHeader mocks base method
 func (m *MockReplicatorService_ReplicateServer) SetHeader(arg0 metadata.MD) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetHeader", arg0)
@@ -382,19 +381,19 @@ func (m *MockReplicatorService_ReplicateServer) SetHeader(arg0 metadata.MD) erro
 	return ret0
 }
 
-// SetHeader indicates an expected call of SetHeader.
+// SetHeader indicates an expected call of SetHeader
 func (mr *MockReplicatorService_ReplicateServerMockRecorder) SetHeader(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHeader", reflect.TypeOf((*MockReplicatorService_ReplicateServer)(nil).SetHeader), arg0)
 }
 
-// SetTrailer mocks base method.
+// SetTrailer mocks base method
 func (m *MockReplicatorService_ReplicateServer) SetTrailer(arg0 metadata.MD) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetTrailer", arg0)
 }
 
-// SetTrailer indicates an expected call of SetTrailer.
+// SetTrailer indicates an expected call of SetTrailer
 func (mr *MockReplicatorService_ReplicateServerMockRecorder) SetTrailer(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTrailer", reflect.TypeOf((*MockReplicatorService_ReplicateServer)(nil).SetTrailer), arg0)

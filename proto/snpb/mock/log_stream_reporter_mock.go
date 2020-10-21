@@ -6,38 +6,37 @@ package mock
 
 import (
 	context "context"
-	reflect "reflect"
-
 	types "github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
 	snpb "github.com/kakao/varlog/proto/snpb"
 	grpc "google.golang.org/grpc"
+	reflect "reflect"
 )
 
-// MockLogStreamReporterServiceClient is a mock of LogStreamReporterServiceClient interface.
+// MockLogStreamReporterServiceClient is a mock of LogStreamReporterServiceClient interface
 type MockLogStreamReporterServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockLogStreamReporterServiceClientMockRecorder
 }
 
-// MockLogStreamReporterServiceClientMockRecorder is the mock recorder for MockLogStreamReporterServiceClient.
+// MockLogStreamReporterServiceClientMockRecorder is the mock recorder for MockLogStreamReporterServiceClient
 type MockLogStreamReporterServiceClientMockRecorder struct {
 	mock *MockLogStreamReporterServiceClient
 }
 
-// NewMockLogStreamReporterServiceClient creates a new mock instance.
+// NewMockLogStreamReporterServiceClient creates a new mock instance
 func NewMockLogStreamReporterServiceClient(ctrl *gomock.Controller) *MockLogStreamReporterServiceClient {
 	mock := &MockLogStreamReporterServiceClient{ctrl: ctrl}
 	mock.recorder = &MockLogStreamReporterServiceClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockLogStreamReporterServiceClient) EXPECT() *MockLogStreamReporterServiceClientMockRecorder {
 	return m.recorder
 }
 
-// Commit mocks base method.
+// Commit mocks base method
 func (m *MockLogStreamReporterServiceClient) Commit(arg0 context.Context, arg1 *snpb.GlobalLogStreamDescriptor, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -50,14 +49,14 @@ func (m *MockLogStreamReporterServiceClient) Commit(arg0 context.Context, arg1 *
 	return ret0, ret1
 }
 
-// Commit indicates an expected call of Commit.
+// Commit indicates an expected call of Commit
 func (mr *MockLogStreamReporterServiceClientMockRecorder) Commit(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporterServiceClient)(nil).Commit), varargs...)
 }
 
-// GetReport mocks base method.
+// GetReport mocks base method
 func (m *MockLogStreamReporterServiceClient) GetReport(arg0 context.Context, arg1 *types.Empty, arg2 ...grpc.CallOption) (*snpb.LocalLogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -70,37 +69,37 @@ func (m *MockLogStreamReporterServiceClient) GetReport(arg0 context.Context, arg
 	return ret0, ret1
 }
 
-// GetReport indicates an expected call of GetReport.
+// GetReport indicates an expected call of GetReport
 func (mr *MockLogStreamReporterServiceClientMockRecorder) GetReport(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockLogStreamReporterServiceClient)(nil).GetReport), varargs...)
 }
 
-// MockLogStreamReporterServiceServer is a mock of LogStreamReporterServiceServer interface.
+// MockLogStreamReporterServiceServer is a mock of LogStreamReporterServiceServer interface
 type MockLogStreamReporterServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockLogStreamReporterServiceServerMockRecorder
 }
 
-// MockLogStreamReporterServiceServerMockRecorder is the mock recorder for MockLogStreamReporterServiceServer.
+// MockLogStreamReporterServiceServerMockRecorder is the mock recorder for MockLogStreamReporterServiceServer
 type MockLogStreamReporterServiceServerMockRecorder struct {
 	mock *MockLogStreamReporterServiceServer
 }
 
-// NewMockLogStreamReporterServiceServer creates a new mock instance.
+// NewMockLogStreamReporterServiceServer creates a new mock instance
 func NewMockLogStreamReporterServiceServer(ctrl *gomock.Controller) *MockLogStreamReporterServiceServer {
 	mock := &MockLogStreamReporterServiceServer{ctrl: ctrl}
 	mock.recorder = &MockLogStreamReporterServiceServerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockLogStreamReporterServiceServer) EXPECT() *MockLogStreamReporterServiceServerMockRecorder {
 	return m.recorder
 }
 
-// Commit mocks base method.
+// Commit mocks base method
 func (m *MockLogStreamReporterServiceServer) Commit(arg0 context.Context, arg1 *snpb.GlobalLogStreamDescriptor) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Commit", arg0, arg1)
@@ -109,13 +108,13 @@ func (m *MockLogStreamReporterServiceServer) Commit(arg0 context.Context, arg1 *
 	return ret0, ret1
 }
 
-// Commit indicates an expected call of Commit.
+// Commit indicates an expected call of Commit
 func (mr *MockLogStreamReporterServiceServerMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporterServiceServer)(nil).Commit), arg0, arg1)
 }
 
-// GetReport mocks base method.
+// GetReport mocks base method
 func (m *MockLogStreamReporterServiceServer) GetReport(arg0 context.Context, arg1 *types.Empty) (*snpb.LocalLogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReport", arg0, arg1)
@@ -124,7 +123,7 @@ func (m *MockLogStreamReporterServiceServer) GetReport(arg0 context.Context, arg
 	return ret0, ret1
 }
 
-// GetReport indicates an expected call of GetReport.
+// GetReport indicates an expected call of GetReport
 func (mr *MockLogStreamReporterServiceServerMockRecorder) GetReport(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockLogStreamReporterServiceServer)(nil).GetReport), arg0, arg1)
