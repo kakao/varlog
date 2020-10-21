@@ -467,21 +467,34 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 				trimHWM = minHWM
 			}
 
-			if knownHWM != curHWM {
-				nrCommitted := mr.numCommitSince(lsID, knownHWM)
-				if nrCommitted > nrUncommit {
-					mr.logger.Panic("# of uncommit should be bigger than # of commit",
-						zap.Uint64("lsID", uint64(lsID)),
-						zap.Uint64("known", uint64(knownHWM)),
-						zap.Uint64("cur", uint64(curHWM)),
-						zap.Uint64("uncommit", uint64(nrUncommit)),
-						zap.Uint64("commit", uint64(nrCommitted)),
-						zap.Uint64("first", uint64(mr.storage.getFirstGLSNoLock().GetHighWatermark())),
-						zap.Uint64("last", uint64(mr.storage.getLastGLSNoLock().GetHighWatermark())),
-					)
-				}
+			if replicas.Status.Sealed() {
+				nrUncommit = 0
+			} else {
+				if knownHWM != curHWM {
+					nrCommitted := mr.numCommitSince(lsID, knownHWM)
+					if nrCommitted > nrUncommit {
+						msg := fmt.Sprintf("# of uncommit should be bigger than # of commit:: lsID[%v] cur[%v] first[%v] last[%v] replicas[%+v]",
+							lsID, curHWM,
+							mr.storage.getFirstGLSNoLock().GetHighWatermark(),
+							mr.storage.getLastGLSNoLock().GetHighWatermark(),
+							replicas,
+						)
+						mr.logger.Panic(msg)
+						/*
+							mr.logger.Panic("# of uncommit should be bigger than # of commit",
+								zap.Uint64("lsID", uint64(lsID)),
+								zap.Uint64("known", uint64(knownHWM)),
+								zap.Uint64("cur", uint64(curHWM)),
+								zap.Uint64("uncommit", uint64(nrUncommit)),
+								zap.Uint64("commit", uint64(nrCommitted)),
+								zap.Uint64("first", uint64(mr.storage.getFirstGLSNoLock().GetHighWatermark())),
+								zap.Uint64("last", uint64(mr.storage.getLastGLSNoLock().GetHighWatermark())),
+							)
+						*/
+					}
 
-				nrUncommit -= nrCommitted
+					nrUncommit -= nrCommitted
+				}
 			}
 
 			commit := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{

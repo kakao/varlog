@@ -1047,14 +1047,14 @@ func newTestSnHandler() *testSnHandler {
 	}
 }
 
-func (sh *testSnHandler) HeartbeatTimeout(snID types.StorageNodeID) {
+func (sh *testSnHandler) HandleHeartbeatTimeout(snID types.StorageNodeID) {
 	select {
 	case sh.hbC <- snID:
 	default:
 	}
 }
 
-func (sh *testSnHandler) Report(sn *varlogpb.StorageNodeMetadataDescriptor) {
+func (sh *testSnHandler) HandleReport(sn *varlogpb.StorageNodeMetadataDescriptor) {
 	select {
 	case sh.reportC <- sn:
 	default:
@@ -1141,6 +1141,350 @@ func TestVarlogSNWatcher(t *testing.T) {
 
 					return false
 				}), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+type dummyCMView struct {
+	clusterID types.ClusterID
+	addr      string
+}
+
+func (cmView *dummyCMView) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
+	cli, err := varlog.NewMetadataRepositoryClient(cmView.addr)
+	if err != nil {
+		return nil, err
+	}
+	defer cli.Close()
+
+	meta, err := cli.GetMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return meta, nil
+}
+
+func (cmView *dummyCMView) StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error) {
+	meta, err := cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if sndesc := meta.GetStorageNode(storageNodeID); sndesc != nil {
+		return sndesc, nil
+	}
+	return nil, errors.New("cmview: no such storage node")
+}
+
+func TestVarlogStatRepositoryRefresh(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             1,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.LeaderElected()
+		}), ShouldBeTrue)
+
+		mr := env.GetMR()
+
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.IsMember()
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		snID, err := env.AddSN()
+		So(err, ShouldBeNil)
+
+		lsID, err := env.AddLS()
+		So(err, ShouldBeNil)
+
+		cmView := &dummyCMView{
+			clusterID: env.ClusterID,
+			addr:      mrAddr,
+		}
+		statRepository := vms.NewStatRepository(cmView)
+
+		metaIndex := statRepository.GetAppliedIndex()
+		So(metaIndex, ShouldBeGreaterThan, 0)
+		So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
+		So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+
+		Convey("When varlog cluster is not changed", func(ctx C) {
+			Convey("Then refresh the statRepository and nothing happens", func(ctx C) {
+				statRepository.Refresh()
+				So(metaIndex, ShouldEqual, statRepository.GetAppliedIndex())
+			})
+		})
+
+		Convey("When AddSN", func(ctx C) {
+			snID2, err := env.AddSN()
+			So(err, ShouldBeNil)
+
+			Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
+				statRepository.Refresh()
+				So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
+				metaIndex := statRepository.GetAppliedIndex()
+
+				So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
+				So(statRepository.GetStorageNode(snID2), ShouldNotBeNil)
+				So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+
+				Convey("When UpdateLS", func(ctx C) {
+					meta, err := mr.GetMetadata(context.TODO())
+					So(err, ShouldBeNil)
+
+					ls := meta.GetLogStream(lsID)
+					So(ls, ShouldNotBeNil)
+
+					ls.Replicas[0].StorageNodeID = snID2
+
+					err = mr.UpdateLogStream(context.TODO(), ls)
+					So(err, ShouldBeNil)
+
+					Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
+						statRepository.Refresh()
+						So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
+
+						So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
+						So(statRepository.GetStorageNode(snID2), ShouldNotBeNil)
+						lsStat := statRepository.GetLogStream(lsID)
+						So(lsStat, ShouldNotBeNil)
+
+						_, ok := lsStat[snID]
+						So(ok, ShouldBeFalse)
+						_, ok = lsStat[snID2]
+						So(ok, ShouldBeTrue)
+					})
+				})
+			})
+		})
+
+		Convey("When AddLS", func(ctx C) {
+			lsID2, err := env.AddLS()
+			So(err, ShouldBeNil)
+
+			Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
+				statRepository.Refresh()
+				So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
+
+				So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
+				So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+				So(statRepository.GetLogStream(lsID2), ShouldNotBeNil)
+			})
+		})
+
+		Convey("When SealLS", func(ctx C) {
+			_, err := mr.Seal(context.TODO(), lsID)
+			So(err, ShouldBeNil)
+
+			Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
+				statRepository.Refresh()
+				So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
+				metaIndex := statRepository.GetAppliedIndex()
+
+				So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
+				So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+
+				Convey("When UnsealLS", func(ctx C) {
+					err := mr.Unseal(context.TODO(), lsID)
+					So(err, ShouldBeNil)
+
+					Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
+						statRepository.Refresh()
+						So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
+
+						So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
+						So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+					})
+				})
+			})
+		})
+	})
+}
+
+func TestVarlogStatRepositoryReport(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             1,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.LeaderElected()
+		}), ShouldBeTrue)
+
+		mr := env.GetMR()
+
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.IsMember()
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		snID, err := env.AddSN()
+		So(err, ShouldBeNil)
+
+		lsID, err := env.AddLS()
+		So(err, ShouldBeNil)
+
+		cmView := &dummyCMView{
+			clusterID: env.ClusterID,
+			addr:      mrAddr,
+		}
+		statRepository := vms.NewStatRepository(cmView)
+
+		So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
+		So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+
+		Convey("When Report", func(ctx C) {
+			sn, _ := env.SNs[snID]
+
+			_, _, err := sn.Seal(env.ClusterID, snID, lsID, types.InvalidGLSN)
+			So(err, ShouldBeNil)
+
+			snm, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeStats)
+			So(err, ShouldBeNil)
+
+			statRepository.Report(snm)
+
+			Convey("Then it should be updated", func(ctx C) {
+				lsStat := statRepository.GetLogStream(lsID)
+				So(lsStat, ShouldNotBeNil)
+
+				r, ok := lsStat[snID]
+				So(ok, ShouldBeTrue)
+
+				So(r.Status.Sealed(), ShouldBeTrue)
+
+				Convey("When AddSN and refresh the statRepository", func(ctx C) {
+					_, err := env.AddSN()
+					So(err, ShouldBeNil)
+					statRepository.Refresh()
+
+					Convey("Then reported info should be applied", func(ctx C) {
+						lsStat := statRepository.GetLogStream(lsID)
+						So(lsStat, ShouldNotBeNil)
+
+						r, ok := lsStat[snID]
+						So(ok, ShouldBeTrue)
+
+						So(r.Status.Sealed(), ShouldBeTrue)
+					})
+				})
+			})
+		})
+	})
+}
+
+func TestVarlogLogStreamSync(t *testing.T) {
+	Convey("Given LogStream", t, func(ctx C) {
+		nrRep := 2
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             nrRep,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.LeaderElected()
+		}), ShouldBeTrue)
+
+		mr := env.GetMR()
+
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.IsMember()
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		for i := 0; i < nrRep; i++ {
+			_, err := env.AddSN()
+			So(err, ShouldBeNil)
+		}
+
+		lsID, err := env.AddLS()
+		So(err, ShouldBeNil)
+
+		meta, err := mr.GetMetadata(context.TODO())
+		So(err, ShouldBeNil)
+
+		ls := meta.GetLogStream(lsID)
+		So(ls, ShouldNotBeNil)
+
+		var backups []varlog.StorageNode
+		backups = make([]varlog.StorageNode, nrRep-1)
+		for i := 1; i < nrRep; i++ {
+			replicaID := ls.Replicas[i].StorageNodeID
+			replica := meta.GetStorageNode(replicaID)
+			So(replica, ShouldNotBeNil)
+
+			backups[i-1].ID = replicaID
+			backups[i-1].Addr = replica.Address
+		}
+
+		cli, err := env.NewLogIOClient(lsID)
+		So(err, ShouldBeNil)
+		defer cli.Close()
+
+		for i := 0; i < 100; i++ {
+			glsn, err := cli.Append(context.TODO(), lsID, []byte("foo"), backups...)
+			So(err, ShouldBeNil)
+			So(glsn, ShouldEqual, types.GLSN(i+1))
+		}
+
+		Convey("Seal", func(ctx C) {
+			sealedGLSN, err := mr.Seal(context.TODO(), lsID)
+			So(err, ShouldBeNil)
+
+			for snID, sn := range env.SNs {
+				sn.Seal(env.ClusterID, snID, lsID, sealedGLSN)
+			}
+
+			Convey("Update LS", func(ctx C) {
+				snID, err := env.AddSN()
+				So(err, ShouldBeNil)
+
+				sn, _ := env.SNs[snID]
+				_, err = sn.AddLogStream(env.ClusterID, snID, lsID, "path")
+				So(err, ShouldBeNil)
+
+				meta, err := mr.GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+
+				ls := meta.GetLogStream(lsID)
+				So(ls, ShouldNotBeNil)
+
+				ls.Replicas[nrRep-1].StorageNodeID = snID
+
+				err = mr.UpdateLogStream(context.TODO(), ls)
+				So(err, ShouldBeNil)
+
+				// Run VMS Server for get sn metadata & sync
+				_, err = env.RunClusterManager([]string{mrAddr})
+				So(err, ShouldBeNil)
+
+				Convey("Then it should be synced", func(ctx C) {
+					So(testutil.CompareWaitN(100, func() bool {
+						snMeta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+						if err != nil {
+							return false
+						}
+
+						return snMeta.GetLogStreams()[0].Status == varlogpb.LogStreamStatusSealed
+					}), ShouldBeTrue)
+				})
 			})
 		})
 	})

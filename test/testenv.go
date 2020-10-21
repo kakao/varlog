@@ -183,6 +183,10 @@ func (clus *VarlogCluster) CloseMR(idx int) error {
 func (clus *VarlogCluster) Close() error {
 	var err error
 
+	if clus.CM != nil {
+		clus.CM.Close()
+	}
+
 	for i := range clus.mrPeers {
 		if erri := clus.CloseMR(i); erri != nil {
 			err = erri
@@ -192,10 +196,6 @@ func (clus *VarlogCluster) Close() error {
 	for _, sn := range clus.SNs {
 		// TODO:: sn.Close() does not close connect
 		sn.Close()
-	}
-
-	if clus.CM != nil {
-		clus.CM.Close()
 	}
 
 	return err

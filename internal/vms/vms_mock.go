@@ -6,37 +6,36 @@ package vms
 
 import (
 	context "context"
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	reflect "reflect"
 )
 
-// MockClusterMetadataView is a mock of ClusterMetadataView interface.
+// MockClusterMetadataView is a mock of ClusterMetadataView interface
 type MockClusterMetadataView struct {
 	ctrl     *gomock.Controller
 	recorder *MockClusterMetadataViewMockRecorder
 }
 
-// MockClusterMetadataViewMockRecorder is the mock recorder for MockClusterMetadataView.
+// MockClusterMetadataViewMockRecorder is the mock recorder for MockClusterMetadataView
 type MockClusterMetadataViewMockRecorder struct {
 	mock *MockClusterMetadataView
 }
 
-// NewMockClusterMetadataView creates a new mock instance.
+// NewMockClusterMetadataView creates a new mock instance
 func NewMockClusterMetadataView(ctrl *gomock.Controller) *MockClusterMetadataView {
 	mock := &MockClusterMetadataView{ctrl: ctrl}
 	mock.recorder = &MockClusterMetadataViewMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockClusterMetadataView) EXPECT() *MockClusterMetadataViewMockRecorder {
 	return m.recorder
 }
 
-// ClusterMetadata mocks base method.
+// ClusterMetadata mocks base method
 func (m *MockClusterMetadataView) ClusterMetadata(arg0 context.Context) (*varlogpb.MetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ClusterMetadata", arg0)
@@ -45,13 +44,13 @@ func (m *MockClusterMetadataView) ClusterMetadata(arg0 context.Context) (*varlog
 	return ret0, ret1
 }
 
-// ClusterMetadata indicates an expected call of ClusterMetadata.
+// ClusterMetadata indicates an expected call of ClusterMetadata
 func (mr *MockClusterMetadataViewMockRecorder) ClusterMetadata(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClusterMetadata", reflect.TypeOf((*MockClusterMetadataView)(nil).ClusterMetadata), arg0)
 }
 
-// StorageNode mocks base method.
+// StorageNode mocks base method
 func (m *MockClusterMetadataView) StorageNode(arg0 context.Context, arg1 types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StorageNode", arg0, arg1)
@@ -60,7 +59,7 @@ func (m *MockClusterMetadataView) StorageNode(arg0 context.Context, arg1 types.S
 	return ret0, ret1
 }
 
-// StorageNode indicates an expected call of StorageNode.
+// StorageNode indicates an expected call of StorageNode
 func (mr *MockClusterMetadataViewMockRecorder) StorageNode(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StorageNode", reflect.TypeOf((*MockClusterMetadataView)(nil).StorageNode), arg0, arg1)

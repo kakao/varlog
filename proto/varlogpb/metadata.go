@@ -61,6 +61,16 @@ func (l *LogStreamDescriptor) Valid() bool {
 	return true
 }
 
+func (l *LogStreamDescriptor) IsReplica(snID types.StorageNodeID) bool {
+	for _, r := range l.GetReplicas() {
+		if r.StorageNodeID == snID {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (r *ReplicaDescriptor) valid() bool {
 	return r != nil && len(r.Path) != 0
 }
