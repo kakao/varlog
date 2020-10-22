@@ -42,6 +42,11 @@ func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.Add
 	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, varlog.ToStatusError(err)
 }
 
+func (s *clusterManagerService) UnregisterLogStream(ctx context.Context, req *vmspb.UnregisterLogStreamRequest) (*vmspb.UnregisterLogStreamResponse, error) {
+	err := s.clusManager.UnregisterLogStream(ctx, req.GetLogStreamID())
+	return &vmspb.UnregisterLogStreamResponse{}, varlog.ToStatusError(err)
+}
+
 func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {
 	lsmetaList, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
 	return &vmspb.SealResponse{LogStreams: lsmetaList}, varlog.ToStatusError(err)

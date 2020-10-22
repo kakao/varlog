@@ -6,37 +6,38 @@ package storagenode
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	types "github.com/kakao/varlog/pkg/varlog/types"
 	snpb "github.com/kakao/varlog/proto/snpb"
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
-	reflect "reflect"
 )
 
-// MockManagement is a mock of Management interface
+// MockManagement is a mock of Management interface.
 type MockManagement struct {
 	ctrl     *gomock.Controller
 	recorder *MockManagementMockRecorder
 }
 
-// MockManagementMockRecorder is the mock recorder for MockManagement
+// MockManagementMockRecorder is the mock recorder for MockManagement.
 type MockManagementMockRecorder struct {
 	mock *MockManagement
 }
 
-// NewMockManagement creates a new mock instance
+// NewMockManagement creates a new mock instance.
 func NewMockManagement(ctrl *gomock.Controller) *MockManagement {
 	mock := &MockManagement{ctrl: ctrl}
 	mock.recorder = &MockManagementMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockManagement) EXPECT() *MockManagementMockRecorder {
 	return m.recorder
 }
 
-// GetMetadata mocks base method
+// GetMetadata mocks base method.
 func (m *MockManagement) GetMetadata(clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadata", clusterID, metadataType)
@@ -45,13 +46,13 @@ func (m *MockManagement) GetMetadata(clusterID types.ClusterID, metadataType snp
 	return ret0, ret1
 }
 
-// GetMetadata indicates an expected call of GetMetadata
+// GetMetadata indicates an expected call of GetMetadata.
 func (mr *MockManagementMockRecorder) GetMetadata(clusterID, metadataType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockManagement)(nil).GetMetadata), clusterID, metadataType)
 }
 
-// AddLogStream mocks base method
+// AddLogStream mocks base method.
 func (m *MockManagement) AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddLogStream", clusterID, storageNodeID, logStreamID, path)
@@ -60,13 +61,13 @@ func (m *MockManagement) AddLogStream(clusterID types.ClusterID, storageNodeID t
 	return ret0, ret1
 }
 
-// AddLogStream indicates an expected call of AddLogStream
+// AddLogStream indicates an expected call of AddLogStream.
 func (mr *MockManagementMockRecorder) AddLogStream(clusterID, storageNodeID, logStreamID, path interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockManagement)(nil).AddLogStream), clusterID, storageNodeID, logStreamID, path)
 }
 
-// RemoveLogStream mocks base method
+// RemoveLogStream mocks base method.
 func (m *MockManagement) RemoveLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveLogStream", clusterID, storageNodeID, logStreamID)
@@ -74,13 +75,13 @@ func (m *MockManagement) RemoveLogStream(clusterID types.ClusterID, storageNodeI
 	return ret0
 }
 
-// RemoveLogStream indicates an expected call of RemoveLogStream
+// RemoveLogStream indicates an expected call of RemoveLogStream.
 func (mr *MockManagementMockRecorder) RemoveLogStream(clusterID, storageNodeID, logStreamID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStream", reflect.TypeOf((*MockManagement)(nil).RemoveLogStream), clusterID, storageNodeID, logStreamID)
 }
 
-// Seal mocks base method
+// Seal mocks base method.
 func (m *MockManagement) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seal", clusterID, storageNodeID, logStreamID, lastCommittedGLSN)
@@ -90,13 +91,13 @@ func (m *MockManagement) Seal(clusterID types.ClusterID, storageNodeID types.Sto
 	return ret0, ret1, ret2
 }
 
-// Seal indicates an expected call of Seal
+// Seal indicates an expected call of Seal.
 func (mr *MockManagementMockRecorder) Seal(clusterID, storageNodeID, logStreamID, lastCommittedGLSN interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockManagement)(nil).Seal), clusterID, storageNodeID, logStreamID, lastCommittedGLSN)
 }
 
-// Unseal mocks base method
+// Unseal mocks base method.
 func (m *MockManagement) Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Unseal", clusterID, storageNodeID, logStreamID)
@@ -104,13 +105,13 @@ func (m *MockManagement) Unseal(clusterID types.ClusterID, storageNodeID types.S
 	return ret0
 }
 
-// Unseal indicates an expected call of Unseal
+// Unseal indicates an expected call of Unseal.
 func (mr *MockManagementMockRecorder) Unseal(clusterID, storageNodeID, logStreamID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockManagement)(nil).Unseal), clusterID, storageNodeID, logStreamID)
 }
 
-// Sync mocks base method
+// Sync mocks base method.
 func (m *MockManagement) Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", ctx, clusterID, storageNodeID, logStreamID, replica, lastGLSN)
@@ -119,36 +120,36 @@ func (m *MockManagement) Sync(ctx context.Context, clusterID types.ClusterID, st
 	return ret0, ret1
 }
 
-// Sync indicates an expected call of Sync
+// Sync indicates an expected call of Sync.
 func (mr *MockManagementMockRecorder) Sync(ctx, clusterID, storageNodeID, logStreamID, replica, lastGLSN interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManagement)(nil).Sync), ctx, clusterID, storageNodeID, logStreamID, replica, lastGLSN)
 }
 
-// MockLogStreamExecutorGetter is a mock of LogStreamExecutorGetter interface
+// MockLogStreamExecutorGetter is a mock of LogStreamExecutorGetter interface.
 type MockLogStreamExecutorGetter struct {
 	ctrl     *gomock.Controller
 	recorder *MockLogStreamExecutorGetterMockRecorder
 }
 
-// MockLogStreamExecutorGetterMockRecorder is the mock recorder for MockLogStreamExecutorGetter
+// MockLogStreamExecutorGetterMockRecorder is the mock recorder for MockLogStreamExecutorGetter.
 type MockLogStreamExecutorGetterMockRecorder struct {
 	mock *MockLogStreamExecutorGetter
 }
 
-// NewMockLogStreamExecutorGetter creates a new mock instance
+// NewMockLogStreamExecutorGetter creates a new mock instance.
 func NewMockLogStreamExecutorGetter(ctrl *gomock.Controller) *MockLogStreamExecutorGetter {
 	mock := &MockLogStreamExecutorGetter{ctrl: ctrl}
 	mock.recorder = &MockLogStreamExecutorGetterMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockLogStreamExecutorGetter) EXPECT() *MockLogStreamExecutorGetterMockRecorder {
 	return m.recorder
 }
 
-// GetLogStreamExecutor mocks base method
+// GetLogStreamExecutor mocks base method.
 func (m *MockLogStreamExecutorGetter) GetLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLogStreamExecutor", logStreamID)
@@ -157,13 +158,13 @@ func (m *MockLogStreamExecutorGetter) GetLogStreamExecutor(logStreamID types.Log
 	return ret0, ret1
 }
 
-// GetLogStreamExecutor indicates an expected call of GetLogStreamExecutor
+// GetLogStreamExecutor indicates an expected call of GetLogStreamExecutor.
 func (mr *MockLogStreamExecutorGetterMockRecorder) GetLogStreamExecutor(logStreamID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogStreamExecutor", reflect.TypeOf((*MockLogStreamExecutorGetter)(nil).GetLogStreamExecutor), logStreamID)
 }
 
-// GetLogStreamExecutors mocks base method
+// GetLogStreamExecutors mocks base method.
 func (m *MockLogStreamExecutorGetter) GetLogStreamExecutors() []LogStreamExecutor {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLogStreamExecutors")
@@ -171,7 +172,7 @@ func (m *MockLogStreamExecutorGetter) GetLogStreamExecutors() []LogStreamExecuto
 	return ret0
 }
 
-// GetLogStreamExecutors indicates an expected call of GetLogStreamExecutors
+// GetLogStreamExecutors indicates an expected call of GetLogStreamExecutors.
 func (mr *MockLogStreamExecutorGetterMockRecorder) GetLogStreamExecutors() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogStreamExecutors", reflect.TypeOf((*MockLogStreamExecutorGetter)(nil).GetLogStreamExecutors))

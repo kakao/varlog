@@ -31,6 +31,16 @@ message AddLogStreamResponse {
     varlogpb.LogStreamDescriptor log_stream = 1;
 }
 
+message UnregisterLogStreamRequest {
+    uint32 log_stream_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+}
+
+message UnregisterLogStreamResponse {}
+
 message SealRequest {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
@@ -81,6 +91,9 @@ service ClusterManager {
     }
 
     rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
+
+    rpc UnregisterLogStream(UnregisterLogStreamRequest)
+        returns (UnregisterLogStreamResponse) {}
 
     rpc Seal(SealRequest) returns (SealResponse) {}
 
