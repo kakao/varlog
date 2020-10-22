@@ -32,6 +32,8 @@ type ClusterManager interface {
 
 	AddLogStream(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 
+	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error
+
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
 	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
 
@@ -291,6 +293,32 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 
 	// TODO: Choose the primary - e.g., shuffle logStreamReplicaMetas
 	return cm.addLogStream(ctx, logStreamDesc)
+}
+
+func (cm *clusterManager) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	clusmeta, err := cm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	lsdesc := clusmeta.GetLogStream(logStreamID)
+	if lsdesc == nil {
+		return errors.New("no such log stream")
+	}
+
+	if lsdesc.GetStatus().Running() {
+		return errors.New("running log stream")
+	}
+	if lsdesc.GetStatus().Deleted() {
+		return errors.New("already deleted")
+	}
+
+	// TODO (jun): test if the log stream has no logs
+
+	return cm.mrMgr.UnregisterLogStream(ctx, logStreamID)
 }
 
 func (cm *clusterManager) verifyLogStream(clusterMetadata *varlogpb.MetadataDescriptor, logStreamDesc *varlogpb.LogStreamDescriptor) error {

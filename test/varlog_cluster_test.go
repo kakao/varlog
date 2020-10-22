@@ -811,6 +811,11 @@ func TestVarlogManagerServer(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(clusmeta.GetLogStream(logStreamID), ShouldNotBeNil)
 
+			Convey("UnregisterLogStream ERROR: running log stream", func() {
+				err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
+				So(err, ShouldNotBeNil)
+			})
+
 			Convey("Seal", func() {
 				lsmetaList, err := cmcli.Seal(context.TODO(), logStreamID)
 				So(err, ShouldBeNil)
@@ -831,6 +836,16 @@ func TestVarlogManagerServer(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(snmeta.GetLogStreams()[0].GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
 				}
+
+				Convey("UnregisterLogStream OK: sealed log stream", func() {
+					err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
+					So(err, ShouldBeNil)
+
+					clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+					So(err, ShouldBeNil)
+
+					So(clusmeta.GetLogStream(logStreamID), ShouldBeNil)
+				})
 
 				Convey("Unseal", func() {
 					err := cmcli.Unseal(context.TODO(), logStreamID)
