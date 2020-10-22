@@ -99,11 +99,12 @@ func (w *snWatcher) heartbeat() {
 
 	//TODO:: make it parallel
 	for _, s := range meta.GetStorageNodes() {
-		sc := w.snMgr.FindByStorageNodeID(s.StorageNodeID)
-
 		ctx, cancel := context.WithTimeout(context.Background(), WATCHER_RPC_TIMEOUT)
 		defer cancel()
-		_, err := sc.GetMetadata(ctx, snpb.MetadataTypeHeartbeat)
+
+		// NOTE: Missing a storage node triggers refreshes of storage node manager, which
+		// can be a somewhat slow job.
+		_, err := w.snMgr.GetMetadata(ctx, s.StorageNodeID)
 		if err != nil {
 			continue
 		}
