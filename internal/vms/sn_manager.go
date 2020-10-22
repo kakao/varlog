@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
@@ -14,7 +13,7 @@ import (
 )
 
 type StorageNodeManager interface {
-	Init() error
+	Refresh(ctx context.Context) error
 
 	FindByStorageNodeID(storageNodeID types.StorageNodeID) varlog.ManagementClient
 
@@ -26,7 +25,7 @@ type StorageNodeManager interface {
 
 	GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
-	AddStorageNode(ctx context.Context, snmcl varlog.ManagementClient) error
+	AddStorageNode(snmcl varlog.ManagementClient)
 
 	AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error
 
@@ -53,37 +52,47 @@ type snManager struct {
 	logger *zap.Logger
 }
 
-func NewStorageNodeManager(cmView ClusterMetadataView, logger *zap.Logger) StorageNodeManager {
+func NewStorageNodeManager(ctx context.Context, cmView ClusterMetadataView, logger *zap.Logger) (StorageNodeManager, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("snmanager")
-	return &snManager{
+	sm := &snManager{
 		cmView: cmView,
 		cs:     make(map[types.StorageNodeID]varlog.ManagementClient),
 		logger: logger,
 	}
+	if err := sm.Refresh(ctx); err != nil {
+		return nil, err
+	}
+	return sm, nil
 }
 
-func (sm *snManager) Init() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func (sm *snManager) Refresh(ctx context.Context) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	return sm.refresh(ctx)
+}
+
+func (sm *snManager) refresh(ctx context.Context) error {
 	meta, err := sm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return err
 	}
 
-	for _, s := range meta.GetStorageNodes() {
-		snmcl, _, err := sm.GetMetadataByAddr(ctx, s.Address)
-		if err != nil {
-			return err
-		}
-		storageNodeID := snmcl.PeerStorageNodeID()
-		if sm.FindByStorageNodeID(storageNodeID) != nil {
+	for _, sndesc := range meta.GetStorageNodes() {
+		storageNodeID := sndesc.GetStorageNodeID()
+		_, ok := sm.cs[storageNodeID]
+		if ok {
 			continue
 		}
 
-		sm.AddStorageNode(ctx, snmcl)
+		snmcl, _, err := sm.GetMetadataByAddr(ctx, sndesc.Address)
+		if err != nil {
+			return err
+		}
+
+		sm.addStorageNode(snmcl)
 	}
 
 	return nil
@@ -144,21 +153,26 @@ func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.Storag
 
 	snmcl, ok := sm.cs[storageNodeID]
 	if !ok {
-		sm.logger.Panic("no such storage node", zap.Any("snid", storageNodeID))
+		err := errors.New("no such storage node")
+		sm.logger.Warn("no such storage node", zap.Any("snid", storageNodeID), zap.Error(err))
+		sm.refresh(ctx)
+		return nil, err
 	}
 	return snmcl.GetMetadata(ctx, snpb.MetadataTypeHeartbeat)
 }
 
-func (sm *snManager) AddStorageNode(ctx context.Context, snmcl varlog.ManagementClient) error {
+func (sm *snManager) AddStorageNode(snmcl varlog.ManagementClient) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
+	sm.addStorageNode(snmcl)
+}
 
+func (sm *snManager) addStorageNode(snmcl varlog.ManagementClient) {
 	storageNodeID := snmcl.PeerStorageNodeID()
 	if _, ok := sm.cs[storageNodeID]; ok {
 		sm.logger.Panic("already registered storagenode", zap.Any("snid", storageNodeID))
 	}
 	sm.cs[storageNodeID] = snmcl
-	return nil
 }
 
 func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
@@ -201,6 +215,9 @@ func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *varlogpb.L
 }
 
 func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]varlogpb.LogStreamMetadataDescriptor, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
 	replicas, err := sm.replicas(ctx, logStreamID)
 	if err != nil {
 		return nil, err
@@ -230,6 +247,9 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 }
 
 func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
 	replicas, err := sm.replicas(ctx, logStreamID)
 	if err != nil {
 		return nil, err
@@ -254,6 +274,9 @@ func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID, sr
 }
 
 func (sm *snManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
 	replicas, err := sm.replicas(ctx, logStreamID)
 	if err != nil {
 		return err

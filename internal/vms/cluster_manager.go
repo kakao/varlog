@@ -110,8 +110,8 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 
 	cmView := mrMgr.ClusterMetadataView()
 
-	snMgr := NewStorageNodeManager(cmView, opts.Logger)
-	if err := snMgr.Init(); err != nil {
+	snMgr, err := NewStorageNodeManager(ctx, cmView, opts.Logger)
+	if err != nil {
 		return nil, err
 	}
 
@@ -245,9 +245,8 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*var
 		goto err_out
 	}
 
-	if err = cm.snMgr.AddStorageNode(ctx, snmcl); err == nil {
-		return snmeta, nil
-	}
+	cm.snMgr.AddStorageNode(snmcl)
+	return snmeta, nil
 
 err_out:
 	snmcl.Close()

@@ -22,8 +22,8 @@ func withTestStorageNodeManager(t *testing.T, f func(ctrl *gomock.Controller, sn
 		cmView := NewMockClusterMetadataView(ctrl)
 		cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(meta, nil)
 
-		snManager := NewStorageNodeManager(cmView, zap.L())
-		So(snManager.Init(), ShouldBeNil)
+		snManager, err := NewStorageNodeManager(context.TODO(), cmView, zap.L())
+		So(err, ShouldBeNil)
 
 		Reset(func() {
 			So(snManager.Close(), ShouldBeNil)
@@ -42,12 +42,11 @@ func TestAddStorageNode(t *testing.T) {
 
 			Convey("Then the StorageNode should be added to it", func() {
 
-				err := snManager.AddStorageNode(context.TODO(), snmcl)
-				So(err, ShouldBeNil)
+				snManager.AddStorageNode(snmcl)
 
 				Convey("When the StorageNodeID of StorageNode already exists in it", func() {
 					Convey("Then the StorageNode should not be added to it", func() {
-						f := func() { snManager.AddStorageNode(context.TODO(), snmcl) }
+						f := func() { snManager.AddStorageNode(snmcl) }
 						So(f, ShouldPanic)
 					})
 				})
@@ -87,8 +86,7 @@ func TestAddLogStream(t *testing.T) {
 			// missing SNID=1
 			for i := 1; i < len(snmclList); i++ {
 				snmcl := snmclList[i]
-				err := snManager.AddStorageNode(context.TODO(), snmcl)
-				So(err, ShouldBeNil)
+				snManager.AddStorageNode(snmcl)
 			}
 
 			Convey("Then LogStream should not be added", func() {
@@ -116,8 +114,7 @@ func TestAddLogStream(t *testing.T) {
 
 			for i := 0; i < len(snmclList); i++ {
 				snmcl := snmclList[i]
-				err := snManager.AddStorageNode(context.TODO(), snmcl)
-				So(err, ShouldBeNil)
+				snManager.AddStorageNode(snmcl)
 			}
 
 			Convey("Then LogStream should not be added", func() {
@@ -137,10 +134,9 @@ func TestAddLogStream(t *testing.T) {
 					}, nil,
 				)
 
-				err := snManager.AddStorageNode(context.TODO(), snmcl)
-				So(err, ShouldBeNil)
+				snManager.AddStorageNode(snmcl)
 
-				err = nil
+				var err error
 				if i == 1 {
 					err = varlog.ErrInternal
 				}
@@ -164,8 +160,7 @@ func TestAddLogStream(t *testing.T) {
 					}, nil,
 				)
 
-				err := snManager.AddStorageNode(context.TODO(), snmcl)
-				So(err, ShouldBeNil)
+				snManager.AddStorageNode(snmcl)
 
 				snmcl.EXPECT().AddLogStream(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			}
@@ -194,8 +189,7 @@ func TestSeal(t *testing.T) {
 			snmcl.EXPECT().PeerStorageNodeID().Return(snid).AnyTimes()
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
 
-			err := snManager.AddStorageNode(context.TODO(), snmcl)
-			So(err, ShouldBeNil)
+			snManager.AddStorageNode(snmcl)
 
 			snmclList = append(snmclList, snmcl)
 
@@ -276,8 +270,7 @@ func TestUnseal(t *testing.T) {
 			snmcl.EXPECT().PeerStorageNodeID().Return(snid).AnyTimes()
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
 
-			err := snManager.AddStorageNode(context.TODO(), snmcl)
-			So(err, ShouldBeNil)
+			snManager.AddStorageNode(snmcl)
 
 			snmclList = append(snmclList, snmcl)
 

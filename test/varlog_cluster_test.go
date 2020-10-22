@@ -1108,9 +1108,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		cmView := mrMgr.ClusterMetadataView()
-		snMgr := vms.NewStorageNodeManager(cmView, zap.NewNop())
-
-		err = snMgr.Init()
+		snMgr, err := vms.NewStorageNodeManager(context.TODO(), cmView, zap.NewNop())
 		So(err, ShouldBeNil)
 
 		snHandler := newTestSnHandler()
