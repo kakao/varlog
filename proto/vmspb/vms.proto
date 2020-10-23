@@ -66,6 +66,18 @@ message RemoveLogStreamReplicaRequest {
 
 message RemoveLogStreamReplicaResponse {}
 
+message UpdateLogStreamRequest {
+    uint32 log_stream_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+    repeated varlogpb.ReplicaDescriptor replicas = 2
+        [(gogoproto.nullable) = true];
+}
+
+message UpdateLogStreamResponse {}
+
 message SealRequest {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
@@ -125,6 +137,9 @@ service ClusterManager {
 
     rpc RemoveLogStreamReplica(RemoveLogStreamReplicaRequest)
         returns (RemoveLogStreamReplicaResponse) {}
+
+    rpc UpdateLogStream(UpdateLogStreamRequest)
+        returns (UpdateLogStreamResponse) {}
 
     rpc Seal(SealRequest) returns (SealResponse) {}
 
