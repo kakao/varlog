@@ -785,6 +785,31 @@ func TestVarlogManagerServer(t *testing.T) {
 			So(snmeta.GetStorageNode().GetStorageNodeID(), ShouldEqual, snid)
 		}
 
+		// replicas to add log stream manually
+		var replicas []*varlogpb.ReplicaDescriptor
+		for snid := range env.SNs {
+			replica := &varlogpb.ReplicaDescriptor{
+				StorageNodeID: snid,
+				Path:          "/tmp",
+			}
+			replicas = append(replicas, replica)
+		}
+
+		Convey("UnregisterStorageNode", func() {
+			for snid := range env.SNs {
+				err := cmcli.UnregisterStorageNode(context.TODO(), snid)
+				So(err, ShouldBeNil)
+
+				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+				So(clusmeta.GetStorageNode(snid), ShouldBeNil)
+			}
+
+			// AddLogStream: ERROR
+			_, err := cmcli.AddLogStream(context.TODO(), replicas)
+			So(err, ShouldNotBeNil)
+		})
+
 		Convey("Duplicated AddStorageNode", func() {
 			for _, snAddr := range snAddrs {
 				_, err := cmcli.AddStorageNode(context.TODO(), snAddr)
@@ -860,16 +885,6 @@ func TestVarlogManagerServer(t *testing.T) {
 			})
 		})
 
-		// replicas to add log stream
-		var replicas []*varlogpb.ReplicaDescriptor
-		for snid := range env.SNs {
-			replica := &varlogpb.ReplicaDescriptor{
-				StorageNodeID: snid,
-				Path:          "/tmp",
-			}
-			replicas = append(replicas, replica)
-		}
-
 		Convey("AddLogStream - Manual", func() {
 			logStreamDesc, err := cmcli.AddLogStream(context.TODO(), replicas)
 			So(err, ShouldBeNil)
@@ -922,7 +937,7 @@ func TestVarlogManagerServer(t *testing.T) {
 				So(err, ShouldBeNil)
 			})
 
-			Convey("AddLogStreamx - OK: due to LogStreamIDGenerator.Refresh", func() {
+			Convey("AddLogStream - OK: due to LogStreamIDGenerator.Refresh", func() {
 				logStreamDesc, err := cmcli.AddLogStream(context.TODO(), replicas)
 				So(err, ShouldBeNil)
 				So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)

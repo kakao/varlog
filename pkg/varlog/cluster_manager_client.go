@@ -11,6 +11,7 @@ import (
 
 type ClusterManagerClient interface {
 	AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error
 	AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error
 	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
@@ -49,6 +50,11 @@ func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) 
 		return nil, FromStatusError(ctx, err)
 	}
 	return rsp.StorageNode, nil
+}
+
+func (c *clusterManagerClient) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
+	_, err := c.rpcClient.UnregisterStorageNode(ctx, &vmspb.UnregisterStorageNodeRequest{StorageNodeID: storageNodeID})
+	return FromStatusError(ctx, err)
 }
 
 func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
