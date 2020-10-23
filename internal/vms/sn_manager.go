@@ -256,6 +256,7 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 		})
 		sm.logger.Debug("seal result", zap.Reflect("logstream_meta", lsmetaDesc))
 	}
+
 	return lsmetaDesc, nil
 }
 

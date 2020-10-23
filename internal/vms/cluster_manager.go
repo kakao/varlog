@@ -388,12 +388,22 @@ func (cm *clusterManager) removableLogStreamReplica(clusmeta *varlogpb.MetadataD
 }
 
 func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error) {
+	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusSealing)
+
 	lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
 	if err != nil {
 		cm.logger.Error("error while sealing by MR", zap.Error(err))
+		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
 		return nil, err
 	}
-	return cm.snMgr.Seal(ctx, logStreamID, lastGLSN)
+
+	result, err := cm.snMgr.Seal(ctx, logStreamID, lastGLSN)
+	if err != nil {
+		cm.logger.Error("error while sealing by SN", zap.Error(err))
+		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
+	}
+
+	return result, err
 }
 
 func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
@@ -405,10 +415,21 @@ func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamI
 }
 
 func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
+	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusUnsealing)
+
 	if err := cm.snMgr.Unseal(ctx, logStreamID); err != nil {
+		cm.logger.Error("error while unsealing by MR", zap.Error(err))
+		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
 		return err
 	}
-	return cm.mrMgr.Unseal(ctx, logStreamID)
+
+	if err := cm.mrMgr.Unseal(ctx, logStreamID); err != nil {
+		cm.logger.Error("error while unsealing by SN", zap.Error(err))
+		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
+		return err
+	}
+
+	return nil
 }
 
 func (cm *clusterManager) HandleHeartbeatTimeout(snID types.StorageNodeID) {
@@ -425,6 +446,77 @@ func (cm *clusterManager) HandleHeartbeatTimeout(snID types.StorageNodeID) {
 	}
 }
 
+func (cm *clusterManager) checkLogStreamStatus(logStreamID types.LogStreamID, mrStatus, replicaStatus varlogpb.LogStreamStatus) {
+	lsStat := cm.statRepository.GetLogStream(logStreamID)
+	switch lsStat.Status {
+	case varlogpb.LogStreamStatusRunning:
+		if mrStatus.Sealed() || replicaStatus.Sealed() {
+			cm.Seal(context.TODO(), logStreamID)
+		}
+	case varlogpb.LogStreamStatusSealing:
+		for _, r := range lsStat.Replicas {
+			if r.Status != varlogpb.LogStreamStatusSealed {
+				cm.Seal(context.TODO(), logStreamID)
+				return
+			}
+		}
+
+		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusSealed)
+	case varlogpb.LogStreamStatusUnsealing:
+		for _, r := range lsStat.Replicas {
+			if r.Status != varlogpb.LogStreamStatusRunning {
+				return
+			}
+		}
+
+		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
+	}
+}
+
+func (cm *clusterManager) syncLogStream(logStreamID types.LogStreamID) {
+	min, max := types.MaxGLSN, types.InvalidGLSN
+	var src, tgt types.StorageNodeID
+
+	lsStat := cm.statRepository.GetLogStream(logStreamID)
+	if !lsStat.Status.Sealed() {
+		return
+	}
+
+	snIDs := make([]types.StorageNodeID, 0, len(lsStat.Replicas))
+	for snID := range lsStat.Replicas {
+		snIDs = append(snIDs, snID)
+	}
+	sort.Slice(snIDs, func(i, j int) bool { return snIDs[i] < snIDs[j] })
+
+	for i, snID := range snIDs {
+		r, _ := lsStat.Replicas[snID]
+
+		if !r.Status.Sealed() {
+			return
+		}
+
+		if i == 0 || r.HighWatermark < min {
+			min = r.HighWatermark
+			tgt = snID
+		}
+
+		if i == 0 || r.HighWatermark > max {
+			max = r.HighWatermark
+			src = snID
+		}
+	}
+
+	if src != tgt {
+		cm.Sync(context.TODO(), logStreamID, src, tgt)
+
+		//TODO: Unseal
+		//status, _ := cm.Sync(context.TODO(), ls.LogStreamID, src, tgt)
+		//if status.GetState() == snpb.SyncStateComplete {
+		//cm.Unseal(context.TODO(), ls.LogStreamID)
+		//}
+	}
+}
+
 func (cm *clusterManager) HandleReport(snm *varlogpb.StorageNodeMetadataDescriptor) {
 	meta, err := cm.cmView.ClusterMetadata(context.TODO())
 	if err != nil {
@@ -433,63 +525,20 @@ func (cm *clusterManager) HandleReport(snm *varlogpb.StorageNodeMetadataDescript
 
 	cm.statRepository.Report(snm)
 
-	//Find Zombie & Sealed LS
+	// Sync LogStreamStatus
 	for _, ls := range snm.GetLogStreams() {
 		mls := meta.GetLogStream(ls.LogStreamID)
 		if mls == nil {
 			//TODO: RemoveLogStream
 		} else {
-			if mls.Status != ls.Status &&
-				(mls.Status.Sealed() ||
-					ls.Status.Sealed()) {
-				cm.Seal(context.TODO(), ls.LogStreamID)
-			}
+			cm.checkLogStreamStatus(ls.LogStreamID, mls.Status, ls.Status)
 		}
 	}
 
-SYNC:
+	// Sync LogStream
 	for _, ls := range snm.GetLogStreams() {
-		if !ls.Status.Sealed() {
-			continue SYNC
-		}
-
-		min, max := types.MaxGLSN, types.InvalidGLSN
-		var src, tgt types.StorageNodeID
-
-		replicas := cm.statRepository.GetLogStream(ls.LogStreamID)
-
-		snIDs := make([]types.StorageNodeID, 0, len(replicas))
-		for snID := range replicas {
-			snIDs = append(snIDs, snID)
-		}
-		sort.Slice(snIDs, func(i, j int) bool { return snIDs[i] < snIDs[j] })
-
-		for i, snID := range snIDs {
-			r, _ := replicas[snID]
-
-			if !r.Status.Sealed() {
-				continue SYNC
-			}
-
-			if i == 0 || r.HighWatermark < min {
-				min = r.HighWatermark
-				tgt = snID
-			}
-
-			if i == 0 || r.HighWatermark > max {
-				max = r.HighWatermark
-				src = snID
-			}
-		}
-
-		if src != tgt {
-			cm.Sync(context.TODO(), ls.LogStreamID, src, tgt)
-
-			//TODO: Unseal
-			//status, _ := cm.Sync(context.TODO(), ls.LogStreamID, src, tgt)
-			//if status.GetState() == snpb.SyncStateComplete {
-			//cm.Unseal(context.TODO(), ls.LogStreamID)
-			//}
+		if ls.Status.Sealed() {
+			cm.syncLogStream(ls.LogStreamID)
 		}
 	}
 }

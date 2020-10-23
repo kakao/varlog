@@ -30,6 +30,8 @@ enum LogStreamStatus {
         [(gogoproto.enumvalue_customname) = "LogStreamStatusSealed"];
     LS_STATUS_DELETED = 3
         [(gogoproto.enumvalue_customname) = "LogStreamStatusDeleted"];
+    LS_STATUS_UNSEALING = 4
+        [(gogoproto.enumvalue_customname) = "LogStreamStatusUnsealing"];
 }
 
 message StorageDescriptor {
