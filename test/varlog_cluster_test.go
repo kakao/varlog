@@ -1239,7 +1239,8 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 		metaIndex := statRepository.GetAppliedIndex()
 		So(metaIndex, ShouldBeGreaterThan, 0)
 		So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
-		So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+		lsStat := statRepository.GetLogStream(lsID)
+		So(lsStat.Replicas, ShouldNotBeNil)
 
 		Convey("When varlog cluster is not changed", func(ctx C) {
 			Convey("Then refresh the statRepository and nothing happens", func(ctx C) {
@@ -1259,7 +1260,8 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 
 				So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
 				So(statRepository.GetStorageNode(snID2), ShouldNotBeNil)
-				So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+				lsStat := statRepository.GetLogStream(lsID)
+				So(lsStat.Replicas, ShouldNotBeNil)
 
 				Convey("When UpdateLS", func(ctx C) {
 					meta, err := mr.GetMetadata(context.TODO())
@@ -1280,11 +1282,11 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 						So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
 						So(statRepository.GetStorageNode(snID2), ShouldNotBeNil)
 						lsStat := statRepository.GetLogStream(lsID)
-						So(lsStat, ShouldNotBeNil)
+						So(lsStat.Replicas, ShouldNotBeNil)
 
-						_, ok := lsStat[snID]
+						_, ok := lsStat.Replicas[snID]
 						So(ok, ShouldBeFalse)
-						_, ok = lsStat[snID2]
+						_, ok = lsStat.Replicas[snID2]
 						So(ok, ShouldBeTrue)
 					})
 				})
@@ -1300,8 +1302,10 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 				So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
 
 				So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
-				So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
-				So(statRepository.GetLogStream(lsID2), ShouldNotBeNil)
+				lsStat := statRepository.GetLogStream(lsID)
+				So(lsStat.Replicas, ShouldNotBeNil)
+				lsStat = statRepository.GetLogStream(lsID2)
+				So(lsStat.Replicas, ShouldNotBeNil)
 			})
 		})
 
@@ -1315,7 +1319,8 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 				metaIndex := statRepository.GetAppliedIndex()
 
 				So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
-				So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+				lsStat := statRepository.GetLogStream(lsID)
+				So(lsStat.Replicas, ShouldNotBeNil)
 
 				Convey("When UnsealLS", func(ctx C) {
 					err := mr.Unseal(context.TODO(), lsID)
@@ -1326,7 +1331,8 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 						So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
 
 						So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
-						So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+						lsStat := statRepository.GetLogStream(lsID)
+						So(lsStat.Replicas, ShouldNotBeNil)
 					})
 				})
 			})
@@ -1369,7 +1375,8 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 		statRepository := vms.NewStatRepository(cmView)
 
 		So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
-		So(statRepository.GetLogStream(lsID), ShouldNotBeNil)
+		lsStat := statRepository.GetLogStream(lsID)
+		So(lsStat.Replicas, ShouldNotBeNil)
 
 		Convey("When Report", func(ctx C) {
 			sn, _ := env.SNs[snID]
@@ -1384,9 +1391,9 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 
 			Convey("Then it should be updated", func(ctx C) {
 				lsStat := statRepository.GetLogStream(lsID)
-				So(lsStat, ShouldNotBeNil)
+				So(lsStat.Replicas, ShouldNotBeNil)
 
-				r, ok := lsStat[snID]
+				r, ok := lsStat.Replicas[snID]
 				So(ok, ShouldBeTrue)
 
 				So(r.Status.Sealed(), ShouldBeTrue)
@@ -1398,9 +1405,9 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 
 					Convey("Then reported info should be applied", func(ctx C) {
 						lsStat := statRepository.GetLogStream(lsID)
-						So(lsStat, ShouldNotBeNil)
+						So(lsStat.Replicas, ShouldNotBeNil)
 
-						r, ok := lsStat[snID]
+						r, ok := lsStat.Replicas[snID]
 						So(ok, ShouldBeTrue)
 
 						So(r.Status.Sealed(), ShouldBeTrue)
@@ -1510,6 +1517,175 @@ func TestVarlogLogStreamSync(t *testing.T) {
 						return snMeta.GetLogStreams()[0].Status == varlogpb.LogStreamStatusSealed
 					}), ShouldBeTrue)
 				})
+			})
+		})
+	})
+}
+
+func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
+	Convey("Given LogStream", t, func(ctx C) {
+		nrRep := 2
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             nrRep,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.LeaderElected()
+		}), ShouldBeTrue)
+
+		mr := env.GetMR()
+
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.IsMember()
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		for i := 0; i < nrRep; i++ {
+			_, err := env.AddSN()
+			So(err, ShouldBeNil)
+		}
+
+		lsID, err := env.AddLS()
+		So(err, ShouldBeNil)
+
+		meta, err := mr.GetMetadata(context.TODO())
+		So(err, ShouldBeNil)
+
+		ls := meta.GetLogStream(lsID)
+		So(ls, ShouldNotBeNil)
+
+		// Run VMS Server
+		_, err = env.RunClusterManager([]string{mrAddr})
+		So(err, ShouldBeNil)
+
+		cmcli, err := env.NewClusterManagerClient()
+		So(err, ShouldBeNil)
+
+		Convey("When Seal is incomplete", func(ctx C) {
+			// control failedSN for making test condition
+			var failedSNID types.StorageNodeID
+			var failedSN *storagenode.StorageNode
+			for snID, sn := range env.SNs {
+				failedSNID = snID
+				failedSN = sn
+				break
+			}
+
+			// remove replica to make Seal LS imcomplete
+			err := failedSN.RemoveLogStream(env.ClusterID, failedSNID, lsID)
+			So(err, ShouldBeNil)
+
+			result, err := cmcli.Seal(context.TODO(), lsID)
+			So(err, ShouldBeNil)
+			So(len(result), ShouldBeLessThan, nrRep)
+
+			Convey("Then SN Watcher make LS sealed", func(ctx C) {
+				_, err := failedSN.AddLogStream(env.ClusterID, failedSNID, lsID, "path")
+				So(err, ShouldBeNil)
+
+				So(testutil.CompareWaitN(100, func() bool {
+					mr.GetMetadata(context.TODO())
+					meta, err := mr.GetMetadata(context.TODO())
+					if err != nil {
+						return false
+					}
+					ls := meta.GetLogStream(lsID)
+					if ls == nil {
+						return false
+					}
+
+					return ls.Status.Sealed()
+				}), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
+	Convey("Given Sealed LogStream", t, func(ctx C) {
+		nrRep := 2
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             nrRep,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.LeaderElected()
+		}), ShouldBeTrue)
+
+		mr := env.GetMR()
+
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.IsMember()
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		for i := 0; i < nrRep; i++ {
+			_, err := env.AddSN()
+			So(err, ShouldBeNil)
+		}
+
+		lsID, err := env.AddLS()
+		So(err, ShouldBeNil)
+
+		meta, err := mr.GetMetadata(context.TODO())
+		So(err, ShouldBeNil)
+
+		ls := meta.GetLogStream(lsID)
+		So(ls, ShouldNotBeNil)
+
+		// Run VMS Server
+		_, err = env.RunClusterManager([]string{mrAddr})
+		So(err, ShouldBeNil)
+
+		cmcli, err := env.NewClusterManagerClient()
+		So(err, ShouldBeNil)
+
+		_, err = cmcli.Seal(context.TODO(), lsID)
+		So(err, ShouldBeNil)
+
+		Convey("When Unseal is incomplete", func(ctx C) {
+			// control failedSN for making test condition
+			var failedSNID types.StorageNodeID
+			var failedSN *storagenode.StorageNode
+			for snID, sn := range env.SNs {
+				failedSNID = snID
+				failedSN = sn
+				break
+			}
+
+			// remove replica to make Unseal LS imcomplete
+			err := failedSN.RemoveLogStream(env.ClusterID, failedSNID, lsID)
+			So(err, ShouldBeNil)
+
+			err = cmcli.Unseal(context.TODO(), lsID)
+			So(err, ShouldNotBeNil)
+
+			Convey("Then SN Watcher make LS sealed", func(ctx C) {
+				_, err := failedSN.AddLogStream(env.ClusterID, failedSNID, lsID, "path")
+				So(err, ShouldBeNil)
+
+				So(testutil.CompareWaitN(100, func() bool {
+					meta, err := failedSN.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+					if err != nil {
+						return false
+					}
+
+					for _, r := range meta.LogStreams {
+						return r.Status.Sealed()
+					}
+
+					return false
+				}), ShouldBeTrue)
 			})
 		})
 	})
