@@ -60,6 +60,8 @@ type StorageNode struct {
 
 	lsr LogStreamReporter
 
+	tst Timestamper
+
 	options *StorageNodeOptions
 	logger  *zap.Logger
 }
@@ -69,6 +71,7 @@ func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
 		clusterID:     options.ClusterID,
 		storageNodeID: options.StorageNodeID,
 		lseMap:        make(map[types.LogStreamID]LogStreamExecutor),
+		tst:           NewTimestamper(),
 		options:       options,
 		logger:        options.Logger,
 		sw:            stopwaiter.New(),
@@ -170,9 +173,8 @@ func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.Metada
 				{Path: "/tmp", Used: 0, Total: 0},
 			},
 		},
-	}
-	if metadataType == snpb.MetadataTypeHeartbeat {
-		return ret, nil
+		CreatedTime: sn.tst.Created(),
+		UpdatedTime: sn.tst.LastUpdated(),
 	}
 
 	ret.LogStreams = sn.logStreamMetadataDescriptors()
@@ -188,7 +190,6 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetada
 	}
 	lsdList := make([]varlogpb.LogStreamMetadataDescriptor, len(lseList))
 	for i, lse := range lseList {
-		lse.LogStreamID()
 		lsdList[i] = varlogpb.LogStreamMetadataDescriptor{
 			StorageNodeID: sn.storageNodeID,
 			LogStreamID:   lse.LogStreamID(),
@@ -197,7 +198,9 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetada
 			// TODO (jun): path represents disk-based storage and
 			// memory-based storage
 			// Path: lse.Path(),
-			Path: "",
+			Path:        "",
+			CreatedTime: lse.Created(),
+			UpdatedTime: lse.LastUpdated(),
 		}
 	}
 	return lsdList
@@ -226,7 +229,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 		lse.Close()
 		return "", err
 	}
-
+	sn.tst.Touch()
 	sn.lseMap[lsid] = lse
 	return stgPath, nil
 }
@@ -244,6 +247,7 @@ func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNo
 	}
 	delete(sn.lseMap, lsid)
 	lse.Close()
+	sn.tst.Touch()
 	return nil
 }
 
@@ -257,6 +261,7 @@ func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.Stora
 		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, varlog.ErrInvalidArgument
 	}
 	status, hwm := lse.Seal(lastCommittedGLSN)
+	sn.tst.Touch()
 	return status, hwm, nil
 }
 
@@ -269,6 +274,7 @@ func (sn *StorageNode) Unseal(clusterID types.ClusterID, storageNodeID types.Sto
 	if !ok {
 		return varlog.ErrInvalidArgument
 	}
+	sn.tst.Touch()
 	return lse.Unseal()
 }
 

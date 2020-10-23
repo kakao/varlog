@@ -818,10 +818,20 @@ func TestVarlogManagerServer(t *testing.T) {
 		})
 
 		Convey("AddLogStream - Simple", func() {
+			timeCheckSN := env.SNs[1]
+			snmeta, err := timeCheckSN.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+			So(err, ShouldBeNil)
+			updatedAt := snmeta.GetUpdatedTime()
+
 			logStreamDesc, err := cmcli.AddLogStream(context.TODO(), nil)
 			So(err, ShouldBeNil)
 			So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
 			logStreamID := logStreamDesc.GetLogStreamID()
+
+			snmeta, err = timeCheckSN.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+			So(err, ShouldBeNil)
+			So(snmeta.GetUpdatedTime(), ShouldNotEqual, updatedAt)
+			updatedAt = snmeta.GetUpdatedTime()
 
 			// pass since NrRep equals to NrSN
 			var snidList []types.StorageNodeID
@@ -860,6 +870,7 @@ func TestVarlogManagerServer(t *testing.T) {
 					snmeta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
 					So(err, ShouldBeNil)
 					So(snmeta.GetLogStreams()[0].GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
+					So(snmeta.GetUpdatedTime(), ShouldNotEqual, updatedAt)
 				}
 
 				Convey("UnregisterLogStream OK: sealed log stream", func() {
