@@ -15,6 +15,7 @@ type ClusterManagerClient interface {
 	AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error
 	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, logStreamReplicas []*varlogpb.ReplicaDescriptor) error
 	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
 	Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*snpb.SyncStatus, error)
@@ -74,6 +75,14 @@ func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, stora
 	_, err := c.rpcClient.RemoveLogStreamReplica(ctx, &vmspb.RemoveLogStreamReplicaRequest{
 		StorageNodeID: storageNodeID,
 		LogStreamID:   logStreamID,
+	})
+	return FromStatusError(ctx, err)
+}
+
+func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, logStreamReplicas []*varlogpb.ReplicaDescriptor) error {
+	_, err := c.rpcClient.UpdateLogStream(ctx, &vmspb.UpdateLogStreamRequest{
+		LogStreamID: logStreamID,
+		Replicas:    logStreamReplicas,
 	})
 	return FromStatusError(ctx, err)
 }

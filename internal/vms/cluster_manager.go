@@ -38,6 +38,8 @@ type ClusterManager interface {
 
 	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
 
+	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, replicas []*varlogpb.ReplicaDescriptor) error
+
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
 	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
 
@@ -402,6 +404,63 @@ func (cm *clusterManager) RemoveLogStreamReplica(ctx context.Context, storageNod
 	}
 
 	return cm.snMgr.RemoveLogStream(ctx, storageNodeID, logStreamID)
+}
+
+func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, replicas []*varlogpb.ReplicaDescriptor) error {
+	// NOTE (jun): Name of the method - UpdateLogStream can be confused.
+	// UpdateLogStream can change only replicas. To update status, use Seal or Unseal.
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	clusmeta, err := cm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	oldLSDesc := clusmeta.GetLogStream(logStreamID)
+	if oldLSDesc == nil {
+		return errors.New("no such log stream")
+	}
+
+	if oldLSDesc.GetStatus().Running() {
+		return errors.New("running log stream")
+	}
+	if oldLSDesc.GetStatus().Deleted() {
+		return errors.New("already deleted")
+	}
+
+	newLSDesc := &varlogpb.LogStreamDescriptor{
+		LogStreamID: logStreamID,
+		Status:      oldLSDesc.GetStatus(),
+		Replicas:    replicas,
+	}
+
+	if oldLSDesc.Equal(newLSDesc) {
+		return nil
+	}
+
+	hasSealed := false
+	for _, replica := range replicas {
+		snmeta, err := cm.snMgr.GetMetadata(ctx, replica.GetStorageNodeID())
+		if err != nil {
+			return err
+		}
+		lsmeta, ok := snmeta.FindLogStream(logStreamID)
+		if !ok {
+			// TODO (jun): call AddLogStreamReplica or not?
+			return errors.New("no such log stream replica")
+		}
+		if lsmeta.GetStatus() == varlogpb.LogStreamStatusSealed {
+			hasSealed = true
+		}
+	}
+	if !hasSealed {
+		// TODO (jun): It will supports force mode which updating unstable log stream will
+		// be allowed when oldLSDesc is also unstable.
+		return errors.New("not allowed unstable update")
+	}
+
+	return cm.mrMgr.UpdateLogStream(ctx, newLSDesc)
 }
 
 func (cm *clusterManager) removableLogStreamReplica(clusmeta *varlogpb.MetadataDescriptor, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
