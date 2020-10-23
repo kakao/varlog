@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
@@ -17,6 +19,37 @@ import (
 var (
 	errLSEKilled = errors.New("killed logstreamexecutor")
 )
+
+type Timestamper interface {
+	Created() time.Time
+	LastUpdated() time.Time
+	Touch()
+}
+type timestamper struct {
+	created time.Time
+	updated atomic.Value
+}
+
+func NewTimestamper() Timestamper {
+	now := time.Now()
+	ts := &timestamper{
+		created: now,
+	}
+	ts.updated.Store(now)
+	return ts
+}
+
+func (ts *timestamper) Created() time.Time {
+	return ts.created
+}
+
+func (ts *timestamper) LastUpdated() time.Time {
+	return ts.updated.Load().(time.Time)
+}
+
+func (ts *timestamper) Touch() {
+	ts.updated.Store(time.Now())
+}
 
 type Sealer interface {
 	Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN)
@@ -43,6 +76,11 @@ type Syncer interface {
 }
 
 type LogStreamExecutor interface {
+	Sealer
+	Unsealer
+	Syncer
+	Timestamper
+
 	Run(ctx context.Context) error
 	Close()
 
@@ -59,10 +97,6 @@ type LogStreamExecutor interface {
 
 	GetReport() UncommittedLogStreamStatus
 	Commit(ctx context.Context, commitResult CommittedLogStreamStatus)
-
-	Sealer
-	Unsealer
-	Syncer
 }
 
 type readTask struct {
@@ -157,6 +191,8 @@ type logStreamExecutor struct {
 	syncTracker   map[types.StorageNodeID]*SyncTaskStatus
 	muSyncTracker sync.Mutex
 
+	tst Timestamper
+
 	logger  *zap.Logger
 	options *LogStreamExecutorOptions
 }
@@ -188,6 +224,7 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 		localHighWatermark:   types.AtomicGLSN(types.InvalidGLSN),
 		status:               varlogpb.LogStreamStatusRunning,
 		syncTracker:          make(map[types.StorageNodeID]*SyncTaskStatus),
+		tst:                  NewTimestamper(),
 		logger:               logger,
 		options:              options,
 	}
@@ -196,6 +233,18 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 
 func (lse *logStreamExecutor) LogStreamID() types.LogStreamID {
 	return lse.logStreamID
+}
+
+func (lse *logStreamExecutor) Created() time.Time {
+	return lse.tst.Created()
+}
+
+func (lse *logStreamExecutor) LastUpdated() time.Time {
+	return lse.tst.LastUpdated()
+}
+
+func (lse *logStreamExecutor) Touch() {
+	lse.tst.Touch()
 }
 
 func (lse *logStreamExecutor) Run(ctx context.Context) error {
@@ -331,7 +380,9 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogSt
 func (lse *logStreamExecutor) Unseal() error {
 	lse.muStatus.Lock()
 	defer lse.muStatus.Unlock()
+
 	if lse.status == varlogpb.LogStreamStatusSealed {
+		lse.tst.Touch()
 		lse.status = varlogpb.LogStreamStatusRunning
 		return nil
 	}
@@ -345,6 +396,8 @@ func (lse *logStreamExecutor) sealItself() {
 func (lse *logStreamExecutor) seal(status varlogpb.LogStreamStatus, itself bool) {
 	lse.muStatus.Lock()
 	defer lse.muStatus.Unlock()
+
+	lse.tst.Touch()
 	if !itself || lse.status.Running() {
 		lse.status = status
 	}

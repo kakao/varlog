@@ -571,6 +571,8 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 		So(err, ShouldBeNil)
 		lse := lseI.(*logStreamExecutor)
 
+		updatedAt := lse.LastUpdated()
+
 		Convey("When LogStreamExecutor.sealItself is called", func() {
 			lse.sealItself()
 
@@ -581,6 +583,8 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 				status := lse.status
 				lse.muStatus.RUnlock()
 				So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
+
+				So(lse.LastUpdated(), ShouldNotEqual, updatedAt)
 			})
 		})
 
@@ -590,6 +594,8 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 			Convey("Then status of LogStreamExecutor is SEALING", func() {
 				status, _ := lse.Seal(types.MaxGLSN)
 				So(status, ShouldEqual, varlogpb.LogStreamStatusSealing)
+
+				So(lse.LastUpdated(), ShouldNotEqual, updatedAt)
 			})
 		})
 
@@ -600,6 +606,8 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 			Convey("Then status of LogStreamExecutor is SEALED", func() {
 				status, _ := lse.Seal(types.MinGLSN)
 				So(status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+
+				So(lse.LastUpdated(), ShouldNotEqual, updatedAt)
 			})
 		})
 
@@ -608,6 +616,8 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 			Convey("Then panic is occurred", func() {
 				So(func() { lse.Seal(types.MinGLSN) }, ShouldPanic)
+
+				So(lse.LastUpdated(), ShouldEqual, updatedAt)
 			})
 		})
 

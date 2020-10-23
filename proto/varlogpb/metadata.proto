@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package varlog.varlogpb;
 
+import "google/protobuf/timestamp.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/varlogpb";
@@ -102,6 +103,11 @@ message StorageNodeMetadataDescriptor {
 
     repeated LogStreamMetadataDescriptor log_streams = 3
         [(gogoproto.nullable) = false];
+
+    google.protobuf.Timestamp created_time = 4
+        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    google.protobuf.Timestamp updated_time = 5
+        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 message LogStreamMetadataDescriptor {
@@ -122,6 +128,10 @@ message LogStreamMetadataDescriptor {
         (gogoproto.customname) = "HighWatermark"
     ];
     string path = 5;
+    google.protobuf.Timestamp created_time = 6
+        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    google.protobuf.Timestamp updated_time = 7
+        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 message LogStreamReplicaDescriptor {
