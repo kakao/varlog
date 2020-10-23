@@ -1,5 +1,8 @@
 export
 
+MAKEFLAGS += --warn-undefined-variables
+SHELL := /bin/bash
+
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MAKEFILE_DIR := $(dir $(MAKEFILE_PATH))
 BUILD_DIR := $(MAKEFILE_DIR)/build
@@ -50,31 +53,25 @@ endif
 
 TEST_DIRS := $(sort $(dir $(shell find . -name '*_test.go')))
 
-all : proto libvarlog storagenode metadata_repository vms
+.PHONY: all
+all : proto storagenode metadata_repository vms
 
-VARLOGPB_PROTO := proto/varlogpb
-SNPB_PROTO := proto/snpb
-MRPB_PROTO := proto/mrpb
-VMSPB_PROTO := proto/vmspb
+PROTO_DIRS := $(sort $(dir $(shell find $(MAKEFILE_DIR)/proto -name '*.proto')))
 
-PROTO := $(VARLOGPB_PROTO) $(SNPB_PROTO) $(MRPB_PROTO) $(VMSPB_PROTO)
-
-proto : check_protoc gogoproto $(PROTO)
+.PHONY: proto
+proto: $(PROTO_DIRS) check_protoc gogoproto
 
 STORAGE_NODE := cmd/storagenode
 storagenode : $(STORAGE_NODE_PROTO) $(STORAGE_NODE)
-
-LIBVARLOG := pkg/varlog
-libvarlog : $(LIBVARLOG)
 
 METADATA_REPOSITORY := cmd/metadata_repository
 metadata_repository : $(METADATA_REPOSITORY_PROTO) $(METADATA_REPOSITORY)
 
 VMS := cmd/vms
-vms : $(PROTO) $(VMS)
+vms: $(VMS) $(PROTO_DIRS)
 
-SUBDIRS := $(PROTO) $(STORAGE_NODE) $(LIBVARLOG) $(METADATA_REPOSITORY) $(VMS)
-subdirs : $(SUBDIRS)
+SUBDIRS := $(PROTO_DIRS) $(STORAGE_NODE) $(METADATA_REPOSITORY) $(VMS)
+subdirs: $(SUBDIRS)
 
 $(SUBDIRS) :
 	$(MAKE) -C $@
@@ -198,7 +195,6 @@ proto/mrpb/mock/metadata_repository_mock.go: $(PROTO) proto/mrpb/metadata_reposi
 		MetadataRepositoryServiceClient,MetadataRepositoryServiceServer
 
 .PHONY: test test_report coverage_report
-
 test:
 	tmpfile=$$(mktemp); \
 	(TERM=sh $(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./... 2>&1; echo $$? > $$tmpfile) | \
@@ -215,7 +211,8 @@ test_report:
 coverage_report:
 	gocov convert $(BUILD_DIR)/reports/coverage.out | gocov-xml > $(BUILD_DIR)/reports/coverage.xml
 
-clean :
+.PHONY: clean
+clean:
 	for dir in $(SUBDIRS); do \
 		$(MAKE) -C $$dir clean; \
 	done
