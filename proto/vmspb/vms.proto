@@ -21,6 +21,16 @@ message AddStorageNodeResponse {
     varlogpb.StorageNodeMetadataDescriptor storage_node = 1;
 }
 
+message UnregisterStorageNodeRequest {
+    uint32 storage_node_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+        (gogoproto.customname) = "StorageNodeID"
+    ];
+}
+
+message UnregisterStorageNodeResponse {}
+
 message AddLogStreamRequest {
     // TODO: nullable = false
     repeated varlogpb.ReplicaDescriptor replicas = 1
@@ -104,6 +114,9 @@ message UnsealResponse {}
 service ClusterManager {
     rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {
     }
+
+    rpc UnregisterStorageNode(UnregisterStorageNodeRequest)
+        returns (UnregisterStorageNodeResponse) {}
 
     rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
 

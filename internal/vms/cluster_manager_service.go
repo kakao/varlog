@@ -37,6 +37,11 @@ func (s *clusterManagerService) AddStorageNode(ctx context.Context, req *vmspb.A
 	return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, varlog.ToStatusError(err)
 }
 
+func (s *clusterManagerService) UnregisterStorageNode(ctx context.Context, req *vmspb.UnregisterStorageNodeRequest) (*vmspb.UnregisterStorageNodeResponse, error) {
+	err := s.clusManager.UnregisterStorageNode(ctx, req.GetStorageNodeID())
+	return &vmspb.UnregisterStorageNodeResponse{}, varlog.ToStatusError(err)
+}
+
 func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
 	logStreamDesc, err := s.clusManager.AddLogStream(ctx, req.GetReplicas())
 	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, varlog.ToStatusError(err)

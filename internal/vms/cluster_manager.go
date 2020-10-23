@@ -30,6 +30,8 @@ type ClusterManager interface {
 	// AddStorageNode adds new StorageNode to the cluster.
 	AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
+	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error
+
 	AddLogStream(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 
 	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error
@@ -253,6 +255,37 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*var
 err_out:
 	snmcl.Close()
 	return nil, err
+}
+
+func (cm *clusterManager) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	clusmeta, err := cm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	sndesc := clusmeta.GetStorageNode(storageNodeID)
+	if sndesc == nil {
+		return errors.New("no such storage node")
+	}
+
+	// TODO (jun): Use helper function
+	for _, lsdesc := range clusmeta.GetLogStreams() {
+		for _, replica := range lsdesc.GetReplicas() {
+			if replica.GetStorageNodeID() == storageNodeID {
+				return errors.New("in-use log stream replica")
+			}
+		}
+	}
+
+	if err := cm.mrMgr.UnregisterStorageNode(ctx, storageNodeID); err != nil {
+		return err
+	}
+
+	cm.snMgr.RemoveStorageNode(storageNodeID)
+	return nil
 }
 
 func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {

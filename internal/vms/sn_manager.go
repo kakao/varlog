@@ -27,6 +27,8 @@ type StorageNodeManager interface {
 
 	AddStorageNode(snmcl varlog.ManagementClient)
 
+	RemoveStorageNode(storageNodeID types.StorageNodeID)
+
 	AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error
 
 	RemoveLogStream(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
@@ -175,6 +177,20 @@ func (sm *snManager) addStorageNode(snmcl varlog.ManagementClient) {
 		sm.logger.Panic("already registered storagenode", zap.Any("snid", storageNodeID))
 	}
 	sm.cs[storageNodeID] = snmcl
+}
+
+func (sm *snManager) RemoveStorageNode(storageNodeID types.StorageNodeID) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	snmcl, ok := sm.cs[storageNodeID]
+	if !ok {
+		sm.logger.Warn("tried to remove nonexistent storage node", zap.Any("snid", storageNodeID))
+		return
+	}
+	delete(sm.cs, storageNodeID)
+	if err := snmcl.Close(); err != nil {
+		sm.logger.Warn("error while closing storage node management client", zap.Error(err), zap.Any("snid", storageNodeID))
+	}
 }
 
 func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
