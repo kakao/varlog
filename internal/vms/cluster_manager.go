@@ -378,12 +378,7 @@ func (cm *clusterManager) verifyLogStream(clusterMetadata *varlogpb.MetadataDesc
 
 func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	if err := cm.snMgr.AddLogStream(ctx, logStreamDesc); err != nil {
-		// Unlike verifyLogStream, ErrLogStreamAlreadyExists is transient error in here.
-		if errors.Is(err, varlog.ErrLogStreamAlreadyExists) {
-			cm.logger.Warn("not registered, duplicated logstream id", zap.Error(err))
-			return nil, varlog.NewErrorf(err, codes.Unavailable, "lsid=%v", logStreamDesc.GetLogStreamID())
-		}
-		return nil, err
+		return nil, varlog.NewErrorf(err, codes.Unavailable, "lsid=%v", logStreamDesc.GetLogStreamID())
 	}
 
 	// NB: RegisterLogStream returns nil if the logstream already exists.

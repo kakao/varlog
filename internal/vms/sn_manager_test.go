@@ -21,7 +21,6 @@ func withTestStorageNodeManager(t *testing.T, f func(ctrl *gomock.Controller, sn
 		meta := &varlogpb.MetadataDescriptor{}
 		cmView := NewMockClusterMetadataView(ctrl)
 		cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(meta, nil)
-
 		snManager, err := NewStorageNodeManager(context.TODO(), cmView, zap.L())
 		So(err, ShouldBeNil)
 
@@ -90,57 +89,21 @@ func TestAddLogStream(t *testing.T) {
 			}
 
 			Convey("Then LogStream should not be added", func() {
-				f := func() { snManager.AddLogStream(context.TODO(), logStreamDesc) }
-				So(f, ShouldPanic)
-			})
-		})
-
-		Convey("When LogStreamID already exists in metadata of storage node", func() {
-			badSNMCL := snmclList[0]
-			badSNMCL.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
-				&varlogpb.StorageNodeMetadataDescriptor{
-					ClusterID:   clusterID,
-					StorageNode: &varlogpb.StorageNodeDescriptor{},
-					LogStreams: []varlogpb.LogStreamMetadataDescriptor{
-						{
-							StorageNodeID: badSNMCL.PeerStorageNodeID(),
-							LogStreamID:   logStreamID,
-							Status:        varlogpb.LogStreamStatusRunning,
-							HighWatermark: types.MinGLSN,
-							Path:          "/tmp",
-						},
-					},
-				}, nil).MaxTimes(1)
-
-			for i := 0; i < len(snmclList); i++ {
-				snmcl := snmclList[i]
-				snManager.AddStorageNode(snmcl)
-			}
-
-			Convey("Then LogStream should not be added", func() {
+				cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
 				err := snManager.AddLogStream(context.TODO(), logStreamDesc)
 				So(err, ShouldNotBeNil)
 			})
 		})
 
-		Convey("When AddLogStream rpc to StorageNode fails", func() {
+		Convey("When at least one of AddLogStream rpc to storage node fails", func() {
+			snmclList[0].EXPECT().AddLogStream(gomock.Any(), gomock.Any(), gomock.Any()).Return(varlog.ErrInternal).MaxTimes(1)
+			for i := 1; i < len(snmclList); i++ {
+				snmcl := snmclList[i]
+				snmcl.EXPECT().AddLogStream(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).MaxTimes(1)
+			}
 			for i := 0; i < len(snmclList); i++ {
 				snmcl := snmclList[i]
-				snmcl.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
-					&varlogpb.StorageNodeMetadataDescriptor{
-						ClusterID:   clusterID,
-						StorageNode: &varlogpb.StorageNodeDescriptor{},
-						LogStreams:  nil,
-					}, nil,
-				)
-
 				snManager.AddStorageNode(snmcl)
-
-				var err error
-				if i == 1 {
-					err = varlog.ErrInternal
-				}
-				snmcl.EXPECT().AddLogStream(gomock.Any(), gomock.Any(), gomock.Any()).Return(err).MaxTimes(1)
 			}
 
 			Convey("Then LogStream should not be added", func() {
@@ -152,16 +115,7 @@ func TestAddLogStream(t *testing.T) {
 		Convey("When AddLogStream rpc to StorageNode succeeds", func() {
 			for i := 0; i < len(snmclList); i++ {
 				snmcl := snmclList[i]
-				snmcl.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
-					&varlogpb.StorageNodeMetadataDescriptor{
-						ClusterID:   clusterID,
-						StorageNode: &varlogpb.StorageNodeDescriptor{},
-						LogStreams:  nil,
-					}, nil,
-				)
-
 				snManager.AddStorageNode(snmcl)
-
 				snmcl.EXPECT().AddLogStream(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			}
 
@@ -220,7 +174,8 @@ func TestSeal(t *testing.T) {
 		}
 
 		Convey("When getting cluster metadata fails", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, varlog.ErrInternal)
+			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, varlog.ErrInternal).AnyTimes()
+
 			Convey("Then Seal shoud return error", func() {
 				_, err := snManager.Seal(context.TODO(), logStreamID, types.MinGLSN)
 				So(err, ShouldNotBeNil)
@@ -228,7 +183,7 @@ func TestSeal(t *testing.T) {
 		})
 
 		Convey("When Seal rpc to StorageNode fails", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil)
+			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil).AnyTimes()
 			const lastGLSN = types.GLSN(10)
 
 			for i := 0; i < len(snmclList)-1; i++ {
@@ -301,7 +256,7 @@ func TestUnseal(t *testing.T) {
 		}
 
 		Convey("When getting cluster metadata fails", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, varlog.ErrInternal)
+			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, varlog.ErrInternal).AnyTimes()
 
 			Convey("Then Unseal should return error", func() {
 				err := snManager.Unseal(context.TODO(), logStreamID)
@@ -310,7 +265,7 @@ func TestUnseal(t *testing.T) {
 		})
 
 		Convey("When Unseal rpc to StorageNode fails", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil)
+			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil).AnyTimes()
 			for i := 0; i < len(snmclList)-1; i++ {
 				snmcl := snmclList[i]
 				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(nil)
@@ -324,7 +279,7 @@ func TestUnseal(t *testing.T) {
 		})
 
 		Convey("When Unseal rpc to StorageNode succeeds", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil)
+			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil).AnyTimes()
 			for i := 0; i < len(snmclList); i++ {
 				snmcl := snmclList[i]
 				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(nil)
