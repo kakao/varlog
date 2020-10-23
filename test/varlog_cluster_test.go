@@ -903,17 +903,24 @@ func TestVarlogManagerServer(t *testing.T) {
 			// Add logstream to storagenode
 			badSNID := types.StorageNodeID(1)
 			badSN := env.SNs[badSNID]
-			_, err := badSN.AddLogStream(env.ClusterID, badSNID, types.LogStreamID(1), "/tmp")
+			badLSID := types.LogStreamID(1)
+			_, err := badSN.AddLogStream(env.ClusterID, badSNID, badLSID, "/tmp")
 			So(err, ShouldBeNil)
 
 			// Not registered logstream
 			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
-			So(clusmeta.GetLogStream(types.LogStreamID(1)), ShouldBeNil)
+			So(clusmeta.GetLogStream(badLSID), ShouldBeNil)
 
+			// FIXME (jun): This test passes due to seqLSIDGen, but it is very fragile.
 			_, err = cmcli.AddLogStream(context.TODO(), replicas)
 			So(err, ShouldNotBeNil)
 			So(varlog.IsTransientErr(err), ShouldBeTrue)
+
+			Convey("RemoveLogStreamReplica: garbage log stream can be removed", func() {
+				err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, types.LogStreamID(1))
+				So(err, ShouldBeNil)
+			})
 
 			Convey("AddLogStreamx - OK: due to LogStreamIDGenerator.Refresh", func() {
 				logStreamDesc, err := cmcli.AddLogStream(context.TODO(), replicas)
@@ -923,8 +930,13 @@ func TestVarlogManagerServer(t *testing.T) {
 				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 				So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
-			})
 
+				Convey("RemoveLogStreamReplica: registered log stream cannot be removed", func() {
+					logStreamID := logStreamDesc.GetLogStreamID()
+					err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, logStreamID)
+					So(err, ShouldNotBeNil)
+				})
+			})
 		})
 	}))
 }
