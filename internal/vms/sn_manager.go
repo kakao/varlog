@@ -193,39 +193,30 @@ func (sm *snManager) RemoveStorageNode(storageNodeID types.StorageNodeID) {
 	}
 }
 
+func (sm *snManager) AddLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	return sm.addLogStreamReplica(ctx, storageNodeID, logStreamID, path)
+}
+
+func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.StorageNodeID, lsid types.LogStreamID, path string) error {
+	snmcl, ok := sm.cs[snid]
+	if !ok {
+		sm.refresh(ctx)
+		return errors.New("no such storage node")
+	}
+	return snmcl.AddLogStream(ctx, lsid, path)
+}
+
 func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	logStreamID := logStreamDesc.GetLogStreamID()
-	replicaDescList := logStreamDesc.GetReplicas()
-
-	// Assume that some logstreams are added to storagenode, but they don't registered to MRs.
-	// At that time, the VMS is restarted. In that case, logstream id generator can generate
-	// duplicated logstreamid.
-	for _, replicaDesc := range replicaDescList {
-		storageNodeID := replicaDesc.GetStorageNodeID()
-		cli, ok := sm.cs[storageNodeID]
-		if !ok {
-			sm.logger.Panic("no such storage node", zap.Any("snid", storageNodeID))
-		}
-		snmeta, err := cli.GetMetadata(ctx, snpb.MetadataTypeLogStreams)
+	for _, replica := range logStreamDesc.GetReplicas() {
+		err := sm.addLogStreamReplica(ctx, replica.GetStorageNodeID(), logStreamID, replica.GetPath())
 		if err != nil {
-			return err
-		}
-		// transient error
-		if _, exists := snmeta.FindLogStream(logStreamID); exists {
-			return varlog.ErrLogStreamAlreadyExists
-		}
-	}
-
-	for _, replicaDesc := range replicaDescList {
-		storageNodeID := replicaDesc.GetStorageNodeID()
-		cli := sm.cs[storageNodeID]
-		if err := cli.AddLogStream(ctx, logStreamID, replicaDesc.GetPath()); err != nil {
-			if errors.Is(err, varlog.ErrLogStreamAlreadyExists) {
-				sm.logger.Panic("logstream should not exist", zap.Any("snid", storageNodeID), zap.Any("lsid", logStreamDesc.GetLogStreamID()), zap.Error(err))
-			}
 			return err
 		}
 	}
