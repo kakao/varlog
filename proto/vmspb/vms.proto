@@ -41,6 +41,21 @@ message UnregisterLogStreamRequest {
 
 message UnregisterLogStreamResponse {}
 
+message RemoveLogStreamReplicaRequest {
+    uint32 storage_node_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+        (gogoproto.customname) = "StorageNodeID"
+    ];
+    uint32 log_stream_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+}
+
+message RemoveLogStreamReplicaResponse {}
+
 message SealRequest {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
@@ -94,6 +109,9 @@ service ClusterManager {
 
     rpc UnregisterLogStream(UnregisterLogStreamRequest)
         returns (UnregisterLogStreamResponse) {}
+
+    rpc RemoveLogStreamReplica(RemoveLogStreamReplicaRequest)
+        returns (RemoveLogStreamReplicaResponse) {}
 
     rpc Seal(SealRequest) returns (SealResponse) {}
 

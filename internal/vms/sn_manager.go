@@ -29,6 +29,8 @@ type StorageNodeManager interface {
 
 	AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error
 
+	RemoveLogStream(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+
 	// Seal seals logstream replicas of storage nodes corresponded with the logStreamID. It
 	// passes the last committed GLSN to the logstream replicas.
 	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]varlogpb.LogStreamMetadataDescriptor, error)
@@ -212,6 +214,17 @@ func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *varlogpb.L
 		}
 	}
 	return nil
+}
+
+func (sm *snManager) RemoveLogStream(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	snmcl, ok := sm.cs[storageNodeID]
+	if !ok {
+		sm.logger.Panic("no such storage node", zap.Any("snid", storageNodeID))
+	}
+	return snmcl.RemoveLogStream(ctx, logStreamID)
 }
 
 func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]varlogpb.LogStreamMetadataDescriptor, error) {

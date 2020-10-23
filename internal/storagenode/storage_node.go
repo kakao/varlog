@@ -238,11 +238,12 @@ func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNo
 	}
 	sn.lseMtx.Lock()
 	defer sn.lseMtx.Unlock()
-	_, ok := sn.lseMap[lsid]
+	lse, ok := sn.lseMap[lsid]
 	if !ok {
 		return varlog.ErrNotExist
 	}
 	delete(sn.lseMap, lsid)
+	lse.Close()
 	return nil
 }
 

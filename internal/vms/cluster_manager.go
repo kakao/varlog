@@ -34,6 +34,8 @@ type ClusterManager interface {
 
 	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error
 
+	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
 	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
 
@@ -351,6 +353,38 @@ func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *varlo
 
 	// NB: RegisterLogStream returns nil if the logstream already exists.
 	return logStreamDesc, cm.mrMgr.RegisterLogStream(ctx, logStreamDesc)
+}
+
+func (cm *clusterManager) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	clusmeta, err := cm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := cm.removableLogStreamReplica(clusmeta, storageNodeID, logStreamID); err != nil {
+		return err
+	}
+
+	return cm.snMgr.RemoveLogStream(ctx, storageNodeID, logStreamID)
+}
+
+func (cm *clusterManager) removableLogStreamReplica(clusmeta *varlogpb.MetadataDescriptor, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
+	lsdesc := clusmeta.GetLogStream(logStreamID)
+	if lsdesc == nil {
+		// unregistered LS or garbage
+		return nil
+	}
+
+	replicas := lsdesc.GetReplicas()
+	for _, replica := range replicas {
+		if replica.GetStorageNodeID() == storageNodeID {
+			return errors.New("in-use log stream replica")
+		}
+	}
+	return nil
 }
 
 func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error) {
