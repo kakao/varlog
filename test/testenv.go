@@ -454,6 +454,14 @@ func (clus *VarlogCluster) RunClusterManager(mrAddrs []string) (vms.ClusterManag
 	opts.Logger = clus.logger
 	opts.MetadataRepositoryAddresses = mrAddrs
 
+	return clus.RunClusterManagerWithOpts(opts)
+}
+
+func (clus *VarlogCluster) RunClusterManagerWithOpts(opts *vms.Options) (vms.ClusterManager, error) {
+	if opts == nil {
+		return nil, varlog.ErrInvalidArgument
+	}
+
 	cm, err := vms.NewClusterManager(context.TODO(), opts)
 	if err != nil {
 		return nil, err

@@ -7,6 +7,7 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
@@ -616,7 +617,11 @@ func (cm *clusterManager) HandleReport(snm *varlogpb.StorageNodeMetadataDescript
 	for _, ls := range snm.GetLogStreams() {
 		mls := meta.GetLogStream(ls.LogStreamID)
 		if mls == nil {
-			//TODO: RemoveLogStream
+			if time.Now().Sub(ls.CreatedTime) > cm.options.WatcherOptions.GCTimeout {
+				ctx, cancel := context.WithTimeout(context.Background(), WATCHER_RPC_TIMEOUT)
+				defer cancel()
+				cm.RemoveLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.LogStreamID)
+			}
 		} else {
 			cm.checkLogStreamStatus(ls.LogStreamID, mls.Status, ls.Status)
 		}

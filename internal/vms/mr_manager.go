@@ -38,6 +38,10 @@ var (
 	errCMVNoStorageNode = errors.New("cmview: no such storage node")
 )
 
+const (
+	RELOAD_INTERVAL = time.Second
+)
+
 type MetadataRepositoryManager interface {
 	ClusterMetadataViewGetter
 	//MetadataGetter
@@ -83,8 +87,9 @@ type mrManager struct {
 	cli             varlog.MetadataRepositoryClient
 	mcli            varlog.MetadataRepositoryManagementClient
 
-	dirty bool
-	meta  *varlogpb.MetadataDescriptor
+	dirty   bool
+	updated time.Time
+	meta    *varlogpb.MetadataDescriptor
 
 	logger *zap.Logger
 }
@@ -432,13 +437,14 @@ func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
 
-	if mrm.dirty {
+	if mrm.dirty || time.Now().Sub(mrm.updated) > RELOAD_INTERVAL {
 		meta, err := mrm.clusterMetadata(ctx)
 		if err != nil {
 			return nil, err
 		}
 		mrm.meta = meta
 		mrm.dirty = false
+		mrm.updated = time.Now()
 	}
 	return mrm.meta, nil
 }

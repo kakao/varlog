@@ -16,6 +16,7 @@ const (
 	DefaultTick             = 100 * time.Millisecond
 	DefaultReportInterval   = 10
 	DefaultHeartbeatTimeout = 10
+	DefaultGCTimeout        = 24 * time.Hour
 )
 
 type Options struct {
@@ -41,6 +42,7 @@ type WatcherOptions struct {
 	Tick             time.Duration
 	ReportInterval   int
 	HeartbeatTimeout int
+	GCTimeout        time.Duration
 }
 
 var DefaultOptions = Options{
@@ -49,6 +51,7 @@ var DefaultOptions = Options{
 		Tick:             DefaultTick,
 		ReportInterval:   DefaultReportInterval,
 		HeartbeatTimeout: DefaultHeartbeatTimeout,
+		GCTimeout:        DefaultGCTimeout,
 	},
 	ClusterID:         DefaultClusterID,
 	ReplicationFactor: DefaultReplicationFactor,
