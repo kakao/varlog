@@ -7,7 +7,6 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 
 	"go.uber.org/zap"
@@ -18,7 +17,7 @@ type StorageNodeWatcher interface {
 	Close() error
 }
 
-const WATCHER_RPC_TIMEOUT = 5 * time.Millisecond
+const WATCHER_RPC_TIMEOUT = 10 * time.Millisecond
 
 var _ StorageNodeWatcher = (*snWatcher)(nil)
 
@@ -165,11 +164,9 @@ func (w *snWatcher) report() {
 
 	//TODO:: make it parallel
 	for _, s := range meta.GetStorageNodes() {
-		sc := w.snMgr.FindByStorageNodeID(s.StorageNodeID)
-
 		ctx, cancel := context.WithTimeout(context.Background(), WATCHER_RPC_TIMEOUT)
 		defer cancel()
-		sn, err := sc.GetMetadata(ctx, snpb.MetadataTypeLogStreams)
+		sn, err := w.snMgr.GetMetadata(ctx, s.StorageNodeID)
 		if err != nil {
 			continue
 		}

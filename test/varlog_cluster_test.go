@@ -1716,3 +1716,74 @@ func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
 		})
 	})
 }
+
+func TestVarlogLogStreamGCZombie(t *testing.T) {
+	Convey("Given Varlog cluster", t, func(ctx C) {
+		nrRep := 1
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             nrRep,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+		env := NewVarlogCluster(opts)
+		env.Start()
+		defer env.Close()
+
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.LeaderElected()
+		}), ShouldBeTrue)
+
+		mr := env.GetMR()
+
+		So(testutil.CompareWaitN(50, func() bool {
+			return mr.IsMember()
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		// Run VMS Server
+		vmsopts := &vms.DefaultOptions
+		vmsopts.ReplicationFactor = uint(nrRep)
+		vmsopts.MetadataRepositoryAddresses = []string{mrAddr}
+		vmsopts.GCTimeout = 6 * time.Duration(vmsopts.ReportInterval) * vmsopts.Tick
+
+		_, err := env.RunClusterManagerWithOpts(vmsopts)
+		So(err, ShouldBeNil)
+
+		snID, err := env.AddSN()
+		So(err, ShouldBeNil)
+
+		lsID := types.LogStreamID(1)
+
+		Convey("When AddLogStream to SN but do not register MR", func(ctx C) {
+			sn, _ := env.SNs[snID]
+			_, err := sn.AddLogStream(env.ClusterID, snID, lsID, "path")
+			So(err, ShouldBeNil)
+
+			meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+			So(err, ShouldBeNil)
+
+			_, exist := meta.FindLogStream(lsID)
+			So(exist, ShouldBeTrue)
+
+			Convey("Then the LogStream should removed after GCTimeout", func(ctx C) {
+				time.Sleep(vmsopts.GCTimeout / 2)
+				meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+				So(err, ShouldBeNil)
+
+				_, exist := meta.FindLogStream(lsID)
+				So(exist, ShouldBeTrue)
+
+				So(testutil.CompareWait(func() bool {
+					meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+					if err != nil {
+						return false
+					}
+
+					_, exist := meta.FindLogStream(lsID)
+					return !exist
+
+				}, vmsopts.GCTimeout), ShouldBeTrue)
+			})
+		})
+	})
+}
