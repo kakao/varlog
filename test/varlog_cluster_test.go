@@ -721,7 +721,7 @@ func withTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func
 		mrAddr := mr.GetServerAddr()
 
 		// VMS Server
-		_, err := env.RunClusterManager([]string{mrAddr})
+		_, err := env.RunClusterManager([]string{mrAddr}, opts.VMSOpts)
 		So(err, ShouldBeNil)
 
 		// VMS Client
@@ -1169,7 +1169,8 @@ func TestVarlogSNWatcher(t *testing.T) {
 				So(testutil.CompareWaitN(50, func() bool {
 					select {
 					case meta := <-snHandler.reportC:
-						return meta.GetLogStreams()[0].GetStatus().Sealed()
+						replica, exist := meta.FindLogStream(lsID)
+						return exist && replica.GetStatus().Sealed()
 					case <-time.After(vms.DefaultTick * time.Duration(2*vms.DefaultReportInterval)):
 					}
 
@@ -1445,37 +1446,23 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 }
 
 func TestVarlogLogStreamSync(t *testing.T) {
-	Convey("Given LogStream", t, func(ctx C) {
-		nrRep := 2
-		opts := VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             nrRep,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		}
-		env := NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
+	nrRep := 2
+	opts := VarlogClusterOptions{
+		NrMR:              1,
+		NrRep:             nrRep,
+		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+	}
 
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
-		}), ShouldBeTrue)
-
-		mr := env.GetMR()
-
-		So(testutil.CompareWaitN(50, func() bool {
-			return mr.IsMember()
-		}), ShouldBeTrue)
-		mrAddr := mr.GetServerAddr()
-
+	Convey("Given LogStream", t, withTestCluster(opts, func(env *VarlogCluster) {
 		for i := 0; i < nrRep; i++ {
-			_, err := env.AddSN()
+			_, err := env.AddSNByVMS()
 			So(err, ShouldBeNil)
 		}
 
-		lsID, err := env.AddLS()
+		lsID, err := env.AddLSByVMS()
 		So(err, ShouldBeNil)
 
-		meta, err := mr.GetMetadata(context.TODO())
+		meta, err := env.GetVMS().Metadata(context.TODO())
 		So(err, ShouldBeNil)
 
 		ls := meta.GetLogStream(lsID)
@@ -1503,94 +1490,62 @@ func TestVarlogLogStreamSync(t *testing.T) {
 		}
 
 		Convey("Seal", func(ctx C) {
-			sealedGLSN, err := mr.Seal(context.TODO(), lsID)
+			result, err := env.GetVMS().Seal(context.TODO(), lsID)
 			So(err, ShouldBeNil)
 
-			for snID, sn := range env.SNs {
-				sn.Seal(env.ClusterID, snID, lsID, sealedGLSN)
-			}
-
 			Convey("Update LS", func(ctx C) {
-				snID, err := env.AddSN()
+				newsn, err := env.AddSNByVMS()
 				So(err, ShouldBeNil)
 
-				sn, _ := env.SNs[snID]
-				_, err = sn.AddLogStream(env.ClusterID, snID, lsID, "path")
-				So(err, ShouldBeNil)
+				victim := result[len(result)-1].StorageNodeID
 
-				meta, err := mr.GetMetadata(context.TODO())
-				So(err, ShouldBeNil)
-
-				ls := meta.GetLogStream(lsID)
-				So(ls, ShouldNotBeNil)
-
-				ls.Replicas[nrRep-1].StorageNodeID = snID
-
-				err = mr.UpdateLogStream(context.TODO(), ls)
-				So(err, ShouldBeNil)
-
-				// Run VMS Server for get sn metadata & sync
-				_, err = env.RunClusterManager([]string{mrAddr})
+				err = env.UpdateLSByVMS(lsID, victim, newsn)
 				So(err, ShouldBeNil)
 
 				Convey("Then it should be synced", func(ctx C) {
 					So(testutil.CompareWaitN(100, func() bool {
-						snMeta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+						snMeta, err := env.LookupSN(newsn).GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
 						if err != nil {
 							return false
 						}
 
-						return snMeta.GetLogStreams()[0].Status == varlogpb.LogStreamStatusSealed
+						replica, exist := snMeta.FindLogStream(lsID)
+						if !exist {
+							return false
+						}
+
+						return replica.Status == varlogpb.LogStreamStatusSealed
 					}), ShouldBeTrue)
 				})
 			})
 		})
-	})
+	}))
 }
 
 func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
-	Convey("Given LogStream", t, func(ctx C) {
-		nrRep := 2
-		opts := VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             nrRep,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		}
-		env := NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
+	nrRep := 2
+	opts := VarlogClusterOptions{
+		NrMR:              1,
+		NrRep:             nrRep,
+		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+	}
 
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
-		}), ShouldBeTrue)
-
-		mr := env.GetMR()
-
-		So(testutil.CompareWaitN(50, func() bool {
-			return mr.IsMember()
-		}), ShouldBeTrue)
-		mrAddr := mr.GetServerAddr()
+	Convey("Given LogStream", t, withTestCluster(opts, func(env *VarlogCluster) {
+		cmcli := env.GetClusterManagerClient()
 
 		for i := 0; i < nrRep; i++ {
-			_, err := env.AddSN()
+			_, err := env.AddSNByVMS()
 			So(err, ShouldBeNil)
 		}
 
-		lsID, err := env.AddLS()
+		lsID, err := env.AddLSByVMS()
 		So(err, ShouldBeNil)
 
-		meta, err := mr.GetMetadata(context.TODO())
+		meta, err := env.GetVMS().Metadata(context.TODO())
 		So(err, ShouldBeNil)
 
 		ls := meta.GetLogStream(lsID)
 		So(ls, ShouldNotBeNil)
-
-		// Run VMS Server
-		_, err = env.RunClusterManager([]string{mrAddr})
-		So(err, ShouldBeNil)
-
-		cmcli, err := env.NewClusterManagerClient()
-		So(err, ShouldBeNil)
 
 		Convey("When Seal is incomplete", func(ctx C) {
 			// control failedSN for making test condition
@@ -1615,8 +1570,7 @@ func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(100, func() bool {
-					mr.GetMetadata(context.TODO())
-					meta, err := mr.GetMetadata(context.TODO())
+					meta, err := env.GetVMS().Metadata(context.TODO())
 					if err != nil {
 						return false
 					}
@@ -1629,52 +1583,33 @@ func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
 				}), ShouldBeTrue)
 			})
 		})
-	})
+	}))
 }
 
 func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
-	Convey("Given Sealed LogStream", t, func(ctx C) {
-		nrRep := 2
-		opts := VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             nrRep,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		}
-		env := NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
+	nrRep := 2
+	opts := VarlogClusterOptions{
+		NrMR:              1,
+		NrRep:             nrRep,
+		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+	}
 
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
-		}), ShouldBeTrue)
-
-		mr := env.GetMR()
-
-		So(testutil.CompareWaitN(50, func() bool {
-			return mr.IsMember()
-		}), ShouldBeTrue)
-		mrAddr := mr.GetServerAddr()
+	Convey("Given Sealed LogStream", t, withTestCluster(opts, func(env *VarlogCluster) {
+		cmcli := env.GetClusterManagerClient()
 
 		for i := 0; i < nrRep; i++ {
-			_, err := env.AddSN()
+			_, err := env.AddSNByVMS()
 			So(err, ShouldBeNil)
 		}
 
-		lsID, err := env.AddLS()
+		lsID, err := env.AddLSByVMS()
 		So(err, ShouldBeNil)
 
-		meta, err := mr.GetMetadata(context.TODO())
+		meta, err := env.GetVMS().Metadata(context.TODO())
 		So(err, ShouldBeNil)
 
 		ls := meta.GetLogStream(lsID)
 		So(ls, ShouldNotBeNil)
-
-		// Run VMS Server
-		_, err = env.RunClusterManager([]string{mrAddr})
-		So(err, ShouldBeNil)
-
-		cmcli, err := env.NewClusterManagerClient()
-		So(err, ShouldBeNil)
 
 		_, err = cmcli.Seal(context.TODO(), lsID)
 		So(err, ShouldBeNil)
@@ -1714,48 +1649,28 @@ func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
 				}), ShouldBeTrue)
 			})
 		})
-	})
+	}))
 }
 
 func TestVarlogLogStreamGCZombie(t *testing.T) {
-	Convey("Given Varlog cluster", t, func(ctx C) {
-		nrRep := 1
-		opts := VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             nrRep,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		}
-		env := NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
+	nrRep := 1
+	opts := VarlogClusterOptions{
+		NrMR:              1,
+		NrRep:             nrRep,
+		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		VMSOpts:           &vms.DefaultOptions,
+	}
 
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
-		}), ShouldBeTrue)
+	opts.VMSOpts.GCTimeout = 6 * time.Duration(opts.VMSOpts.ReportInterval) * opts.VMSOpts.Tick
 
-		mr := env.GetMR()
-
-		So(testutil.CompareWaitN(50, func() bool {
-			return mr.IsMember()
-		}), ShouldBeTrue)
-		mrAddr := mr.GetServerAddr()
-
-		// Run VMS Server
-		vmsopts := &vms.DefaultOptions
-		vmsopts.ReplicationFactor = uint(nrRep)
-		vmsopts.MetadataRepositoryAddresses = []string{mrAddr}
-		vmsopts.GCTimeout = 6 * time.Duration(vmsopts.ReportInterval) * vmsopts.Tick
-
-		_, err := env.RunClusterManagerWithOpts(vmsopts)
-		So(err, ShouldBeNil)
-
-		snID, err := env.AddSN()
+	Convey("Given Varlog cluster", t, withTestCluster(opts, func(env *VarlogCluster) {
+		snID, err := env.AddSNByVMS()
 		So(err, ShouldBeNil)
 
 		lsID := types.LogStreamID(1)
 
 		Convey("When AddLogStream to SN but do not register MR", func(ctx C) {
-			sn, _ := env.SNs[snID]
+			sn := env.LookupSN(snID)
 			_, err := sn.AddLogStream(env.ClusterID, snID, lsID, "path")
 			So(err, ShouldBeNil)
 
@@ -1766,7 +1681,7 @@ func TestVarlogLogStreamGCZombie(t *testing.T) {
 			So(exist, ShouldBeTrue)
 
 			Convey("Then the LogStream should removed after GCTimeout", func(ctx C) {
-				time.Sleep(vmsopts.GCTimeout / 2)
+				time.Sleep(opts.VMSOpts.GCTimeout / 2)
 				meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
 				So(err, ShouldBeNil)
 
@@ -1782,8 +1697,8 @@ func TestVarlogLogStreamGCZombie(t *testing.T) {
 					_, exist := meta.FindLogStream(lsID)
 					return !exist
 
-				}, vmsopts.GCTimeout), ShouldBeTrue)
+				}, opts.VMSOpts.GCTimeout), ShouldBeTrue)
 			})
 		})
-	})
+	}))
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/urfave/cli/v2"
 	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/internal/storagenode"
@@ -31,6 +32,7 @@ type VarlogClusterOptions struct {
 	NrMR              int
 	SnapCount         int
 	ReporterClientFac metadata_repository.ReporterClientFactory
+	VMSOpts           *vms.Options
 }
 
 type VarlogCluster struct {
@@ -375,6 +377,72 @@ func (clus *VarlogCluster) AddLSByVMS() (types.LogStreamID, error) {
 	return lsID, nil
 }
 
+func (clus *VarlogCluster) UpdateLS(lsID types.LogStreamID, oldsn, newsn types.StorageNodeID) error {
+	sn := clus.LookupSN(newsn)
+	_, err := sn.AddLogStream(clus.ClusterID, newsn, lsID, "path")
+	if err != nil {
+		return err
+	}
+
+	meta, err := clus.GetMR().GetMetadata(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	oldLSDesc := meta.GetLogStream(lsID)
+	if oldLSDesc == nil {
+		return errors.New("logStream is not exist")
+	}
+	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
+
+	exist := false
+	for _, r := range newLSDesc.Replicas {
+		if r.StorageNodeID == oldsn {
+			r.StorageNodeID = newsn
+			exist = true
+		}
+	}
+
+	if !exist {
+		return errors.New("invalid victim")
+	}
+
+	return clus.GetMR().UpdateLogStream(context.TODO(), newLSDesc)
+}
+
+func (clus *VarlogCluster) UpdateLSByVMS(lsID types.LogStreamID, oldsn, newsn types.StorageNodeID) error {
+	sn := clus.LookupSN(newsn)
+	_, err := sn.AddLogStream(clus.ClusterID, newsn, lsID, "path")
+	if err != nil {
+		return err
+	}
+
+	meta, err := clus.CM.Metadata(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	oldLSDesc := meta.GetLogStream(lsID)
+	if oldLSDesc == nil {
+		return errors.New("logStream is not exist")
+	}
+	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
+
+	exist := false
+	for _, r := range newLSDesc.Replicas {
+		if r.StorageNodeID == oldsn {
+			r.StorageNodeID = newsn
+			exist = true
+		}
+	}
+
+	if !exist {
+		return errors.New("invalid victim")
+	}
+
+	return clus.CM.UpdateLogStream(context.TODO(), lsID, newLSDesc.Replicas)
+}
+
 func (clus *VarlogCluster) LookupSN(snID types.StorageNodeID) *storagenode.StorageNode {
 	sn, _ := clus.SNs[snID]
 	return sn
@@ -386,6 +454,10 @@ func (clus *VarlogCluster) GetMR() *metadata_repository.RaftMetadataRepository {
 	}
 
 	return clus.MRs[0]
+}
+
+func (clus *VarlogCluster) GetVMS() vms.ClusterManager {
+	return clus.CM
 }
 
 func (clus *VarlogCluster) getSN(lsID types.LogStreamID, idx int) (*storagenode.StorageNode, error) {
@@ -445,22 +517,18 @@ func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (varlog.LogIOC
 	return varlog.NewLogIOClient(snMeta.StorageNode.Address)
 }
 
-func (clus *VarlogCluster) RunClusterManager(mrAddrs []string) (vms.ClusterManager, error) {
-	opts := &vms.DefaultOptions
+func (clus *VarlogCluster) RunClusterManager(mrAddrs []string, opts *vms.Options) (vms.ClusterManager, error) {
 	if clus.VarlogClusterOptions.NrRep < 1 {
 		return nil, varlog.ErrInvalidArgument
 	}
-	opts.ReplicationFactor = uint(clus.VarlogClusterOptions.NrRep)
-	opts.Logger = clus.logger
-	opts.MetadataRepositoryAddresses = mrAddrs
 
-	return clus.RunClusterManagerWithOpts(opts)
-}
-
-func (clus *VarlogCluster) RunClusterManagerWithOpts(opts *vms.Options) (vms.ClusterManager, error) {
 	if opts == nil {
-		return nil, varlog.ErrInvalidArgument
+		opts = &vms.DefaultOptions
+		opts.Logger = clus.logger
 	}
+
+	opts.MetadataRepositoryAddresses = mrAddrs
+	opts.ReplicationFactor = uint(clus.VarlogClusterOptions.NrRep)
 
 	cm, err := vms.NewClusterManager(context.TODO(), opts)
 	if err != nil {
