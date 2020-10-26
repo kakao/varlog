@@ -92,7 +92,7 @@ func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_S
 	}
 	for result := range resultC {
 		if result.Err != nil {
-			if result.Err == errEndOfRange {
+			if result.Err == ErrEndOfRange {
 				return nil
 			}
 			return result.Err

@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func Main(opts *storagenode.StorageNodeOptions) error {
+func Main(opts *storagenode.Options) error {
 	logger, err := zap.NewProduction()
 	if err != nil {
 		return err

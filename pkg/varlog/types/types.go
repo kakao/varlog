@@ -1,17 +1,44 @@
 package types
 
 import (
+	"encoding/binary"
 	"fmt"
+	"hash/fnv"
 	"math"
+	"math/rand"
 	"net"
 	"net/url"
 	"strconv"
 	"sync/atomic"
+	"time"
 )
 
 type ClusterID uint32
 
+func NewClusterIDFromUint(u uint) (ClusterID, error) {
+	if u > math.MaxUint32 {
+		return 0, fmt.Errorf("cluster id overflow %v", u)
+	}
+	return ClusterID(u), nil
+}
+
 type StorageNodeID uint32
+
+func NewStorageNodeIDFromUint(u uint) (StorageNodeID, error) {
+	if u > math.MaxUint32 {
+		return 0, fmt.Errorf("storage node id overflow %v", u)
+	}
+	return StorageNodeID(u), nil
+}
+
+func NewStorageNodeID() StorageNodeID {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	buf := make([]byte, 4)
+	r.Read(buf)
+	h := fnv.New32a()
+	h.Write(buf)
+	return StorageNodeID(h.Sum32())
+}
 
 type LogStreamID uint32
 
@@ -22,6 +49,8 @@ const (
 	MinGLSN     = GLSN(1)
 	MaxGLSN     = GLSN(math.MaxUint64)
 )
+
+var GLSNLen = binary.Size(InvalidGLSN)
 
 func (glsn GLSN) Invalid() bool {
 	return glsn == InvalidGLSN
@@ -53,6 +82,8 @@ const (
 	MinLLSN     = LLSN(1)
 	MaxLLSN     = LLSN(math.MaxUint64)
 )
+
+var LLSNLen = binary.Size(InvalidLLSN)
 
 func (llsn LLSN) Invalid() bool {
 	return llsn == InvalidLLSN

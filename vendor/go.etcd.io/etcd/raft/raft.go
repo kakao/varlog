@@ -995,7 +995,6 @@ func stepLeader(r *raft, m pb.Message) error {
 	// These message types do not require any progress for m.From.
 	switch m.Type {
 	case pb.MsgBeat:
-		r.logger.Debug("send MsgHeartbeat")
 		r.bcastHeartbeat()
 		return nil
 	case pb.MsgCheckQuorum:

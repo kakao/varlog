@@ -16,21 +16,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-// See https://github.com/smartystreets/goconvey/issues/220.
-func init() {
-	/*
-	   The default failure mode is FailureHalts, which causes test execution
-	   within a `Convey` block to halt at the first failure. You could use
-	   that mode if the test were re-worked to aggregate all results into
-	   a collection that was verified after all goroutines have finished.
-	   But, as the code stands, you need to use the FailureContinues mode.
-
-	   The following line sets the failure mode for all tests in the package:
-	*/
-
-	SetDefaultFailureMode(FailureContinues)
-}
-
 func TestReplicatorClientReplicatorService(t *testing.T) {
 	Convey("Given that a ReplicatorService is running", t, func() {
 		const (
@@ -136,7 +121,6 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 func TestReplicatorIntegration(t *testing.T) {
 	Convey("Given that many LSEs for the same LS are running", t, func(c C) {
 		const (
-			logStreamID = types.LogStreamID(1)
 			numLSs      = 2
 			numSNs      = 3
 			repeat      = 100
@@ -375,7 +359,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 				})
 
 				Convey("When some or all of the replicas failed to replicate data", func() {
-					Convey("Then the Replicator should return a channel haning an error", func() {
+					Convey("Then the Replicator should return a channel having an error", func() {
 						lse1.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 						errC2 := make(chan error, 1)
 						errC2 <- varlog.ErrInternal
@@ -388,7 +372,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 				})
 
 				Convey("When some or all of the replicas are timed out", func() {
-					Convey("Then the Replicator should return a channel haning an error", func() {
+					Convey("Then the Replicator should return a channel having an error", func() {
 						Convey("This isn't yet implemented", nil)
 					})
 				})

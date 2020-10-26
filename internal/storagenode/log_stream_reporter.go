@@ -108,16 +108,16 @@ func (lsr *logStreamReporter) Run(ctx context.Context) error {
 	var err error
 	if err = lsr.runner.RunC(mctx, lsr.dispatchCommit); err != nil {
 		lsr.logger.Error("could not run dispatchCommit", zap.Error(err))
-		goto err_out
+		goto errOut
 	}
 	if err = lsr.runner.RunC(mctx, lsr.dispatchReport); err != nil {
 		lsr.logger.Error("could not run dispatchReport", zap.Error(err))
-		goto err_out
+		goto errOut
 	}
 	lsr.logger.Info("run")
 	return nil
 
-err_out:
+errOut:
 	cancel()
 	lsr.runner.Stop()
 	return err

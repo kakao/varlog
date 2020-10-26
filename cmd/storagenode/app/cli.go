@@ -3,9 +3,10 @@ package app
 import (
 	"github.com/urfave/cli/v2"
 	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/pkg/varlog/types"
 )
 
-func InitCLI(options *storagenode.StorageNodeOptions) *cli.App {
+func InitCLI(options *storagenode.Options) *cli.App {
 	app := &cli.App{
 		Name:    "storagenode",
 		Usage:   "run storage node",
@@ -17,12 +18,40 @@ func InitCLI(options *storagenode.StorageNodeOptions) *cli.App {
 	return app
 }
 
-func initStartCommand(options *storagenode.StorageNodeOptions) *cli.Command {
+func initStartCommand(options *storagenode.Options) *cli.Command {
 	startCmd := &cli.Command{
 		Name:    "start",
 		Aliases: []string{"s"},
 		Usage:   "start [flags]",
 		Action: func(c *cli.Context) error {
+			var err error
+
+			// ClusterID
+			parsedClusterID := c.Uint("cluster-id")
+			if options.ClusterID, err = types.NewClusterIDFromUint(parsedClusterID); err != nil {
+				return err
+			}
+
+			// StorageNodeID
+			if c.IsSet("storage-node-id") {
+				parsedStorageNodeID := c.Uint("storage-node-id")
+				if options.StorageNodeID, err = types.NewStorageNodeIDFromUint(parsedStorageNodeID); err != nil {
+					return err
+				}
+			} else {
+				options.StorageNodeID = types.NewStorageNodeID()
+			}
+
+			// Volumes
+			options.Volumes = make(map[storagenode.Volume]struct{})
+			for _, p := range c.StringSlice("volumes") {
+				volume, err := storagenode.NewVolume(p)
+				if err != nil {
+					return err
+				}
+				options.Volumes[volume] = struct{}{}
+			}
+
 			return Main(options)
 		},
 	}
@@ -37,10 +66,45 @@ func initStartCommand(options *storagenode.StorageNodeOptions) *cli.Command {
 			Destination: &options.Verbose,
 		},
 	}
+	startCmd.Flags = append(startCmd.Flags, initStorageNodeFlags(options)...)
 	startCmd.Flags = append(startCmd.Flags, initRPCFlags(&options.RPCOptions)...)
 	startCmd.Flags = append(startCmd.Flags, initLSEFlags(&options.LogStreamExecutorOptions)...)
 	startCmd.Flags = append(startCmd.Flags, initLSRFlags(&options.LogStreamReporterOptions)...)
 	return startCmd
+}
+
+func initStorageNodeFlags(options *storagenode.Options) []cli.Flag {
+	defaultVolumeSS := cli.NewStringSlice(string(storagenode.DefaultVolume))
+	return []cli.Flag{
+		&cli.UintFlag{
+			Name:    "cluster-id",
+			Aliases: []string{},
+			Usage:   "cluster id",
+			EnvVars: []string{"CLUSTER_ID"},
+		},
+		&cli.UintFlag{
+			Name:    "storage-node-id",
+			Aliases: []string{},
+			Usage:   "storage node id",
+			EnvVars: []string{"STORAGE_NODE_ID"},
+		},
+		&cli.StringSliceFlag{
+			Name:        "volumes",
+			Aliases:     []string{},
+			Value:       defaultVolumeSS,
+			Usage:       "volumes",
+			EnvVars:     []string{"VOLUMES"},
+			Destination: defaultVolumeSS,
+		},
+		&cli.StringFlag{
+			Name:        "storage-name",
+			Aliases:     []string{},
+			Value:       storagenode.DefaultStorageName,
+			Usage:       "storage name",
+			EnvVars:     []string{"STORAGE_NAME"},
+			Destination: &options.StorageName,
+		},
+	}
 }
 
 func initRPCFlags(options *storagenode.RPCOptions) []cli.Flag {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 
 	"github.com/kakao/varlog/pkg/varlog"
@@ -23,7 +24,7 @@ type Management interface {
 	GetMetadata(clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
 	// AddLogStream adds a new LogStream to StorageNode.
-	AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) (string, error)
+	AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, storageNodePath string) (string, error)
 
 	// RemoveLogStream removes a LogStream from StorageNode.
 	RemoveLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
@@ -60,25 +61,47 @@ type StorageNode struct {
 
 	lsr LogStreamReporter
 
-	tst Timestamper
+	storageNodePaths map[string]struct{}
 
-	options *StorageNodeOptions
-	logger  *zap.Logger
+	options *Options
+	tst     Timestamper
+
+	logger *zap.Logger
 }
 
-func NewStorageNode(options *StorageNodeOptions) (*StorageNode, error) {
+func NewStorageNode(options *Options) (*StorageNode, error) {
+	if err := options.Valid(); err != nil {
+		return nil, err
+	}
+
 	sn := &StorageNode{
-		clusterID:     options.ClusterID,
-		storageNodeID: options.StorageNodeID,
-		lseMap:        make(map[types.LogStreamID]LogStreamExecutor),
-		tst:           NewTimestamper(),
-		options:       options,
-		logger:        options.Logger,
-		sw:            stopwaiter.New(),
+		clusterID:        options.ClusterID,
+		storageNodeID:    options.StorageNodeID,
+		lseMap:           make(map[types.LogStreamID]LogStreamExecutor),
+		tst:              NewTimestamper(),
+		storageNodePaths: make(map[string]struct{}),
+		options:          options,
+		logger:           options.Logger,
+		sw:               stopwaiter.New(),
 	}
 	if sn.logger == nil {
 		sn.logger = zap.NewNop()
 	}
+
+	for volume := range options.Volumes {
+		snPath, err := volume.CreateStorageNodePath(sn.clusterID, sn.storageNodeID)
+		if err != nil {
+			sn.logger.Error("could not create data directory", zap.Any("storage_node_path", snPath), zap.Error(err))
+			return nil, err
+		}
+		sn.storageNodePaths[snPath] = struct{}{}
+	}
+
+	if len(sn.storageNodePaths) == 0 {
+		sn.logger.Error("no valid storage node path")
+		return nil, varlog.ErrInvalid
+	}
+
 	sn.logger = sn.logger.Named(fmt.Sprintf("storagenode")).With(zap.Any("cid", sn.clusterID), zap.Any("snid", sn.storageNodeID))
 	sn.lsr = NewLogStreamReporter(sn.logger, sn.storageNodeID, sn, &options.LogStreamReporterOptions)
 	sn.server = grpc.NewServer()
@@ -162,23 +185,32 @@ func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.Metada
 		return nil, varlog.ErrInvalidArgument
 	}
 
-	ret := &varlogpb.StorageNodeMetadataDescriptor{
+	snmeta := &varlogpb.StorageNodeMetadataDescriptor{
 		ClusterID: sn.clusterID,
 		StorageNode: &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: sn.storageNodeID,
 			Address:       sn.serverAddr,
 			Status:        varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
-			// FIXME (jun): add dummy storages to avoid invalid storage node
-			Storages: []*varlogpb.StorageDescriptor{
-				{Path: "/tmp", Used: 0, Total: 0},
-			},
 		},
 		CreatedTime: sn.tst.Created(),
 		UpdatedTime: sn.tst.LastUpdated(),
 	}
+	for snPath := range sn.storageNodePaths {
+		snmeta.StorageNode.Storages = append(snmeta.StorageNode.Storages, &varlogpb.StorageDescriptor{
+			Path:  snPath,
+			Used:  0,
+			Total: 0,
+		})
+	}
 
-	ret.LogStreams = sn.logStreamMetadataDescriptors()
-	return ret, nil
+	/* disable metadata type
+	if metadataType == snpb.MetadataTypeHeartbeat {
+		return snmeta, nil
+	}
+	*/
+
+	snmeta.LogStreams = sn.logStreamMetadataDescriptors()
+	return snmeta, nil
 
 	// TODO (jun): add statistics to the response of GetMetadata
 }
@@ -197,8 +229,7 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetada
 			HighWatermark: lse.HighWatermark(),
 			// TODO (jun): path represents disk-based storage and
 			// memory-based storage
-			// Path: lse.Path(),
-			Path:        "",
+			Path:        lse.Path(),
 			CreatedTime: lse.Created(),
 			UpdatedTime: lse.LastUpdated(),
 		}
@@ -207,20 +238,34 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetada
 }
 
 // AddLogStream implements the Management AddLogStream method.
-func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, path string) (string, error) {
+func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, storageNodePath string) (string, error) {
 	if !sn.verifyClusterID(cid) || !sn.verifyStorageNodeID(snid) {
 		return "", varlog.ErrInvalidArgument
 	}
+
 	sn.lseMtx.Lock()
 	defer sn.lseMtx.Unlock()
+
 	_, ok := sn.lseMap[lsid]
 	if ok {
 		return "", varlog.ErrLogStreamAlreadyExists
 	}
-	// TODO(jun): Create Storage and add new LSE
-	var stg Storage = NewInMemoryStorage(sn.logger)
-	var stgPath string
-	lse, err := NewLogStreamExecutor(sn.logger, lsid, stg, &sn.options.LogStreamExecutorOptions)
+
+	if _, exists := sn.storageNodePaths[storageNodePath]; !exists {
+		sn.logger.Error("no such storage path", zap.String("path", storageNodePath), zap.Reflect("storage_node_paths", sn.storageNodePaths))
+		return "", varlog.ErrNotExist
+	}
+
+	lsPath, err := CreateLogStreamPath(storageNodePath, lsid)
+	if err != nil {
+		return "", err
+	}
+
+	storage, err := NewStorage(sn.options.StorageName, WithPath(lsPath), WithLogger(sn.logger))
+	if err != nil {
+		return "", err
+	}
+	lse, err := NewLogStreamExecutor(sn.logger, lsid, storage, &sn.options.LogStreamExecutorOptions)
 	if err != nil {
 		return "", err
 	}
@@ -231,7 +276,7 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 	}
 	sn.tst.Touch()
 	sn.lseMap[lsid] = lse
-	return stgPath, nil
+	return lsPath, nil
 }
 
 // RemoveLogStream implements the Management RemoveLogStream method.
@@ -247,6 +292,10 @@ func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNo
 	}
 	delete(sn.lseMap, lsid)
 	lse.Close()
+	// TODO (jun): Is removing data path optional or default behavior?
+	if err := os.RemoveAll(lse.Path()); err != nil {
+		sn.logger.Warn("error while removing log stream path")
+	}
 	sn.tst.Touch()
 	return nil
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"

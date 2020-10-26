@@ -43,7 +43,7 @@ func TestLogStreamReporterClientCommit(t *testing.T) {
 		mockClient := mock.NewMockLogStreamReporterServiceClient(ctrl)
 		lsrc := &logStreamReporterClient{rpcClient: mockClient}
 
-		Convey("When the Comit RPC is timed out", func() {
+		Convey("When the Commit RPC is timed out", func() {
 			Convey("Then GetReport should return an error", func() {
 				Convey("This isn't yet implemented", nil)
 			})

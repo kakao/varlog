@@ -13,8 +13,8 @@ LDFLAGS :=
 GOFLAGS := -race
 GCFLAGS := -gcflags=all='-N -l'
 
-PKG_SRCS := $(abspath $(shell find . -name '*.go'))
-INTERNAL_SRCS := $(abspath $(shell find . -name '*.go'))
+PKG_SRCS := $(abspath $(shell find $(MAKEFILE_DIR)/pkg -name '*.go'))
+INTERNAL_SRCS := $(abspath $(shell find $(MAKEFILE_DIR)/internal -name '*.go'))
 
 PROTOC_VERSION := 3.12.3
 PROTOC_HOME := $(BUILD_DIR)/protoc
@@ -51,8 +51,6 @@ ifeq ($(TEST_VERBOSE),1)
 	TEST_FLAGS := $(TEST_FLAGS) -v
 endif
 
-TEST_DIRS := $(sort $(dir $(shell find . -name '*_test.go')))
-
 .PHONY: all
 all : proto storagenode metadata_repository vms
 
@@ -61,12 +59,15 @@ PROTO_DIRS := $(sort $(dir $(shell find $(MAKEFILE_DIR)/proto -name '*.proto')))
 .PHONY: proto
 proto: $(PROTO_DIRS) check_protoc gogoproto
 
+.PHONY: storagenode
 STORAGE_NODE := cmd/storagenode
-storagenode : $(STORAGE_NODE_PROTO) $(STORAGE_NODE)
+storagenode: $(STORAGE_NODE) $(PROTO_DIRS)
 
+.PHONY: metadata_repository
 METADATA_REPOSITORY := cmd/metadata_repository
-metadata_repository : $(METADATA_REPOSITORY_PROTO) $(METADATA_REPOSITORY)
+metadata_repository: $(METADATA_REPOSITORY) $(PROTO_DIRS)
 
+.PHONY: vms
 VMS := cmd/vms
 vms: $(VMS) $(PROTO_DIRS)
 

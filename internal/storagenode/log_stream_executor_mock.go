@@ -353,6 +353,20 @@ func (mr *MockLogStreamExecutorMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockLogStreamExecutor)(nil).Close))
 }
 
+// Path mocks base method.
+func (m *MockLogStreamExecutor) Path() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Path")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Path indicates an expected call of Path.
+func (mr *MockLogStreamExecutorMockRecorder) Path() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Path", reflect.TypeOf((*MockLogStreamExecutor)(nil).Path))
+}
+
 // LogStreamID mocks base method.
 func (m *MockLogStreamExecutor) LogStreamID() types.LogStreamID {
 	m.ctrl.T.Helper()
