@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"go.uber.org/zap"
@@ -181,7 +181,7 @@ func TestLogStreamReporterReport(t *testing.T) {
 }
 
 func TestLogStreamReporterGetReportTimeout(t *testing.T) {
-	Convey("Given LogStremReporter", t, func() {
+	Convey("Given LogStreamReporter", t, func() {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 

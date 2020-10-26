@@ -172,7 +172,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 	})
 }
 
-func TestLogIOClientLogIOServiceSubscirbe(t *testing.T) {
+func TestLogIOClientLogIOServiceSubscribe(t *testing.T) {
 	Convey("Given that a LogIOService is running", t, func() {
 		const lsid = types.LogStreamID(1)
 

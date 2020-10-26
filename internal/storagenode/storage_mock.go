@@ -63,6 +63,136 @@ func (mr *MockScannerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockScanner)(nil).Close))
 }
 
+// MockWriteBatch is a mock of WriteBatch interface.
+type MockWriteBatch struct {
+	ctrl     *gomock.Controller
+	recorder *MockWriteBatchMockRecorder
+}
+
+// MockWriteBatchMockRecorder is the mock recorder for MockWriteBatch.
+type MockWriteBatchMockRecorder struct {
+	mock *MockWriteBatch
+}
+
+// NewMockWriteBatch creates a new mock instance.
+func NewMockWriteBatch(ctrl *gomock.Controller) *MockWriteBatch {
+	mock := &MockWriteBatch{ctrl: ctrl}
+	mock.recorder = &MockWriteBatchMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockWriteBatch) EXPECT() *MockWriteBatchMockRecorder {
+	return m.recorder
+}
+
+// Put mocks base method.
+func (m *MockWriteBatch) Put(llsn types.LLSN, data []byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Put", llsn, data)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Put indicates an expected call of Put.
+func (mr *MockWriteBatchMockRecorder) Put(llsn, data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockWriteBatch)(nil).Put), llsn, data)
+}
+
+// Apply mocks base method.
+func (m *MockWriteBatch) Apply() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Apply")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Apply indicates an expected call of Apply.
+func (mr *MockWriteBatchMockRecorder) Apply() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Apply", reflect.TypeOf((*MockWriteBatch)(nil).Apply))
+}
+
+// Close mocks base method.
+func (m *MockWriteBatch) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockWriteBatchMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockWriteBatch)(nil).Close))
+}
+
+// MockCommitBatch is a mock of CommitBatch interface.
+type MockCommitBatch struct {
+	ctrl     *gomock.Controller
+	recorder *MockCommitBatchMockRecorder
+}
+
+// MockCommitBatchMockRecorder is the mock recorder for MockCommitBatch.
+type MockCommitBatchMockRecorder struct {
+	mock *MockCommitBatch
+}
+
+// NewMockCommitBatch creates a new mock instance.
+func NewMockCommitBatch(ctrl *gomock.Controller) *MockCommitBatch {
+	mock := &MockCommitBatch{ctrl: ctrl}
+	mock.recorder = &MockCommitBatchMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCommitBatch) EXPECT() *MockCommitBatchMockRecorder {
+	return m.recorder
+}
+
+// Put mocks base method.
+func (m *MockCommitBatch) Put(llsn types.LLSN, glsn types.GLSN) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Put", llsn, glsn)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Put indicates an expected call of Put.
+func (mr *MockCommitBatchMockRecorder) Put(llsn, glsn interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockCommitBatch)(nil).Put), llsn, glsn)
+}
+
+// Apply mocks base method.
+func (m *MockCommitBatch) Apply() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Apply")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Apply indicates an expected call of Apply.
+func (mr *MockCommitBatchMockRecorder) Apply() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Apply", reflect.TypeOf((*MockCommitBatch)(nil).Apply))
+}
+
+// Close mocks base method.
+func (m *MockCommitBatch) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockCommitBatchMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockCommitBatch)(nil).Close))
+}
+
 // MockStorage is a mock of Storage interface.
 type MockStorage struct {
 	ctrl     *gomock.Controller
@@ -84,6 +214,34 @@ func NewMockStorage(ctrl *gomock.Controller) *MockStorage {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockStorage) EXPECT() *MockStorageMockRecorder {
 	return m.recorder
+}
+
+// Name mocks base method.
+func (m *MockStorage) Name() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Name")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Name indicates an expected call of Name.
+func (mr *MockStorageMockRecorder) Name() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockStorage)(nil).Name))
+}
+
+// Path mocks base method.
+func (m *MockStorage) Path() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Path")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Path indicates an expected call of Path.
+func (mr *MockStorageMockRecorder) Path() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Path", reflect.TypeOf((*MockStorage)(nil).Path))
 }
 
 // Read mocks base method.
@@ -130,6 +288,34 @@ func (mr *MockStorageMockRecorder) Write(llsn, data interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockStorage)(nil).Write), llsn, data)
 }
 
+// WriteBatch mocks base method.
+func (m *MockStorage) WriteBatch(entries []WriteEntry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteBatch", entries)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WriteBatch indicates an expected call of WriteBatch.
+func (mr *MockStorageMockRecorder) WriteBatch(entries interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteBatch", reflect.TypeOf((*MockStorage)(nil).WriteBatch), entries)
+}
+
+// NewWriteBatch mocks base method.
+func (m *MockStorage) NewWriteBatch() WriteBatch {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewWriteBatch")
+	ret0, _ := ret[0].(WriteBatch)
+	return ret0
+}
+
+// NewWriteBatch indicates an expected call of NewWriteBatch.
+func (mr *MockStorageMockRecorder) NewWriteBatch() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewWriteBatch", reflect.TypeOf((*MockStorage)(nil).NewWriteBatch))
+}
+
 // Commit mocks base method.
 func (m *MockStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 	m.ctrl.T.Helper()
@@ -142,6 +328,34 @@ func (m *MockStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 func (mr *MockStorageMockRecorder) Commit(llsn, glsn interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockStorage)(nil).Commit), llsn, glsn)
+}
+
+// CommitBatch mocks base method.
+func (m *MockStorage) CommitBatch(entries []CommitEntry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitBatch", entries)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CommitBatch indicates an expected call of CommitBatch.
+func (mr *MockStorageMockRecorder) CommitBatch(entries interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitBatch", reflect.TypeOf((*MockStorage)(nil).CommitBatch), entries)
+}
+
+// NewCommitBatch mocks base method.
+func (m *MockStorage) NewCommitBatch() CommitBatch {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewCommitBatch")
+	ret0, _ := ret[0].(CommitBatch)
+	return ret0
+}
+
+// NewCommitBatch indicates an expected call of NewCommitBatch.
+func (mr *MockStorageMockRecorder) NewCommitBatch() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewCommitBatch", reflect.TypeOf((*MockStorage)(nil).NewCommitBatch))
 }
 
 // DeleteCommitted mocks base method.

@@ -43,6 +43,7 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			storage := NewMockStorage(ctrl)
+			storage.EXPECT().Close().Return(nil).AnyTimes()
 			lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
 
@@ -56,13 +57,13 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 
 func TestLogStreamExecutorOperations(t *testing.T) {
 	Convey("LogStreamExecutor", t, func() {
-		const storageNodeID = types.StorageNodeID(1)
 		const logStreamID = types.LogStreamID(1)
 		const N = 1000
 
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		storage := NewMockStorage(ctrl)
+		storage.EXPECT().Close().Return(nil).AnyTimes()
 		replicator := NewMockReplicator(ctrl)
 
 		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, storage, &DefaultLogStreamExecutorOptions)
@@ -75,7 +76,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 			lse.Close()
 		})
 
-		Convey("read operation should reply uncertainness if it doesn't know", func() {
+		Convey("read operation should reply uncertainties if it doesn't know", func() {
 			_, err := lse.Read(context.TODO(), types.MinGLSN)
 			So(errors.Is(err, varlog.ErrUndecidable), ShouldBeTrue)
 		})
@@ -168,6 +169,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
+		storage.EXPECT().Close().Return(nil).AnyTimes()
 		replicator := NewMockReplicator(ctrl)
 		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{
 			AppendCTimeout:    DefaultLSEAppendCTimeout,
@@ -391,6 +393,7 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
+		storage.EXPECT().Close().Return(nil).AnyTimes()
 		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
@@ -482,6 +485,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
+		storage.EXPECT().Close().Return(nil).AnyTimes()
 		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
@@ -520,7 +524,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 			lse.(*logStreamExecutor).localHighWatermark.Store(10)
 
 			Convey("And the Scanner.Next returns an error", func() {
-				scanner.EXPECT().Next().Return(newInvalidScanResult(varlog.ErrInternal))
+				scanner.EXPECT().Next().Return(NewInvalidScanResult(varlog.ErrInternal))
 
 				Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
 					c, err := lse.Subscribe(context.TODO(), 1, 11)
@@ -626,7 +630,9 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 func TestLogStreamExecutorAndStorage(t *testing.T) {
 	Convey("Sealing initial LS with InvalidGLSN", t, func() {
-		stg := NewInMemoryStorage(zap.L())
+		stg, err := NewStorage(InMemoryStorageName, WithLogger(zap.L()))
+		So(err, ShouldBeNil)
+
 		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, stg, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 
@@ -644,7 +650,9 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			repeat      = 100
 		)
 
-		stg := NewInMemoryStorage(zap.L())
+		stg, err := NewStorage(InMemoryStorageName, WithLogger(zap.L()))
+		So(err, ShouldBeNil)
+
 		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, stg, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 
@@ -726,7 +734,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 			So(sub.LogEntry.GLSN, ShouldEqual, expectedGLSN)
 			So(sub.LogEntry.LLSN, ShouldEqual, types.LLSN(expectedGLSN))
 		}
-		So((<-subC).Err, ShouldEqual, errEndOfRange)
+		So((<-subC).Err, ShouldEqual, ErrEndOfRange)
 		testutil.CompareWait(func() bool {
 			_, more := <-subC
 			return !more

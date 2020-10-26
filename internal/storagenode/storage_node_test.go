@@ -67,19 +67,22 @@ func commitAndWait(lse LogStreamExecutor, highWatermark, prevHighWatermark, comm
 
 func TestStorageNode(t *testing.T) {
 	Convey("StorageNode Integration Test", t, func() {
-		logger, _ := zap.NewDevelopment()
 		var snList []*StorageNode
 		for i := 0; i < numSN; i++ {
-			opts := &StorageNodeOptions{
+			volume, err := NewVolume(t.TempDir())
+			So(err, ShouldBeNil)
+
+			opts := &Options{
 				RPCOptions:               RPCOptions{RPCBindAddress: bindAddress},
 				LogStreamExecutorOptions: DefaultLogStreamExecutorOptions,
 				LogStreamReporterOptions: DefaultLogStreamReporterOptions,
 				ClusterID:                clusterID,
 				StorageNodeID:            types.StorageNodeID(i),
+				StorageName:              DefaultStorageName,
+				Volumes:                  map[Volume]struct{}{volume: {}},
 				Verbose:                  true,
-				Logger:                   logger,
+				Logger:                   zap.L(),
 			}
-			var err error
 			sn, err := NewStorageNode(opts)
 			if err != nil {
 				t.Fatal(err)
@@ -95,7 +98,7 @@ func TestStorageNode(t *testing.T) {
 
 		var mclList []varlog.ManagementClient
 		for _, sn := range snList {
-			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, logger)
+			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -117,7 +120,10 @@ func TestStorageNode(t *testing.T) {
 			So(meta.GetStorageNode().GetStorageNodeID(), ShouldEqual, sn.storageNodeID)
 			So(meta.GetLogStreams(), ShouldHaveLength, 0)
 
-			err = mcl.AddLogStream(context.TODO(), logStreamID, "/tmp")
+			storages := meta.GetStorageNode().GetStorages()
+			So(len(storages), ShouldBeGreaterThan, 0)
+
+			err = mcl.AddLogStream(context.TODO(), logStreamID, storages[0].GetPath())
 			So(err, ShouldBeNil)
 
 			meta, err = mcl.GetMetadata(context.TODO(), snpb.MetadataTypeLogStreams)
@@ -143,22 +149,30 @@ func TestSync(t *testing.T) {
 			lastCommittedGLSN = types.GLSN(10)
 		)
 
-		logger, err := zap.NewDevelopment()
-		So(err, ShouldBeNil)
-
 		var snList []*StorageNode
+		var storagePathList []string
 		for i := 1; i <= 2; i++ {
-			sn, err := NewStorageNode(&StorageNodeOptions{
+			volume, err := NewVolume(t.TempDir())
+			So(err, ShouldBeNil)
+
+			sn, err := NewStorageNode(&Options{
 				RPCOptions:               RPCOptions{RPCBindAddress: bindAddress},
 				LogStreamExecutorOptions: DefaultLogStreamExecutorOptions,
 				LogStreamReporterOptions: DefaultLogStreamReporterOptions,
 				ClusterID:                clusterID,
 				StorageNodeID:            types.StorageNodeID(i),
+				StorageName:              DefaultStorageName,
+				Volumes:                  map[Volume]struct{}{volume: {}},
 				Verbose:                  true,
-				Logger:                   logger,
+				Logger:                   zap.L(),
 			})
 			So(err, ShouldBeNil)
 			snList = append(snList, sn)
+
+			for snPath := range sn.storageNodePaths {
+				storagePathList = append(storagePathList, snPath)
+				break
+			}
 		}
 
 		for _, sn := range snList {
@@ -173,13 +187,13 @@ func TestSync(t *testing.T) {
 		}()
 
 		var mclList []varlog.ManagementClient
-		for _, sn := range snList {
-			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, logger)
+		for i, sn := range snList {
+			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
 			So(err, ShouldBeNil)
 
 			mclList = append(mclList, mcl)
 
-			err = mcl.AddLogStream(context.TODO(), logStreamID, "/tmp")
+			err = mcl.AddLogStream(context.TODO(), logStreamID, storagePathList[i])
 			So(err, ShouldBeNil)
 		}
 		defer func() {
@@ -225,13 +239,17 @@ func TestSync(t *testing.T) {
 			ent, err := oldCL.Read(context.TODO(), logStreamID, hwm)
 			So(err, ShouldBeNil)
 			So(expectedData, ShouldResemble, ent.Data)
+			zap.L().Sugar().Infof("READ OK - %v", hwm)
 		}
 
 		// Subscribe
+		zap.L().Sugar().Infof("STEP-1")
 		subC, err := oldCL.Subscribe(context.TODO(), logStreamID, types.MinGLSN, lastCommittedGLSN/2)
 		So(err, ShouldBeNil)
+		zap.L().Sugar().Infof("STEP-2")
 		for expectedGLSN := types.MinGLSN; expectedGLSN < lastCommittedGLSN/2; expectedGLSN++ {
 			sub := <-subC
+			zap.L().Sugar().Infof("STEP-3")
 			So(sub.Error, ShouldBeNil)
 			So(sub.GLSN, ShouldEqual, expectedGLSN)
 			So(sub.LLSN, ShouldEqual, types.LLSN(expectedGLSN))

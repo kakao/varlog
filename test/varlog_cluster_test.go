@@ -751,15 +751,20 @@ func TestVarlogManagerServer(t *testing.T) {
 
 		for i := 0; i < nrSN; i++ {
 			storageNodeID := types.StorageNodeID(i + 1)
-			snopts := &storagenode.StorageNodeOptions{
+			volume, err := storagenode.NewVolume(t.TempDir())
+			So(err, ShouldBeNil)
+			snopts := &storagenode.Options{
 				RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
 				LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
 				LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 				ClusterID:                env.ClusterID,
 				StorageNodeID:            storageNodeID,
+				Volumes:                  map[storagenode.Volume]struct{}{volume: {}},
+				StorageName:              storagenode.DefaultStorageName,
 				Verbose:                  true,
 				Logger:                   env.logger,
 			}
+
 			sn, err := storagenode.NewStorageNode(snopts)
 			So(err, ShouldBeNil)
 			So(sn.Run(), ShouldBeNil)
@@ -772,6 +777,7 @@ func TestVarlogManagerServer(t *testing.T) {
 			}
 		}()
 
+		var replicas []*varlogpb.ReplicaDescriptor
 		snAddrs := make(map[types.StorageNodeID]string, nrSN)
 		for snid, sn := range env.SNs {
 			meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeHeartbeat)
@@ -783,14 +789,14 @@ func TestVarlogManagerServer(t *testing.T) {
 			snmeta, err := cmcli.AddStorageNode(context.TODO(), snAddr)
 			So(err, ShouldBeNil)
 			So(snmeta.GetStorageNode().GetStorageNodeID(), ShouldEqual, snid)
-		}
 
-		// replicas to add log stream manually
-		var replicas []*varlogpb.ReplicaDescriptor
-		for snid := range env.SNs {
+			storages := snmeta.GetStorageNode().GetStorages()
+			So(len(storages), ShouldBeGreaterThan, 0)
+			path := storages[0].GetPath()
+			So(len(path), ShouldBeGreaterThan, 0)
 			replica := &varlogpb.ReplicaDescriptor{
 				StorageNodeID: snid,
-				Path:          "/tmp",
+				Path:          path,
 			}
 			replicas = append(replicas, replica)
 		}
@@ -927,10 +933,11 @@ func TestVarlogManagerServer(t *testing.T) {
 
 		Convey("AddLogStream - Error: duplicated, but not registered logstream", func() {
 			// Add logstream to storagenode
-			badSNID := types.StorageNodeID(1)
+			badSNID := replicas[0].GetStorageNodeID()
 			badSN := env.SNs[badSNID]
 			badLSID := types.LogStreamID(1)
-			_, err := badSN.AddLogStream(env.ClusterID, badSNID, badLSID, "/tmp")
+			path := replicas[0].GetPath()
+			_, err := badSN.AddLogStream(env.ClusterID, badSNID, badLSID, path)
 			So(err, ShouldBeNil)
 
 			// Not registered logstream
@@ -1166,7 +1173,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			Convey("Then it should be reported by watcher", func(ctx C) {
-				So(testutil.CompareWaitN(50, func() bool {
+				So(testutil.CompareWaitN(100, func() bool {
 					select {
 					case meta := <-snHandler.reportC:
 						replica, exist := meta.FindLogStream(lsID)
@@ -1566,7 +1573,13 @@ func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
 			So(len(result), ShouldBeLessThan, nrRep)
 
 			Convey("Then SN Watcher make LS sealed", func(ctx C) {
-				_, err := failedSN.AddLogStream(env.ClusterID, failedSNID, lsID, "path")
+				snmeta, err := failedSN.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+				So(err, ShouldBeNil)
+
+				path := snmeta.GetStorageNode().GetStorages()[0].GetPath()
+				So(len(path), ShouldBeGreaterThan, 0)
+
+				_, err = failedSN.AddLogStream(env.ClusterID, failedSNID, lsID, path)
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(100, func() bool {
@@ -1632,7 +1645,13 @@ func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
 			So(err, ShouldNotBeNil)
 
 			Convey("Then SN Watcher make LS sealed", func(ctx C) {
-				_, err := failedSN.AddLogStream(env.ClusterID, failedSNID, lsID, "path")
+				snmeta, err := failedSN.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+				So(err, ShouldBeNil)
+
+				path := snmeta.GetStorageNode().GetStorages()[0].GetPath()
+				So(len(path), ShouldBeGreaterThan, 0)
+
+				_, err = failedSN.AddLogStream(env.ClusterID, failedSNID, lsID, path)
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(100, func() bool {
@@ -1671,10 +1690,13 @@ func TestVarlogLogStreamGCZombie(t *testing.T) {
 
 		Convey("When AddLogStream to SN but do not register MR", func(ctx C) {
 			sn := env.LookupSN(snID)
-			_, err := sn.AddLogStream(env.ClusterID, snID, lsID, "path")
+			meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+			So(err, ShouldBeNil)
+			path := meta.GetStorageNode().GetStorages()[0].GetPath()
+			_, err = sn.AddLogStream(env.ClusterID, snID, lsID, path)
 			So(err, ShouldBeNil)
 
-			meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
+			meta, err = sn.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
 			So(err, ShouldBeNil)
 
 			_, exist := meta.FindLogStream(lsID)

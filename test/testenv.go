@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net/url"
 	"os"
@@ -196,6 +197,23 @@ func (clus *VarlogCluster) Close() error {
 	}
 
 	for _, sn := range clus.SNs {
+		// TODO (jun): remove temporary directories
+		snmeta, err := sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
+		if err != nil {
+			clus.logger.Warn("could not get meta", zap.Error(err))
+		}
+		for _, storage := range snmeta.GetStorageNode().GetStorages() {
+			dbpath := storage.GetPath()
+			if dbpath == ":memory:" {
+				continue
+			}
+			/* comment out for test
+			if err := os.RemoveAll(dbpath); err != nil {
+				clus.logger.Warn("could not remove dbpath", zap.String("path", dbpath), zap.Error(err))
+			}
+			*/
+		}
+
 		// TODO:: sn.Close() does not close connect
 		sn.Close()
 	}
@@ -240,14 +258,24 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 	snID := clus.snID
 	clus.snID += types.StorageNodeID(1)
 
-	opts := &storagenode.StorageNodeOptions{
+	datadir, err := ioutil.TempDir("", "test_*")
+	if err != nil {
+		return types.StorageNodeID(0), err
+	}
+	volume, err := storagenode.NewVolume(datadir)
+	if err != nil {
+		return types.StorageNodeID(0), err
+	}
+	opts := &storagenode.Options{
 		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
 		LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
 		LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 		ClusterID:                clus.ClusterID,
 		StorageNodeID:            snID,
+		StorageName:              storagenode.DefaultStorageName,
 		Verbose:                  true,
 		Logger:                   clus.logger,
+		Volumes:                  map[storagenode.Volume]struct{}{volume: {}},
 	}
 
 	sn, err := storagenode.NewStorageNode(opts)
@@ -266,20 +294,7 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 		return types.StorageNodeID(0), err
 	}
 
-	snd := &varlogpb.StorageNodeDescriptor{
-		StorageNodeID: snID,
-		Address:       meta.StorageNode.Address,
-		Status:        meta.StorageNode.Status,
-		Storages: []*varlogpb.StorageDescriptor{
-			&varlogpb.StorageDescriptor{
-				Path:  "tmp",
-				Used:  0,
-				Total: 100,
-			},
-		},
-	}
-
-	err = clus.MRs[0].RegisterStorageNode(context.TODO(), snd)
+	err = clus.MRs[0].RegisterStorageNode(context.TODO(), meta.GetStorageNode())
 	return snID, err
 }
 
@@ -287,14 +302,24 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 	snID := clus.snID
 	clus.snID += types.StorageNodeID(1)
 
-	opts := &storagenode.StorageNodeOptions{
+	datadir, err := ioutil.TempDir("", "test_*")
+	if err != nil {
+		return types.StorageNodeID(0), err
+	}
+	volume, err := storagenode.NewVolume(datadir)
+	if err != nil {
+		return types.StorageNodeID(0), err
+	}
+	opts := &storagenode.Options{
 		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
 		LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
 		LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 		ClusterID:                clus.ClusterID,
 		StorageNodeID:            snID,
+		StorageName:              storagenode.DefaultStorageName,
 		Verbose:                  true,
 		Logger:                   clus.logger,
+		Volumes:                  map[storagenode.Volume]struct{}{volume: {}},
 	}
 	sn, err := storagenode.NewStorageNode(opts)
 	if err != nil {
@@ -333,7 +358,7 @@ func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 	clus.lsID += types.LogStreamID(1)
 
 	snIDs := make([]types.StorageNodeID, 0, len(clus.SNs))
-	for snID, _ := range clus.SNs {
+	for snID := range clus.SNs {
 		snIDs = append(snIDs, snID)
 	}
 
@@ -342,12 +367,19 @@ func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 
 	replicas := make([]*varlogpb.ReplicaDescriptor, 0, clus.NrRep)
 	for i := 0; i < clus.NrRep; i++ {
-		replicas = append(replicas, &varlogpb.ReplicaDescriptor{StorageNodeID: snIDs[i], Path: "tmp"})
+		storageNodeID := snIDs[i]
+		storageNode := clus.SNs[storageNodeID]
+		snmeta, err := storageNode.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
+		if err != nil {
+			return types.LogStreamID(0), err
+		}
+		targetpath := snmeta.GetStorageNode().GetStorages()[0].Path
+		replicas = append(replicas, &varlogpb.ReplicaDescriptor{StorageNodeID: snIDs[i], Path: targetpath})
 	}
 
 	for _, r := range replicas {
 		sn, _ := clus.SNs[r.StorageNodeID]
-		if _, err := sn.AddLogStream(clus.ClusterID, r.StorageNodeID, lsID, "tmp"); err != nil {
+		if _, err := sn.AddLogStream(clus.ClusterID, r.StorageNodeID, lsID, r.Path); err != nil {
 			return types.LogStreamID(0), err
 		}
 	}
@@ -412,7 +444,13 @@ func (clus *VarlogCluster) UpdateLS(lsID types.LogStreamID, oldsn, newsn types.S
 
 func (clus *VarlogCluster) UpdateLSByVMS(lsID types.LogStreamID, oldsn, newsn types.StorageNodeID) error {
 	sn := clus.LookupSN(newsn)
-	_, err := sn.AddLogStream(clus.ClusterID, newsn, lsID, "path")
+
+	snmeta, err := sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeLogStreams)
+	if err != nil {
+		return err
+	}
+	path := snmeta.GetStorageNode().GetStorages()[0].GetPath()
+	_, err = sn.AddLogStream(clus.ClusterID, newsn, lsID, path)
 	if err != nil {
 		return err
 	}

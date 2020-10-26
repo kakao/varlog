@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	options := &storagenode.StorageNodeOptions{}
+	options := &storagenode.Options{}
 	app := app.InitCLI(options)
 	if err := app.Run(os.Args); err != nil {
 		os.Exit(1)

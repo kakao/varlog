@@ -84,6 +84,7 @@ type LogStreamExecutor interface {
 	Run(ctx context.Context) error
 	Close()
 
+	Path() string
 	LogStreamID() types.LogStreamID
 	Status() varlogpb.LogStreamStatus
 	HighWatermark() types.GLSN
@@ -172,7 +173,7 @@ type logStreamExecutor struct {
 	// atomic access
 	// committedGLSNBegin   types.GLSN // R: read & subscribe W: Trim
 	// lastCommittedGLSN types.GLSN // R: read W: Commit
-	// committedGLSNBegin and committedGLSNEnd are knowledges which are learned from Trim and
+	// committedGLSNBegin and committedGLSNEnd are knowledge which are learned from Trim and
 	// Commit operations.
 	//
 	// localLowWatermark and committedGLSNEnd are knowledge that is learned from Trim and
@@ -231,6 +232,10 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 	return lse, nil
 }
 
+func (lse *logStreamExecutor) Path() string {
+	return lse.storage.Path()
+}
+
 func (lse *logStreamExecutor) LogStreamID() types.LogStreamID {
 	return lse.logStreamID
 }
@@ -262,23 +267,23 @@ func (lse *logStreamExecutor) Run(ctx context.Context) error {
 	var err error
 	if err = lse.runner.RunC(mctx, lse.dispatchAppendC); err != nil {
 		lse.logger.Error("could not run dispatchAppendC", zap.Error(err))
-		goto err_out
+		goto errOut
 	}
 	if err = lse.runner.RunC(mctx, lse.dispatchTrimC); err != nil {
 		lse.logger.Error("could not run dispatchTrimC", zap.Error(err))
-		goto err_out
+		goto errOut
 	}
 	if err = lse.runner.RunC(mctx, lse.dispatchCommitC); err != nil {
 		lse.logger.Error("could not run dispatchCommitC", zap.Error(err))
-		goto err_out
+		goto errOut
 	}
 	if err = lse.replicator.Run(mctx); err != nil {
 		lse.logger.Error("could not run replicator", zap.Error(err))
-		goto err_out
+		goto errOut
 	}
 	return nil
 
-err_out:
+errOut:
 	cancel()
 	lse.runner.Stop()
 	return err
@@ -299,6 +304,9 @@ func (lse *logStreamExecutor) Close() {
 	lse.runner.Stop()
 	lse.stop()
 	lse.exhaustAppendTrackers()
+	if err := lse.storage.Close(); err != nil {
+		lse.logger.Warn("error while closing storage", zap.Error(err))
+	}
 	lse.logger.Info("stop")
 }
 
@@ -530,13 +538,13 @@ func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (
 
 		scanner, err := lse.storage.Scan(begin, end)
 		if err != nil {
-			resultC <- newInvalidScanResult(err)
+			resultC <- NewInvalidScanResult(err)
 			return
 		}
 		defer scanner.Close()
 
 		result := scanner.Next()
-		lse.logger.Debug("scan", zap.Any("result", result))
+		lse.logger.Debug("scan", zap.Any("result", result), zap.String("data", string(result.LogEntry.Data)))
 
 		select {
 		case resultC <- result:
@@ -553,12 +561,12 @@ func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (
 		llsn := result.LogEntry.LLSN
 		for {
 			if ctx.Err() != nil {
-				resultC <- newInvalidScanResult(ctx.Err())
+				resultC <- NewInvalidScanResult(ctx.Err())
 				return
 			}
 
 			result := scanner.Next()
-			lse.logger.Debug("scan", zap.Any("result", result))
+			lse.logger.Debug("scan", zap.Any("result", result), zap.String("data", string(result.LogEntry.Data)))
 
 			if result.Valid() && llsn+1 != result.LogEntry.LLSN {
 				// FIXME (jun): This situation is happened by two causes:
@@ -568,7 +576,7 @@ func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (
 				// overlapped log ranges yet. It, however, results in unexpected
 				// situation like this.
 				err := varlog.NewSimpleErrorf(varlog.ErrUnordered, "llsn next=%v read=%v", llsn+1, result.LogEntry.LLSN)
-				result = newInvalidScanResult(err)
+				result = NewInvalidScanResult(err)
 			}
 			select {
 			case resultC <- result:
@@ -966,13 +974,13 @@ func (lse *logStreamExecutor) syncer(ctx context.Context, sts *SyncTaskStatus) f
 		resultC, err := lse.scan(ctx, first.GLSN, last.GLSN+1)
 		if err != nil {
 			// handle it
-			goto err_out
+			goto errOut
 		}
 
 		for result := range resultC {
 			if !result.Valid() {
 				err = result.Err
-				if err == errEndOfRange {
+				if err == ErrEndOfRange {
 					err = nil
 				}
 				break
@@ -998,7 +1006,7 @@ func (lse *logStreamExecutor) syncer(ctx context.Context, sts *SyncTaskStatus) f
 			sts.mu.Unlock()
 		}
 
-	err_out:
+	errOut:
 		sts.mu.Lock()
 		if err == nil {
 			lse.logger.Info("syncer complete", zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))

@@ -10,6 +10,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	InMemoryStorageName      = "inmem"
+	defaultInMemoryBatchSize = 32
+)
+
 type writtenEntry struct {
 	llsn types.LLSN
 	data []byte
@@ -18,6 +23,47 @@ type writtenEntry struct {
 type committedEntry struct {
 	llsn types.LLSN
 	glsn types.GLSN
+}
+
+type inMemoryWriteBatch struct {
+	entries []WriteEntry
+	s       *InMemoryStorage
+}
+
+func (iwb *inMemoryWriteBatch) Put(llsn types.LLSN, data []byte) error {
+	iwb.entries = append(iwb.entries, WriteEntry{LLSN: llsn, Data: data})
+	return nil
+}
+
+func (iwb *inMemoryWriteBatch) Apply() error {
+	return iwb.s.WriteBatch(iwb.entries)
+}
+
+func (iwb *inMemoryWriteBatch) Close() error {
+	for i := 0; i < len(iwb.entries); i++ {
+		iwb.entries[i].Data = nil
+	}
+	iwb.entries = nil
+	return nil
+}
+
+type inMemoryCommitBatch struct {
+	entries []CommitEntry
+	s       *InMemoryStorage
+}
+
+func (icb *inMemoryCommitBatch) Put(llsn types.LLSN, glsn types.GLSN) error {
+	icb.entries = append(icb.entries, CommitEntry{LLSN: llsn, GLSN: glsn})
+	return nil
+}
+
+func (icb *inMemoryCommitBatch) Apply() error {
+	return icb.s.CommitBatch(icb.entries)
+}
+
+func (icb *inMemoryCommitBatch) Close() error {
+	icb.entries = nil
+	return nil
 }
 
 type InMemoryStorage struct {
@@ -41,7 +87,7 @@ type InMemoryScanner struct {
 
 func (s *InMemoryScanner) Next() ScanResult {
 	if s.cursor >= len(s.committedSnapshot) {
-		return newInvalidScanResult(errEndOfRange)
+		return NewInvalidScanResult(ErrEndOfRange)
 	}
 	went := s.writtenSnapshot[s.cursor]
 	cent := s.committedSnapshot[s.cursor]
@@ -66,12 +112,21 @@ func (s *InMemoryScanner) Close() error {
 	return nil
 }
 
-func NewInMemoryStorage(logger *zap.Logger) Storage {
-	if logger == nil {
-		logger = zap.NewNop()
+func newInMemoryStorage(opts *StorageOptions) (Storage, error) {
+	if opts.Logger == nil {
+		opts.Logger = zap.NewNop()
 	}
-	logger = logger.Named("memstorage")
-	return &InMemoryStorage{logger: logger}
+	opts.Logger = opts.Logger.Named("memstorage")
+	return &InMemoryStorage{logger: opts.Logger}, nil
+}
+
+// TODO (jun): consider in-memory storage
+func (s *InMemoryStorage) Path() string {
+	return ":memory"
+}
+
+func (s *InMemoryStorage) Name() string {
+	return InMemoryStorageName
 }
 
 func (s *InMemoryStorage) searchCommittedEntry(glsn types.GLSN) (int, committedEntry, error) {
@@ -153,10 +208,28 @@ func (s *InMemoryStorage) Write(llsn types.LLSN, data []byte) error {
 	defer s.muWritten.Unlock()
 
 	if len(s.written) > 0 && s.written[len(s.written)-1].llsn+1 != llsn {
-		return varlog.ErrInvalid
+		s.logger.Panic("try to write incorrect LLSN", zap.Any("prev_llsn", s.written[len(s.written)-1].llsn), zap.Any("curr_llsn", llsn))
 	}
 
 	s.written = append(s.written, writtenEntry{llsn: llsn, data: data})
+	return nil
+}
+
+func (s *InMemoryStorage) NewWriteBatch() WriteBatch {
+	return &inMemoryWriteBatch{
+		entries: make([]WriteEntry, 0, defaultInMemoryBatchSize),
+		s:       s,
+	}
+}
+
+// FIXME (jun): WriteBatch should be atomic.
+func (s *InMemoryStorage) WriteBatch(entries []WriteEntry) error {
+	for _, entry := range entries {
+		s.logger.Debug("write_batch", zap.Any("llsn", entry.LLSN))
+		if err := s.Write(entry.LLSN, entry.Data); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -192,6 +265,22 @@ func (s *InMemoryStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 		}
 	}
 	s.committed = append(s.committed, committedEntry{llsn: llsn, glsn: glsn})
+	return nil
+}
+
+func (s *InMemoryStorage) NewCommitBatch() CommitBatch {
+	return &inMemoryCommitBatch{
+		entries: make([]CommitEntry, 0, defaultInMemoryBatchSize),
+		s:       s,
+	}
+}
+
+func (s *InMemoryStorage) CommitBatch(entries []CommitEntry) error {
+	for _, entry := range entries {
+		if err := s.Commit(entry.LLSN, entry.GLSN); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

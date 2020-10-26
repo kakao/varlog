@@ -53,18 +53,18 @@ func (mr *MockManagementMockRecorder) GetMetadata(clusterID, metadataType interf
 }
 
 // AddLogStream mocks base method.
-func (m *MockManagement) AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) (string, error) {
+func (m *MockManagement) AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, storageNodePath string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddLogStream", clusterID, storageNodeID, logStreamID, path)
+	ret := m.ctrl.Call(m, "AddLogStream", clusterID, storageNodeID, logStreamID, storageNodePath)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddLogStream indicates an expected call of AddLogStream.
-func (mr *MockManagementMockRecorder) AddLogStream(clusterID, storageNodeID, logStreamID, path interface{}) *gomock.Call {
+func (mr *MockManagementMockRecorder) AddLogStream(clusterID, storageNodeID, logStreamID, storageNodePath interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockManagement)(nil).AddLogStream), clusterID, storageNodeID, logStreamID, path)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockManagement)(nil).AddLogStream), clusterID, storageNodeID, logStreamID, storageNodePath)
 }
 
 // RemoveLogStream mocks base method.

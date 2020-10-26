@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"math"
 	"net"
 
 	"github.com/urfave/cli/v2"
@@ -29,10 +28,11 @@ func initStartCommand(options *vms.Options) *cli.Command {
 		Action: func(c *cli.Context) error {
 			// ClusterID
 			parsedClusterID := c.Uint("cluster-id")
-			if parsedClusterID > math.MaxUint32 {
-				return fmt.Errorf("invalid cluster id: %v", parsedClusterID)
+			clusterID, err := types.NewClusterIDFromUint(parsedClusterID)
+			if err != nil {
+				return err
 			}
-			options.ClusterID = types.ClusterID(parsedClusterID)
+			options.ClusterID = clusterID
 
 			// Metadata Repository Addresses
 			parsedMRAddrs := c.StringSlice("mr-address")
