@@ -15,9 +15,9 @@ import (
 type StorageNodeManager interface {
 	Refresh(ctx context.Context) error
 
-	FindByStorageNodeID(storageNodeID types.StorageNodeID) varlog.ManagementClient
+	Contains(storageNodeID types.StorageNodeID) bool
 
-	FindByAddress(addr string) varlog.ManagementClient
+	ContainsAddress(addr string) bool
 
 	// GetMetadataByAddr returns metadata about a storage node. It is useful when id of the
 	// storage node is not known.
@@ -116,22 +116,22 @@ func (sm *snManager) Close() error {
 	return err
 }
 
-func (sm *snManager) FindByStorageNodeID(storageNodeID types.StorageNodeID) varlog.ManagementClient {
+func (sm *snManager) Contains(storageNodeID types.StorageNodeID) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	snmcl, _ := sm.cs[storageNodeID]
-	return snmcl
+	_, ok := sm.cs[storageNodeID]
+	return ok
 }
 
-func (sm *snManager) FindByAddress(addr string) varlog.ManagementClient {
+func (sm *snManager) ContainsAddress(addr string) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	for _, snmcl := range sm.cs {
 		if snmcl.PeerAddress() == addr {
-			return snmcl
+			return true
 		}
 	}
-	return nil
+	return false
 }
 
 func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (varlog.ManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error) {
