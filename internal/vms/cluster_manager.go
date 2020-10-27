@@ -21,9 +21,9 @@ import (
 )
 
 type StorageNodeEventHandler interface {
-	HandleHeartbeatTimeout(types.StorageNodeID)
+	HandleHeartbeatTimeout(context.Context, types.StorageNodeID)
 
-	HandleReport(*varlogpb.StorageNodeMetadataDescriptor)
+	HandleReport(context.Context, *varlogpb.StorageNodeMetadataDescriptor)
 }
 
 // ClusterManager manages varlog cluster.
@@ -198,19 +198,31 @@ func (cm *clusterManager) Wait() {
 
 func (cm *clusterManager) Close() {
 	cm.mu.Lock()
-	defer cm.mu.Unlock()
 
 	switch cm.cmState {
 	case clusterManagerReady:
 		cm.logger.Error("could not close not-running cluster manager")
+		cm.mu.Unlock()
 		return
 	case clusterManagerClosed:
+		cm.mu.Unlock()
 		return
 	}
 	cm.cmState = clusterManagerClosed
+	cm.mu.Unlock()
 
 	// SN Watcher
 	cm.snWatcher.Close()
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if err := cm.snMgr.Close(); err != nil {
+		cm.logger.Warn("error while closing storage node manager", zap.Error(err))
+	}
+	if err := cm.mrMgr.Close(); err != nil {
+		cm.logger.Warn("error while closing metadata repository manager", zap.Error(err))
+	}
 
 	cm.server.Stop()
 	cm.sw.Stop()
@@ -456,7 +468,16 @@ func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types
 		return errors.New("not allowed unstable update")
 	}
 
-	return cm.mrMgr.UpdateLogStream(ctx, newLSDesc)
+	// To reset the status of the log stream, set it as LogStreamStatusRunning
+	defer func() {
+		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
+	}()
+
+	if err := cm.mrMgr.UpdateLogStream(ctx, newLSDesc); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (cm *clusterManager) removableLogStreamReplica(clusmeta *varlogpb.MetadataDescriptor, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
@@ -476,6 +497,9 @@ func (cm *clusterManager) removableLogStreamReplica(clusmeta *varlogpb.MetadataD
 }
 
 func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
 	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusSealing)
 
 	lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
@@ -495,6 +519,9 @@ func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamI
 }
 
 func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
 	lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
 	if err != nil {
 		return nil, err
@@ -503,6 +530,9 @@ func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamI
 }
 
 func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
 	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusUnsealing)
 
 	if err := cm.snMgr.Unseal(ctx, logStreamID); err != nil {
@@ -520,8 +550,8 @@ func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStrea
 	return nil
 }
 
-func (cm *clusterManager) HandleHeartbeatTimeout(snID types.StorageNodeID) {
-	meta, err := cm.cmView.ClusterMetadata(context.TODO())
+func (cm *clusterManager) HandleHeartbeatTimeout(ctx context.Context, snID types.StorageNodeID) {
+	meta, err := cm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return
 	}
@@ -529,7 +559,8 @@ func (cm *clusterManager) HandleHeartbeatTimeout(snID types.StorageNodeID) {
 	//TODO: store sn status
 	for _, ls := range meta.GetLogStreams() {
 		if ls.IsReplica(snID) {
-			cm.Seal(context.TODO(), ls.LogStreamID)
+			cm.logger.Debug("seal due to heartbeat timeout", zap.Any("snid", snID), zap.Any("lsid", ls.LogStreamID))
+			cm.Seal(ctx, ls.LogStreamID)
 		}
 	}
 }
@@ -541,6 +572,7 @@ func (cm *clusterManager) checkLogStreamStatus(logStreamID types.LogStreamID, mr
 		if mrStatus.Sealed() || replicaStatus.Sealed() {
 			cm.Seal(context.TODO(), logStreamID)
 		}
+
 	case varlogpb.LogStreamStatusSealing:
 		for _, r := range lsStat.Replicas {
 			if r.Status != varlogpb.LogStreamStatusSealed {
@@ -548,20 +580,19 @@ func (cm *clusterManager) checkLogStreamStatus(logStreamID types.LogStreamID, mr
 				return
 			}
 		}
-
 		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusSealed)
+
 	case varlogpb.LogStreamStatusUnsealing:
 		for _, r := range lsStat.Replicas {
 			if r.Status != varlogpb.LogStreamStatusRunning {
 				return
 			}
 		}
-
 		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
 	}
 }
 
-func (cm *clusterManager) syncLogStream(logStreamID types.LogStreamID) {
+func (cm *clusterManager) syncLogStream(ctx context.Context, logStreamID types.LogStreamID) {
 	min, max := types.MaxGLSN, types.InvalidGLSN
 	var src, tgt types.StorageNodeID
 
@@ -595,7 +626,8 @@ func (cm *clusterManager) syncLogStream(logStreamID types.LogStreamID) {
 	}
 
 	if src != tgt {
-		cm.Sync(context.TODO(), logStreamID, src, tgt)
+		status, err := cm.Sync(ctx, logStreamID, src, tgt)
+		cm.logger.Debug("sync", zap.Any("lsid", logStreamID), zap.Any("src", src), zap.Any("dst", tgt), zap.String("status", status.String()), zap.Error(err))
 
 		//TODO: Unseal
 		//status, _ := cm.Sync(context.TODO(), ls.LogStreamID, src, tgt)
@@ -605,8 +637,8 @@ func (cm *clusterManager) syncLogStream(logStreamID types.LogStreamID) {
 	}
 }
 
-func (cm *clusterManager) HandleReport(snm *varlogpb.StorageNodeMetadataDescriptor) {
-	meta, err := cm.cmView.ClusterMetadata(context.TODO())
+func (cm *clusterManager) HandleReport(ctx context.Context, snm *varlogpb.StorageNodeMetadataDescriptor) {
+	meta, err := cm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return
 	}
@@ -618,9 +650,9 @@ func (cm *clusterManager) HandleReport(snm *varlogpb.StorageNodeMetadataDescript
 		mls := meta.GetLogStream(ls.LogStreamID)
 		if mls == nil {
 			if time.Now().Sub(ls.CreatedTime) > cm.options.WatcherOptions.GCTimeout {
-				ctx, cancel := context.WithTimeout(context.Background(), WATCHER_RPC_TIMEOUT)
+				cctx, cancel := context.WithTimeout(ctx, WATCHER_RPC_TIMEOUT)
 				defer cancel()
-				cm.RemoveLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.LogStreamID)
+				cm.RemoveLogStreamReplica(cctx, snm.StorageNode.StorageNodeID, ls.LogStreamID)
 			}
 		} else {
 			cm.checkLogStreamStatus(ls.LogStreamID, mls.Status, ls.Status)
@@ -630,7 +662,7 @@ func (cm *clusterManager) HandleReport(snm *varlogpb.StorageNodeMetadataDescript
 	// Sync LogStream
 	for _, ls := range snm.GetLogStreams() {
 		if ls.Status.Sealed() {
-			cm.syncLogStream(ls.LogStreamID)
+			cm.syncLogStream(ctx, ls.LogStreamID)
 		}
 	}
 }

@@ -17,7 +17,7 @@ type StorageNodeWatcher interface {
 	Close() error
 }
 
-const WATCHER_RPC_TIMEOUT = 10 * time.Millisecond
+const WATCHER_RPC_TIMEOUT = 150 * time.Millisecond
 
 var _ StorageNodeWatcher = (*snWatcher)(nil)
 
@@ -32,11 +32,16 @@ type snWatcher struct {
 	mu sync.RWMutex
 
 	runner *runner.Runner
+	cancel context.CancelFunc
 
 	logger *zap.Logger
 }
 
 func NewStorageNodeWatcher(opts WatcherOptions, cmView ClusterMetadataView, snMgr StorageNodeManager, snHandler StorageNodeEventHandler, logger *zap.Logger) StorageNodeWatcher {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("snwatcher")
 	return &snWatcher{
 		WatcherOptions: opts,
 		cmView:         cmView,
@@ -49,14 +54,16 @@ func NewStorageNodeWatcher(opts WatcherOptions, cmView ClusterMetadataView, snMg
 }
 
 func (w *snWatcher) Run() error {
-	if _, err := w.runner.Run(w.run); err != nil {
+	cancel, err := w.runner.Run(w.run)
+	if err != nil {
 		return err
 	}
-
+	w.cancel = cancel
 	return nil
 }
 
 func (w *snWatcher) Close() error {
+	w.cancel()
 	w.runner.Stop()
 	return nil
 }
@@ -71,11 +78,11 @@ Loop:
 	for {
 		select {
 		case <-ticker.C:
-			w.heartbeat()
+			w.heartbeat(ctx)
 
 			reportInterval--
 			if reportInterval == 0 {
-				w.report()
+				w.report(ctx)
 				reportInterval = w.ReportInterval
 			}
 
@@ -85,8 +92,8 @@ Loop:
 	}
 }
 
-func (w *snWatcher) heartbeat() {
-	ctx, cancel := context.WithTimeout(context.Background(), WATCHER_RPC_TIMEOUT)
+func (w *snWatcher) heartbeat(c context.Context) {
+	ctx, cancel := context.WithTimeout(c, WATCHER_RPC_TIMEOUT)
 	defer cancel()
 	meta, err := w.cmView.ClusterMetadata(ctx)
 	if err != nil {
@@ -98,7 +105,7 @@ func (w *snWatcher) heartbeat() {
 
 	//TODO:: make it parallel
 	for _, s := range meta.GetStorageNodes() {
-		ctx, cancel := context.WithTimeout(context.Background(), WATCHER_RPC_TIMEOUT)
+		ctx, cancel := context.WithTimeout(c, WATCHER_RPC_TIMEOUT)
 		defer cancel()
 
 		// NOTE: Missing a storage node triggers refreshes of storage node manager, which
@@ -111,7 +118,7 @@ func (w *snWatcher) heartbeat() {
 		w.set(s.StorageNodeID)
 	}
 
-	w.handleHeartbeat()
+	w.handleHeartbeat(c)
 }
 
 func (w *snWatcher) set(snID types.StorageNodeID) {
@@ -140,21 +147,21 @@ func (w *snWatcher) reload(ss []*varlogpb.StorageNodeDescriptor) {
 	w.hb = hb
 }
 
-func (w *snWatcher) handleHeartbeat() {
+func (w *snWatcher) handleHeartbeat(ctx context.Context) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	cur := time.Now()
 	for snID, t := range w.hb {
 		if cur.Sub(t) > w.Tick*time.Duration(w.HeartbeatTimeout) {
-			w.snHandler.HandleHeartbeatTimeout(snID)
+			w.snHandler.HandleHeartbeatTimeout(ctx, snID)
 			w.hb[snID] = time.Now()
 		}
 	}
 }
 
-func (w *snWatcher) report() {
-	ctx, cancel := context.WithTimeout(context.Background(), WATCHER_RPC_TIMEOUT)
+func (w *snWatcher) report(c context.Context) {
+	ctx, cancel := context.WithTimeout(c, WATCHER_RPC_TIMEOUT)
 	defer cancel()
 	meta, err := w.cmView.ClusterMetadata(ctx)
 	if err != nil {
@@ -164,13 +171,13 @@ func (w *snWatcher) report() {
 
 	//TODO:: make it parallel
 	for _, s := range meta.GetStorageNodes() {
-		ctx, cancel := context.WithTimeout(context.Background(), WATCHER_RPC_TIMEOUT)
+		ctx, cancel := context.WithTimeout(c, WATCHER_RPC_TIMEOUT)
 		defer cancel()
 		sn, err := w.snMgr.GetMetadata(ctx, s.StorageNodeID)
 		if err != nil {
 			continue
 		}
 
-		w.snHandler.HandleReport(sn)
+		w.snHandler.HandleReport(c, sn)
 	}
 }
