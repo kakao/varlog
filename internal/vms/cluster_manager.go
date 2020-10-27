@@ -227,7 +227,7 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*var
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	if cm.snMgr.FindByAddress(addr) != nil {
+	if cm.snMgr.ContainsAddress(addr) {
 		return nil, varlog.ErrStorageNodeAlreadyExists
 	}
 
@@ -235,8 +235,8 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*var
 	if err != nil {
 		return nil, err
 	}
-	storageNodeID := snmcl.PeerStorageNodeID()
-	if cm.snMgr.FindByStorageNodeID(storageNodeID) != nil {
+	storageNodeID := snmeta.GetStorageNode().GetStorageNodeID()
+	if cm.snMgr.Contains(storageNodeID) {
 		return nil, varlog.ErrStorageNodeAlreadyExists
 	}
 
@@ -245,17 +245,17 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*var
 		cm.logger.Panic("mismatch between clusterMetadataView and snManager")
 	}
 	if err != errCMVNoStorageNode {
-		goto err_out
+		goto errOut
 	}
 
 	if err = cm.mrMgr.RegisterStorageNode(ctx, snmeta.GetStorageNode()); err != nil {
-		goto err_out
+		goto errOut
 	}
 
 	cm.snMgr.AddStorageNode(snmcl)
 	return snmeta, nil
 
-err_out:
+errOut:
 	snmcl.Close()
 	return nil, err
 }
