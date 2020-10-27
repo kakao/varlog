@@ -44,7 +44,6 @@ const (
 
 type MetadataRepositoryManager interface {
 	ClusterMetadataViewGetter
-	//MetadataGetter
 	io.Closer
 
 	RegisterStorageNode(ctx context.Context, storageNodeMeta *varlogpb.StorageNodeDescriptor) error
@@ -234,7 +233,10 @@ func (mrm *mrManager) clusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 
 func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *varlogpb.StorageNodeDescriptor) error {
 	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	defer func() {
+		mrm.dirty = true
+		mrm.mu.Unlock()
+	}()
 
 	cli := mrm.c()
 	if cli == nil {
@@ -245,13 +247,16 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.dirty = true
+
 	return err
 }
 
 func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
 	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	defer func() {
+		mrm.dirty = true
+		mrm.mu.Unlock()
+	}()
 
 	cli := mrm.c()
 	if cli == nil {
@@ -262,13 +267,16 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.dirty = true
+
 	return err
 }
 
 func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
 	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	defer func() {
+		mrm.dirty = true
+		mrm.mu.Unlock()
+	}()
 
 	cli := mrm.c()
 	if cli == nil {
@@ -279,13 +287,16 @@ func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varl
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.dirty = true
+
 	return err
 }
 
 func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
 	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	defer func() {
+		mrm.dirty = true
+		mrm.mu.Unlock()
+	}()
 
 	cli := mrm.c()
 	if cli == nil {
@@ -296,13 +307,15 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.dirty = true
 	return err
 }
 
 func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
 	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	defer func() {
+		mrm.dirty = true
+		mrm.mu.Unlock()
+	}()
 
 	cli := mrm.c()
 	if cli == nil {
@@ -313,14 +326,16 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlog
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.dirty = true
 	return err
 }
 
 // It implements MetadataRepositoryManager.Seal method.
 func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (lastCommittedGLSN types.GLSN, err error) {
 	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	defer func() {
+		mrm.dirty = true
+		mrm.mu.Unlock()
+	}()
 
 	cli := mrm.c()
 	if cli == nil {
@@ -331,13 +346,15 @@ func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.dirty = true
 	return glsn, err
 }
 
 func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
 	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	defer func() {
+		mrm.dirty = true
+		mrm.mu.Unlock()
+	}()
 
 	cli := mrm.c()
 	if cli == nil {
@@ -348,7 +365,6 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 	if err != nil {
 		mrm.closeClient()
 	}
-	mrm.dirty = true
 	return err
 }
 

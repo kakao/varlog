@@ -1107,14 +1107,14 @@ func newTestSnHandler() *testSnHandler {
 	}
 }
 
-func (sh *testSnHandler) HandleHeartbeatTimeout(snID types.StorageNodeID) {
+func (sh *testSnHandler) HandleHeartbeatTimeout(ctx context.Context, snID types.StorageNodeID) {
 	select {
 	case sh.hbC <- snID:
 	default:
 	}
 }
 
-func (sh *testSnHandler) HandleReport(sn *varlogpb.StorageNodeMetadataDescriptor) {
+func (sh *testSnHandler) HandleReport(ctx context.Context, sn *varlogpb.StorageNodeMetadataDescriptor) {
 	select {
 	case sh.reportC <- sn:
 	default:
@@ -1458,7 +1458,10 @@ func TestVarlogLogStreamSync(t *testing.T) {
 		NrMR:              1,
 		NrRep:             nrRep,
 		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		VMSOpts:           &vms.DefaultOptions,
 	}
+	opts.VMSOpts.HeartbeatTimeout *= 5
+	opts.VMSOpts.Logger = zap.L()
 
 	Convey("Given LogStream", t, withTestCluster(opts, func(env *VarlogCluster) {
 		for i := 0; i < nrRep; i++ {
@@ -1510,7 +1513,7 @@ func TestVarlogLogStreamSync(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				Convey("Then it should be synced", func(ctx C) {
-					So(testutil.CompareWaitN(100, func() bool {
+					So(testutil.CompareWaitN(200, func() bool {
 						snMeta, err := env.LookupSN(newsn).GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
 						if err != nil {
 							return false

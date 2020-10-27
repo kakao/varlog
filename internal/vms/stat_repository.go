@@ -90,6 +90,8 @@ func (s *statRepository) Refresh() {
 						LogStreamID: ls.LogStreamID,
 						Path:        r.Path,
 					}
+					// To reset the status of the log stream, set it as LogStreamStatusRunning
+					lsStat.Status = varlogpb.LogStreamStatusRunning
 				}
 			}
 		} else {
