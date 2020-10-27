@@ -2,15 +2,19 @@ package metadata_repository
 
 import (
 	"errors"
+	"net"
+	"net/url"
+	"strconv"
 	"time"
 
-	"github.com/urfave/cli/v2"
 	types "github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/varlog/util/netutil"
 	"go.uber.org/zap"
 )
 
 const (
 	DefaultRPCBindAddress                        = "0.0.0.0:9092"
+	DefaultRaftPort                              = 10000
 	DefaultSnapshotCount           uint64        = 10000
 	DefaultSnapshotCatchUpEntriesN uint64        = 10000
 	DefaultLogReplicationFactor    int           = 1
@@ -21,8 +25,21 @@ const (
 	UnusedRequestIndex uint64 = 0
 )
 
+var (
+	DefaultRaftAddress = makeDefaultRaftAddress()
+)
+
+func makeDefaultRaftAddress() string {
+	ips, _ := netutil.UnicastIPs()
+	if len(ips) > 0 {
+		return "http://" + net.JoinHostPort(ips[0].String(), strconv.Itoa(DefaultRaftPort))
+	}
+	return ""
+}
+
 type MetadataRepositoryOptions struct {
 	RPCBindAddress     string
+	RaftAddress        string
 	ClusterID          types.ClusterID
 	NodeID             types.NodeID
 	Join               bool
@@ -32,12 +49,25 @@ type MetadataRepositoryOptions struct {
 	RaftTick           time.Duration
 	RaftProposeTimeout time.Duration
 	RPCTimeout         time.Duration
-	PeerList           cli.StringSlice
+	Peers              []string
 	ReporterClientFac  ReporterClientFactory
 	Logger             *zap.Logger
 }
 
 func (options *MetadataRepositoryOptions) validate() error {
+	raftURL, err := url.Parse(options.RaftAddress)
+	if err != nil {
+		return err
+	}
+	raftHost, _, err := net.SplitHostPort(raftURL.Host)
+	if err != nil {
+		return err
+	}
+	raftIP := net.ParseIP(raftHost)
+	if !raftIP.IsGlobalUnicast() || raftIP.IsLoopback() {
+		options.Logger.Warn("bad RAFT address", zap.Any("addr", options.RaftAddress))
+	}
+
 	if options.NodeID == types.InvalidNodeID {
 		return errors.New("invalid nodeID")
 	}
@@ -50,7 +80,7 @@ func (options *MetadataRepositoryOptions) validate() error {
 		return errors.New("NumRep should be bigger than 0")
 	}
 
-	if len(options.PeerList.Value()) < 1 {
+	if len(options.Peers) < 1 {
 		return errors.New("# of PeerList should be bigger than 0")
 	}
 

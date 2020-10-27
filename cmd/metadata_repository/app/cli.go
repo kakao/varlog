@@ -18,6 +18,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		Aliases: []string{"s"},
 		Usage:   "start [flags]",
 		Action: func(c *cli.Context) error {
+			options.Peers = c.StringSlice("peers")
 			return Main(options)
 		},
 	}
@@ -31,13 +32,13 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 			EnvVars:     []string{"BIND"},
 			Destination: &options.RPCBindAddress,
 		},
-		&cli.Uint64Flag{
-			Name:        "node-id",
+		&cli.StringFlag{
+			Name:        "raft-address",
 			Aliases:     []string{},
-			Value:       0,
-			Usage:       "Node ID",
-			EnvVars:     []string{"NODE_ID"},
-			Destination: (*uint64)(&options.NodeID),
+			Value:       metadata_repository.DefaultRaftAddress,
+			Usage:       "Raft Address",
+			EnvVars:     []string{"RAFT_ADDRESS"},
+			Destination: &options.RaftAddress,
 		},
 		&cli.BoolFlag{
 			Name:        "verbose",
@@ -72,11 +73,10 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 			Destination: &options.SnapCount,
 		},
 		&cli.StringSliceFlag{
-			Name:        "peers",
-			Aliases:     []string{"p"},
-			Usage:       "Peers of cluster",
-			EnvVars:     []string{"PEERS"},
-			Destination: &options.PeerList,
+			Name:    "peers",
+			Aliases: []string{"p"},
+			Usage:   "Peers of cluster",
+			EnvVars: []string{"PEERS"},
 		},
 	}
 

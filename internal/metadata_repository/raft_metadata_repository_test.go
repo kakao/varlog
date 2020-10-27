@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -20,7 +19,6 @@ import (
 	"github.com/kakao/varlog/vtesting"
 
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 )
 
@@ -62,14 +60,9 @@ func (clus *metadataRepoCluster) clear(idx int) {
 	if idx < 0 || idx >= len(clus.nodes) {
 		return
 	}
-
-	url, _ := url.Parse(clus.peers[idx])
-	nodeID := types.NewNodeID(url.Host)
-
+	nodeID := types.NewNodeIDFromURL(clus.peers[idx])
 	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
 	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
-
-	return
 }
 
 func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
@@ -77,18 +70,17 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 		return errors.New("out of range")
 	}
 
-	url, _ := url.Parse(clus.peers[idx])
-	nodeID := types.NewNodeID(url.Host)
-
+	peers := make([]string, len(clus.peers))
+	copy(peers, clus.peers)
 	options := &MetadataRepositoryOptions{
 		ClusterID:         types.ClusterID(1),
-		NodeID:            nodeID,
+		RaftAddress:       clus.peers[idx],
 		Join:              join,
 		SnapCount:         testSnapCount,
 		RaftTick:          vtesting.TestRaftTick(),
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
 		NumRep:            clus.nrRep,
-		PeerList:          *cli.NewStringSlice(clus.peers...),
+		Peers:          peers,
 		RPCBindAddress:    ":0",
 		ReporterClientFac: clus.reporterClientFac,
 		Logger:            clus.logger,
