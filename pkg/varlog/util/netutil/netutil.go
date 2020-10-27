@@ -136,3 +136,49 @@ func getTCPListenerAddr(addr net.Addr) (*net.TCPAddr, error) {
 	}
 	return addr.(*net.TCPAddr), nil
 }
+
+func UnicastIPs() ([]net.IP, error) {
+	ips, err := IPs()
+	if err != nil {
+		return nil, err
+	}
+
+	ret := make([]net.IP, 0, len(ips))
+	for _, ip := range ips {
+		if ip.IsGlobalUnicast() && !ip.IsLoopback() {
+			ret = append(ret, ip)
+		}
+	}
+	return ret, nil
+}
+
+func IPs() ([]net.IP, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+
+	var ips []net.IP
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return nil, err
+		}
+		if len(addrs) == 0 {
+			continue
+		}
+
+		for _, addr := range addrs {
+			addr := addr.(*net.IPNet)
+			ip := addr.IP.To4()
+			if ip != nil {
+				ips = append(ips, ip)
+			}
+		}
+	}
+	return ips, nil
+}

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/urfave/cli/v2"
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/vms"
@@ -104,13 +103,13 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 
 	opts := &metadata_repository.MetadataRepositoryOptions{
 		ClusterID:         clus.ClusterID,
-		NodeID:            nodeID,
+		RaftAddress:       clus.mrPeers[idx],
 		Join:              join,
 		SnapCount:         uint64(clus.SnapCount),
 		RaftTick:          vtesting.TestRaftTick(),
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
 		NumRep:            clus.NrRep,
-		PeerList:          *cli.NewStringSlice(clus.mrPeers...),
+		Peers:             clus.mrPeers,
 		RPCBindAddress:    clus.mrRPCEndpoints[idx],
 		ReporterClientFac: clus.ReporterClientFac,
 		Logger:            clus.logger,

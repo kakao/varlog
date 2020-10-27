@@ -59,6 +59,20 @@ type RaftMetadataRepository struct {
 }
 
 func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadataRepository {
+	options.NodeID = types.NewNodeIDFromURL(options.RaftAddress)
+
+	// FIXME(pharrell): Is this good or not? - add the missing local address in peers
+	found := false
+	for _, peer := range options.Peers {
+		if peer == options.RaftAddress {
+			found = true
+			break
+		}
+	}
+	if !found {
+		options.Peers = append(options.Peers, options.RaftAddress)
+	}
+
 	if err := options.validate(); err != nil {
 		panic(err)
 	}
@@ -83,7 +97,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	mr.rnProposeC = make(chan string)
 	mr.raftNode = newRaftNode(
 		options.NodeID,
-		options.PeerList.Value(),
+		options.Peers,
 		options.Join, // if false, not to join an existing cluster
 		options.SnapCount,
 		options.RaftTick,

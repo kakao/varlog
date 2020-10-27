@@ -1,7 +1,10 @@
 package netutil
 
 import (
+	"strconv"
 	"testing"
+
+	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 )
 
 func TestGetListenerAddr(t *testing.T) {
@@ -43,4 +46,38 @@ func TestGetListenerAddr(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIPs(t *testing.T) {
+	ips, err := IPs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ips) == 0 {
+		t.Errorf("no ip?")
+	}
+	for _, ip := range ips {
+		if ip.IsUnspecified() {
+			t.Errorf("%v: unspecified ip", ip)
+		}
+		if ip.IsMulticast() {
+			t.Errorf("%v: multicast ip", ip)
+		}
+	}
+}
+
+func TestNodeIDGen(t *testing.T) {
+	const port = 10000
+
+	ips, err := IPs()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, ip := range ips {
+		addr := ip.String() + ":" + strconv.Itoa(port)
+		nodeID := types.NewNodeID(addr)
+		t.Logf("addr=%v nodeid=%v", addr, nodeID)
+	}
+
 }
