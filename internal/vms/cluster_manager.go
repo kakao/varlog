@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/pkg/varlog/util/netutil"
@@ -39,7 +40,7 @@ type ClusterManager interface {
 
 	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
 
-	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, replicas []*varlogpb.ReplicaDescriptor) error
+	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
 	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
@@ -95,7 +96,7 @@ type clusterManager struct {
 	snMgr          StorageNodeManager
 	mrMgr          MetadataRepositoryManager
 	cmView         ClusterMetadataView
-	snSelector     StorageNodeSelector
+	snSelector     ReplicaSelector
 	snWatcher      StorageNodeWatcher
 	statRepository StatRepository
 	logStreamIDGen LogStreamIDGenerator
@@ -127,13 +128,18 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		return nil, err
 	}
 
+	snSelector, err := newRandomReplicaSelector(cmView, opts.ReplicationFactor)
+	if err != nil {
+		return nil, err
+	}
+
 	cm := &clusterManager{
 		sw:             stopwaiter.New(),
 		cmState:        clusterManagerReady,
 		snMgr:          snMgr,
 		mrMgr:          mrMgr,
 		cmView:         cmView,
-		snSelector:     NewRandomSNSelector(cmView),
+		snSelector:     snSelector,
 		statRepository: NewStatRepository(cmView),
 		logStreamIDGen: logStreamIDGen,
 		logger:         opts.Logger,
@@ -313,7 +319,7 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 	}
 
 	if len(replicas) == 0 {
-		replicas, err = cm.snSelector.SelectStorageNodeAndPath(ctx, cm.options.ReplicationFactor)
+		replicas, err = cm.snSelector.Select(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -414,7 +420,7 @@ func (cm *clusterManager) RemoveLogStreamReplica(ctx context.Context, storageNod
 	return cm.snMgr.RemoveLogStream(ctx, storageNodeID, logStreamID)
 }
 
-func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, replicas []*varlogpb.ReplicaDescriptor) error {
+func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	// NOTE (jun): Name of the method - UpdateLogStream can be confused.
 	// UpdateLogStream can change only replicas. To update status, use Seal or Unseal.
 	cm.mu.Lock()
@@ -422,50 +428,65 @@ func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types
 
 	clusmeta, err := cm.cmView.ClusterMetadata(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	oldLSDesc := clusmeta.GetLogStream(logStreamID)
 	if oldLSDesc == nil {
-		return errors.New("no such log stream")
+		return nil, errors.New("no such log stream")
 	}
 
 	if oldLSDesc.GetStatus().Running() {
-		return errors.New("running log stream")
+		return nil, errors.New("running log stream")
 	}
 	if oldLSDesc.GetStatus().Deleted() {
-		return errors.New("already deleted")
+		return nil, errors.New("already deleted")
 	}
 
-	newLSDesc := &varlogpb.LogStreamDescriptor{
-		LogStreamID: logStreamID,
-		Status:      oldLSDesc.GetStatus(),
-		Replicas:    replicas,
-	}
-
-	if oldLSDesc.Equal(newLSDesc) {
-		return nil
-	}
-
-	hasSealed := false
-	for _, replica := range replicas {
-		snmeta, err := cm.snMgr.GetMetadata(ctx, replica.GetStorageNodeID())
+	if poppedReplica == nil {
+		// choose laggy replica
+		selector := newVictimSelector(cm.snMgr, logStreamID, oldLSDesc.GetReplicas())
+		victims, err := selector.Select(ctx)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		lsmeta, ok := snmeta.FindLogStream(logStreamID)
-		if !ok {
-			// TODO (jun): call AddLogStreamReplica or not?
-			return errors.New("no such log stream replica")
+		poppedReplica = victims[0]
+	}
+
+	if pushedReplica == nil {
+		oldReplicas := oldLSDesc.GetReplicas()
+		denylist := make([]types.StorageNodeID, len(oldReplicas))
+		for i, replica := range oldReplicas {
+			denylist[i] = replica.GetStorageNodeID()
 		}
-		if lsmeta.GetStatus() == varlogpb.LogStreamStatusSealed {
-			hasSealed = true
+
+		selector, err := newRandomReplicaSelector(cm.cmView, 1, denylist...)
+		if err != nil {
+			return nil, err
+		}
+		candidates, err := selector.Select(ctx)
+		if err != nil {
+			return nil, err
+		}
+		pushedReplica = candidates[0]
+	}
+
+	replace := false
+	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
+	for i := range newLSDesc.Replicas {
+		// TODO - fix? poppedReplica can ignore path.
+		if newLSDesc.Replicas[i].GetStorageNodeID() == poppedReplica.GetStorageNodeID() {
+			newLSDesc.Replicas[i] = pushedReplica
+			replace = true
+			break
 		}
 	}
-	if !hasSealed {
-		// TODO (jun): It will supports force mode which updating unstable log stream will
-		// be allowed when oldLSDesc is also unstable.
-		return errors.New("not allowed unstable update")
+	if !replace {
+		cm.logger.Panic("logstream push/pop error")
+	}
+
+	if err := cm.snMgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), logStreamID, pushedReplica.GetPath()); err != nil {
+		return nil, err
 	}
 
 	// To reset the status of the log stream, set it as LogStreamStatusRunning
@@ -474,10 +495,10 @@ func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types
 	}()
 
 	if err := cm.mrMgr.UpdateLogStream(ctx, newLSDesc); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return newLSDesc, nil
 }
 
 func (cm *clusterManager) removableLogStreamReplica(clusmeta *varlogpb.MetadataDescriptor, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {

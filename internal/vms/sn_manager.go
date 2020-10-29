@@ -31,6 +31,8 @@ type StorageNodeManager interface {
 
 	AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error
 
+	AddLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, path string) error
+
 	RemoveLogStream(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
 
 	// Seal seals logstream replicas of storage nodes corresponded with the logStreamID. It

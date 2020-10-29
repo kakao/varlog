@@ -58,8 +58,8 @@ func (s *clusterManagerService) RemoveLogStreamReplica(ctx context.Context, req 
 }
 
 func (s *clusterManagerService) UpdateLogStream(ctx context.Context, req *vmspb.UpdateLogStreamRequest) (*vmspb.UpdateLogStreamResponse, error) {
-	err := s.clusManager.UpdateLogStream(ctx, req.GetLogStreamID(), req.GetReplicas())
-	return &vmspb.UpdateLogStreamResponse{}, varlog.ToStatusError(err)
+	lsdesc, err := s.clusManager.UpdateLogStream(ctx, req.GetLogStreamID(), req.GetPoppedReplica(), req.GetPushedReplica())
+	return &vmspb.UpdateLogStreamResponse{LogStream: lsdesc}, varlog.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {

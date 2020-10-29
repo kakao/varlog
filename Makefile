@@ -108,7 +108,7 @@ internal/vms/vms_mock.go: internal/vms/cluster_manager.go
 		-package vms \
 		-destination $@ \
 		github.com/kakao/varlog/internal/vms \
-		ClusterMetadataView
+		ClusterMetadataView,StorageNodeManager
 
 
 internal/storagenode/storage_node_mock.go: internal/storagenode/storage_node.go
