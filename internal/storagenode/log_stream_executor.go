@@ -842,6 +842,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 
 	commitOk := true
 	glsn := t.committedGLSNBegin
+
 	for glsn < t.committedGLSNEnd {
 		llsn := lse.committedLLSNEnd
 		if err := lse.storage.Commit(llsn, glsn); err != nil {
@@ -875,8 +876,11 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 
 	// NOTE: This is a very subtle case. MR assigns GLSNs to these log entries, but the storage
 	// fails to commit it. Actually, these GLSNs are holes. See the above comments.
-	llsn := lse.committedLLSNEnd
+	offset := types.LLSN(0)
 	for glsn < t.committedGLSNEnd {
+		// NOTE: To avoid a race condition, read committedLLSNEnd inside this for-loop.
+		// Empty commit whilst syncing as a destination doesn't traverse this for-loop.
+		llsn := lse.committedLLSNEnd + offset
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
 			appendT.setGLSN(glsn)
@@ -884,13 +888,15 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		} else {
 			lse.logger.Warn("failed to commit, but cannot notify since no appendTask", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 		}
+		offset++
 		glsn++
-		llsn++
 		lse.logger.Debug("commit failed", zap.Any("llsn", llsn))
 	}
 
 	if commitOk {
 		lse.mu.Lock()
+		// NOTE: Even empty commit should update HWM since LSR aggregates all of the
+		// replicas in the storage node and take the minimum value of each HWMs.
 		lse.globalHighwatermark = t.highWatermark
 		lse.uncommittedLLSNBegin += types.LLSN(t.committedGLSNEnd - t.committedGLSNBegin)
 		if t.committedGLSNEnd-t.committedGLSNBegin > 0 {
