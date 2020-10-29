@@ -15,7 +15,7 @@ type ClusterManagerClient interface {
 	AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error
 	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
-	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, logStreamReplicas []*varlogpb.ReplicaDescriptor) error
+	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
 	Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*snpb.SyncStatus, error)
@@ -79,12 +79,16 @@ func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, stora
 	return FromStatusError(ctx, err)
 }
 
-func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, logStreamReplicas []*varlogpb.ReplicaDescriptor) error {
-	_, err := c.rpcClient.UpdateLogStream(ctx, &vmspb.UpdateLogStreamRequest{
-		LogStreamID: logStreamID,
-		Replicas:    logStreamReplicas,
+func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+	rsp, err := c.rpcClient.UpdateLogStream(ctx, &vmspb.UpdateLogStreamRequest{
+		LogStreamID:   logStreamID,
+		PoppedReplica: poppedReplica,
+		PushedReplica: pushedReplica,
 	})
-	return FromStatusError(ctx, err)
+	if err != nil {
+		return nil, FromStatusError(ctx, err)
+	}
+	return rsp.GetLogStream(), nil
 }
 
 func (c *clusterManagerClient) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error) {

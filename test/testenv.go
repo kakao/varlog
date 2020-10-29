@@ -449,35 +449,48 @@ func (clus *VarlogCluster) UpdateLSByVMS(lsID types.LogStreamID, oldsn, newsn ty
 		return err
 	}
 	path := snmeta.GetStorageNode().GetStorages()[0].GetPath()
-	_, err = sn.AddLogStream(clus.ClusterID, newsn, lsID, path)
-	if err != nil {
-		return err
-	}
-
-	meta, err := clus.CM.Metadata(context.TODO())
-	if err != nil {
-		return err
-	}
-
-	oldLSDesc := meta.GetLogStream(lsID)
-	if oldLSDesc == nil {
-		return errors.New("logStream is not exist")
-	}
-	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
-
-	exist := false
-	for _, r := range newLSDesc.Replicas {
-		if r.StorageNodeID == oldsn {
-			r.StorageNodeID = newsn
-			exist = true
+	/*
+		_, err = sn.AddLogStream(clus.ClusterID, newsn, lsID, path)
+		if err != nil {
+			return err
 		}
+	*/
+
+	newReplica := &varlogpb.ReplicaDescriptor{
+		StorageNodeID: newsn,
+		Path:          path,
+	}
+	oldReplica := &varlogpb.ReplicaDescriptor{
+		StorageNodeID: oldsn,
 	}
 
-	if !exist {
-		return errors.New("invalid victim")
-	}
+	/*
+		meta, err := clus.CM.Metadata(context.TODO())
+		if err != nil {
+			return err
+		}
 
-	return clus.CM.UpdateLogStream(context.TODO(), lsID, newLSDesc.Replicas)
+		oldLSDesc := meta.GetLogStream(lsID)
+		if oldLSDesc == nil {
+			return errors.New("logStream is not exist")
+		}
+		newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
+
+		exist := false
+		for _, r := range newLSDesc.Replicas {
+			if r.StorageNodeID == oldsn {
+				r.StorageNodeID = newsn
+				exist = true
+			}
+		}
+
+		if !exist {
+			return errors.New("invalid victim")
+		}
+	*/
+
+	_, err = clus.CM.UpdateLogStream(context.TODO(), lsID, oldReplica, newReplica)
+	return err
 }
 
 func (clus *VarlogCluster) LookupSN(snID types.StorageNodeID) *storagenode.StorageNode {

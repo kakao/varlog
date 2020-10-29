@@ -72,11 +72,22 @@ message UpdateLogStreamRequest {
             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    repeated varlogpb.ReplicaDescriptor replicas = 2
-        [(gogoproto.nullable) = true];
+    /*
+    // NOTE: popped_replica need not be varlog.ReplicaDescriptor, but it is
+    // natural. Though it is awkward, popped_storage_node_id is used here.
+    uint32 popped_storage_node_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+        (gogoproto.customname) = "PoppedStorageNodeID"
+    ];
+    */
+    varlogpb.ReplicaDescriptor popped_replica = 2;
+    varlogpb.ReplicaDescriptor pushed_replica = 3;
 }
 
-message UpdateLogStreamResponse {}
+message UpdateLogStreamResponse {
+    varlogpb.LogStreamDescriptor log_stream = 1;
+}
 
 message SealRequest {
     uint32 log_stream_id = 1 [

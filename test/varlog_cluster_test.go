@@ -1509,8 +1509,33 @@ func TestVarlogLogStreamSync(t *testing.T) {
 
 				victim := result[len(result)-1].StorageNodeID
 
+				// test if victim exists in the logstream and newsn does not exist
+				// in the log stream
+				meta, err := env.GetMR().GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+				snidmap := make(map[types.StorageNodeID]bool)
+				replicas := meta.GetLogStream(lsID).GetReplicas()
+				for _, replica := range replicas {
+					snidmap[replica.GetStorageNodeID()] = true
+				}
+				So(snidmap, ShouldNotContainKey, newsn)
+				So(snidmap, ShouldContainKey, victim)
+
+				// update LS
 				err = env.UpdateLSByVMS(lsID, victim, newsn)
 				So(err, ShouldBeNil)
+
+				// test if victim does not exist in the logstream and newsn exists
+				// in the log stream
+				meta, err = env.GetMR().GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+				snidmap = make(map[types.StorageNodeID]bool)
+				replicas = meta.GetLogStream(lsID).GetReplicas()
+				for _, replica := range replicas {
+					snidmap[replica.GetStorageNodeID()] = true
+				}
+				So(snidmap, ShouldContainKey, newsn)
+				So(snidmap, ShouldNotContainKey, victim)
 
 				Convey("Then it should be synced", func(ctx C) {
 					So(testutil.CompareWaitN(200, func() bool {
