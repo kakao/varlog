@@ -52,7 +52,7 @@ ifeq ($(TEST_VERBOSE),1)
 endif
 
 .PHONY: all
-all : proto storagenode metadata_repository vms
+all : proto storagenode metadata_repository vms vmc
 
 PROTO_DIRS := $(sort $(dir $(shell find $(MAKEFILE_DIR)/proto -name '*.proto')))
 
@@ -71,7 +71,10 @@ metadata_repository: $(METADATA_REPOSITORY) $(PROTO_DIRS)
 VMS := cmd/vms
 vms: $(VMS) $(PROTO_DIRS)
 
-SUBDIRS := $(PROTO_DIRS) $(STORAGE_NODE) $(METADATA_REPOSITORY) $(VMS)
+VMC := cmd/vmc
+vmc : $(PROTO) $(VMC)
+
+SUBDIRS := $(PROTO_DIRS) $(STORAGE_NODE) $(METADATA_REPOSITORY) $(VMS) $(VMC)
 subdirs: $(SUBDIRS)
 
 $(SUBDIRS) :

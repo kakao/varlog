@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	DefaultRPCBindAddress = "0.0.0.0:9100"
+	DefaultRPCBindAddress = "127.0.0.1:9090"
 
 	DefaultClusterID         = types.ClusterID(1)
 	DefaultReplicationFactor = 1

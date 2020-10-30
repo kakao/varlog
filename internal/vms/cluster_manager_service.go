@@ -34,6 +34,7 @@ func (s *clusterManagerService) Register(server *grpc.Server) {
 
 func (s *clusterManagerService) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
 	snmeta, err := s.clusManager.AddStorageNode(ctx, req.GetAddress())
+	s.logger.Info("AddStorageNode", zap.String("snmeta", snmeta.String()), zap.Error(err))
 	return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, varlog.ToStatusError(err)
 }
 
@@ -44,6 +45,7 @@ func (s *clusterManagerService) UnregisterStorageNode(ctx context.Context, req *
 
 func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
 	logStreamDesc, err := s.clusManager.AddLogStream(ctx, req.GetReplicas())
+	s.logger.Info("AddLogStream", zap.String("lsdesc", logStreamDesc.String()))
 	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, varlog.ToStatusError(err)
 }
 
@@ -63,8 +65,8 @@ func (s *clusterManagerService) UpdateLogStream(ctx context.Context, req *vmspb.
 }
 
 func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {
-	lsmetaList, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
-	return &vmspb.SealResponse{LogStreams: lsmetaList}, varlog.ToStatusError(err)
+	lsmetas, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
+	return &vmspb.SealResponse{LogStreams: lsmetas}, varlog.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Sync(ctx context.Context, req *vmspb.SyncRequest) (*vmspb.SyncResponse, error) {
@@ -73,6 +75,6 @@ func (s *clusterManagerService) Sync(ctx context.Context, req *vmspb.SyncRequest
 }
 
 func (s *clusterManagerService) Unseal(ctx context.Context, req *vmspb.UnsealRequest) (*vmspb.UnsealResponse, error) {
-	err := s.clusManager.Unseal(ctx, req.GetLogStreamID())
-	return &vmspb.UnsealResponse{}, varlog.ToStatusError(err)
+	lsdesc, err := s.clusManager.Unseal(ctx, req.GetLogStreamID())
+	return &vmspb.UnsealResponse{LogStream: lsdesc}, varlog.ToStatusError(err)
 }

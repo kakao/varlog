@@ -4,21 +4,20 @@ import (
 	"context"
 
 	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/proto/vmspb"
 )
 
 type ClusterManagerClient interface {
-	AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error)
-	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error
-	AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
-	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error
-	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
-	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
-	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
-	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
-	Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*snpb.SyncStatus, error)
+	AddStorageNode(ctx context.Context, addr string) (*vmspb.AddStorageNodeResponse, error)
+	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vmspb.UnregisterStorageNodeResponse, error)
+	AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*vmspb.AddLogStreamResponse, error)
+	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnregisterLogStreamResponse, error)
+	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) (*vmspb.RemoveLogStreamReplicaResponse, error)
+	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*vmspb.UpdateLogStreamResponse, error)
+	Seal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.SealResponse, error)
+	Unseal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error)
+	Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*vmspb.SyncResponse, error)
 	Close() error
 }
 
@@ -45,70 +44,58 @@ func (c *clusterManagerClient) Close() error {
 	return c.rpcConn.Close()
 }
 
-func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) (*vmspb.AddStorageNodeResponse, error) {
 	rsp, err := c.rpcClient.AddStorageNode(ctx, &vmspb.AddStorageNodeRequest{Address: addr})
-	if err != nil {
-		return nil, FromStatusError(ctx, err)
-	}
-	return rsp.StorageNode, nil
+	return rsp, FromStatusError(ctx, err)
 }
 
-func (c *clusterManagerClient) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
-	_, err := c.rpcClient.UnregisterStorageNode(ctx, &vmspb.UnregisterStorageNodeRequest{StorageNodeID: storageNodeID})
-	return FromStatusError(ctx, err)
+func (c *clusterManagerClient) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vmspb.UnregisterStorageNodeResponse, error) {
+	rsp, err := c.rpcClient.UnregisterStorageNode(ctx, &vmspb.UnregisterStorageNodeRequest{StorageNodeID: storageNodeID})
+	return rsp, FromStatusError(ctx, err)
 }
 
-func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*vmspb.AddLogStreamResponse, error) {
 	rsp, err := c.rpcClient.AddLogStream(ctx, &vmspb.AddLogStreamRequest{Replicas: logStreamReplicas})
-	if err != nil {
-		return nil, FromStatusError(ctx, err)
-	}
-	return rsp.GetLogStream(), nil
+	return rsp, FromStatusError(ctx, err)
 }
 
-func (c *clusterManagerClient) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
-	_, err := c.rpcClient.UnregisterLogStream(ctx, &vmspb.UnregisterLogStreamRequest{LogStreamID: logStreamID})
-	return FromStatusError(ctx, err)
+func (c *clusterManagerClient) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnregisterLogStreamResponse, error) {
+	rsp, err := c.rpcClient.UnregisterLogStream(ctx, &vmspb.UnregisterLogStreamRequest{LogStreamID: logStreamID})
+	return rsp, FromStatusError(ctx, err)
 }
 
-func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
-	_, err := c.rpcClient.RemoveLogStreamReplica(ctx, &vmspb.RemoveLogStreamReplicaRequest{
+func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) (*vmspb.RemoveLogStreamReplicaResponse, error) {
+	rsp, err := c.rpcClient.RemoveLogStreamReplica(ctx, &vmspb.RemoveLogStreamReplicaRequest{
 		StorageNodeID: storageNodeID,
 		LogStreamID:   logStreamID,
 	})
-	return FromStatusError(ctx, err)
+	return rsp, FromStatusError(ctx, err)
 }
 
-func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*vmspb.UpdateLogStreamResponse, error) {
 	rsp, err := c.rpcClient.UpdateLogStream(ctx, &vmspb.UpdateLogStreamRequest{
 		LogStreamID:   logStreamID,
 		PoppedReplica: poppedReplica,
 		PushedReplica: pushedReplica,
 	})
-	if err != nil {
-		return nil, FromStatusError(ctx, err)
-	}
-	return rsp.GetLogStream(), nil
+	return rsp, FromStatusError(ctx, err)
 }
 
-func (c *clusterManagerClient) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error) {
+func (c *clusterManagerClient) Seal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
 	rsp, err := c.rpcClient.Seal(ctx, &vmspb.SealRequest{LogStreamID: logStreamID})
-	if err != nil {
-		return nil, FromStatusError(ctx, err)
-	}
-	return rsp.GetLogStreams(), nil
+	return rsp, FromStatusError(ctx, err)
 }
 
-func (c *clusterManagerClient) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
-	_, err := c.rpcClient.Unseal(ctx, &vmspb.UnsealRequest{LogStreamID: logStreamID})
-	return FromStatusError(ctx, err)
+func (c *clusterManagerClient) Unseal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error) {
+	rsp, err := c.rpcClient.Unseal(ctx, &vmspb.UnsealRequest{LogStreamID: logStreamID})
+	return rsp, FromStatusError(ctx, err)
 }
 
-func (c *clusterManagerClient) Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*snpb.SyncStatus, error) {
+func (c *clusterManagerClient) Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*vmspb.SyncResponse, error) {
 	rsp, err := c.rpcClient.Sync(ctx, &vmspb.SyncRequest{
 		LogStreamID:      logStreamID,
 		SrcStorageNodeID: srcStorageNodeId,
 		DstStorageNodeID: dstStorageNodeId,
 	})
-	return rsp.GetStatus(), FromStatusError(ctx, err)
+	return rsp, FromStatusError(ctx, err)
 }

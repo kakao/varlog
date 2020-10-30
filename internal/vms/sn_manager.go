@@ -58,15 +58,16 @@ type snManager struct {
 	logger *zap.Logger
 }
 
-func NewStorageNodeManager(ctx context.Context, cmView ClusterMetadataView, logger *zap.Logger) (StorageNodeManager, error) {
+func NewStorageNodeManager(ctx context.Context, clusterID types.ClusterID, cmView ClusterMetadataView, logger *zap.Logger) (StorageNodeManager, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("snmanager")
 	sm := &snManager{
-		cmView: cmView,
-		cs:     make(map[types.StorageNodeID]varlog.ManagementClient),
-		logger: logger,
+		clusterID: clusterID,
+		cmView:    cmView,
+		cs:        make(map[types.StorageNodeID]varlog.ManagementClient),
+		logger:    logger,
 	}
 	if err := sm.Refresh(ctx); err != nil {
 		return nil, err

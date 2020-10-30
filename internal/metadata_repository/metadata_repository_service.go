@@ -9,9 +9,10 @@ import (
 )
 
 type MetadataRepositoryService struct {
-	mrpb.UnimplementedMetadataRepositoryServiceServer
 	metaRepos MetadataRepository
 }
+
+var _ mrpb.MetadataRepositoryServiceServer = (*MetadataRepositoryService)(nil)
 
 func NewMetadataRepositoryService(metaRepos MetadataRepository) *MetadataRepositoryService {
 	return &MetadataRepositoryService{
