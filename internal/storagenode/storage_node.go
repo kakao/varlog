@@ -220,9 +220,9 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetada
 	if len(lseList) == 0 {
 		return nil
 	}
-	lsdList := make([]varlogpb.LogStreamMetadataDescriptor, len(lseList))
+	lsmetas := make([]varlogpb.LogStreamMetadataDescriptor, len(lseList))
 	for i, lse := range lseList {
-		lsdList[i] = varlogpb.LogStreamMetadataDescriptor{
+		lsmetas[i] = varlogpb.LogStreamMetadataDescriptor{
 			StorageNodeID: sn.storageNodeID,
 			LogStreamID:   lse.LogStreamID(),
 			Status:        lse.Status(),
@@ -234,7 +234,7 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetada
 			UpdatedTime: lse.LastUpdated(),
 		}
 	}
-	return lsdList
+	return lsmetas
 }
 
 // AddLogStream implements the Management AddLogStream method.

@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	DefaultRPCBindAddress = "0.0.0.0:9091"
+	DefaultRPCBindAddress = "127.0.0.1:9091"
 )
 
 var (
-	DefaultClusterID     = types.ClusterID(0)
-	DefaultStorageNodeID = types.StorageNodeID(0)
+	DefaultClusterID     = types.ClusterID(1)
+	DefaultStorageNodeID = types.StorageNodeID(1)
 	DefaultVolume        = Volume(os.TempDir())
 	DefaultStorageName   = PebbleStorageName
 )

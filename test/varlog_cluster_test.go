@@ -786,8 +786,9 @@ func TestVarlogManagerServer(t *testing.T) {
 			So(len(snAddr), ShouldBeGreaterThan, 0)
 			snAddrs[snid] = snAddr
 
-			snmeta, err := cmcli.AddStorageNode(context.TODO(), snAddr)
+			rsp, err := cmcli.AddStorageNode(context.TODO(), snAddr)
 			So(err, ShouldBeNil)
+			snmeta := rsp.GetStorageNode()
 			So(snmeta.GetStorageNode().GetStorageNodeID(), ShouldEqual, snid)
 
 			storages := snmeta.GetStorageNode().GetStorages()
@@ -803,7 +804,7 @@ func TestVarlogManagerServer(t *testing.T) {
 
 		Convey("UnregisterStorageNode", func() {
 			for snid := range env.SNs {
-				err := cmcli.UnregisterStorageNode(context.TODO(), snid)
+				_, err := cmcli.UnregisterStorageNode(context.TODO(), snid)
 				So(err, ShouldBeNil)
 
 				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
@@ -829,8 +830,9 @@ func TestVarlogManagerServer(t *testing.T) {
 			So(err, ShouldBeNil)
 			updatedAt := snmeta.GetUpdatedTime()
 
-			logStreamDesc, err := cmcli.AddLogStream(context.TODO(), nil)
+			rsp, err := cmcli.AddLogStream(context.TODO(), nil)
 			So(err, ShouldBeNil)
+			logStreamDesc := rsp.GetLogStream()
 			So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
 			logStreamID := logStreamDesc.GetLogStreamID()
 
@@ -853,13 +855,14 @@ func TestVarlogManagerServer(t *testing.T) {
 			So(clusmeta.GetLogStream(logStreamID), ShouldNotBeNil)
 
 			Convey("UnregisterLogStream ERROR: running log stream", func() {
-				err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
+				_, err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
 				So(err, ShouldNotBeNil)
 			})
 
 			Convey("Seal", func() {
-				lsmetaList, err := cmcli.Seal(context.TODO(), logStreamID)
+				rsp, err := cmcli.Seal(context.TODO(), logStreamID)
 				So(err, ShouldBeNil)
+				lsmetaList := rsp.GetLogStreams()
 				So(len(lsmetaList), ShouldEqual, opts.NrRep)
 				So(lsmetaList[0].HighWatermark, ShouldEqual, types.InvalidGLSN)
 
@@ -880,7 +883,7 @@ func TestVarlogManagerServer(t *testing.T) {
 				}
 
 				Convey("UnregisterLogStream OK: sealed log stream", func() {
-					err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
+					_, err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
 					So(err, ShouldBeNil)
 
 					clusmeta, err := env.GetMR().GetMetadata(context.TODO())
@@ -890,7 +893,7 @@ func TestVarlogManagerServer(t *testing.T) {
 				})
 
 				Convey("Unseal", func() {
-					err := cmcli.Unseal(context.TODO(), logStreamID)
+					_, err := cmcli.Unseal(context.TODO(), logStreamID)
 					So(err, ShouldBeNil)
 
 					clusmeta, err := env.GetMR().GetMetadata(context.TODO())
@@ -903,8 +906,9 @@ func TestVarlogManagerServer(t *testing.T) {
 		})
 
 		Convey("AddLogStream - Manual", func() {
-			logStreamDesc, err := cmcli.AddLogStream(context.TODO(), replicas)
+			rsp, err := cmcli.AddLogStream(context.TODO(), replicas)
 			So(err, ShouldBeNil)
+			logStreamDesc := rsp.GetLogStream()
 			So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
 
 			// pass since NrRep equals to NrSN
@@ -951,13 +955,14 @@ func TestVarlogManagerServer(t *testing.T) {
 			So(varlog.IsTransientErr(err), ShouldBeTrue)
 
 			Convey("RemoveLogStreamReplica: garbage log stream can be removed", func() {
-				err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, types.LogStreamID(1))
+				_, err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, types.LogStreamID(1))
 				So(err, ShouldBeNil)
 			})
 
 			Convey("AddLogStream - OK: due to LogStreamIDGenerator.Refresh", func() {
-				logStreamDesc, err := cmcli.AddLogStream(context.TODO(), replicas)
+				rsp, err := cmcli.AddLogStream(context.TODO(), replicas)
 				So(err, ShouldBeNil)
+				logStreamDesc := rsp.GetLogStream()
 				So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
 
 				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
@@ -966,7 +971,7 @@ func TestVarlogManagerServer(t *testing.T) {
 
 				Convey("RemoveLogStreamReplica: registered log stream cannot be removed", func() {
 					logStreamID := logStreamDesc.GetLogStreamID()
-					err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, logStreamID)
+					_, err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, logStreamID)
 					So(err, ShouldNotBeNil)
 				})
 			})
@@ -1153,7 +1158,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		cmView := mrMgr.ClusterMetadataView()
-		snMgr, err := vms.NewStorageNodeManager(context.TODO(), cmView, zap.NewNop())
+		snMgr, err := vms.NewStorageNodeManager(context.TODO(), env.ClusterID, cmView, zap.NewNop())
 		So(err, ShouldBeNil)
 
 		snHandler := newTestSnHandler()
@@ -1596,9 +1601,9 @@ func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
 			err := failedSN.RemoveLogStream(env.ClusterID, failedSNID, lsID)
 			So(err, ShouldBeNil)
 
-			result, err := cmcli.Seal(context.TODO(), lsID)
+			rsp, err := cmcli.Seal(context.TODO(), lsID)
 			So(err, ShouldBeNil)
-			So(len(result), ShouldBeLessThan, nrRep)
+			So(len(rsp.GetLogStreams()), ShouldBeLessThan, nrRep)
 
 			Convey("Then SN Watcher make LS sealed", func(ctx C) {
 				snmeta, err := failedSN.GetMetadata(env.ClusterID, snpb.MetadataTypeLogStreams)
@@ -1669,7 +1674,7 @@ func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
 			err := failedSN.RemoveLogStream(env.ClusterID, failedSNID, lsID)
 			So(err, ShouldBeNil)
 
-			err = cmcli.Unseal(context.TODO(), lsID)
+			_, err = cmcli.Unseal(context.TODO(), lsID)
 			So(err, ShouldNotBeNil)
 
 			Convey("Then SN Watcher make LS sealed", func(ctx C) {

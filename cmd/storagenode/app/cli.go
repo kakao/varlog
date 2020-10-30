@@ -78,13 +78,15 @@ func initStorageNodeFlags(options *storagenode.Options) []cli.Flag {
 	return []cli.Flag{
 		&cli.UintFlag{
 			Name:    "cluster-id",
-			Aliases: []string{},
+			Aliases: []string{"cid"},
+			Value:   uint(storagenode.DefaultClusterID),
 			Usage:   "cluster id",
 			EnvVars: []string{"CLUSTER_ID"},
 		},
 		&cli.UintFlag{
 			Name:    "storage-node-id",
-			Aliases: []string{},
+			Aliases: []string{"snid"},
+			Value:   uint(storagenode.DefaultStorageNodeID),
 			Usage:   "storage node id",
 			EnvVars: []string{"STORAGE_NODE_ID"},
 		},

@@ -58,7 +58,7 @@ type ClusterManager interface {
 	Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error)
 
 	// Unseal unseals the log stream replicas corresponded with the given logStreamID.
-	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
+	Unseal(ctx context.Context, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error)
 
 	Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error)
 
@@ -118,7 +118,7 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 
 	cmView := mrMgr.ClusterMetadataView()
 
-	snMgr, err := NewStorageNodeManager(ctx, cmView, opts.Logger)
+	snMgr, err := NewStorageNodeManager(ctx, opts.ClusterID, cmView, opts.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -550,25 +550,32 @@ func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamI
 	return cm.snMgr.Sync(ctx, logStreamID, srcID, dstID, lastGLSN)
 }
 
-func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
+func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
+	var err error
+	var clusmeta *varlogpb.MetadataDescriptor
 	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusUnsealing)
 
-	if err := cm.snMgr.Unseal(ctx, logStreamID); err != nil {
+	if err = cm.snMgr.Unseal(ctx, logStreamID); err != nil {
 		cm.logger.Error("error while unsealing by MR", zap.Error(err))
-		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
-		return err
+		goto errOut
 	}
 
-	if err := cm.mrMgr.Unseal(ctx, logStreamID); err != nil {
+	if err = cm.mrMgr.Unseal(ctx, logStreamID); err != nil {
 		cm.logger.Error("error while unsealing by SN", zap.Error(err))
-		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
-		return err
+		goto errOut
 	}
 
-	return nil
+	if clusmeta, err = cm.cmView.ClusterMetadata(ctx); err != nil {
+		goto errOut
+	}
+	return clusmeta.GetLogStream(logStreamID), nil
+
+errOut:
+	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
+	return nil, err
 }
 
 func (cm *clusterManager) HandleHeartbeatTimeout(ctx context.Context, snID types.StorageNodeID) {

@@ -69,6 +69,7 @@ func NewVarlogCluster(opts VarlogClusterOptions) *VarlogCluster {
 		mrIDs:                mrIDs,
 		MRs:                  MRs,
 		SNs:                  make(map[types.StorageNodeID]*storagenode.StorageNode),
+		ClusterID:            types.ClusterID(1),
 	}
 
 	for i := range clus.mrPeers {
@@ -577,6 +578,7 @@ func (clus *VarlogCluster) RunClusterManager(mrAddrs []string, opts *vms.Options
 		opts.Logger = clus.logger
 	}
 
+	opts.ClusterID = clus.ClusterID
 	opts.MetadataRepositoryAddresses = mrAddrs
 	opts.ReplicationFactor = uint(clus.VarlogClusterOptions.NrRep)
 

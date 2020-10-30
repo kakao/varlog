@@ -9,9 +9,10 @@ import (
 )
 
 type ManagementService struct {
-	mrpb.UnimplementedManagementServer
 	m Management
 }
+
+var _ mrpb.ManagementServer = (*ManagementService)(nil)
 
 func NewManagementService(m Management) *ManagementService {
 	return &ManagementService{

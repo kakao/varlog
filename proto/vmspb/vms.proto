@@ -132,7 +132,9 @@ message UnsealRequest {
     ];
 }
 
-message UnsealResponse {}
+message UnsealResponse {
+    varlogpb.LogStreamDescriptor log_stream = 1;
+}
 
 service ClusterManager {
     rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {

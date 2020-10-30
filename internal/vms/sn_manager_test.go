@@ -21,7 +21,7 @@ func withTestStorageNodeManager(t *testing.T, f func(ctrl *gomock.Controller, sn
 		meta := &varlogpb.MetadataDescriptor{}
 		cmView := NewMockClusterMetadataView(ctrl)
 		cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(meta, nil)
-		snManager, err := NewStorageNodeManager(context.TODO(), cmView, zap.L())
+		snManager, err := NewStorageNodeManager(context.TODO(), types.ClusterID(1), cmView, zap.L())
 		So(err, ShouldBeNil)
 
 		Reset(func() {
@@ -57,7 +57,6 @@ func TestAddStorageNode(t *testing.T) {
 func TestAddLogStream(t *testing.T) {
 	Convey("Given a StorageNodeManager", t, withTestStorageNodeManager(t, func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView) {
 		const (
-			clusterID   = types.ClusterID(1)
 			logStreamID = types.LogStreamID(1)
 			nrSN        = 3
 		)

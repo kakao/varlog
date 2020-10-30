@@ -100,10 +100,8 @@ message StorageNodeMetadataDescriptor {
     ];
     // StorageNode is detailed information about the storage node.
     StorageNodeDescriptor storage_node = 2;
-
     repeated LogStreamMetadataDescriptor log_streams = 3
         [(gogoproto.nullable) = false];
-
     google.protobuf.Timestamp created_time = 4
         [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
     google.protobuf.Timestamp updated_time = 5
