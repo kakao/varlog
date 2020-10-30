@@ -57,7 +57,7 @@ all : proto storagenode metadata_repository vms
 PROTO_DIRS := $(sort $(dir $(shell find $(MAKEFILE_DIR)/proto -name '*.proto')))
 
 .PHONY: proto
-proto: $(PROTO_DIRS) check_protoc gogoproto
+proto: check_protoc gogoproto $(PROTO_DIRS)
 
 .PHONY: storagenode
 STORAGE_NODE := cmd/storagenode
