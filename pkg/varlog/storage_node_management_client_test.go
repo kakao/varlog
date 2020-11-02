@@ -18,7 +18,7 @@ func TestManagementClientGetMetadata(t *testing.T) {
 		defer ctrl.Finish()
 
 		mockClient := mock.NewMockManagementClient(ctrl)
-		mc := &managementClient{rpcClient: mockClient}
+		mc := &snManagementClient{rpcClient: mockClient}
 
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, ErrInternal)
@@ -44,7 +44,7 @@ func TestManagementClientAddLogStream(t *testing.T) {
 		defer ctrl.Finish()
 
 		mockClient := mock.NewMockManagementClient(ctrl)
-		mc := &managementClient{rpcClient: mockClient}
+		mc := &snManagementClient{rpcClient: mockClient}
 
 		Convey("When the ManagementClient is timed out", func() {
 			Convey("Then the ManagementClient should return timeout error", func() {
@@ -109,7 +109,7 @@ func TestManagementClientRemoveLogStream(t *testing.T) {
 		defer ctrl.Finish()
 
 		mockClient := mock.NewMockManagementClient(ctrl)
-		mc := &managementClient{rpcClient: mockClient}
+		mc := &snManagementClient{rpcClient: mockClient}
 
 		Convey("When the ManagementClient is timed out", func() {
 			Convey("Then the ManagementClient should return timeout error", func() {
@@ -163,7 +163,7 @@ func TestManagementClientSeal(t *testing.T) {
 		defer ctrl.Finish()
 
 		mockClient := mock.NewMockManagementClient(ctrl)
-		mc := &managementClient{rpcClient: mockClient}
+		mc := &snManagementClient{rpcClient: mockClient}
 
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(nil, ErrInternal)
@@ -189,7 +189,7 @@ func TestManagementClientUnseal(t *testing.T) {
 		defer ctrl.Finish()
 
 		mockClient := mock.NewMockManagementClient(ctrl)
-		mc := &managementClient{rpcClient: mockClient}
+		mc := &snManagementClient{rpcClient: mockClient}
 
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(nil, ErrInternal)

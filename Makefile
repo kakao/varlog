@@ -97,13 +97,13 @@ mockgen: \
 	proto/mrpb/mock/management_mock.go \
 	proto/mrpb/mock/metadata_repository_mock.go
 
-pkg/varlog/varlog_mock.go: pkg/varlog/management_client.go
+pkg/varlog/varlog_mock.go: pkg/varlog/storage_node_management_client.go
 	mockgen -build_flags -mod=vendor \
 		-self_package github.daumkakao.com/varlog/varlog/pkg/varlog \
 		-package varlog \
 		-destination $@ \
 		github.daumkakao.com/varlog/varlog/pkg/varlog \
-		ManagementClient
+		StorageNodeManagementClient
 
 internal/vms/vms_mock.go: internal/vms/cluster_manager.go
 	mockgen -build_flags -mod=vendor \
