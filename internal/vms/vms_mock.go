@@ -120,7 +120,7 @@ func (mr *MockStorageNodeManagerMockRecorder) AddLogStreamReplica(arg0, arg1, ar
 }
 
 // AddStorageNode mocks base method.
-func (m *MockStorageNodeManager) AddStorageNode(arg0 varlog.ManagementClient) {
+func (m *MockStorageNodeManager) AddStorageNode(arg0 varlog.StorageNodeManagementClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AddStorageNode", arg0)
 }
@@ -189,10 +189,10 @@ func (mr *MockStorageNodeManagerMockRecorder) GetMetadata(arg0, arg1 interface{}
 }
 
 // GetMetadataByAddr mocks base method.
-func (m *MockStorageNodeManager) GetMetadataByAddr(arg0 context.Context, arg1 string) (varlog.ManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockStorageNodeManager) GetMetadataByAddr(arg0 context.Context, arg1 string) (varlog.StorageNodeManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadataByAddr", arg0, arg1)
-	ret0, _ := ret[0].(varlog.ManagementClient)
+	ret0, _ := ret[0].(varlog.StorageNodeManagementClient)
 	ret1, _ := ret[1].(*varlogpb.StorageNodeMetadataDescriptor)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

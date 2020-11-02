@@ -96,7 +96,7 @@ func TestStorageNode(t *testing.T) {
 			}
 		}
 
-		var mclList []varlog.ManagementClient
+		var mclList []varlog.StorageNodeManagementClient
 		for _, sn := range snList {
 			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
 			if err != nil {
@@ -186,7 +186,7 @@ func TestSync(t *testing.T) {
 			}
 		}()
 
-		var mclList []varlog.ManagementClient
+		var mclList []varlog.StorageNodeManagementClient
 		for i, sn := range snList {
 			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
 			So(err, ShouldBeNil)

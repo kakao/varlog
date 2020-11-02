@@ -35,7 +35,7 @@ func withTestStorageNodeManager(t *testing.T, f func(ctrl *gomock.Controller, sn
 func TestAddStorageNode(t *testing.T) {
 	Convey("Given a StorageNodeManager", t, withTestStorageNodeManager(t, func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView) {
 		Convey("When a StorageNodeID of StorageNode doesn't exist in it", func() {
-			snmcl := varlog.NewMockManagementClient(ctrl)
+			snmcl := varlog.NewMockStorageNodeManagementClient(ctrl)
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
 			snmcl.EXPECT().PeerStorageNodeID().Return(types.StorageNodeID(1)).Times(2)
 
@@ -66,7 +66,7 @@ func TestAddLogStream(t *testing.T) {
 			Status:      varlogpb.LogStreamStatusRunning,
 		}
 
-		var snmclList []*varlog.MockManagementClient
+		var snmclList []*varlog.MockStorageNodeManagementClient
 
 		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
 			logStreamDesc.Replicas = append(logStreamDesc.Replicas, &varlogpb.ReplicaDescriptor{
@@ -74,7 +74,7 @@ func TestAddLogStream(t *testing.T) {
 				Path:          "/tmp",
 			})
 
-			snmcl := varlog.NewMockManagementClient(ctrl)
+			snmcl := varlog.NewMockStorageNodeManagementClient(ctrl)
 			snmclList = append(snmclList, snmcl)
 			snmcl.EXPECT().PeerStorageNodeID().Return(snid).AnyTimes()
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
@@ -136,9 +136,9 @@ func TestSeal(t *testing.T) {
 
 		var replicaDescList []*varlogpb.ReplicaDescriptor
 		var sndescList []*varlogpb.StorageNodeDescriptor
-		var snmclList []*varlog.MockManagementClient
+		var snmclList []*varlog.MockStorageNodeManagementClient
 		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
-			snmcl := varlog.NewMockManagementClient(ctrl)
+			snmcl := varlog.NewMockStorageNodeManagementClient(ctrl)
 			snmcl.EXPECT().PeerStorageNodeID().Return(snid).AnyTimes()
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
 
@@ -218,9 +218,9 @@ func TestUnseal(t *testing.T) {
 
 		var replicaDescList []*varlogpb.ReplicaDescriptor
 		var sndescList []*varlogpb.StorageNodeDescriptor
-		var snmclList []*varlog.MockManagementClient
+		var snmclList []*varlog.MockStorageNodeManagementClient
 		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
-			snmcl := varlog.NewMockManagementClient(ctrl)
+			snmcl := varlog.NewMockStorageNodeManagementClient(ctrl)
 			snmcl.EXPECT().PeerStorageNodeID().Return(snid).AnyTimes()
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
 
