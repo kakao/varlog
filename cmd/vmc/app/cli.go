@@ -38,6 +38,7 @@ func (app *VMCApp) initCLI() {
 		app.initUnsealCmd(),
 		app.initSyncCmd(),
 		app.initMetaCmd(),
+		app.initMRMgmtCmd(),
 	)
 }
 
@@ -248,21 +249,26 @@ func (app *VMCApp) initMetaCmd() *cobra.Command {
 	return cmd
 }
 
-func (app *VMCApp) initMRCommand() *cobra.Command {
+func (app *VMCApp) initMRMgmtCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "metadatarepository",
 		Aliases: []string{"mr"},
 	}
 
-	addCmd := &cobra.Command{
-		Use:  "add",
+	infoCmd := &cobra.Command{
+		Use:  "info",
 		Args: cobra.NoArgs,
 	}
+	infoCmd.Run = func(cmd *cobra.Command, args []string) {
+		app.infoMRMembers()
+	}
+
 	rmCmd := &cobra.Command{
 		Use:  "remove",
 		Args: cobra.NoArgs,
 	}
-	cmd.AddCommand(addCmd, rmCmd)
+
+	cmd.AddCommand(infoCmd, rmCmd)
 	return cmd
 }
 

@@ -21,7 +21,9 @@ NO_KAKAO_PROXY=localhost,127.0.0.1,127.0.0.0/8,192.168.0.0/16,10.0.0.0/8,172.16.
 OS_TAG_REPO=ubuntu:14.04
 
 DEV_REPO=***REMOVED***/varlog/dev
-VARLOG_REPO=***REMOVED***/varlog/varlog
+MR_REPO=***REMOVED***/varlog/varlog-mr
+SN_REPO=***REMOVED***/varlog/varlog-sn
+VMS_REPO=***REMOVED***/varlog/varlog-vms
 
 FIND_TAG_SH=$(VARLOG_SRC)/docker/get_last_tag.sh
 

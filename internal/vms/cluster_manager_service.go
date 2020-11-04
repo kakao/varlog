@@ -4,7 +4,10 @@ import (
 	"context"
 
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/proto/vmspb"
+
+	gogotypes "github.com/gogo/protobuf/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -77,4 +80,23 @@ func (s *clusterManagerService) Sync(ctx context.Context, req *vmspb.SyncRequest
 func (s *clusterManagerService) Unseal(ctx context.Context, req *vmspb.UnsealRequest) (*vmspb.UnsealResponse, error) {
 	lsdesc, err := s.clusManager.Unseal(ctx, req.GetLogStreamID())
 	return &vmspb.UnsealResponse{LogStream: lsdesc}, varlog.ToStatusError(err)
+}
+
+func (s *clusterManagerService) GetMRMembers(ctx context.Context, _ *gogotypes.Empty) (*vmspb.GetMRMembersResponse, error) {
+	mrInfo, err := s.clusManager.MRInfos(ctx)
+	if err != nil {
+		return &vmspb.GetMRMembersResponse{}, err
+	}
+
+	resp := &vmspb.GetMRMembersResponse{
+		Leader:            mrInfo.Leader,
+		ReplicationFactor: mrInfo.ReplicationFactor,
+	}
+
+	resp.Members = make(map[types.NodeID]string)
+	for nodeID, m := range mrInfo.Members {
+		resp.Members[nodeID] = m.Peer
+	}
+
+	return resp, varlog.ToStatusError(err)
 }

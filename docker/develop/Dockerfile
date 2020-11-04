@@ -15,6 +15,7 @@ RUN sed 's/archive.ubuntu.com/ftp.daum.net/g' -i /etc/apt/sources.list   && \
     apt-get install -y unzip                                             && \
     apt-get install -y make                                              && \
     apt-get install -y wget                                              && \
+    apt-get install -y python                                            && \
     echo '/usr/local/lib'       >> /etc/ld.so.conf                       && \
     echo 'deploy ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 

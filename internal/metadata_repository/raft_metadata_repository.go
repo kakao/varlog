@@ -962,9 +962,10 @@ func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID 
 	member := mr.raftNode.GetMembership()
 
 	clusterInfo := &mrpb.ClusterInfo{
-		ClusterID: mr.options.ClusterID,
-		NodeID:    mr.nodeID,
-		Leader:    types.NodeID(mr.raftNode.membership.getLeader()),
+		ClusterID:         mr.options.ClusterID,
+		NodeID:            mr.nodeID,
+		Leader:            types.NodeID(mr.raftNode.membership.getLeader()),
+		ReplicationFactor: int32(mr.nrReplica),
 	}
 
 	if len(member) > 0 {

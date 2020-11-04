@@ -6,6 +6,8 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/types"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/proto/vmspb"
+
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 type ClusterManagerClient interface {
@@ -18,6 +20,7 @@ type ClusterManagerClient interface {
 	Seal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.SealResponse, error)
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error)
 	Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*vmspb.SyncResponse, error)
+	GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error)
 	Close() error
 }
 
@@ -97,5 +100,10 @@ func (c *clusterManagerClient) Sync(ctx context.Context, logStreamID types.LogSt
 		SrcStorageNodeID: srcStorageNodeId,
 		DstStorageNodeID: dstStorageNodeId,
 	})
+	return rsp, FromStatusError(ctx, err)
+}
+
+func (c *clusterManagerClient) GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error) {
+	rsp, err := c.rpcClient.GetMRMembers(ctx, &gogotypes.Empty{})
 	return rsp, FromStatusError(ctx, err)
 }

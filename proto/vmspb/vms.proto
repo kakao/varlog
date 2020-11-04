@@ -3,6 +3,7 @@ syntax = "proto3";
 package varlog.vmspb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/empty.proto";
 import "varlogpb/metadata.proto";
 import "snpb/replicator.proto";
 
@@ -136,6 +137,18 @@ message UnsealResponse {
     varlogpb.LogStreamDescriptor log_stream = 1;
 }
 
+message GetMRMembersResponse {
+    uint64 leader = 1
+        [(gogoproto.casttype) =
+             "github.com/kakao/varlog/pkg/varlog/types.NodeID"];
+
+    int32 replication_factor = 2;
+
+    map<uint64, string> members = 3
+        [(gogoproto.castkey) =
+             "github.com/kakao/varlog/pkg/varlog/types.NodeID"];
+}
+
 service ClusterManager {
     rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {
     }
@@ -159,4 +172,6 @@ service ClusterManager {
     rpc Sync(SyncRequest) returns (SyncResponse) {}
 
     rpc Unseal(UnsealRequest) returns (UnsealResponse) {}
+
+    rpc GetMRMembers(google.protobuf.Empty) returns (GetMRMembersResponse) {}
 }
