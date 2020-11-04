@@ -14,6 +14,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner/stopwaiter"
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"go.uber.org/zap"
@@ -61,6 +62,8 @@ type ClusterManager interface {
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error)
 
 	Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error)
+
+	MRInfos(ctx context.Context) (*mrpb.ClusterInfo, error)
 
 	Run() error
 
@@ -239,6 +242,12 @@ func (cm *clusterManager) Metadata(ctx context.Context) (*varlogpb.MetadataDescr
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.cmView.ClusterMetadata(ctx)
+}
+
+func (cm *clusterManager) MRInfos(ctx context.Context) (*mrpb.ClusterInfo, error) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.mrMgr.GetClusterInfo(ctx)
 }
 
 func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error) {
