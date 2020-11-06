@@ -81,7 +81,7 @@ $(SUBDIRS) :
 	$(MAKE) -C $@
 
 mockgen: \
-	pkg/varlog/varlog_mock.go \
+	pkg/snc/snc_mock.go \
 	internal/vms/vms_mock.go \
 	internal/storagenode/storage_node_mock.go \
 	internal/storagenode/storage_mock.go \
@@ -97,12 +97,12 @@ mockgen: \
 	proto/mrpb/mock/management_mock.go \
 	proto/mrpb/mock/metadata_repository_mock.go
 
-pkg/varlog/varlog_mock.go: pkg/varlog/storage_node_management_client.go
+pkg/snc/snc_mock.go: pkg/snc/storage_node_management_client.go
 	mockgen -build_flags -mod=vendor \
-		-self_package github.daumkakao.com/varlog/varlog/pkg/varlog \
-		-package varlog \
+		-self_package github.daumkakao.com/varlog/varlog/pkg/snc \
+		-package snc \
 		-destination $@ \
-		github.daumkakao.com/varlog/varlog/pkg/varlog \
+		github.daumkakao.com/varlog/varlog/pkg/snc \
 		StorageNodeManagementClient
 
 internal/vms/vms_mock.go: internal/vms/cluster_manager.go

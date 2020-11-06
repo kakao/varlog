@@ -19,14 +19,14 @@ message MetadataRepositoryDescriptor {
 
         uint64 uncommitted_llsn_offset = 1 [
             (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+                "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
             (gogoproto.customname) = "UncommittedLLSNOffset"
         ];
         uint64 uncommitted_llsn_length = 2
             [(gogoproto.customname) = "UncommittedLLSNLength"];
         uint64 known_high_watermark = 3
             [(gogoproto.casttype) =
-                 "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN"];
+                 "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
     }
 
     message LocalLogStreamReplicas {
@@ -34,7 +34,7 @@ message MetadataRepositoryDescriptor {
 
         map<int32, LocalLogStreamReplica> replicas = 1 [
             (gogoproto.castkey) =
-                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID"
+                "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID"
         ];
         varlogpb.LogStreamStatus status = 2;
     }
@@ -42,14 +42,14 @@ message MetadataRepositoryDescriptor {
     message LogStreamDescriptor {
         uint64 trim_glsn = 1 [
             (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+                "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
             (gogoproto.customname) = "TrimGLSN"
         ];
         repeated snpb.GlobalLogStreamDescriptor global_log_streams = 2
             [(gogoproto.nullable) = true];
         map<uint64, LocalLogStreamReplicas> local_log_streams = 3 [
             (gogoproto.castkey) =
-                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID"
+                "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID"
         ];
     }
 
@@ -57,8 +57,8 @@ message MetadataRepositoryDescriptor {
     LogStreamDescriptor log_stream = 2 [(gogoproto.nullable) = true];
     map<uint64, string> peers = 3
         [(gogoproto.castkey) =
-             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
+             "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
     map<uint64, string> endpoints = 4
         [(gogoproto.castkey) =
-             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
+             "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
 }

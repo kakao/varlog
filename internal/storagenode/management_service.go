@@ -4,11 +4,12 @@ import (
 	"context"
 
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
-	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type managementService struct {
@@ -36,7 +37,7 @@ func (s *managementService) GetMetadata(ctx context.Context, req *snpb.GetMetada
 	metadata, err := s.m.GetMetadata(req.GetClusterID(), req.GetMetadataType())
 	if err != nil {
 		s.logger.Error("could not get metadata", zap.Error(err))
-		return nil, varlog.ToStatusError(err)
+		return nil, verrors.ToStatusError(err)
 	}
 	return &snpb.GetMetadataResponse{StorageNodeMetadata: metadata}, nil
 }
@@ -46,7 +47,7 @@ func (s *managementService) AddLogStream(ctx context.Context, req *snpb.AddLogSt
 	path, err := s.m.AddLogStream(req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID(), req.GetStorage().GetPath())
 	if err != nil {
 		s.logger.Error("could not add logstream", zap.Error(err))
-		return nil, varlog.ToStatusError(err)
+		return nil, verrors.ToStatusError(err)
 	}
 	return &snpb.AddLogStreamResponse{
 		LogStream: &varlogpb.LogStreamDescriptor{

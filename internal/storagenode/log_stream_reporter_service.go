@@ -4,9 +4,10 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/types"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 type LogStreamReporterService struct {

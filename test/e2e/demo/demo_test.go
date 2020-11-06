@@ -15,7 +15,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 

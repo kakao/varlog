@@ -1,4 +1,4 @@
-package main
+package test
 
 import (
 	"context"
@@ -8,19 +8,21 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/zap"
+
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/vms"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
+	"github.daumkakao.com/varlog/varlog/pkg/logc"
+	"github.daumkakao.com/varlog/varlog/pkg/mrc"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
+	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/vtesting"
-	"go.uber.org/zap"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
@@ -41,7 +43,7 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 		mr := env.MRs[0]
 		addr := mr.GetServerAddr()
 
-		cli, err := varlog.NewMetadataRepositoryClient(addr)
+		cli, err := mrc.NewMetadataRepositoryClient(addr)
 		So(err, ShouldBeNil)
 		defer cli.Close()
 
@@ -188,8 +190,8 @@ func TestVarlogReplicateLog(t *testing.T) {
 
 			ls := meta.LogStreams[0]
 
-			var backups []varlog.StorageNode
-			backups = make([]varlog.StorageNode, nrRep-1)
+			var backups []logc.StorageNode
+			backups = make([]logc.StorageNode, nrRep-1)
 			for i := 1; i < nrRep; i++ {
 				replicaID := ls.Replicas[i].StorageNodeID
 				replica := meta.GetStorageNode(replicaID)
@@ -205,7 +207,7 @@ func TestVarlogReplicateLog(t *testing.T) {
 					defer cancel()
 
 					glsn, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
-					if varlog.IsTransientErr(err) {
+					if verrors.IsTransientErr(err) {
 						continue
 					}
 					So(err, ShouldBeNil)
@@ -310,7 +312,7 @@ func TestVarlogSeal(t *testing.T) {
 						break Loop
 					}
 				case err := <-errC:
-					So(err, ShouldEqual, varlog.ErrSealed)
+					So(err, ShouldEqual, verrors.ErrSealed)
 				}
 			}
 
@@ -620,8 +622,8 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 			}
 			defer cli.Close()
 
-			var backups []varlog.StorageNode
-			backups = make([]varlog.StorageNode, nrRep-1)
+			var backups []logc.StorageNode
+			backups = make([]logc.StorageNode, nrRep-1)
 			for i := 1; i < nrRep; i++ {
 				replicaID := ls.Replicas[i].StorageNodeID
 				replica := meta.GetStorageNode(replicaID)
@@ -639,7 +641,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					glsn, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
 					cancel()
 					if err != nil {
-						if varlog.IsTransientErr(err) {
+						if verrors.IsTransientErr(err) {
 							continue
 						}
 						errC <- err
@@ -820,7 +822,7 @@ func TestVarlogManagerServer(t *testing.T) {
 		Convey("Duplicated AddStorageNode", func() {
 			for _, snAddr := range snAddrs {
 				_, err := cmcli.AddStorageNode(context.TODO(), snAddr)
-				So(errors.Is(err, varlog.ErrStorageNodeAlreadyExists), ShouldBeTrue)
+				So(errors.Is(err, verrors.ErrStorageNodeAlreadyExists), ShouldBeTrue)
 			}
 		})
 
@@ -952,7 +954,7 @@ func TestVarlogManagerServer(t *testing.T) {
 			// FIXME (jun): This test passes due to seqLSIDGen, but it is very fragile.
 			_, err = cmcli.AddLogStream(context.TODO(), replicas)
 			So(err, ShouldNotBeNil)
-			So(varlog.IsTransientErr(err), ShouldBeTrue)
+			So(verrors.IsTransientErr(err), ShouldBeTrue)
 
 			Convey("RemoveLogStreamReplica: garbage log stream can be removed", func() {
 				_, err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, types.LogStreamID(1))
@@ -998,15 +1000,15 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 		Convey("When create MRManager with non addrs", func(ctx C) {
 			// VMS Server
-			_, err := vms.NewMRManager(types.ClusterID(0), nil, zap.L())
+			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), nil, zap.L())
 			Convey("Then it should be fail", func(ctx C) {
-				So(err, ShouldResemble, varlog.ErrInvalid)
+				So(err, ShouldResemble, verrors.ErrInvalid)
 			})
 		})
 
 		Convey("When create MRManager with invalid addrs", func(ctx C) {
 			// VMS Server
-			_, err := vms.NewMRManager(types.ClusterID(0), []string{fmt.Sprintf("%s%d", mrAddr, 0)}, zap.L())
+			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), []string{fmt.Sprintf("%s%d", mrAddr, 0)}, zap.L())
 			Convey("Then it should be fail", func(ctx C) {
 				So(err, ShouldNotBeNil)
 			})
@@ -1014,7 +1016,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 		Convey("When create MRManager with valid addrs", func(ctx C) {
 			// VMS Server
-			mrm, err := vms.NewMRManager(types.ClusterID(0), []string{mrAddr}, zap.L())
+			mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), []string{mrAddr}, zap.L())
 			Convey("Then it should be success", func(ctx C) {
 				So(err, ShouldBeNil)
 
@@ -1048,7 +1050,7 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 		mrAddr := mr.GetServerAddr()
 
 		// VMS Server
-		mrm, err := vms.NewMRManager(types.ClusterID(0), []string{mrAddr}, zap.L())
+		mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), []string{mrAddr}, zap.L())
 		So(err, ShouldBeNil)
 		defer mrm.Close()
 
@@ -1154,7 +1156,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 		lsID, err := env.AddLS()
 		So(err, ShouldBeNil)
 
-		mrMgr, err := vms.NewMRManager(env.ClusterID, []string{mrAddr}, env.logger)
+		mrMgr, err := vms.NewMRManager(context.TODO(), env.ClusterID, []string{mrAddr}, env.logger)
 		So(err, ShouldBeNil)
 
 		cmView := mrMgr.ClusterMetadataView()
@@ -1216,7 +1218,7 @@ type dummyCMView struct {
 }
 
 func (cmView *dummyCMView) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
-	cli, err := varlog.NewMetadataRepositoryClient(cmView.addr)
+	cli, err := mrc.NewMetadataRepositoryClient(cmView.addr)
 	if err != nil {
 		return nil, err
 	}
@@ -1483,8 +1485,8 @@ func TestVarlogLogStreamSync(t *testing.T) {
 		ls := meta.GetLogStream(lsID)
 		So(ls, ShouldNotBeNil)
 
-		var backups []varlog.StorageNode
-		backups = make([]varlog.StorageNode, nrRep-1)
+		var backups []logc.StorageNode
+		backups = make([]logc.StorageNode, nrRep-1)
 		for i := 1; i < nrRep; i++ {
 			replicaID := ls.Replicas[i].StorageNodeID
 			replica := meta.GetStorageNode(replicaID)

@@ -3,7 +3,7 @@ package metadata_repository
 import (
 	"context"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 )
 

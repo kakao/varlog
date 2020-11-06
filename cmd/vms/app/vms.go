@@ -7,8 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/internal/vms"
 	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/internal/vms"
 )
 
 func Main(opts *vms.Options) error {

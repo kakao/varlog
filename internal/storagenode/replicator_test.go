@@ -7,8 +7,9 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 func TestReplicator(t *testing.T) {

@@ -5,8 +5,9 @@ import (
 	"net"
 
 	"github.com/urfave/cli/v2"
+
 	"github.daumkakao.com/varlog/varlog/internal/vms"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 func InitCLI(options *vms.Options) *cli.App {

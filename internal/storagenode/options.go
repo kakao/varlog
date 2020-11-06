@@ -5,9 +5,10 @@ import (
 	"os"
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/timeutil"
 	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/timeutil"
 )
 
 const (

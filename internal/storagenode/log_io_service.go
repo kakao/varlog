@@ -4,11 +4,12 @@ import (
 	"context"
 
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 type LogIOService struct {
@@ -39,7 +40,7 @@ func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*sn
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		s.logger.Error("no logstreamexecutor", zap.Any("request", req))
-		return nil, varlog.ErrInvalidArgument
+		return nil, verrors.ErrInvalidArgument
 	}
 	// TODO: create child context by using operation timeout
 	var backups []Replica
@@ -53,7 +54,7 @@ func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*sn
 	glsn, err := lse.Append(ctx, req.GetPayload(), backups...)
 	if err != nil {
 		s.logger.Error("could not append", zap.Any("request", req), zap.Error(err))
-		return nil, varlog.ToStatusError(err)
+		return nil, verrors.ToStatusError(err)
 	}
 	return &snpb.AppendResponse{GLSN: glsn}, nil
 }
@@ -62,33 +63,33 @@ func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.R
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		s.logger.Error("no logstreamexecutor", zap.Any("request", req))
-		return nil, varlog.ErrInvalid
+		return nil, verrors.ErrInvalid
 	}
 
 	// TODO: create child context by using operation timeout
 	logEntry, err := lse.Read(ctx, req.GetGLSN())
 	if err != nil {
 		s.logger.Error("could not read", zap.Any("request", req), zap.Error(err))
-		return nil, varlog.ToStatusError(err)
+		return nil, verrors.ToStatusError(err)
 	}
 	return &snpb.ReadResponse{Payload: logEntry.Data, GLSN: req.GetGLSN(), LLSN: logEntry.LLSN}, nil
 }
 
 func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) error {
 	if req.GetGLSNBegin() >= req.GetGLSNEnd() {
-		return varlog.ErrInvalidArgument
+		return verrors.ErrInvalidArgument
 	}
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
 		s.logger.Error("no logstreamexecutor", zap.Any("request", req))
-		return varlog.ErrInvalid
+		return verrors.ErrInvalid
 	}
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	resultC, err := lse.Subscribe(ctx, req.GetGLSNBegin(), req.GetGLSNEnd())
 	if err != nil {
 		s.logger.Error("could not subscribe", zap.Any("request", req), zap.Error(err))
-		return varlog.ToStatusError(err)
+		return verrors.ToStatusError(err)
 	}
 	for result := range resultC {
 		if result.Err != nil {
@@ -116,5 +117,5 @@ func (s *LogIOService) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtype
 			err = e
 		}
 	}
-	return &pbtypes.Empty{}, varlog.ToStatusError(err)
+	return &pbtypes.Empty{}, verrors.ToStatusError(err)
 }

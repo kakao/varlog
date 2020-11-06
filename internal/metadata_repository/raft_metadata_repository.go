@@ -8,19 +8,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner/stopwaiter"
-	"github.daumkakao.com/varlog/varlog/proto/mrpb"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
-	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
-	"google.golang.org/grpc"
-
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner/stopwaiter"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type RaftMetadataRepository struct {
@@ -159,7 +159,7 @@ func (mr *RaftMetadataRepository) Run() {
 
 	if err := mr.runner.RunC(mctx, func(ctx context.Context) {
 		//TODO:: graceful shutdown
-		if err := mr.server.Serve(lis); err != nil && err != varlog.ErrStopped {
+		if err := mr.server.Serve(lis); err != nil && err != verrors.ErrStopped {
 			mr.logger.Panic("could not serve", zap.Error(err))
 			//r.Close()
 		}
@@ -757,7 +757,7 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 		select {
 		case mr.proposeC <- e:
 		default:
-			return varlog.ErrIgnore
+			return verrors.ErrIgnore
 		}
 	}
 
@@ -780,8 +780,8 @@ func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *v
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore &&
-		err != varlog.ErrAlreadyExists {
+	if err != verrors.ErrIgnore &&
+		err != verrors.ErrAlreadyExists {
 		return err
 	}
 
@@ -794,8 +794,8 @@ func (mr *RaftMetadataRepository) UnregisterStorageNode(ctx context.Context, snI
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore &&
-		err != varlog.ErrNotExist {
+	if err != verrors.ErrIgnore &&
+		err != verrors.ErrNotExist {
 		return err
 	}
 
@@ -808,8 +808,8 @@ func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *var
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore &&
-		err != varlog.ErrAlreadyExists {
+	if err != verrors.ErrIgnore &&
+		err != verrors.ErrAlreadyExists {
 		return err
 	}
 
@@ -822,8 +822,8 @@ func (mr *RaftMetadataRepository) UnregisterLogStream(ctx context.Context, lsID 
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore &&
-		err != varlog.ErrNotExist {
+	if err != verrors.ErrIgnore &&
+		err != verrors.ErrNotExist {
 		return err
 	}
 
@@ -836,7 +836,7 @@ func (mr *RaftMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlo
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore {
+	if err != verrors.ErrIgnore {
 		return err
 	}
 
@@ -845,7 +845,7 @@ func (mr *RaftMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlo
 
 func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	if !mr.raftNode.membership.isMember(mr.nodeID) {
-		return nil, varlog.ErrNotMember
+		return nil, verrors.ErrNotMember
 	}
 
 	m := mr.storage.GetMetadata()
@@ -858,7 +858,7 @@ func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStream
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != nil && err != varlog.ErrIgnore {
+	if err != nil && err != verrors.ErrIgnore {
 		return types.InvalidGLSN, err
 	}
 
@@ -871,7 +871,7 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 	}
 
 	err := mr.propose(ctx, r, true)
-	if err != varlog.ErrIgnore {
+	if err != verrors.ErrIgnore {
 		return err
 	}
 
@@ -880,7 +880,7 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 
 func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {
 	if mr.raftNode.membership.isMember(nodeID) {
-		return varlog.ErrAlreadyExists
+		return verrors.ErrAlreadyExists
 	}
 
 	r := raftpb.ConfChange{
@@ -910,7 +910,7 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.C
 
 func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
 	if !mr.raftNode.membership.isMember(nodeID) {
-		return varlog.ErrNotExist
+		return verrors.ErrNotExist
 	}
 
 	r := raftpb.ConfChange{
@@ -956,7 +956,7 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 
 func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.ClusterInfo, error) {
 	if !mr.raftNode.membership.isMember(mr.nodeID) {
-		return nil, varlog.ErrNotMember
+		return nil, verrors.ErrNotMember
 	}
 
 	member := mr.raftNode.GetMembership()

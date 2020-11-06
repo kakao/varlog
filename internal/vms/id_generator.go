@@ -4,9 +4,10 @@ import (
 	"context"
 	"sync"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
 	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 )
 
 type LogStreamIDGenerator interface {

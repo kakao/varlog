@@ -7,17 +7,17 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil/atomicutil"
-	"github.daumkakao.com/varlog/varlog/proto/mrpb"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
-	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	"github.com/gogo/protobuf/proto"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
 
-	"github.com/gogo/protobuf/proto"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
+	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type jobSnapshot struct {
@@ -219,7 +219,7 @@ func (ms *MetadataStorage) registerStorageNode(sn *varlogpb.StorageNodeDescripto
 	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
 
 	if ms.lookupStorageNode(sn.StorageNodeID) != nil {
-		return varlog.ErrAlreadyExists
+		return verrors.ErrAlreadyExists
 	}
 
 	_, cur := ms.getStateMachine()
@@ -250,15 +250,15 @@ func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error
 
 	if cur.Metadata.GetStorageNode(snID) == nil &&
 		(pre == cur || pre.Metadata.GetStorageNode(snID) == nil) {
-		return varlog.ErrNotExist
+		return verrors.ErrNotExist
 	}
 
 	if !cur.Metadata.UnregistableStorageNode(snID) {
-		return varlog.ErrInvalidArgument
+		return verrors.ErrInvalidArgument
 	}
 
 	if cur != pre && !pre.Metadata.UnregistableStorageNode(snID) {
-		return varlog.ErrInvalidArgument
+		return verrors.ErrInvalidArgument
 	}
 
 	ms.mtMu.Lock()
@@ -294,17 +294,17 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
 
 	if len(ls.Replicas) == 0 {
-		return varlog.ErrInvalidArgument
+		return verrors.ErrInvalidArgument
 	}
 
 	for _, r := range ls.Replicas {
 		if ms.lookupStorageNode(r.StorageNodeID) == nil {
-			return varlog.ErrInvalidArgument
+			return verrors.ErrInvalidArgument
 		}
 	}
 
 	if ms.lookupLogStream(ls.LogStreamID) != nil {
-		return varlog.ErrAlreadyExists
+		return verrors.ErrAlreadyExists
 	}
 
 	_, cur := ms.getStateMachine()
@@ -353,7 +353,7 @@ func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
 
 	if cur.Metadata.GetLogStream(lsID) == nil &&
 		(pre == cur || pre.Metadata.GetLogStream(lsID) == nil) {
-		return varlog.ErrNotExist
+		return verrors.ErrNotExist
 	}
 
 	ms.mtMu.Lock()
@@ -397,12 +397,12 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
 
 	if len(ls.Replicas) == 0 {
-		return varlog.ErrInvalidArgument
+		return verrors.ErrInvalidArgument
 	}
 
 	for _, r := range ls.Replicas {
 		if ms.lookupStorageNode(r.StorageNodeID) == nil {
-			return varlog.ErrInvalidArgument
+			return verrors.ErrInvalidArgument
 		}
 	}
 
@@ -410,7 +410,7 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 
 	if cur.Metadata.GetLogStream(ls.LogStreamID) == nil &&
 		pre.Metadata.GetLogStream(ls.LogStreamID) == nil {
-		return varlog.ErrNotExist
+		return verrors.ErrNotExist
 	}
 
 	ms.mtMu.Lock()
@@ -430,7 +430,7 @@ func (ms *MetadataStorage) updateLocalLogStream(ls *varlogpb.LogStreamDescriptor
 	if !ok {
 		tmp, ok := pre.LogStream.LocalLogStreams[ls.LogStreamID]
 		if !ok {
-			return varlog.ErrInternal
+			return verrors.ErrInternal
 		}
 
 		old = proto.Clone(tmp).(*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
@@ -484,7 +484,7 @@ func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status 
 	if ls == nil {
 		tmp := pre.Metadata.GetLogStream(lsID)
 		if tmp == nil {
-			return varlog.ErrNotExist
+			return verrors.ErrNotExist
 		}
 
 		ls = proto.Clone(tmp).(*varlogpb.LogStreamDescriptor)
@@ -495,7 +495,7 @@ func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status 
 	}
 
 	if ls.Status == status {
-		return varlog.ErrIgnore
+		return verrors.ErrIgnore
 	}
 
 	ms.mtMu.Lock()
@@ -513,7 +513,7 @@ func (ms *MetadataStorage) updateLocalLogStreamStatus(lsID types.LogStreamID, st
 	if !ok {
 		o, ok := pre.LogStream.LocalLogStreams[lsID]
 		if !ok {
-			return varlog.ErrInternal
+			return verrors.ErrInternal
 		}
 
 		lls = proto.Clone(o).(*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
@@ -521,7 +521,7 @@ func (ms *MetadataStorage) updateLocalLogStreamStatus(lsID types.LogStreamID, st
 	}
 
 	if lls.Status == status {
-		return varlog.ErrIgnore
+		return verrors.ErrIgnore
 	}
 
 	if status == varlogpb.LogStreamStatusSealed {
@@ -534,7 +534,7 @@ func (ms *MetadataStorage) updateLocalLogStreamStatus(lsID types.LogStreamID, st
 
 		for _, r := range lls.Replicas {
 			if r.Seal(min) == types.InvalidLLSN {
-				return varlog.ErrInternal
+				return verrors.ErrInternal
 			}
 		}
 	}

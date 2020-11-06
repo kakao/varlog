@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/proto"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 

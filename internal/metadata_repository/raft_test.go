@@ -9,11 +9,12 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
-	types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil"
-	"github.daumkakao.com/varlog/varlog/vtesting"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
+	"github.daumkakao.com/varlog/varlog/vtesting"
 )
 
 type stopFunc func(bool)

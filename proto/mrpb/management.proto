@@ -14,13 +14,13 @@ option (gogoproto.unmarshaler_all) = true;
 message AddPeerRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
 
     uint64 node_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
         (gogoproto.customname) = "NodeID"
     ];
 
@@ -30,13 +30,13 @@ message AddPeerRequest {
 message RemovePeerRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
 
     uint64 node_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
         (gogoproto.customname) = "NodeID"
     ];
 }
@@ -44,7 +44,7 @@ message RemovePeerRequest {
 message GetClusterInfoRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
 }
@@ -57,25 +57,25 @@ message ClusterInfo {
 
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
 
     uint64 node_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
         (gogoproto.customname) = "NodeID"
     ];
 
     uint64 leader = 3
         [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
+             "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
 
     int32 replication_factor = 4;
 
     map<uint64, Member> members = 5
         [(gogoproto.castkey) =
-             "github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID"];
+             "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
 }
 
 message GetClusterInfoResponse {

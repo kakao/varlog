@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/urfave/cli/v2"
+
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 )
 

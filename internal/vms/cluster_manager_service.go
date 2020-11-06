@@ -3,13 +3,13 @@ package vms
 import (
 	"context"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/proto/vmspb"
-
-	gogotypes "github.com/gogo/protobuf/types"
+	pbtypes "github.com/gogo/protobuf/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
 type clusterManagerService struct {
@@ -38,51 +38,51 @@ func (s *clusterManagerService) Register(server *grpc.Server) {
 func (s *clusterManagerService) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
 	snmeta, err := s.clusManager.AddStorageNode(ctx, req.GetAddress())
 	s.logger.Info("AddStorageNode", zap.String("snmeta", snmeta.String()), zap.Error(err))
-	return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, varlog.ToStatusError(err)
+	return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) UnregisterStorageNode(ctx context.Context, req *vmspb.UnregisterStorageNodeRequest) (*vmspb.UnregisterStorageNodeResponse, error) {
 	err := s.clusManager.UnregisterStorageNode(ctx, req.GetStorageNodeID())
-	return &vmspb.UnregisterStorageNodeResponse{}, varlog.ToStatusError(err)
+	return &vmspb.UnregisterStorageNodeResponse{}, verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
 	logStreamDesc, err := s.clusManager.AddLogStream(ctx, req.GetReplicas())
 	s.logger.Info("AddLogStream", zap.String("lsdesc", logStreamDesc.String()))
-	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, varlog.ToStatusError(err)
+	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) UnregisterLogStream(ctx context.Context, req *vmspb.UnregisterLogStreamRequest) (*vmspb.UnregisterLogStreamResponse, error) {
 	err := s.clusManager.UnregisterLogStream(ctx, req.GetLogStreamID())
-	return &vmspb.UnregisterLogStreamResponse{}, varlog.ToStatusError(err)
+	return &vmspb.UnregisterLogStreamResponse{}, verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) RemoveLogStreamReplica(ctx context.Context, req *vmspb.RemoveLogStreamReplicaRequest) (*vmspb.RemoveLogStreamReplicaResponse, error) {
 	err := s.clusManager.RemoveLogStreamReplica(ctx, req.GetStorageNodeID(), req.GetLogStreamID())
-	return &vmspb.RemoveLogStreamReplicaResponse{}, varlog.ToStatusError(err)
+	return &vmspb.RemoveLogStreamReplicaResponse{}, verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) UpdateLogStream(ctx context.Context, req *vmspb.UpdateLogStreamRequest) (*vmspb.UpdateLogStreamResponse, error) {
 	lsdesc, err := s.clusManager.UpdateLogStream(ctx, req.GetLogStreamID(), req.GetPoppedReplica(), req.GetPushedReplica())
-	return &vmspb.UpdateLogStreamResponse{LogStream: lsdesc}, varlog.ToStatusError(err)
+	return &vmspb.UpdateLogStreamResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {
 	lsmetas, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
-	return &vmspb.SealResponse{LogStreams: lsmetas}, varlog.ToStatusError(err)
+	return &vmspb.SealResponse{LogStreams: lsmetas}, verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Sync(ctx context.Context, req *vmspb.SyncRequest) (*vmspb.SyncResponse, error) {
 	status, err := s.clusManager.Sync(ctx, req.GetLogStreamID(), req.GetSrcStorageNodeID(), req.GetDstStorageNodeID())
-	return &vmspb.SyncResponse{Status: status}, varlog.ToStatusError(err)
+	return &vmspb.SyncResponse{Status: status}, verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Unseal(ctx context.Context, req *vmspb.UnsealRequest) (*vmspb.UnsealResponse, error) {
 	lsdesc, err := s.clusManager.Unseal(ctx, req.GetLogStreamID())
-	return &vmspb.UnsealResponse{LogStream: lsdesc}, varlog.ToStatusError(err)
+	return &vmspb.UnsealResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
 }
 
-func (s *clusterManagerService) GetMRMembers(ctx context.Context, _ *gogotypes.Empty) (*vmspb.GetMRMembersResponse, error) {
+func (s *clusterManagerService) GetMRMembers(ctx context.Context, _ *pbtypes.Empty) (*vmspb.GetMRMembersResponse, error) {
 	mrInfo, err := s.clusManager.MRInfos(ctx)
 	if err != nil {
 		return &vmspb.GetMRMembersResponse{}, err
@@ -98,5 +98,5 @@ func (s *clusterManagerService) GetMRMembers(ctx context.Context, _ *gogotypes.E
 		resp.Members[nodeID] = m.Peer
 	}
 
-	return resp, varlog.ToStatusError(err)
+	return resp, verrors.ToStatusError(err)
 }

@@ -4,7 +4,8 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
+
+	"github.daumkakao.com/varlog/varlog/pkg/rpc"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
@@ -17,19 +18,19 @@ type LogStreamReporterClient interface {
 }
 
 type logStreamReporterClient struct {
-	rpcConn   *varlog.RpcConn
+	rpcConn   *rpc.Conn
 	rpcClient snpb.LogStreamReporterServiceClient
 }
 
 func NewLogStreamReporterClient(address string) (LogStreamReporterClient, error) {
-	rpcConn, err := varlog.NewRpcConn(address)
+	rpcConn, err := rpc.NewConn(address)
 	if err != nil {
 		return nil, err
 	}
 	return NewLogStreamReporterClientFromRpcConn(rpcConn)
 }
 
-func NewLogStreamReporterClientFromRpcConn(rpcConn *varlog.RpcConn) (LogStreamReporterClient, error) {
+func NewLogStreamReporterClientFromRpcConn(rpcConn *rpc.Conn) (LogStreamReporterClient, error) {
 	return &logStreamReporterClient{
 		rpcConn:   rpcConn,
 		rpcClient: snpb.NewLogStreamReporterServiceClient(rpcConn.Conn),

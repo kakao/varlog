@@ -10,8 +10,9 @@ import (
 
 	types "github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
-	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
 	grpc "google.golang.org/grpc"
+
+	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 // MockLogStreamReporterServiceClient is a mock of LogStreamReporterServiceClient interface.

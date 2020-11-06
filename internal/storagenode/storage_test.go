@@ -8,8 +8,9 @@ import (
 
 	fuzz "github.com/google/gofuzz"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 func TestValidStorageName(t *testing.T) {

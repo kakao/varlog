@@ -9,9 +9,10 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
 	grpc "google.golang.org/grpc"
 	metadata "google.golang.org/grpc/metadata"
+
+	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 // MockReplicatorServiceClient is a mock of ReplicatorServiceClient interface.

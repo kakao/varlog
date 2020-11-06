@@ -1,6 +1,6 @@
 package varlogpb
 
-import "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+import "github.daumkakao.com/varlog/varlog/pkg/types"
 
 func (snmeta StorageNodeMetadataDescriptor) FindLogStream(logStreamID types.LogStreamID) (LogStreamMetadataDescriptor, bool) {
 	for _, lsmeta := range snmeta.GetLogStreams() {

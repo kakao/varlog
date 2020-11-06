@@ -2,8 +2,9 @@ package app
 
 import (
 	"github.com/urfave/cli/v2"
+
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 func InitCLI(options *storagenode.Options) *cli.App {

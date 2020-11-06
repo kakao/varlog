@@ -30,12 +30,12 @@ message LogStreamRequest {
 message SealRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
     uint32 log_stream_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -44,7 +44,7 @@ message SealResponse {
     varlogpb.LogStreamStatus status = 1;
     uint64 last_committed_glsn = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "LastCommittedGLSN"
     ];
 }
@@ -52,12 +52,12 @@ message SealResponse {
 message UnsealRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
     uint32 log_stream_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }

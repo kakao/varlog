@@ -15,12 +15,12 @@ option (gogoproto.unmarshaler_all) = true;
 message ReplicationRequest {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     uint64 llsn = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
         (gogoproto.customname) = "LLSN"
     ];
     bytes payload = 3;
@@ -30,17 +30,17 @@ message ReplicationRequest {
 message ReplicationResponse {
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint32 log_stream_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     uint64 llsn = 3 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
         (gogoproto.customname) = "LLSN"
     ];
 }
@@ -59,12 +59,12 @@ message SyncPosition {
     option (gogoproto.equal) = true;
     uint64 llsn = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
         (gogoproto.customname) = "LLSN"
     ];
     uint64 glsn = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
 }
@@ -83,7 +83,7 @@ message SyncReplicateRequest {
     bytes data = 4;
     uint32 log_stream_id = 5 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }

@@ -5,8 +5,9 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/testutil/conveyutil"
 	"google.golang.org/grpc"
+
+	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/conveyutil"
 )
 
 // See https://github.com/smartystreets/goconvey/issues/220.

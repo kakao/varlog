@@ -7,11 +7,14 @@ import (
 	"sync"
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/pkg/mrc"
+	"github.daumkakao.com/varlog/varlog/pkg/mrc/mrconnector"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
-	"go.uber.org/zap"
 )
 
 // ClusterMetadataView provides the latest metadata about the cluster.
@@ -79,12 +82,8 @@ var (
 type mrManager struct {
 	clusterID types.ClusterID
 
-	addrs map[types.NodeID]string
-	mu    sync.RWMutex
-
-	connectedNodeID types.NodeID
-	cli             varlog.MetadataRepositoryClient
-	mcli            varlog.MetadataRepositoryManagementClient
+	mu        sync.RWMutex
+	connector mrconnector.Connector
 
 	dirty   bool
 	updated time.Time
@@ -94,123 +93,53 @@ type mrManager struct {
 }
 
 const (
-	MRMANAGER_INIT_TIMEOUT time.Duration = 5 * time.Second
+	// TODO (jun): Fix code styles (See https://golang.org/doc/effective_go.html#mixed-caps)
+	MRMANAGER_INIT_TIMEOUT     = 5 * time.Second
+	RPCAddrsFetchRetryInterval = 100 * time.Millisecond
 )
 
-func NewMRManager(clusterID types.ClusterID, mrAddrs []string, logger *zap.Logger) (MetadataRepositoryManager, error) {
+func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, logger *zap.Logger) (MetadataRepositoryManager, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("mrmanager")
 
 	if len(mrAddrs) == 0 {
-		return nil, varlog.ErrInvalid
+		return nil, verrors.ErrInvalid
 	}
 
-	mrm := &mrManager{
+	opts := []mrconnector.Option{
+		mrconnector.WithClusterID(clusterID),
+		mrconnector.WithConnectionTimeout(MRMANAGER_INIT_TIMEOUT),
+		mrconnector.WithRPCAddrsFetchRetryInterval(RPCAddrsFetchRetryInterval),
+		mrconnector.WithLogger(logger),
+	}
+	connector, err := mrconnector.New(ctx, mrAddrs, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mrManager{
 		clusterID: clusterID,
 		dirty:     true,
+		connector: connector,
 		logger:    logger,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), MRMANAGER_INIT_TIMEOUT)
-	defer cancel()
-
-	var err error
-Loop:
-	for _, addr := range mrAddrs {
-		cli, e := varlog.NewMetadataRepositoryManagementClient(addr)
-		if e != nil {
-			err = e
-			continue Loop
-		}
-		defer cli.Close()
-
-	GET_ADDR:
-		for {
-			rsp, e := cli.GetClusterInfo(ctx, clusterID)
-			if e != nil {
-				err = e
-				continue Loop
-			}
-
-			mrm.updateMemberFromClusterInfo(rsp.GetClusterInfo())
-			if len(mrm.addrs) == 0 {
-				time.Sleep(100 * time.Millisecond)
-				continue GET_ADDR
-			}
-
-			break
-		}
-		return mrm, nil
-	}
-
-	return nil, err
+	}, nil
 }
 
-func (mrm *mrManager) conn() {
-	if mrm.cli != nil {
-		return
-	}
-
-	var rpcConn *varlog.RpcConn
-	for nodeID, addr := range mrm.addrs {
-		if addr == "" {
-			continue
-		}
-
-		conn, e := varlog.NewRpcConn(addr)
-		if e != nil {
-			continue
-		}
-
-		mrm.connectedNodeID = nodeID
-		rpcConn = conn
-		break
-	}
-
-	if rpcConn != nil {
-		mrm.cli, _ = varlog.NewMetadataRepositoryClientFromRpcConn(rpcConn)
-		mrm.mcli, _ = varlog.NewMetadataRepositoryManagementClientFromRpcConn(rpcConn)
-	}
+func (mrm *mrManager) c() mrc.MetadataRepositoryClient {
+	return mrm.connector.Client()
 }
 
-func (mrm *mrManager) c() varlog.MetadataRepositoryClient {
-	if mrm.cli != nil {
-		return mrm.cli
-	}
-
-	mrm.conn()
-	return mrm.cli
-}
-
-func (mrm *mrManager) mc() varlog.MetadataRepositoryManagementClient {
-	if mrm.cli != nil {
-		return mrm.mcli
-	}
-
-	mrm.conn()
-	return mrm.mcli
-}
-
-func (mrm *mrManager) closeClient() error {
-	var err error
-	if mrm.cli != nil {
-		err = mrm.cli.Close()
-	}
-
-	mrm.cli = nil
-	mrm.mcli = nil
-	mrm.connectedNodeID = types.InvalidNodeID
-
-	return err
+func (mrm *mrManager) mc() mrc.MetadataRepositoryManagementClient {
+	return mrm.connector.ManagementClient()
 }
 
 func (mrm *mrManager) Close() error {
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
 
-	return mrm.closeClient()
+	return mrm.connector.Close()
 }
 
 func (mrm *mrManager) ClusterMetadataView() ClusterMetadataView {
@@ -220,12 +149,12 @@ func (mrm *mrManager) ClusterMetadataView() ClusterMetadataView {
 func (mrm *mrManager) clusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	cli := mrm.c()
 	if cli == nil {
-		return nil, varlog.ErrNotAccessible
+		return nil, verrors.ErrNotAccessible
 	}
 
 	meta, err := cli.GetMetadata(ctx)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 	}
 
 	return meta, err
@@ -240,12 +169,12 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 
 	cli := mrm.c()
 	if cli == nil {
-		return varlog.ErrNotAccessible
+		return verrors.ErrNotAccessible
 	}
 
 	err := cli.RegisterStorageNode(ctx, storageNodeMeta)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 	}
 
 	return err
@@ -260,12 +189,12 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 
 	cli := mrm.c()
 	if cli == nil {
-		return varlog.ErrNotAccessible
+		return verrors.ErrNotAccessible
 	}
 
 	err := cli.UnregisterStorageNode(ctx, storageNodeID)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 	}
 
 	return err
@@ -280,12 +209,12 @@ func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varl
 
 	cli := mrm.c()
 	if cli == nil {
-		return varlog.ErrNotAccessible
+		return verrors.ErrNotAccessible
 	}
 
 	err := cli.RegisterLogStream(ctx, logStreamDesc)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 	}
 
 	return err
@@ -300,12 +229,12 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 
 	cli := mrm.c()
 	if cli == nil {
-		return varlog.ErrNotAccessible
+		return verrors.ErrNotAccessible
 	}
 
 	err := cli.UnregisterLogStream(ctx, logStreamID)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 	}
 	return err
 }
@@ -319,12 +248,12 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlog
 
 	cli := mrm.c()
 	if cli == nil {
-		return varlog.ErrNotAccessible
+		return verrors.ErrNotAccessible
 	}
 
 	err := cli.UpdateLogStream(ctx, logStreamDesc)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 	}
 	return err
 }
@@ -339,12 +268,12 @@ func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (
 
 	cli := mrm.c()
 	if cli == nil {
-		return types.InvalidGLSN, varlog.ErrNotAccessible
+		return types.InvalidGLSN, verrors.ErrNotAccessible
 	}
 
 	glsn, err := cli.Seal(ctx, logStreamID)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 	}
 	return glsn, err
 }
@@ -358,32 +287,14 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 
 	cli := mrm.c()
 	if cli == nil {
-		return varlog.ErrNotAccessible
+		return verrors.ErrNotAccessible
 	}
 
 	err := cli.Unseal(ctx, logStreamID)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 	}
 	return err
-}
-
-func (mrm *mrManager) updateMemberFromClusterInfo(cinfo *mrpb.ClusterInfo) {
-	addrs := make(map[types.NodeID]string)
-	for nodeID, member := range cinfo.GetMembers() {
-		if member.GetEndpoint() != "" {
-			addrs[nodeID] = member.GetEndpoint()
-		}
-	}
-
-	for nodeID := range mrm.addrs {
-		if _, ok := addrs[nodeID]; !ok {
-			mrm.closeClient()
-			break
-		}
-	}
-
-	mrm.addrs = addrs
 }
 
 func (mrm *mrManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, error) {
@@ -392,17 +303,15 @@ func (mrm *mrManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, er
 
 	cli := mrm.mc()
 	if cli == nil {
-		return nil, varlog.ErrNotAccessible
+		return nil, verrors.ErrNotAccessible
 	}
 
 	rsp, err := cli.GetClusterInfo(ctx, mrm.clusterID)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 		return nil, err
 	}
-
-	mrm.updateMemberFromClusterInfo(rsp.GetClusterInfo())
-
+	mrm.connector.UpdateRPCAddrs(rsp.GetClusterInfo())
 	return rsp.GetClusterInfo(), err
 }
 
@@ -412,17 +321,15 @@ func (mrm *mrManager) AddPeer(ctx context.Context, nodeID types.NodeID, peerURL,
 
 	cli := mrm.mc()
 	if cli == nil {
-		return varlog.ErrNotAccessible
+		return verrors.ErrNotAccessible
 	}
 
 	err := cli.AddPeer(ctx, mrm.clusterID, nodeID, peerURL)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 		return err
 	}
-
-	mrm.addrs[nodeID] = rpcURL
-
+	mrm.connector.AddRPCAddr(nodeID, rpcURL)
 	return nil
 }
 
@@ -432,18 +339,18 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 
 	cli := mrm.mc()
 	if cli == nil {
-		return varlog.ErrNotAccessible
+		return verrors.ErrNotAccessible
 	}
 
 	err := cli.RemovePeer(ctx, mrm.clusterID, nodeID)
 	if err != nil {
-		mrm.closeClient()
+		mrm.connector.Disconnect()
 		return err
 	}
 
-	delete(mrm.addrs, nodeID)
-	if mrm.connectedNodeID == nodeID {
-		mrm.closeClient()
+	mrm.connector.DelRPCAddr(nodeID)
+	if mrm.connector.ConnectedNodeID() == nodeID {
+		mrm.connector.Disconnect()
 	}
 
 	return nil

@@ -5,9 +5,10 @@ import (
 	"sort"
 	"sync"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 )
 
 const (
@@ -97,7 +98,7 @@ func (s *InMemoryScanner) Next() ScanResult {
 	}
 
 	result := ScanResult{
-		LogEntry: varlog.LogEntry{
+		LogEntry: types.LogEntry{
 			LLSN: s.committedSnapshot[s.cursor].llsn,
 			GLSN: s.committedSnapshot[s.cursor].glsn,
 			// TODO(jun): copy byte array
@@ -132,40 +133,40 @@ func (s *InMemoryStorage) Name() string {
 func (s *InMemoryStorage) searchCommittedEntry(glsn types.GLSN) (int, committedEntry, error) {
 	i := sort.Search(len(s.committed), func(i int) bool { return s.committed[i].glsn >= glsn })
 	if i >= len(s.committed) {
-		return i, committedEntry{}, varlog.ErrNoEntry
+		return i, committedEntry{}, verrors.ErrNoEntry
 	}
 	if s.committed[i].glsn == glsn {
 		return i, s.committed[i], nil
 	}
-	return i, s.committed[i], varlog.ErrNoEntry
+	return i, s.committed[i], verrors.ErrNoEntry
 }
 
-func (s *InMemoryStorage) Read(glsn types.GLSN) (varlog.LogEntry, error) {
+func (s *InMemoryStorage) Read(glsn types.GLSN) (types.LogEntry, error) {
 	s.assert()
 	defer s.assert()
 
 	s.muCommitted.RLock()
 	defer s.muCommitted.RUnlock()
 	if len(s.committed) == 0 {
-		return varlog.InvalidLogEntry, varlog.ErrNoEntry
+		return types.InvalidLogEntry, verrors.ErrNoEntry
 	}
 
 	first := s.committed[0]
 	last := s.committed[len(s.committed)-1]
 	if first.glsn > glsn || last.glsn < glsn {
-		return varlog.InvalidLogEntry, varlog.ErrNoEntry
+		return types.InvalidLogEntry, verrors.ErrNoEntry
 	}
 
 	i, _, err := s.searchCommittedEntry(glsn)
 	if err != nil {
-		return varlog.InvalidLogEntry, varlog.ErrNoEntry
+		return types.InvalidLogEntry, verrors.ErrNoEntry
 	}
 	// NB: The LLSN of the first entry of written and committed should be same.
 	// NB: committedEntry[i] and writtenEntry[i] are the same log entry.
 	s.muWritten.RLock()
 	defer s.muWritten.RUnlock()
 	went := s.written[i]
-	return varlog.LogEntry{
+	return types.LogEntry{
 		GLSN: glsn,
 		LLSN: went.llsn,
 		Data: went.data,
@@ -178,7 +179,7 @@ func (s *InMemoryStorage) Scan(begin, end types.GLSN) (Scanner, error) {
 
 	// TODO (jun): consider reverse-scan
 	if begin >= end {
-		return nil, varlog.ErrInvalid
+		return nil, verrors.ErrInvalid
 	}
 
 	s.muCommitted.RLock()
@@ -236,12 +237,12 @@ func (s *InMemoryStorage) WriteBatch(entries []WriteEntry) error {
 func (s *InMemoryStorage) searchWrittenEnry(llsn types.LLSN) (int, writtenEntry, error) {
 	i := sort.Search(len(s.written), func(i int) bool { return s.written[i].llsn >= llsn })
 	if i >= len(s.written) {
-		return i, writtenEntry{}, varlog.ErrNoEntry
+		return i, writtenEntry{}, verrors.ErrNoEntry
 	}
 	if s.written[i].llsn == llsn {
 		return i, s.written[i], nil
 	}
-	return i, s.written[i], varlog.ErrNoEntry
+	return i, s.written[i], verrors.ErrNoEntry
 }
 
 func (s *InMemoryStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
@@ -261,7 +262,7 @@ func (s *InMemoryStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 	if len(s.committed) > 0 {
 		last := s.committed[len(s.committed)-1]
 		if last.llsn+1 != llsn || last.glsn >= glsn {
-			return varlog.ErrInvalid
+			return verrors.ErrInvalid
 		}
 	}
 	s.committed = append(s.committed, committedEntry{llsn: llsn, glsn: glsn})

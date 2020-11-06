@@ -7,14 +7,15 @@ import (
 	"os"
 	"sync"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner/stopwaiter"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
-	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner/stopwaiter"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // Management is the interface that wraps methods for managing StorageNode.
@@ -99,7 +100,7 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 
 	if len(sn.storageNodePaths) == 0 {
 		sn.logger.Error("no valid storage node path")
-		return nil, varlog.ErrInvalid
+		return nil, verrors.ErrInvalid
 	}
 
 	sn.logger = sn.logger.Named(fmt.Sprintf("storagenode")).With(zap.Any("cid", sn.clusterID), zap.Any("snid", sn.storageNodeID))
@@ -182,7 +183,7 @@ func (sn *StorageNode) Wait() {
 // GetMeGetMetadata implements the Management GetMetadata method.
 func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	if !sn.verifyClusterID(cid) {
-		return nil, varlog.ErrInvalidArgument
+		return nil, verrors.ErrInvalidArgument
 	}
 
 	snmeta := &varlogpb.StorageNodeMetadataDescriptor{
@@ -240,7 +241,7 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetada
 // AddLogStream implements the Management AddLogStream method.
 func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, storageNodePath string) (string, error) {
 	if !sn.verifyClusterID(cid) || !sn.verifyStorageNodeID(snid) {
-		return "", varlog.ErrInvalidArgument
+		return "", verrors.ErrInvalidArgument
 	}
 
 	sn.lseMtx.Lock()
@@ -248,12 +249,12 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 
 	_, ok := sn.lseMap[lsid]
 	if ok {
-		return "", varlog.ErrLogStreamAlreadyExists
+		return "", verrors.ErrLogStreamAlreadyExists
 	}
 
 	if _, exists := sn.storageNodePaths[storageNodePath]; !exists {
 		sn.logger.Error("no such storage path", zap.String("path", storageNodePath), zap.Reflect("storage_node_paths", sn.storageNodePaths))
-		return "", varlog.ErrNotExist
+		return "", verrors.ErrNotExist
 	}
 
 	lsPath, err := CreateLogStreamPath(storageNodePath, lsid)
@@ -282,13 +283,13 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 // RemoveLogStream implements the Management RemoveLogStream method.
 func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID) error {
 	if !sn.verifyClusterID(cid) || !sn.verifyStorageNodeID(snid) {
-		return varlog.ErrInvalidArgument
+		return verrors.ErrInvalidArgument
 	}
 	sn.lseMtx.Lock()
 	defer sn.lseMtx.Unlock()
 	lse, ok := sn.lseMap[lsid]
 	if !ok {
-		return varlog.ErrNotExist
+		return verrors.ErrNotExist
 	}
 	delete(sn.lseMap, lsid)
 	lse.Close()
@@ -303,11 +304,11 @@ func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNo
 // Seal implements the Management Seal method.
 func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
-		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, varlog.ErrInvalidArgument
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, verrors.ErrInvalidArgument
 	}
 	lse, ok := sn.GetLogStreamExecutor(logStreamID)
 	if !ok {
-		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, varlog.ErrInvalidArgument
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, verrors.ErrInvalidArgument
 	}
 	status, hwm := lse.Seal(lastCommittedGLSN)
 	sn.tst.Touch()
@@ -317,11 +318,11 @@ func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.Stora
 // Unseal implements the Management Unseal method.
 func (sn *StorageNode) Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
 	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
-		return varlog.ErrInvalidArgument
+		return verrors.ErrInvalidArgument
 	}
 	lse, ok := sn.GetLogStreamExecutor(logStreamID)
 	if !ok {
-		return varlog.ErrInvalidArgument
+		return verrors.ErrInvalidArgument
 	}
 	sn.tst.Touch()
 	return lse.Unseal()
@@ -329,12 +330,12 @@ func (sn *StorageNode) Unseal(clusterID types.ClusterID, storageNodeID types.Sto
 
 func (sn *StorageNode) Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
 	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
-		return nil, varlog.ErrInvalidArgument
+		return nil, verrors.ErrInvalidArgument
 	}
 	lse, ok := sn.GetLogStreamExecutor(logStreamID)
 	if !ok {
 		sn.logger.Error("could not get LSE")
-		return nil, varlog.ErrInvalidArgument
+		return nil, verrors.ErrInvalidArgument
 	}
 	sts, err := lse.Sync(ctx, replica, lastGLSN)
 	if err != nil {

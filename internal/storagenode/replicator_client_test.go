@@ -9,11 +9,13 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/pkg/rpc"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/snpb/mock"
-	"go.uber.org/zap"
 )
 
 func TestReplicatorClientReplicate(t *testing.T) {
@@ -26,7 +28,7 @@ func TestReplicatorClientReplicate(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		rpcConn := varlog.RpcConn{}
+		rpcConn := rpc.Conn{}
 		rc, err := NewReplicatorClientFromRpcConn(storageNodeID, logStreamID, &rpcConn, zap.NewNop())
 		So(err, ShouldBeNil)
 		mockClient := mock.NewMockReplicatorServiceClient(ctrl)
@@ -81,7 +83,7 @@ func TestReplicatorClient(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		rpcConn := varlog.RpcConn{}
+		rpcConn := rpc.Conn{}
 		rc, err := NewReplicatorClientFromRpcConn(storageNodeID, logStreamID, &rpcConn, zap.NewNop())
 		So(err, ShouldBeNil)
 		mockClient := mock.NewMockReplicatorServiceClient(ctrl)
@@ -104,7 +106,7 @@ func TestReplicatorClient(t *testing.T) {
 		})
 
 		Convey("it should not be run if client stream is failed", func() {
-			mockClient.EXPECT().Replicate(gomock.Any()).Return(nil, varlog.ErrInternal)
+			mockClient.EXPECT().Replicate(gomock.Any()).Return(nil, verrors.ErrInternal)
 			err := rc.Run(context.TODO())
 			So(err, ShouldNotBeNil)
 		})
@@ -149,7 +151,7 @@ func TestReplicatorClient(t *testing.T) {
 			mockStream.EXPECT().Send(gomock.Any()).DoAndReturn(
 				func(*snpb.ReplicationRequest) error {
 					defer close(stop)
-					return varlog.ErrInternal
+					return verrors.ErrInternal
 				},
 			).AnyTimes()
 			mockStream.EXPECT().Recv().DoAndReturn(func() (*snpb.ReplicationResponse, error) {
@@ -186,7 +188,7 @@ func TestReplicatorClient(t *testing.T) {
 			mockStream.EXPECT().Recv().DoAndReturn(
 				func() (*snpb.ReplicationResponse, error) {
 					<-stop
-					return nil, varlog.ErrInternal
+					return nil, verrors.ErrInternal
 				},
 			).AnyTimes()
 			mockStream.EXPECT().CloseSend().MinTimes(1)

@@ -26,7 +26,7 @@ enum MetadataType {
 message GetMetadataRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
     MetadataType metadata_type = 2;
@@ -39,17 +39,17 @@ message GetMetadataResponse {
 message AddLogStreamRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
     uint32 storage_node_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint32 log_stream_id = 3 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     varlogpb.StorageDescriptor storage = 4;
@@ -62,17 +62,17 @@ message AddLogStreamResponse {
 message RemoveLogStreamRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
     uint32 storage_node_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint32 log_stream_id = 3 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -80,22 +80,22 @@ message RemoveLogStreamRequest {
 message SealRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
     uint32 storage_node_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint32 log_stream_id = 3 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     uint64 last_committed_glsn = 4 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "LastCommittedGLSN"
     ];
 }
@@ -104,7 +104,7 @@ message SealResponse {
     varlogpb.LogStreamStatus status = 1;
     uint64 last_committed_glsn = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "LastCommittedGLSN"
     ];
 }
@@ -112,17 +112,17 @@ message SealResponse {
 message UnsealRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
     uint32 storage_node_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint32 log_stream_id = 3 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -131,30 +131,30 @@ message SyncRequest {
     message BackupNode {
         uint32 storage_node_id = 1 [
             (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+                "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
             (gogoproto.customname) = "StorageNodeID"
         ];
         string address = 2;
     }
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.ClusterID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
     uint32 storage_node_id = 2 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint32 log_stream_id = 3 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID",
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     BackupNode backup = 4 [(gogoproto.nullable) = true];
     uint64 last_glsn = 5 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN",
+            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "LastGLSN"
     ];
 }

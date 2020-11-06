@@ -1,11 +1,11 @@
-package main
+package test
 
 import (
 	"log"
 	"testing"
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )

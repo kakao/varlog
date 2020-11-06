@@ -3,8 +3,9 @@ package vms
 import (
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
 	"go.uber.org/zap"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 const (

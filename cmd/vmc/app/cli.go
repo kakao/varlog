@@ -7,7 +7,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 

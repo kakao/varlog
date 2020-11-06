@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/types"
-	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"google.golang.org/grpc"
+
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 )
 
 type ManagementService struct {

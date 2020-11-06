@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 type commitWatcher struct {

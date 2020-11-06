@@ -10,16 +10,17 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/netutil"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner/stopwaiter"
-	"github.daumkakao.com/varlog/varlog/proto/mrpb"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
-	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner/stopwaiter"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type StorageNodeEventHandler interface {
@@ -114,7 +115,7 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 	}
 	opts.Logger = opts.Logger.Named("vms").With(zap.Any("cid", opts.ClusterID))
 
-	mrMgr, err := NewMRManager(opts.ClusterID, opts.MetadataRepositoryAddresses, opts.Logger)
+	mrMgr, err := NewMRManager(ctx, opts.ClusterID, opts.MetadataRepositoryAddresses, opts.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +256,7 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*var
 	defer cm.mu.Unlock()
 
 	if cm.snMgr.ContainsAddress(addr) {
-		return nil, varlog.ErrStorageNodeAlreadyExists
+		return nil, verrors.ErrStorageNodeAlreadyExists
 	}
 
 	snmcl, snmeta, err := cm.snMgr.GetMetadataByAddr(ctx, addr)
@@ -264,7 +265,7 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*var
 	}
 	storageNodeID := snmeta.GetStorageNode().GetStorageNodeID()
 	if cm.snMgr.Contains(storageNodeID) {
-		return nil, varlog.ErrStorageNodeAlreadyExists
+		return nil, verrors.ErrStorageNodeAlreadyExists
 	}
 
 	_, err = cm.cmView.StorageNode(ctx, storageNodeID)
@@ -337,7 +338,7 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 	// See https://github.daumkakao.com/varlog/varlog/pull/198#discussion_r215602
 	logStreamID := cm.logStreamIDGen.Generate()
 	if clusmeta.GetLogStream(logStreamID) != nil {
-		err := varlog.NewErrorf(varlog.ErrLogStreamAlreadyExists, codes.Unavailable, "lsid=%v", logStreamID)
+		err := verrors.NewErrorf(verrors.ErrLogStreamAlreadyExists, codes.Unavailable, "lsid=%v", logStreamID)
 		cm.logger.Error("mismatch between ClusterMetadataView and LogStreamIDGenerator", zap.Any("lsid", logStreamID), zap.Error(err))
 		if err := cm.logStreamIDGen.Refresh(ctx); err != nil {
 			cm.logger.Panic("could not refresh LogStreamIDGenerator", zap.Error(err))
@@ -389,24 +390,24 @@ func (cm *clusterManager) verifyLogStream(clusterMetadata *varlogpb.MetadataDesc
 	replicas := logStreamDesc.GetReplicas()
 	// the number of logstream replica
 	if uint(len(replicas)) != cm.options.ReplicationFactor {
-		return fmt.Errorf("vms: incorrect number of logstream replicas: %w", varlog.ErrInvalid)
+		return fmt.Errorf("vms: incorrect number of logstream replicas: %w", verrors.ErrInvalid)
 	}
 	// storagenode existence
 	for _, replica := range replicas {
 		if clusterMetadata.GetStorageNode(replica.GetStorageNodeID()) == nil {
-			return varlog.ErrStorageNodeNotExist
+			return verrors.ErrStorageNodeNotExist
 		}
 	}
 	// logstream existence
 	if clusterMetadata.GetLogStream(logStreamDesc.GetLogStreamID()) != nil {
-		return varlog.ErrLogStreamAlreadyExists
+		return verrors.ErrLogStreamAlreadyExists
 	}
 	return nil
 }
 
 func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	if err := cm.snMgr.AddLogStream(ctx, logStreamDesc); err != nil {
-		return nil, varlog.NewErrorf(err, codes.Unavailable, "lsid=%v", logStreamDesc.GetLogStreamID())
+		return nil, verrors.NewErrorf(err, codes.Unavailable, "lsid=%v", logStreamDesc.GetLogStreamID())
 	}
 
 	// NB: RegisterLogStream returns nil if the logstream already exists.

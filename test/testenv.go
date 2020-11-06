@@ -1,4 +1,4 @@
-package main
+package test
 
 import (
 	"context"
@@ -11,15 +11,18 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"go.uber.org/zap"
+
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/vms"
+	"github.daumkakao.com/varlog/varlog/pkg/logc"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/vtesting"
-	"go.uber.org/zap"
 )
 
 const (
@@ -351,7 +354,7 @@ err_out:
 
 func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 	if len(clus.SNs) < clus.NrRep {
-		return types.LogStreamID(0), varlog.ErrInvalid
+		return types.LogStreamID(0), verrors.ErrInvalid
 	}
 
 	lsID := clus.lsID
@@ -395,7 +398,7 @@ func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 
 func (clus *VarlogCluster) AddLSByVMS() (types.LogStreamID, error) {
 	if len(clus.SNs) < clus.NrRep {
-		return types.LogStreamID(0), varlog.ErrInvalid
+		return types.LogStreamID(0), verrors.ErrInvalid
 	}
 
 	logStreamDesc, err := clus.CM.AddLogStream(context.TODO(), nil)
@@ -513,7 +516,7 @@ func (clus *VarlogCluster) GetVMS() vms.ClusterManager {
 
 func (clus *VarlogCluster) getSN(lsID types.LogStreamID, idx int) (*storagenode.StorageNode, error) {
 	if len(clus.MRs) == 0 {
-		return nil, varlog.ErrInvalid
+		return nil, verrors.ErrInvalid
 	}
 
 	var meta *varlogpb.MetadataDescriptor
@@ -531,16 +534,16 @@ func (clus *VarlogCluster) getSN(lsID types.LogStreamID, idx int) (*storagenode.
 
 	ls := meta.GetLogStream(lsID)
 	if ls == nil {
-		return nil, varlog.ErrNotExist
+		return nil, verrors.ErrNotExist
 	}
 
 	if len(ls.Replicas) < idx+1 {
-		return nil, varlog.ErrInvalid
+		return nil, verrors.ErrInvalid
 	}
 
 	sn := clus.LookupSN(ls.Replicas[idx].StorageNodeID)
 	if sn == nil {
-		return nil, varlog.ErrInternal
+		return nil, verrors.ErrInternal
 	}
 
 	return sn, nil
@@ -554,7 +557,7 @@ func (clus *VarlogCluster) GetBackupSN(lsID types.LogStreamID) (*storagenode.Sto
 	return clus.getSN(lsID, 1)
 }
 
-func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (varlog.LogIOClient, error) {
+func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (logc.LogIOClient, error) {
 	sn, err := clus.GetPrimarySN(lsID)
 	if err != nil {
 		return nil, err
@@ -565,12 +568,12 @@ func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (varlog.LogIOC
 		return nil, err
 	}
 
-	return varlog.NewLogIOClient(snMeta.StorageNode.Address)
+	return logc.NewLogIOClient(snMeta.StorageNode.Address)
 }
 
 func (clus *VarlogCluster) RunClusterManager(mrAddrs []string, opts *vms.Options) (vms.ClusterManager, error) {
 	if clus.VarlogClusterOptions.NrRep < 1 {
-		return nil, varlog.ErrInvalidArgument
+		return nil, verrors.ErrInvalidArgument
 	}
 
 	if opts == nil {

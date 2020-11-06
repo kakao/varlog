@@ -6,14 +6,16 @@ package mrpb
 import (
 	bytes "bytes"
 	fmt "fmt"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
-	github_daumkakao_com_varlog_varlog_pkg_varlog_types "github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
-	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	io "io"
 	math "math"
 	math_bits "math/bits"
+
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+
+	github_daumkakao_com_varlog_varlog_pkg_types "github.daumkakao.com/varlog/varlog/pkg/types"
+	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -28,13 +30,13 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type MetadataRepositoryDescriptor struct {
-	Metadata             *varlogpb.MetadataDescriptor                                          `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	LogStream            *MetadataRepositoryDescriptor_LogStreamDescriptor                     `protobuf:"bytes,2,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
-	Peers                map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID]string `protobuf:"bytes,3,rep,name=peers,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID" json:"peers,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	Endpoints            map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID]string `protobuf:"bytes,4,rep,name=endpoints,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/varlog/types.NodeID" json:"endpoints,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}                                                              `json:"-"`
-	XXX_unrecognized     []byte                                                                `json:"-"`
-	XXX_sizecache        int32                                                                 `json:"-"`
+	Metadata             *varlogpb.MetadataDescriptor                                   `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	LogStream            *MetadataRepositoryDescriptor_LogStreamDescriptor              `protobuf:"bytes,2,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
+	Peers                map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string `protobuf:"bytes,3,rep,name=peers,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.NodeID" json:"peers,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Endpoints            map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string `protobuf:"bytes,4,rep,name=endpoints,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.NodeID" json:"endpoints,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}                                                       `json:"-"`
+	XXX_unrecognized     []byte                                                         `json:"-"`
+	XXX_sizecache        int32                                                          `json:"-"`
 }
 
 func (m *MetadataRepositoryDescriptor) Reset()         { *m = MetadataRepositoryDescriptor{} }
@@ -84,14 +86,14 @@ func (m *MetadataRepositoryDescriptor) GetLogStream() *MetadataRepositoryDescrip
 	return nil
 }
 
-func (m *MetadataRepositoryDescriptor) GetPeers() map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID]string {
+func (m *MetadataRepositoryDescriptor) GetPeers() map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string {
 	if m != nil {
 		return m.Peers
 	}
 	return nil
 }
 
-func (m *MetadataRepositoryDescriptor) GetEndpoints() map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID]string {
+func (m *MetadataRepositoryDescriptor) GetEndpoints() map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string {
 	if m != nil {
 		return m.Endpoints
 	}
@@ -99,12 +101,12 @@ func (m *MetadataRepositoryDescriptor) GetEndpoints() map[github_daumkakao_com_v
 }
 
 type MetadataRepositoryDescriptor_LocalLogStreamReplica struct {
-	UncommittedLLSNOffset github_daumkakao_com_varlog_varlog_pkg_varlog_types.LLSN `protobuf:"varint,1,opt,name=uncommitted_llsn_offset,json=uncommittedLlsnOffset,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/varlog/types.LLSN" json:"uncommitted_llsn_offset,omitempty"`
-	UncommittedLLSNLength uint64                                                   `protobuf:"varint,2,opt,name=uncommitted_llsn_length,json=uncommittedLlsnLength,proto3" json:"uncommitted_llsn_length,omitempty"`
-	KnownHighWatermark    github_daumkakao_com_varlog_varlog_pkg_varlog_types.GLSN `protobuf:"varint,3,opt,name=known_high_watermark,json=knownHighWatermark,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN" json:"known_high_watermark,omitempty"`
-	XXX_NoUnkeyedLiteral  struct{}                                                 `json:"-"`
-	XXX_unrecognized      []byte                                                   `json:"-"`
-	XXX_sizecache         int32                                                    `json:"-"`
+	UncommittedLLSNOffset github_daumkakao_com_varlog_varlog_pkg_types.LLSN `protobuf:"varint,1,opt,name=uncommitted_llsn_offset,json=uncommittedLlsnOffset,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LLSN" json:"uncommitted_llsn_offset,omitempty"`
+	UncommittedLLSNLength uint64                                            `protobuf:"varint,2,opt,name=uncommitted_llsn_length,json=uncommittedLlsnLength,proto3" json:"uncommitted_llsn_length,omitempty"`
+	KnownHighWatermark    github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,3,opt,name=known_high_watermark,json=knownHighWatermark,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"known_high_watermark,omitempty"`
+	XXX_NoUnkeyedLiteral  struct{}                                          `json:"-"`
+	XXX_unrecognized      []byte                                            `json:"-"`
+	XXX_sizecache         int32                                             `json:"-"`
 }
 
 func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) Reset() {
@@ -144,7 +146,7 @@ func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) XXX_DiscardUnknown(
 
 var xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplica proto.InternalMessageInfo
 
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) GetUncommittedLLSNOffset() github_daumkakao_com_varlog_varlog_pkg_varlog_types.LLSN {
+func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) GetUncommittedLLSNOffset() github_daumkakao_com_varlog_varlog_pkg_types.LLSN {
 	if m != nil {
 		return m.UncommittedLLSNOffset
 	}
@@ -158,7 +160,7 @@ func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) GetUncommittedLLSNL
 	return 0
 }
 
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) GetKnownHighWatermark() github_daumkakao_com_varlog_varlog_pkg_varlog_types.GLSN {
+func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) GetKnownHighWatermark() github_daumkakao_com_varlog_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.KnownHighWatermark
 	}
@@ -166,11 +168,11 @@ func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) GetKnownHighWaterma
 }
 
 type MetadataRepositoryDescriptor_LocalLogStreamReplicas struct {
-	Replicas             map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica `protobuf:"bytes,1,rep,name=replicas,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/varlog/types.StorageNodeID" json:"replicas,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	Status               varlogpb.LogStreamStatus                                                                                                  `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                                                                                  `json:"-"`
-	XXX_unrecognized     []byte                                                                                                                    `json:"-"`
-	XXX_sizecache        int32                                                                                                                     `json:"-"`
+	Replicas             map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica `protobuf:"bytes,1,rep,name=replicas,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"replicas,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Status               varlogpb.LogStreamStatus                                                                                           `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                                                                           `json:"-"`
+	XXX_unrecognized     []byte                                                                                                             `json:"-"`
+	XXX_sizecache        int32                                                                                                              `json:"-"`
 }
 
 func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Reset() {
@@ -210,7 +212,7 @@ func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) XXX_DiscardUnknown
 
 var xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplicas proto.InternalMessageInfo
 
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) GetReplicas() map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica {
+func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) GetReplicas() map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica {
 	if m != nil {
 		return m.Replicas
 	}
@@ -225,12 +227,12 @@ func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) GetStatus() varlog
 }
 
 type MetadataRepositoryDescriptor_LogStreamDescriptor struct {
-	TrimGLSN             github_daumkakao_com_varlog_varlog_pkg_varlog_types.GLSN                                                                 `protobuf:"varint,1,opt,name=trim_glsn,json=trimGlsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/varlog/types.GLSN" json:"trim_glsn,omitempty"`
-	GlobalLogStreams     []*snpb.GlobalLogStreamDescriptor                                                                                        `protobuf:"bytes,2,rep,name=global_log_streams,json=globalLogStreams,proto3" json:"global_log_streams,omitempty"`
-	LocalLogStreams      map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas `protobuf:"bytes,3,rep,name=local_log_streams,json=localLogStreams,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/varlog/types.LogStreamID" json:"local_log_streams,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}                                                                                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                                                                                   `json:"-"`
-	XXX_sizecache        int32                                                                                                                    `json:"-"`
+	TrimGLSN             github_daumkakao_com_varlog_varlog_pkg_types.GLSN                                                                 `protobuf:"varint,1,opt,name=trim_glsn,json=trimGlsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"trim_glsn,omitempty"`
+	GlobalLogStreams     []*snpb.GlobalLogStreamDescriptor                                                                                 `protobuf:"bytes,2,rep,name=global_log_streams,json=globalLogStreams,proto3" json:"global_log_streams,omitempty"`
+	LocalLogStreams      map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas `protobuf:"bytes,3,rep,name=local_log_streams,json=localLogStreams,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"local_log_streams,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}                                                                                                          `json:"-"`
+	XXX_unrecognized     []byte                                                                                                            `json:"-"`
+	XXX_sizecache        int32                                                                                                             `json:"-"`
 }
 
 func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Reset() {
@@ -270,7 +272,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) XXX_DiscardUnknown() 
 
 var xxx_messageInfo_MetadataRepositoryDescriptor_LogStreamDescriptor proto.InternalMessageInfo
 
-func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetTrimGLSN() github_daumkakao_com_varlog_varlog_pkg_varlog_types.GLSN {
+func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetTrimGLSN() github_daumkakao_com_varlog_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.TrimGLSN
 	}
@@ -284,7 +286,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetGlobalLogStreams()
 	return nil
 }
 
-func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetLocalLogStreams() map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas {
+func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetLocalLogStreams() map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas {
 	if m != nil {
 		return m.LocalLogStreams
 	}
@@ -293,67 +295,67 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetLocalLogStreams() 
 
 func init() {
 	proto.RegisterType((*MetadataRepositoryDescriptor)(nil), "varlog.mrpb.MetadataRepositoryDescriptor")
-	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID]string)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.EndpointsEntry")
-	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID]string)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.PeersEntry")
+	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.EndpointsEntry")
+	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.PeersEntry")
 	proto.RegisterType((*MetadataRepositoryDescriptor_LocalLogStreamReplica)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LocalLogStreamReplica")
 	proto.RegisterType((*MetadataRepositoryDescriptor_LocalLogStreamReplicas)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LocalLogStreamReplicas")
-	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LocalLogStreamReplicas.ReplicasEntry")
+	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LocalLogStreamReplicas.ReplicasEntry")
 	proto.RegisterType((*MetadataRepositoryDescriptor_LogStreamDescriptor)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LogStreamDescriptor")
-	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LogStreamDescriptor.LocalLogStreamsEntry")
+	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LogStreamDescriptor.LocalLogStreamsEntry")
 }
 
 func init() { proto.RegisterFile("raft_metadata_repository.proto", fileDescriptor_3db687e1bfe5c0fa) }
 
 var fileDescriptor_3db687e1bfe5c0fa = []byte{
-	// 765 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x56, 0xcf, 0x4f, 0x13, 0x4f,
-	0x14, 0xcf, 0xd0, 0x42, 0xda, 0x21, 0x5f, 0xe0, 0x3b, 0x5f, 0xf8, 0x52, 0x1b, 0xd3, 0x25, 0x9a,
-	0x18, 0x2e, 0x6c, 0x13, 0xf4, 0xd0, 0x20, 0x8a, 0x56, 0x1a, 0x20, 0xa9, 0xa8, 0x5b, 0xd1, 0x84,
-	0xcb, 0x66, 0xb6, 0x9d, 0x6e, 0x37, 0x9d, 0xdd, 0xd9, 0xcc, 0x4c, 0x21, 0x4d, 0x3c, 0x11, 0x4f,
-	0x24, 0xc6, 0x9b, 0x67, 0x2e, 0xfe, 0x01, 0xfe, 0x0d, 0x5e, 0x38, 0xfa, 0x17, 0x94, 0xa4, 0x5e,
-	0x3c, 0x7a, 0xf6, 0x64, 0x76, 0x76, 0xb7, 0x3f, 0xa4, 0x1a, 0x68, 0x3d, 0xf5, 0x4d, 0xe7, 0xbd,
-	0xcf, 0xfb, 0xbc, 0xf7, 0x3e, 0xf3, 0x5a, 0x98, 0xe3, 0xb8, 0x2e, 0x4d, 0x97, 0x48, 0x5c, 0xc3,
-	0x12, 0x9b, 0x9c, 0xf8, 0x4c, 0x38, 0x92, 0xf1, 0xb6, 0xee, 0x73, 0x26, 0x19, 0x9a, 0x3d, 0xc2,
-	0x9c, 0x32, 0x5b, 0x77, 0xb9, 0x6f, 0x65, 0xd7, 0x6c, 0x47, 0x36, 0x5a, 0x96, 0x5e, 0x65, 0x6e,
-	0xde, 0x66, 0x36, 0xcb, 0x2b, 0x1f, 0xab, 0x55, 0x57, 0x27, 0x75, 0x50, 0x56, 0x18, 0x9b, 0x5d,
-	0x0e, 0x63, 0x7d, 0x2b, 0x1f, 0xe3, 0x47, 0x17, 0x39, 0xe1, 0xf9, 0x56, 0x9e, 0x32, 0xdb, 0x14,
-	0x92, 0x13, 0xec, 0xaa, 0xb4, 0x5c, 0x12, 0x1e, 0xde, 0xdf, 0x7a, 0x3f, 0x0f, 0x6f, 0x3e, 0x8d,
-	0x42, 0x8c, 0x1e, 0xa3, 0x6d, 0x22, 0xaa, 0xdc, 0xf1, 0x25, 0xe3, 0xa8, 0x04, 0x53, 0x31, 0x64,
-	0x06, 0xac, 0x80, 0xd5, 0xd9, 0xf5, 0xdb, 0x7a, 0x44, 0x34, 0xce, 0xa9, 0xc7, 0x00, 0xfd, 0xb0,
-	0x62, 0xf2, 0xbc, 0xa3, 0x01, 0xa3, 0x17, 0x8a, 0x2c, 0x08, 0xfb, 0x24, 0x32, 0x53, 0x0a, 0xe8,
-	0x81, 0x3e, 0x50, 0xb1, 0xfe, 0x27, 0x16, 0x7a, 0x99, 0xd9, 0x15, 0x15, 0x7a, 0x29, 0x45, 0x9a,
-	0xc6, 0x57, 0xe8, 0x14, 0xc0, 0x69, 0x9f, 0x10, 0x2e, 0x32, 0x89, 0x95, 0xc4, 0xea, 0xec, 0xfa,
-	0xbd, 0xab, 0xe3, 0x3f, 0x0f, 0xc2, 0x4a, 0x9e, 0xe4, 0xed, 0xe2, 0xc3, 0x93, 0x0b, 0x6d, 0x23,
-	0xea, 0x7e, 0x0d, 0xb7, 0xdc, 0x26, 0x6e, 0x62, 0xa6, 0xe6, 0x10, 0xa2, 0xc5, 0x1f, 0x7e, 0xb3,
-	0x67, 0xca, 0xb6, 0x4f, 0x84, 0xbe, 0xcf, 0x6a, 0x64, 0x6f, 0xdb, 0x08, 0x29, 0xa0, 0x0f, 0x00,
-	0xa6, 0x89, 0x57, 0xf3, 0x99, 0xe3, 0x49, 0x91, 0x49, 0x2a, 0x42, 0x85, 0xab, 0x13, 0x2a, 0xc5,
-	0xa1, 0x7f, 0x87, 0x54, 0x9f, 0x4a, 0xf6, 0xfb, 0x14, 0x5c, 0x2a, 0xb3, 0x2a, 0xa6, 0xbd, 0x9e,
-	0x1a, 0xc4, 0xa7, 0x4e, 0x15, 0xa3, 0x77, 0x00, 0x2e, 0xb7, 0xbc, 0x2a, 0x73, 0x5d, 0x47, 0x4a,
-	0x52, 0x33, 0x29, 0x15, 0x9e, 0xc9, 0xea, 0x75, 0x41, 0xa4, 0x1a, 0x7d, 0xb2, 0x78, 0xd0, 0xed,
-	0x68, 0x4b, 0x07, 0x7d, 0x97, 0x72, 0xb9, 0xb2, 0xff, 0x4c, 0x39, 0xfc, 0xe8, 0x68, 0x85, 0x71,
-	0xf8, 0x05, 0x08, 0xc6, 0xd2, 0x40, 0xd6, 0x32, 0x15, 0x5e, 0x08, 0x89, 0x5e, 0x8c, 0xa0, 0x43,
-	0x89, 0x67, 0xcb, 0x86, 0x12, 0x50, 0xb2, 0x78, 0x63, 0x04, 0x9d, 0xb2, 0x72, 0xb8, 0x04, 0x19,
-	0x7e, 0x8d, 0x3c, 0xb8, 0xd8, 0xf4, 0xd8, 0xb1, 0x67, 0x36, 0x1c, 0xbb, 0x61, 0x1e, 0x63, 0x49,
-	0xb8, 0x8b, 0x79, 0x33, 0x93, 0x50, 0x78, 0x9b, 0xe3, 0x56, 0xb1, 0x13, 0x54, 0x81, 0x14, 0xf2,
-	0xae, 0x63, 0x37, 0x5e, 0xc7, 0xb8, 0x1b, 0xc9, 0x6f, 0x67, 0x1a, 0xc8, 0x9e, 0x26, 0xe0, 0xff,
-	0x23, 0x5b, 0x2e, 0xd0, 0x27, 0x00, 0x53, 0x3c, 0x3a, 0x64, 0x80, 0x52, 0xc9, 0xfe, 0x75, 0x9e,
-	0xc5, 0x28, 0x50, 0x3d, 0x36, 0x42, 0xed, 0x94, 0x4e, 0x2e, 0xb4, 0xc7, 0xe3, 0x54, 0x55, 0x91,
-	0x8c, 0x63, 0x9b, 0x44, 0x12, 0xea, 0xd1, 0x44, 0x05, 0x38, 0x23, 0x24, 0x96, 0x2d, 0xa1, 0xc6,
-	0x30, 0xb7, 0xbe, 0x72, 0x69, 0x21, 0xf4, 0x28, 0x55, 0x94, 0x9f, 0x11, 0xf9, 0x67, 0xdf, 0xc0,
-	0x7f, 0x86, 0xb8, 0xa1, 0x05, 0x98, 0x68, 0x92, 0xb6, 0x52, 0xd7, 0xb4, 0x11, 0x98, 0xe8, 0x00,
-	0x4e, 0x1f, 0x61, 0xda, 0x22, 0xd1, 0x8e, 0xd8, 0x9a, 0xb0, 0x19, 0x46, 0x88, 0xb6, 0x31, 0x55,
-	0x00, 0xd1, 0x30, 0x3e, 0x26, 0xe1, 0x7f, 0x23, 0xd6, 0x09, 0x22, 0x30, 0x2d, 0xb9, 0xe3, 0x9a,
-	0x36, 0x15, 0x5e, 0x24, 0xf7, 0xdd, 0x6e, 0x47, 0x4b, 0xbd, 0xe4, 0x8e, 0x1b, 0xcc, 0x77, 0x22,
-	0x6d, 0xa4, 0x02, 0xe8, 0x1d, 0x2a, 0x3c, 0x74, 0x08, 0x91, 0x4d, 0x99, 0x85, 0xa9, 0xd9, 0xdf,
-	0x87, 0x41, 0x23, 0x83, 0xc9, 0xdf, 0x89, 0x8b, 0x0d, 0x96, 0xb6, 0xbe, 0xa3, 0xdc, 0x7e, 0xbf,
-	0xf9, 0x16, 0xec, 0x61, 0x07, 0x81, 0x3e, 0x03, 0xf8, 0x2f, 0x0d, 0xba, 0x30, 0x84, 0x1d, 0x2e,
-	0x43, 0x63, 0xa2, 0x65, 0xfb, 0x4b, 0x73, 0x23, 0x65, 0x3d, 0x39, 0xb9, 0xd0, 0xb6, 0xc6, 0x7a,
-	0xf5, 0x31, 0xd0, 0xde, 0xb6, 0x31, 0x4f, 0x87, 0xa1, 0xb3, 0x6f, 0x01, 0x5c, 0x1c, 0x95, 0x6e,
-	0x50, 0x2c, 0xc9, 0x50, 0x2c, 0xaf, 0x86, 0xc5, 0xf2, 0x68, 0xd2, 0x97, 0x33, 0xa0, 0x96, 0x6c,
-	0x01, 0xc2, 0xfe, 0xaf, 0xc2, 0x88, 0xdc, 0x8b, 0x83, 0xb9, 0xd3, 0x83, 0x91, 0x9b, 0x70, 0x6e,
-	0x78, 0x7d, 0x5f, 0x27, 0xba, 0x78, 0xff, 0xbc, 0x9b, 0x03, 0x5f, 0xba, 0x39, 0x70, 0xf6, 0x35,
-	0x07, 0x0e, 0xd7, 0xae, 0xd2, 0x5e, 0xf5, 0x6f, 0x20, 0xa8, 0xd9, 0x9a, 0x51, 0xf6, 0xdd, 0x9f,
-	0x01, 0x00, 0x00, 0xff, 0xff, 0xc9, 0x9c, 0x2d, 0x1a, 0x6c, 0x08, 0x00, 0x00,
+	// 762 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x55, 0x4d, 0x4f, 0x1b, 0x39,
+	0x18, 0x96, 0x49, 0x40, 0x89, 0xd1, 0xb2, 0xac, 0x17, 0x96, 0x6c, 0xb4, 0xca, 0xa0, 0x5d, 0x69,
+	0xc5, 0x85, 0x89, 0x16, 0x76, 0xb5, 0x11, 0xa5, 0x5f, 0x11, 0x88, 0x22, 0xa5, 0x69, 0x3b, 0x29,
+	0xad, 0xc4, 0xa1, 0x23, 0x4f, 0xe2, 0x38, 0xa3, 0x78, 0xc6, 0x23, 0xdb, 0x01, 0x45, 0xea, 0x09,
+	0xaa, 0x5e, 0x7b, 0xec, 0x95, 0x73, 0x7f, 0x43, 0x7f, 0x00, 0xc7, 0xfe, 0x82, 0x20, 0xa5, 0x97,
+	0xfe, 0x86, 0x9e, 0xaa, 0xf1, 0xcc, 0xe4, 0xa3, 0xa4, 0x15, 0x69, 0x4e, 0xb1, 0xe3, 0xf7, 0x79,
+	0xde, 0xc7, 0xef, 0xfb, 0xf8, 0x1d, 0x58, 0x10, 0xb8, 0xa9, 0x6c, 0x8f, 0x28, 0xdc, 0xc0, 0x0a,
+	0xdb, 0x82, 0x04, 0x5c, 0xba, 0x8a, 0x8b, 0xae, 0x19, 0x08, 0xae, 0x38, 0x5a, 0x3c, 0xc1, 0x82,
+	0x71, 0x6a, 0x7a, 0x22, 0x70, 0xf2, 0x9b, 0xd4, 0x55, 0xad, 0x8e, 0x63, 0xd6, 0xb9, 0x57, 0xa4,
+	0x9c, 0xf2, 0xa2, 0x8e, 0x71, 0x3a, 0x4d, 0xbd, 0xd3, 0x1b, 0xbd, 0x8a, 0xb0, 0xf9, 0xb5, 0x08,
+	0x1b, 0x38, 0xc5, 0x84, 0x3f, 0x3e, 0x28, 0x48, 0x3f, 0x70, 0x8a, 0x8c, 0x53, 0x5b, 0x2a, 0x41,
+	0xb0, 0xa7, 0xd3, 0x0a, 0x45, 0x44, 0x74, 0xfe, 0x67, 0x6f, 0x09, 0xfe, 0xf1, 0x30, 0x86, 0x58,
+	0x03, 0x45, 0x7b, 0x44, 0xd6, 0x85, 0x1b, 0x28, 0x2e, 0xd0, 0x3e, 0xcc, 0x24, 0x94, 0x39, 0xb0,
+	0x0e, 0x36, 0x16, 0xb7, 0xfe, 0x32, 0x63, 0xa1, 0x49, 0x4e, 0x33, 0x21, 0x18, 0xc2, 0xca, 0xe9,
+	0xcb, 0x9e, 0x01, 0xac, 0x01, 0x14, 0x39, 0x10, 0x0e, 0x45, 0xe4, 0xe6, 0x34, 0xd1, 0x6d, 0x73,
+	0xe4, 0xc6, 0xe6, 0xf7, 0x54, 0x98, 0x15, 0x4e, 0x6b, 0x1a, 0x7a, 0x2d, 0x45, 0x96, 0x25, 0x47,
+	0xe8, 0x1c, 0xc0, 0xf9, 0x80, 0x10, 0x21, 0x73, 0xa9, 0xf5, 0xd4, 0xc6, 0xe2, 0xd6, 0xbf, 0x37,
+	0xe7, 0x7f, 0x1c, 0xc2, 0xf6, 0x7d, 0x25, 0xba, 0xe5, 0xff, 0xcf, 0xae, 0x8c, 0xed, 0xb8, 0xfa,
+	0x0d, 0xdc, 0xf1, 0xda, 0xb8, 0x8d, 0xb9, 0xee, 0x43, 0xc4, 0x96, 0xfc, 0x04, 0x6d, 0x5a, 0x54,
+	0xdd, 0x80, 0x48, 0xb3, 0xca, 0x1b, 0xe4, 0x70, 0xcf, 0x8a, 0x72, 0xa3, 0x37, 0x00, 0x66, 0x89,
+	0xdf, 0x08, 0xb8, 0xeb, 0x2b, 0x99, 0x4b, 0x6b, 0x25, 0xa5, 0x9b, 0x2b, 0xd9, 0x4f, 0xa0, 0x33,
+	0xaa, 0x19, 0x6a, 0xc8, 0xf7, 0xe7, 0xe0, 0x6a, 0x85, 0xd7, 0x31, 0x1b, 0x54, 0xd1, 0x22, 0x01,
+	0x73, 0xeb, 0x18, 0xbd, 0x06, 0x70, 0xad, 0xe3, 0xd7, 0xb9, 0xe7, 0xb9, 0x4a, 0x91, 0x86, 0xcd,
+	0x98, 0xf4, 0x6d, 0xde, 0x6c, 0x4a, 0xa2, 0x74, 0xb3, 0xd3, 0xe5, 0x6a, 0xbf, 0x67, 0xac, 0x1e,
+	0x0d, 0x43, 0x2a, 0x95, 0x5a, 0xf5, 0x91, 0x0e, 0xf8, 0xdc, 0x33, 0xfe, 0x99, 0x4a, 0x58, 0x08,
+	0xb5, 0x56, 0x47, 0xd2, 0x55, 0x98, 0xf4, 0x23, 0x2e, 0xf4, 0x64, 0x82, 0x0e, 0x46, 0x7c, 0xaa,
+	0x5a, 0xda, 0x2b, 0xe9, 0xf2, 0xef, 0x13, 0x74, 0x54, 0x74, 0xc0, 0x35, 0xca, 0xe8, 0x6f, 0x44,
+	0xe1, 0x4a, 0xdb, 0xe7, 0xa7, 0xbe, 0xdd, 0x72, 0x69, 0xcb, 0x3e, 0xc5, 0x8a, 0x08, 0x0f, 0x8b,
+	0x76, 0x2e, 0xa5, 0xf9, 0xfe, 0x9b, 0x5a, 0xfe, 0x41, 0x28, 0x1f, 0x69, 0xca, 0x07, 0x2e, 0x6d,
+	0x3d, 0x4f, 0x08, 0x77, 0xd2, 0x9f, 0x2e, 0x0c, 0x90, 0x3f, 0x4f, 0xc1, 0xdf, 0x26, 0x16, 0x59,
+	0xa2, 0x77, 0x00, 0x66, 0x44, 0xbc, 0xc9, 0x01, 0x6d, 0x88, 0xea, 0x34, 0xd6, 0x9f, 0x44, 0x6a,
+	0x26, 0x8b, 0xc8, 0x26, 0x77, 0xce, 0xae, 0x8c, 0x9d, 0xa9, 0xae, 0x53, 0x53, 0x5c, 0x60, 0x4a,
+	0x62, 0xb7, 0x0c, 0xf4, 0xa1, 0x12, 0x5c, 0x90, 0x0a, 0xab, 0x8e, 0xd4, 0x85, 0x5f, 0xda, 0x5a,
+	0xbf, 0xf6, 0xda, 0x07, 0x5a, 0x6a, 0x3a, 0xce, 0x8a, 0xe3, 0xf3, 0x2f, 0xe1, 0x4f, 0x63, 0xa2,
+	0xd0, 0x32, 0x4c, 0xb5, 0x49, 0x57, 0x1b, 0x69, 0xde, 0x0a, 0x97, 0xe8, 0x08, 0xce, 0x9f, 0x60,
+	0xd6, 0x21, 0xf1, 0x00, 0xb8, 0x3b, 0x63, 0x15, 0xac, 0x88, 0x6d, 0x67, 0xae, 0x04, 0xe2, 0x2e,
+	0xbc, 0x4d, 0xc3, 0x5f, 0x27, 0xcc, 0x0a, 0xf4, 0x02, 0x66, 0x95, 0x70, 0x3d, 0x9b, 0x32, 0xe9,
+	0xc7, 0xce, 0xbe, 0xdf, 0xef, 0x19, 0x99, 0xa7, 0xc2, 0xf5, 0xc2, 0xc6, 0xfe, 0x98, 0x1b, 0x32,
+	0x21, 0xe7, 0x01, 0x93, 0x3e, 0x3a, 0x86, 0x88, 0x32, 0xee, 0x60, 0x66, 0x0f, 0xa7, 0x5c, 0x58,
+	0xc1, 0xb0, 0xd7, 0x7f, 0x27, 0xb7, 0x0c, 0x47, 0xb1, 0x79, 0xa0, 0xc3, 0xbe, 0x3d, 0xcf, 0x96,
+	0xe9, 0x78, 0x80, 0x44, 0xef, 0x01, 0xfc, 0x85, 0x85, 0xd7, 0x1f, 0xe3, 0x8e, 0x46, 0x9c, 0x35,
+	0xd3, 0x08, 0xfd, 0xaa, 0xaa, 0xb1, 0x97, 0x76, 0xcf, 0xae, 0x8c, 0xd2, 0x74, 0x2f, 0x3b, 0x61,
+	0x38, 0xdc, 0xb3, 0x7e, 0x66, 0xe3, 0x9c, 0xf9, 0x57, 0x00, 0xae, 0x4c, 0xca, 0x33, 0x6a, 0x8f,
+	0x74, 0x64, 0x8f, 0x67, 0xe3, 0xf6, 0xb8, 0x37, 0xeb, 0x23, 0x19, 0xf1, 0x47, 0xbe, 0x04, 0xe1,
+	0x70, 0xc8, 0x4f, 0xc8, 0xbd, 0x32, 0x9a, 0x3b, 0x3b, 0x8a, 0xdc, 0x85, 0x4b, 0xe3, 0x43, 0x79,
+	0x1a, 0x74, 0xf9, 0xd6, 0x65, 0xbf, 0x00, 0x3e, 0xf4, 0x0b, 0xe0, 0xe2, 0x63, 0x01, 0x1c, 0x6f,
+	0xde, 0xa4, 0xae, 0xfa, 0xe3, 0x1e, 0xde, 0xd9, 0x59, 0xd0, 0xeb, 0xed, 0x2f, 0x01, 0x00, 0x00,
+	0xff, 0xff, 0x33, 0x16, 0x9a, 0x2c, 0x3b, 0x08, 0x00, 0x00,
 }
 
 func (this *MetadataRepositoryDescriptor_LocalLogStreamReplica) Equal(that interface{}) bool {
@@ -944,7 +946,7 @@ func (m *MetadataRepositoryDescriptor) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Peers == nil {
-				m.Peers = make(map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID]string)
+				m.Peers = make(map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string)
 			}
 			var mapkey uint64
 			var mapvalue string
@@ -1025,7 +1027,7 @@ func (m *MetadataRepositoryDescriptor) Unmarshal(dAtA []byte) error {
 					iNdEx += skippy
 				}
 			}
-			m.Peers[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID(mapkey)] = mapvalue
+			m.Peers[github_daumkakao_com_varlog_varlog_pkg_types.NodeID(mapkey)] = mapvalue
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
@@ -1057,7 +1059,7 @@ func (m *MetadataRepositoryDescriptor) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Endpoints == nil {
-				m.Endpoints = make(map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID]string)
+				m.Endpoints = make(map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string)
 			}
 			var mapkey uint64
 			var mapvalue string
@@ -1138,7 +1140,7 @@ func (m *MetadataRepositoryDescriptor) Unmarshal(dAtA []byte) error {
 					iNdEx += skippy
 				}
 			}
-			m.Endpoints[github_daumkakao_com_varlog_varlog_pkg_varlog_types.NodeID(mapkey)] = mapvalue
+			m.Endpoints[github_daumkakao_com_varlog_varlog_pkg_types.NodeID(mapkey)] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1208,7 +1210,7 @@ func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) Unmarshal(dAtA []by
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.UncommittedLLSNOffset |= github_daumkakao_com_varlog_varlog_pkg_varlog_types.LLSN(b&0x7F) << shift
+				m.UncommittedLLSNOffset |= github_daumkakao_com_varlog_varlog_pkg_types.LLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1246,7 +1248,7 @@ func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) Unmarshal(dAtA []by
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.KnownHighWatermark |= github_daumkakao_com_varlog_varlog_pkg_varlog_types.GLSN(b&0x7F) << shift
+				m.KnownHighWatermark |= github_daumkakao_com_varlog_varlog_pkg_types.GLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1335,7 +1337,7 @@ func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Unmarshal(dAtA []b
 				return io.ErrUnexpectedEOF
 			}
 			if m.Replicas == nil {
-				m.Replicas = make(map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica)
+				m.Replicas = make(map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica)
 			}
 			var mapkey int32
 			var mapvalue *MetadataRepositoryDescriptor_LocalLogStreamReplica
@@ -1418,7 +1420,7 @@ func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Unmarshal(dAtA []b
 					iNdEx += skippy
 				}
 			}
-			m.Replicas[github_daumkakao_com_varlog_varlog_pkg_varlog_types.StorageNodeID(mapkey)] = mapvalue
+			m.Replicas[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID(mapkey)] = mapvalue
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -1507,7 +1509,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.TrimGLSN |= github_daumkakao_com_varlog_varlog_pkg_varlog_types.GLSN(b&0x7F) << shift
+				m.TrimGLSN |= github_daumkakao_com_varlog_varlog_pkg_types.GLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1576,7 +1578,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte
 				return io.ErrUnexpectedEOF
 			}
 			if m.LocalLogStreams == nil {
-				m.LocalLogStreams = make(map[github_daumkakao_com_varlog_varlog_pkg_varlog_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+				m.LocalLogStreams = make(map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 			}
 			var mapkey uint64
 			var mapvalue *MetadataRepositoryDescriptor_LocalLogStreamReplicas
@@ -1659,7 +1661,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte
 					iNdEx += skippy
 				}
 			}
-			m.LocalLogStreams[github_daumkakao_com_varlog_varlog_pkg_varlog_types.LogStreamID(mapkey)] = mapvalue
+			m.LocalLogStreams[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID(mapkey)] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

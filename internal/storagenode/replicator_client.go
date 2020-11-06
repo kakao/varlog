@@ -5,15 +5,16 @@ import (
 	"errors"
 	"sync"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/runner"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/syncutil/atomicutil"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog/util/timeutil"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.daumkakao.com/varlog/varlog/pkg/rpc"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
+	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil"
+	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
+	"github.daumkakao.com/varlog/varlog/pkg/util/timeutil"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 // TODO (jun): add options
@@ -36,7 +37,7 @@ type replicatorClient struct {
 	peerStorageNodeID types.StorageNodeID
 	peerLogStreamID   types.LogStreamID
 
-	rpcConn   *varlog.RpcConn
+	rpcConn   *rpc.Conn
 	rpcClient snpb.ReplicatorServiceClient
 	stream    snpb.ReplicatorService_ReplicateClient
 
@@ -59,14 +60,14 @@ type replicatorClient struct {
 
 // Add more detailed peer info (e.g., storage node id)
 func NewReplicatorClient(peerStorageNodeID types.StorageNodeID, peerLogStreamID types.LogStreamID, peerAddress string, logger *zap.Logger) (ReplicatorClient, error) {
-	rpcConn, err := varlog.NewRpcConn(peerAddress)
+	rpcConn, err := rpc.NewConn(peerAddress)
 	if err != nil {
 		return nil, err
 	}
 	return NewReplicatorClientFromRpcConn(peerStorageNodeID, peerLogStreamID, rpcConn, logger)
 }
 
-func NewReplicatorClientFromRpcConn(peerStorageNodeID types.StorageNodeID, peerLogStreamID types.LogStreamID, rpcConn *varlog.RpcConn, logger *zap.Logger) (ReplicatorClient, error) {
+func NewReplicatorClientFromRpcConn(peerStorageNodeID types.StorageNodeID, peerLogStreamID types.LogStreamID, rpcConn *rpc.Conn, logger *zap.Logger) (ReplicatorClient, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
