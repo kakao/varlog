@@ -10,9 +10,10 @@ import (
 
 	types "github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
-	snpb "github.com/kakao/varlog/proto/snpb"
 	grpc "google.golang.org/grpc"
 	metadata "google.golang.org/grpc/metadata"
+
+	snpb "github.com/kakao/varlog/proto/snpb"
 )
 
 // MockLogIOClient is a mock of LogIOClient interface.

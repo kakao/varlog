@@ -8,8 +8,9 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog/types"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
 )
 
 func TestLogStreamReporterRunClose(t *testing.T) {

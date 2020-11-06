@@ -10,13 +10,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kakao/varlog/pkg/verrors"
+
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/testutil"
-	"github.com/kakao/varlog/proto/varlogpb"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/testutil"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 func TestLogStreamExecutorNew(t *testing.T) {
@@ -78,11 +80,11 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 
 		Convey("read operation should reply uncertainties if it doesn't know", func() {
 			_, err := lse.Read(context.TODO(), types.MinGLSN)
-			So(errors.Is(err, varlog.ErrUndecidable), ShouldBeTrue)
+			So(errors.Is(err, verrors.ErrUndecidable), ShouldBeTrue)
 		})
 
 		Convey("read operation should reply written data", func() {
-			storage.EXPECT().Read(gomock.Any()).Return(varlog.LogEntry{Data: []byte("log")}, nil)
+			storage.EXPECT().Read(gomock.Any()).Return(types.LogEntry{Data: []byte("log")}, nil)
 			lse.(*logStreamExecutor).localLowWatermark = 0
 			lse.(*logStreamExecutor).localHighWatermark = 10
 			logEntry, err := lse.Read(context.TODO(), types.GLSN(0))
@@ -93,11 +95,11 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		Convey("append operation should not write data when sealed", func() {
 			lse.(*logStreamExecutor).sealItself()
 			_, err := lse.Append(context.TODO(), []byte("never"))
-			So(err, ShouldEqual, varlog.ErrSealed)
+			So(err, ShouldEqual, verrors.ErrSealed)
 		})
 
 		Convey("append operation should not write data when the storage is failed", func() {
-			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)
+			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(verrors.ErrInternal)
 			_, err := lse.Append(context.TODO(), []byte("never"))
 			So(err, ShouldNotBeNil)
 			sealed := lse.(*logStreamExecutor).isSealed()
@@ -107,7 +109,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		Convey("append operation should not write data when the replication is failed", func() {
 			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil)
 			c := make(chan error, 1)
-			c <- varlog.ErrInternal
+			c <- verrors.ErrInternal
 			replicator.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(c)
 			replicator.EXPECT().Close().AnyTimes()
 			lse.(*logStreamExecutor).replicator = replicator
@@ -505,7 +507,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		})
 
 		Convey("When Storage.Scan returns an error", func() {
-			storage.EXPECT().Scan(gomock.Any(), gomock.Any()).Return(nil, varlog.ErrInternal)
+			storage.EXPECT().Scan(gomock.Any(), gomock.Any()).Return(nil, verrors.ErrInternal)
 			lse.(*logStreamExecutor).localLowWatermark.Store(1)
 			lse.(*logStreamExecutor).localHighWatermark.Store(10)
 			Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
@@ -524,7 +526,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 			lse.(*logStreamExecutor).localHighWatermark.Store(10)
 
 			Convey("And the Scanner.Next returns an error", func() {
-				scanner.EXPECT().Next().Return(NewInvalidScanResult(varlog.ErrInternal))
+				scanner.EXPECT().Next().Return(NewInvalidScanResult(verrors.ErrInternal))
 
 				Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
 					c, err := lse.Subscribe(context.TODO(), 1, 11)
@@ -537,7 +539,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 				const repeat = 3
 				var cs []*gomock.Call
 				for i := 0; i < repeat; i++ {
-					logEntry := varlog.LogEntry{
+					logEntry := types.LogEntry{
 						LLSN: types.MinLLSN + types.LLSN(i),
 						GLSN: types.MinGLSN + types.GLSN(i),
 					}
@@ -605,7 +607,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 		Convey("When LogStreamExecutor.Seal is called (localHWM = lastCommittedGLSN)", func() {
 			lse.localHighWatermark.Store(types.MinGLSN)
-			storage.EXPECT().Read(gomock.Any()).Return(varlog.LogEntry{}, nil)
+			storage.EXPECT().Read(gomock.Any()).Return(types.LogEntry{}, nil)
 			storage.EXPECT().DeleteUncommitted(gomock.Any()).Return(nil)
 			Convey("Then status of LogStreamExecutor is SEALED", func() {
 				status, _ := lse.Seal(types.MinGLSN)
@@ -720,7 +722,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		}
 
 		_, err = lse.Subscribe(context.TODO(), types.MinGLSN+repeat, types.MinGLSN+repeat+1)
-		So(errors.Is(err, varlog.ErrUndecidable), ShouldBeTrue)
+		So(errors.Is(err, verrors.ErrUndecidable), ShouldBeTrue)
 
 		// Subscribe
 		mid := types.GLSN(repeat / 2)
@@ -756,7 +758,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 
 		// Subscribe trimmed range
 		_, err = lse.Subscribe(context.TODO(), types.MinGLSN, 4)
-		So(errors.Is(err, varlog.ErrTrimmed), ShouldBeTrue)
+		So(errors.Is(err, verrors.ErrTrimmed), ShouldBeTrue)
 
 		// Now, no appending
 		So(lse.GetReport().UncommittedLLSNLength, ShouldEqual, 0)

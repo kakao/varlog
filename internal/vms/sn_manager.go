@@ -5,11 +5,12 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
+	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/snc"
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"go.uber.org/zap"
 )
 
 type StorageNodeManager interface {
@@ -21,11 +22,11 @@ type StorageNodeManager interface {
 
 	// GetMetadataByAddr returns metadata about a storage node. It is useful when id of the
 	// storage node is not known.
-	GetMetadataByAddr(ctx context.Context, addr string) (varlog.StorageNodeManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error)
+	GetMetadataByAddr(ctx context.Context, addr string) (snc.StorageNodeManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error)
 
 	GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
-	AddStorageNode(snmcl varlog.StorageNodeManagementClient)
+	AddStorageNode(snmcl snc.StorageNodeManagementClient)
 
 	RemoveStorageNode(storageNodeID types.StorageNodeID)
 
@@ -51,7 +52,7 @@ var _ StorageNodeManager = (*snManager)(nil)
 type snManager struct {
 	clusterID types.ClusterID
 
-	cs     map[types.StorageNodeID]varlog.StorageNodeManagementClient
+	cs     map[types.StorageNodeID]snc.StorageNodeManagementClient
 	cmView ClusterMetadataView
 	mu     sync.RWMutex
 
@@ -66,7 +67,7 @@ func NewStorageNodeManager(ctx context.Context, clusterID types.ClusterID, cmVie
 	sm := &snManager{
 		clusterID: clusterID,
 		cmView:    cmView,
-		cs:        make(map[types.StorageNodeID]varlog.StorageNodeManagementClient),
+		cs:        make(map[types.StorageNodeID]snc.StorageNodeManagementClient),
 		logger:    logger,
 	}
 	if err := sm.Refresh(ctx); err != nil {
@@ -137,8 +138,8 @@ func (sm *snManager) ContainsAddress(addr string) bool {
 	return false
 }
 
-func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (varlog.StorageNodeManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error) {
-	mc, err := varlog.NewManagementClient(ctx, sm.clusterID, addr, sm.logger)
+func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (snc.StorageNodeManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error) {
+	mc, err := snc.NewManagementClient(ctx, sm.clusterID, addr, sm.logger)
 	if err != nil {
 		sm.logger.Error("could not create storagenode management client", zap.Error(err))
 		return nil, nil, err
@@ -168,13 +169,13 @@ func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.Storag
 	return snmcl.GetMetadata(ctx, snpb.MetadataTypeHeartbeat)
 }
 
-func (sm *snManager) AddStorageNode(snmcl varlog.StorageNodeManagementClient) {
+func (sm *snManager) AddStorageNode(snmcl snc.StorageNodeManagementClient) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.addStorageNode(snmcl)
 }
 
-func (sm *snManager) addStorageNode(snmcl varlog.StorageNodeManagementClient) {
+func (sm *snManager) addStorageNode(snmcl snc.StorageNodeManagementClient) {
 	storageNodeID := snmcl.PeerStorageNodeID()
 	if _, ok := sm.cs[storageNodeID]; ok {
 		sm.logger.Panic("already registered storagenode", zap.Any("snid", storageNodeID))

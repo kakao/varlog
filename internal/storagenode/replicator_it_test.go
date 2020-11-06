@@ -8,12 +8,13 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/netutil"
-	"github.com/kakao/varlog/pkg/varlog/util/testutil/conveyutil"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/netutil"
+	"github.com/kakao/varlog/pkg/util/testutil/conveyutil"
+	"github.com/kakao/varlog/pkg/verrors"
 )
 
 func TestReplicatorClientReplicatorService(t *testing.T) {
@@ -94,7 +95,7 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 
 			Convey("When the underlying LogStreamExecutor.Replicate() in the ReplicatorService returns error", func() {
 				Convey("Then the channel returned from ReplicatorClient.Replicate() should send an error", func() {
-					lse.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)
+					lse.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).Return(verrors.ErrInternal)
 					errC := rc.Replicate(context.TODO(), types.LLSN(0), []byte("foo"))
 					err := <-errC
 					So(err, ShouldNotBeNil)
@@ -121,9 +122,9 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 func TestReplicatorIntegration(t *testing.T) {
 	Convey("Given that many LSEs for the same LS are running", t, func(c C) {
 		const (
-			numLSs      = 2
-			numSNs      = 3
-			repeat      = 100
+			numLSs = 2
+			numSNs = 3
+			repeat = 100
 		)
 
 		ctrl := gomock.NewController(t)
@@ -362,7 +363,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 					Convey("Then the Replicator should return a channel having an error", func() {
 						lse1.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 						errC2 := make(chan error, 1)
-						errC2 <- varlog.ErrInternal
+						errC2 <- verrors.ErrInternal
 						close(errC2)
 						rc2.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any()).Return(errC2)
 						errC := r.Replicate(context.TODO(), types.LLSN(0), []byte("foo"), replicas)

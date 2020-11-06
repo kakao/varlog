@@ -3,8 +3,9 @@ package app
 import (
 	"log"
 
-	"github.com/kakao/varlog/internal/storagenode"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/internal/storagenode"
 )
 
 func Main(opts *storagenode.Options) error {

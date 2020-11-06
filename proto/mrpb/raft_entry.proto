@@ -21,7 +21,7 @@ message RegisterStorageNode {
 message UnregisterStorageNode {
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
 }
@@ -33,7 +33,7 @@ message RegisterLogStream {
 message UnregisterLogStream {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -51,7 +51,7 @@ message Commit {}
 message Seal {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -59,7 +59,7 @@ message Seal {
 message Unseal {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -67,7 +67,7 @@ message Unseal {
 message AddPeer {
     uint64 node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.NodeID",
+            "github.com/kakao/varlog/pkg/types.NodeID",
         (gogoproto.customname) = "NodeID"
     ];
     string url = 2;
@@ -76,7 +76,7 @@ message AddPeer {
 message RemovePeer {
     uint64 node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.NodeID",
+            "github.com/kakao/varlog/pkg/types.NodeID",
         (gogoproto.customname) = "NodeID"
     ];
 }
@@ -84,7 +84,7 @@ message RemovePeer {
 message Endpoint {
     uint64 node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.NodeID",
+            "github.com/kakao/varlog/pkg/types.NodeID",
         (gogoproto.customname) = "NodeID"
     ];
     string url = 2;

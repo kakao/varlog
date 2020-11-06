@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/kakao/varlog/proto/mrpb"
 	"google.golang.org/grpc"
+
+	"github.com/kakao/varlog/proto/mrpb"
 )
 
 type MetadataRepositoryService struct {

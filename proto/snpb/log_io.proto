@@ -17,7 +17,7 @@ message AppendRequest {
     message BackupNode {
         uint32 storage_node_id = 1 [
             (gogoproto.casttype) =
-                "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+                "github.com/kakao/varlog/pkg/types.StorageNodeID",
             (gogoproto.customname) = "StorageNodeID"
         ];
         string address = 2;
@@ -25,7 +25,7 @@ message AppendRequest {
     bytes payload = 1;
     uint32 log_stream_id = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     repeated BackupNode backups = 3 [(gogoproto.nullable) = false];
@@ -36,12 +36,12 @@ message AppendRequest {
 message AppendResponse {
     uint64 glsn = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+            "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
     uint32 log_stream_id = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -50,12 +50,12 @@ message AppendResponse {
 message ReadRequest {
     uint64 glsn = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+            "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
     uint32 log_stream_id = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -65,12 +65,12 @@ message ReadRequest {
 message ReadResponse {
     uint64 glsn = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+            "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
     uint64 llsn = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LLSN",
+            "github.com/kakao/varlog/pkg/types.LLSN",
         (gogoproto.customname) = "LLSN"
     ];
     bytes payload = 3;
@@ -81,17 +81,17 @@ message ReadResponse {
 message SubscribeRequest {
     uint64 glsn_begin = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+            "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSNBegin"
     ];
     uint64 glsn_end = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+            "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSNEnd"
     ];
     uint32 log_stream_id = 3 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -100,12 +100,12 @@ message SubscribeRequest {
 message SubscribeResponse {
     uint64 glsn = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+            "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
     uint64 llsn = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LLSN",
+            "github.com/kakao/varlog/pkg/types.LLSN",
         (gogoproto.customname) = "LLSN"
     ];
     bytes payload = 3;
@@ -117,7 +117,7 @@ message SubscribeResponse {
 message TrimRequest {
     uint64 glsn = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+            "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
 }

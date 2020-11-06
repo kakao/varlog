@@ -6,9 +6,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 )
 
 const PebbleStorageName = "pebble"
@@ -45,7 +46,7 @@ func (scanner *pebbleScanner) Next() ScanResult {
 			scanner.logger.Warn("error while closing scanner", zap.Error(err))
 		}
 	}()
-	logEntry := varlog.LogEntry{
+	logEntry := types.LogEntry{
 		GLSN: makeGLSN(ck),
 		LLSN: makeLLSN(dk),
 		Data: retdata,
@@ -106,7 +107,7 @@ func (pcb *pebbleCommitBatch) Put(llsn types.LLSN, glsn types.GLSN) error {
 	_, closer, err := db.Get(dk)
 	if err != nil {
 		if err == pebble.ErrNotFound {
-			return varlog.ErrNoEntry
+			return verrors.ErrNoEntry
 		}
 		return err
 	}
@@ -199,22 +200,22 @@ func (ps *pebbleStorage) Name() string {
 	return PebbleStorageName
 }
 
-func (ps *pebbleStorage) Read(glsn types.GLSN) (varlog.LogEntry, error) {
+func (ps *pebbleStorage) Read(glsn types.GLSN) (types.LogEntry, error) {
 	ck := makeCommitKey(glsn)
 	dk, ccloser, err := ps.db.Get(ck)
 	if err != nil {
 		if err == pebble.ErrNotFound {
-			return varlog.InvalidLogEntry, varlog.ErrNoEntry
+			return types.InvalidLogEntry, verrors.ErrNoEntry
 		}
-		return varlog.InvalidLogEntry, err
+		return types.InvalidLogEntry, err
 	}
 
 	data, dcloser, err := ps.db.Get(dk)
 	if err != nil {
 		if err == pebble.ErrNotFound {
-			return varlog.InvalidLogEntry, varlog.ErrNoEntry
+			return types.InvalidLogEntry, verrors.ErrNoEntry
 		}
-		return varlog.InvalidLogEntry, err
+		return types.InvalidLogEntry, err
 	}
 
 	defer func() {
@@ -227,7 +228,7 @@ func (ps *pebbleStorage) Read(glsn types.GLSN) (varlog.LogEntry, error) {
 	}()
 	retdata := make([]byte, len(data))
 	copy(retdata, data)
-	return varlog.LogEntry{
+	return types.LogEntry{
 		GLSN: glsn,
 		LLSN: makeLLSN(dk),
 		Data: retdata,
@@ -311,7 +312,7 @@ func (ps *pebbleStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 	_, closer, err := ps.db.Get(dk)
 	if err != nil {
 		if err == pebble.ErrNotFound {
-			return varlog.ErrNoEntry
+			return verrors.ErrNoEntry
 		}
 		return err
 	}

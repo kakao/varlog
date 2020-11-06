@@ -7,16 +7,16 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/zap"
+
 	"github.com/kakao/varlog/internal/storagenode"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/testutil"
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/testutil"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/vtesting"
-
-	. "github.com/smartystreets/goconvey/convey"
-	"go.uber.org/zap"
 )
 
 type dummyMetadataRepository struct {
@@ -35,7 +35,7 @@ func (mr *dummyMetadataRepository) report(lls *snpb.LocalLogStreamDescriptor) er
 	select {
 	case mr.reportC <- lls:
 	default:
-		return varlog.ErrIgnore
+		return verrors.ErrIgnore
 	}
 
 	return nil

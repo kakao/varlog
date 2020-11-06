@@ -7,8 +7,9 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
 
@@ -23,7 +24,7 @@ func TestLogStreamReporterServiceGetReport(t *testing.T) {
 
 		Convey("When LogStreamReporter.GetReport returns an error", func() {
 			lsrMock.EXPECT().GetReport(gomock.Any()).Return(
-				types.MinGLSN, map[types.LogStreamID]UncommittedLogStreamStatus{}, varlog.ErrInternal)
+				types.MinGLSN, map[types.LogStreamID]UncommittedLogStreamStatus{}, verrors.ErrInternal)
 
 			Convey("Then LogStreamReporterService.GetReport should return an error", func() {
 				_, err := service.GetReport(context.TODO(), &pbtypes.Empty{})
@@ -50,7 +51,7 @@ func TestLogStreamReporterServiceCommit(t *testing.T) {
 
 		Convey("When LogStreamReporter.Commit returns an error", func() {
 			lsrMock.EXPECT().Commit(gomock.Any(), gomock.Any(), gomock.Any(),
-				gomock.Any()).Return(varlog.ErrInternal)
+				gomock.Any()).Return(verrors.ErrInternal)
 
 			Convey("Then LogStreamReporterService.Commit should return an error", func() {
 				_, err := service.Commit(context.TODO(),

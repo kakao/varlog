@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/types"
 )
 
 // /<volume>/cid_<cluster_id>/snid_<storage_node_id>/lsid_<log_stream_id>

@@ -8,8 +8,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/kakao/varlog/pkg/varlog"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/varlog"
 )
 
 type VMCApp struct {

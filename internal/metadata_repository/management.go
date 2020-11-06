@@ -3,7 +3,7 @@ package metadata_repository
 import (
 	"context"
 
-	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/mrpb"
 )
 

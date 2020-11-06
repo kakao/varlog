@@ -6,11 +6,12 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
+	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"go.uber.org/zap"
 )
 
 func TestManagementServiceGetMetadata(t *testing.T) {
@@ -22,7 +23,7 @@ func TestManagementServiceGetMetadata(t *testing.T) {
 		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to get metadata", func() {
-			mock.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, varlog.ErrInternal)
+			mock.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, verrors.ErrInternal)
 			Convey("Then the ManagementService should return an error", func() {
 				_, err := service.GetMetadata(context.TODO(), &snpb.GetMetadataRequest{})
 				So(err, ShouldNotBeNil)
@@ -48,7 +49,7 @@ func TestManagementServiceAddLogStream(t *testing.T) {
 		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to add the LogStream", func() {
-			mock.EXPECT().AddLogStream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("", varlog.ErrInternal)
+			mock.EXPECT().AddLogStream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("", verrors.ErrInternal)
 			Convey("Then the ManagementService should return an error", func() {
 				_, err := service.AddLogStream(context.TODO(), &snpb.AddLogStreamRequest{})
 				So(err, ShouldNotBeNil)
@@ -98,7 +99,7 @@ func TestManagementServiceRemoveLogStream(t *testing.T) {
 		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to remove the LogStream", func() {
-			mock.EXPECT().RemoveLogStream(gomock.Any(), gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)
+			mock.EXPECT().RemoveLogStream(gomock.Any(), gomock.Any(), gomock.Any()).Return(verrors.ErrInternal)
 			Convey("Then the ManagementService should return an error", func() {
 				_, err := service.RemoveLogStream(context.TODO(), &snpb.RemoveLogStreamRequest{})
 				So(err, ShouldNotBeNil)
@@ -148,7 +149,7 @@ func TestManagementServiceSeal(t *testing.T) {
 		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to seal the LogStream", func() {
-			mock.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(varlogpb.LogStreamStatusRunning, types.GLSN(1), varlog.ErrInternal)
+			mock.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(varlogpb.LogStreamStatusRunning, types.GLSN(1), verrors.ErrInternal)
 			Convey("Then the ManagementService should return an error", func() {
 				_, err := service.Seal(context.TODO(), &snpb.SealRequest{})
 				So(err, ShouldNotBeNil)
@@ -174,7 +175,7 @@ func TestManagementServiceUnseal(t *testing.T) {
 		service := NewManagementService(mock, zap.NewNop())
 
 		Convey("When the underlying Management failed to unseal the LogStream", func() {
-			mock.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)
+			mock.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any()).Return(verrors.ErrInternal)
 			Convey("Then the ManagementService should return an error", func() {
 				_, err := service.Unseal(context.TODO(), &snpb.UnsealRequest{})
 				So(err, ShouldNotBeNil)

@@ -7,10 +7,12 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/testutil/conveyutil"
 	"google.golang.org/grpc"
+
+	"github.com/kakao/varlog/pkg/logc"
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/testutil/conveyutil"
+	"github.com/kakao/varlog/pkg/verrors"
 )
 
 func TestLogIOClientLogIOServiceAppend(t *testing.T) {
@@ -34,7 +36,7 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 		).AnyTimes()
 
 		Convey("And a LogIOClient tries to append a log entry to a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
-			cli, err := varlog.NewLogIOClient(addr)
+			cli, err := logc.NewLogIOClient(addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {
@@ -54,7 +56,7 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 				lse.EXPECT().Append(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(context.Context, []byte) (types.GLSN, error) {
 						<-stop
-						return types.InvalidGLSN, varlog.ErrInternal
+						return types.InvalidGLSN, verrors.ErrInternal
 					},
 				).MaxTimes(1)
 
@@ -62,12 +64,12 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
 					defer cancel()
 					_, err := cli.Append(ctx, lsid, nil)
-					So(varlog.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
+					So(verrors.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 
 			Convey("When the underlying LogStreamExecutor returns an error", func() {
-				lse.EXPECT().Append(gomock.Any(), gomock.Any()).Return(types.GLSN(0), varlog.ErrInternal)
+				lse.EXPECT().Append(gomock.Any(), gomock.Any()).Return(types.GLSN(0), verrors.ErrInternal)
 				Convey("Then the LogIOClient should return an error", func() {
 					_, err := cli.Append(context.TODO(), lsid, []byte("foo"))
 					So(err, ShouldNotBeNil)
@@ -109,7 +111,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 		).AnyTimes()
 
 		Convey("And a LogIOClient tries to read a log entry from a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
-			cli, err := varlog.NewLogIOClient(addr)
+			cli, err := logc.NewLogIOClient(addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {
@@ -129,7 +131,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 				lse.EXPECT().Read(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(context.Context, types.GLSN) ([]byte, error) {
 						<-stop
-						return nil, varlog.ErrInternal
+						return nil, verrors.ErrInternal
 					},
 				).MaxTimes(1)
 
@@ -137,30 +139,30 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
 					defer cancel()
 					_, err := cli.Read(ctx, lsid, types.MinGLSN)
-					So(varlog.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
+					So(verrors.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 
 			Convey("When the underlying LogStreamExecutor returns ErrTrimmed", func() {
-				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.InvalidLogEntry, varlog.ErrTrimmed)
+				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(types.InvalidLogEntry, verrors.ErrTrimmed)
 
 				Convey("Then the LogIOClient should return ErrTrimmed error", func() {
 					_, err := cli.Read(context.TODO(), lsid, types.GLSN(0))
-					So(err, ShouldResemble, varlog.ErrTrimmed)
+					So(err, ShouldResemble, verrors.ErrTrimmed)
 				})
 			})
 
 			Convey("When the underlying LogStreamExecutor returns ErrUndeciadable", func() {
-				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.InvalidLogEntry, varlog.ErrUndecidable)
+				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(types.InvalidLogEntry, verrors.ErrUndecidable)
 
 				Convey("Then the LogIOClient should return ErrUndecidable error", func() {
 					_, err := cli.Read(context.TODO(), lsid, types.GLSN(0))
-					So(err, ShouldResemble, varlog.ErrUndecidable)
+					So(err, ShouldResemble, verrors.ErrUndecidable)
 				})
 			})
 
 			Convey("when the underlying LogStreamExecutor reads the log entry", func() {
-				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.LogEntry{Data: []byte("foo")}, nil)
+				lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(types.LogEntry{Data: []byte("foo")}, nil)
 
 				Convey("Then the LogIOClient should return the log entry", func() {
 					ent, err := cli.Read(context.TODO(), lsid, types.GLSN(0))
@@ -193,7 +195,7 @@ func TestLogIOClientLogIOServiceSubscribe(t *testing.T) {
 		).AnyTimes()
 
 		Convey("And a LogIOClient tries to subscribe to log entries of a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
-			cli, err := varlog.NewLogIOClient(addr)
+			cli, err := logc.NewLogIOClient(addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {
@@ -260,7 +262,7 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 
 		Convey("And a LogIOClient tries to trim log entries of a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 
-			cli, err := varlog.NewLogIOClient(addr)
+			cli, err := logc.NewLogIOClient(addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {
@@ -273,13 +275,13 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 				lse1.EXPECT().Trim(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(context.Context, types.GLSN) error {
 						<-stop
-						return varlog.ErrInternal
+						return verrors.ErrInternal
 					},
 				).MaxTimes(1)
 				lse2.EXPECT().Trim(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(context.Context, types.GLSN) error {
 						<-stop
-						return varlog.ErrInternal
+						return verrors.ErrInternal
 					},
 				).MaxTimes(1)
 
@@ -287,12 +289,12 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
 					defer cancel()
 					err := cli.Trim(ctx, types.MinGLSN)
-					So(varlog.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
+					So(verrors.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
 				})
 			})
 
 			Convey("When some of the underlying LogStreamExecutor return errors", func() {
-				lse1.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(varlog.ErrInternal)
+				lse1.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(verrors.ErrInternal)
 				lse2.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(nil)
 				Convey("Then the LogIOClient should return an error", func() {
 					err := cli.Trim(context.TODO(), types.GLSN(20))

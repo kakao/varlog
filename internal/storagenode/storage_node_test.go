@@ -9,12 +9,14 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/testutil"
+	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/logc"
+	"github.com/kakao/varlog/pkg/snc"
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"go.uber.org/zap"
 )
 
 const (
@@ -96,9 +98,9 @@ func TestStorageNode(t *testing.T) {
 			}
 		}
 
-		var mclList []varlog.StorageNodeManagementClient
+		var mclList []snc.StorageNodeManagementClient
 		for _, sn := range snList {
-			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
+			mcl, err := snc.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -186,9 +188,9 @@ func TestSync(t *testing.T) {
 			}
 		}()
 
-		var mclList []varlog.StorageNodeManagementClient
+		var mclList []snc.StorageNodeManagementClient
 		for i, sn := range snList {
-			mcl, err := varlog.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
+			mcl, err := snc.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
 			So(err, ShouldBeNil)
 
 			mclList = append(mclList, mcl)
@@ -202,9 +204,9 @@ func TestSync(t *testing.T) {
 			}
 		}()
 
-		var logclList []varlog.LogIOClient
+		var logclList []logc.LogIOClient
 		for _, sn := range snList {
-			logcl, err := varlog.NewLogIOClient(sn.serverAddr)
+			logcl, err := logc.NewLogIOClient(sn.serverAddr)
 			So(err, ShouldBeNil)
 
 			logclList = append(logclList, logcl)

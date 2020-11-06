@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/testutil"
+	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/testutil"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/vtesting"
-
-	. "github.com/smartystreets/goconvey/convey"
-	"go.uber.org/zap"
 )
 
 type metadataRepoCluster struct {
@@ -80,7 +80,7 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 		RaftTick:          vtesting.TestRaftTick(),
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
 		NumRep:            clus.nrRep,
-		Peers:          peers,
+		Peers:             peers,
 		RPCBindAddress:    ":0",
 		ReporterClientFac: clus.reporterClientFac,
 		Logger:            clus.logger,
@@ -1160,7 +1160,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 
 			Convey("Then it should not have member info", func(ctx C) {
 				cinfo, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), types.ClusterID(0))
-				So(err, ShouldResemble, varlog.ErrNotMember)
+				So(err, ShouldResemble, verrors.ErrNotMember)
 
 				cinfo, err = clus.nodes[0].GetClusterInfo(context.TODO(), types.ClusterID(0))
 				So(err, ShouldBeNil)

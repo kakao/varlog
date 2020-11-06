@@ -5,15 +5,16 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/runner"
-	"github.com/kakao/varlog/pkg/varlog/util/syncutil"
-	"github.com/kakao/varlog/pkg/varlog/util/syncutil/atomicutil"
-	"github.com/kakao/varlog/pkg/varlog/util/timeutil"
-	"github.com/kakao/varlog/proto/snpb"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/kakao/varlog/pkg/rpc"
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/runner"
+	"github.com/kakao/varlog/pkg/util/syncutil"
+	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
+	"github.com/kakao/varlog/pkg/util/timeutil"
+	"github.com/kakao/varlog/proto/snpb"
 )
 
 // TODO (jun): add options
@@ -36,7 +37,7 @@ type replicatorClient struct {
 	peerStorageNodeID types.StorageNodeID
 	peerLogStreamID   types.LogStreamID
 
-	rpcConn   *varlog.RpcConn
+	rpcConn   *rpc.Conn
 	rpcClient snpb.ReplicatorServiceClient
 	stream    snpb.ReplicatorService_ReplicateClient
 
@@ -59,14 +60,14 @@ type replicatorClient struct {
 
 // Add more detailed peer info (e.g., storage node id)
 func NewReplicatorClient(peerStorageNodeID types.StorageNodeID, peerLogStreamID types.LogStreamID, peerAddress string, logger *zap.Logger) (ReplicatorClient, error) {
-	rpcConn, err := varlog.NewRpcConn(peerAddress)
+	rpcConn, err := rpc.NewConn(peerAddress)
 	if err != nil {
 		return nil, err
 	}
 	return NewReplicatorClientFromRpcConn(peerStorageNodeID, peerLogStreamID, rpcConn, logger)
 }
 
-func NewReplicatorClientFromRpcConn(peerStorageNodeID types.StorageNodeID, peerLogStreamID types.LogStreamID, rpcConn *varlog.RpcConn, logger *zap.Logger) (ReplicatorClient, error) {
+func NewReplicatorClientFromRpcConn(peerStorageNodeID types.StorageNodeID, peerLogStreamID types.LogStreamID, rpcConn *rpc.Conn, logger *zap.Logger) (ReplicatorClient, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}

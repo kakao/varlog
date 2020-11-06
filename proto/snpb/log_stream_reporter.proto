@@ -17,12 +17,12 @@ message LocalLogStreamDescriptor {
     message LogStreamUncommitReport {
         uint64 log_stream_id = 1 [
             (gogoproto.casttype) =
-                "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+                "github.com/kakao/varlog/pkg/types.LogStreamID",
             (gogoproto.customname) = "LogStreamID"
         ];
         uint64 uncommitted_llsn_offset = 2 [
             (gogoproto.casttype) =
-                "github.com/kakao/varlog/pkg/varlog/types.LLSN",
+                "github.com/kakao/varlog/pkg/types.LLSN",
             (gogoproto.customname) = "UncommittedLLSNOffset"
         ];
         uint64 uncommitted_llsn_length = 3
@@ -31,12 +31,12 @@ message LocalLogStreamDescriptor {
 
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint64 high_watermark = 2
         [(gogoproto.casttype) =
-             "github.com/kakao/varlog/pkg/varlog/types.GLSN"];
+             "github.com/kakao/varlog/pkg/types.GLSN"];
     repeated LogStreamUncommitReport uncommit = 3;
 }
 
@@ -49,12 +49,12 @@ message GlobalLogStreamDescriptor {
     message LogStreamCommitResult {
         uint32 log_stream_id = 1 [
             (gogoproto.casttype) =
-                "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+                "github.com/kakao/varlog/pkg/types.LogStreamID",
             (gogoproto.customname) = "LogStreamID"
         ];
         uint64 committed_glsn_offset = 2 [
             (gogoproto.casttype) =
-                "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+                "github.com/kakao/varlog/pkg/types.GLSN",
             (gogoproto.customname) = "CommittedGLSNOffset"
         ];
         uint64 committed_glsn_length = 3
@@ -63,10 +63,10 @@ message GlobalLogStreamDescriptor {
 
     uint64 high_watermark = 1
         [(gogoproto.casttype) =
-             "github.com/kakao/varlog/pkg/varlog/types.GLSN"];
+             "github.com/kakao/varlog/pkg/types.GLSN"];
     uint64 prev_high_watermark = 2
         [(gogoproto.casttype) =
-             "github.com/kakao/varlog/pkg/varlog/types.GLSN"];
+             "github.com/kakao/varlog/pkg/types.GLSN"];
     repeated LogStreamCommitResult commit_result = 3;
 }
 

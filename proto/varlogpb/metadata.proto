@@ -48,7 +48,7 @@ message StorageNodeDescriptor {
 
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     string address = 2;
@@ -61,7 +61,7 @@ message ReplicaDescriptor {
 
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     string path = 2;
@@ -72,7 +72,7 @@ message LogStreamDescriptor {
 
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     LogStreamStatus status = 2;
@@ -95,7 +95,7 @@ message StorageNodeMetadataDescriptor {
     // to.
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.ClusterID",
+            "github.com/kakao/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
     // StorageNode is detailed information about the storage node.
@@ -111,18 +111,18 @@ message StorageNodeMetadataDescriptor {
 message LogStreamMetadataDescriptor {
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint32 log_stream_id = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     LogStreamStatus status = 3;
     uint32 high_watermark = 4 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.GLSN",
+            "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "HighWatermark"
     ];
     string path = 5;
@@ -135,12 +135,12 @@ message LogStreamMetadataDescriptor {
 message LogStreamReplicaDescriptor {
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint32 log_stream_id = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     string address = 3;

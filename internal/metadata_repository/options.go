@@ -7,9 +7,10 @@ import (
 	"strconv"
 	"time"
 
-	types "github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/netutil"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/netutil"
 )
 
 const (

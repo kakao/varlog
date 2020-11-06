@@ -5,8 +5,9 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/logc"
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -16,7 +17,7 @@ type InMemoryMetadataRepository struct {
 	globalLogStream []*snpb.GlobalLogStreamDescriptor
 	penddingC       chan *snpb.LocalLogStreamDescriptor
 	commitC         chan *snpb.GlobalLogStreamDescriptor
-	storageMap      map[types.StorageNodeID]varlog.LogIOClient
+	storageMap      map[types.StorageNodeID]logc.LogIOClient
 	mu              sync.RWMutex
 }
 
@@ -34,7 +35,7 @@ func (r *InMemoryMetadataRepository) RegisterStorageNode(ctx context.Context, sn
 	defer r.mu.Unlock()
 
 	if err := r.metadata.InsertStorageNode(sn); err != nil {
-		return varlog.ErrAlreadyExists
+		return verrors.ErrAlreadyExists
 	}
 
 	return nil
@@ -54,7 +55,7 @@ func (r *InMemoryMetadataRepository) RegisterLogStream(ctx context.Context, ls *
 	defer r.mu.Unlock()
 
 	if err := r.metadata.InsertLogStream(ls); err != nil {
-		return varlog.ErrAlreadyExists
+		return verrors.ErrAlreadyExists
 	}
 
 	return nil
@@ -74,7 +75,7 @@ func (r *InMemoryMetadataRepository) UpdateLogStream(ctx context.Context, ls *va
 	defer r.mu.Unlock()
 
 	if err := r.metadata.UpdateLogStream(ls); err != nil {
-		return varlog.ErrNotExist
+		return verrors.ErrNotExist
 	}
 
 	return nil

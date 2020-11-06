@@ -5,11 +5,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/runner"
-	"github.com/kakao/varlog/proto/varlogpb"
-
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/runner"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type StorageNodeWatcher interface {

@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/kakao/varlog/pkg/varlog"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/varlog"
 )
 
 func (app *VMCApp) addStorageNode(snAddr string) {

@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/proto/snpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/proto/snpb"
 )
 
 type replicationContext struct {

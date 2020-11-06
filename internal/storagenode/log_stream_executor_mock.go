@@ -10,8 +10,8 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	varlog "github.com/kakao/varlog/pkg/varlog"
-	types "github.com/kakao/varlog/pkg/varlog/types"
+
+	types "github.com/kakao/varlog/pkg/types"
 	snpb "github.com/kakao/varlog/proto/snpb"
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 )
@@ -410,10 +410,10 @@ func (mr *MockLogStreamExecutorMockRecorder) HighWatermark() *gomock.Call {
 }
 
 // Read mocks base method.
-func (m *MockLogStreamExecutor) Read(ctx context.Context, glsn types.GLSN) (varlog.LogEntry, error) {
+func (m *MockLogStreamExecutor) Read(ctx context.Context, glsn types.GLSN) (types.LogEntry, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", ctx, glsn)
-	ret0, _ := ret[0].(varlog.LogEntry)
+	ret0, _ := ret[0].(types.LogEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

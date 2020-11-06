@@ -4,22 +4,22 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
 )
 
 var ErrEndOfRange = errors.New("storage: end of range")
 
 // ScanResult represents a result of Scanner.Next() method. It should be immutable.
 type ScanResult struct {
-	LogEntry varlog.LogEntry
+	LogEntry types.LogEntry
 	Err      error
 }
 
 func NewInvalidScanResult(err error) ScanResult {
 	return ScanResult{
-		LogEntry: varlog.InvalidLogEntry,
+		LogEntry: types.InvalidLogEntry,
 		Err:      err,
 	}
 }
@@ -68,7 +68,7 @@ type Storage interface {
 
 	// Read reads the log entry at the glsn.
 	// If there is no entry at the given position, it returns varlog.ErrNoEntry.
-	Read(glsn types.GLSN) (varlog.LogEntry, error)
+	Read(glsn types.GLSN) (types.LogEntry, error)
 
 	// Scan returns Scanner that reads log entries from the glsn.
 	Scan(begin, end types.GLSN) (Scanner, error)

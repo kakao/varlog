@@ -3,7 +3,7 @@ package app
 import (
 	"time"
 
-	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/types"
 )
 
 const (

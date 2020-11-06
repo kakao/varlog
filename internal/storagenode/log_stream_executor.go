@@ -8,12 +8,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/runner"
+	"github.com/kakao/varlog/pkg/verrors"
+
+	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"go.uber.org/zap"
 )
 
 var (
@@ -89,7 +91,7 @@ type LogStreamExecutor interface {
 	Status() varlogpb.LogStreamStatus
 	HighWatermark() types.GLSN
 
-	Read(ctx context.Context, glsn types.GLSN) (varlog.LogEntry, error)
+	Read(ctx context.Context, glsn types.GLSN) (types.LogEntry, error)
 	Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan ScanResult, error)
 	Append(ctx context.Context, data []byte, backups ...Replica) (types.GLSN, error)
 	Trim(ctx context.Context, glsn types.GLSN) error
@@ -102,7 +104,7 @@ type LogStreamExecutor interface {
 
 type readTask struct {
 	glsn     types.GLSN
-	logEntry varlog.LogEntry
+	logEntry types.LogEntry
 	err      error
 	done     chan struct{}
 }
@@ -376,7 +378,7 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogSt
 		lse.trackers.foreach(func(appendT *appendTask) {
 			llsn := appendT.getLLSN()
 			if llsn > lastCommittedLLSN {
-				appendT.notify(varlog.ErrSealed)
+				appendT.notify(verrors.ErrSealed)
 			}
 		})
 
@@ -458,17 +460,17 @@ func (lse *logStreamExecutor) dispatchCommitC(ctx context.Context) {
 // - spinining early-read to decide NOENT or OK
 // - read aggregation to minimize I/O
 // - cache or not (use memstore?)
-func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) (varlog.LogEntry, error) {
+func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) (types.LogEntry, error) {
 	if err := lse.isTrimmed(glsn); err != nil {
-		return varlog.InvalidLogEntry, err
+		return types.InvalidLogEntry, err
 	}
 	// TODO: wait until decidable or return an error
 	if err := lse.commitUndecidable(glsn); err != nil {
-		return varlog.InvalidLogEntry, err
+		return types.InvalidLogEntry, err
 	}
 	done := make(chan struct{})
 	task := &readTask{
-		logEntry: varlog.InvalidLogEntry,
+		logEntry: types.InvalidLogEntry,
 		glsn:     glsn,
 		done:     done,
 	}
@@ -477,9 +479,9 @@ func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) (varlog
 	case <-done:
 		return task.logEntry, task.err
 	case <-ctx.Done():
-		return varlog.InvalidLogEntry, ctx.Err()
+		return types.InvalidLogEntry, ctx.Err()
 	case <-lse.stopped:
-		return varlog.InvalidLogEntry, errLSEKilled
+		return types.InvalidLogEntry, errLSEKilled
 	}
 }
 
@@ -511,7 +513,7 @@ func (lse *logStreamExecutor) read(t *readTask) {
 
 func (lse *logStreamExecutor) Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan ScanResult, error) {
 	if begin >= end {
-		return nil, varlog.ErrInvalid
+		return nil, verrors.ErrInvalid
 	}
 
 	// TODO (jun): begin has special meanings:
@@ -575,7 +577,7 @@ func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (
 				// It has no guarantee that read and subscribe prevent from trimming
 				// overlapped log ranges yet. It, however, results in unexpected
 				// situation like this.
-				err := varlog.NewSimpleErrorf(varlog.ErrUnordered, "llsn next=%v read=%v", llsn+1, result.LogEntry.LLSN)
+				err := verrors.NewSimpleErrorf(verrors.ErrUnordered, "llsn next=%v read=%v", llsn+1, result.LogEntry.LLSN)
 				result = NewInvalidScanResult(err)
 			}
 			select {
@@ -600,7 +602,7 @@ func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (
 
 func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
 	if lse.isSealed() {
-		return varlog.ErrSealed
+		return verrors.ErrSealed
 	}
 
 	appendTask := newAppendTask(data, nil, llsn, &lse.trackers)
@@ -619,8 +621,8 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 // All Appends are processed sequentially by using the appendC.
 func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
 	if lse.isSealed() {
-		lse.logger.Debug("could not append", zap.Error(varlog.ErrSealed))
-		return types.InvalidGLSN, varlog.ErrSealed
+		lse.logger.Debug("could not append", zap.Error(verrors.ErrSealed))
+		return types.InvalidGLSN, verrors.ErrSealed
 	}
 
 	appendT := newAppendTask(data, replicas, types.InvalidLLSN, &lse.trackers)
@@ -641,8 +643,8 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 
 func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) error {
 	if lse.isSealed() {
-		lse.logger.Debug("could not append or replicate", zap.Error(varlog.ErrSealed))
-		return varlog.ErrSealed
+		lse.logger.Debug("could not append or replicate", zap.Error(verrors.ErrSealed))
+		return verrors.ErrSealed
 	}
 	tctx, cancel := context.WithTimeout(ctx, lse.options.AppendCTimeout)
 	defer cancel()
@@ -659,8 +661,8 @@ func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) err
 
 func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 	if lse.isSealed() {
-		lse.logger.Debug("could not append or replicate", zap.Error(varlog.ErrSealed))
-		t.notify(varlog.ErrSealed)
+		lse.logger.Debug("could not append or replicate", zap.Error(verrors.ErrSealed))
+		t.notify(verrors.ErrSealed)
 		return
 	}
 
@@ -691,7 +693,7 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 	}
 
 	if llsn != lse.uncommittedLLSNEnd.Load() {
-		return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", varlog.ErrCorruptLogStream, llsn, lse.uncommittedLLSNEnd.Load())
+		return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", verrors.ErrCorruptLogStream, llsn, lse.uncommittedLLSNEnd.Load())
 	}
 
 	if err := lse.storage.Write(llsn, data); err != nil {
@@ -719,10 +721,10 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 			return nil
 		case varlogpb.LogStreamStatusDeleted:
 			lse.logger.Panic("invalid LogStreamStatus", zap.Any("status", lse.status))
-			return varlog.ErrInternal
+			return verrors.ErrInternal
 		default:
 			lse.logger.Error("could not add appendTask to tracker", zap.Any("status", lse.status), zap.Any("llsn", llsn))
-			return varlog.ErrSealed
+			return verrors.ErrSealed
 		}
 	}
 
@@ -884,7 +886,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
 			appendT.setGLSN(glsn)
-			appendT.notify(fmt.Errorf("%w: commit error (llsn=%v glsn=%v)", varlog.ErrCorruptLogStream, llsn, glsn))
+			appendT.notify(fmt.Errorf("%w: commit error (llsn=%v glsn=%v)", verrors.ErrCorruptLogStream, llsn, glsn))
 		} else {
 			lse.logger.Warn("failed to commit, but cannot notify since no appendTask", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 		}

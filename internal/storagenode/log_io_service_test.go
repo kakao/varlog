@@ -6,8 +6,9 @@ import (
 
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/snpb/mock"
 )
@@ -53,7 +54,7 @@ func TestStorageNodeServiceAppend(t *testing.T) {
 			lse := NewMockLogStreamExecutor(ctrl)
 			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
 			setLseGetter(lseGetter, lse)
-			lse.EXPECT().Append(gomock.Any(), gomock.Any()).Return(types.GLSN(0), varlog.ErrInternal)
+			lse.EXPECT().Append(gomock.Any(), gomock.Any()).Return(types.GLSN(0), verrors.ErrInternal)
 			_, err := s.Append(context.TODO(), &snpb.AppendRequest{
 				LogStreamID: logStreamID,
 				Payload:     []byte("never"),
@@ -100,7 +101,7 @@ func TestStorageNodeServiceRead(t *testing.T) {
 			lse := NewMockLogStreamExecutor(ctrl)
 			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
 			setLseGetter(lseGetter, lse)
-			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.InvalidLogEntry, varlog.ErrInternal)
+			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(types.InvalidLogEntry, verrors.ErrInternal)
 			_, err := s.Read(context.TODO(), &snpb.ReadRequest{
 				LogStreamID: logStreamID,
 				GLSN:        types.GLSN(10),
@@ -112,7 +113,7 @@ func TestStorageNodeServiceRead(t *testing.T) {
 			lse := NewMockLogStreamExecutor(ctrl)
 			lse.EXPECT().LogStreamID().Return(logStreamID).AnyTimes()
 			setLseGetter(lseGetter, lse)
-			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(varlog.LogEntry{Data: []byte("log")}, nil)
+			lse.EXPECT().Read(gomock.Any(), gomock.Any()).Return(types.LogEntry{Data: []byte("log")}, nil)
 			rsp, err := s.Read(context.TODO(), &snpb.ReadRequest{
 				LogStreamID: logStreamID,
 				GLSN:        types.GLSN(10),

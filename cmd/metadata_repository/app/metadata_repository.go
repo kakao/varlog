@@ -1,8 +1,9 @@
 package app
 
 import (
-	"github.com/kakao/varlog/internal/metadata_repository"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/internal/metadata_repository"
 )
 
 func Main(opts *metadata_repository.MetadataRepositoryOptions) error {

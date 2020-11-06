@@ -5,9 +5,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/timeutil"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/timeutil"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/kakao/varlog/pkg/varlog/types"
+	"github.com/kakao/varlog/pkg/types"
 )
 
 func (s LogStreamStatus) Deleted() bool {

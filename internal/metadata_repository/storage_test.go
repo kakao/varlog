@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/testutil"
+	. "github.com/smartystreets/goconvey/convey"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/testutil"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/vtesting"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestStorageRegisterSN(t *testing.T) {
@@ -31,7 +31,7 @@ func TestStorageRegisterSN(t *testing.T) {
 
 		Convey("SN should not be registered if arleady exist", func(ctx C) {
 			err := ms.registerStorageNode(sn)
-			So(err, ShouldResemble, varlog.ErrAlreadyExists)
+			So(err, ShouldResemble, verrors.ErrAlreadyExists)
 		})
 	})
 }
@@ -44,7 +44,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 		Convey("When SN is not exist", func(ctx C) {
 			Convey("Then it should not be registered", func(ctx C) {
 				err := ms.unregisterStorageNode(snID)
-				So(err, ShouldResemble, varlog.ErrNotExist)
+				So(err, ShouldResemble, verrors.ErrNotExist)
 			})
 		})
 
@@ -88,7 +88,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 
 				Convey("Then SN should not be unregistered", func(ctx C) {
 					err := ms.unregisterStorageNode(snID)
-					So(err, ShouldResemble, varlog.ErrInvalidArgument)
+					So(err, ShouldResemble, verrors.ErrInvalidArgument)
 				})
 			})
 		})
@@ -169,7 +169,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		ls := makeLogStream(lsID, nil)
 
 		err := ms.registerLogStream(ls)
-		So(err, ShouldResemble, varlog.ErrInvalidArgument)
+		So(err, ShouldResemble, verrors.ErrInvalidArgument)
 	})
 
 	Convey("LS should not be registerd if not exist proper SN", t, func(ctx C) {
@@ -185,7 +185,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		ls := makeLogStream(lsID, snIDs)
 
 		err := ms.registerLogStream(ls)
-		So(err, ShouldResemble, varlog.ErrInvalidArgument)
+		So(err, ShouldResemble, verrors.ErrInvalidArgument)
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: snIDs[0],
@@ -195,7 +195,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		err = ms.registerLogStream(ls)
-		So(err, ShouldResemble, varlog.ErrInvalidArgument)
+		So(err, ShouldResemble, verrors.ErrInvalidArgument)
 
 		Convey("LS should be registerd if exist all SN", func(ctx C) {
 			sn := &varlogpb.StorageNodeDescriptor{
@@ -224,7 +224,7 @@ func TestStoragUnregisterLS(t *testing.T) {
 		lsID := types.LogStreamID(time.Now().UnixNano())
 
 		err := ms.unregisterLogStream(lsID)
-		So(err, ShouldResemble, varlog.ErrNotExist)
+		So(err, ShouldResemble, verrors.ErrNotExist)
 
 		Convey("LS which is exist should be unregistered", func(ctx C) {
 			rep := 1
@@ -301,7 +301,7 @@ func TestStorageUpdateLS(t *testing.T) {
 		updateLS := makeLogStream(lsID, updateSnIDs)
 
 		err = ms.UpdateLogStream(updateLS, 0, 0)
-		So(err, ShouldResemble, varlog.ErrInvalidArgument)
+		So(err, ShouldResemble, verrors.ErrInvalidArgument)
 
 		Convey("LS should be updated if exist all SN", func(ctx C) {
 			for i := 0; i < rep; i++ {
@@ -422,7 +422,7 @@ func TestStorageSealLS(t *testing.T) {
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		err := ms.SealLogStream(lsID, 0, 0)
-		So(err, ShouldResemble, varlog.ErrNotExist)
+		So(err, ShouldResemble, verrors.ErrNotExist)
 	})
 
 	Convey("For resigtered LS", t, func(ctx C) {
@@ -468,7 +468,7 @@ func TestStorageSealLS(t *testing.T) {
 
 			Convey("Seal to LS which is already Sealed should return ErrIgnore", func(ctx C) {
 				err := ms.SealLogStream(lsID, 0, 0)
-				So(err, ShouldResemble, varlog.ErrIgnore)
+				So(err, ShouldResemble, verrors.ErrIgnore)
 			})
 		})
 
@@ -580,7 +580,7 @@ func TestStorageUnsealLS(t *testing.T) {
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		err := ms.UnsealLogStream(lsID, 0, 0)
-		So(err, ShouldResemble, varlog.ErrNotExist)
+		So(err, ShouldResemble, verrors.ErrNotExist)
 	})
 
 	Convey("For resigtered LS", t, func(ctx C) {
@@ -609,7 +609,7 @@ func TestStorageUnsealLS(t *testing.T) {
 
 		Convey("Unseal to LS which is already Sealed should return ErrIgnore", func(ctx C) {
 			err := ms.UnsealLogStream(lsID, 0, 0)
-			So(err, ShouldResemble, varlog.ErrIgnore)
+			So(err, ShouldResemble, verrors.ErrIgnore)
 
 			So(testutil.CompareWaitN(10, func() bool {
 				return atomic.LoadInt64(&ms.nrRunning) == 0
@@ -836,7 +836,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		So(cur.Metadata.GetLogStream(lsID), ShouldBeNil)
 
 		err = ms.RegisterLogStream(ls, 0, 0)
-		So(err, ShouldResemble, varlog.ErrAlreadyExists)
+		So(err, ShouldResemble, verrors.ErrAlreadyExists)
 
 		err = ms.RegisterLogStream(ls2, 0, 0)
 		So(err, ShouldBeNil)

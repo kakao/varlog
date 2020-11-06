@@ -7,6 +7,7 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
+
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/snpb/mock"
 )

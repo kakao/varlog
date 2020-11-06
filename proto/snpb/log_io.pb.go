@@ -6,16 +6,18 @@ package snpb
 import (
 	context "context"
 	fmt "fmt"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
-	types "github.com/gogo/protobuf/types"
-	github_com_kakao_varlog_pkg_varlog_types "github.com/kakao/varlog/pkg/varlog/types"
-	grpc "google.golang.org/grpc"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 	io "io"
 	math "math"
 	math_bits "math/bits"
+
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	types "github.com/gogo/protobuf/types"
+	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+
+	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -32,12 +34,12 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 // AppendRequest is a message to send a payload to a storage node. It contains
 // a vector of storage nodes to replicate the payload.
 type AppendRequest struct {
-	Payload              []byte                                                          `protobuf:"bytes,1,opt,name=payload,proto3" json:"payload,omitempty"`
-	LogStreamID          github_com_kakao_varlog_pkg_varlog_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.LogStreamID" json:"log_stream_id,omitempty"`
-	Backups              []AppendRequest_BackupNode                                      `protobuf:"bytes,3,rep,name=backups,proto3" json:"backups"`
-	XXX_NoUnkeyedLiteral struct{}                                                        `json:"-"`
-	XXX_unrecognized     []byte                                                          `json:"-"`
-	XXX_sizecache        int32                                                           `json:"-"`
+	Payload              []byte                                                   `protobuf:"bytes,1,opt,name=payload,proto3" json:"payload,omitempty"`
+	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	Backups              []AppendRequest_BackupNode                               `protobuf:"bytes,3,rep,name=backups,proto3" json:"backups"`
+	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
+	XXX_unrecognized     []byte                                                   `json:"-"`
+	XXX_sizecache        int32                                                    `json:"-"`
 }
 
 func (m *AppendRequest) Reset()         { *m = AppendRequest{} }
@@ -80,7 +82,7 @@ func (m *AppendRequest) GetPayload() []byte {
 	return nil
 }
 
-func (m *AppendRequest) GetLogStreamID() github_com_kakao_varlog_pkg_varlog_types.LogStreamID {
+func (m *AppendRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
 	}
@@ -95,11 +97,11 @@ func (m *AppendRequest) GetBackups() []AppendRequest_BackupNode {
 }
 
 type AppendRequest_BackupNode struct {
-	StorageNodeID        github_com_kakao_varlog_pkg_varlog_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	Address              string                                                            `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                          `json:"-"`
-	XXX_unrecognized     []byte                                                            `json:"-"`
-	XXX_sizecache        int32                                                             `json:"-"`
+	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	Address              string                                                     `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
+	XXX_unrecognized     []byte                                                     `json:"-"`
+	XXX_sizecache        int32                                                      `json:"-"`
 }
 
 func (m *AppendRequest_BackupNode) Reset()         { *m = AppendRequest_BackupNode{} }
@@ -135,7 +137,7 @@ func (m *AppendRequest_BackupNode) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_AppendRequest_BackupNode proto.InternalMessageInfo
 
-func (m *AppendRequest_BackupNode) GetStorageNodeID() github_com_kakao_varlog_pkg_varlog_types.StorageNodeID {
+func (m *AppendRequest_BackupNode) GetStorageNodeID() github_com_kakao_varlog_pkg_types.StorageNodeID {
 	if m != nil {
 		return m.StorageNodeID
 	}
@@ -152,11 +154,11 @@ func (m *AppendRequest_BackupNode) GetAddress() string {
 // AppendResponse contains GLSN (Global Log Sequence Number) that indicates log
 // position in global log space.
 type AppendResponse struct {
-	GLSN                 github_com_kakao_varlog_pkg_varlog_types.GLSN        `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.GLSN" json:"glsn,omitempty"`
-	LogStreamID          github_com_kakao_varlog_pkg_varlog_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                        `json:"-"`
-	XXX_unrecognized     []byte                                                          `json:"-"`
-	XXX_sizecache        int32                                                           `json:"-"`
+	GLSN                 github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"glsn,omitempty"`
+	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
+	XXX_unrecognized     []byte                                                   `json:"-"`
+	XXX_sizecache        int32                                                    `json:"-"`
 }
 
 func (m *AppendResponse) Reset()         { *m = AppendResponse{} }
@@ -192,14 +194,14 @@ func (m *AppendResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_AppendResponse proto.InternalMessageInfo
 
-func (m *AppendResponse) GetGLSN() github_com_kakao_varlog_pkg_varlog_types.GLSN {
+func (m *AppendResponse) GetGLSN() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.GLSN
 	}
 	return 0
 }
 
-func (m *AppendResponse) GetLogStreamID() github_com_kakao_varlog_pkg_varlog_types.LogStreamID {
+func (m *AppendResponse) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
 	}
@@ -208,11 +210,11 @@ func (m *AppendResponse) GetLogStreamID() github_com_kakao_varlog_pkg_varlog_typ
 
 // ReadRequest asks a storage node to retrieve log entry at the GLSN.
 type ReadRequest struct {
-	GLSN                 github_com_kakao_varlog_pkg_varlog_types.GLSN        `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.GLSN" json:"glsn,omitempty"`
-	LogStreamID          github_com_kakao_varlog_pkg_varlog_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                        `json:"-"`
-	XXX_unrecognized     []byte                                                          `json:"-"`
-	XXX_sizecache        int32                                                           `json:"-"`
+	GLSN                 github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"glsn,omitempty"`
+	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
+	XXX_unrecognized     []byte                                                   `json:"-"`
+	XXX_sizecache        int32                                                    `json:"-"`
 }
 
 func (m *ReadRequest) Reset()         { *m = ReadRequest{} }
@@ -248,14 +250,14 @@ func (m *ReadRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ReadRequest proto.InternalMessageInfo
 
-func (m *ReadRequest) GetGLSN() github_com_kakao_varlog_pkg_varlog_types.GLSN {
+func (m *ReadRequest) GetGLSN() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.GLSN
 	}
 	return 0
 }
 
-func (m *ReadRequest) GetLogStreamID() github_com_kakao_varlog_pkg_varlog_types.LogStreamID {
+func (m *ReadRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
 	}
@@ -265,12 +267,12 @@ func (m *ReadRequest) GetLogStreamID() github_com_kakao_varlog_pkg_varlog_types.
 // ReadResponse contains the contents of the log entry which is retrieved by
 // the ReadRequest.
 type ReadResponse struct {
-	GLSN                 github_com_kakao_varlog_pkg_varlog_types.GLSN `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.GLSN" json:"glsn,omitempty"`
-	LLSN                 github_com_kakao_varlog_pkg_varlog_types.LLSN `protobuf:"varint,2,opt,name=llsn,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.LLSN" json:"llsn,omitempty"`
-	Payload              []byte                                                   `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	GLSN                 github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"glsn,omitempty"`
+	LLSN                 github_com_kakao_varlog_pkg_types.LLSN `protobuf:"varint,2,opt,name=llsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"llsn,omitempty"`
+	Payload              []byte                                            `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
+	XXX_unrecognized     []byte                                            `json:"-"`
+	XXX_sizecache        int32                                             `json:"-"`
 }
 
 func (m *ReadResponse) Reset()         { *m = ReadResponse{} }
@@ -306,14 +308,14 @@ func (m *ReadResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ReadResponse proto.InternalMessageInfo
 
-func (m *ReadResponse) GetGLSN() github_com_kakao_varlog_pkg_varlog_types.GLSN {
+func (m *ReadResponse) GetGLSN() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.GLSN
 	}
 	return 0
 }
 
-func (m *ReadResponse) GetLLSN() github_com_kakao_varlog_pkg_varlog_types.LLSN {
+func (m *ReadResponse) GetLLSN() github_com_kakao_varlog_pkg_types.LLSN {
 	if m != nil {
 		return m.LLSN
 	}
@@ -330,12 +332,12 @@ func (m *ReadResponse) GetPayload() []byte {
 // SubscribeRequest has GLSN which indicates an inclusive starting position
 // from which a client wants to receive.
 type SubscribeRequest struct {
-	GLSNBegin            github_com_kakao_varlog_pkg_varlog_types.GLSN        `protobuf:"varint,1,opt,name=glsn_begin,json=glsnBegin,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.GLSN" json:"glsn_begin,omitempty"`
-	GLSNEnd              github_com_kakao_varlog_pkg_varlog_types.GLSN        `protobuf:"varint,2,opt,name=glsn_end,json=glsnEnd,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.GLSN" json:"glsn_end,omitempty"`
-	LogStreamID          github_com_kakao_varlog_pkg_varlog_types.LogStreamID `protobuf:"varint,3,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                        `json:"-"`
-	XXX_unrecognized     []byte                                                          `json:"-"`
-	XXX_sizecache        int32                                                           `json:"-"`
+	GLSNBegin            github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,1,opt,name=glsn_begin,json=glsnBegin,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"glsn_begin,omitempty"`
+	GLSNEnd              github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,2,opt,name=glsn_end,json=glsnEnd,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"glsn_end,omitempty"`
+	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,3,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
+	XXX_unrecognized     []byte                                                   `json:"-"`
+	XXX_sizecache        int32                                                    `json:"-"`
 }
 
 func (m *SubscribeRequest) Reset()         { *m = SubscribeRequest{} }
@@ -371,21 +373,21 @@ func (m *SubscribeRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SubscribeRequest proto.InternalMessageInfo
 
-func (m *SubscribeRequest) GetGLSNBegin() github_com_kakao_varlog_pkg_varlog_types.GLSN {
+func (m *SubscribeRequest) GetGLSNBegin() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.GLSNBegin
 	}
 	return 0
 }
 
-func (m *SubscribeRequest) GetGLSNEnd() github_com_kakao_varlog_pkg_varlog_types.GLSN {
+func (m *SubscribeRequest) GetGLSNEnd() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.GLSNEnd
 	}
 	return 0
 }
 
-func (m *SubscribeRequest) GetLogStreamID() github_com_kakao_varlog_pkg_varlog_types.LogStreamID {
+func (m *SubscribeRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
 	}
@@ -394,12 +396,12 @@ func (m *SubscribeRequest) GetLogStreamID() github_com_kakao_varlog_pkg_varlog_t
 
 // SubscribeResponse comprises the contents of the log entry and its GLSN.
 type SubscribeResponse struct {
-	GLSN                 github_com_kakao_varlog_pkg_varlog_types.GLSN `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.GLSN" json:"glsn,omitempty"`
-	LLSN                 github_com_kakao_varlog_pkg_varlog_types.LLSN `protobuf:"varint,2,opt,name=llsn,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.LLSN" json:"llsn,omitempty"`
-	Payload              []byte                                                   `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	GLSN                 github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"glsn,omitempty"`
+	LLSN                 github_com_kakao_varlog_pkg_types.LLSN `protobuf:"varint,2,opt,name=llsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"llsn,omitempty"`
+	Payload              []byte                                            `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
+	XXX_unrecognized     []byte                                            `json:"-"`
+	XXX_sizecache        int32                                             `json:"-"`
 }
 
 func (m *SubscribeResponse) Reset()         { *m = SubscribeResponse{} }
@@ -435,14 +437,14 @@ func (m *SubscribeResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SubscribeResponse proto.InternalMessageInfo
 
-func (m *SubscribeResponse) GetGLSN() github_com_kakao_varlog_pkg_varlog_types.GLSN {
+func (m *SubscribeResponse) GetGLSN() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.GLSN
 	}
 	return 0
 }
 
-func (m *SubscribeResponse) GetLLSN() github_com_kakao_varlog_pkg_varlog_types.LLSN {
+func (m *SubscribeResponse) GetLLSN() github_com_kakao_varlog_pkg_types.LLSN {
 	if m != nil {
 		return m.LLSN
 	}
@@ -460,10 +462,10 @@ func (m *SubscribeResponse) GetPayload() []byte {
 // If async field is true, the trim operation returns immediately and the
 // storage node removes its log entry in the background.
 type TrimRequest struct {
-	GLSN                 github_com_kakao_varlog_pkg_varlog_types.GLSN `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/varlog/types.GLSN" json:"glsn,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	GLSN                 github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"glsn,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
+	XXX_unrecognized     []byte                                            `json:"-"`
+	XXX_sizecache        int32                                             `json:"-"`
 }
 
 func (m *TrimRequest) Reset()         { *m = TrimRequest{} }
@@ -499,7 +501,7 @@ func (m *TrimRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_TrimRequest proto.InternalMessageInfo
 
-func (m *TrimRequest) GetGLSN() github_com_kakao_varlog_pkg_varlog_types.GLSN {
+func (m *TrimRequest) GetGLSN() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.GLSN
 	}
@@ -520,46 +522,46 @@ func init() {
 func init() { proto.RegisterFile("log_io.proto", fileDescriptor_647c3412d39db750) }
 
 var fileDescriptor_647c3412d39db750 = []byte{
-	// 623 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x56, 0xcf, 0x6a, 0xdb, 0x4e,
-	0x10, 0xce, 0xda, 0xfa, 0xc5, 0x3f, 0x8f, 0xe2, 0xfe, 0xd9, 0x43, 0x71, 0x15, 0x6a, 0x05, 0x41,
-	0x21, 0x97, 0x28, 0x25, 0xbd, 0x94, 0x96, 0x52, 0xa2, 0xc6, 0x84, 0x80, 0x49, 0x41, 0x2e, 0x25,
-	0xf4, 0x62, 0xa4, 0xec, 0x76, 0x23, 0x2c, 0x6b, 0x55, 0xad, 0x14, 0xc8, 0xa5, 0xef, 0xd0, 0x53,
-	0xaf, 0x3d, 0xf5, 0x59, 0x72, 0xec, 0xb1, 0x87, 0xa2, 0x52, 0xf5, 0x2d, 0x72, 0x2a, 0xbb, 0x8a,
-	0x1c, 0x39, 0x24, 0x50, 0x62, 0xd2, 0x42, 0x4e, 0xde, 0xd1, 0xcc, 0x7e, 0xfb, 0x7d, 0x33, 0xbb,
-	0x33, 0x86, 0xa5, 0x90, 0xb3, 0x51, 0xc0, 0xed, 0x38, 0xe1, 0x29, 0xc7, 0xfa, 0xa1, 0x97, 0x84,
-	0x9c, 0xd9, 0x22, 0x8a, 0x7d, 0x63, 0x8d, 0x05, 0xe9, 0x41, 0xe6, 0xdb, 0xfb, 0x7c, 0xb2, 0xce,
-	0x38, 0xe3, 0xeb, 0x2a, 0xc6, 0xcf, 0xde, 0x29, 0x4b, 0x19, 0x6a, 0x55, 0xee, 0x35, 0x96, 0x19,
-	0xe7, 0x2c, 0xa4, 0x67, 0x51, 0x74, 0x12, 0xa7, 0x47, 0xa5, 0xd3, 0xfa, 0xd8, 0x84, 0xce, 0x66,
-	0x1c, 0xd3, 0x88, 0xb8, 0xf4, 0x7d, 0x46, 0x45, 0x8a, 0xbb, 0xd0, 0x8a, 0xbd, 0xa3, 0x90, 0x7b,
-	0xa4, 0x8b, 0x56, 0xd0, 0xea, 0x92, 0x5b, 0x99, 0xf8, 0x10, 0x3a, 0x92, 0x94, 0x48, 0x13, 0xea,
-	0x4d, 0x46, 0x01, 0xe9, 0x36, 0x56, 0xd0, 0x6a, 0xc7, 0x71, 0x8b, 0xdc, 0xd4, 0x07, 0x9c, 0x0d,
-	0xd5, 0xf7, 0x9d, 0xad, 0x93, 0xdc, 0x7c, 0x71, 0xca, 0x90, 0x78, 0xd9, 0x64, 0xec, 0x8d, 0x3d,
-	0xae, 0xb8, 0x96, 0x1a, 0xaa, 0x9f, 0x78, 0x3c, 0x5d, 0xa6, 0x47, 0x31, 0x15, 0x76, 0x0d, 0xc2,
-	0xd5, 0xc3, 0xa9, 0x41, 0x70, 0x1f, 0x5a, 0xbe, 0xb7, 0x3f, 0xce, 0x62, 0xd1, 0x6d, 0xae, 0x34,
-	0x57, 0xf5, 0x8d, 0x87, 0x76, 0x2d, 0x1d, 0xf6, 0x0c, 0x7d, 0xdb, 0x51, 0x91, 0xbb, 0x9c, 0x50,
-	0x47, 0x3b, 0xce, 0xcd, 0x05, 0xb7, 0xda, 0x6b, 0x7c, 0x41, 0x00, 0x67, 0x5e, 0xfc, 0x01, 0x6e,
-	0x8b, 0x94, 0x27, 0x1e, 0xa3, 0xa3, 0x88, 0x13, 0x2a, 0xf5, 0x20, 0xa5, 0xe7, 0x4d, 0x91, 0x9b,
-	0x9d, 0x61, 0xe9, 0x92, 0x91, 0x4a, 0xd1, 0xe6, 0x55, 0x14, 0xcd, 0x80, 0xb8, 0x1d, 0x51, 0x33,
-	0x89, 0xcc, 0xb3, 0x47, 0x48, 0x42, 0x85, 0x50, 0x79, 0x6c, 0xbb, 0x95, 0x69, 0x15, 0x08, 0x6e,
-	0x55, 0xa2, 0x44, 0xcc, 0x23, 0x41, 0xf1, 0x1e, 0x68, 0x2c, 0x14, 0x91, 0x62, 0xa8, 0x39, 0x5b,
-	0x45, 0x6e, 0x6a, 0xdb, 0x83, 0xe1, 0xee, 0x49, 0x6e, 0x3e, 0xb9, 0x0a, 0x31, 0xb9, 0xd7, 0x55,
-	0x88, 0xff, 0xaa, 0xa8, 0xd6, 0x0f, 0x04, 0xba, 0x4b, 0xbd, 0xe9, 0xb5, 0xbb, 0x79, 0x0a, 0xbf,
-	0x23, 0x58, 0x2a, 0x15, 0x5e, 0x7b, 0x11, 0xf7, 0x40, 0x0b, 0x25, 0x72, 0xe3, 0x0c, 0x79, 0x30,
-	0x07, 0xf2, 0x40, 0x21, 0x4b, 0xc4, 0x7a, 0x37, 0x68, 0xce, 0x74, 0x03, 0xeb, 0x5b, 0x03, 0xee,
-	0x0c, 0x33, 0x5f, 0xec, 0x27, 0x81, 0x4f, 0xab, 0x2a, 0x1e, 0x00, 0x48, 0x42, 0x23, 0x9f, 0xb2,
-	0xa0, 0x12, 0xba, 0x53, 0xe4, 0x66, 0x5b, 0x92, 0x75, 0xe4, 0xc7, 0xb9, 0xd4, 0xb6, 0x25, 0xb8,
-	0x82, 0xc1, 0x3e, 0xfc, 0xaf, 0x4e, 0xa2, 0x11, 0x39, 0x95, 0xbd, 0x5d, 0xe4, 0x66, 0x4b, 0x86,
-	0xf5, 0x23, 0x32, 0xd7, 0x29, 0x2d, 0x09, 0xdc, 0x8f, 0x2e, 0x68, 0x78, 0xcd, 0xbf, 0x73, 0x73,
-	0x7e, 0x22, 0xb8, 0x5b, 0x4b, 0xed, 0x8d, 0xbc, 0x3e, 0x0c, 0xf4, 0xd7, 0x49, 0x30, 0xb9, 0xf6,
-	0xe7, 0xbf, 0xf1, 0xa9, 0x01, 0xff, 0x0d, 0x38, 0xdb, 0x79, 0x85, 0x5f, 0xc2, 0x62, 0xd9, 0x56,
-	0xb1, 0x71, 0xf9, 0x00, 0x31, 0x96, 0x2f, 0xf4, 0x95, 0x35, 0xb0, 0x16, 0xf0, 0x73, 0xd0, 0xe4,
-	0xa3, 0xc6, 0xdd, 0x99, 0xb0, 0x5a, 0x27, 0x33, 0xee, 0x5f, 0xe0, 0x99, 0x6e, 0xdf, 0x85, 0xf6,
-	0xb4, 0xb2, 0xf8, 0xc1, 0x4c, 0xe4, 0xf9, 0xc7, 0x64, 0xf4, 0x2e, 0x73, 0x57, 0x68, 0x8f, 0x10,
-	0x7e, 0x0a, 0x9a, 0x4c, 0xe3, 0x39, 0x3a, 0xb5, 0xcc, 0x1a, 0xf7, 0xec, 0x72, 0xfe, 0xdb, 0xd5,
-	0xfc, 0xb7, 0xfb, 0x72, 0xfe, 0x5b, 0x0b, 0xce, 0xb3, 0xe3, 0xa2, 0x87, 0xbe, 0x16, 0x3d, 0xf4,
-	0xf9, 0x57, 0x0f, 0xbd, 0x5d, 0xfb, 0x93, 0x3c, 0xab, 0xff, 0x16, 0xf2, 0x08, 0x7f, 0x51, 0xad,
-	0x1f, 0xff, 0x0e, 0x00, 0x00, 0xff, 0xff, 0x1a, 0xbe, 0xbe, 0x8a, 0xa8, 0x08, 0x00, 0x00,
+	// 619 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x55, 0xbf, 0x6f, 0xd3, 0x40,
+	0x14, 0xee, 0x25, 0xa6, 0x21, 0x2f, 0x0d, 0x3f, 0x6e, 0x40, 0xc1, 0x15, 0x71, 0x15, 0x09, 0xa9,
+	0x4b, 0x5d, 0x28, 0x0b, 0x2a, 0xaa, 0x04, 0x86, 0x08, 0x55, 0x44, 0xad, 0xea, 0x30, 0xc1, 0x10,
+	0xce, 0xbd, 0xe3, 0xb0, 0xe2, 0xf8, 0x8c, 0xcf, 0x06, 0x75, 0xe6, 0x8f, 0x60, 0x84, 0xff, 0x85,
+	0xa5, 0x13, 0x02, 0xc1, 0xec, 0xc1, 0xfc, 0x17, 0x9d, 0xd0, 0x9d, 0xeb, 0xd4, 0xa9, 0x5a, 0x89,
+	0x56, 0x2a, 0x43, 0x27, 0xfb, 0xf9, 0xbd, 0xf7, 0xf9, 0xfb, 0xbe, 0xbb, 0x77, 0x07, 0x0b, 0x81,
+	0xe0, 0x23, 0x5f, 0xd8, 0x51, 0x2c, 0x12, 0x81, 0x5b, 0x1f, 0x48, 0x1c, 0x08, 0x6e, 0xcb, 0x30,
+	0xf2, 0xcc, 0x15, 0xee, 0x27, 0xef, 0x52, 0xcf, 0xde, 0x15, 0x93, 0x55, 0x2e, 0xb8, 0x58, 0xd5,
+	0x35, 0x5e, 0xfa, 0x56, 0x47, 0x3a, 0xd0, 0x6f, 0x45, 0xaf, 0xb9, 0xc8, 0x85, 0xe0, 0x01, 0x3b,
+	0xaa, 0x62, 0x93, 0x28, 0xd9, 0x2b, 0x92, 0xbd, 0x4f, 0x75, 0x68, 0x3f, 0x89, 0x22, 0x16, 0x52,
+	0x97, 0xbd, 0x4f, 0x99, 0x4c, 0x70, 0x07, 0x1a, 0x11, 0xd9, 0x0b, 0x04, 0xa1, 0x1d, 0xb4, 0x84,
+	0x96, 0x17, 0xdc, 0x32, 0xc4, 0x02, 0xda, 0x8a, 0x94, 0x4c, 0x62, 0x46, 0x26, 0x23, 0x9f, 0x76,
+	0x6a, 0x4b, 0x68, 0xb9, 0xed, 0xbc, 0xc8, 0x33, 0xab, 0x35, 0x10, 0x7c, 0xa8, 0xbf, 0x6f, 0x3e,
+	0x3b, 0xc8, 0xac, 0x87, 0x87, 0x0c, 0x29, 0x49, 0x27, 0x63, 0x32, 0x26, 0x42, 0x73, 0x2d, 0x34,
+	0x94, 0x8f, 0x68, 0xcc, 0x57, 0x93, 0xbd, 0x88, 0x49, 0xbb, 0xd2, 0xeb, 0xb6, 0x82, 0x69, 0x40,
+	0x71, 0x1f, 0x1a, 0x1e, 0xd9, 0x1d, 0xa7, 0x91, 0xec, 0xd4, 0x97, 0xea, 0xcb, 0xad, 0xb5, 0xbb,
+	0x76, 0xc5, 0x07, 0x7b, 0x86, 0xb7, 0xed, 0xe8, 0xca, 0x2d, 0x41, 0x99, 0x63, 0xec, 0x67, 0xd6,
+	0x9c, 0x5b, 0xf6, 0x9a, 0x5f, 0x10, 0xc0, 0x51, 0x16, 0x7f, 0x84, 0xeb, 0x32, 0x11, 0x31, 0xe1,
+	0x6c, 0x14, 0x0a, 0xca, 0x94, 0x10, 0xa4, 0x85, 0x6c, 0xe7, 0x99, 0xd5, 0x1e, 0x16, 0x29, 0x55,
+	0xa9, 0xa5, 0xac, 0x9f, 0x49, 0xca, 0x4c, 0xb7, 0xdb, 0x96, 0x95, 0x90, 0x2a, 0x67, 0x09, 0xa5,
+	0x31, 0x93, 0x52, 0x3b, 0xd7, 0x74, 0xcb, 0xb0, 0xf7, 0x1b, 0xc1, 0xb5, 0x52, 0x8d, 0x8c, 0x44,
+	0x28, 0x19, 0xde, 0x01, 0x83, 0x07, 0x32, 0xd4, 0xd4, 0x0c, 0x67, 0x23, 0xcf, 0x2c, 0xe3, 0xf9,
+	0x60, 0xb8, 0x75, 0x90, 0x59, 0xf7, 0xcf, 0xc4, 0x48, 0x35, 0xb9, 0x1a, 0xea, 0xbf, 0xaf, 0x5f,
+	0xef, 0x27, 0x82, 0x96, 0xcb, 0xc8, 0x74, 0x6b, 0x5d, 0x06, 0x4d, 0xdf, 0x11, 0x2c, 0x14, 0x9a,
+	0x2e, 0x6e, 0xa1, 0x76, 0xc0, 0x08, 0x14, 0x64, 0xed, 0x08, 0x72, 0x70, 0x1e, 0xc8, 0x81, 0x86,
+	0x54, 0x50, 0xd5, 0xa9, 0xae, 0xcf, 0x4c, 0x75, 0xef, 0x5b, 0x0d, 0x6e, 0x0c, 0x53, 0x4f, 0xee,
+	0xc6, 0xbe, 0xc7, 0xca, 0x95, 0x22, 0x00, 0x8a, 0xc9, 0xc8, 0x63, 0xdc, 0x2f, 0xa5, 0x39, 0x79,
+	0x66, 0x35, 0x15, 0x4b, 0x47, 0x7d, 0x3c, 0x9f, 0xbe, 0xa6, 0x42, 0xd5, 0xfd, 0xf8, 0x35, 0x5c,
+	0xd5, 0xbf, 0x60, 0x21, 0x3d, 0x14, 0xfa, 0x38, 0xcf, 0xac, 0x86, 0x2a, 0xeb, 0x87, 0xf4, 0x7c,
+	0xf0, 0x0d, 0x85, 0xd8, 0x0f, 0x4f, 0x38, 0xaa, 0xea, 0x17, 0xbc, 0x2d, 0x7e, 0x21, 0xb8, 0x59,
+	0x71, 0xf1, 0x92, 0xec, 0x8d, 0x37, 0xd0, 0x7a, 0x19, 0xfb, 0x93, 0x8b, 0x9b, 0xdf, 0xb5, 0xcf,
+	0x35, 0xb8, 0x32, 0x10, 0x7c, 0x73, 0x1b, 0x3f, 0x85, 0xf9, 0xe2, 0x08, 0xc4, 0xe6, 0xe9, 0xa7,
+	0xbc, 0xb9, 0x78, 0x62, 0xae, 0xb0, 0xbb, 0x37, 0x87, 0x37, 0xc0, 0x50, 0xc3, 0x89, 0x3b, 0x33,
+	0x65, 0x95, 0x33, 0xc8, 0xbc, 0x7d, 0x42, 0x66, 0xda, 0xbe, 0x05, 0xcd, 0xe9, 0x22, 0xe2, 0x3b,
+	0x33, 0x95, 0xc7, 0x47, 0xc4, 0xec, 0x9e, 0x96, 0x2e, 0xd1, 0xee, 0x21, 0xbc, 0x0e, 0x86, 0xf2,
+	0xef, 0x18, 0x9d, 0x8a, 0xa5, 0xe6, 0x2d, 0xbb, 0xb8, 0x9d, 0xed, 0xf2, 0x76, 0xb6, 0xfb, 0xea,
+	0x76, 0xee, 0xcd, 0x39, 0x8f, 0xf6, 0xf3, 0x2e, 0xfa, 0x91, 0x77, 0xd1, 0xd7, 0x3f, 0x5d, 0xf4,
+	0x6a, 0xe5, 0x5f, 0x0c, 0xd6, 0x37, 0xbf, 0xfa, 0x85, 0x37, 0xaf, 0xdf, 0x1f, 0xfc, 0x0d, 0x00,
+	0x00, 0xff, 0xff, 0xc1, 0xe8, 0xcc, 0xa4, 0x46, 0x08, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1360,7 +1362,7 @@ func (m *AppendRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LogStreamID |= github_com_kakao_varlog_pkg_varlog_types.LogStreamID(b&0x7F) << shift
+				m.LogStreamID |= github_com_kakao_varlog_pkg_types.LogStreamID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1467,7 +1469,7 @@ func (m *AppendRequest_BackupNode) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.StorageNodeID |= github_com_kakao_varlog_pkg_varlog_types.StorageNodeID(b&0x7F) << shift
+				m.StorageNodeID |= github_com_kakao_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1572,7 +1574,7 @@ func (m *AppendResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.GLSN |= github_com_kakao_varlog_pkg_varlog_types.GLSN(b&0x7F) << shift
+				m.GLSN |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1591,7 +1593,7 @@ func (m *AppendResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LogStreamID |= github_com_kakao_varlog_pkg_varlog_types.LogStreamID(b&0x7F) << shift
+				m.LogStreamID |= github_com_kakao_varlog_pkg_types.LogStreamID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1664,7 +1666,7 @@ func (m *ReadRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.GLSN |= github_com_kakao_varlog_pkg_varlog_types.GLSN(b&0x7F) << shift
+				m.GLSN |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1683,7 +1685,7 @@ func (m *ReadRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LogStreamID |= github_com_kakao_varlog_pkg_varlog_types.LogStreamID(b&0x7F) << shift
+				m.LogStreamID |= github_com_kakao_varlog_pkg_types.LogStreamID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1756,7 +1758,7 @@ func (m *ReadResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.GLSN |= github_com_kakao_varlog_pkg_varlog_types.GLSN(b&0x7F) << shift
+				m.GLSN |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1775,7 +1777,7 @@ func (m *ReadResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LLSN |= github_com_kakao_varlog_pkg_varlog_types.LLSN(b&0x7F) << shift
+				m.LLSN |= github_com_kakao_varlog_pkg_types.LLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1882,7 +1884,7 @@ func (m *SubscribeRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.GLSNBegin |= github_com_kakao_varlog_pkg_varlog_types.GLSN(b&0x7F) << shift
+				m.GLSNBegin |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1901,7 +1903,7 @@ func (m *SubscribeRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.GLSNEnd |= github_com_kakao_varlog_pkg_varlog_types.GLSN(b&0x7F) << shift
+				m.GLSNEnd |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1920,7 +1922,7 @@ func (m *SubscribeRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LogStreamID |= github_com_kakao_varlog_pkg_varlog_types.LogStreamID(b&0x7F) << shift
+				m.LogStreamID |= github_com_kakao_varlog_pkg_types.LogStreamID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1993,7 +1995,7 @@ func (m *SubscribeResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.GLSN |= github_com_kakao_varlog_pkg_varlog_types.GLSN(b&0x7F) << shift
+				m.GLSN |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2012,7 +2014,7 @@ func (m *SubscribeResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LLSN |= github_com_kakao_varlog_pkg_varlog_types.LLSN(b&0x7F) << shift
+				m.LLSN |= github_com_kakao_varlog_pkg_types.LLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2119,7 +2121,7 @@ func (m *TrimRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.GLSN |= github_com_kakao_varlog_pkg_varlog_types.GLSN(b&0x7F) << shift
+				m.GLSN |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}

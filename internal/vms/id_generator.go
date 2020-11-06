@@ -4,9 +4,10 @@ import (
 	"context"
 	"sync"
 
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/runner"
 )
 
 type LogStreamIDGenerator interface {

@@ -5,15 +5,15 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/kakao/varlog/internal/storagenode"
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/runner"
-	"github.com/kakao/varlog/pkg/varlog/util/syncutil/atomicutil"
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/runner"
+	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-
-	"go.uber.org/zap"
 )
 
 type ReportCollectorCallbacks struct {
@@ -91,18 +91,18 @@ func (rc *ReportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, highWa
 
 func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor, glsn types.GLSN) error {
 	if sn == nil {
-		return varlog.ErrInvalid
+		return verrors.ErrInvalid
 	}
 
 	if !rc.running.Load() {
-		return varlog.ErrInternal
+		return verrors.ErrInternal
 	}
 
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
 	if _, ok := rc.executors[sn.StorageNodeID]; ok {
-		return varlog.ErrExist
+		return verrors.ErrExist
 	}
 
 	executor := &ReportCollectExecutor{
@@ -132,7 +132,7 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 
 func (rc *ReportCollector) UnregisterStorageNode(snID types.StorageNodeID) error {
 	if !rc.running.Load() {
-		return varlog.ErrInternal
+		return verrors.ErrInternal
 	}
 
 	rc.mu.Lock()
@@ -140,7 +140,7 @@ func (rc *ReportCollector) UnregisterStorageNode(snID types.StorageNodeID) error
 
 	executor, ok := rc.executors[snID]
 	if !ok {
-		return varlog.ErrNotExist
+		return verrors.ErrNotExist
 	}
 
 	delete(rc.executors, snID)

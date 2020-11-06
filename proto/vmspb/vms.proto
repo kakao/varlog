@@ -25,7 +25,7 @@ message AddStorageNodeResponse {
 message UnregisterStorageNodeRequest {
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
 }
@@ -45,7 +45,7 @@ message AddLogStreamResponse {
 message UnregisterLogStreamRequest {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -55,12 +55,12 @@ message UnregisterLogStreamResponse {}
 message RemoveLogStreamReplicaRequest {
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
     uint32 log_stream_id = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -70,7 +70,7 @@ message RemoveLogStreamReplicaResponse {}
 message UpdateLogStreamRequest {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     /*
@@ -78,7 +78,7 @@ message UpdateLogStreamRequest {
     // natural. Though it is awkward, popped_storage_node_id is used here.
     uint32 popped_storage_node_id = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "PoppedStorageNodeID"
     ];
     */
@@ -93,7 +93,7 @@ message UpdateLogStreamResponse {
 message SealRequest {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -106,17 +106,17 @@ message SealResponse {
 message SyncRequest {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
     uint32 src_storage_node_id = 2 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "SrcStorageNodeID"
     ];
     uint32 dst_storage_node_id = 3 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.StorageNodeID",
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "DstStorageNodeID"
     ];
 }
@@ -128,7 +128,7 @@ message SyncResponse {
 message UnsealRequest {
     uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/varlog/types.LogStreamID",
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
 }
@@ -140,13 +140,13 @@ message UnsealResponse {
 message GetMRMembersResponse {
     uint64 leader = 1
         [(gogoproto.casttype) =
-             "github.com/kakao/varlog/pkg/varlog/types.NodeID"];
+             "github.com/kakao/varlog/pkg/types.NodeID"];
 
     int32 replication_factor = 2;
 
     map<uint64, string> members = 3
         [(gogoproto.castkey) =
-             "github.com/kakao/varlog/pkg/varlog/types.NodeID"];
+             "github.com/kakao/varlog/pkg/types.NodeID"];
 }
 
 service ClusterManager {

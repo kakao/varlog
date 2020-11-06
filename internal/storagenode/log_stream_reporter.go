@@ -5,10 +5,11 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/pkg/varlog/types"
-	"github.com/kakao/varlog/pkg/varlog/util/runner"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/runner"
+	"github.com/kakao/varlog/pkg/verrors"
 )
 
 var (
@@ -258,7 +259,7 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 func (lsr *logStreamReporter) Commit(ctx context.Context, highWatermark, prevHighWatermark types.GLSN, commitResults []CommittedLogStreamStatus) error {
 	if len(commitResults) == 0 {
 		lsr.logger.Error("could not try to commit: no commit results")
-		return varlog.ErrInternal
+		return verrors.ErrInternal
 	}
 
 	t := lsrCommitTask{
