@@ -27,20 +27,28 @@ endif
 HAS_GRPC_PLUGIN := $(shell which $(GRPC_GO_PLUGIN) > /dev/null && echo true || echo false)
 
 .PHONY: all
-all: check proto generate fmt vms vmc vsn vmr 
+all: check proto generate fmt build
 
-.PHONY: vms vmc vsn vmr
+VMS := build/vms
+VMC := build/vmc
+VSN := build/vsn
+VMR := build/vmr
+BUILD_OUTPUT := $(VMS) $(VMC) $(VSN) $(VMR)
+
+.PHONY: build vms vmc vsn vmr
+build: vms vmc vsn vmr
+
 vms: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o build/vms cmd/vms/main.go
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMS) cmd/vms/main.go
 
 vmc: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o build/vmc cmd/vmc/main.go
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMC) cmd/vmc/main.go
 
 vsn: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o build/vsn cmd/storagenode/main.go
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VSN) cmd/storagenode/main.go
 
 vmr: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o build/vmr cmd/metadata_repository/main.go
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMR) cmd/metadata_repository/main.go
 
 .PHONY: proto
 proto: $(PROTO_PBS)
@@ -116,7 +124,7 @@ vet:
 .PHONY: clean
 clean:
 	$(GO) clean
-	$(RM) build/vms build/vmc buld/vsn build/vmr
+	$(RM) $(BUILD_OUTPUT)
 
 .PHONY: clean_mock
 clean_mock:
