@@ -26,10 +26,11 @@ require (
 	github.com/urfave/cli/v2 v2.2.0
 	go.etcd.io/etcd v0.0.0-20200520232829-54ba9589114f
 	go.uber.org/zap v1.15.0
+	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
-	golang.org/x/tools v0.0.0-20201105220310-78b158585360 // indirect
+	golang.org/x/tools v0.0.0-20201110201400-7099162a900a // indirect
 	google.golang.org/grpc v1.26.0
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
