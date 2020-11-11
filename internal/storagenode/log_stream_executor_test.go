@@ -10,14 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/pkg/verrors"
-
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 

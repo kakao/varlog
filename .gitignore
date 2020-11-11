@@ -32,6 +32,7 @@
 *.vcxproj
 .vscode/*
 .history/
+.idea
 
 # Build tools
 *.cmake

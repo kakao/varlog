@@ -1,5 +1,7 @@
 package vms
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/vms -package vms -destination vms_mock.go . ClusterMetadataView,StorageNodeManager
+
 import (
 	"context"
 	"errors"

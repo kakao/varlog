@@ -1,5 +1,7 @@
 package snc
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/pkg/snc -package snc -destination snc_mock.go . StorageNodeManagementClient
+
 import (
 	"context"
 

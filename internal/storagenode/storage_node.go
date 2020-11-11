@@ -1,5 +1,6 @@
 package storagenode
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/storagenode -package storagenode -destination storage_node_mock.go . Management,LogStreamExecutorGetter
 import (
 	"context"
 	"fmt"
