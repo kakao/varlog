@@ -1,5 +1,3 @@
-export
-
 MAKEFLAGS += --warn-undefined-variables
 SHELL := /bin/bash
 
@@ -7,19 +5,50 @@ MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MAKEFILE_DIR := $(dir $(MAKEFILE_PATH))
 BUILD_DIR := $(MAKEFILE_DIR)/build
 
+GOGO_PROTO_VERSION := v1.3.1
+MOCKGEN_VERSION := v1.4.4
+
 GO := go
 GOPATH := $(shell $(GO) env GOPATH)
 LDFLAGS :=
 GOFLAGS := -race
 GCFLAGS := -gcflags=all='-N -l'
 
-PKG_SRCS := $(abspath $(shell find $(MAKEFILE_DIR)/pkg -name '*.go'))
-INTERNAL_SRCS := $(abspath $(shell find $(MAKEFILE_DIR)/internal -name '*.go'))
-
-PROTOC_VERSION := 3.12.3
-PROTOC_HOME := $(BUILD_DIR)/protoc
 PROTOC := protoc
+GRPC_GO_PLUGIN := protoc-gen-gogo
 PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
+PROTO_SRCS := $(wildcard proto/*/*.proto)
+PROTO_PBS := $(PROTO_SRCS:.proto=.pb.go)
+HAS_PROTOC := $(shell which $(PROTOC) > /dev/null && echo true || echo false)
+HAS_VALID_PROTOC := false
+ifeq ($(HAS_PROTOC),true)
+HAS_VALID_PROTOC := $(shell $(PROTOC) --version | grep -q "libprotoc 3" > /dev/null && echo true || echo false)
+endif
+HAS_GRPC_PLUGIN := $(shell which $(GRPC_GO_PLUGIN) > /dev/null && echo true || echo false)
+
+.PHONY: all
+all: check proto generate fmt vms vmc vsn vmr 
+
+.PHONY: vms vmc vsn vmr
+vms: proto
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o build/vms cmd/vms/main.go
+
+vmc: proto
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o build/vmc cmd/vmc/main.go
+
+vsn: proto
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o build/vsn cmd/storagenode/main.go
+
+vmr: proto
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o build/vmr cmd/metadata_repository/main.go
+
+.PHONY: proto
+proto: $(PROTO_PBS)
+$(PROTO_PBS): $(PROTO_SRCS)
+	for src in $^ ; do \
+		$(PROTOC) $(PROTO_INCS) \
+		--gogo_out=plugins=grpc,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,paths=source_relative:. $$src ; \
+	done
 
 TEST_COUNT := 1
 TEST_FLAGS := -count $(TEST_COUNT) -p 1
@@ -51,155 +80,8 @@ ifeq ($(TEST_VERBOSE),1)
 	TEST_FLAGS := $(TEST_FLAGS) -v
 endif
 
-.PHONY: all
-all : proto storagenode metadata_repository vms vmc
-
-PROTO_DIRS := $(sort $(dir $(shell find $(MAKEFILE_DIR)/proto -name '*.proto')))
-
-.PHONY: proto
-proto: check_protoc gogoproto $(PROTO_DIRS)
-
-.PHONY: storagenode
-STORAGE_NODE := cmd/storagenode
-storagenode: $(STORAGE_NODE) $(PROTO_DIRS)
-
-.PHONY: metadata_repository
-METADATA_REPOSITORY := cmd/metadata_repository
-metadata_repository: $(METADATA_REPOSITORY) $(PROTO_DIRS)
-
-.PHONY: vms
-VMS := cmd/vms
-vms: $(VMS) $(PROTO_DIRS)
-
-VMC := cmd/vmc
-vmc : $(PROTO) $(VMC)
-
-SUBDIRS := $(PROTO_DIRS) $(STORAGE_NODE) $(METADATA_REPOSITORY) $(VMS) $(VMC)
-subdirs: $(SUBDIRS)
-
-$(SUBDIRS) :
-	$(MAKE) -C $@
-
-mockgen: \
-	pkg/snc/snc_mock.go \
-	internal/vms/vms_mock.go \
-	internal/storagenode/storage_node_mock.go \
-	internal/storagenode/storage_mock.go \
-	internal/storagenode/log_stream_executor_mock.go \
-	internal/storagenode/log_stream_reporter_mock.go \
-	internal/storagenode/log_stream_reporter_client_mock.go \
-	internal/storagenode/replicator_mock.go \
-	internal/storagenode/replicator_client_mock.go \
-	proto/snpb/mock/replicator_mock.go \
-	proto/snpb/mock/log_io_mock.go \
-	proto/snpb/mock/log_stream_reporter_mock.go \
-	proto/snpb/mock/management_mock.go \
-	proto/mrpb/mock/management_mock.go \
-	proto/mrpb/mock/metadata_repository_mock.go
-
-pkg/snc/snc_mock.go: pkg/snc/storage_node_management_client.go
-	mockgen -build_flags -mod=vendor \
-		-self_package github.com/kakao/varlog/pkg/snc \
-		-package snc \
-		-destination $@ \
-		github.com/kakao/varlog/pkg/snc \
-		StorageNodeManagementClient
-
-internal/vms/vms_mock.go: internal/vms/cluster_manager.go
-	mockgen -build_flags -mod=vendor \
-		-self_package github.com/kakao/varlog/internal/vms \
-		-package vms \
-		-destination $@ \
-		github.com/kakao/varlog/internal/vms \
-		ClusterMetadataView,StorageNodeManager
-
-
-internal/storagenode/storage_node_mock.go: internal/storagenode/storage_node.go
-	mockgen -self_package github.com/kakao/varlog/internal/storagenode \
-		-package storagenode \
-		-source $< \
-		-destination $@
-
-internal/storagenode/storage_mock.go: internal/storagenode/storage.go
-	mockgen -self_package github.com/kakao/varlog/internal/storagenode \
-		-package storagenode \
-		-source $< \
-		-destination $@
-
-internal/storagenode/log_stream_executor_mock.go: internal/storagenode/log_stream_executor.go
-	mockgen -self_package github.com/kakao/varlog/internal/storagenode \
-		-package storagenode \
-		-source $< \
-		-destination $@
-
-internal/storagenode/log_stream_reporter_mock.go: internal/storagenode/log_stream_reporter.go
-	mockgen -self_package github.com/kakao/varlog/internal/storagenode \
-		-package storagenode \
-		-source $< \
-		-destination $@
-
-internal/storagenode/log_stream_reporter_client_mock.go: internal/storagenode/log_stream_reporter_client.go
-	mockgen -self_package github.com/kakao/varlog/internal/storagenode \
-		-package storagenode \
-		-source $< \
-		-destination $@
-
-internal/storagenode/replicator_mock.go: internal/storagenode/replicator.go
-	mockgen -self_package github.com/kakao/varlog/internal/storagenode \
-		-package storagenode \
-		-source $< \
-		-destination $@
-
-internal/storagenode/replicator_client_mock.go: internal/storagenode/replicator_client.go
-	mockgen -self_package github.com/kakao/varlog/internal/storagenode \
-		-package storagenode \
-		-source $< \
-		-destination $@
-
-proto/snpb/mock/replicator_mock.go: $(PROTO) proto/snpb/replicator.pb.go
-	mockgen -build_flags -mod=vendor \
-		-package mock \
-		-destination $@ \
-		github.com/kakao/varlog/proto/snpb \
-		ReplicatorServiceClient,ReplicatorServiceServer,ReplicatorService_ReplicateClient,ReplicatorService_ReplicateServer
-
-proto/snpb/mock/log_io_mock.go: $(PROTO) proto/snpb/log_io.pb.go
-	mockgen -build_flags -mod=vendor \
-		-package mock \
-		-destination $@ \
-		github.com/kakao/varlog/proto/snpb \
-		LogIOClient,LogIOServer,LogIO_SubscribeClient,LogIO_SubscribeServer
-
-proto/snpb/mock/log_stream_reporter_mock.go: $(PROTO) proto/snpb/log_stream_reporter.pb.go
-	mockgen -build_flags -mod=vendor \
-		-package mock \
-		-destination $@ \
-		github.com/kakao/varlog/proto/snpb \
-		LogStreamReporterServiceClient,LogStreamReporterServiceServer
-
-proto/snpb/mock/management_mock.go: $(PROTO) proto/snpb/management.pb.go
-	mockgen -build_flags -mod=vendor \
-		-package mock \
-		-destination $@ \
-		github.com/kakao/varlog/proto/snpb \
-		ManagementClient,ManagementServer
-
-proto/mrpb/mock/management_mock.go: $(PROTO) proto/mrpb/management.pb.go
-	mockgen -build_flags -mod=vendor \
-		-package mock \
-		-destination $@ \
-		github.com/kakao/varlog/proto/mrpb \
-		ManagementClient,ManagementServer
-
-proto/mrpb/mock/metadata_repository_mock.go: $(PROTO) proto/mrpb/metadata_repository.pb.go
-	mockgen -build_flags -mod=vendor \
-		-package mock \
-		-destination $@ \
-		github.com/kakao/varlog/proto/mrpb \
-		MetadataRepositoryServiceClient,MetadataRepositoryServiceServer
-
 .PHONY: test test_report coverage_report
-test:
+test: check proto generate fmt 
 	tmpfile=$$(mktemp); \
 	(TERM=sh $(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./... 2>&1; echo $$? > $$tmpfile) | \
 	tee $(BUILD_DIR)/reports/test_output.txt; \
@@ -215,39 +97,55 @@ test_report:
 coverage_report:
 	gocov convert $(BUILD_DIR)/reports/coverage.out | gocov-xml > $(BUILD_DIR)/reports/coverage.xml
 
+.PHONY: generate
+generate:
+	go generate ./...
+
+.PHONY: fmt
+fmt:
+	scripts/fmt.sh
+
+.PHONY: lint
+lint:
+	@$(foreach src_path,$(shell $(GO) list ./... | grep -v vendor),golint $(src_path);)
+
+.PHONY: vet
+vet:
+	@$(GO) vet ./...
+
 .PHONY: clean
 clean:
-	for dir in $(SUBDIRS); do \
-		$(MAKE) -C $$dir clean; \
-	done
+	$(GO) clean
+	$(RM) build/vms build/vmc buld/vsn build/vmr
 
-.PHONY: check_protoc
-check_protoc:
-ifneq ($(wildcard $(PROTOC_HOME)/bin/protoc),)
-	$(info Installed protoc: $(shell $(PROTOC_HOME)/bin/protoc --version))
-else
-ifneq ($(shell which protoc),)
-	$(info Installed protoc: $(shell protoc --version))
-else
-	$(error Install protoc. You can use '"make protoc"'.)
+.PHONY: clean_mock
+clean_mock:
+	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.com/kakao/varlog/##),$(RM) -f $(path)/*_mock.go;)
+
+.PHONY: deps
+deps:
+	$(GO) get golang.org/x/tools/cmd/goimports
+	$(GO) get golang.org/x/lint/golint
+	$(GO) get github.com/gogo/protobuf/protoc-gen-gogo@$(GOGO_PROTO_VERSION)
+	$(GO) get github.com/gogo/protobuf/gogoproto@$(GOGO_PROTO_VERSION)
+	$(GO) get github.com/gogo/protobuf/proto@$(GOGO_PROTO_VERSION)
+	$(GO) get github.com/gogo/protobuf/jsonpb@$(GOGO_PROTO_VERSION)
+	$(GO) get github.com/golang/mock/mockgen@$(MOCKGEN_VERSION)
+
+.PHONY: check
+check:
+ifneq ($(HAS_PROTOC),true)
+	@echo "error: $(PROTOC) not installed"
+	@false
 endif
+	@echo "ok: $(PROTOC)"
+ifneq ($(HAS_VALID_PROTOC),true)
+	@echo "error: $(shell $(PROTOC) --version) invalid version"
+	@false
 endif
-
-.PHONY: protoc
-protoc: $(PROTOC_HOME)
-
-$(PROTOC_HOME):
-	PROTOC_HOME=$(PROTOC_HOME) PROTOC_VERSION=$(PROTOC_VERSION) scripts/install_protoc.sh
-
-GOGOPROTO_SRC := $(GOPATH)/src/github.com/gogo/protobuf
-
-.PHONY: gogoproto
-gogoproto: $(GOGOPROTO_SRC)
-
-$(GOGOPROTO_SRC):
-	$(GO) get -u github.com/gogo/protobuf/protoc-gen-gogo
-	$(GO) get -u github.com/gogo/protobuf/gogoproto
-	$(GO) get -u github.com/gogo/protobuf/proto
-	$(GO) get -u github.com/gogo/protobuf/jsonpb
-
-.PHONY : all clean subdirs $(SUBDIRS) mockgen test
+	@echo "ok: $(shell $(PROTOC) --version)"
+ifneq ($(HAS_GRPC_PLUGIN),true)
+	@echo "error: $(GRPC_GO_PLUGIN) not installed"
+	@false
+endif
+	@echo "ok: $(GRPC_GO_PLUGIN)"

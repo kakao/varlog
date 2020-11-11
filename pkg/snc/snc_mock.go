@@ -15,30 +15,30 @@ import (
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 )
 
-// MockStorageNodeManagementClient is a mock of StorageNodeManagementClient interface.
+// MockStorageNodeManagementClient is a mock of StorageNodeManagementClient interface
 type MockStorageNodeManagementClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockStorageNodeManagementClientMockRecorder
 }
 
-// MockStorageNodeManagementClientMockRecorder is the mock recorder for MockStorageNodeManagementClient.
+// MockStorageNodeManagementClientMockRecorder is the mock recorder for MockStorageNodeManagementClient
 type MockStorageNodeManagementClientMockRecorder struct {
 	mock *MockStorageNodeManagementClient
 }
 
-// NewMockStorageNodeManagementClient creates a new mock instance.
+// NewMockStorageNodeManagementClient creates a new mock instance
 func NewMockStorageNodeManagementClient(ctrl *gomock.Controller) *MockStorageNodeManagementClient {
 	mock := &MockStorageNodeManagementClient{ctrl: ctrl}
 	mock.recorder = &MockStorageNodeManagementClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockStorageNodeManagementClient) EXPECT() *MockStorageNodeManagementClientMockRecorder {
 	return m.recorder
 }
 
-// AddLogStream mocks base method.
+// AddLogStream mocks base method
 func (m *MockStorageNodeManagementClient) AddLogStream(arg0 context.Context, arg1 types.LogStreamID, arg2 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddLogStream", arg0, arg1, arg2)
@@ -46,13 +46,13 @@ func (m *MockStorageNodeManagementClient) AddLogStream(arg0 context.Context, arg
 	return ret0
 }
 
-// AddLogStream indicates an expected call of AddLogStream.
+// AddLogStream indicates an expected call of AddLogStream
 func (mr *MockStorageNodeManagementClientMockRecorder) AddLogStream(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).AddLogStream), arg0, arg1, arg2)
 }
 
-// Close mocks base method.
+// Close mocks base method
 func (m *MockStorageNodeManagementClient) Close() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Close")
@@ -60,13 +60,13 @@ func (m *MockStorageNodeManagementClient) Close() error {
 	return ret0
 }
 
-// Close indicates an expected call of Close.
+// Close indicates an expected call of Close
 func (mr *MockStorageNodeManagementClientMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Close))
 }
 
-// GetMetadata mocks base method.
+// GetMetadata mocks base method
 func (m *MockStorageNodeManagementClient) GetMetadata(arg0 context.Context, arg1 snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadata", arg0, arg1)
@@ -75,13 +75,13 @@ func (m *MockStorageNodeManagementClient) GetMetadata(arg0 context.Context, arg1
 	return ret0, ret1
 }
 
-// GetMetadata indicates an expected call of GetMetadata.
+// GetMetadata indicates an expected call of GetMetadata
 func (mr *MockStorageNodeManagementClientMockRecorder) GetMetadata(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).GetMetadata), arg0, arg1)
 }
 
-// PeerAddress mocks base method.
+// PeerAddress mocks base method
 func (m *MockStorageNodeManagementClient) PeerAddress() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeerAddress")
@@ -89,13 +89,13 @@ func (m *MockStorageNodeManagementClient) PeerAddress() string {
 	return ret0
 }
 
-// PeerAddress indicates an expected call of PeerAddress.
+// PeerAddress indicates an expected call of PeerAddress
 func (mr *MockStorageNodeManagementClientMockRecorder) PeerAddress() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeerAddress", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).PeerAddress))
 }
 
-// PeerStorageNodeID mocks base method.
+// PeerStorageNodeID mocks base method
 func (m *MockStorageNodeManagementClient) PeerStorageNodeID() types.StorageNodeID {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeerStorageNodeID")
@@ -103,13 +103,13 @@ func (m *MockStorageNodeManagementClient) PeerStorageNodeID() types.StorageNodeI
 	return ret0
 }
 
-// PeerStorageNodeID indicates an expected call of PeerStorageNodeID.
+// PeerStorageNodeID indicates an expected call of PeerStorageNodeID
 func (mr *MockStorageNodeManagementClientMockRecorder) PeerStorageNodeID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeerStorageNodeID", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).PeerStorageNodeID))
 }
 
-// RemoveLogStream mocks base method.
+// RemoveLogStream mocks base method
 func (m *MockStorageNodeManagementClient) RemoveLogStream(arg0 context.Context, arg1 types.LogStreamID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveLogStream", arg0, arg1)
@@ -117,13 +117,13 @@ func (m *MockStorageNodeManagementClient) RemoveLogStream(arg0 context.Context, 
 	return ret0
 }
 
-// RemoveLogStream indicates an expected call of RemoveLogStream.
+// RemoveLogStream indicates an expected call of RemoveLogStream
 func (mr *MockStorageNodeManagementClientMockRecorder) RemoveLogStream(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStream", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).RemoveLogStream), arg0, arg1)
 }
 
-// Seal mocks base method.
+// Seal mocks base method
 func (m *MockStorageNodeManagementClient) Seal(arg0 context.Context, arg1 types.LogStreamID, arg2 types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seal", arg0, arg1, arg2)
@@ -133,13 +133,13 @@ func (m *MockStorageNodeManagementClient) Seal(arg0 context.Context, arg1 types.
 	return ret0, ret1, ret2
 }
 
-// Seal indicates an expected call of Seal.
+// Seal indicates an expected call of Seal
 func (mr *MockStorageNodeManagementClientMockRecorder) Seal(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Seal), arg0, arg1, arg2)
 }
 
-// Sync mocks base method.
+// Sync mocks base method
 func (m *MockStorageNodeManagementClient) Sync(arg0 context.Context, arg1 types.LogStreamID, arg2 types.StorageNodeID, arg3 string, arg4 types.GLSN) (*snpb.SyncStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", arg0, arg1, arg2, arg3, arg4)
@@ -148,13 +148,13 @@ func (m *MockStorageNodeManagementClient) Sync(arg0 context.Context, arg1 types.
 	return ret0, ret1
 }
 
-// Sync indicates an expected call of Sync.
+// Sync indicates an expected call of Sync
 func (mr *MockStorageNodeManagementClientMockRecorder) Sync(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Sync), arg0, arg1, arg2, arg3, arg4)
 }
 
-// Unseal mocks base method.
+// Unseal mocks base method
 func (m *MockStorageNodeManagementClient) Unseal(arg0 context.Context, arg1 types.LogStreamID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Unseal", arg0, arg1)
@@ -162,7 +162,7 @@ func (m *MockStorageNodeManagementClient) Unseal(arg0 context.Context, arg1 type
 	return ret0
 }
 
-// Unseal indicates an expected call of Unseal.
+// Unseal indicates an expected call of Unseal
 func (mr *MockStorageNodeManagementClientMockRecorder) Unseal(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Unseal), arg0, arg1)

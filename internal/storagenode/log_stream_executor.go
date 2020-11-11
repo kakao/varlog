@@ -1,5 +1,7 @@
 package storagenode
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/storagenode -package storagenode -destination log_stream_executor_mock.go . Timestamper,Sealer,Unsealer,Syncer,LogStreamExecutor
+
 import (
 	"context"
 	"errors"
@@ -8,12 +10,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kakao/varlog/pkg/verrors"
-
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )

@@ -1,5 +1,7 @@
 package storagenode
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/storagenode -package storagenode -destination replicator_client_mock.go . ReplicatorClient
+
 import (
 	"context"
 	"errors"

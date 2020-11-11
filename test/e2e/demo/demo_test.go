@@ -95,7 +95,7 @@ func fork(ctx context.Context, args []string, envs []string, t *testing.T) (cmd 
 
 func forkMR(ctx context.Context, t *testing.T) *exec.Cmd {
 	args := []string{
-		"metadata_repository", "start",
+		"vmr", "start",
 		"--bind", fmt.Sprintf("0.0.0.0:%d", mrPort),
 	}
 	cmd, stdout, stderr := fork(ctx, args, nil, t)
@@ -121,7 +121,7 @@ func forkVMS(ctx context.Context, t *testing.T) *exec.Cmd {
 func forkSN(ctx context.Context, snid int, addr string, t *testing.T) *exec.Cmd {
 	tmpdir := t.TempDir()
 	args := []string{
-		"storagenode", "start",
+		"vsn", "start",
 		"--cluster-id", "1",
 		"--snid", strconv.Itoa(snid),
 		"--rpc-bind-address", addr,

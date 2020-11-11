@@ -29,7 +29,7 @@ require (
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
-	golang.org/x/tools v0.0.0-20200729194436-6467de6f59a7 // indirect
+	golang.org/x/tools v0.0.0-20201105220310-78b158585360 // indirect
 	google.golang.org/grpc v1.26.0
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
