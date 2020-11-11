@@ -9,21 +9,24 @@ import (
 )
 
 const (
-	defaultConnectionTimeout        = 5 * time.Second
-	defaultClusterInfoFetchInterval = 100 * time.Millisecond
+	defaultConnectionTimeout          = 5 * time.Second
+	defaultRPCAddrsFetchRetryInterval = 100 * time.Millisecond
+	defaultClusterInfoFetchInterval   = 10 * time.Second
 )
 
 type options struct {
 	clusterID                  types.ClusterID
 	connectionTimeout          time.Duration
 	rpcAddrsFetchRetryInterval time.Duration
+	clusterInfoFetchInterval   time.Duration
 	logger                     *zap.Logger
 }
 
 var defaultOptions = options{
 	clusterID:                  types.ClusterID(1),
 	connectionTimeout:          defaultConnectionTimeout,
-	rpcAddrsFetchRetryInterval: defaultClusterInfoFetchInterval,
+	rpcAddrsFetchRetryInterval: defaultRPCAddrsFetchRetryInterval,
+	clusterInfoFetchInterval:   defaultClusterInfoFetchInterval,
 	logger:                     zap.NewNop(),
 }
 

@@ -64,6 +64,9 @@ func init() {
 		ErrInvalidArgument, ErrAlreadyExists, ErrNotExist,
 
 		ErrLogStreamAlreadyExists, ErrStorageNodeNotExist, ErrStorageNodeAlreadyExists,
+
+		// metadata repository
+		ErrNotMember,
 	)
 }
 

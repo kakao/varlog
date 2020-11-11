@@ -71,6 +71,8 @@ type MetadataRepositoryManager interface {
 	AddPeer(ctx context.Context, nodeID types.NodeID, peerURL, rpcURL string) error
 
 	RemovePeer(ctx context.Context, nodeID types.NodeID) error
+
+	NumberOfMR() int
 }
 
 var (
@@ -128,11 +130,13 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrAddrs []stri
 }
 
 func (mrm *mrManager) c() mrc.MetadataRepositoryClient {
-	return mrm.connector.Client()
+	cl, _ := mrm.connector.Client()
+	return cl
 }
 
 func (mrm *mrManager) mc() mrc.MetadataRepositoryManagementClient {
-	return mrm.connector.ManagementClient()
+	mcl, _ := mrm.connector.ManagementClient()
+	return mcl
 }
 
 func (mrm *mrManager) Close() error {
@@ -146,6 +150,20 @@ func (mrm *mrManager) ClusterMetadataView() ClusterMetadataView {
 	return mrm
 }
 
+func (mrm *mrManager) closeClient(cl mrc.MetadataRepositoryClient) {
+	err := cl.Close()
+	if err != nil {
+		mrm.logger.Warn("error while closing mr client", zap.Error(err))
+	}
+}
+
+func (mrm *mrManager) closeManagementClient(mcl mrc.MetadataRepositoryManagementClient) {
+	err := mcl.Close()
+	if err != nil {
+		mrm.logger.Warn("error while closing mr client", zap.Error(err))
+	}
+}
+
 func (mrm *mrManager) clusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	cli := mrm.c()
 	if cli == nil {
@@ -154,7 +172,7 @@ func (mrm *mrManager) clusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 
 	meta, err := cli.GetMetadata(ctx)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeClient(cli)
 	}
 
 	return meta, err
@@ -174,7 +192,7 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 
 	err := cli.RegisterStorageNode(ctx, storageNodeMeta)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeClient(cli)
 	}
 
 	return err
@@ -194,7 +212,7 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 
 	err := cli.UnregisterStorageNode(ctx, storageNodeID)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeClient(cli)
 	}
 
 	return err
@@ -214,7 +232,7 @@ func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varl
 
 	err := cli.RegisterLogStream(ctx, logStreamDesc)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeClient(cli)
 	}
 
 	return err
@@ -234,7 +252,7 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 
 	err := cli.UnregisterLogStream(ctx, logStreamID)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeClient(cli)
 	}
 	return err
 }
@@ -253,7 +271,7 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlog
 
 	err := cli.UpdateLogStream(ctx, logStreamDesc)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeClient(cli)
 	}
 	return err
 }
@@ -273,7 +291,7 @@ func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (
 
 	glsn, err := cli.Seal(ctx, logStreamID)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeClient(cli)
 	}
 	return glsn, err
 }
@@ -292,7 +310,7 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 
 	err := cli.Unseal(ctx, logStreamID)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeClient(cli)
 	}
 	return err
 }
@@ -308,10 +326,9 @@ func (mrm *mrManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, er
 
 	rsp, err := cli.GetClusterInfo(ctx, mrm.clusterID)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeManagementClient(cli)
 		return nil, err
 	}
-	mrm.connector.UpdateRPCAddrs(rsp.GetClusterInfo())
 	return rsp.GetClusterInfo(), err
 }
 
@@ -326,7 +343,7 @@ func (mrm *mrManager) AddPeer(ctx context.Context, nodeID types.NodeID, peerURL,
 
 	err := cli.AddPeer(ctx, mrm.clusterID, nodeID, peerURL)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeManagementClient(cli)
 		return err
 	}
 	mrm.connector.AddRPCAddr(nodeID, rpcURL)
@@ -344,14 +361,10 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 
 	err := cli.RemovePeer(ctx, mrm.clusterID, nodeID)
 	if err != nil {
-		mrm.connector.Disconnect()
+		mrm.closeManagementClient(cli)
 		return err
 	}
-
 	mrm.connector.DelRPCAddr(nodeID)
-	if mrm.connector.ConnectedNodeID() == nodeID {
-		mrm.connector.Disconnect()
-	}
 
 	return nil
 }
@@ -381,4 +394,8 @@ func (mrm *mrManager) StorageNode(ctx context.Context, storageNodeID types.Stora
 		return sndesc, nil
 	}
 	return nil, errCMVNoStorageNode
+}
+
+func (mrm *mrManager) NumberOfMR() int {
+	return mrm.connector.NumberOfMR()
 }

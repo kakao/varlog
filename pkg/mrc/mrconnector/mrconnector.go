@@ -2,15 +2,21 @@ package mrconnector
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 )
@@ -22,17 +28,15 @@ type Connector interface {
 
 	ClusterID() types.ClusterID
 
+	NumberOfMR() int
+
 	ConnectedNodeID() types.NodeID
 
 	// TODO (jun): use context to indicate that it can be network communication.
-	Client() mrc.MetadataRepositoryClient
+	Client() (mrc.MetadataRepositoryClient, error)
 
 	// TODO (jun): use context to indicate that it can be network communication.
-	ManagementClient() mrc.MetadataRepositoryManagementClient
-
-	Disconnect() (err error)
-
-	UpdateRPCAddrs(clusterInfo *mrpb.ClusterInfo)
+	ManagementClient() (mrc.MetadataRepositoryManagementClient, error)
 
 	AddRPCAddr(nodeID types.NodeID, addr string)
 
@@ -42,80 +46,110 @@ type Connector interface {
 type connector struct {
 	clusterID types.ClusterID
 
-	// NOTE(jun): some possible data types
-	// - built-in map and RWMutex
-	// - sync.Map and some loops during update
-	// - sync.Map and atomic.Value
-	rpcAddrs sync.Map
+	rpcAddrs         sync.Map     // map[types.NodeID]string
+	connectedMRProxy atomic.Value // *mrProxy
+	group            singleflight.Group
 
-	muConnected     sync.RWMutex
-	connectedNodeID types.NodeID
-	connectedCL     mrc.MetadataRepositoryClient
-	connectedMCL    mrc.MetadataRepositoryManagementClient
+	runner *runner.Runner
+	cancel context.CancelFunc
 
 	logger  *zap.Logger
 	options options
 }
 
-func New(ctx context.Context, seedRpcAddrs []string, opts ...Option) (Connector, error) {
-	if len(seedRpcAddrs) == 0 {
+func New(ctx context.Context, seedRPCAddrs []string, opts ...Option) (Connector, error) {
+	if len(seedRPCAddrs) == 0 {
 		return nil, verrors.ErrInvalid
 	}
 
-	options := defaultOptions
+	mrcOpts := defaultOptions
 	for _, opt := range opts {
-		opt(&options)
+		opt(&mrcOpts)
 	}
-	options.logger = options.logger.Named("mrconnect")
+	mrcOpts.logger = mrcOpts.logger.Named("mrconnector")
 
 	mrc := &connector{
-		clusterID: options.clusterID,
-		logger:    options.logger,
-		options:   options,
+		clusterID: mrcOpts.clusterID,
+		runner:    runner.New("mrconnector", mrcOpts.logger),
+		logger:    mrcOpts.logger,
+		options:   mrcOpts,
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, mrc.options.connectionTimeout)
 	defer cancel()
 
-	rpcAddrs, err := mrc.doFetchRPCAddrsLoop(tctx, seedRpcAddrs)
+	rpcAddrs, err := mrc.fetchRPCAddrs(tctx, seedRPCAddrs)
 	if err != nil {
 		return nil, err
 	}
 	mrc.updateRPCAddrs(rpcAddrs)
+	if _, err = mrc.connect(); err != nil {
+		return nil, err
+	}
+
+	mrc.cancel, err = mrc.runner.Run(mrc.fetchAndUpdate)
+	if err != nil {
+		return nil, err
+	}
+
 	return mrc, nil
+}
+
+func (c *connector) Close() (err error) {
+	c.cancel()
+	c.runner.Stop()
+	if proxy := c.connectedProxy(); proxy != nil {
+		err = proxy.Close()
+	}
+	return err
 }
 
 func (c *connector) ClusterID() types.ClusterID {
 	return c.clusterID
 }
 
-func (c *connector) Close() error {
-	return c.Disconnect()
+func (c *connector) NumberOfMR() int {
+	ret := 0
+	c.rpcAddrs.Range(func(_ interface{}, _ interface{}) bool {
+		ret++
+		return true
+	})
+	return ret
 }
 
-func (c *connector) Disconnect() (err error) {
-	c.muConnected.Lock()
-	defer c.muConnected.Unlock()
-	if c.connectedCL != nil || c.connectedMCL != nil {
-		if e := c.connectedCL.Close(); e != nil {
-			err = e
-		}
-		if e := c.connectedMCL.Close(); e != nil {
-			err = e
-		}
+func (c *connector) Client() (mrc.MetadataRepositoryClient, error) {
+	return c.connect()
+}
+
+func (c *connector) ManagementClient() (mrc.MetadataRepositoryManagementClient, error) {
+	return c.connect()
+}
+
+func (c *connector) ConnectedNodeID() types.NodeID {
+	mrProxy, err := c.connect()
+	if err != nil {
+		return types.InvalidNodeID
 	}
-	c.connectedCL = nil
-	c.connectedMCL = nil
-	c.connectedNodeID = types.InvalidNodeID
-	return err
+	return mrProxy.nodeID
 }
 
-func (c *connector) UpdateRPCAddrs(clusterInfo *mrpb.ClusterInfo) {
-	newAddrs := makeRPCAddrs(clusterInfo)
-	needToDisconnect := c.needToDisconnect(newAddrs)
-	c.updateRPCAddrs(newAddrs)
-	if needToDisconnect {
-		c.Disconnect()
+func (c *connector) releaseMRProxy(nodeID types.NodeID) {
+	c.rpcAddrs.Delete(nodeID)
+}
+
+func (c *connector) fetchAndUpdate(ctx context.Context) {
+	ticker := time.NewTicker(c.options.clusterInfoFetchInterval)
+	defer ticker.Stop()
+
+	for ctx.Err() == nil {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := c.update(ctx); err != nil {
+				c.logger.Error("could not update")
+			}
+		}
 	}
 }
 
@@ -124,38 +158,42 @@ func (c *connector) AddRPCAddr(nodeID types.NodeID, addr string) {
 }
 
 func (c *connector) DelRPCAddr(nodeID types.NodeID) {
-	c.rpcAddrs.Delete(nodeID)
+	if proxy := c.connectedProxy(); proxy != nil && proxy.nodeID == nodeID {
+		proxy.Close()
+	}
 }
 
-func (c *connector) Client() mrc.MetadataRepositoryClient {
-	c.connect()
-	c.muConnected.RLock()
-	defer c.muConnected.RUnlock()
-	return c.connectedCL
+func (c *connector) update(ctx context.Context) error {
+	mrmcl, err := c.ManagementClient()
+	if err != nil {
+		return fmt.Errorf("mrconnector: client connection error (%w)", err)
+	}
+
+	rpcAddrs, err := getRPCAddrs(ctx, mrmcl, c.clusterID)
+	if err != nil {
+		return fmt.Errorf("mrconnector: clusterinfo fetch error (%w)", err)
+	}
+	if len(rpcAddrs) == 0 {
+		return errors.New("mrconnector: number of mr is zero")
+	}
+
+	c.updateRPCAddrs(rpcAddrs)
+
+	if proxy := c.connectedProxy(); proxy != nil {
+		if _, ok := c.rpcAddrs.Load(proxy.nodeID); !ok {
+			if err := proxy.Close(); err != nil {
+				c.logger.Error("error while closing mr client", zap.Error(err))
+			}
+		}
+	}
+	return nil
 }
 
-func (c *connector) ManagementClient() mrc.MetadataRepositoryManagementClient {
-	c.connect()
-	c.muConnected.RLock()
-	defer c.muConnected.RUnlock()
-	return c.connectedMCL
-}
-
-func (c *connector) ConnectedNodeID() types.NodeID {
-	c.muConnected.RLock()
-	defer c.muConnected.RUnlock()
-	return c.connectedNodeID
-}
-
-func (c *connector) doFetchRPCAddrsLoop(ctx context.Context, seedRpcAddrs []string) (rpcAddrs map[types.NodeID]string, err error) {
+func (c *connector) fetchRPCAddrs(ctx context.Context, seedRPCAddrs []string) (rpcAddrs map[types.NodeID]string, err error) {
 	for ctx.Err() == nil {
-		for _, rpcAddr := range seedRpcAddrs {
-			rpcAddrs, err = c.fetchRPCAddrs(ctx, rpcAddr)
-			// TODO (jun, pharrell): Should the number of announced peers be equal to
-			// the number of requested peers?
-			// MRManager checks only if the number of announced peers is positive or
-			// not. This is more strict condition than the condition of MRManager.
-			if err == nil && len(rpcAddrs) >= len(seedRpcAddrs) {
+		for _, rpcAddr := range seedRPCAddrs {
+			rpcAddrs, err = c.connectMRAndFetchRPCAddrs(ctx, rpcAddr)
+			if err == nil && len(rpcAddrs) > 0 {
 				return rpcAddrs, nil
 			}
 			time.Sleep(c.options.rpcAddrsFetchRetryInterval)
@@ -164,7 +202,7 @@ func (c *connector) doFetchRPCAddrsLoop(ctx context.Context, seedRpcAddrs []stri
 	return nil, err
 }
 
-func (c *connector) fetchRPCAddrs(ctx context.Context, rpcAddr string) (map[types.NodeID]string, error) {
+func (c *connector) connectMRAndFetchRPCAddrs(ctx context.Context, rpcAddr string) (map[types.NodeID]string, error) {
 	mrmcl, err := mrc.NewMetadataRepositoryManagementClient(rpcAddr)
 	if err != nil {
 		return nil, err
@@ -174,55 +212,60 @@ func (c *connector) fetchRPCAddrs(ctx context.Context, rpcAddr string) (map[type
 			c.logger.Warn("error while closing mrc management client", zap.Error(err))
 		}
 	}()
-
-	for ctx.Err() == nil {
-		rsp, err := mrmcl.GetClusterInfo(ctx, c.clusterID)
-		if err != nil {
-			return nil, err
-		}
-		clusterInfo := rsp.GetClusterInfo()
-		return makeRPCAddrs(clusterInfo), nil
-	}
-	return nil, ctx.Err()
+	return getRPCAddrs(ctx, mrmcl, c.clusterID)
 }
 
-func (c *connector) connect() (err error) {
-	c.muConnected.RLock()
-	if c.connectedCL != nil && c.connectedMCL != nil {
-		c.muConnected.RUnlock()
-		return nil
+func getRPCAddrs(ctx context.Context, mrmcl mrc.MetadataRepositoryManagementClient, clusterID types.ClusterID) (map[types.NodeID]string, error) {
+	rsp, err := mrmcl.GetClusterInfo(ctx, clusterID)
+	if err != nil {
+		return nil, err
 	}
-	c.muConnected.RUnlock()
-
-	var mrcl mrc.MetadataRepositoryClient
-	var mrmcl mrc.MetadataRepositoryManagementClient
-	c.rpcAddrs.Range(func(nodeID interface{}, addr interface{}) bool {
-		if addr == "" {
-			return true
-		}
-		if mrcl, mrmcl, err = connectToMR(c.clusterID, addr.(string)); err == nil {
-			c.muConnected.Lock()
-			c.connectedCL = mrcl
-			c.connectedMCL = mrmcl
-			c.connectedNodeID = nodeID.(types.NodeID)
-			c.muConnected.Unlock()
-			return false
-		}
-		return true
-	})
-	return err
+	clusterInfo := rsp.GetClusterInfo()
+	return makeRPCAddrs(clusterInfo), nil
 }
 
-func (c *connector) needToDisconnect(newAddrs map[types.NodeID]string) bool {
-	need := false
-	c.rpcAddrs.Range(func(nodeID interface{}, addr interface{}) bool {
-		if _, ok := newAddrs[nodeID.(types.NodeID)]; !ok {
-			need = true
-			return false
+func (c *connector) connectedProxy() *mrProxy {
+	if proxy := c.connectedMRProxy.Load(); proxy != nil {
+		return proxy.(*mrProxy)
+	}
+	return nil
+}
+
+func (c *connector) connect() (*mrProxy, error) {
+	proxy, err, _ := c.group.Do("connect", func() (interface{}, error) {
+		if proxy := c.connectedProxy(); proxy != nil && !proxy.disconnected.Load() {
+			return proxy, nil
 		}
-		return true
+
+		var (
+			err   error
+			mrcl  mrc.MetadataRepositoryClient
+			mrmcl mrc.MetadataRepositoryManagementClient
+			proxy *mrProxy
+		)
+
+		c.rpcAddrs.Range(func(nodeID interface{}, addr interface{}) bool {
+			if addr == "" || nodeID.(types.NodeID) == types.InvalidNodeID {
+				return true
+			}
+			mrcl, mrmcl, err = connectToMR(c.clusterID, addr.(string))
+			if err != nil {
+				c.logger.Debug("could not connect to MR", zap.Error(err), zap.Any("node_id", nodeID), zap.Any("addr", addr))
+				return true
+			}
+			proxy = &mrProxy{
+				cl:     mrcl,
+				mcl:    mrmcl,
+				nodeID: nodeID.(types.NodeID),
+				c:      c,
+			}
+			proxy.disconnected.Store(false)
+			c.connectedMRProxy.Store(proxy)
+			return false
+		})
+		return proxy, err
 	})
-	return need
+	return proxy.(*mrProxy), err
 }
 
 func (c *connector) updateRPCAddrs(newAddrs map[types.NodeID]string) {
@@ -252,7 +295,8 @@ func makeRPCAddrs(clusterInfo *mrpb.ClusterInfo) map[types.NodeID]string {
 func connectToMR(clusterID types.ClusterID, addr string) (mrcl mrc.MetadataRepositoryClient, mrmcl mrc.MetadataRepositoryManagementClient, err error) {
 	// TODO (jun): rpc.NewConn is a blocking function, thus it should be specified by an
 	// explicit timeout parameter.
-	conn, err := rpc.NewConn(addr)
+	var conn *rpc.Conn
+	conn, err = rpc.NewConn(addr)
 	if err != nil {
 		return nil, nil, err
 	}

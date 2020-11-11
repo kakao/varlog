@@ -87,9 +87,15 @@ func (mr *metadataRefresher) refresh(ctx context.Context) error {
 	// 3) Update allowlist, denylist, lsreplicas if the metadata is updated
 
 	// TODO (jun): Use ClusterMetadataView
-	clusmeta, err := mr.connector.Client().GetMetadata(ctx)
+	client, err := mr.connector.Client()
 	if err != nil {
-		mr.connector.Disconnect()
+		return nil
+	}
+	clusmeta, err := client.GetMetadata(ctx)
+	if err != nil {
+		if err := client.Close(); err != nil {
+			mr.logger.Warn("error while closing mr client", zap.Error(err))
+		}
 		return err
 	}
 

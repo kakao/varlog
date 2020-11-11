@@ -194,6 +194,9 @@ func (mr *RaftMetadataRepository) Close() error {
 
 	mr.clearMembership()
 
+	// FIXME (jun, pharrell): Stop gracefully
+	mr.server.Stop()
+
 	return nil
 }
 
