@@ -216,6 +216,8 @@ go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
 # golang.org/x/exp v0.0.0-20200513190911-00229845015e
 golang.org/x/exp/rand
+# golang.org/x/lint v0.0.0-20200302205851-738671d3881b
+## explicit
 # golang.org/x/net v0.0.0-20201021035429-f5854403a974
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
@@ -239,7 +241,7 @@ golang.org/x/text/unicode/norm
 # golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 ## explicit
 golang.org/x/time/rate
-# golang.org/x/tools v0.0.0-20201105220310-78b158585360
+# golang.org/x/tools v0.0.0-20201110201400-7099162a900a
 ## explicit
 # google.golang.org/genproto v0.0.0-20191108220845-16a3f7862a1a
 google.golang.org/genproto/googleapis/rpc/status
