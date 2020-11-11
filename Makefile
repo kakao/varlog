@@ -115,7 +115,7 @@ fmt:
 
 .PHONY: lint
 lint:
-	@$(foreach src_path,$(shell $(GO) list ./... | grep -v vendor),golint $(src_path);)
+	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.daumkakao.com/varlog/varlog/##),golint $(path);)
 
 .PHONY: vet
 vet:

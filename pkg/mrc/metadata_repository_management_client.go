@@ -79,5 +79,6 @@ func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context,
 		ClusterID: clusterID,
 	}
 
-	return c.client.GetClusterInfo(ctx, req)
+	rsp, err := c.client.GetClusterInfo(ctx, req)
+	return rsp, verrors.FromStatusError(ctx, err)
 }

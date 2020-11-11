@@ -13,6 +13,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc/mrconnector"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 )
 
@@ -79,41 +80,52 @@ func TestMRConnector(t *testing.T) {
 			mrc, err := mrconnector.New(context.TODO(), rpcEndpoints, mrconnector.WithClusterID(clusterID), mrconnector.WithLogger(zap.L()))
 			So(err, ShouldBeNil)
 
-			So(mrc.ConnectedNodeID(), ShouldEqual, types.InvalidNodeID)
+			testutil.CompareWaitN(100, func() bool {
+				return mrc.NumberOfMR() == numMR
+			})
 
 			Reset(func() {
 				So(mrc.Close(), ShouldBeNil)
 			})
 
-			Convey("Then no peers should be connected initially", func() {
-				So(mrc.ConnectedNodeID(), ShouldEqual, types.InvalidNodeID)
-			})
-
-			Convey("Then calling Client should establish the connection", func() {
-				_, err = mrc.Client().GetMetadata(context.TODO())
+			Convey("Then calling Client should return the connection", func() {
+				cl, err := mrc.Client()
+				So(err, ShouldBeNil)
+				_, err = cl.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 
-				_, err = mrc.ManagementClient().GetClusterInfo(context.TODO(), clusterID)
+				mcl, err := mrc.ManagementClient()
 				So(err, ShouldBeNil)
-			})
-
-			Convey("Then calling ManagementClient should establish the connection", func() {
-				_, err = mrc.ManagementClient().GetClusterInfo(context.TODO(), clusterID)
-				So(err, ShouldBeNil)
-
-				_, err = mrc.Client().GetMetadata(context.TODO())
+				_, err = mcl.GetClusterInfo(context.TODO(), clusterID)
 				So(err, ShouldBeNil)
 			})
 
-			Convey("And Disconnect is called", func() {
-				So(mrc.Disconnect(), ShouldBeNil)
-				So(mrc.ConnectedNodeID(), ShouldEqual, types.InvalidNodeID)
+			Convey("Then calling ManagementClient should return the connection", func() {
+				mcl, err := mrc.ManagementClient()
+				So(err, ShouldBeNil)
+				_, err = mcl.GetClusterInfo(context.TODO(), clusterID)
+				So(err, ShouldBeNil)
+
+				cl, err := mrc.Client()
+				So(err, ShouldBeNil)
+				_, err = cl.GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+			})
+
+			Convey("And the connected client is closed", func() {
+				cl, err := mrc.Client()
+				So(err, ShouldBeNil)
+				So(cl.Close(), ShouldBeNil)
 
 				Convey("Then calling Client or ManagementClient should reestablish the connection", func() {
-					_, err = mrc.Client().GetMetadata(context.TODO())
+					cl, err := mrc.Client()
+					So(err, ShouldBeNil)
+					_, err = cl.GetMetadata(context.TODO())
 					So(err, ShouldBeNil)
 
-					_, err = mrc.ManagementClient().GetClusterInfo(context.TODO(), clusterID)
+					mcl, err := mrc.ManagementClient()
+					So(err, ShouldBeNil)
+					_, err = mcl.GetClusterInfo(context.TODO(), clusterID)
 					So(err, ShouldBeNil)
 
 					So(mrc.ConnectedNodeID(), ShouldNotEqual, types.InvalidNodeID)
@@ -122,31 +134,38 @@ func TestMRConnector(t *testing.T) {
 			})
 
 			Convey("And connected MR is failed", func() {
-				_, err = mrc.Client().GetMetadata(context.TODO())
+				badCL, err := mrc.Client()
 				So(err, ShouldBeNil)
 
-				nodeID := mrc.ConnectedNodeID()
-				So(nodeID, ShouldNotEqual, types.InvalidNodeID)
+				badCL.GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
 
-				mr, ok := mrs[nodeID]
+				badNodeID := mrc.ConnectedNodeID()
+				So(badNodeID, ShouldNotEqual, types.InvalidNodeID)
+
+				badMR, ok := mrs[badNodeID]
 				So(ok, ShouldBeTrue)
-				So(mr.Close(), ShouldBeNil)
+				So(badMR.Close(), ShouldBeNil)
 
 				Convey("Then the client returned from Client should not be able to request", func() {
-					_, err = mrc.Client().GetMetadata(context.TODO())
+					_, err := badCL.GetMetadata(context.TODO())
 					So(err, ShouldNotBeNil)
+					So(badCL.Close(), ShouldBeNil)
 
-					Convey("Then calling Disconnect and Client should reestablish the connection to the new MR node", func() {
-						So(mrc.Disconnect(), ShouldBeNil)
-						So(mrc.ConnectedNodeID(), ShouldEqual, types.InvalidNodeID)
-
-						_, err = mrc.Client().GetMetadata(context.TODO())
+					Convey("Then calling Client should reestablish the connection to the new MR node", func() {
+						newCL, err := mrc.Client()
 						So(err, ShouldBeNil)
 
-						_, err = mrc.ManagementClient().GetClusterInfo(context.TODO(), clusterID)
+						_, err = newCL.GetMetadata(context.TODO())
 						So(err, ShouldBeNil)
 
-						So(mrc.ConnectedNodeID(), ShouldNotEqual, nodeID)
+						newMCL, err := mrc.ManagementClient()
+						So(err, ShouldBeNil)
+
+						_, err = newMCL.GetClusterInfo(context.TODO(), clusterID)
+						So(err, ShouldBeNil)
+
+						So(mrc.ConnectedNodeID(), ShouldNotEqual, badNodeID)
 
 					})
 				})

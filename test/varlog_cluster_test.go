@@ -1081,13 +1081,15 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 				return !mr.IsMember()
 			}), ShouldBeTrue)
 
+			oldCL, err := mrc.NewMetadataRepositoryManagementClient(mrAddr)
+			So(err, ShouldBeNil)
+			_, err = oldCL.GetClusterInfo(context.TODO(), types.ClusterID(0))
+			So(err, ShouldResemble, verrors.ErrNotMember)
+			So(oldCL.Close(), ShouldBeNil)
+
 			So(testutil.CompareWaitN(50, func() bool {
 				cinfo, err := nmr.GetClusterInfo(context.TODO(), types.ClusterID(0))
-				if err != nil {
-					return false
-				}
-
-				return len(cinfo.GetMembers()) == 1
+				return err == nil && len(cinfo.GetMembers()) == 1 && cinfo.GetLeader() == cinfo.GetNodeID()
 			}), ShouldBeTrue)
 
 			Convey("Then it should be success", func(ctx C) {
