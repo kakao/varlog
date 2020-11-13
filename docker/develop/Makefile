@@ -3,7 +3,7 @@ include $(VARLOG_HOME)/docker/def.mk
 
 DEVIMG=$(DEV_REPO):latest
 
-GO_VERSION=1.15.3
+GO_VERSION=1.15.4
 PROTO_VERSION=3.13.0
 
 all:

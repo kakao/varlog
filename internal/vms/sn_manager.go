@@ -70,9 +70,8 @@ func NewStorageNodeManager(ctx context.Context, clusterID types.ClusterID, cmVie
 		cs:        make(map[types.StorageNodeID]snc.StorageNodeManagementClient),
 		logger:    logger,
 	}
-	if err := sm.Refresh(ctx); err != nil {
-		return nil, err
-	}
+
+	sm.Refresh(ctx)
 	return sm, nil
 }
 
@@ -95,15 +94,15 @@ func (sm *snManager) refresh(ctx context.Context) error {
 			continue
 		}
 
-		snmcl, _, err := sm.GetMetadataByAddr(ctx, sndesc.Address)
-		if err != nil {
-			return err
+		snmcl, _, erri := sm.GetMetadataByAddr(ctx, sndesc.Address)
+		if erri != nil {
+			err = erri
+		} else {
+			sm.addStorageNode(snmcl)
 		}
-
-		sm.addStorageNode(snmcl)
 	}
 
-	return nil
+	return err
 }
 
 func (sm *snManager) Close() error {

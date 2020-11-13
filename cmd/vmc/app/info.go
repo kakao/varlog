@@ -16,3 +16,12 @@ func (app *VMCApp) infoMRMembers() {
 		},
 	)
 }
+
+func (app *VMCApp) infoStoragenodes() {
+	app.withExecutionContext(
+		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
+			app.logger.Info("info storagenode")
+			return cli.GetStorageNodes(ctx)
+		},
+	)
+}

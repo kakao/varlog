@@ -23,6 +23,7 @@ type ClusterManagerClient interface {
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error)
 	Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*vmspb.SyncResponse, error)
 	GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error)
+	GetStorageNodes(ctx context.Context) (*vmspb.GetStorageNodesResponse, error)
 	Close() error
 }
 
@@ -107,5 +108,10 @@ func (c *clusterManagerClient) Sync(ctx context.Context, logStreamID types.LogSt
 
 func (c *clusterManagerClient) GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error) {
 	rsp, err := c.rpcClient.GetMRMembers(ctx, &pbtypes.Empty{})
+	return rsp, verrors.FromStatusError(ctx, err)
+}
+
+func (c *clusterManagerClient) GetStorageNodes(ctx context.Context) (*vmspb.GetStorageNodesResponse, error) {
+	rsp, err := c.rpcClient.GetStorageNodes(ctx, &pbtypes.Empty{})
 	return rsp, verrors.FromStatusError(ctx, err)
 }

@@ -149,6 +149,12 @@ message GetMRMembersResponse {
              "github.com/kakao/varlog/pkg/types.NodeID"];
 }
 
+message GetStorageNodesResponse {
+    map<uint32, string> storagenodes = 1
+        [(gogoproto.castkey) =
+             "github.com/kakao/varlog/pkg/types.StorageNodeID"];
+}
+
 service ClusterManager {
     rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {
     }
@@ -174,4 +180,7 @@ service ClusterManager {
     rpc Unseal(UnsealRequest) returns (UnsealResponse) {}
 
     rpc GetMRMembers(google.protobuf.Empty) returns (GetMRMembersResponse) {}
+
+    rpc GetStorageNodes(google.protobuf.Empty)
+        returns (GetStorageNodesResponse) {}
 }

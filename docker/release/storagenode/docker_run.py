@@ -52,8 +52,26 @@ def getRPCAddr():
     return "%s:%s" % (MY_IP,getEnv("RPC_PORT", DEFAULT_RPC_PORT))
 
 def getStorageNodeID():
-    # TODO:: fix it using vmc
-    return randint(1, 2^31 - 1)
+    try:
+        META_STORAGE_NODE="./vmc meta sn"
+
+        resp = commands.getstatusoutput(META_STORAGE_NODE)
+        if resp[0] != 0:
+            raise Exception(resp[1])
+
+        meta = json.loads(resp[1])
+        storagenodes = meta['storagenodes']
+        
+        my_addr = getRPCAddr()
+        for snid, addr in storagenodes.items():
+            if addr == my_addr:
+                return snid, True
+        
+        return randint(1, 2^31 - 1), False
+    except Exception as e:
+        log_print("[ERROR] getStorageNodeID,",str(e))
+        raise e
+
 
 def getValumes():
     # TODO:: fix it
@@ -105,26 +123,27 @@ def addStorageNode(addr):
         log_print("[ERROR] add storagenode,", str(e) )
         raise e
 
-SNID=getStorageNodeID()
-VOLUMES=getValumes()
-SN_ADDR=getRPCAddr()
-
-STORAGE_NODE="nohup ./storagenode start --cluster-id=%s --storage-node-id=%s --rpc-bind-address=0.0.0.0:%s --volumes=%s &" \
-        % (getEnv("CLUSTER_ID", DEFAULT_CLUSTER_ID), \
-        SNID, \
-        getEnv("RPC_PORT", DEFAULT_RPC_PORT), \
-        VOLUMES)
-
 try:
-    cmd_run("sudo sysctl -w kernel.core_pattern=core.%e.%p; sudo sysctl -p");
+    snid, exist = getStorageNodeID()
+    volumes = getValumes()
+    sn_addr = getRPCAddr()
+
+    STORAGE_NODE="nohup ./storagenode start --cluster-id=%s --storage-node-id=%s --rpc-bind-address=0.0.0.0:%s --volumes=%s &" \
+            % (getEnv("CLUSTER_ID", DEFAULT_CLUSTER_ID), \
+            snid, \
+            getEnv("RPC_PORT", DEFAULT_RPC_PORT), \
+            volumes)
 
     log_print("start storagenode")
-    print(STORAGE_NODE)
+    log_print(STORAGE_NODE)
+
     cmd_run(STORAGE_NODE)
 
     time.sleep(1)
 
-    addStorageNode(SN_ADDR)
+    if exist == False:
+        log_print("add storagenode")
+        addStorageNode(sn_addr)
 
     killer = Killer()
     log_print("Loop start")

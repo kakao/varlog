@@ -229,6 +229,9 @@ func (app *VMCApp) initMetaCmd() *cobra.Command {
 	// vmc metdata storagenode
 	subCmd = newSNCmd()
 	addStorageNodeIDFlag(subCmd.Flags())
+	subCmd.Run = func(cmd *cobra.Command, args []string) {
+		app.infoStoragenodes()
+	}
 	cmd.AddCommand(subCmd)
 
 	// vmc metdata logstream
