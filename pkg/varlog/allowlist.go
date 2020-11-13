@@ -109,7 +109,12 @@ func (adl *transientAllowlist) expireDenyTTL(ctx context.Context) {
 }
 
 func (adl *transientAllowlist) pick() (types.LogStreamID, bool) {
-	cache := adl.cache.Load().([]types.LogStreamID)
+	cacheIf := adl.cache.Load()
+	if cacheIf == nil {
+		return 0, false
+	}
+
+	cache := cacheIf.([]types.LogStreamID)
 	l := len(cache)
 	if l > 0 {
 		idx := rand.Intn(l)
@@ -120,7 +125,12 @@ func (adl *transientAllowlist) pick() (types.LogStreamID, bool) {
 
 func (adl *transientAllowlist) warmup() {
 	adl.group.Do("warmup", func() (interface{}, error) {
-		cache := make([]types.LogStreamID, 0, len(adl.cache.Load().([]types.LogStreamID)))
+		lenHint := 0
+		cacheIf := adl.cache.Load()
+		if cacheIf != nil {
+			lenHint = len(cacheIf.([]types.LogStreamID))
+		}
+		cache := make([]types.LogStreamID, 0, lenHint)
 		adl.allowlist.Range(func(logStreamID interface{}, aitem interface{}) bool {
 			item := aitem.(allowlistItem)
 			if !item.denied {

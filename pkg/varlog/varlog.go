@@ -17,15 +17,15 @@ import (
 type Varlog interface {
 	io.Closer
 
-	Append(ctx context.Context, data []byte, opts AppendOptions) (types.GLSN, error)
+	Append(ctx context.Context, data []byte, opts ...AppendOption) (types.GLSN, error)
 
-	AppendTo(ctx context.Context, logStreamID types.LogStreamID, data []byte, opts AppendOptions) (types.GLSN, error)
+	AppendTo(ctx context.Context, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error)
 
-	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN, opts ReadOptions) ([]byte, error)
+	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
 
-	Subscribe(ctx context.Context, glsn types.GLSN, onNextFunc OnNext, opts SubscribeOptions) error
+	Subscribe(ctx context.Context, glsn types.GLSN, onNextFunc OnNext) error
 
-	Trim(ctx context.Context, glsn types.GLSN, opts TrimOptions) error
+	Trim(ctx context.Context, glsn types.GLSN) error
 }
 
 type OnNext func(glsn types.GLSN, err error)
@@ -107,23 +107,28 @@ func Open(clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, 
 	return v, nil
 }
 
-func (v *varlog) Append(ctx context.Context, data []byte, opts AppendOptions) (types.GLSN, error) {
-	return v.append(ctx, 0, data, opts)
+func (v *varlog) Append(ctx context.Context, data []byte, opts ...AppendOption) (types.GLSN, error) {
+	return v.append(ctx, 0, data, opts...)
 }
 
-func (v *varlog) AppendTo(ctx context.Context, logStreamID types.LogStreamID, data []byte, opts AppendOptions) (types.GLSN, error) {
-	panic("not yet implemented")
+func (v *varlog) AppendTo(ctx context.Context, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error) {
+	opts = append(opts, withoutSelectLogStream())
+	return v.append(ctx, logStreamID, data, opts...)
 }
 
-func (v *varlog) Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN, opts ReadOptions) ([]byte, error) {
-	panic("not yet implemented")
+func (v *varlog) Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
+	logEntry, err := v.read(ctx, logStreamID, glsn)
+	if err != nil {
+		return nil, err
+	}
+	return logEntry.Data, nil
 }
 
-func (v *varlog) Subscribe(ctx context.Context, glsn types.GLSN, onNextFunc OnNext, opts SubscribeOptions) error {
+func (v *varlog) Subscribe(ctx context.Context, glsn types.GLSN, onNextFunc OnNext) error {
 	panic("not implemented")
 }
 
-func (v *varlog) Trim(ctx context.Context, glsn types.GLSN, opts TrimOptions) error {
+func (v *varlog) Trim(ctx context.Context, glsn types.GLSN) error {
 	panic("not implemented")
 }
 

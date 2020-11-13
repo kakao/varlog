@@ -30,9 +30,15 @@ type renewableReplicasRetriever struct {
 }
 
 func (r *renewableReplicasRetriever) Retrieve(logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool) {
-	lsReplicasMap := r.lsreplicas.Load().(*sync.Map)
-	lsreplicas, ok := lsReplicasMap.Load(logStreamID)
-	return lsreplicas.([]varlogpb.LogStreamReplicaDescriptor), ok
+	lsReplicasMapIf := r.lsreplicas.Load()
+	if lsReplicasMapIf == nil {
+		return nil, false
+	}
+	lsReplicasMap := lsReplicasMapIf.(*sync.Map)
+	if lsreplicas, ok := lsReplicasMap.Load(logStreamID); ok {
+		return lsreplicas.([]varlogpb.LogStreamReplicaDescriptor), true
+	}
+	return nil, false
 }
 
 func (r *renewableReplicasRetriever) Renew(metadata *varlogpb.MetadataDescriptor) {
@@ -59,5 +65,4 @@ func (r *renewableReplicasRetriever) Renew(metadata *varlogpb.MetadataDescriptor
 	}
 
 	r.lsreplicas.Store(newLSReplicasMap)
-
 }
