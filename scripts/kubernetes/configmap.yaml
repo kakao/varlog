@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcp-services
+  namespace: ingress-nginx
+data:
+  9090: "default/varlog-vms-service:9090"
+  9092: "default/varlog-mr-service:9092"

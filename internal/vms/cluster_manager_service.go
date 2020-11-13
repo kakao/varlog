@@ -100,3 +100,20 @@ func (s *clusterManagerService) GetMRMembers(ctx context.Context, _ *pbtypes.Emp
 
 	return resp, verrors.ToStatusError(err)
 }
+
+func (s *clusterManagerService) GetStorageNodes(ctx context.Context, _ *pbtypes.Empty) (*vmspb.GetStorageNodesResponse, error) {
+	meta, err := s.clusManager.Metadata(ctx)
+	if err != nil {
+		return &vmspb.GetStorageNodesResponse{}, err
+	}
+
+	resp := &vmspb.GetStorageNodesResponse{}
+	if meta != nil && meta.StorageNodes != nil {
+		resp.Storagenodes = make(map[types.StorageNodeID]string)
+		for _, sn := range meta.StorageNodes {
+			resp.Storagenodes[sn.StorageNodeID] = sn.Address
+		}
+	}
+
+	return resp, verrors.ToStatusError(err)
+}

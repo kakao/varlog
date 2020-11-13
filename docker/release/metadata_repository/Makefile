@@ -3,7 +3,7 @@ include $(VARLOG_HOME)/docker/def.mk
 
 DEVIMG=$(DEV_REPO):latest
 
-GO_VERSION=1.15.3
+GO_VERSION=1.15.4
 PROTO_VERSION=3.13.0
 
 all:
@@ -28,9 +28,9 @@ push:
 
 dist:
 	make clean;
-	-mkdir -p ./dist
+	mkdir -p ./dist
 	# build
-	cd ~/varlog; make clean; make all;
-	-cp ~/varlog/build/vmc ./dist/
-	-cp ~/varlog/build/metadata_repository ./dist/
-	-cp ./docker_run.py ./dist/
+	cd ~/varlog; make clean; make deps; make all;
+	cp ~/varlog/build/vmc ./dist/
+	cp ~/varlog/build/metadata_repository ./dist/
+	cp ./docker_run.py ./dist/

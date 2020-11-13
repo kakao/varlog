@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: varlog-mr-service
+spec:
+  selector:
+    app: varlog-mr
+  ports:
+    - protocol: TCP
+      port: 9092
+      targetPort: 9092

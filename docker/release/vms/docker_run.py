@@ -42,10 +42,10 @@ def getEnv(key, default):
         return default
 
 def getMRAddr():
-    addr = getEnv("MR_ADDR", None)
+    addr = getEnv("MR_ADDRESS", None)
     if addr != None:
         return addr
-    raise "MR check error! check environment value(export MR_ADDR=)"
+    raise "MR check error! check environment value(export MR_ADDRESS=)"
 
 def getRPCAddr():
     return "0.0.0.0:%s" % (getEnv("RPC_PORT", DEFAULT_RPC_PORT))

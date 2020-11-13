@@ -1,0 +1,17 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: varlog-mr-vip-service
+  namespace: ingress-nginx
+  annotations:
+    service.beta.kubernetes.io/openstack-internal-load-balancer: "true"
+spec:
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+  type: LoadBalancer
+  ports:
+  - name: varlog-mr-service
+    port: 9092
+    targetPort: 9092
+    protocol: TCP
