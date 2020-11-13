@@ -19,6 +19,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/testutil"
+	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -1760,4 +1761,126 @@ func TestVarlogLogStreamGCZombie(t *testing.T) {
 			})
 		})
 	}))
+}
+
+func TestVarlogClient(t *testing.T) {
+	Convey("Given cluster option", t, func() {
+		const nrSN = 3
+
+		clusterOpts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             3,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		}
+
+		Convey("and running cluster", withTestCluster(clusterOpts, func(env *VarlogCluster) {
+			cmcli := env.GetClusterManagerClient()
+
+			for i := 0; i < nrSN; i++ {
+				storageNodeID := types.StorageNodeID(i + 1)
+				volume, err := storagenode.NewVolume(t.TempDir())
+				So(err, ShouldBeNil)
+				snopts := &storagenode.Options{
+					RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
+					LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
+					LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
+					ClusterID:                env.ClusterID,
+					StorageNodeID:            storageNodeID,
+					Volumes:                  map[storagenode.Volume]struct{}{volume: {}},
+					StorageName:              storagenode.DefaultStorageName,
+					Verbose:                  true,
+					Logger:                   env.logger,
+				}
+
+				sn, err := storagenode.NewStorageNode(snopts)
+				So(err, ShouldBeNil)
+				So(sn.Run(), ShouldBeNil)
+				env.SNs[storageNodeID] = sn
+			}
+
+			var replicas []*varlogpb.ReplicaDescriptor
+			snAddrs := make(map[types.StorageNodeID]string, nrSN)
+			for snid, sn := range env.SNs {
+				meta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeHeartbeat)
+				So(err, ShouldBeNil)
+				snAddr := meta.GetStorageNode().GetAddress()
+				So(len(snAddr), ShouldBeGreaterThan, 0)
+				snAddrs[snid] = snAddr
+
+				rsp, err := cmcli.AddStorageNode(context.TODO(), snAddr)
+				So(err, ShouldBeNil)
+				snmeta := rsp.GetStorageNode()
+				So(snmeta.GetStorageNode().GetStorageNodeID(), ShouldEqual, snid)
+
+				storages := snmeta.GetStorageNode().GetStorages()
+				So(len(storages), ShouldBeGreaterThan, 0)
+				path := storages[0].GetPath()
+				So(len(path), ShouldBeGreaterThan, 0)
+				replica := &varlogpb.ReplicaDescriptor{
+					StorageNodeID: snid,
+					Path:          path,
+				}
+				replicas = append(replicas, replica)
+			}
+
+			mrAddr := env.GetMR().GetServerAddr()
+
+			Reset(func() {
+				for _, sn := range env.SNs {
+					sn.Close()
+				}
+			})
+
+			Convey("No log stream in the cluster", func() {
+				Convey("Append", func() {
+					vlg, err := varlog.Open(env.ClusterID, []string{mrAddr}, varlog.WithLogger(zap.L()), varlog.WithOpenTimeout(time.Minute))
+					So(err, ShouldBeNil)
+
+					_, err = vlg.Append(context.TODO(), []byte("foo"))
+					So(err, ShouldNotBeNil)
+
+					So(vlg.Close(), ShouldBeNil)
+				})
+			})
+
+			Convey("Log stream in the cluster", func() {
+				rsp, err := cmcli.AddLogStream(context.TODO(), nil)
+				So(err, ShouldBeNil)
+				lsID := rsp.GetLogStream().GetLogStreamID()
+
+				vlg, err := varlog.Open(env.ClusterID, []string{mrAddr}, varlog.WithLogger(zap.L()), varlog.WithOpenTimeout(time.Minute))
+				So(err, ShouldBeNil)
+
+				Reset(func() {
+					So(vlg.Close(), ShouldBeNil)
+				})
+
+				Convey("AppendTo", func() {
+					glsn, err := vlg.AppendTo(context.TODO(), lsID, []byte("foo"))
+					So(err, ShouldBeNil)
+					So(glsn, ShouldNotEqual, types.InvalidGLSN)
+
+					bytes, err := vlg.Read(context.TODO(), lsID, glsn)
+					So(err, ShouldBeNil)
+					So(string(bytes), ShouldEqual, "foo")
+				})
+
+				Convey("AppendTo not existing log stream", func() {
+					_, err := vlg.AppendTo(context.TODO(), lsID+1, []byte("foo"))
+					So(err, ShouldNotBeNil)
+				})
+
+				Convey("Append", func() {
+					glsn, err := vlg.Append(context.TODO(), []byte("foo"))
+					So(err, ShouldBeNil)
+					So(glsn, ShouldNotEqual, types.InvalidGLSN)
+
+					bytes, err := vlg.Read(context.TODO(), lsID, glsn)
+					So(err, ShouldBeNil)
+					So(string(bytes), ShouldEqual, "foo")
+
+				})
+			})
+		}))
+	})
 }

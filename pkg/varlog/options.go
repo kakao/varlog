@@ -75,13 +75,46 @@ func WithLogger(logger *zap.Logger) Option {
 	})
 }
 
-type AppendOptions struct {
-	Retry           int
+const (
+	defaultRetryCount = 3
+)
+
+func defaultAppendOptions() appendOptions {
+	return appendOptions{
+		retryCount:      defaultRetryCount,
+		selectLogStream: true,
+	}
+}
+
+type appendOptions struct {
+	retryCount      int
 	selectLogStream bool
 }
 
-type ReadOptions struct{}
+type AppendOption interface {
+	apply(*appendOptions)
+}
 
-type SubscribeOptions struct{}
+type appendOption struct {
+	f func(*appendOptions)
+}
 
-type TrimOptions struct{}
+func (opt *appendOption) apply(opts *appendOptions) {
+	opt.f(opts)
+}
+
+func newAppendOption(f func(*appendOptions)) *appendOption {
+	return &appendOption{f: f}
+}
+
+func WithRetryCount(retryCount int) AppendOption {
+	return newAppendOption(func(opts *appendOptions) {
+		opts.retryCount = retryCount
+	})
+}
+
+func withoutSelectLogStream() AppendOption {
+	return newAppendOption(func(opts *appendOptions) {
+		opts.selectLogStream = false
+	})
+}
