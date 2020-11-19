@@ -9,6 +9,11 @@ pipeline {
     }
 
     stage('test') {
+      environment { 
+        VAULT_ADDR      = 'https://vault.daumkakao.io'
+        VAULT_ROLE_ID   = 'b6ce1ff0-fb27-f6b3-0eb6-0af8c4e54324'
+        VAULT_SECRET_ID = 'c020d160-e91f-d1da-a31b-8ee8e188dfd8'
+      }
       steps {
         sh 'make test TEST_FAILFAST=1 TEST_TIMEOUT=1h TEST_COUNT=2 TEST_CPU=4,8,16 TEST_COVERAGE=1'
       }
