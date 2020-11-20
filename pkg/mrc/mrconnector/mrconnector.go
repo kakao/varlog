@@ -21,6 +21,10 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 )
 
+var (
+	errNoMR = errors.New("mrconnector: no accessible metadata repository")
+)
+
 // Connector represents a connection proxy for the metadata repository. It contains clients and
 // management clients for the metadata repository.
 type Connector interface {
@@ -238,7 +242,7 @@ func (c *connector) connect() (*mrProxy, error) {
 		}
 
 		var (
-			err   error
+			err   = errNoMR
 			mrcl  mrc.MetadataRepositoryClient
 			mrmcl mrc.MetadataRepositoryManagementClient
 			proxy *mrProxy

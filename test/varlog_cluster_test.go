@@ -741,10 +741,14 @@ func withTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func
 }
 
 func TestVarlogManagerServer(t *testing.T) {
+	vmsOpts := vms.DefaultOptions
+	vmsOpts.HeartbeatTimeout *= 10
+	vmsOpts.Logger = zap.L()
 	opts := VarlogClusterOptions{
 		NrMR:              1,
 		NrRep:             3,
 		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		VMSOpts:           &vmsOpts,
 	}
 
 	Convey("AddStorageNode", t, withTestCluster(opts, func(env *VarlogCluster) {
@@ -1463,12 +1467,15 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 }
 
 func TestVarlogLogStreamSync(t *testing.T) {
+	vmsOpts := vms.DefaultOptions
+	vmsOpts.HeartbeatTimeout *= 10
+	vmsOpts.Logger = zap.L()
 	nrRep := 2
 	opts := VarlogClusterOptions{
 		NrMR:              1,
 		NrRep:             nrRep,
 		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vms.DefaultOptions,
+		VMSOpts:           &vmsOpts,
 	}
 	opts.VMSOpts.HeartbeatTimeout *= 5
 	opts.VMSOpts.Logger = zap.L()
@@ -1711,11 +1718,14 @@ func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
 
 func TestVarlogLogStreamGCZombie(t *testing.T) {
 	nrRep := 1
+	vmsOpts := vms.DefaultOptions
+	vmsOpts.HeartbeatTimeout *= 10
+	vmsOpts.Logger = zap.L()
 	opts := VarlogClusterOptions{
 		NrMR:              1,
 		NrRep:             nrRep,
 		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vms.DefaultOptions,
+		VMSOpts:           &vmsOpts,
 	}
 
 	opts.VMSOpts.GCTimeout = 6 * time.Duration(opts.VMSOpts.ReportInterval) * opts.VMSOpts.Tick
@@ -1766,11 +1776,15 @@ func TestVarlogLogStreamGCZombie(t *testing.T) {
 func TestVarlogClient(t *testing.T) {
 	Convey("Given cluster option", t, func() {
 		const nrSN = 3
+		vmsOpts := vms.DefaultOptions
+		vmsOpts.HeartbeatTimeout *= 10
+		vmsOpts.Logger = zap.L()
 
 		clusterOpts := VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             3,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			VMSOpts:           &vmsOpts,
 		}
 
 		Convey("and running cluster", withTestCluster(clusterOpts, func(env *VarlogCluster) {
