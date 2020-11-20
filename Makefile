@@ -137,12 +137,9 @@ clean_mock:
 
 .PHONY: deps
 deps:
-	$(GO) get golang.org/x/tools/cmd/goimports
-	$(GO) get golang.org/x/lint/golint
+	GO111MODULE=off $(GO) get golang.org/x/tools/cmd/goimports
+	GO111MODULE=off $(GO) get golang.org/x/lint/golint
 	$(GO) get github.com/gogo/protobuf/protoc-gen-gogo@$(GOGO_PROTO_VERSION)
-	$(GO) get github.com/gogo/protobuf/gogoproto@$(GOGO_PROTO_VERSION)
-	$(GO) get github.com/gogo/protobuf/proto@$(GOGO_PROTO_VERSION)
-	$(GO) get github.com/gogo/protobuf/jsonpb@$(GOGO_PROTO_VERSION)
 	$(GO) get github.com/golang/mock/mockgen@$(MOCKGEN_VERSION)
 
 .PHONY: check
