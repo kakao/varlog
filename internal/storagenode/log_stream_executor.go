@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	errLSEKilled = errors.New("killed logstreamexecutor")
+	errLSEClosed = errors.New("logstream: closed log stream executor")
 )
 
 type Timestamper interface {
@@ -129,7 +129,7 @@ type logStreamExecutor struct {
 	replicator  Replicator
 
 	running     bool
-	muRunning   sync.Mutex
+	muRunning   sync.RWMutex
 	cancel      context.CancelFunc
 	runner      *runner.Runner
 	stopped     chan struct{}
@@ -293,6 +293,15 @@ errOut:
 }
 
 func (lse *logStreamExecutor) Close() {
+	lse.muRunning.RLock()
+	cancel := lse.cancel
+	lse.muRunning.RUnlock()
+	if cancel != nil {
+		cancel()
+	}
+	lse.replicator.Close()
+	lse.runner.Stop()
+	lse.stop()
 	lse.muRunning.Lock()
 	defer lse.muRunning.Unlock()
 
@@ -300,12 +309,7 @@ func (lse *logStreamExecutor) Close() {
 		return
 	}
 	lse.running = false
-	if lse.cancel != nil {
-		lse.cancel()
-	}
-	lse.replicator.Close()
-	lse.runner.Stop()
-	lse.stop()
+
 	lse.exhaustAppendTrackers()
 	if err := lse.storage.Close(); err != nil {
 		lse.logger.Warn("error while closing storage", zap.Error(err))
@@ -324,7 +328,7 @@ func (lse *logStreamExecutor) exhaustAppendTrackers() {
 	lse.logger.Info("exhaust pending append tasks")
 	lse.trackers.foreach(func(appendT *appendTask) {
 		lse.logger.Debug("discard append task", zap.Any("llsn", appendT.getLLSN()))
-		appendT.notify(errLSEKilled)
+		appendT.notify(errLSEClosed)
 	})
 }
 
@@ -344,6 +348,13 @@ func (lse *logStreamExecutor) isSealed() bool {
 }
 
 func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN) {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
+	if !lse.running {
+		// TODO (jun): add an error to return values
+		lse.logger.Error("could not seal", zap.Error(errLSEClosed))
+		return lse.Status(), types.InvalidGLSN
+	}
 	// process seal request one by one
 	lse.muSeal.Lock()
 	defer lse.muSeal.Unlock()
@@ -389,6 +400,11 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogSt
 }
 
 func (lse *logStreamExecutor) Unseal() error {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
+	if !lse.running {
+		return errLSEClosed
+	}
 	lse.muStatus.Lock()
 	defer lse.muStatus.Unlock()
 
@@ -462,6 +478,11 @@ func (lse *logStreamExecutor) dispatchCommitC(ctx context.Context) {
 // - read aggregation to minimize I/O
 // - cache or not (use memstore?)
 func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) (types.LogEntry, error) {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
+	if !lse.running {
+		return types.InvalidLogEntry, errLSEClosed
+	}
 	if err := lse.isTrimmed(glsn); err != nil {
 		return types.InvalidLogEntry, err
 	}
@@ -482,7 +503,7 @@ func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) (types.
 	case <-ctx.Done():
 		return types.InvalidLogEntry, ctx.Err()
 	case <-lse.stopped:
-		return types.InvalidLogEntry, errLSEKilled
+		return types.InvalidLogEntry, errLSEClosed
 	}
 }
 
@@ -513,6 +534,11 @@ func (lse *logStreamExecutor) read(t *readTask) {
 }
 
 func (lse *logStreamExecutor) Subscribe(ctx context.Context, begin, end types.GLSN) (<-chan ScanResult, error) {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
+	if !lse.running {
+		return nil, errLSEClosed
+	}
 	if begin >= end {
 		return nil, verrors.ErrInvalid
 	}
@@ -602,6 +628,11 @@ func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (
 }
 
 func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
+	if !lse.running {
+		return errLSEClosed
+	}
 	if lse.isSealed() {
 		return verrors.ErrSealed
 	}
@@ -621,6 +652,11 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 // If the log stream is locked, the append is failed.
 // All Appends are processed sequentially by using the appendC.
 func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
+	if !lse.running {
+		return types.InvalidGLSN, errLSEClosed
+	}
 	if lse.isSealed() {
 		lse.logger.Debug("could not append", zap.Error(verrors.ErrSealed))
 		return types.InvalidGLSN, verrors.ErrSealed
@@ -656,7 +692,7 @@ func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) err
 		lse.logger.Error("could not add appendTask to appendC", zap.Error(tctx.Err()))
 		return tctx.Err()
 	case <-lse.stopped:
-		return errLSEKilled
+		return errLSEClosed
 	}
 }
 
@@ -754,6 +790,11 @@ func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendT
 }
 
 func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
+	if !lse.running {
+		return errLSEClosed
+	}
 	if err := lse.isTrimmed(glsn); err != nil {
 		// already trimmed, no problem
 		return nil
@@ -770,7 +811,7 @@ func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
 	case <-tctx.Done():
 		return tctx.Err()
 	case <-lse.stopped:
-		return errLSEKilled
+		return errLSEClosed
 	}
 	return nil
 }
@@ -786,6 +827,8 @@ func (lse *logStreamExecutor) trim(t *trimTask) {
 }
 
 func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
 	// TODO: If this is sealed, ...
 	lse.mu.RLock()
 	offset := lse.uncommittedLLSNBegin
@@ -801,6 +844,8 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 }
 
 func (lse *logStreamExecutor) Commit(ctx context.Context, cr CommittedLogStreamStatus) {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
 	if err := lse.verifyCommit(cr.PrevHighWatermark); err != nil {
 		lse.logger.Error("could not commit", zap.Error(err))
 		return
@@ -820,7 +865,7 @@ func (lse *logStreamExecutor) Commit(ctx context.Context, cr CommittedLogStreamS
 	case <-tctx.Done():
 		lse.logger.Error("could not send commitTask to commitC", zap.Error(tctx.Err()))
 	case <-lse.stopped:
-		lse.logger.Error("could not send commitTask to commitC", zap.Error(errLSEKilled))
+		lse.logger.Error("could not send commitTask to commitC", zap.Error(errLSEClosed))
 	}
 }
 
@@ -918,6 +963,11 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 }
 
 func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLSN types.GLSN) (*SyncTaskStatus, error) {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
+	if !lse.running {
+		return nil, errLSEClosed
+	}
 	// TODO (jun): Delete SyncTaskStatus, but when?
 	if status := lse.Status(); status != varlogpb.LogStreamStatusSealed {
 		lse.logger.Error("bad status to sync", zap.Any("status", status))
@@ -1042,6 +1092,11 @@ func (lse *logStreamExecutor) getLogPosition(glsn types.GLSN) (types.LLSN, error
 }
 
 func (lse *logStreamExecutor) SyncReplicate(ctx context.Context, first, last, current snpb.SyncPosition, data []byte) error {
+	lse.muRunning.RLock()
+	defer lse.muRunning.RUnlock()
+	if !lse.running {
+		return errLSEClosed
+	}
 	// TODO (jun): prevent from triggering Sync from multiple sources
 	if status := lse.Status(); status != varlogpb.LogStreamStatusSealing {
 		lse.logger.Error("bad status to syncreplicate", zap.Any("status", status))

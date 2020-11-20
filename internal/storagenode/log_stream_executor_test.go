@@ -434,52 +434,6 @@ func TestLogStreamExecutorRead(t *testing.T) {
 	})
 }
 
-func TestLogStreamExecutorTrim(t *testing.T) {
-	Convey("Given that a LogStreamExecutor.Trim is called", t, func() {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
-		So(err, ShouldBeNil)
-
-		Convey("When the context passed to the Trim is cancelled before enqueueing the trimTask", func() {
-			Convey("Then the LogStreamExecutor should return cancellation error", func() {
-				ctx, cancel := context.WithCancel(context.TODO())
-				cancel()
-				<-ctx.Done()
-
-				lse.(*logStreamExecutor).localLowWatermark.Store(1)
-				lse.(*logStreamExecutor).localHighWatermark.Store(10)
-
-				err := lse.Trim(ctx, 2)
-				So(err, ShouldNotBeNil)
-			})
-		})
-	})
-}
-
-func TestLogStreamExecutorReplicate(t *testing.T) {
-	Convey("Given that LogStreamExecutor.Replicate is called", t, func() {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		storage := NewMockStorage(ctrl)
-		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
-		So(err, ShouldBeNil)
-
-		Convey("When the context passed to Replicate is canceled before calling storage.Write", func() {
-			ctx, cancel := context.WithCancel(context.TODO())
-			cancel()
-
-			Convey("Then the Replicate should return cancellation error", func() {
-				err := lse.Replicate(ctx, types.MinLLSN, []byte("foo"))
-				So(err, ShouldResemble, context.Canceled)
-			})
-		})
-	})
-}
-
 func TestLogStreamExecutorSubscribe(t *testing.T) {
 	Convey("Given LogStreamExecutor.Subscribe", t, func() {
 		ctrl := gomock.NewController(t)
@@ -575,8 +529,14 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 		lseI, err := NewLogStreamExecutor(zap.L(), lsid, storage, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 		lse := lseI.(*logStreamExecutor)
-
 		updatedAt := lse.LastUpdated()
+
+		So(lseI.Run(context.TODO()), ShouldBeNil)
+
+		Reset(func() {
+			storage.EXPECT().Close().Return(nil)
+			lseI.Close()
+		})
 
 		Convey("When LogStreamExecutor.sealItself is called", func() {
 			lse.sealItself()
