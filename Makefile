@@ -88,6 +88,11 @@ ifeq ($(TEST_VERBOSE),1)
 	TEST_FLAGS := $(TEST_FLAGS) -v
 endif
 
+TEST_E2E := 0
+ifeq ($(TEST_E2E),1)
+	TEST_FLAGS := $(TEST_FLAGS) -tags=e2e
+endif
+
 .PHONY: test test_report coverage_report
 test: check proto generate fmt 
 	tmpfile=$$(mktemp); \
