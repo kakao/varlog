@@ -17,8 +17,20 @@ func TestGetListenerAddr(t *testing.T) {
 		{in: "0.0.0.0:8000", minOutLen: 1},
 		{in: "127.0.0.1:0", minOutLen: 1},
 		{in: "127.0.0.1:8000", out: "127.0.0.1:8000"},
-		{in: "127.0.0:8000"},
-		{in: "211.211.56.120:8000"},
+	}
+	ips, err := IPs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ip := range ips {
+		tests = append(tests, struct {
+			in        string
+			out       string
+			minOutLen int
+		}{
+			in:  ip.String() + ":8000",
+			out: ip.String() + ":8000",
+		})
 	}
 
 	for i := range tests {

@@ -94,10 +94,13 @@ func GetListenerAddrs(addr net.Addr) ([]string, error) {
 
 	var ips []net.IP
 	if tcpAddr.IP.IsUnspecified() {
-		ips = getIPs()
+		ips, err = IPs()
+		if err != nil {
+			return nil, err
+		}
 	} else if tcpAddr.IP.IsLoopback() {
 		ips = append(ips, tcpAddr.IP)
-	} else if ip, err := getIP(tcpAddr); err != nil {
+	} else if ip, err := getIP(tcpAddr); err == nil {
 		ips = append(ips, ip)
 	}
 
@@ -109,26 +112,15 @@ func GetListenerAddrs(addr net.Addr) ([]string, error) {
 	return ret, nil
 }
 
-func getIP(addr net.Addr) (net.IP, error) {
-	ip, _, _ := net.ParseCIDR(addr.String())
+func getIP(addr *net.TCPAddr) (net.IP, error) {
+	ip := net.ParseIP(addr.IP.String())
+	if ip == nil {
+		return nil, errNotGlobalUnicastAddress
+	}
 	if !ip.IsGlobalUnicast() {
 		return nil, errNotGlobalUnicastAddress
 	}
 	return ip, nil
-}
-
-func getIPs() []net.IP {
-	var ret []net.IP
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ret
-	}
-	for _, addr := range addrs {
-		if ip, err := getIP(addr); err == nil {
-			ret = append(ret, ip)
-		}
-	}
-	return ret
 }
 
 func getTCPListenerAddr(addr net.Addr) (*net.TCPAddr, error) {
