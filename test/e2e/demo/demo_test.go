@@ -31,22 +31,24 @@ var (
 	vmsAddr = fmt.Sprintf("127.0.0.1:%d", vmsPort)
 )
 
-func clearDir(t *testing.T) {
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+func getClearDir(t *testing.T) func() {
+	return func() {
+		dir, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	fis, err := ioutil.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+		fis, err := ioutil.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	for _, fi := range fis {
-		if fi.IsDir() && fi.Name()[:4] == "raft" {
-			t.Log(fi.Name())
-			if err := os.RemoveAll(fi.Name()); err != nil {
-				t.Fatal(err)
+		for _, fi := range fis {
+			if fi.IsDir() && fi.Name()[:4] == "raft" {
+				t.Log(fi.Name())
+				if err := os.RemoveAll(fi.Name()); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 	}
@@ -214,7 +216,9 @@ func forkVMC(ctx context.Context, args []string, t *testing.T) (*exec.Cmd, io.Re
 }
 
 func TestDemo(t *testing.T) {
-	clearDir(t)
+	cleanup := getClearDir(t)
+	cleanup()
+	t.Cleanup(cleanup)
 
 	var snInfos = []struct {
 		snid int
