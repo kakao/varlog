@@ -27,6 +27,9 @@
 *.out
 *.app
 
+# Python
+*.pyc
+
 # Editor or IDE files
 *.swp
 *.vcxproj

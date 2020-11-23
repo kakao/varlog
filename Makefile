@@ -4,6 +4,7 @@ SHELL := /bin/bash
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MAKEFILE_DIR := $(dir $(MAKEFILE_PATH))
 BUILD_DIR := $(MAKEFILE_DIR)/build
+BIN_DIR := $(MAKEFILE_DIR)/bin
 
 GOGO_PROTO_VERSION := v1.3.1
 MOCKGEN_VERSION := v1.4.4
@@ -29,10 +30,10 @@ HAS_GRPC_PLUGIN := $(shell which $(GRPC_GO_PLUGIN) > /dev/null && echo true || e
 .PHONY: all
 all: check proto generate fmt build
 
-VMS := build/vms
-VMC := build/vmc
-VSN := build/vsn
-VMR := build/vmr
+VMS := $(BIN_DIR)/vms
+VMC := $(BIN_DIR)/vmc
+VSN := $(BIN_DIR)/vsn
+VMR := $(BIN_DIR)/vmr
 BUILD_OUTPUT := $(VMS) $(VMC) $(VSN) $(VMR)
 
 .PHONY: build vms vmc vsn vmr

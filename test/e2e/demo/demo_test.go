@@ -52,13 +52,13 @@ func clearDir(t *testing.T) {
 	}
 }
 
-func buildDir(t *testing.T) string {
+func binDir(t *testing.T) string {
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	dir = filepath.Join(dir, "../../../build")
+	dir = filepath.Join(dir, "../../../bin")
 	dir, err = filepath.Abs(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func runScanner(ctx context.Context, r io.ReadCloser, w io.Writer) {
 }
 
 func fork(ctx context.Context, args []string, envs []string, t *testing.T) (cmd *exec.Cmd, stdout io.ReadCloser, stderr io.ReadCloser) {
-	bin := filepath.Join(buildDir(t), args[0])
+	bin := filepath.Join(binDir(t), args[0])
 	cmd = exec.CommandContext(ctx, bin, args[1:]...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
