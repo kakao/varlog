@@ -12,11 +12,13 @@ import (
 )
 
 const defaultRaftTick = time.Millisecond * 100
+const defaultCommitTick = time.Millisecond * 10
 const defaultTimeoutUnit = time.Millisecond * 200
 const defaultProcCount = 16
 
 var (
 	testRaftTick    time.Duration = defaultRaftTick
+	testCommitTick  time.Duration = defaultCommitTick
 	testTimeoutUnit time.Duration = defaultTimeoutUnit
 	testLogger      *zap.Logger   = zap.NewNop()
 )
@@ -34,6 +36,12 @@ func init() {
 		testRaftTick = dur
 	}
 	log.Printf("TEST_RAFT_TICK=%v", testRaftTick)
+
+	v = os.Getenv("TEST_COMMIT_TICK")
+	if dur, err := time.ParseDuration(v); err == nil {
+		testCommitTick = dur
+	}
+	log.Printf("TEST_COMMIT_TICK=%v", testCommitTick)
 
 	v = os.Getenv("TEST_USE_LOGGER")
 	v = strings.ToLower(v)
@@ -69,4 +77,8 @@ func TestLogger() *zap.Logger {
 
 func TestRaftTick() time.Duration {
 	return testRaftTick
+}
+
+func TestCommitTick() time.Duration {
+	return testCommitTick
 }

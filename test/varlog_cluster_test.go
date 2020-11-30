@@ -734,6 +734,7 @@ func withTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func
 		Reset(func() {
 			env.Close()
 			cmCli.Close()
+			testutil.GC()
 		})
 
 		f(env)

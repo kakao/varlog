@@ -60,7 +60,7 @@ $(PROTO_PBS): $(PROTO_SRCS)
 	done
 
 TEST_COUNT := 1
-TEST_FLAGS := -count $(TEST_COUNT) -p 1
+TEST_FLAGS := -count $(TEST_COUNT) -p 1 
 
 ifneq ($(TEST_CPU),)
 	TEST_FLAGS := $(TEST_FLAGS) -cpu $(TEST_CPU)

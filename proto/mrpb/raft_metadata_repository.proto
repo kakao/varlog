@@ -32,10 +32,9 @@ message MetadataRepositoryDescriptor {
     message LocalLogStreamReplicas {
         option (gogoproto.equal) = true;
 
-        map<int32, LocalLogStreamReplica> replicas = 1 [
-            (gogoproto.castkey) =
-                "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID"
-        ];
+        map<int32, LocalLogStreamReplica> replicas = 1
+            [(gogoproto.castkey) =
+                 "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID"];
         varlogpb.LogStreamStatus status = 2;
     }
 
@@ -47,15 +46,19 @@ message MetadataRepositoryDescriptor {
         ];
         repeated snpb.GlobalLogStreamDescriptor global_log_streams = 2
             [(gogoproto.nullable) = true];
-        map<uint64, LocalLogStreamReplicas> local_log_streams = 3 [
-            (gogoproto.castkey) =
-                "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID"
-        ];
+        map<uint64, LocalLogStreamReplicas> local_log_streams = 3
+            [(gogoproto.castkey) =
+                 "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID"];
+    }
+
+    message PeerDescriptor {
+        string url = 1 [(gogoproto.customname) = "URL"];
+        bool is_learner = 2;
     }
 
     varlogpb.MetadataDescriptor metadata = 1 [(gogoproto.nullable) = true];
     LogStreamDescriptor log_stream = 2 [(gogoproto.nullable) = true];
-    map<uint64, string> peers = 3
+    map<uint64, PeerDescriptor> peers = 3
         [(gogoproto.castkey) =
              "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
     map<uint64, string> endpoints = 4

@@ -22,11 +22,9 @@ import (
 
 type jobSnapshot struct {
 	appliedIndex uint64
-	confState    *raftpb.ConfState
 }
 
 type jobMetadataCache struct {
-	appliedIndex uint64
 	nodeIndex    uint64
 	requestIndex uint64
 }
@@ -40,6 +38,12 @@ type committedEntry struct {
 	confState *raftpb.ConfState
 }
 
+type SnapshotGetter interface {
+	GetSnapshotIndex() uint64
+	GetSnapshot() ([]byte, *raftpb.ConfState, uint64)
+}
+
+// TODO:: refactoring
 type MetadataStorage struct {
 	// make orig immutable
 	// and entries are applied to diff
@@ -49,18 +53,26 @@ type MetadataStorage struct {
 	copyOnWrite      atomicutil.AtomicBool
 
 	// snapshot orig for raft
-	snap []byte
+	snap      []byte
+	snapCount uint64
+
 	// the largest index of the entry already applied to the snapshot
-	snapIndex     uint64
-	snapConfState *raftpb.ConfState
+	snapIndex uint64
+
+	// confState for snapshot
+	snapConfState atomic.Value
+
+	// confState for origStateMachine
+	origConfState *raftpb.ConfState
+	// confState for diffStateMachine
+	diffConfState *raftpb.ConfState
+
 	// the largest index of the entry already applied to the stateMachine
 	appliedIndex uint64
-	confState    *raftpb.ConfState
-	snapCount    uint64
 
 	// immutable metadata cache for client request
 	metaCache *varlogpb.MetadataDescriptor
-	// the largest index of the entry already applied to the stateMachine
+	// change of metadata sequence number
 	metaAppliedIndex uint64
 	// callback after cache is completed
 	cacheCompleteCB func(uint64, uint64, error)
@@ -107,8 +119,8 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger
 	ms.diffStateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
 
-	ms.origStateMachine.Peers = make(map[types.NodeID]string)
-	ms.diffStateMachine.Peers = make(map[types.NodeID]string)
+	ms.origStateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+	ms.diffStateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 
 	ms.origStateMachine.Endpoints = make(map[types.NodeID]string)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
@@ -216,8 +228,6 @@ func (ms *MetadataStorage) LookupLogStream(lsID types.LogStreamID) *varlogpb.Log
 }
 
 func (ms *MetadataStorage) registerStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
-	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
-
 	if ms.lookupStorageNode(sn.StorageNodeID) != nil {
 		return verrors.ErrAlreadyExists
 	}
@@ -227,7 +237,13 @@ func (ms *MetadataStorage) registerStorageNode(sn *varlogpb.StorageNodeDescripto
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	return cur.Metadata.UpsertStorageNode(sn)
+	err := cur.Metadata.UpsertStorageNode(sn)
+	if err != nil {
+		return err
+	}
+
+	ms.metaAppliedIndex++
+	return err
 }
 
 func (ms *MetadataStorage) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor, nodeIndex, requestIndex uint64) error {
@@ -244,8 +260,6 @@ func (ms *MetadataStorage) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 }
 
 func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error {
-	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
-
 	pre, cur := ms.getStateMachine()
 
 	if cur.Metadata.GetStorageNode(snID) == nil &&
@@ -274,6 +288,7 @@ func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error
 		cur.Metadata.InsertStorageNode(deleted)
 	}
 
+	ms.metaAppliedIndex++
 	return nil
 }
 
@@ -291,8 +306,6 @@ func (ms *MetadataStorage) UnregisterStorageNode(snID types.StorageNodeID, nodeI
 }
 
 func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) error {
-	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
-
 	if len(ls.Replicas) == 0 {
 		return verrors.ErrInvalidArgument
 	}
@@ -329,6 +342,7 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 	}
 
 	cur.LogStream.LocalLogStreams[ls.LogStreamID] = lm
+	ms.metaAppliedIndex++
 
 	return nil
 }
@@ -347,8 +361,6 @@ func (ms *MetadataStorage) RegisterLogStream(ls *varlogpb.LogStreamDescriptor, n
 }
 
 func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
-	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
-
 	pre, cur := ms.getStateMachine()
 
 	if cur.Metadata.GetLogStream(lsID) == nil &&
@@ -377,6 +389,8 @@ func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
 		cur.LogStream.LocalLogStreams[lsID] = lm
 	}
 
+	ms.metaAppliedIndex++
+
 	return nil
 }
 
@@ -394,8 +408,6 @@ func (ms *MetadataStorage) UnregisterLogStream(lsID types.LogStreamID, nodeIndex
 }
 
 func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) error {
-	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
-
 	if len(ls.Replicas) == 0 {
 		return verrors.ErrInvalidArgument
 	}
@@ -416,7 +428,13 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	return cur.Metadata.UpsertLogStream(ls)
+	err := cur.Metadata.UpsertLogStream(ls)
+	if err != nil {
+		return err
+	}
+
+	ms.metaAppliedIndex++
+	return err
 }
 
 func (ms *MetadataStorage) updateLocalLogStream(ls *varlogpb.LogStreamDescriptor) error {
@@ -476,10 +494,9 @@ func (ms *MetadataStorage) UpdateLogStream(ls *varlogpb.LogStreamDescriptor, nod
 }
 
 func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status varlogpb.LogStreamStatus) error {
-	defer func() { atomic.AddUint64(&ms.metaAppliedIndex, 1) }()
-
 	pre, cur := ms.getStateMachine()
 
+	exist := true
 	ls := cur.Metadata.GetLogStream(lsID)
 	if ls == nil {
 		tmp := pre.Metadata.GetLogStream(lsID)
@@ -489,9 +506,7 @@ func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status 
 
 		ls = proto.Clone(tmp).(*varlogpb.LogStreamDescriptor)
 
-		ms.mtMu.Lock()
-		cur.Metadata.InsertLogStream(ls)
-		ms.mtMu.Unlock()
+		exist = false
 	}
 
 	if ls.Status == status {
@@ -501,7 +516,12 @@ func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status 
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
+	if !exist {
+		cur.Metadata.InsertLogStream(ls)
+	}
+
 	ls.Status = status
+	ms.metaAppliedIndex++
 
 	return nil
 }
@@ -588,14 +608,24 @@ func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, re
 	return nil
 }
 
-func (ms *MetadataStorage) AddPeer(nodeID types.NodeID, url string, cs *raftpb.ConfState) error {
+func (ms *MetadataStorage) AddPeer(nodeID types.NodeID, url string, isLearner bool, cs *raftpb.ConfState) error {
 	ms.prMu.Lock()
 	defer ms.prMu.Unlock()
 
+	ms.setConfState(cs)
 	_, cur := ms.getStateMachine()
-	cur.Peers[nodeID] = url
 
-	ms.confState = cs
+	peer := &mrpb.MetadataRepositoryDescriptor_PeerDescriptor{
+		URL:       url,
+		IsLearner: isLearner,
+	}
+
+	if exist, ok := cur.Peers[nodeID]; ok {
+		if exist != nil && !exist.IsLearner {
+			return nil
+		}
+	}
+	cur.Peers[nodeID] = peer
 
 	return nil
 }
@@ -604,17 +634,16 @@ func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID, cs *raftpb.ConfState)
 	ms.prMu.Lock()
 	defer ms.prMu.Unlock()
 
+	ms.setConfState(cs)
 	_, cur := ms.getStateMachine()
 
 	if cur == ms.origStateMachine {
 		delete(cur.Peers, nodeID)
 		delete(cur.Endpoints, nodeID)
 	} else {
-		cur.Peers[nodeID] = ""
+		cur.Peers[nodeID] = nil
 		cur.Endpoints[nodeID] = ""
 	}
-
-	ms.confState = cs
 
 	return nil
 }
@@ -866,9 +895,8 @@ func (ms *MetadataStorage) UpdateAppliedIndex(appliedIndex uint64) {
 	// make sure to merge before trigger snapshop
 	// it makes orig have entry with appliedIndex
 	ms.mergeStateMachine()
-	if ms.appliedIndex-atomic.LoadUint64(&ms.snapIndex) > ms.snapCount {
-		ms.triggerSnapshot(appliedIndex)
-	}
+
+	ms.triggerSnapshot(appliedIndex)
 }
 
 func (ms *MetadataStorage) getHighWatermarkNoLock() types.GLSN {
@@ -931,11 +959,28 @@ func (ms *MetadataStorage) GetMetadata() *varlogpb.MetadataDescriptor {
 	return ms.metaCache
 }
 
+func (ms *MetadataStorage) getSnapshotConfState() *raftpb.ConfState {
+	f := ms.snapConfState.Load()
+	if f == nil {
+		return nil
+	}
+
+	return f.(*raftpb.ConfState)
+}
+
+func (ms *MetadataStorage) getSnapshotIndex() uint64 {
+	return atomic.LoadUint64(&ms.snapIndex)
+}
+
+func (ms *MetadataStorage) GetSnapshotIndex() uint64 {
+	return ms.getSnapshotIndex()
+}
+
 func (ms *MetadataStorage) GetSnapshot() ([]byte, *raftpb.ConfState, uint64) {
 	ms.ssMu.RLock()
 	defer ms.ssMu.RUnlock()
 
-	return ms.snap, ms.snapConfState, atomic.LoadUint64(&ms.snapIndex)
+	return ms.snap, ms.getSnapshotConfState(), ms.getSnapshotIndex()
 }
 
 func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.ConfState, snapIndex uint64) error {
@@ -950,7 +995,7 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 	}
 
 	if stateMachine.Peers == nil {
-		stateMachine.Peers = make(map[types.NodeID]string)
+		stateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	}
 
 	if stateMachine.Endpoints == nil {
@@ -962,7 +1007,7 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 
 	ms.ssMu.Lock()
 	ms.snap = snap
-	ms.snapConfState = snapConfState
+	ms.snapConfState.Store(snapConfState)
 	atomic.StoreUint64(&ms.snapIndex, snapIndex)
 	ms.ssMu.Unlock()
 
@@ -971,7 +1016,6 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 
 	ms.mcMu.Lock()
 	ms.metaCache = cache
-	atomic.StoreUint64(&ms.metaAppliedIndex, snapIndex)
 	ms.mcMu.Unlock()
 
 	ms.mtMu.Lock()
@@ -984,8 +1028,10 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
 	ms.diffStateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 	ms.diffStateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
-	ms.diffStateMachine.Peers = make(map[types.NodeID]string)
+	ms.diffStateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
+
+	ms.metaAppliedIndex = snapIndex
 
 	ms.prMu.Unlock()
 	ms.lsMu.Unlock()
@@ -993,6 +1039,8 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 
 	// make nrUpdateSinceCommit > 0 to enable commit
 	ms.nrUpdateSinceCommit = 1
+	ms.appliedIndex = snapIndex
+	ms.origConfState = snapConfState
 
 	ms.jobC = make(chan *storageAsyncJob, 4096)
 	ms.Run()
@@ -1061,7 +1109,7 @@ func (ms *MetadataStorage) createSnapshot(job *jobSnapshot) {
 	defer ms.ssMu.Unlock()
 
 	ms.snap = b
-	ms.snapConfState = job.confState
+	ms.snapConfState.Store(ms.origConfState)
 	atomic.StoreUint64(&ms.snapIndex, job.appliedIndex)
 }
 
@@ -1072,7 +1120,11 @@ func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 		}
 	}()
 
-	if ms.metaCache != nil && ms.metaCache.AppliedIndex >= job.appliedIndex {
+	ms.mtMu.RLock()
+	metaAppliedIndex := ms.metaAppliedIndex
+	ms.mtMu.RUnlock()
+
+	if ms.metaCache != nil && ms.metaCache.AppliedIndex >= metaAppliedIndex {
 		return
 	}
 
@@ -1095,7 +1147,7 @@ func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 	ms.mcMu.Lock()
 	defer ms.mcMu.Unlock()
 
-	cache.AppliedIndex = atomic.LoadUint64(&ms.metaAppliedIndex)
+	cache.AppliedIndex = ms.metaAppliedIndex
 	ms.metaCache = cache
 }
 
@@ -1158,11 +1210,11 @@ func (ms *MetadataStorage) mergePeers() {
 	ms.prMu.Lock()
 	defer ms.prMu.Unlock()
 
-	for nodeID, url := range ms.diffStateMachine.Peers {
-		if url == "" {
+	for nodeID, peer := range ms.diffStateMachine.Peers {
+		if peer == nil {
 			delete(ms.origStateMachine.Peers, nodeID)
 		} else {
-			ms.origStateMachine.Peers[nodeID] = url
+			ms.origStateMachine.Peers[nodeID] = peer
 		}
 	}
 
@@ -1174,8 +1226,23 @@ func (ms *MetadataStorage) mergePeers() {
 		}
 	}
 
-	ms.diffStateMachine.Peers = make(map[types.NodeID]string)
+	ms.diffStateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
+}
+
+func (ms *MetadataStorage) mergeConfState() {
+	if ms.diffConfState != nil {
+		ms.origConfState = ms.diffConfState
+	}
+	ms.diffConfState = nil
+}
+
+func (ms *MetadataStorage) setConfState(cs *raftpb.ConfState) {
+	if ms.isCopyOnWrite() {
+		ms.diffConfState = cs
+	} else {
+		ms.origConfState = cs
+	}
 }
 
 func (ms *MetadataStorage) trimGlobalLogStream() {
@@ -1190,19 +1257,41 @@ func (ms *MetadataStorage) trimGlobalLogStream() {
 }
 
 func (ms *MetadataStorage) mergeStateMachine() {
-	if atomic.LoadInt64(&ms.nrRunning) != 0 ||
-		!ms.isCopyOnWrite() {
+	if atomic.LoadInt64(&ms.nrRunning) != 0 {
+		return
+	}
+
+	if !ms.isCopyOnWrite() {
 		return
 	}
 
 	ms.mergeMetadata()
 	ms.mergeLogStream()
 	ms.mergePeers()
+	ms.mergeConfState()
 
 	ms.releaseCopyOnWrite()
+	return
+}
+
+func (ms *MetadataStorage) needSnapshot() bool {
+	if ms.appliedIndex-ms.getSnapshotIndex() > ms.snapCount {
+		return true
+	}
+
+	// check if there was a conf change
+	return ms.getSnapshotConfState() != ms.origConfState
 }
 
 func (ms *MetadataStorage) triggerSnapshot(appliedIndex uint64) {
+	if ms.isCopyOnWrite() {
+		return
+	}
+
+	if !ms.needSnapshot() {
+		return
+	}
+
 	if !atomic.CompareAndSwapInt64(&ms.nrRunning, 0, 1) {
 		// While other snapshots are running,
 		// there is no quarantee that an entry
@@ -1214,7 +1303,6 @@ func (ms *MetadataStorage) triggerSnapshot(appliedIndex uint64) {
 
 	job := &jobSnapshot{
 		appliedIndex: appliedIndex,
-		confState:    ms.confState,
 	}
 	ms.jobC <- &storageAsyncJob{job: job}
 }
@@ -1224,7 +1312,6 @@ func (ms *MetadataStorage) triggerMetadataCache(nodeIndex, requestIndex uint64) 
 	ms.setCopyOnWrite()
 
 	job := &jobMetadataCache{
-		appliedIndex: atomic.LoadUint64(&ms.metaAppliedIndex),
 		nodeIndex:    nodeIndex,
 		requestIndex: requestIndex,
 	}
