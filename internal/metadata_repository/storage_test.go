@@ -275,6 +275,7 @@ func TestStorageUpdateLS(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
+			testutil.GC()
 		})
 
 		rep := 2
@@ -430,6 +431,7 @@ func TestStorageSealLS(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
+			testutil.GC()
 		})
 
 		rep := 2
@@ -588,6 +590,7 @@ func TestStorageUnsealLS(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
+			testutil.GC()
 		})
 
 		rep := 2
@@ -946,6 +949,7 @@ func TestStorageMetadataCache(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
+			testutil.GC()
 		})
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -1000,6 +1004,7 @@ func TestStorageMetadataCache(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
+			testutil.GC()
 		})
 
 		<-ch
@@ -1057,6 +1062,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			ms.Run()
 			Reset(func() {
 				ms.Close()
+				testutil.GC()
 			})
 
 			<-ch
@@ -1127,7 +1133,7 @@ func TestStorageSnapshot(t *testing.T) {
 			ch <- struct{}{}
 		}
 
-		ms := NewMetadataStorage(cb, DefaultSnapshotCount, nil)
+		ms := NewMetadataStorage(cb, 0, nil)
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -1146,6 +1152,7 @@ func TestStorageSnapshot(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
+			testutil.GC()
 		})
 
 		<-ch
@@ -1202,10 +1209,11 @@ func TestStorageApplySnapshot(t *testing.T) {
 			ch <- struct{}{}
 		}
 
-		ms := NewMetadataStorage(cb, DefaultSnapshotCount, nil)
+		ms := NewMetadataStorage(cb, 0, nil)
 		ms.Run()
 		Reset(func() {
 			ms.Close()
+			testutil.GC()
 		})
 
 		appliedIndex := uint64(0)
@@ -1279,6 +1287,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
+			testutil.GC()
 		})
 
 		n := 10000

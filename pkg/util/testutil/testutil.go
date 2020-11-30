@@ -1,6 +1,8 @@
 package testutil
 
 import (
+	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/kakao/varlog/vtesting"
@@ -39,4 +41,18 @@ func CompareWait10(cmp func() bool) bool {
 
 func CompareWait1(cmp func() bool) bool {
 	return CompareWaitN(1, cmp)
+}
+
+func GC() {
+	var ms runtime.MemStats
+	var gc runtime.MemStats
+
+	runtime.ReadMemStats(&ms)
+	runtime.GC()
+	runtime.ReadMemStats(&gc)
+
+	fmt.Printf("\nGC Stat:: %f -> %f mb, Sys: %f mb\n",
+		float32(ms.Alloc)/float32(1024*1024),
+		float32(gc.Alloc)/float32(1024*1024),
+		float32(gc.Sys)/float32(1024*1024))
 }

@@ -36,16 +36,15 @@ type raftNode struct {
 	commitC     chan *raftCommittedEntry // entries committed to app
 	snapshotC   chan struct{}            // snapshot trigger
 
-	id          vtypes.NodeID   // node ID for raft
-	bpeers      []string        // raft bootstrap peer URLs
-	url         string          // raft listen url
-	membership  *raftMembership // raft membership
-	raftTick    time.Duration   // raft tick
-	join        bool            // node is joining an existing cluster
-	waldir      string          // path to WAL directory
-	snapdir     string          // path to snapshot directory
-	getSnapshot func() ([]byte, *raftpb.ConfState, uint64)
-	lastIndex   uint64 // index of log at start
+	id         vtypes.NodeID   // node ID for raft
+	bpeers     []string        // raft bootstrap peer URLs
+	url        string          // raft listen url
+	membership *raftMembership // raft membership
+	raftTick   time.Duration   // raft tick
+	join       bool            // node is joining an existing cluster
+	waldir     string          // path to WAL directory
+	snapdir    string          // path to snapshot directory
+	lastIndex  uint64          // index of log at start
 
 	raftState     raft.StateType
 	snapshotIndex uint64
@@ -56,8 +55,9 @@ type raftNode struct {
 	raftStorage *raft.MemoryStorage
 	wal         *wal.WAL
 
-	snapshotter *snap.Snapshotter
-	snapCount   uint64
+	snapshotGetter SnapshotGetter
+	snapshotter    *snap.Snapshotter
+	snapCount      uint64
 
 	transport *rafthttp.Transport
 
@@ -79,11 +79,12 @@ type raftCommittedEntry struct {
 }
 
 type raftMembership struct {
-	state   raft.StateType           // raft state
-	leader  types.ID                 // raft leader
-	members map[vtypes.NodeID]string // raft member map
-	peers   map[vtypes.NodeID]string // raft known peer map
-	mu      sync.RWMutex
+	state    raft.StateType           // raft state
+	leader   types.ID                 // raft leader
+	learners map[vtypes.NodeID]string // raft learner map
+	members  map[vtypes.NodeID]string // raft member map
+	peers    map[vtypes.NodeID]string // raft known peer map
+	mu       sync.RWMutex
 }
 
 // newRaftNode initiates a raft instance and returns a committed log entry
@@ -91,29 +92,29 @@ type raftMembership struct {
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries.
-func newRaftNode(id vtypes.NodeID, peers []string, join bool, snapCount uint64, raftTick time.Duration, getSnapshot func() ([]byte, *raftpb.ConfState, uint64), proposeC chan string,
+func newRaftNode(id vtypes.NodeID, peers []string, join bool, snapCount uint64, raftTick time.Duration, snapshotGetter SnapshotGetter, proposeC chan string,
 	confChangeC chan raftpb.ConfChange, logger *zap.Logger) *raftNode {
 
 	commitC := make(chan *raftCommittedEntry)
 	snapshotC := make(chan struct{})
 
 	rc := &raftNode{
-		proposeC:    proposeC,
-		snapshotC:   snapshotC,
-		confChangeC: confChangeC,
-		commitC:     commitC,
-		id:          id,
-		bpeers:      peers,
-		membership:  newRaftMemebership(),
-		raftTick:    raftTick,
-		join:        join,
-		waldir:      fmt.Sprintf("raft-%d", id),
-		snapdir:     fmt.Sprintf("raft-%d-snap", id),
-		getSnapshot: getSnapshot,
-		snapCount:   snapCount,
-		logger:      logger,
-		runner:      runner.New("raft-node", logger),
-		httprunner:  runner.New("http", logger),
+		proposeC:       proposeC,
+		snapshotC:      snapshotC,
+		confChangeC:    confChangeC,
+		commitC:        commitC,
+		id:             id,
+		bpeers:         peers,
+		membership:     newRaftMemebership(),
+		raftTick:       raftTick,
+		join:           join,
+		waldir:         fmt.Sprintf("raft-%d", id),
+		snapdir:        fmt.Sprintf("raft-%d-snap", id),
+		snapshotGetter: snapshotGetter,
+		snapCount:      snapCount,
+		logger:         logger,
+		runner:         runner.New("raft-node", logger),
+		httprunner:     runner.New("http", logger),
 	}
 
 	return rc
@@ -170,7 +171,7 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 
 			cs = rc.node.ApplyConfChange(cc)
 			switch cc.Type {
-			case raftpb.ConfChangeAddNode:
+			case raftpb.ConfChangeAddNode, raftpb.ConfChangeAddLearnerNode:
 				if len(cc.Context) == 0 {
 					cc.Context = rc.membership.getPeer(vtypes.NodeID(cc.NodeID))
 					if cc.Context == nil {
@@ -186,15 +187,20 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 				if cc.NodeID != uint64(rc.id) {
 					rc.transport.AddPeer(types.ID(cc.NodeID), []string{string(cc.Context)})
 				}
-				rc.membership.addMember(vtypes.NodeID(cc.NodeID), string(cc.Context))
 
-			case raftpb.ConfChangeRemoveNode:
-				if rc.membership.removePeer(vtypes.NodeID(cc.NodeID)) &&
-					cc.NodeID != uint64(rc.id) {
-					rc.transport.RemovePeer(types.ID(cc.NodeID))
+				if cc.Type == raftpb.ConfChangeAddNode {
+					rc.membership.addMember(vtypes.NodeID(cc.NodeID), string(cc.Context))
+				} else {
+					rc.membership.addLearner(vtypes.NodeID(cc.NodeID), string(cc.Context))
 				}
+			case raftpb.ConfChangeRemoveNode:
+				rc.membership.removePeer(vtypes.NodeID(cc.NodeID))
 
-				if cc.NodeID == uint64(rc.id) {
+				if cc.NodeID != uint64(rc.id) {
+					if tr := rc.transport.Get(types.ID(cc.NodeID)); tr != nil {
+						rc.transport.RemovePeer(types.ID(cc.NodeID))
+					}
+				} else {
 					rc.logger.Info("I've been removed from the cluster! Shutting down.")
 					shutdown = true
 				}
@@ -370,16 +376,16 @@ func (rc *raftNode) start() {
 
 	rc.transport.Start()
 
-	if snapshot == nil {
-		for i, peer := range rpeers {
-			if peer.ID == uint64(rc.id) {
-				rc.url = rc.bpeers[i]
-			} else {
-				rc.transport.AddPeer(types.ID(peer.ID), []string{rc.bpeers[i]})
-			}
-			rc.membership.addPeer(vtypes.NodeID(peer.ID), rc.bpeers[i])
+	for i, peer := range rpeers {
+		if peer.ID == uint64(rc.id) {
+			rc.url = rc.bpeers[i]
+		} else {
+			rc.transport.AddPeer(types.ID(peer.ID), []string{rc.bpeers[i]})
 		}
-	} else {
+		rc.membership.addPeer(vtypes.NodeID(peer.ID), rc.bpeers[i])
+	}
+
+	if snapshot != nil {
 		rc.recoverMembership(*snapshot)
 	}
 
@@ -577,12 +583,12 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 
 func (rc *raftNode) doSnapshot() {
 	snapshotIndex := atomic.LoadUint64(&rc.snapshotIndex)
-
-	data, confState, appliedIndex := rc.getSnapshot()
+	appliedIndex := rc.snapshotGetter.GetSnapshotIndex()
 	if snapshotIndex >= appliedIndex {
 		return
 	}
 
+	data, confState, appliedIndex := rc.snapshotGetter.GetSnapshot()
 	rc.logger.Info("start snapshot",
 		zap.Uint64("snapshotAppliedIndex", appliedIndex),
 		zap.Uint64("lastSnapshotIndex", snapshotIndex),
@@ -735,13 +741,14 @@ func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
 
 func (rc *raftNode) GetNodeID() vtypes.NodeID { return rc.id }
 func (rc *raftNode) GetMembership() map[vtypes.NodeID]string {
-	return rc.membership.getMemberUrls()
+	return rc.membership.getMemberURLs()
 }
 
 func newRaftMemebership() *raftMembership {
 	return &raftMembership{
-		peers:   make(map[vtypes.NodeID]string),
-		members: make(map[vtypes.NodeID]string),
+		peers:    make(map[vtypes.NodeID]string),
+		members:  make(map[vtypes.NodeID]string),
+		learners: make(map[vtypes.NodeID]string),
 	}
 }
 
@@ -759,15 +766,24 @@ func (rc *raftNode) recoverMembership(snapshot raftpb.Snapshot) {
 	}
 
 	rc.transport.RemoveAllPeers()
-	rc.membership.removeAllPeers()
+	rc.membership.removeAllMembers()
 
 	for nodeID, peer := range stateMachine.Peers {
-		if nodeID == rc.id {
-			rc.url = peer
-		} else {
-			rc.transport.AddPeer(types.ID(nodeID), []string{peer})
+		if peer == nil {
+			continue
 		}
-		rc.membership.addMember(nodeID, peer)
+
+		if nodeID == rc.id {
+			rc.url = peer.URL
+		} else {
+			rc.transport.AddPeer(types.ID(nodeID), []string{peer.URL})
+		}
+
+		if peer.IsLearner {
+			rc.membership.addLearner(nodeID, peer.URL)
+		} else {
+			rc.membership.addMember(nodeID, peer.URL)
+		}
 	}
 
 	return
@@ -781,8 +797,28 @@ func (rm *raftMembership) addMember(nodeID vtypes.NodeID, url string) {
 		return
 	}
 
+	if _, ok := rm.learners[nodeID]; ok {
+		delete(rm.learners, nodeID)
+	}
+
 	rm.peers[nodeID] = url
 	rm.members[nodeID] = url
+}
+
+func (rm *raftMembership) addLearner(nodeID vtypes.NodeID, url string) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	if _, ok := rm.learners[nodeID]; ok {
+		return
+	}
+
+	if _, ok := rm.members[nodeID]; ok {
+		return
+	}
+
+	rm.peers[nodeID] = url
+	rm.learners[nodeID] = url
 }
 
 func (rm *raftMembership) addPeer(nodeID vtypes.NodeID, url string) {
@@ -796,21 +832,16 @@ func (rm *raftMembership) addPeer(nodeID vtypes.NodeID, url string) {
 	rm.peers[nodeID] = url
 }
 
-func (rm *raftMembership) removePeer(nodeID vtypes.NodeID) bool {
+func (rm *raftMembership) removePeer(nodeID vtypes.NodeID) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
-	_, ok := rm.peers[nodeID]
-	if !ok {
-		return false
-	}
-
 	delete(rm.peers, nodeID)
 	delete(rm.members, nodeID)
-	return true
+	delete(rm.learners, nodeID)
 }
 
-func (rm *raftMembership) getMemberUrls() map[vtypes.NodeID]string {
+func (rm *raftMembership) getMemberURLs() map[vtypes.NodeID]string {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
@@ -834,12 +865,21 @@ func (rm *raftMembership) getMembers() []types.ID {
 	return m
 }
 
-func (rm *raftMembership) removeAllPeers() {
+func (rm *raftMembership) reset() {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
 	rm.peers = make(map[vtypes.NodeID]string)
 	rm.members = make(map[vtypes.NodeID]string)
+	rm.learners = make(map[vtypes.NodeID]string)
+}
+
+func (rm *raftMembership) removeAllMembers() {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	rm.members = make(map[vtypes.NodeID]string)
+	rm.learners = make(map[vtypes.NodeID]string)
 }
 
 func (rm *raftMembership) isMember(nodeID vtypes.NodeID) bool {
@@ -847,6 +887,14 @@ func (rm *raftMembership) isMember(nodeID vtypes.NodeID) bool {
 	defer rm.mu.RUnlock()
 
 	_, ok := rm.members[nodeID]
+	return ok
+}
+
+func (rm *raftMembership) isLearner(nodeID vtypes.NodeID) bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	_, ok := rm.learners[nodeID]
 	return ok
 }
 
@@ -889,5 +937,5 @@ func (rm *raftMembership) getLeader() uint64 {
 func (rm *raftMembership) clearMembership() {
 	atomic.StoreUint64((*uint64)(&rm.leader), raft.None)
 	atomic.StoreUint64((*uint64)(&rm.state), uint64(raft.StateFollower))
-	rm.removeAllPeers()
+	rm.reset()
 }

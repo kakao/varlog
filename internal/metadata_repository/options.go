@@ -22,6 +22,8 @@ const (
 	DefaultProposeTimeout          time.Duration = 100 * time.Millisecond
 	DefaultRaftTick                time.Duration = 100 * time.Millisecond
 	DefaultRPCTimeout              time.Duration = 100 * time.Millisecond
+	DefaultCommitTick              time.Duration = 1 * time.Millisecond
+	DefaultPromoteTick             time.Duration = 100 * time.Millisecond
 
 	UnusedRequestIndex uint64 = 0
 )
@@ -50,6 +52,8 @@ type MetadataRepositoryOptions struct {
 	RaftTick           time.Duration
 	RaftProposeTimeout time.Duration
 	RPCTimeout         time.Duration
+	CommitTick         time.Duration
+	PromoteTick        time.Duration
 	Peers              []string
 	ReporterClientFac  ReporterClientFactory
 	Logger             *zap.Logger
@@ -107,6 +111,14 @@ func (options *MetadataRepositoryOptions) validate() error {
 
 	if options.RPCTimeout == time.Duration(0) {
 		options.RPCTimeout = DefaultRPCTimeout
+	}
+
+	if options.CommitTick == time.Duration(0) {
+		options.CommitTick = DefaultCommitTick
+	}
+
+	if options.PromoteTick == time.Duration(0) {
+		options.PromoteTick = DefaultPromoteTick
 	}
 
 	return nil

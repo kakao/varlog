@@ -71,6 +71,7 @@ message AddPeer {
         (gogoproto.customname) = "NodeID"
     ];
     string url = 2;
+    bool is_learner = 3;
 }
 
 message RemovePeer {
