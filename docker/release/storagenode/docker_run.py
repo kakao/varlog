@@ -21,11 +21,11 @@ DEFAULT_CLUSTER_ID = '1'
 DEFAULT_RPC_PORT = '9091'
 TEST_STORAGE = "/home/deploy/storage"
 
-STORAGE_NODE_STOP = "ps -fC storagenode | grep storagenode | awk '{print $2}' " \
+STORAGE_NODE_STOP = "ps -fC vsn | grep vsn | awk '{print $2}' " \
                     "| xargs kill -SIGTERM "
-STORAGE_NODE_KILL = "ps -fC storagenode | grep storagenode | awk '{print $2}' " \
+STORAGE_NODE_KILL = "ps -fC vsn | grep vsn | awk '{print $2}' " \
                     "| xargs kill -SIGKILL "
-STORAGE_NODE_CHECK_PROCESS = "ps -fC storagenode | grep storagenode | grep -v " \
+STORAGE_NODE_CHECK_PROCESS = "ps -fC vsn | grep vsn | grep -v " \
                              "defunct "
 
 MY_HOST = socket.gethostname()
@@ -146,7 +146,7 @@ def main():
         volumes = get_volumes()
         sn_addr = get_rpc_addr()
 
-        storage_node = "nohup ./storagenode start --cluster-id=%s " \
+        storage_node = "nohup ./vsn start --cluster-id=%s " \
                        "--storage-node-id=%s --rpc-bind-address=0.0.0.0:%s " \
                        "--volumes=%s &" \
                        % (get_env("CLUSTER_ID", DEFAULT_CLUSTER_ID),

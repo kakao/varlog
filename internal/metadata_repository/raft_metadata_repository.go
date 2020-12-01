@@ -57,7 +57,7 @@ type RaftMetadataRepository struct {
 	cancel context.CancelFunc
 
 	server       *grpc.Server
-	endpointAddr string
+	endpointAddr atomic.Value
 
 	nrReport uint64
 }
@@ -154,28 +154,40 @@ func (mr *RaftMetadataRepository) Run() {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 
-	mr.logger.Info("listening", zap.String("address", mr.options.RPCBindAddress))
-	lis, err := netutil.NewStoppableListener(mctx, mr.options.RPCBindAddress)
-	if err != nil {
-		mr.logger.Panic("could not listen", zap.Error(err))
-	}
-
-	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
-	mr.endpointAddr = addrs[0]
-
 	mr.raftNode.start()
 
 	if err := mr.runner.RunC(mctx, func(ctx context.Context) {
+		timer := time.NewTimer(mr.raftNode.raftTick)
+		defer timer.Stop()
+
+		for !mr.IsMember() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				timer.Reset(mr.raftNode.raftTick)
+			}
+		}
+
+		mr.logger.Info("listening", zap.String("address", mr.options.RPCBindAddress))
+		lis, err := netutil.NewStoppableListener(mctx, mr.options.RPCBindAddress)
+		if err != nil {
+			mr.logger.Panic("could not listen", zap.Error(err))
+		}
+
+		addrs, _ := netutil.GetListenerAddrs(lis.Addr())
+		mr.endpointAddr.Store(addrs[0])
+
+		if err := mr.runner.RunC(ctx, mr.registerEndpoint); err != nil {
+			mr.logger.Panic("could not run", zap.Error(err))
+		}
+
 		//TODO:: graceful shutdown
 		if err := mr.server.Serve(lis); err != nil && err != verrors.ErrStopped {
 			mr.logger.Panic("could not serve", zap.Error(err))
 			//r.Close()
 		}
 	}); err != nil {
-		mr.logger.Panic("could not run", zap.Error(err))
-	}
-
-	if err := mr.runner.RunC(mctx, mr.registerEndpoint); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 
@@ -893,7 +905,7 @@ func (mr *RaftMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlo
 }
 
 func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
-	if !mr.raftNode.membership.isMember(mr.nodeID) {
+	if !mr.IsMember() {
 		return nil, verrors.ErrNotMember
 	}
 
@@ -996,20 +1008,25 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 		time.Sleep(mr.raftNode.raftTick)
 	}
 
+	endpoint := mr.endpointAddr.Load()
+	if endpoint == nil {
+		mr.logger.Panic("get endpoint fail")
+	}
+
 	if ctx.Err() != nil {
 		return
 	}
 
 	r := &mrpb.Endpoint{
 		NodeID: mr.nodeID,
-		Url:    mr.endpointAddr,
+		Url:    endpoint.(string),
 	}
 
 	mr.propose(ctx, r, true)
 }
 
 func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.ClusterInfo, error) {
-	if !mr.raftNode.membership.isMember(mr.nodeID) {
+	if !mr.IsMember() {
 		return nil, verrors.ErrNotMember
 	}
 
@@ -1039,7 +1056,11 @@ func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID 
 }
 
 func (mr *RaftMetadataRepository) GetServerAddr() string {
-	return mr.endpointAddr
+	endpoint := mr.endpointAddr.Load()
+	if endpoint == nil {
+		return ""
+	}
+	return endpoint.(string)
 }
 
 func (mr *RaftMetadataRepository) GetReportCount() uint64 {

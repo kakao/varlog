@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -84,10 +85,21 @@ func New(ctx context.Context, seedRPCAddrs []string, opts ...Option) (Connector,
 
 	rpcAddrs, err := mrc.fetchRPCAddrs(tctx, seedRPCAddrs)
 	if err != nil {
+		mrc.logger.Error("could not fetch MR addrs",
+			zap.String("seed", strings.Join(seedRPCAddrs, ",")),
+			zap.String("err", err.Error()),
+		)
 		return nil, err
 	}
+
+	mrc.logger.Info("fetch MR addrs",
+		zap.String("seed", strings.Join(seedRPCAddrs, ",")),
+		zap.Int("# addr", len(rpcAddrs)),
+	)
+
 	mrc.updateRPCAddrs(rpcAddrs)
 	if _, err = mrc.connect(); err != nil {
+		mrc.logger.Error("could not connect to MR", zap.Error(err))
 		return nil, err
 	}
 

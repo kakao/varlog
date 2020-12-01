@@ -267,12 +267,26 @@ func (app *VMCApp) initMRMgmtCmd() *cobra.Command {
 		app.infoMRMembers()
 	}
 
+	raftURL := ""
+	rpcAddr := ""
+	addCmd := &cobra.Command{
+		Use:  "add",
+		Args: cobra.NoArgs,
+	}
+	addCmd.Flags().StringVar(&raftURL, "raft-url", "", "metadata repository raft url")
+	addCmd.Flags().StringVar(&rpcAddr, "rpc-addr", "", "metadata repository rpc addr")
+	addCmd.MarkFlagRequired("raft-url")
+	addCmd.MarkFlagRequired("rpc-addr")
+	addCmd.Run = func(cmd *cobra.Command, args []string) {
+		app.addMRPeer(raftURL, rpcAddr)
+	}
+
 	rmCmd := &cobra.Command{
 		Use:  "remove",
 		Args: cobra.NoArgs,
 	}
 
-	cmd.AddCommand(infoCmd, rmCmd)
+	cmd.AddCommand(infoCmd, addCmd, rmCmd)
 	return cmd
 }
 

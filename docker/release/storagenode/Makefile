@@ -30,6 +30,6 @@ dist:
 	mkdir -p dist
 	# build
 	cd ~/varlog; make clean; make deps; make all;
-	cp ~/varlog/build/storagenode ./dist/
-	cp ~/varlog/build/vmc ./dist/
+	cp ~/varlog/bin/vsn ./dist/
+	cp ~/varlog/bin/vmc ./dist/
 	cp ./docker_run.py ./dist/

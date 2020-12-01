@@ -85,6 +85,7 @@ type raftMembership struct {
 	members  map[vtypes.NodeID]string // raft member map
 	peers    map[vtypes.NodeID]string // raft known peer map
 	mu       sync.RWMutex
+	logger   *zap.Logger
 }
 
 // newRaftNode initiates a raft instance and returns a committed log entry
@@ -105,7 +106,7 @@ func newRaftNode(id vtypes.NodeID, peers []string, join bool, snapCount uint64, 
 		commitC:        commitC,
 		id:             id,
 		bpeers:         peers,
-		membership:     newRaftMemebership(),
+		membership:     newRaftMemebership(logger),
 		raftTick:       raftTick,
 		join:           join,
 		waldir:         fmt.Sprintf("raft-%d", id),
@@ -288,7 +289,6 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 
 // replayWAL replays WAL entries into the raft instance.
 func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
-	rc.logger.Info("replaying WAL", zap.Uint64("member", uint64(rc.id)))
 	w := rc.openWAL(snapshot)
 	_, st, ents, err := w.ReadAll()
 	if err != nil {
@@ -310,6 +310,12 @@ func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	if len(ents) > 0 {
 		rc.lastIndex = ents[len(ents)-1].Index
 	}
+
+	rc.logger.Info("replay WAL",
+		zap.Uint64("member", uint64(rc.id)),
+		zap.Uint64("lastIndex", rc.lastIndex),
+	)
+
 	//TODO:: check neccessary whether send signal replay WAL complete
 	return w
 }
@@ -322,6 +328,14 @@ func (rc *raftNode) start() {
 	}
 	rc.snapshotter = snap.New(rc.logger.Named("snapshot"), rc.snapdir)
 	snapshot := rc.loadSnapshot()
+
+	if snapshot != nil {
+		rc.logger.Info("load snapshot",
+			zap.Uint64("member", uint64(rc.id)),
+			zap.Uint64("index", snapshot.Metadata.Index),
+			zap.Uint64("term", snapshot.Metadata.Term),
+		)
+	}
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL(snapshot)
@@ -744,11 +758,12 @@ func (rc *raftNode) GetMembership() map[vtypes.NodeID]string {
 	return rc.membership.getMemberURLs()
 }
 
-func newRaftMemebership() *raftMembership {
+func newRaftMemebership(logger *zap.Logger) *raftMembership {
 	return &raftMembership{
 		peers:    make(map[vtypes.NodeID]string),
 		members:  make(map[vtypes.NodeID]string),
 		learners: make(map[vtypes.NodeID]string),
+		logger:   logger,
 	}
 }
 
@@ -887,7 +902,7 @@ func (rm *raftMembership) isMember(nodeID vtypes.NodeID) bool {
 	defer rm.mu.RUnlock()
 
 	_, ok := rm.members[nodeID]
-	return ok
+	return rm.hasLeader() && ok
 }
 
 func (rm *raftMembership) isLearner(nodeID vtypes.NodeID) bool {
@@ -895,7 +910,7 @@ func (rm *raftMembership) isLearner(nodeID vtypes.NodeID) bool {
 	defer rm.mu.RUnlock()
 
 	_, ok := rm.learners[nodeID]
-	return ok
+	return rm.hasLeader() && ok
 }
 
 func (rm *raftMembership) getPeer(nodeID vtypes.NodeID) []byte {
@@ -916,6 +931,7 @@ func (rm *raftMembership) updateState(state *raft.SoftState) {
 	}
 
 	if state.Lead != raft.None {
+		rm.logger.Info("set leader", zap.Uint64("leader", uint64(state.Lead)))
 		atomic.StoreUint64((*uint64)(&rm.leader), uint64(state.Lead))
 	}
 

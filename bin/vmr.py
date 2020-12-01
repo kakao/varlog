@@ -33,7 +33,7 @@ def get_raft_url():
 
 
 def get_rpc_addr():
-    return "0.0.0.0:%s" % (os.getenv("RPC_PORT", DEFAULT_RPC_PORT))
+    return "%s:%s" % (MY_IP, os.getenv("RPC_PORT", DEFAULT_RPC_PORT))
 
 
 def get_vms_addr():
@@ -52,10 +52,30 @@ def get_info():
         ])
         info = json.loads(out)
         members = info['members'].values()
-        return info['replicationFactor'], ' '.join(members)
+        return info['replicationFactor'], members
     except Exception:
         logger.exception("could not get peers")
         return int(os.getenv("REP_FACTOR", DEFAULT_REP_FACTOR)), None
+
+
+def add_raft_peer():
+    try:
+        raft_url = get_raft_url()
+        rpc_addr = get_rpc_addr()
+
+        out = subprocess.check_output([
+            f"{binpath}/vmc",
+            "mr",
+            "add",
+            f"--raft-url={raft_url}",
+            f"--rpc-addr={rpc_addr}"
+        ])
+        info = json.loads(out)
+        node_id = info['nodeId']
+        return node_id != '0'
+    except Exception:
+        logger.exception("could not add peer")
+        return False
 
 
 def main():
@@ -70,8 +90,15 @@ def main():
         f"--raft-address={raft_url}",
         f"--bind={rpc_addr}"]
 
+    need_add_peer = False
     if peers is not None:
-        metadata_repository += f" --join=true --peers={peers}"
+        metadata_repository += f" --join=true"
+
+        for peer in peers:
+            metadata_repository += f" --peers={peer}"
+
+        if raft_url not in peers:
+            need_add_peer = True
 
     metadata_repository_restart = [
         f"{binpath}/vmr",
@@ -86,6 +113,8 @@ def main():
     killer = Killer()
     while not killer.kill_now:
         if procutil.check("vmr"):
+            if need_add_peer:
+                need_add_peed = not add_raft_peer()
             time.sleep(CHECK_TIME)
             continue
         try:

@@ -994,6 +994,18 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 		return err
 	}
 
+	if stateMachine.Metadata == nil {
+		stateMachine.Metadata = &varlogpb.MetadataDescriptor{}
+	}
+
+	if stateMachine.LogStream == nil {
+		stateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
+	}
+
+	if stateMachine.LogStream.LocalLogStreams == nil {
+		stateMachine.LogStream.LocalLogStreams = make(map[types.LogStreamID]*mrpb.MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+	}
+
 	if stateMachine.Peers == nil {
 		stateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	}
@@ -1103,6 +1115,8 @@ func (ms *MetadataStorage) getStateMachine() (*mrpb.MetadataRepositoryDescriptor
 }
 
 func (ms *MetadataStorage) createSnapshot(job *jobSnapshot) {
+	ms.logger.Info("create snapshot", zap.Uint64("index", job.appliedIndex))
+
 	b, _ := ms.origStateMachine.Marshal()
 
 	ms.ssMu.Lock()

@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"time"
@@ -9,10 +10,12 @@ import (
 )
 
 func CompareWait(cmp func() bool, timeout time.Duration) bool {
-	after := time.After(timeout)
+	after := time.NewTimer(timeout)
+	defer after.Stop()
+
 	for {
 		select {
-		case <-after:
+		case <-after.C:
 			return false
 		default:
 			if cmp() {
@@ -41,6 +44,36 @@ func CompareWait10(cmp func() bool) bool {
 
 func CompareWait1(cmp func() bool) bool {
 	return CompareWaitN(1, cmp)
+}
+
+func CompareWaitError(cmp func() (bool, error), timeout time.Duration) error {
+	after := time.NewTimer(timeout)
+	defer after.Stop()
+
+	for {
+		select {
+		case <-after.C:
+			return errors.New("timeout")
+		default:
+			ok, err := cmp()
+			if err != nil {
+				return err
+			}
+
+			if ok {
+				return nil
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func CompareWaitErrorN(factor int64, cmp func() (bool, error)) error {
+	if factor < 1 {
+		factor = 1
+	}
+
+	return CompareWaitError(cmp, vtesting.TimeoutUnitTimesFactor(factor))
 }
 
 func GC() {

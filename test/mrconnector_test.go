@@ -2,8 +2,6 @@ package test
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -14,49 +12,27 @@ import (
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
-	"github.com/kakao/varlog/vtesting"
 )
 
 func TestMRConnector(t *testing.T) {
 	Convey("Given 3 MR nodes", t, func() {
-		const (
-			clusterID   = types.ClusterID(1)
-			numMR       = 3
-			portBase    = 10000
-			rpcPortBase = 20000
-		)
-
-		var peers []string
-		var rpcEndpoints []string
-		for i := 0; i < numMR; i++ {
-			peers = append(peers, fmt.Sprintf("http://127.0.0.1:%d", portBase+i))
-			rpcEndpoints = append(rpcEndpoints, fmt.Sprintf("127.0.0.1:%d", rpcPortBase+i))
+		opts := VarlogClusterOptions{
+			NrMR:              3,
+			NrRep:             1,
+			ReporterClientFac: metadata_repository.NewEmptyReporterClientFactory(),
 		}
+		env := NewVarlogCluster(opts)
+		env.Start()
 
-		mrs := make(map[types.NodeID]metadata_repository.MetadataRepository, numMR)
-		for i := 0; i < numMR; i++ {
-			nodeID := types.NewNodeIDFromURL(peers[i])
-			So(nodeID, ShouldNotEqual, types.InvalidNodeID)
+		Reset(func() {
+			env.Close()
+		})
 
-			opts := &metadata_repository.MetadataRepositoryOptions{
-				ClusterID:         clusterID,
-				RaftAddress:       peers[i],
-				Join:              false,
-				SnapCount:         10,
-				RaftTick:          vtesting.TestRaftTick(),
-				RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
-				NumRep:            1,
-				Peers:             peers,
-				RPCBindAddress:    rpcEndpoints[i],
-				ReporterClientFac: metadata_repository.NewEmptyReporterClientFactory(),
-				Logger:            zap.L(),
-			}
-			mr := metadata_repository.NewRaftMetadataRepository(opts)
-			mrs[nodeID] = mr
-			mr.Run()
-		}
+		for idx, rpcEndpoint := range env.mrRPCEndpoints {
+			So(testutil.CompareWaitN(100, func() bool {
+				return env.MRs[idx].GetServerAddr() != ""
+			}), ShouldBeTrue)
 
-		for _, rpcEndpoint := range rpcEndpoints {
 			mrmcl, err := mrc.NewMetadataRepositoryManagementClient(rpcEndpoint)
 			So(err, ShouldBeNil)
 			So(mrmcl.Close(), ShouldBeNil)
@@ -66,22 +42,12 @@ func TestMRConnector(t *testing.T) {
 			So(mrcl.Close(), ShouldBeNil)
 		}
 
-		Reset(func() {
-			for _, mr := range mrs {
-				So(mr.Close(), ShouldBeNil)
-			}
-			for nodeID := range mrs {
-				os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
-				os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
-			}
-		})
-
 		Convey("When Connector is created", func() {
-			mrc, err := mrconnector.New(context.TODO(), rpcEndpoints, mrconnector.WithClusterID(clusterID), mrconnector.WithLogger(zap.L()))
+			mrc, err := mrconnector.New(context.TODO(), env.mrRPCEndpoints, mrconnector.WithClusterID(env.ClusterID), mrconnector.WithLogger(zap.L()))
 			So(err, ShouldBeNil)
 
 			testutil.CompareWaitN(100, func() bool {
-				return mrc.NumberOfMR() == numMR
+				return mrc.NumberOfMR() == env.NrMR
 			})
 
 			Reset(func() {
@@ -96,14 +62,14 @@ func TestMRConnector(t *testing.T) {
 
 				mcl, err := mrc.ManagementClient()
 				So(err, ShouldBeNil)
-				_, err = mcl.GetClusterInfo(context.TODO(), clusterID)
+				_, err = mcl.GetClusterInfo(context.TODO(), env.ClusterID)
 				So(err, ShouldBeNil)
 			})
 
 			Convey("Then calling ManagementClient should return the connection", func() {
 				mcl, err := mrc.ManagementClient()
 				So(err, ShouldBeNil)
-				_, err = mcl.GetClusterInfo(context.TODO(), clusterID)
+				_, err = mcl.GetClusterInfo(context.TODO(), env.ClusterID)
 				So(err, ShouldBeNil)
 
 				cl, err := mrc.Client()
@@ -125,7 +91,7 @@ func TestMRConnector(t *testing.T) {
 
 					mcl, err := mrc.ManagementClient()
 					So(err, ShouldBeNil)
-					_, err = mcl.GetClusterInfo(context.TODO(), clusterID)
+					_, err = mcl.GetClusterInfo(context.TODO(), env.ClusterID)
 					So(err, ShouldBeNil)
 
 					So(mrc.ConnectedNodeID(), ShouldNotEqual, types.InvalidNodeID)
@@ -143,7 +109,7 @@ func TestMRConnector(t *testing.T) {
 				badNodeID := mrc.ConnectedNodeID()
 				So(badNodeID, ShouldNotEqual, types.InvalidNodeID)
 
-				badMR, ok := mrs[badNodeID]
+				badMR, ok := env.LookupMR(badNodeID)
 				So(ok, ShouldBeTrue)
 				So(badMR.Close(), ShouldBeNil)
 
@@ -162,7 +128,7 @@ func TestMRConnector(t *testing.T) {
 						newMCL, err := mrc.ManagementClient()
 						So(err, ShouldBeNil)
 
-						_, err = newMCL.GetClusterInfo(context.TODO(), clusterID)
+						_, err = newMCL.GetClusterInfo(context.TODO(), env.ClusterID)
 						So(err, ShouldBeNil)
 
 						So(mrc.ConnectedNodeID(), ShouldNotEqual, badNodeID)

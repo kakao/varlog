@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
-
-	"github.com/kakao/varlog/pkg/util/testutil"
 )
 
 const (
@@ -16,6 +14,9 @@ const (
 	E2E_CONTEXT  = "context"
 	E2E_USER     = "user"
 	E2E_TOKEN    = "token"
+
+	DEFAULT_MR_CNT = 3
+	DEFAULT_SN_CNT = 5
 )
 
 func getK8sVarlogClusterOpts() K8sVarlogClusterOptions {
@@ -45,6 +46,9 @@ func getK8sVarlogClusterOpts() K8sVarlogClusterOptions {
 		opts.Token = f.(string)
 	}
 
+	opts.NrMR = DEFAULT_MR_CNT
+	opts.NrSN = DEFAULT_SN_CNT
+
 	return opts
 }
 
@@ -60,94 +64,32 @@ func TestK8sVarlogClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	k8s.IsMRRunning()
 	t.Log(addr)
-
-	k8s.IsVMSRunning()
 }
 
-func TestK8sVarlogRestart(t *testing.T) {
+func TestK8sVarlogReset(t *testing.T) {
 	Convey("Given K8s Varlog cluster", t, func(ctx C) {
 		opts := getK8sVarlogClusterOpts()
 		k8s, err := NewK8sVarlogCluster(opts)
 		So(err, ShouldBeNil)
 
-		mrs, err := k8s.GetMRs()
-		So(err, ShouldBeNil)
-		So(len(mrs), ShouldBeGreaterThan, 0)
-
-		sns, err := k8s.GetSNs()
-		So(err, ShouldBeNil)
-		So(len(sns), ShouldBeGreaterThan, 0)
-
-		Convey("When StopAll", func(ctx C) {
-			err := k8s.StopAll()
+		Convey("When Reset Cluster", func(ctx C) {
+			err := k8s.Reset()
 			So(err, ShouldBeNil)
 
-			Convey("Then, there are no alive nodes", func(ctx C) {
-				So(testutil.CompareWaitN(50, func() bool {
-					mrs, err := k8s.GetMRs()
-					if err != nil {
-						return false
-					}
-					return len(mrs) == 0
-				}), ShouldBeTrue)
+			Convey("Then, Pods should be created", func(ctx C) {
+				ok, err := k8s.IsMRRunning()
+				So(err, ShouldBeNil)
+				So(ok, ShouldBeTrue)
 
-				So(testutil.CompareWaitN(50, func() bool {
-					sns, err := k8s.GetSNs()
-					if err != nil {
-						return false
-					}
-					return len(sns) == 0
-				}), ShouldBeTrue)
+				ok, err = k8s.IsSNRunning()
+				So(err, ShouldBeNil)
+				So(ok, ShouldBeTrue)
 
-				Convey("When Start Again, it should make cluster well", func(ctx C) {
-					err := k8s.StartMRs()
-					So(err, ShouldBeNil)
-					So(testutil.CompareWaitN(50, func() bool {
-						mrs, err := k8s.GetMRs()
-						if err != nil {
-							return false
-						}
-						return len(mrs) > 0
-					}), ShouldBeTrue)
-
-					err = k8s.StartVMS()
-					So(testutil.CompareWaitN(50, func() bool {
-						ok, err := k8s.IsVMSRunning()
-						if err != nil {
-							return false
-						}
-
-						return ok
-					}), ShouldBeTrue)
-					So(err, ShouldBeNil)
-
-					err = k8s.StartSNs()
-					So(err, ShouldBeNil)
-					So(testutil.CompareWaitN(50, func() bool {
-						sns, err := k8s.GetSNs()
-						if err != nil {
-							return false
-						}
-						return len(sns) > 0
-					}), ShouldBeTrue)
-
-					So(testutil.CompareWaitN(50, func() bool {
-						ok, err := k8s.IsMRRunning()
-						if err != nil {
-							return false
-						}
-						return ok
-					}), ShouldBeTrue)
-
-					So(testutil.CompareWaitN(50, func() bool {
-						ok, err := k8s.IsSNRunning()
-						if err != nil {
-							return false
-						}
-						return ok
-					}), ShouldBeTrue)
-				})
+				ok, err = k8s.IsVMSRunning()
+				So(err, ShouldBeNil)
+				So(ok, ShouldBeTrue)
 			})
 		})
 	})

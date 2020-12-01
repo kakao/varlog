@@ -121,6 +121,7 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 
 	clus.mrIDs[idx] = nodeID
 	clus.MRs[idx] = metadata_repository.NewRaftMetadataRepository(opts)
+
 	return nil
 }
 
@@ -508,6 +509,15 @@ func (clus *VarlogCluster) GetMR() *metadata_repository.RaftMetadataRepository {
 	}
 
 	return clus.MRs[0]
+}
+
+func (clus *VarlogCluster) LookupMR(nodeID types.NodeID) (*metadata_repository.RaftMetadataRepository, bool) {
+	for idx, mrID := range clus.mrIDs {
+		if nodeID == mrID {
+			return clus.MRs[idx], true
+		}
+	}
+	return nil, false
 }
 
 func (clus *VarlogCluster) GetVMS() vms.ClusterManager {
