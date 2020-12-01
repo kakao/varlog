@@ -1,7 +1,10 @@
 package logc
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/logc -package logc -destination log_io_client_mock.go . LogIOClient
+
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/kakao/varlog/pkg/rpc"
@@ -17,8 +20,13 @@ type StorageNode struct {
 }
 
 type SubscribeResult struct {
-	*types.LogEntry
+	types.LogEntry
 	Error error
+}
+
+var InvalidSubscribeResult = SubscribeResult{
+	LogEntry: types.InvalidLogEntry,
+	Error:    errors.New("invalid subscribe result"),
 }
 
 // LogIOClient contains methods to use basic operations - append, read, subscribe, trim of
@@ -112,10 +120,11 @@ func (c *logIOClient) Subscribe(ctx context.Context, logStreamID types.LogStream
 	go func(ctx context.Context) {
 		defer close(out)
 		for {
-			rsp, err := stream.Recv()
+			rsp, rpcErr := stream.Recv()
+			err := verrors.FromStatusError(ctx, rpcErr)
 			result := SubscribeResult{Error: err}
 			if err == nil {
-				result.LogEntry = &types.LogEntry{
+				result.LogEntry = types.LogEntry{
 					GLSN: rsp.GetGLSN(),
 					LLSN: rsp.GetLLSN(),
 					Data: rsp.GetPayload(),
