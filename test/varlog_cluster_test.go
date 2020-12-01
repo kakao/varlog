@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -1778,7 +1781,10 @@ func TestVarlogLogStreamGCZombie(t *testing.T) {
 
 func TestVarlogClient(t *testing.T) {
 	Convey("Given cluster option", t, func() {
-		const nrSN = 3
+		const (
+			nrSN = 3
+			nrLS = 3
+		)
 		vmsOpts := vms.DefaultOptions
 		vmsOpts.HeartbeatTimeout *= 10
 		vmsOpts.Logger = zap.L()
@@ -1861,9 +1867,13 @@ func TestVarlogClient(t *testing.T) {
 			})
 
 			Convey("Log stream in the cluster", func() {
-				rsp, err := cmcli.AddLogStream(context.TODO(), nil)
-				So(err, ShouldBeNil)
-				lsID := rsp.GetLogStream().GetLogStreamID()
+				var lsIDs []types.LogStreamID
+				for i := 0; i < nrLS; i++ {
+					rsp, err := cmcli.AddLogStream(context.TODO(), nil)
+					So(err, ShouldBeNil)
+					lsID := rsp.GetLogStream().GetLogStreamID()
+					lsIDs = append(lsIDs, lsID)
+				}
 
 				vlg, err := varlog.Open(env.ClusterID, []string{mrAddr}, varlog.WithLogger(zap.L()), varlog.WithOpenTimeout(time.Minute))
 				So(err, ShouldBeNil)
@@ -1873,6 +1883,7 @@ func TestVarlogClient(t *testing.T) {
 				})
 
 				Convey("AppendTo", func() {
+					lsID := lsIDs[0]
 					glsn, err := vlg.AppendTo(context.TODO(), lsID, []byte("foo"))
 					So(err, ShouldBeNil)
 					So(glsn, ShouldNotEqual, types.InvalidGLSN)
@@ -1883,7 +1894,8 @@ func TestVarlogClient(t *testing.T) {
 				})
 
 				Convey("AppendTo not existing log stream", func() {
-					_, err := vlg.AppendTo(context.TODO(), lsID+1, []byte("foo"))
+					lsID := lsIDs[len(lsIDs)-1] + 1
+					_, err := vlg.AppendTo(context.TODO(), lsID, []byte("foo"))
 					So(err, ShouldNotBeNil)
 				})
 
@@ -1892,10 +1904,50 @@ func TestVarlogClient(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(glsn, ShouldNotEqual, types.InvalidGLSN)
 
-					bytes, err := vlg.Read(context.TODO(), lsID, glsn)
-					So(err, ShouldBeNil)
-					So(string(bytes), ShouldEqual, "foo")
+					var errList []error
+					var bytesList []string
+					for _, lsID := range lsIDs {
+						bytes, err := vlg.Read(context.TODO(), lsID, glsn)
+						errList = append(errList, err)
+						bytesList = append(bytesList, string(bytes))
+					}
+					So(errList, ShouldContain, nil)
+					So(bytesList, ShouldContain, "foo")
+				})
 
+				Convey("Subscribe", func() {
+					const (
+						numLogs = 10
+						minGLSN = types.MinGLSN
+					)
+					for i := minGLSN; i < minGLSN+types.GLSN(numLogs); i++ {
+						glsn, err := vlg.Append(context.TODO(), []byte(strconv.Itoa(int(i))))
+						So(err, ShouldBeNil)
+						So(glsn, ShouldEqual, types.GLSN(i))
+					}
+					var wg sync.WaitGroup
+					wg.Add(1)
+					glsnC := make(chan types.GLSN, numLogs)
+					onNext := func(logEntry types.LogEntry, err error) {
+						if err == io.EOF {
+							wg.Done()
+							close(glsnC)
+							return
+						}
+						if err != nil {
+							t.Error(err)
+						}
+						glsnC <- logEntry.GLSN
+					}
+					closer, err := vlg.Subscribe(context.TODO(), minGLSN, minGLSN+types.GLSN(numLogs), onNext, varlog.SubscribeOption{})
+					So(err, ShouldBeNil)
+					wg.Wait()
+					expectedGLSN := types.GLSN(1)
+					for glsn := range glsnC {
+						So(glsn, ShouldEqual, expectedGLSN)
+						expectedGLSN++
+					}
+					closer()
 				})
 			})
 		}))

@@ -1,5 +1,7 @@
 package logc
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/pkg/logc -package logc -destination log_io_client_manager_mock.go . LogClientManager
+
 import (
 	"io"
 	"strconv"

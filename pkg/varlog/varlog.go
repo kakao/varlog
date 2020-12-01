@@ -9,6 +9,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/logc"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc/mrconnector"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
@@ -23,12 +24,12 @@ type Varlog interface {
 
 	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
 
-	Subscribe(ctx context.Context, glsn types.GLSN, onNextFunc OnNext) error
+	Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts SubscribeOption) (SubscribeCloser, error)
 
 	Trim(ctx context.Context, glsn types.GLSN) error
 }
 
-type OnNext func(glsn types.GLSN, err error)
+type OnNext func(logEntry types.LogEntry, err error)
 
 type varlog struct {
 	clusterID         types.ClusterID
@@ -40,6 +41,8 @@ type varlog struct {
 	logCLManager logc.LogClientManager
 	logger       *zap.Logger
 	opts         *options
+
+	runner *runner.Runner
 
 	closed atomicutil.AtomicBool
 }
@@ -58,6 +61,7 @@ func Open(clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, 
 		clusterID: clusterID,
 		logger:    logOpts.logger,
 		opts:      &logOpts,
+		runner:    runner.New("varlog", logOpts.logger),
 	}
 
 	// mr connector
@@ -124,8 +128,8 @@ func (v *varlog) Read(ctx context.Context, logStreamID types.LogStreamID, glsn t
 	return logEntry.Data, nil
 }
 
-func (v *varlog) Subscribe(ctx context.Context, glsn types.GLSN, onNextFunc OnNext) error {
-	panic("not implemented")
+func (v *varlog) Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts SubscribeOption) (SubscribeCloser, error) {
+	return v.subscribe(ctx, begin, end, onNextFunc, opts)
 }
 
 func (v *varlog) Trim(ctx context.Context, glsn types.GLSN) error {

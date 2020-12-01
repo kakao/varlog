@@ -52,6 +52,7 @@ func (v *varlog) append(ctx context.Context, logStreamID types.LogStreamID, data
 			v.allowlist.Deny(logStreamID)
 			continue
 		}
+		return glsn, err
 	}
 	return glsn, err
 }

@@ -916,7 +916,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			appendT.setGLSN(glsn)
 			appendT.notify(nil)
 		} else {
-			lse.logger.Warn("committed, but cannot notify since no appendTask", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
+			lse.logger.Warn("committed, but cannot notify since no appendTask exists", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 		}
 		lse.logger.Debug("committed", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 		glsn++
@@ -934,7 +934,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			appendT.setGLSN(glsn)
 			appendT.notify(fmt.Errorf("%w: commit error (llsn=%v glsn=%v)", verrors.ErrCorruptLogStream, llsn, glsn))
 		} else {
-			lse.logger.Warn("failed to commit, but cannot notify since no appendTask", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
+			lse.logger.Warn("failed to commit, but cannot notify since no appendTask exists", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 		}
 		offset++
 		glsn++
