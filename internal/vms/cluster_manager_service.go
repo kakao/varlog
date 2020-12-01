@@ -85,7 +85,7 @@ func (s *clusterManagerService) Unseal(ctx context.Context, req *vmspb.UnsealReq
 func (s *clusterManagerService) GetMRMembers(ctx context.Context, _ *pbtypes.Empty) (*vmspb.GetMRMembersResponse, error) {
 	mrInfo, err := s.clusManager.MRInfos(ctx)
 	if err != nil {
-		return &vmspb.GetMRMembersResponse{}, err
+		return &vmspb.GetMRMembersResponse{}, verrors.ToStatusError(err)
 	}
 
 	resp := &vmspb.GetMRMembersResponse{
@@ -101,10 +101,35 @@ func (s *clusterManagerService) GetMRMembers(ctx context.Context, _ *pbtypes.Emp
 	return resp, verrors.ToStatusError(err)
 }
 
+func (s *clusterManagerService) AddMRPeer(ctx context.Context, req *vmspb.AddMRPeerRequest) (*vmspb.AddMRPeerResponse, error) {
+	nodeID, err := s.clusManager.AddMRPeer(ctx, req.RaftURL, req.RPCAddr)
+	if err != nil {
+		s.logger.Info("AddPeer",
+			zap.String("raft", req.RaftURL),
+			zap.String("rpc", req.RPCAddr),
+			zap.Uint64("nodeID", uint64(nodeID)),
+			zap.String("err", err.Error()),
+		)
+		return &vmspb.AddMRPeerResponse{}, verrors.ToStatusError(err)
+	}
+
+	s.logger.Info("AddPeer",
+		zap.String("raft", req.RaftURL),
+		zap.String("rpc", req.RPCAddr),
+		zap.Uint64("nodeID", uint64(nodeID)),
+	)
+
+	resp := &vmspb.AddMRPeerResponse{
+		NodeID: nodeID,
+	}
+
+	return resp, verrors.ToStatusError(err)
+}
+
 func (s *clusterManagerService) GetStorageNodes(ctx context.Context, _ *pbtypes.Empty) (*vmspb.GetStorageNodesResponse, error) {
 	meta, err := s.clusManager.Metadata(ctx)
 	if err != nil {
-		return &vmspb.GetStorageNodesResponse{}, err
+		return &vmspb.GetStorageNodesResponse{}, verrors.ToStatusError(err)
 	}
 
 	resp := &vmspb.GetStorageNodesResponse{}

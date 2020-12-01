@@ -18,16 +18,16 @@ DEFAULT_REP_FACTOR = '1'
 DEFAULT_RPC_PORT = '9092'
 DEFAULT_RAFT_PORT = '10000'
 
-METADATA_REPOSITORY_STOP = "ps -fC metadata_repository | grep " \
-                           "metadata_repository | awk '{print $2}' | xargs " \
+METADATA_REPOSITORY_STOP = "ps -fC vmr | grep " \
+                           "vmr | awk '{print $2}' | xargs " \
                            "kill " \
                            "-SIGTERM "
-METADATA_REPOSITORY_KILL = "ps -fC metadata_repository | grep " \
-                           "metadata_repository | awk '{print $2}' | xargs " \
+METADATA_REPOSITORY_KILL = "ps -fC vmr | grep " \
+                           "vmr | awk '{print $2}' | xargs " \
                            "kill " \
                            "-SIGKILL "
-METADATA_REPOSITORY_CHECK_PROCESS = "ps -fC metadata_repository | grep " \
-                                    "metadata_repository | grep -v defunct "
+METADATA_REPOSITORY_CHECK_PROCESS = "ps -fC vmr | grep " \
+                                    "vmr | grep -v defunct "
 
 MY_HOST = socket.gethostname()
 MY_IP = socket.gethostbyname(MY_HOST)
@@ -65,7 +65,7 @@ def get_raft_url():
 
 
 def get_rpc_addr():
-    return "0.0.0.0:%s" % (get_env("RPC_PORT", DEFAULT_RPC_PORT))
+    return "%s:%s" % (MY_IP, get_env("RPC_PORT", DEFAULT_RPC_PORT))
 
 
 def get_info():
@@ -76,10 +76,29 @@ def get_info():
         info = json.loads(resp[1])
 
         members = info['members'].values()
-        return info['replicationFactor'], ' '.join(members)
+        return info['replicationFactor'], members
     except Exception as ex:
         log_print("[ERROR] get peers,", str(ex))
         return int(get_env("REP_FACTOR", DEFAULT_REP_FACTOR)), None
+
+def add_raft_peer():
+    try:
+        add_peer = "./vmc mr add --raft-url=%s --rpc-addr=%s:%s" % (
+                get_raft_url(), 
+                MY_IP, get_env("RPC_PORT", DEFAULT_RPC_PORT))
+
+        log_print("add peer:: " + add_peer)
+
+        resp = commands.getstatusoutput(add_peer)
+        info = json.loads(resp[1])
+
+        log_print(info)
+
+        node_id = info['nodeId']
+        return node_id != '0'
+    except Exception as ex:
+        log_print("[ERROR] add peer,", str(ex))
+        return False
 
 
 def metadata_repository_check_process(is_print):
@@ -121,14 +140,24 @@ def main():
     raft_url = get_raft_url()
     rpc_addr = get_rpc_addr()
 
-    metadata_repository = "nohup ./metadata_repository start " \
+    metadata_repository = "nohup ./vmr start " \
                           "--log-rep-factor=%d " \
-                          "--raft-address=%s --bind=%s &" \
+                          "--raft-address=%s --bind=%s" \
                           % (rep_factor, raft_url, rpc_addr)
-    if peers is not None:
-        metadata_repository += " --join=true --peers=%s" % peers
 
-    metadata_repository_restart = "nohup ./metadata_repository start " \
+    need_add_raft_peer = False
+    if peers is not None:
+        metadata_repository += " --join=true"
+
+        for peer in peers:
+            metadata_repository += " --peers=%s" % peer
+
+        if raft_url not in peers:
+            need_add_raft_peer = True
+
+    metadata_repository += " &"
+
+    metadata_repository_restart = "nohup ./vmr start " \
                                   "--log-rep-factor=%d --raft-address=%s " \
                                   "--bind=%s " \
                                   "--join=true &" \
@@ -137,8 +166,7 @@ def main():
     try:
         cmd_run("sudo sysctl -w kernel.core_pattern=core.%e.%p; sudo sysctl -p")
 
-        log_print("start metadata_repository")
-        print(metadata_repository)
+        log_print("start metadata_repository:: " + metadata_repository)
         cmd_run(metadata_repository)
 
         time.sleep(1)
@@ -153,6 +181,8 @@ def main():
 
                     cmd_run(METADATA_REPOSITORY_KILL)
                     cmd_run(metadata_repository_restart)
+                elif need_add_raft_peer:
+                    need_add_raft_peer = not add_raft_peer()
 
             except Exception as e:
                 log_print("[ERROR] loop,", str(e))

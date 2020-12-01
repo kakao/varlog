@@ -88,4 +88,10 @@ func TestFromStatusError(t *testing.T) {
 	if !errors.Is(decodedErr, ErrTrimmed) {
 		t.Errorf("unexpected Is result, %v %v", varlogErr, decodedErr)
 	}
+
+	statusErr = ToStatusError(ErrAlreadyExists)
+	decodedErr = FromStatusError(context.TODO(), statusErr)
+	if !errors.Is(decodedErr, FromStatusError(context.TODO(), ErrAlreadyExists)) {
+		t.Errorf("unexpected Is result, %v %v", ErrAlreadyExists, decodedErr)
+	}
 }

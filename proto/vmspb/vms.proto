@@ -155,6 +155,19 @@ message GetStorageNodesResponse {
              "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID"];
 }
 
+message AddMRPeerRequest {
+    string raft_url = 1 [(gogoproto.customname) = "RaftURL"];
+    string rpc_addr = 2 [(gogoproto.customname) = "RPCAddr"];
+}
+
+message AddMRPeerResponse {
+    uint64 node_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
+        (gogoproto.customname) = "NodeID"
+    ];
+}
+
 service ClusterManager {
     rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {
     }
@@ -180,6 +193,8 @@ service ClusterManager {
     rpc Unseal(UnsealRequest) returns (UnsealResponse) {}
 
     rpc GetMRMembers(google.protobuf.Empty) returns (GetMRMembersResponse) {}
+
+    rpc AddMRPeer(AddMRPeerRequest) returns (AddMRPeerResponse) {}
 
     rpc GetStorageNodes(google.protobuf.Empty)
         returns (GetStorageNodesResponse) {}

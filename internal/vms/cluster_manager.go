@@ -68,6 +68,8 @@ type ClusterManager interface {
 
 	MRInfos(ctx context.Context) (*mrpb.ClusterInfo, error)
 
+	AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error)
+
 	Run() error
 
 	Address() string
@@ -251,6 +253,26 @@ func (cm *clusterManager) MRInfos(ctx context.Context) (*mrpb.ClusterInfo, error
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.mrMgr.GetClusterInfo(ctx)
+}
+
+func (cm *clusterManager) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error) {
+	nodeID := types.NewNodeIDFromURL(raftURL)
+	if nodeID == types.InvalidNodeID {
+		return types.InvalidNodeID, verrors.ErrInvalidArgument
+	}
+
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	err := cm.mrMgr.AddPeer(ctx, nodeID, raftURL, rpcAddr)
+	if err != nil {
+		if !errors.Is(verrors.FromStatusError(context.TODO(), err),
+			verrors.FromStatusError(context.TODO(), verrors.ErrAlreadyExists)) {
+			return types.InvalidNodeID, err
+		}
+	}
+
+	return nodeID, nil
 }
 
 func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error) {

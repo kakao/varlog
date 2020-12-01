@@ -136,7 +136,7 @@ func (e Error) Code() codes.Code {
 // Error returns error string.
 func (e Error) Error() string {
 	if e.cause == nil {
-		return fmt.Sprintf("desc=%v code=%v)", e.desc, e.code)
+		return fmt.Sprintf("desc=%v code=%v", e.desc, e.code)
 	}
 	return fmt.Sprintf("%v: desc=%v code=%v", e.cause.Error(), e.desc, e.code)
 }

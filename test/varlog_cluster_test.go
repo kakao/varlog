@@ -37,11 +37,10 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 		env.Start()
 		defer env.Close()
 
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
-		}), ShouldBeTrue)
-
 		mr := env.MRs[0]
+		So(testutil.CompareWaitN(10, func() bool {
+			return mr.GetServerAddr() != ""
+		}), ShouldBeTrue)
 		addr := mr.GetServerAddr()
 
 		cli, err := mrc.NewMetadataRepositoryClient(addr)
@@ -721,6 +720,9 @@ func withTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()
+		So(testutil.CompareWaitN(10, func() bool {
+			return mr.GetServerAddr() != ""
+		}), ShouldBeTrue)
 		mrAddr := mr.GetServerAddr()
 
 		// VMS Server
@@ -1000,7 +1002,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 		mr := env.MRs[0]
 		So(testutil.CompareWaitN(50, func() bool {
-			return mr.IsMember()
+			return mr.GetServerAddr() != ""
 		}), ShouldBeTrue)
 		mrAddr := mr.GetServerAddr()
 
@@ -1051,7 +1053,7 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 
 		mr := env.MRs[0]
 		So(testutil.CompareWaitN(50, func() bool {
-			return mr.IsMember()
+			return mr.GetServerAddr() != ""
 		}), ShouldBeTrue)
 		mrAddr := mr.GetServerAddr()
 
@@ -1154,7 +1156,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 		mr := env.GetMR()
 
 		So(testutil.CompareWaitN(50, func() bool {
-			return mr.IsMember()
+			return mr.GetServerAddr() != ""
 		}), ShouldBeTrue)
 		mrAddr := mr.GetServerAddr()
 
@@ -1269,7 +1271,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 		mr := env.GetMR()
 
 		So(testutil.CompareWaitN(50, func() bool {
-			return mr.IsMember()
+			return mr.GetServerAddr() != ""
 		}), ShouldBeTrue)
 		mrAddr := mr.GetServerAddr()
 
@@ -1407,7 +1409,7 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 		mr := env.GetMR()
 
 		So(testutil.CompareWaitN(50, func() bool {
-			return mr.IsMember()
+			return mr.GetServerAddr() != ""
 		}), ShouldBeTrue)
 		mrAddr := mr.GetServerAddr()
 

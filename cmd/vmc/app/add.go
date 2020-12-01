@@ -25,3 +25,15 @@ func (app *VMCApp) addLogStream() {
 		},
 	)
 }
+
+func (app *VMCApp) addMRPeer(raftURL, rpcAddr string) {
+	app.withExecutionContext(
+		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
+			app.logger.Info("add MR Peer",
+				zap.String("raftURL", raftURL),
+				zap.String("rpcAddr", rpcAddr),
+			)
+			return cli.AddMRPeer(ctx, raftURL, rpcAddr)
+		},
+	)
+}

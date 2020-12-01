@@ -1086,6 +1086,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
+
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.leaderElected()
