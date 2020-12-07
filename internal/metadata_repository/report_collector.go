@@ -10,7 +10,6 @@ import (
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
-	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -45,7 +44,7 @@ type ReportCollector struct {
 	logger     *zap.Logger
 	cancel     context.CancelFunc
 	runner     *runner.Runner
-	running    atomicutil.AtomicBool
+	closed     bool
 }
 
 func NewReportCollector(cb ReportCollectorCallbacks, rpcTimeout time.Duration, logger *zap.Logger) *ReportCollector {
@@ -57,23 +56,39 @@ func NewReportCollector(cb ReportCollectorCallbacks, rpcTimeout time.Duration, l
 	}
 }
 
+func (rc *ReportCollector) running() bool {
+	return !rc.closed && rc.runner.State() == runner.Running
+}
+
 func (rc *ReportCollector) Run() {
-	if !rc.running.Load() {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	if !rc.running() {
 		rc.runner = runner.New("rc", rc.logger)
-		rc.running.Store(true)
 	}
 }
 
-func (rc *ReportCollector) Close() {
-	if rc.running.Load() {
-		rc.running.Store(false)
-
-		rc.mu.Lock()
+func (rc *ReportCollector) reset() {
+	if rc.running() {
 		rc.executors = make(map[types.StorageNodeID]*ReportCollectExecutor)
-		rc.mu.Unlock()
 
 		rc.runner.Stop()
 	}
+}
+
+func (rc *ReportCollector) Reset() {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	rc.reset()
+}
+
+func (rc *ReportCollector) Close() {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	rc.reset()
+	rc.closed = true
 }
 
 func (rc *ReportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, highWatermark types.GLSN) error {
@@ -94,12 +109,12 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		return verrors.ErrInvalid
 	}
 
-	if !rc.running.Load() {
-		return verrors.ErrInternal
-	}
-
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
+
+	if !rc.running() {
+		return verrors.ErrStopped
+	}
 
 	if _, ok := rc.executors[sn.StorageNodeID]; ok {
 		return verrors.ErrExist
@@ -131,12 +146,12 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 }
 
 func (rc *ReportCollector) UnregisterStorageNode(snID types.StorageNodeID) error {
-	if !rc.running.Load() {
-		return verrors.ErrInternal
-	}
-
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
+
+	if !rc.running() {
+		return verrors.ErrStopped
+	}
 
 	executor, ok := rc.executors[snID]
 	if !ok {
@@ -156,6 +171,10 @@ func (rc *ReportCollector) Commit(gls *snpb.GlobalLogStreamDescriptor) {
 
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
+
+	if !rc.running() {
+		return
+	}
 
 	for _, executor := range rc.executors {
 		select {

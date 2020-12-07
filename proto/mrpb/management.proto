@@ -53,6 +53,7 @@ message ClusterInfo {
     message Member {
         string peer = 1;
         string endpoint = 2;
+        bool learner = 3;
     }
 
     uint32 cluster_id = 1 [

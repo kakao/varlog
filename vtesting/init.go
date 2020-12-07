@@ -13,8 +13,8 @@ import (
 
 const defaultRaftTick = time.Millisecond * 100
 const defaultCommitTick = time.Millisecond * 10
-const defaultTimeoutUnit = time.Millisecond * 200
-const defaultProcCount = 16
+const defaultTimeoutUnit = time.Millisecond * 400
+const defaultProcCount = 8
 
 var (
 	testRaftTick    time.Duration = defaultRaftTick

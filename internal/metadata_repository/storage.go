@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gogo/protobuf/proto"
+	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
 
@@ -34,13 +35,33 @@ type storageAsyncJob struct {
 }
 
 type committedEntry struct {
+	leader    uint64
 	entry     *mrpb.RaftEntry
 	confState *raftpb.ConfState
 }
 
 type SnapshotGetter interface {
 	GetSnapshotIndex() uint64
+
 	GetSnapshot() ([]byte, *raftpb.ConfState, uint64)
+}
+
+type Membership interface {
+	SetLeader(types.NodeID)
+
+	Leader() types.NodeID
+
+	AddPeer(types.NodeID, string, bool, *raftpb.ConfState) error
+
+	RemovePeer(types.NodeID, *raftpb.ConfState) error
+
+	GetPeers() map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor
+
+	IsMember(types.NodeID) bool
+
+	IsLearner(types.NodeID) bool
+
+	Clear()
 }
 
 // TODO:: refactoring
@@ -76,6 +97,9 @@ type MetadataStorage struct {
 	metaAppliedIndex uint64
 	// callback after cache is completed
 	cacheCompleteCB func(uint64, uint64, error)
+
+	// The membership leader is not permanent to check whether the cluster is joined.
+	leader uint64
 
 	// number of running async job
 	nrRunning           int64
@@ -608,6 +632,18 @@ func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, re
 	return nil
 }
 
+func (ms *MetadataStorage) SetLeader(nodeID types.NodeID) {
+	atomic.StoreUint64(&ms.leader, uint64(nodeID))
+}
+
+func (ms *MetadataStorage) Leader() types.NodeID {
+	return types.NodeID(atomic.LoadUint64(&ms.leader))
+}
+
+func (ms *MetadataStorage) Clear() {
+	atomic.StoreUint64(&ms.leader, raft.None)
+}
+
 func (ms *MetadataStorage) AddPeer(nodeID types.NodeID, url string, isLearner bool, cs *raftpb.ConfState) error {
 	ms.prMu.Lock()
 	defer ms.prMu.Unlock()
@@ -646,6 +682,71 @@ func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID, cs *raftpb.ConfState)
 	}
 
 	return nil
+}
+
+func (ms *MetadataStorage) GetPeers() map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor {
+	peers := make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+
+	ms.prMu.RLock()
+	defer ms.prMu.RUnlock()
+
+	for nodeID, peer := range ms.origStateMachine.Peers {
+		peers[nodeID] = peer
+	}
+
+	for nodeID, peer := range ms.diffStateMachine.Peers {
+		if peer != nil {
+			peers[nodeID] = peer
+		} else {
+			delete(peers, nodeID)
+		}
+	}
+
+	return peers
+}
+
+func (ms *MetadataStorage) IsMember(nodeID types.NodeID) bool {
+	ms.prMu.RLock()
+	defer ms.prMu.RUnlock()
+
+	pre, cur := ms.getStateMachine()
+
+	if peer, ok := cur.Peers[nodeID]; ok {
+		if peer == nil {
+			return false
+		}
+		return !peer.IsLearner
+	}
+
+	if pre != cur {
+		if peer, ok := pre.Peers[nodeID]; ok {
+			return !peer.IsLearner
+		}
+	}
+
+	return false
+}
+
+func (ms *MetadataStorage) IsLearner(nodeID types.NodeID) bool {
+	ms.prMu.RLock()
+	defer ms.prMu.RUnlock()
+
+	pre, cur := ms.getStateMachine()
+
+	if peer, ok := cur.Peers[nodeID]; ok {
+		if peer == nil {
+			return false
+		}
+		return peer.IsLearner
+	}
+
+	if pre != cur {
+		if peer, ok := pre.Peers[nodeID]; ok {
+			return peer.IsLearner
+		}
+	}
+
+	return false
 }
 
 func (ms *MetadataStorage) RegisterEndpoint(nodeID types.NodeID, url string, nodeIndex, requestIndex uint64) error {

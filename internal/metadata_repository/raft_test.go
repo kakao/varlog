@@ -66,6 +66,7 @@ func newCluster(n int) *cluster {
 			clus.peers,
 			false,
 			DefaultSnapshotCount,
+			DefaultSnapshotCatchUpCount,
 			vtesting.TestRaftTick(),
 			nil,
 			clus.proposeC[i],

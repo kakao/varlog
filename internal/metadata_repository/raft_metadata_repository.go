@@ -49,6 +49,8 @@ type RaftMetadataRepository struct {
 	rnProposeC    chan string
 	rnCommitC     chan *raftCommittedEntry
 
+	listenNotifyC chan struct{}
+
 	options *MetadataRepositoryOptions
 	logger  *zap.Logger
 
@@ -58,6 +60,9 @@ type RaftMetadataRepository struct {
 
 	server       *grpc.Server
 	endpointAddr atomic.Value
+
+	// membership
+	membership Membership
 
 	nrReport uint64
 }
@@ -93,6 +98,9 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	}
 
 	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
+	mr.membership = mr.storage
+
+	mr.listenNotifyC = make(chan struct{})
 
 	mr.proposeC = make(chan *mrpb.RaftEntry, 4096)
 	mr.commitC = make(chan *committedEntry, 4096)
@@ -105,6 +113,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		options.Join, // if false, not to join an existing cluster
 		//options.SnapCount,
 		1,
+		options.SnapCatchUpCount,
 		options.RaftTick,
 		mr.storage,
 		mr.rnProposeC,
@@ -150,23 +159,14 @@ func (mr *RaftMetadataRepository) Run() {
 	if err := mr.runner.RunC(mctx, mr.runCommitTrigger); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
-	if err := mr.runner.RunC(mctx, mr.runPromoteMember); err != nil {
-		mr.logger.Panic("could not run", zap.Error(err))
-	}
 
 	mr.raftNode.start()
 
 	if err := mr.runner.RunC(mctx, func(ctx context.Context) {
-		timer := time.NewTimer(mr.raftNode.raftTick)
-		defer timer.Stop()
-
-		for !mr.IsMember() {
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-				timer.Reset(mr.raftNode.raftTick)
-			}
+		select {
+		case <-ctx.Done():
+			return
+		case <-mr.listenNotifyC:
 		}
 
 		mr.logger.Info("listening", zap.String("address", mr.options.RPCBindAddress))
@@ -225,15 +225,15 @@ func (mr *RaftMetadataRepository) Wait() {
 }
 
 func (mr *RaftMetadataRepository) isLeader() bool {
-	return mr.raftNode.membership.getLeader() == uint64(mr.nodeID)
+	return mr.membership.Leader() == mr.nodeID
 }
 
 func (mr *RaftMetadataRepository) hasLeader() bool {
-	return mr.raftNode.membership.hasLeader()
+	return uint64(mr.membership.Leader()) != raft.None
 }
 
 func (mr *RaftMetadataRepository) clearMembership() {
-	mr.raftNode.membership.clearMembership()
+	mr.membership.Clear()
 }
 
 func (mr *RaftMetadataRepository) runReplication(ctx context.Context) {
@@ -273,27 +273,14 @@ Loop:
 	ticker.Stop()
 }
 
-func (mr *RaftMetadataRepository) runPromoteMember(ctx context.Context) {
-	ticker := time.NewTicker(mr.options.PromoteTick)
-Loop:
-	for {
-		select {
-		case <-ticker.C:
-			mr.promoteMember(ctx)
-		case <-ctx.Done():
-			break Loop
-		}
-	}
-
-	ticker.Stop()
-}
-
 func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
+	listenNoti := false
+
 	for c := range mr.commitC {
 		if c == nil {
 			snap := mr.raftNode.loadSnapshot()
 			if snap != nil {
-				mr.reportCollector.Close()
+				mr.reportCollector.Reset()
 
 				err := mr.storage.ApplySnapshot(snap.Data, &snap.Metadata.ConfState, snap.Metadata.Index)
 				if err != nil {
@@ -303,12 +290,18 @@ func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
 				err = mr.reportCollector.Recover(
 					mr.storage.GetAllStorageNodes(),
 					mr.storage.GetHighWatermark())
-				if err != nil {
+				if err != nil &&
+					err != verrors.ErrStopped {
 					mr.logger.Panic("recover report collector fail")
 				}
 			}
+		} else if c.leader != raft.None {
+			mr.membership.SetLeader(types.NodeID(c.leader))
+		}
 
-			continue
+		if !listenNoti && mr.IsMember() {
+			close(mr.listenNotifyC)
+			listenNoti = true
 		}
 
 		mr.apply(c)
@@ -324,13 +317,19 @@ func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 			e = &mrpb.RaftEntry{}
 			switch d.entryType {
 			case raftpb.EntryNormal:
-				err := e.Unmarshal(d.data)
-				if err != nil {
-					mr.logger.Error(err.Error())
-					continue
-				}
-				c = &committedEntry{
-					entry: e,
+				if d.data != nil {
+					err := e.Unmarshal(d.data)
+					if err != nil {
+						mr.logger.Error(err.Error())
+						continue
+					}
+					c = &committedEntry{
+						entry: e,
+					}
+				} else {
+					c = &committedEntry{
+						leader: d.leader,
+					}
 				}
 			case raftpb.EntryConfChange:
 				var cc raftpb.ConfChange
@@ -397,6 +396,10 @@ func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, e
 }
 
 func (mr *RaftMetadataRepository) apply(c *committedEntry) {
+	if c == nil || c.entry == nil {
+		return
+	}
+
 	e := c.entry
 	f := e.Request.GetValue()
 
@@ -751,29 +754,6 @@ func (mr *RaftMetadataRepository) proposeCommit() {
 	mr.propose(context.TODO(), r, false)
 }
 
-func (mr *RaftMetadataRepository) promoteMember(ctx context.Context) {
-	if !mr.isLeader() {
-		return
-	}
-
-	status := mr.raftNode.node.Status()
-	leaderMatch := status.Progress[uint64(mr.nodeID)].Match
-
-	for nodeID, pr := range status.Progress {
-		if pr.IsLearner && float64(pr.Match) > float64(leaderMatch)*PROMOTE_RATE {
-			r := raftpb.ConfChange{
-				Type:   raftpb.ConfChangeAddNode,
-				NodeID: nodeID,
-			}
-
-			select {
-			case mr.rnConfChangeC <- r:
-			default:
-			}
-		}
-	}
-}
-
 func (mr *RaftMetadataRepository) proposeReport(lls *snpb.LocalLogStreamDescriptor) error {
 	r := &mrpb.Report{
 		LogStream: lls,
@@ -820,6 +800,8 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 		}
 	} else {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case mr.proposeC <- e:
 		default:
 			return verrors.ErrIgnore
@@ -940,13 +922,12 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 }
 
 func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {
-	if mr.raftNode.membership.isMember(nodeID) ||
-		mr.raftNode.membership.isLearner(nodeID) {
+	if mr.membership.IsMember(nodeID) ||
+		mr.membership.IsLearner(nodeID) {
 		return verrors.ErrAlreadyExists
 	}
 
 	r := raftpb.ConfChange{
-		//Type: raftpb.ConfChangeAddNode,
 		Type:    raftpb.ConfChangeAddLearnerNode,
 		NodeID:  uint64(nodeID),
 		Context: []byte(url),
@@ -955,8 +936,8 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.C
 	timer := time.NewTimer(mr.raftNode.raftTick)
 	defer timer.Stop()
 
-	for !mr.raftNode.membership.isMember(nodeID) &&
-		!mr.raftNode.membership.isLearner(nodeID) {
+	for !mr.membership.IsMember(nodeID) &&
+		!mr.membership.IsLearner(nodeID) {
 		if err := mr.proposeConfChange(ctx, r); err != nil {
 			return err
 		}
@@ -973,8 +954,8 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.C
 }
 
 func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
-	if !mr.raftNode.membership.isMember(nodeID) &&
-		!mr.raftNode.membership.isLearner(nodeID) {
+	if !mr.membership.IsMember(nodeID) &&
+		!mr.membership.IsLearner(nodeID) {
 		return verrors.ErrNotExist
 	}
 
@@ -986,8 +967,8 @@ func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID type
 	timer := time.NewTimer(mr.raftNode.raftTick)
 	defer timer.Stop()
 
-	for mr.raftNode.membership.isMember(nodeID) ||
-		mr.raftNode.membership.isLearner(nodeID) {
+	for mr.membership.IsMember(nodeID) ||
+		mr.membership.IsLearner(nodeID) {
 		if err := mr.proposeConfChange(ctx, r); err != nil {
 			return err
 		}
@@ -1004,19 +985,7 @@ func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID type
 }
 
 func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
-	for ctx.Err() == nil && !mr.IsMember() {
-		time.Sleep(mr.raftNode.raftTick)
-	}
-
 	endpoint := mr.endpointAddr.Load()
-	if endpoint == nil {
-		mr.logger.Panic("get endpoint fail")
-	}
-
-	if ctx.Err() != nil {
-		return
-	}
-
 	r := &mrpb.Endpoint{
 		NodeID: mr.nodeID,
 		Url:    endpoint.(string),
@@ -1030,12 +999,12 @@ func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID 
 		return nil, verrors.ErrNotMember
 	}
 
-	member := mr.raftNode.GetMembership()
+	member := mr.membership.GetPeers()
 
 	clusterInfo := &mrpb.ClusterInfo{
 		ClusterID:         mr.options.ClusterID,
 		NodeID:            mr.nodeID,
-		Leader:            types.NodeID(mr.raftNode.membership.getLeader()),
+		Leader:            mr.membership.Leader(),
 		ReplicationFactor: int32(mr.nrReplica),
 	}
 
@@ -1044,8 +1013,9 @@ func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID 
 
 		for nodeID, peer := range member {
 			member := &mrpb.ClusterInfo_Member{
-				Peer:     peer,
+				Peer:     peer.URL,
 				Endpoint: mr.storage.LookupEndpoint(nodeID),
+				Learner:  peer.IsLearner,
 			}
 
 			clusterInfo.Members[nodeID] = member
@@ -1076,9 +1046,9 @@ func (mr *RaftMetadataRepository) GetMinHighWatermark() types.GLSN {
 }
 
 func (mr *RaftMetadataRepository) IsMember() bool {
-	return mr.raftNode.membership.isMember(mr.nodeID)
+	return mr.hasLeader() && mr.storage.IsMember(mr.nodeID)
 }
 
 func (mr *RaftMetadataRepository) IsLearner() bool {
-	return mr.raftNode.membership.isLearner(mr.nodeID)
+	return mr.hasLeader() && mr.storage.IsLearner(mr.nodeID)
 }

@@ -46,7 +46,8 @@ type raftNode struct {
 	snapdir    string          // path to snapshot directory
 	lastIndex  uint64          // index of log at start
 
-	raftState     raft.StateType
+	raftState raft.StateType
+
 	snapshotIndex uint64
 	appliedIndex  uint64
 
@@ -55,9 +56,10 @@ type raftNode struct {
 	raftStorage *raft.MemoryStorage
 	wal         *wal.WAL
 
-	snapshotGetter SnapshotGetter
-	snapshotter    *snap.Snapshotter
-	snapCount      uint64
+	snapshotGetter   SnapshotGetter
+	snapshotter      *snap.Snapshotter
+	snapCount        uint64
+	snapCatchUpCount uint64
 
 	transport *rafthttp.Transport
 
@@ -73,6 +75,7 @@ type raftNode struct {
 // committed entry to app
 type raftCommittedEntry struct {
 	entryType raftpb.EntryType
+	leader    uint64
 	index     uint64
 	data      []byte
 	confState *raftpb.ConfState
@@ -80,7 +83,7 @@ type raftCommittedEntry struct {
 
 type raftMembership struct {
 	state    raft.StateType           // raft state
-	leader   types.ID                 // raft leader
+	leader   uint64                   // raft leader
 	learners map[vtypes.NodeID]string // raft learner map
 	members  map[vtypes.NodeID]string // raft member map
 	peers    map[vtypes.NodeID]string // raft known peer map
@@ -93,29 +96,35 @@ type raftMembership struct {
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries.
-func newRaftNode(id vtypes.NodeID, peers []string, join bool, snapCount uint64, raftTick time.Duration, snapshotGetter SnapshotGetter, proposeC chan string,
-	confChangeC chan raftpb.ConfChange, logger *zap.Logger) *raftNode {
+func newRaftNode(id vtypes.NodeID, peers []string, join bool,
+	snapCount, snapCatchUpCount uint64,
+	raftTick time.Duration,
+	snapshotGetter SnapshotGetter,
+	proposeC chan string,
+	confChangeC chan raftpb.ConfChange,
+	logger *zap.Logger) *raftNode {
 
 	commitC := make(chan *raftCommittedEntry)
 	snapshotC := make(chan struct{})
 
 	rc := &raftNode{
-		proposeC:       proposeC,
-		snapshotC:      snapshotC,
-		confChangeC:    confChangeC,
-		commitC:        commitC,
-		id:             id,
-		bpeers:         peers,
-		membership:     newRaftMemebership(logger),
-		raftTick:       raftTick,
-		join:           join,
-		waldir:         fmt.Sprintf("raft-%d", id),
-		snapdir:        fmt.Sprintf("raft-%d-snap", id),
-		snapshotGetter: snapshotGetter,
-		snapCount:      snapCount,
-		logger:         logger,
-		runner:         runner.New("raft-node", logger),
-		httprunner:     runner.New("http", logger),
+		proposeC:         proposeC,
+		snapshotC:        snapshotC,
+		confChangeC:      confChangeC,
+		commitC:          commitC,
+		id:               id,
+		bpeers:           peers,
+		membership:       newRaftMemebership(logger),
+		raftTick:         raftTick,
+		join:             join,
+		waldir:           fmt.Sprintf("raft-%d", id),
+		snapdir:          fmt.Sprintf("raft-%d-snap", id),
+		snapshotGetter:   snapshotGetter,
+		snapCount:        snapCount,
+		snapCatchUpCount: snapCatchUpCount,
+		logger:           logger,
+		runner:           runner.New("raft-node", logger),
+		httprunner:       runner.New("http", logger),
 	}
 
 	return rc
@@ -135,6 +144,7 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 	if err := rc.snapshotter.SaveSnap(snap); err != nil {
 		return err
 	}
+
 	return rc.wal.ReleaseLockTo(snap.Metadata.Index)
 }
 
@@ -247,6 +257,26 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 		*/
 	}
 	return true
+}
+
+func (rc *raftNode) publishLeader(ctx context.Context, state *raft.SoftState) {
+	if state == nil {
+		return
+	}
+
+	if state.Lead == raft.None {
+		return
+	}
+
+	e := &raftCommittedEntry{
+		leader:    state.Lead,
+		entryType: raftpb.EntryNormal,
+	}
+
+	select {
+	case rc.commitC <- e:
+	case <-ctx.Done():
+	}
 }
 
 func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
@@ -418,6 +448,9 @@ func (rc *raftNode) start() {
 		rc.logger.Panic("could not run", zap.Error(err))
 	}
 	if err := rc.runner.RunC(ctx, rc.processPropose); err != nil {
+		rc.logger.Panic("could not run", zap.Error(err))
+	}
+	if err := rc.runner.RunC(ctx, rc.processPromote); err != nil {
 		rc.logger.Panic("could not run", zap.Error(err))
 	}
 }
@@ -609,7 +642,9 @@ func (rc *raftNode) doSnapshot() {
 	)
 
 	snap, err := rc.raftStorage.CreateSnapshot(appliedIndex, confState, data)
-	if err != nil {
+	if err == raft.ErrSnapOutOfDate {
+		return
+	} else if err != nil {
 		rc.logger.Panic(err.Error())
 	}
 
@@ -617,9 +652,11 @@ func (rc *raftNode) doSnapshot() {
 		rc.logger.Panic(err.Error())
 	}
 
+	atomic.StoreUint64(&rc.snapshotIndex, snap.Metadata.Index)
+
 	compactIndex := uint64(1)
-	if appliedIndex > DefaultSnapshotCatchUpEntriesN {
-		compactIndex = appliedIndex - DefaultSnapshotCatchUpEntriesN
+	if appliedIndex > rc.snapCatchUpCount {
+		compactIndex = appliedIndex - rc.snapCatchUpCount
 	}
 
 	if err := rc.raftStorage.Compact(compactIndex); err != nil && err != raft.ErrCompacted {
@@ -627,7 +664,6 @@ func (rc *raftNode) doSnapshot() {
 	}
 
 	rc.logger.Info("compacted log", zap.Uint64("index", compactIndex))
-	atomic.StoreUint64(&rc.snapshotIndex, appliedIndex)
 }
 
 func (rc *raftNode) processSnapshot(ctx context.Context) {
@@ -693,11 +729,15 @@ func (rc *raftNode) processRaftEvent(ctx context.Context) {
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-rc.node.Ready():
 			rc.membership.updateState(rd.SoftState)
+			rc.publishLeader(ctx, rd.SoftState)
+
 			rc.wal.Save(rd.HardState, rd.Entries)
+
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				rc.saveSnap(rd.Snapshot)
 				rc.raftStorage.ApplySnapshot(rd.Snapshot)
 				rc.publishSnapshot(rd.Snapshot)
+
 				rc.recoverMembership(rd.Snapshot)
 			}
 
@@ -714,6 +754,44 @@ func (rc *raftNode) processRaftEvent(ctx context.Context) {
 		case <-ctx.Done():
 			rc.stopRaft()
 			return
+		}
+	}
+}
+
+func (rc *raftNode) processPromote(ctx context.Context) {
+	ticker := time.NewTicker(rc.raftTick)
+Loop:
+	for {
+		select {
+		case <-ticker.C:
+			rc.promoteMember(ctx)
+		case <-ctx.Done():
+			break Loop
+		}
+	}
+
+	ticker.Stop()
+}
+
+func (rc *raftNode) promoteMember(ctx context.Context) {
+	if !rc.membership.isLeader() {
+		return
+	}
+
+	status := rc.node.Status()
+	leaderMatch := status.Progress[uint64(rc.id)].Match
+
+	for nodeID, pr := range status.Progress {
+		if pr.IsLearner && float64(pr.Match) > float64(leaderMatch)*PROMOTE_RATE {
+			r := raftpb.ConfChange{
+				Type:   raftpb.ConfChangeAddNode,
+				NodeID: nodeID,
+			}
+
+			select {
+			case rc.confChangeC <- r:
+			default:
+			}
 		}
 	}
 }
@@ -754,9 +832,6 @@ func (rc *raftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
 }
 
 func (rc *raftNode) GetNodeID() vtypes.NodeID { return rc.id }
-func (rc *raftNode) GetMembership() map[vtypes.NodeID]string {
-	return rc.membership.getMemberURLs()
-}
 
 func newRaftMemebership(logger *zap.Logger) *raftMembership {
 	return &raftMembership{
@@ -856,18 +931,6 @@ func (rm *raftMembership) removePeer(nodeID vtypes.NodeID) {
 	delete(rm.learners, nodeID)
 }
 
-func (rm *raftMembership) getMemberURLs() map[vtypes.NodeID]string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
-	m := make(map[vtypes.NodeID]string)
-	for nodeID, url := range rm.members {
-		m[nodeID] = url
-	}
-
-	return m
-}
-
 func (rm *raftMembership) getMembers() []types.ID {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -897,22 +960,6 @@ func (rm *raftMembership) removeAllMembers() {
 	rm.learners = make(map[vtypes.NodeID]string)
 }
 
-func (rm *raftMembership) isMember(nodeID vtypes.NodeID) bool {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
-	_, ok := rm.members[nodeID]
-	return rm.hasLeader() && ok
-}
-
-func (rm *raftMembership) isLearner(nodeID vtypes.NodeID) bool {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
-	_, ok := rm.learners[nodeID]
-	return rm.hasLeader() && ok
-}
-
 func (rm *raftMembership) getPeer(nodeID vtypes.NodeID) []byte {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -932,7 +979,7 @@ func (rm *raftMembership) updateState(state *raft.SoftState) {
 
 	if state.Lead != raft.None {
 		rm.logger.Info("set leader", zap.Uint64("leader", uint64(state.Lead)))
-		atomic.StoreUint64((*uint64)(&rm.leader), uint64(state.Lead))
+		atomic.StoreUint64(&rm.leader, uint64(state.Lead))
 	}
 
 	atomic.StoreUint64((*uint64)(&rm.state), uint64(state.RaftState))
@@ -942,16 +989,6 @@ func (rm *raftMembership) isLeader() bool {
 	return raft.StateLeader == raft.StateType(atomic.LoadUint64((*uint64)(&rm.state)))
 }
 
-func (rm *raftMembership) hasLeader() bool {
-	return rm.getLeader() != raft.None
-}
-
 func (rm *raftMembership) getLeader() uint64 {
-	return atomic.LoadUint64((*uint64)(&rm.leader))
-}
-
-func (rm *raftMembership) clearMembership() {
-	atomic.StoreUint64((*uint64)(&rm.leader), raft.None)
-	atomic.StoreUint64((*uint64)(&rm.state), uint64(raft.StateFollower))
-	rm.reset()
+	return atomic.LoadUint64(&rm.leader)
 }
