@@ -193,6 +193,7 @@ func TestSubscribe(t *testing.T) {
 					if err != nil {
 						// NOTE: Regardless of context error or EOF, an
 						// error should be raised only once.
+						close(glsnC)
 						wg.Done()
 						return
 					}
