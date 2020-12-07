@@ -128,11 +128,10 @@ func TestRegisterStorageNode(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		reportCollector.mu.RLock()
-
 		_, ok := reportCollector.executors[sn.StorageNodeID]
-		So(ok, ShouldBeTrue)
-
 		reportCollector.mu.RUnlock()
+
+		So(ok, ShouldBeTrue)
 
 		err = reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
 		So(err, ShouldNotBeNil)
@@ -166,11 +165,10 @@ func TestUnregisterStorageNode(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		reportCollector.mu.RLock()
-
 		_, ok := reportCollector.executors[sn.StorageNodeID]
-		So(ok, ShouldBeFalse)
-
 		reportCollector.mu.RUnlock()
+
+		So(ok, ShouldBeFalse)
 	})
 }
 
@@ -206,36 +204,60 @@ func TestRecoverStorageNode(t *testing.T) {
 
 		for i := 0; i < nrSN; i++ {
 			reportCollector.mu.RLock()
-
 			_, ok := reportCollector.executors[SNs[i].StorageNodeID]
-			So(ok, ShouldBeTrue)
-
 			reportCollector.mu.RUnlock()
+
+			So(ok, ShouldBeTrue)
 		}
 
-		Convey("When ReportCollector Close", func(ctx C) {
-			reportCollector.Close()
+		Convey("When ReportCollector Reset", func(ctx C) {
+			reportCollector.Reset()
 
-			Convey("Then there shoulb be no ReportCollectExecutor", func(ctx C) {
+			Convey("Then there should be no ReportCollectExecutor", func(ctx C) {
 				for i := 0; i < nrSN; i++ {
 					reportCollector.mu.RLock()
-
 					_, ok := reportCollector.executors[SNs[i].StorageNodeID]
-					So(ok, ShouldBeFalse)
-
 					reportCollector.mu.RUnlock()
+
+					So(ok, ShouldBeFalse)
 				}
 
 				Convey("When ReportCollector Recover", func(ctx C) {
 					reportCollector.Recover(SNs, hwm)
-					Convey("Then there shoulb be no ReportCollectExecutor", func(ctx C) {
+					Convey("Then there should be ReportCollectExecutor", func(ctx C) {
 						for i := 0; i < nrSN; i++ {
 							reportCollector.mu.RLock()
-
 							_, ok := reportCollector.executors[SNs[i].StorageNodeID]
-							So(ok, ShouldBeTrue)
-
 							reportCollector.mu.RUnlock()
+
+							So(ok, ShouldBeTrue)
+						}
+					})
+				})
+			})
+		})
+
+		Convey("When ReportCollector Close", func(ctx C) {
+			reportCollector.Close()
+
+			Convey("Then there should be no ReportCollectExecutor", func(ctx C) {
+				for i := 0; i < nrSN; i++ {
+					reportCollector.mu.RLock()
+					_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+					reportCollector.mu.RUnlock()
+
+					So(ok, ShouldBeFalse)
+				}
+
+				Convey("When ReportCollector Recover", func(ctx C) {
+					reportCollector.Recover(SNs, hwm)
+					Convey("Then there should be no ReportCollectExecutor", func(ctx C) {
+						for i := 0; i < nrSN; i++ {
+							reportCollector.mu.RLock()
+							_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+							reportCollector.mu.RUnlock()
+
+							So(ok, ShouldBeFalse)
 						}
 					})
 				})

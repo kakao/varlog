@@ -78,6 +78,7 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 		RaftAddress:       clus.peers[idx],
 		Join:              join,
 		SnapCount:         testSnapCount,
+		SnapCatchUpCount:  testSnapCount,
 		RaftTick:          vtesting.TestRaftTick(),
 		CommitTick:        vtesting.TestCommitTick(),
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
@@ -1100,7 +1101,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 				StorageNodeID: snIDs[i],
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
 			defer cancel()
 
 			err := clus.nodes[0].RegisterStorageNode(rctx, sn)
@@ -1110,7 +1111,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 		lsID := types.LogStreamID(0)
 
 		ls := makeLogStream(lsID, snIDs)
-		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
 		defer cancel()
 		err := clus.nodes[0].RegisterLogStream(rctx, ls)
 		So(err, ShouldBeNil)
@@ -1121,7 +1122,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 			So(clus.start(newNode), ShouldBeNil)
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(100))
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
 			defer cancel()
 
 			So(clus.nodes[0].AddPeer(rctx,
@@ -1129,8 +1130,8 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 				clus.nodes[newNode].nodeID,
 				clus.peers[newNode]), ShouldBeNil)
 
-			Convey("Then getMeta from new node should be success", func(ctx C) {
-				So(testutil.CompareWaitN(100, func() bool {
+			Convey("Then new node should be member", func(ctx C) {
+				So(testutil.CompareWaitN(200, func() bool {
 					return clus.nodes[newNode].IsMember()
 				}), ShouldBeTrue)
 
@@ -1141,7 +1142,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 						StorageNodeID: snID,
 					}
 
-					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(100))
+					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
 					defer cancel()
 
 					err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
@@ -1154,38 +1155,6 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(meta.GetStorageNode(snID), ShouldNotBeNil)
 				})
-			})
-		})
-
-		Convey("When new nodes joining", func(ctx C) {
-			newNode := nrNode
-			nrNode += 1
-			So(clus.appendMetadataRepo(), ShouldBeNil)
-			So(clus.start(newNode), ShouldBeNil)
-
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
-			defer cancel()
-
-			So(clus.nodes[0].AddPeer(rctx,
-				types.ClusterID(0),
-				clus.nodes[newNode].nodeID,
-				clus.peers[newNode]), ShouldBeNil)
-
-			Convey("Then proposal should be operated", func(ctx C) {
-				snID := snIDs[nrRep-1] + types.StorageNodeID(1)
-
-				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: snID,
-				}
-
-				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(100))
-				defer cancel()
-
-				err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
-				if rctx.Err() != nil {
-					clus.logger.Info("complete with ctx error", zap.String("err", rctx.Err().Error()))
-				}
-				So(err, ShouldBeNil)
 			})
 		})
 
@@ -1205,8 +1174,8 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(len(cinfo.Members), ShouldBeLessThan, nrNode)
 
-				Convey("After joining, it should have member info", func(ctx C) {
-					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+				Convey("After join, it should have member info", func(ctx C) {
+					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
 					defer cancel()
 
 					So(clus.nodes[0].AddPeer(rctx,
@@ -1214,7 +1183,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 						clus.nodes[newNode].nodeID,
 						clus.peers[newNode]), ShouldBeNil)
 
-					So(testutil.CompareWaitN(100, func() bool {
+					So(testutil.CompareWaitN(200, func() bool {
 						return clus.nodes[newNode].IsMember()
 					}), ShouldBeTrue)
 
@@ -1225,7 +1194,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 							StorageNodeID: snID,
 						}
 
-						rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(100))
+						rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
 						defer cancel()
 
 						err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
@@ -1331,7 +1300,7 @@ func TestMRFailoverRestart(t *testing.T) {
 
 			So(testutil.CompareWaitN(50, func() bool {
 				peers := clus.getMembersFromSnapshot(restartNode)
-				return len(peers) == nrNode
+				return len(peers) > 0
 			}), ShouldBeTrue)
 
 			clus.restart(restartNode)
@@ -1366,7 +1335,7 @@ func TestMRFailoverRestart(t *testing.T) {
 
 			So(testutil.CompareWaitN(100, func() bool {
 				peers := clus.getMembersFromSnapshot(restartNode)
-				return len(peers) == nrNode
+				return len(peers) > 0
 			}), ShouldBeTrue)
 
 			clus.stop(restartNode)
@@ -1501,7 +1470,7 @@ func TestMRRemoteSnapshot(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		So(testutil.CompareWaitN(50, func() bool {
+		So(testutil.CompareWaitN(500, func() bool {
 			peers := clus.getMembersFromSnapshot(leader)
 			return len(peers) == nrNode
 		}), ShouldBeTrue)
@@ -1543,15 +1512,6 @@ func TestMRRemoteSnapshot(t *testing.T) {
 	})
 }
 
-func TestMRRemoteSnapshotFail(t *testing.T) {
-	Convey("Given MR cluster which have snapshot", t, func(ctx C) {
-		Convey("When new node join but sendSnapshot fail", func(ctx C) {
-			Convey("Then replication should be operate", func(ctx C) {
-			})
-		})
-	})
-}
-
 func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 	Convey("Given MR cluster with 5 peers", t, func(ctx C) {
 		nrRep := 1
@@ -1575,7 +1535,7 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 			restartNode := (leader + 1) % nrNode
 			leaveNode := (leader + 2) % nrNode
 
-			So(testutil.CompareWaitN(50, func() bool {
+			So(testutil.CompareWaitN(500, func() bool {
 				peers := clus.getMembersFromSnapshot(restartNode)
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
@@ -1595,13 +1555,113 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 			clus.restart(restartNode)
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
-				So(testutil.CompareWaitN(50, func() bool {
+				So(testutil.CompareWaitN(100, func() bool {
 					cinfo, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
 					}
 					return len(cinfo.Members) == nrNode
 				}), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
+	Convey("Given MR cluster with 3 peers", t, func(ctx C) {
+		nrRep := 1
+		nrNode := 3
+		testSnapCount = 10
+		defer func() { testSnapCount = 0 }()
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		clus.Start()
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.leaderElected()
+		}), ShouldBeTrue)
+
+		leader := clus.leader()
+		So(leader, ShouldBeGreaterThan, -1)
+
+		Convey("When follower restart with outdated snapshot", func(ctx C) {
+			restartNode := (leader + 1) % nrNode
+
+			So(testutil.CompareWaitN(500, func() bool {
+				peers := clus.getMembersFromSnapshot(restartNode)
+				return len(peers) == nrNode
+			}), ShouldBeTrue)
+
+			clus.stop(restartNode)
+
+			appliedIdx := clus.nodes[restartNode].raftNode.appliedIndex
+
+			So(testutil.CompareWaitN(500, func() bool {
+				snapshot := clus.getSnapshot(leader)
+				return snapshot.Metadata.Index > appliedIdx+testSnapCount+1
+			}), ShouldBeTrue)
+
+			clus.restart(restartNode)
+
+			Convey("Then node which is restarted should serve", func(ctx C) {
+				So(testutil.CompareWaitN(100, func() bool {
+					return clus.nodes[restartNode].GetServerAddr() != ""
+				}), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
+	Convey("Given MR cluster with 3 peers", t, func(ctx C) {
+		nrRep := 1
+		nrNode := 3
+		testSnapCount = 10
+		defer func() { testSnapCount = 0 }()
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		clus.Start()
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.leaderElected()
+		}), ShouldBeTrue)
+
+		leader := clus.leader()
+		So(leader, ShouldBeGreaterThan, -1)
+
+		Convey("When remove node during restart that", func(ctx C) {
+			restartNode := (leader + 1) % nrNode
+
+			So(testutil.CompareWaitN(500, func() bool {
+				peers := clus.getMembersFromSnapshot(restartNode)
+				return len(peers) == nrNode
+			}), ShouldBeTrue)
+
+			clus.stop(restartNode)
+
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			defer cancel()
+
+			So(clus.nodes[leader].RemovePeer(rctx,
+				types.ClusterID(0),
+				clus.nodes[restartNode].nodeID), ShouldBeNil)
+
+			nrNode -= 1
+
+			So(testutil.CompareWaitN(500, func() bool {
+				peers := clus.getMembersFromSnapshot(leader)
+				return len(peers) == nrNode
+			}), ShouldBeTrue)
+
+			clus.restart(restartNode)
+
+			Convey("Then the node should not serve", func(ctx C) {
+				time.Sleep(10 * time.Second)
+				So(clus.nodes[restartNode].GetServerAddr(), ShouldEqual, "")
 			})
 		})
 	})
@@ -1648,13 +1708,16 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 		Convey("When follower restart with snapshot", func(ctx C) {
 			restartNode := (leader + 1) % nrNode
 
-			So(testutil.CompareWaitN(50, func() bool {
+			So(testutil.CompareWaitN(500, func() bool {
 				peers := clus.getMembersFromSnapshot(restartNode)
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(restartNode)
 			clus.restart(restartNode)
+
+			So(testutil.CompareWaitN(50, func() bool {
+				return clus.nodes[restartNode].GetServerAddr() != ""
+			}), ShouldBeTrue)
 
 			Convey("Then ReportCollector should recover", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
@@ -1739,7 +1802,7 @@ func TestMRScaleOutJoin(t *testing.T) {
 			return clus.leaderElected()
 		}), ShouldBeTrue)
 
-		So(testutil.CompareWaitN(50, func() bool {
+		So(testutil.CompareWaitN(500, func() bool {
 			peers := clus.getMembersFromSnapshot(0)
 			return len(peers) == nrNode
 		}), ShouldBeTrue)

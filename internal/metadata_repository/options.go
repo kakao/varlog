@@ -14,16 +14,16 @@ import (
 )
 
 const (
-	DefaultRPCBindAddress                        = "0.0.0.0:9092"
-	DefaultRaftPort                              = 10000
-	DefaultSnapshotCount           uint64        = 10000
-	DefaultSnapshotCatchUpEntriesN uint64        = 10000
-	DefaultLogReplicationFactor    int           = 1
-	DefaultProposeTimeout          time.Duration = 100 * time.Millisecond
-	DefaultRaftTick                time.Duration = 100 * time.Millisecond
-	DefaultRPCTimeout              time.Duration = 100 * time.Millisecond
-	DefaultCommitTick              time.Duration = 1 * time.Millisecond
-	DefaultPromoteTick             time.Duration = 100 * time.Millisecond
+	DefaultRPCBindAddress                     = "0.0.0.0:9092"
+	DefaultRaftPort                           = 10000
+	DefaultSnapshotCount        uint64        = 10000
+	DefaultSnapshotCatchUpCount uint64        = 10000
+	DefaultLogReplicationFactor int           = 1
+	DefaultProposeTimeout       time.Duration = 100 * time.Millisecond
+	DefaultRaftTick             time.Duration = 100 * time.Millisecond
+	DefaultRPCTimeout           time.Duration = 100 * time.Millisecond
+	DefaultCommitTick           time.Duration = 1 * time.Millisecond
+	DefaultPromoteTick          time.Duration = 100 * time.Millisecond
 
 	UnusedRequestIndex uint64 = 0
 )
@@ -49,6 +49,7 @@ type MetadataRepositoryOptions struct {
 	Verbose            bool
 	NumRep             int
 	SnapCount          uint64
+	SnapCatchUpCount   uint64
 	RaftTick           time.Duration
 	RaftProposeTimeout time.Duration
 	RPCTimeout         time.Duration
@@ -99,6 +100,10 @@ func (options *MetadataRepositoryOptions) validate() error {
 
 	if options.SnapCount == 0 {
 		options.SnapCount = DefaultSnapshotCount
+	}
+
+	if options.SnapCatchUpCount == 0 {
+		options.SnapCount = DefaultSnapshotCatchUpCount
 	}
 
 	if options.RaftTick == time.Duration(0) {
