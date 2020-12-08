@@ -26,7 +26,7 @@ type Varlog interface {
 
 	Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts SubscribeOption) (SubscribeCloser, error)
 
-	Trim(ctx context.Context, glsn types.GLSN) error
+	Trim(ctx context.Context, until types.GLSN, opts TrimOption) error
 }
 
 type OnNext func(logEntry types.LogEntry, err error)
@@ -133,8 +133,8 @@ func (v *varlog) Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN
 	return v.subscribe(ctx, begin, end, onNextFunc, opts)
 }
 
-func (v *varlog) Trim(ctx context.Context, glsn types.GLSN) error {
-	panic("not implemented")
+func (v *varlog) Trim(ctx context.Context, until types.GLSN, opts TrimOption) error {
+	return v.trim(ctx, until, opts)
 }
 
 func (v *varlog) Close() (err error) {
