@@ -121,6 +121,7 @@ func newSubscriber(ctx context.Context, logStreamID types.LogStreamID, logCL log
 func (s *subscriber) subscribe(ctx context.Context) {
 	defer func() {
 		s.closed.Store(true)
+		s.transmitCV <- transmitSignal{glsn: types.InvalidGLSN, closed: true}
 	}()
 	for {
 		select {
@@ -130,7 +131,6 @@ func (s *subscriber) subscribe(ctx context.Context) {
 			// NOTE: ErrUndecidable is ignored since it is neither sign of connection
 			// failure nor a miss of logs.
 			if !ok || res.Error == io.EOF || errors.Is(res.Error, verrors.ErrUndecidable) {
-				s.transmitCV <- transmitSignal{glsn: types.InvalidGLSN, closed: true}
 				return
 			}
 			glsn := res.GLSN
