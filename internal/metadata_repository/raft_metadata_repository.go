@@ -892,6 +892,10 @@ func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.Me
 	}
 
 	m := mr.storage.GetMetadata()
+	mr.logger.Info("GetMetadata",
+		zap.Int("SN", len(m.GetStorageNodes())),
+		zap.Int("LS", len(m.GetLogStreams())),
+	)
 	return m, nil
 }
 

@@ -83,6 +83,11 @@ func (mgr *logClientManager) GetOrConnect(storageNodeID types.StorageNodeID, add
 		mgr.m.Store(storageNodeID, lip)
 		return lip, nil
 	})
+
+	if lip == nil {
+		return nil, err
+	}
+
 	return lip.(*logClientProxy), err
 }
 

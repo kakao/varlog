@@ -102,6 +102,7 @@ func Open(clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, 
 	// logcl manager
 	// TODO (jun): metadataRefresher should implement ClusterMetadataView
 	metadata := refresher.metadata.Load().(*varlogpb.MetadataDescriptor)
+
 	logCLManager, err := logc.NewLogClientManager(metadata, v.logger)
 	if err != nil {
 		return nil, err

@@ -132,6 +132,7 @@ def stop():
 def add_storage_node(addr):
     try:
         cmd = "./vmc add sn --storage-node-address=%s" % addr
+        log_print(cmd)
         resp = commands.getstatusoutput(cmd)
         if resp[0] != 0:
             raise Exception("[ERROR] add storagenode," + resp[1])
@@ -147,11 +148,11 @@ def main():
         sn_addr = get_rpc_addr()
 
         storage_node = "nohup ./vsn start --cluster-id=%s " \
-                       "--storage-node-id=%s --rpc-bind-address=0.0.0.0:%s " \
+                       "--storage-node-id=%s --rpc-bind-address=%s " \
                        "--volumes=%s &" \
                        % (get_env("CLUSTER_ID", DEFAULT_CLUSTER_ID),
                           snid,
-                          get_env("RPC_PORT", DEFAULT_RPC_PORT),
+                          sn_addr,
                           volumes)
 
         log_print("start storagenode")
