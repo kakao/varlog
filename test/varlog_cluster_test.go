@@ -1786,7 +1786,7 @@ func TestVarlogClient(t *testing.T) {
 			nrLS = 3
 		)
 		vmsOpts := vms.DefaultOptions
-		vmsOpts.HeartbeatTimeout *= 10
+		vmsOpts.HeartbeatTimeout *= 20
 		vmsOpts.Logger = zap.L()
 
 		clusterOpts := VarlogClusterOptions{
@@ -1945,6 +1945,81 @@ func TestVarlogClient(t *testing.T) {
 					expectedGLSN := types.GLSN(1)
 					for glsn := range glsnC {
 						So(glsn, ShouldEqual, expectedGLSN)
+						expectedGLSN++
+					}
+					closer()
+				})
+
+				Convey("Trim", func() {
+					const (
+						numLogs = 10
+						minGLSN = types.MinGLSN
+					)
+
+					// append
+					for i := minGLSN; i < minGLSN+types.GLSN(numLogs); i++ {
+						glsn, err := vlg.Append(context.TODO(), []byte(strconv.Itoa(int(i))))
+						So(err, ShouldBeNil)
+						So(glsn, ShouldEqual, types.GLSN(i))
+					}
+
+					makeOnNext := func(outc chan<- types.LogEntry) varlog.OnNext {
+						return func(logEntry types.LogEntry, err error) {
+							if err != nil {
+								close(outc)
+								return
+							}
+							outc <- logEntry
+						}
+					}
+
+					// check appended logs
+					leC := make(chan types.LogEntry)
+					onNext := makeOnNext(leC)
+					closer, err := vlg.Subscribe(context.TODO(), minGLSN, minGLSN+types.GLSN(numLogs), onNext, varlog.SubscribeOption{})
+					So(err, ShouldBeNil)
+					expectedGLSN := minGLSN
+					for logEntry := range leC {
+						So(logEntry.GLSN, ShouldEqual, expectedGLSN)
+						expectedGLSN++
+					}
+					closer()
+
+					// trim
+					until := types.GLSN(numLogs/2) + minGLSN
+					err = vlg.Trim(context.TODO(), until, varlog.TrimOption{})
+					So(err, ShouldBeNil)
+
+					// actual deletion in SN is asynchronous.
+					subscribeTest := testutil.CompareWait100(func() bool {
+						errC := make(chan error)
+						nopOnNext := func(le types.LogEntry, err error) {
+							isErr := err != nil
+							errC <- err
+							if isErr {
+								close(errC)
+							}
+						}
+						closer, err := vlg.Subscribe(context.TODO(), minGLSN, until, nopOnNext, varlog.SubscribeOption{})
+						So(err, ShouldBeNil)
+
+						isErr := false
+						for err := range errC {
+							isErr = isErr || (err != nil && err != io.EOF)
+						}
+						closer()
+						return isErr
+					})
+					So(subscribeTest, ShouldBeTrue)
+
+					// subscribe remains
+					leC = make(chan types.LogEntry)
+					onNext = makeOnNext(leC)
+					closer, err = vlg.Subscribe(context.TODO(), until+1, minGLSN+types.GLSN(numLogs), onNext, varlog.SubscribeOption{})
+					So(err, ShouldBeNil)
+					expectedGLSN = until + 1
+					for logEntry := range leC {
+						So(logEntry.GLSN, ShouldEqual, expectedGLSN)
 						expectedGLSN++
 					}
 					closer()

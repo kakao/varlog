@@ -518,10 +518,11 @@ func (lse *logStreamExecutor) isTrimmed(glsn types.GLSN) error {
 func (lse *logStreamExecutor) commitUndecidable(glsn types.GLSN) error {
 	hwm := lse.localHighWatermark.Load()
 	if glsn > hwm {
+		// TODO (jun): consider below situation: local_hwm < trim's until < global_hwm
+		// ISSUE: https://jira.daumkakao.com/browse/VARLOG-303
 		return errUndecidable(glsn, hwm)
 	}
 	return nil
-	//return glsn > lse.localHighWatermark.Load()
 }
 
 func (lse *logStreamExecutor) read(t *readTask) {
