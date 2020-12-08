@@ -103,7 +103,7 @@ func (options *MetadataRepositoryOptions) validate() error {
 	}
 
 	if options.SnapCatchUpCount == 0 {
-		options.SnapCount = DefaultSnapshotCatchUpCount
+		options.SnapCatchUpCount = DefaultSnapshotCatchUpCount
 	}
 
 	if options.RaftTick == time.Duration(0) {

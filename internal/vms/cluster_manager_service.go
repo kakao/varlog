@@ -37,7 +37,9 @@ func (s *clusterManagerService) Register(server *grpc.Server) {
 
 func (s *clusterManagerService) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
 	snmeta, err := s.clusManager.AddStorageNode(ctx, req.GetAddress())
-	s.logger.Info("AddStorageNode", zap.String("snmeta", snmeta.String()), zap.Error(err))
+	s.logger.Info("AddStorageNode",
+		zap.String("addr", req.GetAddress()),
+		zap.String("snmeta", snmeta.String()), zap.Error(err))
 	return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, verrors.ToStatusError(err)
 }
 
@@ -69,6 +71,10 @@ func (s *clusterManagerService) UpdateLogStream(ctx context.Context, req *vmspb.
 
 func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {
 	lsmetas, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
+	s.logger.Info("Seal",
+		zap.Uint32("lsid", uint32(req.GetLogStreamID())),
+		zap.String("lsmetas", (&vmspb.SealResponse{LogStreams: lsmetas}).String()),
+	)
 	return &vmspb.SealResponse{LogStreams: lsmetas}, verrors.ToStatusError(err)
 }
 
@@ -79,6 +85,10 @@ func (s *clusterManagerService) Sync(ctx context.Context, req *vmspb.SyncRequest
 
 func (s *clusterManagerService) Unseal(ctx context.Context, req *vmspb.UnsealRequest) (*vmspb.UnsealResponse, error) {
 	lsdesc, err := s.clusManager.Unseal(ctx, req.GetLogStreamID())
+	s.logger.Info("Unseal",
+		zap.Uint32("lsid", uint32(req.GetLogStreamID())),
+		zap.String("lsdesc", lsdesc.String()),
+	)
 	return &vmspb.UnsealResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
 }
 
