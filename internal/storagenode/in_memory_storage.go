@@ -121,6 +121,11 @@ func newInMemoryStorage(opts *StorageOptions) (Storage, error) {
 	return &InMemoryStorage{logger: opts.Logger}, nil
 }
 
+func (s *InMemoryStorage) RecoverLogStreamContext(lsc *logStreamContext) bool {
+	return false
+	// panic("not implemented")
+}
+
 // TODO (jun): consider in-memory storage
 func (s *InMemoryStorage) Path() string {
 	return ":memory"
@@ -283,6 +288,11 @@ func (s *InMemoryStorage) CommitBatch(entries []CommitEntry) error {
 		}
 	}
 	return nil
+}
+
+func (s *InMemoryStorage) StoreCommitContext(hwm, prevHWM, committedGLSNBegin, committedGLSNEnd types.GLSN) error {
+	return nil
+	// panic("not implemented")
 }
 
 func (s *InMemoryStorage) DeleteCommitted(glsn types.GLSN) error {

@@ -139,52 +139,7 @@ type logStreamExecutor struct {
 	commitC chan commitTask
 	trimC   chan *trimTask
 
-	// lock guard for knownNextGLSN and uncommittedLLSNBegin
-	// knownNextGLSN and uncommittedLLSNBegin should be updated simultaneously.
-	mu sync.RWMutex
-
-	// globalHighwatermark acts as a version of commit result. In the scope of the same
-	// globalHighwatermark, all the reports requested by MR have the same uncommittedLLSNBegin.
-	// Because the reports with different values of uncommittedLLSNBegin with the same
-	// globalHighwatermark can make some log entries in the log stream have no or more than one GLSN.
-	// It is read by GetReport, and written by commit.
-	globalHighwatermark types.GLSN // set by Commit
-	// knownNextGLSN types.GLSN // set by Commit
-
-	// uncommittedLLSNBegin is the start of the range that is reported as uncommitted log
-	// entries. In the reports marked as the same KnownNextGLSN, uncommittedLLSNBegin of those
-	// must be the same value. Because MR calculates commit results based on the KnownNextGLSN
-	// and uncommittedLLSNBegin.
-	// After all of the commits in a commit result are completed successfully, the value of
-	// uncommittedLLSNBegin should be increased by the difference between committedGLSNEnd and
-	// committedGLSNBegin in the commit result.
-	// It is read by GetReport and written by commit.
-	uncommittedLLSNBegin types.LLSN
-
-	// committedLLSNEnd is the next position to be committed to storage. It is used only by
-	// commit function.
-	// Sometimes, it can be greater than uncommittedLLSNBegin. See the reason why below.
-	// It is read and written only by commit.
-	committedLLSNEnd types.LLSN // increased only by Commit
-
-	// uncommittedLLSNEnd is the tail of the LogStreamExecutor. It indicates the next position
-	// for the log entry to be written. It is increased after successful writing to the storage
-	// during the append operation.
-	// It is read by GetReport, written by Append
-	uncommittedLLSNEnd types.AtomicLLSN
-
-	// atomic access
-	// committedGLSNBegin   types.GLSN // R: read & subscribe W: Trim
-	// lastCommittedGLSN types.GLSN // R: read W: Commit
-	// committedGLSNBegin and committedGLSNEnd are knowledge which are learned from Trim and
-	// Commit operations.
-	//
-	// localLowWatermark and committedGLSNEnd are knowledge that is learned from Trim and
-	// Commit operations. Exact values of them are maintained in the storage. By learning
-	// these values in the LogStreamExecutor, it can be avoided to unnecessary requests to
-	// the storage.
-	localLowWatermark  types.AtomicGLSN
-	localHighWatermark types.AtomicGLSN
+	lsc logStreamContext
 
 	trackers appendTaskTracker
 
@@ -211,26 +166,34 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 	logger = logger.Named("logstreamexecutor").With(zap.Any("lsid", logStreamID))
 
 	lse := &logStreamExecutor{
-		logStreamID:          logStreamID,
-		storage:              storage,
-		replicator:           NewReplicator(logStreamID, logger),
-		stopped:              make(chan struct{}),
-		runner:               runner.New(fmt.Sprintf("logstreamexecutor-%v", logStreamID), logger),
-		trackers:             newAppendTracker(),
-		appendC:              make(chan *appendTask, options.AppendCSize),
-		trimC:                make(chan *trimTask, options.TrimCSize),
-		commitC:              make(chan commitTask, options.CommitCSize),
-		globalHighwatermark:  types.InvalidGLSN,
-		uncommittedLLSNBegin: types.MinLLSN,
-		uncommittedLLSNEnd:   types.AtomicLLSN(types.MinLLSN),
-		committedLLSNEnd:     types.MinLLSN,
-		localLowWatermark:    types.AtomicGLSN(types.MinGLSN),
-		localHighWatermark:   types.AtomicGLSN(types.InvalidGLSN),
-		status:               varlogpb.LogStreamStatusRunning,
-		syncTracker:          make(map[types.StorageNodeID]*SyncTaskStatus),
-		tst:                  NewTimestamper(),
-		logger:               logger,
-		options:              options,
+		logStreamID: logStreamID,
+		storage:     storage,
+		replicator:  NewReplicator(logStreamID, logger),
+		stopped:     make(chan struct{}),
+		runner:      runner.New(fmt.Sprintf("logstreamexecutor-%v", logStreamID), logger),
+		trackers:    newAppendTracker(),
+		appendC:     make(chan *appendTask, options.AppendCSize),
+		trimC:       make(chan *trimTask, options.TrimCSize),
+		commitC:     make(chan commitTask, options.CommitCSize),
+		status:      varlogpb.LogStreamStatusRunning,
+		syncTracker: make(map[types.StorageNodeID]*SyncTaskStatus),
+		tst:         NewTimestamper(),
+		logger:      logger,
+		options:     options,
+	}
+	initLogStreamContext(&lse.lsc)
+	if lse.storage.RecoverLogStreamContext(&lse.lsc) {
+		lse.lsc.rcc.mu.RLock()
+		defer lse.lsc.rcc.mu.RUnlock()
+		lse.logger.Info("last logStreamContext is recovered",
+			zap.Uint64("global_hwm", uint64(lse.lsc.rcc.globalHighwatermark)),
+			zap.Uint64("uncommitted_llsn_begin", uint64(lse.lsc.rcc.uncommittedLLSNBegin)),
+			zap.Uint64("uncommitted_llsn_end", uint64(lse.lsc.uncommittedLLSNEnd.Load())),
+			zap.Uint64("committed_llsn_end", uint64(lse.lsc.committedLLSNEnd)),
+			zap.Uint64("local_lwm", uint64(lse.lsc.localLowWatermark.Load())),
+			zap.Uint64("local_hwm", uint64(lse.lsc.localHighWatermark.Load())),
+		)
+
 	}
 	return lse, nil
 }
@@ -339,7 +302,7 @@ func (lse *logStreamExecutor) Status() varlogpb.LogStreamStatus {
 }
 
 func (lse *logStreamExecutor) HighWatermark() types.GLSN {
-	return lse.localHighWatermark.Load()
+	return lse.lsc.localHighWatermark.Load()
 }
 
 func (lse *logStreamExecutor) isSealed() bool {
@@ -359,7 +322,7 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogSt
 	lse.muSeal.Lock()
 	defer lse.muSeal.Unlock()
 
-	localHWM := lse.localHighWatermark.Load()
+	localHWM := lse.lsc.localHighWatermark.Load()
 	if localHWM > lastCommittedGLSN {
 		lse.logger.Panic("localHighWatermark > lastCommittedGLSN",
 			zap.Any("localHighWatermark", localHWM),
@@ -508,7 +471,7 @@ func (lse *logStreamExecutor) Read(ctx context.Context, glsn types.GLSN) (types.
 }
 
 func (lse *logStreamExecutor) isTrimmed(glsn types.GLSN) error {
-	lwm := lse.localLowWatermark.Load()
+	lwm := lse.lsc.localLowWatermark.Load()
 	if glsn < lwm {
 		return errTrimmed(glsn, lwm)
 	}
@@ -516,7 +479,7 @@ func (lse *logStreamExecutor) isTrimmed(glsn types.GLSN) error {
 }
 
 func (lse *logStreamExecutor) commitUndecidable(glsn types.GLSN) error {
-	hwm := lse.localHighWatermark.Load()
+	hwm := lse.lsc.localHighWatermark.Load()
 	if glsn > hwm {
 		// TODO (jun): consider below situation: local_hwm < trim's until < global_hwm
 		// ISSUE: VARLOG-303
@@ -727,11 +690,11 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 	llsn, data, _ := t.getParams()
 	primary := t.isPrimary()
 	if primary {
-		llsn = lse.uncommittedLLSNEnd.Load()
+		llsn = lse.lsc.uncommittedLLSNEnd.Load()
 	}
 
-	if llsn != lse.uncommittedLLSNEnd.Load() {
-		return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", verrors.ErrCorruptLogStream, llsn, lse.uncommittedLLSNEnd.Load())
+	if llsn != lse.lsc.uncommittedLLSNEnd.Load() {
+		return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", verrors.ErrCorruptLogStream, llsn, lse.lsc.uncommittedLLSNEnd.Load())
 	}
 
 	if err := lse.storage.Write(llsn, data); err != nil {
@@ -746,7 +709,7 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 	// If, moreover, Commit corresponded to the report is arrived, its content contains the
 	// uncommitted log whose appendTask is not tracked. In this case, client of that append
 	// request may wait forever.
-	defer lse.uncommittedLLSNEnd.Add(1)
+	defer lse.lsc.uncommittedLLSNEnd.Add(1)
 	if primary {
 		t.markWritten(llsn)
 
@@ -821,7 +784,7 @@ func (lse *logStreamExecutor) trim(t *trimTask) {
 	if err := lse.isTrimmed(t.glsn); err != nil {
 		return
 	}
-	lse.localLowWatermark.Store(t.glsn + 1)
+	lse.lsc.localLowWatermark.Store(t.glsn + 1)
 	if err := lse.storage.DeleteCommitted(t.glsn); err != nil {
 		lse.logger.Error("could not trim", zap.Error(err))
 	}
@@ -831,16 +794,12 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	lse.muRunning.RLock()
 	defer lse.muRunning.RUnlock()
 	// TODO: If this is sealed, ...
-	lse.mu.RLock()
-	offset := lse.uncommittedLLSNBegin
-	hwm := lse.globalHighwatermark
-	lse.mu.RUnlock()
-
+	hwm, offset := lse.lsc.rcc.get()
 	return UncommittedLogStreamStatus{
 		LogStreamID:           lse.logStreamID,
 		KnownHighWatermark:    hwm,
 		UncommittedLLSNOffset: offset,
-		UncommittedLLSNLength: uint64(lse.uncommittedLLSNEnd.Load() - offset),
+		UncommittedLLSNLength: uint64(lse.lsc.uncommittedLLSNEnd.Load() - offset),
 	}
 }
 
@@ -871,16 +830,14 @@ func (lse *logStreamExecutor) Commit(ctx context.Context, cr CommittedLogStreamS
 }
 
 func (lse *logStreamExecutor) verifyCommit(prevHighWatermark types.GLSN) error {
-	lse.mu.RLock()
-	defer lse.mu.RUnlock()
-
-	if lse.globalHighwatermark.Invalid() {
+	globalHWM, _ := lse.lsc.rcc.get()
+	if globalHWM.Invalid() {
 		return nil
 	}
-	if lse.globalHighwatermark == prevHighWatermark {
+	if globalHWM == prevHighWatermark {
 		return nil
 	}
-	return fmt.Errorf("logstream: highwatermark mismatch (globalHighwatermark=%v prevHighWatermark=%v)", lse.globalHighwatermark, prevHighWatermark)
+	return fmt.Errorf("logstream: highwatermark mismatch (globalHighwatermark=%v prevHighWatermark=%v)", globalHWM, prevHighWatermark)
 }
 
 func (lse *logStreamExecutor) commit(t commitTask) {
@@ -889,11 +846,23 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		return
 	}
 
+	first := true
 	commitOk := true
 	glsn := t.committedGLSNBegin
 
 	for glsn < t.committedGLSNEnd {
-		llsn := lse.committedLLSNEnd
+		if first {
+			if err := lse.storage.StoreCommitContext(t.highWatermark, t.prevHighWatermark, t.committedGLSNBegin, t.committedGLSNEnd); err != nil {
+				lse.logger.Error("could not store commit context", zap.Error(err))
+				commitOk = false
+				lse.sealItself()
+				break
+			}
+
+			first = false
+		}
+
+		llsn := lse.lsc.committedLLSNEnd
 		if err := lse.storage.Commit(llsn, glsn); err != nil {
 			lse.logger.Error("could not commit", zap.Error(err))
 			// NOTE: The LogStreamExecutor fails to commit Log entries that are
@@ -905,13 +874,13 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			lse.sealItself()
 			break
 		}
-		lse.committedLLSNEnd++
+		lse.lsc.committedLLSNEnd++
 		// NB: Mutating localHighWatermark here is somewhat nasty.
 		// Read operation to the log entry before getting a response
 		// of appending it might succeed. To mitigate the subtle case,
 		// we can mutate the localHighWatermark just before replying
 		// to the append operation. But it is not a perfect solution.
-		lse.localHighWatermark.Store(glsn)
+		lse.lsc.localHighWatermark.Store(glsn)
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
 			appendT.setGLSN(glsn)
@@ -929,7 +898,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 	for glsn < t.committedGLSNEnd {
 		// NOTE: To avoid a race condition, read committedLLSNEnd inside this for-loop.
 		// Empty commit whilst syncing as a destination doesn't traverse this for-loop.
-		llsn := lse.committedLLSNEnd + offset
+		llsn := lse.lsc.committedLLSNEnd + offset
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
 			appendT.setGLSN(glsn)
@@ -943,23 +912,23 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 	}
 
 	if commitOk {
-		lse.mu.Lock()
+		lse.lsc.rcc.mu.Lock()
+		defer lse.lsc.rcc.mu.Unlock()
 		// NOTE: Even empty commit should update HWM since LSR aggregates all of the
 		// replicas in the storage node and take the minimum value of each HWMs.
-		lse.globalHighwatermark = t.highWatermark
-		lse.uncommittedLLSNBegin += types.LLSN(t.committedGLSNEnd - t.committedGLSNBegin)
+		lse.lsc.rcc.globalHighwatermark = t.highWatermark
+		lse.lsc.rcc.uncommittedLLSNBegin += types.LLSN(t.committedGLSNEnd - t.committedGLSNBegin)
 		if t.committedGLSNEnd-t.committedGLSNBegin > 0 {
 			lse.logger.Debug("commit batch",
 				zap.Any("glsn_begin", t.committedGLSNBegin),
 				zap.Any("glsn_end", t.committedGLSNEnd),
-				zap.Any("old_hwm", lse.globalHighwatermark-t.highWatermark),
-				zap.Any("new_hwm", lse.globalHighwatermark),
-				zap.Any("new_committed_llsn_end", lse.committedLLSNEnd),
+				zap.Any("old_hwm", lse.lsc.rcc.globalHighwatermark-t.highWatermark),
+				zap.Any("new_hwm", lse.lsc.rcc.globalHighwatermark),
+				zap.Any("new_committed_llsn_end", lse.lsc.committedLLSNEnd),
 			)
 		} else {
 			lse.logger.Debug("empty commit batch")
 		}
-		lse.mu.Unlock()
 	}
 }
 
@@ -990,7 +959,7 @@ func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLS
 		}, nil
 	}
 
-	firstGLSN := lse.localLowWatermark.Load()
+	firstGLSN := lse.lsc.localLowWatermark.Load()
 	firstLLSN, err := lse.getLogPosition(firstGLSN)
 	if err != nil {
 		return nil, err
@@ -1119,15 +1088,15 @@ func (lse *logStreamExecutor) SyncReplicate(ctx context.Context, first, last, cu
 	// FIXME (jun): use more safe and better method to reset all state variables
 	if current.Equal(last) {
 		lse.logger.Debug("syncreplate complete")
-		lse.mu.Lock()
-		defer lse.mu.Unlock()
-		lse.globalHighwatermark = current.GetGLSN()
-		lse.uncommittedLLSNBegin = current.GetLLSN() + 1
+		lse.lsc.rcc.mu.Lock()
+		defer lse.lsc.rcc.mu.Unlock()
+		lse.lsc.rcc.globalHighwatermark = current.GetGLSN()
+		lse.lsc.rcc.uncommittedLLSNBegin = current.GetLLSN() + 1
 
-		lse.committedLLSNEnd = current.GetLLSN() + 1
-		lse.uncommittedLLSNEnd.Store(current.GetLLSN() + 1)
-		lse.localLowWatermark.Store(first.GetGLSN())
-		lse.localHighWatermark.Store(last.GetGLSN())
+		lse.lsc.committedLLSNEnd = current.GetLLSN() + 1
+		lse.lsc.uncommittedLLSNEnd.Store(current.GetLLSN() + 1)
+		lse.lsc.localLowWatermark.Store(first.GetGLSN())
+		lse.lsc.localHighWatermark.Store(last.GetGLSN())
 	}
 
 	return nil

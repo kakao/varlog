@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/util/netutil"
 	"github.com/kakao/varlog/pkg/util/runner/stopwaiter"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -63,7 +64,8 @@ type StorageNode struct {
 
 	lsr LogStreamReporter
 
-	storageNodePaths map[string]struct{}
+	// storageNodePaths map[string]struct{}
+	storageNodePaths set.Set
 
 	options *Options
 	tst     Timestamper
@@ -77,11 +79,12 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 	}
 
 	sn := &StorageNode{
-		clusterID:        options.ClusterID,
-		storageNodeID:    options.StorageNodeID,
-		lseMap:           make(map[types.LogStreamID]LogStreamExecutor),
-		tst:              NewTimestamper(),
-		storageNodePaths: make(map[string]struct{}),
+		clusterID:     options.ClusterID,
+		storageNodeID: options.StorageNodeID,
+		lseMap:        make(map[types.LogStreamID]LogStreamExecutor),
+		tst:           NewTimestamper(),
+		// storageNodePaths: make(map[string]struct{}),
+		storageNodePaths: set.New(len(options.Volumes)),
 		options:          options,
 		logger:           options.Logger,
 		sw:               stopwaiter.New(),
@@ -148,6 +151,32 @@ func (sn *StorageNode) Run() error {
 		}
 	}()
 
+	logStreamPaths := set.New(0)
+	for volume := range sn.options.Volumes {
+		paths := volume.ReadLogStreamPaths(sn.clusterID, sn.storageNodeID)
+		for _, path := range paths {
+			if logStreamPaths.Contains(path) {
+				return fmt.Errorf("storagenode: duplicated log stream path (%s)", path)
+			}
+			logStreamPaths.Add(path)
+		}
+	}
+
+	sn.lseMtx.Lock()
+	defer sn.lseMtx.Unlock()
+	for logStreamPathIf := range logStreamPaths {
+		logStreamPath := logStreamPathIf.(string)
+		_, _, _, logStreamID, err := ParseLogStreamPath(logStreamPath)
+		if err != nil {
+			return err
+		}
+		// AddLogStream
+		sn.logger.Debug("AddLogStream", zap.Any("lsid", logStreamID))
+		if err := sn.addLogStream(logStreamID, logStreamPath); err != nil {
+			return err
+		}
+	}
+
 	sn.logger.Info("start")
 	return nil
 }
@@ -197,7 +226,8 @@ func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.Metada
 		CreatedTime: sn.tst.Created(),
 		UpdatedTime: sn.tst.LastUpdated(),
 	}
-	for snPath := range sn.storageNodePaths {
+	for snPathIf := range sn.storageNodePaths {
+		snPath := snPathIf.(string)
 		snmeta.StorageNode.Storages = append(snmeta.StorageNode.Storages, &varlogpb.StorageDescriptor{
 			Path:  snPath,
 			Used:  0,
@@ -263,22 +293,30 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 		return "", err
 	}
 
-	storage, err := NewStorage(sn.options.StorageName, WithPath(lsPath), WithLogger(sn.logger))
-	if err != nil {
+	if err := sn.addLogStream(lsid, lsPath); err != nil {
 		return "", err
 	}
-	lse, err := NewLogStreamExecutor(sn.logger, lsid, storage, &sn.options.LogStreamExecutorOptions)
+
+	return lsPath, nil
+}
+
+func (sn *StorageNode) addLogStream(logStreamID types.LogStreamID, logStreamPath string) error {
+	storage, err := NewStorage(sn.options.StorageName, WithPath(logStreamPath), WithLogger(sn.logger))
 	if err != nil {
-		return "", err
+		return err
+	}
+	lse, err := NewLogStreamExecutor(sn.logger, logStreamID, storage, &sn.options.LogStreamExecutorOptions)
+	if err != nil {
+		return err
 	}
 
 	if err := lse.Run(context.Background()); err != nil {
 		lse.Close()
-		return "", err
+		return err
 	}
 	sn.tst.Touch()
-	sn.lseMap[lsid] = lse
-	return lsPath, nil
+	sn.lseMap[logStreamID] = lse
+	return nil
 }
 
 // RemoveLogStream implements the Management RemoveLogStream method.

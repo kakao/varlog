@@ -22,6 +22,11 @@ func NewClusterIDFromUint(u uint) (ClusterID, error) {
 	return ClusterID(u), nil
 }
 
+func ParseClusterID(s string) (ClusterID, error) {
+	id, err := strconv.ParseUint(s, 10, 32)
+	return ClusterID(id), err
+}
+
 type StorageNodeID uint32
 
 func NewStorageNodeIDFromUint(u uint) (StorageNodeID, error) {
@@ -40,7 +45,17 @@ func NewStorageNodeID() StorageNodeID {
 	return StorageNodeID(h.Sum32())
 }
 
+func ParseStorageNodeID(s string) (StorageNodeID, error) {
+	id, err := strconv.ParseUint(s, 10, 32)
+	return StorageNodeID(id), err
+}
+
 type LogStreamID uint32
+
+func ParseLogStreamID(s string) (LogStreamID, error) {
+	id, err := strconv.ParseUint(s, 10, 32)
+	return LogStreamID(id), err
+}
 
 type GLSN uint64
 

@@ -357,6 +357,20 @@ func (mr *MockStorageMockRecorder) Read(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockStorage)(nil).Read), arg0)
 }
 
+// RecoverLogStreamContext mocks base method
+func (m *MockStorage) RecoverLogStreamContext(arg0 *logStreamContext) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecoverLogStreamContext", arg0)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// RecoverLogStreamContext indicates an expected call of RecoverLogStreamContext
+func (mr *MockStorageMockRecorder) RecoverLogStreamContext(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecoverLogStreamContext", reflect.TypeOf((*MockStorage)(nil).RecoverLogStreamContext), arg0)
+}
+
 // Scan mocks base method
 func (m *MockStorage) Scan(arg0, arg1 types.GLSN) (Scanner, error) {
 	m.ctrl.T.Helper()
@@ -370,6 +384,20 @@ func (m *MockStorage) Scan(arg0, arg1 types.GLSN) (Scanner, error) {
 func (mr *MockStorageMockRecorder) Scan(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scan", reflect.TypeOf((*MockStorage)(nil).Scan), arg0, arg1)
+}
+
+// StoreCommitContext mocks base method
+func (m *MockStorage) StoreCommitContext(arg0, arg1, arg2, arg3 types.GLSN) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StoreCommitContext", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StoreCommitContext indicates an expected call of StoreCommitContext
+func (mr *MockStorageMockRecorder) StoreCommitContext(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreCommitContext", reflect.TypeOf((*MockStorage)(nil).StoreCommitContext), arg0, arg1, arg2, arg3)
 }
 
 // Write mocks base method
