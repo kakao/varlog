@@ -31,6 +31,7 @@ func TestLogStreamExecutorNew(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			storage := NewMockStorage(ctrl)
+			storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
 			lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
 			So(lse.(*logStreamExecutor).isSealed(), ShouldBeFalse)
@@ -44,6 +45,7 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			storage := NewMockStorage(ctrl)
+			storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
 			storage.EXPECT().Close().Return(nil).AnyTimes()
 			lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
@@ -64,6 +66,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		storage := NewMockStorage(ctrl)
+		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
 		storage.EXPECT().Close().Return(nil).AnyTimes()
 		replicator := NewMockReplicator(ctrl)
 
@@ -84,8 +87,8 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 
 		Convey("read operation should reply written data", func() {
 			storage.EXPECT().Read(gomock.Any()).Return(types.LogEntry{Data: []byte("log")}, nil)
-			lse.(*logStreamExecutor).localLowWatermark = 0
-			lse.(*logStreamExecutor).localHighWatermark = 10
+			lse.(*logStreamExecutor).lsc.localLowWatermark = 0
+			lse.(*logStreamExecutor).lsc.localHighWatermark = 10
 			logEntry, err := lse.Read(context.TODO(), types.GLSN(0))
 			So(err, ShouldBeNil)
 			So(string(logEntry.Data), ShouldEqual, "log")
@@ -119,9 +122,9 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		Convey("append operation should write data", func() {
 			waitCommitDone := func(knownNextGLSN types.GLSN) {
 				for {
-					lse.(*logStreamExecutor).mu.RLock()
-					updatedKnownNextGLSN := lse.(*logStreamExecutor).globalHighwatermark
-					lse.(*logStreamExecutor).mu.RUnlock()
+					lse.(*logStreamExecutor).lsc.rcc.mu.RLock()
+					updatedKnownNextGLSN := lse.(*logStreamExecutor).lsc.rcc.globalHighwatermark
+					lse.(*logStreamExecutor).lsc.rcc.mu.RUnlock()
 					if knownNextGLSN != updatedKnownNextGLSN {
 						break
 					}
@@ -129,18 +132,19 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 				}
 			}
 			waitWriteDone := func(uncommittedLLSNEnd types.LLSN) {
-				for uncommittedLLSNEnd == lse.(*logStreamExecutor).uncommittedLLSNEnd.Load() {
+				for uncommittedLLSNEnd == lse.(*logStreamExecutor).lsc.uncommittedLLSNEnd.Load() {
 					time.Sleep(time.Millisecond)
 				}
 			}
 
 			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			storage.EXPECT().StoreCommitContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			storage.EXPECT().Commit(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			for i := types.MinGLSN; i < N; i++ {
-				lse.(*logStreamExecutor).mu.RLock()
-				knownHWM := lse.(*logStreamExecutor).globalHighwatermark
-				lse.(*logStreamExecutor).mu.RUnlock()
-				uncommittedLLSNEnd := lse.(*logStreamExecutor).uncommittedLLSNEnd.Load()
+				lse.(*logStreamExecutor).lsc.rcc.mu.RLock()
+				knownHWM := lse.(*logStreamExecutor).lsc.rcc.globalHighwatermark
+				lse.(*logStreamExecutor).lsc.rcc.mu.RUnlock()
+				uncommittedLLSNEnd := lse.(*logStreamExecutor).lsc.uncommittedLLSNEnd.Load()
 				var wg sync.WaitGroup
 				wg.Add(1)
 				go func(uncommittedLLSNEnd types.LLSN, knownNextGLSN types.GLSN) {
@@ -171,6 +175,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 		storage := NewMockStorage(ctrl)
 		storage.EXPECT().Close().Return(nil).AnyTimes()
+		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
 		replicator := NewMockReplicator(ctrl)
 		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{
 			AppendCTimeout:    DefaultLSEAppendCTimeout,
@@ -345,6 +350,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 			stop := make(chan struct{})
 			block := func(f func()) {
+				storage.EXPECT().StoreCommitContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).MaxTimes(1)
 				storage.EXPECT().Commit(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(types.LLSN, types.GLSN) error {
 						f()
@@ -394,6 +400,7 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
+		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
 		storage.EXPECT().Close().Return(nil).AnyTimes()
 		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
@@ -406,7 +413,7 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		})
 
 		Convey("When the context passed to the Read is cancelled", func() {
-			lse.(*logStreamExecutor).localHighWatermark.Store(types.MaxGLSN)
+			lse.(*logStreamExecutor).lsc.localHighWatermark.Store(types.MaxGLSN)
 
 			stop := make(chan struct{})
 			storage.EXPECT().Read(gomock.Any()).DoAndReturn(func(types.GLSN) ([]byte, error) {
@@ -440,6 +447,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
+		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
 		storage.EXPECT().Close().Return(nil).AnyTimes()
 		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
@@ -452,7 +460,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		})
 
 		Convey("When the GLSN passed to it is less than LowWatermark", func() {
-			lse.(*logStreamExecutor).localLowWatermark.Store(2)
+			lse.(*logStreamExecutor).lsc.localLowWatermark.Store(2)
 			Convey("Then the LogStreamExecutor.Subscribe should return an error", func() {
 				_, err := lse.Subscribe(context.TODO(), 2, 3)
 				So(err, ShouldNotBeNil)
@@ -461,8 +469,8 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 
 		Convey("When Storage.Scan returns an error", func() {
 			storage.EXPECT().Scan(gomock.Any(), gomock.Any()).Return(nil, verrors.ErrInternal)
-			lse.(*logStreamExecutor).localLowWatermark.Store(1)
-			lse.(*logStreamExecutor).localHighWatermark.Store(10)
+			lse.(*logStreamExecutor).lsc.localLowWatermark.Store(1)
+			lse.(*logStreamExecutor).lsc.localHighWatermark.Store(10)
 			Convey("Then the LogStreamExecutor.Subscribe should return a channel that has the error", func() {
 				c, err := lse.Subscribe(context.TODO(), 1, 11)
 				So(err, ShouldBeNil)
@@ -475,8 +483,8 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 			scanner.EXPECT().Close().Return(nil).AnyTimes()
 			storage.EXPECT().Scan(gomock.Any(), gomock.Any()).Return(scanner, nil)
 
-			lse.(*logStreamExecutor).localLowWatermark.Store(1)
-			lse.(*logStreamExecutor).localHighWatermark.Store(10)
+			lse.(*logStreamExecutor).lsc.localLowWatermark.Store(1)
+			lse.(*logStreamExecutor).lsc.localHighWatermark.Store(10)
 
 			Convey("And the Scanner.Next returns an error", func() {
 				scanner.EXPECT().Next().Return(NewInvalidScanResult(verrors.ErrInternal))
@@ -526,6 +534,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 		const lsid = types.LogStreamID(1)
 		storage := NewMockStorage(ctrl)
+		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
 		lseI, err := NewLogStreamExecutor(zap.L(), lsid, storage, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 		lse := lseI.(*logStreamExecutor)
@@ -554,7 +563,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 		})
 
 		Convey("When LogStreamExecutor.Seal is called (localHWM < lastCommittedGLSN)", func() {
-			lse.localHighWatermark.Store(types.MinGLSN)
+			lse.lsc.localHighWatermark.Store(types.MinGLSN)
 
 			Convey("Then status of LogStreamExecutor is SEALING", func() {
 				status, _ := lse.Seal(types.MaxGLSN)
@@ -565,7 +574,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 		})
 
 		Convey("When LogStreamExecutor.Seal is called (localHWM = lastCommittedGLSN)", func() {
-			lse.localHighWatermark.Store(types.MinGLSN)
+			lse.lsc.localHighWatermark.Store(types.MinGLSN)
 			storage.EXPECT().Read(gomock.Any()).Return(types.LogEntry{}, nil)
 			storage.EXPECT().DeleteUncommitted(gomock.Any()).Return(nil)
 			Convey("Then status of LogStreamExecutor is SEALED", func() {
@@ -577,7 +586,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 		})
 
 		Convey("When LogStreamExecutor.Seal is called (localHWM > lastCommittedGLSN)", func() {
-			lse.localHighWatermark.Store(types.MaxGLSN)
+			lse.lsc.localHighWatermark.Store(types.MaxGLSN)
 
 			Convey("Then panic is occurred", func() {
 				So(func() { lse.Seal(types.MinGLSN) }, ShouldPanic)

@@ -90,6 +90,10 @@ type Storage interface {
 
 	NewCommitBatch() CommitBatch
 
+	RecoverLogStreamContext(lsc *logStreamContext) bool
+
+	StoreCommitContext(hwm, prevHWM, committedGLSNBegin, committedGLSNEnd types.GLSN) error
+
 	// DeleteCommitted removes committed log entries until the glsn. It acts like garbage collection.
 	DeleteCommitted(glsn types.GLSN) error
 

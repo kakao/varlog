@@ -3,8 +3,10 @@ package storagenode
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/fputil"
@@ -73,11 +75,36 @@ func (vol Volume) CreateStorageNodePath(clusterID types.ClusterID, storageNodeID
 	return snPath, err
 }
 
-// type StorageNodePath string
+func (vol Volume) ReadLogStreamPaths(clusterID types.ClusterID, storageNodeID types.StorageNodeID) []string {
+	clusterDir := fmt.Sprintf("%s_%v", clusterDirPrefix, clusterID)
+	storageNodeDir := fmt.Sprintf("%s_%v", storageDirPrefix, storageNodeID)
+	storageNodePath := filepath.Join(string(vol), clusterDir, storageNodeDir)
+
+	var logStreamPaths []string
+	fis, err := ioutil.ReadDir(storageNodePath)
+	if err != nil {
+		return nil
+	}
+	for _, fi := range fis {
+		if !fi.IsDir() {
+			continue
+		}
+		toks := strings.SplitN(fi.Name(), "_", 2)
+		if toks[0] != logStreamDirPrefix {
+			continue
+		}
+		if _, err := types.ParseLogStreamID(toks[1]); err != nil {
+			continue
+		}
+		path := filepath.Join(storageNodePath, fi.Name())
+		logStreamPaths = append(logStreamPaths, path)
+	}
+	return logStreamPaths
+}
 
 // CreateLogStreamPath creates a new directory to store various data related to the log stream
 // replica. If creating the new directory fails, it returns an error.
-func /*(snp StorageNodePath)*/ CreateLogStreamPath(storageNodePath string, logStreamID types.LogStreamID) (string, error) {
+func CreateLogStreamPath(storageNodePath string, logStreamID types.LogStreamID) (string, error) {
 	logStreamDir := fmt.Sprintf("%s_%v", logStreamDirPrefix, logStreamID)
 	lsPath := filepath.Join(storageNodePath, logStreamDir)
 	lsPath, err := filepath.Abs(lsPath)
@@ -95,4 +122,36 @@ func createPath(dir string) (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+func ParseLogStreamPath(path string) (vol Volume, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, err error) {
+	path = filepath.Clean(path)
+	if !filepath.IsAbs(path) {
+		return Volume(""), 0, 0, 0, errors.New("not absolute path")
+	}
+
+	toks := strings.Split(path, string(filepath.Separator))
+	if len(toks) < 4 {
+		return Volume(""), 0, 0, 0, errors.New("invalid path")
+	}
+
+	lsidPath := toks[len(toks)-1]
+	snidPath := toks[len(toks)-2]
+	cidPath := toks[len(toks)-3]
+	volPath := filepath.Join("/", filepath.Join(toks[0:len(toks)-3]...))
+
+	vol = Volume(volPath)
+	if lsid, err = types.ParseLogStreamID(strings.TrimPrefix(lsidPath, logStreamDirPrefix+"_")); err != nil {
+		goto errOut
+	}
+	if snid, err = types.ParseStorageNodeID(strings.TrimPrefix(snidPath, storageDirPrefix+"_")); err != nil {
+		goto errOut
+	}
+	if cid, err = types.ParseClusterID(strings.TrimPrefix(cidPath, clusterDirPrefix+"_")); err != nil {
+		goto errOut
+	}
+	return vol, cid, snid, lsid, nil
+
+errOut:
+	return Volume(""), 0, 0, 0, errors.New("invalid path")
 }

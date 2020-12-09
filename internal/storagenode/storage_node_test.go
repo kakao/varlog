@@ -172,7 +172,7 @@ func TestSync(t *testing.T) {
 			snList = append(snList, sn)
 
 			for snPath := range sn.storageNodePaths {
-				storagePathList = append(storagePathList, snPath)
+				storagePathList = append(storagePathList, snPath.(string))
 				break
 			}
 		}
@@ -241,17 +241,13 @@ func TestSync(t *testing.T) {
 			ent, err := oldCL.Read(context.TODO(), logStreamID, hwm)
 			So(err, ShouldBeNil)
 			So(expectedData, ShouldResemble, ent.Data)
-			zap.L().Sugar().Infof("READ OK - %v", hwm)
 		}
 
 		// Subscribe
-		zap.L().Sugar().Infof("STEP-1")
 		subC, err := oldCL.Subscribe(context.TODO(), logStreamID, types.MinGLSN, lastCommittedGLSN/2)
 		So(err, ShouldBeNil)
-		zap.L().Sugar().Infof("STEP-2")
 		for expectedGLSN := types.MinGLSN; expectedGLSN < lastCommittedGLSN/2; expectedGLSN++ {
 			sub := <-subC
-			zap.L().Sugar().Infof("STEP-3")
 			So(sub.Error, ShouldBeNil)
 			So(sub.GLSN, ShouldEqual, expectedGLSN)
 			So(sub.LLSN, ShouldEqual, types.LLSN(expectedGLSN))
@@ -397,5 +393,160 @@ func TestSync(t *testing.T) {
 			So(oldLogEntry.LLSN, ShouldEqual, types.LLSN(lastCommittedGLSN))
 		})
 
+	})
+}
+
+func TestStorageNodeRestart(t *testing.T) {
+	Convey("StorageNode Restart", t, func() {
+		const (
+			numLogs     = 10
+			moreLogs    = 10
+			logStreamID = types.LogStreamID(1)
+		)
+
+		volume, err := NewVolume(t.TempDir())
+		So(err, ShouldBeNil)
+
+		opts := &Options{
+			RPCOptions:               RPCOptions{RPCBindAddress: bindAddress},
+			LogStreamExecutorOptions: DefaultLogStreamExecutorOptions,
+			LogStreamReporterOptions: DefaultLogStreamReporterOptions,
+			ClusterID:                clusterID,
+			StorageNodeID:            types.StorageNodeID(1),
+			StorageName:              DefaultStorageName,
+			Volumes:                  map[Volume]struct{}{volume: {}},
+			Verbose:                  true,
+			Logger:                   zap.L(),
+		}
+		sn, err := NewStorageNode(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := sn.Run(); err != nil {
+			t.Fatal(err)
+		}
+
+		// snmcl: connect
+		mcl, err := snc.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		meta, err := mcl.GetMetadata(context.TODO(), snpb.MetadataTypeLogStreams)
+		So(err, ShouldBeNil)
+		So(meta.GetClusterID(), ShouldEqual, clusterID)
+		So(meta.GetStorageNode().GetStorageNodeID(), ShouldEqual, sn.storageNodeID)
+		So(meta.GetLogStreams(), ShouldHaveLength, 0)
+
+		storages := meta.GetStorageNode().GetStorages()
+		So(len(storages), ShouldBeGreaterThan, 0)
+
+		err = mcl.AddLogStream(context.TODO(), logStreamID, storages[0].GetPath())
+		So(err, ShouldBeNil)
+
+		// logcl: connect
+		logCL, err := logc.NewLogIOClient(sn.serverAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for hwm := types.GLSN(1); hwm < types.GLSN(1+numLogs); hwm++ {
+			lse, ok := sn.GetLogStreamExecutor(logStreamID)
+			So(ok, ShouldBeTrue)
+
+			data := []byte(fmt.Sprintf("data-%02d", int(hwm)))
+			errC := commitAndWait(lse, hwm, hwm-1, hwm, 1)
+			glsn, err := logCL.Append(context.TODO(), logStreamID, data)
+
+			So(glsn, ShouldNotEqual, types.InvalidGLSN)
+			So(err, ShouldBeNil)
+			So(<-errC, ShouldBeNil)
+
+			// Read
+			ent, err := logCL.Read(context.TODO(), logStreamID, hwm)
+			So(err, ShouldBeNil)
+			So(data, ShouldResemble, ent.Data)
+		}
+
+		// Subscribe
+		subC, err := logCL.Subscribe(context.TODO(), logStreamID, 1, 11)
+		So(err, ShouldBeNil)
+		for expected := types.GLSN(1); expected < types.GLSN(1+numLogs); expected++ {
+			sub := <-subC
+			So(sub.Error, ShouldBeNil)
+			So(sub.GLSN, ShouldEqual, expected)
+		}
+		So((<-subC).Error, ShouldEqual, io.EOF)
+		_, more := <-subC
+		So(more, ShouldBeFalse)
+
+		sn.Close()
+		sn.Wait()
+		So(mcl.Close(), ShouldBeNil)
+		So(logCL.Close(), ShouldBeNil)
+
+		// restart
+		sn, err = NewStorageNode(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := sn.Run(); err != nil {
+			t.Fatal(err)
+		}
+
+		// mcl: reconnect
+		mcl, err = snc.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
+		if err != nil {
+			t.Fatal(err)
+		}
+		meta, err = mcl.GetMetadata(context.TODO(), snpb.MetadataTypeLogStreams)
+		So(err, ShouldBeNil)
+		So(meta.GetClusterID(), ShouldEqual, clusterID)
+		So(meta.GetStorageNode().GetStorageNodeID(), ShouldEqual, sn.storageNodeID)
+		So(meta.GetLogStreams(), ShouldHaveLength, 1)
+		So(meta.GetLogStreams()[0].GetLogStreamID(), ShouldEqual, logStreamID)
+
+		// logcl: connect
+		logCL, err = logc.NewLogIOClient(sn.serverAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Subscribe
+		subC, err = logCL.Subscribe(context.TODO(), logStreamID, 1, 11)
+		So(err, ShouldBeNil)
+		for expected := types.GLSN(1); expected < types.GLSN(1+numLogs); expected++ {
+			sub := <-subC
+			So(sub.Error, ShouldBeNil)
+			So(sub.GLSN, ShouldEqual, expected)
+		}
+		So((<-subC).Error, ShouldEqual, io.EOF)
+		_, more = <-subC
+		So(more, ShouldBeFalse)
+
+		// append
+		for hwm := types.GLSN(1 + numLogs); hwm < types.GLSN(1+numLogs+moreLogs); hwm++ {
+			lse, ok := sn.GetLogStreamExecutor(logStreamID)
+			So(ok, ShouldBeTrue)
+
+			data := []byte(fmt.Sprintf("data-%02d", int(hwm)))
+			errC := commitAndWait(lse, hwm, hwm-1, hwm, 1)
+			glsn, err := logCL.Append(context.TODO(), logStreamID, data)
+
+			So(glsn, ShouldNotEqual, types.InvalidGLSN)
+			So(err, ShouldBeNil)
+			So(<-errC, ShouldBeNil)
+
+			// Read
+			ent, err := logCL.Read(context.TODO(), logStreamID, hwm)
+			So(err, ShouldBeNil)
+			So(data, ShouldResemble, ent.Data)
+		}
+
+		sn.Close()
+		sn.Wait()
+		So(mcl.Close(), ShouldBeNil)
+		So(logCL.Close(), ShouldBeNil)
 	})
 }
