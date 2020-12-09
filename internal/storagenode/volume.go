@@ -3,11 +3,11 @@ package storagenode
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/fputil"
 )
 
 // /<volume>/cid_<cluster_id>/snid_<storage_node_id>/lsid_<log_stream_id>
@@ -56,7 +56,7 @@ func ValidDir(dir string) error {
 	if !fi.IsDir() {
 		return errors.New("not directory")
 	}
-	return isWritableDir(dir)
+	return fputil.IsWritableDir(dir)
 }
 
 // CreateStorageNodePath creates a new directory to store various data related to the storage node.
@@ -95,15 +95,4 @@ func createPath(dir string) (string, error) {
 		return "", err
 	}
 	return dir, nil
-}
-
-func isWritableDir(dir string) error {
-	name := filepath.Join(dir, touchFileName)
-	if err := ioutil.WriteFile(name, []byte(""), 0600); err != nil {
-		return err
-	}
-	if err := os.Remove(name); err != nil {
-		return err
-	}
-	return nil
 }
