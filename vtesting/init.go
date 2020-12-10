@@ -15,8 +15,10 @@ const defaultRaftTick = time.Millisecond * 100
 const defaultCommitTick = time.Millisecond * 10
 const defaultTimeoutUnit = time.Millisecond * 400
 const defaultProcCount = 8
+const defaultRaftDir = "raftdata"
 
 var (
+	testRaftDir     string        = defaultRaftDir
 	testRaftTick    time.Duration = defaultRaftTick
 	testCommitTick  time.Duration = defaultCommitTick
 	testTimeoutUnit time.Duration = defaultTimeoutUnit
@@ -81,4 +83,8 @@ func TestRaftTick() time.Duration {
 
 func TestCommitTick() time.Duration {
 	return testCommitTick
+}
+
+func TestRaftDir() string {
+	return testRaftDir
 }

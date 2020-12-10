@@ -115,6 +115,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		1,
 		options.SnapCatchUpCount,
 		options.RaftTick,
+		options.RaftDir,
 		mr.storage,
 		mr.rnProposeC,
 		mr.rnConfChangeC,

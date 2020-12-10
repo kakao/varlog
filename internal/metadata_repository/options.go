@@ -24,6 +24,8 @@ const (
 	DefaultRPCTimeout           time.Duration = 100 * time.Millisecond
 	DefaultCommitTick           time.Duration = 1 * time.Millisecond
 	DefaultPromoteTick          time.Duration = 100 * time.Millisecond
+	DefaultRaftDir              string        = "raftdata"
+	DefaultLogDir               string        = "log"
 
 	UnusedRequestIndex uint64 = 0
 )
@@ -57,6 +59,8 @@ type MetadataRepositoryOptions struct {
 	PromoteTick        time.Duration
 	Peers              []string
 	ReporterClientFac  ReporterClientFactory
+	RaftDir            string
+	LogDir             string
 	Logger             *zap.Logger
 }
 
@@ -124,6 +128,14 @@ func (options *MetadataRepositoryOptions) validate() error {
 
 	if options.PromoteTick == time.Duration(0) {
 		options.PromoteTick = DefaultPromoteTick
+	}
+
+	if options.RaftDir == "" {
+		options.RaftDir = DefaultRaftDir
+	}
+
+	if options.LogDir == "" {
+		options.LogDir = DefaultLogDir
 	}
 
 	return nil

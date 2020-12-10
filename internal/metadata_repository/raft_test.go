@@ -56,8 +56,8 @@ func newCluster(n int) *cluster {
 		}
 		nodeID := types.NewNodeID(url.Host)
 
-		os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
-		os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
+		os.RemoveAll(fmt.Sprintf("raftdata/wal/%d", nodeID))
+		os.RemoveAll(fmt.Sprintf("raftdata/snap/%d", nodeID))
 		clus.proposeC[i] = make(chan string, 1)
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
 		//logger, _ := zap.NewDevelopment()
@@ -68,6 +68,7 @@ func newCluster(n int) *cluster {
 			DefaultSnapshotCount,
 			DefaultSnapshotCatchUpCount,
 			vtesting.TestRaftTick(),
+			"raftdata",
 			nil,
 			clus.proposeC[i],
 			clus.confChangeC[i],
@@ -100,8 +101,8 @@ func (clus *cluster) close(i int) (err error) {
 	url, _ := url.Parse(clus.peers[i])
 	nodeID := types.NewNodeID(url.Host)
 
-	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
-	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
+	os.RemoveAll(fmt.Sprintf("raftdata/wal/%d", nodeID))
+	os.RemoveAll(fmt.Sprintf("raftdata/snap/%d", nodeID))
 
 	clus.running[i] = false
 
@@ -115,6 +116,8 @@ func (clus *cluster) Close() (err error) {
 			err = erri
 		}
 	}
+
+	os.RemoveAll("raftdata")
 
 	return
 }

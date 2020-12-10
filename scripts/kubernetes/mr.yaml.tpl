@@ -16,6 +16,11 @@ spec:
         app: varlog-mr
         name: varlog-mr
     spec:
+      volumes:
+      - name: varlog-mr-home
+        hostPath:
+          path: {{VMR_HOME}}
+          type: DirectoryOrCreate
       containers:
       - name: varlog-mr
         image: idock.daumkakao.io/varlog/varlog-mr:{{DOCKER_TAG}}
@@ -26,6 +31,11 @@ spec:
           value: Asia/Seoul
         - name: VMS_ADDRESS
           value: '{{VMS_ADDRESS}}:9090'
+        - name: VMR_HOME
+          value: '{{VMR_HOME}}'
+        volumeMounts:
+        - name: varlog-mr-home
+          mountPath: {{VMR_HOME}}
         readinessProbe:
           tcpSocket:
             port: 9092

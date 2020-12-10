@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
+	vtypes "github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -31,9 +33,29 @@ const (
 	ENV_REP_FACTOR = "REP_FACTOR"
 )
 
+type K8sVarlogPodGetter interface {
+	Pods(namespace string, selector map[string]string) (*v1.PodList, error)
+}
+
 type K8sVarlogCluster struct {
 	K8sVarlogClusterOptions
-	cli *kubernetes.Clientset
+	cli  *kubernetes.Clientset
+	view K8sVarlogView
+}
+
+// node ID to k8s node name view
+type K8sVarlogView interface {
+	Renew()
+	GetMRNodeName(vtypes.NodeID) string
+	GetSNNodeName(vtypes.StorageNodeID) string
+}
+
+type k8sVarlogView struct {
+	podGetter K8sVarlogPodGetter
+	idGetter  VarlogIDGetter
+	mrs       map[vtypes.NodeID]string
+	sns       map[vtypes.StorageNodeID]string
+	mu        sync.RWMutex
 }
 
 type patchStringValue struct {
@@ -59,7 +81,10 @@ func NewK8sVarlogCluster(opts K8sVarlogClusterOptions) (*K8sVarlogCluster, error
 		return nil, err
 	}
 
-	return &K8sVarlogCluster{K8sVarlogClusterOptions: opts, cli: c}, nil
+	k8s := &K8sVarlogCluster{K8sVarlogClusterOptions: opts, cli: c}
+	k8s.view = newK8sVarlogView(k8s)
+
+	return k8s, nil
 }
 
 func (k8s *K8sVarlogCluster) Nodes(selector map[string]string) (*v1.NodeList, error) {
@@ -370,6 +395,32 @@ func (k8s *K8sVarlogCluster) StopVMS() error {
 	return k8s.ScaleReplicaSet(VMS_RS_NAME, 0)
 }
 
+func (k8s *K8sVarlogCluster) StopMR(mrID vtypes.NodeID) error {
+	nodeName := k8s.view.GetMRNodeName(mrID)
+	if nodeName == "" {
+		return errors.New("could not stop metadata repository pod")
+	}
+
+	return k8s.ReplaceLabel(nodeName, "type", MR_STOP_LABEL)
+}
+
+func (k8s *K8sVarlogCluster) StopSN(snID vtypes.StorageNodeID) error {
+	nodeName := k8s.view.GetSNNodeName(snID)
+	if nodeName == "" {
+		return errors.New("could not stop metadata repository pod")
+	}
+
+	return k8s.ReplaceLabel(nodeName, "type", SN_STOP_LABEL)
+}
+
+func (k8s *K8sVarlogCluster) RecoverMR() error {
+	return k8s.ReplaceLabelAll("type", MR_STOP_LABEL, MR_LABEL)
+}
+
+func (k8s *K8sVarlogCluster) RecoverSN() error {
+	return k8s.ReplaceLabelAll("type", SN_STOP_LABEL, SN_LABEL)
+}
+
 func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
 	nodeSelector := map[string]string{"type": label}
 	podSelector := map[string]string{"app": label}
@@ -509,4 +560,84 @@ func withTestCluster(opts K8sVarlogClusterOptions, f func(k8s *K8sVarlogCluster)
 
 		f(k8s)
 	}
+}
+
+func newK8sVarlogView(podGetter K8sVarlogPodGetter) *k8sVarlogView {
+	return &k8sVarlogView{
+		podGetter: podGetter,
+		idGetter:  &varlogIDGetter{},
+		mrs:       make(map[vtypes.NodeID]string),
+		sns:       make(map[vtypes.StorageNodeID]string),
+	}
+}
+
+func (view *k8sVarlogView) Renew() {
+	pods, err := view.podGetter.Pods("default", map[string]string{"app": MR_LABEL})
+	if err != nil {
+		return
+	}
+
+	clusterID := vtypes.ClusterID(0)
+	mrs := make(map[vtypes.NodeID]string)
+	for _, pod := range pods.Items {
+		addr := fmt.Sprintf("%s:%d",
+			pod.Status.HostIP,
+			pod.Spec.Containers[0].ReadinessProbe.Handler.TCPSocket.Port.IntValue())
+
+		cid, mrid, err := view.idGetter.MetadataRepositoryID(addr)
+		if err != nil {
+			continue
+		}
+		clusterID = cid
+
+		mrs[mrid] = pod.Spec.NodeName
+	}
+
+	pods, err = view.podGetter.Pods("default", map[string]string{"app": SN_LABEL})
+	if err != nil {
+		return
+	}
+
+	sns := make(map[vtypes.StorageNodeID]string)
+	for _, pod := range pods.Items {
+		addr := fmt.Sprintf("%s:%d",
+			pod.Status.HostIP,
+			pod.Spec.Containers[0].ReadinessProbe.Handler.TCPSocket.Port.IntValue())
+
+		snid, err := view.idGetter.StorageNodeID(addr, clusterID)
+		if err != nil {
+			continue
+		}
+
+		sns[snid] = pod.Spec.NodeName
+	}
+
+	view.mrs = mrs
+	view.sns = sns
+}
+
+func (view *k8sVarlogView) GetMRNodeName(mrID vtypes.NodeID) string {
+	view.mu.Lock()
+	defer view.mu.Unlock()
+
+	nodeID, ok := view.mrs[mrID]
+	if !ok {
+		view.Renew()
+		nodeID, _ = view.mrs[mrID]
+	}
+
+	return nodeID
+}
+
+func (view *k8sVarlogView) GetSNNodeName(snID vtypes.StorageNodeID) string {
+	view.mu.Lock()
+	defer view.mu.Unlock()
+
+	nodeID, ok := view.sns[snID]
+	if !ok {
+		view.Renew()
+		nodeID, _ = view.sns[snID]
+	}
+
+	return nodeID
 }

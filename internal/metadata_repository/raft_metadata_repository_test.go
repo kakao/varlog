@@ -62,8 +62,8 @@ func (clus *metadataRepoCluster) clear(idx int) {
 		return
 	}
 	nodeID := types.NewNodeIDFromURL(clus.peers[idx])
-	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
-	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
+	os.RemoveAll(fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID))
+	os.RemoveAll(fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID))
 }
 
 func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
@@ -80,6 +80,7 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 		SnapCount:         testSnapCount,
 		SnapCatchUpCount:  testSnapCount,
 		RaftTick:          vtesting.TestRaftTick(),
+		RaftDir:           vtesting.TestRaftDir(),
 		CommitTick:        vtesting.TestCommitTick(),
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
 		NumRep:            clus.nrRep,
@@ -213,6 +214,8 @@ func (clus *metadataRepoCluster) Close() error {
 			err = erri
 		}
 	}
+
+	os.RemoveAll(vtesting.TestRaftDir())
 
 	testutil.GC()
 
