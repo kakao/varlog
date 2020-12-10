@@ -17,6 +17,7 @@ CHECK_TIME = 3
 DEFAULT_REP_FACTOR = '1'
 DEFAULT_RPC_PORT = '9092'
 DEFAULT_RAFT_PORT = '10000'
+DEFAULT_VMR_HOME = './varlog-mr'
 
 METADATA_REPOSITORY_STOP = "ps -fC vmr | grep " \
                            "vmr | awk '{print $2}' | xargs " \
@@ -66,6 +67,15 @@ def get_raft_url():
 
 def get_rpc_addr():
     return "%s:%s" % (MY_IP, get_env("RPC_PORT", DEFAULT_RPC_PORT))
+
+def get_vmr_home():
+    return get_env("VMR_HOME", DEFAULT_VMR_HOME)
+
+def get_raft_dir():
+    return "%s/raftdata" % get_vmr_home()
+
+def get_log_dir():
+    return "%s/log" % get_vmr_home()
 
 
 def get_info():
@@ -139,11 +149,15 @@ def main():
     rep_factor, peers = get_info()
     raft_url = get_raft_url()
     rpc_addr = get_rpc_addr()
+    vmr_home = get_vmr_home()
+    raft_dir = get_raft_dir()
+    log_dir = get_log_dir()
 
     metadata_repository = "nohup ./vmr start " \
                           "--log-rep-factor=%d " \
-                          "--raft-address=%s --bind=%s" \
-                          % (rep_factor, raft_url, rpc_addr)
+                          "--raft-address=%s --bind=%s " \
+                          "--raft-dir=%s --log-dir=%s" \
+                          % (rep_factor, raft_url, rpc_addr, raft_dir, log_dir)
 
     need_add_raft_peer = False
     if peers is not None:
@@ -160,12 +174,19 @@ def main():
     metadata_repository_restart = "nohup ./vmr start " \
                                   "--log-rep-factor=%d --raft-address=%s " \
                                   "--bind=%s " \
+                                  "--raft-dir=%s --log-dir=%s " \
                                   "--join=true &" \
-                                  % (rep_factor, raft_url, rpc_addr)
+                                  % (rep_factor, raft_url, rpc_addr, raft_dir, log_dir)
+
+    os.system("sudo mkdir -p %s" % vmr_home)
+    os.system("sudo chown -R deploy.users %s" % vmr_home)
+    os.system("sudo chmod -R 777 %s" % vmr_home)
+
+    if peers is None or need_add_raft_peer:
+        log_print("remove raft data:%s" % raft_dir)
+        os.system("rm -r %s" % raft_dir)
 
     try:
-        cmd_run("sudo sysctl -w kernel.core_pattern=core.%e.%p; sudo sysctl -p")
-
         log_print("start metadata_repository:: " + metadata_repository)
         cmd_run(metadata_repository)
 

@@ -99,6 +99,7 @@ type raftMembership struct {
 func newRaftNode(id vtypes.NodeID, peers []string, join bool,
 	snapCount, snapCatchUpCount uint64,
 	raftTick time.Duration,
+	raftDir string,
 	snapshotGetter SnapshotGetter,
 	proposeC chan string,
 	confChangeC chan raftpb.ConfChange,
@@ -117,8 +118,8 @@ func newRaftNode(id vtypes.NodeID, peers []string, join bool,
 		membership:       newRaftMemebership(logger),
 		raftTick:         raftTick,
 		join:             join,
-		waldir:           fmt.Sprintf("raft-%d", id),
-		snapdir:          fmt.Sprintf("raft-%d-snap", id),
+		waldir:           fmt.Sprintf("%s/wal/%d", raftDir, id),
+		snapdir:          fmt.Sprintf("%s/snap/%d", raftDir, id),
 		snapshotGetter:   snapshotGetter,
 		snapCount:        snapCount,
 		snapCatchUpCount: snapCatchUpCount,
@@ -290,7 +291,7 @@ func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 // openWAL returns a WAL ready for reading.
 func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	if !wal.Exist(rc.waldir) {
-		if err := os.Mkdir(rc.waldir, 0750); err != nil {
+		if err := os.MkdirAll(rc.waldir, 0750); err != nil {
 			rc.logger.Panic("cannot create dir for wal", zap.String("err", err.Error()))
 		}
 
@@ -352,7 +353,7 @@ func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 
 func (rc *raftNode) start() {
 	if !fileutil.Exist(rc.snapdir) {
-		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
+		if err := os.MkdirAll(rc.snapdir, 0750); err != nil {
 			rc.logger.Panic("cannot create dir for snapshot", zap.String("err", err.Error()))
 		}
 	}

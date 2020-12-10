@@ -41,6 +41,22 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 			EnvVars:     []string{"RAFT_ADDRESS"},
 			Destination: &options.RaftAddress,
 		},
+		&cli.StringFlag{
+			Name:        "raft-dir",
+			Aliases:     []string{},
+			Value:       metadata_repository.DefaultRaftDir,
+			Usage:       "Raft Dir",
+			EnvVars:     []string{"RAFT_DIR"},
+			Destination: &options.RaftDir,
+		},
+		&cli.StringFlag{
+			Name:        "log-dir",
+			Aliases:     []string{},
+			Value:       metadata_repository.DefaultLogDir,
+			Usage:       "Log Dir",
+			EnvVars:     []string{"LOG_DIR"},
+			Destination: &options.LogDir,
+		},
 		&cli.BoolFlag{
 			Name:        "verbose",
 			Aliases:     []string{"v"},

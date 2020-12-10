@@ -91,8 +91,8 @@ func (clus *VarlogCluster) clearMR(idx int) {
 	url, _ := url.Parse(clus.mrPeers[idx])
 	nodeID := types.NewNodeID(url.Host)
 
-	os.RemoveAll(fmt.Sprintf("raft-%d", nodeID))
-	os.RemoveAll(fmt.Sprintf("raft-%d-snap", nodeID))
+	os.RemoveAll(fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID))
+	os.RemoveAll(fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID))
 
 	return
 }
@@ -111,6 +111,7 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 		Join:              join,
 		SnapCount:         uint64(clus.SnapCount),
 		RaftTick:          vtesting.TestRaftTick(),
+		RaftDir:           vtesting.TestRaftDir(),
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
 		NumRep:            clus.NrRep,
 		Peers:             clus.mrPeers,
@@ -199,6 +200,8 @@ func (clus *VarlogCluster) Close() error {
 			err = erri
 		}
 	}
+
+	os.RemoveAll(vtesting.TestRaftDir())
 
 	for _, sn := range clus.SNs {
 		// TODO (jun): remove temporary directories
