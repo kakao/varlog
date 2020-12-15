@@ -252,8 +252,15 @@ func (ms *MetadataStorage) LookupLogStream(lsID types.LogStreamID) *varlogpb.Log
 }
 
 func (ms *MetadataStorage) registerStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
-	if ms.lookupStorageNode(sn.StorageNodeID) != nil {
+	old := ms.lookupStorageNode(sn.StorageNodeID)
+	equal := old.Equal(sn)
+	if old != nil && !equal {
 		return verrors.ErrAlreadyExists
+	}
+
+	if equal {
+		// To ensure that it is applied to the meta cache
+		return nil
 	}
 
 	_, cur := ms.getStateMachine()
@@ -340,8 +347,15 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 		}
 	}
 
-	if ms.lookupLogStream(ls.LogStreamID) != nil {
+	old := ms.lookupLogStream(ls.LogStreamID)
+	equal := old.Equal(ls)
+	if old != nil && !equal {
 		return verrors.ErrAlreadyExists
+	}
+
+	if equal {
+		// To ensure that it is applied to the meta cache
+		return nil
 	}
 
 	_, cur := ms.getStateMachine()
@@ -442,12 +456,17 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 		}
 	}
 
-	pre, cur := ms.getStateMachine()
-
-	if cur.Metadata.GetLogStream(ls.LogStreamID) == nil &&
-		pre.Metadata.GetLogStream(ls.LogStreamID) == nil {
+	old := ms.lookupLogStream(ls.LogStreamID)
+	if old == nil {
 		return verrors.ErrNotExist
 	}
+
+	if equal := old.Equal(ls); equal {
+		// To ensure that it is applied to the meta cache
+		return nil
+	}
+
+	_, cur := ms.getStateMachine()
 
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
@@ -534,7 +553,8 @@ func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status 
 	}
 
 	if ls.Status == status {
-		return verrors.ErrIgnore
+		// To ensure that it is applied to the meta cache
+		return nil
 	}
 
 	ms.mtMu.Lock()
@@ -565,7 +585,8 @@ func (ms *MetadataStorage) updateLocalLogStreamStatus(lsID types.LogStreamID, st
 	}
 
 	if lls.Status == status {
-		return verrors.ErrIgnore
+		// To ensure that it is applied to the meta cache
+		return nil
 	}
 
 	if status == varlogpb.LogStreamStatusSealed {

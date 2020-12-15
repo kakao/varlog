@@ -827,12 +827,7 @@ func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *v
 		StorageNode: sn,
 	}
 
-	err := mr.propose(ctx, r, true)
-	if err != verrors.ErrAlreadyExists {
-		return err
-	}
-
-	return nil
+	return mr.propose(ctx, r, true)
 }
 
 func (mr *RaftMetadataRepository) UnregisterStorageNode(ctx context.Context, snID types.StorageNodeID) error {
@@ -853,12 +848,7 @@ func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *var
 		LogStream: ls,
 	}
 
-	err := mr.propose(ctx, r, true)
-	if err != verrors.ErrAlreadyExists {
-		return err
-	}
-
-	return nil
+	return mr.propose(ctx, r, true)
 }
 
 func (mr *RaftMetadataRepository) UnregisterLogStream(ctx context.Context, lsID types.LogStreamID) error {
