@@ -112,8 +112,9 @@ yaml 생성 및 적용
 ```
 DOCKER_TAG=`docker images | grep varlog-sn | head -n1 | tail -n1 | awk '{print $2}'`
 VMS_ADDRESS=`kubectl get svc | grep varlog-vms-service | awk '{print $3}'`
+VSN_HOME=$(echo /home/deploy/varlog-sn | sed 's_/_\\/_g')
 
-cat sn.yaml.tpl | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" | sed "s/{{VMS_ADDRESS}}/${VMS_ADDRESS}/g" > sn.yaml
+cat sn.yaml.tpl | sed "s/{{VSN_HOME}}/${VSN_HOME}/g" | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" | sed "s/{{VMS_ADDRESS}}/${VMS_ADDRESS}/g" > sn.yaml
 
 kubectl apply -f sn.yaml
 

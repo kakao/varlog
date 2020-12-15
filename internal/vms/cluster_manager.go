@@ -593,12 +593,12 @@ func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStrea
 	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusUnsealing)
 
 	if err = cm.snMgr.Unseal(ctx, logStreamID); err != nil {
-		cm.logger.Error("error while unsealing by MR", zap.Error(err))
+		cm.logger.Error("error while unsealing by SN", zap.Error(err))
 		goto errOut
 	}
 
 	if err = cm.mrMgr.Unseal(ctx, logStreamID); err != nil {
-		cm.logger.Error("error while unsealing by SN", zap.Error(err))
+		cm.logger.Error("error while unsealing by MR", zap.Error(err))
 		goto errOut
 	}
 
@@ -629,15 +629,18 @@ func (cm *clusterManager) HandleHeartbeatTimeout(ctx context.Context, snID types
 
 func (cm *clusterManager) checkLogStreamStatus(logStreamID types.LogStreamID, mrStatus, replicaStatus varlogpb.LogStreamStatus) {
 	lsStat := cm.statRepository.GetLogStream(logStreamID)
+
 	switch lsStat.Status {
 	case varlogpb.LogStreamStatusRunning:
 		if mrStatus.Sealed() || replicaStatus.Sealed() {
+			cm.logger.Info("seal due to status mismatch", zap.Any("lsid", logStreamID))
 			cm.Seal(context.TODO(), logStreamID)
 		}
 
 	case varlogpb.LogStreamStatusSealing:
 		for _, r := range lsStat.Replicas {
 			if r.Status != varlogpb.LogStreamStatusSealed {
+				cm.logger.Info("seal due to status", zap.Any("lsid", logStreamID))
 				cm.Seal(context.TODO(), logStreamID)
 				return
 			}
@@ -646,7 +649,13 @@ func (cm *clusterManager) checkLogStreamStatus(logStreamID types.LogStreamID, mr
 
 	case varlogpb.LogStreamStatusUnsealing:
 		for _, r := range lsStat.Replicas {
-			if r.Status != varlogpb.LogStreamStatusRunning {
+			if r.Status == varlogpb.LogStreamStatusRunning {
+				continue
+			} else if r.Status == varlogpb.LogStreamStatusSealed {
+				return
+			} else if r.Status == varlogpb.LogStreamStatusSealing {
+				cm.logger.Info("seal due to unexpected status", zap.Any("lsid", logStreamID))
+				cm.Seal(context.TODO(), logStreamID)
 				return
 			}
 		}

@@ -27,19 +27,23 @@ func (rcc *reportCommitContext) get() (globalHighwatermark types.GLSN, uncommitt
 	return rcc.globalHighwatermark, rcc.uncommittedLLSNBegin
 }
 
-// logStreamContext represents context containing runtime information of log stream executor. The
+// LogStreamContext represents context containing runtime information of log stream executor. The
 // log stream executor should save its runtime to persistent storage to recover its last status
 // after restarting it.
 //
-// Members of logStreamContext are read and written by some methods of log stream executor. They are
+// Members of LogStreamContext are read and written by some methods of log stream executor. They are
 // also recovered by the initialization of storage or sync replication.
-type logStreamContext struct {
+type LogStreamContext struct {
 	// See reportCommitContext.
 	rcc reportCommitContext
 
 	// committedLLSNEnd is the next position to be committed to storage. It can increases by
 	// commit.
-	committedLLSNEnd types.LLSN
+	// committedLLSNEnd types.LLSN
+	committedLLSNEnd struct {
+		llsn types.LLSN
+		mu   sync.RWMutex
+	}
 
 	// uncommittedLLSNEnd is the next position to be written. It is increased after successful
 	// writing to the storage during the append operation.
@@ -53,11 +57,11 @@ type logStreamContext struct {
 	localHighWatermark types.AtomicGLSN
 }
 
-func initLogStreamContext(lsc *logStreamContext) {
+func initLogStreamContext(lsc *LogStreamContext) {
 	lsc.rcc.globalHighwatermark = types.InvalidGLSN
 	lsc.rcc.uncommittedLLSNBegin = types.MinLLSN
 	lsc.uncommittedLLSNEnd.Store(types.MinLLSN)
-	lsc.committedLLSNEnd = types.MinLLSN
+	lsc.committedLLSNEnd.llsn = types.MinLLSN
 	lsc.localLowWatermark.Store(types.MinGLSN)
 	lsc.localHighWatermark.Store(types.InvalidGLSN)
 }

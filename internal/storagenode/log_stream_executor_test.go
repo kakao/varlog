@@ -31,7 +31,8 @@ func TestLogStreamExecutorNew(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			storage := NewMockStorage(ctrl)
-			storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
+			storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
+			storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 			lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
 			So(lse.(*logStreamExecutor).isSealed(), ShouldBeFalse)
@@ -45,7 +46,8 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			storage := NewMockStorage(ctrl)
-			storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
+			storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
+			storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 			storage.EXPECT().Close().Return(nil).AnyTimes()
 			lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), storage, &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
@@ -66,7 +68,8 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		storage := NewMockStorage(ctrl)
-		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 		storage.EXPECT().Close().Return(nil).AnyTimes()
 		replicator := NewMockReplicator(ctrl)
 
@@ -138,7 +141,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 			}
 
 			storage.EXPECT().Write(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-			storage.EXPECT().StoreCommitContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			storage.EXPECT().StoreCommitContext(gomock.Any()).Return(nil).AnyTimes()
 			storage.EXPECT().Commit(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			for i := types.MinGLSN; i < N; i++ {
 				lse.(*logStreamExecutor).lsc.rcc.mu.RLock()
@@ -175,7 +178,8 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 		storage := NewMockStorage(ctrl)
 		storage.EXPECT().Close().Return(nil).AnyTimes()
-		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 		replicator := NewMockReplicator(ctrl)
 		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{
 			AppendCTimeout:    DefaultLSEAppendCTimeout,
@@ -350,7 +354,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 			stop := make(chan struct{})
 			block := func(f func()) {
-				storage.EXPECT().StoreCommitContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).MaxTimes(1)
+				storage.EXPECT().StoreCommitContext(gomock.Any()).Return(nil).MaxTimes(1)
 				storage.EXPECT().Commit(gomock.Any(), gomock.Any()).DoAndReturn(
 					func(types.LLSN, types.GLSN) error {
 						f()
@@ -400,7 +404,8 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 		storage.EXPECT().Close().Return(nil).AnyTimes()
 		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
@@ -447,7 +452,8 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		defer ctrl.Finish()
 
 		storage := NewMockStorage(ctrl)
-		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 		storage.EXPECT().Close().Return(nil).AnyTimes()
 		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
@@ -534,7 +540,8 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 
 		const lsid = types.LogStreamID(1)
 		storage := NewMockStorage(ctrl)
-		storage.EXPECT().RecoverLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 		lseI, err := NewLogStreamExecutor(zap.L(), lsid, storage, &DefaultLogStreamExecutorOptions)
 		So(err, ShouldBeNil)
 		lse := lseI.(*logStreamExecutor)

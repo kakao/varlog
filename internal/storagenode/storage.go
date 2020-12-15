@@ -39,26 +39,23 @@ type Scanner interface {
 	Close() error
 }
 
-type WriteEntry struct {
-	LLSN types.LLSN
-	Data []byte
-}
-
 type WriteBatch interface {
 	Put(llsn types.LLSN, data []byte) error
 	Apply() error
 	Close() error
 }
 
-type CommitEntry struct {
-	LLSN types.LLSN
-	GLSN types.GLSN
-}
-
 type CommitBatch interface {
 	Put(llsn types.LLSN, glsn types.GLSN) error
 	Apply() error
 	Close() error
+}
+
+type CommitContext struct {
+	HighWatermark      types.GLSN
+	PrevHighWatermark  types.GLSN
+	CommittedGLSNBegin types.GLSN
+	CommittedGLSNEnd   types.GLSN
 }
 
 type Storage interface {
@@ -78,28 +75,40 @@ type Storage interface {
 	// Write writes log entry at the llsn. The log entry contains data.
 	Write(llsn types.LLSN, data []byte) error
 
-	WriteBatch(entries []WriteEntry) error
-
+	// NewWriteBatch creates a batch for write operations.
 	NewWriteBatch() WriteBatch
 
 	// Commit confirms that the log entry at the llsn is assigned global log position with the
 	// glsn.
 	Commit(llsn types.LLSN, glsn types.GLSN) error
 
-	CommitBatch(entries []CommitEntry) error
-
+	// NewCommitBatch creates a batch for commit operations.
 	NewCommitBatch() CommitBatch
 
-	RecoverLogStreamContext(lsc *logStreamContext) bool
+	// RestoreLogStreamContext restores the LogStreamContext that can be recovered by contents
+	// of the storage. The LogStreamContext referred to by the parameter is filled with restored
+	// context. If the LogStreamContext is recovered, the RestoreLogStreamContext returns true,
+	// otherwise false.
+	RestoreLogStreamContext(lsc *LogStreamContext) bool
 
-	StoreCommitContext(hwm, prevHWM, committedGLSNBegin, committedGLSNEnd types.GLSN) error
+	// RestoreStorage restores the status of storage.
+	RestoreStorage(lastLLSN types.LLSN, lastGLSN types.GLSN)
+
+	// StoreCommitContext writes context information to storage when a group of logs are
+	// committed. It must be called ahead of commits that are requested by a metadata
+	// repository. If it fails, commits requested by the metadata repository should not be
+	// written.
+	StoreCommitContext(commitContext CommitContext) error
 
 	// DeleteCommitted removes committed log entries until the glsn. It acts like garbage collection.
-	DeleteCommitted(glsn types.GLSN) error
+	// If prefixEnd is invalid, DeleteCommitted returns an error. If it tries to delete
+	// uncommitted logs, it returns an error.
+	DeleteCommitted(prefixEnd types.GLSN) error
 
 	// DeleteUncommitted removes uncommitted log entries from the llsn. It should not remove
 	// committed log entries. If the log entry at the given llsn is committed, it panics.
-	DeleteUncommitted(llsn types.LLSN) error
+	// If the storage is empty, that is, it has no written logs, DeleteUncommitted returns nil.
+	DeleteUncommitted(suffixBegin types.LLSN) error
 
 	// Close closes the storage.
 	Close() error

@@ -9,6 +9,7 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 
+	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	vtypes "github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
@@ -118,7 +119,7 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 				}
 			}
 
-			Convey("Then it should be appendable", func() {
+			Convey("Then it should be abel to append", func() {
 				for i := 0; i < 1000; i++ {
 					_, err := varlog.Append(context.TODO(), []byte("foo"))
 					So(err, ShouldBeNil)
@@ -128,7 +129,7 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 					err := k8s.RecoverMR()
 					So(err, ShouldBeNil)
 
-					Convey("Then if should be appendable", func() {
+					Convey("Then if should be abel to append", func() {
 						for i := 0; i < 1000; i++ {
 							_, err := varlog.Append(context.TODO(), []byte("foo"))
 							So(err, ShouldBeNil)
@@ -137,5 +138,137 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 				})
 			})
 		})
+	}))
+}
+
+func TestK8sVarlogFailoverSN(t *testing.T) {
+	opts := getK8sVarlogClusterOpts()
+
+	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
+		vmsaddr, err := k8s.VMSAddress()
+		So(err, ShouldBeNil)
+
+		mrseed, err := k8s.MRAddress()
+		So(err, ShouldBeNil)
+
+		mcli, err := varlog.NewClusterManagerClient(vmsaddr)
+		So(err, ShouldBeNil)
+
+		mrcli, err := mrc.NewMetadataRepositoryClient(mrseed)
+		So(err, ShouldBeNil)
+
+		Reset(func() {
+			mcli.Close()
+			mrcli.Close()
+		})
+
+		r, err := mcli.AddLogStream(context.TODO(), nil)
+		So(err, ShouldBeNil)
+
+		lsID := r.LogStream.LogStreamID
+
+		So(testutil.CompareWaitN(100, func() bool {
+			meta, err := mrcli.GetMetadata(context.TODO())
+			if err != nil {
+				return false
+			}
+
+			return meta.GetLogStream(lsID) != nil
+		}), ShouldBeTrue)
+
+		varlog, err := varlog.Open(vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
+		So(err, ShouldBeNil)
+
+		Reset(func() {
+			varlog.Close()
+		})
+
+		_, err = varlog.Append(context.TODO(), []byte("foo"))
+		So(err, ShouldBeNil)
+
+		Convey("When SN backup fail", func() {
+			meta, err := mrcli.GetMetadata(context.TODO())
+			So(err, ShouldBeNil)
+			lsdesc := meta.GetLogStream(lsID)
+
+			err = k8s.StopSN(lsdesc.Replicas[len(lsdesc.Replicas)-1].StorageNodeID)
+			So(err, ShouldBeNil)
+
+			Convey("Then it should be sealed", func() {
+				So(testutil.CompareWaitN(100, func() bool {
+					varlog.Append(context.TODO(), []byte("foo"))
+
+					meta, err := mrcli.GetMetadata(context.TODO())
+					if err != nil {
+						return false
+					}
+
+					return meta.GetLogStream(lsID).Status.Sealed()
+				}), ShouldBeTrue)
+
+				Convey("When SN recover", func() {
+					err := k8s.RecoverSN()
+					So(err, ShouldBeNil)
+
+					So(testutil.CompareWaitN(100, func() bool {
+						ok, err := k8s.IsSNRunning()
+						if err != nil {
+							return false
+						}
+
+						return ok
+					}), ShouldBeTrue)
+
+					Convey("Then if should be able to append", func() {
+						So(testutil.CompareWaitN(100, func() bool {
+							mcli.Unseal(context.TODO(), lsID)
+
+							_, err := varlog.Append(context.TODO(), []byte("foo"))
+							return err == nil
+						}), ShouldBeTrue)
+					})
+				})
+			})
+		})
+	}))
+}
+
+func TestK8sVarlogAppend(t *testing.T) {
+	opts := getK8sVarlogClusterOpts()
+	opts.Reset = false
+
+	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
+		vmsaddr, err := k8s.VMSAddress()
+		So(err, ShouldBeNil)
+
+		mrseed, err := k8s.MRAddress()
+		So(err, ShouldBeNil)
+
+		mcli, err := varlog.NewClusterManagerClient(vmsaddr)
+		So(err, ShouldBeNil)
+
+		mrcli, err := mrc.NewMetadataRepositoryClient(mrseed)
+		So(err, ShouldBeNil)
+
+		varlog, err := varlog.Open(vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
+		So(err, ShouldBeNil)
+
+		Reset(func() {
+			mcli.Close()
+			mrcli.Close()
+			varlog.Close()
+		})
+
+		meta, err := mrcli.GetMetadata(context.TODO())
+		So(err, ShouldBeNil)
+		So(len(meta.GetLogStreams()), ShouldBeGreaterThan, 0)
+		lsdesc := meta.GetLogStreams()[0]
+
+		if lsdesc.Status.Sealed() {
+			mcli.Unseal(context.TODO(), lsdesc.LogStreamID)
+		}
+
+		_, err = varlog.Append(context.TODO(), []byte("foo"))
+		So(err, ShouldBeNil)
 	}))
 }

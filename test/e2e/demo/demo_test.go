@@ -44,8 +44,7 @@ func getClearDir(t *testing.T) func() {
 		}
 
 		for _, fi := range fis {
-			if fi.IsDir() && fi.Name() == "raftdata" {
-				t.Log(fi.Name())
+			if fi.IsDir() && (fi.Name() == "raftdata" || fi.Name() == "log") {
 				if err := os.RemoveAll(fi.Name()); err != nil {
 					t.Fatal(err)
 				}

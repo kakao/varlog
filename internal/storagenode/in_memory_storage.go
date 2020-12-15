@@ -1,6 +1,7 @@
 package storagenode
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -27,12 +28,12 @@ type committedEntry struct {
 }
 
 type inMemoryWriteBatch struct {
-	entries []WriteEntry
+	entries []writtenEntry
 	s       *InMemoryStorage
 }
 
 func (iwb *inMemoryWriteBatch) Put(llsn types.LLSN, data []byte) error {
-	iwb.entries = append(iwb.entries, WriteEntry{LLSN: llsn, Data: data})
+	iwb.entries = append(iwb.entries, writtenEntry{llsn: llsn, data: data})
 	return nil
 }
 
@@ -42,19 +43,19 @@ func (iwb *inMemoryWriteBatch) Apply() error {
 
 func (iwb *inMemoryWriteBatch) Close() error {
 	for i := 0; i < len(iwb.entries); i++ {
-		iwb.entries[i].Data = nil
+		iwb.entries[i].data = nil
 	}
 	iwb.entries = nil
 	return nil
 }
 
 type inMemoryCommitBatch struct {
-	entries []CommitEntry
+	entries []committedEntry
 	s       *InMemoryStorage
 }
 
 func (icb *inMemoryCommitBatch) Put(llsn types.LLSN, glsn types.GLSN) error {
-	icb.entries = append(icb.entries, CommitEntry{LLSN: llsn, GLSN: glsn})
+	icb.entries = append(icb.entries, committedEntry{llsn: llsn, glsn: glsn})
 	return nil
 }
 
@@ -121,9 +122,12 @@ func newInMemoryStorage(opts *StorageOptions) (Storage, error) {
 	return &InMemoryStorage{logger: opts.Logger}, nil
 }
 
-func (s *InMemoryStorage) RecoverLogStreamContext(lsc *logStreamContext) bool {
+func (s *InMemoryStorage) RestoreLogStreamContext(lsc *LogStreamContext) bool {
 	return false
 	// panic("not implemented")
+}
+func (s *InMemoryStorage) RestoreStorage(lastLLSN types.LLSN, lastGLSN types.GLSN) {
+	return
 }
 
 // TODO (jun): consider in-memory storage
@@ -214,7 +218,8 @@ func (s *InMemoryStorage) Write(llsn types.LLSN, data []byte) error {
 	defer s.muWritten.Unlock()
 
 	if len(s.written) > 0 && s.written[len(s.written)-1].llsn+1 != llsn {
-		s.logger.Panic("try to write incorrect LLSN", zap.Any("prev_llsn", s.written[len(s.written)-1].llsn), zap.Any("curr_llsn", llsn))
+		return errors.New("storage: incorrect log position")
+		// s.logger.Panic("try to write incorrect LLSN", zap.Any("prev_llsn", s.written[len(s.written)-1].llsn), zap.Any("curr_llsn", llsn))
 	}
 
 	s.written = append(s.written, writtenEntry{llsn: llsn, data: data})
@@ -223,16 +228,16 @@ func (s *InMemoryStorage) Write(llsn types.LLSN, data []byte) error {
 
 func (s *InMemoryStorage) NewWriteBatch() WriteBatch {
 	return &inMemoryWriteBatch{
-		entries: make([]WriteEntry, 0, defaultInMemoryBatchSize),
+		entries: make([]writtenEntry, 0, defaultInMemoryBatchSize),
 		s:       s,
 	}
 }
 
 // FIXME (jun): WriteBatch should be atomic.
-func (s *InMemoryStorage) WriteBatch(entries []WriteEntry) error {
+func (s *InMemoryStorage) WriteBatch(entries []writtenEntry) error {
 	for _, entry := range entries {
-		s.logger.Debug("write_batch", zap.Any("llsn", entry.LLSN))
-		if err := s.Write(entry.LLSN, entry.Data); err != nil {
+		s.logger.Debug("write_batch", zap.Any("llsn", entry.llsn))
+		if err := s.Write(entry.llsn, entry.data); err != nil {
 			return err
 		}
 	}
@@ -276,21 +281,21 @@ func (s *InMemoryStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
 
 func (s *InMemoryStorage) NewCommitBatch() CommitBatch {
 	return &inMemoryCommitBatch{
-		entries: make([]CommitEntry, 0, defaultInMemoryBatchSize),
+		entries: make([]committedEntry, 0, defaultInMemoryBatchSize),
 		s:       s,
 	}
 }
 
-func (s *InMemoryStorage) CommitBatch(entries []CommitEntry) error {
+func (s *InMemoryStorage) CommitBatch(entries []committedEntry) error {
 	for _, entry := range entries {
-		if err := s.Commit(entry.LLSN, entry.GLSN); err != nil {
+		if err := s.Commit(entry.llsn, entry.glsn); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *InMemoryStorage) StoreCommitContext(hwm, prevHWM, committedGLSNBegin, committedGLSNEnd types.GLSN) error {
+func (s *InMemoryStorage) StoreCommitContext(commitContext CommitContext) error {
 	return nil
 	// panic("not implemented")
 }

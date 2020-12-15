@@ -16,6 +16,11 @@ spec:
         app: varlog-sn
         name: varlog-sn
     spec:
+      volumes:
+      - name: varlog-sn-home
+        hostPath:
+          path: {{VSN_HOME}}
+          type: DirectoryOrCreate
       containers:
       - name: varlog-sn
         image: idock.daumkakao.io/varlog/varlog-sn:{{DOCKER_TAG}}
@@ -26,6 +31,11 @@ spec:
           value: Asia/Seoul
         - name: VMS_ADDRESS
           value: '{{VMS_ADDRESS}}:9090'
+        - name: VSN_HOME
+          value: '{{VSN_HOME}}'
+        volumeMounts:
+        - name: varlog-sn-home
+          mountPath: {{VSN_HOME}}
         readinessProbe:
           tcpSocket:
             port: 9091

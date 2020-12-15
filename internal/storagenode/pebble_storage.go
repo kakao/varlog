@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/pebble"
 	"go.uber.org/zap"
@@ -61,42 +62,24 @@ func (scanner *pebbleScanner) Close() error {
 	return scanner.iter.Close()
 }
 
-type pebbleWriteBatch struct {
-	b               *pebble.Batch
-	ps              *pebbleStorage
-	prevWrittenLLSN types.LLSN
-}
-
-func (pwb *pebbleWriteBatch) Put(llsn types.LLSN, data []byte) error {
-	prevWrittenLLSN := pwb.prevWrittenLLSN + types.LLSN(pwb.b.Count())
-	if !prevWrittenLLSN.Invalid() && prevWrittenLLSN+1 != llsn {
-		return fmt.Errorf("storage: incorrect LLSN, prev_llsn=%v curr_llsn=%v", prevWrittenLLSN, llsn)
-	}
-
-	k := encodeDataKey(llsn)
-	if err := pwb.b.Set(k, data, pwb.ps.writeOption); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (pwb *pebbleWriteBatch) Apply() error {
-	return pwb.ps.writeBatch(pwb)
-}
-
-func (pwb *pebbleWriteBatch) Close() error {
-	return pwb.b.Close()
-}
-
 type pebbleCommitBatch struct {
 	b                 *pebble.Batch
 	ps                *pebbleStorage
+	prevWrittenLLSN   types.LLSN // snapshot
 	prevCommittedLLSN types.LLSN // fixed value
 	prevCommittedGLSN types.GLSN // increment value
 }
 
 func (pcb *pebbleCommitBatch) Put(llsn types.LLSN, glsn types.GLSN) error {
-	prevCommittedLLSN := pcb.prevCommittedLLSN + types.LLSN(pcb.b.Count())
+	if llsn.Invalid() || glsn.Invalid() {
+		return errors.New("storage: invalid log position")
+	}
+
+	batchSize := pcb.b.Count()
+	prevCommittedLLSN := pcb.prevCommittedLLSN + types.LLSN(batchSize)
+	if batchSize > 0 && prevCommittedLLSN.Invalid() {
+		return errors.New("storage: invalid batch")
+	}
 	if !prevCommittedLLSN.Invalid() && prevCommittedLLSN+1 != llsn {
 		return fmt.Errorf("storage: incorrect LLSN, prev_llsn=%v curr_llsn=%v", prevCommittedLLSN, llsn)
 	}
@@ -104,20 +87,12 @@ func (pcb *pebbleCommitBatch) Put(llsn types.LLSN, glsn types.GLSN) error {
 		return fmt.Errorf("storage: incorrect GLSN, prev_glsn=%v curr_glsn=%v", pcb.prevCommittedGLSN, glsn)
 	}
 
-	db := pcb.ps.db
-	dk := encodeDataKey(llsn)
-	_, closer, err := db.Get(dk)
-	if err != nil {
-		if err == pebble.ErrNotFound {
-			return verrors.ErrNoEntry
-		}
-		return err
-	}
-	if err := closer.Close(); err != nil {
-		return err
+	if llsn > pcb.prevWrittenLLSN {
+		return errors.New("storage: unwritten log")
 	}
 
 	ck := encodeCommitKey(glsn)
+	dk := encodeDataKey(llsn)
 	if err := pcb.b.Set(ck, dk, pcb.ps.commitOption); err != nil {
 		return err
 	}
@@ -126,7 +101,7 @@ func (pcb *pebbleCommitBatch) Put(llsn types.LLSN, glsn types.GLSN) error {
 }
 
 func (pcb *pebbleCommitBatch) Apply() error {
-	return pcb.ps.commitBatch(pcb)
+	return pcb.ps.applyCommitBatch(pcb)
 }
 
 func (pcb *pebbleCommitBatch) Close() error {
@@ -134,10 +109,18 @@ func (pcb *pebbleCommitBatch) Close() error {
 }
 
 type pebbleStorage struct {
-	db                *pebble.DB
-	prevWrittenLLSN   types.LLSN
-	prevCommittedLLSN types.LLSN
-	prevCommittedGLSN types.GLSN
+	db *pebble.DB
+
+	writeProgress struct {
+		mu       sync.RWMutex
+		prevLLSN types.LLSN
+	}
+
+	commitProgress struct {
+		mu       sync.RWMutex
+		prevLLSN types.LLSN
+		prevGLSN types.GLSN
+	}
 
 	writeOption  *pebble.WriteOptions
 	commitOption *pebble.WriteOptions
@@ -152,10 +135,39 @@ func newPebbleStorage(opts *StorageOptions) (Storage, error) {
 		opts.Logger = zap.NewNop()
 	}
 	opts.Logger = opts.Logger.Named("pebblestorage")
-	db, err := pebble.Open(opts.Path, &pebble.Options{
-		// TODO: configurable
+
+	// TODO: make configurable
+	// So far, belows is experimental settings.
+	pebbleOpts := &pebble.Options{
 		ErrorIfExists: false,
-	})
+
+		// quite performance gain, but not durable
+		// DisableWAL:                  true,
+		// L0CompactionThreshold:       2,
+		// L0StopWritesThreshold:       1000,
+		// LBaseMaxBytes:               64 << 20,
+		// Levels:                      make([]pebble.LevelOptions, 7),
+		// MaxConcurrentCompactions:    3,
+		//  MemTableSize:                64 << 20,
+		// MemTableStopWritesThreshold: 4,
+	}
+	/*
+		for i := 0; i < len(pebbleOpts.Levels); i++ {
+			l := &pebbleOpts.Levels[i]
+			l.BlockSize = 32 << 10
+			l.IndexBlockSize = 256 << 10
+			l.FilterPolicy = bloom.FilterPolicy(10)
+			l.FilterType = pebble.TableFilter
+			if i > 0 {
+				l.TargetFileSize = pebbleOpts.Levels[i-1].TargetFileSize * 2
+			}
+			l.EnsureDefaults()
+		}
+		pebbleOpts.Levels[6].FilterPolicy = nil
+		pebbleOpts.EnsureDefaults()
+	*/
+
+	db, err := pebble.Open(opts.Path, pebbleOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -166,15 +178,25 @@ func newPebbleStorage(opts *StorageOptions) (Storage, error) {
 		options: opts,
 	}
 	ps.writeOption = &pebble.WriteOptions{Sync: !opts.DisableWriteSync}
-	ps.commitOption = &pebble.WriteOptions{Sync: !opts.DisableWriteSync}
+	ps.commitOption = &pebble.WriteOptions{Sync: !opts.DisableCommitSync}
 	// TODO (jun): When restarting the SN, pebbleStorage should recover prevLLSN and prevGLSN.
 	return ps, nil
 }
 
-func (ps *pebbleStorage) RecoverLogStreamContext(lsc *logStreamContext) bool {
-	defer func() {
-		ps.recoverStorage(lsc.committedLLSNEnd-1, lsc.localHighWatermark.Load())
-	}()
+func (ps *pebbleStorage) RestoreLogStreamContext(lsc *LogStreamContext) bool {
+	ccIter := ps.db.NewIter(&pebble.IterOptions{
+		LowerBound: []byte{commitContextKeyPrefix},
+		UpperBound: []byte{commitContextKeySentryPrefix},
+	})
+	defer ccIter.Close()
+
+	// If the storage has no CommitContext, it can't restore past storage status and
+	// LogStreamContext.
+	if !ccIter.Last() {
+		return false
+	}
+
+	cc := decodeCommitContextKey(ccIter.Key())
 
 	cIter := ps.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
@@ -182,34 +204,28 @@ func (ps *pebbleStorage) RecoverLogStreamContext(lsc *logStreamContext) bool {
 	})
 	defer cIter.Close()
 
-	ccIter := ps.db.NewIter(&pebble.IterOptions{
-		LowerBound: []byte{commitContextKeyPrefix},
-		UpperBound: []byte{commitContextKeySentryPrefix},
-	})
-	defer ccIter.Close()
-
-	if !ccIter.Last() {
-		// no hint to recover
-		return false
-	}
-
-	hwm, prevHWM, committedGLSNBegin, committedGLSNEnd := decodeCommitContextKey(ccIter.Key())
-	if cIter.Last() && decodeCommitKey(cIter.Key()) == committedGLSNEnd-1 {
+	// If the GLSN of the last committed log matches with the CommitContext, the storage can be
+	// restored by the CommitContext.
+	if cIter.Last() && decodeCommitKey(cIter.Key()) == cc.CommittedGLSNEnd-1 {
 		// happy path
-		ps.setLogStreamContext(hwm, cIter, lsc)
+		ps.setLogStreamContext(cc.HighWatermark, cIter, lsc)
 		return true
 	}
 
-	if !cIter.SeekLT(encodeCommitKey(committedGLSNBegin)) {
+	// If the storage has no committed logs before the CommitContext, it can't restore past
+	// storage status and LogStreamContext.
+	if !cIter.SeekLT(encodeCommitKey(cc.CommittedGLSNBegin)) {
 		// no hint to recover
 		return false
 	}
 
-	ps.setLogStreamContext(prevHWM, cIter, lsc)
+	// Restore the storage and LogStreamContext by using the last committed logs before the
+	// CommitContext.
+	ps.setLogStreamContext(cc.PrevHighWatermark, cIter, lsc)
 	return true
 }
 
-func (ps *pebbleStorage) setLogStreamContext(globalHWM types.GLSN, cIter *pebble.Iterator, lsc *logStreamContext) {
+func (ps *pebbleStorage) setLogStreamContext(globalHWM types.GLSN, cIter *pebble.Iterator, lsc *LogStreamContext) {
 	lastGLSN := decodeCommitKey(cIter.Key())
 	lastLLSN := decodeDataKey(cIter.Value())
 	cIter.First()
@@ -217,75 +233,20 @@ func (ps *pebbleStorage) setLogStreamContext(globalHWM types.GLSN, cIter *pebble
 
 	lsc.rcc.globalHighwatermark = globalHWM
 	lsc.rcc.uncommittedLLSNBegin = lastLLSN + 1
-	lsc.committedLLSNEnd = lastLLSN + 1
+	lsc.committedLLSNEnd.llsn = lastLLSN + 1
 	lsc.uncommittedLLSNEnd.Store(lastLLSN + 1)
 	lsc.localHighWatermark.Store(lastGLSN)
 	lsc.localLowWatermark.Store(firstGLSN)
 }
 
-func (ps *pebbleStorage) recoverStorage(lastLLSN types.LLSN, lastGLSN types.GLSN) {
-	ps.prevWrittenLLSN = lastLLSN
-	ps.prevCommittedLLSN = lastLLSN
-	ps.prevCommittedGLSN = lastGLSN
-}
-
-func encodeDataKey(llsn types.LLSN) []byte {
-	key := make([]byte, types.LLSNLen+1)
-	key[0] = dataKeyPrefix
-	binary.BigEndian.PutUint64(key[1:], uint64(llsn))
-	return key
-}
-
-func encodeCommitKey(glsn types.GLSN) []byte {
-	key := make([]byte, types.GLSNLen+1)
-	key[0] = commitKeyPrefix
-	binary.BigEndian.PutUint64(key[1:], uint64(glsn))
-	return key
-}
-
-func encodeCommitContextKey(hwm, prevHWM, committedGLSNBegin, committedGLSNEnd types.GLSN) []byte {
-	sz := types.GLSNLen
-	key := make([]byte, sz*4+1)
-
-	key[0] = commitContextKeyPrefix
-	offset := 1
-	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(hwm))
-
-	offset += sz
-	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(prevHWM))
-
-	offset += sz
-	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(committedGLSNBegin))
-
-	offset += sz
-	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(committedGLSNEnd))
-	return key
-}
-
-func decodeCommitContextKey(key []byte) (hwm, prevHWM, committedGLSNBegin, committedGLSNEnd types.GLSN) {
-	sz := types.GLSNLen
-	offset := 1
-	hwm = types.GLSN(binary.BigEndian.Uint64(key[offset : offset+sz]))
-
-	offset += sz
-	prevHWM = types.GLSN(binary.BigEndian.Uint64(key[offset : offset+sz]))
-
-	offset += sz
-	committedGLSNBegin = types.GLSN(binary.BigEndian.Uint64(key[offset : offset+sz]))
-
-	offset += sz
-	committedGLSNEnd = types.GLSN(binary.BigEndian.Uint64(key[offset : offset+sz]))
-	return hwm, prevHWM, committedGLSNBegin, committedGLSNEnd
-}
-
-func decodeDataKey(dataKey []byte) types.LLSN {
-	// TODO: check key prefix
-	return types.LLSN(binary.BigEndian.Uint64(dataKey[1:]))
-}
-
-func decodeCommitKey(commitKey []byte) types.GLSN {
-	// TODO: check key prefix
-	return types.GLSN(binary.BigEndian.Uint64(commitKey[1:]))
+func (ps *pebbleStorage) RestoreStorage(lastLLSN types.LLSN, lastGLSN types.GLSN) {
+	ps.commitProgress.mu.Lock()
+	defer ps.commitProgress.mu.Unlock()
+	ps.writeProgress.mu.Lock()
+	defer ps.writeProgress.mu.Unlock()
+	ps.writeProgress.prevLLSN = lastLLSN
+	ps.commitProgress.prevLLSN = lastLLSN
+	ps.commitProgress.prevGLSN = lastGLSN
 }
 
 func (ps *pebbleStorage) Path() string {
@@ -346,142 +307,228 @@ func (ps *pebbleStorage) Scan(begin, end types.GLSN) (Scanner, error) {
 }
 
 func (ps *pebbleStorage) Write(llsn types.LLSN, data []byte) error {
-	if !ps.prevWrittenLLSN.Invalid() && ps.prevWrittenLLSN+1 != llsn {
-		// panic: it can be changed returning an error, and seal itself.
-		ps.logger.Panic("try to write incorrect LLSN", zap.Any("prev_llsn", ps.prevWrittenLLSN), zap.Any("curr_llsn", llsn))
-	}
-
-	k := encodeDataKey(llsn)
-	if err := ps.db.Set(k, data, pebble.Sync); err != nil {
+	wb := ps.NewWriteBatch()
+	defer wb.Close()
+	if err := wb.Put(llsn, data); err != nil {
 		return err
 	}
-
-	ps.logger.Debug("write", zap.Any("llsn", llsn))
-	ps.prevWrittenLLSN++
-	return nil
+	return wb.Apply()
 }
 
 func (ps *pebbleStorage) NewWriteBatch() WriteBatch {
-	prevWrittenLLSN := ps.prevWrittenLLSN
-	return &pebbleWriteBatch{
-		b:               ps.db.NewBatch(),
-		prevWrittenLLSN: prevWrittenLLSN,
-	}
+	ps.writeProgress.mu.RLock()
+	defer ps.writeProgress.mu.RUnlock()
+	wb := &pebbleWriteBatch{}
+	wb.b = ps.db.NewBatch()
+	wb.ps = ps
+	wb.prevWrittenLLSN = ps.writeProgress.prevLLSN
+	return wb
 }
 
-func (ps *pebbleStorage) WriteBatch(entries []WriteEntry) error {
-	batch := ps.NewWriteBatch()
-	defer func() {
-		if err := batch.Close(); err != nil {
-			ps.logger.Warn("error while closing batch", zap.Error(err))
-		}
-	}()
-	for _, entry := range entries {
-		if err := batch.Put(entry.LLSN, entry.Data); err != nil {
-			return err
-		}
-	}
-	return batch.Apply()
-}
-
-func (ps *pebbleStorage) writeBatch(pwb *pebbleWriteBatch) error {
-	if ps.prevWrittenLLSN != pwb.prevWrittenLLSN {
-		return errors.New("incorrect batch")
+func (ps *pebbleStorage) applyWriteBatch(pwb *pebbleWriteBatch) error {
+	ps.writeProgress.mu.Lock()
+	defer ps.writeProgress.mu.Unlock()
+	if ps.writeProgress.prevLLSN != pwb.prevWrittenLLSN {
+		return errors.New("storage: inconsistent write batch")
 	}
 	count := pwb.b.Count()
 	if err := ps.db.Apply(pwb.b, ps.writeOption); err != nil {
 		return err
 	}
-	ps.prevWrittenLLSN += types.LLSN(count)
+	ps.writeProgress.prevLLSN += types.LLSN(count)
 	return nil
 }
 
 func (ps *pebbleStorage) Commit(llsn types.LLSN, glsn types.GLSN) error {
-	if !ps.prevCommittedLLSN.Invalid() && ps.prevCommittedLLSN+1 != llsn {
-		ps.logger.Panic("try to commit incorrect LLSN", zap.Any("prev_llsn", ps.prevCommittedLLSN), zap.Any("curr_llsn", llsn))
-	}
-	if ps.prevCommittedGLSN >= glsn {
-		ps.logger.Panic("try to commit incorrect GLSN", zap.Any("prev_glsn", ps.prevCommittedGLSN), zap.Any("curr_glsn", glsn))
-	}
-
-	dk := encodeDataKey(llsn)
-	_, closer, err := ps.db.Get(dk)
-	if err != nil {
-		if err == pebble.ErrNotFound {
-			return verrors.ErrNoEntry
-		}
+	cb := ps.NewCommitBatch()
+	defer cb.Close()
+	if err := cb.Put(llsn, glsn); err != nil {
 		return err
 	}
-	if err := closer.Close(); err != nil {
-		return err
-	}
-
-	ck := encodeCommitKey(glsn)
-	if err := ps.db.Set(ck, dk, pebble.Sync); err != nil {
-		return err
-	}
-
-	ps.logger.Debug("commit", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
-	ps.prevCommittedGLSN = glsn
-	ps.prevCommittedLLSN++
-	return nil
-}
-
-func (ps *pebbleStorage) CommitBatch(entries []CommitEntry) error {
-	batch := ps.NewCommitBatch()
-	defer func() {
-		if err := batch.Close(); err != nil {
-			ps.logger.Warn("error while closing batch", zap.Error(err))
-		}
-	}()
-	for _, entry := range entries {
-		if err := batch.Put(entry.LLSN, entry.GLSN); err != nil {
-			return err
-		}
-	}
-	return batch.Apply()
+	return cb.Apply()
 }
 
 func (ps *pebbleStorage) NewCommitBatch() CommitBatch {
-	return &pebbleCommitBatch{}
+	ps.writeProgress.mu.RLock()
+	prevWrittenLLSN := ps.writeProgress.prevLLSN
+	ps.writeProgress.mu.RUnlock()
+
+	ps.commitProgress.mu.RLock()
+	defer ps.commitProgress.mu.RUnlock()
+	return &pebbleCommitBatch{
+		b:                 ps.db.NewBatch(),
+		ps:                ps,
+		prevWrittenLLSN:   prevWrittenLLSN,
+		prevCommittedLLSN: ps.commitProgress.prevLLSN,
+		prevCommittedGLSN: ps.commitProgress.prevGLSN,
+	}
 }
 
-func (ps *pebbleStorage) commitBatch(pcb *pebbleCommitBatch) error {
-	if ps.prevCommittedLLSN != pcb.prevCommittedLLSN {
-		return errors.New("incorrect batch")
+func (ps *pebbleStorage) applyCommitBatch(pcb *pebbleCommitBatch) error {
+	ps.commitProgress.mu.Lock()
+	defer ps.commitProgress.mu.Unlock()
+
+	if ps.commitProgress.prevLLSN != pcb.prevCommittedLLSN {
+		return errors.New("storage: inconsistent commit batch")
 	}
 	count := pcb.b.Count()
 	if err := ps.db.Apply(pcb.b, ps.commitOption); err != nil {
 		return err
 	}
-	ps.prevCommittedLLSN += types.LLSN(count)
-	ps.prevCommittedGLSN = pcb.ps.prevCommittedGLSN
+	ps.commitProgress.prevLLSN += types.LLSN(count)
+	ps.commitProgress.prevGLSN = pcb.prevCommittedGLSN
 	return nil
 }
 
-func (ps *pebbleStorage) StoreCommitContext(hwm, prevHWM, committedGLSNBegin, committedGLSNEnd types.GLSN) error {
+func (ps *pebbleStorage) StoreCommitContext(cc CommitContext) error {
 	// TODO (jun): remove commmit context (trim? ttl?)
-	cck := encodeCommitContextKey(hwm, prevHWM, committedGLSNBegin, committedGLSNEnd)
+	cck := encodeCommitContextKey(cc)
 	return ps.db.Set(cck, nil, pebble.Sync)
 }
 
-func (ps *pebbleStorage) DeleteCommitted(glsn types.GLSN) error {
-	begin := []byte{commitKeyPrefix}
-	end := encodeCommitKey(glsn + 1)
-	return ps.db.DeleteRange(begin, end, pebble.NoSync)
-}
+func (ps *pebbleStorage) DeleteCommitted(prefixEnd types.GLSN) error {
+	if prefixEnd.Invalid() {
+		return errors.New("storage: invalid range")
+	}
 
-func (ps *pebbleStorage) DeleteUncommitted(llsn types.LLSN) error {
-	if llsn <= ps.prevCommittedLLSN {
-		err := fmt.Errorf("storage: could not delete committed (llsn=%v prev_committed_llsn=%v)", llsn, ps.prevCommittedLLSN)
-		ps.logger.Error("error while deleting uncommitted logs", zap.Any("llsn", llsn), zap.Any("prev_committed_llsn", ps.prevCommittedLLSN), zap.Error(err))
+	ps.commitProgress.mu.RLock()
+	defer ps.commitProgress.mu.RUnlock()
+
+	// it can't delete uncommitted logs
+	if prefixEnd > ps.commitProgress.prevGLSN+1 {
+		return errors.New("storage: invalid range")
+	}
+
+	cBegin := []byte{commitKeyPrefix}
+	cEnd := encodeCommitKey(prefixEnd)
+
+	iter := ps.db.NewIter(&pebble.IterOptions{
+		LowerBound: cBegin,
+		UpperBound: cEnd,
+	})
+	defer iter.Close()
+
+	if !iter.Last() {
+		// already deleted
+		return nil
+	}
+	lastDataKey := iter.Value()
+
+	// delete committed
+	if err := ps.db.DeleteRange(cBegin, cEnd, pebble.NoSync); err != nil {
 		return err
 	}
-	begin := encodeDataKey(llsn)
+
+	// deleted written
+	dBegin := []byte{dataKeyPrefix}
+	dEnd := encodeDataKey(decodeDataKey(lastDataKey) + 1)
+	return ps.db.DeleteRange(dBegin, dEnd, pebble.NoSync)
+}
+
+func (ps *pebbleStorage) DeleteUncommitted(suffixBegin types.LLSN) error {
+	ps.commitProgress.mu.RLock()
+	defer ps.commitProgress.mu.RUnlock()
+	ps.writeProgress.mu.Lock()
+	defer ps.writeProgress.mu.Unlock()
+
+	// no written logs (empty storage)
+	if ps.writeProgress.prevLLSN.Invalid() {
+		return nil
+	}
+
+	// it can't delete committed logs.
+	if suffixBegin <= ps.commitProgress.prevLLSN {
+		return fmt.Errorf("storage: invalid range (suffixBegin %d <= prev committed LLSN %d)", suffixBegin, ps.commitProgress.prevLLSN)
+	}
+
+	// no logs to delete
+	if suffixBegin > ps.writeProgress.prevLLSN {
+		return nil
+	}
+
+	// it can't delete unwritten logs.
+	/*
+		if suffixBegin > ps.writeProgress.prevLLSN {
+			return fmt.Errorf("storage: invalid range (suffixBegin %d > prev written LLSN %d)", suffixBegin, ps.writeProgress.prevLLSN)
+		}
+	*/
+
+	begin := encodeDataKey(suffixBegin)
 	end := []byte{dataKeySentryPrefix}
-	return ps.db.DeleteRange(begin, end, pebble.NoSync)
+	if err := ps.db.DeleteRange(begin, end, pebble.NoSync); err != nil {
+		return err
+	}
+	ps.writeProgress.prevLLSN = suffixBegin - 1
+	return nil
 }
 
 func (ps *pebbleStorage) Close() error {
 	return ps.db.Close()
+}
+
+func encodeDataKey(llsn types.LLSN) []byte {
+	key := make([]byte, types.LLSNLen+1)
+	key[0] = dataKeyPrefix
+	binary.BigEndian.PutUint64(key[1:], uint64(llsn))
+	return key
+}
+
+func decodeDataKey(dataKey []byte) types.LLSN {
+	if dataKey[0] != dataKeyPrefix {
+		panic("storage: invalid key type")
+	}
+	return types.LLSN(binary.BigEndian.Uint64(dataKey[1:]))
+}
+
+func encodeCommitKey(glsn types.GLSN) []byte {
+	key := make([]byte, types.GLSNLen+1)
+	key[0] = commitKeyPrefix
+	binary.BigEndian.PutUint64(key[1:], uint64(glsn))
+	return key
+}
+
+func decodeCommitKey(commitKey []byte) types.GLSN {
+	if commitKey[0] != commitKeyPrefix {
+		panic("storage: invalid key type")
+	}
+	return types.GLSN(binary.BigEndian.Uint64(commitKey[1:]))
+}
+
+func encodeCommitContextKey(cc CommitContext) []byte {
+	sz := types.GLSNLen
+	key := make([]byte, sz*4+1)
+
+	key[0] = commitContextKeyPrefix
+	offset := 1
+	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.HighWatermark))
+
+	offset += sz
+	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.PrevHighWatermark))
+
+	offset += sz
+	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.CommittedGLSNBegin))
+
+	offset += sz
+	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.CommittedGLSNEnd))
+	return key
+}
+
+func decodeCommitContextKey(key []byte) (cc CommitContext) {
+	if key[0] != commitContextKeyPrefix {
+		panic("storage: invalid key type")
+	}
+
+	sz := types.GLSNLen
+	offset := 1
+	cc.HighWatermark = types.GLSN(binary.BigEndian.Uint64(key[offset : offset+sz]))
+
+	offset += sz
+	cc.PrevHighWatermark = types.GLSN(binary.BigEndian.Uint64(key[offset : offset+sz]))
+
+	offset += sz
+	cc.CommittedGLSNBegin = types.GLSN(binary.BigEndian.Uint64(key[offset : offset+sz]))
+
+	offset += sz
+	cc.CommittedGLSNEnd = types.GLSN(binary.BigEndian.Uint64(key[offset : offset+sz]))
+	return cc
 }

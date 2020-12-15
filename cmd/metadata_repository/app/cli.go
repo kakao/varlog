@@ -4,6 +4,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
@@ -19,12 +21,28 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		Aliases: []string{"s"},
 		Usage:   "start [flags]",
 		Action: func(c *cli.Context) error {
+			var err error
+
+			// ClusterID
+			parsedClusterID := c.Uint("cluster-id")
+			if options.ClusterID, err = types.NewClusterIDFromUint(parsedClusterID); err != nil {
+				return err
+			}
+
 			options.Peers = c.StringSlice("peers")
+
 			return Main(options)
 		},
 	}
 
 	startCmd.Flags = []cli.Flag{
+		&cli.UintFlag{
+			Name:    "cluster-id",
+			Aliases: []string{"cid"},
+			Value:   uint(storagenode.DefaultClusterID),
+			Usage:   "cluster id",
+			EnvVars: []string{"CLUSTER_ID"},
+		},
 		&cli.StringFlag{
 			Name:        "bind",
 			Aliases:     []string{"b"},

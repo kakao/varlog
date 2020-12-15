@@ -19,7 +19,7 @@ CHECK_TIME = 3
 
 DEFAULT_CLUSTER_ID = '1'
 DEFAULT_RPC_PORT = '9091'
-TEST_STORAGE = "/home/deploy/storage"
+DEFAULT_VSN_HOME = "/home/deploy/varlog-sn"
 
 STORAGE_NODE_STOP = "ps -fC vsn | grep vsn | awk '{print $2}' " \
                     "| xargs kill -SIGTERM "
@@ -62,6 +62,14 @@ def get_env(key, default):
 def get_rpc_addr():
     return "%s:%s" % (MY_IP, get_env("RPC_PORT", DEFAULT_RPC_PORT))
 
+def get_vsn_home():
+    return get_env("VSN_HOME", DEFAULT_VSN_HOME)
+
+def get_storage_dir():
+    return "%s/storage" % get_vsn_home()
+
+def get_log_dir():
+    return "%s/log" % get_vsn_home()
 
 def get_storage_node_id():
     try:
@@ -85,12 +93,22 @@ def get_storage_node_id():
         raise e
 
 
-def get_volumes():
+def get_volumes(exist):
     # TODO:: fix it
-    if os.path.exists(TEST_STORAGE):
-        shutil.rmtree(TEST_STORAGE)
-    os.mkdir(TEST_STORAGE)
-    return TEST_STORAGE
+    vsn_home = get_vsn_home()
+    os.system("sudo chown -R deploy.users %s" % vsn_home)
+    os.system("sudo chmod -R 777 %s" % vsn_home)
+
+    storage = get_storage_dir()
+
+    if not exist and os.path.exists(storage):
+        shutil.rmtree(storage)
+        log_printf("remove %s" % storage)
+
+    if not os.path.exists(storage):
+        os.mkdir(storage)
+
+    return storage
 
 
 def storagenode_check_process(is_print):
@@ -144,7 +162,7 @@ def add_storage_node(addr):
 def main():
     try:
         snid, exist = get_storage_node_id()
-        volumes = get_volumes()
+        volumes = get_volumes(exist)
         sn_addr = get_rpc_addr()
 
         storage_node = "nohup ./vsn start --cluster-id=%s " \
