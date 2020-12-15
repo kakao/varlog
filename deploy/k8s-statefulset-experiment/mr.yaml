@@ -1,0 +1,100 @@
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+    name: mr-pdb
+spec:
+    selector:
+        matchLabels:
+            app: mr
+    maxUnavailable: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+    name: mr
+    labels:
+        app: mr
+spec:
+    replicas: 3
+    selector:
+        matchLabels:
+            app: mr
+    serviceName: mr-raft
+    template:
+        metadata:
+            labels:
+                app: mr
+        spec:
+            hostNetwork: true
+            containers:
+                - name: mr
+                  image: idock.daumkakao.io/jun_song/mr:0.0.1
+                  imagePullPolicy: Always
+                  ports:
+                      - name: rpc
+                        containerPort: 9092
+                        hostPort: 9092
+                      - name: raft
+                        containerPort: 10000
+                  command: 
+                      - /bin/sh
+                      - -c
+                      - >-
+                        set -x;
+                        source /varlog/data/peers;
+                        /varlog/bin/vmr start 
+                        -bind $(POD_IP):9092
+                        --raft-address http://$(POD_IP):10000
+                        --log-rep-factor 1
+                  readinessProbe:
+                    tcpSocket:
+                        port: 9092
+                  env:
+                      - name: POD_IP
+                        valueFrom:
+                            fieldRef:
+                                fieldPath: status.podIP
+                      - name: HOST_IP
+                        valueFrom: 
+                            fieldRef:
+                                fieldPath: status.hostIP
+                  volumeMounts:
+                      - name: workdir
+                        mountPath: /varlog/data
+            initContainers:
+                - name: seed-provider
+                  image: idock.daumkakao.io/jun_song/mc:0.0.1
+                  imagePullPolicy: Always
+                  command:
+                    - /bin/sh
+                    - -c
+                    - >-
+                        set -x;
+                        seed_ip=$(nslookup mr-0 | awk '/^Address: / { print $2 }');
+                        echo "$seed_ip";
+                        echo "$(POD_IP)";
+                        if [ "$seed_ip" == "$(POD_IP)" ]; then echo first; 
+                        else echo not-first; fi
+                  env:
+                      - name: POD_IP
+                        valueFrom:
+                            fieldRef:
+                                fieldPath: status.podIP
+                - name: get-peers
+                  image: idock.daumkakao.io/jun_song/mc:0.0.1
+                  imagePullPolicy: Always
+                  command: 
+                    - /bin/sh
+                    - -c
+                    - >-
+                        set -x;
+                        /varlog/bin/vmc mr info --vms-address $(MS_RPC_SERVICE_HOST):$(MS_RPC_SERVICE_PORT) |
+                        jq -r '.members | to_entries | map(.value) | join(",")' |
+                        awk '{if(length($0)>0) print "JOIN=1\nPEERS=" $0}' >
+                        /workdir/peers
+                  volumeMounts:
+                      - name: workdir
+                        mountPath: "/workdir"
+            volumes:
+                - name: workdir
+                  emptyDir: {}

@@ -160,3 +160,8 @@ ifneq ($(HAS_GRPC_PLUGIN),true)
 	@false
 endif
 	@echo "ok: $(GRPC_GO_PLUGIN)"
+
+.PHONY: docker
+DOCKER_TAG := 0.0.1-alpine
+docker:
+	scripts/dockerize.sh

@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Service
+metadata:
+    name: sn-rpc
+    labels:
+        app: sn
+spec:
+    selector:
+        app: sn
+    clusterIP: None
+    ports:
+        - name: rpc
+          port: 9091
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+    name: sn
+    labels:
+        app: sn
+spec:
+    replicas: 6
+    selector:
+        matchLabels:
+            app: sn
+    serviceName: sn-rpc
+    template:
+        metadata:
+            labels:
+                app: sn
+        spec:
+            hostNetwork: true
+            containers:
+                - name: sn
+                  image: idock.daumkakao.io/jun_song/sn:0.0.1
+                  ports:
+                      - name: rpc
+                        containerPort: 9091
+                        hostPort: 9091
+                  command:
+                      - "/varlog/bin/vsn"
+                      - "start"
+                      - "--rpc-bind-address"
+                      - "$(HOST_IP):9091"
+                      - "--cluster-id"
+                      - "1"
+                      - "--storage-name"
+                      - "pebble"
+                      - "--volumes"
+                      - "/varlog/data"
+                  env:
+                      - name: HOST_IP
+                        valueFrom:
+                            fieldRef:
+                                fieldPath: status.hostIP
+                      - name: POD_IP
+                        valueFrom:
+                            fieldRef:
+                                fieldPath: status.podIP
+                  volumeMounts:
+                      - name: sndata
+                        mountPath: /varlog/data
+    volumeClaimTemplates:
+        - metadata:
+              name: sndata
+          spec:
+              accessModes: ["ReadWriteOnce"]
+              storageClassName: local-storage
+              resources:
+                  requests:
+                      storage: 1Gi
