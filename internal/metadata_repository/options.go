@@ -35,7 +35,7 @@ var (
 )
 
 func makeDefaultRaftAddress() string {
-	ips, _ := netutil.UnicastIPs()
+	ips, _ := netutil.AdvertisableIPs()
 	if len(ips) > 0 {
 		return "http://" + net.JoinHostPort(ips[0].String(), strconv.Itoa(DefaultRaftPort))
 	}
