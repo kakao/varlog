@@ -3,9 +3,13 @@ package vms
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.daumkakao.com/varlog/varlog/pkg/snc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -87,22 +91,56 @@ func (sm *snManager) refresh(ctx context.Context) error {
 		return err
 	}
 
+	oldCS := make(map[types.StorageNodeID]snc.StorageNodeManagementClient, len(sm.cs))
+	for storageNodeID, snmcl := range sm.cs {
+		oldCS[storageNodeID] = snmcl
+	}
+
+	var mu sync.Mutex
+	errSN := make([]string, 0, len(sm.cs))
+	newCS := make(map[types.StorageNodeID]snc.StorageNodeManagementClient, len(sm.cs))
+
+	g, ctx := errgroup.WithContext(ctx)
 	for _, sndesc := range meta.GetStorageNodes() {
 		storageNodeID := sndesc.GetStorageNodeID()
-		_, ok := sm.cs[storageNodeID]
-		if ok {
-			continue
-		}
+		g.Go(func() error {
+			if snmcl, ok := oldCS[storageNodeID]; ok {
+				if _, err := snmcl.GetMetadata(ctx, snpb.MetadataTypeHeartbeat); err == nil {
+					mu.Lock()
+					defer mu.Unlock()
+					newCS[storageNodeID] = snmcl
+					delete(oldCS, storageNodeID)
+					return nil
+				}
+			}
 
-		snmcl, _, erri := sm.GetMetadataByAddr(ctx, sndesc.Address)
-		if erri != nil {
-			err = erri
-		} else {
-			sm.addStorageNode(snmcl)
+			if snmcl, _, err := sm.GetMetadataByAddr(ctx, sndesc.GetAddress()); err == nil {
+				mu.Lock()
+				defer mu.Unlock()
+				newCS[storageNodeID] = snmcl
+				return nil
+			}
+
+			sm.logger.Error("storage node refresh failed", zap.Uint32("snid", uint32(storageNodeID)))
+			mu.Lock()
+			defer mu.Unlock()
+			errSN = append(errSN, strconv.FormatUint(uint64(storageNodeID), 10))
+			return nil
+		})
+	}
+	g.Wait()
+
+	sm.cs = newCS
+	for _, snmcl := range oldCS {
+		if err := snmcl.Close(); err != nil {
+			sm.logger.Error("could not close storage node manager client", zap.Error(err))
 		}
 	}
 
-	return err
+	if len(errSN) > 0 {
+		return fmt.Errorf("snamanger: fresh failed storage nodes " + strings.Join(errSN, ","))
+	}
+	return nil
 }
 
 func (sm *snManager) Close() error {
@@ -232,7 +270,10 @@ func (sm *snManager) RemoveLogStream(ctx context.Context, storageNodeID types.St
 
 	snmcl, ok := sm.cs[storageNodeID]
 	if !ok {
-		sm.logger.Panic("no such storage node", zap.Any("snid", storageNodeID))
+		err := errors.New("no such storage node")
+		sm.logger.Warn("no such storage node", zap.Any("snid", storageNodeID), zap.Error(err))
+		sm.refresh(ctx)
+		return err
 	}
 	return snmcl.RemoveLogStream(ctx, logStreamID)
 }
@@ -250,7 +291,10 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 		storageNodeID := replica.GetStorageNodeID()
 		cli, ok := sm.cs[storageNodeID]
 		if !ok {
-			sm.logger.Panic("mismatch between clusterMetadataView and StorageNodeManager", zap.Any("snid", storageNodeID), zap.Any("lsid", logStreamID))
+			err := errors.New("no such storage node")
+			sm.logger.Warn("no such storage node", zap.Any("snid", storageNodeID), zap.Error(err))
+			sm.refresh(ctx)
+			return nil, err
 		}
 		status, highWatermark, err := cli.Seal(ctx, logStreamID, lastCommittedGLSN)
 		if err != nil {
@@ -285,13 +329,17 @@ func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID, sr
 	}
 
 	if !storageNodeIDs[srcID] || !storageNodeIDs[dstID] {
-		sm.logger.Panic("no such storage node")
+		err := errors.New("no such storage node")
+		return nil, err
 	}
 
 	srcCli := sm.cs[srcID]
 	dstCli := sm.cs[dstID]
 	if srcCli == nil || dstCli == nil {
-		sm.logger.Panic("no such storage node")
+		err := errors.New("no such storage node")
+		sm.logger.Warn("no such storage node", zap.Any("src_snid", srcID), zap.Any("dst_snid", dstID), zap.Error(err))
+		sm.refresh(ctx)
+		return nil, err
 	}
 	// TODO: check cluster meta if snids exist
 	return srcCli.Sync(ctx, logStreamID, dstID, dstCli.PeerAddress(), lastGLSN)
@@ -309,7 +357,10 @@ func (sm *snManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) 
 		storageNodeID := replica.GetStorageNodeID()
 		cli, ok := sm.cs[storageNodeID]
 		if !ok {
-			sm.logger.Panic("mismatch between clusterMetadataView and StorageNodeManager", zap.Any("snid", storageNodeID), zap.Any("lsid", logStreamID))
+			err := errors.New("no such storage node")
+			sm.logger.Warn("no such storage node", zap.Any("snid", storageNodeID), zap.Error(err))
+			sm.refresh(ctx)
+			return err
 		}
 		if err := cli.Unseal(ctx, logStreamID); err != nil {
 			return err
