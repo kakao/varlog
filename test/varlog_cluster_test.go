@@ -585,28 +585,25 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 }
 
 func TestVarlogFailoverSNBackupFail(t *testing.T) {
-	Convey("Given Varlog cluster", t, func(ctx C) {
-		nrRep := 2
-		nrCli := 5
-		opts := VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             nrRep,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		}
-		env := NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
+	nrRep := 2
+	nrCli := 5
+	vmsOpts := vms.DefaultOptions
+	vmsOpts.HeartbeatTimeout *= 10
+	vmsOpts.Logger = zap.L()
+	opts := VarlogClusterOptions{
+		NrMR:              1,
+		NrRep:             nrRep,
+		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		VMSOpts:           &vmsOpts,
+	}
 
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
-		}), ShouldBeTrue)
-
+	Convey("Given Varlog cluster", t, withTestCluster(opts, func(env *VarlogCluster) {
 		for i := 0; i < nrRep; i++ {
-			_, err := env.AddSN()
+			_, err := env.AddSNByVMS()
 			So(err, ShouldBeNil)
 		}
 
-		lsID, err := env.AddLS()
+		lsID, err := env.AddLSByVMS()
 		So(err, ShouldBeNil)
 
 		meta, _ := env.GetMR().GetMetadata(context.TODO())
@@ -668,6 +665,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		Convey("When backup SN fail", func(ctx C) {
 			errCnt := 0
 			maxGLSN := types.InvalidGLSN
+			oldsn, _ := env.GetBackupSN(lsID, 1)
 
 			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
 			defer timer.Stop()
@@ -683,8 +681,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					}
 
 					if glsn == types.GLSN(32) {
-						sn, _ := env.GetBackupSN(lsID)
-						sn.Close()
+						oldsn.Close()
 					}
 				case <-errC:
 					errCnt++
@@ -708,9 +705,63 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 
 				_, hwm, _ := psn.Seal(env.ClusterID, ls.Replicas[0].StorageNodeID, lsID, sealedGLSN)
 				So(hwm, ShouldEqual, sealedGLSN)
+
+				Convey("When backup SN recover", func(ctx C) {
+					sn, err := env.RecoverSN(ls.Replicas[1].StorageNodeID)
+					So(err, ShouldBeNil)
+
+					So(testutil.CompareWaitN(50, func() bool {
+						snmeta, err := sn.GetMetadata(env.ClusterID, snpb.MetadataTypeHeartbeat)
+						if err != nil {
+							return false
+						}
+
+						status, _, _ := sn.Seal(env.ClusterID, ls.Replicas[1].StorageNodeID, lsID, sealedGLSN)
+						if status == varlogpb.LogStreamStatusSealing {
+							replica := storagenode.Replica{
+								StorageNodeID: ls.Replicas[1].StorageNodeID,
+								LogStreamID:   lsID,
+								Address:       snmeta.StorageNode.Address,
+							}
+							psn.Sync(context.TODO(), env.ClusterID, ls.Replicas[0].StorageNodeID, lsID, replica, sealedGLSN)
+						}
+
+						return status == varlogpb.LogStreamStatusSealed
+					}), ShouldBeTrue)
+
+					Convey("Then it should be abel to append", func(ctx C) {
+
+						cli, err := env.NewLogIOClient(lsID)
+						So(err, ShouldBeNil)
+						Reset(func() {
+							cli.Close()
+						})
+
+						var backups []logc.StorageNode
+						backups = make([]logc.StorageNode, nrRep-1)
+						for i := 1; i < nrRep; i++ {
+							replicaID := ls.Replicas[i].StorageNodeID
+							replica := meta.GetStorageNode(replicaID)
+
+							backups[i-1].ID = replicaID
+							backups[i-1].Addr = replica.Address
+						}
+
+						cmCli := env.GetClusterManagerClient()
+
+						So(testutil.CompareWaitN(10, func() bool {
+							cmCli.Unseal(context.TODO(), lsID)
+
+							rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
+							defer cancel()
+							_, err = cli.Append(rctx, lsID, []byte("foo"), backups...)
+							return err == nil
+						}), ShouldBeTrue)
+					})
+				})
 			})
 		})
-	})
+	}))
 }
 
 func withTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func() {

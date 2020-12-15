@@ -10,7 +10,7 @@ const (
 	E2E_TOKEN     = "token"
 
 	DEFAULT_MR_CNT     = 3
-	DEFAULT_SN_CNT     = 5
+	DEFAULT_SN_CNT     = 3
 	DEFAULT_LS_CNT     = 2
 	DEFAULT_REP_FACTOR = 3
 )

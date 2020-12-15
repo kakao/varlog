@@ -14,10 +14,11 @@ sys.setdefaultencoding('utf-8')
 
 CHECK_TIME = 3
 
+DEFAULT_CLUSTER_ID = '1'
 DEFAULT_REP_FACTOR = '1'
 DEFAULT_RPC_PORT = '9092'
 DEFAULT_RAFT_PORT = '10000'
-DEFAULT_VMR_HOME = './varlog-mr'
+DEFAULT_VMR_HOME = '/home/deploy/varlog-mr'
 
 METADATA_REPOSITORY_STOP = "ps -fC vmr | grep " \
                            "vmr | awk '{print $2}' | xargs " \
@@ -154,10 +155,13 @@ def main():
     log_dir = get_log_dir()
 
     metadata_repository = "nohup ./vmr start " \
+                          "--cluster-id=%s " \
                           "--log-rep-factor=%d " \
                           "--raft-address=%s --bind=%s " \
                           "--raft-dir=%s --log-dir=%s" \
-                          % (rep_factor, raft_url, rpc_addr, raft_dir, log_dir)
+                          % (get_env("CLUSTER_ID", DEFAULT_CLUSTER_ID),
+                                  rep_factor, raft_url, rpc_addr, 
+                                  raft_dir, log_dir)
 
     need_add_raft_peer = False
     if peers is not None:
@@ -172,11 +176,14 @@ def main():
     metadata_repository += " &"
 
     metadata_repository_restart = "nohup ./vmr start " \
+                                  "--cluster-id=%s " \
                                   "--log-rep-factor=%d --raft-address=%s " \
                                   "--bind=%s " \
                                   "--raft-dir=%s --log-dir=%s " \
                                   "--join=true &" \
-                                  % (rep_factor, raft_url, rpc_addr, raft_dir, log_dir)
+                                  % (get_env("CLUSTER_ID", DEFAULT_CLUSTER_ID),
+                                          rep_factor, raft_url, rpc_addr, 
+                                          raft_dir, log_dir)
 
     os.system("sudo mkdir -p %s" % vmr_home)
     os.system("sudo chown -R deploy.users %s" % vmr_home)

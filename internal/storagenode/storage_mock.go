@@ -244,20 +244,6 @@ func (mr *MockStorageMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockStorage)(nil).Commit), arg0, arg1)
 }
 
-// CommitBatch mocks base method
-func (m *MockStorage) CommitBatch(arg0 []CommitEntry) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CommitBatch", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CommitBatch indicates an expected call of CommitBatch
-func (mr *MockStorageMockRecorder) CommitBatch(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitBatch", reflect.TypeOf((*MockStorage)(nil).CommitBatch), arg0)
-}
-
 // DeleteCommitted mocks base method
 func (m *MockStorage) DeleteCommitted(arg0 types.GLSN) error {
 	m.ctrl.T.Helper()
@@ -357,18 +343,30 @@ func (mr *MockStorageMockRecorder) Read(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockStorage)(nil).Read), arg0)
 }
 
-// RecoverLogStreamContext mocks base method
-func (m *MockStorage) RecoverLogStreamContext(arg0 *logStreamContext) bool {
+// RestoreLogStreamContext mocks base method
+func (m *MockStorage) RestoreLogStreamContext(arg0 *LogStreamContext) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RecoverLogStreamContext", arg0)
+	ret := m.ctrl.Call(m, "RestoreLogStreamContext", arg0)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
-// RecoverLogStreamContext indicates an expected call of RecoverLogStreamContext
-func (mr *MockStorageMockRecorder) RecoverLogStreamContext(arg0 interface{}) *gomock.Call {
+// RestoreLogStreamContext indicates an expected call of RestoreLogStreamContext
+func (mr *MockStorageMockRecorder) RestoreLogStreamContext(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecoverLogStreamContext", reflect.TypeOf((*MockStorage)(nil).RecoverLogStreamContext), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoreLogStreamContext", reflect.TypeOf((*MockStorage)(nil).RestoreLogStreamContext), arg0)
+}
+
+// RestoreStorage mocks base method
+func (m *MockStorage) RestoreStorage(arg0 types.LLSN, arg1 types.GLSN) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RestoreStorage", arg0, arg1)
+}
+
+// RestoreStorage indicates an expected call of RestoreStorage
+func (mr *MockStorageMockRecorder) RestoreStorage(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoreStorage", reflect.TypeOf((*MockStorage)(nil).RestoreStorage), arg0, arg1)
 }
 
 // Scan mocks base method
@@ -387,17 +385,17 @@ func (mr *MockStorageMockRecorder) Scan(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // StoreCommitContext mocks base method
-func (m *MockStorage) StoreCommitContext(arg0, arg1, arg2, arg3 types.GLSN) error {
+func (m *MockStorage) StoreCommitContext(arg0 CommitContext) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StoreCommitContext", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "StoreCommitContext", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StoreCommitContext indicates an expected call of StoreCommitContext
-func (mr *MockStorageMockRecorder) StoreCommitContext(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockStorageMockRecorder) StoreCommitContext(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreCommitContext", reflect.TypeOf((*MockStorage)(nil).StoreCommitContext), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreCommitContext", reflect.TypeOf((*MockStorage)(nil).StoreCommitContext), arg0)
 }
 
 // Write mocks base method
@@ -412,18 +410,4 @@ func (m *MockStorage) Write(arg0 types.LLSN, arg1 []byte) error {
 func (mr *MockStorageMockRecorder) Write(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockStorage)(nil).Write), arg0, arg1)
-}
-
-// WriteBatch mocks base method
-func (m *MockStorage) WriteBatch(arg0 []WriteEntry) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WriteBatch", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// WriteBatch indicates an expected call of WriteBatch
-func (mr *MockStorageMockRecorder) WriteBatch(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteBatch", reflect.TypeOf((*MockStorage)(nil).WriteBatch), arg0)
 }
