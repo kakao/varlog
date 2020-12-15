@@ -34,10 +34,12 @@ VMS := $(BIN_DIR)/vms
 VMC := $(BIN_DIR)/vmc
 VSN := $(BIN_DIR)/vsn
 VMR := $(BIN_DIR)/vmr
-BUILD_OUTPUT := $(VMS) $(VMC) $(VSN) $(VMR)
+SNTOOL := $(BIN_DIR)/sntool
 
-.PHONY: build vms vmc vsn vmr
-build: vms vmc vsn vmr
+BUILD_OUTPUT := $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL)
+
+.PHONY: build vms vmc vsn vmr sntool
+build: vms vmc vsn vmr sntool
 
 vms: proto
 	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMS) cmd/vms/main.go
@@ -50,6 +52,9 @@ vsn: proto
 
 vmr: proto
 	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMR) cmd/metadata_repository/main.go
+
+sntool: proto
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(SNTOOL) cmd/sntool/sntool.go
 
 .PHONY: proto
 proto: $(PROTO_PBS)
