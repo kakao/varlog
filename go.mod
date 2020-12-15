@@ -17,7 +17,7 @@ require (
 	github.com/urfave/cli/v2 v2.3.0
 	go.etcd.io/etcd v0.0.0-20200520232829-54ba9589114f
 	go.uber.org/zap v1.16.0
-	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
+	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13
 	google.golang.org/grpc v1.33.2
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
