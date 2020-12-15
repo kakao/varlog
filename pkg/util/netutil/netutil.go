@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sort"
 	"strconv"
 	"syscall"
 	"time"
@@ -85,7 +86,8 @@ func Listen(network, address string) (net.Listener, error) {
 }
 
 // GetListenerAddrs returns ip address of given net.Listener. If the net.Listener is not TCP
-// listener, GetListenerAddrs returns errNotSupportedNetwork.
+// listener, GetListenerAddrs returns errNotSupportedNetwork.  Returned addresses are sorted that
+// advertisable address comes first.
 func GetListenerAddrs(addr net.Addr) ([]string, error) {
 	tcpAddr, err := getTCPListenerAddr(addr)
 	if err != nil {
@@ -130,7 +132,8 @@ func getTCPListenerAddr(addr net.Addr) (*net.TCPAddr, error) {
 	return addr.(*net.TCPAddr), nil
 }
 
-func UnicastIPs() ([]net.IP, error) {
+// AdvertisableIPs returns a slice of global unicast IPs.
+func AdvertisableIPs() ([]net.IP, error) {
 	ips, err := IPs()
 	if err != nil {
 		return nil, err
@@ -138,13 +141,14 @@ func UnicastIPs() ([]net.IP, error) {
 
 	ret := make([]net.IP, 0, len(ips))
 	for _, ip := range ips {
-		if ip.IsGlobalUnicast() && !ip.IsLoopback() {
+		if ip.IsGlobalUnicast() {
 			ret = append(ret, ip)
 		}
 	}
 	return ret, nil
 }
 
+//  IPs returns a slice of net.IP that is usable. Advertisable IP comes first in the returned slice.
 func IPs() ([]net.IP, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -173,5 +177,8 @@ func IPs() ([]net.IP, error) {
 			}
 		}
 	}
+	sort.Slice(ips, func(i, j int) bool {
+		return ips[i].IsGlobalUnicast()
+	})
 	return ips, nil
 }

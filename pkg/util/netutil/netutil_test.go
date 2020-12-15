@@ -78,6 +78,14 @@ func TestIPs(t *testing.T) {
 	}
 }
 
+func TestAdvertisableIPs(t *testing.T) {
+	uniIps, err := AdvertisableIPs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(uniIps)
+}
+
 func TestNodeIDGen(t *testing.T) {
 	const port = 10000
 
