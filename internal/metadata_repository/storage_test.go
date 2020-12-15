@@ -24,6 +24,7 @@ func TestStorageRegisterSN(t *testing.T) {
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: snID,
+			Address:       "mt_addr",
 		}
 
 		err := ms.registerStorageNode(sn)
@@ -31,6 +32,14 @@ func TestStorageRegisterSN(t *testing.T) {
 
 		Convey("SN should not be registered if arleady exist", func(ctx C) {
 			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+
+			dup_sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snID,
+				Address:       "diff_addr",
+			}
+
+			err = ms.registerStorageNode(dup_sn)
 			So(err, ShouldResemble, verrors.ErrAlreadyExists)
 		})
 	})
@@ -468,9 +477,9 @@ func TestStorageSealLS(t *testing.T) {
 				So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 			})
 
-			Convey("Seal to LS which is already Sealed should return ErrIgnore", func(ctx C) {
+			Convey("Seal to LS which is already Sealed should return nil", func(ctx C) {
 				err := ms.SealLogStream(lsID, 0, 0)
-				So(err, ShouldResemble, verrors.ErrIgnore)
+				So(err, ShouldBeNil)
 			})
 		})
 
@@ -610,9 +619,9 @@ func TestStorageUnsealLS(t *testing.T) {
 		err := ms.registerLogStream(ls)
 		So(err, ShouldBeNil)
 
-		Convey("Unseal to LS which is already Sealed should return ErrIgnore", func(ctx C) {
+		Convey("Unseal to LS which is already Unsealed should return nil", func(ctx C) {
 			err := ms.UnsealLogStream(lsID, 0, 0)
-			So(err, ShouldResemble, verrors.ErrIgnore)
+			So(err, ShouldBeNil)
 
 			So(testutil.CompareWaitN(10, func() bool {
 				return atomic.LoadInt64(&ms.nrRunning) == 0
@@ -785,6 +794,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: snID,
+			Address:       "my_addr",
 		}
 
 		err := ms.RegisterStorageNode(sn, 0, 0)
@@ -795,8 +805,12 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		So(pre.Metadata.GetStorageNode(snID), ShouldNotBeNil)
 		So(cur.Metadata.GetStorageNode(snID), ShouldBeNil)
 
+		sn = &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: snID,
+			Address:       "diff_addr",
+		}
 		err = ms.RegisterStorageNode(sn, 0, 0)
-		So(err, ShouldNotBeNil)
+		So(err, ShouldResemble, verrors.ErrAlreadyExists)
 
 		snID2 := snID + types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
@@ -838,7 +852,9 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		So(pre.Metadata.GetLogStream(lsID), ShouldNotBeNil)
 		So(cur.Metadata.GetLogStream(lsID), ShouldBeNil)
 
-		err = ms.RegisterLogStream(ls, 0, 0)
+		conflict := makeLogStream(lsID, snIDs)
+		ls.Replicas[0].StorageNodeID = ls.Replicas[0].StorageNodeID + 100
+		err = ms.RegisterLogStream(conflict, 0, 0)
 		So(err, ShouldResemble, verrors.ErrAlreadyExists)
 
 		err = ms.RegisterLogStream(ls2, 0, 0)
