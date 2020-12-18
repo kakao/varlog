@@ -813,12 +813,20 @@ func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	defer lse.muRunning.RUnlock()
 	// TODO: If this is sealed, ...
 	hwm, offset := lse.lsc.rcc.get()
-	return UncommittedLogStreamStatus{
+	uncommittedLLSNEnd := lse.lsc.uncommittedLLSNEnd.Load()
+	status := UncommittedLogStreamStatus{
 		LogStreamID:           lse.logStreamID,
 		KnownHighWatermark:    hwm,
 		UncommittedLLSNOffset: offset,
-		UncommittedLLSNLength: uint64(lse.lsc.uncommittedLLSNEnd.Load() - offset),
+		UncommittedLLSNLength: uint64(uncommittedLLSNEnd - offset),
 	}
+	lse.logger.Debug("get_report",
+		zap.Any("hwm", status.KnownHighWatermark),
+		zap.Any("llsn_offset", status.UncommittedLLSNOffset),
+		zap.Any("llsn_length", status.UncommittedLLSNLength),
+		zap.Any("uncommittedLLSNEnd", uncommittedLLSNEnd))
+
+	return status
 }
 
 func (lse *logStreamExecutor) Commit(ctx context.Context, cr CommittedLogStreamStatus) {
@@ -853,11 +861,14 @@ func (lse *logStreamExecutor) verifyCommit(ct *commitTask) error {
 	lse.lsc.rcc.mu.RLock()
 	defer lse.lsc.rcc.mu.RUnlock()
 
+	uncommittedLLSNEnd := lse.lsc.uncommittedLLSNEnd.Load()
 	numCommitted := uint64(ct.committedGLSNEnd - ct.committedGLSNBegin)
-	numUncommitted := uint64(lse.lsc.uncommittedLLSNEnd.Load() - lse.lsc.rcc.uncommittedLLSNBegin)
+	numUncommitted := uint64(uncommittedLLSNEnd - lse.lsc.rcc.uncommittedLLSNBegin)
 	if numUncommitted < numCommitted {
 		// NOTE: MR just sends past commit messages to recovered SN that has no written logs.
-		return errors.New("logstream: no written logs - recovered sn?")
+		return fmt.Errorf("logstream: numUncommitted (%d - %d = %d) < numCommitted (%d - %d = %d) - recovered sn?",
+			uncommittedLLSNEnd, lse.lsc.rcc.uncommittedLLSNBegin, numUncommitted,
+			ct.committedGLSNEnd, ct.committedGLSNBegin, numCommitted)
 	}
 
 	knownGlobalHWM := lse.lsc.rcc.globalHighwatermark
@@ -961,7 +972,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 				zap.Any("glsn_end", t.committedGLSNEnd),
 				zap.Any("old_hwm", lse.lsc.rcc.globalHighwatermark-t.highWatermark),
 				zap.Any("new_hwm", lse.lsc.rcc.globalHighwatermark),
-				zap.Any("new_committed_llsn_end", lse.lsc.committedLLSNEnd),
+				zap.Any("new_committed_llsn_end", lse.lsc.committedLLSNEnd.llsn),
 			)
 		} else {
 			lse.logger.Debug("empty commit batch")

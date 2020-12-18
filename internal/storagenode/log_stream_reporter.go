@@ -187,7 +187,7 @@ func (lsr *logStreamReporter) GetReport(ctx context.Context) (types.GLSN, map[ty
 		return types.InvalidGLSN, nil, tctx.Err()
 	}
 
-	lsr.logger.Debug("contents of report", zap.Any("KnownHighWatermark", t.knownHighWatermark), zap.Reflect("reports", t.reports))
+	lsr.logger.Debug("contents of report", zap.Int("size", len(t.reports)), zap.Any("KnownHighWatermark", t.knownHighWatermark), zap.Reflect("reports", t.reports))
 	return t.knownHighWatermark, t.reports, nil
 }
 
@@ -204,6 +204,13 @@ func (lsr *logStreamReporter) addReportC(ctx context.Context, t *lsrReportTask) 
 	return nil
 }
 
+func (lsr *logStreamReporter) saveHistory(knownHighWatermark types.GLSN, report UncommittedLogStreamStatus) {
+	if lsr.history[knownHighWatermark] == nil {
+		lsr.history[knownHighWatermark] = make(map[types.LogStreamID]UncommittedLogStreamStatus)
+	}
+	lsr.history[knownHighWatermark][report.LogStreamID] = report
+}
+
 func (lsr *logStreamReporter) report(t *lsrReportTask) {
 	executors := lsr.lseGetter.GetLogStreamExecutors()
 	if len(executors) == 0 {
@@ -211,6 +218,7 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 		return
 	}
 
+	// hasNewLSE := false
 	reports := make(map[types.LogStreamID]UncommittedLogStreamStatus)
 	knownHighWatermark := types.MaxGLSN
 	for _, executor := range executors {
@@ -226,24 +234,53 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 			knownHighWatermark = status.KnownHighWatermark
 		}
 		reports[status.LogStreamID] = status
+
+		// NOTE: Special care for the new LSE is not needed. See below comments.
+		// hasNewLSE = hasNewLSE || (status.KnownHighWatermark.Invalid() && status.UncommittedLLSNLength > 0)
 	}
 
-	if oldReports, ok := lsr.history[knownHighWatermark]; ok {
-		for logStreamID, newReport := range reports {
-			if oldReport, ok := oldReports[logStreamID]; ok {
-				newReport.UncommittedLLSNLength += uint64(newReport.UncommittedLLSNOffset - oldReport.UncommittedLLSNOffset)
-				newReport.UncommittedLLSNOffset = oldReport.UncommittedLLSNOffset
+	// NOTE: Special care for the new LSE is not needed. See below comments.
+	// if hasNewLSE {
+	//	knownHighWatermark = types.InvalidGLSN
+	// }
 
-				reports[logStreamID] = newReport
-				// NOTE (jun): reports[logStreamID].KnownHighWatermark is overridden
-				// by LogStreamReporterService.
-				// This field is needed only after implementing LS-wise
-				// HighWatermark.
-			}
+	for logStreamID, newReport := range reports {
+		lsr.saveHistory(newReport.KnownHighWatermark, newReport)
 
+		if newReport.KnownHighWatermark.Invalid() {
+			// NOTE: This LSE has invalid global HWM, but don't need special care:
+			// 1) Replica of new LogStream
+			// 2) New Replica of existing LogStream
+			// In both cases, any valid HWM is possible. Valid HWM means that MR has
+			// the HWM in its GLS.
+			continue
 		}
+
+		// Each LSE advances its HWM progress. Thus, some LSEs can't have
+		// knownHighWatermark, which is SN's HWM.  So it should delete those statuses of LSE
+		// from the report.
+		oldReports, ok := lsr.history[knownHighWatermark]
+		if !ok {
+			delete(reports, logStreamID)
+			continue
+		}
+		oldReport, ok := oldReports[logStreamID]
+		if !ok {
+			delete(reports, logStreamID)
+			continue
+		}
+
+		// NOTE: Report calibration (back to the previous status)
+		//  If report calibration is needed, remove the comments below.
+		oldReport.UncommittedLLSNLength = uint64(newReport.UncommittedLLSNOffset-oldReport.UncommittedLLSNOffset) + newReport.UncommittedLLSNLength
+
+		reports[logStreamID] = oldReport
+
+		// NOTE (jun): reports[logStreamID].KnownHighWatermark is overridden by
+		// LogStreamReporterService.  This field is needed only after implementing LS-wise
+		// HighWatermark.
 	}
-	lsr.history[knownHighWatermark] = reports
+
 	lsr.lastReportedHWM = knownHighWatermark
 
 	t.reports = reports

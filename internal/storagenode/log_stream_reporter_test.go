@@ -289,7 +289,13 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 				knownHighWatermark, reports, err := lsr.GetReport(context.TODO())
 				So(err, ShouldBeNil)
 				So(knownHighWatermark, ShouldEqual, types.GLSN(0))
-				So(len(reports), ShouldEqual, len(lseList))
+				expectedReportCount := 0
+				for _, report := range reports {
+					if report.KnownHighWatermark == types.GLSN(0) {
+						expectedReportCount++
+					}
+				}
+				So(len(reports), ShouldEqual, expectedReportCount)
 
 				Convey("And the report should be stored in history", func() {
 					lsr.Close()

@@ -115,6 +115,92 @@ func TestVarlogRegisterStorageNode(t *testing.T) {
 	})
 }
 
+func TestVarlogAppendLogManyLogStreams(t *testing.T) {
+	Convey("Append with many log streams", t, func() {
+		const (
+			numClient = 10
+			numSN     = 1
+			numLS     = 10
+			numAppend = 100
+		)
+
+		vmsOpts := vms.DefaultOptions
+		vmsOpts.HeartbeatTimeout *= 10
+		vmsOpts.Logger = zap.L()
+
+		opts := VarlogClusterOptions{
+			NrMR:              1,
+			NrRep:             1,
+			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			VMSOpts:           &vmsOpts,
+		}
+
+		Convey("Varlog cluster", withTestCluster(opts, func(env *VarlogCluster) {
+			for i := 0; i < numSN; i++ {
+				_, err := env.AddSNByVMS()
+				So(err, ShouldBeNil)
+			}
+
+			for i := 0; i < numLS; i++ {
+				_, err := env.AddLSByVMS()
+				So(err, ShouldBeNil)
+			}
+
+			mrAddr := env.GetMR().GetServerAddr()
+
+			var wg sync.WaitGroup
+			wg.Add(numClient)
+			for i := 0; i < numClient; i++ {
+				go func() {
+					defer wg.Done()
+
+					client, err := varlog.Open(env.ClusterID, []string{mrAddr})
+					if err != nil {
+						t.Error(err)
+					}
+					defer client.Close()
+					for i := 0; i < numAppend; i++ {
+						glsn, err := client.Append(context.TODO(), []byte("foo"))
+						if err != nil {
+							t.Error(err)
+						}
+						if glsn == types.InvalidGLSN {
+							t.Error(glsn)
+						}
+					}
+				}()
+			}
+
+			wg.Wait()
+
+			client, err := varlog.Open(env.ClusterID, []string{mrAddr})
+			So(err, ShouldBeNil)
+			defer client.Close()
+
+			subC := make(chan types.GLSN, numClient*numAppend)
+			onNext := func(logEntry types.LogEntry, err error) {
+				if err != nil {
+					close(subC)
+					return
+				}
+				subC <- logEntry.GLSN
+			}
+			closer, err := client.Subscribe(context.TODO(), 1, numClient*numAppend+1, onNext, varlog.SubscribeOption{})
+			So(err, ShouldBeNil)
+			defer closer()
+
+			expectedGLSN := types.GLSN(1)
+			for sub := range subC {
+				So(sub, ShouldEqual, expectedGLSN)
+				expectedGLSN++
+			}
+			So(expectedGLSN, ShouldEqual, numClient*numAppend+1)
+
+			So(env.Close(), ShouldBeNil)
+		}))
+	})
+}
+
 func TestVarlogAppendLog(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		opts := VarlogClusterOptions{
