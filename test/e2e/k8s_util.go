@@ -543,6 +543,14 @@ func (k8s *K8sVarlogCluster) IsSNRunning() (bool, error) {
 	return n == k8s.NrSN, err
 }
 
+func (k8s *K8sVarlogCluster) NumMRRunning() (int, error) {
+	return k8s.numPodsReady("default", map[string]string{"app": MR_LABEL})
+}
+
+func (k8s *K8sVarlogCluster) NumSNRunning() (int, error) {
+	return k8s.numPodsReady("default", map[string]string{"app": SN_LABEL})
+}
+
 func withTestCluster(opts K8sVarlogClusterOptions, f func(k8s *K8sVarlogCluster)) func() {
 	return func() {
 		k8s, err := NewK8sVarlogCluster(opts)

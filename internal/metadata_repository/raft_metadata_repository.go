@@ -290,7 +290,8 @@ func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
 
 				err = mr.reportCollector.Recover(
 					mr.storage.GetAllStorageNodes(),
-					mr.storage.GetHighWatermark())
+					mr.storage.GetFirstGLS().GetHighWatermark(),
+				)
 				if err != nil &&
 					err != verrors.ErrStopped {
 					mr.logger.Panic("recover report collector fail")
@@ -533,11 +534,12 @@ func (mr *RaftMetadataRepository) applyCommit() error {
 				if knownHWM != curHWM {
 					nrCommitted := mr.numCommitSince(lsID, knownHWM)
 					if nrCommitted > nrUncommit {
-						msg := fmt.Sprintf("# of uncommit should be bigger than # of commit:: lsID[%v] cur[%v] first[%v] last[%v] replicas[%+v]",
+						msg := fmt.Sprintf("# of uncommit should be bigger than # of commit:: lsID[%v] cur[%v] first[%v] last[%v] replicas[%+v] nrCommitted[%v] nrUncommit[%v]",
 							lsID, curHWM,
 							mr.storage.getFirstGLSNoLock().GetHighWatermark(),
 							mr.storage.getLastGLSNoLock().GetHighWatermark(),
 							replicas,
+							nrCommitted, nrUncommit,
 						)
 						mr.logger.Panic(msg)
 						/*

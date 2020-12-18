@@ -272,3 +272,60 @@ func TestK8sVarlogAppend(t *testing.T) {
 		So(err, ShouldBeNil)
 	}))
 }
+
+func TestK8sVarlogEnduranceExample(t *testing.T) {
+	opts := getK8sVarlogClusterOpts()
+	opts.NrSN = 5
+	opts.NrLS = 5
+	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
+		mrseed, err := k8s.MRAddress()
+		So(err, ShouldBeNil)
+
+		confChange := NewConfChanger(
+			WithChangeFunc(AnyBackupSNFail(k8s)),
+			WithCheckFunc(WaitSNFail(k8s)),
+			WithRecoverFunc(RecoverSN(k8s)),
+			WithRecoverCheckFunc(RecoverSNCheck(k8s)),
+			WithConfChangeInterval(10*time.Second),
+		)
+
+		action := NewAction(WithTitle("backup sn fail"),
+			WithClusterID(vtypes.ClusterID(1)),
+			WithMRAddr(mrseed),
+			WithConfChange(confChange),
+			WithPrevFunc(AddLogStream(k8s)),
+		)
+
+		err = action.Do(context.TODO())
+		So(err, ShouldBeNil)
+	}))
+}
+
+func TestK8sVarlogEnduranceFollowerMRFail(t *testing.T) {
+	opts := getK8sVarlogClusterOpts()
+	opts.NrMR = 3
+	opts.NrSN = 3
+	opts.NrLS = 1
+	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
+		mrseed, err := k8s.MRAddress()
+		So(err, ShouldBeNil)
+
+		confChange := NewConfChanger(
+			WithChangeFunc(FollowerMRFail(k8s)),
+			WithCheckFunc(WaitMRFail(k8s)),
+			WithRecoverFunc(RecoverMR(k8s)),
+			WithRecoverCheckFunc(RecoverMRCheck(k8s)),
+			WithConfChangeInterval(10*time.Second),
+		)
+
+		action := NewAction(WithTitle("follower mr fail"),
+			WithClusterID(vtypes.ClusterID(1)),
+			WithMRAddr(mrseed),
+			WithConfChange(confChange),
+			WithPrevFunc(AddLogStream(k8s)),
+		)
+
+		err = action.Do(context.TODO())
+		So(err, ShouldBeNil)
+	}))
+}
