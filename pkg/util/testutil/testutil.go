@@ -3,7 +3,9 @@ package testutil
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/kakao/varlog/vtesting"
@@ -88,4 +90,10 @@ func GC() {
 		float32(ms.Alloc)/float32(1024*1024),
 		float32(gc.Alloc)/float32(1024*1024),
 		float32(gc.Sys)/float32(1024*1024))
+}
+
+func GetFunctionName(i interface{}) string {
+	a := runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
+	s := strings.Split(a, "/")
+	return s[len(s)-1]
 }
