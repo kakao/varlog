@@ -45,7 +45,7 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoClu
 		nrRep:             nrRep,
 		peers:             peers,
 		nodes:             nodes,
-		reporterClientFac: NewDummyReporterClientFactory(!increseUncommit),
+		reporterClientFac: NewDummyReporterClientFactory(1, !increseUncommit),
 		logger:            zap.L(),
 	}
 
@@ -582,10 +582,10 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID)
-		reporterClient.increaseUncommitted()
+		reporterClient.increaseUncommitted(0)
 
 		So(testutil.CompareWaitN(50, func() bool {
-			return reporterClient.numUncommitted() == 0
+			return reporterClient.numUncommitted(0) == 0
 		}), ShouldBeTrue)
 	})
 }

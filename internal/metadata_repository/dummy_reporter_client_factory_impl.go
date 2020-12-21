@@ -53,9 +53,9 @@ type DummyReporterClient struct {
 	storageNodeID      types.StorageNodeID
 	knownHighWatermark types.GLSN
 
-	logStreamID           types.LogStreamID
-	uncommittedLLSNOffset types.LLSN
-	uncommittedLLSNLength uint64
+	logStreamIDs          []types.LogStreamID
+	uncommittedLLSNOffset []types.LLSN
+	uncommittedLLSNLength []uint64
 
 	manual bool
 	mu     sync.Mutex
@@ -83,13 +83,15 @@ func (r *DummyReporterClient) descRef() {
 }
 
 type DummyReporterClientFactory struct {
-	manual bool
-	m      sync.Map
+	manual       bool
+	nrLogStreams int
+	m            sync.Map
 }
 
-func NewDummyReporterClientFactory(manual bool) *DummyReporterClientFactory {
+func NewDummyReporterClientFactory(nrLogStreams int, manual bool) *DummyReporterClientFactory {
 	a := &DummyReporterClientFactory{
-		manual: manual,
+		nrLogStreams: nrLogStreams,
+		manual:       manual,
 	}
 
 	return a
@@ -98,12 +100,24 @@ func NewDummyReporterClientFactory(manual bool) *DummyReporterClientFactory {
 func (a *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
 	status := DUMMY_REPORTERCLIENT_STATUS_RUNNING
 
+	LSIDs := make([]types.LogStreamID, a.nrLogStreams)
+	for i := 0; i < a.nrLogStreams; i++ {
+		LSIDs[i] = types.LogStreamID(sn.StorageNodeID) + types.LogStreamID(i)
+	}
+
+	uncommittedLLSNOffset := make([]types.LLSN, a.nrLogStreams)
+	for i := 0; i < a.nrLogStreams; i++ {
+		uncommittedLLSNOffset[i] = types.MinLLSN
+	}
+
+	uncommittedLLSNLength := make([]uint64, a.nrLogStreams)
+
 	cli := &DummyReporterClient{
 		manual:                a.manual,
 		storageNodeID:         sn.StorageNodeID,
-		logStreamID:           types.LogStreamID(sn.StorageNodeID),
-		uncommittedLLSNOffset: types.MinLLSN,
-		uncommittedLLSNLength: 0,
+		logStreamIDs:          LSIDs,
+		uncommittedLLSNOffset: uncommittedLLSNOffset,
+		uncommittedLLSNLength: uncommittedLLSNLength,
 		status:                status,
 		factory:               a,
 	}
@@ -129,19 +143,23 @@ func (r *DummyReporterClient) GetReport(ctx context.Context) (*snpb.LocalLogStre
 	}
 
 	if !r.manual {
-		r.uncommittedLLSNLength++
+		for i := range r.logStreamIDs {
+			r.uncommittedLLSNLength[i]++
+		}
 	}
 
 	lls := &snpb.LocalLogStreamDescriptor{
 		StorageNodeID: r.storageNodeID,
 		HighWatermark: r.knownHighWatermark,
-		Uncommit: []*snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
-			{
-				LogStreamID:           r.logStreamID,
-				UncommittedLLSNOffset: r.uncommittedLLSNOffset,
-				UncommittedLLSNLength: r.uncommittedLLSNLength,
-			},
-		},
+	}
+
+	for i, lsID := range r.logStreamIDs {
+		u := &snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
+			LogStreamID:           lsID,
+			UncommittedLLSNOffset: r.uncommittedLLSNOffset[i],
+			UncommittedLLSNLength: r.uncommittedLLSNLength[i],
+		}
+		lls.Uncommit = append(lls.Uncommit, u)
 	}
 
 	return lls, nil
@@ -167,12 +185,13 @@ func (r *DummyReporterClient) Commit(ctx context.Context, glsn *snpb.GlobalLogSt
 	r.knownHighWatermark = glsn.HighWatermark
 
 	for _, result := range glsn.CommitResult {
-		if result.LogStreamID != r.logStreamID {
+		idx := int(result.LogStreamID - types.LogStreamID(r.storageNodeID))
+		if idx < 0 || idx >= len(r.logStreamIDs) {
 			return errors.New("invalid log stream ID")
 		}
 
-		r.uncommittedLLSNOffset += types.LLSN(result.CommittedGLSNLength)
-		r.uncommittedLLSNLength -= result.CommittedGLSNLength
+		r.uncommittedLLSNOffset[idx] += types.LLSN(result.CommittedGLSNLength)
+		r.uncommittedLLSNLength[idx] -= result.CommittedGLSNLength
 	}
 
 	return nil
@@ -202,18 +221,26 @@ func (a *DummyReporterClientFactory) lookupClient(snID types.StorageNodeID) *Dum
 	return f.(*DummyReporterClient)
 }
 
-func (r *DummyReporterClient) increaseUncommitted() {
+func (r *DummyReporterClient) increaseUncommitted(idx int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.uncommittedLLSNLength++
+	if idx < 0 || idx >= len(r.uncommittedLLSNLength) {
+		return
+	}
+
+	r.uncommittedLLSNLength[idx]++
 }
 
-func (r *DummyReporterClient) numUncommitted() uint64 {
+func (r *DummyReporterClient) numUncommitted(idx int) uint64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return r.uncommittedLLSNLength
+	if idx < 0 || idx >= len(r.uncommittedLLSNLength) {
+		return 0
+	}
+
+	return r.uncommittedLLSNLength[idx]
 }
 
 func (r *DummyReporterClient) getKnownHighWatermark() types.GLSN {
@@ -252,7 +279,7 @@ func (a *DummyReporterClientFactory) recoverRPC(snID types.StorageNodeID) {
 	cli := &DummyReporterClient{
 		manual:                old.manual,
 		storageNodeID:         old.storageNodeID,
-		logStreamID:           old.logStreamID,
+		logStreamIDs:          old.logStreamIDs,
 		uncommittedLLSNOffset: old.uncommittedLLSNOffset,
 		uncommittedLLSNLength: old.uncommittedLLSNLength,
 		status:                DUMMY_REPORTERCLIENT_STATUS_RUNNING,

@@ -15,6 +15,8 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
+const DEFAULT_REPORT_ALL_DUR = time.Second
+
 type ReportCollectorCallbacks struct {
 	report        func(*snpb.LocalLogStreamDescriptor) error
 	getClient     func(*varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error)
@@ -23,17 +25,18 @@ type ReportCollectorCallbacks struct {
 }
 
 type ReportCollectExecutor struct {
-	highWatermark types.GLSN
-	logStreamIDs  []types.LogStreamID
-	cli           storagenode.LogStreamReporterClient
-	sn            *varlogpb.StorageNodeDescriptor
-	cb            ReportCollectorCallbacks
-	rpcTimeout    time.Duration
-	lsmu          sync.RWMutex
-	clmu          sync.RWMutex
-	resultC       chan *snpb.GlobalLogStreamDescriptor
-	logger        *zap.Logger
-	cancel        context.CancelFunc
+	highWatermark   types.GLSN
+	lastReport      *snpb.LocalLogStreamDescriptor
+	lastReportAllAt time.Time
+	cli             storagenode.LogStreamReporterClient
+	sn              *varlogpb.StorageNodeDescriptor
+	cb              ReportCollectorCallbacks
+	rpcTimeout      time.Duration
+	lsmu            sync.RWMutex
+	clmu            sync.RWMutex
+	resultC         chan *snpb.GlobalLogStreamDescriptor
+	logger          *zap.Logger
+	cancel          context.CancelFunc
 }
 
 type ReportCollector struct {
@@ -265,11 +268,22 @@ func (rce *ReportCollectExecutor) getReport() error {
 		return err
 	}
 
-	lsIDs := make([]types.LogStreamID, len(lls.Uncommit))
-	for i, u := range lls.Uncommit {
-		lsIDs[i] = u.LogStreamID
+	lls = rce.processReport(lls)
+	if lls.Len() > 0 {
+		rce.cb.report(lls)
 	}
 
+	return nil
+}
+
+func (rce *ReportCollectExecutor) saveReport(lls *snpb.LocalLogStreamDescriptor) {
+	rce.lsmu.Lock()
+	rce.highWatermark = lls.HighWatermark
+	rce.lastReport = lls
+	rce.lsmu.Unlock()
+}
+
+func (rce *ReportCollectExecutor) processReport(lls *snpb.LocalLogStreamDescriptor) *snpb.LocalLogStreamDescriptor {
 	if lls.HighWatermark.Invalid() {
 		lls.HighWatermark = rce.highWatermark
 	} else if lls.HighWatermark < rce.highWatermark {
@@ -279,18 +293,63 @@ func (rce *ReportCollectExecutor) getReport() error {
 		)
 	}
 
-	rce.lsmu.Lock()
-	rce.highWatermark = lls.HighWatermark
-	rce.logStreamIDs = lsIDs
-	rce.lsmu.Unlock()
+	lls.Sort()
 
-	//	rce.logger.Debug("report",
-	//		zap.Uint64("hwm", uint64(lls.HighWatermark)),
-	//	)
+	if rce.lastReport == nil {
+		rce.saveReport(lls)
+		rce.lastReportAllAt = time.Now()
+		return lls
+	}
 
-	rce.cb.report(lls)
+	diff := &snpb.LocalLogStreamDescriptor{
+		StorageNodeID: lls.StorageNodeID,
+		HighWatermark: lls.HighWatermark,
+	}
 
-	return nil
+	merge := &snpb.LocalLogStreamDescriptor{
+		StorageNodeID: lls.StorageNodeID,
+		HighWatermark: lls.HighWatermark,
+	}
+
+	i := 0
+	j := 0
+	for i < lls.Len() && j < rce.lastReport.Len() {
+		cur := lls.Uncommit[i]
+		prev := rce.lastReport.Uncommit[j]
+
+		if cur.LogStreamID < prev.LogStreamID {
+			diff.Uncommit = append(diff.Uncommit, cur)
+			merge.Uncommit = append(merge.Uncommit, cur)
+			i++
+		} else if prev.LogStreamID < cur.LogStreamID {
+			merge.Uncommit = append(merge.Uncommit, prev)
+			j++
+		} else {
+			if cur.UncommittedLLSNOffset > prev.UncommittedLLSNOffset ||
+				cur.UncommitedLLSNEnd() > prev.UncommitedLLSNEnd() {
+				diff.Uncommit = append(diff.Uncommit, cur)
+			}
+			merge.Uncommit = append(merge.Uncommit, cur)
+			i++
+			j++
+		}
+	}
+
+	if i < lls.Len() {
+		diff.Uncommit = append(diff.Uncommit, lls.Uncommit[i:]...)
+		merge.Uncommit = append(merge.Uncommit, lls.Uncommit[i:]...)
+	} else if j < rce.lastReport.Len() {
+		merge.Uncommit = append(merge.Uncommit, rce.lastReport.Uncommit[j:]...)
+	}
+
+	rce.saveReport(merge)
+
+	if time.Now().Sub(rce.lastReportAllAt) > DEFAULT_REPORT_ALL_DUR {
+		rce.lastReportAllAt = time.Now()
+		return lls
+	}
+
+	return diff
 }
 
 func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) error {
@@ -299,19 +358,23 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 		return err
 	}
 
+	rce.lsmu.RLock()
+	lastReport := rce.lastReport
+	rce.lsmu.RUnlock()
+
+	if lastReport == nil {
+		return nil
+	}
+
 	r := snpb.GlobalLogStreamDescriptor{
 		HighWatermark:     gls.HighWatermark,
 		PrevHighWatermark: gls.PrevHighWatermark,
 	}
 
-	rce.lsmu.RLock()
-	lsIDs := rce.logStreamIDs
-	rce.lsmu.RUnlock()
+	r.CommitResult = make([]*snpb.GlobalLogStreamDescriptor_LogStreamCommitResult, 0, lastReport.Len())
 
-	r.CommitResult = make([]*snpb.GlobalLogStreamDescriptor_LogStreamCommitResult, 0, len(lsIDs))
-
-	for _, lsID := range lsIDs {
-		c := getCommitResultFromGLS(gls, lsID)
+	for _, u := range lastReport.Uncommit {
+		c := getCommitResultFromGLS(gls, u.LogStreamID)
 		if c != nil {
 			r.CommitResult = append(r.CommitResult, c)
 		}

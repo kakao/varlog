@@ -89,7 +89,7 @@ func (mr *dummyMetadataRepository) trimGLS(glsn types.GLSN) {
 
 func TestRegisterStorageNode(t *testing.T) {
 	Convey("Registering nil storage node should return an error", t, func() {
-		a := NewDummyReporterClientFactory(false)
+		a := NewDummyReporterClientFactory(1, false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
 			report:        mr.report,
@@ -107,7 +107,7 @@ func TestRegisterStorageNode(t *testing.T) {
 	})
 
 	Convey("Registering dup storage node should return an error", t, func() {
-		a := NewDummyReporterClientFactory(false)
+		a := NewDummyReporterClientFactory(1, false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
 			report:        mr.report,
@@ -140,7 +140,7 @@ func TestRegisterStorageNode(t *testing.T) {
 
 func TestUnregisterStorageNode(t *testing.T) {
 	Convey("Registering dup storage node should return an error", t, func() {
-		a := NewDummyReporterClientFactory(false)
+		a := NewDummyReporterClientFactory(1, false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
 			report:        mr.report,
@@ -174,7 +174,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 
 func TestRecoverStorageNode(t *testing.T) {
 	Convey("Given ReportCollector", t, func() {
-		a := NewDummyReporterClientFactory(false)
+		a := NewDummyReporterClientFactory(1, false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
 			report:        mr.report,
@@ -269,7 +269,7 @@ func TestRecoverStorageNode(t *testing.T) {
 func TestReport(t *testing.T) {
 	Convey("ReportCollector should collect report from registered storage node", t, func() {
 		nrStorage := 5
-		a := NewDummyReporterClientFactory(false)
+		a := NewDummyReporterClientFactory(1, false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
 			report:        mr.report,
@@ -332,6 +332,70 @@ func TestReport(t *testing.T) {
 	})
 }
 
+func TestReportDedup(t *testing.T) {
+	Convey("Given ReportCollector", t, func() {
+		a := NewDummyReporterClientFactory(3, true)
+		mr := NewDummyMetadataRepository()
+		cb := ReportCollectorCallbacks{
+			report:        mr.report,
+			getClient:     a.GetClient,
+			lookupNextGLS: mr.lookupNextGLS,
+			getOldestGLS:  mr.getOldestGLS,
+		}
+
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
+		reportCollector.Run()
+		defer reportCollector.Close()
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(0),
+		}
+
+		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+		So(err, ShouldBeNil)
+
+		r := <-mr.reportC
+		So(r.Len(), ShouldEqual, 3)
+
+		Convey("When logStream[0] increase uncommitted", func() {
+			reporterClient := a.lookupClient(sn.StorageNodeID)
+			reporterClient.increaseUncommitted(0)
+
+			Convey("Then report should include logStream[0]", func() {
+				r = <-mr.reportC
+				So(r.Len(), ShouldEqual, 1)
+				So(r.Uncommit[0].LogStreamID, ShouldEqual, types.LogStreamID(0))
+
+				Convey("When logStream[1] increase uncommitted", func() {
+					reporterClient.increaseUncommitted(1)
+
+					Convey("Then report should include logStream[1]", func() {
+						r = <-mr.reportC
+						So(r.Len(), ShouldEqual, 1)
+						So(r.Uncommit[0].LogStreamID, ShouldEqual, types.LogStreamID(1))
+
+						Convey("When logStream[2] increase uncommitted", func() {
+							reporterClient.increaseUncommitted(2)
+
+							Convey("Then report should include logStream[2]", func() {
+								r = <-mr.reportC
+								So(r.Len(), ShouldEqual, 1)
+								So(r.Uncommit[0].LogStreamID, ShouldEqual, types.LogStreamID(2))
+
+								Convey("After reportAll interval, report should include all", func() {
+									r = <-mr.reportC
+									So(r.Len(), ShouldEqual, 3)
+								})
+							})
+						})
+					})
+				})
+			})
+		})
+	})
+}
+
 func newDummyGlobalLogStream(prev types.GLSN, nrStorage int) *snpb.GlobalLogStreamDescriptor {
 	gls := &snpb.GlobalLogStreamDescriptor{
 		HighWatermark:     prev + types.GLSN(nrStorage),
@@ -358,7 +422,7 @@ func TestCommit(t *testing.T) {
 		nrStorage := 5
 		knownHWM := types.InvalidGLSN
 
-		a := NewDummyReporterClientFactory(false)
+		a := NewDummyReporterClientFactory(1, false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
 			report:        mr.report,
@@ -483,7 +547,7 @@ func TestCatchupRace(t *testing.T) {
 		knownHWM := types.InvalidGLSN
 
 		mr := NewDummyMetadataRepository()
-		clientFac := NewDummyReporterClientFactory(false)
+		clientFac := NewDummyReporterClientFactory(1, false)
 		cb := ReportCollectorCallbacks{
 			report:        mr.report,
 			getClient:     clientFac.GetClient,
@@ -536,7 +600,7 @@ func TestRPCFail(t *testing.T) {
 	Convey("Given ReportCollector", t, func(ctx C) {
 		//knownHWM := types.InvalidGLSN
 
-		clientFac := NewDummyReporterClientFactory(false)
+		clientFac := NewDummyReporterClientFactory(1, false)
 		mr := NewDummyMetadataRepository()
 		cb := ReportCollectorCallbacks{
 			report:        mr.report,
@@ -608,7 +672,7 @@ func TestRPCFail(t *testing.T) {
 
 func TestReporterClientReconnect(t *testing.T) {
 	Convey("Given Reporter Client", t, func(ctx C) {
-		clientFac := NewDummyReporterClientFactory(false)
+		clientFac := NewDummyReporterClientFactory(1, false)
 		cb := ReportCollectorCallbacks{
 			getClient: clientFac.GetClient,
 		}
