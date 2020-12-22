@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -19,6 +20,7 @@ type ReplicaSelector interface {
 
 // TODO: randomReplicaSelector does not consider the capacities and load of each SNs.
 type randomReplicaSelector struct {
+	r        *rand.Rand
 	cmView   ClusterMetadataView
 	count    uint
 	denylist map[types.StorageNodeID]bool
@@ -30,6 +32,7 @@ func newRandomReplicaSelector(cmView ClusterMetadataView, count uint, denylist .
 	}
 
 	rs := &randomReplicaSelector{
+		r:      rand.New(rand.NewSource(time.Now().UnixNano())),
 		cmView: cmView,
 		count:  count,
 	}
@@ -59,9 +62,9 @@ func (rs *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Replic
 	if uint(len(allowlist)) < rs.count {
 		return nil, errors.New("replicaselector: not enough replicas")
 	}
-	indices := rand.Perm(len(allowlist))[:rs.count]
+	indices := rs.r.Perm(len(allowlist))[:rs.count]
 	ret := make([]*varlogpb.ReplicaDescriptor, 0, rs.count)
-	for idx := range indices {
+	for _, idx := range indices {
 		sndesc := allowlist[idx]
 		// TODO (jun): choose proper path
 		ret = append(ret, &varlogpb.ReplicaDescriptor{
