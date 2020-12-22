@@ -278,7 +278,7 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 		return types.StorageNodeID(0), err
 	}
 	opts := &storagenode.Options{
-		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
+		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: "127.0.0.1:0"},
 		LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
 		LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 		ClusterID:                clus.ClusterID,
@@ -324,7 +324,7 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 		return types.StorageNodeID(0), err
 	}
 	opts := &storagenode.Options{
-		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
+		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: "127.0.0.1:0"},
 		LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
 		LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 		ClusterID:                clus.ClusterID,

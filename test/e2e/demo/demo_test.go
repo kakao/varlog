@@ -97,7 +97,7 @@ func fork(ctx context.Context, args []string, envs []string, t *testing.T) (cmd 
 func forkMR(ctx context.Context, t *testing.T) *exec.Cmd {
 	args := []string{
 		"vmr", "start",
-		"--bind", fmt.Sprintf("0.0.0.0:%d", mrPort),
+		"--bind", fmt.Sprintf("127.0.0.1:%d", mrPort),
 	}
 	cmd, stdout, stderr := fork(ctx, args, nil, t)
 	runScanner(ctx, stdout, os.Stdout)
