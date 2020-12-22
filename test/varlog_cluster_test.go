@@ -904,7 +904,7 @@ func TestVarlogManagerServer(t *testing.T) {
 			volume, err := storagenode.NewVolume(t.TempDir())
 			So(err, ShouldBeNil)
 			snopts := &storagenode.Options{
-				RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
+				RPCOptions:               storagenode.RPCOptions{RPCBindAddress: "127.0.0.1:0"},
 				LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
 				LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 				ClusterID:                env.ClusterID,
@@ -1941,7 +1941,7 @@ func TestVarlogClient(t *testing.T) {
 				volume, err := storagenode.NewVolume(t.TempDir())
 				So(err, ShouldBeNil)
 				snopts := &storagenode.Options{
-					RPCOptions:               storagenode.RPCOptions{RPCBindAddress: ":0"},
+					RPCOptions:               storagenode.RPCOptions{RPCBindAddress: "127.0.0.1:0"},
 					LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
 					LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
 					ClusterID:                env.ClusterID,
