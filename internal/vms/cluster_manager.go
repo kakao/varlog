@@ -119,7 +119,7 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 	}
 	opts.Logger = opts.Logger.Named("vms").With(zap.Any("cid", opts.ClusterID))
 
-	mrMgr, err := NewMRManager(ctx, opts.ClusterID, opts.MetadataRepositoryAddresses, opts.Logger)
+	mrMgr, err := NewMRManager(ctx, opts.ClusterID, opts.MRManagerOptions, opts.Logger)
 	if err != nil {
 		return nil, err
 	}

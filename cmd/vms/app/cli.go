@@ -85,6 +85,22 @@ func initStartCommand(options *vms.Options) *cli.Command {
 			EnvVars:     []string{"MR_ADDRESS"},
 			Destination: cli.NewStringSlice(),
 		},
+		&cli.IntFlag{
+			Name:        "init-mr-conn-retry-count",
+			Aliases:     []string{},
+			Value:       vms.DefaultInitialMRConnectRetryCount,
+			Usage:       "the number of retry of initial metadata repository connect",
+			EnvVars:     []string{"INIT_MR_CONN_RETRY_COUNT"},
+			Destination: &options.InitialMRConnRetryCount,
+		},
+		&cli.DurationFlag{
+			Name:        "init-mr-conn-retry-backoff",
+			Aliases:     []string{},
+			Value:       vms.DefaultInitialMRConnectRetryBackoff,
+			Usage:       "backoff duration between retries of initial metadata repository connect",
+			EnvVars:     []string{"INIT_MR_CONN_RETRY_BACKOFF"},
+			Destination: &options.InitialMRConnRetryBackoff,
+		},
 	)
 
 	return startCmd
