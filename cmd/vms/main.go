@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	options := vms.DefaultOptions
+	options := vms.DefaultOptions()
 	app := app.InitCLI(&options)
 	if err := app.Run(os.Args); err != nil {
 		log.Printf("vms: %v", err)

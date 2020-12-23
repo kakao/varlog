@@ -124,7 +124,7 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 			numAppend = 100
 		)
 
-		vmsOpts := vms.DefaultOptions
+		vmsOpts := vms.DefaultOptions()
 		vmsOpts.HeartbeatTimeout *= 10
 		vmsOpts.Logger = zap.L()
 
@@ -673,7 +673,7 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 func TestVarlogFailoverSNBackupFail(t *testing.T) {
 	nrRep := 2
 	nrCli := 5
-	vmsOpts := vms.DefaultOptions
+	vmsOpts := vms.DefaultOptions()
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
 	opts := VarlogClusterOptions{
@@ -884,7 +884,7 @@ func withTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func
 }
 
 func TestVarlogManagerServer(t *testing.T) {
-	vmsOpts := vms.DefaultOptions
+	vmsOpts := vms.DefaultOptions()
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
 	opts := VarlogClusterOptions{
@@ -1130,12 +1130,83 @@ func TestVarlogManagerServer(t *testing.T) {
 }
 
 func TestVarlogNewMRManager(t *testing.T) {
+	Convey("Given that MRManager runs without any running MR", t, func(c C) {
+		const (
+			clusterID  = types.ClusterID(1)
+			mrRPCAddr  = "127.0.0.1:20000"
+			mrRAFTAddr = "http://127.0.0.1:30000"
+		)
+		vmsOpts := vms.DefaultOptions()
+
+		Convey("When MR does not start within specified periods", func(c C) {
+			vmsOpts.InitialMRConnRetryCount = 1
+			vmsOpts.InitialMRConnRetryBackoff = 100 * time.Millisecond
+			vmsOpts.MetadataRepositoryAddresses = []string{mrRPCAddr}
+
+			Convey("Then the MRManager should return an error", func(ctx C) {
+				_, err := vms.NewMRManager(context.TODO(), clusterID, vmsOpts.MRManagerOptions, zap.L())
+				So(err, ShouldNotBeNil)
+			})
+		})
+
+		Convey("When MR starts within specified periods", func(c C) {
+			vmsOpts.InitialMRConnRetryCount = 5
+			vmsOpts.InitialMRConnRetryBackoff = 100 * time.Millisecond
+			vmsOpts.MetadataRepositoryAddresses = []string{mrRPCAddr}
+
+			// vms
+			mrmC := make(chan vms.MetadataRepositoryManager, 1)
+			go func() {
+				defer close(mrmC)
+				mrm, err := vms.NewMRManager(context.TODO(), clusterID, vmsOpts.MRManagerOptions, zap.L())
+				c.So(err, ShouldBeNil)
+				if err == nil {
+					mrmC <- mrm
+				}
+			}()
+
+			time.Sleep(10 * time.Millisecond)
+
+			// mr
+			mrOpts := &metadata_repository.MetadataRepositoryOptions{
+				ClusterID:         clusterID,
+				RaftAddress:       mrRAFTAddr,
+				Join:              false,
+				SnapCount:         uint64(10),
+				RaftTick:          vtesting.TestRaftTick(),
+				RaftDir:           vtesting.TestRaftDir(),
+				RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
+				NumRep:            1,
+				Peers:             []string{mrRAFTAddr},
+				RPCBindAddress:    mrRPCAddr,
+				ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+				Logger:            zap.L(),
+			}
+			mr := metadata_repository.NewRaftMetadataRepository(mrOpts)
+			mr.Run()
+
+			Reset(func() {
+				So(mr.Close(), ShouldBeNil)
+			})
+
+			Convey("Then the MRManager should connect to the MR", func(ctx C) {
+				mrm, ok := <-mrmC
+				So(ok, ShouldBeTrue)
+				So(mrm.Close(), ShouldBeNil)
+			})
+		})
+
+	})
+
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
+		vmsOpts := vms.DefaultOptions()
+		vmsOpts.InitialMRConnRetryCount = 3
+		opts.VMSOpts = &vmsOpts
 		env := NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
@@ -1147,8 +1218,9 @@ func TestVarlogNewMRManager(t *testing.T) {
 		mrAddr := mr.GetServerAddr()
 
 		Convey("When create MRManager with non addrs", func(ctx C) {
+			opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = nil
 			// VMS Server
-			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), nil, zap.L())
+			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), opts.VMSOpts.MRManagerOptions, zap.L())
 			Convey("Then it should be fail", func(ctx C) {
 				So(err, ShouldResemble, verrors.ErrInvalid)
 			})
@@ -1156,7 +1228,8 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 		Convey("When create MRManager with invalid addrs", func(ctx C) {
 			// VMS Server
-			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), []string{fmt.Sprintf("%s%d", mrAddr, 0)}, zap.L())
+			opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{fmt.Sprintf("%s%d", mrAddr, 0)}
+			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), opts.VMSOpts.MRManagerOptions, zap.L())
 			Convey("Then it should be fail", func(ctx C) {
 				So(err, ShouldNotBeNil)
 			})
@@ -1164,7 +1237,8 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 		Convey("When create MRManager with valid addrs", func(ctx C) {
 			// VMS Server
-			mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), []string{mrAddr}, zap.L())
+			opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
+			mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), opts.VMSOpts.MRManagerOptions, zap.L())
 			Convey("Then it should be success", func(ctx C) {
 				So(err, ShouldBeNil)
 
@@ -1175,7 +1249,6 @@ func TestVarlogNewMRManager(t *testing.T) {
 				})
 			})
 			defer mrm.Close()
-
 		})
 	})
 }
@@ -1187,6 +1260,8 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
+		vmsOpts := vms.DefaultOptions()
+		opts.VMSOpts = &vmsOpts
 		env := NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
@@ -1198,7 +1273,8 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 		mrAddr := mr.GetServerAddr()
 
 		// VMS Server
-		mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), []string{mrAddr}, zap.L())
+		opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
+		mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), opts.VMSOpts.MRManagerOptions, zap.L())
 		So(err, ShouldBeNil)
 		defer mrm.Close()
 
@@ -1285,6 +1361,8 @@ func TestVarlogSNWatcher(t *testing.T) {
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
+		vmsOpts := vms.DefaultOptions()
+		opts.VMSOpts = &vmsOpts
 		env := NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
@@ -1306,7 +1384,8 @@ func TestVarlogSNWatcher(t *testing.T) {
 		lsID, err := env.AddLS()
 		So(err, ShouldBeNil)
 
-		mrMgr, err := vms.NewMRManager(context.TODO(), env.ClusterID, []string{mrAddr}, env.logger)
+		opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
+		mrMgr, err := vms.NewMRManager(context.TODO(), env.ClusterID, opts.VMSOpts.MRManagerOptions, env.logger)
 		So(err, ShouldBeNil)
 
 		cmView := mrMgr.ClusterMetadataView()
@@ -1610,7 +1689,7 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 }
 
 func TestVarlogLogStreamSync(t *testing.T) {
-	vmsOpts := vms.DefaultOptions
+	vmsOpts := vms.DefaultOptions()
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
 	nrRep := 2
@@ -1861,7 +1940,7 @@ func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
 
 func TestVarlogLogStreamGCZombie(t *testing.T) {
 	nrRep := 1
-	vmsOpts := vms.DefaultOptions
+	vmsOpts := vms.DefaultOptions()
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
 	opts := VarlogClusterOptions{
@@ -1922,7 +2001,7 @@ func TestVarlogClient(t *testing.T) {
 			nrSN = 3
 			nrLS = 3
 		)
-		vmsOpts := vms.DefaultOptions
+		vmsOpts := vms.DefaultOptions()
 		vmsOpts.HeartbeatTimeout *= 20
 		vmsOpts.Logger = zap.L()
 

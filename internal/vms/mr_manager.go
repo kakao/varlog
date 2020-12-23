@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"sync"
 	"time"
 
@@ -100,13 +101,13 @@ const (
 	RPCAddrsFetchRetryInterval = 100 * time.Millisecond
 )
 
-func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, logger *zap.Logger) (MetadataRepositoryManager, error) {
+func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrOpts MRManagerOptions, logger *zap.Logger) (MetadataRepositoryManager, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("mrmanager")
 
-	if len(mrAddrs) == 0 {
+	if len(mrOpts.MetadataRepositoryAddresses) == 0 {
 		return nil, verrors.ErrInvalid
 	}
 
@@ -116,17 +117,26 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrAddrs []stri
 		mrconnector.WithRPCAddrsFetchRetryInterval(RPCAddrsFetchRetryInterval),
 		mrconnector.WithLogger(logger),
 	}
-	connector, err := mrconnector.New(ctx, mrAddrs, opts...)
-	if err != nil {
-		return nil, err
+	tryCnt := mrOpts.InitialMRConnRetryCount + 1
+	if tryCnt <= 0 {
+		tryCnt = math.MaxInt32
 	}
 
-	return &mrManager{
-		clusterID: clusterID,
-		dirty:     true,
-		connector: connector,
-		logger:    logger,
-	}, nil
+	var err error
+	for i := 0; i < tryCnt; i++ {
+		connector, e := mrconnector.New(ctx, mrOpts.MetadataRepositoryAddresses, opts...)
+		if e == nil {
+			return &mrManager{
+				clusterID: clusterID,
+				dirty:     true,
+				connector: connector,
+				logger:    logger,
+			}, nil
+		}
+		err = e
+		time.Sleep(mrOpts.InitialMRConnRetryBackoff)
+	}
+	return nil, err
 }
 
 func (mrm *mrManager) c() (mrc.MetadataRepositoryClient, error) {

@@ -632,7 +632,8 @@ func (clus *VarlogCluster) RunClusterManager(mrAddrs []string, opts *vms.Options
 	}
 
 	if opts == nil {
-		opts = &vms.DefaultOptions
+		vmOpts := vms.DefaultOptions()
+		opts = &vmOpts
 		opts.Logger = clus.logger
 	}
 
