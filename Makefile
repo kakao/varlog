@@ -28,7 +28,7 @@ endif
 HAS_GRPC_PLUGIN := $(shell which $(GRPC_GO_PLUGIN) > /dev/null && echo true || echo false)
 
 .PHONY: all
-all: check proto generate fmt build
+all: generate fmt build
 
 VMS := $(BIN_DIR)/vms
 VMC := $(BIN_DIR)/vmc
@@ -100,7 +100,7 @@ ifeq ($(TEST_E2E),1)
 endif
 
 .PHONY: test test_report coverage_report
-test: check proto generate fmt 
+test: build
 	tmpfile=$$(mktemp); \
 	(TERM=sh $(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./... 2>&1; echo $$? > $$tmpfile) | \
 	tee $(BUILD_DIR)/reports/test_output.txt; \
@@ -118,7 +118,7 @@ coverage_report:
 
 .PHONY: generate
 generate:
-	go generate ./...
+	$(GO) generate ./...
 
 .PHONY: fmt
 fmt:
@@ -149,7 +149,10 @@ deps:
 	$(GO) get github.com/golang/mock/mockgen@$(MOCKGEN_VERSION)
 
 .PHONY: check
-check:
+check: check_proto
+
+.PHONY: check_proto
+check_proto:
 ifneq ($(HAS_PROTOC),true)
 	@echo "error: $(PROTOC) not installed"
 	@false
