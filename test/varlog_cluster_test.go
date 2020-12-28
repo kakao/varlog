@@ -119,7 +119,7 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 	Convey("Append with many log streams", t, func() {
 		const (
 			numClient = 10
-			numSN     = 1
+			numSN     = 2
 			numLS     = 10
 			numAppend = 100
 		)
@@ -130,7 +130,7 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 
 		opts := VarlogClusterOptions{
 			NrMR:              1,
-			NrRep:             1,
+			NrRep:             2,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 			VMSOpts:           &vmsOpts,
 		}
@@ -903,19 +903,15 @@ func TestVarlogManagerServer(t *testing.T) {
 			storageNodeID := types.StorageNodeID(i + 1)
 			volume, err := storagenode.NewVolume(t.TempDir())
 			So(err, ShouldBeNil)
-			snopts := &storagenode.Options{
-				RPCOptions:               storagenode.RPCOptions{RPCBindAddress: "127.0.0.1:0"},
-				LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
-				LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
-				ClusterID:                env.ClusterID,
-				StorageNodeID:            storageNodeID,
-				Volumes:                  map[storagenode.Volume]struct{}{volume: {}},
-				StorageName:              storagenode.DefaultStorageName,
-				Verbose:                  true,
-				Logger:                   env.logger,
-			}
 
-			sn, err := storagenode.NewStorageNode(snopts)
+			snopts := storagenode.DefaultOptions()
+			snopts.RPCBindAddress = "127.0.0.1:0"
+			snopts.ClusterID = env.ClusterID
+			snopts.StorageNodeID = storageNodeID
+			snopts.Logger = env.logger
+			snopts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
+
+			sn, err := storagenode.NewStorageNode(&snopts)
 			So(err, ShouldBeNil)
 			So(sn.Run(), ShouldBeNil)
 			env.SNs[storageNodeID] = sn
@@ -2019,19 +2015,15 @@ func TestVarlogClient(t *testing.T) {
 				storageNodeID := types.StorageNodeID(i + 1)
 				volume, err := storagenode.NewVolume(t.TempDir())
 				So(err, ShouldBeNil)
-				snopts := &storagenode.Options{
-					RPCOptions:               storagenode.RPCOptions{RPCBindAddress: "127.0.0.1:0"},
-					LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
-					LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
-					ClusterID:                env.ClusterID,
-					StorageNodeID:            storageNodeID,
-					Volumes:                  map[storagenode.Volume]struct{}{volume: {}},
-					StorageName:              storagenode.DefaultStorageName,
-					Verbose:                  true,
-					Logger:                   env.logger,
-				}
 
-				sn, err := storagenode.NewStorageNode(snopts)
+				snopts := storagenode.DefaultOptions()
+				snopts.RPCBindAddress = "127.0.0.1:0"
+				snopts.ClusterID = env.ClusterID
+				snopts.StorageNodeID = storageNodeID
+				snopts.Logger = env.logger
+				snopts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
+
+				sn, err := storagenode.NewStorageNode(&snopts)
 				So(err, ShouldBeNil)
 				So(sn.Run(), ShouldBeNil)
 				env.SNs[storageNodeID] = sn

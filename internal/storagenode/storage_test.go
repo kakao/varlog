@@ -567,7 +567,7 @@ func makeStorage(name string, b *testing.B) (Storage, func()) {
 		b.Fatal(err)
 	}
 
-	storage, err := NewStorage(name, WithLogger(zap.NewNop()), WithPath(tmpdir), WithDisableWriteSync())
+	storage, err := NewStorage(name, WithLogger(zap.NewNop()), WithPath(tmpdir), WithEnableWriteFsync())
 	if err != nil {
 		b.Fatal(err)
 	}

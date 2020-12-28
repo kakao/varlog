@@ -122,8 +122,11 @@ type pebbleStorage struct {
 		prevGLSN types.GLSN
 	}
 
-	writeOption  *pebble.WriteOptions
-	commitOption *pebble.WriteOptions
+	writeOption             *pebble.WriteOptions
+	commitOption            *pebble.WriteOptions
+	commitContextOption     *pebble.WriteOptions
+	deleteCommittedOption   *pebble.WriteOptions
+	deleteUncommittedOption *pebble.WriteOptions
 
 	dbpath  string
 	logger  *zap.Logger
@@ -176,10 +179,13 @@ func newPebbleStorage(opts *StorageOptions) (Storage, error) {
 		logger:  opts.Logger,
 		dbpath:  opts.Path,
 		options: opts,
+
+		writeOption:             &pebble.WriteOptions{Sync: opts.EnableWriteFsync},
+		commitOption:            &pebble.WriteOptions{Sync: opts.EnableCommitFsync},
+		commitContextOption:     &pebble.WriteOptions{Sync: opts.EnableCommitContextFsync},
+		deleteCommittedOption:   &pebble.WriteOptions{Sync: opts.EnableDeleteCommittedFsync},
+		deleteUncommittedOption: &pebble.WriteOptions{Sync: !opts.DisableDeleteUncommittedFsync},
 	}
-	ps.writeOption = &pebble.WriteOptions{Sync: !opts.DisableWriteSync}
-	ps.commitOption = &pebble.WriteOptions{Sync: !opts.DisableCommitSync}
-	// TODO (jun): When restarting the SN, pebbleStorage should recover prevLLSN and prevGLSN.
 	return ps, nil
 }
 
@@ -383,7 +389,7 @@ func (ps *pebbleStorage) applyCommitBatch(pcb *pebbleCommitBatch) error {
 func (ps *pebbleStorage) StoreCommitContext(cc CommitContext) error {
 	// TODO (jun): remove commmit context (trim? ttl?)
 	cck := encodeCommitContextKey(cc)
-	return ps.db.Set(cck, nil, pebble.Sync)
+	return ps.db.Set(cck, nil, ps.commitContextOption)
 }
 
 func (ps *pebbleStorage) DeleteCommitted(prefixEnd types.GLSN) error {

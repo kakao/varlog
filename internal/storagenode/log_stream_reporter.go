@@ -320,13 +320,15 @@ func (lsr *logStreamReporter) Commit(ctx context.Context, highWatermark, prevHig
 }
 
 func (lsr *logStreamReporter) commit(ctx context.Context, t lsrCommitTask) {
-	for _, commitResult := range t.commitResults {
-		logStreamID := commitResult.LogStreamID
-		executor, ok := lsr.lseGetter.GetLogStreamExecutor(logStreamID)
-		if !ok {
-			lsr.logger.Panic("no such executor", zap.Any("target_lsid", "logStreamID"))
-		}
-		lsr.logger.Debug("try to commit", zap.Reflect("commit", commitResult))
-		go executor.Commit(ctx, commitResult)
+	for i := range t.commitResults {
+		go func(idx int) {
+			logStreamID := t.commitResults[idx].LogStreamID
+			executor, ok := lsr.lseGetter.GetLogStreamExecutor(logStreamID)
+			if !ok {
+				lsr.logger.Panic("no such executor", zap.Any("target_lsid", "logStreamID"))
+			}
+			lsr.logger.Debug("try to commit", zap.Reflect("commit", t.commitResults[idx]))
+			executor.Commit(ctx, t.commitResults[idx])
+		}(i)
 	}
 }

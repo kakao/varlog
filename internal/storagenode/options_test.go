@@ -35,12 +35,13 @@ func TestOptions(t *testing.T) {
 		Convey("Nil logger", func() {
 			tmpdir := t.TempDir()
 			opts.Volumes = map[Volume]struct{}{Volume(tmpdir): {}}
-			opts.StorageName = DefaultStorageName
+			opts.StorageOptions.Name = DefaultStorageName
 			So(opts.Valid(), ShouldNotBeNil)
 		})
 
 		Convey("Default options", func() {
-			So(DefaultOptions.Valid(), ShouldBeNil)
+			opts := DefaultOptions()
+			So(opts.Valid(), ShouldBeNil)
 		})
 	})
 }

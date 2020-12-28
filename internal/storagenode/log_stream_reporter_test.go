@@ -19,7 +19,8 @@ func TestLogStreamReporterRunClose(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &DefaultLogStreamReporterOptions)
+		opts := DefaultLogStreamReporterOptions()
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &opts)
 		So(func() { lsr.Run(context.TODO()) }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
@@ -45,7 +46,8 @@ func TestLogStreamReporterReport(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		var t *lsrReportTask
-		lsr := NewLogStreamReporter(logger, types.StorageNodeID(1), lseGetter, &DefaultLogStreamReporterOptions).(*logStreamReporter)
+		opts := DefaultLogStreamReporterOptions()
+		lsr := NewLogStreamReporter(logger, types.StorageNodeID(1), lseGetter, &opts).(*logStreamReporter)
 
 		// This map is write-once and immutable for each HWM, LSID pair
 		// map<"HWM_LSID", UncommittedLLSNOffset>
@@ -186,7 +188,7 @@ func TestLogStreamReporterGetReportTimeout(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		opts := DefaultLogStreamReporterOptions
+		opts := DefaultLogStreamReporterOptions()
 		opts.ReportCTimeout = time.Duration(0)
 		opts.ReportWaitTimeout = time.Duration(0)
 
@@ -229,7 +231,8 @@ func TestLogStreamReporterGetReport(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &DefaultLogStreamReporterOptions).(*logStreamReporter)
+		opts := DefaultLogStreamReporterOptions()
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &opts).(*logStreamReporter)
 		lsr.Run(context.TODO())
 
 		var lseList []*MockLogStreamExecutor
@@ -388,7 +391,8 @@ func TestLogStreamReporterCommit(t *testing.T) {
 		defer ctrl.Finish()
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &DefaultLogStreamReporterOptions).(*logStreamReporter)
+		opts := DefaultLogStreamReporterOptions()
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &opts).(*logStreamReporter)
 		lse1 := NewMockLogStreamExecutor(ctrl)
 		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
 		lse2 := NewMockLogStreamExecutor(ctrl)
