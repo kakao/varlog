@@ -74,18 +74,14 @@ func TestStorageNode(t *testing.T) {
 			volume, err := NewVolume(t.TempDir())
 			So(err, ShouldBeNil)
 
-			opts := &Options{
-				RPCOptions:               RPCOptions{RPCBindAddress: bindAddress},
-				LogStreamExecutorOptions: DefaultLogStreamExecutorOptions,
-				LogStreamReporterOptions: DefaultLogStreamReporterOptions,
-				ClusterID:                clusterID,
-				StorageNodeID:            types.StorageNodeID(i),
-				StorageName:              DefaultStorageName,
-				Volumes:                  map[Volume]struct{}{volume: {}},
-				Verbose:                  true,
-				Logger:                   zap.L(),
-			}
-			sn, err := NewStorageNode(opts)
+			opts := DefaultOptions()
+			opts.RPCOptions.RPCBindAddress = bindAddress
+			opts.ClusterID = clusterID
+			opts.StorageNodeID = types.StorageNodeID(i)
+			opts.Volumes = map[Volume]struct{}{volume: {}}
+			opts.Logger = zap.L()
+
+			sn, err := NewStorageNode(&opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -157,17 +153,14 @@ func TestSync(t *testing.T) {
 			volume, err := NewVolume(t.TempDir())
 			So(err, ShouldBeNil)
 
-			sn, err := NewStorageNode(&Options{
-				RPCOptions:               RPCOptions{RPCBindAddress: bindAddress},
-				LogStreamExecutorOptions: DefaultLogStreamExecutorOptions,
-				LogStreamReporterOptions: DefaultLogStreamReporterOptions,
-				ClusterID:                clusterID,
-				StorageNodeID:            types.StorageNodeID(i),
-				StorageName:              DefaultStorageName,
-				Volumes:                  map[Volume]struct{}{volume: {}},
-				Verbose:                  true,
-				Logger:                   zap.L(),
-			})
+			opts := DefaultOptions()
+			opts.RPCOptions.RPCBindAddress = bindAddress
+			opts.ClusterID = clusterID
+			opts.StorageNodeID = types.StorageNodeID(i)
+			opts.Volumes = map[Volume]struct{}{volume: {}}
+			opts.Logger = zap.L()
+
+			sn, err := NewStorageNode(&opts)
 			So(err, ShouldBeNil)
 			snList = append(snList, sn)
 
@@ -407,18 +400,14 @@ func TestStorageNodeRestart(t *testing.T) {
 		volume, err := NewVolume(t.TempDir())
 		So(err, ShouldBeNil)
 
-		opts := &Options{
-			RPCOptions:               RPCOptions{RPCBindAddress: bindAddress},
-			LogStreamExecutorOptions: DefaultLogStreamExecutorOptions,
-			LogStreamReporterOptions: DefaultLogStreamReporterOptions,
-			ClusterID:                clusterID,
-			StorageNodeID:            types.StorageNodeID(1),
-			StorageName:              DefaultStorageName,
-			Volumes:                  map[Volume]struct{}{volume: {}},
-			Verbose:                  true,
-			Logger:                   zap.L(),
-		}
-		sn, err := NewStorageNode(opts)
+		opts := DefaultOptions()
+		opts.RPCOptions.RPCBindAddress = bindAddress
+		opts.ClusterID = clusterID
+		opts.StorageNodeID = types.StorageNodeID(1)
+		opts.Volumes = map[Volume]struct{}{volume: {}}
+		opts.Logger = zap.L()
+
+		sn, err := NewStorageNode(&opts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -487,7 +476,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		So(logCL.Close(), ShouldBeNil)
 
 		// restart
-		sn, err = NewStorageNode(opts)
+		sn, err = NewStorageNode(&opts)
 		if err != nil {
 			t.Fatal(err)
 		}

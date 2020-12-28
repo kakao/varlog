@@ -19,7 +19,6 @@ var (
 	DefaultClusterID     = types.ClusterID(1)
 	DefaultStorageNodeID = types.StorageNodeID(1)
 	DefaultVolume        = Volume(os.TempDir())
-	DefaultStorageName   = PebbleStorageName
 )
 
 const (
@@ -43,47 +42,55 @@ const (
 	DefaultLSRReportWaitTimeout = timeutil.MaxDuration
 )
 
-var DefaultOptions = Options{
-	RPCOptions:               DefaultRPCOptions,
-	LogStreamExecutorOptions: DefaultLogStreamExecutorOptions,
-	LogStreamReporterOptions: DefaultLogStreamReporterOptions,
-	ClusterID:                DefaultClusterID,
-	StorageNodeID:            DefaultStorageNodeID,
-	Volumes:                  map[Volume]struct{}{DefaultVolume: {}},
-	StorageName:              DefaultStorageName,
-	Verbose:                  false,
-	Logger:                   zap.NewNop(),
+func DefaultOptions() Options {
+	return Options{
+		RPCOptions:               DefaultRPCOptions(),
+		LogStreamExecutorOptions: DefaultLogStreamExecutorOptions(),
+		LogStreamReporterOptions: DefaultLogStreamReporterOptions(),
+		StorageOptions:           DefaultStorageOptions(),
+		ClusterID:                DefaultClusterID,
+		StorageNodeID:            DefaultStorageNodeID,
+		Volumes:                  map[Volume]struct{}{DefaultVolume: {}},
+		Verbose:                  false,
+		Logger:                   zap.NewNop(),
+	}
 }
 
-var DefaultRPCOptions = RPCOptions{RPCBindAddress: DefaultRPCBindAddress}
-
-var DefaultLogStreamExecutorOptions = LogStreamExecutorOptions{
-	AppendCSize:       DefaultLSEAppendCSize,
-	AppendCTimeout:    DefaultLSEAppendCTimeout,
-	CommitWaitTimeout: DefaultLSECommitWaitTimeout,
-	TrimCSize:         DefaultLSETrimCSize,
-	TrimCTimeout:      DefaultLSETrimCTimeout,
-	CommitCSize:       DefaultLSECommitCSize,
-	CommitCTimeout:    DefaultLSECommitCTimeout,
+func DefaultRPCOptions() RPCOptions {
+	return RPCOptions{RPCBindAddress: DefaultRPCBindAddress}
 }
 
-var DefaultLogStreamReporterOptions = LogStreamReporterOptions{
-	CommitCSize:       DefaultLSRCommitCSize,
-	CommitCTimeout:    DefaultLSRCommitCTimeout,
-	ReportCSize:       DefaultLSRReportCSize,
-	ReportCTimeout:    DefaultLSRReportCTimeout,
-	ReportWaitTimeout: DefaultLSRReportWaitTimeout,
+func DefaultLogStreamExecutorOptions() LogStreamExecutorOptions {
+	return LogStreamExecutorOptions{
+		AppendCSize:       DefaultLSEAppendCSize,
+		AppendCTimeout:    DefaultLSEAppendCTimeout,
+		CommitWaitTimeout: DefaultLSECommitWaitTimeout,
+		TrimCSize:         DefaultLSETrimCSize,
+		TrimCTimeout:      DefaultLSETrimCTimeout,
+		CommitCSize:       DefaultLSECommitCSize,
+		CommitCTimeout:    DefaultLSECommitCTimeout,
+	}
+}
+
+func DefaultLogStreamReporterOptions() LogStreamReporterOptions {
+	return LogStreamReporterOptions{
+		CommitCSize:       DefaultLSRCommitCSize,
+		CommitCTimeout:    DefaultLSRCommitCTimeout,
+		ReportCSize:       DefaultLSRReportCSize,
+		ReportCTimeout:    DefaultLSRReportCTimeout,
+		ReportWaitTimeout: DefaultLSRReportWaitTimeout,
+	}
 }
 
 type Options struct {
 	RPCOptions
 	LogStreamExecutorOptions
 	LogStreamReporterOptions
+	StorageOptions
 
 	ClusterID     types.ClusterID
 	StorageNodeID types.StorageNodeID
 	Volumes       map[Volume]struct{}
-	StorageName   string
 
 	Verbose bool
 
@@ -124,7 +131,7 @@ func (opts Options) Valid() error {
 			return err
 		}
 	}
-	if err := ValidStorageName(opts.StorageName); err != nil {
+	if err := ValidStorageName(opts.StorageOptions.Name); err != nil {
 		return err
 	}
 	if opts.Logger == nil {

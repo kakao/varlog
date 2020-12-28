@@ -301,7 +301,27 @@ func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeI
 }
 
 func (sn *StorageNode) addLogStream(logStreamID types.LogStreamID, logStreamPath string) error {
-	storage, err := NewStorage(sn.options.StorageName, WithPath(logStreamPath), WithLogger(sn.logger))
+	snOpts := []StorageOption{
+		WithPath(logStreamPath),
+		WithLogger(sn.logger),
+	}
+	if sn.options.StorageOptions.EnableWriteFsync {
+		snOpts = append(snOpts, WithEnableWriteFsync())
+	}
+	if sn.options.StorageOptions.EnableCommitFsync {
+		snOpts = append(snOpts, WithEnableCommitFsync())
+	}
+	if sn.options.StorageOptions.EnableCommitContextFsync {
+		snOpts = append(snOpts, WithEnableCommitContextFsync())
+	}
+	if sn.options.StorageOptions.EnableDeleteCommittedFsync {
+		snOpts = append(snOpts, WithEnableDeleteCommittedFsync())
+	}
+	if sn.options.StorageOptions.DisableDeleteUncommittedFsync {
+		snOpts = append(snOpts, WithDisableDeleteUncommittedFsync())
+	}
+
+	storage, err := NewStorage(sn.options.StorageOptions.Name, snOpts...)
 	if err != nil {
 		return err
 	}

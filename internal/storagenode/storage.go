@@ -114,14 +114,38 @@ type Storage interface {
 	Close() error
 }
 
+const (
+	DefaultStorageName                   = PebbleStorageName
+	DefaultEnableWriteFsync              = false // default: no sync
+	DefaultEnableCommitFsync             = false // default: no sync
+	DefaultEnableCommitContextFsync      = false // default: no sync
+	DefaultEnableDeleteCommittedFsync    = false // default: no sync
+	DefaultDisableDeleteUncommittedFsync = false // default: sync
+)
+
 type StorageOptions struct {
 	Name string
 	Path string
 
-	DisableWriteSync  bool
-	DisableCommitSync bool
+	EnableWriteFsync              bool
+	EnableCommitFsync             bool
+	EnableCommitContextFsync      bool
+	EnableDeleteCommittedFsync    bool
+	DisableDeleteUncommittedFsync bool
 
 	Logger *zap.Logger
+}
+
+func DefaultStorageOptions() StorageOptions {
+	return StorageOptions{
+		Name:                          DefaultStorageName,
+		EnableWriteFsync:              DefaultEnableWriteFsync,
+		EnableCommitFsync:             DefaultEnableCommitFsync,
+		EnableCommitContextFsync:      DefaultEnableCommitContextFsync,
+		EnableDeleteCommittedFsync:    DefaultEnableDeleteCommittedFsync,
+		DisableDeleteUncommittedFsync: DefaultDisableDeleteUncommittedFsync,
+		Logger:                        zap.NewNop(),
+	}
 }
 
 type StorageOption func(*StorageOptions)
@@ -156,15 +180,33 @@ func WithLogger(logger *zap.Logger) StorageOption {
 	}
 }
 
-func WithDisableWriteSync() StorageOption {
+func WithEnableWriteFsync() StorageOption {
 	return func(opts *StorageOptions) {
-		opts.DisableWriteSync = true
+		opts.EnableWriteFsync = true
 	}
 }
 
-func WithDisableCommitSync() StorageOption {
+func WithEnableCommitFsync() StorageOption {
 	return func(opts *StorageOptions) {
-		opts.DisableCommitSync = true
+		opts.EnableCommitFsync = true
+	}
+}
+
+func WithEnableCommitContextFsync() StorageOption {
+	return func(opts *StorageOptions) {
+		opts.EnableCommitContextFsync = true
+	}
+}
+
+func WithEnableDeleteCommittedFsync() StorageOption {
+	return func(opts *StorageOptions) {
+		opts.EnableDeleteCommittedFsync = true
+	}
+}
+
+func WithDisableDeleteUncommittedFsync() StorageOption {
+	return func(opts *StorageOptions) {
+		opts.DisableDeleteUncommittedFsync = true
 	}
 }
 
@@ -172,12 +214,10 @@ func NewStorage(name string, opts ...StorageOption) (Storage, error) {
 	if err := ValidStorageName(name); err != nil {
 		return nil, err
 	}
-	options := &StorageOptions{
-		Name:   name,
-		Logger: zap.NewNop(),
-	}
+	options := DefaultStorageOptions()
+	options.Name = name
 	for _, opt := range opts {
-		opt(options)
+		opt(&options)
 	}
-	return storages[name](options)
+	return storages[name](&options)
 }

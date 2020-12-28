@@ -71,6 +71,7 @@ func initStartCommand(options *storagenode.Options) *cli.Command {
 	startCmd.Flags = append(startCmd.Flags, initRPCFlags(&options.RPCOptions)...)
 	startCmd.Flags = append(startCmd.Flags, initLSEFlags(&options.LogStreamExecutorOptions)...)
 	startCmd.Flags = append(startCmd.Flags, initLSRFlags(&options.LogStreamReporterOptions)...)
+	startCmd.Flags = append(startCmd.Flags, initStorageFlags(&options.StorageOptions)...)
 	return startCmd
 }
 
@@ -98,14 +99,6 @@ func initStorageNodeFlags(options *storagenode.Options) []cli.Flag {
 			Usage:       "volumes",
 			EnvVars:     []string{"VOLUMES"},
 			Destination: defaultVolumeSS,
-		},
-		&cli.StringFlag{
-			Name:        "storage-name",
-			Aliases:     []string{},
-			Value:       storagenode.DefaultStorageName,
-			Usage:       "storage name",
-			EnvVars:     []string{"STORAGE_NAME"},
-			Destination: &options.StorageName,
 		},
 	}
 }
@@ -221,6 +214,49 @@ func initLSRFlags(options *storagenode.LogStreamReporterOptions) []cli.Flag {
 			EnvVars:     []string{"LSR_REPORT_WAIT_TIMEOUT"},
 			DefaultText: "infinity",
 			Destination: &options.ReportWaitTimeout,
+		},
+	}
+}
+
+func initStorageFlags(options *storagenode.StorageOptions) []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:        "storage-name",
+			Aliases:     []string{},
+			Value:       storagenode.DefaultStorageName,
+			Usage:       "storage name",
+			EnvVars:     []string{"STORAGE_NAME"},
+			Destination: &options.Name,
+		},
+		&cli.BoolFlag{
+			Name:        "storage-enable-write-fsync",
+			Value:       storagenode.DefaultEnableWriteFsync,
+			Usage:       "enable fsync of uncommitted data",
+			Destination: &options.EnableWriteFsync,
+		},
+		&cli.BoolFlag{
+			Name:        "storage-enable-commit-fsync",
+			Value:       storagenode.DefaultEnableCommitFsync,
+			Usage:       "enable fsync of committed data",
+			Destination: &options.EnableWriteFsync,
+		},
+		&cli.BoolFlag{
+			Name:        "storage-enable-commit-context-fsync",
+			Value:       storagenode.DefaultEnableCommitContextFsync,
+			Usage:       "enable fsync of commit context",
+			Destination: &options.EnableCommitContextFsync,
+		},
+		&cli.BoolFlag{
+			Name:        "storage-enable-delete-committed-fsync",
+			Value:       storagenode.DefaultEnableDeleteCommittedFsync,
+			Usage:       "enable fsync of deleting committed data",
+			Destination: &options.EnableDeleteCommittedFsync,
+		},
+		&cli.BoolFlag{
+			Name:        "storage-disable-delete-uncommitted-fsync",
+			Value:       storagenode.DefaultDisableDeleteUncommittedFsync,
+			Usage:       "enable fsync of deleting uncommitted data",
+			Destination: &options.DisableDeleteUncommittedFsync,
 		},
 	}
 }

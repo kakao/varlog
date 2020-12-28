@@ -872,7 +872,7 @@ func (lse *logStreamExecutor) verifyCommit(ct *commitTask) error {
 	}
 
 	knownGlobalHWM := lse.lsc.rcc.globalHighwatermark
-	if !knownGlobalHWM.Invalid() && knownGlobalHWM != ct.prevHighWatermark {
+	if knownGlobalHWM != ct.prevHighWatermark {
 		return fmt.Errorf("logstream: highwatermark mismatch (LSE.globalHWM=%v Commit.prevHWM=%v)", knownGlobalHWM, ct.prevHighWatermark)
 	}
 

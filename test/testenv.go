@@ -277,19 +277,14 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
-	opts := &storagenode.Options{
-		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: "127.0.0.1:0"},
-		LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
-		LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
-		ClusterID:                clus.ClusterID,
-		StorageNodeID:            snID,
-		StorageName:              storagenode.DefaultStorageName,
-		Verbose:                  true,
-		Logger:                   clus.logger,
-		Volumes:                  map[storagenode.Volume]struct{}{volume: {}},
-	}
+	opts := storagenode.DefaultOptions()
+	opts.RPCBindAddress = "127.0.0.1:0"
+	opts.ClusterID = clus.ClusterID
+	opts.StorageNodeID = snID
+	opts.Logger = clus.logger
+	opts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
 
-	sn, err := storagenode.NewStorageNode(opts)
+	sn, err := storagenode.NewStorageNode(&opts)
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
@@ -323,18 +318,15 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
-	opts := &storagenode.Options{
-		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: "127.0.0.1:0"},
-		LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
-		LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
-		ClusterID:                clus.ClusterID,
-		StorageNodeID:            snID,
-		StorageName:              storagenode.DefaultStorageName,
-		Verbose:                  true,
-		Logger:                   clus.logger,
-		Volumes:                  map[storagenode.Volume]struct{}{volume: {}},
-	}
-	sn, err := storagenode.NewStorageNode(opts)
+
+	opts := storagenode.DefaultOptions()
+	opts.RPCBindAddress = "127.0.0.1:0"
+	opts.ClusterID = clus.ClusterID
+	opts.StorageNodeID = snID
+	opts.Logger = clus.logger
+	opts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
+
+	sn, err := storagenode.NewStorageNode(&opts)
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
@@ -372,19 +364,14 @@ func (clus *VarlogCluster) RecoverSN(snID types.StorageNodeID) (*storagenode.Sto
 
 	addr, _ := clus.snRPCEndpoints[snID]
 
-	opts := &storagenode.Options{
-		RPCOptions:               storagenode.RPCOptions{RPCBindAddress: addr},
-		LogStreamExecutorOptions: storagenode.DefaultLogStreamExecutorOptions,
-		LogStreamReporterOptions: storagenode.DefaultLogStreamReporterOptions,
-		ClusterID:                clus.ClusterID,
-		StorageNodeID:            snID,
-		StorageName:              storagenode.DefaultStorageName,
-		Verbose:                  true,
-		Logger:                   clus.logger,
-		Volumes:                  map[storagenode.Volume]struct{}{volume: {}},
-	}
+	opts := storagenode.DefaultOptions()
+	opts.RPCBindAddress = addr
+	opts.ClusterID = clus.ClusterID
+	opts.StorageNodeID = snID
+	opts.Logger = clus.logger
+	opts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
 
-	sn, err := storagenode.NewStorageNode(opts)
+	sn, err := storagenode.NewStorageNode(&opts)
 	if err != nil {
 		return nil, err
 	}
