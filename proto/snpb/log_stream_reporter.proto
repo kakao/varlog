@@ -3,7 +3,6 @@ syntax = "proto3";
 package varlog.snpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-import "google/protobuf/empty.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
 
@@ -11,33 +10,36 @@ option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-// LocalLogStreamDescriptor is manifest that log stream reports to metadata
+// LogStreamUncommitReport is manifest that log stream reports to metadata
 // repository about log entries those are waiting to commit.
-message LocalLogStreamDescriptor {
-    message LogStreamUncommitReport {
-        uint64 log_stream_id = 1 [
-            (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-            (gogoproto.customname) = "LogStreamID"
-        ];
-        uint64 uncommitted_llsn_offset = 2 [
-            (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
-            (gogoproto.customname) = "UncommittedLLSNOffset"
-        ];
-        uint64 uncommitted_llsn_length = 3
-            [(gogoproto.customname) = "UncommittedLLSNLength"];
-    }
+message LogStreamUncommitReport {
+    option (gogoproto.equal) = true;
 
+    uint32 log_stream_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+    uint64 uncommitted_llsn_offset = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
+        (gogoproto.customname) = "UncommittedLLSNOffset"
+    ];
+    uint64 uncommitted_llsn_length = 3
+        [(gogoproto.customname) = "UncommittedLLSNLength"];
+    uint64 high_watermark = 4
+        [(gogoproto.casttype) =
+             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
+}
+
+message GetReportRequest {}
+message GetReportResponse {
     uint32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    uint64 high_watermark = 2
-        [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
-    repeated LogStreamUncommitReport uncommit = 3;
+    repeated LogStreamUncommitReport uncommit_reports = 2;
 }
 
 // GlobalLogStreamDescriptor is a committing result against with
@@ -45,32 +47,43 @@ message LocalLogStreamDescriptor {
 // global log space.
 // Field commit_result contains positions of all log entries of log streams in
 // a storage node which is a receiver of this GlobalLogStreamDescriptor.
-message GlobalLogStreamDescriptor {
-    message LogStreamCommitResult {
-        uint32 log_stream_id = 1 [
-            (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-            (gogoproto.customname) = "LogStreamID"
-        ];
-        uint64 committed_glsn_offset = 2 [
-            (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
-            (gogoproto.customname) = "CommittedGLSNOffset"
-        ];
-        uint64 committed_glsn_length = 3
-            [(gogoproto.customname) = "CommittedGLSNLength"];
-    }
+message LogStreamCommitResult {
+    option (gogoproto.equal) = true;
 
-    uint64 high_watermark = 1
+    uint32 log_stream_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+    uint64 committed_glsn_offset = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
+        (gogoproto.customname) = "CommittedGLSNOffset"
+    ];
+    uint64 committed_glsn_length = 3
+        [(gogoproto.customname) = "CommittedGLSNLength"];
+    uint64 high_watermark = 4
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
-    uint64 prev_high_watermark = 2
+    uint64 prev_high_watermark = 5
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
-    repeated LogStreamCommitResult commit_result = 3;
+}
+
+message CommitRequest {
+    uint32 storage_node_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
+        (gogoproto.customname) = "StorageNodeID"
+    ];
+    repeated LogStreamCommitResult commit_results = 2;
+}
+
+message CommitResponse {
+    // TODO:
 }
 
 service LogStreamReporterService {
-    rpc GetReport(google.protobuf.Empty) returns (LocalLogStreamDescriptor) {}
-    rpc Commit(GlobalLogStreamDescriptor) returns (google.protobuf.Empty) {}
+    rpc GetReport(GetReportRequest) returns (GetReportResponse) {}
+    rpc Commit(CommitRequest) returns (CommitResponse) {}
 }

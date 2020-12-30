@@ -29,6 +29,179 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+type LogStreamCommitResults struct {
+	HighWatermark        github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,1,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
+	PrevHighWatermark    github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,2,opt,name=prev_high_watermark,json=prevHighWatermark,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"prev_high_watermark,omitempty"`
+	CommitResults        []*snpb.LogStreamCommitResult                     `protobuf:"bytes,3,rep,name=commit_results,json=commitResults,proto3" json:"commit_results,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
+	XXX_unrecognized     []byte                                            `json:"-"`
+	XXX_sizecache        int32                                             `json:"-"`
+}
+
+func (m *LogStreamCommitResults) Reset()         { *m = LogStreamCommitResults{} }
+func (m *LogStreamCommitResults) String() string { return proto.CompactTextString(m) }
+func (*LogStreamCommitResults) ProtoMessage()    {}
+func (*LogStreamCommitResults) Descriptor() ([]byte, []int) {
+	return fileDescriptor_60447af781d89487, []int{0}
+}
+func (m *LogStreamCommitResults) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogStreamCommitResults) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_LogStreamCommitResults.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *LogStreamCommitResults) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogStreamCommitResults.Merge(m, src)
+}
+func (m *LogStreamCommitResults) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *LogStreamCommitResults) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogStreamCommitResults.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogStreamCommitResults proto.InternalMessageInfo
+
+func (m *LogStreamCommitResults) GetHighWatermark() github_daumkakao_com_varlog_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.HighWatermark
+	}
+	return 0
+}
+
+func (m *LogStreamCommitResults) GetPrevHighWatermark() github_daumkakao_com_varlog_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.PrevHighWatermark
+	}
+	return 0
+}
+
+func (m *LogStreamCommitResults) GetCommitResults() []*snpb.LogStreamCommitResult {
+	if m != nil {
+		return m.CommitResults
+	}
+	return nil
+}
+
+type StorageNodeUncommitReport struct {
+	StorageNodeID        github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	UncommitReports      []*snpb.LogStreamUncommitReport                            `protobuf:"bytes,2,rep,name=uncommit_reports,json=uncommitReports,proto3" json:"uncommit_reports,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
+	XXX_unrecognized     []byte                                                     `json:"-"`
+	XXX_sizecache        int32                                                      `json:"-"`
+}
+
+func (m *StorageNodeUncommitReport) Reset()         { *m = StorageNodeUncommitReport{} }
+func (m *StorageNodeUncommitReport) String() string { return proto.CompactTextString(m) }
+func (*StorageNodeUncommitReport) ProtoMessage()    {}
+func (*StorageNodeUncommitReport) Descriptor() ([]byte, []int) {
+	return fileDescriptor_60447af781d89487, []int{1}
+}
+func (m *StorageNodeUncommitReport) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StorageNodeUncommitReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_StorageNodeUncommitReport.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *StorageNodeUncommitReport) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StorageNodeUncommitReport.Merge(m, src)
+}
+func (m *StorageNodeUncommitReport) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *StorageNodeUncommitReport) XXX_DiscardUnknown() {
+	xxx_messageInfo_StorageNodeUncommitReport.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StorageNodeUncommitReport proto.InternalMessageInfo
+
+func (m *StorageNodeUncommitReport) GetStorageNodeID() github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID {
+	if m != nil {
+		return m.StorageNodeID
+	}
+	return 0
+}
+
+func (m *StorageNodeUncommitReport) GetUncommitReports() []*snpb.LogStreamUncommitReport {
+	if m != nil {
+		return m.UncommitReports
+	}
+	return nil
+}
+
+type LogStreamUncommitReports struct {
+	Replicas             map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*snpb.LogStreamUncommitReport `protobuf:"bytes,1,rep,name=replicas,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"replicas,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Status               varlogpb.LogStreamStatus                                                                     `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                                                     `json:"-"`
+	XXX_unrecognized     []byte                                                                                       `json:"-"`
+	XXX_sizecache        int32                                                                                        `json:"-"`
+}
+
+func (m *LogStreamUncommitReports) Reset()         { *m = LogStreamUncommitReports{} }
+func (m *LogStreamUncommitReports) String() string { return proto.CompactTextString(m) }
+func (*LogStreamUncommitReports) ProtoMessage()    {}
+func (*LogStreamUncommitReports) Descriptor() ([]byte, []int) {
+	return fileDescriptor_60447af781d89487, []int{2}
+}
+func (m *LogStreamUncommitReports) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogStreamUncommitReports) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_LogStreamUncommitReports.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *LogStreamUncommitReports) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogStreamUncommitReports.Merge(m, src)
+}
+func (m *LogStreamUncommitReports) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *LogStreamUncommitReports) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogStreamUncommitReports.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogStreamUncommitReports proto.InternalMessageInfo
+
+func (m *LogStreamUncommitReports) GetReplicas() map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*snpb.LogStreamUncommitReport {
+	if m != nil {
+		return m.Replicas
+	}
+	return nil
+}
+
+func (m *LogStreamUncommitReports) GetStatus() varlogpb.LogStreamStatus {
+	if m != nil {
+		return m.Status
+	}
+	return varlogpb.LogStreamStatusRunning
+}
+
 type MetadataRepositoryDescriptor struct {
 	Metadata             *varlogpb.MetadataDescriptor                                                                         `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	LogStream            *MetadataRepositoryDescriptor_LogStreamDescriptor                                                    `protobuf:"bytes,2,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
@@ -43,7 +216,7 @@ func (m *MetadataRepositoryDescriptor) Reset()         { *m = MetadataRepository
 func (m *MetadataRepositoryDescriptor) String() string { return proto.CompactTextString(m) }
 func (*MetadataRepositoryDescriptor) ProtoMessage()    {}
 func (*MetadataRepositoryDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_60447af781d89487, []int{0}
+	return fileDescriptor_60447af781d89487, []int{3}
 }
 func (m *MetadataRepositoryDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -100,139 +273,13 @@ func (m *MetadataRepositoryDescriptor) GetEndpoints() map[github_daumkakao_com_v
 	return nil
 }
 
-type MetadataRepositoryDescriptor_LocalLogStreamReplica struct {
-	UncommittedLLSNOffset github_daumkakao_com_varlog_varlog_pkg_types.LLSN `protobuf:"varint,1,opt,name=uncommitted_llsn_offset,json=uncommittedLlsnOffset,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LLSN" json:"uncommitted_llsn_offset,omitempty"`
-	UncommittedLLSNLength uint64                                            `protobuf:"varint,2,opt,name=uncommitted_llsn_length,json=uncommittedLlsnLength,proto3" json:"uncommitted_llsn_length,omitempty"`
-	KnownHighWatermark    github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,3,opt,name=known_high_watermark,json=knownHighWatermark,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"known_high_watermark,omitempty"`
-	XXX_NoUnkeyedLiteral  struct{}                                          `json:"-"`
-	XXX_unrecognized      []byte                                            `json:"-"`
-	XXX_sizecache         int32                                             `json:"-"`
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) Reset() {
-	*m = MetadataRepositoryDescriptor_LocalLogStreamReplica{}
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) String() string {
-	return proto.CompactTextString(m)
-}
-func (*MetadataRepositoryDescriptor_LocalLogStreamReplica) ProtoMessage() {}
-func (*MetadataRepositoryDescriptor_LocalLogStreamReplica) Descriptor() ([]byte, []int) {
-	return fileDescriptor_60447af781d89487, []int{0, 0}
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplica.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplica.Merge(m, src)
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) XXX_DiscardUnknown() {
-	xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplica.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplica proto.InternalMessageInfo
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) GetUncommittedLLSNOffset() github_daumkakao_com_varlog_varlog_pkg_types.LLSN {
-	if m != nil {
-		return m.UncommittedLLSNOffset
-	}
-	return 0
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) GetUncommittedLLSNLength() uint64 {
-	if m != nil {
-		return m.UncommittedLLSNLength
-	}
-	return 0
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) GetKnownHighWatermark() github_daumkakao_com_varlog_varlog_pkg_types.GLSN {
-	if m != nil {
-		return m.KnownHighWatermark
-	}
-	return 0
-}
-
-type MetadataRepositoryDescriptor_LocalLogStreamReplicas struct {
-	Replicas             map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica `protobuf:"bytes,1,rep,name=replicas,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"replicas,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	Status               varlogpb.LogStreamStatus                                                                                           `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                                                                           `json:"-"`
-	XXX_unrecognized     []byte                                                                                                             `json:"-"`
-	XXX_sizecache        int32                                                                                                              `json:"-"`
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Reset() {
-	*m = MetadataRepositoryDescriptor_LocalLogStreamReplicas{}
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) String() string {
-	return proto.CompactTextString(m)
-}
-func (*MetadataRepositoryDescriptor_LocalLogStreamReplicas) ProtoMessage() {}
-func (*MetadataRepositoryDescriptor_LocalLogStreamReplicas) Descriptor() ([]byte, []int) {
-	return fileDescriptor_60447af781d89487, []int{0, 1}
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplicas.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplicas.Merge(m, src)
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) XXX_DiscardUnknown() {
-	xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplicas.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_MetadataRepositoryDescriptor_LocalLogStreamReplicas proto.InternalMessageInfo
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) GetReplicas() map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica {
-	if m != nil {
-		return m.Replicas
-	}
-	return nil
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) GetStatus() varlogpb.LogStreamStatus {
-	if m != nil {
-		return m.Status
-	}
-	return varlogpb.LogStreamStatusRunning
-}
-
 type MetadataRepositoryDescriptor_LogStreamDescriptor struct {
-	TrimGLSN             github_daumkakao_com_varlog_varlog_pkg_types.GLSN                                                                 `protobuf:"varint,1,opt,name=trim_glsn,json=trimGlsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"trim_glsn,omitempty"`
-	GlobalLogStreams     []*snpb.GlobalLogStreamDescriptor                                                                                 `protobuf:"bytes,2,rep,name=global_log_streams,json=globalLogStreams,proto3" json:"global_log_streams,omitempty"`
-	LocalLogStreams      map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas `protobuf:"bytes,3,rep,name=local_log_streams,json=localLogStreams,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"local_log_streams,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}                                                                                                          `json:"-"`
-	XXX_unrecognized     []byte                                                                                                            `json:"-"`
-	XXX_sizecache        int32                                                                                                             `json:"-"`
+	TrimGLSN             github_daumkakao_com_varlog_varlog_pkg_types.GLSN                                      `protobuf:"varint,1,opt,name=trim_glsn,json=trimGlsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"trim_glsn,omitempty"`
+	CommitHistory        []*LogStreamCommitResults                                                              `protobuf:"bytes,2,rep,name=commit_history,json=commitHistory,proto3" json:"commit_history,omitempty"`
+	UncommitReports      map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*LogStreamUncommitReports `protobuf:"bytes,3,rep,name=uncommit_reports,json=uncommitReports,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"uncommit_reports,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}                                                                               `json:"-"`
+	XXX_unrecognized     []byte                                                                                 `json:"-"`
+	XXX_sizecache        int32                                                                                  `json:"-"`
 }
 
 func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Reset() {
@@ -243,7 +290,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) String() string {
 }
 func (*MetadataRepositoryDescriptor_LogStreamDescriptor) ProtoMessage() {}
 func (*MetadataRepositoryDescriptor_LogStreamDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_60447af781d89487, []int{0, 2}
+	return fileDescriptor_60447af781d89487, []int{3, 0}
 }
 func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -279,16 +326,16 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetTrimGLSN() github_
 	return 0
 }
 
-func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetGlobalLogStreams() []*snpb.GlobalLogStreamDescriptor {
+func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetCommitHistory() []*LogStreamCommitResults {
 	if m != nil {
-		return m.GlobalLogStreams
+		return m.CommitHistory
 	}
 	return nil
 }
 
-func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetLocalLogStreams() map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas {
+func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) GetUncommitReports() map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*LogStreamUncommitReports {
 	if m != nil {
-		return m.LocalLogStreams
+		return m.UncommitReports
 	}
 	return nil
 }
@@ -309,7 +356,7 @@ func (m *MetadataRepositoryDescriptor_PeerDescriptor) String() string {
 }
 func (*MetadataRepositoryDescriptor_PeerDescriptor) ProtoMessage() {}
 func (*MetadataRepositoryDescriptor_PeerDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_60447af781d89487, []int{0, 3}
+	return fileDescriptor_60447af781d89487, []int{3, 1}
 }
 func (m *MetadataRepositoryDescriptor_PeerDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -353,14 +400,15 @@ func (m *MetadataRepositoryDescriptor_PeerDescriptor) GetIsLearner() bool {
 }
 
 func init() {
+	proto.RegisterType((*LogStreamCommitResults)(nil), "varlog.mrpb.LogStreamCommitResults")
+	proto.RegisterType((*StorageNodeUncommitReport)(nil), "varlog.mrpb.StorageNodeUncommitReport")
+	proto.RegisterType((*LogStreamUncommitReports)(nil), "varlog.mrpb.LogStreamUncommitReports")
+	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*snpb.LogStreamUncommitReport)(nil), "varlog.mrpb.LogStreamUncommitReports.ReplicasEntry")
 	proto.RegisterType((*MetadataRepositoryDescriptor)(nil), "varlog.mrpb.MetadataRepositoryDescriptor")
 	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.EndpointsEntry")
 	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]*MetadataRepositoryDescriptor_PeerDescriptor)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.PeersEntry")
-	proto.RegisterType((*MetadataRepositoryDescriptor_LocalLogStreamReplica)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LocalLogStreamReplica")
-	proto.RegisterType((*MetadataRepositoryDescriptor_LocalLogStreamReplicas)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LocalLogStreamReplicas")
-	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LocalLogStreamReplicas.ReplicasEntry")
 	proto.RegisterType((*MetadataRepositoryDescriptor_LogStreamDescriptor)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LogStreamDescriptor")
-	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LogStreamDescriptor.LocalLogStreamsEntry")
+	proto.RegisterMapType((map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*LogStreamUncommitReports)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.LogStreamDescriptor.UncommitReportsEntry")
 	proto.RegisterType((*MetadataRepositoryDescriptor_PeerDescriptor)(nil), "varlog.mrpb.MetadataRepositoryDescriptor.PeerDescriptor")
 }
 
@@ -369,69 +417,70 @@ func init() {
 }
 
 var fileDescriptor_60447af781d89487 = []byte{
-	// 825 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x56, 0x4f, 0x6f, 0xdb, 0x36,
-	0x14, 0x87, 0x62, 0x27, 0xb3, 0x19, 0x2c, 0xc9, 0xb8, 0x64, 0x71, 0x84, 0xcd, 0x0a, 0x36, 0x60,
-	0xc8, 0x0e, 0x91, 0xb1, 0x64, 0xc3, 0x8c, 0x2c, 0xfb, 0x67, 0x24, 0xc8, 0x32, 0x68, 0xde, 0x26,
-	0x2f, 0x2d, 0x90, 0x43, 0x05, 0xca, 0xa6, 0x65, 0xc1, 0x94, 0x28, 0x90, 0x74, 0x02, 0x03, 0x3d,
-	0x25, 0x45, 0xaf, 0x3d, 0xf6, 0x9a, 0x73, 0x3f, 0x43, 0x3f, 0x40, 0x8e, 0xfd, 0x04, 0x0e, 0xe0,
-	0xf6, 0xd0, 0xcf, 0xd0, 0x53, 0x21, 0x4a, 0xb2, 0xe5, 0x46, 0x2d, 0xe2, 0xfa, 0x64, 0x8a, 0x7c,
-	0xef, 0xf7, 0x7e, 0xef, 0xbd, 0x1f, 0x1f, 0x0d, 0xbe, 0x0b, 0x18, 0x15, 0xb4, 0xe2, 0xb1, 0xc0,
-	0xae, 0x30, 0xd4, 0x16, 0x96, 0x87, 0x05, 0x6a, 0x21, 0x81, 0x2c, 0x86, 0x03, 0xca, 0x5d, 0x41,
-	0x59, 0x5f, 0x97, 0x36, 0x70, 0xf1, 0x0c, 0x31, 0x42, 0x1d, 0x3d, 0xb4, 0x55, 0xb7, 0x1d, 0x57,
-	0x74, 0x7a, 0xb6, 0xde, 0xa4, 0x5e, 0xc5, 0xa1, 0x0e, 0xad, 0x48, 0x1b, 0xbb, 0xd7, 0x96, 0x5f,
-	0x11, 0x68, 0xb8, 0x8a, 0x7c, 0xd5, 0xf5, 0xc8, 0x37, 0xb0, 0x2b, 0x09, 0x7e, 0x7c, 0x50, 0xe6,
-	0x7e, 0x60, 0x57, 0x08, 0x75, 0x2c, 0x2e, 0x18, 0x46, 0x9e, 0x0c, 0xcb, 0x04, 0x66, 0xd1, 0xf9,
-	0xd7, 0xaf, 0x96, 0xc1, 0x97, 0x7f, 0xc7, 0x2e, 0xe6, 0x88, 0xd1, 0x01, 0xe6, 0x4d, 0xe6, 0x06,
-	0x82, 0x32, 0x78, 0x08, 0x0a, 0x09, 0x64, 0x49, 0xd9, 0x54, 0xb6, 0x16, 0x77, 0xbe, 0xd1, 0x63,
-	0xa2, 0x49, 0x4c, 0x3d, 0x01, 0x18, 0xbb, 0xd5, 0xf2, 0xd7, 0x03, 0x4d, 0x31, 0x47, 0xae, 0xd0,
-	0x06, 0x60, 0x4c, 0xa2, 0x34, 0x27, 0x81, 0x7e, 0xd1, 0x53, 0x19, 0xeb, 0x1f, 0x62, 0xa1, 0x1b,
-	0xd4, 0x69, 0x48, 0xd7, 0x5b, 0x21, 0x8a, 0x24, 0x39, 0x82, 0x97, 0x0a, 0x98, 0x0f, 0x30, 0x66,
-	0xbc, 0x94, 0xdb, 0xcc, 0x6d, 0x2d, 0xee, 0xfc, 0x70, 0x77, 0xfc, 0x7f, 0x43, 0xb7, 0x43, 0x5f,
-	0xb0, 0x7e, 0xed, 0xa7, 0x8b, 0x1b, 0x6d, 0x37, 0xae, 0x7e, 0x0b, 0xf5, 0xbc, 0x2e, 0xea, 0x22,
-	0x2a, 0xfb, 0x10, 0xa1, 0x25, 0x3f, 0x41, 0xd7, 0xa9, 0x88, 0x7e, 0x80, 0xb9, 0x5e, 0xa7, 0x2d,
-	0x7c, 0x7c, 0x60, 0x46, 0xb1, 0xe1, 0x13, 0x05, 0x14, 0xb1, 0xdf, 0x0a, 0xa8, 0xeb, 0x0b, 0x5e,
-	0xca, 0x4b, 0x26, 0xd5, 0xbb, 0x33, 0x39, 0x4c, 0x5c, 0x67, 0x64, 0x33, 0xe6, 0xa0, 0x0e, 0xe7,
-	0xc0, 0x9a, 0x41, 0x9b, 0x88, 0x8c, 0xaa, 0x68, 0xe2, 0x80, 0xb8, 0x4d, 0x04, 0x1f, 0x2b, 0x60,
-	0xbd, 0xe7, 0x37, 0xa9, 0xe7, 0xb9, 0x42, 0xe0, 0x96, 0x45, 0x08, 0xf7, 0x2d, 0xda, 0x6e, 0x73,
-	0x2c, 0x64, 0xb3, 0xf3, 0xb5, 0xfa, 0x70, 0xa0, 0xad, 0x9d, 0x8c, 0x4d, 0x0c, 0xa3, 0x51, 0xff,
-	0x47, 0x1a, 0xbc, 0x19, 0x68, 0xdf, 0x4f, 0x45, 0x2c, 0x74, 0x35, 0xd7, 0x52, 0xe1, 0x0c, 0xc2,
-	0xfd, 0x08, 0x0b, 0xfe, 0x97, 0xc1, 0x83, 0x60, 0xdf, 0x11, 0x1d, 0xa9, 0x95, 0x7c, 0x6d, 0x23,
-	0x83, 0x87, 0x21, 0x0d, 0x6e, 0x41, 0x46, 0xdb, 0xd0, 0x01, 0xab, 0x5d, 0x9f, 0x9e, 0xfb, 0x56,
-	0xc7, 0x75, 0x3a, 0xd6, 0x39, 0x12, 0x98, 0x79, 0x88, 0x75, 0x4b, 0x39, 0x89, 0xf7, 0xe3, 0xd4,
-	0xf4, 0x8f, 0x42, 0xfa, 0x50, 0x42, 0xfe, 0xe9, 0x3a, 0x9d, 0xfb, 0x09, 0xe0, 0x5e, 0xfe, 0xf5,
-	0x95, 0xa6, 0xa8, 0x97, 0x39, 0xf0, 0x45, 0x66, 0x91, 0x39, 0x7c, 0xa6, 0x80, 0x02, 0x8b, 0x3f,
-	0x4a, 0x8a, 0x14, 0x44, 0x7d, 0x1a, 0xe9, 0x67, 0x81, 0xea, 0xc9, 0x22, 0x92, 0xc9, 0xaf, 0x17,
-	0x37, 0xda, 0xde, 0x54, 0xe9, 0x34, 0x04, 0x65, 0xc8, 0xc1, 0xb1, 0x5a, 0x46, 0xfc, 0x60, 0x15,
-	0x2c, 0x70, 0x81, 0x44, 0x8f, 0xcb, 0xc2, 0x2f, 0xed, 0x6c, 0xde, 0xba, 0xed, 0x23, 0x2e, 0x0d,
-	0x69, 0x67, 0xc6, 0xf6, 0xea, 0x43, 0xf0, 0xe9, 0x04, 0x29, 0xb8, 0x02, 0x72, 0x5d, 0xdc, 0x97,
-	0x42, 0x9a, 0x37, 0xc3, 0x25, 0x3c, 0x01, 0xf3, 0x67, 0x88, 0xf4, 0x70, 0x3c, 0x00, 0x7e, 0x9b,
-	0xb1, 0x0a, 0x66, 0x84, 0xb6, 0x37, 0x57, 0x55, 0xe2, 0x2e, 0x3c, 0xcd, 0x83, 0xcf, 0x33, 0x66,
-	0x05, 0x7c, 0x00, 0x8a, 0x82, 0xb9, 0x9e, 0xe5, 0x10, 0xee, 0xc7, 0xca, 0xfe, 0x63, 0x38, 0xd0,
-	0x0a, 0xff, 0x33, 0xd7, 0x0b, 0x1b, 0xfb, 0x71, 0x6a, 0x28, 0x84, 0x98, 0x47, 0x84, 0xfb, 0xf0,
-	0x14, 0x40, 0x87, 0x50, 0x1b, 0x11, 0x6b, 0x3c, 0xe5, 0xc2, 0x0a, 0x86, 0xbd, 0xfe, 0x36, 0xc9,
-	0x32, 0x1c, 0xc5, 0xfa, 0x91, 0x34, 0x7b, 0xff, 0x3c, 0x5b, 0x71, 0x26, 0x0d, 0x38, 0x7c, 0xae,
-	0x80, 0xcf, 0x48, 0x98, 0xfe, 0x04, 0x76, 0x34, 0xe2, 0xcc, 0x99, 0x46, 0xe8, 0x3b, 0x55, 0x8d,
-	0xb5, 0xb4, 0x7f, 0x71, 0xa3, 0x55, 0xa7, 0xbb, 0xd9, 0x09, 0xc2, 0xf1, 0x81, 0xb9, 0x4c, 0x26,
-	0x31, 0xd5, 0x47, 0x0a, 0x58, 0xcd, 0x8a, 0x93, 0x96, 0x47, 0x3e, 0x92, 0xc7, 0xbd, 0x49, 0x79,
-	0xfc, 0x3e, 0xeb, 0x25, 0x49, 0xe9, 0x43, 0xfd, 0x0b, 0x2c, 0x85, 0x43, 0x3e, 0xa5, 0x89, 0x0d,
-	0x90, 0xeb, 0x31, 0x22, 0xe3, 0x17, 0x6b, 0x9f, 0x0c, 0x07, 0x5a, 0xee, 0xc4, 0x34, 0xcc, 0x70,
-	0x0f, 0x7e, 0x05, 0x80, 0xcb, 0x2d, 0x82, 0x11, 0xf3, 0x31, 0x93, 0x6c, 0x0a, 0x66, 0xd1, 0xe5,
-	0x46, 0xb4, 0xa1, 0x32, 0x00, 0xc6, 0x0f, 0x46, 0x46, 0x1e, 0xf5, 0xc9, 0x3c, 0xaa, 0xd3, 0xbd,
-	0x43, 0xe3, 0xcf, 0x34, 0xff, 0x7d, 0xb0, 0x34, 0xf9, 0x34, 0x64, 0xc4, 0x5d, 0x4d, 0xc7, 0x2d,
-	0xa6, 0xbc, 0x6b, 0x3f, 0x5f, 0x0f, 0xcb, 0xca, 0x8b, 0x61, 0x59, 0xb9, 0x7a, 0x59, 0x56, 0x4e,
-	0xb7, 0xef, 0xd2, 0xdd, 0xd1, 0xff, 0x16, 0x7b, 0x41, 0xae, 0x77, 0xdf, 0x06, 0x00, 0x00, 0xff,
-	0xff, 0xc0, 0x5f, 0xcb, 0x52, 0xcc, 0x08, 0x00, 0x00,
+	// 836 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x56, 0xdf, 0x4e, 0x33, 0x45,
+	0x14, 0xcf, 0xb6, 0xfd, 0x3e, 0xdb, 0x21, 0xed, 0x87, 0x03, 0xd1, 0xd2, 0x68, 0x97, 0x14, 0x4d,
+	0xf0, 0x82, 0x6d, 0x04, 0x8d, 0x4d, 0x41, 0x13, 0x2b, 0x04, 0x30, 0x15, 0xc8, 0x56, 0x62, 0x62,
+	0x8c, 0x9b, 0x69, 0x3b, 0x6c, 0x37, 0xdd, 0xdd, 0xd9, 0xcc, 0xcc, 0x42, 0x7a, 0x8b, 0x0f, 0xe0,
+	0x2b, 0xf0, 0x04, 0xbe, 0x80, 0x2f, 0xc0, 0x9d, 0xc6, 0x07, 0x28, 0x49, 0x8d, 0x89, 0x97, 0x5e,
+	0x73, 0x65, 0x76, 0x66, 0xb7, 0xdd, 0x85, 0xc5, 0xb4, 0xf6, 0xaa, 0x33, 0x3b, 0xe7, 0x9c, 0xdf,
+	0xef, 0xfc, 0xf9, 0x9d, 0x14, 0x7c, 0xe4, 0x51, 0xc2, 0x49, 0xdd, 0xa1, 0x5e, 0xb7, 0x4e, 0xd1,
+	0x15, 0x37, 0x1c, 0xcc, 0x51, 0x1f, 0x71, 0x64, 0x50, 0xec, 0x11, 0x66, 0x71, 0x42, 0x47, 0x9a,
+	0xb0, 0x81, 0x2b, 0xd7, 0x88, 0xda, 0xc4, 0xd4, 0x02, 0xdb, 0xca, 0x8e, 0x69, 0xf1, 0x81, 0xdf,
+	0xd5, 0x7a, 0xc4, 0xa9, 0x9b, 0xc4, 0x24, 0x75, 0x61, 0xd3, 0xf5, 0xaf, 0xc4, 0x4d, 0x06, 0x0d,
+	0x4e, 0xd2, 0xb7, 0xf2, 0xae, 0xf4, 0xf5, 0xba, 0xf5, 0x28, 0x7e, 0xf8, 0x50, 0x65, 0xae, 0xd7,
+	0xad, 0xdb, 0xc4, 0x34, 0x18, 0xa7, 0x18, 0x39, 0x02, 0x96, 0x72, 0x4c, 0xe5, 0x7b, 0xed, 0x97,
+	0x0c, 0x78, 0xa7, 0x4d, 0xcc, 0x8e, 0x78, 0xfc, 0x8a, 0x38, 0x8e, 0xc5, 0x75, 0xcc, 0x7c, 0x9b,
+	0x33, 0xf8, 0x03, 0x28, 0x0d, 0x2c, 0x73, 0x60, 0xdc, 0x20, 0x8e, 0xa9, 0x83, 0xe8, 0xb0, 0xac,
+	0x6c, 0x2a, 0xdb, 0xb9, 0xd6, 0xa7, 0x8f, 0x63, 0xf5, 0xe3, 0x90, 0x5e, 0x1f, 0xf9, 0xce, 0x10,
+	0x0d, 0x11, 0x11, 0x44, 0x25, 0x89, 0xe8, 0xc7, 0x1b, 0x9a, 0x75, 0x3e, 0xf2, 0x30, 0xd3, 0x8e,
+	0xdb, 0x9d, 0x33, 0xbd, 0x18, 0x04, 0xfb, 0x2e, 0x8a, 0x05, 0x31, 0x58, 0xf3, 0x28, 0xbe, 0x36,
+	0x9e, 0x40, 0x64, 0x96, 0x81, 0x78, 0x3b, 0x88, 0x78, 0x92, 0x80, 0x39, 0x05, 0xa5, 0x9e, 0xc8,
+	0xca, 0xa0, 0x32, 0xad, 0x72, 0x76, 0x33, 0xbb, 0xbd, 0xb2, 0x5b, 0xd3, 0xc2, 0x6a, 0x07, 0xf5,
+	0xd1, 0x52, 0x2b, 0xa0, 0x17, 0x7b, 0xf1, 0x7a, 0x34, 0x73, 0x7f, 0xdf, 0xa9, 0x4a, 0xed, 0x2f,
+	0x05, 0x6c, 0x74, 0x38, 0xa1, 0xc8, 0xc4, 0x67, 0xa4, 0x8f, 0x2f, 0xdd, 0xc8, 0x28, 0x28, 0x2b,
+	0xbc, 0x01, 0x6f, 0x98, 0x7c, 0x34, 0x5c, 0xd2, 0xc7, 0x86, 0xd5, 0x17, 0x45, 0x2b, 0xb6, 0xce,
+	0x27, 0x63, 0xb5, 0x18, 0xf3, 0x3b, 0x3d, 0x7c, 0x1c, 0xab, 0xcd, 0x85, 0x52, 0x4c, 0x78, 0xeb,
+	0x45, 0x16, 0xbb, 0xf6, 0xe1, 0x39, 0x58, 0xf5, 0xdd, 0x69, 0xa6, 0x01, 0x17, 0x56, 0xce, 0x88,
+	0x4c, 0x3f, 0x48, 0xcf, 0x34, 0x49, 0x5c, 0x7f, 0xe3, 0x27, 0xee, 0xac, 0xf6, 0x5b, 0x06, 0x94,
+	0x5f, 0x30, 0x66, 0xf0, 0x67, 0x05, 0xe4, 0x29, 0xf6, 0x6c, 0xab, 0x87, 0x58, 0x59, 0x11, 0x30,
+	0x7b, 0x5a, 0x6c, 0x7c, 0x5f, 0x82, 0x61, 0x9a, 0x1e, 0x7a, 0x1d, 0xb9, 0x9c, 0x8e, 0x5a, 0x5f,
+	0xdc, 0x3e, 0x2c, 0x55, 0x84, 0x29, 0x09, 0xd8, 0x00, 0xaf, 0x19, 0x47, 0xdc, 0x67, 0x62, 0x82,
+	0x4a, 0xbb, 0x9b, 0x11, 0x9d, 0x48, 0x18, 0x33, 0x4a, 0x1d, 0x61, 0xa7, 0x87, 0xf6, 0x15, 0x04,
+	0x8a, 0x09, 0x52, 0x70, 0x15, 0x64, 0x87, 0x78, 0x24, 0xfb, 0xa6, 0x07, 0x47, 0xd8, 0x04, 0xaf,
+	0xae, 0x91, 0xed, 0x63, 0x11, 0x7b, 0xde, 0x8a, 0x4a, 0x97, 0x66, 0xa6, 0xa1, 0x84, 0x93, 0xf3,
+	0x47, 0x01, 0xbc, 0xf7, 0x4d, 0xa8, 0x4e, 0x7d, 0x2a, 0xfe, 0x43, 0xcc, 0x7a, 0xd4, 0xf2, 0x38,
+	0xa1, 0xf0, 0x08, 0xe4, 0x23, 0xf5, 0x0a, 0xf4, 0x95, 0xdd, 0xad, 0x67, 0x59, 0x44, 0x01, 0x66,
+	0x6e, 0xad, 0xdc, 0xfd, 0x58, 0x55, 0xf4, 0xa9, 0x2b, 0xec, 0x02, 0x30, 0xd3, 0x7b, 0x48, 0xf9,
+	0xf3, 0x44, 0x77, 0xfe, 0x8b, 0xc5, 0x2c, 0x9f, 0x67, 0x10, 0x05, 0x3b, 0x7a, 0x82, 0x3f, 0x29,
+	0xe0, 0x95, 0x87, 0x31, 0x8d, 0xe4, 0xf4, 0xc9, 0xfc, 0xf1, 0x2f, 0x02, 0x37, 0xd9, 0xfe, 0xcf,
+	0x6e, 0x1f, 0xd4, 0xbd, 0x85, 0xda, 0x1f, 0xf6, 0x5d, 0x62, 0x07, 0x63, 0x58, 0xc0, 0x6e, 0xdf,
+	0x23, 0x96, 0xcb, 0x59, 0x39, 0x27, 0x98, 0x34, 0xe6, 0x67, 0x72, 0x14, 0xb9, 0x2e, 0xc9, 0x66,
+	0xc6, 0xa1, 0xf2, 0x4f, 0x16, 0xac, 0xa5, 0x14, 0x10, 0xfe, 0x08, 0x0a, 0x9c, 0x5a, 0x8e, 0x61,
+	0xda, 0xcc, 0x0d, 0xd7, 0xe8, 0x97, 0x93, 0xb1, 0x9a, 0xff, 0x96, 0x5a, 0x4e, 0xb0, 0xba, 0xfe,
+	0xdf, 0xbe, 0xcb, 0x07, 0x31, 0x8f, 0x6d, 0xe6, 0xc2, 0x8b, 0xe9, 0x9a, 0x1b, 0x58, 0xc1, 0x62,
+	0x18, 0x85, 0xe2, 0xdf, 0x4a, 0x57, 0x65, 0x62, 0xd1, 0x87, 0xdd, 0x0d, 0xb7, 0xdd, 0x89, 0xf4,
+	0x87, 0xbf, 0x2a, 0x29, 0x1b, 0x45, 0x36, 0x5b, 0x5f, 0x6a, 0x98, 0xb4, 0x27, 0x2b, 0x41, 0x16,
+	0xff, 0xe0, 0xf6, 0x41, 0x6d, 0x2c, 0x54, 0x81, 0x69, 0xe8, 0xd3, 0xc3, 0x67, 0xdb, 0xab, 0x62,
+	0x81, 0xf5, 0x34, 0x98, 0x14, 0x6d, 0xef, 0x27, 0xb5, 0xfd, 0xe1, 0x5c, 0x6b, 0x2c, 0x26, 0xee,
+	0xca, 0xd7, 0xa0, 0x14, 0x8c, 0x74, 0xac, 0xd9, 0x1b, 0x20, 0xeb, 0x53, 0x5b, 0x80, 0x14, 0x5a,
+	0x6f, 0x4d, 0xc6, 0x6a, 0xf6, 0x52, 0x6f, 0xeb, 0xc1, 0x37, 0xf8, 0x3e, 0x00, 0x16, 0x33, 0x6c,
+	0x8c, 0xa8, 0x8b, 0xa9, 0x80, 0xcc, 0xeb, 0x05, 0x8b, 0xb5, 0xe5, 0x87, 0x0a, 0x05, 0x60, 0x26,
+	0x8f, 0x38, 0xd9, 0x9c, 0x24, 0x7b, 0x96, 0x24, 0xdb, 0x58, 0x4c, 0x75, 0xb3, 0x6b, 0x9c, 0xff,
+	0x01, 0x28, 0x25, 0x85, 0x90, 0x82, 0xbb, 0x1e, 0xc7, 0x2d, 0xc4, 0xbc, 0x5b, 0xfb, 0xf7, 0x93,
+	0xaa, 0xf2, 0xfb, 0xa4, 0xaa, 0xdc, 0xfd, 0x59, 0x55, 0xbe, 0xdf, 0x99, 0xa7, 0x83, 0xd3, 0x3f,
+	0x44, 0xdd, 0xd7, 0xe2, 0xbc, 0xf7, 0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xa5, 0xa5, 0xb5, 0xb5,
+	0x25, 0x09, 0x00, 0x00,
 }
 
-func (this *MetadataRepositoryDescriptor_LocalLogStreamReplica) Equal(that interface{}) bool {
+func (this *LogStreamCommitResults) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*MetadataRepositoryDescriptor_LocalLogStreamReplica)
+	that1, ok := that.(*LogStreamCommitResults)
 	if !ok {
-		that2, ok := that.(MetadataRepositoryDescriptor_LocalLogStreamReplica)
+		that2, ok := that.(LogStreamCommitResults)
 		if ok {
 			that1 = &that2
 		} else {
@@ -443,28 +492,33 @@ func (this *MetadataRepositoryDescriptor_LocalLogStreamReplica) Equal(that inter
 	} else if this == nil {
 		return false
 	}
-	if this.UncommittedLLSNOffset != that1.UncommittedLLSNOffset {
+	if this.HighWatermark != that1.HighWatermark {
 		return false
 	}
-	if this.UncommittedLLSNLength != that1.UncommittedLLSNLength {
+	if this.PrevHighWatermark != that1.PrevHighWatermark {
 		return false
 	}
-	if this.KnownHighWatermark != that1.KnownHighWatermark {
+	if len(this.CommitResults) != len(that1.CommitResults) {
 		return false
+	}
+	for i := range this.CommitResults {
+		if !this.CommitResults[i].Equal(that1.CommitResults[i]) {
+			return false
+		}
 	}
 	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
 		return false
 	}
 	return true
 }
-func (this *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Equal(that interface{}) bool {
+func (this *LogStreamUncommitReports) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+	that1, ok := that.(*LogStreamUncommitReports)
 	if !ok {
-		that2, ok := that.(MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+		that2, ok := that.(LogStreamUncommitReports)
 		if ok {
 			that1 = &that2
 		} else {
@@ -492,6 +546,159 @@ func (this *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Equal(that inte
 	}
 	return true
 }
+func (m *LogStreamCommitResults) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LogStreamCommitResults) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LogStreamCommitResults) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.CommitResults) > 0 {
+		for iNdEx := len(m.CommitResults) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.CommitResults[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if m.PrevHighWatermark != 0 {
+		i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(m.PrevHighWatermark))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.HighWatermark != 0 {
+		i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(m.HighWatermark))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *StorageNodeUncommitReport) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StorageNodeUncommitReport) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StorageNodeUncommitReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.UncommitReports) > 0 {
+		for iNdEx := len(m.UncommitReports) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.UncommitReports[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.StorageNodeID != 0 {
+		i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(m.StorageNodeID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *LogStreamUncommitReports) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LogStreamUncommitReports) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LogStreamUncommitReports) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Status != 0 {
+		i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(m.Status))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Replicas) > 0 {
+		for k := range m.Replicas {
+			v := m.Replicas[k]
+			baseI := i
+			if v != nil {
+				{
+					size, err := v.MarshalToSizedBuffer(dAtA[:i])
+					if err != nil {
+						return 0, err
+					}
+					i -= size
+					i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(size))
+				}
+				i--
+				dAtA[i] = 0x12
+			}
+			i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(k))
+			i--
+			dAtA[i] = 0x8
+			i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *MetadataRepositoryDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
@@ -584,104 +791,6 @@ func (m *MetadataRepositoryDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, e
 	return len(dAtA) - i, nil
 }
 
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.KnownHighWatermark != 0 {
-		i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(m.KnownHighWatermark))
-		i--
-		dAtA[i] = 0x18
-	}
-	if m.UncommittedLLSNLength != 0 {
-		i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(m.UncommittedLLSNLength))
-		i--
-		dAtA[i] = 0x10
-	}
-	if m.UncommittedLLSNOffset != 0 {
-		i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(m.UncommittedLLSNOffset))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Status != 0 {
-		i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(m.Status))
-		i--
-		dAtA[i] = 0x10
-	}
-	if len(m.Replicas) > 0 {
-		for k := range m.Replicas {
-			v := m.Replicas[k]
-			baseI := i
-			if v != nil {
-				{
-					size, err := v.MarshalToSizedBuffer(dAtA[:i])
-					if err != nil {
-						return 0, err
-					}
-					i -= size
-					i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(size))
-				}
-				i--
-				dAtA[i] = 0x12
-			}
-			i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(k))
-			i--
-			dAtA[i] = 0x8
-			i = encodeVarintRaftMetadataRepository(dAtA, i, uint64(baseI-i))
-			i--
-			dAtA[i] = 0xa
-		}
-	}
-	return len(dAtA) - i, nil
-}
-
 func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
@@ -706,9 +815,9 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) MarshalToSizedBuffer(
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if len(m.LocalLogStreams) > 0 {
-		for k := range m.LocalLogStreams {
-			v := m.LocalLogStreams[k]
+	if len(m.UncommitReports) > 0 {
+		for k := range m.UncommitReports {
+			v := m.UncommitReports[k]
 			baseI := i
 			if v != nil {
 				{
@@ -730,10 +839,10 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) MarshalToSizedBuffer(
 			dAtA[i] = 0x1a
 		}
 	}
-	if len(m.GlobalLogStreams) > 0 {
-		for iNdEx := len(m.GlobalLogStreams) - 1; iNdEx >= 0; iNdEx-- {
+	if len(m.CommitHistory) > 0 {
+		for iNdEx := len(m.CommitHistory) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size, err := m.GlobalLogStreams[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				size, err := m.CommitHistory[iNdEx].MarshalToSizedBuffer(dAtA[:i])
 				if err != nil {
 					return 0, err
 				}
@@ -807,6 +916,79 @@ func encodeVarintRaftMetadataRepository(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+func (m *LogStreamCommitResults) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.HighWatermark != 0 {
+		n += 1 + sovRaftMetadataRepository(uint64(m.HighWatermark))
+	}
+	if m.PrevHighWatermark != 0 {
+		n += 1 + sovRaftMetadataRepository(uint64(m.PrevHighWatermark))
+	}
+	if len(m.CommitResults) > 0 {
+		for _, e := range m.CommitResults {
+			l = e.ProtoSize()
+			n += 1 + l + sovRaftMetadataRepository(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *StorageNodeUncommitReport) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.StorageNodeID != 0 {
+		n += 1 + sovRaftMetadataRepository(uint64(m.StorageNodeID))
+	}
+	if len(m.UncommitReports) > 0 {
+		for _, e := range m.UncommitReports {
+			l = e.ProtoSize()
+			n += 1 + l + sovRaftMetadataRepository(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *LogStreamUncommitReports) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Replicas) > 0 {
+		for k, v := range m.Replicas {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.ProtoSize()
+				l += 1 + sovRaftMetadataRepository(uint64(l))
+			}
+			mapEntrySize := 1 + sovRaftMetadataRepository(uint64(k)) + l
+			n += mapEntrySize + 1 + sovRaftMetadataRepository(uint64(mapEntrySize))
+		}
+	}
+	if m.Status != 0 {
+		n += 1 + sovRaftMetadataRepository(uint64(m.Status))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *MetadataRepositoryDescriptor) ProtoSize() (n int) {
 	if m == nil {
 		return 0
@@ -848,55 +1030,6 @@ func (m *MetadataRepositoryDescriptor) ProtoSize() (n int) {
 	return n
 }
 
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.UncommittedLLSNOffset != 0 {
-		n += 1 + sovRaftMetadataRepository(uint64(m.UncommittedLLSNOffset))
-	}
-	if m.UncommittedLLSNLength != 0 {
-		n += 1 + sovRaftMetadataRepository(uint64(m.UncommittedLLSNLength))
-	}
-	if m.KnownHighWatermark != 0 {
-		n += 1 + sovRaftMetadataRepository(uint64(m.KnownHighWatermark))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if len(m.Replicas) > 0 {
-		for k, v := range m.Replicas {
-			_ = k
-			_ = v
-			l = 0
-			if v != nil {
-				l = v.ProtoSize()
-				l += 1 + sovRaftMetadataRepository(uint64(l))
-			}
-			mapEntrySize := 1 + sovRaftMetadataRepository(uint64(k)) + l
-			n += mapEntrySize + 1 + sovRaftMetadataRepository(uint64(mapEntrySize))
-		}
-	}
-	if m.Status != 0 {
-		n += 1 + sovRaftMetadataRepository(uint64(m.Status))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
 func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) ProtoSize() (n int) {
 	if m == nil {
 		return 0
@@ -906,14 +1039,14 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) ProtoSize() (n int) {
 	if m.TrimGLSN != 0 {
 		n += 1 + sovRaftMetadataRepository(uint64(m.TrimGLSN))
 	}
-	if len(m.GlobalLogStreams) > 0 {
-		for _, e := range m.GlobalLogStreams {
+	if len(m.CommitHistory) > 0 {
+		for _, e := range m.CommitHistory {
 			l = e.ProtoSize()
 			n += 1 + l + sovRaftMetadataRepository(uint64(l))
 		}
 	}
-	if len(m.LocalLogStreams) > 0 {
-		for k, v := range m.LocalLogStreams {
+	if len(m.UncommitReports) > 0 {
+		for k, v := range m.UncommitReports {
 			_ = k
 			_ = v
 			l = 0
@@ -955,6 +1088,427 @@ func sovRaftMetadataRepository(x uint64) (n int) {
 }
 func sozRaftMetadataRepository(x uint64) (n int) {
 	return sovRaftMetadataRepository(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *LogStreamCommitResults) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRaftMetadataRepository
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LogStreamCommitResults: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LogStreamCommitResults: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
+			}
+			m.HighWatermark = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaftMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.HighWatermark |= github_daumkakao_com_varlog_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrevHighWatermark", wireType)
+			}
+			m.PrevHighWatermark = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaftMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PrevHighWatermark |= github_daumkakao_com_varlog_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommitResults", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaftMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CommitResults = append(m.CommitResults, &snpb.LogStreamCommitResult{})
+			if err := m.CommitResults[len(m.CommitResults)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRaftMetadataRepository(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StorageNodeUncommitReport) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRaftMetadataRepository
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StorageNodeUncommitReport: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StorageNodeUncommitReport: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
+			}
+			m.StorageNodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaftMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StorageNodeID |= github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UncommitReports", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaftMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.UncommitReports = append(m.UncommitReports, &snpb.LogStreamUncommitReport{})
+			if err := m.UncommitReports[len(m.UncommitReports)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRaftMetadataRepository(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LogStreamUncommitReports) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRaftMetadataRepository
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LogStreamUncommitReports: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LogStreamUncommitReports: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Replicas", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaftMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Replicas == nil {
+				m.Replicas = make(map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*snpb.LogStreamUncommitReport)
+			}
+			var mapkey uint32
+			var mapvalue *snpb.LogStreamUncommitReport
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowRaftMetadataRepository
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRaftMetadataRepository
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapkey |= uint32(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else if fieldNum == 2 {
+					var mapmsglen int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRaftMetadataRepository
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapmsglen |= int(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					if mapmsglen < 0 {
+						return ErrInvalidLengthRaftMetadataRepository
+					}
+					postmsgIndex := iNdEx + mapmsglen
+					if postmsgIndex < 0 {
+						return ErrInvalidLengthRaftMetadataRepository
+					}
+					if postmsgIndex > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = &snpb.LogStreamUncommitReport{}
+					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+						return err
+					}
+					iNdEx = postmsgIndex
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipRaftMetadataRepository(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthRaftMetadataRepository
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Replicas[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID(mapkey)] = mapvalue
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			m.Status = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaftMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Status |= varlogpb.LogStreamStatus(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRaftMetadataRepository(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRaftMetadataRepository
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *MetadataRepositoryDescriptor) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -1310,305 +1864,6 @@ func (m *MetadataRepositoryDescriptor) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplica) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowRaftMetadataRepository
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: LocalLogStreamReplica: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: LocalLogStreamReplica: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field UncommittedLLSNOffset", wireType)
-			}
-			m.UncommittedLLSNOffset = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRaftMetadataRepository
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.UncommittedLLSNOffset |= github_daumkakao_com_varlog_varlog_pkg_types.LLSN(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field UncommittedLLSNLength", wireType)
-			}
-			m.UncommittedLLSNLength = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRaftMetadataRepository
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.UncommittedLLSNLength |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field KnownHighWatermark", wireType)
-			}
-			m.KnownHighWatermark = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRaftMetadataRepository
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.KnownHighWatermark |= github_daumkakao_com_varlog_varlog_pkg_types.GLSN(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipRaftMetadataRepository(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftMetadataRepository
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthRaftMetadataRepository
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowRaftMetadataRepository
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: LocalLogStreamReplicas: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: LocalLogStreamReplicas: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Replicas", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRaftMetadataRepository
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthRaftMetadataRepository
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthRaftMetadataRepository
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Replicas == nil {
-				m.Replicas = make(map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]*MetadataRepositoryDescriptor_LocalLogStreamReplica)
-			}
-			var mapkey int32
-			var mapvalue *MetadataRepositoryDescriptor_LocalLogStreamReplica
-			for iNdEx < postIndex {
-				entryPreIndex := iNdEx
-				var wire uint64
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return ErrIntOverflowRaftMetadataRepository
-					}
-					if iNdEx >= l {
-						return io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					wire |= uint64(b&0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				fieldNum := int32(wire >> 3)
-				if fieldNum == 1 {
-					for shift := uint(0); ; shift += 7 {
-						if shift >= 64 {
-							return ErrIntOverflowRaftMetadataRepository
-						}
-						if iNdEx >= l {
-							return io.ErrUnexpectedEOF
-						}
-						b := dAtA[iNdEx]
-						iNdEx++
-						mapkey |= int32(b&0x7F) << shift
-						if b < 0x80 {
-							break
-						}
-					}
-				} else if fieldNum == 2 {
-					var mapmsglen int
-					for shift := uint(0); ; shift += 7 {
-						if shift >= 64 {
-							return ErrIntOverflowRaftMetadataRepository
-						}
-						if iNdEx >= l {
-							return io.ErrUnexpectedEOF
-						}
-						b := dAtA[iNdEx]
-						iNdEx++
-						mapmsglen |= int(b&0x7F) << shift
-						if b < 0x80 {
-							break
-						}
-					}
-					if mapmsglen < 0 {
-						return ErrInvalidLengthRaftMetadataRepository
-					}
-					postmsgIndex := iNdEx + mapmsglen
-					if postmsgIndex < 0 {
-						return ErrInvalidLengthRaftMetadataRepository
-					}
-					if postmsgIndex > l {
-						return io.ErrUnexpectedEOF
-					}
-					mapvalue = &MetadataRepositoryDescriptor_LocalLogStreamReplica{}
-					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
-						return err
-					}
-					iNdEx = postmsgIndex
-				} else {
-					iNdEx = entryPreIndex
-					skippy, err := skipRaftMetadataRepository(dAtA[iNdEx:])
-					if err != nil {
-						return err
-					}
-					if skippy < 0 {
-						return ErrInvalidLengthRaftMetadataRepository
-					}
-					if (iNdEx + skippy) > postIndex {
-						return io.ErrUnexpectedEOF
-					}
-					iNdEx += skippy
-				}
-			}
-			m.Replicas[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID(mapkey)] = mapvalue
-			iNdEx = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
-			}
-			m.Status = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRaftMetadataRepository
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Status |= varlogpb.LogStreamStatus(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipRaftMetadataRepository(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftMetadataRepository
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthRaftMetadataRepository
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1659,7 +1914,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte
 			}
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field GlobalLogStreams", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field CommitHistory", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1686,14 +1941,14 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.GlobalLogStreams = append(m.GlobalLogStreams, &snpb.GlobalLogStreamDescriptor{})
-			if err := m.GlobalLogStreams[len(m.GlobalLogStreams)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			m.CommitHistory = append(m.CommitHistory, &LogStreamCommitResults{})
+			if err := m.CommitHistory[len(m.CommitHistory)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LocalLogStreams", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field UncommitReports", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1720,11 +1975,11 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.LocalLogStreams == nil {
-				m.LocalLogStreams = make(map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*MetadataRepositoryDescriptor_LocalLogStreamReplicas)
+			if m.UncommitReports == nil {
+				m.UncommitReports = make(map[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID]*LogStreamUncommitReports)
 			}
-			var mapkey uint64
-			var mapvalue *MetadataRepositoryDescriptor_LocalLogStreamReplicas
+			var mapkey uint32
+			var mapvalue *LogStreamUncommitReports
 			for iNdEx < postIndex {
 				entryPreIndex := iNdEx
 				var wire uint64
@@ -1753,7 +2008,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						mapkey |= uint64(b&0x7F) << shift
+						mapkey |= uint32(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -1784,7 +2039,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte
 					if postmsgIndex > l {
 						return io.ErrUnexpectedEOF
 					}
-					mapvalue = &MetadataRepositoryDescriptor_LocalLogStreamReplicas{}
+					mapvalue = &LogStreamUncommitReports{}
 					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
 						return err
 					}
@@ -1804,7 +2059,7 @@ func (m *MetadataRepositoryDescriptor_LogStreamDescriptor) Unmarshal(dAtA []byte
 					iNdEx += skippy
 				}
 			}
-			m.LocalLogStreams[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID(mapkey)] = mapvalue
+			m.UncommitReports[github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID(mapkey)] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

@@ -5,88 +5,142 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 const DEFAULT_REPORT_ALL_DUR = time.Second
 
-type ReportCollectorCallbacks struct {
-	report        func(*snpb.LocalLogStreamDescriptor) error
-	getClient     func(*varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error)
-	lookupNextGLS func(types.GLSN) *snpb.GlobalLogStreamDescriptor
-	getOldestGLS  func() *snpb.GlobalLogStreamDescriptor
+type ReportCollector interface {
+	Run()
+
+	Reset()
+
+	Close()
+
+	Recover([]*varlogpb.StorageNodeDescriptor, []*varlogpb.LogStreamDescriptor, types.GLSN) error
+
+	RegisterStorageNode(*varlogpb.StorageNodeDescriptor, types.GLSN) error
+
+	UnregisterStorageNode(types.StorageNodeID) error
+
+	RegisterLogStream(types.StorageNodeID, types.LogStreamID) error
+
+	UnregisterLogStream(types.StorageNodeID, types.LogStreamID) error
+
+	Commit()
+
+	NumExecutors() int
+
+	NumCommitter() int
 }
 
-type ReportCollectExecutor struct {
-	highWatermark   types.GLSN
-	lastReport      *snpb.LocalLogStreamDescriptor
-	lastReportAllAt time.Time
-	cli             storagenode.LogStreamReporterClient
-	sn              *varlogpb.StorageNodeDescriptor
-	cb              ReportCollectorCallbacks
-	rpcTimeout      time.Duration
-	lsmu            sync.RWMutex
-	clmu            sync.RWMutex
-	resultC         chan *snpb.GlobalLogStreamDescriptor
-	logger          *zap.Logger
-	cancel          context.CancelFunc
+type commitHelper interface {
+	commit(context.Context, *snpb.LogStreamCommitResult) error
+
+	getHighWatermark(types.LogStreamID) (types.GLSN, bool)
+
+	lookupCommitResults(types.GLSN) *mrpb.LogStreamCommitResults
+
+	lookupNextCommitResults(types.GLSN) *mrpb.LogStreamCommitResults
 }
 
-type ReportCollector struct {
-	executors  map[types.StorageNodeID]*ReportCollectExecutor
-	cb         ReportCollectorCallbacks
+type logStreamCommitter struct {
+	lsID   types.LogStreamID
+	helper commitHelper
+
+	triggerC chan struct{}
+
+	runner *runner.Runner
+	cancel context.CancelFunc
+	logger *zap.Logger
+}
+
+type reportContext struct {
+	minHighwatermark types.GLSN
+	report           *mrpb.StorageNodeUncommitReport
+	reloadAt         time.Time
+	mu               sync.RWMutex
+}
+
+type storageNodeConnector struct {
+	sn  *varlogpb.StorageNodeDescriptor
+	cli storagenode.LogStreamReporterClient
+	mu  sync.RWMutex
+}
+
+type reportCollectExecutor struct {
+	storageNodeID types.StorageNodeID
+	helper        ReportCollectorHelper
+
+	snConnector storageNodeConnector
+
+	reportCtx *reportContext
+
+	committers map[types.LogStreamID]*logStreamCommitter
+	cmmu       sync.RWMutex
+
 	rpcTimeout time.Duration
-	mu         sync.RWMutex
-	logger     *zap.Logger
-	cancel     context.CancelFunc
-	runner     *runner.Runner
+
+	runner *runner.Runner
+	cancel context.CancelFunc
+	logger *zap.Logger
+}
+
+type reportCollector struct {
+	executors map[types.StorageNodeID]*reportCollectExecutor
+	mu        sync.RWMutex
+
+	helper ReportCollectorHelper
+
+	rpcTimeout time.Duration
 	closed     bool
+
+	logger *zap.Logger
 }
 
-func NewReportCollector(cb ReportCollectorCallbacks, rpcTimeout time.Duration, logger *zap.Logger) *ReportCollector {
-	return &ReportCollector{
+func NewReportCollector(helper ReportCollectorHelper, rpcTimeout time.Duration, logger *zap.Logger) *reportCollector {
+	return &reportCollector{
 		logger:     logger,
-		cb:         cb,
+		helper:     helper,
 		rpcTimeout: rpcTimeout,
-		executors:  make(map[types.StorageNodeID]*ReportCollectExecutor),
+		executors:  make(map[types.StorageNodeID]*reportCollectExecutor),
 	}
 }
 
-func (rc *ReportCollector) running() bool {
-	return !rc.closed && rc.runner.State() == runner.Running
+func (rc *reportCollector) running() bool {
+	return !rc.closed
 }
 
-func (rc *ReportCollector) Run() {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	if !rc.running() {
-		rc.runner = runner.New("rc", rc.logger)
-	}
+func (rc *reportCollector) Run() {
 }
 
-func (rc *ReportCollector) reset() {
+func (rc *reportCollector) reset() {
 	if rc.running() {
-		rc.executors = make(map[types.StorageNodeID]*ReportCollectExecutor)
+		for _, e := range rc.executors {
+			e.stop()
+		}
 
-		rc.runner.Stop()
+		rc.executors = make(map[types.StorageNodeID]*reportCollectExecutor)
 	}
 }
 
-func (rc *ReportCollector) Reset() {
+func (rc *reportCollector) Reset() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
 	rc.reset()
 }
 
-func (rc *ReportCollector) Close() {
+func (rc *reportCollector) Close() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
@@ -94,20 +148,37 @@ func (rc *ReportCollector) Close() {
 	rc.closed = true
 }
 
-func (rc *ReportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, highWatermark types.GLSN) error {
+func (rc *reportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, lss []*varlogpb.LogStreamDescriptor, highWatermark types.GLSN) error {
 	rc.Run()
 
 	for _, sn := range sns {
+		if sn.Status.Deleted() {
+			continue
+		}
+
 		err := rc.RegisterStorageNode(sn, highWatermark)
 		if err != nil {
 			return err
 		}
 	}
 
+	for _, ls := range lss {
+		if ls.Status.Deleted() {
+			continue
+		}
+
+		for _, r := range ls.Replicas {
+			err := rc.RegisterLogStream(r.StorageNodeID, ls.LogStreamID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
-func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor, glsn types.GLSN) error {
+func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor, highWatermark types.GLSN) error {
 	if sn == nil {
 		return verrors.ErrInvalid
 	}
@@ -123,23 +194,19 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		return verrors.ErrExist
 	}
 
-	executor := &ReportCollectExecutor{
-		resultC:       make(chan *snpb.GlobalLogStreamDescriptor, 1),
-		highWatermark: glsn,
-		sn:            sn,
-		cb:            rc.cb,
+	logger := rc.logger.Named("executor").With(zap.Uint32("snid", uint32(sn.StorageNodeID)))
+	executor := &reportCollectExecutor{
+		storageNodeID: sn.StorageNodeID,
+		helper:        rc.helper,
+		snConnector:   storageNodeConnector{sn: sn},
+		reportCtx:     &reportContext{minHighwatermark: highWatermark},
+		committers:    make(map[types.LogStreamID]*logStreamCommitter),
 		rpcTimeout:    rc.rpcTimeout,
-		logger:        rc.logger.Named("executor").With(zap.Uint32("snid", uint32(sn.StorageNodeID))),
+		runner:        runner.New("excutor", logger),
+		logger:        logger,
 	}
-	ctx, cancel := rc.runner.WithManagedCancel(context.Background())
-	executor.cancel = cancel
 
-	if err := rc.runner.RunC(ctx, executor.runCommit); err != nil {
-		executor.cancel()
-		return err
-	}
-	if err := rc.runner.RunC(ctx, executor.runReport); err != nil {
-		executor.cancel()
+	if err := executor.run(); err != nil {
 		return err
 	}
 
@@ -148,7 +215,7 @@ func (rc *ReportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 	return nil
 }
 
-func (rc *ReportCollector) UnregisterStorageNode(snID types.StorageNodeID) error {
+func (rc *reportCollector) UnregisterStorageNode(snID types.StorageNodeID) error {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
@@ -161,17 +228,49 @@ func (rc *ReportCollector) UnregisterStorageNode(snID types.StorageNodeID) error
 		return verrors.ErrNotExist
 	}
 
+	if executor.numCommitter() != 0 {
+		return verrors.ErrNotEmpty
+	}
+
 	delete(rc.executors, snID)
-	executor.cancel()
+	executor.stopNoWait()
 
 	return nil
 }
 
-func (rc *ReportCollector) Commit(gls *snpb.GlobalLogStreamDescriptor) {
-	if gls == nil {
-		return
+func (rc *reportCollector) RegisterLogStream(snID types.StorageNodeID, lsID types.LogStreamID) error {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+
+	if !rc.running() {
+		return verrors.ErrStopped
 	}
 
+	executor, ok := rc.executors[snID]
+	if !ok {
+		return verrors.ErrNotExist
+	}
+
+	return executor.registerLogStream(lsID)
+}
+
+func (rc *reportCollector) UnregisterLogStream(snID types.StorageNodeID, lsID types.LogStreamID) error {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+
+	if !rc.running() {
+		return verrors.ErrStopped
+	}
+
+	executor, ok := rc.executors[snID]
+	if !ok {
+		return verrors.ErrNotExist
+	}
+
+	return executor.unregisterLogStream(lsID)
+}
+
+func (rc *reportCollector) Commit() {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
@@ -180,29 +279,121 @@ func (rc *ReportCollector) Commit(gls *snpb.GlobalLogStreamDescriptor) {
 	}
 
 	for _, executor := range rc.executors {
-		select {
-		case executor.resultC <- gls:
-		default:
-		}
+		executor.addCommitC()
 	}
 }
 
-func (rce *ReportCollectExecutor) runReport(ctx context.Context) {
+func (rc *reportCollector) NumExecutors() int {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+
+	return len(rc.executors)
+}
+
+func (rc *reportCollector) NumCommitter() int {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+
+	num := 0
+	for _, executor := range rc.executors {
+		num += executor.numCommitter()
+	}
+
+	return num
+}
+
+func (rce *reportCollectExecutor) run() error {
+	ctx, cancel := rce.runner.WithManagedCancel(context.Background())
+	if err := rce.runner.RunC(ctx, rce.runReport); err != nil {
+		return err
+	}
+	rce.cancel = cancel
+
+	return nil
+}
+
+func (rce *reportCollectExecutor) stop() {
+	rce.cmmu.RLock()
+	for _, c := range rce.committers {
+		c.stop()
+	}
+	rce.cmmu.RUnlock()
+
+	rce.runner.Stop()
+
+	rce.closeClient(nil)
+}
+
+func (rce *reportCollectExecutor) stopNoWait() {
+	rce.cmmu.RLock()
+	for _, c := range rce.committers {
+		c.stopNoWait()
+	}
+	rce.cmmu.RUnlock()
+
+	rce.cancel()
+
+	go rce.stop()
+}
+
+func (rce *reportCollectExecutor) registerLogStream(lsID types.LogStreamID) error {
+	rce.cmmu.Lock()
+	defer rce.cmmu.Unlock()
+
+	if _, ok := rce.committers[lsID]; ok {
+		return verrors.ErrExist
+	}
+
+	c := newLogStreamCommitter(lsID, rce, rce.logger)
+	err := c.run()
+	if err != nil {
+		return err
+	}
+
+	rce.committers[lsID] = c
+	return nil
+}
+
+func (rce *reportCollectExecutor) unregisterLogStream(lsID types.LogStreamID) error {
+	rce.cmmu.Lock()
+	defer rce.cmmu.Unlock()
+
+	c, ok := rce.committers[lsID]
+	if !ok {
+		return verrors.ErrNotExist
+	}
+
+	delete(rce.committers, lsID)
+	c.stopNoWait()
+
+	return nil
+}
+
+func (rce *reportCollectExecutor) addCommitC() {
+	rce.cmmu.RLock()
+	defer rce.cmmu.RUnlock()
+
+	for _, c := range rce.committers {
+		c.addCommitC()
+	}
+}
+
+func (rce *reportCollectExecutor) numCommitter() int {
+	rce.cmmu.RLock()
+	defer rce.cmmu.RUnlock()
+
+	return len(rce.committers)
+}
+
+func (rce *reportCollectExecutor) runReport(ctx context.Context) {
 Loop:
 	for {
 		select {
 		case <-ctx.Done():
 			break Loop
 		default:
-			err := rce.getReport()
+			err := rce.getReport(ctx)
 			if err != nil {
-				/*
-					rce.logger.Error("getReport fail",
-						zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
-						zap.String("ADDR", rce.sn.Address),
-						zap.String("err", err.Error()),
-					)
-				*/
 				continue Loop
 			}
 		}
@@ -211,192 +402,144 @@ Loop:
 	rce.closeClient(nil)
 }
 
-func (rce *ReportCollectExecutor) runCommit(ctx context.Context) {
-Loop:
-	for {
-		select {
-		case <-ctx.Done():
-			break Loop
-		case gls := <-rce.resultC:
-			highWatermark := rce.getHighWatermark()
-
-			err := rce.catchup(highWatermark, gls)
-			if err != nil {
-				/*
-					rce.logger.Debug("commit fail",
-						zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
-						zap.String("ADDR", rce.sn.Address),
-						zap.String("err", err.Error()),
-					)
-				*/
-				continue Loop
-			}
-
-			err = rce.commit(gls)
-			if err != nil {
-				/*
-					rce.logger.Debug("commit fail",
-						zap.Uint64("SNID", uint64(rce.sn.StorageNodeID)),
-						zap.String("ADDR", rce.sn.Address),
-						zap.String("err", err.Error()),
-					)
-				*/
-				continue Loop
-			}
-		}
-	}
-
-	rce.closeClient(nil)
-}
-
-func (rce *ReportCollectExecutor) getReport() error {
+func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 	cli, err := rce.getClient()
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), rce.rpcTimeout)
+	ctx, cancel := context.WithTimeout(ctx, rce.rpcTimeout)
 	defer cancel()
-	lls, err := cli.GetReport(ctx)
+	response, err := cli.GetReport(ctx)
 	if err != nil {
-		/*
-			rce.logger.Debug("getReport",
-				zap.String("err", err.Error()),
-			)
-		*/
 		rce.closeClient(cli)
 		return err
 	}
 
-	lls = rce.processReport(lls)
-	if lls.Len() > 0 {
-		rce.cb.report(lls)
+	report := rce.processReport(response)
+	if report.Len() > 0 {
+		rce.helper.ProposeReport(rce.storageNodeID, report.UncommitReports)
 	}
 
 	return nil
 }
 
-func (rce *ReportCollectExecutor) saveReport(lls *snpb.LocalLogStreamDescriptor) {
-	rce.lsmu.Lock()
-	rce.highWatermark = lls.HighWatermark
-	rce.lastReport = lls
-	rce.lsmu.Unlock()
-}
-
-func (rce *ReportCollectExecutor) processReport(lls *snpb.LocalLogStreamDescriptor) *snpb.LocalLogStreamDescriptor {
-	if lls.HighWatermark.Invalid() {
-		lls.HighWatermark = rce.highWatermark
-	} else if lls.HighWatermark < rce.highWatermark {
-		rce.logger.Panic("invalid GLSN",
-			zap.Uint64("REPORT", uint64(lls.HighWatermark)),
-			zap.Uint64("CUR", uint64(rce.highWatermark)),
-		)
+func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse) *mrpb.StorageNodeUncommitReport {
+	report := &mrpb.StorageNodeUncommitReport{
+		StorageNodeID:   response.StorageNodeID,
+		UncommitReports: response.UncommitReports,
 	}
 
-	lls.Sort()
-
-	if rce.lastReport == nil {
-		rce.saveReport(lls)
-		rce.lastReportAllAt = time.Now()
-		return lls
+	if report.Len() == 0 {
+		return report
 	}
 
-	diff := &snpb.LocalLogStreamDescriptor{
-		StorageNodeID: lls.StorageNodeID,
-		HighWatermark: lls.HighWatermark,
+	report.Sort()
+
+	minHighwatermark := rce.reportCtx.updateMinHighwatermark(report)
+	for _, u := range report.UncommitReports {
+		if u.HighWatermark.Invalid() {
+			u.HighWatermark = minHighwatermark
+		}
 	}
 
-	merge := &snpb.LocalLogStreamDescriptor{
-		StorageNodeID: lls.StorageNodeID,
-		HighWatermark: lls.HighWatermark,
+	prevReport := rce.reportCtx.getReport()
+	if prevReport == nil {
+		rce.reportCtx.saveReport(report)
+		rce.reportCtx.reload()
+		return report
+	}
+
+	diff := &mrpb.StorageNodeUncommitReport{
+		StorageNodeID: report.StorageNodeID,
 	}
 
 	i := 0
 	j := 0
-	for i < lls.Len() && j < rce.lastReport.Len() {
-		cur := lls.Uncommit[i]
-		prev := rce.lastReport.Uncommit[j]
+	for i < report.Len() && j < prevReport.Len() {
+		cur := report.UncommitReports[i]
+		prev := prevReport.UncommitReports[j]
 
 		if cur.LogStreamID < prev.LogStreamID {
-			diff.Uncommit = append(diff.Uncommit, cur)
-			merge.Uncommit = append(merge.Uncommit, cur)
+			diff.UncommitReports = append(diff.UncommitReports, cur)
 			i++
 		} else if prev.LogStreamID < cur.LogStreamID {
-			merge.Uncommit = append(merge.Uncommit, prev)
 			j++
 		} else {
-			if cur.UncommittedLLSNOffset > prev.UncommittedLLSNOffset ||
-				cur.UncommitedLLSNEnd() > prev.UncommitedLLSNEnd() {
-				diff.Uncommit = append(diff.Uncommit, cur)
+			if cur.HighWatermark < prev.HighWatermark {
+				rce.logger.Panic("invalid report",
+					zap.Any("prev", prev.HighWatermark),
+					zap.Any("cur", cur.HighWatermark))
 			}
-			merge.Uncommit = append(merge.Uncommit, cur)
+
+			if cur.UncommittedLLSNOffset > prev.UncommittedLLSNOffset ||
+				cur.UncommittedLLSNEnd() > prev.UncommittedLLSNEnd() {
+				diff.UncommitReports = append(diff.UncommitReports, cur)
+			}
 			i++
 			j++
 		}
 	}
 
-	if i < lls.Len() {
-		diff.Uncommit = append(diff.Uncommit, lls.Uncommit[i:]...)
-		merge.Uncommit = append(merge.Uncommit, lls.Uncommit[i:]...)
-	} else if j < rce.lastReport.Len() {
-		merge.Uncommit = append(merge.Uncommit, rce.lastReport.Uncommit[j:]...)
+	if i < report.Len() {
+		diff.UncommitReports = append(diff.UncommitReports, report.UncommitReports[i:]...)
 	}
 
-	rce.saveReport(merge)
+	rce.reportCtx.saveReport(report)
 
-	if time.Now().Sub(rce.lastReportAllAt) > DEFAULT_REPORT_ALL_DUR {
-		rce.lastReportAllAt = time.Now()
-		return lls
+	if rce.reportCtx.isExpire() {
+		rce.reportCtx.reload()
+		return report
 	}
 
 	return diff
 }
 
-func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) error {
+func (rce *reportCollectExecutor) closeClient(cli storagenode.LogStreamReporterClient) {
+	rce.snConnector.mu.Lock()
+	defer rce.snConnector.mu.Unlock()
+
+	if rce.snConnector.cli != nil &&
+		(rce.snConnector.cli == cli || cli == nil) {
+		rce.snConnector.cli.Close()
+		rce.snConnector.cli = nil
+	}
+}
+
+func (rce *reportCollectExecutor) getClient() (storagenode.LogStreamReporterClient, error) {
+	rce.snConnector.mu.RLock()
+	cli := rce.snConnector.cli
+	rce.snConnector.mu.RUnlock()
+
+	if cli != nil {
+		return cli, nil
+	}
+
+	rce.snConnector.mu.Lock()
+	defer rce.snConnector.mu.Unlock()
+
+	var err error
+	if rce.snConnector.cli == nil {
+		rce.snConnector.cli, err = rce.helper.GetClient(rce.snConnector.sn)
+	}
+	return rce.snConnector.cli, err
+}
+
+func (rce *reportCollectExecutor) commit(ctx context.Context, cr *snpb.LogStreamCommitResult) error {
 	cli, err := rce.getClient()
 	if err != nil {
 		return err
 	}
 
-	rce.lsmu.RLock()
-	lastReport := rce.lastReport
-	rce.lsmu.RUnlock()
-
-	if lastReport == nil {
-		return nil
+	r := snpb.CommitRequest{
+		StorageNodeID: rce.storageNodeID,
+		CommitResults: []*snpb.LogStreamCommitResult{cr},
 	}
 
-	r := snpb.GlobalLogStreamDescriptor{
-		HighWatermark:     gls.HighWatermark,
-		PrevHighWatermark: gls.PrevHighWatermark,
-	}
-
-	r.CommitResult = make([]*snpb.GlobalLogStreamDescriptor_LogStreamCommitResult, 0, lastReport.Len())
-
-	for _, u := range lastReport.Uncommit {
-		c := getCommitResultFromGLS(gls, u.LogStreamID)
-		if c != nil {
-			r.CommitResult = append(r.CommitResult, c)
-		}
-	}
-
-	if len(r.CommitResult) == 0 {
-		return nil
-	}
-
-	rce.logger.Debug("commit",
-		zap.Uint64("hwm", uint64(r.HighWatermark)),
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), rce.rpcTimeout)
+	ctx, cancel := context.WithTimeout(ctx, rce.rpcTimeout)
 	defer cancel()
 	err = cli.Commit(ctx, &r)
 	if err != nil {
-		/*
-			rce.logger.Debug("commit",
-				zap.String("err", err.Error()),
-			)
-		*/
 		rce.closeClient(cli)
 		return err
 	}
@@ -404,89 +547,157 @@ func (rce *ReportCollectExecutor) commit(gls *snpb.GlobalLogStreamDescriptor) er
 	return nil
 }
 
-func (rce *ReportCollectExecutor) catchup(highWatermark types.GLSN, gls *snpb.GlobalLogStreamDescriptor) error {
-	for highWatermark < gls.HighWatermark {
-		prev := rce.cb.lookupNextGLS(highWatermark)
-		if prev == nil {
-			prev = rce.cb.getOldestGLS()
-			if prev == nil || prev.PrevHighWatermark < highWatermark {
-				rce.logger.Warn("could not catchup",
-					zap.Uint64("known hwm", uint64(highWatermark)),
-					zap.Uint64("first prev hwm", uint64(prev.GetPrevHighWatermark())),
-				)
-				return nil
-			}
-
-			rce.logger.Debug("send commit result skipping the sequence",
-				zap.Uint64("known hwm", uint64(highWatermark)),
-				zap.Uint64("first prev hwm", uint64(prev.GetPrevHighWatermark())),
-			)
-
-			if prev.HighWatermark == gls.HighWatermark {
-				return nil
-			}
-		}
-
-		err := rce.commit(prev)
-		if err != nil {
-			return err
-		}
-
-		highWatermark = prev.HighWatermark
+func (rce *reportCollectExecutor) getHighWatermark(lsID types.LogStreamID) (types.GLSN, bool) {
+	report := rce.reportCtx.getReport()
+	if report == nil {
+		return types.InvalidGLSN, false
 	}
+
+	r := report.LookupReport(lsID)
+	if r == nil {
+		return types.InvalidGLSN, false
+	}
+
+	return r.HighWatermark, true
+}
+
+func (rce *reportCollectExecutor) lookupCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
+	return rce.helper.LookupCommitResults(glsn)
+}
+
+func (rce *reportCollectExecutor) lookupNextCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
+	return rce.helper.LookupNextCommitResults(glsn)
+}
+
+func newLogStreamCommitter(lsID types.LogStreamID, helper commitHelper, logger *zap.Logger) *logStreamCommitter {
+	triggerC := make(chan struct{}, 1)
+
+	return &logStreamCommitter{
+		lsID:     lsID,
+		helper:   helper,
+		triggerC: triggerC,
+		runner:   runner.New("lscommitter", logger),
+		logger:   logger,
+	}
+}
+
+func (lc *logStreamCommitter) run() error {
+	ctx, cancel := lc.runner.WithManagedCancel(context.Background())
+	if err := lc.runner.RunC(ctx, lc.runCommit); err != nil {
+		return err
+	}
+	lc.cancel = cancel
 
 	return nil
 }
 
-func (rc *ReportCollector) getMinHighWatermark() types.GLSN {
-	rc.mu.RLock()
-	defer rc.mu.RUnlock()
+func (lc *logStreamCommitter) stop() {
+	lc.runner.Stop()
+}
 
-	min := types.MaxGLSN
+func (lc *logStreamCommitter) stopNoWait() {
+	lc.cancel()
+}
 
-	for _, e := range rc.executors {
-		hwm := e.getHighWatermark()
-		if hwm < min {
-			min = hwm
+func (lc *logStreamCommitter) addCommitC() {
+	select {
+	case lc.triggerC <- struct{}{}:
+	default:
+	}
+}
+
+func (lc *logStreamCommitter) runCommit(ctx context.Context) {
+Loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break Loop
+		case <-lc.triggerC:
+			lc.catchup(ctx)
 		}
 	}
 
-	return min
+	close(lc.triggerC)
 }
 
-func (rce *ReportCollectExecutor) getHighWatermark() types.GLSN {
-	rce.lsmu.RLock()
-	defer rce.lsmu.RUnlock()
+func (lc *logStreamCommitter) isNewbie(highWatermark types.GLSN) bool {
+	if highWatermark.Invalid() {
+		return true
+	}
 
-	return rce.highWatermark
+	cr := lc.helper.lookupCommitResults(highWatermark)
+	if cr == nil {
+		lc.logger.Panic("no commit result", zap.Any("hwm", highWatermark))
+	}
+
+	return cr.LookupCommitResult(lc.lsID) == nil
 }
 
-func (rce *ReportCollectExecutor) closeClient(cli storagenode.LogStreamReporterClient) {
-	rce.clmu.Lock()
-	defer rce.clmu.Unlock()
+func (lc *logStreamCommitter) catchup(ctx context.Context) {
+	highWatermark, ok := lc.helper.getHighWatermark(lc.lsID)
+	if !ok {
+		return
+	}
 
-	if rce.cli != nil &&
-		(rce.cli == cli || cli == nil) {
-		rce.cli.Close()
-		rce.cli = nil
+	for ctx.Err() == nil {
+
+		results := lc.helper.lookupNextCommitResults(highWatermark)
+		if results == nil {
+			return
+		}
+		highWatermark = results.HighWatermark
+
+		cr := results.LookupCommitResult(lc.lsID)
+		if cr != nil {
+			cr = proto.Clone(cr).(*snpb.LogStreamCommitResult)
+			cr.HighWatermark = results.HighWatermark
+			if lc.isNewbie(results.PrevHighWatermark) {
+				cr.PrevHighWatermark = types.InvalidGLSN
+			} else {
+				cr.PrevHighWatermark = results.PrevHighWatermark
+			}
+
+			err := lc.helper.commit(ctx, cr)
+			if err != nil {
+				return
+			}
+		}
 	}
 }
 
-func (rce *ReportCollectExecutor) getClient() (storagenode.LogStreamReporterClient, error) {
-	rce.clmu.RLock()
-	cli := rce.cli
-	rce.clmu.RUnlock()
+func (rc *reportContext) saveReport(report *mrpb.StorageNodeUncommitReport) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
 
-	if cli != nil {
-		return cli, nil
+	rc.report = report
+}
+
+func (rc *reportContext) getReport() *mrpb.StorageNodeUncommitReport {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+
+	return rc.report
+}
+
+func (rc *reportContext) reload() {
+	rc.reloadAt = time.Now()
+}
+
+func (rc *reportContext) isExpire() bool {
+	return time.Since(rc.reloadAt) > DEFAULT_REPORT_ALL_DUR
+}
+
+func (rc *reportContext) updateMinHighwatermark(report *mrpb.StorageNodeUncommitReport) types.GLSN {
+	minHighwatermark := types.MaxGLSN
+	for _, u := range report.UncommitReports {
+		if minHighwatermark > u.HighWatermark {
+			minHighwatermark = u.HighWatermark
+		}
 	}
 
-	rce.clmu.Lock()
-	defer rce.clmu.Unlock()
-
-	var err error
-	if rce.cli == nil {
-		rce.cli, err = rce.cb.getClient(rce.sn)
+	if !minHighwatermark.Invalid() && minHighwatermark != types.MaxGLSN {
+		rc.minHighwatermark = minHighwatermark
 	}
-	return rce.cli, err
+
+	return rc.minHighwatermark
 }

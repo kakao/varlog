@@ -264,19 +264,19 @@ func (clus *metadataRepoCluster) closeNoErrors(t *testing.T) {
 	clus.logger.Info("cluster stop complete")
 }
 
-func makeLocalLogStream(snID types.StorageNodeID, knownHighWatermark types.GLSN, lsID types.LogStreamID, offset types.LLSN, length uint64) *snpb.LocalLogStreamDescriptor {
-	lls := &snpb.LocalLogStreamDescriptor{
+func makeUncommitReport(snID types.StorageNodeID, knownHighWatermark types.GLSN, lsID types.LogStreamID, offset types.LLSN, length uint64) *mrpb.Report {
+	report := &mrpb.Report{
 		StorageNodeID: snID,
-		HighWatermark: knownHighWatermark,
 	}
-	ls := &snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
+	u := &snpb.LogStreamUncommitReport{
 		LogStreamID:           lsID,
+		HighWatermark:         knownHighWatermark,
 		UncommittedLLSNOffset: offset,
 		UncommittedLLSNLength: length,
 	}
-	lls.Uncommit = append(lls.Uncommit, ls)
+	report.UncommitReport = append(report.UncommitReport, u)
 
-	return lls
+	return report
 }
 
 func makeLogStream(lsID types.LogStreamID, snIDs []types.StorageNodeID) *varlogpb.LogStreamDescriptor {
@@ -306,12 +306,12 @@ func TestMRApplyReport(t *testing.T) {
 		})
 		mr := clus.nodes[0]
 
-		snIds := make([]types.StorageNodeID, rep)
-		for i := range snIds {
-			snIds[i] = types.StorageNodeID(i)
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := range snIDs {
+			snIDs[i] = types.StorageNodeID(i)
 
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIds[i],
+				StorageNodeID: snIDs[i],
 			}
 
 			err := mr.storage.registerStorageNode(sn)
@@ -320,55 +320,55 @@ func TestMRApplyReport(t *testing.T) {
 		lsId := types.LogStreamID(0)
 		notExistSnID := types.StorageNodeID(rep)
 
-		lls := makeLocalLogStream(snIds[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
-		mr.applyReport(&mrpb.Report{LogStream: lls})
+		report := makeUncommitReport(snIDs[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
+		mr.applyReport(report)
 
-		for _, snId := range snIds {
-			r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+		for _, snId := range snIDs {
+			r := mr.storage.LookupUncommitReport(lsId, snId)
 			So(r, ShouldBeNil)
 		}
 
-		Convey("LocalLogStream should register when register LogStream", func(ctx C) {
-			ls := makeLogStream(lsId, snIds)
+		Convey("UncommitReport should register when register LogStream", func(ctx C) {
+			ls := makeLogStream(lsId, snIDs)
 			err := mr.storage.registerLogStream(ls)
 			So(err, ShouldBeNil)
 
-			for _, snId := range snIds {
-				r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+			for _, snId := range snIDs {
+				r := mr.storage.LookupUncommitReport(lsId, snId)
 				So(r, ShouldNotBeNil)
 			}
 
-			Convey("Report should not apply if snID is not exist in LocalLogStream", func(ctx C) {
-				lls := makeLocalLogStream(notExistSnID, types.InvalidGLSN, lsId, types.MinLLSN, 2)
-				mr.applyReport(&mrpb.Report{LogStream: lls})
+			Convey("Report should not apply if snID is not exist in UncommitReport", func(ctx C) {
+				report := makeUncommitReport(notExistSnID, types.InvalidGLSN, lsId, types.MinLLSN, 2)
+				mr.applyReport(report)
 
-				r := mr.storage.LookupLocalLogStreamReplica(lsId, notExistSnID)
+				r := mr.storage.LookupUncommitReport(lsId, notExistSnID)
 				So(r, ShouldBeNil)
 			})
 
-			Convey("Report should apply if snID is exist in LocalLogStream", func(ctx C) {
-				snId := snIds[0]
-				lls := makeLocalLogStream(snId, types.InvalidGLSN, lsId, types.MinLLSN, 2)
-				mr.applyReport(&mrpb.Report{LogStream: lls})
+			Convey("Report should apply if snID is exist in UncommitReport", func(ctx C) {
+				snId := snIDs[0]
+				report := makeUncommitReport(snId, types.InvalidGLSN, lsId, types.MinLLSN, 2)
+				mr.applyReport(report)
 
-				r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+				r := mr.storage.LookupUncommitReport(lsId, snId)
 				So(r, ShouldNotBeNil)
 				So(r.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN+types.LLSN(2))
 
 				Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
-					lls := makeLocalLogStream(snId, types.InvalidGLSN, lsId, types.MinLLSN, 3)
-					mr.applyReport(&mrpb.Report{LogStream: lls})
+					report := makeUncommitReport(snId, types.InvalidGLSN, lsId, types.MinLLSN, 3)
+					mr.applyReport(report)
 
-					r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+					r := mr.storage.LookupUncommitReport(lsId, snId)
 					So(r, ShouldNotBeNil)
 					So(r.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN+types.LLSN(3))
 				})
 
 				Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
-					lls := makeLocalLogStream(snId, types.InvalidGLSN, lsId, types.MinLLSN, 1)
-					mr.applyReport(&mrpb.Report{LogStream: lls})
+					report := makeUncommitReport(snId, types.InvalidGLSN, lsId, types.MinLLSN, 1)
+					mr.applyReport(report)
 
-					r := mr.storage.LookupLocalLogStreamReplica(lsId, snId)
+					r := mr.storage.LookupUncommitReport(lsId, snId)
 					So(r, ShouldNotBeNil)
 					So(r.UncommittedLLSNEnd(), ShouldNotEqual, types.MinLLSN+types.LLSN(1))
 				})
@@ -385,39 +385,39 @@ func TestMRCalculateCommit(t *testing.T) {
 		})
 		mr := clus.nodes[0]
 
-		snIds := make([]types.StorageNodeID, 2)
-		for i := range snIds {
-			snIds[i] = types.StorageNodeID(i)
+		snIDs := make([]types.StorageNodeID, 2)
+		for i := range snIDs {
+			snIDs[i] = types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIds[i],
+				StorageNodeID: snIDs[i],
 			}
 
 			err := mr.storage.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
 		lsId := types.LogStreamID(0)
-		ls := makeLogStream(lsId, snIds)
+		ls := makeLogStream(lsId, snIDs)
 		err := mr.storage.registerLogStream(ls)
 		So(err, ShouldBeNil)
 
 		Convey("LogStream which all reports have not arrived cannot be commit", func(ctx C) {
-			lls := makeLocalLogStream(snIds[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
-			mr.applyReport(&mrpb.Report{LogStream: lls})
+			report := makeUncommitReport(snIDs[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
+			mr.applyReport(report)
 
-			replicas := mr.storage.LookupLocalLogStream(lsId)
+			replicas := mr.storage.LookupUncommitReports(lsId)
 			_, minHWM, nrCommit := mr.calculateCommit(replicas)
 			So(nrCommit, ShouldEqual, 0)
 			So(minHWM, ShouldEqual, types.InvalidGLSN)
 		})
 
 		Convey("LogStream which all reports are disjoint cannot be commit", func(ctx C) {
-			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(5), 1)
-			mr.applyReport(&mrpb.Report{LogStream: lls})
+			report := makeUncommitReport(snIDs[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(5), 1)
+			mr.applyReport(report)
 
-			lls = makeLocalLogStream(snIds[1], types.GLSN(7), lsId, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(&mrpb.Report{LogStream: lls})
+			report = makeUncommitReport(snIDs[1], types.GLSN(7), lsId, types.MinLLSN+types.LLSN(3), 2)
+			mr.applyReport(report)
 
-			replicas := mr.storage.LookupLocalLogStream(lsId)
+			replicas := mr.storage.LookupUncommitReports(lsId)
 			knownHWM, minHWM, nrCommit := mr.calculateCommit(replicas)
 			So(nrCommit, ShouldEqual, 0)
 			So(knownHWM, ShouldEqual, types.GLSN(10))
@@ -425,13 +425,13 @@ func TestMRCalculateCommit(t *testing.T) {
 		})
 
 		Convey("LogStream Should be commit where replication is completed", func(ctx C) {
-			lls := makeLocalLogStream(snIds[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(3), 3)
-			mr.applyReport(&mrpb.Report{LogStream: lls})
+			report := makeUncommitReport(snIDs[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(3), 3)
+			mr.applyReport(report)
 
-			lls = makeLocalLogStream(snIds[1], types.GLSN(9), lsId, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(&mrpb.Report{LogStream: lls})
+			report = makeUncommitReport(snIDs[1], types.GLSN(9), lsId, types.MinLLSN+types.LLSN(3), 2)
+			mr.applyReport(report)
 
-			replicas := mr.storage.LookupLocalLogStream(lsId)
+			replicas := mr.storage.LookupUncommitReports(lsId)
 			knownHWM, minHWM, nrCommit := mr.calculateCommit(replicas)
 			So(nrCommit, ShouldEqual, 2)
 			So(minHWM, ShouldEqual, types.GLSN(9))
@@ -450,14 +450,14 @@ func TestMRGlobalCommit(t *testing.T) {
 
 		mr := clus.nodes[0]
 
-		snIds := make([][]types.StorageNodeID, 2)
-		for i := range snIds {
-			snIds[i] = make([]types.StorageNodeID, rep)
-			for j := range snIds[i] {
-				snIds[i][j] = types.StorageNodeID(i*2 + j)
+		snIDs := make([][]types.StorageNodeID, 2)
+		for i := range snIDs {
+			snIDs[i] = make([]types.StorageNodeID, rep)
+			for j := range snIDs[i] {
+				snIDs[i][j] = types.StorageNodeID(i*2 + j)
 
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: snIds[i][j],
+					StorageNodeID: snIDs[i][j],
 				}
 
 				err := mr.storage.registerStorageNode(sn)
@@ -471,7 +471,7 @@ func TestMRGlobalCommit(t *testing.T) {
 		}
 
 		for i, lsId := range lsIds {
-			ls := makeLogStream(lsId, snIds[i])
+			ls := makeLogStream(lsId, snIDs[i])
 			err := mr.storage.registerLogStream(ls)
 			So(err, ShouldBeNil)
 		}
@@ -483,23 +483,23 @@ func TestMRGlobalCommit(t *testing.T) {
 
 		Convey("global commit", func(ctx C) {
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			// global commit (2, 3) highest glsn: 5
@@ -509,13 +509,13 @@ func TestMRGlobalCommit(t *testing.T) {
 
 			Convey("LogStream should be dedup", func(ctx C) {
 				So(testutil.CompareWaitN(10, func() bool {
-					lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 3)
-					return mr.proposeReport(lls) == nil
+					report := makeUncommitReport(snIDs[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 3)
+					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 				}), ShouldBeTrue)
 
 				So(testutil.CompareWaitN(10, func() bool {
-					lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
-					return mr.proposeReport(lls) == nil
+					report := makeUncommitReport(snIDs[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
+					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 				}), ShouldBeTrue)
 
 				time.Sleep(vtesting.TimeoutUnitTimesFactor(1))
@@ -527,13 +527,13 @@ func TestMRGlobalCommit(t *testing.T) {
 
 			Convey("LogStream which have wrong GLSN but have uncommitted should commit", func(ctx C) {
 				So(testutil.CompareWaitN(10, func() bool {
-					lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 6)
-					return mr.proposeReport(lls) == nil
+					report := makeUncommitReport(snIDs[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 6)
+					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 				}), ShouldBeTrue)
 
 				So(testutil.CompareWaitN(10, func() bool {
-					lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 6)
-					return mr.proposeReport(lls) == nil
+					report := makeUncommitReport(snIDs[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 6)
+					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 				}), ShouldBeTrue)
 
 				So(testutil.CompareWaitN(10, func() bool {
@@ -545,7 +545,7 @@ func TestMRGlobalCommit(t *testing.T) {
 }
 
 func TestMRSimpleReportNCommit(t *testing.T) {
-	Convey("Uncommitted LocalLogStream should be committed", t, func(ctx C) {
+	Convey("UncommitReport should be committed", t, func(ctx C) {
 		clus := newMetadataRepoCluster(1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
@@ -729,14 +729,14 @@ func TestMRGetLastCommitted(t *testing.T) {
 
 		mr := clus.nodes[0]
 
-		snIds := make([][]types.StorageNodeID, 2)
-		for i := range snIds {
-			snIds[i] = make([]types.StorageNodeID, rep)
-			for j := range snIds[i] {
-				snIds[i][j] = types.StorageNodeID(i*2 + j)
+		snIDs := make([][]types.StorageNodeID, 2)
+		for i := range snIDs {
+			snIDs[i] = make([]types.StorageNodeID, rep)
+			for j := range snIDs[i] {
+				snIDs[i][j] = types.StorageNodeID(i*2 + j)
 
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: snIds[i][j],
+					StorageNodeID: snIDs[i][j],
 				}
 
 				err := mr.storage.registerStorageNode(sn)
@@ -750,7 +750,7 @@ func TestMRGetLastCommitted(t *testing.T) {
 		}
 
 		for i, lsId := range lsIds {
-			ls := makeLogStream(lsId, snIds[i])
+			ls := makeLogStream(lsId, snIDs[i])
 			err := mr.storage.registerLogStream(ls)
 			So(err, ShouldBeNil)
 		}
@@ -762,23 +762,23 @@ func TestMRGetLastCommitted(t *testing.T) {
 
 		Convey("getLastCommitted should return last committed GLSN", func(ctx C) {
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			// global commit (2, 3) highest glsn: 5
@@ -786,27 +786,27 @@ func TestMRGetLastCommitted(t *testing.T) {
 				return mr.storage.GetHighWatermark() == types.GLSN(5)
 			}), ShouldBeTrue)
 
-			So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(2))
-			So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(5))
+			So(mr.getLastCommittedLength(lsIds[0]), ShouldEqual, 2)
+			So(mr.getLastCommittedLength(lsIds[1]), ShouldEqual, 3)
 
 			Convey("getLastCommitted should return same if not committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
 					So(testutil.CompareWaitN(10, func() bool {
-						lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
-						return mr.proposeReport(lls) == nil
+						report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
+						return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 					}), ShouldBeTrue)
 
 					So(testutil.CompareWaitN(10, func() bool {
-						lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
-						return mr.proposeReport(lls) == nil
+						report := makeUncommitReport(snIDs[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
+						return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 					}), ShouldBeTrue)
 
 					So(testutil.CompareWaitN(50, func() bool {
 						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 					}), ShouldBeTrue)
 
-					So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(2))
-					So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(6+i))
+					So(mr.getLastCommittedLength(lsIds[0]), ShouldEqual, 0)
+					So(mr.getLastCommittedLength(lsIds[1]), ShouldEqual, 1)
 				}
 			})
 
@@ -817,31 +817,31 @@ func TestMRGetLastCommitted(t *testing.T) {
 
 				for i := 0; i < 10; i++ {
 					So(testutil.CompareWaitN(10, func() bool {
-						lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, uint64(3+i))
-						return mr.proposeReport(lls) == nil
+						report := makeUncommitReport(snIDs[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, uint64(3+i))
+						return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 					}), ShouldBeTrue)
 
 					So(testutil.CompareWaitN(10, func() bool {
-						lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, uint64(3+i))
-						return mr.proposeReport(lls) == nil
+						report := makeUncommitReport(snIDs[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, uint64(3+i))
+						return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 					}), ShouldBeTrue)
 
 					So(testutil.CompareWaitN(10, func() bool {
-						lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
-						return mr.proposeReport(lls) == nil
+						report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
+						return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 					}), ShouldBeTrue)
 
 					So(testutil.CompareWaitN(10, func() bool {
-						lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
-						return mr.proposeReport(lls) == nil
+						report := makeUncommitReport(snIDs[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
+						return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 					}), ShouldBeTrue)
 
 					So(testutil.CompareWaitN(10, func() bool {
 						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 					}), ShouldBeTrue)
 
-					So(mr.getLastCommitted(lsIds[0]), ShouldEqual, types.GLSN(6+i))
-					So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(5))
+					So(mr.getLastCommittedLength(lsIds[0]), ShouldEqual, 1)
+					So(mr.getLastCommittedLength(lsIds[1]), ShouldEqual, 0)
 				}
 			})
 		})
@@ -858,14 +858,14 @@ func TestMRSeal(t *testing.T) {
 
 		mr := clus.nodes[0]
 
-		snIds := make([][]types.StorageNodeID, 2)
-		for i := range snIds {
-			snIds[i] = make([]types.StorageNodeID, rep)
-			for j := range snIds[i] {
-				snIds[i][j] = types.StorageNodeID(i*2 + j)
+		snIDs := make([][]types.StorageNodeID, 2)
+		for i := range snIDs {
+			snIDs[i] = make([]types.StorageNodeID, rep)
+			for j := range snIDs[i] {
+				snIDs[i][j] = types.StorageNodeID(i*2 + j)
 
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: snIds[i][j],
+					StorageNodeID: snIDs[i][j],
 				}
 
 				err := mr.storage.registerStorageNode(sn)
@@ -879,7 +879,7 @@ func TestMRSeal(t *testing.T) {
 		}
 
 		for i, lsId := range lsIds {
-			ls := makeLogStream(lsId, snIds[i])
+			ls := makeLogStream(lsId, snIDs[i])
 			err := mr.storage.registerLogStream(ls)
 			So(err, ShouldBeNil)
 		}
@@ -891,36 +891,36 @@ func TestMRSeal(t *testing.T) {
 
 		Convey("Seal should commit and return last committed", func(ctx C) {
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
-				return mr.proposeReport(lls) == nil
+				report := makeUncommitReport(snIDs[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
+				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
 			rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			lc, err := mr.Seal(rctx, lsIds[1])
 			So(err, ShouldBeNil)
-			So(lc, ShouldEqual, types.GLSN(5))
+			So(lc, ShouldEqual, mr.getLastCommitted(lsIds[1]))
 
 			Convey("Seal should return same last committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
 					rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
-					lc, err := mr.Seal(rctx, lsIds[1])
+					lc2, err := mr.Seal(rctx, lsIds[1])
 					So(err, ShouldBeNil)
-					So(lc, ShouldEqual, types.GLSN(5))
+					So(lc2, ShouldEqual, lc)
 				}
 			})
 		})
@@ -937,14 +937,14 @@ func TestMRUnseal(t *testing.T) {
 
 		mr := clus.nodes[0]
 
-		snIds := make([][]types.StorageNodeID, 2)
-		for i := range snIds {
-			snIds[i] = make([]types.StorageNodeID, rep)
-			for j := range snIds[i] {
-				snIds[i][j] = types.StorageNodeID(i*2 + j)
+		snIDs := make([][]types.StorageNodeID, 2)
+		for i := range snIDs {
+			snIDs[i] = make([]types.StorageNodeID, rep)
+			for j := range snIDs[i] {
+				snIDs[i][j] = types.StorageNodeID(i*2 + j)
 
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: snIds[i][j],
+					StorageNodeID: snIDs[i][j],
 				}
 
 				err := mr.storage.registerStorageNode(sn)
@@ -958,7 +958,7 @@ func TestMRUnseal(t *testing.T) {
 		}
 
 		for i, lsId := range lsIds {
-			ls := makeLogStream(lsId, snIds[i])
+			ls := makeLogStream(lsId, snIDs[i])
 			err := mr.storage.registerLogStream(ls)
 			So(err, ShouldBeNil)
 		}
@@ -969,29 +969,29 @@ func TestMRUnseal(t *testing.T) {
 		}), ShouldBeTrue)
 
 		So(testutil.CompareWaitN(10, func() bool {
-			lls := makeLocalLogStream(snIds[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
-			return mr.proposeReport(lls) == nil
+			report := makeUncommitReport(snIDs[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
+			return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 		}), ShouldBeTrue)
 
 		So(testutil.CompareWaitN(10, func() bool {
-			lls := makeLocalLogStream(snIds[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
-			return mr.proposeReport(lls) == nil
+			report := makeUncommitReport(snIDs[0][1], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
+			return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 		}), ShouldBeTrue)
 
 		So(testutil.CompareWaitN(10, func() bool {
-			lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
-			return mr.proposeReport(lls) == nil
+			report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, 4)
+			return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 		}), ShouldBeTrue)
 
 		So(testutil.CompareWaitN(10, func() bool {
-			lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
-			return mr.proposeReport(lls) == nil
+			report := makeUncommitReport(snIDs[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
+			return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 		}), ShouldBeTrue)
 
 		rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		lc, err := mr.Seal(rctx, lsIds[1])
 		So(err, ShouldBeNil)
-		So(lc, ShouldEqual, types.GLSN(5))
+		So(lc, ShouldEqual, mr.getLastCommitted(lsIds[1]))
 
 		Convey("Unealed LS should update report", func(ctx C) {
 			rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
@@ -1000,21 +1000,90 @@ func TestMRUnseal(t *testing.T) {
 
 			for i := 0; i < 10; i++ {
 				So(testutil.CompareWaitN(10, func() bool {
-					lls := makeLocalLogStream(snIds[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
-					return mr.proposeReport(lls) == nil
+					report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
+					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 				}), ShouldBeTrue)
 
 				So(testutil.CompareWaitN(10, func() bool {
-					lls := makeLocalLogStream(snIds[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
-					return mr.proposeReport(lls) == nil
+					report := makeUncommitReport(snIDs[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
+					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 				}), ShouldBeTrue)
 
 				So(testutil.CompareWaitN(50, func() bool {
 					return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 				}), ShouldBeTrue)
 
-				So(mr.getLastCommitted(lsIds[1]), ShouldEqual, types.GLSN(6+i))
+				So(mr.getLastCommittedLength(lsIds[1]), ShouldEqual, 1)
 			}
+		})
+	})
+}
+
+func TestMRUpdateLogStream(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		nrStorageNode := 2
+		rep := 1
+		clus := newMetadataRepoCluster(1, rep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
+		clus.Start()
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.leaderElected()
+		}), ShouldBeTrue)
+
+		mr := clus.nodes[0]
+
+		snIDs := make([]types.StorageNodeID, nrStorageNode)
+		for i := range snIDs {
+			snIDs[i] = types.StorageNodeID(i)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := mr.RegisterStorageNode(context.TODO(), sn)
+			So(err, ShouldBeNil)
+		}
+
+		lsID := types.LogStreamID(0)
+		ls := makeLogStream(lsID, snIDs[0:1])
+		err := mr.RegisterLogStream(context.TODO(), ls)
+		So(err, ShouldBeNil)
+		So(testutil.CompareWaitN(1, func() bool {
+			return mr.reportCollector.NumCommitter() == 1
+		}), ShouldBeTrue)
+
+		Convey("When Update LogStream", func() {
+			rctx, _ := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(50))
+			_, err = mr.Seal(rctx, lsID)
+			So(err, ShouldBeNil)
+
+			updatedls := makeLogStream(lsID, snIDs[1:2])
+			err = mr.UpdateLogStream(context.TODO(), updatedls)
+			So(err, ShouldBeNil)
+
+			Convey("Then unused report collector should be closed", func() {
+				So(testutil.CompareWaitN(1, func() bool {
+					return mr.reportCollector.NumCommitter() == 1
+				}), ShouldBeTrue)
+
+				err = mr.UnregisterStorageNode(context.TODO(), snIDs[0])
+				So(err, ShouldBeNil)
+
+				So(testutil.CompareWaitN(10, func() bool {
+					reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[0])
+					return reporterClient == nil
+				}), ShouldBeTrue)
+
+				So(testutil.CompareWaitN(1, func() bool {
+					return mr.reportCollector.NumCommitter() == 1
+				}), ShouldBeTrue)
+
+				reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[1])
+				So(reporterClient == nil, ShouldBeFalse)
+			})
 		})
 	})
 }
@@ -1058,7 +1127,7 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 
 		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[0])
 		So(testutil.CompareWaitN(50, func() bool {
-			return !reporterClient.getKnownHighWatermark().Invalid()
+			return !reporterClient.getKnownHighWatermark(0).Invalid()
 		}), ShouldBeTrue)
 
 		Convey("When node fail", func(ctx C) {
@@ -1071,10 +1140,10 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 					return leader != clus.leader()
 				}), ShouldBeTrue)
 
-				prev := reporterClient.getKnownHighWatermark()
+				prev := reporterClient.getKnownHighWatermark(0)
 
 				So(testutil.CompareWaitN(50, func() bool {
-					return reporterClient.getKnownHighWatermark() > prev
+					return reporterClient.getKnownHighWatermark(0) > prev
 				}), ShouldBeTrue)
 			})
 		})
@@ -1675,6 +1744,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 		nrStorageNode := 3
+		nrLogStream := 2
 		testSnapCount = 10
 
 		clus := newMetadataRepoCluster(nrNode, nrRep, false)
@@ -1690,14 +1760,16 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 		leader := clus.leader()
 		So(leader, ShouldBeGreaterThan, -1)
 
-		snIds := make([][]types.StorageNodeID, nrStorageNode)
-		for i := range snIds {
-			snIds[i] = make([]types.StorageNodeID, nrRep)
-			for j := range snIds[i] {
-				snIds[i][j] = types.StorageNodeID(i*nrStorageNode + j)
+		restartNode := (leader + 1) % nrNode
+
+		snIDs := make([][]types.StorageNodeID, nrStorageNode)
+		for i := range snIDs {
+			snIDs[i] = make([]types.StorageNodeID, nrRep)
+			for j := range snIDs[i] {
+				snIDs[i][j] = types.StorageNodeID(i*nrStorageNode + j)
 
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: snIds[i][j],
+					StorageNodeID: snIDs[i][j],
 				}
 
 				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
@@ -1708,9 +1780,26 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 			}
 		}
 
-		Convey("When follower restart with snapshot", func(ctx C) {
-			restartNode := (leader + 1) % nrNode
+		So(testutil.CompareWaitN(1, func() bool {
+			return clus.nodes[leader].reportCollector.NumExecutors() == nrStorageNode*nrRep
+		}), ShouldBeTrue)
 
+		for i := 0; i < nrLogStream; i++ {
+			lsID := types.LogStreamID(i)
+			ls := makeLogStream(lsID, snIDs[i%nrStorageNode])
+
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			defer cancel()
+
+			err := clus.nodes[0].RegisterLogStream(rctx, ls)
+			So(err, ShouldBeNil)
+		}
+
+		So(testutil.CompareWaitN(1, func() bool {
+			return clus.nodes[leader].reportCollector.NumCommitter() == nrLogStream*nrRep
+		}), ShouldBeTrue)
+
+		Convey("When follower restart with snapshot", func(ctx C) {
 			So(testutil.CompareWaitN(500, func() bool {
 				peers := clus.getMembersFromSnapshot(restartNode)
 				return len(peers) == nrNode
@@ -1724,10 +1813,8 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 
 			Convey("Then ReportCollector should recover", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
-					clus.nodes[restartNode].reportCollector.mu.RLock()
-					defer clus.nodes[restartNode].reportCollector.mu.RUnlock()
-
-					return len(clus.nodes[restartNode].reportCollector.executors) == nrStorageNode
+					return clus.nodes[restartNode].reportCollector.NumExecutors() == nrStorageNode*nrRep &&
+						clus.nodes[restartNode].reportCollector.NumCommitter() == nrLogStream*nrRep
 				}), ShouldBeTrue)
 			})
 		})

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 
@@ -24,10 +23,10 @@ func TestLogStreamReporterServiceGetReport(t *testing.T) {
 
 		Convey("When LogStreamReporter.GetReport returns an error", func() {
 			lsrMock.EXPECT().GetReport(gomock.Any()).Return(
-				types.MinGLSN, map[types.LogStreamID]UncommittedLogStreamStatus{}, verrors.ErrInternal)
+				map[types.LogStreamID]UncommittedLogStreamStatus{}, verrors.ErrInternal)
 
 			Convey("Then LogStreamReporterService.GetReport should return an error", func() {
-				_, err := service.GetReport(context.TODO(), &pbtypes.Empty{})
+				_, err := service.GetReport(context.TODO(), &snpb.GetReportRequest{})
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -50,19 +49,19 @@ func TestLogStreamReporterServiceCommit(t *testing.T) {
 		service := NewLogStreamReporterService(lsrMock, nil)
 
 		Convey("When LogStreamReporter.Commit returns an error", func() {
-			lsrMock.EXPECT().Commit(gomock.Any(), gomock.Any(), gomock.Any(),
-				gomock.Any()).Return(verrors.ErrInternal)
+			lsrMock.EXPECT().Commit(gomock.Any(), gomock.Any()).Return(verrors.ErrInternal)
 
 			Convey("Then LogStreamReporterService.Commit should return an error", func() {
 				_, err := service.Commit(context.TODO(),
-					&snpb.GlobalLogStreamDescriptor{
-						HighWatermark:     types.MinGLSN,
-						PrevHighWatermark: types.InvalidGLSN,
-						CommitResult: []*snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
+					&snpb.CommitRequest{
+						StorageNodeID: types.StorageNodeID(0),
+						CommitResults: []*snpb.LogStreamCommitResult{
 							{
 								LogStreamID:         types.LogStreamID(0),
 								CommittedGLSNOffset: types.MinGLSN,
 								CommittedGLSNLength: 1,
+								HighWatermark:       types.MinGLSN,
+								PrevHighWatermark:   types.InvalidGLSN,
 							},
 						},
 					})

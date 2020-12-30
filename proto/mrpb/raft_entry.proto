@@ -43,7 +43,12 @@ message UpdateLogStream {
 }
 
 message Report {
-    snpb.LocalLogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
+    uint32 storage_node_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
+        (gogoproto.customname) = "StorageNodeID"
+    ];
+    repeated snpb.LogStreamUncommitReport uncommit_report = 2;
 }
 
 message Commit {}

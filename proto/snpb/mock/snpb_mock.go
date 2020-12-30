@@ -853,14 +853,14 @@ func (m *MockLogStreamReporterServiceClient) EXPECT() *MockLogStreamReporterServ
 }
 
 // Commit mocks base method
-func (m *MockLogStreamReporterServiceClient) Commit(arg0 context.Context, arg1 *snpb.GlobalLogStreamDescriptor, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockLogStreamReporterServiceClient) Commit(arg0 context.Context, arg1 *snpb.CommitRequest, arg2 ...grpc.CallOption) (*snpb.CommitResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Commit", varargs...)
-	ret0, _ := ret[0].(*types.Empty)
+	ret0, _ := ret[0].(*snpb.CommitResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -873,14 +873,14 @@ func (mr *MockLogStreamReporterServiceClientMockRecorder) Commit(arg0, arg1 inte
 }
 
 // GetReport mocks base method
-func (m *MockLogStreamReporterServiceClient) GetReport(arg0 context.Context, arg1 *types.Empty, arg2 ...grpc.CallOption) (*snpb.LocalLogStreamDescriptor, error) {
+func (m *MockLogStreamReporterServiceClient) GetReport(arg0 context.Context, arg1 *snpb.GetReportRequest, arg2 ...grpc.CallOption) (*snpb.GetReportResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetReport", varargs...)
-	ret0, _ := ret[0].(*snpb.LocalLogStreamDescriptor)
+	ret0, _ := ret[0].(*snpb.GetReportResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -916,10 +916,10 @@ func (m *MockLogStreamReporterServiceServer) EXPECT() *MockLogStreamReporterServ
 }
 
 // Commit mocks base method
-func (m *MockLogStreamReporterServiceServer) Commit(arg0 context.Context, arg1 *snpb.GlobalLogStreamDescriptor) (*types.Empty, error) {
+func (m *MockLogStreamReporterServiceServer) Commit(arg0 context.Context, arg1 *snpb.CommitRequest) (*snpb.CommitResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Commit", arg0, arg1)
-	ret0, _ := ret[0].(*types.Empty)
+	ret0, _ := ret[0].(*snpb.CommitResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -931,10 +931,10 @@ func (mr *MockLogStreamReporterServiceServerMockRecorder) Commit(arg0, arg1 inte
 }
 
 // GetReport mocks base method
-func (m *MockLogStreamReporterServiceServer) GetReport(arg0 context.Context, arg1 *types.Empty) (*snpb.LocalLogStreamDescriptor, error) {
+func (m *MockLogStreamReporterServiceServer) GetReport(arg0 context.Context, arg1 *snpb.GetReportRequest) (*snpb.GetReportResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReport", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.LocalLogStreamDescriptor)
+	ret0, _ := ret[0].(*snpb.GetReportResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

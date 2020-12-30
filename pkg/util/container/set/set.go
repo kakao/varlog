@@ -31,3 +31,16 @@ func (s Set) Foreach(f func(interface{}) bool) {
 		}
 	}
 }
+
+func (s Set) Diff(sub Set) Set {
+	r := New(s.Size())
+	s.Foreach(func(k interface{}) bool {
+		if !sub.Contains(k) {
+			r.Add(k)
+		}
+
+		return true
+	})
+
+	return r
+}

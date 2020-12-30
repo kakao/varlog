@@ -12,28 +12,40 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 )
 
 type dummyMetadataRepository struct {
-	reportC chan *snpb.LocalLogStreamDescriptor
-	m       []*snpb.GlobalLogStreamDescriptor
-	mt      sync.Mutex
+	reportC        chan *mrpb.StorageNodeUncommitReport
+	m              []*mrpb.LogStreamCommitResults
+	reporterCliFac ReporterClientFactory
+	mt             sync.Mutex
 }
 
-func NewDummyMetadataRepository() *dummyMetadataRepository {
+func NewDummyMetadataRepository(reporterCliFac ReporterClientFactory) *dummyMetadataRepository {
 	return &dummyMetadataRepository{
-		reportC: make(chan *snpb.LocalLogStreamDescriptor, 4096),
+		reportC:        make(chan *mrpb.StorageNodeUncommitReport, 4096),
+		reporterCliFac: reporterCliFac,
 	}
 }
 
-func (mr *dummyMetadataRepository) report(lls *snpb.LocalLogStreamDescriptor) error {
+func (mr *dummyMetadataRepository) GetClient(sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+	return mr.reporterCliFac.GetClient(sn)
+}
+
+func (mr *dummyMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []*snpb.LogStreamUncommitReport) error {
+	r := &mrpb.StorageNodeUncommitReport{
+		StorageNodeID:   snID,
+		UncommitReports: ur,
+	}
 	select {
-	case mr.reportC <- lls:
+	case mr.reportC <- r:
 	default:
 		return verrors.ErrIgnore
 	}
@@ -41,7 +53,22 @@ func (mr *dummyMetadataRepository) report(lls *snpb.LocalLogStreamDescriptor) er
 	return nil
 }
 
-func (mr *dummyMetadataRepository) lookupNextGLS(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
+func (mr *dummyMetadataRepository) LookupCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
+	mr.mt.Lock()
+	defer mr.mt.Unlock()
+
+	i := sort.Search(len(mr.m), func(i int) bool {
+		return mr.m[i].HighWatermark >= glsn
+	})
+
+	if i < len(mr.m) && mr.m[i].HighWatermark == glsn {
+		return mr.m[i]
+	}
+
+	return nil
+}
+
+func (mr *dummyMetadataRepository) LookupNextCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
 	mr.mt.Lock()
 	defer mr.mt.Unlock()
 
@@ -56,18 +83,7 @@ func (mr *dummyMetadataRepository) lookupNextGLS(glsn types.GLSN) *snpb.GlobalLo
 	return nil
 }
 
-func (mr *dummyMetadataRepository) getOldestGLS() *snpb.GlobalLogStreamDescriptor {
-	mr.mt.Lock()
-	defer mr.mt.Unlock()
-
-	if len(mr.m) == 0 {
-		return nil
-	}
-
-	return mr.m[0]
-}
-
-func (mr *dummyMetadataRepository) appendGLS(gls *snpb.GlobalLogStreamDescriptor) {
+func (mr *dummyMetadataRepository) appendGLS(gls *mrpb.LogStreamCommitResults) {
 	mr.mt.Lock()
 	defer mr.mt.Unlock()
 
@@ -81,8 +97,10 @@ func (mr *dummyMetadataRepository) trimGLS(glsn types.GLSN) {
 
 	for i, gls := range mr.m {
 		if glsn == gls.HighWatermark {
-			mr.m = mr.m[i:]
-			return
+			if i > 0 {
+				mr.m = mr.m[i-1:]
+				return
+			}
 		}
 	}
 }
@@ -90,15 +108,10 @@ func (mr *dummyMetadataRepository) trimGLS(glsn types.GLSN) {
 func TestRegisterStorageNode(t *testing.T) {
 	Convey("Registering nil storage node should return an error", t, func() {
 		a := NewDummyReporterClientFactory(1, false)
-		mr := NewDummyMetadataRepository()
-		cb := ReportCollectorCallbacks{
-			report:        mr.report,
-			getClient:     a.GetClient,
-			lookupNextGLS: mr.lookupNextGLS,
-			getOldestGLS:  mr.getOldestGLS,
-		}
+		mr := NewDummyMetadataRepository(a)
+
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -108,15 +121,10 @@ func TestRegisterStorageNode(t *testing.T) {
 
 	Convey("Registering dup storage node should return an error", t, func() {
 		a := NewDummyReporterClientFactory(1, false)
-		mr := NewDummyMetadataRepository()
-		cb := ReportCollectorCallbacks{
-			report:        mr.report,
-			getClient:     a.GetClient,
-			lookupNextGLS: mr.lookupNextGLS,
-			getOldestGLS:  mr.getOldestGLS,
-		}
+		mr := NewDummyMetadataRepository(a)
+
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -138,58 +146,151 @@ func TestRegisterStorageNode(t *testing.T) {
 	})
 }
 
-func TestUnregisterStorageNode(t *testing.T) {
-	Convey("Registering dup storage node should return an error", t, func() {
+func TestRegisterLogStream(t *testing.T) {
+	Convey("Register LogStream", t, func() {
 		a := NewDummyReporterClientFactory(1, false)
-		mr := NewDummyMetadataRepository()
-		cb := ReportCollectorCallbacks{
-			report:        mr.report,
-			getClient:     a.GetClient,
-			lookupNextGLS: mr.lookupNextGLS,
-			getOldestGLS:  mr.getOldestGLS,
-		}
+		mr := NewDummyMetadataRepository(a)
+
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector.Run()
+		defer reportCollector.Close()
+
+		snID := types.StorageNodeID(0)
+		lsID := types.LogStreamID(0)
+
+		Convey("registeration LogStream with not existing storageNodeID should be failed", func() {
+			err := reportCollector.RegisterLogStream(snID, lsID)
+			So(err, ShouldResemble, verrors.ErrNotExist)
+		})
+
+		Convey("registeration LogStream with existing storageNodeID should be succeed", func() {
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snID,
+			}
+
+			err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+			So(err, ShouldBeNil)
+			So(reportCollector.NumExecutors(), ShouldEqual, 1)
+
+			err = reportCollector.RegisterLogStream(snID, lsID)
+			So(err, ShouldBeNil)
+			So(reportCollector.NumCommitter(), ShouldEqual, 1)
+
+			Convey("duplicated registeration LogStream should be failed", func() {
+				err = reportCollector.RegisterLogStream(snID, lsID)
+				So(err, ShouldResemble, verrors.ErrExist)
+			})
+		})
+	})
+}
+
+func TestUnregisterStorageNode(t *testing.T) {
+	Convey("Unregister StorageNode", t, func() {
+		a := NewDummyReporterClientFactory(1, false)
+		mr := NewDummyMetadataRepository(a)
+
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
+		lsID := types.LogStreamID(0)
+
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: snID,
 		}
 
 		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
 		So(err, ShouldBeNil)
+		So(reportCollector.NumExecutors(), ShouldEqual, 1)
 
-		err = reportCollector.UnregisterStorageNode(snID)
-		So(err, ShouldBeNil)
+		Convey("unregisteration storageNode should be succeed", func() {
+			err := reportCollector.UnregisterStorageNode(snID)
+			So(err, ShouldBeNil)
 
-		reportCollector.mu.RLock()
-		_, ok := reportCollector.executors[sn.StorageNodeID]
-		reportCollector.mu.RUnlock()
+			So(reportCollector.NumExecutors(), ShouldEqual, 0)
+		})
 
-		So(ok, ShouldBeFalse)
+		Convey("unregisteration storageNode with logstream should be failed", func() {
+			err = reportCollector.RegisterLogStream(snID, lsID)
+			So(err, ShouldBeNil)
+			So(reportCollector.NumCommitter(), ShouldEqual, 1)
+
+			err := reportCollector.UnregisterStorageNode(snID)
+			So(err, ShouldResemble, verrors.ErrNotEmpty)
+
+			So(reportCollector.NumExecutors(), ShouldEqual, 1)
+			So(reportCollector.NumCommitter(), ShouldEqual, 1)
+
+			Convey("unregisteration storageNode with empty should be succeed", func() {
+				err := reportCollector.UnregisterLogStream(snID, lsID)
+				So(err, ShouldBeNil)
+				So(reportCollector.NumCommitter(), ShouldEqual, 0)
+
+				err = reportCollector.UnregisterStorageNode(snID)
+				So(err, ShouldBeNil)
+
+				So(reportCollector.NumExecutors(), ShouldEqual, 0)
+			})
+		})
+	})
+}
+
+func TestUnregisterLogStream(t *testing.T) {
+	Convey("Register LogStream", t, func() {
+		a := NewDummyReporterClientFactory(1, false)
+		mr := NewDummyMetadataRepository(a)
+
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector.Run()
+		defer reportCollector.Close()
+
+		snID := types.StorageNodeID(0)
+		lsID := types.LogStreamID(0)
+
+		Convey("unregisteration LogStream with not existing storageNodeID should be failed", func() {
+			err := reportCollector.UnregisterLogStream(snID, lsID)
+			So(err, ShouldResemble, verrors.ErrNotExist)
+		})
+
+		Convey("unregisteration LogStream with existing storageNodeID should be succeed", func() {
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snID,
+			}
+
+			err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+			So(err, ShouldBeNil)
+			So(reportCollector.NumExecutors(), ShouldEqual, 1)
+
+			err = reportCollector.RegisterLogStream(snID, lsID)
+			So(err, ShouldBeNil)
+			So(reportCollector.NumCommitter(), ShouldEqual, 1)
+
+			err = reportCollector.UnregisterLogStream(snID, lsID)
+			So(err, ShouldBeNil)
+
+			So(reportCollector.NumCommitter(), ShouldEqual, 0)
+		})
 	})
 }
 
 func TestRecoverStorageNode(t *testing.T) {
 	Convey("Given ReportCollector", t, func() {
 		a := NewDummyReporterClientFactory(1, false)
-		mr := NewDummyMetadataRepository()
-		cb := ReportCollectorCallbacks{
-			report:        mr.report,
-			getClient:     a.GetClient,
-			lookupNextGLS: mr.lookupNextGLS,
-			getOldestGLS:  mr.getOldestGLS,
-		}
+		mr := NewDummyMetadataRepository(a)
+
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
 		nrSN := 5
 		hwm := types.MinGLSN
 		var SNs []*varlogpb.StorageNodeDescriptor
+		var LSs []*varlogpb.LogStreamDescriptor
 
 		for i := 0; i < nrSN; i++ {
 			sn := &varlogpb.StorageNodeDescriptor{
@@ -200,14 +301,26 @@ func TestRecoverStorageNode(t *testing.T) {
 
 			err := reportCollector.RegisterStorageNode(sn, hwm)
 			So(err, ShouldBeNil)
+
+			ls := &varlogpb.LogStreamDescriptor{
+				LogStreamID: types.LogStreamID(time.Now().UnixNano()),
+			}
+			ls.Replicas = append(ls.Replicas, &varlogpb.ReplicaDescriptor{StorageNodeID: sn.StorageNodeID})
+
+			LSs = append(LSs, ls)
+
+			err = reportCollector.RegisterLogStream(sn.StorageNodeID, ls.LogStreamID)
+			So(err, ShouldBeNil)
 		}
 
 		for i := 0; i < nrSN; i++ {
 			reportCollector.mu.RLock()
-			_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+			executor, ok := reportCollector.executors[SNs[i].StorageNodeID]
+			nrCommitter := len(executor.committers)
 			reportCollector.mu.RUnlock()
 
 			So(ok, ShouldBeTrue)
+			So(nrCommitter, ShouldEqual, 1)
 		}
 
 		Convey("When ReportCollector Reset", func(ctx C) {
@@ -223,14 +336,16 @@ func TestRecoverStorageNode(t *testing.T) {
 				}
 
 				Convey("When ReportCollector Recover", func(ctx C) {
-					reportCollector.Recover(SNs, hwm)
+					reportCollector.Recover(SNs, LSs, hwm)
 					Convey("Then there should be ReportCollectExecutor", func(ctx C) {
 						for i := 0; i < nrSN; i++ {
 							reportCollector.mu.RLock()
-							_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+							executor, ok := reportCollector.executors[SNs[i].StorageNodeID]
+							nrCommitter := len(executor.committers)
 							reportCollector.mu.RUnlock()
 
 							So(ok, ShouldBeTrue)
+							So(nrCommitter, ShouldEqual, 1)
 						}
 					})
 				})
@@ -250,7 +365,7 @@ func TestRecoverStorageNode(t *testing.T) {
 				}
 
 				Convey("When ReportCollector Recover", func(ctx C) {
-					reportCollector.Recover(SNs, hwm)
+					reportCollector.Recover(SNs, LSs, hwm)
 					Convey("Then there should be no ReportCollectExecutor", func(ctx C) {
 						for i := 0; i < nrSN; i++ {
 							reportCollector.mu.RLock()
@@ -270,16 +385,10 @@ func TestReport(t *testing.T) {
 	Convey("ReportCollector should collect report from registered storage node", t, func() {
 		nrStorage := 5
 		a := NewDummyReporterClientFactory(1, false)
-		mr := NewDummyMetadataRepository()
-		cb := ReportCollectorCallbacks{
-			report:        mr.report,
-			getClient:     a.GetClient,
-			lookupNextGLS: mr.lookupNextGLS,
-			getOldestGLS:  mr.getOldestGLS,
-		}
+		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -335,16 +444,10 @@ func TestReport(t *testing.T) {
 func TestReportDedup(t *testing.T) {
 	Convey("Given ReportCollector", t, func() {
 		a := NewDummyReporterClientFactory(3, true)
-		mr := NewDummyMetadataRepository()
-		cb := ReportCollectorCallbacks{
-			report:        mr.report,
-			getClient:     a.GetClient,
-			lookupNextGLS: mr.lookupNextGLS,
-			getOldestGLS:  mr.getOldestGLS,
-		}
+		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -365,7 +468,7 @@ func TestReportDedup(t *testing.T) {
 			Convey("Then report should include logStream[0]", func() {
 				r = <-mr.reportC
 				So(r.Len(), ShouldEqual, 1)
-				So(r.Uncommit[0].LogStreamID, ShouldEqual, types.LogStreamID(0))
+				So(r.UncommitReports[0].LogStreamID, ShouldEqual, types.LogStreamID(0))
 
 				Convey("When logStream[1] increase uncommitted", func() {
 					reporterClient.increaseUncommitted(1)
@@ -373,7 +476,7 @@ func TestReportDedup(t *testing.T) {
 					Convey("Then report should include logStream[1]", func() {
 						r = <-mr.reportC
 						So(r.Len(), ShouldEqual, 1)
-						So(r.Uncommit[0].LogStreamID, ShouldEqual, types.LogStreamID(1))
+						So(r.UncommitReports[0].LogStreamID, ShouldEqual, types.LogStreamID(1))
 
 						Convey("When logStream[2] increase uncommitted", func() {
 							reporterClient.increaseUncommitted(2)
@@ -381,7 +484,7 @@ func TestReportDedup(t *testing.T) {
 							Convey("Then report should include logStream[2]", func() {
 								r = <-mr.reportC
 								So(r.Len(), ShouldEqual, 1)
-								So(r.Uncommit[0].LogStreamID, ShouldEqual, types.LogStreamID(2))
+								So(r.UncommitReports[0].LogStreamID, ShouldEqual, types.LogStreamID(2))
 
 								Convey("After reportAll interval, report should include all", func() {
 									r = <-mr.reportC
@@ -396,43 +499,38 @@ func TestReportDedup(t *testing.T) {
 	})
 }
 
-func newDummyGlobalLogStream(prev types.GLSN, nrStorage int) *snpb.GlobalLogStreamDescriptor {
-	gls := &snpb.GlobalLogStreamDescriptor{
-		HighWatermark:     prev + types.GLSN(nrStorage),
+func newDummyCommitResults(prev types.GLSN, nrLogStream int) *mrpb.LogStreamCommitResults {
+	cr := &mrpb.LogStreamCommitResults{
+		HighWatermark:     prev + types.GLSN(nrLogStream),
 		PrevHighWatermark: prev,
 	}
 	glsn := prev + types.GLSN(1)
 
-	for i := 0; i < nrStorage; i++ {
-		lls := &snpb.GlobalLogStreamDescriptor_LogStreamCommitResult{
+	for i := 0; i < nrLogStream; i++ {
+		r := &snpb.LogStreamCommitResult{
 			LogStreamID:         types.LogStreamID(i),
 			CommittedGLSNOffset: glsn,
 			CommittedGLSNLength: 1,
 		}
 		glsn += 1
 
-		gls.CommitResult = append(gls.CommitResult, lls)
+		cr.CommitResults = append(cr.CommitResults, r)
 	}
 
-	return gls
+	return cr
 }
 
 func TestCommit(t *testing.T) {
 	Convey("Given ReportCollector", t, func() {
 		nrStorage := 5
+		nrLogStream := nrStorage
 		knownHWM := types.InvalidGLSN
 
 		a := NewDummyReporterClientFactory(1, false)
-		mr := NewDummyMetadataRepository()
-		cb := ReportCollectorCallbacks{
-			report:        mr.report,
-			getClient:     a.GetClient,
-			lookupNextGLS: mr.lookupNextGLS,
-			getOldestGLS:  mr.getOldestGLS,
-		}
+		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()
@@ -453,144 +551,100 @@ func TestCommit(t *testing.T) {
 			}), ShouldBeTrue)
 		}
 
+		for i := 0; i < nrLogStream; i++ {
+			err := reportCollector.RegisterLogStream(types.StorageNodeID(i%nrStorage), types.LogStreamID(i))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		Convey("ReportCollector should broadcast commit result to registered storage node", func() {
-			gls := newDummyGlobalLogStream(knownHWM, nrStorage)
+			gls := newDummyCommitResults(knownHWM, nrStorage)
 			mr.appendGLS(gls)
 			knownHWM = gls.HighWatermark
 
-			reportCollector.Commit(gls)
+			reportCollector.Commit()
 
 			a.m.Range(func(k, v interface{}) bool {
 				cli := v.(*DummyReporterClient)
 				So(testutil.CompareWaitN(10, func() bool {
-					reportCollector.Commit(gls)
+					reportCollector.Commit()
 
-					cli.mu.Lock()
-					defer cli.mu.Unlock()
-
-					return cli.knownHighWatermark == knownHWM
+					return cli.getKnownHighWatermark(0) == knownHWM
 				}), ShouldBeTrue)
 				return true
 			})
 
-			So(testutil.CompareWaitN(10, func() bool {
-				return reportCollector.getMinHighWatermark() == knownHWM
-			}), ShouldBeTrue)
-
 			Convey("ReportCollector should send ordered commit result to registered storage node", func() {
-				gls := newDummyGlobalLogStream(knownHWM, nrStorage)
+				gls := newDummyCommitResults(knownHWM, nrStorage)
 				mr.appendGLS(gls)
 				knownHWM = gls.HighWatermark
 
-				gls = newDummyGlobalLogStream(knownHWM, nrStorage)
+				gls = newDummyCommitResults(knownHWM, nrStorage)
 				mr.appendGLS(gls)
 				knownHWM = gls.HighWatermark
 
-				reportCollector.Commit(gls)
+				reportCollector.Commit()
 
 				a.m.Range(func(k, v interface{}) bool {
 					cli := v.(*DummyReporterClient)
 					So(testutil.CompareWaitN(10, func() bool {
-						reportCollector.Commit(gls)
+						reportCollector.Commit()
 
-						cli.mu.Lock()
-						defer cli.mu.Unlock()
-
-						return cli.knownHighWatermark == knownHWM
+						return cli.getKnownHighWatermark(0) == knownHWM
 					}), ShouldBeTrue)
 					return true
 				})
 
-				So(testutil.CompareWaitN(10, func() bool {
-					return reportCollector.getMinHighWatermark() == knownHWM
-				}), ShouldBeTrue)
+				trimHWM := types.MaxGLSN
+				reportCollector.mu.RLock()
+				for _, executor := range reportCollector.executors {
+					reports := executor.reportCtx.getReport()
+					for _, report := range reports.UncommitReports {
+						if !report.HighWatermark.Invalid() && report.HighWatermark < trimHWM {
+							trimHWM = report.HighWatermark
+						}
+					}
+				}
+				reportCollector.mu.RUnlock()
+
+				mr.trimGLS(trimHWM)
 
 				Convey("ReportCollector should send proper commit against new StorageNode", func() {
-					mr.trimGLS(knownHWM)
-
 					sn := &varlogpb.StorageNodeDescriptor{
 						StorageNodeID: types.StorageNodeID(nrStorage),
 					}
 
 					err := reportCollector.RegisterStorageNode(sn, knownHWM)
-					if err != nil {
-						t.Fatal(err)
-					}
+					So(err, ShouldBeNil)
 
-					gls := newDummyGlobalLogStream(knownHWM, nrStorage+1)
+					nrStorage += 1
+
+					err = reportCollector.RegisterLogStream(sn.StorageNodeID, types.LogStreamID(nrLogStream))
+					So(err, ShouldBeNil)
+
+					nrLogStream += 1
+
+					gls := newDummyCommitResults(knownHWM, nrStorage)
 					mr.appendGLS(gls)
 					knownHWM = gls.HighWatermark
 
-					reportCollector.Commit(gls)
+					So(testutil.CompareWaitN(10, func() bool {
+						nrCli := 0
+						a.m.Range(func(k, v interface{}) bool {
+							cli := v.(*DummyReporterClient)
+							So(testutil.CompareWaitN(10, func() bool {
+								reportCollector.Commit()
 
-					a.m.Range(func(k, v interface{}) bool {
-						cli := v.(*DummyReporterClient)
-						So(testutil.CompareWaitN(10, func() bool {
-							reportCollector.Commit(gls)
+								return cli.getKnownHighWatermark(0) == knownHWM
+							}), ShouldBeTrue)
+							nrCli++
+							return true
+						})
 
-							cli.mu.Lock()
-							defer cli.mu.Unlock()
-
-							return cli.knownHighWatermark == knownHWM
-						}), ShouldBeTrue)
-						return true
-					})
+						return nrCli == nrStorage
+					}), ShouldBeTrue)
 				})
-			})
-		})
-	})
-}
-
-func TestCatchupRace(t *testing.T) {
-	Convey("Given reportCollectExecutor", t, func(ctx C) {
-		nrStorage := 5
-		knownHWM := types.InvalidGLSN
-
-		mr := NewDummyMetadataRepository()
-		clientFac := NewDummyReporterClientFactory(1, false)
-		cb := ReportCollectorCallbacks{
-			report:        mr.report,
-			getClient:     clientFac.GetClient,
-			lookupNextGLS: mr.lookupNextGLS,
-			getOldestGLS:  mr.getOldestGLS,
-		}
-
-		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: types.StorageNodeID(0),
-		}
-
-		logger, _ := zap.NewDevelopment()
-
-		executor := &ReportCollectExecutor{
-			resultC:       make(chan *snpb.GlobalLogStreamDescriptor, 1),
-			highWatermark: knownHWM,
-			sn:            sn,
-			cb:            cb,
-			logger:        logger,
-		}
-
-		Convey("When HWM Update during commit", func(ctx C) {
-			gls := newDummyGlobalLogStream(knownHWM, nrStorage)
-			mr.appendGLS(gls)
-			knownHWM = gls.HighWatermark
-
-			gls = newDummyGlobalLogStream(knownHWM, nrStorage)
-			mr.appendGLS(gls)
-			knownHWM = gls.HighWatermark
-
-			executor.lsmu.Lock()
-			executor.highWatermark = knownHWM
-			executor.lsmu.Unlock()
-
-			mr.trimGLS(knownHWM)
-
-			gls = newDummyGlobalLogStream(knownHWM, nrStorage)
-			mr.appendGLS(gls)
-			knownHWM = gls.HighWatermark
-
-			Convey("Then catchup should not panic", func(ctx C) {
-				err := executor.catchup(types.InvalidGLSN, gls)
-				So(err, ShouldBeNil)
 			})
 		})
 	})
@@ -601,16 +655,10 @@ func TestRPCFail(t *testing.T) {
 		//knownHWM := types.InvalidGLSN
 
 		clientFac := NewDummyReporterClientFactory(1, false)
-		mr := NewDummyMetadataRepository()
-		cb := ReportCollectorCallbacks{
-			report:        mr.report,
-			getClient:     clientFac.GetClient,
-			lookupNextGLS: mr.lookupNextGLS,
-			getOldestGLS:  mr.getOldestGLS,
-		}
+		mr := NewDummyMetadataRepository(clientFac)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(cb, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
 		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()
@@ -673,9 +721,7 @@ func TestRPCFail(t *testing.T) {
 func TestReporterClientReconnect(t *testing.T) {
 	Convey("Given Reporter Client", t, func(ctx C) {
 		clientFac := NewDummyReporterClientFactory(1, false)
-		cb := ReportCollectorCallbacks{
-			getClient: clientFac.GetClient,
-		}
+		mr := NewDummyMetadataRepository(clientFac)
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: types.StorageNodeID(0),
@@ -683,11 +729,13 @@ func TestReporterClientReconnect(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 
-		executor := &ReportCollectExecutor{
-			resultC:       make(chan *snpb.GlobalLogStreamDescriptor, 1),
-			highWatermark: types.MinGLSN,
-			sn:            sn,
-			cb:            cb,
+		executor := &reportCollectExecutor{
+			storageNodeID: sn.StorageNodeID,
+			helper:        mr,
+			snConnector:   storageNodeConnector{sn: sn},
+			reportCtx:     &reportContext{},
+			committers:    make(map[types.LogStreamID]*logStreamCommitter),
+			runner:        runner.New("excutor", logger),
 			logger:        logger,
 		}
 

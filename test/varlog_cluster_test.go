@@ -477,7 +477,7 @@ func TestVarlogTrimGLS(t *testing.T) {
 
 			Convey("Then GLS history of MR should be trimmed", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
-					return mr.GetMinHighWatermark() == hwm
+					return mr.GetMinHighWatermark() == mr.GetPrevHighWatermark()
 				}), ShouldBeTrue)
 			})
 		})
@@ -555,7 +555,7 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 
 			Convey("Then GLS history of MR should be trimmed", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
-					return mr.GetMinHighWatermark() == hwm
+					return mr.GetMinHighWatermark() == mr.GetPrevHighWatermark()
 				}), ShouldBeTrue)
 			})
 		})

@@ -5,8 +5,6 @@ package storagenode
 import (
 	"context"
 
-	"github.com/gogo/protobuf/types"
-
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
@@ -14,8 +12,8 @@ import (
 // LogStreamReporterClient contains the functionality of bi-directional communication about local
 // log stream and global log stream.
 type LogStreamReporterClient interface {
-	GetReport(context.Context) (*snpb.LocalLogStreamDescriptor, error)
-	Commit(context.Context, *snpb.GlobalLogStreamDescriptor) error
+	GetReport(context.Context) (*snpb.GetReportResponse, error)
+	Commit(context.Context, *snpb.CommitRequest) error
 	Close() error
 }
 
@@ -39,12 +37,12 @@ func NewLogStreamReporterClientFromRpcConn(rpcConn *rpc.Conn) (LogStreamReporter
 	}, nil
 }
 
-func (c *logStreamReporterClient) GetReport(ctx context.Context) (*snpb.LocalLogStreamDescriptor, error) {
-	return c.rpcClient.GetReport(ctx, &types.Empty{})
+func (c *logStreamReporterClient) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
+	return c.rpcClient.GetReport(ctx, &snpb.GetReportRequest{})
 }
 
-func (c *logStreamReporterClient) Commit(ctx context.Context, gls *snpb.GlobalLogStreamDescriptor) error {
-	_, err := c.rpcClient.Commit(ctx, gls)
+func (c *logStreamReporterClient) Commit(ctx context.Context, cr *snpb.CommitRequest) error {
+	_, err := c.rpcClient.Commit(ctx, cr)
 	return err
 }
 
