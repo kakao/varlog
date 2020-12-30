@@ -8,17 +8,18 @@ import (
 	"github.com/kakao/varlog/pkg/logc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type InMemoryMetadataRepository struct {
-	metadata        varlogpb.MetadataDescriptor
-	globalLogStream []*snpb.GlobalLogStreamDescriptor
-	penddingC       chan *snpb.LocalLogStreamDescriptor
-	commitC         chan *snpb.GlobalLogStreamDescriptor
-	storageMap      map[types.StorageNodeID]logc.LogIOClient
-	mu              sync.RWMutex
+	metadata      varlogpb.MetadataDescriptor
+	commitHistory []*mrpb.LogStreamCommitResults
+	penddingC     chan *snpb.LogStreamUncommitReport
+	commitC       chan *mrpb.LogStreamCommitResults
+	storageMap    map[types.StorageNodeID]logc.LogIOClient
+	mu            sync.RWMutex
 }
 
 func NewInMemoryMetadataRepository() *InMemoryMetadataRepository {
@@ -111,11 +112,11 @@ func (r *InMemoryMetadataRepository) deliverer() {
 	// call Commit() to storage node
 }
 
-func (r *InMemoryMetadataRepository) penddingReport(report *snpb.LocalLogStreamDescriptor) error {
+func (r *InMemoryMetadataRepository) penddingReport(report *snpb.LogStreamUncommitReport) error {
 	r.penddingC <- report
 	return nil
 }
 
-func (r *InMemoryMetadataRepository) deliveryResult(snId types.StorageNodeID, results []*snpb.GlobalLogStreamDescriptor) error {
+func (r *InMemoryMetadataRepository) deliveryResult(snId types.StorageNodeID, results []*snpb.LogStreamCommitResult) error {
 	return errors.New("not yet implemented")
 }

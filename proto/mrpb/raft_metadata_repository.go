@@ -8,75 +8,92 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-func (s *MetadataRepositoryDescriptor) LookupGlobalLogStreamByPrev(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
-	i := sort.Search(len(s.LogStream.GlobalLogStreams), func(i int) bool {
-		return s.LogStream.GlobalLogStreams[i].PrevHighWatermark >= glsn
+func (s *MetadataRepositoryDescriptor) LookupCommitResultsByPrev(glsn types.GLSN) *LogStreamCommitResults {
+	i := sort.Search(len(s.LogStream.CommitHistory), func(i int) bool {
+		return s.LogStream.CommitHistory[i].PrevHighWatermark >= glsn
 	})
 
-	if i < len(s.LogStream.GlobalLogStreams) && s.LogStream.GlobalLogStreams[i].PrevHighWatermark == glsn {
-		return s.LogStream.GlobalLogStreams[i]
+	if i < len(s.LogStream.CommitHistory) && s.LogStream.CommitHistory[i].PrevHighWatermark == glsn {
+		return s.LogStream.CommitHistory[i]
 	}
 
 	return nil
 }
 
-func (s *MetadataRepositoryDescriptor) LookupGlobalLogStream(glsn types.GLSN) *snpb.GlobalLogStreamDescriptor {
-	i := sort.Search(len(s.LogStream.GlobalLogStreams), func(i int) bool {
-		return s.LogStream.GlobalLogStreams[i].HighWatermark >= glsn
+func (s *MetadataRepositoryDescriptor) LookupCommitResults(glsn types.GLSN) *LogStreamCommitResults {
+	i := sort.Search(len(s.LogStream.CommitHistory), func(i int) bool {
+		return s.LogStream.CommitHistory[i].HighWatermark >= glsn
 	})
 
-	if i < len(s.LogStream.GlobalLogStreams) && s.LogStream.GlobalLogStreams[i].HighWatermark == glsn {
-		return s.LogStream.GlobalLogStreams[i]
+	if i < len(s.LogStream.CommitHistory) && s.LogStream.CommitHistory[i].HighWatermark == glsn {
+		return s.LogStream.CommitHistory[i]
 	}
 
 	return nil
 }
 
-func (s *MetadataRepositoryDescriptor) GetLastGlobalLogStream() *snpb.GlobalLogStreamDescriptor {
-	n := len(s.LogStream.GlobalLogStreams)
+func (s *MetadataRepositoryDescriptor) GetLastCommitResults() *LogStreamCommitResults {
+	n := len(s.LogStream.CommitHistory)
 	if n == 0 {
 		return nil
 	}
 
-	return s.LogStream.GlobalLogStreams[n-1]
+	return s.LogStream.CommitHistory[n-1]
 }
 
-func (s *MetadataRepositoryDescriptor) GetFirstGlobalLogStream() *snpb.GlobalLogStreamDescriptor {
-	n := len(s.LogStream.GlobalLogStreams)
+func (s *MetadataRepositoryDescriptor) GetFirstCommitResults() *LogStreamCommitResults {
+	n := len(s.LogStream.CommitHistory)
 	if n == 0 {
 		return nil
 	}
 
-	return s.LogStream.GlobalLogStreams[0]
+	return s.LogStream.CommitHistory[0]
 }
 
-func (l *MetadataRepositoryDescriptor_LocalLogStreamReplicas) Deleted() bool {
+func (crs *LogStreamCommitResults) LookupCommitResult(lsID types.LogStreamID) *snpb.LogStreamCommitResult {
+	if crs == nil {
+		return nil
+	}
+
+	i := sort.Search(len(crs.CommitResults), func(i int) bool {
+		return crs.CommitResults[i].LogStreamID >= lsID
+	})
+
+	if i < len(crs.CommitResults) && crs.CommitResults[i].LogStreamID == lsID {
+		return crs.CommitResults[i]
+	}
+
+	return nil
+}
+
+func (l *LogStreamUncommitReports) Deleted() bool {
 	return l.Status == varlogpb.LogStreamStatusDeleted
 }
 
-func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) UncommittedLLSNEnd() types.LLSN {
-	// return exclusive end
-	if r == nil {
-		return types.InvalidLLSN
-	}
-
-	return r.UncommittedLLSNOffset + types.LLSN(r.UncommittedLLSNLength)
+func (l *StorageNodeUncommitReport) Len() int {
+	return len(l.UncommitReports)
 }
 
-func (r *MetadataRepositoryDescriptor_LocalLogStreamReplica) Seal(end types.LLSN) types.LLSN {
-	if r == nil {
-		return types.InvalidLLSN
+func (l *StorageNodeUncommitReport) Swap(i, j int) {
+	l.UncommitReports[i], l.UncommitReports[j] = l.UncommitReports[j], l.UncommitReports[i]
+}
+
+func (l *StorageNodeUncommitReport) Less(i, j int) bool {
+	return l.UncommitReports[i].LogStreamID < l.UncommitReports[j].LogStreamID
+}
+
+func (l *StorageNodeUncommitReport) Sort() {
+	sort.Sort(l)
+}
+
+func (l *StorageNodeUncommitReport) LookupReport(lsID types.LogStreamID) *snpb.LogStreamUncommitReport {
+	if l == nil {
+		return nil
 	}
 
-	if end < r.UncommittedLLSNOffset {
-		return types.InvalidLLSN
+	i := sort.Search(l.Len(), func(i int) bool { return l.UncommitReports[i].LogStreamID >= lsID })
+	if i < l.Len() && l.UncommitReports[i].LogStreamID == lsID {
+		return l.UncommitReports[i]
 	}
-
-	if end > r.UncommittedLLSNEnd() {
-		return types.InvalidLLSN
-	}
-
-	r.UncommittedLLSNLength = uint64(end - r.UncommittedLLSNOffset)
-
-	return r.UncommittedLLSNEnd()
+	return nil
 }

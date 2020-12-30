@@ -3,7 +3,6 @@ package storagenode
 import (
 	"context"
 
-	"github.com/gogo/protobuf/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -28,44 +27,42 @@ func (s *LogStreamReporterService) Register(server *grpc.Server) {
 	snpb.RegisterLogStreamReporterServiceServer(server, s)
 }
 
-func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *types.Empty) (*snpb.LocalLogStreamDescriptor, error) {
-	rsp := &snpb.LocalLogStreamDescriptor{
+func (s *LogStreamReporterService) GetReport(ctx context.Context, _ *snpb.GetReportRequest) (*snpb.GetReportResponse, error) {
+	rsp := &snpb.GetReportResponse{
 		StorageNodeID: s.StorageNodeID(),
 	}
-	knownHighWatermark, reports, err := s.LogStreamReporter.GetReport(ctx)
+	reports, err := s.LogStreamReporter.GetReport(ctx)
 	if err != nil {
 		s.logger.Error("could not get report", zap.Error(err))
 		return nil, err
 	}
-	rsp.Uncommit = make([]*snpb.LocalLogStreamDescriptor_LogStreamUncommitReport, 0, len(reports))
+	rsp.UncommitReports = make([]*snpb.LogStreamUncommitReport, 0, len(reports))
 	for _, report := range reports {
-		rsp.Uncommit = append(rsp.Uncommit,
-			&snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
+		rsp.UncommitReports = append(rsp.UncommitReports,
+			&snpb.LogStreamUncommitReport{
 				LogStreamID:           report.LogStreamID,
+				HighWatermark:         report.KnownHighWatermark,
 				UncommittedLLSNOffset: report.UncommittedLLSNOffset,
 				UncommittedLLSNLength: report.UncommittedLLSNLength,
 			},
 		)
 	}
-	rsp.HighWatermark = knownHighWatermark
 	return rsp, nil
 }
 
-func (s *LogStreamReporterService) Commit(ctx context.Context, req *snpb.GlobalLogStreamDescriptor) (*types.Empty, error) {
-	if len(req.CommitResult) == 0 {
+func (s *LogStreamReporterService) Commit(ctx context.Context, req *snpb.CommitRequest) (*snpb.CommitResponse, error) {
+	if len(req.CommitResults) == 0 {
 		s.logger.Error("no commit result in Commit")
-		return &types.Empty{}, nil
+		return &snpb.CommitResponse{}, nil
 	}
-	hwm := req.GetHighWatermark()
-	prevHWM := req.GetPrevHighWatermark()
-	commitResults := make([]CommittedLogStreamStatus, len(req.CommitResult))
-	for i, cr := range req.CommitResult {
+	commitResults := make([]CommittedLogStreamStatus, len(req.CommitResults))
+	for i, cr := range req.CommitResults {
 		commitResults[i].LogStreamID = cr.LogStreamID
-		commitResults[i].HighWatermark = hwm
-		commitResults[i].PrevHighWatermark = prevHWM
+		commitResults[i].HighWatermark = cr.HighWatermark
+		commitResults[i].PrevHighWatermark = cr.PrevHighWatermark
 		commitResults[i].CommittedGLSNOffset = cr.CommittedGLSNOffset
 		commitResults[i].CommittedGLSNLength = cr.CommittedGLSNLength
 	}
-	err := s.LogStreamReporter.Commit(ctx, hwm, prevHWM, commitResults)
-	return &types.Empty{}, err
+	err := s.LogStreamReporter.Commit(ctx, commitResults)
+	return &snpb.CommitResponse{}, err
 }

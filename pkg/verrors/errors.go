@@ -43,6 +43,7 @@ var (
 	ErrStopped       = errors.New("stopped")
 	ErrNotMember     = errors.New("not member")
 	ErrNotAccessible = errors.New("not accessible")
+	ErrNotEmpty      = errors.New("not empty")
 
 	ErrInvalidArgument = status.New(codes.InvalidArgument, "invalid argument").Err()
 	ErrAlreadyExists   = status.New(codes.AlreadyExists, "varlogserver: already exists").Err()

@@ -51,7 +51,7 @@ func (rs *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Replic
 	if err != nil {
 		return nil, err
 	}
-	sndescList := clusmeta.GetAllStorageNodes()
+	sndescList := clusmeta.GetStorageNodes()
 	allowlist := make([]*varlogpb.StorageNodeDescriptor, 0, len(sndescList))
 	for _, sndesc := range sndescList {
 		if !rs.denylist[sndesc.GetStorageNodeID()] {

@@ -16,11 +16,11 @@ import (
 type EmptyReporterClient struct {
 }
 
-func (rc *EmptyReporterClient) GetReport(ctx context.Context) (*snpb.LocalLogStreamDescriptor, error) {
-	return &snpb.LocalLogStreamDescriptor{}, nil
+func (rc *EmptyReporterClient) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
+	return &snpb.GetReportResponse{}, nil
 }
 
-func (rc *EmptyReporterClient) Commit(ctx context.Context, gls *snpb.GlobalLogStreamDescriptor) error {
+func (rc *EmptyReporterClient) Commit(ctx context.Context, gls *snpb.CommitRequest) error {
 	return nil
 }
 
@@ -50,10 +50,10 @@ const (
 )
 
 type DummyReporterClient struct {
-	storageNodeID      types.StorageNodeID
-	knownHighWatermark types.GLSN
+	storageNodeID types.StorageNodeID
 
 	logStreamIDs          []types.LogStreamID
+	knownHighWatermark    []types.GLSN
 	uncommittedLLSNOffset []types.LLSN
 	uncommittedLLSNLength []uint64
 
@@ -82,6 +82,13 @@ func (r *DummyReporterClient) descRef() {
 	}
 }
 
+func (r *DummyReporterClient) getRef() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.ref
+}
+
 type DummyReporterClientFactory struct {
 	manual       bool
 	nrLogStreams int
@@ -105,6 +112,8 @@ func (a *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescripto
 		LSIDs[i] = types.LogStreamID(sn.StorageNodeID) + types.LogStreamID(i)
 	}
 
+	knownHighWatermark := make([]types.GLSN, a.nrLogStreams)
+
 	uncommittedLLSNOffset := make([]types.LLSN, a.nrLogStreams)
 	for i := 0; i < a.nrLogStreams; i++ {
 		uncommittedLLSNOffset[i] = types.MinLLSN
@@ -116,6 +125,7 @@ func (a *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescripto
 		manual:                a.manual,
 		storageNodeID:         sn.StorageNodeID,
 		logStreamIDs:          LSIDs,
+		knownHighWatermark:    knownHighWatermark,
 		uncommittedLLSNOffset: uncommittedLLSNOffset,
 		uncommittedLLSNLength: uncommittedLLSNLength,
 		status:                status,
@@ -130,7 +140,7 @@ func (a *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescripto
 	return cli, nil
 }
 
-func (r *DummyReporterClient) GetReport(ctx context.Context) (*snpb.LocalLogStreamDescriptor, error) {
+func (r *DummyReporterClient) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
 	time.Sleep(DefaultDelay)
 
 	r.mu.Lock()
@@ -148,24 +158,24 @@ func (r *DummyReporterClient) GetReport(ctx context.Context) (*snpb.LocalLogStre
 		}
 	}
 
-	lls := &snpb.LocalLogStreamDescriptor{
+	lls := &snpb.GetReportResponse{
 		StorageNodeID: r.storageNodeID,
-		HighWatermark: r.knownHighWatermark,
 	}
 
 	for i, lsID := range r.logStreamIDs {
-		u := &snpb.LocalLogStreamDescriptor_LogStreamUncommitReport{
+		u := &snpb.LogStreamUncommitReport{
 			LogStreamID:           lsID,
+			HighWatermark:         r.knownHighWatermark[i],
 			UncommittedLLSNOffset: r.uncommittedLLSNOffset[i],
 			UncommittedLLSNLength: r.uncommittedLLSNLength[i],
 		}
-		lls.Uncommit = append(lls.Uncommit, u)
+		lls.UncommitReports = append(lls.UncommitReports, u)
 	}
 
 	return lls, nil
 }
 
-func (r *DummyReporterClient) Commit(ctx context.Context, glsn *snpb.GlobalLogStreamDescriptor) error {
+func (r *DummyReporterClient) Commit(ctx context.Context, cr *snpb.CommitRequest) error {
 	time.Sleep(DefaultDelay)
 
 	r.mu.Lock()
@@ -177,21 +187,19 @@ func (r *DummyReporterClient) Commit(ctx context.Context, glsn *snpb.GlobalLogSt
 		return errors.New("closed")
 	}
 
-	if !r.knownHighWatermark.Invalid() &&
-		glsn.PrevHighWatermark != r.knownHighWatermark {
-		return nil
-	}
-
-	r.knownHighWatermark = glsn.HighWatermark
-
-	for _, result := range glsn.CommitResult {
+	for _, result := range cr.CommitResults {
 		idx := int(result.LogStreamID - types.LogStreamID(r.storageNodeID))
 		if idx < 0 || idx >= len(r.logStreamIDs) {
 			return errors.New("invalid log stream ID")
 		}
 
+		if r.knownHighWatermark[idx] != result.PrevHighWatermark {
+			continue
+		}
+
 		r.uncommittedLLSNOffset[idx] += types.LLSN(result.CommittedGLSNLength)
 		r.uncommittedLLSNLength[idx] -= result.CommittedGLSNLength
+		r.knownHighWatermark[idx] = result.HighWatermark
 	}
 
 	return nil
@@ -243,11 +251,11 @@ func (r *DummyReporterClient) numUncommitted(idx int) uint64 {
 	return r.uncommittedLLSNLength[idx]
 }
 
-func (r *DummyReporterClient) getKnownHighWatermark() types.GLSN {
+func (r *DummyReporterClient) getKnownHighWatermark(idx int) types.GLSN {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return r.knownHighWatermark
+	return r.knownHighWatermark[idx]
 }
 
 func (a *DummyReporterClientFactory) crashRPC(snID types.StorageNodeID) {
@@ -280,6 +288,7 @@ func (a *DummyReporterClientFactory) recoverRPC(snID types.StorageNodeID) {
 		manual:                old.manual,
 		storageNodeID:         old.storageNodeID,
 		logStreamIDs:          old.logStreamIDs,
+		knownHighWatermark:    old.knownHighWatermark,
 		uncommittedLLSNOffset: old.uncommittedLLSNOffset,
 		uncommittedLLSNLength: old.uncommittedLLSNLength,
 		status:                DUMMY_REPORTERCLIENT_STATUS_RUNNING,

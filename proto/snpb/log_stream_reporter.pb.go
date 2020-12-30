@@ -4,6 +4,7 @@
 package snpb
 
 import (
+	bytes "bytes"
 	context "context"
 	fmt "fmt"
 	io "io"
@@ -12,7 +13,6 @@ import (
 
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
-	types "github.com/gogo/protobuf/types"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -31,96 +31,30 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-// LocalLogStreamDescriptor is manifest that log stream reports to metadata
+// LogStreamUncommitReport is manifest that log stream reports to metadata
 // repository about log entries those are waiting to commit.
-type LocalLogStreamDescriptor struct {
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	HighWatermark        github_com_kakao_varlog_pkg_types.GLSN          `protobuf:"varint,2,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
-	Uncommit             []*LocalLogStreamDescriptor_LogStreamUncommitReport        `protobuf:"bytes,3,rep,name=uncommit,proto3" json:"uncommit,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
-}
-
-func (m *LocalLogStreamDescriptor) Reset()         { *m = LocalLogStreamDescriptor{} }
-func (m *LocalLogStreamDescriptor) String() string { return proto.CompactTextString(m) }
-func (*LocalLogStreamDescriptor) ProtoMessage()    {}
-func (*LocalLogStreamDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b6a839cf0bdc32d5, []int{0}
-}
-func (m *LocalLogStreamDescriptor) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *LocalLogStreamDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_LocalLogStreamDescriptor.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *LocalLogStreamDescriptor) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_LocalLogStreamDescriptor.Merge(m, src)
-}
-func (m *LocalLogStreamDescriptor) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *LocalLogStreamDescriptor) XXX_DiscardUnknown() {
-	xxx_messageInfo_LocalLogStreamDescriptor.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_LocalLogStreamDescriptor proto.InternalMessageInfo
-
-func (m *LocalLogStreamDescriptor) GetStorageNodeID() github_com_kakao_varlog_pkg_types.StorageNodeID {
-	if m != nil {
-		return m.StorageNodeID
-	}
-	return 0
-}
-
-func (m *LocalLogStreamDescriptor) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
-	if m != nil {
-		return m.HighWatermark
-	}
-	return 0
-}
-
-func (m *LocalLogStreamDescriptor) GetUncommit() []*LocalLogStreamDescriptor_LogStreamUncommitReport {
-	if m != nil {
-		return m.Uncommit
-	}
-	return nil
-}
-
-type LocalLogStreamDescriptor_LogStreamUncommitReport struct {
+type LogStreamUncommitReport struct {
 	LogStreamID           github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 	UncommittedLLSNOffset github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,2,opt,name=uncommitted_llsn_offset,json=uncommittedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"uncommitted_llsn_offset,omitempty"`
 	UncommittedLLSNLength uint64                                                   `protobuf:"varint,3,opt,name=uncommitted_llsn_length,json=uncommittedLlsnLength,proto3" json:"uncommitted_llsn_length,omitempty"`
+	HighWatermark         github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,4,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
 	XXX_NoUnkeyedLiteral  struct{}                                                 `json:"-"`
 	XXX_unrecognized      []byte                                                   `json:"-"`
 	XXX_sizecache         int32                                                    `json:"-"`
 }
 
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) Reset() {
-	*m = LocalLogStreamDescriptor_LogStreamUncommitReport{}
+func (m *LogStreamUncommitReport) Reset()         { *m = LogStreamUncommitReport{} }
+func (m *LogStreamUncommitReport) String() string { return proto.CompactTextString(m) }
+func (*LogStreamUncommitReport) ProtoMessage()    {}
+func (*LogStreamUncommitReport) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b6a839cf0bdc32d5, []int{0}
 }
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) String() string {
-	return proto.CompactTextString(m)
-}
-func (*LocalLogStreamDescriptor_LogStreamUncommitReport) ProtoMessage() {}
-func (*LocalLogStreamDescriptor_LogStreamUncommitReport) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b6a839cf0bdc32d5, []int{0, 0}
-}
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) XXX_Unmarshal(b []byte) error {
+func (m *LogStreamUncommitReport) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *LogStreamUncommitReport) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_LocalLogStreamDescriptor_LogStreamUncommitReport.Marshal(b, m, deterministic)
+		return xxx_messageInfo_LogStreamUncommitReport.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -130,37 +64,138 @@ func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) XXX_Marshal(b []byte,
 		return b[:n], nil
 	}
 }
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_LocalLogStreamDescriptor_LogStreamUncommitReport.Merge(m, src)
+func (m *LogStreamUncommitReport) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogStreamUncommitReport.Merge(m, src)
 }
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) XXX_Size() int {
+func (m *LogStreamUncommitReport) XXX_Size() int {
 	return m.ProtoSize()
 }
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) XXX_DiscardUnknown() {
-	xxx_messageInfo_LocalLogStreamDescriptor_LogStreamUncommitReport.DiscardUnknown(m)
+func (m *LogStreamUncommitReport) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogStreamUncommitReport.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_LocalLogStreamDescriptor_LogStreamUncommitReport proto.InternalMessageInfo
+var xxx_messageInfo_LogStreamUncommitReport proto.InternalMessageInfo
 
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
+func (m *LogStreamUncommitReport) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
 	}
 	return 0
 }
 
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) GetUncommittedLLSNOffset() github_com_kakao_varlog_pkg_types.LLSN {
+func (m *LogStreamUncommitReport) GetUncommittedLLSNOffset() github_com_kakao_varlog_pkg_types.LLSN {
 	if m != nil {
 		return m.UncommittedLLSNOffset
 	}
 	return 0
 }
 
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) GetUncommittedLLSNLength() uint64 {
+func (m *LogStreamUncommitReport) GetUncommittedLLSNLength() uint64 {
 	if m != nil {
 		return m.UncommittedLLSNLength
 	}
 	return 0
+}
+
+func (m *LogStreamUncommitReport) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.HighWatermark
+	}
+	return 0
+}
+
+type GetReportRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetReportRequest) Reset()         { *m = GetReportRequest{} }
+func (m *GetReportRequest) String() string { return proto.CompactTextString(m) }
+func (*GetReportRequest) ProtoMessage()    {}
+func (*GetReportRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b6a839cf0bdc32d5, []int{1}
+}
+func (m *GetReportRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetReportRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetReportRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetReportRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetReportRequest.Merge(m, src)
+}
+func (m *GetReportRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetReportRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetReportRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetReportRequest proto.InternalMessageInfo
+
+type GetReportResponse struct {
+	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	UncommitReports      []*LogStreamUncommitReport                                 `protobuf:"bytes,2,rep,name=uncommit_reports,json=uncommitReports,proto3" json:"uncommit_reports,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
+	XXX_unrecognized     []byte                                                     `json:"-"`
+	XXX_sizecache        int32                                                      `json:"-"`
+}
+
+func (m *GetReportResponse) Reset()         { *m = GetReportResponse{} }
+func (m *GetReportResponse) String() string { return proto.CompactTextString(m) }
+func (*GetReportResponse) ProtoMessage()    {}
+func (*GetReportResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b6a839cf0bdc32d5, []int{2}
+}
+func (m *GetReportResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetReportResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetReportResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetReportResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetReportResponse.Merge(m, src)
+}
+func (m *GetReportResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetReportResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetReportResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetReportResponse proto.InternalMessageInfo
+
+func (m *GetReportResponse) GetStorageNodeID() github_com_kakao_varlog_pkg_types.StorageNodeID {
+	if m != nil {
+		return m.StorageNodeID
+	}
+	return 0
+}
+
+func (m *GetReportResponse) GetUncommitReports() []*LogStreamUncommitReport {
+	if m != nil {
+		return m.UncommitReports
+	}
+	return nil
 }
 
 // GlobalLogStreamDescriptor is a committing result against with
@@ -168,94 +203,29 @@ func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) GetUncommittedLLSNLen
 // global log space.
 // Field commit_result contains positions of all log entries of log streams in
 // a storage node which is a receiver of this GlobalLogStreamDescriptor.
-type GlobalLogStreamDescriptor struct {
-	HighWatermark        github_com_kakao_varlog_pkg_types.GLSN  `protobuf:"varint,1,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
-	PrevHighWatermark    github_com_kakao_varlog_pkg_types.GLSN  `protobuf:"varint,2,opt,name=prev_high_watermark,json=prevHighWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"prev_high_watermark,omitempty"`
-	CommitResult         []*GlobalLogStreamDescriptor_LogStreamCommitResult `protobuf:"bytes,3,rep,name=commit_result,json=commitResult,proto3" json:"commit_result,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                           `json:"-"`
-	XXX_unrecognized     []byte                                             `json:"-"`
-	XXX_sizecache        int32                                              `json:"-"`
-}
-
-func (m *GlobalLogStreamDescriptor) Reset()         { *m = GlobalLogStreamDescriptor{} }
-func (m *GlobalLogStreamDescriptor) String() string { return proto.CompactTextString(m) }
-func (*GlobalLogStreamDescriptor) ProtoMessage()    {}
-func (*GlobalLogStreamDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b6a839cf0bdc32d5, []int{1}
-}
-func (m *GlobalLogStreamDescriptor) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *GlobalLogStreamDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_GlobalLogStreamDescriptor.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *GlobalLogStreamDescriptor) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GlobalLogStreamDescriptor.Merge(m, src)
-}
-func (m *GlobalLogStreamDescriptor) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *GlobalLogStreamDescriptor) XXX_DiscardUnknown() {
-	xxx_messageInfo_GlobalLogStreamDescriptor.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_GlobalLogStreamDescriptor proto.InternalMessageInfo
-
-func (m *GlobalLogStreamDescriptor) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
-	if m != nil {
-		return m.HighWatermark
-	}
-	return 0
-}
-
-func (m *GlobalLogStreamDescriptor) GetPrevHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
-	if m != nil {
-		return m.PrevHighWatermark
-	}
-	return 0
-}
-
-func (m *GlobalLogStreamDescriptor) GetCommitResult() []*GlobalLogStreamDescriptor_LogStreamCommitResult {
-	if m != nil {
-		return m.CommitResult
-	}
-	return nil
-}
-
-type GlobalLogStreamDescriptor_LogStreamCommitResult struct {
+type LogStreamCommitResult struct {
 	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 	CommittedGLSNOffset  github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,2,opt,name=committed_glsn_offset,json=committedGlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_offset,omitempty"`
 	CommittedGLSNLength  uint64                                                   `protobuf:"varint,3,opt,name=committed_glsn_length,json=committedGlsnLength,proto3" json:"committed_glsn_length,omitempty"`
+	HighWatermark        github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,4,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
+	PrevHighWatermark    github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,5,opt,name=prev_high_watermark,json=prevHighWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"prev_high_watermark,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
 	XXX_unrecognized     []byte                                                   `json:"-"`
 	XXX_sizecache        int32                                                    `json:"-"`
 }
 
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) Reset() {
-	*m = GlobalLogStreamDescriptor_LogStreamCommitResult{}
+func (m *LogStreamCommitResult) Reset()         { *m = LogStreamCommitResult{} }
+func (m *LogStreamCommitResult) String() string { return proto.CompactTextString(m) }
+func (*LogStreamCommitResult) ProtoMessage()    {}
+func (*LogStreamCommitResult) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b6a839cf0bdc32d5, []int{3}
 }
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) String() string {
-	return proto.CompactTextString(m)
-}
-func (*GlobalLogStreamDescriptor_LogStreamCommitResult) ProtoMessage() {}
-func (*GlobalLogStreamDescriptor_LogStreamCommitResult) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b6a839cf0bdc32d5, []int{1, 0}
-}
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) XXX_Unmarshal(b []byte) error {
+func (m *LogStreamCommitResult) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *LogStreamCommitResult) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_GlobalLogStreamDescriptor_LogStreamCommitResult.Marshal(b, m, deterministic)
+		return xxx_messageInfo_LogStreamCommitResult.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -265,44 +235,154 @@ func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) XXX_Marshal(b []byte, 
 		return b[:n], nil
 	}
 }
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GlobalLogStreamDescriptor_LogStreamCommitResult.Merge(m, src)
+func (m *LogStreamCommitResult) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogStreamCommitResult.Merge(m, src)
 }
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) XXX_Size() int {
+func (m *LogStreamCommitResult) XXX_Size() int {
 	return m.ProtoSize()
 }
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) XXX_DiscardUnknown() {
-	xxx_messageInfo_GlobalLogStreamDescriptor_LogStreamCommitResult.DiscardUnknown(m)
+func (m *LogStreamCommitResult) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogStreamCommitResult.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_GlobalLogStreamDescriptor_LogStreamCommitResult proto.InternalMessageInfo
+var xxx_messageInfo_LogStreamCommitResult proto.InternalMessageInfo
 
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
+func (m *LogStreamCommitResult) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
 	}
 	return 0
 }
 
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) GetCommittedGLSNOffset() github_com_kakao_varlog_pkg_types.GLSN {
+func (m *LogStreamCommitResult) GetCommittedGLSNOffset() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.CommittedGLSNOffset
 	}
 	return 0
 }
 
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) GetCommittedGLSNLength() uint64 {
+func (m *LogStreamCommitResult) GetCommittedGLSNLength() uint64 {
 	if m != nil {
 		return m.CommittedGLSNLength
 	}
 	return 0
 }
 
+func (m *LogStreamCommitResult) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.HighWatermark
+	}
+	return 0
+}
+
+func (m *LogStreamCommitResult) GetPrevHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.PrevHighWatermark
+	}
+	return 0
+}
+
+type CommitRequest struct {
+	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	CommitResults        []*LogStreamCommitResult                                   `protobuf:"bytes,2,rep,name=commit_results,json=commitResults,proto3" json:"commit_results,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
+	XXX_unrecognized     []byte                                                     `json:"-"`
+	XXX_sizecache        int32                                                      `json:"-"`
+}
+
+func (m *CommitRequest) Reset()         { *m = CommitRequest{} }
+func (m *CommitRequest) String() string { return proto.CompactTextString(m) }
+func (*CommitRequest) ProtoMessage()    {}
+func (*CommitRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b6a839cf0bdc32d5, []int{4}
+}
+func (m *CommitRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CommitRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_CommitRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *CommitRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CommitRequest.Merge(m, src)
+}
+func (m *CommitRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *CommitRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_CommitRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CommitRequest proto.InternalMessageInfo
+
+func (m *CommitRequest) GetStorageNodeID() github_com_kakao_varlog_pkg_types.StorageNodeID {
+	if m != nil {
+		return m.StorageNodeID
+	}
+	return 0
+}
+
+func (m *CommitRequest) GetCommitResults() []*LogStreamCommitResult {
+	if m != nil {
+		return m.CommitResults
+	}
+	return nil
+}
+
+type CommitResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *CommitResponse) Reset()         { *m = CommitResponse{} }
+func (m *CommitResponse) String() string { return proto.CompactTextString(m) }
+func (*CommitResponse) ProtoMessage()    {}
+func (*CommitResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b6a839cf0bdc32d5, []int{5}
+}
+func (m *CommitResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CommitResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_CommitResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *CommitResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CommitResponse.Merge(m, src)
+}
+func (m *CommitResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *CommitResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_CommitResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CommitResponse proto.InternalMessageInfo
+
 func init() {
-	proto.RegisterType((*LocalLogStreamDescriptor)(nil), "varlog.snpb.LocalLogStreamDescriptor")
-	proto.RegisterType((*LocalLogStreamDescriptor_LogStreamUncommitReport)(nil), "varlog.snpb.LocalLogStreamDescriptor.LogStreamUncommitReport")
-	proto.RegisterType((*GlobalLogStreamDescriptor)(nil), "varlog.snpb.GlobalLogStreamDescriptor")
-	proto.RegisterType((*GlobalLogStreamDescriptor_LogStreamCommitResult)(nil), "varlog.snpb.GlobalLogStreamDescriptor.LogStreamCommitResult")
+	proto.RegisterType((*LogStreamUncommitReport)(nil), "varlog.snpb.LogStreamUncommitReport")
+	proto.RegisterType((*GetReportRequest)(nil), "varlog.snpb.GetReportRequest")
+	proto.RegisterType((*GetReportResponse)(nil), "varlog.snpb.GetReportResponse")
+	proto.RegisterType((*LogStreamCommitResult)(nil), "varlog.snpb.LogStreamCommitResult")
+	proto.RegisterType((*CommitRequest)(nil), "varlog.snpb.CommitRequest")
+	proto.RegisterType((*CommitResponse)(nil), "varlog.snpb.CommitResponse")
 }
 
 func init() {
@@ -310,46 +390,122 @@ func init() {
 }
 
 var fileDescriptor_b6a839cf0bdc32d5 = []byte{
-	// 623 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x55, 0x4f, 0x8b, 0xd3, 0x40,
-	0x1c, 0xdd, 0xec, 0x3f, 0x74, 0x6a, 0x14, 0xb3, 0xd4, 0x76, 0x23, 0x34, 0xa5, 0xa8, 0xf4, 0xb2,
-	0x29, 0xae, 0x08, 0xe2, 0x9f, 0x4b, 0x77, 0xa5, 0xea, 0x86, 0x2e, 0xa6, 0x2c, 0xa2, 0x08, 0x21,
-	0x4d, 0xa6, 0xd3, 0xd0, 0x24, 0x13, 0x26, 0xd3, 0x2e, 0x7b, 0xf3, 0xe4, 0xc7, 0x10, 0x3f, 0x84,
-	0x7e, 0x07, 0x8f, 0x1e, 0x3d, 0xe5, 0x10, 0xc1, 0x0f, 0xb1, 0x27, 0xc9, 0x4c, 0x92, 0xa6, 0xb4,
-	0x85, 0x56, 0xd6, 0x53, 0x33, 0x33, 0xef, 0xf7, 0x7e, 0x6f, 0xde, 0x3c, 0x7e, 0x05, 0xf7, 0x02,
-	0x82, 0x29, 0x6e, 0x85, 0x7e, 0xd0, 0x6f, 0xb9, 0x18, 0x19, 0x21, 0x25, 0xd0, 0xf4, 0x0c, 0x02,
-	0x03, 0x4c, 0x28, 0x24, 0x2a, 0x3b, 0x96, 0x4a, 0x13, 0x93, 0xb8, 0x18, 0xa9, 0x09, 0x4c, 0x3e,
-	0x40, 0x0e, 0x1d, 0x8e, 0xfb, 0xaa, 0x85, 0xbd, 0x16, 0xc2, 0x08, 0xb7, 0x18, 0xa6, 0x3f, 0x1e,
-	0xb0, 0x15, 0xe7, 0x4b, 0xbe, 0x78, 0xad, 0x7c, 0x17, 0x61, 0x8c, 0x5c, 0x38, 0x45, 0x41, 0x2f,
-	0xa0, 0x17, 0xfc, 0xb0, 0xf1, 0x7d, 0x07, 0x54, 0x35, 0x6c, 0x99, 0xae, 0x86, 0x51, 0x8f, 0xb5,
-	0x3e, 0x86, 0xa1, 0x45, 0x9c, 0x80, 0x62, 0x22, 0x9d, 0x83, 0x5b, 0x21, 0xc5, 0xc4, 0x44, 0xd0,
-	0xf0, 0xb1, 0x0d, 0x0d, 0xc7, 0xae, 0x0a, 0x75, 0xa1, 0x29, 0xb6, 0x4f, 0xe3, 0x48, 0x11, 0x7b,
-	0xfc, 0xa8, 0x8b, 0x6d, 0xf8, 0xfa, 0xf8, 0x32, 0x52, 0x9e, 0xa6, 0xb2, 0x6c, 0x73, 0xec, 0x8d,
-	0xcc, 0x91, 0x89, 0x99, 0x40, 0x2e, 0x3c, 0xfb, 0x09, 0x46, 0xa8, 0x45, 0x2f, 0x02, 0x18, 0xaa,
-	0x33, 0xd5, 0xba, 0x18, 0x16, 0x96, 0xb6, 0xf4, 0x11, 0xdc, 0x1c, 0x3a, 0x68, 0x68, 0x9c, 0x9b,
-	0x14, 0x12, 0xcf, 0x24, 0xa3, 0xea, 0x66, 0x5d, 0x68, 0x6e, 0xb7, 0x1f, 0x5f, 0x46, 0xca, 0xc3,
-	0xb5, 0xda, 0x74, 0xb4, 0x5e, 0x57, 0x17, 0x13, 0xb2, 0x77, 0x19, 0x97, 0xf4, 0x1e, 0x5c, 0x1b,
-	0xfb, 0x16, 0xf6, 0x3c, 0x87, 0x56, 0xb7, 0xea, 0x5b, 0xcd, 0xd2, 0xe1, 0x0b, 0xb5, 0xe0, 0xaf,
-	0xba, 0xcc, 0x0f, 0x35, 0xdf, 0x3b, 0x4b, 0xcb, 0x75, 0xf6, 0x4a, 0x7a, 0x4e, 0x27, 0xff, 0xd9,
-	0x04, 0x95, 0x25, 0x28, 0x09, 0x03, 0xb1, 0xf0, 0xc0, 0xa9, 0x97, 0xdb, 0xed, 0x93, 0x38, 0x52,
-	0x4a, 0x79, 0x0d, 0x73, 0xf2, 0xc9, 0x5a, 0x57, 0x2c, 0xd4, 0xea, 0x25, 0x37, 0x5f, 0xd8, 0xd2,
-	0x67, 0x01, 0x54, 0x32, 0x65, 0x14, 0xda, 0x86, 0xeb, 0x86, 0xbe, 0x81, 0x07, 0x83, 0x10, 0xd2,
-	0xd4, 0xcf, 0x6e, 0x1c, 0x29, 0xe5, 0xb3, 0x29, 0x44, 0xd3, 0x7a, 0xdd, 0x53, 0x06, 0x58, 0xdb,
-	0xe8, 0xa4, 0x54, 0x2f, 0x17, 0xda, 0x69, 0x6e, 0xe8, 0x73, 0x2e, 0xe9, 0xed, 0x02, 0x1d, 0x2e,
-	0xf4, 0x11, 0x1d, 0x56, 0xb7, 0x98, 0x8e, 0xfd, 0x05, 0x3a, 0x34, 0x06, 0x98, 0xa3, 0xe4, 0xdb,
-	0x8d, 0x2f, 0x3b, 0x60, 0xbf, 0xe3, 0xe2, 0xfe, 0xe2, 0xe0, 0xce, 0xe7, 0x47, 0xb8, 0xc2, 0xfc,
-	0x40, 0xb0, 0x17, 0x10, 0x38, 0x31, 0xae, 0x32, 0xa2, 0xb7, 0x13, 0xc6, 0x57, 0x33, 0x6d, 0x4c,
-	0x20, 0xf2, 0x9b, 0x1b, 0x04, 0x86, 0x63, 0x37, 0xcb, 0xea, 0xf3, 0x99, 0xac, 0x2e, 0xf5, 0x60,
-	0x1a, 0x8b, 0xa3, 0x34, 0x84, 0x09, 0x87, 0x7e, 0xc3, 0x2a, 0xac, 0xe4, 0x5f, 0x9b, 0xa0, 0xbc,
-	0x10, 0xb7, 0x38, 0xac, 0xe2, 0x7f, 0x0c, 0xeb, 0x27, 0x01, 0x94, 0xa7, 0x11, 0x41, 0x73, 0x51,
-	0xd5, 0xe2, 0x48, 0xd9, 0x3b, 0xca, 0x00, 0x9d, 0x7f, 0x0f, 0x2a, 0xb3, 0x7b, 0x2f, 0x6f, 0xd5,
-	0x99, 0xc6, 0xf4, 0x64, 0x4e, 0xc1, 0x4c, 0x48, 0x2b, 0x73, 0x0a, 0xd2, 0x88, 0xce, 0x92, 0xf1,
-	0xcd, 0xc3, 0x6f, 0x42, 0x32, 0x58, 0xd3, 0xfb, 0xe9, 0xe9, 0x34, 0xef, 0x41, 0x32, 0x71, 0x2c,
-	0x28, 0x69, 0xe0, 0x7a, 0x07, 0x66, 0x73, 0xe1, 0x8e, 0xca, 0x07, 0xb4, 0x9a, 0x0d, 0x68, 0xf5,
-	0x65, 0x32, 0xa0, 0xe5, 0xfb, 0x2b, 0x0d, 0xa5, 0xc6, 0x86, 0xf4, 0x06, 0xec, 0x72, 0x59, 0xd2,
-	0x83, 0xd5, 0xb2, 0x21, 0x2f, 0x69, 0xd9, 0xd8, 0x68, 0x3f, 0xfb, 0x11, 0xd7, 0x84, 0x9f, 0x71,
-	0x4d, 0xf8, 0xfa, 0xbb, 0x26, 0x7c, 0x38, 0x58, 0xc5, 0xd9, 0xfc, 0xff, 0xab, 0xbf, 0xcb, 0xbe,
-	0x1f, 0xfd, 0x0d, 0x00, 0x00, 0xff, 0xff, 0x34, 0x3b, 0x79, 0x4e, 0xd4, 0x06, 0x00, 0x00,
+	// 617 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x95, 0xcd, 0x6a, 0xdb, 0x4e,
+	0x14, 0xc5, 0xff, 0x93, 0xf8, 0x1f, 0xe8, 0x18, 0xe5, 0x63, 0x82, 0x89, 0xea, 0x52, 0x2b, 0x88,
+	0x2c, 0xbc, 0x89, 0x4c, 0x53, 0x0a, 0x25, 0xdd, 0xd9, 0x05, 0x37, 0x44, 0xd8, 0x54, 0x26, 0x14,
+	0x4a, 0x41, 0xc8, 0xd6, 0x58, 0x36, 0x96, 0x34, 0xaa, 0x66, 0xe4, 0xd0, 0x5d, 0x57, 0x7d, 0x8e,
+	0x40, 0xd7, 0x7d, 0x8f, 0xd2, 0x55, 0xa1, 0xeb, 0x6a, 0xa1, 0x6e, 0xfa, 0x0c, 0x59, 0x15, 0x8d,
+	0x3e, 0x2c, 0xc5, 0x0e, 0xd4, 0x2d, 0x34, 0x2b, 0x7b, 0x74, 0xef, 0x3d, 0xe7, 0x30, 0xf3, 0x1b,
+	0x09, 0x1e, 0x79, 0x3e, 0x61, 0xa4, 0x45, 0x5d, 0x6f, 0xd8, 0xb2, 0x89, 0xa5, 0x53, 0xe6, 0x63,
+	0xc3, 0xd1, 0x7d, 0xec, 0x11, 0x9f, 0x61, 0x5f, 0xe1, 0x65, 0x54, 0x9d, 0x1b, 0xbe, 0x4d, 0x2c,
+	0x25, 0x6e, 0xab, 0x1f, 0x5b, 0x53, 0x36, 0x09, 0x86, 0xca, 0x88, 0x38, 0x2d, 0x8b, 0x58, 0xa4,
+	0xc5, 0x7b, 0x86, 0xc1, 0x98, 0xaf, 0x12, 0xbd, 0xf8, 0x5f, 0x32, 0x2b, 0x7f, 0xd9, 0x84, 0x07,
+	0x2a, 0xb1, 0x06, 0x5c, 0xf8, 0xc2, 0x1d, 0x11, 0xc7, 0x99, 0x32, 0x8d, 0xeb, 0x23, 0x02, 0x85,
+	0x82, 0xe9, 0xd4, 0x14, 0xc1, 0x21, 0x68, 0x0a, 0xed, 0xf3, 0x28, 0x94, 0xaa, 0xf9, 0xcc, 0xd9,
+	0xf3, 0xeb, 0x50, 0x7a, 0x9a, 0x9a, 0x9a, 0x46, 0xe0, 0xcc, 0x8c, 0x99, 0x41, 0xb8, 0x7d, 0x12,
+	0x2b, 0xfb, 0xf1, 0x66, 0x56, 0x8b, 0xbd, 0xf3, 0x30, 0x55, 0x0a, 0xb3, 0x5a, 0xd5, 0xce, 0x17,
+	0x26, 0xfa, 0x00, 0xe0, 0x41, 0x90, 0x66, 0x60, 0xd8, 0xd4, 0x6d, 0x9b, 0xba, 0x3a, 0x19, 0x8f,
+	0x29, 0x66, 0xe2, 0xc6, 0x21, 0x68, 0x56, 0xda, 0xbd, 0x28, 0x94, 0x6a, 0x17, 0x8b, 0x16, 0x55,
+	0x1d, 0xf4, 0xfa, 0xbc, 0xe1, 0x3a, 0x94, 0x1e, 0xad, 0x97, 0x42, 0x1d, 0xf4, 0xb4, 0x5a, 0xc1,
+	0x4e, 0xb5, 0xa9, 0x9b, 0x68, 0xa1, 0x97, 0x2b, 0x72, 0xd8, 0xd8, 0xb5, 0xd8, 0x44, 0xdc, 0xe4,
+	0x39, 0xee, 0xaf, 0xc8, 0xa1, 0xf2, 0x86, 0x25, 0xc9, 0xe4, 0x31, 0x7a, 0x03, 0xb7, 0x27, 0x53,
+	0x6b, 0xa2, 0x5f, 0x1a, 0x0c, 0xfb, 0x8e, 0xe1, 0xcf, 0xc4, 0x0a, 0x57, 0x7a, 0xb2, 0x76, 0xf0,
+	0x6e, 0x1c, 0x5c, 0x88, 0xc5, 0x5e, 0x65, 0x5a, 0xa7, 0x95, 0x9f, 0x57, 0x12, 0x90, 0x11, 0xdc,
+	0xed, 0xe2, 0xf4, 0xf4, 0x34, 0xfc, 0x36, 0xc0, 0x94, 0xc9, 0xdf, 0x01, 0xdc, 0x2b, 0x3c, 0xa4,
+	0x1e, 0x71, 0x29, 0x46, 0x97, 0x70, 0x87, 0x32, 0xe2, 0x1b, 0x16, 0xd6, 0x5d, 0x62, 0xe2, 0xc5,
+	0xe1, 0xf6, 0xa3, 0x50, 0x12, 0x06, 0x49, 0xa9, 0x47, 0x4c, 0xcc, 0x8f, 0xf7, 0x74, 0xad, 0x7c,
+	0xa5, 0x69, 0x4d, 0xa0, 0x85, 0xa5, 0x89, 0xfa, 0x70, 0x37, 0xdb, 0x9f, 0x14, 0x63, 0x2a, 0x6e,
+	0x1c, 0x6e, 0x36, 0xab, 0x27, 0x47, 0x4a, 0x01, 0x63, 0xe5, 0x16, 0x26, 0xb5, 0x9d, 0xa0, 0xb4,
+	0xa6, 0xf2, 0xc7, 0x0a, 0xac, 0xe5, 0xcd, 0x9d, 0xb4, 0x44, 0x03, 0xfb, 0x0e, 0xf0, 0x7d, 0x0f,
+	0x60, 0x6d, 0x01, 0x8d, 0xb5, 0x04, 0xaf, 0x1a, 0x85, 0xd2, 0x7e, 0x27, 0x6b, 0xe8, 0xfe, 0x39,
+	0xba, 0x9c, 0x80, 0xfd, 0xdc, 0xaa, 0xbb, 0x00, 0xf7, 0x7c, 0x29, 0x41, 0x09, 0xdb, 0x83, 0xa5,
+	0x04, 0x29, 0xb4, 0x65, 0xb1, 0x7f, 0x81, 0x2c, 0xc2, 0x70, 0xdf, 0xf3, 0xf1, 0x5c, 0xbf, 0x61,
+	0xf1, 0xff, 0xdf, 0x58, 0xec, 0xc5, 0x8a, 0x2f, 0x56, 0xdc, 0x8c, 0x6f, 0x00, 0x0a, 0x19, 0x1c,
+	0xfc, 0x5e, 0xdc, 0xdd, 0x0d, 0x38, 0x83, 0xdb, 0x39, 0xff, 0x31, 0xa7, 0x19, 0xff, 0xf2, 0x6a,
+	0xfe, 0x8b, 0x48, 0x6b, 0xc2, 0xa8, 0xb0, 0xa2, 0xf2, 0x2e, 0xdc, 0xce, 0xcb, 0xfc, 0x5e, 0x9f,
+	0x7c, 0x02, 0x50, 0xcc, 0x47, 0xb5, 0xf4, 0x33, 0x31, 0xc0, 0xfe, 0x7c, 0x3a, 0xc2, 0x48, 0x85,
+	0xf7, 0xf2, 0x37, 0x01, 0x7a, 0x58, 0xb2, 0xbb, 0xf9, 0xda, 0xa8, 0x37, 0x6e, 0x2b, 0x27, 0x46,
+	0xf2, 0x7f, 0xa8, 0x03, 0xb7, 0x12, 0x73, 0x54, 0x2f, 0xf5, 0x96, 0xb6, 0xb9, 0xfe, 0x60, 0x65,
+	0x2d, 0x13, 0x69, 0x3f, 0xfb, 0x1c, 0x35, 0xc0, 0xd7, 0xa8, 0x01, 0xae, 0x7e, 0x34, 0xc0, 0xeb,
+	0xe3, 0xdf, 0xd9, 0xe5, 0xfc, 0x8b, 0x38, 0xdc, 0xe2, 0xff, 0x1f, 0xff, 0x0a, 0x00, 0x00, 0xff,
+	0xff, 0x71, 0x6a, 0x14, 0xac, 0x26, 0x07, 0x00, 0x00,
+}
+
+func (this *LogStreamUncommitReport) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*LogStreamUncommitReport)
+	if !ok {
+		that2, ok := that.(LogStreamUncommitReport)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.LogStreamID != that1.LogStreamID {
+		return false
+	}
+	if this.UncommittedLLSNOffset != that1.UncommittedLLSNOffset {
+		return false
+	}
+	if this.UncommittedLLSNLength != that1.UncommittedLLSNLength {
+		return false
+	}
+	if this.HighWatermark != that1.HighWatermark {
+		return false
+	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+		return false
+	}
+	return true
+}
+func (this *LogStreamCommitResult) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*LogStreamCommitResult)
+	if !ok {
+		that2, ok := that.(LogStreamCommitResult)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.LogStreamID != that1.LogStreamID {
+		return false
+	}
+	if this.CommittedGLSNOffset != that1.CommittedGLSNOffset {
+		return false
+	}
+	if this.CommittedGLSNLength != that1.CommittedGLSNLength {
+		return false
+	}
+	if this.HighWatermark != that1.HighWatermark {
+		return false
+	}
+	if this.PrevHighWatermark != that1.PrevHighWatermark {
+		return false
+	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+		return false
+	}
+	return true
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -364,8 +520,8 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type LogStreamReporterServiceClient interface {
-	GetReport(ctx context.Context, in *types.Empty, opts ...grpc.CallOption) (*LocalLogStreamDescriptor, error)
-	Commit(ctx context.Context, in *GlobalLogStreamDescriptor, opts ...grpc.CallOption) (*types.Empty, error)
+	GetReport(ctx context.Context, in *GetReportRequest, opts ...grpc.CallOption) (*GetReportResponse, error)
+	Commit(ctx context.Context, in *CommitRequest, opts ...grpc.CallOption) (*CommitResponse, error)
 }
 
 type logStreamReporterServiceClient struct {
@@ -376,8 +532,8 @@ func NewLogStreamReporterServiceClient(cc *grpc.ClientConn) LogStreamReporterSer
 	return &logStreamReporterServiceClient{cc}
 }
 
-func (c *logStreamReporterServiceClient) GetReport(ctx context.Context, in *types.Empty, opts ...grpc.CallOption) (*LocalLogStreamDescriptor, error) {
-	out := new(LocalLogStreamDescriptor)
+func (c *logStreamReporterServiceClient) GetReport(ctx context.Context, in *GetReportRequest, opts ...grpc.CallOption) (*GetReportResponse, error) {
+	out := new(GetReportResponse)
 	err := c.cc.Invoke(ctx, "/varlog.snpb.LogStreamReporterService/GetReport", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -385,8 +541,8 @@ func (c *logStreamReporterServiceClient) GetReport(ctx context.Context, in *type
 	return out, nil
 }
 
-func (c *logStreamReporterServiceClient) Commit(ctx context.Context, in *GlobalLogStreamDescriptor, opts ...grpc.CallOption) (*types.Empty, error) {
-	out := new(types.Empty)
+func (c *logStreamReporterServiceClient) Commit(ctx context.Context, in *CommitRequest, opts ...grpc.CallOption) (*CommitResponse, error) {
+	out := new(CommitResponse)
 	err := c.cc.Invoke(ctx, "/varlog.snpb.LogStreamReporterService/Commit", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -396,18 +552,18 @@ func (c *logStreamReporterServiceClient) Commit(ctx context.Context, in *GlobalL
 
 // LogStreamReporterServiceServer is the server API for LogStreamReporterService service.
 type LogStreamReporterServiceServer interface {
-	GetReport(context.Context, *types.Empty) (*LocalLogStreamDescriptor, error)
-	Commit(context.Context, *GlobalLogStreamDescriptor) (*types.Empty, error)
+	GetReport(context.Context, *GetReportRequest) (*GetReportResponse, error)
+	Commit(context.Context, *CommitRequest) (*CommitResponse, error)
 }
 
 // UnimplementedLogStreamReporterServiceServer can be embedded to have forward compatible implementations.
 type UnimplementedLogStreamReporterServiceServer struct {
 }
 
-func (*UnimplementedLogStreamReporterServiceServer) GetReport(ctx context.Context, req *types.Empty) (*LocalLogStreamDescriptor, error) {
+func (*UnimplementedLogStreamReporterServiceServer) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetReport not implemented")
 }
-func (*UnimplementedLogStreamReporterServiceServer) Commit(ctx context.Context, req *GlobalLogStreamDescriptor) (*types.Empty, error) {
+func (*UnimplementedLogStreamReporterServiceServer) Commit(ctx context.Context, req *CommitRequest) (*CommitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Commit not implemented")
 }
 
@@ -416,7 +572,7 @@ func RegisterLogStreamReporterServiceServer(s *grpc.Server, srv LogStreamReporte
 }
 
 func _LogStreamReporterService_GetReport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(types.Empty)
+	in := new(GetReportRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -428,13 +584,13 @@ func _LogStreamReporterService_GetReport_Handler(srv interface{}, ctx context.Co
 		FullMethod: "/varlog.snpb.LogStreamReporterService/GetReport",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(LogStreamReporterServiceServer).GetReport(ctx, req.(*types.Empty))
+		return srv.(LogStreamReporterServiceServer).GetReport(ctx, req.(*GetReportRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _LogStreamReporterService_Commit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GlobalLogStreamDescriptor)
+	in := new(CommitRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -446,7 +602,7 @@ func _LogStreamReporterService_Commit_Handler(srv interface{}, ctx context.Conte
 		FullMethod: "/varlog.snpb.LogStreamReporterService/Commit",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(LogStreamReporterServiceServer).Commit(ctx, req.(*GlobalLogStreamDescriptor))
+		return srv.(LogStreamReporterServiceServer).Commit(ctx, req.(*CommitRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -468,7 +624,7 @@ var _LogStreamReporterService_serviceDesc = grpc.ServiceDesc{
 	Metadata: "proto/snpb/log_stream_reporter.proto",
 }
 
-func (m *LocalLogStreamDescriptor) Marshal() (dAtA []byte, err error) {
+func (m *LogStreamUncommitReport) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -478,12 +634,12 @@ func (m *LocalLogStreamDescriptor) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *LocalLogStreamDescriptor) MarshalTo(dAtA []byte) (int, error) {
+func (m *LogStreamUncommitReport) MarshalTo(dAtA []byte) (int, error) {
 	size := m.ProtoSize()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *LocalLogStreamDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *LogStreamUncommitReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -491,57 +647,11 @@ func (m *LocalLogStreamDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if len(m.Uncommit) > 0 {
-		for iNdEx := len(m.Uncommit) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Uncommit[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintLogStreamReporter(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x1a
-		}
 	}
 	if m.HighWatermark != 0 {
 		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.HighWatermark))
 		i--
-		dAtA[i] = 0x10
-	}
-	if m.StorageNodeID != 0 {
-		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.StorageNodeID))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
+		dAtA[i] = 0x20
 	}
 	if m.UncommittedLLSNLength != 0 {
 		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.UncommittedLLSNLength))
@@ -561,7 +671,7 @@ func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) MarshalToSizedBuffer(
 	return len(dAtA) - i, nil
 }
 
-func (m *GlobalLogStreamDescriptor) Marshal() (dAtA []byte, err error) {
+func (m *GetReportRequest) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -571,12 +681,12 @@ func (m *GlobalLogStreamDescriptor) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *GlobalLogStreamDescriptor) MarshalTo(dAtA []byte) (int, error) {
+func (m *GetReportRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.ProtoSize()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *GlobalLogStreamDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *GetReportRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -585,10 +695,37 @@ func (m *GlobalLogStreamDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, erro
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if len(m.CommitResult) > 0 {
-		for iNdEx := len(m.CommitResult) - 1; iNdEx >= 0; iNdEx-- {
+	return len(dAtA) - i, nil
+}
+
+func (m *GetReportResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetReportResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetReportResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.UncommitReports) > 0 {
+		for iNdEx := len(m.UncommitReports) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size, err := m.CommitResult[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				size, err := m.UncommitReports[iNdEx].MarshalToSizedBuffer(dAtA[:i])
 				if err != nil {
 					return 0, err
 				}
@@ -596,23 +733,18 @@ func (m *GlobalLogStreamDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, erro
 				i = encodeVarintLogStreamReporter(dAtA, i, uint64(size))
 			}
 			i--
-			dAtA[i] = 0x1a
+			dAtA[i] = 0x12
 		}
 	}
-	if m.PrevHighWatermark != 0 {
-		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.PrevHighWatermark))
-		i--
-		dAtA[i] = 0x10
-	}
-	if m.HighWatermark != 0 {
-		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.HighWatermark))
+	if m.StorageNodeID != 0 {
+		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.StorageNodeID))
 		i--
 		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
 
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) Marshal() (dAtA []byte, err error) {
+func (m *LogStreamCommitResult) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -622,12 +754,12 @@ func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) Marshal() (dAtA []byte
 	return dAtA[:n], nil
 }
 
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) MarshalTo(dAtA []byte) (int, error) {
+func (m *LogStreamCommitResult) MarshalTo(dAtA []byte) (int, error) {
 	size := m.ProtoSize()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *LogStreamCommitResult) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -635,6 +767,16 @@ func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) MarshalToSizedBuffer(d
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.PrevHighWatermark != 0 {
+		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.PrevHighWatermark))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.HighWatermark != 0 {
+		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.HighWatermark))
+		i--
+		dAtA[i] = 0x20
 	}
 	if m.CommittedGLSNLength != 0 {
 		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.CommittedGLSNLength))
@@ -654,6 +796,79 @@ func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) MarshalToSizedBuffer(d
 	return len(dAtA) - i, nil
 }
 
+func (m *CommitRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CommitRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CommitRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.CommitResults) > 0 {
+		for iNdEx := len(m.CommitResults) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.CommitResults[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintLogStreamReporter(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.StorageNodeID != 0 {
+		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.StorageNodeID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *CommitResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CommitResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CommitResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintLogStreamReporter(dAtA []byte, offset int, v uint64) int {
 	offset -= sovLogStreamReporter(v)
 	base := offset
@@ -665,31 +880,7 @@ func encodeVarintLogStreamReporter(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-func (m *LocalLogStreamDescriptor) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.StorageNodeID != 0 {
-		n += 1 + sovLogStreamReporter(uint64(m.StorageNodeID))
-	}
-	if m.HighWatermark != 0 {
-		n += 1 + sovLogStreamReporter(uint64(m.HighWatermark))
-	}
-	if len(m.Uncommit) > 0 {
-		for _, e := range m.Uncommit {
-			l = e.ProtoSize()
-			n += 1 + l + sovLogStreamReporter(uint64(l))
-		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) ProtoSize() (n int) {
+func (m *LogStreamUncommitReport) ProtoSize() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -704,26 +895,38 @@ func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) ProtoSize() (n int) {
 	if m.UncommittedLLSNLength != 0 {
 		n += 1 + sovLogStreamReporter(uint64(m.UncommittedLLSNLength))
 	}
+	if m.HighWatermark != 0 {
+		n += 1 + sovLogStreamReporter(uint64(m.HighWatermark))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
 
-func (m *GlobalLogStreamDescriptor) ProtoSize() (n int) {
+func (m *GetReportRequest) ProtoSize() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.HighWatermark != 0 {
-		n += 1 + sovLogStreamReporter(uint64(m.HighWatermark))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
-	if m.PrevHighWatermark != 0 {
-		n += 1 + sovLogStreamReporter(uint64(m.PrevHighWatermark))
+	return n
+}
+
+func (m *GetReportResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
 	}
-	if len(m.CommitResult) > 0 {
-		for _, e := range m.CommitResult {
+	var l int
+	_ = l
+	if m.StorageNodeID != 0 {
+		n += 1 + sovLogStreamReporter(uint64(m.StorageNodeID))
+	}
+	if len(m.UncommitReports) > 0 {
+		for _, e := range m.UncommitReports {
 			l = e.ProtoSize()
 			n += 1 + l + sovLogStreamReporter(uint64(l))
 		}
@@ -734,7 +937,7 @@ func (m *GlobalLogStreamDescriptor) ProtoSize() (n int) {
 	return n
 }
 
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) ProtoSize() (n int) {
+func (m *LogStreamCommitResult) ProtoSize() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -749,6 +952,45 @@ func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) ProtoSize() (n int) {
 	if m.CommittedGLSNLength != 0 {
 		n += 1 + sovLogStreamReporter(uint64(m.CommittedGLSNLength))
 	}
+	if m.HighWatermark != 0 {
+		n += 1 + sovLogStreamReporter(uint64(m.HighWatermark))
+	}
+	if m.PrevHighWatermark != 0 {
+		n += 1 + sovLogStreamReporter(uint64(m.PrevHighWatermark))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CommitRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.StorageNodeID != 0 {
+		n += 1 + sovLogStreamReporter(uint64(m.StorageNodeID))
+	}
+	if len(m.CommitResults) > 0 {
+		for _, e := range m.CommitResults {
+			l = e.ProtoSize()
+			n += 1 + l + sovLogStreamReporter(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CommitResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -761,133 +1003,7 @@ func sovLogStreamReporter(x uint64) (n int) {
 func sozLogStreamReporter(x uint64) (n int) {
 	return sovLogStreamReporter(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *LocalLogStreamDescriptor) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowLogStreamReporter
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: LocalLogStreamDescriptor: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: LocalLogStreamDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
-			}
-			m.StorageNodeID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.StorageNodeID |= github_com_kakao_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
-			}
-			m.HighWatermark = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.HighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Uncommit", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Uncommit = append(m.Uncommit, &LocalLogStreamDescriptor_LogStreamUncommitReport{})
-			if err := m.Uncommit[len(m.Uncommit)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipLogStreamReporter(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) Unmarshal(dAtA []byte) error {
+func (m *LogStreamUncommitReport) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -973,6 +1089,25 @@ func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) Unmarshal(dAtA []byte
 					break
 				}
 			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
+			}
+			m.HighWatermark = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogStreamReporter
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.HighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipLogStreamReporter(dAtA[iNdEx:])
@@ -998,7 +1133,7 @@ func (m *LocalLogStreamDescriptor_LogStreamUncommitReport) Unmarshal(dAtA []byte
 	}
 	return nil
 }
-func (m *GlobalLogStreamDescriptor) Unmarshal(dAtA []byte) error {
+func (m *GetReportRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1021,17 +1156,71 @@ func (m *GlobalLogStreamDescriptor) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: GlobalLogStreamDescriptor: wiretype end group for non-group")
+			return fmt.Errorf("proto: GetReportRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GlobalLogStreamDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: GetReportRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLogStreamReporter(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetReportResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLogStreamReporter
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetReportResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetReportResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
 			}
-			m.HighWatermark = 0
+			m.StorageNodeID = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowLogStreamReporter
@@ -1041,33 +1230,14 @@ func (m *GlobalLogStreamDescriptor) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.HighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				m.StorageNodeID |= github_com_kakao_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
 		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field PrevHighWatermark", wireType)
-			}
-			m.PrevHighWatermark = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.PrevHighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CommitResult", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field UncommitReports", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1094,8 +1264,8 @@ func (m *GlobalLogStreamDescriptor) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.CommitResult = append(m.CommitResult, &GlobalLogStreamDescriptor_LogStreamCommitResult{})
-			if err := m.CommitResult[len(m.CommitResult)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			m.UncommitReports = append(m.UncommitReports, &LogStreamUncommitReport{})
+			if err := m.UncommitReports[len(m.UncommitReports)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1124,7 +1294,7 @@ func (m *GlobalLogStreamDescriptor) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) Unmarshal(dAtA []byte) error {
+func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1210,6 +1380,205 @@ func (m *GlobalLogStreamDescriptor_LogStreamCommitResult) Unmarshal(dAtA []byte)
 					break
 				}
 			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
+			}
+			m.HighWatermark = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogStreamReporter
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.HighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrevHighWatermark", wireType)
+			}
+			m.PrevHighWatermark = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogStreamReporter
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PrevHighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLogStreamReporter(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CommitRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLogStreamReporter
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CommitRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CommitRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
+			}
+			m.StorageNodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogStreamReporter
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StorageNodeID |= github_com_kakao_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommitResults", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogStreamReporter
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CommitResults = append(m.CommitResults, &LogStreamCommitResult{})
+			if err := m.CommitResults[len(m.CommitResults)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLogStreamReporter(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CommitResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLogStreamReporter
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CommitResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CommitResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
 		default:
 			iNdEx = preIndex
 			skippy, err := skipLogStreamReporter(dAtA[iNdEx:])

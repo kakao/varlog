@@ -284,28 +284,3 @@ func (m *MetadataDescriptor) GetLogStream(id types.LogStreamID) *LogStreamDescri
 
 	return nil
 }
-
-func (m *MetadataDescriptor) UnregistableStorageNode(snID types.StorageNodeID) bool {
-	for _, ls := range m.LogStreams {
-		for _, r := range ls.Replicas {
-			if r.StorageNodeID == snID {
-				return false
-			}
-		}
-	}
-
-	return true
-}
-
-func (m *MetadataDescriptor) GetAllStorageNodes() []*StorageNodeDescriptor {
-	if len(m.StorageNodes) == 0 {
-		return nil
-	}
-
-	r := make([]*StorageNodeDescriptor, 0, len(m.StorageNodes))
-	for _, sn := range m.StorageNodes {
-		r = append(r, sn)
-	}
-
-	return r
-}

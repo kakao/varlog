@@ -49,27 +49,26 @@ func (mr *MockLogStreamReporterMockRecorder) Close() *gomock.Call {
 }
 
 // Commit mocks base method
-func (m *MockLogStreamReporter) Commit(arg0 context.Context, arg1, arg2 types.GLSN, arg3 []CommittedLogStreamStatus) error {
+func (m *MockLogStreamReporter) Commit(arg0 context.Context, arg1 []CommittedLogStreamStatus) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Commit", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Commit", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Commit indicates an expected call of Commit
-func (mr *MockLogStreamReporterMockRecorder) Commit(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockLogStreamReporterMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporter)(nil).Commit), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporter)(nil).Commit), arg0, arg1)
 }
 
 // GetReport mocks base method
-func (m *MockLogStreamReporter) GetReport(arg0 context.Context) (types.GLSN, map[types.LogStreamID]UncommittedLogStreamStatus, error) {
+func (m *MockLogStreamReporter) GetReport(arg0 context.Context) (map[types.LogStreamID]UncommittedLogStreamStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReport", arg0)
-	ret0, _ := ret[0].(types.GLSN)
-	ret1, _ := ret[1].(map[types.LogStreamID]UncommittedLogStreamStatus)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(map[types.LogStreamID]UncommittedLogStreamStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetReport indicates an expected call of GetReport

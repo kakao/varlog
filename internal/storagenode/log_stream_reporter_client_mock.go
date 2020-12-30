@@ -51,7 +51,7 @@ func (mr *MockLogStreamReporterClientMockRecorder) Close() *gomock.Call {
 }
 
 // Commit mocks base method
-func (m *MockLogStreamReporterClient) Commit(arg0 context.Context, arg1 *snpb.GlobalLogStreamDescriptor) error {
+func (m *MockLogStreamReporterClient) Commit(arg0 context.Context, arg1 *snpb.CommitRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Commit", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -65,10 +65,10 @@ func (mr *MockLogStreamReporterClientMockRecorder) Commit(arg0, arg1 interface{}
 }
 
 // GetReport mocks base method
-func (m *MockLogStreamReporterClient) GetReport(arg0 context.Context) (*snpb.LocalLogStreamDescriptor, error) {
+func (m *MockLogStreamReporterClient) GetReport(arg0 context.Context) (*snpb.GetReportResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReport", arg0)
-	ret0, _ := ret[0].(*snpb.LocalLogStreamDescriptor)
+	ret0, _ := ret[0].(*snpb.GetReportResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
