@@ -761,6 +761,8 @@ func TestMRGetLastCommitted(t *testing.T) {
 		}), ShouldBeTrue)
 
 		Convey("getLastCommitted should return last committed GLSN", func(ctx C) {
+			preHighWatermark := mr.storage.GetHighWatermark()
+
 			So(testutil.CompareWaitN(10, func() bool {
 				report := makeUncommitReport(snIDs[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, 2)
 				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
@@ -786,11 +788,13 @@ func TestMRGetLastCommitted(t *testing.T) {
 				return mr.storage.GetHighWatermark() == types.GLSN(5)
 			}), ShouldBeTrue)
 
-			So(mr.getLastCommittedLength(lsIds[0]), ShouldEqual, 2)
-			So(mr.getLastCommittedLength(lsIds[1]), ShouldEqual, 3)
+			So(mr.numCommitSince(lsIds[0], preHighWatermark), ShouldEqual, 2)
+			So(mr.numCommitSince(lsIds[1], preHighWatermark), ShouldEqual, 3)
 
 			Convey("getLastCommitted should return same if not committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
+					preHighWatermark := mr.storage.GetHighWatermark()
+
 					So(testutil.CompareWaitN(10, func() bool {
 						report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 						return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
@@ -805,8 +809,8 @@ func TestMRGetLastCommitted(t *testing.T) {
 						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 					}), ShouldBeTrue)
 
-					So(mr.getLastCommittedLength(lsIds[0]), ShouldEqual, 0)
-					So(mr.getLastCommittedLength(lsIds[1]), ShouldEqual, 1)
+					So(mr.numCommitSince(lsIds[0], preHighWatermark), ShouldEqual, 0)
+					So(mr.numCommitSince(lsIds[1], preHighWatermark), ShouldEqual, 1)
 				}
 			})
 
@@ -816,6 +820,8 @@ func TestMRGetLastCommitted(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				for i := 0; i < 10; i++ {
+					preHighWatermark := mr.storage.GetHighWatermark()
+
 					So(testutil.CompareWaitN(10, func() bool {
 						report := makeUncommitReport(snIDs[0][0], types.InvalidGLSN, lsIds[0], types.MinLLSN, uint64(3+i))
 						return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
@@ -840,8 +846,8 @@ func TestMRGetLastCommitted(t *testing.T) {
 						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 					}), ShouldBeTrue)
 
-					So(mr.getLastCommittedLength(lsIds[0]), ShouldEqual, 1)
-					So(mr.getLastCommittedLength(lsIds[1]), ShouldEqual, 0)
+					So(mr.numCommitSince(lsIds[0], preHighWatermark), ShouldEqual, 1)
+					So(mr.numCommitSince(lsIds[1], preHighWatermark), ShouldEqual, 0)
 				}
 			})
 		})
@@ -999,6 +1005,8 @@ func TestMRUnseal(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			for i := 0; i < 10; i++ {
+				preHighWatermark := mr.storage.GetHighWatermark()
+
 				So(testutil.CompareWaitN(10, func() bool {
 					report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
 					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
@@ -1013,7 +1021,7 @@ func TestMRUnseal(t *testing.T) {
 					return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 				}), ShouldBeTrue)
 
-				So(mr.getLastCommittedLength(lsIds[1]), ShouldEqual, 1)
+				So(mr.numCommitSince(lsIds[1], preHighWatermark), ShouldEqual, 1)
 			}
 		})
 	})
