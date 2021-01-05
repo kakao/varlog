@@ -19,7 +19,7 @@ type LogStreamReporterClient interface {
 
 type logStreamReporterClient struct {
 	rpcConn   *rpc.Conn
-	rpcClient snpb.LogStreamReporterServiceClient
+	rpcClient snpb.LogStreamReporterClient
 }
 
 func NewLogStreamReporterClient(address string) (LogStreamReporterClient, error) {
@@ -33,7 +33,7 @@ func NewLogStreamReporterClient(address string) (LogStreamReporterClient, error)
 func NewLogStreamReporterClientFromRpcConn(rpcConn *rpc.Conn) (LogStreamReporterClient, error) {
 	return &logStreamReporterClient{
 		rpcConn:   rpcConn,
-		rpcClient: snpb.NewLogStreamReporterServiceClient(rpcConn.Conn),
+		rpcClient: snpb.NewLogStreamReporterClient(rpcConn.Conn),
 	}, nil
 }
 

@@ -19,6 +19,9 @@ var (
 	DefaultClusterID     = types.ClusterID(1)
 	DefaultStorageNodeID = types.StorageNodeID(1)
 	DefaultVolume        = Volume(os.TempDir())
+
+	DefaultTelemetryCollectorName    = "nop"
+	DefaultTelmetryCollectorEndpoint = "" // "http://localhost:14268/api/traces"
 )
 
 const (
@@ -87,6 +90,7 @@ type Options struct {
 	LogStreamExecutorOptions
 	LogStreamReporterOptions
 	StorageOptions
+	TelemetryOptions
 
 	ClusterID     types.ClusterID
 	StorageNodeID types.StorageNodeID
@@ -120,6 +124,11 @@ type LogStreamReporterOptions struct {
 	ReportCSize       uint
 	ReportCTimeout    time.Duration
 	ReportWaitTimeout time.Duration
+}
+
+type TelemetryOptions struct {
+	CollectorName     string
+	CollectorEndpoint string
 }
 
 func (opts Options) Valid() error {

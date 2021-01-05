@@ -72,6 +72,7 @@ func initStartCommand(options *storagenode.Options) *cli.Command {
 	startCmd.Flags = append(startCmd.Flags, initLSEFlags(&options.LogStreamExecutorOptions)...)
 	startCmd.Flags = append(startCmd.Flags, initLSRFlags(&options.LogStreamReporterOptions)...)
 	startCmd.Flags = append(startCmd.Flags, initStorageFlags(&options.StorageOptions)...)
+	startCmd.Flags = append(startCmd.Flags, initTelemetryFlags(&options.TelemetryOptions)...)
 	return startCmd
 }
 
@@ -257,6 +258,25 @@ func initStorageFlags(options *storagenode.StorageOptions) []cli.Flag {
 			Value:       storagenode.DefaultDisableDeleteUncommittedFsync,
 			Usage:       "enable fsync of deleting uncommitted data",
 			Destination: &options.DisableDeleteUncommittedFsync,
+		},
+	}
+}
+
+func initTelemetryFlags(options *storagenode.TelemetryOptions) []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:        "collector-name",
+			Value:       storagenode.DefaultTelemetryCollectorName,
+			Usage:       "Collector name",
+			EnvVars:     []string{"COLLECTOR_NAME"},
+			Destination: &options.CollectorName,
+		},
+		&cli.StringFlag{
+			Name:        "collector-endpoint",
+			Value:       storagenode.DefaultTelmetryCollectorEndpoint,
+			Usage:       "Collector endpoint",
+			EnvVars:     []string{"COLLECTOR_ENDPOINT"},
+			Destination: &options.CollectorEndpoint,
 		},
 	}
 }

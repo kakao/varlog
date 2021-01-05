@@ -117,8 +117,8 @@ func (k8s *K8sVarlogCluster) Reset() error {
 		if err != nil {
 			return false, err
 		}
-
-		return n == 0, nil
+		// NOTE: 1 is jaeger
+		return n == 1, nil
 	}); err != nil {
 		return err
 	}

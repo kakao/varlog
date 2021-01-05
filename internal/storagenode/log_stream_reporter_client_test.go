@@ -16,7 +16,7 @@ func TestLogStreamReporterClientGetReport(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockClient := mock.NewMockLogStreamReporterServiceClient(ctrl)
+		mockClient := mock.NewMockLogStreamReporterClient(ctrl)
 		lsrc := &logStreamReporterClient{rpcClient: mockClient}
 
 		Convey("When the GetReport RPC is timed out", func() {
@@ -40,7 +40,7 @@ func TestLogStreamReporterClientCommit(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockClient := mock.NewMockLogStreamReporterServiceClient(ctrl)
+		mockClient := mock.NewMockLogStreamReporterClient(ctrl)
 		lsrc := &logStreamReporterClient{rpcClient: mockClient}
 
 		Convey("When the Commit RPC is timed out", func() {

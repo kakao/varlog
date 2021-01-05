@@ -10,10 +10,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/label"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
+	"github.com/kakao/varlog/pkg/util/telemetry/trace"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -152,11 +156,12 @@ type logStreamExecutor struct {
 
 	tst Timestamper
 
+	tmStub  *telemetryStub
 	logger  *zap.Logger
 	options *LogStreamExecutorOptions
 }
 
-func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, storage Storage, options *LogStreamExecutorOptions) (LogStreamExecutor, error) {
+func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, storage Storage, tmStub *telemetryStub, options *LogStreamExecutorOptions) (LogStreamExecutor, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("logstream: no storage")
 	}
@@ -178,6 +183,7 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 		status:      varlogpb.LogStreamStatusRunning,
 		syncTracker: make(map[types.StorageNodeID]*SyncTaskStatus),
 		tst:         NewTimestamper(),
+		tmStub:      tmStub,
 		logger:      logger,
 		options:     options,
 	}
@@ -228,7 +234,17 @@ func (lse *logStreamExecutor) Touch() {
 	lse.tst.Touch()
 }
 
-func (lse *logStreamExecutor) Run(ctx context.Context) error {
+func (lse *logStreamExecutor) Run(ctx context.Context) (err error) {
+	ctx, span := lse.tmStub.startSpan(ctx, "storagenode.(*LogStreamExecutor).Run")
+	defer func() {
+		if err == nil {
+			span.SetStatus(codes.Ok, "")
+		} else {
+			span.RecordError(err)
+		}
+		span.End()
+	}()
+
 	lse.muRunning.Lock()
 	defer lse.muRunning.Unlock()
 
@@ -237,10 +253,9 @@ func (lse *logStreamExecutor) Run(ctx context.Context) error {
 	}
 	lse.running = true
 
-	mctx, cancel := lse.runner.WithManagedCancel(ctx)
+	mctx, cancel := lse.runner.WithManagedCancel(context.Background())
 	lse.cancel = cancel
 
-	var err error
 	if err = lse.runner.RunC(mctx, lse.dispatchAppendC); err != nil {
 		lse.logger.Error("could not run dispatchAppendC", zap.Error(err))
 		goto errOut
@@ -610,6 +625,11 @@ func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (
 }
 
 func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
+	ctx, span := lse.tmStub.startSpan(ctx, "Replicate", oteltrace.WithAttributes(trace.LogStreamIDLabel(lse.logStreamID)))
+	defer func() {
+		span.End()
+	}()
+
 	lse.muRunning.RLock()
 	defer lse.muRunning.RUnlock()
 	if !lse.running {
@@ -634,6 +654,14 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 // If the log stream is locked, the append is failed.
 // All Appends are processed sequentially by using the appendC.
 func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
+	commitWaitTime := int64(-1)
+
+	ctx, span := lse.tmStub.startSpan(ctx, "Append", oteltrace.WithAttributes(trace.LogStreamIDLabel(lse.logStreamID)))
+	defer func() {
+		span.SetAttributes(label.Int64("commit_wait_time_ms", commitWaitTime))
+		span.End()
+	}()
+
 	lse.muRunning.RLock()
 	defer lse.muRunning.RUnlock()
 	if !lse.running {
@@ -645,6 +673,7 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 	}
 
 	appendT := newAppendTask(data, replicas, types.InvalidLLSN, &lse.trackers)
+	appendT.span = span
 	if err := lse.addAppendC(ctx, appendT); err != nil {
 		lse.logger.Debug("could not add appendTask to appendC", zap.Error(err))
 		return types.InvalidGLSN, err
@@ -657,6 +686,7 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 		lse.logger.Error("could not wait appendTask", zap.Error(err))
 	}
 	appendT.close()
+	commitWaitTime = appendT.commitWaitTime.Load().Milliseconds()
 	return appendT.getGLSN(), err
 }
 
@@ -679,6 +709,12 @@ func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) err
 }
 
 func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
+	ctx = oteltrace.ContextWithSpan(ctx, t.span)
+	ctx, span := lse.tmStub.startSpan(ctx, "Prepare")
+	defer func() {
+		span.End()
+	}()
+
 	if lse.isSealed() {
 		lse.logger.Debug("could not append or replicate", zap.Error(verrors.ErrSealed))
 		t.notify(verrors.ErrSealed)
@@ -719,6 +755,8 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 		return err
 	}
 
+	t.writeCompletedTime.Store(time.Now())
+
 	// NOTE (jun): Tracking the appendTask MUST be starting before incrementing
 	// uncommittedLLSNEnd.
 	// Let's assume that incrementing uncommittedLLSNEnd is happened before tracking the
@@ -751,6 +789,11 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 }
 
 func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendTask) {
+	ctx, span := lse.tmStub.startSpan(ctx, "TriggerReplication")
+	defer func() {
+		span.End()
+	}()
+
 	llsn, data, replicas := t.getParams()
 	if len(replicas) == 0 {
 		return
@@ -931,6 +974,10 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		lse.lsc.localHighWatermark.Store(glsn)
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
+			writeCompletedTime := appendT.writeCompletedTime.Load()
+			if !writeCompletedTime.IsZero() {
+				appendT.commitWaitTime.Store(time.Since(writeCompletedTime))
+			}
 			appendT.setGLSN(glsn)
 			appendT.notify(nil)
 		} else {

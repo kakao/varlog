@@ -5,6 +5,8 @@ import (
 	"sync"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
+	"github.com/kakao/varlog/pkg/util/telemetry/trace"
 )
 
 type commitWatcher struct {
@@ -45,6 +47,10 @@ type appendTask struct {
 	mu      sync.RWMutex
 	primary bool
 	written bool
+
+	span               trace.Span
+	writeCompletedTime atomicutil.AtomicTime
+	commitWaitTime     atomicutil.AtomicDuration
 
 	atTrk *appendTaskTracker
 }

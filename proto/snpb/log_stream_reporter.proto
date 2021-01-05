@@ -83,7 +83,7 @@ message CommitResponse {
     // TODO:
 }
 
-service LogStreamReporterService {
+service LogStreamReporter {
     rpc GetReport(GetReportRequest) returns (GetReportResponse) {}
     rpc Commit(CommitRequest) returns (CommitResponse) {}
 }

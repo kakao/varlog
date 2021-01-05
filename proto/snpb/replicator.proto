@@ -92,7 +92,7 @@ message SyncReplicateResponse {
     SyncStatus status = 1;
 }
 
-service ReplicatorService {
+service Replicator {
     rpc Replicate(stream ReplicationRequest)
         returns (stream ReplicationResponse) {}
     rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}

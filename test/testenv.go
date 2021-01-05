@@ -209,7 +209,7 @@ func (clus *VarlogCluster) Close() error {
 
 	for _, sn := range clus.SNs {
 		// TODO (jun): remove temporary directories
-		snmeta, err := sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
+		snmeta, err := sn.GetMetadata(context.TODO(), clus.ClusterID, snpb.MetadataTypeHeartbeat)
 		if err != nil {
 			clus.logger.Warn("could not get meta", zap.Error(err))
 		}
@@ -293,7 +293,7 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 		return types.StorageNodeID(0), err
 	}
 
-	meta, err := sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
+	meta, err := sn.GetMetadata(context.TODO(), clus.ClusterID, snpb.MetadataTypeHeartbeat)
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
@@ -325,6 +325,8 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 	opts.StorageNodeID = snID
 	opts.Logger = clus.logger
 	opts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
+	opts.CollectorName = "nop"
+	opts.CollectorEndpoint = "localhost:55680"
 
 	sn, err := storagenode.NewStorageNode(&opts)
 	if err != nil {
@@ -336,7 +338,7 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 		goto err_out
 	}
 
-	meta, err = sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
+	meta, err = sn.GetMetadata(context.TODO(), clus.ClusterID, snpb.MetadataTypeHeartbeat)
 	if err != nil {
 		goto err_out
 	}
@@ -405,7 +407,7 @@ func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 	for i := 0; i < clus.NrRep; i++ {
 		storageNodeID := snIDs[i]
 		storageNode := clus.SNs[storageNodeID]
-		snmeta, err := storageNode.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
+		snmeta, err := storageNode.GetMetadata(context.TODO(), clus.ClusterID, snpb.MetadataTypeHeartbeat)
 		if err != nil {
 			return types.LogStreamID(0), err
 		}
@@ -415,7 +417,7 @@ func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 
 	for _, r := range replicas {
 		sn, _ := clus.SNs[r.StorageNodeID]
-		if _, err := sn.AddLogStream(clus.ClusterID, r.StorageNodeID, lsID, r.Path); err != nil {
+		if _, err := sn.AddLogStream(context.TODO(), clus.ClusterID, r.StorageNodeID, lsID, r.Path); err != nil {
 			return types.LogStreamID(0), err
 		}
 	}
@@ -447,7 +449,7 @@ func (clus *VarlogCluster) AddLSByVMS() (types.LogStreamID, error) {
 
 func (clus *VarlogCluster) UpdateLS(lsID types.LogStreamID, oldsn, newsn types.StorageNodeID) error {
 	sn := clus.LookupSN(newsn)
-	_, err := sn.AddLogStream(clus.ClusterID, newsn, lsID, "path")
+	_, err := sn.AddLogStream(context.TODO(), clus.ClusterID, newsn, lsID, "path")
 	if err != nil {
 		return err
 	}
@@ -481,7 +483,7 @@ func (clus *VarlogCluster) UpdateLS(lsID types.LogStreamID, oldsn, newsn types.S
 func (clus *VarlogCluster) UpdateLSByVMS(lsID types.LogStreamID, oldsn, newsn types.StorageNodeID) error {
 	sn := clus.LookupSN(newsn)
 
-	snmeta, err := sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeLogStreams)
+	snmeta, err := sn.GetMetadata(context.TODO(), clus.ClusterID, snpb.MetadataTypeLogStreams)
 	if err != nil {
 		return err
 	}
@@ -605,7 +607,7 @@ func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (logc.LogIOCli
 		return nil, err
 	}
 
-	snMeta, err := sn.GetMetadata(clus.ClusterID, snpb.MetadataTypeHeartbeat)
+	snMeta, err := sn.GetMetadata(context.TODO(), clus.ClusterID, snpb.MetadataTypeHeartbeat)
 	if err != nil {
 		return nil, err
 	}

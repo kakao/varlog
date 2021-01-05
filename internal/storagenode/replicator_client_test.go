@@ -31,11 +31,11 @@ func TestReplicatorClientReplicate(t *testing.T) {
 		rpcConn := rpc.Conn{}
 		rc, err := NewReplicatorClientFromRpcConn(storageNodeID, logStreamID, &rpcConn, zap.NewNop())
 		So(err, ShouldBeNil)
-		mockClient := mock.NewMockReplicatorServiceClient(ctrl)
+		mockClient := mock.NewMockReplicatorClient(ctrl)
 		rc.(*replicatorClient).rpcClient = mockClient
 
 		stop := make(chan struct{})
-		mockStream := mock.NewMockReplicatorService_ReplicateClient(ctrl)
+		mockStream := mock.NewMockReplicator_ReplicateClient(ctrl)
 		mockStream.EXPECT().Recv().DoAndReturn(func() (*snpb.ReplicationResponse, error) {
 			<-stop
 			return nil, io.EOF
@@ -49,7 +49,7 @@ func TestReplicatorClientReplicate(t *testing.T) {
 		).AnyTimes()
 
 		mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-			func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
+			func(context.Context) (snpb.Replicator_ReplicateClient, error) {
 				return mockStream, nil
 			},
 		).AnyTimes()
@@ -86,15 +86,15 @@ func TestReplicatorClient(t *testing.T) {
 		rpcConn := rpc.Conn{}
 		rc, err := NewReplicatorClientFromRpcConn(storageNodeID, logStreamID, &rpcConn, zap.NewNop())
 		So(err, ShouldBeNil)
-		mockClient := mock.NewMockReplicatorServiceClient(ctrl)
+		mockClient := mock.NewMockReplicatorClient(ctrl)
 		rc.(*replicatorClient).rpcClient = mockClient
-		mockStream := mock.NewMockReplicatorService_ReplicateClient(ctrl)
+		mockStream := mock.NewMockReplicator_ReplicateClient(ctrl)
 
 		Convey("it should be run and closed", func() {
 			mockStream.EXPECT().Recv().Return(nil, io.EOF).AnyTimes()
 			mockStream.EXPECT().CloseSend().MinTimes(1)
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.Replicator_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)
@@ -123,7 +123,7 @@ func TestReplicatorClient(t *testing.T) {
 			mockStream.EXPECT().Recv().Return(nil, io.EOF).AnyTimes()
 			mockStream.EXPECT().CloseSend().MinTimes(1)
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.Replicator_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)
@@ -142,7 +142,7 @@ func TestReplicatorClient(t *testing.T) {
 
 		Convey("it should not replicate data when occurred send error", func() {
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.Replicator_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)
@@ -173,7 +173,7 @@ func TestReplicatorClient(t *testing.T) {
 
 		Convey("it should not replicate data when occurred receive error", func() {
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.Replicator_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)
@@ -206,7 +206,7 @@ func TestReplicatorClient(t *testing.T) {
 
 		Convey("it should replicate data", func() {
 			mockClient.EXPECT().Replicate(gomock.Any()).DoAndReturn(
-				func(context.Context) (snpb.ReplicatorService_ReplicateClient, error) {
+				func(context.Context) (snpb.Replicator_ReplicateClient, error) {
 					return mockStream, nil
 				},
 			)

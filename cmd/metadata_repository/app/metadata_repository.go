@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
-	"github.com/kakao/varlog/pkg/util/loggerutil"
+	"github.com/kakao/varlog/pkg/util/log"
 )
 
 func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
@@ -21,16 +21,16 @@ func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
 		return err
 	}
 
-	lopts := loggerutil.Options{
-		RotateOptions: loggerutil.RotateOptions{
-			MaxSizeMB:  loggerutil.DefaultMaxSizeMB,
-			MaxAgeDays: loggerutil.DefaultMaxAgeDay,
-			MaxBackups: loggerutil.DefaultMaxBackups,
+	lopts := log.Options{
+		RotateOptions: log.RotateOptions{
+			MaxSizeMB:  log.DefaultMaxSizeMB,
+			MaxAgeDays: log.DefaultMaxAgeDay,
+			MaxBackups: log.DefaultMaxBackups,
 		},
 		Path: fmt.Sprintf("%s/log.txt", path),
 	}
 
-	logger, err := loggerutil.New(lopts)
+	logger, err := log.NewInternal(lopts)
 	if err != nil {
 		return err
 	}

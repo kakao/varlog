@@ -25,9 +25,10 @@ const (
 type ReplicatorService struct {
 	storageNodeID types.StorageNodeID
 	lseGetter     LogStreamExecutorGetter
-	snpb.UnimplementedReplicatorServiceServer
-	logger *zap.Logger
+	logger        *zap.Logger
 }
+
+var _ snpb.ReplicatorServer = (*ReplicatorService)(nil)
 
 func NewReplicatorService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, logger *zap.Logger) *ReplicatorService {
 	if logger == nil {
@@ -43,10 +44,10 @@ func NewReplicatorService(storageNodeID types.StorageNodeID, lseGetter LogStream
 
 func (s *ReplicatorService) Register(server *grpc.Server) {
 	s.logger.Info("register to rpc server")
-	snpb.RegisterReplicatorServiceServer(server, s)
+	snpb.RegisterReplicatorServer(server, s)
 }
 
-func (s *ReplicatorService) Replicate(stream snpb.ReplicatorService_ReplicateServer) error {
+func (s *ReplicatorService) Replicate(stream snpb.Replicator_ReplicateServer) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := s.send(ctx, stream, s.replicate(ctx, s.recv(ctx, stream)))
@@ -62,7 +63,7 @@ func (s *ReplicatorService) Replicate(stream snpb.ReplicatorService_ReplicateSer
 	return fmt.Errorf("stream is broken")
 }
 
-func (s *ReplicatorService) recv(ctx context.Context, stream snpb.ReplicatorService_ReplicateServer) <-chan *replicationContext {
+func (s *ReplicatorService) recv(ctx context.Context, stream snpb.Replicator_ReplicateServer) <-chan *replicationContext {
 	c := make(chan *replicationContext, replicationContextCSize)
 	go func() {
 		defer close(c)
@@ -115,7 +116,7 @@ func (s *ReplicatorService) replicate(ctx context.Context, repCtxC <-chan *repli
 	return c
 }
 
-func (s *ReplicatorService) send(ctx context.Context, stream snpb.ReplicatorService_ReplicateServer, repCtxC <-chan *replicationContext) <-chan *replicationContext {
+func (s *ReplicatorService) send(ctx context.Context, stream snpb.Replicator_ReplicateServer, repCtxC <-chan *replicationContext) <-chan *replicationContext {
 	c := make(chan *replicationContext, replicationContextCSize)
 	go func() {
 		defer close(c)
