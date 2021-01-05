@@ -2,6 +2,7 @@ package metadata_repository
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -607,6 +608,8 @@ func TestCommit(t *testing.T) {
 					}
 				}
 				reportCollector.mu.RUnlock()
+
+				fmt.Printf("knowHWM:%v, trim:%v\n", knownHWM, trimHWM)
 
 				mr.trimGLS(trimHWM)
 
