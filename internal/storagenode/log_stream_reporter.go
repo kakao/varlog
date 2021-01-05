@@ -64,11 +64,12 @@ type logStreamReporter struct {
 	reportC chan *lsrReportTask
 	commitC chan lsrCommitTask
 
+	tmStub  *telemetryStub
 	options *LogStreamReporterOptions
 	logger  *zap.Logger
 }
 
-func NewLogStreamReporter(logger *zap.Logger, storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, options *LogStreamReporterOptions) LogStreamReporter {
+func NewLogStreamReporter(logger *zap.Logger, storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, tmStub *telemetryStub, options *LogStreamReporterOptions) LogStreamReporter {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -80,6 +81,7 @@ func NewLogStreamReporter(logger *zap.Logger, storageNodeID types.StorageNodeID,
 		commitC:       make(chan lsrCommitTask, options.CommitCSize),
 		runner:        runner.New("logstreamreporter", logger),
 		stopped:       make(chan struct{}),
+		tmStub:        tmStub,
 		options:       options,
 		logger:        logger,
 	}

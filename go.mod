@@ -7,7 +7,7 @@ require (
 	github.com/gogo/protobuf v1.3.1
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.4.4
-	github.com/golang/protobuf v1.4.3
+	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/google/gofuzz v1.2.0
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/smartystreets/goconvey v1.6.4
@@ -16,10 +16,16 @@ require (
 	github.com/spf13/viper v1.7.1
 	github.com/urfave/cli/v2 v2.3.0
 	go.etcd.io/etcd v0.0.0-20200520232829-54ba9589114f
+	go.opentelemetry.io/otel v0.15.0
+	go.opentelemetry.io/otel/exporters/otlp v0.15.0
+	go.opentelemetry.io/otel/exporters/stdout v0.15.0
+	go.opentelemetry.io/otel/exporters/trace/jaeger v0.15.0
+	go.opentelemetry.io/otel/sdk v0.15.0
 	go.uber.org/zap v1.16.0
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13
 	google.golang.org/grpc v1.33.2
+	google.golang.org/protobuf v1.25.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.19.0
 	k8s.io/apimachinery v0.19.0

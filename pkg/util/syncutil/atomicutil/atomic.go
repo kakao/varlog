@@ -1,6 +1,9 @@
 package atomicutil
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+	"time"
+)
 
 type AtomicBool uint32
 
@@ -27,4 +30,30 @@ func (b *AtomicBool) CompareAndSwap(old, new bool) (swapped bool) {
 	}
 	swapped = atomic.CompareAndSwapUint32((*uint32)(b), ov, nv)
 	return swapped
+}
+
+type AtomicTime struct {
+	atomic.Value
+}
+
+func (t *AtomicTime) Load() time.Time {
+	ret := t.Value.Load()
+	if ret == nil {
+		return time.Time{}
+	}
+	return ret.(time.Time)
+}
+
+func (t *AtomicTime) Store(tm time.Time) {
+	t.Value.Store(tm)
+}
+
+type AtomicDuration time.Duration
+
+func (d *AtomicDuration) Load() time.Duration {
+	return time.Duration(atomic.LoadInt64((*int64)(d)))
+}
+
+func (d *AtomicDuration) Store(duration time.Duration) {
+	atomic.StoreInt64((*int64)(d), int64(duration))
 }

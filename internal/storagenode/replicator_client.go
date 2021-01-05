@@ -40,8 +40,8 @@ type replicatorClient struct {
 	peerLogStreamID   types.LogStreamID
 
 	rpcConn   *rpc.Conn
-	rpcClient snpb.ReplicatorServiceClient
-	stream    snpb.ReplicatorService_ReplicateClient
+	rpcClient snpb.ReplicatorClient
+	stream    snpb.Replicator_ReplicateClient
 
 	once   syncutil.OnlyOnce
 	cancel context.CancelFunc
@@ -78,7 +78,7 @@ func NewReplicatorClientFromRpcConn(peerStorageNodeID types.StorageNodeID, peerL
 		peerStorageNodeID: peerStorageNodeID,
 		peerLogStreamID:   peerLogStreamID,
 		rpcConn:           rpcConn,
-		rpcClient:         snpb.NewReplicatorServiceClient(rpcConn.Conn),
+		rpcClient:         snpb.NewReplicatorClient(rpcConn.Conn),
 		errCs:             make(map[types.LLSN]chan<- error),
 		requestC:          make(chan *snpb.ReplicationRequest, rcRequestCSize),
 		runner:            runner.New("replicatorclient", logger),

@@ -3,11 +3,14 @@ package storagenode
 //go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/storagenode -package storagenode -destination storage_node_mock.go . Management,LogStreamExecutorGetter
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"sync"
+	"time"
 
+	"go.opentelemetry.io/otel/label"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -22,23 +25,25 @@ import (
 
 // Management is the interface that wraps methods for managing StorageNode.
 type Management interface {
+	StorageNodeID() types.StorageNodeID
+
 	// GetMetadata returns metadata of StorageNode. The metadata contains
 	// configurations and statistics for StorageNode.
-	GetMetadata(clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
 	// AddLogStream adds a new LogStream to StorageNode.
-	AddLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, storageNodePath string) (string, error)
+	AddLogStream(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, storageNodePath string) (string, error)
 
 	// RemoveLogStream removes a LogStream from StorageNode.
-	RemoveLogStream(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+	RemoveLogStream(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
 
 	// Seal changes status of LogStreamExecutor corresponding to the
 	// LogStreamID to LogStreamStatusSealing or LogStreamStatusSealed.
-	Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
+	Seal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
 
 	// Unseal changes status of LogStreamExecutor corresponding to the
 	// LogStreamID to LogStreamStatusRunning.
-	Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+	Unseal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
 
 	Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
 }
@@ -70,6 +75,8 @@ type StorageNode struct {
 	options *Options
 	tst     Timestamper
 
+	tmStub *telemetryStub
+
 	logger *zap.Logger
 }
 
@@ -79,15 +86,15 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 	}
 
 	sn := &StorageNode{
-		clusterID:     options.ClusterID,
-		storageNodeID: options.StorageNodeID,
-		lseMap:        make(map[types.LogStreamID]LogStreamExecutor),
-		tst:           NewTimestamper(),
-		// storageNodePaths: make(map[string]struct{}),
+		clusterID:        options.ClusterID,
+		storageNodeID:    options.StorageNodeID,
+		lseMap:           make(map[types.LogStreamID]LogStreamExecutor),
+		tst:              NewTimestamper(),
 		storageNodePaths: set.New(len(options.Volumes)),
 		options:          options,
 		logger:           options.Logger,
 		sw:               stopwaiter.New(),
+		tmStub:           newTelemetryStub(options.TelemetryOptions.CollectorName, options.TelemetryOptions.CollectorEndpoint),
 	}
 	if sn.logger == nil {
 		sn.logger = zap.NewNop()
@@ -99,7 +106,7 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 			sn.logger.Error("could not create data directory", zap.Any("storage_node_path", snPath), zap.Error(err))
 			return nil, err
 		}
-		sn.storageNodePaths[snPath] = struct{}{}
+		sn.storageNodePaths.Add(snPath)
 	}
 
 	if len(sn.storageNodePaths) == 0 {
@@ -108,12 +115,12 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 	}
 
 	sn.logger = sn.logger.Named(fmt.Sprintf("storagenode")).With(zap.Any("cid", sn.clusterID), zap.Any("snid", sn.storageNodeID))
-	sn.lsr = NewLogStreamReporter(sn.logger, sn.storageNodeID, sn, &options.LogStreamReporterOptions)
+	sn.lsr = NewLogStreamReporter(sn.logger, sn.storageNodeID, sn, sn.tmStub, &options.LogStreamReporterOptions)
 	sn.server = grpc.NewServer()
 
-	NewLogStreamReporterService(sn.lsr, sn.logger).Register(sn.server)
-	NewLogIOService(sn.storageNodeID, sn, sn.logger).Register(sn.server)
-	NewManagementService(sn, sn.logger).Register(sn.server)
+	NewLogStreamReporterService(sn.lsr, sn.tmStub, sn.logger).Register(sn.server)
+	NewLogIOService(sn.storageNodeID, sn, sn.tmStub, sn.logger).Register(sn.server)
+	NewManagementService(sn, sn.tmStub, sn.logger).Register(sn.server)
 	NewReplicatorService(sn.storageNodeID, sn, sn.logger).Register(sn.server)
 
 	return sn, nil
@@ -170,9 +177,12 @@ func (sn *StorageNode) Run() error {
 		if err != nil {
 			return err
 		}
-		// AddLogStream
-		sn.logger.Debug("AddLogStream", zap.Any("lsid", logStreamID))
-		if err := sn.addLogStream(logStreamID, logStreamPath); err != nil {
+
+		storage, err := sn.createStorage(context.Background(), logStreamPath)
+		if err != nil {
+			return err
+		}
+		if err := sn.startLogStream(context.Background(), logStreamID, storage); err != nil {
 			return err
 		}
 	}
@@ -202,6 +212,9 @@ func (sn *StorageNode) Close() {
 	// FIXME (jun): Use GracefulStop
 	sn.server.Stop()
 
+	// TODO: set close timeout
+	sn.tmStub.close(context.TODO())
+
 	sn.sw.Stop()
 	sn.logger.Info("stop")
 }
@@ -210,9 +223,16 @@ func (sn *StorageNode) Wait() {
 	sn.sw.Wait()
 }
 
+func (sn *StorageNode) StorageNodeID() types.StorageNodeID {
+	return sn.storageNodeID
+}
+
 // GetMeGetMetadata implements the Management GetMetadata method.
-func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
-	if !sn.verifyClusterID(cid) {
+func (sn *StorageNode) GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+	ctx, span := sn.tmStub.startSpan(ctx, "storagenode.GetMetadata")
+	defer span.End()
+
+	if !sn.verifyClusterID(clusterID) {
 		return nil, verrors.ErrInvalidArgument
 	}
 
@@ -235,20 +255,18 @@ func (sn *StorageNode) GetMetadata(cid types.ClusterID, metadataType snpb.Metada
 		})
 	}
 
-	/* disable metadata type
-	if metadataType == snpb.MetadataTypeHeartbeat {
-		return snmeta, nil
-	}
-	*/
-
-	snmeta.LogStreams = sn.logStreamMetadataDescriptors()
+	snmeta.LogStreams = sn.logStreamMetadataDescriptors(ctx)
 	return snmeta, nil
-
-	// TODO (jun): add statistics to the response of GetMetadata
 }
 
-func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetadataDescriptor {
+func (sn *StorageNode) logStreamMetadataDescriptors(ctx context.Context) []varlogpb.LogStreamMetadataDescriptor {
+	ctx, span := sn.tmStub.startSpan(ctx, "storagenode.logStreamMetadataDescriptors")
+	defer span.End()
+
+	tick := time.Now()
 	lseList := sn.GetLogStreamExecutors()
+	span.SetAttributes(label.Int64("get_log_stream_executors_ms", time.Since(tick).Milliseconds()))
+
 	if len(lseList) == 0 {
 		return nil
 	}
@@ -259,48 +277,60 @@ func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetada
 			LogStreamID:   lse.LogStreamID(),
 			Status:        lse.Status(),
 			HighWatermark: lse.HighWatermark(),
-			// TODO (jun): path represents disk-based storage and
-			// memory-based storage
-			Path:        lse.Path(),
-			CreatedTime: lse.Created(),
-			UpdatedTime: lse.LastUpdated(),
+			Path:          lse.Path(),
+			CreatedTime:   lse.Created(),
+			UpdatedTime:   lse.LastUpdated(),
 		}
 	}
 	return lsmetas
 }
 
 // AddLogStream implements the Management AddLogStream method.
-func (sn *StorageNode) AddLogStream(cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, storageNodePath string) (string, error) {
-	if !sn.verifyClusterID(cid) || !sn.verifyStorageNodeID(snid) {
+func (sn *StorageNode) AddLogStream(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, storageNodePath string) (string, error) {
+	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
 		return "", verrors.ErrInvalidArgument
+	}
+
+	logStreamPath, err := sn.addLogStream(ctx, logStreamID, storageNodePath)
+	if err != nil {
+		return "", err
+	}
+
+	return logStreamPath, nil
+}
+
+func (sn *StorageNode) addLogStream(ctx context.Context, logStreamID types.LogStreamID, storageNodePath string) (string, error) {
+	if !sn.storageNodePaths.Contains(storageNodePath) {
+		return "", errors.New("storagenode: no such storage path")
+	}
+
+	lsPath, err := CreateLogStreamPath(storageNodePath, logStreamID)
+	if err != nil {
+		return "", err
 	}
 
 	sn.lseMtx.Lock()
 	defer sn.lseMtx.Unlock()
 
-	_, ok := sn.lseMap[lsid]
-	if ok {
+	if _, ok := sn.lseMap[logStreamID]; ok {
 		return "", verrors.ErrLogStreamAlreadyExists
 	}
 
-	if _, exists := sn.storageNodePaths[storageNodePath]; !exists {
-		sn.logger.Error("no such storage path", zap.String("path", storageNodePath), zap.Reflect("storage_node_paths", sn.storageNodePaths))
-		return "", verrors.ErrNotExist
-	}
-
-	lsPath, err := CreateLogStreamPath(storageNodePath, lsid)
+	storage, err := sn.createStorage(ctx, lsPath)
 	if err != nil {
 		return "", err
 	}
 
-	if err := sn.addLogStream(lsid, lsPath); err != nil {
+	if err := sn.startLogStream(ctx, logStreamID, storage); err != nil {
 		return "", err
 	}
-
 	return lsPath, nil
 }
 
-func (sn *StorageNode) addLogStream(logStreamID types.LogStreamID, logStreamPath string) error {
+func (sn *StorageNode) createStorage(ctx context.Context, logStreamPath string) (Storage, error) {
+	ctx, span := sn.tmStub.startSpan(ctx, "storagenode/StorageNode.createStorage")
+	defer span.End()
+
 	snOpts := []StorageOption{
 		WithPath(logStreamPath),
 		WithLogger(sn.logger),
@@ -320,17 +350,25 @@ func (sn *StorageNode) addLogStream(logStreamID types.LogStreamID, logStreamPath
 	if sn.options.StorageOptions.DisableDeleteUncommittedFsync {
 		snOpts = append(snOpts, WithDisableDeleteUncommittedFsync())
 	}
-
 	storage, err := NewStorage(sn.options.StorageOptions.Name, snOpts...)
 	if err != nil {
-		return err
+		span.RecordError(err)
 	}
-	lse, err := NewLogStreamExecutor(sn.logger, logStreamID, storage, &sn.options.LogStreamExecutorOptions)
+	return storage, err
+}
+
+func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.LogStreamID, storage Storage) (err error) {
+	ctx, span := sn.tmStub.startSpan(ctx, "storagenode/StorageNode.startLogStream")
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
+	lse, err := NewLogStreamExecutor(sn.logger, logStreamID, storage, sn.tmStub, &sn.options.LogStreamExecutorOptions)
 	if err != nil {
 		return err
 	}
-
-	if err := lse.Run(context.Background()); err != nil {
+	if err = lse.Run(ctx); err != nil {
 		lse.Close()
 		return err
 	}
@@ -340,28 +378,42 @@ func (sn *StorageNode) addLogStream(logStreamID types.LogStreamID, logStreamPath
 }
 
 // RemoveLogStream implements the Management RemoveLogStream method.
-func (sn *StorageNode) RemoveLogStream(cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID) error {
-	if !sn.verifyClusterID(cid) || !sn.verifyStorageNodeID(snid) {
+func (sn *StorageNode) RemoveLogStream(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
+	ctx, span := sn.tmStub.startSpan(ctx, "storagenode/StorageNode.RemoveLogStream")
+	defer span.End()
+
+	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
 		return verrors.ErrInvalidArgument
 	}
+
 	sn.lseMtx.Lock()
 	defer sn.lseMtx.Unlock()
-	lse, ok := sn.lseMap[lsid]
+
+	lse, ok := sn.lseMap[logStreamID]
 	if !ok {
 		return verrors.ErrNotExist
 	}
-	delete(sn.lseMap, lsid)
+	delete(sn.lseMap, logStreamID)
+
+	tick := time.Now()
 	lse.Close()
+	closeDuration := time.Since(tick)
+
+	tick = time.Now()
 	// TODO (jun): Is removing data path optional or default behavior?
 	if err := os.RemoveAll(lse.Path()); err != nil {
 		sn.logger.Warn("error while removing log stream path")
 	}
+	removeDuration := time.Since(tick)
 	sn.tst.Touch()
+
+	span.SetAttributes(label.Int64("close_duration_ms", closeDuration.Milliseconds()),
+		label.Int64("remove_duration_ms", removeDuration.Milliseconds()))
 	return nil
 }
 
 // Seal implements the Management Seal method.
-func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
+func (sn *StorageNode) Seal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
 		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, verrors.ErrInvalidArgument
 	}
@@ -375,7 +427,7 @@ func (sn *StorageNode) Seal(clusterID types.ClusterID, storageNodeID types.Stora
 }
 
 // Unseal implements the Management Unseal method.
-func (sn *StorageNode) Unseal(clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
+func (sn *StorageNode) Unseal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
 	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
 		return verrors.ErrInvalidArgument
 	}

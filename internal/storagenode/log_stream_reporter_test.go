@@ -20,7 +20,7 @@ func TestLogStreamReporterRunClose(t *testing.T) {
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
 		opts := DefaultLogStreamReporterOptions()
-		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &opts)
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, newNopTelmetryStub(), &opts)
 		So(func() { lsr.Run(context.TODO()) }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
 		So(func() { lsr.Close() }, ShouldNotPanic)
@@ -42,12 +42,11 @@ func TestLogStreamReporterReport(t *testing.T) {
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
 		lseGetter.EXPECT().GetLogStreamExecutors().Return([]LogStreamExecutor{lse1, lse2}).Times(3)
 
-		logger, err := zap.NewDevelopment()
-		So(err, ShouldBeNil)
+		logger := zap.L()
 
 		var t *lsrReportTask
 		opts := DefaultLogStreamReporterOptions()
-		lsr := NewLogStreamReporter(logger, types.StorageNodeID(1), lseGetter, &opts).(*logStreamReporter)
+		lsr := NewLogStreamReporter(logger, types.StorageNodeID(1), lseGetter, newNopTelmetryStub(), &opts).(*logStreamReporter)
 
 		// This map is write-once and immutable for each HWM, LSID pair
 		// map<"HWM_LSID", UncommittedLLSNOffset>
@@ -189,7 +188,7 @@ func TestLogStreamReporterGetReportTimeout(t *testing.T) {
 		opts.ReportWaitTimeout = time.Duration(0)
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
-		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &opts)
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, newNopTelmetryStub(), &opts)
 
 		lse := NewMockLogStreamExecutor(ctrl)
 		lse.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
@@ -391,7 +390,7 @@ func TestLogStreamReporterCommit(t *testing.T) {
 
 		lseGetter := NewMockLogStreamExecutorGetter(ctrl)
 		opts := DefaultLogStreamReporterOptions()
-		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, &opts).(*logStreamReporter)
+		lsr := NewLogStreamReporter(zap.NewNop(), types.StorageNodeID(0), lseGetter, newNopTelmetryStub(), &opts).(*logStreamReporter)
 		lse1 := NewMockLogStreamExecutor(ctrl)
 		lse1.EXPECT().LogStreamID().Return(types.LogStreamID(1)).AnyTimes()
 		lse2 := NewMockLogStreamExecutor(ctrl)

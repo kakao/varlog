@@ -1,0 +1,34 @@
+version: "2"
+services:
+
+  jaeger:
+    container_name: jaeger
+    image: jaegertracing/all-in-one:1.21
+    ports:
+      - "16686:16686"
+      - "14268"
+      - "14250"
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  otelcol:
+    container_name: otelcol
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-config.yaml"]
+    volumes:
+      - ./otel-config.yaml:/etc/otel-config.yaml
+    ports:
+      - "1777:1777"   # pprof extension
+      - "55679:55679" # zpages extension
+      - "8889"   # Prometheus exporter metrics
+      - "13133:13133" # health_check extension
+      - "55680:55680" # grpc protocol
+      - "55681:55681" # http protocol
+    depends_on:
+      - jaeger

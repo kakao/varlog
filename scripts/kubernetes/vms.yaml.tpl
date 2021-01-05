@@ -25,6 +25,8 @@ spec:
           value: Asia/Seoul
         - name: MR_ADDRESS
           value: "{{MR_ADDRESS}}:9092"
+        - name: COLLECTOR_ENDPOINT
+          value: "{{JAEGER_ADDRESS}}"
       dnsPolicy: None
       dnsConfig:
         nameservers:
