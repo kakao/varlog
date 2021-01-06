@@ -124,6 +124,9 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 		Logger:            clus.logger,
 	}
 
+	opts.CollectorName = "nop"
+	opts.CollectorEndpoint = "localhost:55680"
+
 	clus.mrIDs[idx] = nodeID
 	clus.MRs[idx] = metadata_repository.NewRaftMetadataRepository(opts)
 

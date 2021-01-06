@@ -43,6 +43,8 @@ func makeDefaultRaftAddress() string {
 }
 
 type MetadataRepositoryOptions struct {
+	TelemetryOptions
+
 	RPCBindAddress     string
 	RaftAddress        string
 	ClusterID          types.ClusterID
@@ -62,6 +64,11 @@ type MetadataRepositoryOptions struct {
 	RaftDir            string
 	LogDir             string
 	Logger             *zap.Logger
+}
+
+type TelemetryOptions struct {
+	CollectorName     string
+	CollectorEndpoint string
 }
 
 func (options *MetadataRepositoryOptions) validate() error {

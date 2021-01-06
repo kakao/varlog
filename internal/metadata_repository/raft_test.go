@@ -72,6 +72,7 @@ func newCluster(n int) *cluster {
 			nil,
 			clus.proposeC[i],
 			clus.confChangeC[i],
+			newTelemetryStub("nop", ""),
 			logger,
 		)
 
