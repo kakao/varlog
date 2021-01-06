@@ -70,6 +70,8 @@ type raftNode struct {
 
 	httprunner *runner.Runner
 	httpcancel context.CancelFunc
+
+	tmStub *telemetryStub
 }
 
 // committed entry to app
@@ -103,6 +105,7 @@ func newRaftNode(id vtypes.NodeID, peers []string, join bool,
 	snapshotGetter SnapshotGetter,
 	proposeC chan string,
 	confChangeC chan raftpb.ConfChange,
+	tmStub *telemetryStub,
 	logger *zap.Logger) *raftNode {
 
 	commitC := make(chan *raftCommittedEntry)
@@ -126,6 +129,7 @@ func newRaftNode(id vtypes.NodeID, peers []string, join bool,
 		logger:           logger,
 		runner:           runner.New("raft-node", logger),
 		httprunner:       runner.New("http", logger),
+		tmStub:           tmStub,
 	}
 
 	return rc
@@ -135,18 +139,30 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 	// must save the snapshot index to the WAL before saving the
 	// snapshot to maintain the invariant that we only Open the
 	// wal at previously-saved snapshot indexes.
-	walSnap := walpb.Snapshot{
-		Index: snap.Metadata.Index,
-		Term:  snap.Metadata.Term,
-	}
-	if err := rc.wal.SaveSnapshot(walSnap); err != nil {
-		return err
-	}
-	if err := rc.snapshotter.SaveSnap(snap); err != nil {
-		return err
-	}
+	_, err := rc.withTelemetry(context.TODO(), "save_snap", func(ctx context.Context) (interface{}, error) {
+		walSnap := walpb.Snapshot{
+			Index: snap.Metadata.Index,
+			Term:  snap.Metadata.Term,
+		}
+		if err := rc.wal.SaveSnapshot(walSnap); err != nil {
+			return nil, err
+		}
+		if err := rc.snapshotter.SaveSnap(snap); err != nil {
+			return nil, err
+		}
 
-	return rc.wal.ReleaseLockTo(snap.Metadata.Index)
+		return nil, rc.wal.ReleaseLockTo(snap.Metadata.Index)
+	})
+
+	return err
+}
+
+func (rc *raftNode) saveWal(st raftpb.HardState, ents []raftpb.Entry) error {
+	_, err := rc.withTelemetry(context.TODO(), "save_wal", func(ctx context.Context) (interface{}, error) {
+		return nil, rc.wal.Save(st, ents)
+	})
+
+	return err
 }
 
 func (rc *raftNode) entriesToApply(ents []raftpb.Entry) (nents []raftpb.Entry) {
@@ -732,7 +748,7 @@ func (rc *raftNode) processRaftEvent(ctx context.Context) {
 			rc.membership.updateState(rd.SoftState)
 			rc.publishLeader(ctx, rd.SoftState)
 
-			rc.wal.Save(rd.HardState, rd.Entries)
+			rc.saveWal(rd.HardState, rd.Entries)
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				rc.saveSnap(rd.Snapshot)
@@ -992,4 +1008,11 @@ func (rm *raftMembership) isLeader() bool {
 
 func (rm *raftMembership) getLeader() uint64 {
 	return atomic.LoadUint64(&rm.leader)
+}
+
+func (rc *raftNode) withTelemetry(ctx context.Context, name string, h handler) (interface{}, error) {
+	st := time.Now()
+	rsp, err := h(ctx)
+	rc.tmStub.mb.Records(name).Record(ctx, time.Since(st).Nanoseconds())
+	return rsp, err
 }

@@ -90,6 +90,9 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 		Logger:            clus.logger,
 	}
 
+	options.CollectorName = "nop"
+	options.CollectorEndpoint = "localhost:55680"
+
 	clus.nodes[idx] = NewRaftMetadataRepository(options)
 	return nil
 }

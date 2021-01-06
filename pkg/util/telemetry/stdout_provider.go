@@ -14,10 +14,7 @@ type stdoutProvider struct {
 var _ Provider = (*stdoutProvider)(nil)
 
 func newStdoutProvider() (*stdoutProvider, error) {
-	exportOpts := []stdout.Option{
-		stdout.WithQuantiles([]float64{0.5}),
-	}
-	pipeline, err := stdout.InstallNewPipeline(exportOpts, nil)
+	pipeline, err := stdout.InstallNewPipeline(nil, nil)
 	if err != nil {
 		return nil, err
 	}
