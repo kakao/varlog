@@ -343,8 +343,11 @@ func (mrm *mrManager) AddPeer(ctx context.Context, nodeID types.NodeID, peerURL,
 	}
 
 	if err := cli.AddPeer(ctx, mrm.clusterID, nodeID, peerURL); err != nil {
-		if !errors.Is(verrors.FromStatusError(context.TODO(), err),
-			verrors.FromStatusError(context.TODO(), verrors.ErrAlreadyExists)) {
+		/*
+			if !errors.Is(verrors.FromStatusError(context.TODO(), err),
+				verrors.FromStatusError(context.TODO(), verrors.ErrAlreadyExists)) {
+		*/
+		if !errors.Is(err, verrors.ErrAlreadyExists) {
 			mrm.closeManagementClient(cli)
 		}
 		return err

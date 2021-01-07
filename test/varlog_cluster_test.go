@@ -296,7 +296,7 @@ func TestVarlogReplicateLog(t *testing.T) {
 					defer cancel()
 
 					glsn, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
-					if verrors.IsTransientErr(err) {
+					if verrors.IsTransient(err) {
 						continue
 					}
 					So(err, ShouldBeNil)
@@ -730,7 +730,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					glsn, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
 					cancel()
 					if err != nil {
-						if verrors.IsTransientErr(err) {
+						if verrors.IsTransient(err) {
 							continue
 						}
 						errC <- err
@@ -1101,7 +1101,7 @@ func TestVarlogManagerServer(t *testing.T) {
 			// FIXME (jun): This test passes due to seqLSIDGen, but it is very fragile.
 			_, err = cmcli.AddLogStream(context.TODO(), replicas)
 			So(err, ShouldNotBeNil)
-			So(verrors.IsTransientErr(err), ShouldBeTrue)
+			So(verrors.IsTransient(err), ShouldBeTrue)
 
 			Convey("RemoveLogStreamReplica: garbage log stream can be removed", func() {
 				_, err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, types.LogStreamID(1))

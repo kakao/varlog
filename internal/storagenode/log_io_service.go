@@ -2,14 +2,14 @@ package storagenode
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/pkg/errors"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/telemetry/trace"
@@ -50,22 +50,26 @@ func (s *LogIOService) withTelemetry(ctx context.Context, spanName string, req i
 	)
 	s.tmStub.metrics().requests.Add(ctx, 1)
 	rsp, err = h(ctx, req)
-	if err != nil {
+	if err == nil {
+		s.logger.Info(spanName)
+	} else {
 		span.RecordError(err)
+		s.logger.Error(spanName, zap.Error(err))
 	}
-	s.logger.Info(spanName, zap.Error(err))
 	s.tmStub.metrics().requests.Add(ctx, -1)
 	span.End()
 	return rsp, err
 }
 
 func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.AppendResponse, error) {
+	code := codes.Internal
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO.Append", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.AppendRequest)
 			var rsp *snpb.AppendResponse
 			lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 			if !ok {
+				code = codes.NotFound
 				return rsp, errors.New("storagenode: no such log stream")
 			}
 
@@ -80,27 +84,53 @@ func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*sn
 
 			glsn, err := lse.Append(ctx, req.GetPayload(), backups...)
 			if err != nil {
-				return rsp, fmt.Errorf("storagenode: append failed: %w", err)
+				code = codes.Internal
+				return rsp, errors.Wrap(err, "storagenode")
 			}
 			return &snpb.AppendResponse{GLSN: glsn}, nil
 		},
 	)
-	return rspI.(*snpb.AppendResponse), verrors.ToStatusError(err)
+	return rspI.(*snpb.AppendResponse), verrors.ToStatusErrorWithCode(err, code)
 }
 
 func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.ReadResponse, error) {
+	code := codes.Internal
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO.Read", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.ReadRequest)
 			var rsp *snpb.ReadResponse
 			lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 			if !ok {
+				code = codes.NotFound
 				return rsp, errors.New("storagenode: no such log stream")
 			}
 
 			logEntry, err := lse.Read(ctx, req.GetGLSN())
 			if err != nil {
-				return rsp, fmt.Errorf("storagenode: read failed: %w", err)
+				// TODO: Check whether these are safe.
+				switch errors.Cause(err) {
+				case verrors.ErrNoEntry:
+					code = codes.NotFound
+				case verrors.ErrTrimmed:
+					code = codes.OutOfRange
+				case verrors.ErrUndecidable:
+					code = codes.Unavailable
+				default:
+					code = codes.Internal
+				}
+				/*
+					if errors.Is(err, verrors.ErrNoEntry) {
+						code = codes.NotFound
+					} else if errors.Is(err, verrors.ErrTrimmed) {
+						code = codes.OutOfRange
+					} else if errors.Is(err, verrors.ErrUndecidable) {
+						// TODO (jun): consider codes.FailedPrecondition
+						code = codes.Unavailable
+					} else {
+						code = codes.Internal
+					}
+				*/
+				return rsp, errors.Wrap(err, "storagenode")
 			}
 			return &snpb.ReadResponse{
 				Payload: logEntry.Data,
@@ -109,26 +139,28 @@ func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.R
 			}, nil
 		},
 	)
-	return rspI.(*snpb.ReadResponse), verrors.ToStatusError(err)
+	return rspI.(*snpb.ReadResponse), verrors.ToStatusErrorWithCode(err, code)
 }
 
 func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) error {
+	code := codes.Internal
 	_, err := s.withTelemetry(stream.Context(), "varlog.snpb.LogIO.Subscribe", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.SubscribeRequest)
 
 			if req.GetGLSNBegin() >= req.GetGLSNEnd() {
+				code = codes.InvalidArgument
 				return nil, errors.New("storagenode: invalid subscription range")
 			}
 			lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 			if !ok {
+				code = codes.NotFound
 				return nil, errors.New("storagenode: no such log stream")
 			}
 
 			resultC, err := lse.Subscribe(ctx, req.GetGLSNBegin(), req.GetGLSNEnd())
 			if err != nil {
-				return nil, err
-				// return nil, fmt.Errorf("storagenode: subscribe failed: %w", err)
+				return nil, errors.Wrap(err, "storagenode")
 			}
 
 			for result := range resultC {
@@ -137,23 +169,24 @@ func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_S
 					if result.Err == ErrEndOfRange {
 						return nil, nil
 					}
-					return nil, fmt.Errorf("storagenode: subscribe failed: %w", result.Err)
+					return nil, errors.Wrap(result.Err, "storagenode")
 				}
 				if err := stream.Send(&snpb.SubscribeResponse{
 					GLSN:    result.LogEntry.GLSN,
 					LLSN:    result.LogEntry.LLSN,
 					Payload: result.LogEntry.Data,
 				}); err != nil {
-					return nil, fmt.Errorf("storagenode: subscribe failed: %w", err)
+					return nil, errors.Wrap(err, "storagenode")
 				}
 			}
 			return nil, nil
 		},
 	)
-	return verrors.ToStatusError(err)
+	return verrors.ToStatusErrorWithCode(err, code)
 }
 
 func (s *LogIOService) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtypes.Empty, error) {
+	code := codes.Internal
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO.Trim", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.TrimRequest)
@@ -177,5 +210,5 @@ func (s *LogIOService) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtype
 			return &pbtypes.Empty{}, nil
 		},
 	)
-	return rspI.(*pbtypes.Empty), verrors.ToStatusError(err)
+	return rspI.(*pbtypes.Empty), verrors.ToStatusErrorWithCode(err, code)
 }
