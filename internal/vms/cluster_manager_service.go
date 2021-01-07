@@ -6,6 +6,7 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -51,7 +52,7 @@ func (s *clusterManagerService) UnregisterStorageNode(ctx context.Context, req *
 func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
 	logStreamDesc, err := s.clusManager.AddLogStream(ctx, req.GetReplicas())
 	s.logger.Info("AddLogStream", zap.String("lsdesc", logStreamDesc.String()))
-	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, verrors.ToStatusError(err)
+	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, verrors.ToStatusErrorWithCode(err, codes.Unavailable)
 }
 
 func (s *clusterManagerService) UnregisterLogStream(ctx context.Context, req *vmspb.UnregisterLogStreamRequest) (*vmspb.UnregisterLogStreamResponse, error) {

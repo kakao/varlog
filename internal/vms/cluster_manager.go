@@ -14,7 +14,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
@@ -266,8 +265,11 @@ func (cm *clusterManager) AddMRPeer(ctx context.Context, raftURL, rpcAddr string
 
 	err := cm.mrMgr.AddPeer(ctx, nodeID, raftURL, rpcAddr)
 	if err != nil {
-		if !errors.Is(verrors.FromStatusError(context.TODO(), err),
-			verrors.FromStatusError(context.TODO(), verrors.ErrAlreadyExists)) {
+		if !errors.Is(err, verrors.ErrAlreadyExists) {
+			/*
+				if !errors.Is(verrors.FromStatusError(context.TODO(), err),
+					verrors.FromStatusError(context.TODO(), verrors.ErrAlreadyExists)) {
+			*/
 			return types.InvalidNodeID, err
 		}
 	}
@@ -362,7 +364,8 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 	// See https://github.daumkakao.com/varlog/varlog/pull/198#discussion_r215602
 	logStreamID := cm.logStreamIDGen.Generate()
 	if clusmeta.GetLogStream(logStreamID) != nil {
-		err := verrors.NewErrorf(verrors.ErrLogStreamAlreadyExists, codes.Unavailable, "lsid=%v", logStreamID)
+		err := fmt.Errorf("vms: logstream already exists (%d): %w", logStreamID, verrors.ErrLogStreamAlreadyExists)
+		// err := verrors.NewErrorf(verrors.ErrLogStreamAlreadyExists, codes.Unavailable, "lsid=%v", logStreamID)
 		cm.logger.Error("mismatch between ClusterMetadataView and LogStreamIDGenerator", zap.Any("lsid", logStreamID), zap.Error(err))
 		if err := cm.logStreamIDGen.Refresh(ctx); err != nil {
 			cm.logger.Panic("could not refresh LogStreamIDGenerator", zap.Error(err))
@@ -431,7 +434,8 @@ func (cm *clusterManager) verifyLogStream(clusterMetadata *varlogpb.MetadataDesc
 
 func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	if err := cm.snMgr.AddLogStream(ctx, logStreamDesc); err != nil {
-		return nil, verrors.NewErrorf(err, codes.Unavailable, "lsid=%v", logStreamDesc.GetLogStreamID())
+		return nil, fmt.Errorf("vms: could not add log stream (%d): %w", logStreamDesc.GetLogStreamID(), err)
+		// return nil, verrors.NewErrorf(err, codes.Unavailable, "lsid=%v", logStreamDesc.GetLogStreamID())
 	}
 
 	// NB: RegisterLogStream returns nil if the logstream already exists.

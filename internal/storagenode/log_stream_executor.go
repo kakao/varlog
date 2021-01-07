@@ -4,12 +4,12 @@ package storagenode
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/label"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -163,7 +163,7 @@ type logStreamExecutor struct {
 
 func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, storage Storage, tmStub *telemetryStub, options *LogStreamExecutorOptions) (LogStreamExecutor, error) {
 	if storage == nil {
-		return nil, fmt.Errorf("logstream: no storage")
+		return nil, errors.New("logstream: no storage")
 	}
 	if logger == nil {
 		logger = zap.NewNop()
@@ -524,7 +524,7 @@ func (lse *logStreamExecutor) commitUndecidable(glsn types.GLSN) error {
 func (lse *logStreamExecutor) read(t *readTask) {
 	logEntry, err := lse.storage.Read(t.glsn)
 	if err != nil {
-		t.err = fmt.Errorf("logstreamexecutor read error (glsn=%v): %w", t.glsn, err)
+		t.err = errors.Wrapf(err, "logstream: glsn=%d", t.glsn)
 	}
 	t.logEntry = logEntry
 	close(t.done)
@@ -601,7 +601,7 @@ func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (
 				// It has no guarantee that read and subscribe prevent from trimming
 				// overlapped log ranges yet. It, however, results in unexpected
 				// situation like this.
-				err := verrors.NewSimpleErrorf(verrors.ErrUnordered, "llsn next=%v read=%v", llsn+1, result.LogEntry.LLSN)
+				err := errors.Wrapf(verrors.ErrUnordered, "logstream: expected=%d, actual=%d", llsn+1, result.LogEntry.LLSN)
 				result = NewInvalidScanResult(err)
 			}
 			select {

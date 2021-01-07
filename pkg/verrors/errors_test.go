@@ -1,97 +1,94 @@
 package verrors
 
 import (
-	"context"
-	"errors"
+	"fmt"
 	"testing"
-	"time"
 
+	"github.com/gogo/status"
+	"github.com/pkg/errors"
+	. "github.com/smartystreets/goconvey/convey"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
-func TestVarlogErrorIs(t *testing.T) {
-	err1 := NewError(ErrNoEntry, codes.Unknown, "desc1")
-	err2 := NewError(ErrInternal, codes.Unknown, "desc1")
-	if !err1.(*Error).Is(err2) {
-		t.Error("unexpected Is result")
-	}
-	if !errors.Is(err1, err2) {
-		t.Error("unexpected Is result")
-	}
+func TestStatusError(t *testing.T) {
+	Convey("Given chained errors not registered", t, func() {
+		sentinelErr := errors.New("sentinel error")
+		registeredSentinelErr := ErrNoEntry
+		So(errorRegistry, ShouldContainKey, registeredSentinelErr.Error())
 
-	if !errors.Is(err1, ErrNoEntry) {
-		t.Error("unexpected Is result")
-	}
+		err1 := fmt.Errorf("outermost: %w", fmt.Errorf("outer: %w", sentinelErr))
+		err2 := errors.Wrap(errors.Wrap(sentinelErr, "outer"), "outermost")
+		err3 := errors.Wrap(fmt.Errorf("outer: %w", sentinelErr), "outermost")
+		errs := []error{err1, err2, err3}
 
-	err3 := NewError(err1, codes.Unknown, "outer-most")
-	if !errors.Is(err3, ErrNoEntry) {
-		t.Error("unexpected Is result")
-	}
-	if !errors.Is(err3, err1) {
-		t.Error("unexpected Is result")
-	}
-}
+		Convey("When the error is converted by uinsg ToStatusError", func() {
+			var stErrs []error
+			for _, err := range errs {
+				stErr := ToStatusErrorWithCode(err, codes.Internal)
+				_, ok := status.FromError(stErr)
+				So(ok, ShouldBeTrue)
+				stErrs = append(stErrs, stErr)
+			}
 
-func TestToStatus(t *testing.T) {
-	if ToStatus(nil) != nil {
-		t.Error("should be nil")
-	}
+			Convey("Then the errors is reverted by using FromStatusError", func() {
+				for _, stErr := range stErrs {
+					revErr := FromStatusError(stErr)
+					_, ok := status.FromError(revErr)
+					So(ok, ShouldBeFalse)
 
-	if st := ToStatus(context.Canceled); st.Code() != codes.Canceled {
-		t.Errorf("actual = %v expected = %v", st.Code(), codes.Canceled)
-	}
+					maybeSentinelError := revErr
+					for {
+						e := errors.Unwrap(maybeSentinelError)
+						if e == nil {
+							break
+						}
+						maybeSentinelError = e
+					}
 
-	if st := ToStatus(context.DeadlineExceeded); st.Code() != codes.DeadlineExceeded {
-		t.Errorf("actual = %v expected = %v", st.Code(), codes.Canceled)
-	}
+					So(maybeSentinelError.Error(), ShouldEqual, sentinelErr.Error())
+					So(errors.Is(maybeSentinelError, sentinelErr), ShouldBeFalse)
+				}
+			})
+		})
+	})
 
-	if st := ToStatus(NewError(ErrNeedRetry, codes.Unavailable, ErrNeedRetry.Error())); st.Code() != codes.Unavailable {
-		t.Errorf("actual = %v expected = %v", st.Code(), codes.Unavailable)
-	}
-}
+	Convey("Given chained errors registered", t, func() {
+		sentinelErr := ErrNoEntry
+		So(errorRegistry, ShouldContainKey, sentinelErr.Error())
 
-func TestFromStatusError(t *testing.T) {
-	if FromStatusError(context.TODO(), nil) != nil {
-		t.Error("should be nil")
-	}
+		err1 := fmt.Errorf("outermost: %w", fmt.Errorf("outer: %w", sentinelErr))
+		err2 := errors.Wrap(errors.Wrap(sentinelErr, "outer"), "outermost")
+		err3 := errors.Wrap(fmt.Errorf("outer: %w", sentinelErr), "outermost")
+		errs := []error{err1, err2, err3}
 
-	ctx, cancel := context.WithCancel(context.TODO())
-	cancel()
-	<-ctx.Done()
-	if err := FromStatusError(ctx, status.New(codes.Canceled, "canceled").Err()); err != context.Canceled {
-		t.Errorf("actual = %v expected =%v", err, context.Canceled)
-	}
+		Convey("When the error is converted by uinsg ToStatusError", func() {
+			var stErrs []error
+			for _, err := range errs {
+				stErr := ToStatusErrorWithCode(err, codes.Internal)
+				_, ok := status.FromError(stErr)
+				So(ok, ShouldBeTrue)
+				stErrs = append(stErrs, stErr)
+			}
 
-	ctx, cancel = context.WithTimeout(context.TODO(), time.Duration(0))
-	cancel()
-	<-ctx.Done()
-	if err := FromStatusError(ctx, status.New(codes.DeadlineExceeded, "timeout").Err()); err != context.DeadlineExceeded {
-		t.Errorf("actual = %v expected =%v", err, context.DeadlineExceeded)
-	}
+			Convey("Then the errors is reverted by using FromStatusError", func() {
+				for _, stErr := range stErrs {
+					revErr := FromStatusError(stErr)
+					_, ok := status.FromError(revErr)
+					So(ok, ShouldBeFalse)
 
-	varlogErr := NewErrorf(ErrTrimmed, codes.Unknown, "logstream: trimmed (glsn = 10)")
-	statusErr := ToStatusError(varlogErr)
-	decodedErr := FromStatusError(context.TODO(), statusErr)
-	if !errors.Is(decodedErr, ErrTrimmed) {
-		t.Errorf("unexpected Is result, %v %v", varlogErr, decodedErr)
-	}
+					maybeSentinelError := revErr
+					for {
+						e := errors.Unwrap(maybeSentinelError)
+						if e == nil {
+							break
+						}
+						maybeSentinelError = e
+					}
 
-	statusErr = ToStatusError(ErrTrimmed)
-	decodedErr = FromStatusError(context.TODO(), statusErr)
-	if !errors.Is(decodedErr, ErrTrimmed) {
-		t.Errorf("unexpected Is result, %v %v", varlogErr, decodedErr)
-	}
-
-	statusErr = ToStatusError(errors.New(ErrTrimmed.Error()))
-	decodedErr = FromStatusError(context.TODO(), statusErr)
-	if !errors.Is(decodedErr, ErrTrimmed) {
-		t.Errorf("unexpected Is result, %v %v", varlogErr, decodedErr)
-	}
-
-	statusErr = ToStatusError(ErrAlreadyExists)
-	decodedErr = FromStatusError(context.TODO(), statusErr)
-	if !errors.Is(decodedErr, FromStatusError(context.TODO(), ErrAlreadyExists)) {
-		t.Errorf("unexpected Is result, %v %v", ErrAlreadyExists, decodedErr)
-	}
+					So(maybeSentinelError.Error(), ShouldEqual, sentinelErr.Error())
+					So(errors.Is(maybeSentinelError, sentinelErr), ShouldBeTrue)
+				}
+			})
+		})
+	})
 }

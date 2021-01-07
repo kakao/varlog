@@ -53,22 +53,22 @@ func (c *clusterManagerClient) Close() error {
 
 func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) (*vmspb.AddStorageNodeResponse, error) {
 	rsp, err := c.rpcClient.AddStorageNode(ctx, &vmspb.AddStorageNodeRequest{Address: addr})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vmspb.UnregisterStorageNodeResponse, error) {
 	rsp, err := c.rpcClient.UnregisterStorageNode(ctx, &vmspb.UnregisterStorageNodeRequest{StorageNodeID: storageNodeID})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*vmspb.AddLogStreamResponse, error) {
 	rsp, err := c.rpcClient.AddLogStream(ctx, &vmspb.AddLogStreamRequest{Replicas: logStreamReplicas})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnregisterLogStreamResponse, error) {
 	rsp, err := c.rpcClient.UnregisterLogStream(ctx, &vmspb.UnregisterLogStreamRequest{LogStreamID: logStreamID})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) (*vmspb.RemoveLogStreamReplicaResponse, error) {
@@ -76,7 +76,7 @@ func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, stora
 		StorageNodeID: storageNodeID,
 		LogStreamID:   logStreamID,
 	})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*vmspb.UpdateLogStreamResponse, error) {
@@ -85,17 +85,17 @@ func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, logStreamID 
 		PoppedReplica: poppedReplica,
 		PushedReplica: pushedReplica,
 	})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) Seal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
 	rsp, err := c.rpcClient.Seal(ctx, &vmspb.SealRequest{LogStreamID: logStreamID})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) Unseal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error) {
 	rsp, err := c.rpcClient.Unseal(ctx, &vmspb.UnsealRequest{LogStreamID: logStreamID})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*vmspb.SyncResponse, error) {
@@ -104,20 +104,20 @@ func (c *clusterManagerClient) Sync(ctx context.Context, logStreamID types.LogSt
 		SrcStorageNodeID: srcStorageNodeId,
 		DstStorageNodeID: dstStorageNodeId,
 	})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error) {
 	rsp, err := c.rpcClient.GetMRMembers(ctx, &pbtypes.Empty{})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (*vmspb.AddMRPeerResponse, error) {
 	rsp, err := c.rpcClient.AddMRPeer(ctx, &vmspb.AddMRPeerRequest{RaftURL: raftURL, RPCAddr: rpcAddr})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *clusterManagerClient) GetStorageNodes(ctx context.Context) (*vmspb.GetStorageNodesResponse, error) {
 	rsp, err := c.rpcClient.GetStorageNodes(ctx, &pbtypes.Empty{})
-	return rsp, verrors.FromStatusError(ctx, err)
+	return rsp, verrors.FromStatusError(err)
 }

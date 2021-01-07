@@ -5,6 +5,6 @@ package varlog.varlogpb;
 option go_package = "github.daumkakao.com/varlog/varlog/proto/varlogpb";
 
 message ErrorDetail {
-    string desc = 1;
-    bool is_varlog_error = 2;
+    string error_string = 1;
 }
+
