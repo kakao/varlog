@@ -620,17 +620,21 @@ Loop:
 	close(lc.triggerC)
 }
 
-func (lc *logStreamCommitter) isNewbie(highWatermark types.GLSN) bool {
-	if highWatermark.Invalid() {
-		return true
+func (lc *logStreamCommitter) isNewbie(prevHighWatermark, highWatermark types.GLSN) (bool, bool) {
+	if prevHighWatermark.Invalid() {
+		return true, true
 	}
 
-	cr := lc.helper.lookupCommitResults(highWatermark)
+	cr := lc.helper.lookupCommitResults(prevHighWatermark)
 	if cr == nil {
-		lc.logger.Panic("no commit result", zap.Any("hwm", highWatermark))
+		if newHighWatermark, _ := lc.helper.getHighWatermark(lc.lsID); newHighWatermark > highWatermark {
+			// could not verify
+			return false, false
+		}
+		lc.logger.Panic("no commit result", zap.Any("hwm", prevHighWatermark))
 	}
 
-	return cr.LookupCommitResult(lc.lsID) == nil
+	return cr.LookupCommitResult(lc.lsID) == nil, true
 }
 
 func (lc *logStreamCommitter) catchup(ctx context.Context) {
@@ -639,8 +643,8 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 		return
 	}
 
+CATCHUP:
 	for ctx.Err() == nil {
-
 		results := lc.helper.lookupNextCommitResults(highWatermark)
 		if results == nil {
 			return
@@ -649,9 +653,15 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 
 		cr := results.LookupCommitResult(lc.lsID)
 		if cr != nil {
+			isNewbie, ok := lc.isNewbie(results.PrevHighWatermark, results.HighWatermark)
+			if !ok {
+				highWatermark, _ = lc.helper.getHighWatermark(lc.lsID)
+				continue CATCHUP
+			}
+
 			cr = proto.Clone(cr).(*snpb.LogStreamCommitResult)
 			cr.HighWatermark = results.HighWatermark
-			if lc.isNewbie(results.PrevHighWatermark) {
+			if isNewbie {
 				cr.PrevHighWatermark = types.InvalidGLSN
 			} else {
 				cr.PrevHighWatermark = results.PrevHighWatermark
