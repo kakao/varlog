@@ -1435,6 +1435,7 @@ func (ms *MetadataStorage) trimLogStreamCommitHistory() {
 	if 0 < i &&
 		i < len(s.LogStream.CommitHistory) &&
 		s.LogStream.CommitHistory[i].HighWatermark == s.LogStream.TrimGLSN {
+		ms.logger.Info("trim", zap.Any("glsn", s.LogStream.TrimGLSN))
 		s.LogStream.CommitHistory = s.LogStream.CommitHistory[i-1:]
 	}
 }

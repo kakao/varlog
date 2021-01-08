@@ -61,7 +61,7 @@ func (act *action) Do(ctx context.Context) error {
 	for i := 0; i < act.nrCli; i++ {
 		wg.Add(1)
 		if err := act.runner.RunC(mctx, func(rctx context.Context) {
-			varlog, err := varlog.Open(act.clusterID, []string{act.mrAddr}, varlog.WithDenyTTL(5*time.Second))
+			vcli, err := varlog.Open(act.clusterID, []string{act.mrAddr}, varlog.WithDenyTTL(5*time.Second))
 			wg.Done()
 
 			if err != nil {
@@ -71,14 +71,14 @@ func (act *action) Do(ctx context.Context) error {
 				}
 				return
 			}
-			defer varlog.Close()
+			defer vcli.Close()
 
 			for {
 				select {
 				case <-rctx.Done():
 					return
 				default:
-					glsn, err := varlog.Append(rctx, []byte("foo"))
+					glsn, err := vcli.Append(rctx, []byte("foo"))
 					if err != nil {
 						select {
 						case errC <- fmt.Errorf("append fail. desc = %s", err.Error()):

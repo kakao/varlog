@@ -66,12 +66,17 @@ func NewInternal(opts Options) (*zap.Logger, error) {
 		writeSyncer = zapcore.Lock(zapcore.AddSync(os.Stderr))
 	}
 	if len(opts.Path) > 0 {
-		if err := os.MkdirAll(opts.Path, logDirMode); err != nil {
+		if opts.Path[len(opts.Path)-1] == '/' {
+			return nil, errors.New("logger: invalid file path")
+		}
+
+		if err := os.MkdirAll(filepath.Dir(opts.Path), logDirMode); err != nil {
 			return nil, err
 		}
 		if err := fputil.IsWritableDir(filepath.Dir(opts.Path)); err != nil {
 			return nil, err
 		}
+
 		fileSyncer := zapcore.AddSync(&lumberjack.Logger{
 			Filename:   opts.Path,
 			LocalTime:  opts.LocalTime,

@@ -53,7 +53,7 @@ func AnyPrimarySNFail(k8s *K8sVarlogCluster) func() error {
 
 func WaitSNFail(k8s *K8sVarlogCluster) func() error {
 	return func() error {
-		ok := testutil.CompareWaitN(100, func() bool {
+		ok := testutil.CompareWaitN(200, func() bool {
 			n, err := k8s.NumSNRunning()
 			if err != nil {
 				return false
