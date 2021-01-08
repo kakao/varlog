@@ -80,6 +80,11 @@ func (options *MetadataRepositoryOptions) validate() error {
 	if err != nil {
 		return err
 	}
+
+	if options.Logger == nil {
+		return errors.New("logger should not be nil")
+	}
+
 	raftIP := net.ParseIP(raftHost)
 	if !raftIP.IsGlobalUnicast() || raftIP.IsLoopback() {
 		options.Logger.Warn("bad RAFT address", zap.Any("addr", options.RaftAddress))
@@ -103,10 +108,6 @@ func (options *MetadataRepositoryOptions) validate() error {
 
 	if options.ReporterClientFac == nil {
 		return errors.New("reporterClientFac should not be nil")
-	}
-
-	if options.Logger == nil {
-		return errors.New("logger should not be nil")
 	}
 
 	if options.SnapCount == 0 {

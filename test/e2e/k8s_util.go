@@ -150,7 +150,7 @@ func (k8s *K8sVarlogCluster) Reset() error {
 		return err
 	}
 
-	if err := testutil.CompareWaitErrorN(100, k8s.IsMRRunning); err != nil {
+	if err := testutil.CompareWaitErrorN(200, k8s.IsMRRunning); err != nil {
 		return err
 	}
 
@@ -158,7 +158,7 @@ func (k8s *K8sVarlogCluster) Reset() error {
 		return err
 	}
 
-	if err := testutil.CompareWaitErrorN(100, k8s.IsSNRunning); err != nil {
+	if err := testutil.CompareWaitErrorN(200, k8s.IsSNRunning); err != nil {
 		return err
 	}
 
@@ -454,7 +454,7 @@ func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
 		}
 
 		num++
-		if err := testutil.CompareWaitErrorN(100, func() (bool, error) {
+		if err := testutil.CompareWaitErrorN(200, func() (bool, error) {
 			p, err := k8s.numPodsReady("default", podSelector)
 			return p == num, err
 		}); err != nil {

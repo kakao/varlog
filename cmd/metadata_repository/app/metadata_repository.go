@@ -14,10 +14,7 @@ import (
 func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
 	path, err := filepath.Abs(opts.LogDir)
 	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(path, 0750); err != nil {
+		fmt.Printf("could not create abs path:: %v\n", err)
 		return err
 	}
 
@@ -32,6 +29,7 @@ func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
 
 	logger, err := log.NewInternal(lopts)
 	if err != nil {
+		fmt.Printf("could not create logger:: %v\n", err)
 		return err
 	}
 
