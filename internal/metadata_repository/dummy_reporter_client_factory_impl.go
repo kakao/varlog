@@ -9,6 +9,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
@@ -63,6 +64,10 @@ type DummyReporterClient struct {
 	status  DummyReporterClientStatus
 	factory *DummyReporterClientFactory
 
+	reportDelay   atomicutil.AtomicDuration
+	commitDelay   atomicutil.AtomicDuration
+	disableReport atomicutil.AtomicBool
+
 	ref int
 }
 
@@ -96,43 +101,45 @@ type DummyReporterClientFactory struct {
 }
 
 func NewDummyReporterClientFactory(nrLogStreams int, manual bool) *DummyReporterClientFactory {
-	a := &DummyReporterClientFactory{
+	fac := &DummyReporterClientFactory{
 		nrLogStreams: nrLogStreams,
 		manual:       manual,
 	}
 
-	return a
+	return fac
 }
 
-func (a *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+func (fac *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
 	status := DUMMY_REPORTERCLIENT_STATUS_RUNNING
 
-	LSIDs := make([]types.LogStreamID, a.nrLogStreams)
-	for i := 0; i < a.nrLogStreams; i++ {
+	LSIDs := make([]types.LogStreamID, fac.nrLogStreams)
+	for i := 0; i < fac.nrLogStreams; i++ {
 		LSIDs[i] = types.LogStreamID(sn.StorageNodeID) + types.LogStreamID(i)
 	}
 
-	knownHighWatermark := make([]types.GLSN, a.nrLogStreams)
+	knownHighWatermark := make([]types.GLSN, fac.nrLogStreams)
 
-	uncommittedLLSNOffset := make([]types.LLSN, a.nrLogStreams)
-	for i := 0; i < a.nrLogStreams; i++ {
+	uncommittedLLSNOffset := make([]types.LLSN, fac.nrLogStreams)
+	for i := 0; i < fac.nrLogStreams; i++ {
 		uncommittedLLSNOffset[i] = types.MinLLSN
 	}
 
-	uncommittedLLSNLength := make([]uint64, a.nrLogStreams)
+	uncommittedLLSNLength := make([]uint64, fac.nrLogStreams)
 
 	cli := &DummyReporterClient{
-		manual:                a.manual,
+		manual:                fac.manual,
 		storageNodeID:         sn.StorageNodeID,
 		logStreamIDs:          LSIDs,
 		knownHighWatermark:    knownHighWatermark,
 		uncommittedLLSNOffset: uncommittedLLSNOffset,
 		uncommittedLLSNLength: uncommittedLLSNLength,
 		status:                status,
-		factory:               a,
+		factory:               fac,
+		reportDelay:           atomicutil.AtomicDuration(DefaultDelay),
+		commitDelay:           atomicutil.AtomicDuration(DefaultDelay),
 	}
 
-	f, _ := a.m.LoadOrStore(sn.StorageNodeID, cli)
+	f, _ := fac.m.LoadOrStore(sn.StorageNodeID, cli)
 
 	cli = f.(*DummyReporterClient)
 	cli.incrRef()
@@ -140,8 +147,30 @@ func (a *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescripto
 	return cli, nil
 }
 
+func (r *DummyReporterClient) DisableReport() {
+	r.disableReport.Store(true)
+}
+
+func (r *DummyReporterClient) EnableReport() {
+	r.disableReport.Store(false)
+}
+
+func (r *DummyReporterClient) SetReportDelay(d time.Duration) {
+	r.reportDelay.Store(d)
+}
+
+func (r *DummyReporterClient) SetCommitDelay(d time.Duration) {
+	r.commitDelay.Store(d)
+}
+
 func (r *DummyReporterClient) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
-	time.Sleep(DefaultDelay)
+	if r.disableReport.Load() {
+		return &snpb.GetReportResponse{
+			StorageNodeID: r.storageNodeID,
+		}, nil
+	}
+
+	time.Sleep(r.reportDelay.Load())
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -176,7 +205,7 @@ func (r *DummyReporterClient) GetReport(ctx context.Context) (*snpb.GetReportRes
 }
 
 func (r *DummyReporterClient) Commit(ctx context.Context, cr *snpb.CommitRequest) error {
-	time.Sleep(DefaultDelay)
+	time.Sleep(r.commitDelay.Load())
 
 	r.mu.Lock()
 	defer r.mu.Unlock()

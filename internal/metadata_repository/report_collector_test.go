@@ -653,6 +653,105 @@ func TestCommit(t *testing.T) {
 	})
 }
 
+func TestCommitWithDelay(t *testing.T) {
+	Convey("Given ReportCollector", t, func() {
+		knownHWM := types.InvalidGLSN
+
+		a := NewDummyReporterClientFactory(1, false)
+		mr := NewDummyMetadataRepository(a)
+
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(mr, time.Second, logger)
+		reportCollector.Run()
+		Reset(func() {
+			reportCollector.Close()
+		})
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: types.StorageNodeID(0),
+		}
+
+		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		So(testutil.CompareWaitN(1, func() bool {
+			return a.lookupClient(sn.StorageNodeID) != nil
+		}), ShouldBeTrue)
+
+		err = reportCollector.RegisterLogStream(types.StorageNodeID(0), types.LogStreamID(0))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		reportCollector.mu.RLock()
+		executor, ok := reportCollector.executors[sn.StorageNodeID]
+		reportCollector.mu.RUnlock()
+
+		So(ok, ShouldBeTrue)
+
+		// check report
+		So(testutil.CompareWaitN(10, func() bool {
+			return executor.reportCtx.getReport() != nil
+		}), ShouldBeTrue)
+
+		dummySN := a.lookupClient(sn.StorageNodeID)
+
+		Convey("disable report to catchup using old hwm", func() {
+			dummySN.DisableReport()
+
+			gls := newDummyCommitResults(knownHWM, 1)
+			mr.appendGLS(gls)
+			knownHWM = gls.HighWatermark
+
+			gls = newDummyCommitResults(knownHWM, 1)
+			mr.appendGLS(gls)
+			knownHWM = gls.HighWatermark
+
+			gls = newDummyCommitResults(knownHWM, 1)
+			mr.appendGLS(gls)
+			knownHWM = gls.HighWatermark
+
+			reportCollector.Commit()
+
+			So(testutil.CompareWaitN(10, func() bool {
+				return dummySN.getKnownHighWatermark(0) == knownHWM
+			}), ShouldBeTrue)
+
+			So(executor.reportCtx.getReport().UncommitReports[0].HighWatermark.Invalid(), ShouldBeTrue)
+
+			Convey("set commit delay & enable report to trim during catchup", func() {
+				dummySN.SetCommitDelay(30 * time.Millisecond)
+				reportCollector.Commit()
+
+				time.Sleep(10 * time.Millisecond)
+				dummySN.EnableReport()
+
+				So(testutil.CompareWaitN(10, func() bool {
+					reports := executor.reportCtx.getReport()
+					return reports.UncommitReports[0].HighWatermark == knownHWM
+				}), ShouldBeTrue)
+
+				mr.trimGLS(knownHWM)
+
+				gls = newDummyCommitResults(knownHWM, 1)
+				mr.appendGLS(gls)
+				knownHWM = gls.HighWatermark
+
+				Convey("then it should catchup", func() {
+					reportCollector.Commit()
+
+					So(testutil.CompareWaitN(10, func() bool {
+						reports := executor.reportCtx.getReport()
+						return reports.UncommitReports[0].HighWatermark == knownHWM
+					}), ShouldBeTrue)
+				})
+			})
+		})
+	})
+}
+
 func TestRPCFail(t *testing.T) {
 	Convey("Given ReportCollector", t, func(ctx C) {
 		//knownHWM := types.InvalidGLSN
