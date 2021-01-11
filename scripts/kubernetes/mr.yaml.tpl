@@ -1,5 +1,5 @@
 kind: DaemonSet
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 metadata:
   name: varlog-mr
   namespace: default
@@ -30,12 +30,14 @@ spec:
         - name: TZ
           value: Asia/Seoul
         - name: VMS_ADDRESS
-          value: '{{VMS_ADDRESS}}:9090'
+          value: '$(VARLOG_VMS_SERVICE_SERVICE_HOST):$(VARLOG_VMS_SERVICE_SERVICE_PORT)'
         - name: VMR_HOME
           value: '{{VMR_HOME}}'
         volumeMounts:
         - name: varlog-mr-home
           mountPath: {{VMR_HOME}}
+        - name: COLLECTOR_ENDPOINT
+          value: "http://$(JAEGER_COLLECTOR_SERVICE_HOST):$(JAEGER_COLLECTOR_SERVICE_PORT)/api/traces"
         readinessProbe:
           tcpSocket:
             port: 9092

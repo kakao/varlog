@@ -24,9 +24,9 @@ spec:
         - name: TZ
           value: Asia/Seoul
         - name: MR_ADDRESS
-          value: "{{MR_ADDRESS}}:9092"
+          value: "$(VARLOG_MR_SERVICE_SERVICE_HOST):$(VARLOG_MR_SERVICE_SERVICE_PORT)"
         - name: COLLECTOR_ENDPOINT
-          value: "{{JAEGER_ADDRESS}}"
+          value: "http://$(JAEGER_COLLECTOR_SERVICE_HOST):$(JAEGER_COLLECTOR_SERVICE_PORT)/api/traces"
       dnsPolicy: None
       dnsConfig:
         nameservers:

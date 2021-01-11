@@ -1,5 +1,5 @@
 kind: DaemonSet
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 metadata:
   name: varlog-sn
   namespace: default
@@ -30,9 +30,11 @@ spec:
         - name: TZ
           value: Asia/Seoul
         - name: VMS_ADDRESS
-          value: '{{VMS_ADDRESS}}:9090'
+          value: '$(VARLOG_VMS_SERVICE_SERVICE_HOST):$(VARLOG_VMS_SERVICE_SERVICE_PORT)'
         - name: VSN_HOME
           value: '{{VSN_HOME}}'
+        - name: COLLECTOR_ENDPOINT
+          value: "http://$(JAEGER_COLLECTOR_SERVICE_HOST):$(JAEGER_COLLECTOR_SERVICE_PORT)/api/traces"
         volumeMounts:
         - name: varlog-sn-home
           mountPath: {{VSN_HOME}}

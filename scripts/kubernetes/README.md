@@ -5,6 +5,26 @@
 # kubernetes settging
 Varlog 클러스터 생성
 
+## Telemetry
+
+### Jaeger
+
+Jaeger service 와 deployment 를 배포
+
+```
+$ kubectl apply -f jaeger.yaml
+```
+
+Jaeger service 를 외부에 노출
+
+```
+$ kubectl apply -f jaeger-vip-service.yaml
+```
+
+### Prometheus
+
+### Open telemetry
+
 ## metadata repository service 생성
 metadata repository cluster 접근을 위한 service 생성
 
@@ -15,21 +35,6 @@ kubectl apply -f mr-service.yaml
 kubectl get svc
 ```
 
-## vms 생성
-vms deployment 생성
-
-```
-DOCKER_TAG=`docker images | grep varlog-vms | head -n1 | tail -n1 | awk '{print $2}'`
-MR_ADDRESS=`kubectl get svc | grep varlog-mr-service | awk '{print $3}'`
-
-cat vms.yaml.tpl | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" | sed "s/{{MR_ADDRESS}}/${MR_ADDRESS}/g" > vms.yaml
-
-kubectl apply -f vms.yaml
-
-# deployment 생성 확인
-kubectl get deployment
-```
-
 ## vms service 생성
 vms 접근을 위한 service 생성
 
@@ -38,6 +43,20 @@ kubectl apply -f vms-service.yaml
 
 # svc 생성 확인
 kubectl get svc
+```
+
+## vms 생성
+vms deployment 생성
+
+```
+DOCKER_TAG=`docker images | grep varlog-vms | head -n1 | tail -n1 | awk '{print $2}'`
+
+cat vms.yaml.tpl | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" > vms.yaml
+
+kubectl apply -f vms.yaml
+
+# deployment 생성 확인
+kubectl get deployment
 ```
 
 ## service를 cluster 외부로 노출
@@ -75,10 +94,9 @@ kubectl get nodes --show-labels
 yaml 생성 및 적용
 ```
 DOCKER_TAG=`docker images | grep varlog-mr | head -n1 | tail -n1 | awk '{print $2}'`
-VMS_ADDRESS=`kubectl get svc | grep varlog-vms-service | awk '{print $3}'`
 VMR_HOME=$(echo /home/deploy/varlog-mr | sed 's_/_\\/_g')
 
-cat mr.yaml.tpl | sed "s/{{VMR_HOME}}/${VMR_HOME}/g" | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" | sed "s/{{VMS_ADDRESS}}/${VMS_ADDRESS}/g" > mr.yaml
+cat mr.yaml.tpl | sed "s/{{VMR_HOME}}/${VMR_HOME}/g" | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" > mr.yaml
 
 kubectl apply -f mr.yaml
 
@@ -111,10 +129,9 @@ kubectl get nodes --show-labels
 yaml 생성 및 적용
 ```
 DOCKER_TAG=`docker images | grep varlog-sn | head -n1 | tail -n1 | awk '{print $2}'`
-VMS_ADDRESS=`kubectl get svc | grep varlog-vms-service | awk '{print $3}'`
 VSN_HOME=$(echo /home/deploy/varlog-sn | sed 's_/_\\/_g')
 
-cat sn.yaml.tpl | sed "s/{{VSN_HOME}}/${VSN_HOME}/g" | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" | sed "s/{{VMS_ADDRESS}}/${VMS_ADDRESS}/g" > sn.yaml
+cat sn.yaml.tpl | sed "s/{{VSN_HOME}}/${VSN_HOME}/g" | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" > sn.yaml
 
 kubectl apply -f sn.yaml
 
