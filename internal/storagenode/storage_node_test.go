@@ -310,16 +310,21 @@ func TestSync(t *testing.T) {
 			So(syncStatus.GetState(), ShouldEqual, snpb.SyncStateInProgress)
 
 			// wait for changing syncstate
+			var lastStatus *snpb.SyncStatus
 			testutil.CompareWait(func() bool {
 				status, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
 				c.So(err, ShouldBeNil)
+				lastStatus = status
 				return status.GetState() != snpb.SyncStateInProgress
 			}, time.Minute)
 
 			// eventually, it fails
-			syncStatus, err = oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
-			So(err, ShouldBeNil)
-			So(syncStatus.GetState(), ShouldEqual, snpb.SyncStateError)
+			So(lastStatus.GetState(), ShouldEqual, snpb.SyncStateError)
+			/*
+				syncStatus, err = oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+				So(err, ShouldBeNil)
+				So(syncStatus.GetState(), ShouldEqual, snpb.SyncStateError)
+			*/
 		})
 
 		// ERROR: newSN (NOT SEALED) ---> oldSN
