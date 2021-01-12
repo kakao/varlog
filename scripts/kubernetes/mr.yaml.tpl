@@ -33,11 +33,13 @@ spec:
           value: '$(VARLOG_VMS_SERVICE_SERVICE_HOST):$(VARLOG_VMS_SERVICE_SERVICE_PORT)'
         - name: VMR_HOME
           value: '{{VMR_HOME}}'
+        - name: COLLECTOR_NAME
+          value: "otel"
+        - name: COLLECTOR_ENDPOINT
+          value: "localhost:55680"
         volumeMounts:
         - name: varlog-mr-home
           mountPath: {{VMR_HOME}}
-        - name: COLLECTOR_ENDPOINT
-          value: "http://$(JAEGER_COLLECTOR_SERVICE_HOST):$(JAEGER_COLLECTOR_SERVICE_PORT)/api/traces"
         readinessProbe:
           tcpSocket:
             port: 9092

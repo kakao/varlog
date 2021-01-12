@@ -115,6 +115,27 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		},
 	}
 
+	startCmd.Flags = append(startCmd.Flags, initTelemetryFlags(&options.TelemetryOptions)...)
+
 	app.Commands = append(app.Commands, startCmd)
 	return app
+}
+
+func initTelemetryFlags(options *metadata_repository.TelemetryOptions) []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:        "collector-name",
+			Value:       metadata_repository.DefaultTelemetryCollectorName,
+			Usage:       "Collector name",
+			EnvVars:     []string{"COLLECTOR_NAME"},
+			Destination: &options.CollectorName,
+		},
+		&cli.StringFlag{
+			Name:        "collector-endpoint",
+			Value:       metadata_repository.DefaultTelmetryCollectorEndpoint,
+			Usage:       "Collector endpoint",
+			EnvVars:     []string{"COLLECTOR_ENDPOINT"},
+			Destination: &options.CollectorEndpoint,
+		},
+	}
 }

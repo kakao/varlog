@@ -33,8 +33,10 @@ spec:
           value: '$(VARLOG_VMS_SERVICE_SERVICE_HOST):$(VARLOG_VMS_SERVICE_SERVICE_PORT)'
         - name: VSN_HOME
           value: '{{VSN_HOME}}'
+        - name: COLLECTOR_NAME
+          value: "otel"
         - name: COLLECTOR_ENDPOINT
-          value: "http://$(JAEGER_COLLECTOR_SERVICE_HOST):$(JAEGER_COLLECTOR_SERVICE_PORT)/api/traces"
+          value: "localhost:55680"
         volumeMounts:
         - name: varlog-sn-home
           mountPath: {{VSN_HOME}}

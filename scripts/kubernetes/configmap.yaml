@@ -6,4 +6,5 @@ metadata:
 data:
   9090: "default/varlog-vms-service:9090"
   9092: "default/varlog-mr-service:9092"
+  9090: "default/prometheus-service:9090"
   16686: "default/jaeger-ui:16686"
