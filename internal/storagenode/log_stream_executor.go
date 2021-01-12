@@ -77,6 +77,19 @@ type SyncTaskStatus struct {
 	mu      sync.RWMutex
 }
 
+func (sts *SyncTaskStatus) copy() *SyncTaskStatus {
+	sts.mu.RLock()
+	defer sts.mu.RUnlock()
+	return &SyncTaskStatus{
+		Replica: sts.Replica,
+		State:   sts.State,
+		First:   sts.First,
+		Last:    sts.Last,
+		Current: sts.Current,
+		Err:     sts.Err,
+	}
+}
+
 type Syncer interface {
 	Sync(ctx context.Context, replica Replica, lastGLSN types.GLSN) (*SyncTaskStatus, error)
 	SyncReplicate(ctx context.Context, first, last, current snpb.SyncPosition, data []byte) error
@@ -1045,6 +1058,10 @@ func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLS
 	if sts, ok := lse.syncTracker[replica.StorageNodeID]; ok {
 		sts.mu.RLock()
 		defer sts.mu.RUnlock()
+		// FIXME (jun): Deleting sync history this point is not good.
+		if sts.Err != nil {
+			delete(lse.syncTracker, replica.StorageNodeID)
+		}
 		return &SyncTaskStatus{
 			Replica: sts.Replica,
 			State:   sts.State,
@@ -1084,7 +1101,7 @@ func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLS
 		delete(lse.syncTracker, replica.StorageNodeID)
 	}
 
-	return sts, nil
+	return sts.copy(), nil
 }
 
 func (lse *logStreamExecutor) syncer(ctx context.Context, sts *SyncTaskStatus) func(context.Context) {

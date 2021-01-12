@@ -238,5 +238,12 @@ func (r *replicator) SyncReplicate(ctx context.Context, replica Replica, first, 
 	if err != nil {
 		return err
 	}
-	return rc.SyncReplicate(ctx, r.logStreamID, first, last, current, data)
+	if err := rc.SyncReplicate(ctx, r.logStreamID, first, last, current, data); err != nil {
+		r.mtxRcm.Lock()
+		rc.Close()
+		delete(r.rcm, rc.PeerStorageNodeID())
+		r.mtxRcm.Unlock()
+		return err
+	}
+	return nil
 }

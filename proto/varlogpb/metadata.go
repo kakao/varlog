@@ -284,3 +284,13 @@ func (m *MetadataDescriptor) GetLogStream(id types.LogStreamID) *LogStreamDescri
 
 	return nil
 }
+
+func (snmd *StorageNodeMetadataDescriptor) GetLogStream(logStreamID types.LogStreamID) (LogStreamMetadataDescriptor, bool) {
+	logStreams := snmd.GetLogStreams()
+	for i := range logStreams {
+		if logStreams[i].GetLogStreamID() == logStreamID {
+			return logStreams[i], true
+		}
+	}
+	return LogStreamMetadataDescriptor{}, false
+}
