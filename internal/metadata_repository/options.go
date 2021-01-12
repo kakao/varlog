@@ -14,18 +14,20 @@ import (
 )
 
 const (
-	DefaultRPCBindAddress                     = "0.0.0.0:9092"
-	DefaultRaftPort                           = 10000
-	DefaultSnapshotCount        uint64        = 10000
-	DefaultSnapshotCatchUpCount uint64        = 10000
-	DefaultLogReplicationFactor int           = 1
-	DefaultProposeTimeout       time.Duration = 100 * time.Millisecond
-	DefaultRaftTick             time.Duration = 100 * time.Millisecond
-	DefaultRPCTimeout           time.Duration = 100 * time.Millisecond
-	DefaultCommitTick           time.Duration = 1 * time.Millisecond
-	DefaultPromoteTick          time.Duration = 100 * time.Millisecond
-	DefaultRaftDir              string        = "raftdata"
-	DefaultLogDir               string        = "log"
+	DefaultRPCBindAddress                          = "0.0.0.0:9092"
+	DefaultRaftPort                                = 10000
+	DefaultSnapshotCount             uint64        = 10000
+	DefaultSnapshotCatchUpCount      uint64        = 10000
+	DefaultLogReplicationFactor      int           = 1
+	DefaultProposeTimeout            time.Duration = 100 * time.Millisecond
+	DefaultRaftTick                  time.Duration = 100 * time.Millisecond
+	DefaultRPCTimeout                time.Duration = 100 * time.Millisecond
+	DefaultCommitTick                time.Duration = 1 * time.Millisecond
+	DefaultPromoteTick               time.Duration = 100 * time.Millisecond
+	DefaultRaftDir                   string        = "raftdata"
+	DefaultLogDir                    string        = "log"
+	DefaultTelemetryCollectorName    string        = "nop"
+	DefaultTelmetryCollectorEndpoint string        = "localhost:55680"
 
 	UnusedRequestIndex uint64 = 0
 )
