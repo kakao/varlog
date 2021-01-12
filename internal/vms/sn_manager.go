@@ -101,7 +101,9 @@ func (sm *snManager) refresh(ctx context.Context) error {
 	newCS := make(map[types.StorageNodeID]snc.StorageNodeManagementClient, len(sm.cs))
 
 	g, ctx := errgroup.WithContext(ctx)
-	for _, sndesc := range meta.GetStorageNodes() {
+	sndescList := meta.GetStorageNodes()
+	for i := range sndescList {
+		sndesc := sndescList[i]
 		storageNodeID := sndesc.GetStorageNodeID()
 		g.Go(func() error {
 			if snmcl, ok := oldCS[storageNodeID]; ok {
