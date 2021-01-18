@@ -113,6 +113,14 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 			Usage:   "Peers of cluster",
 			EnvVars: []string{"PEERS"},
 		},
+		&cli.StringFlag{
+			Name:        "debug-addr",
+			Aliases:     []string{"d"},
+			Value:       metadata_repository.DefaultDebugAddress,
+			Usage:       "Debug Address",
+			EnvVars:     []string{"DEBUG_ADDRESS"},
+			Destination: &options.DebugAddress,
+		},
 	}
 
 	startCmd.Flags = append(startCmd.Flags, initTelemetryFlags(&options.TelemetryOptions)...)
