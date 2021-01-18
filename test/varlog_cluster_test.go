@@ -88,7 +88,7 @@ func TestVarlogRegisterStorageNode(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()
@@ -213,7 +213,7 @@ func TestVarlogAppendLog(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()
@@ -256,7 +256,7 @@ func TestVarlogReplicateLog(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()
@@ -319,7 +319,7 @@ func TestVarlogSeal(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()
@@ -436,7 +436,7 @@ func TestVarlogTrimGLS(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()
@@ -501,7 +501,7 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		snID, err := env.AddSN()
@@ -577,7 +577,7 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		leader := env.Leader()
@@ -859,7 +859,7 @@ func withTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func
 		env.Start()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()
@@ -1367,7 +1367,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()
@@ -1483,7 +1483,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()
@@ -1621,7 +1621,7 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 		defer env.Close()
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return env.LeaderElected()
+			return env.HealthCheck()
 		}), ShouldBeTrue)
 
 		mr := env.GetMR()

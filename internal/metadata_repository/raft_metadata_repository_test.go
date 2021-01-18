@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -13,7 +14,9 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -223,6 +226,38 @@ func (clus *metadataRepoCluster) Close() error {
 	testutil.GC()
 
 	return err
+}
+
+func (clus *metadataRepoCluster) healthCheck(idx int) bool {
+	f := clus.nodes[idx].endpointAddr.Load()
+	if f == nil {
+		return false
+	}
+	_, port, _ := net.SplitHostPort(f.(string))
+	endpoint := fmt.Sprintf("localhost:%s", port)
+
+	conn, err := rpc.NewConn(endpoint)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	healthClient := grpc_health_v1.NewHealthClient(conn.Conn)
+	if _, err := healthClient.Check(context.Background(), &grpc_health_v1.HealthCheckRequest{}); err != nil {
+		return false
+	}
+
+	return true
+}
+
+func (clus *metadataRepoCluster) healthCheckAll() bool {
+	for i := range clus.nodes {
+		if !clus.healthCheck(i) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (clus *metadataRepoCluster) leader() int {
@@ -481,7 +516,7 @@ func TestMRGlobalCommit(t *testing.T) {
 
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		Convey("global commit", func(ctx C) {
@@ -555,7 +590,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		snID := types.StorageNodeID(0)
@@ -700,7 +735,7 @@ func TestMRRequestMap(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(50, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		mr := clus.nodes[0]
@@ -760,7 +795,7 @@ func TestMRGetLastCommitted(t *testing.T) {
 
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		Convey("getLastCommitted should return last committed GLSN", func(ctx C) {
@@ -896,7 +931,7 @@ func TestMRSeal(t *testing.T) {
 
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		Convey("Seal should commit and return last committed", func(ctx C) {
@@ -977,7 +1012,7 @@ func TestMRUnseal(t *testing.T) {
 
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		So(testutil.CompareWaitN(10, func() bool {
@@ -1046,7 +1081,7 @@ func TestMRUpdateLogStream(t *testing.T) {
 
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		mr := clus.nodes[0]
@@ -1116,7 +1151,7 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		snIDs := make([]types.StorageNodeID, nrRep)
@@ -1179,7 +1214,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		snIDs := make([]types.StorageNodeID, nrRep)
@@ -1309,7 +1344,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		leader := clus.leader()
@@ -1378,7 +1413,7 @@ func TestMRFailoverRestart(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		leader := clus.leader()
@@ -1467,7 +1502,7 @@ func TestMRLoadSnapshot(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		leader := clus.leader()
@@ -1538,7 +1573,7 @@ func TestMRRemoteSnapshot(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		leader := clus.leader()
@@ -1614,7 +1649,7 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		leader := clus.leader()
@@ -1669,7 +1704,7 @@ func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		leader := clus.leader()
@@ -1716,7 +1751,7 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		leader := clus.leader()
@@ -1771,7 +1806,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		leader := clus.leader()
@@ -1871,7 +1906,7 @@ func TestMRProposeRetry(t *testing.T) {
 		})
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		Convey("When cli register SN & transfer leader for dropping propose", func(ctx C) {
@@ -1906,7 +1941,7 @@ func TestMRScaleOutJoin(t *testing.T) {
 		})
 		clus.Start()
 		So(testutil.CompareWaitN(10, func() bool {
-			return clus.leaderElected()
+			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		So(testutil.CompareWaitN(500, func() bool {

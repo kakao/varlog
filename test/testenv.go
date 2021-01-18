@@ -12,11 +12,13 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/vms"
 	"github.com/kakao/varlog/pkg/logc"
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -233,6 +235,23 @@ func (clus *VarlogCluster) Close() error {
 	}
 
 	return err
+}
+
+func (clus *VarlogCluster) HealthCheck() bool {
+	for _, endpoint := range clus.mrRPCEndpoints {
+		conn, err := rpc.NewConn(endpoint)
+		if err != nil {
+			return false
+		}
+		defer conn.Close()
+
+		healthClient := grpc_health_v1.NewHealthClient(conn.Conn)
+		if _, err := healthClient.Check(context.Background(), &grpc_health_v1.HealthCheckRequest{}); err != nil {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (clus *VarlogCluster) Leader() int {
