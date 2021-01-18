@@ -50,6 +50,12 @@ func WithRPCAddrsFetchRetryInterval(interval time.Duration) Option {
 	}
 }
 
+func WithClusterInfoFetchInterval(interval time.Duration) Option {
+	return func(opts *options) {
+		opts.clusterInfoFetchInterval = interval
+	}
+}
+
 func WithLogger(logger *zap.Logger) Option {
 	return func(opts *options) {
 		opts.logger = logger

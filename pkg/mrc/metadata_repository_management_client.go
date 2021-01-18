@@ -3,6 +3,8 @@ package mrc
 import (
 	"context"
 
+	"github.com/pkg/errors"
+
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -43,11 +45,11 @@ func (c *metadataRepositoryManagementClient) Close() error {
 
 func (c *metadataRepositoryManagementClient) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {
 	if len(url) == 0 || nodeID == types.InvalidNodeID {
-		return verrors.ErrInvalid
+		return errors.Wrap(verrors.ErrInvalid, "mrmcl")
 	}
 
 	if nodeID != types.NewNodeIDFromURL(url) {
-		return verrors.ErrInvalid
+		return errors.Wrap(verrors.ErrInvalid, "mrmcl")
 	}
 
 	req := &mrpb.AddPeerRequest{
@@ -57,12 +59,12 @@ func (c *metadataRepositoryManagementClient) AddPeer(ctx context.Context, cluste
 	}
 
 	_, err := c.client.AddPeer(ctx, req)
-	return verrors.ToErr(ctx, err)
+	return errors.Wrap(verrors.FromStatusError(err), "mrmcl")
 }
 
 func (c *metadataRepositoryManagementClient) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
 	if nodeID == types.InvalidNodeID {
-		return verrors.ErrInvalid
+		return errors.Wrap(verrors.ErrInvalid, "mrmcl")
 	}
 
 	req := &mrpb.RemovePeerRequest{
@@ -71,7 +73,7 @@ func (c *metadataRepositoryManagementClient) RemovePeer(ctx context.Context, clu
 	}
 
 	_, err := c.client.RemovePeer(ctx, req)
-	return verrors.ToErr(ctx, err)
+	return errors.Wrap(verrors.FromStatusError(err), "mrmcl")
 }
 
 func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.GetClusterInfoResponse, error) {
@@ -80,5 +82,5 @@ func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context,
 	}
 
 	rsp, err := c.client.GetClusterInfo(ctx, req)
-	return rsp, verrors.ToErr(ctx, err)
+	return rsp, errors.Wrap(verrors.FromStatusError(err), "mrmcl")
 }

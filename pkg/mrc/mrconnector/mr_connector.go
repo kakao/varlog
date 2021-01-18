@@ -2,23 +2,22 @@ package mrconnector
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/singleflight"
-
+	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 )
 
@@ -64,7 +63,7 @@ type connector struct {
 
 func New(ctx context.Context, seedRPCAddrs []string, opts ...Option) (Connector, error) {
 	if len(seedRPCAddrs) == 0 {
-		return nil, verrors.ErrInvalid
+		return nil, errors.New("no seed address")
 	}
 
 	mrcOpts := defaultOptions
@@ -105,7 +104,7 @@ func New(ctx context.Context, seedRPCAddrs []string, opts ...Option) (Connector,
 
 	mrc.cancel, err = mrc.runner.Run(mrc.fetchAndUpdate)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "mrconnector")
 	}
 
 	return mrc, nil
@@ -177,17 +176,18 @@ func (c *connector) DelRPCAddr(nodeID types.NodeID) {
 	if proxy := c.connectedProxy(); proxy != nil && proxy.nodeID == nodeID {
 		proxy.Close()
 	}
+	c.rpcAddrs.Delete(nodeID)
 }
 
 func (c *connector) update(ctx context.Context) error {
 	mrmcl, err := c.ManagementClient()
 	if err != nil {
-		return fmt.Errorf("mrconnector: client connection error (%w)", err)
+		return errors.Wrap(err, "mrconnector")
 	}
 
 	rpcAddrs, err := getRPCAddrs(ctx, mrmcl, c.clusterID)
 	if err != nil {
-		return fmt.Errorf("mrconnector: clusterinfo fetch error (%w)", err)
+		return multierr.Append(errors.Wrap(err, "mrconnector"), mrmcl.Close())
 	}
 	if len(rpcAddrs) == 0 {
 		return errors.New("mrconnector: number of mr is zero")
@@ -208,10 +208,11 @@ func (c *connector) update(ctx context.Context) error {
 func (c *connector) fetchRPCAddrs(ctx context.Context, seedRPCAddrs []string) (rpcAddrs map[types.NodeID]string, err error) {
 	for ctx.Err() == nil {
 		for _, rpcAddr := range seedRPCAddrs {
-			rpcAddrs, err = c.connectMRAndFetchRPCAddrs(ctx, rpcAddr)
-			if err == nil && len(rpcAddrs) > 0 {
+			rpcAddrs, e := c.connectMRAndFetchRPCAddrs(ctx, rpcAddr)
+			if e == nil && len(rpcAddrs) > 0 {
 				return rpcAddrs, nil
 			}
+			err = multierr.Append(err, e)
 			time.Sleep(c.options.rpcAddrsFetchRetryInterval)
 		}
 	}
@@ -236,8 +237,27 @@ func getRPCAddrs(ctx context.Context, mrmcl mrc.MetadataRepositoryManagementClie
 	if err != nil {
 		return nil, err
 	}
-	clusterInfo := rsp.GetClusterInfo()
-	return makeRPCAddrs(clusterInfo), nil
+	members := rsp.GetClusterInfo().GetMembers()
+	addrs := make(map[types.NodeID]string, len(members))
+	var mu sync.Mutex
+	g, ctx := errgroup.WithContext(ctx)
+	for nodeID := range members {
+		nodeID := nodeID
+		g.Go(func() error {
+			ep := members[nodeID].GetEndpoint()
+			if mrc, err := mrc.NewMetadataRepositoryClient(ep); err == nil {
+				if _, err := mrc.GetMetadata(ctx); err == nil {
+					mu.Lock()
+					addrs[nodeID] = ep
+					mu.Unlock()
+				}
+				mrc.Close()
+			}
+			return nil
+		})
+	}
+	g.Wait()
+	return addrs, nil
 }
 
 func (c *connector) connectedProxy() *mrProxy {
@@ -254,9 +274,8 @@ func (c *connector) connect() (*mrProxy, error) {
 		}
 
 		var (
-			err   = errNoMR
-			mrcl  mrc.MetadataRepositoryClient
-			mrmcl mrc.MetadataRepositoryManagementClient
+			noMR  = true
+			err   error
 			proxy *mrProxy
 		)
 
@@ -264,11 +283,14 @@ func (c *connector) connect() (*mrProxy, error) {
 			if addr == "" || nodeID.(types.NodeID) == types.InvalidNodeID {
 				return true
 			}
-			mrcl, mrmcl, err = connectToMR(c.clusterID, addr.(string))
-			if err != nil {
+			noMR = false
+			mrcl, mrmcl, e := connectToMR(c.clusterID, addr.(string))
+			if e != nil {
 				c.logger.Debug("could not connect to MR", zap.Error(err), zap.Any("node_id", nodeID), zap.Any("addr", addr))
+				err = multierr.Append(err, e)
 				return true
 			}
+			err = nil
 			proxy = &mrProxy{
 				cl:     mrcl,
 				mcl:    mrmcl,
@@ -279,6 +301,9 @@ func (c *connector) connect() (*mrProxy, error) {
 			c.connectedMRProxy.Store(proxy)
 			return false
 		})
+		if noMR {
+			return proxy, errors.New("mrconnector: no accessible metadata repository")
+		}
 		return proxy, err
 	})
 	return proxy.(*mrProxy), err

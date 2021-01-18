@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -21,16 +22,15 @@ func NewConn(address string) (*Conn, error) {
 	// and etc.
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithTimeout(defaultConnTimeout), grpc.WithBlock())
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "rpc: %s", address)
 	}
 	return &Conn{Conn: conn}, nil
 }
 
-func (c *Conn) Close() error {
-	var err error
+func (c *Conn) Close() (err error) {
 	if c.Conn != nil {
 		c.once.Do(func() {
-			err = c.Conn.Close()
+			err = errors.Wrap(c.Conn.Close(), "rpc")
 			c.Conn = nil
 		})
 	}
