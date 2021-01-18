@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
@@ -45,7 +47,7 @@ func newMetadataRefresher(ctx context.Context, connector mrconnector.Connector, 
 		runner:            runner.New("metarefresher", logger),
 	}
 	if err := mr.refresh(ctx); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "metarefresher")
 	}
 
 	mctx, cancel := mr.runner.WithManagedCancel(context.Background())
@@ -89,14 +91,13 @@ func (mr *metadataRefresher) refresh(ctx context.Context) error {
 	// TODO (jun): Use ClusterMetadataView
 	client, err := mr.connector.Client()
 	if err != nil {
-		return nil
+		// TODO (jun): check if this is safe fix
+		return err
 	}
+	// TODO (jun): check if it needs retry? am I torching mr?
 	clusmeta, err := client.GetMetadata(ctx)
 	if err != nil {
-		if err := client.Close(); err != nil {
-			mr.logger.Warn("error while closing mr client", zap.Error(err))
-		}
-		return err
+		return multierr.Append(err, client.Close())
 	}
 
 	if clusmeta.Equal(mr.metadata.Load()) {

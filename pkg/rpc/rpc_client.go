@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-const defaultConnTimeout = 100 * time.Millisecond
+const defaultConnTimeout = 3000 * time.Millisecond
 
 type Conn struct {
 	Conn *grpc.ClientConn

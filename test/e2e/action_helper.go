@@ -2,10 +2,13 @@ package e2e
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"math/rand"
 
+	"github.com/pkg/errors"
+
 	"github.com/kakao/varlog/pkg/mrc"
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
 )
@@ -32,11 +35,15 @@ func anySNFail(k8s *K8sVarlogCluster, primary bool) error {
 	}
 
 	idx := rand.Intn(len(lsdescs))
+	lsdesc := lsdescs[idx]
+	var snID types.StorageNodeID
 	if primary {
-		return k8s.StopSN(lsdescs[idx].Replicas[0].StorageNodeID)
+		snID = lsdesc.GetReplicas()[0].GetStorageNodeID()
 	} else {
-		return k8s.StopSN(lsdescs[idx].Replicas[len(lsdescs[idx].Replicas)-1].StorageNodeID)
+		snID = lsdesc.Replicas[len(lsdesc.GetReplicas())-1].GetStorageNodeID()
 	}
+	fmt.Printf("SNFAIL: snid=%d, lsid=%d\n", snID, lsdesc.GetLogStreamID())
+	return k8s.StopSN(snID)
 }
 
 func AnyBackupSNFail(k8s *K8sVarlogCluster) func() error {
@@ -65,7 +72,7 @@ func WaitSNFail(k8s *K8sVarlogCluster) func() error {
 			return nil
 		}
 
-		return errors.New("chage check timeout")
+		return errors.New("change check timeout")
 	}
 }
 

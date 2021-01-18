@@ -208,11 +208,11 @@ func (c *connector) update(ctx context.Context) error {
 func (c *connector) fetchRPCAddrs(ctx context.Context, seedRPCAddrs []string) (rpcAddrs map[types.NodeID]string, err error) {
 	for ctx.Err() == nil {
 		for _, rpcAddr := range seedRPCAddrs {
-			rpcAddrs, e := c.connectMRAndFetchRPCAddrs(ctx, rpcAddr)
-			if e == nil && len(rpcAddrs) > 0 {
+			rpcAddrs, errConn := c.connectMRAndFetchRPCAddrs(ctx, rpcAddr)
+			if errConn == nil && len(rpcAddrs) > 0 {
 				return rpcAddrs, nil
 			}
-			err = multierr.Append(err, e)
+			err = multierr.Append(err, errConn)
 			time.Sleep(c.options.rpcAddrsFetchRetryInterval)
 		}
 	}
@@ -233,9 +233,10 @@ func (c *connector) connectMRAndFetchRPCAddrs(ctx context.Context, rpcAddr strin
 }
 
 func getRPCAddrs(ctx context.Context, mrmcl mrc.MetadataRepositoryManagementClient, clusterID types.ClusterID) (map[types.NodeID]string, error) {
+	tick := time.Now()
 	rsp, err := mrmcl.GetClusterInfo(ctx, clusterID)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "mrconnector: elapsed=%s", time.Since(tick).String())
 	}
 	members := rsp.GetClusterInfo().GetMembers()
 	addrs := make(map[types.NodeID]string, len(members))

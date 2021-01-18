@@ -1,12 +1,13 @@
 package testutil
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/vtesting"
 )
@@ -48,15 +49,17 @@ func CompareWait1(cmp func() bool) bool {
 	return CompareWaitN(1, cmp)
 }
 
-func CompareWaitError(cmp func() (bool, error), timeout time.Duration) error {
+func CompareWaitErrorWithRetryInterval(cmp func() (bool, error), timeout time.Duration, retryInterval time.Duration) error {
 	after := time.NewTimer(timeout)
 	defer after.Stop()
 
+	numTries := 0
 	for {
 		select {
 		case <-after.C:
-			return errors.New("timeout")
+			return errors.Errorf("compare wait timeout (%s,tries=%d)", timeout.String(), numTries)
 		default:
+			numTries++
 			ok, err := cmp()
 			if err != nil {
 				return err
@@ -65,9 +68,21 @@ func CompareWaitError(cmp func() (bool, error), timeout time.Duration) error {
 			if ok {
 				return nil
 			}
-			time.Sleep(time.Millisecond)
+			time.Sleep(retryInterval)
 		}
 	}
+}
+
+func CompareWaitError(cmp func() (bool, error), timeout time.Duration) error {
+	return CompareWaitErrorWithRetryInterval(cmp, timeout, time.Millisecond)
+}
+
+func CompareWaitErrorWithRetryIntervalN(factor int64, retryInterval time.Duration, cmp func() (bool, error)) error {
+	if factor < 1 {
+		factor = 1
+	}
+
+	return CompareWaitErrorWithRetryInterval(cmp, vtesting.TimeoutUnitTimesFactor(factor), retryInterval)
 }
 
 func CompareWaitErrorN(factor int64, cmp func() (bool, error)) error {

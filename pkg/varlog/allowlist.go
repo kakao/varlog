@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -32,7 +33,7 @@ type RenewableAllowlist interface {
 }
 
 const (
-	expireDenyTTLTick = 1 * time.Second
+	expireDenyTTLTick = 10 * time.Second
 )
 
 type allowlistItem struct {
@@ -120,6 +121,7 @@ func (adl *transientAllowlist) pick() (types.LogStreamID, bool) {
 		idx := rand.Intn(l)
 		return cache[idx], true
 	}
+
 	return 0, false
 }
 
@@ -169,23 +171,24 @@ func (adl *transientAllowlist) Contains(logStreamID types.LogStreamID) bool {
 
 func (adl *transientAllowlist) Renew(metadata *varlogpb.MetadataDescriptor) {
 	lsdescs := metadata.GetLogStreams()
-	recentLSIDs := make(map[types.LogStreamID]bool, len(lsdescs))
+	recentLSIDs := set.New(len(lsdescs))
 	for _, lsdesc := range lsdescs {
-		recentLSIDs[lsdesc.GetLogStreamID()] = true
+		recentLSIDs.Add(lsdesc.GetLogStreamID())
 	}
 
 	changed := false
 
 	adl.allowlist.Range(func(logStreamID interface{}, aitem interface{}) bool {
-		if !recentLSIDs[logStreamID.(types.LogStreamID)] {
+		if !recentLSIDs.Contains(logStreamID.(types.LogStreamID)) {
 			adl.allowlist.Delete(logStreamID)
 			changed = changed || !aitem.(allowlistItem).denied
 		}
 		return true
 	})
 
+	now := time.Now()
 	for logStreamID := range recentLSIDs {
-		aitem := allowlistItem{denied: false, ts: time.Now()}
+		aitem := allowlistItem{denied: false, ts: now}
 		_, loaded := adl.allowlist.LoadOrStore(logStreamID, aitem)
 		changed = changed || !loaded
 	}

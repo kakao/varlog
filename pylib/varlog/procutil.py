@@ -1,46 +1,54 @@
+import os
+import signal
 import time
 from subprocess import PIPE
 from subprocess import Popen
 
 
-def check(name):
-    with Popen(["ps", "-cx"], stdout=PIPE) as ps:
-        with Popen(["grep", name], stdin=ps.stdout, stdout=PIPE) as grep:
+def get_pids(name):
+    pids = list()
+    with Popen(["ps", "acx"], stdout=PIPE) as ps:
+        with Popen(["grep", "-e", name], stdin=ps.stdout, stdout=PIPE) as grep:
             ps.stdout.close()
-            with Popen(["grep", "-v", "defunct"], stdin=grep.stdout,
+            with Popen(["grep", "-v", "-e", "grep", "-e", "defunct"],
+                       stdin=grep.stdout,
                        stdout=PIPE) as grepv:
                 grep.stdout.close()
                 outs, _ = grepv.communicate()
-                return grepv.returncode == 0 and len(outs) > 0
-    raise Exception(f"checking process failed: {name}")
+                if grepv.returncode != 0:
+                    return pids
+                for line in outs.splitlines():
+                    toks = line.split()
+                    pids.append(int(toks[0]))
+                return pids
+
+
+def check_liveness(name):
+    pids = get_pids(name)
+    return len(pids) > 0
 
 
 def stop(name):
-    send_signal(name, "SIGTERM")
+    send_signal_by_name(name, signal.SIGTERM)
     while True:
-        if not check(name):
+        if not check_liveness(name):
             break
         time.sleep(0.1)
 
 
 def kill(name):
-    send_signal(name, "SIGKILL")
+    send_signal_by_name(name, signal.SIGKILL)
     while True:
-        if not check(name):
+        if not check_liveness(name):
             break
         time.sleep(0.1)
 
 
-def send_signal(name, sig):
-    with Popen(["ps", "-cx"], stdout=PIPE) as ps:
-        with Popen(["grep", name], stdin=ps.stdout, stdout=PIPE) as grep:
-            ps.stdout.close()
-            with Popen(["awk", "{print $1}"], stdin=grep.stdout,
-                       stdout=PIPE) as awk:
-                grep.stdout.close()
-                with Popen(["xargs", "kill", f"-{sig}"], stdin=awk.stdout,
-                           stdout=PIPE) as xargs:
-                    awk.stdout.close()
-                    xargs.communicate()
-                    return
-    raise Exception(f"sending signal failed: {name} - {sig}")
+def send_signal_by_name(name, sig):
+    pids = get_pids(name)
+    for pid in pids:
+        send_signal(pid, sig)
+
+
+def send_signal(pid, sig):
+    os.kill(pid, sig)

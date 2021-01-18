@@ -4,8 +4,9 @@ package logc
 
 import (
 	"context"
-	"errors"
 	"io"
+
+	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -48,7 +49,7 @@ type logIOClient struct {
 func NewLogIOClient(address string) (LogIOClient, error) {
 	rpcConn, err := rpc.NewConn(address)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "log io client")
 	}
 	return NewLogIOClientFromRpcConn(rpcConn)
 }

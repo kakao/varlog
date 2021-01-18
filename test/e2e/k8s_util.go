@@ -3,20 +3,22 @@ package e2e
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
+	"time"
 
-	vtypes "github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/testutil"
-
+	"github.com/pkg/errors"
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/multierr"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+
+	vtypes "github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/testutil"
 )
 
 const (
@@ -88,19 +90,25 @@ func NewK8sVarlogCluster(opts K8sVarlogClusterOptions) (*K8sVarlogCluster, error
 }
 
 func (k8s *K8sVarlogCluster) Nodes(selector map[string]string) (*v1.NodeList, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer cancel()
 	labelSelector := labels.Set(selector)
-	return k8s.cli.
+	list, err := k8s.cli.
 		CoreV1().
 		Nodes().
-		List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector.String()})
+		List(ctx, metav1.ListOptions{LabelSelector: labelSelector.String()})
+	return list, errors.Wrap(err, "k8s")
 }
 
 func (k8s *K8sVarlogCluster) Pods(namespace string, selector map[string]string) (*v1.PodList, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer cancel()
 	labelSelector := labels.Set(selector)
-	return k8s.cli.
+	list, err := k8s.cli.
 		CoreV1().
 		Pods(namespace).
-		List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector.String()})
+		List(ctx, metav1.ListOptions{LabelSelector: labelSelector.String()})
+	return list, errors.Wrap(err, "k8s")
 }
 
 func (k8s *K8sVarlogCluster) WorkerNodes() (*v1.NodeList, error) {
@@ -112,15 +120,15 @@ func (k8s *K8sVarlogCluster) Reset() error {
 		return err
 	}
 
-	if err := testutil.CompareWaitErrorN(100, func() (bool, error) {
-		n, err := k8s.numPodsReady("default", nil)
+	var numPods int
+	if err := testutil.CompareWaitErrorN(500, func() (bool, error) {
+		numPods, err := k8s.numPodsReady("default", nil)
 		if err != nil {
-			return false, err
+			return false, errors.Wrap(err, "k8s")
 		}
-		// NOTE: 1 is jaeger
-		return n == 1, nil
+		return numPods == 0, nil
 	}); err != nil {
-		return err
+		return errors.Wrapf(err, "k8s: numPodsReady=%d", numPods)
 	}
 
 	rep := fmt.Sprintf("%d", k8s.RepFactor)
@@ -166,24 +174,28 @@ func (k8s *K8sVarlogCluster) Reset() error {
 }
 
 func (k8s *K8sVarlogCluster) VMSAddress() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer cancel()
 	s, err := k8s.cli.
 		CoreV1().
 		Services("ingress-nginx").
-		Get(context.TODO(), VMS_VIP_NAME, metav1.GetOptions{})
+		Get(ctx, VMS_VIP_NAME, metav1.GetOptions{})
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "k8s")
 	}
 
 	return fmt.Sprintf("%s:%d", s.Status.LoadBalancer.Ingress[0].IP, s.Spec.Ports[0].Port), nil
 }
 
 func (k8s *K8sVarlogCluster) MRAddress() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer cancel()
 	s, err := k8s.cli.
 		CoreV1().
 		Services("ingress-nginx").
-		Get(context.TODO(), MR_VIP_NAME, metav1.GetOptions{})
+		Get(ctx, MR_VIP_NAME, metav1.GetOptions{})
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "k8s")
 	}
 
 	return fmt.Sprintf("%s:%d", s.Status.LoadBalancer.Ingress[0].IP, s.Spec.Ports[0].Port), nil
@@ -197,11 +209,13 @@ func (k8s *K8sVarlogCluster) ReplaceLabel(node, label, value string) error {
 	}}
 	payloadBytes, _ := json.Marshal(payload)
 
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer cancel()
 	_, err := k8s.cli.
 		CoreV1().
 		Nodes().
-		Patch(context.TODO(), node, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
-	return err
+		Patch(ctx, node, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
+	return errors.Wrap(err, "k8s")
 }
 
 func (k8s *K8sVarlogCluster) AddLabel(node, label, value string) error {
@@ -212,11 +226,13 @@ func (k8s *K8sVarlogCluster) AddLabel(node, label, value string) error {
 	}}
 	payloadBytes, _ := json.Marshal(payload)
 
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer cancel()
 	_, err := k8s.cli.
 		CoreV1().
 		Nodes().
-		Patch(context.TODO(), node, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
-	return err
+		Patch(ctx, node, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
+	return errors.Wrap(err, "k8s")
 }
 
 func (k8s *K8sVarlogCluster) RemoveLabel(node, label string) error {
@@ -226,20 +242,24 @@ func (k8s *K8sVarlogCluster) RemoveLabel(node, label string) error {
 	}}
 	payloadBytes, _ := json.Marshal(payload)
 
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer cancel()
 	_, err := k8s.cli.
 		CoreV1().
 		Nodes().
-		Patch(context.TODO(), node, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
-	return err
+		Patch(ctx, node, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
+	return errors.Wrap(err, "k8s")
 }
 
 func (k8s *K8sVarlogCluster) ScaleReplicaSet(replicasetName string, scale int32) error {
+	gCtx, gCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer gCancel()
 	s, err := k8s.cli.
 		AppsV1().
 		Deployments("default").
-		GetScale(context.TODO(), replicasetName, metav1.GetOptions{})
+		GetScale(gCtx, replicasetName, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "k8s")
 	}
 
 	sc := *s
@@ -249,25 +269,24 @@ func (k8s *K8sVarlogCluster) ScaleReplicaSet(replicasetName string, scale int32)
 
 	sc.Spec.Replicas = scale
 
+	uCtx, uCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer uCancel()
 	_, err = k8s.cli.
 		AppsV1().
 		Deployments("default").
-		UpdateScale(context.TODO(),
-			replicasetName, &sc, metav1.UpdateOptions{})
-	if err != nil {
-		return err
-	}
-
-	return nil
+		UpdateScale(uCtx, replicasetName, &sc, metav1.UpdateOptions{})
+	return errors.Wrap(err, "k8s")
 }
 
 func (k8s *K8sVarlogCluster) ReplaceEnvToDeployment(deployment, name, value string) error {
+	gCtx, gCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer gCancel()
 	d, err := k8s.cli.
 		AppsV1().
 		Deployments("default").
-		Get(context.TODO(), deployment, metav1.GetOptions{})
+		Get(gCtx, deployment, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "k8s")
 	}
 
 	exist := false
@@ -289,21 +308,25 @@ func (k8s *K8sVarlogCluster) ReplaceEnvToDeployment(deployment, name, value stri
 			append(d.Spec.Template.Spec.Containers[0].Env, env)
 	}
 
+	uCtx, uCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer uCancel()
 	_, err = k8s.cli.
 		AppsV1().
 		Deployments("default").
-		Update(context.TODO(), d, metav1.UpdateOptions{})
+		Update(uCtx, d, metav1.UpdateOptions{})
 
-	return err
+	return errors.Wrap(err, "k8s")
 }
 
 func (k8s *K8sVarlogCluster) ReplaceEnvToDaemonset(daemonset, name, value string) error {
+	gCtx, gCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer gCancel()
 	d, err := k8s.cli.
 		AppsV1().
 		DaemonSets("default").
-		Get(context.TODO(), daemonset, metav1.GetOptions{})
+		Get(gCtx, daemonset, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "k8s")
 	}
 
 	exist := false
@@ -325,12 +348,14 @@ func (k8s *K8sVarlogCluster) ReplaceEnvToDaemonset(daemonset, name, value string
 			append(d.Spec.Template.Spec.Containers[0].Env, env)
 	}
 
+	uCtx, uCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	defer uCancel()
 	_, err = k8s.cli.
 		AppsV1().
 		DaemonSets("default").
-		Update(context.TODO(), d, metav1.UpdateOptions{})
+		Update(uCtx, d, metav1.UpdateOptions{})
 
-	return err
+	return errors.Wrap(err, "k8s")
 }
 
 func (k8s *K8sVarlogCluster) StopAll() error {
@@ -338,7 +363,17 @@ func (k8s *K8sVarlogCluster) StopAll() error {
 		return err
 	}
 
-	return k8s.RemoveLabelAll()
+	if err := k8s.RemoveLabelAll(); err != nil {
+		return err
+	}
+
+	return testutil.CompareWaitErrorN(300, func() (bool, error) {
+		numPods, err := k8s.numPodsReady("default", nil)
+		if err != nil {
+			return false, err
+		}
+		return numPods == 0, nil
+	})
 }
 
 func (k8s *K8sVarlogCluster) ReplaceLabelAll(label, o, n string) error {
@@ -357,7 +392,7 @@ func (k8s *K8sVarlogCluster) ReplaceLabelAll(label, o, n string) error {
 	return err
 }
 
-func (k8s *K8sVarlogCluster) RemoveLabelAll() error {
+func (k8s *K8sVarlogCluster) RemoveLabelAll() (err error) {
 	nodes, err := k8s.WorkerNodes()
 	if err != nil {
 		return err
@@ -365,9 +400,8 @@ func (k8s *K8sVarlogCluster) RemoveLabelAll() error {
 
 	for _, node := range nodes.Items {
 		if _, ok := node.Labels["type"]; ok {
-			erri := k8s.RemoveLabel(node.GetName(), "type")
-			if erri != nil {
-				err = erri
+			if erri := k8s.RemoveLabel(node.GetName(), "type"); erri != nil {
+				err = multierr.Append(err, erri)
 			}
 		}
 	}
@@ -454,11 +488,12 @@ func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
 		}
 
 		num++
-		if err := testutil.CompareWaitErrorN(200, func() (bool, error) {
-			p, err := k8s.numPodsReady("default", podSelector)
-			return p == num, err
+		numPods := 0
+		if err := testutil.CompareWaitErrorWithRetryIntervalN(1000, 10*time.Second, func() (bool, error) {
+			numPods, err := k8s.numPodsReady("default", podSelector)
+			return numPods == num, errors.Wrap(err, "k8s")
 		}); err != nil {
-			return err
+			return errors.Wrapf(err, "k8s: node=%s, numPodsReady=%d", node.GetName(), numPods)
 		}
 
 		if num == expected {
@@ -466,8 +501,8 @@ func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
 		}
 	}
 
-	if num < expected {
-		return errors.New("not enough nodes")
+	if num != expected {
+		return errors.New("too many or not enough nodes")
 	}
 
 	return nil
@@ -516,6 +551,10 @@ func (k8s *K8sVarlogCluster) numPodsReady(namespace string, labels map[string]st
 	n := 0
 
 	for _, pod := range pods.Items {
+		switch pod.Name[:4] {
+		case "prom", "jaeg", "otel":
+			continue
+		}
 		if pod.Status.Phase == "Running" {
 			for _, condition := range pod.Status.Conditions {
 				if condition.Type == "Ready" && condition.Status == "True" {
@@ -558,6 +597,9 @@ func withTestCluster(opts K8sVarlogClusterOptions, f func(k8s *K8sVarlogCluster)
 
 		if opts.Reset {
 			err = k8s.Reset()
+			if err != nil {
+				fmt.Printf("reset failed: %+v\n", err)
+			}
 			So(err, ShouldBeNil)
 		}
 
@@ -582,7 +624,7 @@ func newK8sVarlogView(podGetter K8sVarlogPodGetter) *k8sVarlogView {
 func (view *k8sVarlogView) Renew() error {
 	pods, err := view.podGetter.Pods("default", map[string]string{"app": MR_LABEL})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "k8s")
 	}
 
 	clusterID := vtypes.ClusterID(0)
@@ -603,7 +645,7 @@ func (view *k8sVarlogView) Renew() error {
 
 	pods, err = view.podGetter.Pods("default", map[string]string{"app": SN_LABEL})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "k8s")
 	}
 
 	sns := make(map[vtypes.StorageNodeID]string)

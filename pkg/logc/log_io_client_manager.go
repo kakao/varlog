@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 
@@ -76,7 +77,7 @@ func (mgr *logClientManager) GetOrConnect(storageNodeID types.StorageNodeID, add
 
 		logcl, err := NewLogIOClient(addr)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "logclmanager")
 		}
 
 		lip := newLogIOProxy(logcl)
