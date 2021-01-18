@@ -2,6 +2,7 @@ package mrc
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	pbtypes "github.com/gogo/protobuf/types"
@@ -52,14 +53,14 @@ func TestMRManagementClientAddPeer(t *testing.T) {
 		Convey("When the length of passed url is zero", func() {
 			Convey("Then the ManagementClient should return an ErrInvalid", func() {
 				err := mc.AddPeer(context.TODO(), types.ClusterID(1), types.NodeID(1), "")
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(errors.Is(err, verrors.ErrInvalid), ShouldBeTrue)
 			})
 		})
 
 		Convey("When the nodeID is invalid", func() {
 			Convey("Then the ManagementClient should return an ErrInvalid", func() {
 				err := mc.AddPeer(context.TODO(), types.ClusterID(1), types.InvalidNodeID, "http://127.0.0.1:10000")
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(errors.Is(err, verrors.ErrInvalid), ShouldBeTrue)
 			})
 		})
 
@@ -68,7 +69,7 @@ func TestMRManagementClientAddPeer(t *testing.T) {
 				url := "127.0.0.1:10000"
 				nodeID := types.NewNodeIDFromURL(url) + types.NodeID(1)
 				err := mc.AddPeer(context.TODO(), types.ClusterID(1), nodeID, url)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(errors.Is(err, verrors.ErrInvalid), ShouldBeTrue)
 			})
 		})
 
@@ -105,7 +106,7 @@ func TestMRManagementClientRemovePeer(t *testing.T) {
 		Convey("When the nodeID is invalid", func() {
 			Convey("Then the ManagementClient should return an ErrInvalid", func() {
 				err := mc.RemovePeer(context.TODO(), types.ClusterID(1), types.InvalidNodeID)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(errors.Is(err, verrors.ErrInvalid), ShouldBeTrue)
 			})
 		})
 

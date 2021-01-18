@@ -1307,7 +1307,7 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 			oldCL, err := mrc.NewMetadataRepositoryManagementClient(mrAddr)
 			So(err, ShouldBeNil)
 			_, err = oldCL.GetClusterInfo(context.TODO(), types.ClusterID(0))
-			So(err, ShouldResemble, verrors.ErrNotMember)
+			So(errors.Is(err, verrors.ErrNotMember), ShouldBeTrue)
 			So(oldCL.Close(), ShouldBeNil)
 
 			So(testutil.CompareWaitN(50, func() bool {
