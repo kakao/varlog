@@ -13,6 +13,8 @@ import (
 	"go.opentelemetry.io/otel/label"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
@@ -57,8 +59,9 @@ type StorageNode struct {
 	clusterID     types.ClusterID
 	storageNodeID types.StorageNodeID
 
-	server     *grpc.Server
-	serverAddr string
+	server       *grpc.Server
+	healthServer *health.Server
+	serverAddr   string
 
 	running   bool
 	muRunning sync.Mutex
@@ -117,6 +120,9 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 	sn.logger = sn.logger.Named(fmt.Sprintf("storagenode")).With(zap.Any("cid", sn.clusterID), zap.Any("snid", sn.storageNodeID))
 	sn.lsr = NewLogStreamReporter(sn.logger, sn.storageNodeID, sn, sn.tmStub, &options.LogStreamReporterOptions)
 	sn.server = grpc.NewServer()
+
+	sn.healthServer = health.NewServer()
+	grpc_health_v1.RegisterHealthServer(sn.server, sn.healthServer)
 
 	NewLogStreamReporterService(sn.lsr, sn.tmStub, sn.logger).Register(sn.server)
 	NewLogIOService(sn.storageNodeID, sn, sn.tmStub, sn.logger).Register(sn.server)
@@ -187,6 +193,7 @@ func (sn *StorageNode) Run() error {
 		}
 	}
 
+	sn.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 	sn.logger.Info("start")
 	return nil
 }
@@ -195,9 +202,12 @@ func (sn *StorageNode) Close() {
 	sn.muRunning.Lock()
 	defer sn.muRunning.Unlock()
 
+	sn.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+
 	if !sn.running {
 		return
 	}
+
 	sn.running = false
 
 	// LogStreamReporter

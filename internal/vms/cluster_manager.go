@@ -14,6 +14,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
@@ -91,8 +93,9 @@ const (
 )
 
 type clusterManager struct {
-	server     *grpc.Server
-	serverAddr string
+	server       *grpc.Server
+	serverAddr   string
+	healthServer *health.Server
 
 	// single large lock
 	mu sync.RWMutex
@@ -156,6 +159,8 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 	cm.snWatcher = NewStorageNodeWatcher(opts.WatcherOptions, cmView, snMgr, cm, opts.Logger)
 
 	cm.server = grpc.NewServer()
+	cm.healthServer = health.NewServer()
+	grpc_health_v1.RegisterHealthServer(cm.server, cm.healthServer)
 
 	NewClusterManagerService(cm, cm.logger).Register(cm.server)
 
@@ -201,6 +206,7 @@ func (cm *clusterManager) Run() error {
 	// SN Watcher
 	cm.snWatcher.Run()
 
+	cm.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 	cm.logger.Info("start")
 	return nil
 }
@@ -211,6 +217,8 @@ func (cm *clusterManager) Wait() {
 
 func (cm *clusterManager) Close() {
 	cm.mu.Lock()
+
+	cm.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 
 	switch cm.cmState {
 	case clusterManagerReady:

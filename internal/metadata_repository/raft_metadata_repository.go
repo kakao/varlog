@@ -11,6 +11,8 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/types"
@@ -69,6 +71,7 @@ type RaftMetadataRepository struct {
 	cancel context.CancelFunc
 
 	server       *grpc.Server
+	healthServer *health.Server
 	endpointAddr atomic.Value
 
 	// membership
@@ -142,6 +145,8 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		mr.logger.Named("report"))
 
 	mr.server = grpc.NewServer()
+	mr.healthServer = health.NewServer()
+	grpc_health_v1.RegisterHealthServer(mr.server, mr.healthServer)
 	NewMetadataRepositoryService(mr).Register(mr.server)
 	NewManagementService(mr).Register(mr.server)
 
@@ -199,11 +204,14 @@ func (mr *RaftMetadataRepository) Run() {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 
+	mr.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 	mr.logger.Info("starting metadata repository")
 }
 
 //TODO:: handle pendding msg
 func (mr *RaftMetadataRepository) Close() error {
+	mr.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+
 	defer mr.sw.Stop()
 
 	mr.reportCollector.Close()
