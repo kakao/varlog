@@ -1,2 +1,7 @@
 .git
+
 build/
+
+# python
+__pycache__
+*.pyc

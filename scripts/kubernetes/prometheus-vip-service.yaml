@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: jaeger-ui-vip
+  name: prometheus-ui-vip
   namespace: ingress-nginx
   annotations:
     service.beta.kubernetes.io/openstack-internal-load-balancer: 'true'
@@ -11,5 +11,5 @@ spec:
     app.kubernetes.io/name: ingress-nginx
   type: LoadBalancer
   ports:
-    - name: jaeger-ui
-      port: 16686
+    - name: prometheus-ui
+      port: 9090

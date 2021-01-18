@@ -1,11 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: varlog-mr-service
+  name: varlog-mr-rpc
 spec:
   selector:
     app: varlog-mr
   ports:
-    - protocol: TCP
+    - name: rpc
       port: 9092
-      targetPort: 9092

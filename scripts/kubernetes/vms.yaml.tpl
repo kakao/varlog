@@ -1,4 +1,3 @@
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,27 +15,43 @@ spec:
         app: varlog-vms
     spec:
       containers:
-      - name: varlog-vms
-        image: idock.daumkakao.io/varlog/varlog-vms:{{DOCKER_TAG}}
-        command:
-        - "/home/deploy/docker_run.py"
-        env:
-        - name: TZ
-          value: Asia/Seoul
-        - name: MR_ADDRESS
-          value: "$(VARLOG_MR_SERVICE_SERVICE_HOST):$(VARLOG_MR_SERVICE_SERVICE_PORT)"
-        - name: COLLECTOR_ENDPOINT
-          value: "http://$(JAEGER_COLLECTOR_SERVICE_HOST):$(JAEGER_COLLECTOR_SERVICE_PORT)/api/traces"
+        - name: varlog-vms
+          image: idock.daumkakao.io/varlog/varlog-vms:{{DOCKER_TAG}}
+          resources:
+            limits:
+              cpu: '1000m'
+              memory: '1024Mi'
+            requests:
+              cpu: '500m'
+              memory: '256Mi'
+          command:
+            - 'python3'
+            - '/home/deploy/bin/vms.py'
+          env:
+            - name: TZ
+              value: Asia/Seoul
+            - name: MR_ADDRESS
+              value: '$(VARLOG_MR_RPC_SERVICE_HOST):$(VARLOG_MR_RPC_SERVICE_PORT)'
+            - name: COLLECTOR_NAME
+              value: 'otel'
+            - name: COLLECTOR_ENDPOINT
+              value: 'localhost:55680'
+          ports:
+            - name: rpc
+              containerPort: 9093
+          readinessProbe:
+            tcpSocket:
+              port: 9093
       dnsPolicy: None
       dnsConfig:
         nameservers:
-        - 10.20.30.40
+          - 10.20.30.40
         searches:
-        - dakao.io
-        - krane.iwilab.com
+          - dakao.io
+          - krane.iwilab.com
         options:
-        - name: timeout
-          value: '1'
-        - name: attempts
-          value: '2'
-        - name: rotate
+          - name: timeout
+            value: '1'
+          - name: attempts
+            value: '2'
+          - name: rotate

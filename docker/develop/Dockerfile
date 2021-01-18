@@ -1,4 +1,4 @@
-FROM mdock.daumkakao.io/ubuntu:16.04
+FROM mdock.daumkakao.io/ubuntu:20.04
 ENV DEBIAN_FRONTEND noninteractive
 
 ARG GO_VERSION
@@ -16,6 +16,7 @@ RUN sed 's/archive.ubuntu.com/ftp.daum.net/g' -i /etc/apt/sources.list   && \
     apt-get install -y make                                              && \
     apt-get install -y wget                                              && \
     apt-get install -y python                                            && \
+    apt-get install -y python3                                           && \
     apt-get install -y git                                               && \
     echo '/usr/local/lib'       >> /etc/ld.so.conf                       && \
     echo 'deploy ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers

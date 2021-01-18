@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
@@ -111,7 +112,7 @@ func (cc *confChanger) Err() error {
 		return nil
 	}
 
-	return fmt.Errorf("conf change fail. desc = %s", cc.err.Error())
+	return errors.Wrap(cc.err, "conf change")
 }
 
 func (cc *confChanger) Close() {
@@ -122,7 +123,7 @@ func (cc *confChanger) setErr(err error) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
-	fmt.Printf("Conf Change Complete. err = %v\n", err)
+	fmt.Printf("Conf Change Complete. err = %+v\n", err)
 	cc.err = err
 	close(cc.done)
 }

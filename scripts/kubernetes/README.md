@@ -3,7 +3,8 @@
 - Date: 
 
 # kubernetes settging
-Varlog 클러스터 생성
+
+[toc]
 
 ## Telemetry
 
@@ -11,19 +12,13 @@ Varlog 클러스터 생성
 
 Jaeger service 와 deployment 를 배포
 
-```
-$ kubectl apply -f jaeger.yaml
-```
-
-Jaeger service 를 외부에 노출
-
-```
-$ kubectl apply -f jaeger-vip-service.yaml
+```shell
+kubectl apply -f jaeger.yaml
 ```
 
 ### Prometheus
 
-```
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -48,7 +43,7 @@ data:
 ```
 Prometheus Config를 ConfigMap에 등록한다. otel-collector로 부터 수집하도록 한다.
 
-```
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -92,7 +87,7 @@ spec:
 Prometheus는 deployment로 수행되며 ConfigMap을 mount하여 config file을 갖는다. 
 추후 prometheus storage volume은 설정해준다.
 
-```
+```yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -129,13 +124,13 @@ spec:
 Service를 생성하고 tcp-service를 통해 외부에 노출한다.
 
 
-```
+```shell
 $ kubectl apply -f prometheus.yaml
 ```
 
 ### Open telemetry
 
-```
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -192,7 +187,7 @@ OpenTelemetry Collector 설정
 ConfigMap의 config를 통해 deployment를 생성하고 agent가 접근할 수 있도록 service를 생성한다.
 
 
-```
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -244,7 +239,7 @@ OpenTelemetry agent 설정
 - trace와 metric 모두 otlp pipeline 정의
 
 
-```
+```yaml
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -295,31 +290,34 @@ agent는 daemonset으로 설정한다. 같은 노드의 다른 pod 에서 접근
 hostNetwork의 경우, dnsPolicy를 ClusterFirstWithHostNet 로 해야만 service를 찾을 수 있다.
 
 
-```
+```shell
 kubectl apply -f otelcol.yaml
 ```
 
-## metadata repository service 생성
+## Varlog
+
+### Services
+
 metadata repository cluster 접근을 위한 service 생성
 
-```
+```shell
 kubectl apply -f mr-service.yaml
 
 # service 생성 확인
 kubectl get svc
 ```
 
-## vms service 생성
 vms 접근을 위한 service 생성
 
-```
+```shell
 kubectl apply -f vms-service.yaml
 
 # svc 생성 확인
 kubectl get svc
 ```
 
-## vms 생성
+### Management Server
+
 vms deployment 생성
 
 ```
@@ -333,40 +331,21 @@ kubectl apply -f vms.yaml
 kubectl get deployment
 ```
 
-## service를 cluster 외부로 노출
-tcp-services를 통해 vms service와 mr service를 cluster 외부로 노출한다
-(참고: https://wiki.daumkakao.com/pages/viewpage.action?pageId=649250876)
+### Metadata Repository
 
-mr의 노드는 host network를 사용하지만, 외부의 client가 mr node list를 알기 위해 
-vip가 필요하다.
-
-```
-# ingress-nginx namespace의 "tcp-services" configmap 수정
-kubectl apply -f configmap.yaml
-
-# vms vip service 생성
-kubectl apply -f vms-vip-service.yaml
-
-# mr vip service 생성
-kubectl apply -f mr-vip-service.yaml
-
-# vip svc 생성 확인
-kubectl get svc -n ingress-nginx
-```
-EXTERNAL-IP 생성될때 시간이 좀 걸린다
-
-## metadata repository 생성
 metadata repository daemonset 생성
 
 metadata repository로 쓰일 노드에 label을 추가한다
-```
+
+```shell
 kubectl label nodes <node-name> type=varlog-mr
 
 kubectl get nodes --show-labels
 ```
 
 yaml 생성 및 적용
-```
+
+```shell
 DOCKER_TAG=`docker images | grep varlog-mr | head -n1 | tail -n1 | awk '{print $2}'`
 VMR_HOME=$(echo /home/deploy/varlog-mr | sed 's_/_\\/_g')
 
@@ -379,7 +358,8 @@ kubectl get daemonset
 ```
 
 metadata repository 생성 확인
-```
+
+```shell
 ./build/vmc mr info
 {
   "leader": "777533920413483008",
@@ -390,18 +370,19 @@ metadata repository 생성 확인
 }
 ```
 
-## storagenode 생성
+### Storage Node
+
 storagenode daemonset 생성
 
 metadata repository로 쓰일 노드에 label을 추가한다
-```
+```sh
 kubectl label nodes <node-name> type=varlog-sn
 
 kubectl get nodes --show-labels
 ```
 
 yaml 생성 및 적용
-```
+```shell
 DOCKER_TAG=`docker images | grep varlog-sn | head -n1 | tail -n1 | awk '{print $2}'`
 VSN_HOME=$(echo /home/deploy/varlog-sn | sed 's_/_\\/_g')
 
@@ -416,7 +397,7 @@ storagenode도 마찬가지로 host network를 사용한다.
 그러므로 외부 노출을 위한 tcp-services는 필요가 없다.
 
 storagenode 생성 확인
-```
+```shell
 ./build/vmc meta sn
 {
   "storagenodes": {
@@ -424,3 +405,31 @@ storagenode 생성 확인
   }
 }
 ```
+
+## Ingress-nginx
+
+NGINX Ingress Controller (https://kubernetes.github.io/ingress-nginx/) 
+
+Kakao wiki (https://wiki.daumkakao.com/pages/viewpage.action?pageId=649250876)
+
+외부에 노출할 TCP 서비스를 ConfigMap 으로 제공한다. (https://kubernetes.github.io/ingress-nginx/user-guide/exposing-tcp-udp-services/)
+
+```sh
+kubectl apply -f ingress-nginx-configmap.yaml
+```
+
+LoadBalancer 설정 (https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer)
+
+```shell
+kubectl apply -f jaeger-vip-service.yaml
+kubectl apply -f prometheus-vip-service.yaml
+kubectl apply -f vms-vip-service.yaml
+kubectl apply -f mr-vip-service.yaml
+```
+
+## 참고
+
+서비스 디스커버 (환경 변수 & DNS)
+
+https://kubernetes.io/docs/concepts/services-networking/service/#discovering-services
+

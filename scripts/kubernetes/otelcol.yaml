@@ -13,13 +13,13 @@ data:
       otlp:
         protocols:
           grpc:
-            endpoint: "0.0.0.0:55680"
+            endpoint: '0.0.0.0:55680'
 
     exporters:
       logging:
         loglevel: debug
       otlp:
-        endpoint: "otel-collector.default:55680"
+        endpoint: 'otel-collector.default:55680'
         insecure: true
 
     processors:
@@ -64,11 +64,10 @@ spec:
     spec:
       containers:
       - command:
-          - "/otelcol"
-          - "--config=/conf/otel-agent-config.yaml"
+          - '/otelcol'
+          - '--config=/conf/otel-agent-config.yaml'
         image: mdock.daumkakao.io/otel/opentelemetry-collector-dev:latest
         name: otel-agent
-        resources:
         volumeMounts:
         - name: otel-agent-config-vol
           mountPath: /conf
@@ -103,7 +102,7 @@ data:
       otlp:
         protocols:
           grpc:
-            endpoint: "0.0.0.0:55680"
+            endpoint: '0.0.0.0:55680'
 
     processors:
       batch:
@@ -119,11 +118,11 @@ data:
       logging:
         loglevel: debug
       jaeger:
-        endpoint: "jaeger-collector.default:14268"
+        endpoint: 'jaeger-collector.default:14268'
         insecure: true
       prometheus:
-        endpoint: "0.0.0.0:8889"
-        namespace: "varlog"
+        endpoint: '0.0.0.0:8889'
+        namespace: 'varlog'
 
     service:
       pipelines:
@@ -189,8 +188,8 @@ spec:
     spec:
       containers:
       - command:
-          - "/otelcol"
-          - "--config=/conf/otel-collector-config.yaml"
+          - '/otelcol'
+          - '--config=/conf/otel-collector-config.yaml'
         image: mdock.daumkakao.io/otel/opentelemetry-collector-dev:latest
         name: otel-collector
         ports:

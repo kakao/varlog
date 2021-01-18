@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
@@ -61,12 +63,15 @@ func (act *action) Do(ctx context.Context) error {
 	for i := 0; i < act.nrCli; i++ {
 		wg.Add(1)
 		if err := act.runner.RunC(mctx, func(rctx context.Context) {
-			vcli, err := varlog.Open(act.clusterID, []string{act.mrAddr}, varlog.WithDenyTTL(5*time.Second))
+			vcli, err := varlog.Open(act.clusterID, []string{act.mrAddr},
+				varlog.WithDenyTTL(5*time.Second),
+				varlog.WithOpenTimeout(10*time.Second),
+			)
 			wg.Done()
 
 			if err != nil {
 				select {
-				case errC <- fmt.Errorf("open fail. desc = %s", err.Error()):
+				case errC <- errors.Wrap(err, "open"):
 				default:
 				}
 				return
@@ -78,10 +83,10 @@ func (act *action) Do(ctx context.Context) error {
 				case <-rctx.Done():
 					return
 				default:
-					glsn, err := vcli.Append(rctx, []byte("foo"))
+					glsn, err := vcli.Append(rctx, []byte("foo"), varlog.WithRetryCount(5))
 					if err != nil {
 						select {
-						case errC <- fmt.Errorf("append fail. desc = %s", err.Error()):
+						case errC <- errors.Wrap(err, "append"):
 						default:
 						}
 						return

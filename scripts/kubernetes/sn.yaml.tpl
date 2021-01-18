@@ -21,22 +21,30 @@ spec:
         hostPath:
           path: {{VSN_HOME}}
           type: DirectoryOrCreate
+      initContainers:
+      - name: volume-perm
+        image: mdock.daumkakao.io/busybox
+        command: ['sh', '-c', 'chmod -R 777 {{VSN_HOME}}']
+        volumeMounts:
+        - name: varlog-sn-home
+          mountPath: {{VSN_HOME}}
       containers:
       - name: varlog-sn
         image: idock.daumkakao.io/varlog/varlog-sn:{{DOCKER_TAG}}
         command:
-        - "/home/deploy/docker_run.py"
+        - 'python3'
+        - '/home/deploy/bin/vsn.py'
         env:
         - name: TZ
           value: Asia/Seoul
         - name: VMS_ADDRESS
-          value: '$(VARLOG_VMS_SERVICE_SERVICE_HOST):$(VARLOG_VMS_SERVICE_SERVICE_PORT)'
+          value: '$(VARLOG_VMS_RPC_SERVICE_HOST):$(VARLOG_VMS_RPC_SERVICE_PORT)'
         - name: VSN_HOME
           value: '{{VSN_HOME}}'
         - name: COLLECTOR_NAME
-          value: "otel"
+          value: 'otel'
         - name: COLLECTOR_ENDPOINT
-          value: "localhost:55680"
+          value: 'localhost:55680'
         volumeMounts:
         - name: varlog-sn-home
           mountPath: {{VSN_HOME}}

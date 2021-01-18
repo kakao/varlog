@@ -1,13 +1,14 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import grp
 import json
 import os
+import pwd
 import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from random import randint
 
@@ -19,20 +20,22 @@ if os.path.isdir(pylib):  # noqa
 
 from varlog.killer import Killer  # noqa
 from varlog import procutil  # noqa
+from varlog import limits  # noqa
 from varlog.logger import get_logger  # noqa
 
 logger = get_logger("vsn")
 
-CHECK_TIME = 3
+RETRY_INTERVAL_SEC = 3
+ADD_STORAGE_NODE_INTERVAL_SEC = 1
 DEFAULT_CLUSTER_ID = "1"
 DEFAULT_RPC_PORT = "9091"
+DEFAULT_VSN_HOME = "/home/deploy/varlog-sn"
 TEST_STORAGE = "/home/deploy/storage"
-MY_HOST = socket.gethostname()
-MY_IP = socket.gethostbyname(MY_HOST)
+LOCAL_ADDRESS = socket.gethostbyname(socket.gethostname())
 
 
 def get_rpc_addr():
-    return "%s:%s" % (MY_IP, os.getenv("RPC_PORT", DEFAULT_RPC_PORT))
+    return "%s:%s" % (LOCAL_ADDRESS, os.getenv("RPC_PORT", DEFAULT_RPC_PORT))
 
 
 def get_vms_addr():
@@ -58,24 +61,18 @@ def get_storage_node_id():
         raise e
 
 
-def get_volume(volume, temp=False):
-    if temp:
-        volume = tempfile.mkdtemp(prefix="varlog", suffix="volume")
-    else:
-        if os.path.exists(volume):
-            shutil.rmtree(volume)
-        os.mkdir(volume)
+def get_volume(truncate=False):
+    home = os.getenv("VSN_HOME", DEFAULT_VSN_HOME)
+    datapath = f"{home}/data"
 
-    def deleter():
-        shutil.rmtree(volume)
+    if truncate:
+        try:
+            shutil.rmtree(datapath)
+        except FileNotFoundError:
+            pass
 
-    return volume, deleter
-
-    # # TODO:: fix it
-    # if os.path.exists(TEST_STORAGE):
-    #     shutil.rmtree(TEST_STORAGE)
-    # os.mkdir(TEST_STORAGE)
-    # return TEST_STORAGE
+    os.makedirs(datapath, exist_ok=True)
+    return datapath
 
 
 def add_storage_node(addr):
@@ -89,37 +86,39 @@ def add_storage_node(addr):
 
 
 def main():
+    limits.set_limits()
+    cluster_id = os.getenv("CLUSTER_ID", DEFAULT_CLUSTER_ID)
+    rpc_addr = "0.0.0.0:%s" % os.getenv("RPC_PORT", DEFAULT_RPC_PORT)
     snid, exist = get_storage_node_id()
-    volume, deleter = get_volume("", temp=True)
+    volume = get_volume(truncate=not exist)
     sn_addr = get_rpc_addr()
+
     storage_node = [
         f"{binpath}/vsn",
         "start",
-        "--cluster-id=%s" % os.getenv("CLUSTER_ID", DEFAULT_CLUSTER_ID),
-        "--storage-node-id=%s" % snid,
-        "--rpc-bind-address=0.0.0.0:%s" % os.getenv("RPC_PORT",
-                                                    DEFAULT_RPC_PORT),
-        "--volumes=%s" % volume
+        f"--cluster-id={cluster_id}",
+        f"--storage-node-id={snid}",
+        f"--rpc-bind-address={rpc_addr}",
+        f"--volumes={volume}"
     ]
+
     killer = Killer()
     while not killer.kill_now:
-        if procutil.check("vsn"):
-            time.sleep(CHECK_TIME)
+        if procutil.check_liveness("vsn"):
+            time.sleep(RETRY_INTERVAL_SEC)
             continue
         try:
-            logger.info("vsn is not running, start it")
-            logger.debug(f"vsn: {storage_node}")
             procutil.kill("vsn")
+            logger.info(f"running storage node: {storage_node}")
             subprocess.Popen(storage_node)
-            time.sleep(1)
+            time.sleep(ADD_STORAGE_NODE_INTERVAL_SEC)
             if not exist:
-                logger.info("add sn")
+                logger.info("adding storage node to cluster")
                 add_storage_node(sn_addr)
         except (OSError, ValueError, subprocess.SubprocessError):
-            logger.exception("could not run vsn")
-        time.sleep(CHECK_TIME)
+            logger.exception("could not run storage node")
+        time.sleep(RETRY_INTERVAL_SEC)
     procutil.stop("vsn")
-    deleter()
 
 
 if __name__ == "__main__":

@@ -21,22 +21,30 @@ spec:
         hostPath:
           path: {{VMR_HOME}}
           type: DirectoryOrCreate
+      initContainers:
+      - name: volume-perm
+        image: mdock.daumkakao.io/busybox
+        command: ['sh', '-c', 'chmod -R 777 {{VMR_HOME}}']
+        volumeMounts:
+        - name: varlog-mr-home
+          mountPath: {{VMR_HOME}}
       containers:
       - name: varlog-mr
         image: idock.daumkakao.io/varlog/varlog-mr:{{DOCKER_TAG}}
         command:
-        - "/home/deploy/docker_run.py"
+        - 'python3'
+        - '/home/deploy/bin/vmr.py'
         env:
         - name: TZ
           value: Asia/Seoul
         - name: VMS_ADDRESS
-          value: '$(VARLOG_VMS_SERVICE_SERVICE_HOST):$(VARLOG_VMS_SERVICE_SERVICE_PORT)'
+          value: '$(VARLOG_VMS_RPC_SERVICE_HOST):$(VARLOG_VMS_RPC_SERVICE_PORT)'
         - name: VMR_HOME
           value: '{{VMR_HOME}}'
         - name: COLLECTOR_NAME
-          value: "otel"
+          value: 'otel'
         - name: COLLECTOR_ENDPOINT
-          value: "localhost:55680"
+          value: 'localhost:55680'
         volumeMounts:
         - name: varlog-mr-home
           mountPath: {{VMR_HOME}}
@@ -47,7 +55,6 @@ spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 60
       dnsPolicy: None
-      securityContext: {}
       hostNetwork: true
       affinity:
         nodeAffinity:

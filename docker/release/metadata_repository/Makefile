@@ -28,9 +28,10 @@ push:
 
 dist:
 	make clean;
-	mkdir -p ./dist
+	mkdir -p ./dist/bin
 	# build
 	cd ~/varlog; make clean; make deps; make all;
-	cp ~/varlog/bin/vmc ./dist/
-	cp ~/varlog/bin/vmr ./dist/
-	cp ./docker_run.py ./dist/
+	cp ~/varlog/bin/vmc ./dist/bin/
+	cp ~/varlog/bin/vmr ./dist/bin/
+	cp ~/varlog/bin/vmr.py ./dist/bin/
+	cp -R ~/varlog/pylib ./dist/

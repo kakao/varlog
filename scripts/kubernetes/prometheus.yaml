@@ -23,35 +23,16 @@ data:
 apiVersion: v1
 kind: Service
 metadata:
-  name: prometheus-vip-service
-  namespace: ingress-nginx
+  name: prometheus-ui
   annotations:
-    service.beta.kubernetes.io/openstack-internal-load-balancer: "true"
-spec:
-  externalTrafficPolicy: Local
-  selector:
-    app.kubernetes.io/name: ingress-nginx
-  type: LoadBalancer
-  ports:
-  - name: prometheus-service
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: prometheus-service
-  annotations:
-      prometheus.io/scrape: 'true'
-      prometheus.io/port:   '9090'
+    prometheus.io/scrape: 'true'
+    prometheus.io/port:   '9090'
 spec:
   selector:
     app: prometheus
   ports:
-    - protocol: TCP
+    - name: ui
       port: 9090
-      targetPort: 9090
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -73,8 +54,8 @@ spec:
         - name: prometheus
           image: mdock.daumkakao.io/prom/prometheus:latest
           args:
-            - "--config.file=/etc/prometheus/prometheus.yml"
-            - "--storage.tsdb.path=/prometheus/"
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/prometheus/'
           ports:
             - containerPort: 9090
           readinessProbe:

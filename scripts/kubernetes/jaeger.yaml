@@ -1,49 +1,49 @@
 apiVersion: v1
 kind: Service
 metadata:
-    name: jaeger-ui
+  name: jaeger-ui
 spec:
-    selector:
-        app: jaeger
-    ports:
-        - name: ui
-          port: 16686
+  selector:
+    app: jaeger
+  ports:
+    - name: ui
+      port: 16686
 ---
 apiVersion: v1
 kind: Service
 metadata:
-    name: jaeger-collector
+  name: jaeger-collector
 spec:
-    selector:
-        app: jaeger
-    ports:
-        - name: collector
-          port: 14268
+  selector:
+    app: jaeger
+  ports:
+    - name: collector
+      port: 14268
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-    name: jaeger
-    labels:
-        app: jaeger
+  name: jaeger
+  labels:
+    app: jaeger
 spec:
-    replicas: 1
-    selector:
-        matchLabels:
-            app: jaeger
-    template:
-        metadata:
-            labels:
-                app: jaeger
-        spec:
-            containers:
-                - name: jaeger
-                  image: mdock.daumkakao.io/jaegertracing/all-in-one:1.21
-                  ports:
-                      - name: collector
-                        containerPort: 14268
-                      - name: ui
-                        containerPort: 16686
-                  readinessProbe:
-                    tcpSocket:
-                        port: 14268
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: mdock.daumkakao.io/jaegertracing/all-in-one:1.21
+          ports:
+            - name: collector
+              containerPort: 14268
+            - name: ui
+              containerPort: 16686
+          readinessProbe:
+            tcpSocket:
+              port: 14268

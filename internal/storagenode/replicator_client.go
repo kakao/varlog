@@ -4,9 +4,9 @@ package storagenode
 
 import (
 	"context"
-	"errors"
 	"sync"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -98,15 +98,15 @@ func (rc *replicatorClient) Run(ctx context.Context) error {
 
 		stream, err := rc.rpcClient.Replicate(mctx)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "replicatorclient")
 		}
 		rc.stream = stream
 
 		if err := rc.runner.RunC(mctx, rc.dispatchRequestC); err != nil {
-			return err
+			return errors.Wrap(err, "replicatorclient")
 		}
 		if err := rc.runner.RunC(mctx, rc.dispatchResponse); err != nil {
-			return err
+			return errors.Wrap(err, "replicatorclient")
 		}
 		rc.running.Store(true)
 		return nil
@@ -186,6 +186,7 @@ LOOP:
 			err := rc.stream.Send(req)
 			if err != nil {
 				rc.logger.Error("could not send", zap.Error(err), zap.Any("request", req))
+				err = errors.Wrap(err, "replicatorclient")
 				rc.propagateError(req.GetLLSN(), err)
 				break LOOP
 			}
@@ -213,6 +214,7 @@ LOOP:
 			rsp, err := rc.stream.Recv()
 			if err != nil {
 				rc.logger.Info("could not recv", zap.Error(err))
+				err = errors.Wrap(err, "replicatorclient")
 				break LOOP
 			}
 			rc.propagateError(rsp.GetLLSN(), err)
