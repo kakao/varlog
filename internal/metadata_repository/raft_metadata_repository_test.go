@@ -818,7 +818,8 @@ func TestMRGetLastCommitted(t *testing.T) {
 			})
 
 			Convey("getLastCommitted should return same for sealed LS", func(ctx C) {
-				rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+				defer cancel()
 				_, err := mr.Seal(rctx, lsIds[1])
 				So(err, ShouldBeNil)
 
@@ -919,14 +920,16 @@ func TestMRSeal(t *testing.T) {
 				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
-			rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			defer cancel()
 			lc, err := mr.Seal(rctx, lsIds[1])
 			So(err, ShouldBeNil)
 			So(lc, ShouldEqual, mr.getLastCommitted(lsIds[1]))
 
 			Convey("Seal should return same last committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
-					rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+					defer cancel()
 					lc2, err := mr.Seal(rctx, lsIds[1])
 					So(err, ShouldBeNil)
 					So(lc2, ShouldEqual, lc)
@@ -997,13 +1000,15 @@ func TestMRUnseal(t *testing.T) {
 			return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 		}), ShouldBeTrue)
 
-		rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		defer cancel()
 		lc, err := mr.Seal(rctx, lsIds[1])
 		So(err, ShouldBeNil)
 		So(lc, ShouldEqual, mr.getLastCommitted(lsIds[1]))
 
 		Convey("Unealed LS should update report", func(ctx C) {
-			rctx, _ := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			defer cancel()
 			err := mr.Unseal(rctx, lsIds[1])
 			So(err, ShouldBeNil)
 
@@ -1067,7 +1072,8 @@ func TestMRUpdateLogStream(t *testing.T) {
 		}), ShouldBeTrue)
 
 		Convey("When Update LogStream", func() {
-			rctx, _ := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(50))
+			defer cancel()
 			_, err = mr.Seal(rctx, lsID)
 			So(err, ShouldBeNil)
 
