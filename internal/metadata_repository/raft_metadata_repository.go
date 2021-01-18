@@ -3,6 +3,8 @@ package metadata_repository
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/pprof"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,6 +74,7 @@ type RaftMetadataRepository struct {
 
 	server       *grpc.Server
 	healthServer *health.Server
+	debugServer  *http.Server
 	endpointAddr atomic.Value
 
 	// membership
@@ -172,6 +175,11 @@ func (mr *RaftMetadataRepository) Run() {
 	if err := mr.runner.RunC(mctx, mr.runCommitTrigger); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
+	if mr.options.DebugAddress != "" {
+		if err := mr.runner.RunC(mctx, mr.runDebugServer); err != nil {
+			mr.logger.Panic("could not run", zap.Error(err))
+		}
+	}
 
 	mr.raftNode.start()
 
@@ -205,7 +213,39 @@ func (mr *RaftMetadataRepository) Run() {
 	}
 
 	mr.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+
 	mr.logger.Info("starting metadata repository")
+}
+
+func (mr *RaftMetadataRepository) runDebugServer(ctx context.Context) {
+	httpMux := http.NewServeMux()
+	mr.debugServer = &http.Server{Addr: mr.options.DebugAddress, Handler: httpMux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
+
+	defer mr.debugServer.Close()
+
+	httpMux.HandleFunc("/debug/pprof/", pprof.Index)
+	httpMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	httpMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	httpMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	httpMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	httpMux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	httpMux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+	httpMux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+	httpMux.Handle("/debug/pprof/block", pprof.Handler("block"))
+
+	lis, err := netutil.NewStoppableListener(ctx, mr.options.DebugAddress)
+	if err != nil {
+		mr.logger.Panic("could not listen", zap.Error(err))
+	}
+
+	if err := mr.debugServer.Serve(lis); err != nil && err != verrors.ErrStopped {
+		mr.logger.Panic("could not serve", zap.Error(err))
+	}
 }
 
 //TODO:: handle pendding msg
@@ -233,7 +273,6 @@ func (mr *RaftMetadataRepository) Close() error {
 	// FIXME (jun, pharrell): Stop gracefully
 	mr.server.Stop()
 	mr.tmStub.close(context.TODO())
-
 	return nil
 }
 

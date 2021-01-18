@@ -15,6 +15,7 @@ import (
 
 const (
 	DefaultRPCBindAddress                          = "0.0.0.0:9092"
+	DefaultDebugAddress                            = "0.0.0.0:9099"
 	DefaultRaftPort                                = 10000
 	DefaultSnapshotCount             uint64        = 10000
 	DefaultSnapshotCatchUpCount      uint64        = 10000
@@ -49,6 +50,7 @@ type MetadataRepositoryOptions struct {
 
 	RPCBindAddress     string
 	RaftAddress        string
+	DebugAddress       string
 	ClusterID          types.ClusterID
 	NodeID             types.NodeID
 	Join               bool
