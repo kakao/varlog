@@ -107,12 +107,18 @@ func initStorageNodeFlags(options *storagenode.Options) []cli.Flag {
 func initRPCFlags(options *storagenode.RPCOptions) []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
-			Name:        "rpc-bind-address",
-			Aliases:     []string{},
-			Value:       storagenode.DefaultRPCBindAddress,
-			Usage:       "RPC bind address",
-			EnvVars:     []string{"RPC_BIND_ADDRESS"},
-			Destination: &options.RPCBindAddress,
+			Name:        "listen-address",
+			Aliases:     []string{"rpc-bind-address"},
+			Value:       storagenode.DefaultListenAddress,
+			Usage:       "RPC listen address",
+			EnvVars:     []string{"LISTEN_ADDRESS, RPC_BIND_ADDRESS"},
+			Destination: &options.ListenAddress,
+		},
+		&cli.StringFlag{
+			Name:        "advertise-address",
+			Usage:       "RPC advertise address",
+			EnvVars:     []string{"ADVERTISE_ADDRESS"},
+			Destination: &options.AdvertiseAddress,
 		},
 	}
 }

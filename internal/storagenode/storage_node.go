@@ -59,9 +59,9 @@ type StorageNode struct {
 	clusterID     types.ClusterID
 	storageNodeID types.StorageNodeID
 
-	server       *grpc.Server
-	healthServer *health.Server
-	serverAddr   string
+	server        *grpc.Server
+	healthServer  *health.Server
+	advertiseAddr string
 
 	running   bool
 	muRunning sync.Mutex
@@ -147,14 +147,16 @@ func (sn *StorageNode) Run() error {
 	}
 
 	// Listener
-	lis, err := net.Listen("tcp", sn.options.RPCBindAddress)
+	lis, err := net.Listen("tcp", sn.options.ListenAddress)
 	if err != nil {
 		sn.logger.Error("could not listen", zap.Error(err))
 		return err
 	}
-	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
-	// TODO (jun): choose best address
-	sn.serverAddr = addrs[0]
+	sn.advertiseAddr = sn.options.AdvertiseAddress
+	if sn.advertiseAddr == "" {
+		addrs, _ := netutil.GetListenerAddrs(lis.Addr())
+		sn.advertiseAddr = addrs[0]
+	}
 
 	// RPC Server
 	go func() {
@@ -250,7 +252,7 @@ func (sn *StorageNode) GetMetadata(ctx context.Context, clusterID types.ClusterI
 		ClusterID: sn.clusterID,
 		StorageNode: &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: sn.storageNodeID,
-			Address:       sn.serverAddr,
+			Address:       sn.advertiseAddr,
 			Status:        varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
 		},
 		CreatedTime: sn.tst.Created(),

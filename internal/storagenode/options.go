@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	DefaultRPCBindAddress = "127.0.0.1:9091"
+	DefaultListenAddress = "0.0.0.0:9091"
 )
 
 var (
@@ -60,7 +60,7 @@ func DefaultOptions() Options {
 }
 
 func DefaultRPCOptions() RPCOptions {
-	return RPCOptions{RPCBindAddress: DefaultRPCBindAddress}
+	return RPCOptions{ListenAddress: DefaultListenAddress}
 }
 
 func DefaultLogStreamExecutorOptions() LogStreamExecutorOptions {
@@ -101,8 +101,11 @@ type Options struct {
 	Logger *zap.Logger
 }
 
+// ListenAddress
+// AdvertiseAddress
 type RPCOptions struct {
-	RPCBindAddress string
+	ListenAddress    string
+	AdvertiseAddress string
 }
 
 type LogStreamExecutorOptions struct {
