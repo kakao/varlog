@@ -239,7 +239,7 @@ func (clus *VarlogCluster) Close() error {
 
 func (clus *VarlogCluster) HealthCheck() bool {
 	for _, endpoint := range clus.mrRPCEndpoints {
-		conn, err := rpc.NewConn(endpoint)
+		conn, err := rpc.NewBlockingConn(endpoint)
 		if err != nil {
 			return false
 		}

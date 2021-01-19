@@ -28,7 +28,7 @@ type metadataRepositoryClient struct {
 }
 
 func NewMetadataRepositoryClient(address string) (MetadataRepositoryClient, error) {
-	rpcConn, err := rpc.NewConn(address)
+	rpcConn, err := rpc.NewBlockingConn(address)
 	if err != nil {
 		return nil, err
 	}

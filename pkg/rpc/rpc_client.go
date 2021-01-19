@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -15,16 +16,26 @@ type Conn struct {
 	once sync.Once
 }
 
-func NewConn(address string) (*Conn, error) {
-	// TODO (jun): Adding WithBlock changes behavior of NewConn; it wat non-blocking function,
-	// but it now blocks.
-	// FIXME (jun): Provides options, for example connection timeout, blocking or non-blocking,
-	// and etc.
-	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithTimeout(defaultConnTimeout), grpc.WithBlock())
+func NewConn(ctx context.Context, address string, opts ...grpc.DialOption) (*Conn, error) {
+	conn, err := grpc.DialContext(ctx, address, opts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "rpc: %s", address)
 	}
 	return &Conn{Conn: conn}, nil
+}
+
+func NewBlockingConnWithContext(ctx context.Context, address string) (*Conn, error) {
+	return NewConn(ctx, address, grpc.WithInsecure(), grpc.WithReturnConnectionError())
+}
+
+func NewBlockingConn(address string) (*Conn, error) {
+	// TODO (jun): Adding WithBlock changes behavior of NewConn; it wat non-blocking function,
+	// but it now blocks.
+	// FIXME (jun): Provides options, for example connection timeout, blocking or non-blocking,
+	// and etc.
+	ctx, cancel := context.WithTimeout(context.Background(), defaultConnTimeout)
+	defer cancel()
+	return NewBlockingConnWithContext(ctx, address)
 }
 
 func (c *Conn) Close() (err error) {
