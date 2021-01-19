@@ -29,8 +29,8 @@ const (
 	SN_STOP_LABEL = "varlog-sn-stop"
 	SN_DROP_LABEL = "varlog-sn-drop"
 	VMS_RS_NAME   = "varlog-vms"
-	VMS_VIP_NAME  = "varlog-vms-vip-service"
-	MR_VIP_NAME   = "varlog-mr-vip-service"
+	VMS_VIP_NAME  = "varlog-vms-rpc-vip"
+	MR_VIP_NAME   = "varlog-mr-rpc-vip"
 
 	ENV_REP_FACTOR = "REP_FACTOR"
 )
