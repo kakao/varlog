@@ -75,7 +75,7 @@ func TestStorageNode(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			opts := DefaultOptions()
-			opts.RPCOptions.RPCBindAddress = bindAddress
+			opts.RPCOptions.ListenAddress = bindAddress
 			opts.ClusterID = clusterID
 			opts.StorageNodeID = types.StorageNodeID(i)
 			opts.Volumes = map[Volume]struct{}{volume: {}}
@@ -96,7 +96,7 @@ func TestStorageNode(t *testing.T) {
 
 		var mclList []snc.StorageNodeManagementClient
 		for _, sn := range snList {
-			mcl, err := snc.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
+			mcl, err := snc.NewManagementClient(context.TODO(), clusterID, sn.advertiseAddr, zap.L())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,7 +154,7 @@ func TestSync(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			opts := DefaultOptions()
-			opts.RPCOptions.RPCBindAddress = bindAddress
+			opts.RPCOptions.ListenAddress = bindAddress
 			opts.ClusterID = clusterID
 			opts.StorageNodeID = types.StorageNodeID(i)
 			opts.Volumes = map[Volume]struct{}{volume: {}}
@@ -183,7 +183,7 @@ func TestSync(t *testing.T) {
 
 		var mclList []snc.StorageNodeManagementClient
 		for i, sn := range snList {
-			mcl, err := snc.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
+			mcl, err := snc.NewManagementClient(context.TODO(), clusterID, sn.advertiseAddr, zap.L())
 			So(err, ShouldBeNil)
 
 			mclList = append(mclList, mcl)
@@ -199,7 +199,7 @@ func TestSync(t *testing.T) {
 
 		var logclList []logc.LogIOClient
 		for _, sn := range snList {
-			logcl, err := logc.NewLogIOClient(sn.serverAddr)
+			logcl, err := logc.NewLogIOClient(sn.advertiseAddr)
 			So(err, ShouldBeNil)
 
 			logclList = append(logclList, logcl)
@@ -215,7 +215,7 @@ func TestSync(t *testing.T) {
 		oldCL, newCL := logclList[0], logclList[1]
 
 		So(oldSN.storageNodeID, ShouldNotEqual, newSN.storageNodeID)
-		So(oldSN.serverAddr, ShouldNotEqual, newSN.serverAddr)
+		So(oldSN.advertiseAddr, ShouldNotEqual, newSN.advertiseAddr)
 
 		// Append some logs to oldSN
 		for hwm := types.GLSN(1); hwm <= lastCommittedGLSN; hwm++ {
@@ -275,19 +275,19 @@ func TestSync(t *testing.T) {
 			So(lse.Status(), ShouldEqual, varlogpb.LogStreamStatusRunning)
 
 			// start sync,
-			status, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			status, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.advertiseAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(status.GetState(), ShouldEqual, snpb.SyncStateInProgress)
 
 			// wait for changing syncstate
 			testutil.CompareWait(func() bool {
-				status, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+				status, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.advertiseAddr, lastCommittedGLSN)
 				c.So(err, ShouldBeNil)
 				return status.GetState() != snpb.SyncStateInProgress
 			}, time.Minute)
 
 			// eventually, it fails
-			_, err = oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			_, err = oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.advertiseAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 		})
 
@@ -305,14 +305,14 @@ func TestSync(t *testing.T) {
 			So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 
 			// start sync,
-			syncStatus, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			syncStatus, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.advertiseAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(syncStatus.GetState(), ShouldEqual, snpb.SyncStateInProgress)
 
 			// wait for changing syncstate
 			var lastStatus *snpb.SyncStatus
 			testutil.CompareWait(func() bool {
-				status, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+				status, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.advertiseAddr, lastCommittedGLSN)
 				c.So(err, ShouldBeNil)
 				lastStatus = status
 				return status.GetState() != snpb.SyncStateInProgress
@@ -335,7 +335,7 @@ func TestSync(t *testing.T) {
 			So(lse.Status(), ShouldEqual, varlogpb.LogStreamStatusRunning)
 
 			// Sync Error
-			_, err := newMCL.Sync(context.TODO(), logStreamID, oldSN.storageNodeID, oldSN.serverAddr, lastCommittedGLSN)
+			_, err := newMCL.Sync(context.TODO(), logStreamID, oldSN.storageNodeID, oldSN.advertiseAddr, lastCommittedGLSN)
 			So(err, ShouldNotBeNil)
 
 			// Syncing SN (= source SN) is LogStreamStatusSealing
@@ -345,7 +345,7 @@ func TestSync(t *testing.T) {
 			So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 
 			// Sync Error
-			_, err = newMCL.Sync(context.TODO(), logStreamID, oldSN.storageNodeID, oldSN.serverAddr, lastCommittedGLSN)
+			_, err = newMCL.Sync(context.TODO(), logStreamID, oldSN.storageNodeID, oldSN.advertiseAddr, lastCommittedGLSN)
 			So(err, ShouldNotBeNil)
 		})
 
@@ -358,18 +358,18 @@ func TestSync(t *testing.T) {
 			So(sealedGLSN, ShouldEqual, types.InvalidGLSN)
 
 			// sync
-			_, err = oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			_, err = oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.advertiseAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 
 			// wait for changing syncstate
 			testutil.CompareWait(func() bool {
-				status, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+				status, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.advertiseAddr, lastCommittedGLSN)
 				c.So(err, ShouldBeNil)
 				return status.GetState() != snpb.SyncStateInProgress
 			}, time.Minute)
 
 			// check: complete
-			syncStatus, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.serverAddr, lastCommittedGLSN)
+			syncStatus, err := oldMCL.Sync(context.TODO(), logStreamID, newSN.storageNodeID, newSN.advertiseAddr, lastCommittedGLSN)
 			So(err, ShouldBeNil)
 			So(syncStatus.GetState(), ShouldEqual, snpb.SyncStateComplete)
 
@@ -406,7 +406,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		opts := DefaultOptions()
-		opts.RPCOptions.RPCBindAddress = bindAddress
+		opts.RPCOptions.ListenAddress = bindAddress
 		opts.ClusterID = clusterID
 		opts.StorageNodeID = types.StorageNodeID(1)
 		opts.Volumes = map[Volume]struct{}{volume: {}}
@@ -422,7 +422,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		}
 
 		// snmcl: connect
-		mcl, err := snc.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
+		mcl, err := snc.NewManagementClient(context.TODO(), clusterID, sn.advertiseAddr, zap.L())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -440,7 +440,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		// logcl: connect
-		logCL, err := logc.NewLogIOClient(sn.serverAddr)
+		logCL, err := logc.NewLogIOClient(sn.advertiseAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -490,7 +490,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		}
 
 		// mcl: reconnect
-		mcl, err = snc.NewManagementClient(context.TODO(), clusterID, sn.serverAddr, zap.L())
+		mcl, err = snc.NewManagementClient(context.TODO(), clusterID, sn.advertiseAddr, zap.L())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -502,7 +502,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		So(meta.GetLogStreams()[0].GetLogStreamID(), ShouldEqual, logStreamID)
 
 		// logcl: connect
-		logCL, err = logc.NewLogIOClient(sn.serverAddr)
+		logCL, err = logc.NewLogIOClient(sn.advertiseAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -542,5 +542,51 @@ func TestStorageNodeRestart(t *testing.T) {
 		sn.Wait()
 		So(mcl.Close(), ShouldBeNil)
 		So(logCL.Close(), ShouldBeNil)
+	})
+}
+
+func TestRPCAddress(t *testing.T) {
+	Convey("Given that listen address of StorageNode is not specified", t, func() {
+		opts := DefaultOptions()
+		opts.ListenAddress = "0.0.0.0:0"
+
+		Convey("When the advertise address is specified", func() {
+			opts.AdvertiseAddress = "127.0.0.1:9999"
+
+			Convey("Then advertise address of the StorageNode should be equal to opts.AdvertiseAddress", func() {
+				sn, err := NewStorageNode(&opts)
+				So(err, ShouldBeNil)
+				So(sn.Run(), ShouldBeNil)
+				Reset(func() {
+					sn.Close()
+				})
+
+				snmd, err := sn.GetMetadata(context.TODO(), opts.ClusterID, snpb.MetadataTypeLogStreams)
+				So(err, ShouldBeNil)
+
+				So(snmd.GetStorageNode().GetAddress(), ShouldEqual, opts.AdvertiseAddress)
+			})
+		})
+
+		Convey("When the advertise address is not specified", func() {
+			Convey("Then advertise address of StorageNode should be set", func() {
+				sn, err := NewStorageNode(&opts)
+				So(err, ShouldBeNil)
+				So(sn.Run(), ShouldBeNil)
+				Reset(func() {
+					sn.Close()
+				})
+
+				snmd, err := sn.GetMetadata(context.TODO(), opts.ClusterID, snpb.MetadataTypeLogStreams)
+				So(err, ShouldBeNil)
+
+				So(snmd.GetStorageNode().GetAddress(), ShouldNotBeEmpty)
+			})
+		})
+	})
+
+	Convey("Given that listen address of StorageNode is specified", t, func() {
+		// TODO: Binding specified address can result in bind error when parallel testing
+		t.Skip()
 	})
 }

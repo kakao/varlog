@@ -908,7 +908,7 @@ func TestVarlogManagerServer(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			snopts := storagenode.DefaultOptions()
-			snopts.RPCBindAddress = "127.0.0.1:0"
+			snopts.ListenAddress = "127.0.0.1:0"
 			snopts.ClusterID = env.ClusterID
 			snopts.StorageNodeID = storageNodeID
 			snopts.Logger = env.logger
@@ -2020,7 +2020,7 @@ func TestVarlogClient(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				snopts := storagenode.DefaultOptions()
-				snopts.RPCBindAddress = "127.0.0.1:0"
+				snopts.ListenAddress = "127.0.0.1:0"
 				snopts.ClusterID = env.ClusterID
 				snopts.StorageNodeID = storageNodeID
 				snopts.Logger = env.logger

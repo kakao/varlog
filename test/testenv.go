@@ -300,7 +300,7 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 		return types.StorageNodeID(0), err
 	}
 	opts := storagenode.DefaultOptions()
-	opts.RPCBindAddress = "127.0.0.1:0"
+	opts.ListenAddress = "127.0.0.1:0"
 	opts.ClusterID = clus.ClusterID
 	opts.StorageNodeID = snID
 	opts.Logger = clus.logger
@@ -342,7 +342,7 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 	}
 
 	opts := storagenode.DefaultOptions()
-	opts.RPCBindAddress = "127.0.0.1:0"
+	opts.ListenAddress = "127.0.0.1:0"
 	opts.ClusterID = clus.ClusterID
 	opts.StorageNodeID = snID
 	opts.Logger = clus.logger
@@ -389,7 +389,7 @@ func (clus *VarlogCluster) RecoverSN(snID types.StorageNodeID) (*storagenode.Sto
 	addr, _ := clus.snRPCEndpoints[snID]
 
 	opts := storagenode.DefaultOptions()
-	opts.RPCBindAddress = addr
+	opts.ListenAddress = addr
 	opts.ClusterID = clus.ClusterID
 	opts.StorageNodeID = snID
 	opts.Logger = clus.logger
