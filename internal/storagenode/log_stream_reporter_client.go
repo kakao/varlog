@@ -23,7 +23,7 @@ type logStreamReporterClient struct {
 }
 
 func NewLogStreamReporterClient(address string) (LogStreamReporterClient, error) {
-	rpcConn, err := rpc.NewConn(address)
+	rpcConn, err := rpc.NewBlockingConn(address)
 	if err != nil {
 		return nil, err
 	}

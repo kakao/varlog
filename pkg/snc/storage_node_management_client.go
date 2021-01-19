@@ -44,7 +44,7 @@ func NewManagementClient(ctx context.Context, clusterID types.ClusterID, address
 	}
 	logger = logger.Named("snmcl").With(zap.Any("peer_addr", address))
 
-	rpcConn, err := rpc.NewConn(address)
+	rpcConn, err := rpc.NewBlockingConn(address)
 	if err != nil {
 		logger.Error("could not connect to storagenode", zap.Error(err))
 		return nil, err

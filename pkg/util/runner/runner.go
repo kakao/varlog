@@ -2,11 +2,11 @@ package runner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -83,7 +83,7 @@ func (r *Runner) RunC(ctx context.Context, f func(context.Context)) error {
 	case Invalid:
 		return errors.New("invalid runner")
 	case Stopping, Stopped:
-		return fmt.Errorf("runner %v: stopping or stopped (%v)", r.name, r.state)
+		return errors.Errorf("runner %v: stopping or stopped (%v)", r.name, r.state)
 	}
 
 	r.wg.Add(1)

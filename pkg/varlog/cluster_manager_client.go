@@ -36,7 +36,7 @@ type clusterManagerClient struct {
 }
 
 func NewClusterManagerClient(addr string) (ClusterManagerClient, error) {
-	rpcConn, err := rpc.NewConn(addr)
+	rpcConn, err := rpc.NewBlockingConn(addr)
 	if err != nil {
 		return nil, err
 	}

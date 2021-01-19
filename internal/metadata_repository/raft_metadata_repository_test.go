@@ -236,7 +236,7 @@ func (clus *metadataRepoCluster) healthCheck(idx int) bool {
 	_, port, _ := net.SplitHostPort(f.(string))
 	endpoint := fmt.Sprintf("localhost:%s", port)
 
-	conn, err := rpc.NewConn(endpoint)
+	conn, err := rpc.NewBlockingConn(endpoint)
 	if err != nil {
 		return false
 	}

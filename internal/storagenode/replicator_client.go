@@ -62,7 +62,7 @@ type replicatorClient struct {
 
 // Add more detailed peer info (e.g., storage node id)
 func NewReplicatorClient(peerStorageNodeID types.StorageNodeID, peerLogStreamID types.LogStreamID, peerAddress string, logger *zap.Logger) (ReplicatorClient, error) {
-	rpcConn, err := rpc.NewConn(peerAddress)
+	rpcConn, err := rpc.NewBlockingConn(peerAddress)
 	if err != nil {
 		return nil, err
 	}

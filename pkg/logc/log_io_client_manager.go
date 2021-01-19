@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 
@@ -45,7 +46,7 @@ func NewLogClientManager(metadata *varlogpb.MetadataDescriptor, logger *zap.Logg
 		}
 	}
 	if err != nil {
-		mgr.Close()
+		err = multierr.Append(err, mgr.Close())
 		mgr = nil
 	}
 	return mgr, err
@@ -54,7 +55,7 @@ func NewLogClientManager(metadata *varlogpb.MetadataDescriptor, logger *zap.Logg
 func (mgr *logClientManager) Close() (err error) {
 	mgr.m.Range(func(storageNodeID interface{}, logCL interface{}) bool {
 		if e := logCL.(LogIOClient).Close(); e != nil {
-			err = e
+			err = multierr.Append(err, e)
 		}
 		mgr.m.Delete(storageNodeID)
 		return true
@@ -77,7 +78,7 @@ func (mgr *logClientManager) GetOrConnect(storageNodeID types.StorageNodeID, add
 
 		logcl, err := NewLogIOClient(addr)
 		if err != nil {
-			return nil, errors.Wrap(err, "logclmanager")
+			return nil, errors.Wrapf(err, "logclmanager: snid=%d", storageNodeID)
 		}
 
 		lip := newLogIOProxy(logcl)

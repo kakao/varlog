@@ -338,27 +338,29 @@ func connectToMR(clusterID types.ClusterID, addr string) (mrcl mrc.MetadataRepos
 	// TODO (jun): rpc.NewConn is a blocking function, thus it should be specified by an
 	// explicit timeout parameter.
 	var conn *rpc.Conn
-	conn, err = rpc.NewConn(addr)
+	conn, err = rpc.NewBlockingConn(addr)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrapf(err, "mrconnector")
 	}
 	mrcl, err = mrc.NewMetadataRepositoryClientFromRpcConn(conn)
 	if err != nil {
+		err = errors.Wrapf(err, "mrconnector")
 		goto ErrOut
 	}
 	mrmcl, err = mrc.NewMetadataRepositoryManagementClientFromRpcConn(conn)
 	if err != nil {
+		err = errors.Wrapf(err, "mrconnector")
 		goto ErrOut
 	}
 	return mrcl, mrmcl, nil
 
 ErrOut:
 	if mrcl != nil {
-		mrcl.Close()
+		err = multierr.Append(err, mrcl.Close())
 	}
 	if mrmcl != nil {
-		mrmcl.Close()
+		err = multierr.Append(err, mrmcl.Close())
 	}
-	conn.Close()
+	err = multierr.Append(err, conn.Close())
 	return nil, nil, err
 }

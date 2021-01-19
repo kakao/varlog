@@ -71,7 +71,7 @@ func (act *action) Do(ctx context.Context) error {
 
 			if err != nil {
 				select {
-				case errC <- errors.Wrap(err, "open"):
+				case errC <- err:
 				default:
 				}
 				return

@@ -47,7 +47,7 @@ type logIOClient struct {
 }
 
 func NewLogIOClient(address string) (LogIOClient, error) {
-	rpcConn, err := rpc.NewConn(address)
+	rpcConn, err := rpc.NewBlockingConn(address)
 	if err != nil {
 		return nil, errors.Wrap(err, "log io client")
 	}
