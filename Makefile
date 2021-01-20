@@ -169,7 +169,35 @@ ifneq ($(HAS_GRPC_PLUGIN),true)
 endif
 	@echo "ok: $(GRPC_GO_PLUGIN)"
 
-.PHONY: docker
-DOCKER_TAG := 0.0.1-alpine
-docker:
-	scripts/dockerize.sh
+.PHONY: docker image image_vms image_mr image_sn push push_vms push_mr push_sn
+
+VERSION := $(shell cat $(MAKEFILE_DIR)/VERSION)
+GIT_HASH := $(shell git describe --always --broken)
+BUILD_DATE := $(shell date -u '+%FT%T%z')
+DOCKER_TAG := v$(VERSION)-$(GIT_HASH)
+# IMAGE_BUILD_DATE := $(shell date -u '+%Y%m%d%H%M')
+# DOCKER_TAG := v$(VERSION)-$(GIT_HASH)-$(IMAGE_BUILD_DATE)
+
+docker: image push
+
+image: image_vms image_mr image_sn
+
+image_vms:
+	docker build --target varlog-vms -f $(MAKEFILE_DIR)/docker/alpine/Dockerfile -t ***REMOVED***/varlog/varlog-vms:$(DOCKER_TAG) .
+
+image_mr:
+	docker build --target varlog-mr -f $(MAKEFILE_DIR)/docker/alpine/Dockerfile -t ***REMOVED***/varlog/varlog-mr:$(DOCKER_TAG) .
+
+image_sn:
+	docker build --target varlog-sn -f $(MAKEFILE_DIR)/docker/alpine/Dockerfile -t ***REMOVED***/varlog/varlog-sn:$(DOCKER_TAG) .
+
+push: push_vms push_mr push_sn
+
+push_vms:
+	docker push ***REMOVED***/varlog/varlog-vms:$(DOCKER_TAG)
+
+push_mr:
+	docker push ***REMOVED***/varlog/varlog-mr:$(DOCKER_TAG)
+
+push_sn:
+	docker push ***REMOVED***/varlog/varlog-sn:$(DOCKER_TAG)

@@ -8,11 +8,10 @@ from subprocess import Popen
 def get_pids(name):
     pids = list()
     with Popen(["ps", "acx"], stdout=PIPE) as ps:
-        with Popen(["grep", "-e", name], stdin=ps.stdout, stdout=PIPE) as grep:
+        with Popen(["grep", "-e", f"{name} "], stdin=ps.stdout, stdout=PIPE) as grep:
             ps.stdout.close()
-            with Popen(["grep", "-v", "-e", "grep", "-e", "defunct"],
-                       stdin=grep.stdout,
-                       stdout=PIPE) as grepv:
+            grepv_cmd = ["grep", "-v", "-e", "grep", "-e", "defunct"]
+            with Popen(grepv_cmd, stdin=grep.stdout, stdout=PIPE) as grepv:
                 grep.stdout.close()
                 outs, _ = grepv.communicate()
                 if grepv.returncode != 0:

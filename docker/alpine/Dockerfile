@@ -1,11 +1,11 @@
-ARG GO_VERSION=1.15.5
+ARG GO_VERSION=1.15.7
 ARG PYTHON_VERSION=3.9
 ARG PROTO_VERSION=3.14.0
 ARG ALPINE_VERSION=3.12
-ARG GRPC_HEALTH_PROBE_VERSION=v0.3.4
+ARG GRPC_HEALTH_PROBE_VERSION=v0.3.6
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG MS_RPC_PORT=9090
+ARG MS_RPC_PORT=9093
 ARG SN_RPC_PORT=9091
 ARG MR_RPC_PORT=9092
 ARG MR_RAFT_PORT=10000
@@ -70,7 +70,7 @@ RUN chown -R varlog:varlog /varlog
 USER varlog
 
 
-FROM release-base AS release-mc
+FROM release-base AS varlog-vmc
 ENV PATH=/varlog/bin:$PATH
 WORKDIR /varlog
 RUN chown -R varlog:varlog /varlog
@@ -78,7 +78,7 @@ USER varlog
 CMD ["/varlog/bin/vmc"]
 
 
-FROM release-base AS release-ms
+FROM release-base AS varlog-vms
 ARG MS_RPC_PORT
 EXPOSE ${MS_RPC_PORT}
 ENV PATH=/varlog/bin:$PATH
@@ -94,7 +94,7 @@ ENTRYPOINT ["/varlog/docker-entrypoint.sh"]
 CMD ["/varlog/bin/vms"]
 
 
-FROM release-base AS release-mr
+FROM release-base AS varlog-mr
 EXPOSE ${MR_RPC_PORT}
 EXPOSE ${MR_RAFT_PORT}
 ENV PATH=/varlog/bin:$PATH
@@ -110,7 +110,7 @@ ENTRYPOINT ["/varlog/docker-entrypoint.sh"]
 CMD ["/varlog/bin/vmr"]
 
 
-FROM release-base AS release-sn
+FROM release-base AS varlog-sn
 EXPOSE ${SN_RPC_PORT}
 ENV PATH=/varlog/bin:$PATH
 WORKDIR /varlog
