@@ -33,7 +33,7 @@ spec:
         image: idock.daumkakao.io/varlog/varlog-sn:{{DOCKER_TAG}}
         command:
         - 'python3'
-        - '/home/deploy/bin/vsn.py'
+        - '/varlog/bin/vsn.py'
         env:
         - name: TZ
           value: Asia/Seoul

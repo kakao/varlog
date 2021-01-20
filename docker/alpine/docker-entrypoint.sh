@@ -2,8 +2,8 @@
 
 set -e
 
-ulimit -n 65536
-ulimit -u 2048
+ulimit -n 100000 
+ulimit -u unlimited 
 ulimit -c unlimited
 
 # sysctl: error setting key 'kernel.core_pattern': Read-only file system

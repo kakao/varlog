@@ -33,7 +33,7 @@ spec:
         image: idock.daumkakao.io/varlog/varlog-mr:{{DOCKER_TAG}}
         command:
         - 'python3'
-        - '/home/deploy/bin/vmr.py'
+        - '/varlog/bin/vmr.py'
         env:
         - name: TZ
           value: Asia/Seoul

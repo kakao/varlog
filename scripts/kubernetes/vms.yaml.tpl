@@ -26,7 +26,7 @@ spec:
               memory: '256Mi'
           command:
             - 'python3'
-            - '/home/deploy/bin/vms.py'
+            - '/varlog/bin/vms.py'
           env:
             - name: TZ
               value: Asia/Seoul

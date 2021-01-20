@@ -321,7 +321,7 @@ kubectl get svc
 vms deployment 생성
 
 ```
-DOCKER_TAG=`docker images | grep varlog-vms | head -n1 | tail -n1 | awk '{print $2}'`
+DOCKER_TAG=$(docker images --format "{{.CreatedAt}}\t{{.Repository}}\t{{.Tag}}" | grep varlog-vms | sort -r | head -n1 | cut -f3)
 
 cat vms.yaml.tpl | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" > vms.yaml
 
@@ -346,8 +346,8 @@ kubectl get nodes --show-labels
 yaml 생성 및 적용
 
 ```shell
-DOCKER_TAG=`docker images | grep varlog-mr | head -n1 | tail -n1 | awk '{print $2}'`
-VMR_HOME=$(echo /home/deploy/varlog-mr | sed 's_/_\\/_g')
+DOCKER_TAG=$(docker images --format "{{.CreatedAt}}\t{{.Repository}}\t{{.Tag}}" | grep varlog-mr | sort -r | head -n1 | cut -f3)
+VMR_HOME=$(echo /varlog/mr | sed 's_/_\\/_g')
 
 cat mr.yaml.tpl | sed "s/{{VMR_HOME}}/${VMR_HOME}/g" | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" > mr.yaml
 
@@ -383,8 +383,8 @@ kubectl get nodes --show-labels
 
 yaml 생성 및 적용
 ```shell
-DOCKER_TAG=`docker images | grep varlog-sn | head -n1 | tail -n1 | awk '{print $2}'`
-VSN_HOME=$(echo /home/deploy/varlog-sn | sed 's_/_\\/_g')
+DOCKER_TAG=$(docker images --format "{{.CreatedAt}}\t{{.Repository}}\t{{.Tag}}" | grep varlog-sn | sort -r | head -n1 | cut -f3)
+VSN_HOME=$(echo /varlog/data | sed 's_/_\\/_g')
 
 cat sn.yaml.tpl | sed "s/{{VSN_HOME}}/${VSN_HOME}/g" | sed "s/{{DOCKER_TAG}}/${DOCKER_TAG}/g" > sn.yaml
 
