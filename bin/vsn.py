@@ -34,8 +34,10 @@ TEST_STORAGE = "/home/deploy/storage"
 LOCAL_ADDRESS = socket.gethostbyname(socket.gethostname())
 
 
-def get_rpc_addr():
-    return "%s:%s" % (LOCAL_ADDRESS, os.getenv("RPC_PORT", DEFAULT_RPC_PORT))
+def get_advertise_addr():
+    host = os.getenv("HOST_IP", LOCAL_ADDRESS)
+    port = os.getenv("RPC_PORT", DEFAULT_RPC_PORT)
+    return f"{host}:{port}"
 
 
 def get_vms_addr():
@@ -51,7 +53,7 @@ def get_storage_node_id():
             [f"{binpath}/vmc", "meta", "sn",
              "--vms-address=%s" % get_vms_addr()])
         meta = json.loads(out)
-        my_addr = get_rpc_addr()
+        my_addr = get_advertise_addr()
         for snid, addr in meta["storagenodes"].items():
             if addr == my_addr:
                 return snid, True
@@ -88,18 +90,20 @@ def add_storage_node(addr):
 def main():
     limits.set_limits()
     cluster_id = os.getenv("CLUSTER_ID", DEFAULT_CLUSTER_ID)
-    rpc_addr = "0.0.0.0:%s" % os.getenv("RPC_PORT", DEFAULT_RPC_PORT)
+    listen_port = os.getenv("RPC_PORT", DEFAULT_RPC_PORT)
     snid, exist = get_storage_node_id()
     volume = get_volume(truncate=not exist)
-    sn_addr = get_rpc_addr()
+    listen_addr = f"0.0.0.0:{listen_port}"
+    advertise_addr = get_advertise_addr()
 
     storage_node = [
         f"{binpath}/vsn",
         "start",
         f"--cluster-id={cluster_id}",
         f"--storage-node-id={snid}",
-        f"--rpc-bind-address={rpc_addr}",
-        f"--volumes={volume}"
+        f"--listen-address={listen_addr}",
+        f"--volumes={volume}",
+        f"--advertise-address={advertise_addr}"
     ]
 
     killer = Killer()
@@ -114,7 +118,7 @@ def main():
             time.sleep(ADD_STORAGE_NODE_INTERVAL_SEC)
             if not exist:
                 logger.info("adding storage node to cluster")
-                add_storage_node(sn_addr)
+                add_storage_node(advertise_addr)
         except (OSError, ValueError, subprocess.SubprocessError):
             logger.exception("could not run storage node")
         time.sleep(RETRY_INTERVAL_SEC)

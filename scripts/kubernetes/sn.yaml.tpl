@@ -45,6 +45,10 @@ spec:
           value: 'otel'
         - name: COLLECTOR_ENDPOINT
           value: 'localhost:55680'
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
         volumeMounts:
         - name: varlog-sn-home
           mountPath: {{VSN_HOME}}
