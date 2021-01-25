@@ -22,12 +22,14 @@ type options struct {
 	logger                     *zap.Logger
 }
 
-var defaultOptions = options{
-	clusterID:                  types.ClusterID(1),
-	connectionTimeout:          defaultConnectionTimeout,
-	rpcAddrsFetchRetryInterval: defaultRPCAddrsFetchRetryInterval,
-	clusterInfoFetchInterval:   defaultClusterInfoFetchInterval,
-	logger:                     zap.NewNop(),
+func defaultOptions() options {
+	return options{
+		clusterID:                  types.ClusterID(1),
+		connectionTimeout:          defaultConnectionTimeout,
+		rpcAddrsFetchRetryInterval: defaultRPCAddrsFetchRetryInterval,
+		clusterInfoFetchInterval:   defaultClusterInfoFetchInterval,
+		logger:                     zap.NewNop(),
+	}
 }
 
 type Option func(*options)
