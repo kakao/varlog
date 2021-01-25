@@ -4,7 +4,9 @@ package storagenode
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/label"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
@@ -24,7 +27,7 @@ import (
 )
 
 var (
-	errLSEClosed = errors.New("logstream: closed log stream executor")
+	errLSEClosed = stderrors.New("logstream: closed")
 )
 
 type Timestamper interface {
@@ -678,26 +681,21 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 	lse.muRunning.RLock()
 	defer lse.muRunning.RUnlock()
 	if !lse.running {
-		return types.InvalidGLSN, errLSEClosed
+		return types.InvalidGLSN, errors.WithStack(errLSEClosed)
 	}
 	if lse.isSealed() {
-		lse.logger.Debug("could not append", zap.Error(verrors.ErrSealed))
-		return types.InvalidGLSN, verrors.ErrSealed
+		return types.InvalidGLSN, errors.WithStack(verrors.ErrSealed)
 	}
 
 	appendT := newAppendTask(data, replicas, types.InvalidLLSN, &lse.trackers)
 	appendT.span = span
 	if err := lse.addAppendC(ctx, appendT); err != nil {
-		lse.logger.Debug("could not add appendTask to appendC", zap.Error(err))
 		return types.InvalidGLSN, err
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, lse.options.CommitWaitTimeout)
 	defer cancel()
 	err := appendT.wait(tctx)
-	if err != nil {
-		lse.logger.Error("could not wait appendTask", zap.Error(err))
-	}
 	appendT.close()
 	commitWaitTime = appendT.commitWaitTime.Load().Milliseconds()
 	return appendT.getGLSN(), err
@@ -705,8 +703,7 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 
 func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) error {
 	if lse.isSealed() {
-		lse.logger.Debug("could not append or replicate", zap.Error(verrors.ErrSealed))
-		return verrors.ErrSealed
+		return errors.WithStack(verrors.ErrSealed)
 	}
 	tctx, cancel := context.WithTimeout(ctx, lse.options.AppendCTimeout)
 	defer cancel()
@@ -714,10 +711,9 @@ func (lse *logStreamExecutor) addAppendC(ctx context.Context, t *appendTask) err
 	case lse.appendC <- t:
 		return nil
 	case <-tctx.Done():
-		lse.logger.Error("could not add appendTask to appendC", zap.Error(tctx.Err()))
-		return tctx.Err()
+		return errors.WithStack(tctx.Err())
 	case <-lse.stopped:
-		return errLSEClosed
+		return errors.WithStack(errLSEClosed)
 	}
 }
 
@@ -729,8 +725,7 @@ func (lse *logStreamExecutor) prepare(ctx context.Context, t *appendTask) {
 	}()
 
 	if lse.isSealed() {
-		lse.logger.Debug("could not append or replicate", zap.Error(verrors.ErrSealed))
-		t.notify(verrors.ErrSealed)
+		t.notify(errors.WithStack(verrors.ErrSealed))
 		return
 	}
 
@@ -761,7 +756,11 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 	}
 
 	if llsn != lse.lsc.uncommittedLLSNEnd.Load() {
-		return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", verrors.ErrCorruptLogStream, llsn, lse.lsc.uncommittedLLSNEnd.Load())
+		return errors.Errorf("logstream: corrupt (llsn = %d, uncommittedLLSNEnd = %d)",
+			llsn,
+			lse.lsc.uncommittedLLSNEnd.Load(),
+		)
+		// return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", verrors.ErrCorruptLogStream, llsn, lse.lsc.uncommittedLLSNEnd.Load())
 	}
 
 	if err := lse.storage.Write(llsn, data); err != nil {
@@ -789,15 +788,14 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 		case varlogpb.LogStreamStatusRunning:
 			lse.trackers.track(llsn, t)
 			return nil
-		case varlogpb.LogStreamStatusDeleted:
-			lse.logger.Panic("invalid LogStreamStatus", zap.Any("status", lse.status))
-			return verrors.ErrInternal
+		case varlogpb.LogStreamStatusSealed, varlogpb.LogStreamStatusSealing:
+			return errors.WithStack(verrors.ErrSealed)
 		default:
-			lse.logger.Error("could not add appendTask to tracker", zap.Any("status", lse.status), zap.Any("llsn", llsn))
-			return verrors.ErrSealed
+			err := errors.Errorf("logstream: invalid status (%s)", lse.status)
+			lse.logger.DPanic("invalid status", zap.Error(err))
+			return err
 		}
 	}
-
 	return nil
 }
 
@@ -818,7 +816,7 @@ func (lse *logStreamExecutor) triggerReplication(ctx context.Context, t *appendT
 		select {
 		case err = <-errC:
 		case <-ctx.Done():
-			err = ctx.Err()
+			err = errors.Wrapf(ctx.Err(), "logstream")
 		}
 		if err != nil {
 			lse.sealItself()
@@ -831,7 +829,7 @@ func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
 	lse.muRunning.RLock()
 	defer lse.muRunning.RUnlock()
 	if !lse.running {
-		return errLSEClosed
+		return errors.WithStack(errLSEClosed)
 	}
 	if err := lse.isTrimmed(glsn); err != nil {
 		// already trimmed, no problem
@@ -847,9 +845,9 @@ func (lse *logStreamExecutor) Trim(ctx context.Context, glsn types.GLSN) error {
 	select {
 	case lse.trimC <- &trimTask{glsn: glsn}:
 	case <-tctx.Done():
-		return tctx.Err()
+		return errors.Wrap(tctx.Err(), "logstream")
 	case <-lse.stopped:
-		return errLSEClosed
+		return errors.WithStack(errLSEClosed)
 	}
 	return nil
 }
@@ -867,7 +865,7 @@ func (lse *logStreamExecutor) trim(t *trimTask) {
 func (lse *logStreamExecutor) GetReport() UncommittedLogStreamStatus {
 	lse.muRunning.RLock()
 	defer lse.muRunning.RUnlock()
-	// TODO: If this is sealed, ...
+
 	hwm, offset := lse.lsc.rcc.get()
 	uncommittedLLSNEnd := lse.lsc.uncommittedLLSNEnd.Load()
 	status := UncommittedLogStreamStatus{
@@ -897,22 +895,26 @@ func (lse *logStreamExecutor) Commit(ctx context.Context, cr CommittedLogStreamS
 	}
 
 	if err := lse.verifyCommit(&ct); err != nil {
-		lse.logger.Error("could not commit", zap.Error(err))
+		lse.logger.Debug("could not commit", zap.Error(err))
 		return
 	}
 
+	var err error
 	tctx, cancel := context.WithTimeout(ctx, lse.options.CommitCTimeout)
 	defer cancel()
 	select {
 	case lse.commitC <- ct:
+		return
 	case <-tctx.Done():
-		lse.logger.Error("could not send commitTask to commitC", zap.Error(tctx.Err()))
+		err = errors.Wrapf(tctx.Err(), "logstream")
 	case <-lse.stopped:
-		lse.logger.Error("could not send commitTask to commitC", zap.Error(errLSEClosed))
+		err = errors.WithStack(errLSEClosed)
+	}
+	if err != nil {
+		lse.logger.Error("could not commit", zap.Error(err))
 	}
 }
 
-// func (lse *logStreamExecutor) verifyCommit(prevHighWatermark types.GLSN) error {
 func (lse *logStreamExecutor) verifyCommit(ct *commitTask) error {
 	lse.lsc.rcc.mu.RLock()
 	defer lse.lsc.rcc.mu.RUnlock()
@@ -922,14 +924,14 @@ func (lse *logStreamExecutor) verifyCommit(ct *commitTask) error {
 	numUncommitted := uint64(uncommittedLLSNEnd - lse.lsc.rcc.uncommittedLLSNBegin)
 	if numUncommitted < numCommitted {
 		// NOTE: MR just sends past commit messages to recovered SN that has no written logs.
-		return fmt.Errorf("logstream: numUncommitted (%d - %d = %d) < numCommitted (%d - %d = %d) - recovered sn?",
+		return errors.Errorf("logstream: numUncommitted (%d - %d = %d) < numCommitted (%d - %d = %d) - recovered sn?",
 			uncommittedLLSNEnd, lse.lsc.rcc.uncommittedLLSNBegin, numUncommitted,
 			ct.committedGLSNEnd, ct.committedGLSNBegin, numCommitted)
 	}
 
 	knownGlobalHWM := lse.lsc.rcc.globalHighwatermark
 	if knownGlobalHWM != ct.prevHighWatermark {
-		return fmt.Errorf("logstream: highwatermark mismatch (LSE.globalHWM=%v Commit.prevHWM=%v)", knownGlobalHWM, ct.prevHighWatermark)
+		return errors.Errorf("logstream: highwatermark mismatch (LSE.globalHWM=%v Commit.prevHWM=%v)", knownGlobalHWM, ct.prevHighWatermark)
 	}
 
 	return nil
@@ -937,13 +939,18 @@ func (lse *logStreamExecutor) verifyCommit(ct *commitTask) error {
 
 func (lse *logStreamExecutor) commit(t commitTask) {
 	if err := lse.verifyCommit(&t); err != nil {
-		lse.logger.Error("could not commit", zap.Error(err))
+		lse.logger.Debug("could not commit", zap.Error(err))
 		return
 	}
 
-	first := true
-	commitOk := true
-	glsn := t.committedGLSNBegin
+	var (
+		commitErr error
+		nrCommits uint64
+
+		first    = true
+		commitOk = true
+		glsn     = t.committedGLSNBegin
+	)
 
 	lse.lsc.committedLLSNEnd.mu.Lock()
 	defer lse.lsc.committedLLSNEnd.mu.Unlock()
@@ -956,19 +963,16 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 				CommittedGLSNBegin: t.committedGLSNBegin,
 				CommittedGLSNEnd:   t.committedGLSNEnd,
 			}
-			if err := lse.storage.StoreCommitContext(cc); err != nil {
-				lse.logger.Error("could not store commit context", zap.Error(err))
+			if commitErr = lse.storage.StoreCommitContext(cc); commitErr != nil {
 				commitOk = false
 				lse.sealItself()
 				break
 			}
-
 			first = false
 		}
 
 		llsn := lse.lsc.committedLLSNEnd.llsn
-		if err := lse.storage.Commit(llsn, glsn); err != nil {
-			lse.logger.Error("could not commit", zap.Error(err))
+		if commitErr = lse.storage.Commit(llsn, glsn); commitErr != nil {
 			// NOTE: The LogStreamExecutor fails to commit Log entries that are
 			// assigned GLSN by MR, for example, because of the storage failure.
 			// In other replicated storage nodes, it can be okay.
@@ -978,6 +982,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			lse.sealItself()
 			break
 		}
+		nrCommits++
 		lse.lsc.committedLLSNEnd.llsn++
 		// NB: Mutating localHighWatermark here is somewhat nasty.
 		// Read operation to the log entry before getting a response
@@ -993,10 +998,12 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			}
 			appendT.setGLSN(glsn)
 			appendT.notify(nil)
-		} else {
-			lse.logger.Warn("committed, but cannot notify since no appendTask exists", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
 		}
-		lse.logger.Debug("committed", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
+		lse.logger.Debug("commit",
+			zap.Uint64("llsn", uint64(llsn)),
+			zap.Uint64("glsn", uint64(glsn)),
+			zap.Bool("notify", ok),
+		)
 		glsn++
 	}
 
@@ -1010,46 +1017,71 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		appendT, ok := lse.trackers.get(llsn)
 		if ok {
 			appendT.setGLSN(glsn)
-			appendT.notify(fmt.Errorf("%w: commit error (llsn=%v glsn=%v)", verrors.ErrCorruptLogStream, llsn, glsn))
-		} else {
-			lse.logger.Warn("failed to commit, but cannot notify since no appendTask exists", zap.Any("llsn", llsn), zap.Any("glsn", glsn))
+			appendT.notify(errors.Errorf("logstream: could not commit (llsn = %d, glsn = %d)", llsn, glsn))
 		}
+		lse.logger.Debug("could not commit",
+			zap.Uint64("llsn", uint64(llsn)),
+			zap.Uint64("glsn", uint64(glsn)),
+			zap.Bool("notify", ok),
+		)
 		offset++
 		glsn++
-		lse.logger.Debug("commit failed", zap.Any("llsn", llsn))
 	}
 
 	if commitOk {
-		lse.lsc.rcc.mu.Lock()
-		defer lse.lsc.rcc.mu.Unlock()
 		// NOTE: Even empty commit should update HWM since LSR aggregates all of the
 		// replicas in the storage node and take the minimum value of each HWMs.
+		lse.lsc.rcc.mu.Lock()
+		defer lse.lsc.rcc.mu.Unlock()
+
+		total := t.committedGLSNEnd - t.committedGLSNBegin
 		lse.lsc.rcc.globalHighwatermark = t.highWatermark
-		lse.lsc.rcc.uncommittedLLSNBegin += types.LLSN(t.committedGLSNEnd - t.committedGLSNBegin)
-		if t.committedGLSNEnd-t.committedGLSNBegin > 0 {
-			lse.logger.Debug("commit batch",
-				zap.Any("glsn_begin", t.committedGLSNBegin),
-				zap.Any("glsn_end", t.committedGLSNEnd),
-				zap.Any("old_hwm", lse.lsc.rcc.globalHighwatermark-t.highWatermark),
-				zap.Any("new_hwm", lse.lsc.rcc.globalHighwatermark),
-				zap.Any("new_committed_llsn_end", lse.lsc.committedLLSNEnd.llsn),
+		lse.lsc.rcc.uncommittedLLSNBegin += types.LLSN(total)
+
+		if lse.logger.Core().Enabled(zapcore.InfoLevel) {
+			var sb strings.Builder
+
+			fmt.Fprintf(&sb, "[%d, %d)", t.committedGLSNBegin, t.committedGLSNEnd)
+			glsnRange := sb.String()
+			sb.Reset()
+
+			llsnEnd := lse.lsc.committedLLSNEnd.llsn
+			fmt.Fprintf(&sb, "[%d, %d)", llsnEnd-types.LLSN(total), llsnEnd)
+			llsnRange := sb.String()
+			sb.Reset()
+
+			fmt.Fprintf(&sb, "%d -> %d", t.prevHighWatermark, t.highWatermark)
+			hwmUpdate := sb.String()
+
+			lse.logger.Info("commit completed",
+				zap.Uint64("nr_commits", uint64(total)),
+				zap.String("glsn", glsnRange),
+				zap.String("llsn", llsnRange),
+				zap.String("global_hwm", hwmUpdate),
 			)
-		} else {
-			lse.logger.Debug("empty commit batch")
 		}
+		return
 	}
+
+	fields := make([]zap.Field, 0, 2)
+	fields = append(fields, zap.Error(commitErr))
+	if nrCommits > 0 {
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "%d/%d", nrCommits, t.committedGLSNEnd-t.committedGLSNBegin)
+		fields = append(fields, zap.String("partial_commits", sb.String()))
+	}
+	lse.logger.Error("commit failed", fields...)
 }
 
 func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLSN types.GLSN) (*SyncTaskStatus, error) {
 	lse.muRunning.RLock()
 	defer lse.muRunning.RUnlock()
 	if !lse.running {
-		return nil, errLSEClosed
+		return nil, errors.WithStack(errLSEClosed)
 	}
 	// TODO (jun): Delete SyncTaskStatus, but when?
 	if status := lse.Status(); status != varlogpb.LogStreamStatusSealed {
-		lse.logger.Error("bad status to sync", zap.Any("status", status))
-		return nil, fmt.Errorf("bad status (%v) to sync", status)
+		return nil, errors.Errorf("logstream: invalid status to sync (%s)", status)
 	}
 
 	lse.muSyncTracker.Lock()
@@ -1096,12 +1128,13 @@ func (lse *logStreamExecutor) Sync(ctx context.Context, replica Replica, lastGLS
 	}
 	lse.syncTracker[replica.StorageNodeID] = sts
 
-	if err := lse.runner.RunC(mctx, lse.syncer(mctx, sts)); err != nil {
-		lse.logger.Error("could not run syncer", zap.Error(err))
+	err = lse.runner.RunC(mctx, lse.syncer(mctx, sts))
+	if err != nil {
+		err = errors.Wrapf(err, "logstream")
 		delete(lse.syncTracker, replica.StorageNodeID)
 	}
 
-	return sts.copy(), nil
+	return sts.copy(), err
 }
 
 func (lse *logStreamExecutor) syncer(ctx context.Context, sts *SyncTaskStatus) func(context.Context) {
@@ -1128,7 +1161,7 @@ func (lse *logStreamExecutor) syncer(ctx context.Context, sts *SyncTaskStatus) f
 			}
 
 			if result.LogEntry.LLSN != first.LLSN+numLogs {
-				err = fmt.Errorf("unexpected LLSN: expected=%v actual=%v", first.LLSN+numLogs, result.LogEntry.LLSN)
+				err = errors.Errorf("logstream: unexpected LLSN (expected = %v, actual = %v)", first.LLSN+numLogs, result.LogEntry.LLSN)
 				break
 			}
 			numLogs++
@@ -1150,10 +1183,10 @@ func (lse *logStreamExecutor) syncer(ctx context.Context, sts *SyncTaskStatus) f
 	errOut:
 		sts.mu.Lock()
 		if err == nil {
-			lse.logger.Info("syncer complete", zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
+			lse.logger.Debug("syncer completed", zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
 			sts.State = snpb.SyncStateComplete
 		} else {
-			lse.logger.Error("syncer failure", zap.Error(err), zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
+			lse.logger.Error("syncer failed", zap.Error(err), zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
 			sts.State = snpb.SyncStateError
 		}
 		sts.Err = err
@@ -1163,7 +1196,7 @@ func (lse *logStreamExecutor) syncer(ctx context.Context, sts *SyncTaskStatus) f
 
 func (lse *logStreamExecutor) getLogPosition(glsn types.GLSN) (types.LLSN, error) {
 	if glsn == types.InvalidGLSN {
-		return types.InvalidLLSN, errors.New("invalid argument")
+		return types.InvalidLLSN, errors.New("logstream: invalid GLSN")
 	}
 	logEntry, err := lse.storage.Read(glsn)
 	if err != nil {
@@ -1177,12 +1210,11 @@ func (lse *logStreamExecutor) SyncReplicate(ctx context.Context, first, last, cu
 	lse.muRunning.RLock()
 	defer lse.muRunning.RUnlock()
 	if !lse.running {
-		return errLSEClosed
+		return errors.WithStack(errLSEClosed)
 	}
 	// TODO (jun): prevent from triggering Sync from multiple sources
 	if status := lse.Status(); status != varlogpb.LogStreamStatusSealing {
-		lse.logger.Error("bad status to syncreplicate", zap.Any("status", status))
-		return fmt.Errorf("bad status (%v) to syncreplicate", status)
+		return errors.Errorf("invalid status to syncreplicate (%s)", status)
 	}
 
 	// TODO: guard lse.lsc.committedLLSNEnd
@@ -1196,12 +1228,12 @@ func (lse *logStreamExecutor) SyncReplicate(ctx context.Context, first, last, cu
 	}
 
 	if err := lse.storage.Write(current.GetLLSN(), data); err != nil {
-		lse.logger.Error("syncreplicate: could not write", zap.Error(err))
+		// lse.logger.Error("syncreplicate: could not write", zap.Error(err))
 		return err
 	}
 
 	if err := lse.storage.Commit(current.GetLLSN(), current.GetGLSN()); err != nil {
-		lse.logger.Error("syncreplicate: could not commit", zap.Error(err))
+		// lse.logger.Error("syncreplicate: could not commit", zap.Error(err))
 		return err
 	}
 

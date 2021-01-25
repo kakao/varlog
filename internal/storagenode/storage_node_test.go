@@ -112,7 +112,7 @@ func TestStorageNode(t *testing.T) {
 			sn := snList[i]
 			mcl := mclList[i]
 
-			meta, err := mcl.GetMetadata(context.TODO(), snpb.MetadataTypeLogStreams)
+			meta, err := mcl.GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 			So(meta.GetClusterID(), ShouldEqual, clusterID)
 			So(meta.GetStorageNode().GetStorageNodeID(), ShouldEqual, sn.storageNodeID)
@@ -124,7 +124,7 @@ func TestStorageNode(t *testing.T) {
 			err = mcl.AddLogStream(context.TODO(), logStreamID, storages[0].GetPath())
 			So(err, ShouldBeNil)
 
-			meta, err = mcl.GetMetadata(context.TODO(), snpb.MetadataTypeLogStreams)
+			meta, err = mcl.GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 			So(meta.GetClusterID(), ShouldEqual, clusterID)
 			So(meta.GetStorageNode().GetStorageNodeID(), ShouldEqual, sn.storageNodeID)
@@ -427,7 +427,7 @@ func TestStorageNodeRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		meta, err := mcl.GetMetadata(context.TODO(), snpb.MetadataTypeLogStreams)
+		meta, err := mcl.GetMetadata(context.TODO())
 		So(err, ShouldBeNil)
 		So(meta.GetClusterID(), ShouldEqual, clusterID)
 		So(meta.GetStorageNode().GetStorageNodeID(), ShouldEqual, sn.storageNodeID)
@@ -494,7 +494,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		meta, err = mcl.GetMetadata(context.TODO(), snpb.MetadataTypeLogStreams)
+		meta, err = mcl.GetMetadata(context.TODO())
 		So(err, ShouldBeNil)
 		So(meta.GetClusterID(), ShouldEqual, clusterID)
 		So(meta.GetStorageNode().GetStorageNodeID(), ShouldEqual, sn.storageNodeID)
@@ -561,7 +561,7 @@ func TestRPCAddress(t *testing.T) {
 					sn.Close()
 				})
 
-				snmd, err := sn.GetMetadata(context.TODO(), opts.ClusterID, snpb.MetadataTypeLogStreams)
+				snmd, err := sn.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 
 				So(snmd.GetStorageNode().GetAddress(), ShouldEqual, opts.AdvertiseAddress)
@@ -577,7 +577,7 @@ func TestRPCAddress(t *testing.T) {
 					sn.Close()
 				})
 
-				snmd, err := sn.GetMetadata(context.TODO(), opts.ClusterID, snpb.MetadataTypeLogStreams)
+				snmd, err := sn.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 
 				So(snmd.GetStorageNode().GetAddress(), ShouldNotBeEmpty)

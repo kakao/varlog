@@ -25,7 +25,7 @@ func TestManagementClientGetMetadata(t *testing.T) {
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(nil, verrors.ErrInternal)
 			Convey("Then the ManagementClient should return the error", func() {
-				_, err := mc.GetMetadata(context.TODO(), snpb.MetadataTypeHeartbeat)
+				_, err := mc.GetMetadata(context.TODO())
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -33,7 +33,7 @@ func TestManagementClientGetMetadata(t *testing.T) {
 		Convey("Whyen the ManagementService succeeds to get metadata", func() {
 			mockClient.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(&snpb.GetMetadataResponse{}, nil)
 			Convey("Then the ManagementClient should return the metadata", func() {
-				_, err := mc.GetMetadata(context.TODO(), snpb.MetadataTypeHeartbeat)
+				_, err := mc.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 			})
 		})
@@ -54,34 +54,10 @@ func TestManagementClientAddLogStream(t *testing.T) {
 			})
 		})
 
-		Convey("When the ManagementService is timed out", func() {
-			Convey("Then the ManagementClient should return timeout error", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed ClusterID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed StorageNodeID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed LogStreamID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
 		Convey("When the length of passed path is zero", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
+			Convey("Then the ManagementClient should return an error", func() {
 				err := mc.AddLogStream(context.TODO(), types.LogStreamID(1), "")
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, ShouldNotBeNil)
 			})
 		})
 
@@ -115,29 +91,6 @@ func TestManagementClientRemoveLogStream(t *testing.T) {
 
 		Convey("When the ManagementClient is timed out", func() {
 			Convey("Then the ManagementClient should return timeout error", func() {
-			})
-		})
-
-		Convey("When the ManagementService is timed out", func() {
-			Convey("Then the ManagementClient should return timeout error", func() {
-			})
-		})
-
-		Convey("When the passed ClusterID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed StorageNodeID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
-			})
-		})
-
-		Convey("When the passed LogStreamID is invalid", func() {
-			Convey("Then the ManagementClient should return an ErrInvalid", func() {
-				Convey("This isn't yet implemented", nil)
 			})
 		})
 

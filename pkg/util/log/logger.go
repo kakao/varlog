@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/label"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -37,6 +38,8 @@ var (
 	panicLabel  = label.String(loggerLevelAttributeKey, "panic")
 	fatalLabel  = label.String(loggerLevelAttributeKey, "fatal")
 )
+
+type Level = zapcore.Level
 
 type Logger struct {
 	z        *zap.Logger
@@ -79,11 +82,19 @@ func (log *Logger) With(fields ...zap.Field) *Logger {
 	return &Logger{z: log.z.With(fields...), nameAttr: log.nameAttr, attrs: newAttrs}
 }
 
+func (log *Logger) Enabled(lvl zapcore.Level) bool {
+	return log.z.Core().Enabled(lvl)
+}
+
+func (log *Logger) DebugEnabled() bool {
+	return log.Enabled(zapcore.DebugLevel)
+}
+
 func (log *Logger) Debug(msg string, fields ...zap.Field) {
 	log.z.Debug(msg, fields...)
 }
 
-func (log *Logger) DebugC(ctx context.Context, msg string, fields ...zap.Field) {
+func (log *Logger) DebugWithTrace(ctx context.Context, msg string, fields ...zap.Field) {
 	log.setAttributesToSpan(ctx, msg, debugLabel, fields...)
 	log.z.Debug(msg, fields...)
 }

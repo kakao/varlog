@@ -5,6 +5,7 @@ package snc
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
@@ -18,7 +19,7 @@ import (
 type StorageNodeManagementClient interface {
 	PeerAddress() string
 	PeerStorageNodeID() types.StorageNodeID
-	GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error)
 	AddLogStream(ctx context.Context, logStreamID types.LogStreamID, path string) error
 	RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error
 	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
@@ -51,8 +52,7 @@ func NewManagementClient(ctx context.Context, clusterID types.ClusterID, address
 	}
 	rpcClient := snpb.NewManagementClient(rpcConn.Conn)
 	rsp, err := rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
-		ClusterID:    clusterID,
-		MetadataType: snpb.MetadataTypeHeartbeat,
+		ClusterID: clusterID,
 	})
 	if err != nil {
 		if closeErr := rpcConn.Close(); closeErr != nil {
@@ -81,21 +81,16 @@ func (c snManagementClient) PeerStorageNodeID() types.StorageNodeID {
 	return c.storageNodeID
 }
 
-func (c *snManagementClient) GetMetadata(ctx context.Context, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (c *snManagementClient) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
-		ClusterID:    c.clusterID,
-		MetadataType: metadataType,
+		ClusterID: c.clusterID,
 	})
-	if err != nil {
-		return nil, err
-	}
-	return rsp.GetStorageNodeMetadata(), nil
+	return rsp.GetStorageNodeMetadata(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
 func (c *snManagementClient) AddLogStream(ctx context.Context, lsid types.LogStreamID, path string) error {
-	// TODO(jun): Check ranges CID, SNID and LSID
 	if stringsutil.Empty(path) {
-		return verrors.ErrInvalid // FIXME: ErrInvalid ErrInvalidArgument
+		return errors.New("snmcl: invalid argument")
 	}
 	// FIXME(jun): Does the return value of AddLogStream need?
 	_, err := c.rpcClient.AddLogStream(ctx, &snpb.AddLogStreamRequest{
@@ -106,29 +101,26 @@ func (c *snManagementClient) AddLogStream(ctx context.Context, lsid types.LogStr
 			Path: path,
 		},
 	})
-	return err
-
+	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
 func (c *snManagementClient) RemoveLogStream(ctx context.Context, lsid types.LogStreamID) error {
-	// TODO(jun): Check ranges CID, SNID and LSID
 	_, err := c.rpcClient.RemoveLogStream(ctx, &snpb.RemoveLogStreamRequest{
 		ClusterID:     c.clusterID,
 		StorageNodeID: c.storageNodeID,
 		LogStreamID:   lsid,
 	})
-	return err
+	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
 func (c *snManagementClient) Seal(ctx context.Context, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
-	// TODO(jun): Check ranges CID, SNID and LSID
 	rsp, err := c.rpcClient.Seal(ctx, &snpb.SealRequest{
 		ClusterID:         c.clusterID,
 		StorageNodeID:     c.storageNodeID,
 		LogStreamID:       lsid,
 		LastCommittedGLSN: lastCommittedGLSN,
 	})
-	return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), err
+	return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
 func (c *snManagementClient) Unseal(ctx context.Context, lsid types.LogStreamID) error {
@@ -138,7 +130,7 @@ func (c *snManagementClient) Unseal(ctx context.Context, lsid types.LogStreamID)
 		StorageNodeID: c.storageNodeID,
 		LogStreamID:   lsid,
 	})
-	return err
+	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
 func (c *snManagementClient) Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
@@ -152,7 +144,7 @@ func (c *snManagementClient) Sync(ctx context.Context, logStreamID types.LogStre
 		},
 		LastGLSN: lastGLSN,
 	})
-	return rsp.GetStatus(), err
+	return rsp.GetStatus(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
 // Close closes connection to the storage node.

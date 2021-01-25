@@ -4,9 +4,11 @@ package storagenode
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"sync"
 
+	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -31,8 +33,8 @@ type replicateTask struct {
 const replicateCSize = 0
 
 var (
-	errRepKilled  = errors.New("killed replicator")
-	errNoReplicas = errors.New("replicator: no replicas")
+	errRepKilled  = stderrors.New("replicator: killed replicator")
+	errNoReplicas = stderrors.New("replicator: no replicas")
 )
 
 type Replicator interface {
@@ -114,12 +116,12 @@ func (r *replicator) Close() {
 	r.mtxRcm.Unlock()
 	r.runner.Stop()
 	r.stop()
-	r.logger.Info("close")
+	r.logger.Info("stop")
 }
 
 func (r *replicator) stop() {
 	r.onceStopped.Do(func() {
-		r.logger.Info("stopped rpc handlers")
+		r.logger.Info("stopping channels")
 		close(r.stopped)
 	})
 }
@@ -127,7 +129,7 @@ func (r *replicator) stop() {
 func (r *replicator) Replicate(ctx context.Context, llsn types.LLSN, data []byte, replicas []Replica) <-chan error {
 	errC := make(chan error, 1)
 	if len(replicas) == 0 {
-		errC <- errNoReplicas
+		errC <- errors.WithStack(errNoReplicas)
 		close(errC)
 		return errC
 	}
@@ -140,10 +142,10 @@ func (r *replicator) Replicate(ctx context.Context, llsn types.LLSN, data []byte
 	select {
 	case r.replicateC <- task:
 	case <-ctx.Done():
-		errC <- ctx.Err()
+		errC <- errors.Wrapf(ctx.Err(), "replicator")
 		close(errC)
 	case <-r.stopped:
-		errC <- errRepKilled
+		errC <- errors.WithStack(errRepKilled)
 		close(errC)
 	}
 	return errC
@@ -183,15 +185,16 @@ func (r *replicator) replicate(ctx context.Context, t *replicateTask) {
 	var err error
 	var errRcs []ReplicatorClient
 	for i, errC := range errCs {
+		var e error
 		select {
-		case e := <-errC:
+		case e = <-errC:
 			if e == nil {
 				continue
 			}
-			err = e
 		case <-ctx.Done():
-			err = ctx.Err()
+			e = errors.Wrapf(ctx.Err(), "replicator")
 		}
+		err = multierr.Append(err, e)
 		errRcs = append(errRcs, rcs[i])
 	}
 	t.errC <- err
@@ -207,9 +210,8 @@ func (r *replicator) replicate(ctx context.Context, t *replicateTask) {
 }
 
 func (r *replicator) getOrConnect(ctx context.Context, replica Replica) (ReplicatorClient, error) {
+	// TODO (jun): Is acquiring RLock and then WLock good for performance? right?
 	r.mtxRcm.RLock()
-	// NOTE: This implies that all of the replicas in a Log Stream is running on different
-	// Storage Nodes. Is this a good assumption?
 	rc, ok := r.rcm[replica.StorageNodeID]
 	r.mtxRcm.RUnlock()
 	if ok {

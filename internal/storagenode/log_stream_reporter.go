@@ -4,18 +4,18 @@ package storagenode
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"sync"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
-	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 )
 
 var (
-	errLSRKilled = errors.New("killed logstreamreporter")
+	errLSRKilled = stderrors.New("logstreamreporter: killed")
 )
 
 type UncommittedLogStreamStatus struct {
@@ -105,14 +105,12 @@ func (lsr *logStreamReporter) Run(ctx context.Context) error {
 
 	var err error
 	if err = lsr.runner.RunC(mctx, lsr.dispatchCommit); err != nil {
-		lsr.logger.Error("could not run dispatchCommit", zap.Error(err))
 		goto errOut
 	}
 	if err = lsr.runner.RunC(mctx, lsr.dispatchReport); err != nil {
-		lsr.logger.Error("could not run dispatchReport", zap.Error(err))
 		goto errOut
 	}
-	lsr.logger.Info("run")
+	lsr.logger.Info("start")
 	return nil
 
 errOut:
@@ -139,7 +137,7 @@ func (lsr *logStreamReporter) Close() {
 
 func (lsr *logStreamReporter) stop() {
 	lsr.onceStopped.Do(func() {
-		lsr.logger.Info("stopped rpc handlers")
+		lsr.logger.Info("stopping channels")
 		close(lsr.stopped)
 	})
 }
@@ -179,7 +177,7 @@ func (lsr *logStreamReporter) GetReport(ctx context.Context) (map[types.LogStrea
 	select {
 	case <-t.done:
 	case <-tctx.Done():
-		return nil, tctx.Err()
+		return nil, errors.Wrap(tctx.Err(), "logstreamreporter")
 	}
 
 	lsr.logger.Debug("contents of report", zap.Int("size", len(t.reports)), zap.Reflect("reports", t.reports))
@@ -192,9 +190,9 @@ func (lsr *logStreamReporter) addReportC(ctx context.Context, t *lsrReportTask) 
 	select {
 	case lsr.reportC <- t:
 	case <-tctx.Done():
-		return tctx.Err()
+		return errors.Wrap(tctx.Err(), "logstreamreporter")
 	case <-lsr.stopped:
-		return errLSRKilled
+		return errors.WithStack(errLSRKilled)
 	}
 	return nil
 }
@@ -206,48 +204,42 @@ func (lsr *logStreamReporter) report(t *lsrReportTask) {
 		return
 	}
 
-	reports := make(map[types.LogStreamID]UncommittedLogStreamStatus)
+	reports := make(map[types.LogStreamID]UncommittedLogStreamStatus, len(executors))
 	for _, executor := range executors {
 		status := executor.GetReport()
-
 		reports[status.LogStreamID] = status
 	}
-
 	t.reports = reports
 	close(t.done)
 }
 
 func (lsr *logStreamReporter) Commit(ctx context.Context, commitResults []CommittedLogStreamStatus) error {
 	if len(commitResults) == 0 {
-		lsr.logger.Error("could not try to commit: no commit results")
-		return verrors.ErrInternal
+		return errors.New("logstreamreporter: no commit results")
 	}
 
-	t := lsrCommitTask{
-		commitResults: commitResults,
-	}
+	t := lsrCommitTask{commitResults: commitResults}
 	tctx, cancel := context.WithTimeout(ctx, lsr.options.CommitCTimeout)
 	defer cancel()
 	select {
 	case lsr.commitC <- t:
 		return nil
 	case <-tctx.Done():
-		lsr.logger.Error("could not try to commit: failed to append commitTask to commitC", zap.Error(tctx.Err()))
-		return tctx.Err()
+		return errors.Wrap(tctx.Err(), "logstreamreporter")
 	case <-lsr.stopped:
-		return errLSRKilled
+		return errors.WithStack(errLSRKilled)
 	}
 }
 
 func (lsr *logStreamReporter) commit(ctx context.Context, t lsrCommitTask) {
+	lsr.logger.Debug("commit", zap.Any("commitTask", t))
 	for i := range t.commitResults {
 		go func(idx int) {
 			logStreamID := t.commitResults[idx].LogStreamID
 			executor, ok := lsr.lseGetter.GetLogStreamExecutor(logStreamID)
 			if !ok {
-				lsr.logger.Panic("no such executor", zap.Any("target_lsid", "logStreamID"))
+				lsr.logger.DPanic("no such log stream executor", zap.Uint32("lsid", uint32(logStreamID)))
 			}
-			lsr.logger.Debug("try to commit", zap.Reflect("commit", t.commitResults[idx]))
 			executor.Commit(ctx, t.commitResults[idx])
 		}(i)
 	}

@@ -3,9 +3,7 @@ package storagenode
 //go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/storagenode -package storagenode -destination storage_mock.go . Scanner,WriteBatch,CommitBatch,Storage
 
 import (
-	"errors"
-	"fmt"
-
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -163,7 +161,7 @@ func initStorages() map[string]initStorageFunc {
 
 func ValidStorageName(name string) error {
 	if _, ok := storages[name]; !ok {
-		return fmt.Errorf("unknown storage %s", name)
+		return errors.Errorf("unknown storage %s", name)
 	}
 	return nil
 }

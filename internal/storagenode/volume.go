@@ -1,12 +1,13 @@
 package storagenode
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pkg/errors"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/fputil"
@@ -49,16 +50,17 @@ func (vol Volume) Valid() error {
 // - writable directory
 func ValidDir(dir string) error {
 	if !filepath.IsAbs(dir) {
-		return errors.New("not absolute path")
+		return errors.New("storagenode: not absolute path")
 	}
 	fi, err := os.Stat(dir)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	if !fi.IsDir() {
-		return errors.New("not directory")
+		return errors.New("storagenode: not directory")
 	}
-	return fputil.IsWritableDir(dir)
+	err = fputil.IsWritableDir(dir)
+	return errors.WithMessage(err, "storagenode")
 }
 
 // CreateStorageNodePath creates a new directory to store various data related to the storage node.
@@ -69,7 +71,7 @@ func (vol Volume) CreateStorageNodePath(clusterID types.ClusterID, storageNodeID
 	snPath := filepath.Join(string(vol), clusterDir, storageNodeDir)
 	snPath, err := filepath.Abs(snPath)
 	if err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "storagenode")
 	}
 	snPath, err = createPath(snPath)
 	return snPath, err
@@ -109,14 +111,14 @@ func CreateLogStreamPath(storageNodePath string, logStreamID types.LogStreamID) 
 	lsPath := filepath.Join(storageNodePath, logStreamDir)
 	lsPath, err := filepath.Abs(lsPath)
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 	return createPath(lsPath)
 }
 
 func createPath(dir string) (string, error) {
 	if err := os.MkdirAll(dir, VolumeFileMode); err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 	if err := ValidDir(dir); err != nil {
 		return "", err

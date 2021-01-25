@@ -2,6 +2,7 @@ package storagenode
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -64,7 +65,7 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
 					defer cancel()
 					_, err := cli.Append(ctx, lsid, nil)
-					So(verrors.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
+					So(errors.Is(err, context.DeadlineExceeded), ShouldBeTrue)
 				})
 			})
 
@@ -139,7 +140,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
 					defer cancel()
 					_, err := cli.Read(ctx, lsid, types.MinGLSN)
-					So(verrors.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
+					So(errors.Is(err, context.DeadlineExceeded), ShouldBeTrue)
 				})
 			})
 
@@ -295,7 +296,7 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond)
 					defer cancel()
 					err := cli.Trim(ctx, types.MinGLSN)
-					So(verrors.ToErr(ctx, err), ShouldResemble, context.DeadlineExceeded)
+					So(errors.Is(err, context.DeadlineExceeded), ShouldBeTrue)
 				})
 			})
 

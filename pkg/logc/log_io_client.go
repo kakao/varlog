@@ -78,7 +78,7 @@ func (c *logIOClient) Append(ctx context.Context, logStreamID types.LogStreamID,
 	}
 	rsp, err := c.rpcClient.Append(ctx, req)
 	if err != nil {
-		return types.InvalidGLSN, verrors.FromStatusError(err)
+		return types.InvalidGLSN, errors.Wrap(verrors.FromStatusError(err), "logiocl")
 	}
 	return rsp.GetGLSN(), nil
 }
@@ -91,7 +91,7 @@ func (c *logIOClient) Read(ctx context.Context, logStreamID types.LogStreamID, g
 	}
 	rsp, err := c.rpcClient.Read(ctx, req)
 	if err != nil {
-		return nil, verrors.FromStatusError(err)
+		return nil, errors.Wrap(verrors.FromStatusError(err), "logiocl")
 	}
 	return &types.LogEntry{
 		GLSN: rsp.GetGLSN(),
@@ -104,7 +104,7 @@ func (c *logIOClient) Read(ctx context.Context, logStreamID types.LogStreamID, g
 // entries taken are sequential.
 func (c *logIOClient) Subscribe(ctx context.Context, logStreamID types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error) {
 	if begin >= end {
-		return nil, verrors.ErrInvalid
+		return nil, errors.New("logiocl: invalid argument")
 	}
 
 	req := &snpb.SubscribeRequest{
@@ -114,7 +114,7 @@ func (c *logIOClient) Subscribe(ctx context.Context, logStreamID types.LogStream
 	}
 	stream, err := c.rpcClient.Subscribe(ctx, req)
 	if err != nil {
-		return nil, verrors.FromStatusError(err)
+		return nil, errors.Wrap(verrors.FromStatusError(err), "logiocl")
 	}
 
 	out := make(chan SubscribeResult)
@@ -149,7 +149,7 @@ func (c *logIOClient) Subscribe(ctx context.Context, logStreamID types.LogStream
 func (c *logIOClient) Trim(ctx context.Context, glsn types.GLSN) error {
 	req := &snpb.TrimRequest{GLSN: glsn}
 	_, err := c.rpcClient.Trim(ctx, req)
-	return verrors.FromStatusError(err)
+	return errors.Wrap(verrors.FromStatusError(err), "logiocl")
 }
 
 // Close closes connection to the storage node.

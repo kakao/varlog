@@ -14,22 +14,12 @@ option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
-enum MetadataType {
-    option (gogoproto.goproto_enum_prefix) = false;
-
-    HEARTBEAT = 0 [(gogoproto.enumvalue_customname) = "MetadataTypeHeartbeat"];
-    LOG_STREAMS = 1
-        [(gogoproto.enumvalue_customname) = "MetadataTypeLogStreams"];
-    STATS = 2 [(gogoproto.enumvalue_customname) = "MetadataTypeStats"];
-}
-
 message GetMetadataRequest {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
-    MetadataType metadata_type = 2;
 }
 
 message GetMetadataResponse {

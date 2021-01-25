@@ -13,7 +13,6 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/snc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 type sntool struct {
@@ -39,7 +38,7 @@ func (snt *sntool) get() (string, error) {
 		return "", errors.New("sntool: could not connect storage node")
 	}
 	defer snmcl.Close()
-	snmeta, err := snmcl.GetMetadata(ctx, snpb.MetadataTypeLogStreams)
+	snmeta, err := snmcl.GetMetadata(ctx)
 	if err != nil {
 		return "", errors.New("sntool: could not get metadata")
 	}

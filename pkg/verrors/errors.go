@@ -29,7 +29,7 @@ var (
 )
 
 var (
-	ErrLogStreamAlreadyExists   = errors.New("logstream already exists")
+	//ErrLogStreamAlreadyExists   = errors.New("logstream already exists")
 	ErrStorageNodeNotExist      = errors.New("storagenode does not exist")
 	ErrStorageNodeAlreadyExists = errors.New("storagenode already exists")
 )
@@ -81,7 +81,7 @@ func init() {
 
 		ErrInvalidArgument, ErrAlreadyExists, ErrNotExist,
 
-		ErrLogStreamAlreadyExists, ErrStorageNodeNotExist, ErrStorageNodeAlreadyExists,
+		ErrStorageNodeNotExist, ErrStorageNodeAlreadyExists,
 
 		// metadata repository
 		ErrNotMember,
