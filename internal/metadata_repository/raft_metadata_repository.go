@@ -203,6 +203,8 @@ func (mr *RaftMetadataRepository) Run() {
 			mr.logger.Panic("could not run", zap.Error(err))
 		}
 
+		mr.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+
 		//TODO:: graceful shutdown
 		if err := mr.server.Serve(lis); err != nil && err != verrors.ErrStopped {
 			mr.logger.Panic("could not serve", zap.Error(err))
@@ -211,8 +213,6 @@ func (mr *RaftMetadataRepository) Run() {
 	}); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
-
-	mr.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
 	mr.logger.Info("starting metadata repository")
 }
