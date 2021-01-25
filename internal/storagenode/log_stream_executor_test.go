@@ -101,7 +101,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		Convey("append operation should not write data when sealed", func() {
 			lse.(*logStreamExecutor).sealItself()
 			_, err := lse.Append(context.TODO(), []byte("never"))
-			So(err, ShouldEqual, verrors.ErrSealed)
+			So(errors.Is(err, verrors.ErrSealed), ShouldBeTrue)
 		})
 
 		Convey("append operation should not write data when the storage is failed", func() {
@@ -214,7 +214,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 				stop := make(chan struct{})
 				go func() {
 					_, err := lse.Append(ctx, nil, Replica{})
-					c.So(err, ShouldResemble, context.Canceled)
+					c.So(errors.Is(err, context.Canceled), ShouldBeTrue)
 					close(stop)
 				}()
 				time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
@@ -239,7 +239,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 				lse.(*logStreamExecutor).options.AppendCTimeout = time.Duration(0)
 				Convey("Then the LogStreamExecutor should return timeout error", func() {
 					_, err := lse.Append(context.TODO(), nil)
-					So(err, ShouldResemble, context.DeadlineExceeded)
+					So(errors.Is(err, context.DeadlineExceeded), ShouldBeTrue)
 				})
 			})
 
@@ -248,7 +248,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 				cancel()
 				Convey("Then the LogStreamExecutor should return cancellation error", func() {
 					_, err := lse.Append(ctx, nil)
-					So(err, ShouldResemble, context.Canceled)
+					So(errors.Is(err, context.Canceled), ShouldBeTrue)
 				})
 			})
 		})
@@ -275,7 +275,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 				block(func() {})
 				Convey("Then the LogStreamExecutor should return timeout error", func() {
 					_, err := lse.Append(context.TODO(), nil)
-					So(err, ShouldResemble, context.DeadlineExceeded)
+					So(errors.Is(err, context.DeadlineExceeded), ShouldBeTrue)
 				})
 			})
 
@@ -287,7 +287,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 				Convey("Then the LogStreamExecutor should return cancellation error", func() {
 					_, err := lse.Append(ctx, nil)
-					So(err, ShouldResemble, context.Canceled)
+					So(errors.Is(err, context.Canceled), ShouldBeTrue)
 				})
 			})
 		})
@@ -327,7 +327,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 
 				Convey("Then the LogStreamExecutor should return cancellation error", func() {
 					_, err := lse.Append(ctx, nil, Replica{})
-					So(err, ShouldResemble, context.Canceled)
+					So(errors.Is(err, context.Canceled), ShouldBeTrue)
 				})
 			})
 		})
@@ -375,7 +375,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 				block(func() {})
 				Convey("Then the LogStreamExecutor should return timeout error", func() {
 					_, err := lse.Append(context.TODO(), nil, Replica{})
-					So(err, ShouldResemble, context.DeadlineExceeded)
+					So(errors.Is(err, context.DeadlineExceeded), ShouldBeTrue)
 				})
 			})
 
@@ -389,7 +389,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 					wait := make(chan struct{})
 					go func() {
 						_, err := lse.Append(ctx, nil, Replica{})
-						c.So(err, ShouldResemble, context.Canceled)
+						c.So(errors.Is(err, context.Canceled), ShouldBeTrue)
 						close(wait)
 					}()
 					<-wait
@@ -436,7 +436,7 @@ func TestLogStreamExecutorRead(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.TODO())
 				go func() {
 					_, err := lse.Read(ctx, types.MinGLSN)
-					c.So(err, ShouldResemble, context.Canceled)
+					c.So(errors.Is(err, context.Canceled), ShouldBeTrue)
 					close(wait)
 				}()
 				time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))

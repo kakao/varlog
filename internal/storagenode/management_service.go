@@ -2,6 +2,7 @@ package storagenode
 
 import (
 	"context"
+	"errors"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"go.opentelemetry.io/otel/codes"
@@ -9,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/telemetry/trace"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
@@ -48,29 +50,45 @@ func (s *managementService) withTelemetry(ctx context.Context, spanName string, 
 		oteltrace.WithAttributes(trace.StorageNodeIDLabel(s.m.StorageNodeID())),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
+	if cidGetter, ok := req.(interface{ GetClusterID() types.ClusterID }); ok {
+		if cidGetter.GetClusterID() != s.m.ClusterID() {
+			err = errors.New("storagenode: invalid ClusterID")
+			goto out
+		}
+	}
+	if snidGetter, ok := req.(interface{ GetStorageNodeID() types.StorageNodeID }); ok {
+		if snidGetter.GetStorageNodeID() != s.m.StorageNodeID() {
+			err = errors.New("storagenode: invalid StorageNodeID")
+			goto out
+		}
+	}
 	rsp, err = h(ctx, req)
+	// FIXME (jun): This is meaningless line.
+	s.tmStub.metrics().requests.Add(ctx, 1)
+out:
 	if err == nil {
 		span.SetStatus(codes.Ok, "")
 	} else {
 		span.RecordError(err)
+		s.logger.Error(spanName, zap.Error(err))
 	}
-	s.logger.Info(spanName, zap.Error(err))
 	span.End()
-	s.tmStub.metrics().requests.Add(ctx, 1)
 	return rsp, err
 }
 
 // GetMetadata implements the ManagementServer GetMetadata method.
 func (s *managementService) GetMetadata(ctx context.Context, req *snpb.GetMetadataRequest) (*snpb.GetMetadataResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Management/GetMetadata", req,
-		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.GetMetadataRequest)
-			metadata, err := s.m.GetMetadata(ctx, req.GetClusterID(), req.GetMetadataType())
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			metadata, err := s.m.GetMetadata(ctx)
 			rsp := &snpb.GetMetadataResponse{StorageNodeMetadata: metadata}
 			return rsp, err
 		},
 	)
-	return rspI.(*snpb.GetMetadataResponse), verrors.ToStatusError(err)
+	if err != nil {
+		return nil, verrors.ToStatusError(err)
+	}
+	return rspI.(*snpb.GetMetadataResponse), nil
 }
 
 // AddLogStream implements the ManagementServer AddLogStream method.
@@ -78,8 +96,7 @@ func (s *managementService) AddLogStream(ctx context.Context, req *snpb.AddLogSt
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Management/AddLogStream", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.AddLogStreamRequest)
-			// TODO: too many arguments!!
-			path, err := s.m.AddLogStream(ctx, req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID(), req.GetStorage().GetPath())
+			path, err := s.m.AddLogStream(ctx, req.GetLogStreamID(), req.GetStorage().GetPath())
 			return &snpb.AddLogStreamResponse{
 				LogStream: &varlogpb.LogStreamDescriptor{
 					LogStreamID: req.GetLogStreamID(),
@@ -92,7 +109,10 @@ func (s *managementService) AddLogStream(ctx context.Context, req *snpb.AddLogSt
 			}, err
 		},
 	)
-	return rspI.(*snpb.AddLogStreamResponse), verrors.ToStatusError(err)
+	if err != nil {
+		return nil, verrors.ToStatusError(err)
+	}
+	return rspI.(*snpb.AddLogStreamResponse), nil
 }
 
 // RemoveLogStream implements the ManagementServer RemoveLogStream method.
@@ -100,11 +120,14 @@ func (s *managementService) RemoveLogStream(ctx context.Context, req *snpb.Remov
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Management/RemoveLogStream", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.RemoveLogStreamRequest)
-			err := s.m.RemoveLogStream(ctx, req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID())
+			err := s.m.RemoveLogStream(ctx, req.GetLogStreamID())
 			return &pbtypes.Empty{}, err
 		},
 	)
-	return rspI.(*pbtypes.Empty), verrors.ToStatusError(err)
+	if err != nil {
+		return nil, verrors.ToStatusError(err)
+	}
+	return rspI.(*pbtypes.Empty), nil
 }
 
 // Seal implements the ManagementServer Seal method.
@@ -112,15 +135,17 @@ func (s *managementService) Seal(ctx context.Context, req *snpb.SealRequest) (*s
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Management/Seal", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.SealRequest)
-			// TODO: too many arguments
-			status, maxGLSN, err := s.m.Seal(ctx, req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID(), req.GetLastCommittedGLSN())
+			status, maxGLSN, err := s.m.Seal(ctx, req.GetLogStreamID(), req.GetLastCommittedGLSN())
 			return &snpb.SealResponse{
 				Status:            status,
 				LastCommittedGLSN: maxGLSN,
 			}, err
 		},
 	)
-	return rspI.(*snpb.SealResponse), verrors.ToStatusError(err)
+	if err != nil {
+		return nil, verrors.ToStatusError(err)
+	}
+	return rspI.(*snpb.SealResponse), nil
 }
 
 // Unseal implements the ManagementServer Unseal method.
@@ -128,11 +153,14 @@ func (s *managementService) Unseal(ctx context.Context, req *snpb.UnsealRequest)
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Management/Unseal", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.UnsealRequest)
-			err := s.m.Unseal(ctx, req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID())
+			err := s.m.Unseal(ctx, req.GetLogStreamID())
 			return &pbtypes.Empty{}, err
 		},
 	)
-	return rspI.(*pbtypes.Empty), verrors.ToStatusError(err)
+	if err != nil {
+		return nil, verrors.ToStatusError(err)
+	}
+	return rspI.(*pbtypes.Empty), nil
 }
 
 // Sync implements the ManagementServer Sync method.
@@ -145,9 +173,12 @@ func (s *managementService) Sync(ctx context.Context, req *snpb.SyncRequest) (*s
 				LogStreamID:   req.GetLogStreamID(),
 				Address:       req.GetBackup().GetAddress(),
 			}
-			status, err := s.m.Sync(ctx, req.GetClusterID(), req.GetStorageNodeID(), req.GetLogStreamID(), replica, req.GetLastGLSN())
+			status, err := s.m.Sync(ctx, req.GetLogStreamID(), replica, req.GetLastGLSN())
 			return &snpb.SyncResponse{Status: status}, err
 		},
 	)
-	return rspI.(*snpb.SyncResponse), verrors.ToStatusError(err)
+	if err != nil {
+		return nil, verrors.ToStatusError(err)
+	}
+	return rspI.(*snpb.SyncResponse), nil
 }

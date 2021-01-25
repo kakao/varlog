@@ -2,6 +2,7 @@ package storagenode
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -51,7 +52,7 @@ func TestReplicator(t *testing.T) {
 			})
 			err := <-errC
 			So(err, ShouldNotBeNil)
-			So(err, ShouldResemble, context.DeadlineExceeded)
+			So(errors.Is(err, context.DeadlineExceeded), ShouldBeTrue)
 		})
 
 		Convey("replicate operation should not work with closing replicator", func() {

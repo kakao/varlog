@@ -145,6 +145,7 @@ clean_mock:
 deps:
 	GO111MODULE=off $(GO) get golang.org/x/tools/cmd/goimports
 	GO111MODULE=off $(GO) get golang.org/x/lint/golint
+	GO111MODULE=off $(GO) get golang.org/x/tools/cmd/stringer
 	$(GO) get github.com/gogo/protobuf/protoc-gen-gogo@$(GOGO_PROTO_VERSION)
 	$(GO) get github.com/golang/mock/mockgen@$(MOCKGEN_VERSION)
 

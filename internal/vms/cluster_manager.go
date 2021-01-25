@@ -372,7 +372,7 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 	// See https://github.com/kakao/varlog/pull/198#discussion_r215602
 	logStreamID := cm.logStreamIDGen.Generate()
 	if clusmeta.GetLogStream(logStreamID) != nil {
-		err := fmt.Errorf("vms: logstream already exists (%d): %w", logStreamID, verrors.ErrLogStreamAlreadyExists)
+		err := fmt.Errorf("vms: logstream already exists (%d)", logStreamID)
 		// err := verrors.NewErrorf(verrors.ErrLogStreamAlreadyExists, codes.Unavailable, "lsid=%v", logStreamID)
 		cm.logger.Error("mismatch between ClusterMetadataView and LogStreamIDGenerator", zap.Any("lsid", logStreamID), zap.Error(err))
 		if err := cm.logStreamIDGen.Refresh(ctx); err != nil {
@@ -435,7 +435,8 @@ func (cm *clusterManager) verifyLogStream(clusterMetadata *varlogpb.MetadataDesc
 	}
 	// logstream existence
 	if clusterMetadata.GetLogStream(logStreamDesc.GetLogStreamID()) != nil {
-		return verrors.ErrLogStreamAlreadyExists
+		//return verrors.ErrLogStreamAlreadyExists
+		return errors.New("ErrLogStreamAlreadyExists")
 	}
 	return nil
 }

@@ -32,8 +32,8 @@ func NewLogStreamReporterService(lsr LogStreamReporter, tmStub *telemetryStub, l
 }
 
 func (s *LogStreamReporterService) Register(server *grpc.Server) {
-	s.logger.Info("register to rpc server")
 	snpb.RegisterLogStreamReporterServer(server, s)
+	s.logger.Info("register to rpc server")
 }
 
 func (s *LogStreamReporterService) withTelemetry(ctx context.Context, spanName string, req interface{}, h handler) (rsp interface{}, err error) {

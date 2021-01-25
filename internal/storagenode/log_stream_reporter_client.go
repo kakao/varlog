@@ -5,7 +5,10 @@ package storagenode
 import (
 	"context"
 
+	"github.com/pkg/errors"
+
 	"github.com/kakao/varlog/pkg/rpc"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
 
@@ -38,12 +41,14 @@ func NewLogStreamReporterClientFromRpcConn(rpcConn *rpc.Conn) (LogStreamReporter
 }
 
 func (c *logStreamReporterClient) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
-	return c.rpcClient.GetReport(ctx, &snpb.GetReportRequest{})
+	rsp, err := c.rpcClient.GetReport(ctx, &snpb.GetReportRequest{})
+	return rsp, errors.Wrap(verrors.FromStatusError(err), "lsrcl")
+
 }
 
 func (c *logStreamReporterClient) Commit(ctx context.Context, cr *snpb.CommitRequest) error {
 	_, err := c.rpcClient.Commit(ctx, cr)
-	return err
+	return errors.Wrap(verrors.FromStatusError(err), "lsrcl")
 }
 
 func (c *logStreamReporterClient) Close() error {

@@ -1,5 +1,7 @@
 package runner
 
+//go:generate stringer -type=State
+
 import (
 	"context"
 	"fmt"
@@ -79,11 +81,8 @@ func (r *Runner) WithManagedCancel(parent context.Context) (context.Context, con
 func (r *Runner) RunC(ctx context.Context, f func(context.Context)) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	switch r.state {
-	case Invalid:
-		return errors.New("invalid runner")
-	case Stopping, Stopped:
-		return errors.Errorf("runner %v: stopping or stopped (%v)", r.name, r.state)
+	if r.state != Running {
+		return errors.Errorf("runner-%s: %s", r.name, r.state.String())
 	}
 
 	r.wg.Add(1)

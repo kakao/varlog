@@ -4,6 +4,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -14,14 +16,12 @@ const (
 func IsWritableDir(dir string) error {
 	dir, err := filepath.Abs(dir)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	filename := filepath.Join(dir, touchFileName)
 	if err := ioutil.WriteFile(filename, []byte(""), touchFileMode); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
-	if err := os.Remove(filename); err != nil {
-		return err
-	}
-	return nil
+	err = os.Remove(filename)
+	return errors.WithStack(err)
 }

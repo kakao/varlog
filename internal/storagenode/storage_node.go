@@ -3,13 +3,13 @@ package storagenode
 //go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/storagenode -package storagenode -destination storage_node_mock.go . Management,LogStreamExecutorGetter
 import (
 	"context"
-	"errors"
-	"fmt"
+	stderrors "errors"
 	"net"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/label"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -25,29 +25,35 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
+var (
+	errNoLogStream = stderrors.New("storagenode: no such log stream")
+)
+
 // Management is the interface that wraps methods for managing StorageNode.
 type Management interface {
+	ClusterID() types.ClusterID
+
 	StorageNodeID() types.StorageNodeID
 
 	// GetMetadata returns metadata of StorageNode. The metadata contains
 	// configurations and statistics for StorageNode.
-	GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
 	// AddLogStream adds a new LogStream to StorageNode.
-	AddLogStream(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, storageNodePath string) (string, error)
+	AddLogStream(ctx context.Context, logStreamID types.LogStreamID, storageNodePath string) (string, error)
 
 	// RemoveLogStream removes a LogStream from StorageNode.
-	RemoveLogStream(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+	RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error
 
 	// Seal changes status of LogStreamExecutor corresponding to the
 	// LogStreamID to LogStreamStatusSealing or LogStreamStatusSealed.
-	Seal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
+	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
 
 	// Unseal changes status of LogStreamExecutor corresponding to the
 	// LogStreamID to LogStreamStatusRunning.
-	Unseal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
 
-	Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
+	Sync(ctx context.Context, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
 }
 
 type LogStreamExecutorGetter interface {
@@ -72,7 +78,6 @@ type StorageNode struct {
 
 	lsr LogStreamReporter
 
-	// storageNodePaths map[string]struct{}
 	storageNodePaths set.Set
 
 	options *Options
@@ -102,22 +107,23 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 	if sn.logger == nil {
 		sn.logger = zap.NewNop()
 	}
+	sn.logger = sn.logger.Named("storagenode").With(
+		zap.Uint32("cid", uint32(sn.clusterID)),
+		zap.Uint32("snid", uint32(sn.storageNodeID)),
+	)
 
 	for volume := range options.Volumes {
 		snPath, err := volume.CreateStorageNodePath(sn.clusterID, sn.storageNodeID)
 		if err != nil {
-			sn.logger.Error("could not create data directory", zap.Any("storage_node_path", snPath), zap.Error(err))
 			return nil, err
 		}
 		sn.storageNodePaths.Add(snPath)
 	}
 
 	if len(sn.storageNodePaths) == 0 {
-		sn.logger.Error("no valid storage node path")
-		return nil, verrors.ErrInvalid
+		return nil, errors.New("storagenode: no valid storage node path")
 	}
 
-	sn.logger = sn.logger.Named(fmt.Sprintf("storagenode")).With(zap.Any("cid", sn.clusterID), zap.Any("snid", sn.storageNodeID))
 	sn.lsr = NewLogStreamReporter(sn.logger, sn.storageNodeID, sn, sn.tmStub, &options.LogStreamReporterOptions)
 	sn.server = grpc.NewServer()
 
@@ -149,8 +155,7 @@ func (sn *StorageNode) Run() error {
 	// Listener
 	lis, err := net.Listen("tcp", sn.options.ListenAddress)
 	if err != nil {
-		sn.logger.Error("could not listen", zap.Error(err))
-		return err
+		return errors.Wrapf(err, "storagenode")
 	}
 	sn.advertiseAddr = sn.options.AdvertiseAddress
 	if sn.advertiseAddr == "" {
@@ -161,7 +166,7 @@ func (sn *StorageNode) Run() error {
 	// RPC Server
 	go func() {
 		if err := sn.server.Serve(lis); err != nil {
-			sn.logger.Error("could not serve", zap.Error(err))
+			sn.logger.Error("rpc server error", zap.Error(err))
 			sn.Close()
 		}
 	}()
@@ -171,7 +176,7 @@ func (sn *StorageNode) Run() error {
 		paths := volume.ReadLogStreamPaths(sn.clusterID, sn.storageNodeID)
 		for _, path := range paths {
 			if logStreamPaths.Contains(path) {
-				return fmt.Errorf("storagenode: duplicated log stream path (%s)", path)
+				return errors.Errorf("storagenode: duplicated log stream path (%s)", path)
 			}
 			logStreamPaths.Add(path)
 		}
@@ -205,11 +210,9 @@ func (sn *StorageNode) Close() {
 	defer sn.muRunning.Unlock()
 
 	sn.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
-
 	if !sn.running {
 		return
 	}
-
 	sn.running = false
 
 	// LogStreamReporter
@@ -235,18 +238,18 @@ func (sn *StorageNode) Wait() {
 	sn.sw.Wait()
 }
 
+func (sn *StorageNode) ClusterID() types.ClusterID {
+	return sn.clusterID
+}
+
 func (sn *StorageNode) StorageNodeID() types.StorageNodeID {
 	return sn.storageNodeID
 }
 
 // GetMeGetMetadata implements the Management GetMetadata method.
-func (sn *StorageNode) GetMetadata(ctx context.Context, clusterID types.ClusterID, metadataType snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (sn *StorageNode) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	ctx, span := sn.tmStub.startSpan(ctx, "storagenode.GetMetadata")
 	defer span.End()
-
-	if !sn.verifyClusterID(clusterID) {
-		return nil, verrors.ErrInvalidArgument
-	}
 
 	snmeta := &varlogpb.StorageNodeMetadataDescriptor{
 		ClusterID: sn.clusterID,
@@ -298,11 +301,7 @@ func (sn *StorageNode) logStreamMetadataDescriptors(ctx context.Context) []varlo
 }
 
 // AddLogStream implements the Management AddLogStream method.
-func (sn *StorageNode) AddLogStream(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, storageNodePath string) (string, error) {
-	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
-		return "", verrors.ErrInvalidArgument
-	}
-
+func (sn *StorageNode) AddLogStream(ctx context.Context, logStreamID types.LogStreamID, storageNodePath string) (string, error) {
 	logStreamPath, err := sn.addLogStream(ctx, logStreamID, storageNodePath)
 	if err != nil {
 		return "", err
@@ -325,7 +324,7 @@ func (sn *StorageNode) addLogStream(ctx context.Context, logStreamID types.LogSt
 	defer sn.lseMtx.Unlock()
 
 	if _, ok := sn.lseMap[logStreamID]; ok {
-		return "", verrors.ErrLogStreamAlreadyExists
+		return "", errors.New("storagenode: log stream already exists")
 	}
 
 	storage, err := sn.createStorage(ctx, lsPath)
@@ -390,13 +389,9 @@ func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.Log
 }
 
 // RemoveLogStream implements the Management RemoveLogStream method.
-func (sn *StorageNode) RemoveLogStream(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
+func (sn *StorageNode) RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
 	ctx, span := sn.tmStub.startSpan(ctx, "storagenode/StorageNode.RemoveLogStream")
 	defer span.End()
-
-	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
-		return verrors.ErrInvalidArgument
-	}
 
 	sn.lseMtx.Lock()
 	defer sn.lseMtx.Unlock()
@@ -425,13 +420,10 @@ func (sn *StorageNode) RemoveLogStream(ctx context.Context, clusterID types.Clus
 }
 
 // Seal implements the Management Seal method.
-func (sn *StorageNode) Seal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
-	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
-		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, verrors.ErrInvalidArgument
-	}
+func (sn *StorageNode) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	lse, ok := sn.GetLogStreamExecutor(logStreamID)
 	if !ok {
-		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, verrors.ErrInvalidArgument
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, errors.WithStack(errNoLogStream)
 	}
 	status, hwm := lse.Seal(lastCommittedGLSN)
 	sn.tst.Touch()
@@ -439,26 +431,19 @@ func (sn *StorageNode) Seal(ctx context.Context, clusterID types.ClusterID, stor
 }
 
 // Unseal implements the Management Unseal method.
-func (sn *StorageNode) Unseal(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
-	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
-		return verrors.ErrInvalidArgument
-	}
+func (sn *StorageNode) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
 	lse, ok := sn.GetLogStreamExecutor(logStreamID)
 	if !ok {
-		return verrors.ErrInvalidArgument
+		return errors.WithStack(errNoLogStream)
 	}
 	sn.tst.Touch()
 	return lse.Unseal()
 }
 
-func (sn *StorageNode) Sync(ctx context.Context, clusterID types.ClusterID, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
-	if !sn.verifyClusterID(clusterID) || !sn.verifyStorageNodeID(storageNodeID) {
-		return nil, verrors.ErrInvalidArgument
-	}
+func (sn *StorageNode) Sync(ctx context.Context, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
 	lse, ok := sn.GetLogStreamExecutor(logStreamID)
 	if !ok {
-		sn.logger.Error("could not get LSE")
-		return nil, verrors.ErrInvalidArgument
+		return nil, errors.WithStack(errNoLogStream)
 	}
 	sts, err := lse.Sync(ctx, replica, lastGLSN)
 	if err != nil {

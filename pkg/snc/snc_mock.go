@@ -67,18 +67,18 @@ func (mr *MockStorageNodeManagementClientMockRecorder) Close() *gomock.Call {
 }
 
 // GetMetadata mocks base method
-func (m *MockStorageNodeManagementClient) GetMetadata(arg0 context.Context, arg1 snpb.MetadataType) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockStorageNodeManagementClient) GetMetadata(arg0 context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetadata", arg0, arg1)
+	ret := m.ctrl.Call(m, "GetMetadata", arg0)
 	ret0, _ := ret[0].(*varlogpb.StorageNodeMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMetadata indicates an expected call of GetMetadata
-func (mr *MockStorageNodeManagementClientMockRecorder) GetMetadata(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockStorageNodeManagementClientMockRecorder) GetMetadata(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).GetMetadata), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).GetMetadata), arg0)
 }
 
 // PeerAddress mocks base method

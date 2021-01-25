@@ -70,7 +70,7 @@ func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*sn
 			lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 			if !ok {
 				code = codes.NotFound
-				return rsp, errors.New("storagenode: no such log stream")
+				return rsp, errors.WithStack(errNoLogStream)
 			}
 
 			backups := make([]Replica, 0, len(req.Backups))
@@ -85,7 +85,7 @@ func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*sn
 			glsn, err := lse.Append(ctx, req.GetPayload(), backups...)
 			if err != nil {
 				code = codes.Internal
-				return rsp, errors.Wrap(err, "storagenode")
+				return rsp, err
 			}
 			return &snpb.AppendResponse{GLSN: glsn}, nil
 		},
@@ -102,7 +102,7 @@ func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.R
 			lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 			if !ok {
 				code = codes.NotFound
-				return rsp, errors.New("storagenode: no such log stream")
+				return rsp, errors.WithStack(errNoLogStream)
 			}
 
 			logEntry, err := lse.Read(ctx, req.GetGLSN())
@@ -155,12 +155,12 @@ func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_S
 			lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 			if !ok {
 				code = codes.NotFound
-				return nil, errors.New("storagenode: no such log stream")
+				return nil, errors.WithStack(errNoLogStream)
 			}
 
 			resultC, err := lse.Subscribe(ctx, req.GetGLSNBegin(), req.GetGLSNEnd())
 			if err != nil {
-				return nil, errors.Wrap(err, "storagenode")
+				return nil, err
 			}
 
 			for result := range resultC {

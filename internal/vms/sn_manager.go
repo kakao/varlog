@@ -107,7 +107,7 @@ func (sm *snManager) refresh(ctx context.Context) error {
 		storageNodeID := sndesc.GetStorageNodeID()
 		g.Go(func() error {
 			if snmcl, ok := oldCS[storageNodeID]; ok {
-				if _, err := snmcl.GetMetadata(ctx, snpb.MetadataTypeHeartbeat); err == nil {
+				if _, err := snmcl.GetMetadata(ctx); err == nil {
 					mu.Lock()
 					defer mu.Unlock()
 					newCS[storageNodeID] = snmcl
@@ -183,7 +183,7 @@ func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (snc.St
 		sm.logger.Error("could not create storagenode management client", zap.Error(err))
 		return nil, nil, err
 	}
-	snMeta, err := mc.GetMetadata(ctx, snpb.MetadataTypeHeartbeat)
+	snMeta, err := mc.GetMetadata(ctx)
 	if err != nil {
 		if err := mc.Close(); err != nil {
 			sm.logger.Error("could not close storagenode management client", zap.Error(err))
@@ -205,7 +205,7 @@ func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.Storag
 		sm.refresh(ctx)
 		return nil, err
 	}
-	return snmcl.GetMetadata(ctx, snpb.MetadataTypeHeartbeat)
+	return snmcl.GetMetadata(ctx)
 }
 
 func (sm *snManager) AddStorageNode(snmcl snc.StorageNodeManagementClient) {

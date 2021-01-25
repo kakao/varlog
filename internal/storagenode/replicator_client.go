@@ -4,11 +4,11 @@ package storagenode
 
 import (
 	"context"
+	stderrors "errors"
 	"sync"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -16,6 +16,7 @@ import (
 	"github.com/kakao/varlog/pkg/util/syncutil"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/util/timeutil"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
 
@@ -25,7 +26,7 @@ const (
 	rcRequestCTimeout = timeutil.MaxDuration
 )
 
-var errNotRunning = errors.New("replicatorclient: not running")
+var errNotRunning = stderrors.New("replicatorclient: not running")
 
 type ReplicatorClient interface {
 	Run(ctx context.Context) error
@@ -103,10 +104,10 @@ func (rc *replicatorClient) Run(ctx context.Context) error {
 		rc.stream = stream
 
 		if err := rc.runner.RunC(mctx, rc.dispatchRequestC); err != nil {
-			return errors.Wrap(err, "replicatorclient")
+			return errors.WithMessage(err, "replicatorclient")
 		}
 		if err := rc.runner.RunC(mctx, rc.dispatchResponse); err != nil {
-			return errors.Wrap(err, "replicatorclient")
+			return errors.WithMessage(err, "replicatorclient")
 		}
 		rc.running.Store(true)
 		return nil
@@ -121,12 +122,13 @@ func (rc *replicatorClient) Close() error {
 		rc.runner.Stop()
 		rc.propagateAllError()
 	}
-	rc.logger.Info("close")
+	defer rc.logger.Info("stop")
 	return rc.rpcConn.Close()
 }
 
 func (rc *replicatorClient) stopReplicate() {
 	rc.onceReplicateStop.Do(func() {
+		rc.logger.Info("stopping channels")
 		close(rc.replicateStop)
 	})
 }
@@ -137,7 +139,7 @@ func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data
 	// NOTE (jun): If Replicate() is called before calling Run(), Replicate() returns
 	// errNotRunning.
 	if !rc.running.Load() {
-		errC <- errNotRunning
+		errC <- errors.WithStack(errNotRunning)
 		close(errC)
 		return errC
 	}
@@ -158,22 +160,16 @@ func (rc *replicatorClient) Replicate(ctx context.Context, llsn types.LLSN, data
 	return errC
 }
 
-func (rc *replicatorClient) addRequestC(ctx context.Context, req *snpb.ReplicationRequest) error {
+func (rc *replicatorClient) addRequestC(ctx context.Context, req *snpb.ReplicationRequest) (err error) {
 	tctx, cancel := context.WithTimeout(ctx, rcRequestCTimeout)
 	defer cancel()
 
-	var err error
 	select {
 	case rc.requestC <- req:
 	case <-tctx.Done():
-		err = tctx.Err()
+		err = errors.Wrap(tctx.Err(), "replicatorclient")
 	case <-rc.replicateStop:
-		err = errNotRunning
-	}
-	if err == nil {
-		rc.logger.Debug("sent ReplicationRequest to requestC", zap.Any("request", req))
-	} else {
-		rc.logger.Error("stop Replicate", zap.Any("request", req), zap.Error(err))
+		err = errors.WithStack(errNotRunning)
 	}
 	return err
 }
@@ -185,8 +181,9 @@ LOOP:
 		case req := <-rc.requestC:
 			err := rc.stream.Send(req)
 			if err != nil {
+				// TODO (jun): Use verrors.FromStatusError
 				rc.logger.Error("could not send", zap.Error(err), zap.Any("request", req))
-				err = errors.Wrap(err, "replicatorclient")
+				err = errors.Wrap(err, "replicatorclient: send")
 				rc.propagateError(req.GetLLSN(), err)
 				break LOOP
 			}
@@ -196,7 +193,7 @@ LOOP:
 	}
 
 	if err := rc.stream.CloseSend(); err != nil {
-		rc.logger.Error("CloseSend error", zap.Error(err))
+		rc.logger.Error("failed to close stream", zap.Error(err))
 	}
 
 	rc.stopReplicate()
@@ -214,7 +211,7 @@ LOOP:
 			rsp, err := rc.stream.Recv()
 			if err != nil {
 				rc.logger.Info("could not recv", zap.Error(err))
-				err = errors.Wrap(err, "replicatorclient")
+				err = errors.Wrap(err, "replicatorclient: recv")
 				break LOOP
 			}
 			rc.propagateError(rsp.GetLLSN(), err)
@@ -227,43 +224,34 @@ LOOP:
 }
 
 func (rc *replicatorClient) propagateError(llsn types.LLSN, err error) {
-	const (
-		errorPropagation = "propagate error"
-		okPropagation    = "propagate ok"
-	)
-
-	var msg string
-	if err == nil {
-		msg = okPropagation
-	} else {
-		msg = errorPropagation
-	}
-
+	err = errors.WithMessagef(err, "replicatorclient: lsid = %d, peer_snid = %d, llsn = %d",
+		rc.peerLogStreamID,
+		rc.peerStorageNodeID,
+		llsn)
 	rc.muErrCs.Lock()
 	defer rc.muErrCs.Unlock()
 	if errC, ok := rc.errCs[llsn]; ok {
-		if ce := rc.logger.Check(zapcore.DebugLevel, msg); ce != nil {
-			ce.Write(zap.Any("llsn", llsn), zap.Error(err))
-		}
 		delete(rc.errCs, llsn)
 		errC <- err
 		close(errC)
 		return
 	}
-	rc.logger.Error("could not propagate error", zap.Any("llsn", llsn), zap.Error(err))
+	rc.logger.DPanic("could not notify an error", zap.Error(err))
 }
 
 func (rc *replicatorClient) propagateAllError() {
 	rc.running.Store(false)
 	rc.muErrCs.Lock()
 	defer rc.muErrCs.Unlock()
+	err := errors.WithStack(errNotRunning)
+	halted := make([]uint64, len(rc.errCs))
 	for llsn, errC := range rc.errCs {
-		err := errNotRunning
-		rc.logger.Info("propagate error", zap.Any("llsn", llsn), zap.Error(err))
+		halted = append(halted, uint64(llsn))
 		delete(rc.errCs, llsn)
 		errC <- err
 		close(errC)
 	}
+	rc.logger.Debug("notify error to all", zap.Uint64s("halted_llsn", halted), zap.Error(err))
 }
 
 func (rc *replicatorClient) SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current snpb.SyncPosition, data []byte) error {
@@ -275,5 +263,5 @@ func (rc *replicatorClient) SyncReplicate(ctx context.Context, logStreamID types
 		LogStreamID: logStreamID,
 	}
 	_, err := rc.rpcClient.SyncReplicate(ctx, req)
-	return err
+	return errors.Wrap(verrors.FromStatusError(err), "replicatorclient")
 }

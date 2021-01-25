@@ -2,6 +2,7 @@ package storagenode
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -211,7 +212,7 @@ func TestLogStreamReporterGetReportTimeout(t *testing.T) {
 
 			Convey("Then LogStreamReporter.GetReport should return timeout error", func() {
 				_, err := lsr.GetReport(context.TODO())
-				So(err, ShouldResemble, context.DeadlineExceeded)
+				So(errors.Is(err, context.DeadlineExceeded), ShouldBeTrue)
 				close(wait)
 			})
 		})

@@ -22,7 +22,7 @@ func init() {
 	   The following line sets the failure mode for all tests in the package:
 	*/
 
-	SetDefaultFailureMode(FailureContinues)
+	//SetDefaultFailureMode(FailureContinues)
 }
 
 func TestLogStreamReporterClientLogStreamReporterService(t *testing.T) {
