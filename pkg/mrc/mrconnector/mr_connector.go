@@ -34,6 +34,8 @@ type Connector interface {
 
 	NumberOfMR() int
 
+	ActiveMRs() map[types.NodeID]string
+
 	ConnectedNodeID() types.NodeID
 
 	// TODO (jun): use context to indicate that it can be network communication.
@@ -66,7 +68,7 @@ func New(ctx context.Context, seedRPCAddrs []string, opts ...Option) (Connector,
 		return nil, errors.New("no seed address")
 	}
 
-	mrcOpts := defaultOptions
+	mrcOpts := defaultOptions()
 	for _, opt := range opts {
 		opt(&mrcOpts)
 	}
@@ -127,6 +129,15 @@ func (c *connector) NumberOfMR() int {
 	ret := 0
 	c.rpcAddrs.Range(func(_ interface{}, _ interface{}) bool {
 		ret++
+		return true
+	})
+	return ret
+}
+
+func (c *connector) ActiveMRs() map[types.NodeID]string {
+	ret := make(map[types.NodeID]string)
+	c.rpcAddrs.Range(func(nodeIDI interface{}, addrI interface{}) bool {
+		ret[nodeIDI.(types.NodeID)] = addrI.(string)
 		return true
 	})
 	return ret
@@ -207,10 +218,15 @@ func (c *connector) update(ctx context.Context) error {
 
 func (c *connector) fetchRPCAddrs(ctx context.Context, seedRPCAddrs []string) (rpcAddrs map[types.NodeID]string, err error) {
 	for ctx.Err() == nil {
-		for _, rpcAddr := range seedRPCAddrs {
-			rpcAddrs, errConn := c.connectMRAndFetchRPCAddrs(ctx, rpcAddr)
+		for _, seedRPCAddr := range seedRPCAddrs {
+			rpcAddrs, errConn := c.connectMRAndFetchRPCAddrs(ctx, seedRPCAddr)
 			if errConn == nil && len(rpcAddrs) > 0 {
 				return rpcAddrs, nil
+			}
+			if errConn == nil {
+				errConn = errors.Errorf("mrconnector: seed = %s, no members", seedRPCAddr)
+			} else {
+				errConn = errors.WithMessagef(errConn, "mrconnector: seed = %s", seedRPCAddr)
 			}
 			err = multierr.Append(err, errConn)
 			time.Sleep(c.options.rpcAddrsFetchRetryInterval)
@@ -219,8 +235,8 @@ func (c *connector) fetchRPCAddrs(ctx context.Context, seedRPCAddrs []string) (r
 	return nil, err
 }
 
-func (c *connector) connectMRAndFetchRPCAddrs(ctx context.Context, rpcAddr string) (map[types.NodeID]string, error) {
-	mrmcl, err := mrc.NewMetadataRepositoryManagementClient(rpcAddr)
+func (c *connector) connectMRAndFetchRPCAddrs(ctx context.Context, seedRPCAddr string) (map[types.NodeID]string, error) {
+	mrmcl, err := mrc.NewMetadataRepositoryManagementClient(seedRPCAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -233,10 +249,9 @@ func (c *connector) connectMRAndFetchRPCAddrs(ctx context.Context, rpcAddr strin
 }
 
 func getRPCAddrs(ctx context.Context, mrmcl mrc.MetadataRepositoryManagementClient, clusterID types.ClusterID) (map[types.NodeID]string, error) {
-	tick := time.Now()
 	rsp, err := mrmcl.GetClusterInfo(ctx, clusterID)
 	if err != nil {
-		return nil, errors.Wrapf(err, "mrconnector: elapsed=%s", time.Since(tick).String())
+		return nil, err
 	}
 	members := rsp.GetClusterInfo().GetMembers()
 	addrs := make(map[types.NodeID]string, len(members))

@@ -2,21 +2,51 @@ package test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 )
 
 func TestMRConnector(t *testing.T) {
+	safeMRClose := func(env *VarlogCluster, idx int) [2]int {
+		mr := env.MRs[idx]
+		So(mr.Close(), ShouldBeNil)
+
+		numCheckRPC := 0
+		ep := env.mrRPCEndpoints[idx]
+		So(testutil.CompareWaitN(100, func() bool {
+			numCheckRPC++
+			conn, err := rpc.NewBlockingConn(ep)
+			if err == nil {
+				So(conn.Close(), ShouldBeNil)
+			}
+			return err != nil
+		}), ShouldBeTrue)
+
+		numCheckRAFT := 0
+		peer := env.mrPeers[idx]
+		So(testutil.CompareWaitN(100, func() bool {
+			numCheckRAFT++
+			_, err := http.Get(peer)
+			return err != nil
+		}), ShouldBeTrue)
+
+		return [2]int{numCheckRPC, numCheckRAFT}
+	}
+
+	SetDefaultFailureMode(FailureHalts)
 	Convey("Given 3 MR nodes", t, func() {
 		const clusterInfoFetchInterval = 1 * time.Second
 		opts := VarlogClusterOptions{
@@ -28,22 +58,51 @@ func TestMRConnector(t *testing.T) {
 		env.Start()
 
 		Reset(func() {
-			env.Close()
-			time.Sleep(3 * time.Second)
+			So(env.Close(), ShouldBeNil)
+			for idx := range env.MRs {
+				checks := safeMRClose(env, idx)
+				So(checks[0], ShouldEqual, 1)
+				So(checks[1], ShouldEqual, 1)
+			}
 		})
 
-		for idx, rpcEndpoint := range env.mrRPCEndpoints {
+		for _, rpcEndpoint := range env.mrRPCEndpoints {
 			So(testutil.CompareWaitN(100, func() bool {
-				return env.MRs[idx].GetServerAddr() != ""
+				conn, err := rpc.NewBlockingConn(rpcEndpoint)
+				if err != nil {
+					return false
+				}
+				defer conn.Close()
+
+				client := grpc_health_v1.NewHealthClient(conn.Conn)
+				rsp, err := client.Check(context.TODO(), &grpc_health_v1.HealthCheckRequest{})
+				status := rsp.GetStatus()
+				ok := err == nil && status == grpc_health_v1.HealthCheckResponse_SERVING
+				if !ok {
+					return false
+				}
+
+				// NOTE (jun): Does not HealthCheck imply this?
+				mcl, err := mrc.NewMetadataRepositoryManagementClientFromRpcConn(conn)
+				if err != nil {
+					return false
+				}
+				clusinfo, err := mcl.GetClusterInfo(context.TODO(), env.ClusterID)
+				if err != nil {
+					return false
+				}
+				members := clusinfo.GetClusterInfo().GetMembers()
+				if len(members) != env.NrMR {
+					return false
+				}
+				for _, member := range members {
+					if member.GetEndpoint() == "" {
+						return false
+					}
+				}
+				return true
+
 			}), ShouldBeTrue)
-
-			mrmcl, err := mrc.NewMetadataRepositoryManagementClient(rpcEndpoint)
-			So(err, ShouldBeNil)
-			So(mrmcl.Close(), ShouldBeNil)
-
-			mrcl, err := mrc.NewMetadataRepositoryClient(rpcEndpoint)
-			So(err, ShouldBeNil)
-			So(mrcl.Close(), ShouldBeNil)
 		}
 
 		Convey("When Connector is created", func() {
@@ -113,19 +172,25 @@ func TestMRConnector(t *testing.T) {
 						return mrConn.NumberOfMR() == opts.NrMR
 					}), ShouldBeTrue)
 
-					for i := 0; i < opts.NrMR-1; i++ {
+					for i := 1; i < opts.NrMR; i++ {
+						// Close MR: env.MRs[1], env.MRs[2]
 						time.Sleep(2 * clusterInfoFetchInterval)
-						So(env.MRs[i].Close(), ShouldBeNil)
+						checks := safeMRClose(env, i)
+						So(checks[0], ShouldEqual, 1)
+						So(checks[1], ShouldEqual, 1)
 					}
 					close(nextc)
 					So(g.Wait(), ShouldBeNil)
 
 					So(testutil.CompareWaitN(100, func() bool {
-						return mrConn.NumberOfMR() == 1
+						// Active MR: env.MRs[0]
+						mrs := mrConn.ActiveMRs()
+						return len(mrs) == 1 && mrs[env.mrIDs[0]] != ""
 					}), ShouldBeTrue)
+					So(mrConn.NumberOfMR(), ShouldEqual, 1)
 
-					Convey("When the last MR fails", func() {
-						So(env.MRs[opts.NrMR-1].Close(), ShouldBeNil)
+					Convey("When the active MR (idx=0) fails", func() {
+						So(env.MRs[0].Close(), ShouldBeNil)
 						Convey("Then MRConnector should not work", func() {
 							maybeFail(context.TODO())
 							_, err := mrConn.Client()
@@ -133,31 +198,51 @@ func TestMRConnector(t *testing.T) {
 						})
 					})
 
-					Convey("And the failed MR is recovered", func() {
-						mrIdx := 0
+					Convey("And the failed MR (idx=1) is recovered", func() {
+						So(mrConn.NumberOfMR(), ShouldEqual, 1)
+						// Recover MR: env.MRs[1]
+						mrIdx := 1
 						So(env.RestartMR(mrIdx), ShouldBeNil)
 						time.Sleep(2 * clusterInfoFetchInterval)
+
 						So(testutil.CompareWaitN(100, func() bool {
-							mrcl, err := mrc.NewMetadataRepositoryClient(env.mrRPCEndpoints[mrIdx])
-							ok := err == nil
-							if ok {
-								mrcl.Close()
+							ep := env.mrRPCEndpoints[mrIdx]
+							conn, err := rpc.NewBlockingConn(ep)
+							if err != nil {
+								return false
 							}
-							return ok
+							defer conn.Close()
+
+							client := grpc_health_v1.NewHealthClient(conn.Conn)
+							rsp, err := client.Check(context.TODO(), &grpc_health_v1.HealthCheckRequest{})
+							status := rsp.GetStatus()
+							return err == nil && status == grpc_health_v1.HealthCheckResponse_SERVING
 						}), ShouldBeTrue)
 
 						So(testutil.CompareWaitN(100, func() bool {
-							return mrConn.NumberOfMR() == 2
+							// Active MR: env.MRs[0], env.MRs[1]
+							mrs := mrConn.ActiveMRs()
+							nodeID0 := env.mrIDs[0]
+							nodeID1 := env.mrIDs[1]
+							return len(mrs) == 2 && mrs[nodeID0] != "" && mrs[nodeID1] != ""
 						}), ShouldBeTrue)
 
 						Convey("Then MRConnector should reconnect to recovered MR", func() {
-							So(env.MRs[opts.NrMR-1].Close(), ShouldBeNil)
+							// env.MRs[0] failed
+							checks := safeMRClose(env, 0)
+							So(checks[0], ShouldEqual, 1)
+							So(checks[1], ShouldEqual, 1)
 							maybeFail(context.TODO())
+
 							cl, err := mrConn.Client()
 							So(err, ShouldBeNil)
 							_, err = cl.GetMetadata(context.TODO())
 							So(err, ShouldBeNil)
-							So(mrConn.NumberOfMR(), ShouldEqual, 1)
+
+							// Active MR: env.MRs[1]
+							mrs := mrConn.ActiveMRs()
+							So(mrs, ShouldHaveLength, 1)
+							So(mrs, ShouldContainKey, env.mrIDs[1])
 						})
 					})
 				})
