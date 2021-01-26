@@ -1035,6 +1035,22 @@ func TestStorageCopyOnWrite(t *testing.T) {
 }
 
 func TestStorageMetadataCache(t *testing.T) {
+	Convey("", t, func(ctx C) {
+		cb := func(uint64, uint64, error) {}
+
+		ms := NewMetadataStorage(cb, DefaultSnapshotCount, nil)
+		ms.Run()
+		Reset(func() {
+			ms.Close()
+			testutil.GC()
+		})
+
+		m := ms.GetMetadata()
+		So(m, ShouldNotBeNil)
+		So(m.GetStorageNodes(), ShouldBeNil)
+		So(m.GetLogStreams(), ShouldBeNil)
+	})
+
 	Convey("cacheCompleteCB should return after make cache", t, func(ctx C) {
 		ch := make(chan struct{}, 1)
 		cb := func(uint64, uint64, error) {

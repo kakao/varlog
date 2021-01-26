@@ -150,6 +150,8 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger
 	ms.origStateMachine.Endpoints = make(map[types.NodeID]string)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
 
+	ms.metaCache = &varlogpb.MetadataDescriptor{}
+
 	ms.jobC = make(chan *storageAsyncJob, 4096)
 
 	return ms
