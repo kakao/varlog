@@ -68,6 +68,7 @@ type raftNode struct {
 	runner *runner.Runner
 	cancel context.CancelFunc
 
+	httpserver *http.Server
 	httprunner *runner.Runner
 	httpcancel context.CancelFunc
 
@@ -562,6 +563,8 @@ func (rc *raftNode) stopHTTP() {
 	rc.httpcancel()
 	rc.transport.Stop()
 	rc.httprunner.Stop()
+	// TODO: use context or shutdown timeout
+	rc.httpserver.Shutdown(context.TODO())
 }
 
 type snapReaderCloser struct{ *bytes.Reader }
@@ -824,7 +827,15 @@ func (rc *raftNode) runRaft(ctx context.Context) {
 		rc.logger.Panic("Failed to listen rafthttp", zap.String("err", err.Error()))
 	}
 
-	err = (&http.Server{Handler: rc.transport.Handler()}).Serve(ln)
+	stderrLogger, err := zap.NewStdLogAt(rc.logger, zap.ErrorLevel)
+	if err != nil {
+		rc.logger.Panic("could not create stdlogger", zap.Error(err))
+	}
+	rc.httpserver = &http.Server{
+		Handler:  rc.transport.Handler(),
+		ErrorLog: stderrLogger,
+	}
+	err = rc.httpserver.Serve(ln)
 	select {
 	case <-ctx.Done():
 	default:
