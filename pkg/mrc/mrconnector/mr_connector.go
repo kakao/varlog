@@ -2,6 +2,7 @@ package mrconnector
 
 import (
 	"context"
+	stderrors "errors"
 	"io"
 	"strings"
 	"sync"
@@ -22,7 +23,7 @@ import (
 )
 
 var (
-	errNoMR = errors.New("mrconnector: no accessible metadata repository")
+	errNoMR = stderrors.New("mrconnector: no accessible metadata repository")
 )
 
 // Connector represents a connection proxy for the metadata repository. It contains clients and
@@ -84,7 +85,7 @@ func New(ctx context.Context, seedRPCAddrs []string, opts ...Option) (Connector,
 	tctx, cancel := context.WithTimeout(ctx, mrc.options.connectionTimeout)
 	defer cancel()
 
-	rpcAddrs, err := mrc.fetchRPCAddrs(tctx, seedRPCAddrs)
+	rpcAddrs, err := mrc.fetchRPCAddrsFromSeeds(tctx, seedRPCAddrs)
 	if err != nil {
 		mrc.logger.Error("could not fetch MR addrs",
 			zap.String("seed", strings.Join(seedRPCAddrs, ",")),
@@ -164,7 +165,7 @@ func (c *connector) releaseMRProxy(nodeID types.NodeID) {
 }
 
 func (c *connector) fetchAndUpdate(ctx context.Context) {
-	ticker := time.NewTicker(c.options.clusterInfoFetchInterval)
+	ticker := time.NewTicker(c.options.rpcAddrsFetchInterval)
 	defer ticker.Stop()
 
 	for ctx.Err() == nil {
@@ -196,7 +197,7 @@ func (c *connector) update(ctx context.Context) error {
 		return errors.Wrap(err, "mrconnector")
 	}
 
-	rpcAddrs, err := getRPCAddrs(ctx, mrmcl, c.clusterID)
+	rpcAddrs, err := c.getRPCAddrs(ctx, mrmcl)
 	if err != nil {
 		return multierr.Append(errors.Wrap(err, "mrconnector"), mrmcl.Close())
 	}
@@ -216,40 +217,45 @@ func (c *connector) update(ctx context.Context) error {
 	return nil
 }
 
-func (c *connector) fetchRPCAddrs(ctx context.Context, seedRPCAddrs []string) (rpcAddrs map[types.NodeID]string, err error) {
+func (c *connector) fetchRPCAddrsFromSeeds(ctx context.Context, seedRPCAddrs []string) (rpcAddrs map[types.NodeID]string, err error) {
 	for ctx.Err() == nil {
 		for _, seedRPCAddr := range seedRPCAddrs {
-			rpcAddrs, errConn := c.connectMRAndFetchRPCAddrs(ctx, seedRPCAddr)
-			if errConn == nil && len(rpcAddrs) > 0 {
+			rpcAddrs, errConn := c.fetchRPCAddrsFromSeed(ctx, seedRPCAddr)
+			if errConn == nil {
 				return rpcAddrs, nil
 			}
-			if errConn == nil {
-				errConn = errors.Errorf("mrconnector: seed = %s, no members", seedRPCAddr)
-			} else {
-				errConn = errors.WithMessagef(errConn, "mrconnector: seed = %s", seedRPCAddr)
-			}
 			err = multierr.Append(err, errConn)
-			time.Sleep(c.options.rpcAddrsFetchRetryInterval)
+			time.Sleep(c.options.rpcAddrsInitialFetchRetryInterval)
 		}
 	}
 	return nil, err
 }
 
-func (c *connector) connectMRAndFetchRPCAddrs(ctx context.Context, seedRPCAddr string) (map[types.NodeID]string, error) {
+func (c *connector) fetchRPCAddrsFromSeed(ctx context.Context, seedRPCAddr string) (rpcAddrs map[types.NodeID]string, err error) {
 	mrmcl, err := mrc.NewMetadataRepositoryManagementClient(seedRPCAddr)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err := mrmcl.Close(); err != nil {
-			c.logger.Warn("error while closing mrc management client", zap.Error(err))
-		}
-	}()
-	return getRPCAddrs(ctx, mrmcl, c.clusterID)
+
+	rpcAddrs, err = c.getRPCAddrs(ctx, mrmcl)
+	if err != nil {
+		err = errors.WithMessagef(err, "mrconnector: seed = %s", seedRPCAddr)
+	} else if len(rpcAddrs) == 0 {
+		err = errors.Errorf("mrconnector: seed = %s, no members", seedRPCAddr)
+	}
+
+	err = multierr.Append(err, mrmcl.Close())
+	if err != nil {
+		rpcAddrs = nil
+	}
+	return rpcAddrs, err
 }
 
-func getRPCAddrs(ctx context.Context, mrmcl mrc.MetadataRepositoryManagementClient, clusterID types.ClusterID) (map[types.NodeID]string, error) {
-	rsp, err := mrmcl.GetClusterInfo(ctx, clusterID)
+func (c *connector) getRPCAddrs(ctx context.Context, mrmcl mrc.MetadataRepositoryManagementClient) (map[types.NodeID]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.options.rpcAddrsFetchTimeout)
+	defer cancel()
+
+	rsp, err := mrmcl.GetClusterInfo(ctx, c.clusterID)
 	if err != nil {
 		return nil, err
 	}

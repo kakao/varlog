@@ -9,26 +9,29 @@ import (
 )
 
 const (
-	defaultConnectionTimeout          = 5 * time.Second
-	defaultRPCAddrsFetchRetryInterval = 100 * time.Millisecond
-	defaultClusterInfoFetchInterval   = 10 * time.Second
+	defaultConnectionTimeout                 = 5 * time.Second
+	defaultRPCAddrsInitialFetchRetryInterval = 100 * time.Millisecond
+	defaultRPCAddrsFetchInterval             = 10 * time.Second
+	defaultRPCAddrsFetchTimeout              = 100 * time.Millisecond
 )
 
 type options struct {
-	clusterID                  types.ClusterID
-	connectionTimeout          time.Duration
-	rpcAddrsFetchRetryInterval time.Duration
-	clusterInfoFetchInterval   time.Duration
-	logger                     *zap.Logger
+	clusterID                         types.ClusterID
+	connectionTimeout                 time.Duration
+	rpcAddrsInitialFetchRetryInterval time.Duration
+	rpcAddrsFetchInterval             time.Duration
+	rpcAddrsFetchTimeout              time.Duration
+	logger                            *zap.Logger
 }
 
 func defaultOptions() options {
 	return options{
-		clusterID:                  types.ClusterID(1),
-		connectionTimeout:          defaultConnectionTimeout,
-		rpcAddrsFetchRetryInterval: defaultRPCAddrsFetchRetryInterval,
-		clusterInfoFetchInterval:   defaultClusterInfoFetchInterval,
-		logger:                     zap.NewNop(),
+		clusterID:                         types.ClusterID(1),
+		connectionTimeout:                 defaultConnectionTimeout,
+		rpcAddrsInitialFetchRetryInterval: defaultRPCAddrsInitialFetchRetryInterval,
+		rpcAddrsFetchInterval:             defaultRPCAddrsFetchInterval,
+		rpcAddrsFetchTimeout:              defaultRPCAddrsFetchTimeout,
+		logger:                            zap.NewNop(),
 	}
 }
 
@@ -46,15 +49,21 @@ func WithConnectionTimeout(timeout time.Duration) Option {
 	}
 }
 
-func WithRPCAddrsFetchRetryInterval(interval time.Duration) Option {
+func WithRPCAddrsInitialFetchRetryInterval(interval time.Duration) Option {
 	return func(opts *options) {
-		opts.rpcAddrsFetchRetryInterval = interval
+		opts.rpcAddrsInitialFetchRetryInterval = interval
 	}
 }
 
-func WithClusterInfoFetchInterval(interval time.Duration) Option {
+func WithRPCAddrsFetchInterval(interval time.Duration) Option {
 	return func(opts *options) {
-		opts.clusterInfoFetchInterval = interval
+		opts.rpcAddrsFetchInterval = interval
+	}
+}
+
+func WithRPCAddrsFetchTimeout(timeout time.Duration) Option {
+	return func(opts *options) {
+		opts.rpcAddrsFetchTimeout = timeout
 	}
 }
 
