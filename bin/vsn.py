@@ -69,6 +69,7 @@ def get_volume(truncate=False):
 
     if truncate:
         try:
+            logger.info(f"remove volume {datapath}")
             shutil.rmtree(datapath)
         except FileNotFoundError:
             pass
@@ -91,36 +92,40 @@ def main():
     limits.set_limits()
     cluster_id = os.getenv("CLUSTER_ID", DEFAULT_CLUSTER_ID)
     listen_port = os.getenv("RPC_PORT", DEFAULT_RPC_PORT)
-    snid, exist = get_storage_node_id()
-    volume = get_volume(truncate=not exist)
     listen_addr = f"0.0.0.0:{listen_port}"
     advertise_addr = get_advertise_addr()
 
-    storage_node = [
-        f"{binpath}/vsn",
-        "start",
-        f"--cluster-id={cluster_id}",
-        f"--storage-node-id={snid}",
-        f"--listen-address={listen_addr}",
-        f"--volumes={volume}",
-        f"--advertise-address={advertise_addr}"
-    ]
-
     killer = Killer()
+    ok = False
     while not killer.kill_now:
-        if procutil.check_liveness("vsn"):
+        if ok and procutil.check_liveness("vsn"):
             time.sleep(RETRY_INTERVAL_SEC)
             continue
         try:
             procutil.kill("vsn")
-            logger.info(f"running storage node: {storage_node}")
+
+            snid, exist = get_storage_node_id()
+            volume = get_volume(truncate=not exist)
+            storage_node = [
+                f"{binpath}/vsn",
+                "start",
+                f"--cluster-id={cluster_id}",
+                f"--storage-node-id={snid}",
+                f"--listen-address={listen_addr}",
+                f"--volumes={volume}",
+                f"--advertise-address={advertise_addr}"
+            ]
+
+            logger.info(f"running storage node: {storage_node}, already registered={exist}")
             subprocess.Popen(storage_node)
+            ok = True
             time.sleep(ADD_STORAGE_NODE_INTERVAL_SEC)
             if not exist:
                 logger.info("adding storage node to cluster")
                 add_storage_node(advertise_addr)
         except (OSError, ValueError, subprocess.SubprocessError):
             logger.exception("could not run storage node")
+            ok = False
         time.sleep(RETRY_INTERVAL_SEC)
     procutil.stop("vsn")
 
