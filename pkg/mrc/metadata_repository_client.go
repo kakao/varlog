@@ -2,6 +2,7 @@ package mrc
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -31,6 +32,7 @@ type metadataRepositoryClient struct {
 	client  mrpb.MetadataRepositoryServiceClient
 }
 
+// FIXME (jun, pharrell): Use context or timeout, or remove health check.
 func NewMetadataRepositoryClient(address string) (MetadataRepositoryClient, error) {
 	rpcConn, err := rpc.NewBlockingConn(address)
 	if err != nil {
@@ -38,14 +40,17 @@ func NewMetadataRepositoryClient(address string) (MetadataRepositoryClient, erro
 	}
 
 	client := grpc_health_v1.NewHealthClient(rpcConn.Conn)
-	// TODO (jun): use context
-	rsp, healthErr := client.Check(context.TODO(), &grpc_health_v1.HealthCheckRequest{})
-	if healthErr != nil {
-		return nil, multierr.Append(multierr.Append(err, healthErr), rpcConn.Close())
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	rsp, err := client.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
+	if err != nil {
+		err = errors.Wrap(err, "mrmcl")
+		return nil, multierr.Append(err, rpcConn.Close())
 	}
 	status := rsp.GetStatus()
 	if status != grpc_health_v1.HealthCheckResponse_SERVING {
-		return nil, multierr.Append(multierr.Append(err, errors.Errorf("mrcl: not ready (%+v)", status)), rpcConn.Close())
+		err := errors.Errorf("mrmcl: not ready (%+v)", status)
+		return nil, multierr.Append(err, rpcConn.Close())
 	}
 	return NewMetadataRepositoryClientFromRpcConn(rpcConn)
 }
