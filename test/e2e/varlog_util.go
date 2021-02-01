@@ -11,20 +11,20 @@ import (
 )
 
 type VarlogIDGetter interface {
-	MetadataRepositoryID(string) (vtypes.ClusterID, vtypes.NodeID, error)
-	StorageNodeID(string, vtypes.ClusterID) (vtypes.StorageNodeID, error)
+	MetadataRepositoryID(ctx context.Context, addr string) (vtypes.ClusterID, vtypes.NodeID, error)
+	StorageNodeID(ctx context.Context, addr string, clusterID vtypes.ClusterID) (vtypes.StorageNodeID, error)
 }
 
 type varlogIDGetter struct{}
 
-func (v *varlogIDGetter) MetadataRepositoryID(addr string) (vtypes.ClusterID, vtypes.NodeID, error) {
+func (v *varlogIDGetter) MetadataRepositoryID(ctx context.Context, addr string) (vtypes.ClusterID, vtypes.NodeID, error) {
 	cli, err := mrc.NewMetadataRepositoryManagementClient(addr)
 	if err != nil {
 		return vtypes.ClusterID(0), vtypes.InvalidNodeID, err
 	}
 	defer cli.Close()
 
-	cinfo, err := cli.GetClusterInfo(context.TODO(), vtypes.ClusterID(0))
+	cinfo, err := cli.GetClusterInfo(ctx, vtypes.ClusterID(0))
 	if err != nil {
 		return vtypes.ClusterID(0), vtypes.InvalidNodeID, err
 	}
@@ -32,8 +32,8 @@ func (v *varlogIDGetter) MetadataRepositoryID(addr string) (vtypes.ClusterID, vt
 	return cinfo.ClusterInfo.ClusterID, cinfo.ClusterInfo.NodeID, nil
 }
 
-func (v *varlogIDGetter) StorageNodeID(addr string, clusterID vtypes.ClusterID) (vtypes.StorageNodeID, error) {
-	cli, err := snc.NewManagementClient(context.TODO(), clusterID, addr, zap.NewNop())
+func (v *varlogIDGetter) StorageNodeID(ctx context.Context, addr string, clusterID vtypes.ClusterID) (vtypes.StorageNodeID, error) {
+	cli, err := snc.NewManagementClient(ctx, clusterID, addr, zap.NewNop())
 	if err != nil {
 		return vtypes.StorageNodeID(0), err
 	}

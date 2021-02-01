@@ -53,11 +53,12 @@ type K8sVarlogView interface {
 }
 
 type k8sVarlogView struct {
-	podGetter K8sVarlogPodGetter
-	idGetter  VarlogIDGetter
-	mrs       map[vtypes.NodeID]string
-	sns       map[vtypes.StorageNodeID]string
-	mu        sync.RWMutex
+	podGetter  K8sVarlogPodGetter
+	idGetter   VarlogIDGetter
+	mrs        map[vtypes.NodeID]string
+	sns        map[vtypes.StorageNodeID]string
+	mu         sync.RWMutex
+	rpcTimeout time.Duration
 }
 
 type patchStringValue struct {
@@ -84,13 +85,13 @@ func NewK8sVarlogCluster(opts K8sVarlogClusterOptions) (*K8sVarlogCluster, error
 	}
 
 	k8s := &K8sVarlogCluster{K8sVarlogClusterOptions: opts, cli: c}
-	k8s.view = newK8sVarlogView(k8s)
+	k8s.view = newK8sVarlogView(k8s, opts.rpcTimeout)
 
 	return k8s, nil
 }
 
 func (k8s *K8sVarlogCluster) Nodes(selector map[string]string) (*v1.NodeList, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer cancel()
 	labelSelector := labels.Set(selector)
 	list, err := k8s.cli.
@@ -101,7 +102,7 @@ func (k8s *K8sVarlogCluster) Nodes(selector map[string]string) (*v1.NodeList, er
 }
 
 func (k8s *K8sVarlogCluster) Pods(namespace string, selector map[string]string) (*v1.PodList, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer cancel()
 	labelSelector := labels.Set(selector)
 	list, err := k8s.cli.
@@ -174,7 +175,7 @@ func (k8s *K8sVarlogCluster) Reset() error {
 }
 
 func (k8s *K8sVarlogCluster) VMSAddress() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer cancel()
 	s, err := k8s.cli.
 		CoreV1().
@@ -188,7 +189,7 @@ func (k8s *K8sVarlogCluster) VMSAddress() (string, error) {
 }
 
 func (k8s *K8sVarlogCluster) MRAddress() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer cancel()
 	s, err := k8s.cli.
 		CoreV1().
@@ -209,7 +210,7 @@ func (k8s *K8sVarlogCluster) ReplaceLabel(node, label, value string) error {
 	}}
 	payloadBytes, _ := json.Marshal(payload)
 
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer cancel()
 	_, err := k8s.cli.
 		CoreV1().
@@ -226,7 +227,7 @@ func (k8s *K8sVarlogCluster) AddLabel(node, label, value string) error {
 	}}
 	payloadBytes, _ := json.Marshal(payload)
 
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer cancel()
 	_, err := k8s.cli.
 		CoreV1().
@@ -242,7 +243,7 @@ func (k8s *K8sVarlogCluster) RemoveLabel(node, label string) error {
 	}}
 	payloadBytes, _ := json.Marshal(payload)
 
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer cancel()
 	_, err := k8s.cli.
 		CoreV1().
@@ -252,7 +253,7 @@ func (k8s *K8sVarlogCluster) RemoveLabel(node, label string) error {
 }
 
 func (k8s *K8sVarlogCluster) ScaleReplicaSet(replicasetName string, scale int32) error {
-	gCtx, gCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	gCtx, gCancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer gCancel()
 	s, err := k8s.cli.
 		AppsV1().
@@ -269,7 +270,7 @@ func (k8s *K8sVarlogCluster) ScaleReplicaSet(replicasetName string, scale int32)
 
 	sc.Spec.Replicas = scale
 
-	uCtx, uCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	uCtx, uCancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer uCancel()
 	_, err = k8s.cli.
 		AppsV1().
@@ -279,7 +280,7 @@ func (k8s *K8sVarlogCluster) ScaleReplicaSet(replicasetName string, scale int32)
 }
 
 func (k8s *K8sVarlogCluster) ReplaceEnvToDeployment(deployment, name, value string) error {
-	gCtx, gCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	gCtx, gCancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer gCancel()
 	d, err := k8s.cli.
 		AppsV1().
@@ -308,7 +309,7 @@ func (k8s *K8sVarlogCluster) ReplaceEnvToDeployment(deployment, name, value stri
 			append(d.Spec.Template.Spec.Containers[0].Env, env)
 	}
 
-	uCtx, uCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	uCtx, uCancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer uCancel()
 	_, err = k8s.cli.
 		AppsV1().
@@ -319,7 +320,7 @@ func (k8s *K8sVarlogCluster) ReplaceEnvToDeployment(deployment, name, value stri
 }
 
 func (k8s *K8sVarlogCluster) ReplaceEnvToDaemonset(daemonset, name, value string) error {
-	gCtx, gCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	gCtx, gCancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer gCancel()
 	d, err := k8s.cli.
 		AppsV1().
@@ -348,7 +349,7 @@ func (k8s *K8sVarlogCluster) ReplaceEnvToDaemonset(daemonset, name, value string
 			append(d.Spec.Template.Spec.Containers[0].Env, env)
 	}
 
-	uCtx, uCancel := context.WithTimeout(context.Background(), k8s.k8sTimeout)
+	uCtx, uCancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
 	defer uCancel()
 	_, err = k8s.cli.
 		AppsV1().
@@ -612,12 +613,13 @@ func withTestCluster(opts K8sVarlogClusterOptions, f func(k8s *K8sVarlogCluster)
 	}
 }
 
-func newK8sVarlogView(podGetter K8sVarlogPodGetter) *k8sVarlogView {
+func newK8sVarlogView(podGetter K8sVarlogPodGetter, timeout time.Duration) *k8sVarlogView {
 	return &k8sVarlogView{
-		podGetter: podGetter,
-		idGetter:  &varlogIDGetter{},
-		mrs:       make(map[vtypes.NodeID]string),
-		sns:       make(map[vtypes.StorageNodeID]string),
+		podGetter:  podGetter,
+		idGetter:   &varlogIDGetter{},
+		mrs:        make(map[vtypes.NodeID]string),
+		sns:        make(map[vtypes.StorageNodeID]string),
+		rpcTimeout: timeout,
 	}
 }
 
@@ -634,7 +636,9 @@ func (view *k8sVarlogView) Renew() error {
 			pod.Status.HostIP,
 			pod.Spec.Containers[0].ReadinessProbe.Handler.TCPSocket.Port.IntValue())
 
-		cid, mrid, err := view.idGetter.MetadataRepositoryID(addr)
+		ctx, cancel := context.WithTimeout(context.Background(), view.rpcTimeout)
+		cid, mrid, err := view.idGetter.MetadataRepositoryID(ctx, addr)
+		cancel()
 		if err != nil {
 			return err
 		}
@@ -654,7 +658,9 @@ func (view *k8sVarlogView) Renew() error {
 			pod.Status.HostIP,
 			pod.Spec.Containers[0].ReadinessProbe.Handler.TCPSocket.Port.IntValue())
 
-		snid, err := view.idGetter.StorageNodeID(addr, clusterID)
+		ctx, cancel := context.WithTimeout(context.Background(), view.rpcTimeout)
+		snid, err := view.idGetter.StorageNodeID(ctx, addr, clusterID)
+		cancel()
 		if err != nil {
 			return err
 		}

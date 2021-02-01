@@ -25,7 +25,9 @@ func anySNFail(k8s *K8sVarlogCluster, primary bool) error {
 	}
 	defer mrcli.Close()
 
-	meta, err := mrcli.GetMetadata(context.TODO())
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
+	defer cancel()
+	meta, err := mrcli.GetMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -110,7 +112,9 @@ func mrFail(k8s *K8sVarlogCluster, leader bool) error {
 	}
 	defer mcli.Close()
 
-	members, err := mcli.GetMRMembers(context.TODO())
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
+	defer cancel()
+	members, err := mcli.GetMRMembers(ctx)
 	if err != nil {
 		return err
 	}
@@ -194,7 +198,9 @@ func AddLogStream(k8s *K8sVarlogCluster) func() error {
 		defer mcli.Close()
 
 		for i := 0; i < k8s.NrLS; i++ {
-			_, err = mcli.AddLogStream(context.TODO(), nil)
+			ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
+			_, err = mcli.AddLogStream(ctx, nil)
+			cancel()
 			if err != nil {
 				return err
 			}

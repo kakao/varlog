@@ -278,7 +278,7 @@ func TestK8sVarlogEnduranceExample(t *testing.T) {
 	opts.Reset = true
 	opts.NrSN = 5
 	opts.NrLS = 5
-	opts.k8sTimeout = 10 * time.Second
+	opts.rpcTimeout = 10 * time.Second
 	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
 		mrseed, err := k8s.MRAddress()
 		So(err, ShouldBeNil)
