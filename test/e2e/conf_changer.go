@@ -50,7 +50,7 @@ func (cc *confChanger) waitInterval(ctx context.Context) error {
 	case <-ctx.Done():
 	}
 
-	return ctx.Err()
+	return errors.WithStack(ctx.Err())
 }
 
 func (cc *confChanger) Do(ctx context.Context) error {
