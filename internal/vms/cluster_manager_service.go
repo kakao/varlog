@@ -2,6 +2,7 @@ package vms
 
 import (
 	"context"
+	"fmt"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"go.uber.org/zap"
@@ -32,124 +33,162 @@ func NewClusterManagerService(clusterManager ClusterManager, logger *zap.Logger)
 }
 
 func (s *clusterManagerService) Register(server *grpc.Server) {
-	s.logger.Info("register to rpc server")
 	vmspb.RegisterClusterManagerServer(server, s)
+	s.logger.Info("register to rpc server")
+}
+
+type handler func(ctx context.Context, req interface{}) (rsp interface{}, err error)
+
+func (s *clusterManagerService) withTelemetry(ctx context.Context, spanName string, req interface{}, fn handler) (rsp interface{}, err error) {
+	rsp, err = fn(ctx, req)
+	if err == nil {
+		s.logger.Info(spanName, zap.Stringer("request", req.(fmt.Stringer)), zap.Stringer("response", rsp.(fmt.Stringer)))
+	} else {
+		s.logger.Error(spanName, zap.Stringer("request", req.(fmt.Stringer)), zap.Error(err))
+	}
+	return rsp, err
 }
 
 func (s *clusterManagerService) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
-	snmeta, err := s.clusManager.AddStorageNode(ctx, req.GetAddress())
-	s.logger.Info("AddStorageNode",
-		zap.String("addr", req.GetAddress()),
-		zap.String("snmeta", snmeta.String()), zap.Error(err))
-	return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, verrors.ToStatusError(err)
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/AddStorageNode", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			req := reqI.(*vmspb.AddStorageNodeRequest)
+			snmeta, err := s.clusManager.AddStorageNode(ctx, req.GetAddress())
+			return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, err
+		},
+	)
+	return rspI.(*vmspb.AddStorageNodeResponse), verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) UnregisterStorageNode(ctx context.Context, req *vmspb.UnregisterStorageNodeRequest) (*vmspb.UnregisterStorageNodeResponse, error) {
-	err := s.clusManager.UnregisterStorageNode(ctx, req.GetStorageNodeID())
-	return &vmspb.UnregisterStorageNodeResponse{}, verrors.ToStatusError(err)
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/UnregisterStorageNode", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			err := s.clusManager.UnregisterStorageNode(ctx, req.GetStorageNodeID())
+			return &vmspb.UnregisterStorageNodeResponse{}, err
+		},
+	)
+	return rspI.(*vmspb.UnregisterStorageNodeResponse), verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
-	logStreamDesc, err := s.clusManager.AddLogStream(ctx, req.GetReplicas())
-	s.logger.Info("AddLogStream", zap.String("lsdesc", logStreamDesc.String()))
-	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, verrors.ToStatusErrorWithCode(err, codes.Unavailable)
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/AddLogStream", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			logStreamDesc, err := s.clusManager.AddLogStream(ctx, req.GetReplicas())
+			return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, err
+		},
+	)
+	return rspI.(*vmspb.AddLogStreamResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
 }
 
 func (s *clusterManagerService) UnregisterLogStream(ctx context.Context, req *vmspb.UnregisterLogStreamRequest) (*vmspb.UnregisterLogStreamResponse, error) {
-	err := s.clusManager.UnregisterLogStream(ctx, req.GetLogStreamID())
-	return &vmspb.UnregisterLogStreamResponse{}, verrors.ToStatusError(err)
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/UnregisterLogStream", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			err := s.clusManager.UnregisterLogStream(ctx, req.GetLogStreamID())
+			return &vmspb.UnregisterLogStreamResponse{}, err
+		},
+	)
+	return rspI.(*vmspb.UnregisterLogStreamResponse), verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) RemoveLogStreamReplica(ctx context.Context, req *vmspb.RemoveLogStreamReplicaRequest) (*vmspb.RemoveLogStreamReplicaResponse, error) {
-	err := s.clusManager.RemoveLogStreamReplica(ctx, req.GetStorageNodeID(), req.GetLogStreamID())
-	return &vmspb.RemoveLogStreamReplicaResponse{}, verrors.ToStatusError(err)
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/RemoveLogStreamReplica", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			err := s.clusManager.RemoveLogStreamReplica(ctx, req.GetStorageNodeID(), req.GetLogStreamID())
+			return &vmspb.RemoveLogStreamReplicaResponse{}, err
+		},
+	)
+	return rspI.(*vmspb.RemoveLogStreamReplicaResponse), verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) UpdateLogStream(ctx context.Context, req *vmspb.UpdateLogStreamRequest) (*vmspb.UpdateLogStreamResponse, error) {
-	lsdesc, err := s.clusManager.UpdateLogStream(ctx, req.GetLogStreamID(), req.GetPoppedReplica(), req.GetPushedReplica())
-	return &vmspb.UpdateLogStreamResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/UpdateLogStream", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			lsdesc, err := s.clusManager.UpdateLogStream(ctx, req.GetLogStreamID(), req.GetPoppedReplica(), req.GetPushedReplica())
+			return &vmspb.UpdateLogStreamResponse{LogStream: lsdesc}, err
+		},
+	)
+	return rspI.(*vmspb.UpdateLogStreamResponse), verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {
-	lsmetas, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
-	s.logger.Info("Seal",
-		zap.Uint32("lsid", uint32(req.GetLogStreamID())),
-		zap.String("lsmetas", (&vmspb.SealResponse{LogStreams: lsmetas}).String()),
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/Seal", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			lsmetas, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
+			return &vmspb.SealResponse{LogStreams: lsmetas}, err
+		},
 	)
-	return &vmspb.SealResponse{LogStreams: lsmetas}, verrors.ToStatusError(err)
+	return rspI.(*vmspb.SealResponse), verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Sync(ctx context.Context, req *vmspb.SyncRequest) (*vmspb.SyncResponse, error) {
-	status, err := s.clusManager.Sync(ctx, req.GetLogStreamID(), req.GetSrcStorageNodeID(), req.GetDstStorageNodeID())
-	return &vmspb.SyncResponse{Status: status}, verrors.ToStatusError(err)
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/Sync", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			status, err := s.clusManager.Sync(ctx, req.GetLogStreamID(), req.GetSrcStorageNodeID(), req.GetDstStorageNodeID())
+			return &vmspb.SyncResponse{Status: status}, err
+		},
+	)
+	return rspI.(*vmspb.SyncResponse), verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) Unseal(ctx context.Context, req *vmspb.UnsealRequest) (*vmspb.UnsealResponse, error) {
-	lsdesc, err := s.clusManager.Unseal(ctx, req.GetLogStreamID())
-	s.logger.Info("Unseal",
-		zap.Uint32("lsid", uint32(req.GetLogStreamID())),
-		zap.String("lsdesc", lsdesc.String()),
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/Unseal", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			lsdesc, err := s.clusManager.Unseal(ctx, req.GetLogStreamID())
+			return &vmspb.UnsealResponse{LogStream: lsdesc}, err
+		},
 	)
-	return &vmspb.UnsealResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
+	return rspI.(*vmspb.UnsealResponse), verrors.ToStatusError(err)
 }
 
-func (s *clusterManagerService) GetMRMembers(ctx context.Context, _ *pbtypes.Empty) (*vmspb.GetMRMembersResponse, error) {
-	mrInfo, err := s.clusManager.MRInfos(ctx)
-	if err != nil {
-		return &vmspb.GetMRMembersResponse{}, verrors.ToStatusError(err)
-	}
-
-	resp := &vmspb.GetMRMembersResponse{
-		Leader:            mrInfo.Leader,
-		ReplicationFactor: mrInfo.ReplicationFactor,
-	}
-
-	resp.Members = make(map[types.NodeID]string)
-	for nodeID, m := range mrInfo.Members {
-		resp.Members[nodeID] = m.Peer
-	}
-
-	return resp, verrors.ToStatusError(err)
+func (s *clusterManagerService) GetMRMembers(ctx context.Context, req *pbtypes.Empty) (*vmspb.GetMRMembersResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/GetMRMembers", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			var rsp *vmspb.GetMRMembersResponse
+			mrInfo, err := s.clusManager.MRInfos(ctx)
+			if err != nil {
+				return rsp, err
+			}
+			rsp = &vmspb.GetMRMembersResponse{
+				Leader:            mrInfo.Leader,
+				ReplicationFactor: mrInfo.ReplicationFactor,
+				Members:           make(map[types.NodeID]string, len(mrInfo.Members)),
+			}
+			for nodeID, m := range mrInfo.Members {
+				rsp.Members[nodeID] = m.Peer
+			}
+			return rsp, nil
+		},
+	)
+	return rspI.(*vmspb.GetMRMembersResponse), verrors.ToStatusError(err)
 }
 
 func (s *clusterManagerService) AddMRPeer(ctx context.Context, req *vmspb.AddMRPeerRequest) (*vmspb.AddMRPeerResponse, error) {
-	nodeID, err := s.clusManager.AddMRPeer(ctx, req.RaftURL, req.RPCAddr)
-	if err != nil {
-		s.logger.Info("AddPeer",
-			zap.String("raft", req.RaftURL),
-			zap.String("rpc", req.RPCAddr),
-			zap.Uint64("nodeID", uint64(nodeID)),
-			zap.String("err", err.Error()),
-		)
-		return &vmspb.AddMRPeerResponse{}, verrors.ToStatusError(err)
-	}
-
-	s.logger.Info("AddPeer",
-		zap.String("raft", req.RaftURL),
-		zap.String("rpc", req.RPCAddr),
-		zap.Uint64("nodeID", uint64(nodeID)),
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/AddMRPeer", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			nodeID, err := s.clusManager.AddMRPeer(ctx, req.RaftURL, req.RPCAddr)
+			return &vmspb.AddMRPeerResponse{NodeID: nodeID}, err
+		},
 	)
-
-	resp := &vmspb.AddMRPeerResponse{
-		NodeID: nodeID,
-	}
-
-	return resp, verrors.ToStatusError(err)
+	return rspI.(*vmspb.AddMRPeerResponse), verrors.ToStatusError(err)
 }
 
-func (s *clusterManagerService) GetStorageNodes(ctx context.Context, _ *pbtypes.Empty) (*vmspb.GetStorageNodesResponse, error) {
-	meta, err := s.clusManager.Metadata(ctx)
-	if err != nil {
-		return &vmspb.GetStorageNodesResponse{}, verrors.ToStatusError(err)
-	}
-
-	resp := &vmspb.GetStorageNodesResponse{}
-	if meta != nil && meta.StorageNodes != nil {
-		resp.Storagenodes = make(map[types.StorageNodeID]string)
-		for _, sn := range meta.StorageNodes {
-			resp.Storagenodes[sn.StorageNodeID] = sn.Address
-		}
-	}
-
-	return resp, verrors.ToStatusError(err)
+func (s *clusterManagerService) GetStorageNodes(ctx context.Context, req *pbtypes.Empty) (*vmspb.GetStorageNodesResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/GetStorageNodes", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			var rsp *vmspb.GetStorageNodesResponse
+			meta, err := s.clusManager.Metadata(ctx)
+			if err != nil {
+				return rsp, err
+			}
+			rsp = &vmspb.GetStorageNodesResponse{}
+			if meta != nil && meta.StorageNodes != nil {
+				rsp.Storagenodes = make(map[types.StorageNodeID]string, len(meta.StorageNodes))
+				for _, sn := range meta.StorageNodes {
+					rsp.Storagenodes[sn.StorageNodeID] = sn.Address
+				}
+			}
+			return rsp, nil
+		},
+	)
+	return rspI.(*vmspb.GetStorageNodesResponse), verrors.ToStatusError(err)
 }

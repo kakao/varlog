@@ -1,10 +1,12 @@
 package varlogpb
 
 import (
-	"errors"
 	"sort"
 
+	"github.com/pkg/errors"
+
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 )
 
 func (s LogStreamStatus) Deleted() bool {
@@ -99,6 +101,13 @@ func makeReplicaDescriptorDiffSet(replicas []*ReplicaDescriptor) map[string]*Rep
 		set[replica.String()] = replica
 	}
 	return set
+}
+
+func (m *MetadataDescriptor) Must() *MetadataDescriptor {
+	if m == nil {
+		panic("MetadataDescriptor is nil")
+	}
+	return m
 }
 
 func (m *MetadataDescriptor) searchStorageNode(id types.StorageNodeID) (int, bool) {
@@ -218,6 +227,34 @@ func (m *MetadataDescriptor) GetStorageNode(id types.StorageNodeID) *StorageNode
 	return nil
 }
 
+func (m *MetadataDescriptor) HaveStorageNode(id types.StorageNodeID) (*StorageNodeDescriptor, error) {
+	if m == nil {
+		return nil, errors.New("MetadataDescriptor is nil")
+	}
+	if snd := m.GetStorageNode(id); snd != nil {
+		return snd, nil
+	}
+	return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
+}
+
+func (m *MetadataDescriptor) MustHaveStorageNode(id types.StorageNodeID) (*StorageNodeDescriptor, error) {
+	return m.Must().HaveStorageNode(id)
+}
+
+func (m *MetadataDescriptor) NotHaveStorageNode(id types.StorageNodeID) error {
+	if m == nil {
+		return errors.New("MetadataDescriptor is nil")
+	}
+	if snd := m.GetStorageNode(id); snd == nil {
+		return nil
+	}
+	return errors.Wrap(verrors.ErrExist, "storage node")
+}
+
+func (m *MetadataDescriptor) MustNotHaveStorageNode(id types.StorageNodeID) error {
+	return m.Must().NotHaveStorageNode(id)
+}
+
 func (m *MetadataDescriptor) InsertLogStream(ls *LogStreamDescriptor) error {
 	if m == nil || ls == nil {
 		return nil
@@ -283,6 +320,34 @@ func (m *MetadataDescriptor) GetLogStream(id types.LogStreamID) *LogStreamDescri
 	}
 
 	return nil
+}
+
+func (m *MetadataDescriptor) HaveLogStream(id types.LogStreamID) (*LogStreamDescriptor, error) {
+	if m == nil {
+		return nil, errors.New("MetadataDescriptor is nil")
+	}
+	if lsd := m.GetLogStream(id); lsd != nil {
+		return lsd, nil
+	}
+	return nil, errors.Wrap(verrors.ErrNotExist, "log stream")
+}
+
+func (m *MetadataDescriptor) MustHaveLogStream(id types.LogStreamID) (*LogStreamDescriptor, error) {
+	return m.Must().HaveLogStream(id)
+}
+
+func (m *MetadataDescriptor) NotHaveLogStream(id types.LogStreamID) error {
+	if m == nil {
+		return errors.New("MetadataDescriptor is nil")
+	}
+	if lsd := m.GetLogStream(id); lsd == nil {
+		return nil
+	}
+	return errors.Wrap(verrors.ErrExist, "log stream")
+}
+
+func (m *MetadataDescriptor) MustNotHaveLogStream(id types.LogStreamID) error {
+	return m.Must().NotHaveLogStream(id)
 }
 
 func (snmd *StorageNodeMetadataDescriptor) GetLogStream(logStreamID types.LogStreamID) (LogStreamMetadataDescriptor, bool) {

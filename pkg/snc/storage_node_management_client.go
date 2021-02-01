@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/rpc"
@@ -47,7 +48,6 @@ func NewManagementClient(ctx context.Context, clusterID types.ClusterID, address
 
 	rpcConn, err := rpc.NewBlockingConn(address)
 	if err != nil {
-		logger.Error("could not connect to storagenode", zap.Error(err))
 		return nil, err
 	}
 	rpcClient := snpb.NewManagementClient(rpcConn.Conn)
@@ -55,10 +55,7 @@ func NewManagementClient(ctx context.Context, clusterID types.ClusterID, address
 		ClusterID: clusterID,
 	})
 	if err != nil {
-		if closeErr := rpcConn.Close(); closeErr != nil {
-			logger.Error("error while closing connection to storagenode", zap.Error(err))
-		}
-		return nil, err
+		return nil, multierr.Append(err, rpcConn.Close())
 	}
 	storageNodeID := rsp.GetStorageNodeMetadata().GetStorageNode().GetStorageNodeID()
 	logger = logger.With(zap.Any("peer_snid", storageNodeID))

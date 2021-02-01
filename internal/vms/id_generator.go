@@ -4,10 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/runner"
 )
 
 type LogStreamIDGenerator interface {
@@ -60,9 +59,7 @@ func (gen *seqLSIDGen) Refresh(ctx context.Context) error {
 	return nil
 }
 
-func (gen *seqLSIDGen) getMaxLogStreamID(ctx context.Context) (types.LogStreamID, error) {
-	maxID := types.LogStreamID(0)
-
+func (gen *seqLSIDGen) getMaxLogStreamID(ctx context.Context) (maxID types.LogStreamID, err error) {
 	clusmeta, err := gen.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return maxID, err
@@ -74,43 +71,24 @@ func (gen *seqLSIDGen) getMaxLogStreamID(ctx context.Context) (types.LogStreamID
 		snidList = append(snidList, sndesc.GetStorageNodeID())
 	}
 
-	maxIDs := make([]types.LogStreamID, len(snidList))
-	errs := make([]error, len(snidList))
-	runner := runner.New("seq-lsid-gen", zap.NewNop())
-	mctx, cancel := runner.WithManagedCancel(ctx)
-	defer func() {
-		cancel()
-		runner.Stop()
-	}()
-
-	// TODO (jun): Runner needs graceful stop which waits until tasks are terminated without
-	// calling cancel functions.
-	var wg sync.WaitGroup
-	wg.Add(len(snidList))
-	for i, snid := range snidList {
-		idx := i
+	var mu sync.Mutex
+	g, ctx := errgroup.WithContext(ctx)
+	for _, snid := range snidList {
 		storageNodeID := snid
-		f := func(context.Context) {
-			defer wg.Done()
-			maxIDs[idx], errs[idx] = getLocalMaxLogStreamID(ctx, storageNodeID, gen.snMgr)
-		}
-		if err := runner.RunC(mctx, f); err != nil {
-			return maxID, err
-		}
+		g.Go(func() error {
+			localMaxID, e := getLocalMaxLogStreamID(ctx, storageNodeID, gen.snMgr)
+			if e != nil {
+				return e
+			}
+			mu.Lock()
+			if maxID < localMaxID {
+				maxID = localMaxID
+			}
+			mu.Unlock()
+			return nil
+		})
 	}
-	wg.Wait()
-	for _, err := range errs {
-		if err != nil {
-			return maxID, err
-		}
-	}
-
-	for _, localMaxID := range maxIDs {
-		if localMaxID > maxID {
-			maxID = localMaxID
-		}
-	}
-	return maxID, nil
+	return maxID, g.Wait()
 }
 
 func getLocalMaxLogStreamID(ctx context.Context, storageNodeID types.StorageNodeID, snMgr StorageNodeManager) (types.LogStreamID, error) {

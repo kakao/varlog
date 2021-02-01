@@ -2,13 +2,14 @@ package vms
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -23,25 +24,23 @@ type randomReplicaSelector struct {
 	r        *rand.Rand
 	cmView   ClusterMetadataView
 	count    uint
-	denylist map[types.StorageNodeID]bool
+	denylist set.Set // set[types.StorageNodeID]
 }
 
 func newRandomReplicaSelector(cmView ClusterMetadataView, count uint, denylist ...types.StorageNodeID) (ReplicaSelector, error) {
 	if count == 0 {
-		return nil, errors.New("replicaselector: count is zero")
+		return nil, errors.New("replicaselector: zero replication factor")
 	}
 
 	rs := &randomReplicaSelector{
-		r:      rand.New(rand.NewSource(time.Now().UnixNano())),
-		cmView: cmView,
-		count:  count,
+		r:        rand.New(rand.NewSource(time.Now().UnixNano())),
+		cmView:   cmView,
+		count:    count,
+		denylist: set.New(len(denylist)),
 	}
-	if len(denylist) == 0 {
-		return rs, nil
-	}
-	rs.denylist = make(map[types.StorageNodeID]bool, len(denylist))
+
 	for _, snid := range denylist {
-		rs.denylist[snid] = true
+		rs.denylist.Add(snid)
 	}
 	return rs, nil
 }
@@ -54,7 +53,7 @@ func (rs *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Replic
 	sndescList := clusmeta.GetStorageNodes()
 	allowlist := make([]*varlogpb.StorageNodeDescriptor, 0, len(sndescList))
 	for _, sndesc := range sndescList {
-		if !rs.denylist[sndesc.GetStorageNodeID()] {
+		if !rs.denylist.Contains(sndesc.GetStorageNodeID()) {
 			allowlist = append(allowlist, sndesc)
 		}
 	}

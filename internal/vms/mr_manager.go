@@ -2,12 +2,13 @@ package vms
 
 import (
 	"context"
-	"errors"
 	"io"
 	"math"
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/mrc"
@@ -37,10 +38,6 @@ type ClusterMetadataView interface {
 type ClusterMetadataViewGetter interface {
 	ClusterMetadataView() ClusterMetadataView
 }
-
-var (
-	errCMVNoStorageNode = errors.New("cmview: no such storage node")
-)
 
 const (
 	RELOAD_INTERVAL = time.Second
@@ -108,7 +105,7 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrOpts MRManag
 	logger = logger.Named("mrmanager")
 
 	if len(mrOpts.MetadataRepositoryAddresses) == 0 {
-		return nil, verrors.ErrInvalid
+		return nil, errors.New("mrmanager: no metadata repository address")
 	}
 
 	opts := []mrconnector.Option{
@@ -151,36 +148,22 @@ func (mrm *mrManager) Close() error {
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
 
-	return mrm.connector.Close()
+	return errors.Wrap(mrm.connector.Close(), "mrmanager")
 }
 
 func (mrm *mrManager) ClusterMetadataView() ClusterMetadataView {
 	return mrm
 }
 
-func (mrm *mrManager) closeClient(cl mrc.MetadataRepositoryClient) {
-	err := cl.Close()
-	if err != nil {
-		mrm.logger.Warn("error while closing mr client", zap.Error(err))
-	}
-}
-
-func (mrm *mrManager) closeManagementClient(mcl mrc.MetadataRepositoryManagementClient) {
-	err := mcl.Close()
-	if err != nil {
-		mrm.logger.Warn("error while closing mr client", zap.Error(err))
-	}
-}
-
 func (mrm *mrManager) clusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	cli, err := mrm.c()
 	if err != nil {
-		return nil, verrors.ErrNotAccessible
+		return nil, errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	meta, err := cli.GetMetadata(ctx)
 	if err != nil {
-		mrm.closeClient(cli)
+		return nil, multierr.Append(err, cli.Close())
 	}
 
 	return meta, err
@@ -195,11 +178,11 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 
 	cli, err := mrm.c()
 	if err != nil {
-		return verrors.ErrNotAccessible
+		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	if err := cli.RegisterStorageNode(ctx, storageNodeMeta); err != nil {
-		mrm.closeClient(cli)
+		return multierr.Append(err, cli.Close())
 	}
 
 	return err
@@ -214,11 +197,11 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 
 	cli, err := mrm.c()
 	if err != nil {
-		return verrors.ErrNotAccessible
+		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	if err := cli.UnregisterStorageNode(ctx, storageNodeID); err != nil {
-		mrm.closeClient(cli)
+		return multierr.Append(err, cli.Close())
 	}
 
 	return err
@@ -233,11 +216,11 @@ func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varl
 
 	cli, err := mrm.c()
 	if err != nil {
-		return verrors.ErrNotAccessible
+		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	if err := cli.RegisterLogStream(ctx, logStreamDesc); err != nil {
-		mrm.closeClient(cli)
+		return multierr.Append(err, cli.Close())
 	}
 
 	return err
@@ -252,11 +235,11 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 
 	cli, err := mrm.c()
 	if err != nil {
-		return verrors.ErrNotAccessible
+		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	if err := cli.UnregisterLogStream(ctx, logStreamID); err != nil {
-		mrm.closeClient(cli)
+		return multierr.Append(err, cli.Close())
 	}
 	return err
 }
@@ -270,11 +253,11 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlog
 
 	cli, err := mrm.c()
 	if err != nil {
-		return verrors.ErrNotAccessible
+		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	if err := cli.UpdateLogStream(ctx, logStreamDesc); err != nil {
-		mrm.closeClient(cli)
+		return multierr.Append(err, cli.Close())
 	}
 	return err
 }
@@ -289,11 +272,11 @@ func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (
 
 	cli, err := mrm.c()
 	if err != nil {
-		return types.InvalidGLSN, verrors.ErrNotAccessible
+		return types.InvalidGLSN, errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	if lastCommittedGLSN, err = cli.Seal(ctx, logStreamID); err != nil {
-		mrm.closeClient(cli)
+		return types.InvalidGLSN, multierr.Append(err, cli.Close())
 	}
 	return lastCommittedGLSN, err
 }
@@ -307,11 +290,11 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 
 	cli, err := mrm.c()
 	if err != nil {
-		return verrors.ErrNotAccessible
+		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	if err := cli.Unseal(ctx, logStreamID); err != nil {
-		mrm.closeClient(cli)
+		return multierr.Append(err, cli.Close())
 	}
 	return err
 }
@@ -322,13 +305,12 @@ func (mrm *mrManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, er
 
 	cli, err := mrm.mc()
 	if cli == nil {
-		return nil, verrors.ErrNotAccessible
+		return nil, errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	rsp, err := cli.GetClusterInfo(ctx, mrm.clusterID)
 	if err != nil {
-		mrm.closeManagementClient(cli)
-		return nil, err
+		return nil, multierr.Append(err, cli.Close())
 	}
 	return rsp.GetClusterInfo(), err
 }
@@ -339,12 +321,12 @@ func (mrm *mrManager) AddPeer(ctx context.Context, nodeID types.NodeID, peerURL,
 
 	cli, err := mrm.mc()
 	if err != nil {
-		return verrors.ErrNotAccessible
+		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	if err := cli.AddPeer(ctx, mrm.clusterID, nodeID, peerURL); err != nil {
 		if !errors.Is(err, verrors.ErrAlreadyExists) {
-			mrm.closeManagementClient(cli)
+			return multierr.Append(err, cli.Close())
 		}
 		return err
 	}
@@ -359,12 +341,11 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 
 	cli, err := mrm.mc()
 	if err != nil {
-		return verrors.ErrNotAccessible
+		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
 	if err := cli.RemovePeer(ctx, mrm.clusterID, nodeID); err != nil {
-		mrm.closeManagementClient(cli)
-		return err
+		return multierr.Append(err, cli.Close())
 	}
 	mrm.connector.DelRPCAddr(nodeID)
 
@@ -392,10 +373,13 @@ func (mrm *mrManager) StorageNode(ctx context.Context, storageNodeID types.Stora
 	if err != nil {
 		return nil, err
 	}
-	if sndesc := meta.GetStorageNode(storageNodeID); sndesc != nil {
-		return sndesc, nil
-	}
-	return nil, errCMVNoStorageNode
+	return meta.MustHaveStorageNode(storageNodeID)
+	/*
+		if sndesc := meta.GetStorageNode(storageNodeID); sndesc != nil {
+			return sndesc, nil
+		}
+		return nil, errors.Wrap(errNoStorageNode, "mrmanager")
+	*/
 }
 
 func (mrm *mrManager) NumberOfMR() int {
