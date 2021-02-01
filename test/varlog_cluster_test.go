@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	assert "github.com/smartystreets/assertions"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
@@ -135,6 +136,10 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 		}
 
 		Convey("Varlog cluster", withTestCluster(opts, func(env *VarlogCluster) {
+			So(testutil.CompareWaitN(50, func() bool {
+				return env.HealthCheck()
+			}), ShouldBeTrue)
+
 			for i := 0; i < numSN; i++ {
 				_, err := env.AddSNByVMS()
 				So(err, ShouldBeNil)
@@ -968,7 +973,8 @@ func TestVarlogManagerServer(t *testing.T) {
 		Convey("Duplicated AddStorageNode", func() {
 			for _, snAddr := range snAddrs {
 				_, err := cmcli.AddStorageNode(context.TODO(), snAddr)
-				So(errors.Is(err, verrors.ErrStorageNodeAlreadyExists), ShouldBeTrue)
+				So(err, assert.ShouldWrap, verrors.ErrExist)
+				So(errors.Is(err, verrors.ErrExist), ShouldBeTrue)
 			}
 		})
 
@@ -1220,7 +1226,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 			// VMS Server
 			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), opts.VMSOpts.MRManagerOptions, zap.L())
 			Convey("Then it should be fail", func(ctx C) {
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, ShouldNotBeNil)
 			})
 		})
 

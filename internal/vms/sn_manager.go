@@ -2,17 +2,17 @@ package vms
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"strconv"
-	"strings"
 	"sync"
 
+	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.daumkakao.com/varlog/varlog/pkg/snc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/container/set"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
@@ -97,7 +97,7 @@ func (sm *snManager) refresh(ctx context.Context) error {
 	}
 
 	var mu sync.Mutex
-	errSN := make([]string, 0, len(sm.cs))
+	var errs error
 	newCS := make(map[types.StorageNodeID]snc.StorageNodeManagementClient, len(sm.cs))
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -106,8 +106,10 @@ func (sm *snManager) refresh(ctx context.Context) error {
 		sndesc := sndescList[i]
 		storageNodeID := sndesc.GetStorageNodeID()
 		g.Go(func() error {
-			if snmcl, ok := oldCS[storageNodeID]; ok {
-				if _, err := snmcl.GetMetadata(ctx); err == nil {
+			var err error
+			snmcl, ok := oldCS[storageNodeID]
+			if ok {
+				if _, err = snmcl.GetMetadata(ctx); err == nil {
 					mu.Lock()
 					defer mu.Unlock()
 					newCS[storageNodeID] = snmcl
@@ -116,17 +118,16 @@ func (sm *snManager) refresh(ctx context.Context) error {
 				}
 			}
 
-			if snmcl, _, err := sm.GetMetadataByAddr(ctx, sndesc.GetAddress()); err == nil {
+			if snmcl, _, err = sm.GetMetadataByAddr(ctx, sndesc.GetAddress()); err == nil {
 				mu.Lock()
 				defer mu.Unlock()
 				newCS[storageNodeID] = snmcl
 				return nil
 			}
 
-			sm.logger.Error("storage node refresh failed", zap.Uint32("snid", uint32(storageNodeID)))
 			mu.Lock()
 			defer mu.Unlock()
-			errSN = append(errSN, strconv.FormatUint(uint64(storageNodeID), 10))
+			errs = multierr.Append(errs, errors.WithMessagef(err, "snmanager: snid = %d", storageNodeID))
 			return nil
 		})
 	}
@@ -139,22 +140,15 @@ func (sm *snManager) refresh(ctx context.Context) error {
 		}
 	}
 
-	if len(errSN) > 0 {
-		return fmt.Errorf("snamanger: fresh failed storage nodes " + strings.Join(errSN, ","))
-	}
-	return nil
+	return errs
 }
 
-func (sm *snManager) Close() error {
+func (sm *snManager) Close() (err error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	var err error
 	for id, cli := range sm.cs {
-		if e := cli.Close(); e != nil {
-			sm.logger.Error("could not close storagenode management client", zap.Any("snid", id), zap.Error(e))
-			err = e
-		}
+		err = multierr.Append(err, errors.WithMessagef(cli.Close(), "snmanager: snid = %d", id))
 	}
 	return err
 }
@@ -180,16 +174,11 @@ func (sm *snManager) ContainsAddress(addr string) bool {
 func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (snc.StorageNodeManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error) {
 	mc, err := snc.NewManagementClient(ctx, sm.clusterID, addr, sm.logger)
 	if err != nil {
-		sm.logger.Error("could not create storagenode management client", zap.Error(err))
 		return nil, nil, err
 	}
 	snMeta, err := mc.GetMetadata(ctx)
 	if err != nil {
-		if err := mc.Close(); err != nil {
-			sm.logger.Error("could not close storagenode management client", zap.Error(err))
-			return nil, nil, err
-		}
-		return nil, nil, err
+		return nil, nil, multierr.Append(err, mc.Close())
 	}
 	return mc, snMeta, nil
 }
@@ -200,10 +189,8 @@ func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.Storag
 
 	snmcl, ok := sm.cs[storageNodeID]
 	if !ok {
-		err := errors.New("no such storage node")
-		sm.logger.Warn("no such storage node", zap.Any("snid", storageNodeID), zap.Error(err))
 		sm.refresh(ctx)
-		return nil, err
+		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 	return snmcl.GetMetadata(ctx)
 }
@@ -217,7 +204,7 @@ func (sm *snManager) AddStorageNode(snmcl snc.StorageNodeManagementClient) {
 func (sm *snManager) addStorageNode(snmcl snc.StorageNodeManagementClient) {
 	storageNodeID := snmcl.PeerStorageNodeID()
 	if _, ok := sm.cs[storageNodeID]; ok {
-		sm.logger.Panic("already registered storagenode", zap.Any("snid", storageNodeID))
+		sm.logger.Panic("already registered storagenode", zap.Uint32("snid", uint32(storageNodeID)))
 	}
 	sm.cs[storageNodeID] = snmcl
 }
@@ -247,7 +234,7 @@ func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.Storage
 	snmcl, ok := sm.cs[snid]
 	if !ok {
 		sm.refresh(ctx)
-		return errors.New("no such storage node")
+		return errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 	return snmcl.AddLogStream(ctx, lsid, path)
 }
@@ -272,10 +259,8 @@ func (sm *snManager) RemoveLogStream(ctx context.Context, storageNodeID types.St
 
 	snmcl, ok := sm.cs[storageNodeID]
 	if !ok {
-		err := errors.New("no such storage node")
-		sm.logger.Warn("no such storage node", zap.Any("snid", storageNodeID), zap.Error(err))
 		sm.refresh(ctx)
-		return err
+		return errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 	return snmcl.RemoveLogStream(ctx, logStreamID)
 }
@@ -293,10 +278,8 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 		storageNodeID := replica.GetStorageNodeID()
 		cli, ok := sm.cs[storageNodeID]
 		if !ok {
-			err := errors.New("no such storage node")
-			sm.logger.Warn("no such storage node", zap.Any("snid", storageNodeID), zap.Error(err))
 			sm.refresh(ctx)
-			return nil, err
+			return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 		}
 		status, highWatermark, err := cli.Seal(ctx, logStreamID, lastCommittedGLSN)
 		if err != nil {
@@ -324,24 +307,22 @@ func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID, sr
 	if err != nil {
 		return nil, err
 	}
-	storageNodeIDs := make(map[types.StorageNodeID]bool, len(replicas))
+	// FIXME (jun): Tiny set/map may be slower than simple array. Check and fix it.
+	storageNodeIDs := set.New(len(replicas))
 	for _, replica := range replicas {
 		storageNodeID := replica.GetStorageNodeID()
-		storageNodeIDs[storageNodeID] = true
+		storageNodeIDs.Add(storageNodeID)
 	}
 
-	if !storageNodeIDs[srcID] || !storageNodeIDs[dstID] {
-		err := errors.New("no such storage node")
-		return nil, err
+	if !storageNodeIDs.Contains(srcID) || !storageNodeIDs.Contains(dstID) {
+		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 
 	srcCli := sm.cs[srcID]
 	dstCli := sm.cs[dstID]
 	if srcCli == nil || dstCli == nil {
-		err := errors.New("no such storage node")
-		sm.logger.Warn("no such storage node", zap.Any("src_snid", srcID), zap.Any("dst_snid", dstID), zap.Error(err))
 		sm.refresh(ctx)
-		return nil, err
+		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 	// TODO: check cluster meta if snids exist
 	return srcCli.Sync(ctx, logStreamID, dstID, dstCli.PeerAddress(), lastGLSN)
@@ -359,10 +340,8 @@ func (sm *snManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) 
 		storageNodeID := replica.GetStorageNodeID()
 		cli, ok := sm.cs[storageNodeID]
 		if !ok {
-			err := errors.New("no such storage node")
-			sm.logger.Warn("no such storage node", zap.Any("snid", storageNodeID), zap.Error(err))
 			sm.refresh(ctx)
-			return err
+			return errors.Wrap(verrors.ErrNotExist, "storage node")
 		}
 		if err := cli.Unseal(ctx, logStreamID); err != nil {
 			return err
@@ -376,7 +355,9 @@ func (sm *snManager) replicas(ctx context.Context, logStreamID types.LogStreamID
 	if err != nil {
 		return nil, err
 	}
-	lsdesc := clusmeta.GetLogStream(logStreamID)
-	replicas := lsdesc.GetReplicas()
-	return replicas, nil
+	lsdesc, err := clusmeta.MustHaveLogStream(logStreamID)
+	if err != nil {
+		return nil, err
+	}
+	return lsdesc.GetReplicas(), nil
 }

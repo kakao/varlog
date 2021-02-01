@@ -9,7 +9,7 @@ import (
 	"github.com/gogo/status"
 	"google.golang.org/grpc/codes"
 
-	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	"github.daumkakao.com/varlog/varlog/proto/errpb"
 )
 
 // TODO (jun, pharrell): ErrAlreadyExists, ErrExist, ErrVMSStorageNode...
@@ -29,26 +29,28 @@ var (
 )
 
 var (
-	//ErrLogStreamAlreadyExists   = errors.New("logstream already exists")
-	ErrStorageNodeNotExist      = errors.New("storagenode does not exist")
-	ErrStorageNodeAlreadyExists = errors.New("storagenode already exists")
+//ErrStorageNodeNotExist = errors.New("storagenode does not exist")
+//ErrStorageNodeAlreadyExists = errors.New("storagenode already exists")
 )
 
 var (
-	ErrInvalid       = errors.New("invalid argument")
-	ErrExist         = errors.New("already exists")
-	ErrIgnore        = errors.New("ignore")
-	ErrInprogress    = errors.New("inprogress")
-	ErrNeedRetry     = errors.New("need retry")
-	ErrStopped       = errors.New("stopped")
-	ErrNotMember     = errors.New("not member")
-	ErrNotAccessible = errors.New("not accessible")
-	ErrNotEmpty      = errors.New("not empty")
+	ErrInvalid  = errors.New("invalid argument")
+	ErrExist    = errors.New("already exists")
+	ErrNotExist = errors.New("not exist")
+	ErrState    = errors.New("invalid state")
+	ErrClosed   = errors.New("closed")
+
+	ErrIgnore     = errors.New("ignore")
+	ErrInprogress = errors.New("inprogress")
+	ErrNeedRetry  = errors.New("need retry")
+	ErrStopped    = errors.New("stopped")
+	ErrNotMember  = errors.New("not member")
+	ErrNotEmpty   = errors.New("not empty")
 
 	ErrInvalidArgument = errors.New("status - invalid argument")
 	ErrAlreadyExists   = errors.New("status - varlogserver: already exists")
-	ErrNotExist        = errors.New("status - not exist")
-	ErrInternal        = errors.New("status - internal error")
+
+	ErrInternal = errors.New("status - internal error")
 )
 
 type transientError struct {
@@ -81,7 +83,8 @@ func init() {
 
 		ErrInvalidArgument, ErrAlreadyExists, ErrNotExist,
 
-		ErrStorageNodeNotExist, ErrStorageNodeAlreadyExists,
+		// ErrStorageNodeNotExist, ErrStorageNodeAlreadyExists,
+		ErrExist,
 
 		// metadata repository
 		ErrNotMember,
@@ -106,6 +109,9 @@ func initErrorRegistry(errs ...error) {
 // If the err is either context.DeadlineExceeded or context.Canceled, it returns
 // grpc/status.statusError having a code of either codes.DeadlineExceeded or codes.Canceled.
 func ToStatusError(err error) error {
+	if err == nil {
+		return nil
+	}
 	if errors.Is(err, context.Canceled) {
 		return ToStatusErrorWithCode(err, codes.Canceled)
 	}
@@ -127,7 +133,7 @@ func ToStatusErrorWithCode(err error, code codes.Code) error {
 	st := status.New(code, err.Error())
 	var details []proto.Message
 	for err != nil {
-		detail := &varlogpb.ErrorDetail{
+		detail := &errpb.ErrorDetail{
 			ErrorString: err.Error(),
 		}
 		details = append(details, detail)
@@ -188,7 +194,7 @@ func FromStatusError(maybeStatusErr error) (err error) {
 func parseDetails(st *status.Status) (err error) {
 	details := st.Details()
 	for i := len(details) - 1; i >= 0; i-- {
-		detail, ok := details[i].(*varlogpb.ErrorDetail)
+		detail, ok := details[i].(*errpb.ErrorDetail)
 		if !ok {
 			continue
 		}

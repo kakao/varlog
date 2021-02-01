@@ -1,17 +1,19 @@
 package vms
 
+//go:generate stringer -type=clusterManagerState -trimprefix=clusterManager
 //go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/vms -package vms -destination vms_mock.go . ClusterMetadataView,StorageNodeManager
 
 import (
 	"context"
-	"errors"
-	"fmt"
+	"io"
 	"net"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -34,6 +36,8 @@ type StorageNodeEventHandler interface {
 
 // ClusterManager manages varlog cluster.
 type ClusterManager interface {
+	io.Closer
+
 	// AddStorageNode adds new StorageNode to the cluster.
 	AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error)
 
@@ -75,14 +79,10 @@ type ClusterManager interface {
 
 	Address() string
 
-	Close()
-
 	Wait()
 }
 
 var _ ClusterManager = (*clusterManager)(nil)
-
-var errCMKilled = errors.New("killed cluster manager")
 
 type clusterManagerState int
 
@@ -181,15 +181,14 @@ func (cm *clusterManager) Run() error {
 	case clusterManagerRunning:
 		return nil
 	case clusterManagerClosed:
-		return errCMKilled
+		return errors.Wrap(verrors.ErrClosed, "vms")
 	}
 	cm.cmState = clusterManagerRunning
 
 	// Listener
 	lis, err := net.Listen("tcp", cm.options.RPCBindAddress)
 	if err != nil {
-		cm.logger.Error("could not listen", zap.Error(err))
-		return err
+		return errors.WithStack(err)
 	}
 	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
 	// TODO (jun): choose best address
@@ -204,7 +203,9 @@ func (cm *clusterManager) Run() error {
 	}()
 
 	// SN Watcher
-	cm.snWatcher.Run()
+	if err := cm.snWatcher.Run(); err != nil {
+		return err
+	}
 
 	cm.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 	cm.logger.Info("start")
@@ -215,39 +216,29 @@ func (cm *clusterManager) Wait() {
 	cm.sw.Wait()
 }
 
-func (cm *clusterManager) Close() {
+func (cm *clusterManager) Close() (err error) {
 	cm.mu.Lock()
+	defer cm.mu.Unlock()
 
 	cm.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
-
 	switch cm.cmState {
 	case clusterManagerReady:
-		cm.logger.Error("could not close not-running cluster manager")
-		cm.mu.Unlock()
-		return
+		return errors.Wrapf(verrors.ErrState, "cluster manager: %s", cm.cmState)
 	case clusterManagerClosed:
-		cm.mu.Unlock()
-		return
+		return nil
 	}
 	cm.cmState = clusterManagerClosed
 	cm.mu.Unlock()
 
 	// SN Watcher
-	cm.snWatcher.Close()
+	err = cm.snWatcher.Close()
 
 	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	if err := cm.snMgr.Close(); err != nil {
-		cm.logger.Warn("error while closing storage node manager", zap.Error(err))
-	}
-	if err := cm.mrMgr.Close(); err != nil {
-		cm.logger.Warn("error while closing metadata repository manager", zap.Error(err))
-	}
-
+	err = multierr.Combine(err, cm.snMgr.Close(), cm.mrMgr.Close())
 	cm.server.Stop()
 	cm.sw.Stop()
 	cm.logger.Info("stop")
+	return err
 }
 
 func (cm *clusterManager) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
@@ -265,7 +256,7 @@ func (cm *clusterManager) MRInfos(ctx context.Context) (*mrpb.ClusterInfo, error
 func (cm *clusterManager) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error) {
 	nodeID := types.NewNodeIDFromURL(raftURL)
 	if nodeID == types.InvalidNodeID {
-		return types.InvalidNodeID, verrors.ErrInvalidArgument
+		return nodeID, errors.Wrap(verrors.ErrInvalid, "raft address")
 	}
 
 	cm.mu.RLock()
@@ -274,10 +265,6 @@ func (cm *clusterManager) AddMRPeer(ctx context.Context, raftURL, rpcAddr string
 	err := cm.mrMgr.AddPeer(ctx, nodeID, raftURL, rpcAddr)
 	if err != nil {
 		if !errors.Is(err, verrors.ErrAlreadyExists) {
-			/*
-				if !errors.Is(verrors.FromStatusError(context.TODO(), err),
-					verrors.FromStatusError(context.TODO(), verrors.ErrAlreadyExists)) {
-			*/
 			return types.InvalidNodeID, err
 		}
 	}
@@ -285,28 +272,35 @@ func (cm *clusterManager) AddMRPeer(ctx context.Context, raftURL, rpcAddr string
 	return nodeID, nil
 }
 
-func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (snmeta *varlogpb.StorageNodeMetadataDescriptor, err error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	if cm.snMgr.ContainsAddress(addr) {
-		return nil, verrors.ErrStorageNodeAlreadyExists
+		return nil, errors.Wrap(verrors.ErrExist, "storage node address")
 	}
 
 	snmcl, snmeta, err := cm.snMgr.GetMetadataByAddr(ctx, addr)
 	if err != nil {
 		return nil, err
 	}
-	storageNodeID := snmeta.GetStorageNode().GetStorageNodeID()
+
+	var (
+		clusmeta      *varlogpb.MetadataDescriptor
+		storageNodeID = snmeta.GetStorageNode().GetStorageNodeID()
+	)
+
 	if cm.snMgr.Contains(storageNodeID) {
-		return nil, verrors.ErrStorageNodeAlreadyExists
+		err = errors.Wrap(verrors.ErrExist, "storage node id")
+		goto errOut
 	}
 
-	_, err = cm.cmView.StorageNode(ctx, storageNodeID)
-	if err == nil {
-		cm.logger.Panic("mismatch between clusterMetadataView and snManager")
+	clusmeta, err = cm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		goto errOut
 	}
-	if err != errCMVNoStorageNode {
+
+	if err = clusmeta.MustNotHaveStorageNode(storageNodeID); err != nil {
 		goto errOut
 	}
 
@@ -318,8 +312,7 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (*var
 	return snmeta, nil
 
 errOut:
-	snmcl.Close()
-	return nil, err
+	return nil, multierr.Append(err, snmcl.Close())
 }
 
 func (cm *clusterManager) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
@@ -331,16 +324,16 @@ func (cm *clusterManager) UnregisterStorageNode(ctx context.Context, storageNode
 		return err
 	}
 
-	sndesc := clusmeta.GetStorageNode(storageNodeID)
-	if sndesc == nil {
-		return errors.New("no such storage node")
+	if _, err := clusmeta.MustHaveStorageNode(storageNodeID); err != nil {
+		return err
 	}
 
 	// TODO (jun): Use helper function
 	for _, lsdesc := range clusmeta.GetLogStreams() {
 		for _, replica := range lsdesc.GetReplicas() {
 			if replica.GetStorageNodeID() == storageNodeID {
-				return errors.New("in-use log stream replica")
+				return errors.New("active log stream")
+				// return errors.Wrap(errRunningLogStream, "vms")
 			}
 		}
 	}
@@ -357,10 +350,7 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	clusmeta, err := cm.cmView.ClusterMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
+	var err error
 
 	if len(replicas) == 0 {
 		replicas, err = cm.snSelector.Select(ctx)
@@ -369,13 +359,16 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 		}
 	}
 
+	clusmeta, err := cm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// See https://github.daumkakao.com/varlog/varlog/pull/198#discussion_r215602
 	logStreamID := cm.logStreamIDGen.Generate()
-	if clusmeta.GetLogStream(logStreamID) != nil {
-		err := fmt.Errorf("vms: logstream already exists (%d)", logStreamID)
-		// err := verrors.NewErrorf(verrors.ErrLogStreamAlreadyExists, codes.Unavailable, "lsid=%v", logStreamID)
-		cm.logger.Error("mismatch between ClusterMetadataView and LogStreamIDGenerator", zap.Any("lsid", logStreamID), zap.Error(err))
-		if err := cm.logStreamIDGen.Refresh(ctx); err != nil {
+	if err := clusmeta.MustNotHaveLogStream(logStreamID); err != nil {
+		if e := cm.logStreamIDGen.Refresh(ctx); e != nil {
+			err = multierr.Append(err, e)
 			cm.logger.Panic("could not refresh LogStreamIDGenerator", zap.Error(err))
 		}
 		return nil, err
@@ -404,16 +397,16 @@ func (cm *clusterManager) UnregisterLogStream(ctx context.Context, logStreamID t
 		return err
 	}
 
-	lsdesc := clusmeta.GetLogStream(logStreamID)
-	if lsdesc == nil {
-		return errors.New("no such log stream")
+	lsdesc, err := clusmeta.MustHaveLogStream(logStreamID)
+	if err != nil {
+		return err
 	}
 
-	if lsdesc.GetStatus().Running() {
-		return errors.New("running log stream")
-	}
-	if lsdesc.GetStatus().Deleted() {
-		return errors.New("already deleted")
+	status := lsdesc.GetStatus()
+	// TODO (jun): Check whether status.Deleted means unregistered.
+	// If so, is status.Deleted okay or not?
+	if status.Running() || status.Deleted() {
+		return errors.Errorf("invalid log stream status: %s", status)
 	}
 
 	// TODO (jun): test if the log stream has no logs
@@ -421,34 +414,29 @@ func (cm *clusterManager) UnregisterLogStream(ctx context.Context, logStreamID t
 	return cm.mrMgr.UnregisterLogStream(ctx, logStreamID)
 }
 
-func (cm *clusterManager) verifyLogStream(clusterMetadata *varlogpb.MetadataDescriptor, logStreamDesc *varlogpb.LogStreamDescriptor) error {
-	replicas := logStreamDesc.GetReplicas()
+func (cm *clusterManager) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor, lsdesc *varlogpb.LogStreamDescriptor) error {
+	replicas := lsdesc.GetReplicas()
 	// the number of logstream replica
 	if uint(len(replicas)) != cm.options.ReplicationFactor {
-		return fmt.Errorf("vms: incorrect number of logstream replicas: %w", verrors.ErrInvalid)
+		return errors.Errorf("invalid number of log stream replicas: %d", len(replicas))
 	}
 	// storagenode existence
 	for _, replica := range replicas {
-		if clusterMetadata.GetStorageNode(replica.GetStorageNodeID()) == nil {
-			return verrors.ErrStorageNodeNotExist
+		if _, err := clusmeta.MustHaveStorageNode(replica.GetStorageNodeID()); err != nil {
+			return err
 		}
 	}
 	// logstream existence
-	if clusterMetadata.GetLogStream(logStreamDesc.GetLogStreamID()) != nil {
-		//return verrors.ErrLogStreamAlreadyExists
-		return errors.New("ErrLogStreamAlreadyExists")
-	}
-	return nil
+	return clusmeta.MustNotHaveLogStream(lsdesc.GetLogStreamID())
 }
 
-func (cm *clusterManager) addLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
-	if err := cm.snMgr.AddLogStream(ctx, logStreamDesc); err != nil {
-		return nil, fmt.Errorf("vms: could not add log stream (%d): %w", logStreamDesc.GetLogStreamID(), err)
-		// return nil, verrors.NewErrorf(err, codes.Unavailable, "lsid=%v", logStreamDesc.GetLogStreamID())
+func (cm *clusterManager) addLogStream(ctx context.Context, lsdesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+	if err := cm.snMgr.AddLogStream(ctx, lsdesc); err != nil {
+		return nil, err
 	}
 
 	// NB: RegisterLogStream returns nil if the logstream already exists.
-	return logStreamDesc, cm.mrMgr.RegisterLogStream(ctx, logStreamDesc)
+	return lsdesc, cm.mrMgr.RegisterLogStream(ctx, lsdesc)
 }
 
 func (cm *clusterManager) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
@@ -478,20 +466,18 @@ func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types
 		return nil, err
 	}
 
-	oldLSDesc := clusmeta.GetLogStream(logStreamID)
-	if oldLSDesc == nil {
-		return nil, errors.New("no such log stream")
+	oldLSDesc, err := clusmeta.MustHaveLogStream(logStreamID)
+	if err != nil {
+		return nil, err
 	}
 
-	if oldLSDesc.GetStatus().Running() {
-		return nil, errors.New("running log stream")
-	}
-	if oldLSDesc.GetStatus().Deleted() {
-		return nil, errors.New("already deleted")
+	status := oldLSDesc.GetStatus()
+	if status.Running() || status.Deleted() {
+		return nil, errors.Errorf("invalid log stream status: %s", status)
 	}
 
 	if poppedReplica == nil {
-		// choose laggy replica
+		// TODO: Choose laggy replica
 		selector := newVictimSelector(cm.snMgr, logStreamID, oldLSDesc.GetReplicas())
 		victims, err := selector.Select(ctx)
 		if err != nil {
@@ -558,7 +544,7 @@ func (cm *clusterManager) removableLogStreamReplica(clusmeta *varlogpb.MetadataD
 	replicas := lsdesc.GetReplicas()
 	for _, replica := range replicas {
 		if replica.GetStorageNodeID() == storageNodeID {
-			return errors.New("in-use log stream replica")
+			return errors.Wrap(verrors.ErrState, "running log stream is not removable")
 		}
 	}
 	return nil
@@ -572,14 +558,12 @@ func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamI
 
 	lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
 	if err != nil {
-		cm.logger.Error("error while sealing by MR", zap.Error(err))
 		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
 		return nil, err
 	}
 
 	result, err := cm.snMgr.Seal(ctx, logStreamID, lastGLSN)
 	if err != nil {
-		cm.logger.Error("error while sealing by SN", zap.Error(err))
 		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
 	}
 
@@ -606,12 +590,10 @@ func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStrea
 	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusUnsealing)
 
 	if err = cm.snMgr.Unseal(ctx, logStreamID); err != nil {
-		cm.logger.Error("error while unsealing by SN", zap.Error(err))
 		goto errOut
 	}
 
 	if err = cm.mrMgr.Unseal(ctx, logStreamID); err != nil {
-		cm.logger.Error("error while unsealing by MR", zap.Error(err))
 		goto errOut
 	}
 
