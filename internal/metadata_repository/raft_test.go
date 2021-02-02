@@ -65,6 +65,7 @@ func newCluster(n int) *cluster {
 		rc := newRaftNode(nodeID,
 			clus.peers,
 			false,
+			false,
 			DefaultSnapshotCount,
 			DefaultSnapshotCatchUpCount,
 			vtesting.TestRaftTick(),

@@ -130,8 +130,8 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		options.NodeID,
 		options.Peers,
 		options.Join, // if false, not to join an existing cluster
-		//options.SnapCount,
-		1,
+		options.UnsafeNoSync,
+		1, // options.SnapCount
 		options.SnapCatchUpCount,
 		options.RaftTick,
 		options.RaftDir,
@@ -139,7 +139,6 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		mr.rnProposeC,
 		mr.rnConfChangeC,
 		mr.tmStub,
-		//mr.logger.Named("raftnode"),
 		mr.logger.Named(fmt.Sprintf("%v", options.NodeID)),
 	)
 	mr.rnCommitC = mr.raftNode.commitC
