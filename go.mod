@@ -16,7 +16,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.1
 	github.com/urfave/cli/v2 v2.3.0
-	go.etcd.io/etcd v0.0.0-20200520232829-54ba9589114f
+	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
 	go.opentelemetry.io/otel v0.15.0
 	go.opentelemetry.io/otel/exporters/otlp v0.15.0
 	go.opentelemetry.io/otel/exporters/stdout v0.15.0

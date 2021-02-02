@@ -36,15 +36,16 @@ type raftNode struct {
 	commitC     chan *raftCommittedEntry // entries committed to app
 	snapshotC   chan struct{}            // snapshot trigger
 
-	id         vtypes.NodeID   // node ID for raft
-	bpeers     []string        // raft bootstrap peer URLs
-	url        string          // raft listen url
-	membership *raftMembership // raft membership
-	raftTick   time.Duration   // raft tick
-	join       bool            // node is joining an existing cluster
-	waldir     string          // path to WAL directory
-	snapdir    string          // path to snapshot directory
-	lastIndex  uint64          // index of log at start
+	id           vtypes.NodeID   // node ID for raft
+	bpeers       []string        // raft bootstrap peer URLs
+	url          string          // raft listen url
+	membership   *raftMembership // raft membership
+	raftTick     time.Duration   // raft tick
+	join         bool            // node is joining an existing cluster
+	unsafeNoSync bool            // unsafe nosync
+	waldir       string          // path to WAL directory
+	snapdir      string          // path to snapshot directory
+	lastIndex    uint64          // index of log at start
 
 	raftState raft.StateType
 
@@ -99,7 +100,8 @@ type raftMembership struct {
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries.
-func newRaftNode(id vtypes.NodeID, peers []string, join bool,
+func newRaftNode(id vtypes.NodeID, peers []string,
+	join, unsafeNoSync bool,
 	snapCount, snapCatchUpCount uint64,
 	raftTick time.Duration,
 	raftDir string,
@@ -122,6 +124,7 @@ func newRaftNode(id vtypes.NodeID, peers []string, join bool,
 		membership:       newRaftMemebership(logger),
 		raftTick:         raftTick,
 		join:             join,
+		unsafeNoSync:     unsafeNoSync,
 		waldir:           fmt.Sprintf("%s/wal/%d", raftDir, id),
 		snapdir:          fmt.Sprintf("%s/snap/%d", raftDir, id),
 		snapshotGetter:   snapshotGetter,
@@ -387,6 +390,9 @@ func (rc *raftNode) start() {
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL(snapshot)
+	if rc.unsafeNoSync {
+		rc.wal.SetUnsafeNoFsync()
+	}
 
 	rpeers := make([]raft.Peer, len(rc.bpeers))
 	for i, peer := range rc.bpeers {

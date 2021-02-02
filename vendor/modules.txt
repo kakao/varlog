@@ -216,7 +216,7 @@ github.com/subosito/gotenv
 github.com/urfave/cli/v2
 # github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2
 github.com/xiang90/probing
-# go.etcd.io/etcd v0.0.0-20200520232829-54ba9589114f
+# go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
 ## explicit
 go.etcd.io/etcd/etcdserver/api/rafthttp
 go.etcd.io/etcd/etcdserver/api/snap

@@ -91,6 +91,14 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 			EnvVars:     []string{"JOIN"},
 			Destination: &options.Join,
 		},
+		&cli.BoolFlag{
+			Name:        "nosync",
+			Aliases:     []string{},
+			Value:       false,
+			Usage:       "unsafe nosync",
+			EnvVars:     []string{"UNSAFE_NOSYNC"},
+			Destination: &options.UnsafeNoSync,
+		},
 		&cli.IntFlag{
 			Name:        "log-rep-factor",
 			Aliases:     []string{},

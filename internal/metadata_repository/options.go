@@ -55,6 +55,7 @@ type MetadataRepositoryOptions struct {
 	NodeID             types.NodeID
 	Join               bool
 	Verbose            bool
+	UnsafeNoSync       bool
 	NumRep             int
 	SnapCount          uint64
 	SnapCatchUpCount   uint64
