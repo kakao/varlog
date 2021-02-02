@@ -3,6 +3,7 @@ package vms
 import (
 	"context"
 	"math/rand"
+	"sort"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -38,7 +39,6 @@ func newRandomReplicaSelector(cmView ClusterMetadataView, count uint, denylist .
 		count:    count,
 		denylist: set.New(len(denylist)),
 	}
-
 	for _, snid := range denylist {
 		rs.denylist.Add(snid)
 	}
@@ -51,26 +51,43 @@ func (rs *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Replic
 		return nil, err
 	}
 	sndescList := clusmeta.GetStorageNodes()
-	allowlist := make([]*varlogpb.StorageNodeDescriptor, 0, len(sndescList))
+	allowlist := make([]struct {
+		snd      *varlogpb.StorageNodeDescriptor
+		priority int
+	}, 0, len(sndescList))
 	for _, sndesc := range sndescList {
-		if !rs.denylist.Contains(sndesc.GetStorageNodeID()) {
-			allowlist = append(allowlist, sndesc)
+		storageNodeID := sndesc.GetStorageNodeID()
+		if !rs.denylist.Contains(storageNodeID) {
+			// TODO (jun): This is very inefficient functions. Make map<storage_node,
+			// log_streams> first.
+			rds := clusmeta.GetLogStreamsByStorageNodeID(storageNodeID)
+			allowlist = append(allowlist, struct {
+				snd      *varlogpb.StorageNodeDescriptor
+				priority int
+			}{
+				snd:      sndesc,
+				priority: len(rds),
+			})
 		}
 	}
 
 	if uint(len(allowlist)) < rs.count {
 		return nil, errors.New("replicaselector: not enough replicas")
 	}
-	indices := rs.r.Perm(len(allowlist))[:rs.count]
+
+	sort.Slice(allowlist, func(i, j int) bool {
+		return allowlist[i].priority < allowlist[j].priority
+	})
+
 	ret := make([]*varlogpb.ReplicaDescriptor, 0, rs.count)
-	for _, idx := range indices {
-		sndesc := allowlist[idx]
+	for idx := range allowlist[0:rs.count] {
 		// TODO (jun): choose proper path
 		ret = append(ret, &varlogpb.ReplicaDescriptor{
-			StorageNodeID: sndesc.GetStorageNodeID(),
-			Path:          sndesc.GetStorages()[0].Path,
+			StorageNodeID: allowlist[idx].snd.GetStorageNodeID(),
+			Path:          allowlist[idx].snd.GetStorages()[0].Path,
 		})
 	}
+
 	return ret, nil
 }
 
