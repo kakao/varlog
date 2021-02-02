@@ -25,6 +25,10 @@ var _ mrc.MetadataRepositoryClient = (*mrProxy)(nil)
 var _ mrc.MetadataRepositoryManagementClient = (*mrProxy)(nil)
 
 func (m *mrProxy) Close() (err error) {
+	if m == nil {
+		// TODO (jun): It should return an error after stabilization.
+		panic("mrProxy is nil")
+	}
 	m.once.Do(func() {
 		m.disconnected.Store(true)
 		m.c.releaseMRProxy(m.nodeID)

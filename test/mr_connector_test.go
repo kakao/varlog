@@ -127,9 +127,7 @@ func TestMRConnector(t *testing.T) {
 				)
 
 				maybeFail := func(ctx context.Context) {
-					if cl, err := mrConn.Client(); err != nil {
-						cl.Close()
-					} else {
+					if cl, err := mrConn.Client(); err == nil {
 						if _, err := cl.GetMetadata(ctx); err != nil {
 							cl.Close()
 						}
@@ -154,7 +152,6 @@ func TestMRConnector(t *testing.T) {
 						maybeFail(ctx)
 
 						if cl, err := mrConn.Client(); err != nil {
-							cl.Close()
 							return err
 						} else {
 							if _, err := cl.GetMetadata(ctx); err != nil {
