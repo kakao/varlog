@@ -7,7 +7,7 @@ from subprocess import Popen
 
 def get_pids(name):
     pids = list()
-    with Popen(["ps", "acx"], stdout=PIPE) as ps:
+    with Popen(["ps", "ax"], stdout=PIPE) as ps:
         with Popen(["grep", "-e", f"{name} "], stdin=ps.stdout, stdout=PIPE) as grep:
             ps.stdout.close()
             grepv_cmd = ["grep", "-v", "-e", "grep", "-e", "defunct"]
