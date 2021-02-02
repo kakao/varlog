@@ -37,6 +37,18 @@ func TestRandomSelector(t *testing.T) {
 						},
 					},
 				},
+				LogStreams: []*varlogpb.LogStreamDescriptor{
+					{
+						LogStreamID: types.LogStreamID(1),
+						Status:      varlogpb.LogStreamStatusRunning,
+						Replicas: []*varlogpb.ReplicaDescriptor{
+							{
+								StorageNodeID: types.StorageNodeID(1),
+								Path:          "/tmp",
+							},
+						},
+					},
+				},
 			},
 			nil,
 		).MaxTimes(1)
@@ -59,6 +71,15 @@ func TestRandomSelector(t *testing.T) {
 		Convey("When there are enough replicas to select", func() {
 			Convey("Then Select should return replicas", func() {
 				selector, err := newRandomReplicaSelector(cmView, 1, types.StorageNodeID(1))
+				So(err, ShouldBeNil)
+
+				replicas, err := selector.Select(context.TODO())
+				So(err, ShouldBeNil)
+				So(replicas[0].GetStorageNodeID(), ShouldEqual, types.StorageNodeID(2))
+			})
+
+			Convey("Then Select should return replicas which are most idle", func() {
+				selector, err := newRandomReplicaSelector(cmView, 1)
 				So(err, ShouldBeNil)
 
 				replicas, err := selector.Select(context.TODO())

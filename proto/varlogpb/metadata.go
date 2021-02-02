@@ -350,6 +350,22 @@ func (m *MetadataDescriptor) MustNotHaveLogStream(id types.LogStreamID) error {
 	return m.Must().NotHaveLogStream(id)
 }
 
+func (m *MetadataDescriptor) GetLogStreamsByStorageNodeID(id types.StorageNodeID) []*ReplicaDescriptor {
+	if m == nil {
+		return nil
+	}
+	hint := len(m.GetLogStreams()) / (len(m.GetStorageNodes()) + 1)
+	ret := make([]*ReplicaDescriptor, 0, hint)
+	for _, lsd := range m.GetLogStreams() {
+		for _, rd := range lsd.GetReplicas() {
+			if rd.GetStorageNodeID() == id {
+				ret = append(ret, rd)
+			}
+		}
+	}
+	return ret
+}
+
 func (snmd *StorageNodeMetadataDescriptor) GetLogStream(logStreamID types.LogStreamID) (LogStreamMetadataDescriptor, bool) {
 	logStreams := snmd.GetLogStreams()
 	for i := range logStreams {
