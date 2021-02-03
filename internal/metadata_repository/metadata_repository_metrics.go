@@ -19,12 +19,12 @@ func newMetricsBag(ts *telemetryStub) *metricsBag {
 	}
 }
 
-func (mb *metricsBag) Records(name string) metric.Int64ValueRecorder {
+func (mb *metricsBag) Records(name string) metric.Float64ValueRecorder {
 	f, ok := mb.records.Load(name)
 	if !ok {
-		r := metric.Must(mb.mt).NewInt64ValueRecorder(name)
+		r := metric.Must(mb.mt).NewFloat64ValueRecorder(name)
 		f, _ = mb.records.LoadOrStore(name, r)
 	}
 
-	return f.(metric.Int64ValueRecorder)
+	return f.(metric.Float64ValueRecorder)
 }

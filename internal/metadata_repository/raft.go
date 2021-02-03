@@ -21,6 +21,7 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/wal"
 	"go.etcd.io/etcd/wal/walpb"
+	"go.opentelemetry.io/otel/label"
 	"go.uber.org/zap"
 
 	vtypes "github.com/kakao/varlog/pkg/types"
@@ -768,12 +769,12 @@ func (rc *raftNode) processRaftEvent(ctx context.Context) {
 			}
 
 			rc.raftStorage.Append(rd.Entries)
+
 			rc.transport.Send(rc.processMessages(rd.Messages))
 			if ok := rc.publishEntries(ctx, rc.entriesToApply(rd.CommittedEntries)); ok {
 				rc.maybeTriggerSnapshot()
 				rc.node.Advance()
 			}
-
 		case err := <-rc.transport.ErrorC:
 			rc.logger.Panic("transport error", zap.String("err", err.Error()))
 
@@ -1012,7 +1013,6 @@ func (rm *raftMembership) updateState(state *raft.SoftState) {
 	}
 
 	if state.Lead != raft.None {
-		rm.logger.Info("set leader", zap.Uint64("leader", uint64(state.Lead)))
 		atomic.StoreUint64(&rm.leader, uint64(state.Lead))
 	}
 
@@ -1030,6 +1030,12 @@ func (rm *raftMembership) getLeader() uint64 {
 func (rc *raftNode) withTelemetry(ctx context.Context, name string, h handler) (interface{}, error) {
 	st := time.Now()
 	rsp, err := h(ctx)
-	rc.tmStub.mb.Records(name).Record(ctx, time.Since(st).Nanoseconds())
+
+	rc.tmStub.mb.Records(name).Record(ctx,
+		float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
+		label.KeyValue{
+			Key:   "nodeid",
+			Value: label.Uint64Value(uint64(rc.id)),
+		})
 	return rsp, err
 }

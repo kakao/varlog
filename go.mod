@@ -7,6 +7,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.4.4
+	github.com/golang/protobuf v1.4.2
 	github.com/google/gofuzz v1.2.0
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/pkg/errors v0.9.1
@@ -27,7 +28,7 @@ require (
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13
 	google.golang.org/grpc v1.35.0
-	google.golang.org/protobuf v1.25.0
+	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.19.0
 	k8s.io/apimachinery v0.19.0

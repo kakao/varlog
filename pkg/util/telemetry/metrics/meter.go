@@ -17,7 +17,7 @@ type Closer func()
 func New(exporter exporter.Exporter) Closer {
 	pusher := push.New(
 		basic.New(
-			simple.NewWithExactDistribution(),
+			simple.NewWithInexpensiveDistribution(),
 			exporter,
 		),
 		exporter,
