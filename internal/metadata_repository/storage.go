@@ -951,16 +951,16 @@ func (ms *MetadataStorage) UpdateUncommitReport(lsID types.LogStreamID, snID typ
 	ms.nrUpdateSinceCommit++
 }
 
-func (ms *MetadataStorage) GetUncommitReportIDs() set.Set {
+func (ms *MetadataStorage) GetUncommitReportIDs() []types.LogStreamID {
 	pre, cur := ms.getStateMachine()
 
-	ids := set.New(len(pre.LogStream.UncommitReports))
+	idset := set.New(len(pre.LogStream.UncommitReports))
 	deleted := set.New(4)
 	for lsID, lls := range pre.LogStream.UncommitReports {
 		if lls.Status.Deleted() {
 			deleted.Add(lsID)
 		} else {
-			ids.Add(lsID)
+			idset.Add(lsID)
 		}
 	}
 
@@ -969,12 +969,20 @@ func (ms *MetadataStorage) GetUncommitReportIDs() set.Set {
 			if lls.Status.Deleted() {
 				deleted.Add(lsID)
 			} else {
-				ids.Add(lsID)
+				idset.Add(lsID)
 			}
 		}
 	}
 
-	return ids.Diff(deleted)
+	idset = idset.Diff(deleted)
+	ids := make([]types.LogStreamID, 0, idset.Size())
+
+	idset.Foreach(func(k interface{}) bool {
+		ids = append(ids, k.(types.LogStreamID))
+		return true
+	})
+
+	return ids
 }
 
 func (ms *MetadataStorage) AppendLogStreamCommitHistory(cr *mrpb.LogStreamCommitResults) {
@@ -984,7 +992,7 @@ func (ms *MetadataStorage) AppendLogStreamCommitHistory(cr *mrpb.LogStreamCommit
 		return
 	}
 
-	sort.Slice(cr.CommitResults, func(i, j int) bool { return cr.CommitResults[i].LogStreamID < cr.CommitResults[j].LogStreamID })
+	//ms.logger.Info("append commit", zap.String("logstreams", cr.String()))
 
 	_, cur := ms.getStateMachine()
 

@@ -337,7 +337,7 @@ func TestStoragUnregisterLS(t *testing.T) {
 
 			err := ms.RegisterLogStream(ls, 0, 0)
 			So(err, ShouldBeNil)
-			So(ms.GetUncommitReportIDs().Size(), ShouldEqual, 1)
+			So(len(ms.GetUncommitReportIDs()), ShouldEqual, 1)
 
 			So(ms.isCopyOnWrite(), ShouldBeTrue)
 
@@ -346,7 +346,7 @@ func TestStoragUnregisterLS(t *testing.T) {
 
 			So(ms.lookupLogStream(lsID), ShouldBeNil)
 			So(ms.LookupUncommitReports(lsID), ShouldBeNil)
-			So(ms.GetUncommitReportIDs().Size(), ShouldEqual, 0)
+			So(len(ms.GetUncommitReportIDs()), ShouldEqual, 0)
 
 			Convey("unregistered SN should not be found after merge", func(ctx C) {
 				ms.mergeMetadata()
@@ -356,7 +356,7 @@ func TestStoragUnregisterLS(t *testing.T) {
 
 				So(ms.lookupLogStream(lsID), ShouldBeNil)
 				So(ms.LookupUncommitReports(lsID), ShouldBeNil)
-				So(ms.GetUncommitReportIDs().Size(), ShouldEqual, 0)
+				So(len(ms.GetUncommitReportIDs()), ShouldEqual, 0)
 			})
 		})
 	})
