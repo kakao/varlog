@@ -12,7 +12,10 @@ import (
 )
 
 func Main(opts *storagenode.Options) error {
-	logger, err := zap.NewProduction()
+	loggerConfig := zap.NewProductionConfig()
+	loggerConfig.Sampling = nil
+	loggerConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+	logger, err := loggerConfig.Build(zap.AddStacktrace(zap.DPanicLevel))
 	if err != nil {
 		return err
 	}

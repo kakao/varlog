@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"go.uber.org/multierr"
+
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
@@ -33,14 +35,10 @@ func (m *mrProxy) Close() (err error) {
 		m.disconnected.Store(true)
 		m.c.releaseMRProxy(m.nodeID)
 		if m.cl != nil {
-			if e := m.cl.Close(); e != nil {
-				err = e
-			}
+			err = multierr.Append(err, m.cl.Close())
 		}
 		if m.mcl != nil {
-			if e := m.mcl.Close(); e != nil {
-				err = e
-			}
+			err = multierr.Append(err, m.mcl.Close())
 		}
 	})
 	return err

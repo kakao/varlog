@@ -13,7 +13,7 @@ import (
 )
 
 func Main(opts *vms.Options) error {
-	logger, err := zap.NewProduction()
+	logger, err := zap.NewProduction(zap.AddStacktrace(zap.DPanicLevel))
 	if err != nil {
 		return err
 	}
