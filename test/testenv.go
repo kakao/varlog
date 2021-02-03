@@ -35,6 +35,7 @@ type VarlogClusterOptions struct {
 	NrRep             int
 	NrMR              int
 	SnapCount         int
+	CollectorName     string
 	ReporterClientFac metadata_repository.ReporterClientFactory
 	VMSOpts           *vms.Options
 }
@@ -126,6 +127,9 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 	}
 
 	opts.CollectorName = "nop"
+	if clus.CollectorName != "" {
+		opts.CollectorName = clus.CollectorName
+	}
 	opts.CollectorEndpoint = "localhost:55680"
 
 	clus.mrIDs[idx] = nodeID

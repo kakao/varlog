@@ -2238,3 +2238,23 @@ func TestVarlogClient(t *testing.T) {
 		}))
 	})
 }
+
+func TestVarlogRaftDelay(t *testing.T) {
+	t.Skip()
+
+	nrRep := 1
+	vmsOpts := vms.DefaultOptions()
+	vmsOpts.HeartbeatTimeout *= 10
+	vmsOpts.Logger = zap.L()
+	opts := VarlogClusterOptions{
+		NrMR:              3,
+		NrRep:             nrRep,
+		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		CollectorName:     "otel",
+		VMSOpts:           &vmsOpts,
+	}
+
+	Convey("Given Varlog cluster", t, withTestCluster(opts, func(env *VarlogCluster) {
+		time.Sleep(10 * time.Minute)
+	}))
+}

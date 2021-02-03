@@ -16,7 +16,8 @@ data:
         - targets:
 
     scrape_configs:
-      - job_name: 'prometheus'
+      - job_name: 'collector'
+        scrape_interval: 1s
         static_configs:
             - targets: ['otel-collector.default:8889']
 ---

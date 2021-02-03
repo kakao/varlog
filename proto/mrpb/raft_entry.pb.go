@@ -13,7 +13,7 @@ import (
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-	_ "google.golang.org/protobuf/types/known/timestamppb"
+	_ "github.com/golang/protobuf/ptypes/timestamp"
 
 	github_daumkakao_com_varlog_varlog_pkg_types "github.daumkakao.com/varlog/varlog/pkg/types"
 	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
@@ -2040,10 +2040,7 @@ func (m *RegisterStorageNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2113,10 +2110,7 @@ func (m *UnregisterStorageNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2203,10 +2197,7 @@ func (m *RegisterLogStream) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2276,10 +2267,7 @@ func (m *UnregisterLogStream) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2366,10 +2354,7 @@ func (m *UpdateLogStream) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2473,10 +2458,7 @@ func (m *Report) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2579,10 +2561,7 @@ func (m *Commit) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2652,10 +2631,7 @@ func (m *Seal) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2725,10 +2701,7 @@ func (m *Unseal) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2850,10 +2823,7 @@ func (m *AddPeer) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -2923,10 +2893,7 @@ func (m *RemovePeer) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -3028,10 +2995,7 @@ func (m *Endpoint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -3172,10 +3136,7 @@ func (m *RaftEntry) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {
@@ -3658,10 +3619,7 @@ func (m *RaftEntry_Request) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthRaftEntry
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaftEntry
 			}
 			if (iNdEx + skippy) > l {

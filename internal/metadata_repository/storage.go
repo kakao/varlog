@@ -655,6 +655,7 @@ func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, re
 }
 
 func (ms *MetadataStorage) SetLeader(nodeID types.NodeID) {
+	ms.logger.Info("set leader", zap.Any("leader", nodeID))
 	atomic.StoreUint64(&ms.leader, uint64(nodeID))
 }
 

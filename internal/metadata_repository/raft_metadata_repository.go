@@ -11,6 +11,7 @@ import (
 
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
+	"go.opentelemetry.io/otel/label"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -104,11 +105,13 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		panic(err)
 	}
 
+	logger := options.Logger.Named("vmr").With(zap.Any("nodeid", options.NodeID))
+
 	mr := &RaftMetadataRepository{
 		clusterID:         options.ClusterID,
 		nodeID:            options.NodeID,
 		nrReplica:         options.NumRep,
-		logger:            options.Logger,
+		logger:            logger,
 		reporterClientFac: options.ReporterClientFac,
 		options:           options,
 		runner:            runner.New("mr", options.Logger),
@@ -139,7 +142,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		mr.rnProposeC,
 		mr.rnConfChangeC,
 		mr.tmStub,
-		mr.logger.Named(fmt.Sprintf("%v", options.NodeID)),
+		mr.logger.Named("raftnode"),
 	)
 	mr.rnCommitC = mr.raftNode.commitC
 
@@ -618,7 +621,12 @@ func (mr *RaftMetadataRepository) applyReport(r *mrpb.Report) error {
 
 func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit) error {
 	if r.GetNodeID() == mr.nodeID {
-		mr.tmStub.mb.Records("raft_delay").Record(context.TODO(), time.Since(r.CreatedTime).Nanoseconds())
+		mr.tmStub.mb.Records("raft_delay").Record(context.TODO(),
+			float64(time.Since(r.CreatedTime).Nanoseconds())/float64(time.Millisecond),
+			label.KeyValue{
+				Key:   "nodeid",
+				Value: label.Uint64Value(uint64(mr.nodeID)),
+			})
 	}
 
 	_, err := mr.withTelemetry(context.TODO(), "commit", func(ctx context.Context) (interface{}, error) {
@@ -1188,6 +1196,11 @@ type handler func(ctx context.Context) (interface{}, error)
 func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string, h handler) (interface{}, error) {
 	st := time.Now()
 	rsp, err := h(ctx)
-	mr.tmStub.mb.Records(name).Record(ctx, time.Since(st).Nanoseconds())
+	mr.tmStub.mb.Records(name).Record(ctx,
+		float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
+		label.KeyValue{
+			Key:   "nodeid",
+			Value: label.Uint64Value(uint64(mr.nodeID)),
+		})
 	return rsp, err
 }
