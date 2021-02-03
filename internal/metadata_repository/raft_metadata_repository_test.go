@@ -317,6 +317,18 @@ func makeUncommitReport(snID types.StorageNodeID, knownHighWatermark types.GLSN,
 	return report
 }
 
+func appendUncommitReport(report *mrpb.Report, knownHighWatermark types.GLSN, lsID types.LogStreamID, offset types.LLSN, length uint64) *mrpb.Report {
+	u := &snpb.LogStreamUncommitReport{
+		LogStreamID:           lsID,
+		HighWatermark:         knownHighWatermark,
+		UncommittedLLSNOffset: offset,
+		UncommittedLLSNLength: length,
+	}
+	report.UncommitReport = append(report.UncommitReport, u)
+
+	return report
+}
+
 func makeLogStream(lsID types.LogStreamID, snIDs []types.StorageNodeID) *varlogpb.LogStreamDescriptor {
 	ls := &varlogpb.LogStreamDescriptor{
 		LogStreamID: lsID,
@@ -578,6 +590,78 @@ func TestMRGlobalCommit(t *testing.T) {
 					return mr.storage.GetHighWatermark() == types.GLSN(9)
 				}), ShouldBeTrue)
 			})
+		})
+	})
+}
+
+func TestMRGlobalCommitConsistency(t *testing.T) {
+	Convey("Given 2 mr nodes & 5 log streams", t, func(ctx C) {
+		rep := 1
+		nrNodes := 2
+		nrLS := 5
+
+		clus := newMetadataRepoCluster(nrNodes, rep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := range snIDs {
+			snIDs[i] = types.StorageNodeID(i)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			for j := 0; j < nrNodes; j++ {
+				err := clus.nodes[j].storage.registerStorageNode(sn)
+				So(err, ShouldBeNil)
+			}
+		}
+
+		lsIDs := make([]types.LogStreamID, nrLS)
+		for i := range lsIDs {
+			lsIDs[i] = types.LogStreamID(i)
+		}
+
+		for _, lsID := range lsIDs {
+			ls := makeLogStream(lsID, snIDs)
+			for i := 0; i < nrNodes; i++ {
+				err := clus.nodes[i].storage.registerLogStream(ls)
+				So(err, ShouldBeNil)
+			}
+		}
+
+		clus.Start()
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.healthCheckAll()
+		}), ShouldBeTrue)
+
+		Convey("Then, it should calulate same glsn for each log streams", func(ctx C) {
+			for i := 0; i < 100; i++ {
+				var report *mrpb.Report
+				for j, lsID := range lsIDs {
+					if j == 0 {
+						report = makeUncommitReport(snIDs[0], types.GLSN(i*nrLS), lsID, types.LLSN(i+1), 1)
+					} else {
+						report = appendUncommitReport(report, types.GLSN(i*nrLS), lsID, types.LLSN(i+1), 1)
+					}
+				}
+
+				So(testutil.CompareWaitN(10, func() bool {
+					return clus.nodes[0].proposeReport(report.StorageNodeID, report.UncommitReport) == nil
+				}), ShouldBeTrue)
+
+				for j := 0; j < nrNodes; j++ {
+					So(testutil.CompareWaitN(10, func() bool {
+						return clus.nodes[j].storage.GetHighWatermark() == types.GLSN(nrLS*(i+1))
+					}), ShouldBeTrue)
+
+					for k, lsID := range lsIDs {
+						So(clus.nodes[j].getLastCommitted(lsID), ShouldEqual, types.GLSN((nrLS*i)+k+1))
+					}
+				}
+			}
 		})
 	})
 }

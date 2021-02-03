@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/pprof"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -642,9 +643,9 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit) error {
 		if mr.storage.NumUpdateSinceCommit() > 0 {
 			lsIDs := mr.storage.GetUncommitReportIDs()
 
-			lsIDs.Foreach(func(k interface{}) bool {
-				lsID := k.(types.LogStreamID)
+			sort.Slice(lsIDs, func(i, j int) bool { return lsIDs[i] < lsIDs[j] })
 
+			for _, lsID := range lsIDs {
 				reports := mr.storage.LookupUncommitReports(lsID)
 				knownHWM, minHWM, nrUncommit := mr.calculateCommit(reports)
 				if minHWM < trimHWM {
@@ -686,9 +687,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit) error {
 
 				crs.CommitResults = append(crs.CommitResults, commit)
 				totalCommitted += nrUncommit
-
-				return true
-			})
+			}
 		}
 		crs.HighWatermark = curHWM + types.GLSN(totalCommitted)
 
@@ -1019,7 +1018,12 @@ func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStream
 		return types.InvalidGLSN, err
 	}
 
-	return mr.getLastCommitted(lsID), nil
+	lastCommitted := mr.getLastCommitted(lsID)
+	mr.logger.Info("seal",
+		zap.Uint32("lsid", uint32(lsID)),
+		zap.Uint64("last", uint64(lastCommitted)))
+
+	return lastCommitted, nil
 }
 
 func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStreamID) error {
