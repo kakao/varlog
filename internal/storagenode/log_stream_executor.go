@@ -1058,6 +1058,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 				zap.String("glsn", glsnRange),
 				zap.String("llsn", llsnRange),
 				zap.String("global_hwm", hwmUpdate),
+				zap.Uint64("local_hwm", uint64(lse.lsc.localHighWatermark.Load())),
 			)
 		}
 		return

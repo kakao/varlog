@@ -7,6 +7,7 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	_ "github.com/golang/mock/mockgen/model"
+	assert "github.com/smartystreets/assertions"
 	. "github.com/smartystreets/goconvey/convey"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -53,7 +54,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 		Convey("When passed StorageNodeDescriptor is nil", func() {
 			Convey("Then the MRClient should return an ErrInvalid", func() {
 				err := mc.RegisterStorageNode(context.TODO(), nil)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, assert.ShouldWrap, verrors.ErrInvalid)
 			})
 		})
 
@@ -70,7 +71,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 					},
 				}
 				err := mc.RegisterStorageNode(context.TODO(), sn)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, assert.ShouldWrap, verrors.ErrInvalid)
 			})
 		})
 
@@ -81,7 +82,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 					Address:       "address",
 				}
 				err := mc.RegisterStorageNode(context.TODO(), sn)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, assert.ShouldWrap, verrors.ErrInvalid)
 			})
 		})
 
@@ -98,7 +99,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 					},
 				}
 				err := mc.RegisterStorageNode(context.TODO(), sn)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, assert.ShouldWrap, verrors.ErrInvalid)
 			})
 		})
 
@@ -116,7 +117,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 					},
 				}
 				err := mc.RegisterStorageNode(context.TODO(), sn)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, assert.ShouldWrap, verrors.ErrInvalid)
 			})
 		})
 
@@ -201,7 +202,7 @@ func TestMRClientRegisterLogStream(t *testing.T) {
 		Convey("When passed LogStreamDescriptor is nil", func() {
 			Convey("Then the MRClient should return an ErrInvalid", func() {
 				err := mc.RegisterLogStream(context.TODO(), nil)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, assert.ShouldWrap, verrors.ErrInvalid)
 			})
 		})
 
@@ -211,7 +212,7 @@ func TestMRClientRegisterLogStream(t *testing.T) {
 					LogStreamID: types.LogStreamID(1),
 				}
 				err := mc.RegisterLogStream(context.TODO(), ls)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, assert.ShouldWrap, verrors.ErrInvalid)
 			})
 		})
 
@@ -228,7 +229,7 @@ func TestMRClientRegisterLogStream(t *testing.T) {
 				So(ls.Valid(), ShouldBeFalse)
 
 				err := mc.RegisterLogStream(context.TODO(), ls)
-				So(err, ShouldResemble, verrors.ErrInvalid)
+				So(err, assert.ShouldWrap, verrors.ErrInvalid)
 			})
 		})
 

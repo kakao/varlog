@@ -69,7 +69,7 @@ func (c *metadataRepositoryClient) Close() error {
 
 func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {
 	if !sn.Valid() {
-		return verrors.ErrInvalid
+		return errors.WithStack(verrors.ErrInvalid)
 	}
 
 	req := &mrpb.StorageNodeRequest{
@@ -77,7 +77,7 @@ func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *
 	}
 
 	_, err := c.client.RegisterStorageNode(ctx, req)
-	return verrors.ToErr(ctx, err)
+	return verrors.FromStatusError(errors.WithStack(err))
 }
 
 func (c *metadataRepositoryClient) UnregisterStorageNode(ctx context.Context, snID types.StorageNodeID) error {
@@ -88,19 +88,19 @@ func (c *metadataRepositoryClient) UnregisterStorageNode(ctx context.Context, sn
 	}
 
 	_, err := c.client.UnregisterStorageNode(ctx, req)
-	return verrors.ToErr(ctx, err)
+	return verrors.FromStatusError(errors.WithStack(err))
 }
 
 func (c *metadataRepositoryClient) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
 	if !ls.Valid() {
-		return verrors.ErrInvalid
+		return errors.WithStack(verrors.ErrInvalid)
 	}
 
 	req := &mrpb.LogStreamRequest{
 		LogStream: ls,
 	}
 	_, err := c.client.RegisterLogStream(ctx, req)
-	return verrors.ToErr(ctx, err)
+	return verrors.FromStatusError(errors.WithStack(err))
 }
 
 func (c *metadataRepositoryClient) UnregisterLogStream(ctx context.Context, lsID types.LogStreamID) error {
@@ -110,25 +110,25 @@ func (c *metadataRepositoryClient) UnregisterLogStream(ctx context.Context, lsID
 		},
 	}
 	_, err := c.client.UnregisterLogStream(ctx, req)
-	return verrors.ToErr(ctx, err)
+	return verrors.FromStatusError(errors.WithStack(err))
 }
 
 func (c *metadataRepositoryClient) UpdateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
 	if !ls.Valid() {
-		return verrors.ErrInvalid
+		return errors.WithStack(verrors.ErrInvalid)
 	}
 
 	req := &mrpb.LogStreamRequest{
 		LogStream: ls,
 	}
 	_, err := c.client.UpdateLogStream(ctx, req)
-	return verrors.ToErr(ctx, err)
+	return verrors.FromStatusError(errors.WithStack(err))
 }
 
 func (c *metadataRepositoryClient) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	rsp, err := c.client.GetMetadata(ctx, &mrpb.GetMetadataRequest{})
 	if err != nil {
-		return nil, verrors.ToErr(ctx, err)
+		return nil, verrors.FromStatusError(errors.WithStack(err))
 	}
 	return rsp.GetMetadata(), nil
 }
@@ -136,7 +136,7 @@ func (c *metadataRepositoryClient) GetMetadata(ctx context.Context) (*varlogpb.M
 func (c *metadataRepositoryClient) Seal(ctx context.Context, lsID types.LogStreamID) (types.GLSN, error) {
 	rsp, err := c.client.Seal(ctx, &mrpb.SealRequest{LogStreamID: lsID})
 	if err != nil {
-		return types.InvalidGLSN, verrors.ToErr(ctx, err)
+		return types.InvalidGLSN, verrors.FromStatusError(errors.WithStack(err))
 	}
 
 	return rsp.LastCommittedGLSN, nil
@@ -145,7 +145,7 @@ func (c *metadataRepositoryClient) Seal(ctx context.Context, lsID types.LogStrea
 func (c *metadataRepositoryClient) Unseal(ctx context.Context, lsID types.LogStreamID) error {
 	_, err := c.client.Unseal(ctx, &mrpb.UnsealRequest{LogStreamID: lsID})
 	if err != nil {
-		return verrors.ToErr(ctx, err)
+		return verrors.FromStatusError(errors.WithStack(err))
 	}
 	return nil
 }

@@ -38,7 +38,7 @@ func NewMetadataRepositoryManagementClient(address string) (MetadataRepositoryMa
 	defer cancel()
 	rsp, err := client.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
 	if err != nil {
-		err = errors.Wrap(err, "mrmcl")
+		err = errors.Wrapf(err, "mrmcl: addr = %s", address)
 		return nil, multierr.Append(err, rpcConn.Close())
 	}
 	status := rsp.GetStatus()
