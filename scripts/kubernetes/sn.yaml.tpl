@@ -24,7 +24,7 @@ spec:
       initContainers:
       - name: volume-perm
         image: mdock.daumkakao.io/busybox
-        command: ['sh', '-c', 'chmod -R 777 {{VSN_HOME}}']
+        command: ["sh", "-c", "chmod -R 777 {{VSN_HOME}}"]
         volumeMounts:
         - name: varlog-sn-home
           mountPath: {{VSN_HOME}}
@@ -32,19 +32,19 @@ spec:
       - name: varlog-sn
         image: idock.daumkakao.io/varlog/varlog-sn:{{DOCKER_TAG}}
         command:
-        - 'python3'
-        - '/varlog/bin/vsn.py'
+        - "python3"
+        - "/varlog/bin/vsn.py"
         env:
         - name: TZ
           value: Asia/Seoul
         - name: VMS_ADDRESS
-          value: '$(VARLOG_VMS_RPC_SERVICE_HOST):$(VARLOG_VMS_RPC_SERVICE_PORT)'
+          value: "$(VARLOG_VMS_RPC_SERVICE_HOST):$(VARLOG_VMS_RPC_SERVICE_PORT)"
         - name: VSN_HOME
-          value: '{{VSN_HOME}}'
+          value: "{{VSN_HOME}}"
         - name: COLLECTOR_NAME
-          value: 'otel'
+          value: "otel"
         - name: COLLECTOR_ENDPOINT
-          value: 'localhost:55680'
+          value: "localhost:55680"
         - name: HOST_IP
           valueFrom:
             fieldRef:
@@ -53,8 +53,19 @@ spec:
         - name: varlog-sn-home
           mountPath: {{VSN_HOME}}
         readinessProbe:
-          tcpSocket:
-            port: 9091
+          exec:
+            command:
+            - "sh"
+            - "-c"
+            - "/varlog/tools/grpc_health_probe -addr=${HOST_IP}:9091"
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - "sh"
+            - "-c"
+            - "/varlog/tools/grpc_health_probe -addr=${HOST_IP}:9091"
+          periodSeconds: 10
         imagePullPolicy: IfNotPresent
       restartPolicy: Always
       terminationGracePeriodSeconds: 60
@@ -79,9 +90,9 @@ spec:
         - krane.iwilab.com
         options:
         - name: timeout
-          value: '1'
+          value: "1"
         - name: attempts
-          value: '2'
+          value: "2"
         - name: rotate
   updateStrategy:
     type: RollingUpdate

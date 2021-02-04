@@ -33,14 +33,20 @@ DEFAULT_VMR_HOME = "/home/deploy/varlog-mr"
 LOCAL_ADDRESS = socket.gethostbyname(socket.gethostname())
 
 
+def get_local_addr():
+    host = os.getenv("HOST_IP", LOCAL_ADDRESS)
+    return host
+
 def get_raft_url():
+    local_addr = get_local_addr()
     raft_port = os.getenv("RAFT_PORT", DEFAULT_RAFT_PORT)
-    return f"http://{LOCAL_ADDRESS}:{raft_port}"
+    return f"http://{local_addr}:{raft_port}"
 
 
 def get_rpc_addr():
+    local_addr = get_local_addr()
     rpc_port = os.getenv("RPC_PORT", DEFAULT_RPC_PORT)
-    return f"{LOCAL_ADDRESS}:{rpc_port}"
+    return f"{local_addr}:{rpc_port}"
 
 
 def get_vms_addr():

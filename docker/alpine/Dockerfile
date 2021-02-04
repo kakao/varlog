@@ -87,6 +87,7 @@ COPY --from=builder /varlog/bin/vms.py /varlog/bin/vms.py
 COPY --from=builder /varlog/pylib /varlog/pylib
 COPY --from=builder /varlog/bin/vms /varlog/bin/vms
 COPY --from=builder /varlog/bin/vmc /varlog/bin/vmc
+COPY --from=builder /bin/grpc_health_probe /varlog/tools/grpc_health_probe
 COPY --from=builder /varlog/docker/alpine/docker-entrypoint.sh /varlog/docker-entrypoint.sh
 RUN chown -R varlog:varlog /varlog
 USER varlog
@@ -103,6 +104,7 @@ COPY --from=builder /varlog/bin/vmr.py /varlog/bin/vmr.py
 COPY --from=builder /varlog/pylib /varlog/pylib
 COPY --from=builder /varlog/bin/vmr /varlog/bin/vmr
 COPY --from=builder /varlog/bin/vmc /varlog/bin/vmc
+COPY --from=builder /bin/grpc_health_probe /varlog/tools/grpc_health_probe
 COPY --from=builder /varlog/docker/alpine/docker-entrypoint.sh /varlog/docker-entrypoint.sh
 RUN chown -R varlog:varlog /varlog
 USER varlog
@@ -118,6 +120,7 @@ COPY --from=builder /varlog/bin/vsn.py /varlog/bin/vsn.py
 COPY --from=builder /varlog/pylib /varlog/pylib
 COPY --from=builder /varlog/bin/vsn /varlog/bin/vsn
 COPY --from=builder /varlog/bin/vmc /varlog/bin/vmc
+COPY --from=builder /bin/grpc_health_probe /varlog/tools/grpc_health_probe
 COPY --from=builder /varlog/docker/alpine/docker-entrypoint.sh /varlog/docker-entrypoint.sh
 RUN chown -R varlog:varlog /varlog
 USER varlog
