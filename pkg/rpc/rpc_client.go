@@ -29,7 +29,7 @@ func NewBlockingConnWithContext(ctx context.Context, address string) (*Conn, err
 }
 
 func NewBlockingConn(address string) (*Conn, error) {
-	// TODO (jun): Adding WithBlock changes behavior of NewConn; it wat non-blocking function,
+	// TODO (jun): Adding WithBlock changes behavior of NewConn; it was non-blocking function,
 	// but it now blocks.
 	// FIXME (jun): Provides options, for example connection timeout, blocking or non-blocking,
 	// and etc.

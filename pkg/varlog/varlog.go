@@ -67,7 +67,6 @@ func Open(clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, 
 	// mr connector
 	connectorOpts := []mrconnector.Option{
 		mrconnector.WithClusterID(clusterID),
-		mrconnector.WithConnectionTimeout(v.opts.openTimeout),
 		mrconnector.WithLogger(v.opts.logger),
 	}
 	connector, err := mrconnector.New(context.Background(), mrAddrs, connectorOpts...)
