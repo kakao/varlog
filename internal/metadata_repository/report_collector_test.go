@@ -703,14 +703,17 @@ func TestCommitWithDelay(t *testing.T) {
 
 			gls := newDummyCommitResults(knownHWM, 1)
 			mr.appendGLS(gls)
+			prevHWM := knownHWM
 			knownHWM = gls.HighWatermark
 
 			gls = newDummyCommitResults(knownHWM, 1)
 			mr.appendGLS(gls)
+			prevHWM = knownHWM
 			knownHWM = gls.HighWatermark
 
 			gls = newDummyCommitResults(knownHWM, 1)
 			mr.appendGLS(gls)
+			prevHWM = knownHWM
 			knownHWM = gls.HighWatermark
 
 			reportCollector.Commit()
@@ -719,7 +722,7 @@ func TestCommitWithDelay(t *testing.T) {
 				return dummySN.getKnownHighWatermark(0) == knownHWM
 			}), ShouldBeTrue)
 
-			So(executor.reportCtx.getReport().UncommitReports[0].HighWatermark.Invalid(), ShouldBeTrue)
+			So(executor.reportCtx.getReport().UncommitReports[0].HighWatermark, ShouldBeLessThan, prevHWM)
 
 			Convey("set commit delay & enable report to trim during catchup", func() {
 				dummySN.SetCommitDelay(30 * time.Millisecond)
