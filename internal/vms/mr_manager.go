@@ -110,7 +110,6 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrOpts MRManag
 
 	opts := []mrconnector.Option{
 		mrconnector.WithClusterID(clusterID),
-		mrconnector.WithConnectionTimeout(MRMANAGER_INIT_TIMEOUT),
 		mrconnector.WithRPCAddrsInitialFetchRetryInterval(RPCAddrsFetchRetryInterval),
 		mrconnector.WithLogger(logger),
 	}

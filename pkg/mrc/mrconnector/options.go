@@ -9,28 +9,31 @@ import (
 )
 
 const (
-	defaultConnectionTimeout                 = 5 * time.Second
-	defaultRPCAddrsInitialFetchRetryInterval = 100 * time.Millisecond
+	defaultClusterID                         = types.ClusterID(1)
+	defaultConnTimeout                       = 1 * time.Second
+	defaultRPCTimeout                        = 1 * time.Second
+	defaultInitialRPCAddrsFetchRetryCount    = 3
+	defaultInitialRPCAddrsFetchRetryInterval = 100 * time.Millisecond
 	defaultRPCAddrsFetchInterval             = 10 * time.Second
-	defaultRPCAddrsFetchTimeout              = 100 * time.Millisecond
 )
 
 type options struct {
 	clusterID                         types.ClusterID
-	connectionTimeout                 time.Duration
-	rpcAddrsInitialFetchRetryInterval time.Duration
+	connTimeout                       time.Duration
+	rpcTimeout                        time.Duration
+	initialRPCAddrsFetchRetryCount    int
+	initialRPCAddrsFetchRetryInterval time.Duration
 	rpcAddrsFetchInterval             time.Duration
-	rpcAddrsFetchTimeout              time.Duration
 	logger                            *zap.Logger
 }
 
 func defaultOptions() options {
 	return options{
-		clusterID:                         types.ClusterID(1),
-		connectionTimeout:                 defaultConnectionTimeout,
-		rpcAddrsInitialFetchRetryInterval: defaultRPCAddrsInitialFetchRetryInterval,
+		clusterID:                         defaultClusterID,
+		connTimeout:                       defaultConnTimeout,
+		rpcTimeout:                        defaultRPCTimeout,
+		initialRPCAddrsFetchRetryInterval: defaultInitialRPCAddrsFetchRetryInterval,
 		rpcAddrsFetchInterval:             defaultRPCAddrsFetchInterval,
-		rpcAddrsFetchTimeout:              defaultRPCAddrsFetchTimeout,
 		logger:                            zap.NewNop(),
 	}
 }
@@ -43,27 +46,27 @@ func WithClusterID(clusterID types.ClusterID) Option {
 	}
 }
 
-func WithConnectionTimeout(timeout time.Duration) Option {
+func WithConnectTimeout(connTimeout time.Duration) Option {
 	return func(opts *options) {
-		opts.connectionTimeout = timeout
+		opts.connTimeout = connTimeout
+	}
+}
+
+func WithRPCTimeout(rpcTimeout time.Duration) Option {
+	return func(opts *options) {
+		opts.rpcTimeout = rpcTimeout
 	}
 }
 
 func WithRPCAddrsInitialFetchRetryInterval(interval time.Duration) Option {
 	return func(opts *options) {
-		opts.rpcAddrsInitialFetchRetryInterval = interval
+		opts.initialRPCAddrsFetchRetryInterval = interval
 	}
 }
 
 func WithRPCAddrsFetchInterval(interval time.Duration) Option {
 	return func(opts *options) {
 		opts.rpcAddrsFetchInterval = interval
-	}
-}
-
-func WithRPCAddrsFetchTimeout(timeout time.Duration) Option {
-	return func(opts *options) {
-		opts.rpcAddrsFetchTimeout = timeout
 	}
 }
 
