@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
@@ -20,16 +22,16 @@ import (
 	"github.com/kakao/varlog/pkg/logc"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/testutil"
+	"github.com/kakao/varlog/pkg/util/testutil/ports"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/vtesting"
 )
 
-const (
-	MR_PORT_BASE     = 10000
-	MR_RPC_PORT_BASE = 11000
-)
+const varlogClusterPortBase = 10000
+const varlogClusterManagerPortBase = 999
 
 type VarlogClusterOptions struct {
 	NrRep             int
@@ -48,40 +50,51 @@ type VarlogCluster struct {
 	snRPCEndpoints map[types.StorageNodeID]string
 	CM             vms.ClusterManager
 	CMCli          varlog.ClusterManagerClient
-	mrPeers        []string
-	mrRPCEndpoints []string
-	mrIDs          []types.NodeID
+	MRPeers        []string
+	MRRPCEndpoints []string
+	MRIDs          []types.NodeID
 	snID           types.StorageNodeID
 	lsID           types.LogStreamID
 	ClusterID      types.ClusterID
 	logger         *zap.Logger
+
+	portLease *ports.Lease
 }
 
 func NewVarlogCluster(opts VarlogClusterOptions) *VarlogCluster {
+	portLease, err := ports.ReserveWeaklyWithRetry(varlogClusterPortBase)
+	if err != nil {
+		panic(err)
+	}
+
 	mrPeers := make([]string, opts.NrMR)
 	mrRPCEndpoints := make([]string, opts.NrMR)
 	MRs := make([]*metadata_repository.RaftMetadataRepository, opts.NrMR)
 	mrIDs := make([]types.NodeID, opts.NrMR)
 
 	for i := range mrPeers {
-		mrPeers[i] = fmt.Sprintf("http://127.0.0.1:%d", MR_PORT_BASE+i)
-		mrRPCEndpoints[i] = fmt.Sprintf("127.0.0.1:%d", MR_RPC_PORT_BASE+i)
+		raftPort := i*2 + portLease.Base()
+		rpcPort := i*2 + 1 + portLease.Base()
+
+		mrPeers[i] = fmt.Sprintf("http://127.0.0.1:%d", raftPort)
+		mrRPCEndpoints[i] = fmt.Sprintf("127.0.0.1:%d", rpcPort)
 	}
 
 	clus := &VarlogCluster{
 		VarlogClusterOptions: opts,
 		logger:               zap.L(),
-		mrPeers:              mrPeers,
-		mrRPCEndpoints:       mrRPCEndpoints,
-		mrIDs:                mrIDs,
+		MRPeers:              mrPeers,
+		MRRPCEndpoints:       mrRPCEndpoints,
+		MRIDs:                mrIDs,
 		MRs:                  MRs,
 		SNs:                  make(map[types.StorageNodeID]*storagenode.StorageNode),
 		volumes:              make(map[types.StorageNodeID]storagenode.Volume),
 		snRPCEndpoints:       make(map[types.StorageNodeID]string),
 		ClusterID:            types.ClusterID(1),
+		portLease:            portLease,
 	}
 
-	for i := range clus.mrPeers {
+	for i := range clus.MRPeers {
 		clus.clearMR(i)
 		clus.createMR(i, false)
 	}
@@ -94,13 +107,11 @@ func (clus *VarlogCluster) clearMR(idx int) {
 		return
 	}
 
-	url, _ := url.Parse(clus.mrPeers[idx])
+	url, _ := url.Parse(clus.MRPeers[idx])
 	nodeID := types.NewNodeID(url.Host)
 
 	os.RemoveAll(fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID))
 	os.RemoveAll(fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID))
-
-	return
 }
 
 func (clus *VarlogCluster) createMR(idx int, join bool) error {
@@ -108,20 +119,20 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 		return errors.New("out of range")
 	}
 
-	url, _ := url.Parse(clus.mrPeers[idx])
+	url, _ := url.Parse(clus.MRPeers[idx])
 	nodeID := types.NewNodeID(url.Host)
 
 	opts := &metadata_repository.MetadataRepositoryOptions{
 		ClusterID:         clus.ClusterID,
-		RaftAddress:       clus.mrPeers[idx],
+		RaftAddress:       clus.MRPeers[idx],
 		Join:              join,
 		SnapCount:         uint64(clus.SnapCount),
 		RaftTick:          vtesting.TestRaftTick(),
 		RaftDir:           vtesting.TestRaftDir(),
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
 		NumRep:            clus.NrRep,
-		Peers:             clus.mrPeers,
-		RPCBindAddress:    clus.mrRPCEndpoints[idx],
+		Peers:             clus.MRPeers,
+		RPCBindAddress:    clus.MRRPCEndpoints[idx],
 		ReporterClientFac: clus.ReporterClientFac,
 		Logger:            clus.logger,
 	}
@@ -132,7 +143,7 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 	}
 	opts.CollectorEndpoint = "localhost:55680"
 
-	clus.mrIDs[idx] = nodeID
+	clus.MRIDs[idx] = nodeID
 	clus.MRs[idx] = metadata_repository.NewRaftMetadataRepository(opts)
 
 	return nil
@@ -140,9 +151,11 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 
 func (clus *VarlogCluster) AppendMR() error {
 	idx := len(clus.MRs)
-	clus.mrPeers = append(clus.mrPeers, fmt.Sprintf("http://127.0.0.1:%d", MR_PORT_BASE+idx))
-	clus.mrRPCEndpoints = append(clus.mrRPCEndpoints, fmt.Sprintf("127.0.0.1:%d", MR_RPC_PORT_BASE+idx))
-	clus.mrIDs = append(clus.mrIDs, types.InvalidNodeID)
+	raftPort := 2*idx + clus.portLease.Base()
+	rpcPort := 2*idx + 1 + clus.portLease.Base()
+	clus.MRPeers = append(clus.MRPeers, fmt.Sprintf("http://127.0.0.1:%d", raftPort))
+	clus.MRRPCEndpoints = append(clus.MRRPCEndpoints, fmt.Sprintf("127.0.0.1:%d", rpcPort))
+	clus.MRIDs = append(clus.MRIDs, types.InvalidNodeID)
 	clus.MRs = append(clus.MRs, nil)
 
 	clus.clearMR(idx)
@@ -207,19 +220,18 @@ func (clus *VarlogCluster) Close() error {
 		clus.CM.Close()
 	}
 
-	for i := range clus.mrPeers {
-		if erri := clus.CloseMR(i); erri != nil {
-			err = erri
-		}
+	for i := range clus.MRPeers {
+		err = multierr.Append(err, clus.CloseMR(i))
 	}
 
-	os.RemoveAll(vtesting.TestRaftDir())
+	err = multierr.Append(err, os.RemoveAll(vtesting.TestRaftDir()))
 
 	for _, sn := range clus.SNs {
 		// TODO (jun): remove temporary directories
-		snmeta, err := sn.GetMetadata(context.TODO())
-		if err != nil {
-			clus.logger.Warn("could not get meta", zap.Error(err))
+		snmeta, erri := sn.GetMetadata(context.TODO())
+		if erri != nil {
+			err = multierr.Append(err, erri)
+			clus.logger.Warn("could not get meta", zap.Error(erri))
 		}
 		for _, storage := range snmeta.GetStorageNode().GetStorages() {
 			dbpath := storage.GetPath()
@@ -237,11 +249,11 @@ func (clus *VarlogCluster) Close() error {
 		sn.Close()
 	}
 
-	return err
+	return multierr.Combine(err, clus.portLease.Release())
 }
 
 func (clus *VarlogCluster) HealthCheck() bool {
-	for _, endpoint := range clus.mrRPCEndpoints {
+	for _, endpoint := range clus.MRRPCEndpoints {
 		conn, err := rpc.NewBlockingConn(endpoint)
 		if err != nil {
 			return false
@@ -261,7 +273,7 @@ func (clus *VarlogCluster) Leader() int {
 	leader := -1
 	for i, n := range clus.MRs {
 		cinfo, _ := n.GetClusterInfo(context.TODO(), clus.ClusterID)
-		if cinfo.GetLeader() != types.InvalidNodeID && clus.mrIDs[i] == cinfo.GetLeader() {
+		if cinfo.GetLeader() != types.InvalidNodeID && clus.MRIDs[i] == cinfo.GetLeader() {
 			leader = i
 			break
 		}
@@ -571,7 +583,7 @@ func (clus *VarlogCluster) GetMR() *metadata_repository.RaftMetadataRepository {
 }
 
 func (clus *VarlogCluster) LookupMR(nodeID types.NodeID) (*metadata_repository.RaftMetadataRepository, bool) {
-	for idx, mrID := range clus.mrIDs {
+	for idx, mrID := range clus.MRIDs {
 		if nodeID == mrID {
 			return clus.MRs[idx], true
 		}
@@ -651,6 +663,7 @@ func (clus *VarlogCluster) RunClusterManager(mrAddrs []string, opts *vms.Options
 		opts.Logger = clus.logger
 	}
 
+	opts.RPCBindAddress = fmt.Sprintf("127.0.0.1:%d", clus.portLease.Base()+varlogClusterManagerPortBase)
 	opts.ClusterID = clus.ClusterID
 	opts.MetadataRepositoryAddresses = mrAddrs
 	opts.ReplicationFactor = uint(clus.VarlogClusterOptions.NrRep)
@@ -678,4 +691,41 @@ func (clus *VarlogCluster) NewClusterManagerClient() (varlog.ClusterManagerClien
 
 func (clus *VarlogCluster) GetClusterManagerClient() varlog.ClusterManagerClient {
 	return clus.CMCli
+}
+
+func (clus *VarlogCluster) Logger() *zap.Logger {
+	return clus.logger
+}
+
+func WithTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func() {
+	return func() {
+		env := NewVarlogCluster(opts)
+		env.Start()
+
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.HealthCheck()
+		}), ShouldBeTrue)
+
+		mr := env.GetMR()
+		So(testutil.CompareWaitN(10, func() bool {
+			return mr.GetServerAddr() != ""
+		}), ShouldBeTrue)
+		mrAddr := mr.GetServerAddr()
+
+		// VMS Server
+		_, err := env.RunClusterManager([]string{mrAddr}, opts.VMSOpts)
+		So(err, ShouldBeNil)
+
+		// VMS Client
+		cmCli, err := env.NewClusterManagerClient()
+		So(err, ShouldBeNil)
+
+		Reset(func() {
+			env.Close()
+			cmCli.Close()
+			testutil.GC()
+		})
+
+		f(env)
+	}
 }

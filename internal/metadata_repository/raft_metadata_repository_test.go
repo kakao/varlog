@@ -13,12 +13,14 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 	"go.etcd.io/etcd/raft/raftpb"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
+	"github.com/kakao/varlog/pkg/util/testutil/ports"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
@@ -32,16 +34,22 @@ type metadataRepoCluster struct {
 	nodes             []*RaftMetadataRepository
 	reporterClientFac ReporterClientFactory
 	logger            *zap.Logger
+	portLease         *ports.Lease
 }
 
 var testSnapCount uint64
 
 func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoCluster {
+	portLease, err := ports.ReserveWeaklyWithRetry(10000)
+	if err != nil {
+		panic(err)
+	}
+
 	peers := make([]string, n)
 	nodes := make([]*RaftMetadataRepository, n)
 
 	for i := range peers {
-		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", 10000+i)
+		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", portLease.Base()+i)
 	}
 
 	clus := &metadataRepoCluster{
@@ -50,6 +58,7 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoClu
 		nodes:             nodes,
 		reporterClientFac: NewDummyReporterClientFactory(1, !increseUncommit),
 		logger:            zap.L(),
+		portLease:         portLease,
 	}
 
 	for i := range clus.peers {
@@ -102,7 +111,7 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 
 func (clus *metadataRepoCluster) appendMetadataRepo() error {
 	idx := len(clus.nodes)
-	clus.peers = append(clus.peers, fmt.Sprintf("http://127.0.0.1:%d", 10000+idx))
+	clus.peers = append(clus.peers, fmt.Sprintf("http://127.0.0.1:%d", clus.portLease.Base()+idx))
 	clus.nodes = append(clus.nodes, nil)
 
 	clus.clear(idx)
@@ -153,9 +162,7 @@ func (clus *metadataRepoCluster) close(idx int) error {
 
 	err := clus.stop(idx)
 	clus.clear(idx)
-
 	clus.logger.Info("cluster node stop", zap.Int("idx", idx))
-
 	return err
 }
 
@@ -216,15 +223,11 @@ func (clus *metadataRepoCluster) getMetadataFromSnapshot(idx int) *varlogpb.Meta
 func (clus *metadataRepoCluster) Close() error {
 	var err error
 	for i := range clus.peers {
-		if erri := clus.close(i); erri != nil {
-			err = erri
-		}
+		err = multierr.Append(err, clus.close(i))
 	}
-
-	os.RemoveAll(vtesting.TestRaftDir())
-
+	err = multierr.Append(err, os.RemoveAll(vtesting.TestRaftDir()))
+	err = multierr.Append(err, clus.portLease.Release())
 	testutil.GC()
-
 	return err
 }
 
