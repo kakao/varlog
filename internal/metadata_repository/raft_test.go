@@ -14,6 +14,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
+	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 )
 
@@ -29,13 +30,18 @@ type cluster struct {
 	running     []bool
 	stop        []stopFunc
 	leader      []leaderFunc
+	portLease   *ports.Lease
 }
 
 // newCluster creates a cluster of n nodes
 func newCluster(n int) *cluster {
+	portLease, err := ports.ReserveWeaklyWithRetry(10000)
+	if err != nil {
+		panic(err)
+	}
 	peers := make([]string, n)
 	for i := range peers {
-		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", 10000+i)
+		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", portLease.Base()+i)
 	}
 
 	clus := &cluster{
@@ -47,6 +53,7 @@ func newCluster(n int) *cluster {
 		running:     make([]bool, len(peers)),
 		stop:        make([]stopFunc, len(peers)),
 		leader:      make([]leaderFunc, len(peers)),
+		portLease:   portLease,
 	}
 
 	for i, peer := range clus.peers {
@@ -121,7 +128,7 @@ func (clus *cluster) Close() (err error) {
 
 	os.RemoveAll("raftdata")
 
-	return
+	return clus.portLease.Release()
 }
 
 func (clus *cluster) closeNoErrors(t *testing.T) {

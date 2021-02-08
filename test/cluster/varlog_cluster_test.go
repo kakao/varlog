@@ -1,17 +1,14 @@
-package test
+package cluster
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
-	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	assert "github.com/smartystreets/assertions"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
@@ -26,17 +23,18 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	"github.daumkakao.com/varlog/varlog/test"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 )
 
 func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewEmptyReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -78,12 +76,12 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 
 func TestVarlogRegisterStorageNode(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -128,14 +126,14 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 		vmsOpts.HeartbeatTimeout *= 10
 		vmsOpts.Logger = zap.L()
 
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             2,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 			VMSOpts:           &vmsOpts,
 		}
 
-		Convey("Varlog cluster", withTestCluster(opts, func(env *VarlogCluster) {
+		Convey("Varlog cluster", test.WithTestCluster(opts, func(env *test.VarlogCluster) {
 			So(testutil.CompareWaitN(50, func() bool {
 				return env.HealthCheck()
 			}), ShouldBeTrue)
@@ -207,12 +205,12 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 
 func TestVarlogAppendLog(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -250,12 +248,12 @@ func TestVarlogAppendLog(t *testing.T) {
 func TestVarlogReplicateLog(t *testing.T) {
 	nrRep := 2
 	Convey("Given Varlog cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             nrRep,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -313,12 +311,12 @@ func TestVarlogReplicateLog(t *testing.T) {
 
 func TestVarlogSeal(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -429,13 +427,13 @@ func TestVarlogSeal(t *testing.T) {
 func TestVarlogTrimGLS(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		nrLS := 2
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			SnapCount:         10,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -494,13 +492,13 @@ func TestVarlogTrimGLS(t *testing.T) {
 func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		nrLS := 2
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			SnapCount:         10,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -569,769 +567,6 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 	})
 }
 
-func TestVarlogFailoverMRLeaderFail(t *testing.T) {
-	Convey("Given Varlog cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
-			NrMR:              3,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		}
-		env := NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
-
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.HealthCheck()
-		}), ShouldBeTrue)
-
-		leader := env.Leader()
-
-		_, err := env.AddSN()
-		So(err, ShouldBeNil)
-
-		lsID, err := env.AddLS()
-		So(err, ShouldBeNil)
-
-		errC := make(chan error, 1024)
-		glsnC := make(chan types.GLSN, 1024)
-
-		appendf := func(actx context.Context) {
-			cli, err := env.NewLogIOClient(lsID)
-			if err != nil {
-				errC <- err
-				return
-			}
-			defer cli.Close()
-
-			for {
-				select {
-				case <-actx.Done():
-					return
-				default:
-					rctx, cancel := context.WithTimeout(actx, vtesting.TimeoutUnitTimesFactor(50))
-					glsn, err := cli.Append(rctx, lsID, []byte("foo"))
-					cancel()
-					if err != nil {
-						if err != context.DeadlineExceeded {
-							errC <- err
-						}
-					} else {
-						glsnC <- glsn
-					}
-				}
-			}
-		}
-
-		runner := runner.New("failover-leader-test", zap.NewNop())
-		defer runner.Stop()
-
-		for i := 0; i < 5; i++ {
-			runner.Run(appendf)
-		}
-
-		Convey("When MR leader fail", func(ctx C) {
-			maxGLSN := types.InvalidGLSN
-			triggerGLSN := types.GLSN(20)
-			goalGLSN := types.GLSN(3) * triggerGLSN
-			stopped := false
-
-			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
-			defer timer.Stop()
-
-		Loop:
-			for {
-				select {
-				case <-timer.C:
-					t.Fatal("timeout")
-				case glsn := <-glsnC:
-					if maxGLSN < glsn {
-						maxGLSN = glsn
-					}
-					if !stopped && maxGLSN > triggerGLSN {
-						So(env.LeaderFail(), ShouldBeTrue)
-						stopped = true
-
-						So(testutil.CompareWaitN(50, func() bool {
-							return env.Leader() != leader
-						}), ShouldBeTrue)
-
-					} else if maxGLSN > goalGLSN {
-						break Loop
-					}
-				case err := <-errC:
-					So(err, ShouldBeNil)
-				}
-			}
-
-			Convey("Then it should be able to keep appending log", func(ctx C) {
-				cli, err := env.NewLogIOClient(lsID)
-				So(err, ShouldBeNil)
-				defer cli.Close()
-
-				for glsn := types.MinGLSN; glsn <= maxGLSN; glsn += types.GLSN(1) {
-					_, err := cli.Read(context.TODO(), lsID, glsn)
-					So(err, ShouldBeNil)
-				}
-			})
-		})
-	})
-}
-
-func TestVarlogFailoverSNBackupFail(t *testing.T) {
-	nrRep := 2
-	nrCli := 5
-	vmsOpts := vms.DefaultOptions()
-	vmsOpts.HeartbeatTimeout *= 10
-	vmsOpts.Logger = zap.L()
-	opts := VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             nrRep,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vmsOpts,
-	}
-
-	Convey("Given Varlog cluster", t, withTestCluster(opts, func(env *VarlogCluster) {
-		for i := 0; i < nrRep; i++ {
-			_, err := env.AddSNByVMS()
-			So(err, ShouldBeNil)
-		}
-
-		lsID, err := env.AddLSByVMS()
-		So(err, ShouldBeNil)
-
-		meta, _ := env.GetMR().GetMetadata(context.TODO())
-		So(meta, ShouldNotBeNil)
-
-		ls := meta.LogStreams[0]
-
-		errC := make(chan error, 1024)
-		glsnC := make(chan types.GLSN, 1024)
-
-		appendf := func(actx context.Context) {
-			cli, err := env.NewLogIOClient(lsID)
-			if err != nil {
-				errC <- err
-				return
-			}
-			defer cli.Close()
-
-			var backups []logc.StorageNode
-			backups = make([]logc.StorageNode, nrRep-1)
-			for i := 1; i < nrRep; i++ {
-				replicaID := ls.Replicas[i].StorageNodeID
-				replica := meta.GetStorageNode(replicaID)
-
-				backups[i-1].ID = replicaID
-				backups[i-1].Addr = replica.Address
-			}
-
-			for {
-				select {
-				case <-actx.Done():
-					return
-				default:
-					rctx, cancel := context.WithTimeout(actx, vtesting.TimeoutUnitTimesFactor(10))
-					glsn, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
-					cancel()
-					if err != nil {
-						if verrors.IsTransient(err) {
-							continue
-						}
-						errC <- err
-						return
-					} else {
-						glsnC <- glsn
-					}
-				}
-			}
-		}
-
-		runner := runner.New("backup-fail-test", zap.NewNop())
-		defer func() {
-			runner.Stop()
-		}()
-
-		for i := 0; i < nrCli; i++ {
-			runner.Run(appendf)
-		}
-
-		Convey("When backup SN fail", func(ctx C) {
-			errCnt := 0
-			maxGLSN := types.InvalidGLSN
-			oldsn, _ := env.GetBackupSN(lsID, 1)
-
-			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
-			defer timer.Stop()
-
-		Loop:
-			for {
-				select {
-				case <-timer.C:
-					t.Fatal("timeout")
-				case glsn := <-glsnC:
-					if maxGLSN < glsn {
-						maxGLSN = glsn
-					}
-
-					if glsn == types.GLSN(32) {
-						oldsn.Close()
-					}
-				case <-errC:
-					errCnt++
-					if errCnt == nrCli {
-						break Loop
-					}
-				}
-			}
-
-			Convey("Then it should not be able to append", func(ctx C) {
-				sealedGLSN, _ := env.GetMR().Seal(context.TODO(), lsID)
-				So(sealedGLSN, ShouldBeGreaterThanOrEqualTo, maxGLSN)
-
-				psn, _ := env.GetPrimarySN(lsID)
-				So(psn, ShouldNotBeNil)
-
-				So(testutil.CompareWaitN(50, func() bool {
-					status, _, _ := psn.Seal(context.TODO(), lsID, sealedGLSN)
-					return status == varlogpb.LogStreamStatusSealed
-				}), ShouldBeTrue)
-
-				_, hwm, _ := psn.Seal(context.TODO(), lsID, sealedGLSN)
-				So(hwm, ShouldEqual, sealedGLSN)
-
-				Convey("When backup SN recover", func(ctx C) {
-					sn, err := env.RecoverSN(ls.Replicas[1].StorageNodeID)
-					So(err, ShouldBeNil)
-
-					So(testutil.CompareWaitN(50, func() bool {
-						snmeta, err := sn.GetMetadata(context.TODO())
-						if err != nil {
-							return false
-						}
-
-						status, _, _ := sn.Seal(context.TODO(), lsID, sealedGLSN)
-						if status == varlogpb.LogStreamStatusSealing {
-							replica := storagenode.Replica{
-								StorageNodeID: ls.Replicas[1].StorageNodeID,
-								LogStreamID:   lsID,
-								Address:       snmeta.StorageNode.Address,
-							}
-							psn.Sync(context.TODO(), lsID, replica, sealedGLSN)
-						}
-
-						return status == varlogpb.LogStreamStatusSealed
-					}), ShouldBeTrue)
-
-					Convey("Then it should be abel to append", func(ctx C) {
-
-						cli, err := env.NewLogIOClient(lsID)
-						So(err, ShouldBeNil)
-						Reset(func() {
-							cli.Close()
-						})
-
-						var backups []logc.StorageNode
-						backups = make([]logc.StorageNode, nrRep-1)
-						for i := 1; i < nrRep; i++ {
-							replicaID := ls.Replicas[i].StorageNodeID
-							replica := meta.GetStorageNode(replicaID)
-
-							backups[i-1].ID = replicaID
-							backups[i-1].Addr = replica.Address
-						}
-
-						cmCli := env.GetClusterManagerClient()
-
-						So(testutil.CompareWaitN(10, func() bool {
-							cmCli.Unseal(context.TODO(), lsID)
-
-							rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
-							defer cancel()
-							_, err = cli.Append(rctx, lsID, []byte("foo"), backups...)
-							return err == nil
-						}), ShouldBeTrue)
-					})
-				})
-			})
-		})
-	}))
-}
-
-func withTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func() {
-	return func() {
-		env := NewVarlogCluster(opts)
-		env.Start()
-
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.HealthCheck()
-		}), ShouldBeTrue)
-
-		mr := env.GetMR()
-		So(testutil.CompareWaitN(10, func() bool {
-			return mr.GetServerAddr() != ""
-		}), ShouldBeTrue)
-		mrAddr := mr.GetServerAddr()
-
-		// VMS Server
-		_, err := env.RunClusterManager([]string{mrAddr}, opts.VMSOpts)
-		So(err, ShouldBeNil)
-
-		// VMS Client
-		cmCli, err := env.NewClusterManagerClient()
-		So(err, ShouldBeNil)
-
-		Reset(func() {
-			env.Close()
-			cmCli.Close()
-			testutil.GC()
-		})
-
-		f(env)
-	}
-}
-
-func TestVarlogManagerServer(t *testing.T) {
-	vmsOpts := vms.DefaultOptions()
-	vmsOpts.HeartbeatTimeout *= 10
-	vmsOpts.Logger = zap.L()
-	opts := VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             3,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vmsOpts,
-	}
-
-	Convey("AddStorageNode", t, withTestCluster(opts, func(env *VarlogCluster) {
-		nrSN := opts.NrRep
-
-		cmcli := env.GetClusterManagerClient()
-
-		for i := 0; i < nrSN; i++ {
-			storageNodeID := types.StorageNodeID(i + 1)
-			volume, err := storagenode.NewVolume(t.TempDir())
-			So(err, ShouldBeNil)
-
-			snopts := storagenode.DefaultOptions()
-			snopts.ListenAddress = "127.0.0.1:0"
-			snopts.ClusterID = env.ClusterID
-			snopts.StorageNodeID = storageNodeID
-			snopts.Logger = env.logger
-			snopts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
-
-			sn, err := storagenode.NewStorageNode(&snopts)
-			So(err, ShouldBeNil)
-			So(sn.Run(), ShouldBeNil)
-			env.SNs[storageNodeID] = sn
-		}
-
-		defer func() {
-			for _, sn := range env.SNs {
-				sn.Close()
-			}
-		}()
-
-		var replicas []*varlogpb.ReplicaDescriptor
-		snAddrs := make(map[types.StorageNodeID]string, nrSN)
-		for snid, sn := range env.SNs {
-			meta, err := sn.GetMetadata(context.TODO())
-			So(err, ShouldBeNil)
-			snAddr := meta.GetStorageNode().GetAddress()
-			So(len(snAddr), ShouldBeGreaterThan, 0)
-			snAddrs[snid] = snAddr
-
-			rsp, err := cmcli.AddStorageNode(context.TODO(), snAddr)
-			So(err, ShouldBeNil)
-			snmeta := rsp.GetStorageNode()
-			So(snmeta.GetStorageNode().GetStorageNodeID(), ShouldEqual, snid)
-
-			storages := snmeta.GetStorageNode().GetStorages()
-			So(len(storages), ShouldBeGreaterThan, 0)
-			path := storages[0].GetPath()
-			So(len(path), ShouldBeGreaterThan, 0)
-			replica := &varlogpb.ReplicaDescriptor{
-				StorageNodeID: snid,
-				Path:          path,
-			}
-			replicas = append(replicas, replica)
-		}
-
-		Convey("UnregisterStorageNode", func() {
-			for snid := range env.SNs {
-				_, err := cmcli.UnregisterStorageNode(context.TODO(), snid)
-				So(err, ShouldBeNil)
-
-				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
-				So(err, ShouldBeNil)
-				So(clusmeta.GetStorageNode(snid), ShouldBeNil)
-			}
-
-			// AddLogStream: ERROR
-			_, err := cmcli.AddLogStream(context.TODO(), replicas)
-			So(err, ShouldNotBeNil)
-		})
-
-		Convey("Duplicated AddStorageNode", func() {
-			for _, snAddr := range snAddrs {
-				_, err := cmcli.AddStorageNode(context.TODO(), snAddr)
-				So(err, assert.ShouldWrap, verrors.ErrExist)
-				So(errors.Is(err, verrors.ErrExist), ShouldBeTrue)
-			}
-		})
-
-		Convey("AddLogStream - Simple", func() {
-			timeCheckSN := env.SNs[1]
-			snmeta, err := timeCheckSN.GetMetadata(context.TODO())
-			So(err, ShouldBeNil)
-			updatedAt := snmeta.GetUpdatedTime()
-
-			rsp, err := cmcli.AddLogStream(context.TODO(), nil)
-			So(err, ShouldBeNil)
-			logStreamDesc := rsp.GetLogStream()
-			So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
-			logStreamID := logStreamDesc.GetLogStreamID()
-
-			snmeta, err = timeCheckSN.GetMetadata(context.TODO())
-			So(err, ShouldBeNil)
-			So(snmeta.GetUpdatedTime(), ShouldNotEqual, updatedAt)
-			updatedAt = snmeta.GetUpdatedTime()
-
-			// pass since NrRep equals to NrSN
-			var snidList []types.StorageNodeID
-			for _, replica := range logStreamDesc.GetReplicas() {
-				snidList = append(snidList, replica.GetStorageNodeID())
-			}
-			for snid := range env.SNs {
-				So(snidList, ShouldContain, snid)
-			}
-
-			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
-			So(err, ShouldBeNil)
-			So(clusmeta.GetLogStream(logStreamID), ShouldNotBeNil)
-
-			Convey("UnregisterLogStream ERROR: running log stream", func() {
-				_, err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
-				So(err, ShouldNotBeNil)
-			})
-
-			Convey("Seal", func() {
-				rsp, err := cmcli.Seal(context.TODO(), logStreamID)
-				So(err, ShouldBeNil)
-				lsmetaList := rsp.GetLogStreams()
-				So(len(lsmetaList), ShouldEqual, opts.NrRep)
-				So(lsmetaList[0].HighWatermark, ShouldEqual, types.InvalidGLSN)
-
-				// check MR metadata: sealed
-				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
-				So(err, ShouldBeNil)
-				lsdesc := clusmeta.GetLogStream(logStreamID)
-				So(lsdesc, ShouldNotBeNil)
-				So(lsdesc.GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
-				So(len(lsdesc.GetReplicas()), ShouldEqual, opts.NrRep)
-
-				// check SN metadata: sealed
-				for _, sn := range env.SNs {
-					snmeta, err := sn.GetMetadata(context.TODO())
-					So(err, ShouldBeNil)
-					So(snmeta.GetLogStreams()[0].GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
-					So(snmeta.GetUpdatedTime(), ShouldNotEqual, updatedAt)
-				}
-
-				Convey("UnregisterLogStream OK: sealed log stream", func() {
-					_, err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
-					So(err, ShouldBeNil)
-
-					clusmeta, err := env.GetMR().GetMetadata(context.TODO())
-					So(err, ShouldBeNil)
-
-					So(clusmeta.GetLogStream(logStreamID), ShouldBeNil)
-				})
-
-				Convey("Unseal", func() {
-					_, err := cmcli.Unseal(context.TODO(), logStreamID)
-					So(err, ShouldBeNil)
-
-					clusmeta, err := env.GetMR().GetMetadata(context.TODO())
-					So(err, ShouldBeNil)
-					lsdesc := clusmeta.GetLogStream(logStreamID)
-					So(lsdesc, ShouldNotBeNil)
-					So(lsdesc.GetStatus(), ShouldEqual, varlogpb.LogStreamStatusRunning)
-				})
-			})
-		})
-
-		Convey("AddLogStream - Manual", func() {
-			rsp, err := cmcli.AddLogStream(context.TODO(), replicas)
-			So(err, ShouldBeNil)
-			logStreamDesc := rsp.GetLogStream()
-			So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
-
-			// pass since NrRep equals to NrSN
-			var snidList []types.StorageNodeID
-			for _, replica := range logStreamDesc.GetReplicas() {
-				snidList = append(snidList, replica.GetStorageNodeID())
-			}
-			for snid := range env.SNs {
-				So(snidList, ShouldContain, snid)
-			}
-
-			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
-			So(err, ShouldBeNil)
-			So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
-		})
-
-		Convey("AddLogStream - Error: no such StorageNodeID", func() {
-			rand.Seed(time.Now().UnixNano())
-			i := rand.Intn(len(replicas))
-			// invalid storage node id
-			replicas[i].StorageNodeID += types.StorageNodeID(nrSN)
-
-			_, err := cmcli.AddLogStream(context.TODO(), replicas)
-			So(err, ShouldNotBeNil)
-		})
-
-		Convey("AddLogStream - Error: duplicated, but not registered logstream", func() {
-			// Add logstream to storagenode
-			badSNID := replicas[0].GetStorageNodeID()
-			badSN := env.SNs[badSNID]
-			badLSID := types.LogStreamID(1)
-			path := replicas[0].GetPath()
-			_, err := badSN.AddLogStream(context.TODO(), badLSID, path)
-			So(err, ShouldBeNil)
-
-			// Not registered logstream
-			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
-			So(err, ShouldBeNil)
-			So(clusmeta.GetLogStream(badLSID), ShouldBeNil)
-
-			// FIXME (jun): This test passes due to seqLSIDGen, but it is very fragile.
-			_, err = cmcli.AddLogStream(context.TODO(), replicas)
-			So(err, ShouldNotBeNil)
-			So(verrors.IsTransient(err), ShouldBeTrue)
-
-			Convey("RemoveLogStreamReplica: garbage log stream can be removed", func() {
-				_, err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, types.LogStreamID(1))
-				So(err, ShouldBeNil)
-			})
-
-			Convey("AddLogStream - OK: due to LogStreamIDGenerator.Refresh", func() {
-				rsp, err := cmcli.AddLogStream(context.TODO(), replicas)
-				So(err, ShouldBeNil)
-				logStreamDesc := rsp.GetLogStream()
-				So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
-
-				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
-				So(err, ShouldBeNil)
-				So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
-
-				Convey("RemoveLogStreamReplica: registered log stream cannot be removed", func() {
-					logStreamID := logStreamDesc.GetLogStreamID()
-					_, err := cmcli.RemoveLogStreamReplica(context.TODO(), badSNID, logStreamID)
-					So(err, ShouldNotBeNil)
-				})
-			})
-		})
-	}))
-}
-
-func TestVarlogNewMRManager(t *testing.T) {
-	Convey("Given that MRManager runs without any running MR", t, func(c C) {
-		const (
-			clusterID  = types.ClusterID(1)
-			mrRPCAddr  = "127.0.0.1:20000"
-			mrRAFTAddr = "http://127.0.0.1:30000"
-		)
-		vmsOpts := vms.DefaultOptions()
-
-		Convey("When MR does not start within specified periods", func(c C) {
-			vmsOpts.InitialMRConnRetryCount = 1
-			vmsOpts.InitialMRConnRetryBackoff = 100 * time.Millisecond
-			vmsOpts.MetadataRepositoryAddresses = []string{mrRPCAddr}
-
-			Convey("Then the MRManager should return an error", func(ctx C) {
-				_, err := vms.NewMRManager(context.TODO(), clusterID, vmsOpts.MRManagerOptions, zap.L())
-				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("When MR starts within specified periods", func(c C) {
-			vmsOpts.InitialMRConnRetryCount = 5
-			vmsOpts.InitialMRConnRetryBackoff = 100 * time.Millisecond
-			vmsOpts.MetadataRepositoryAddresses = []string{mrRPCAddr}
-
-			// vms
-			mrmC := make(chan vms.MetadataRepositoryManager, 1)
-			go func() {
-				defer close(mrmC)
-				mrm, err := vms.NewMRManager(context.TODO(), clusterID, vmsOpts.MRManagerOptions, zap.L())
-				c.So(err, ShouldBeNil)
-				if err == nil {
-					mrmC <- mrm
-				}
-			}()
-
-			time.Sleep(10 * time.Millisecond)
-
-			// mr
-			mrOpts := &metadata_repository.MetadataRepositoryOptions{
-				ClusterID:         clusterID,
-				RaftAddress:       mrRAFTAddr,
-				Join:              false,
-				SnapCount:         uint64(10),
-				RaftTick:          vtesting.TestRaftTick(),
-				RaftDir:           vtesting.TestRaftDir(),
-				RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
-				NumRep:            1,
-				Peers:             []string{mrRAFTAddr},
-				RPCBindAddress:    mrRPCAddr,
-				ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-				Logger:            zap.L(),
-			}
-			mr := metadata_repository.NewRaftMetadataRepository(mrOpts)
-			mr.Run()
-
-			Reset(func() {
-				So(mr.Close(), ShouldBeNil)
-			})
-
-			Convey("Then the MRManager should connect to the MR", func(ctx C) {
-				mrm, ok := <-mrmC
-				So(ok, ShouldBeTrue)
-				So(mrm.Close(), ShouldBeNil)
-			})
-		})
-
-	})
-
-	Convey("Given MR cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		}
-		vmsOpts := vms.DefaultOptions()
-		vmsOpts.InitialMRConnRetryCount = 3
-		opts.VMSOpts = &vmsOpts
-		env := NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
-
-		mr := env.MRs[0]
-		So(testutil.CompareWaitN(50, func() bool {
-			return mr.GetServerAddr() != ""
-		}), ShouldBeTrue)
-		mrAddr := mr.GetServerAddr()
-
-		Convey("When create MRManager with non addrs", func(ctx C) {
-			opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = nil
-			// VMS Server
-			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), opts.VMSOpts.MRManagerOptions, zap.L())
-			Convey("Then it should be fail", func(ctx C) {
-				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("When create MRManager with invalid addrs", func(ctx C) {
-			// VMS Server
-			opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{fmt.Sprintf("%s%d", mrAddr, 0)}
-			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), opts.VMSOpts.MRManagerOptions, zap.L())
-			Convey("Then it should be fail", func(ctx C) {
-				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("When create MRManager with valid addrs", func(ctx C) {
-			// VMS Server
-			opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
-			mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), opts.VMSOpts.MRManagerOptions, zap.L())
-			Convey("Then it should be success", func(ctx C) {
-				So(err, ShouldBeNil)
-
-				Convey("and it should work", func(ctx C) {
-					cinfo, err := mrm.GetClusterInfo(context.TODO())
-					So(err, ShouldBeNil)
-					So(len(cinfo.GetMembers()), ShouldEqual, 1)
-				})
-			})
-			defer mrm.Close()
-		})
-	})
-}
-
-func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
-	Convey("Given MR cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		}
-		vmsOpts := vms.DefaultOptions()
-		opts.VMSOpts = &vmsOpts
-		env := NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
-
-		mr := env.MRs[0]
-		So(testutil.CompareWaitN(50, func() bool {
-			return mr.GetServerAddr() != ""
-		}), ShouldBeTrue)
-		mrAddr := mr.GetServerAddr()
-
-		// VMS Server
-		opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
-		mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), opts.VMSOpts.MRManagerOptions, zap.L())
-		So(err, ShouldBeNil)
-		defer mrm.Close()
-
-		Convey("When all the cluster configuration nodes are changed", func(ctx C) {
-			env.AppendMR()
-			err := env.StartMR(1)
-			So(err, ShouldBeNil)
-
-			nmr := env.MRs[1]
-
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
-			defer cancel()
-
-			err = mrm.AddPeer(rctx, env.mrIDs[1], env.mrPeers[1], env.mrRPCEndpoints[1])
-			So(err, ShouldBeNil)
-
-			So(testutil.CompareWaitN(50, func() bool {
-				return nmr.IsMember()
-			}), ShouldBeTrue)
-
-			rctx, cancel = context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
-			defer cancel()
-
-			err = mrm.RemovePeer(rctx, env.mrIDs[0])
-			So(err, ShouldBeNil)
-
-			So(testutil.CompareWaitN(50, func() bool {
-				return !mr.IsMember()
-			}), ShouldBeTrue)
-
-			oldCL, err := mrc.NewMetadataRepositoryManagementClient(mrAddr)
-			So(err, ShouldBeNil)
-			_, err = oldCL.GetClusterInfo(context.TODO(), types.ClusterID(0))
-			So(errors.Is(err, verrors.ErrNotMember), ShouldBeTrue)
-			So(oldCL.Close(), ShouldBeNil)
-
-			So(testutil.CompareWaitN(50, func() bool {
-				cinfo, err := nmr.GetClusterInfo(context.TODO(), types.ClusterID(0))
-				return err == nil && len(cinfo.GetMembers()) == 1 && cinfo.GetLeader() == cinfo.GetNodeID()
-			}), ShouldBeTrue)
-
-			Convey("Then it should be success", func(ctx C) {
-				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
-				defer cancel()
-
-				cinfo, err := mrm.GetClusterInfo(rctx)
-				So(err, ShouldBeNil)
-				So(len(cinfo.GetMembers()), ShouldEqual, 1)
-			})
-		})
-	})
-}
-
 type testSnHandler struct {
 	hbC     chan types.StorageNodeID
 	reportC chan *varlogpb.StorageNodeMetadataDescriptor
@@ -1360,14 +595,14 @@ func (sh *testSnHandler) HandleReport(ctx context.Context, sn *varlogpb.StorageN
 
 func TestVarlogSNWatcher(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
 		vmsOpts := vms.DefaultOptions()
 		opts.VMSOpts = &vmsOpts
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -1389,7 +624,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		opts.VMSOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
-		mrMgr, err := vms.NewMRManager(context.TODO(), env.ClusterID, opts.VMSOpts.MRManagerOptions, env.logger)
+		mrMgr, err := vms.NewMRManager(context.TODO(), env.ClusterID, opts.VMSOpts.MRManagerOptions, env.Logger())
 		So(err, ShouldBeNil)
 
 		cmView := mrMgr.ClusterMetadataView()
@@ -1478,12 +713,12 @@ func (cmView *dummyCMView) StorageNode(ctx context.Context, storageNodeID types.
 
 func TestVarlogStatRepositoryRefresh(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -1616,12 +851,12 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 
 func TestVarlogStatRepositoryReport(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 		defer env.Close()
 
@@ -1697,7 +932,7 @@ func TestVarlogLogStreamSync(t *testing.T) {
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
 	nrRep := 2
-	opts := VarlogClusterOptions{
+	opts := test.VarlogClusterOptions{
 		NrMR:              1,
 		NrRep:             nrRep,
 		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
@@ -1706,7 +941,7 @@ func TestVarlogLogStreamSync(t *testing.T) {
 	opts.VMSOpts.HeartbeatTimeout *= 5
 	opts.VMSOpts.Logger = zap.L()
 
-	Convey("Given LogStream", t, withTestCluster(opts, func(env *VarlogCluster) {
+	Convey("Given LogStream", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
 		for i := 0; i < nrRep; i++ {
 			_, err := env.AddSNByVMS()
 			So(err, ShouldBeNil)
@@ -1802,13 +1037,13 @@ func TestVarlogLogStreamSync(t *testing.T) {
 
 func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
 	nrRep := 2
-	opts := VarlogClusterOptions{
+	opts := test.VarlogClusterOptions{
 		NrMR:              1,
 		NrRep:             nrRep,
 		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 	}
 
-	Convey("Given LogStream", t, withTestCluster(opts, func(env *VarlogCluster) {
+	Convey("Given LogStream", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
 		cmcli := env.GetClusterManagerClient()
 
 		for i := 0; i < nrRep; i++ {
@@ -1870,13 +1105,13 @@ func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
 
 func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
 	nrRep := 2
-	opts := VarlogClusterOptions{
+	opts := test.VarlogClusterOptions{
 		NrMR:              1,
 		NrRep:             nrRep,
 		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 	}
 
-	Convey("Given Sealed LogStream", t, withTestCluster(opts, func(env *VarlogCluster) {
+	Convey("Given Sealed LogStream", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
 		cmcli := env.GetClusterManagerClient()
 
 		for i := 0; i < nrRep; i++ {
@@ -1943,7 +1178,7 @@ func TestVarlogLogStreamGCZombie(t *testing.T) {
 	vmsOpts := vms.DefaultOptions()
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
-	opts := VarlogClusterOptions{
+	opts := test.VarlogClusterOptions{
 		NrMR:              1,
 		NrRep:             nrRep,
 		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
@@ -1952,7 +1187,7 @@ func TestVarlogLogStreamGCZombie(t *testing.T) {
 
 	opts.VMSOpts.GCTimeout = 6 * time.Duration(opts.VMSOpts.ReportInterval) * opts.VMSOpts.Tick
 
-	Convey("Given Varlog cluster", t, withTestCluster(opts, func(env *VarlogCluster) {
+	Convey("Given Varlog cluster", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
 		snID, err := env.AddSNByVMS()
 		So(err, ShouldBeNil)
 
@@ -2003,14 +1238,14 @@ func TestVarlogClient(t *testing.T) {
 		vmsOpts.HeartbeatTimeout *= 20
 		vmsOpts.Logger = zap.L()
 
-		clusterOpts := VarlogClusterOptions{
+		clusterOpts := test.VarlogClusterOptions{
 			NrMR:              1,
 			NrRep:             3,
 			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 			VMSOpts:           &vmsOpts,
 		}
 
-		Convey("and running cluster", withTestCluster(clusterOpts, func(env *VarlogCluster) {
+		Convey("and running cluster", test.WithTestCluster(clusterOpts, func(env *test.VarlogCluster) {
 			cmcli := env.GetClusterManagerClient()
 
 			for i := 0; i < nrSN; i++ {
@@ -2022,7 +1257,7 @@ func TestVarlogClient(t *testing.T) {
 				snopts.ListenAddress = "127.0.0.1:0"
 				snopts.ClusterID = env.ClusterID
 				snopts.StorageNodeID = storageNodeID
-				snopts.Logger = env.logger
+				snopts.Logger = env.Logger()
 				snopts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
 
 				sn, err := storagenode.NewStorageNode(&snopts)
@@ -2246,7 +1481,7 @@ func TestVarlogRaftDelay(t *testing.T) {
 	vmsOpts := vms.DefaultOptions()
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
-	opts := VarlogClusterOptions{
+	opts := test.VarlogClusterOptions{
 		NrMR:              3,
 		NrRep:             nrRep,
 		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
@@ -2254,7 +1489,7 @@ func TestVarlogRaftDelay(t *testing.T) {
 		VMSOpts:           &vmsOpts,
 	}
 
-	Convey("Given Varlog cluster", t, withTestCluster(opts, func(env *VarlogCluster) {
+	Convey("Given Varlog cluster", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
 		time.Sleep(10 * time.Minute)
 	}))
 }

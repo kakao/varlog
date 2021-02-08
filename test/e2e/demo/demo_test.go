@@ -17,21 +17,12 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
 	"github.daumkakao.com/varlog/varlog/proto/vmspb"
+	"github.daumkakao.com/varlog/varlog/vtesting"
 )
 
-const (
-	mrPort  = 21000
-	snPort  = 9000
-	vmsPort = 8190
-)
-
-var (
-	mrAddr  = fmt.Sprintf("127.0.0.1:%d", mrPort)
-	vmsAddr = fmt.Sprintf("127.0.0.1:%d", vmsPort)
-)
-
-func getClearDir(t *testing.T) func() {
+func getClearDir(t *testing.T, raftAddr string) func() {
 	return func() {
 		dir, err := os.Getwd()
 		if err != nil {
@@ -50,6 +41,10 @@ func getClearDir(t *testing.T) func() {
 				}
 			}
 		}
+
+		nodeID := types.NewNodeIDFromURL(raftAddr)
+		os.RemoveAll(fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID))
+		os.RemoveAll(fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID))
 	}
 }
 
@@ -94,10 +89,12 @@ func fork(ctx context.Context, args []string, envs []string, t *testing.T) (cmd 
 	return cmd, stdout, stderr
 }
 
-func forkMR(ctx context.Context, t *testing.T) *exec.Cmd {
+func forkMR(ctx context.Context, rpcAddr string, raftAddr string, t *testing.T) *exec.Cmd {
 	args := []string{
 		"vmr", "start",
-		"--bind", fmt.Sprintf("127.0.0.1:%d", mrPort),
+		"--bind", rpcAddr,
+		"--raft-address", raftAddr,
+		"--raft-dir", vtesting.TestRaftDir(),
 	}
 	cmd, stdout, stderr := fork(ctx, args, nil, t)
 	runScanner(ctx, stdout, os.Stdout)
@@ -105,7 +102,7 @@ func forkMR(ctx context.Context, t *testing.T) *exec.Cmd {
 	return cmd
 }
 
-func forkVMS(ctx context.Context, t *testing.T) *exec.Cmd {
+func forkVMS(ctx context.Context, vmsAddr string, mrAddr string, t *testing.T) *exec.Cmd {
 	args := []string{
 		"vms", "start",
 		"--mr-address", mrAddr,
@@ -134,22 +131,22 @@ func forkSN(ctx context.Context, snid int, addr string, t *testing.T) *exec.Cmd 
 	return cmd
 }
 
-func addSN(ctx context.Context, addr string, t *testing.T) error {
+func addSN(ctx context.Context, addr string, vmsAddr string, t *testing.T) error {
 	args := []string{
 		"vmc", "add", "sn",
 		"--storage-node-address", addr,
 	}
-	cmd, stdout, stderr := forkVMC(ctx, args, t)
+	cmd, stdout, stderr := forkVMC(ctx, args, vmsAddr, t)
 	runScanner(ctx, stdout, os.Stdout)
 	runScanner(ctx, stderr, os.Stderr)
 	return cmd.Wait()
 }
 
-func addLS(ctx context.Context, t *testing.T) types.LogStreamID {
+func addLS(ctx context.Context, vmsAddr string, t *testing.T) types.LogStreamID {
 	args := []string{
 		"vmc", "add", "ls",
 	}
-	cmd, stdout, stderr := forkVMC(ctx, args, t)
+	cmd, stdout, stderr := forkVMC(ctx, args, vmsAddr, t)
 	runScanner(ctx, stderr, os.Stderr)
 	var sb strings.Builder
 	if _, err := io.Copy(&sb, stdout); err != nil {
@@ -165,59 +162,63 @@ func addLS(ctx context.Context, t *testing.T) types.LogStreamID {
 	return rsp.GetLogStream().GetLogStreamID()
 }
 
-func sealLS(ctx context.Context, logStreamID types.LogStreamID, t *testing.T) error {
+func sealLS(ctx context.Context, logStreamID types.LogStreamID, vmsAddr string, t *testing.T) error {
 	args := []string{
 		"vmc", "seal", "ls",
 		"--log-stream-id", fmt.Sprintf("%v", logStreamID),
 	}
-	cmd, stdout, stderr := forkVMC(ctx, args, t)
+	cmd, stdout, stderr := forkVMC(ctx, args, vmsAddr, t)
 	runScanner(ctx, stderr, os.Stderr)
 	runScanner(ctx, stdout, os.Stdout)
 	return cmd.Wait()
 }
 
-func unsealLS(ctx context.Context, logStreamID types.LogStreamID, t *testing.T) error {
+func unsealLS(ctx context.Context, logStreamID types.LogStreamID, vmsAddr string, t *testing.T) error {
 	args := []string{
 		"vmc", "unseal", "ls",
 		"--log-stream-id", fmt.Sprintf("%v", logStreamID),
 	}
-	cmd, stdout, stderr := forkVMC(ctx, args, t)
+	cmd, stdout, stderr := forkVMC(ctx, args, vmsAddr, t)
 	runScanner(ctx, stderr, os.Stderr)
 	runScanner(ctx, stdout, os.Stdout)
 	return cmd.Wait()
 }
 
-func rmLS(ctx context.Context, logStreamID types.LogStreamID, t *testing.T) error {
+func rmLS(ctx context.Context, logStreamID types.LogStreamID, vmsAddr string, t *testing.T) error {
 	args := []string{
 		"vmc", "rm", "ls",
 		"--log-stream-id", fmt.Sprintf("%v", logStreamID),
 	}
-	cmd, stdout, stderr := forkVMC(ctx, args, t)
+	cmd, stdout, stderr := forkVMC(ctx, args, vmsAddr, t)
 	runScanner(ctx, stderr, os.Stderr)
 	runScanner(ctx, stdout, os.Stdout)
 	return cmd.Wait()
 }
 
-func rmSN(ctx context.Context, storageNodeID types.StorageNodeID, t *testing.T) error {
+func rmSN(ctx context.Context, storageNodeID types.StorageNodeID, vmsAddr string, t *testing.T) error {
 	args := []string{
 		"vmc", "rm", "sn",
 		"--storage-node-id", fmt.Sprintf("%v", storageNodeID),
 	}
-	cmd, stdout, stderr := forkVMC(ctx, args, t)
+	cmd, stdout, stderr := forkVMC(ctx, args, vmsAddr, t)
 	runScanner(ctx, stderr, os.Stderr)
 	runScanner(ctx, stdout, os.Stdout)
 	return cmd.Wait()
 }
 
-func forkVMC(ctx context.Context, args []string, t *testing.T) (*exec.Cmd, io.ReadCloser, io.ReadCloser) {
+func forkVMC(ctx context.Context, args []string, vmsAddr string, t *testing.T) (*exec.Cmd, io.ReadCloser, io.ReadCloser) {
 	envs := []string{"VMS_ADDRESS=" + vmsAddr}
 	return fork(ctx, args, envs, t)
 }
 
 func TestDemo(t *testing.T) {
-	cleanup := getClearDir(t)
-	cleanup()
-	t.Cleanup(cleanup)
+	portLease, err := ports.ReserveWeaklyWithRetry(10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer portLease.Release()
+
+	nextPort := portLease.Base()
 
 	var snInfos = []struct {
 		snid int
@@ -225,13 +226,27 @@ func TestDemo(t *testing.T) {
 	}{
 		{
 			snid: 1,
-			addr: fmt.Sprintf("127.0.0.1:%d", snPort+1),
+			addr: fmt.Sprintf("127.0.0.1:%d", nextPort),
 		},
 		{
 			snid: 2,
-			addr: fmt.Sprintf("127.0.0.1:%d", snPort+2),
+			addr: fmt.Sprintf("127.0.0.1:%d", nextPort+1),
 		},
 	}
+	nextPort += 2
+
+	mrRPCAddr := fmt.Sprintf("127.0.0.1:%d", nextPort)
+	nextPort++
+
+	mrRAFTAddr := fmt.Sprintf("http://127.0.0.1:%d", nextPort)
+	nextPort++
+
+	vmsAddr := fmt.Sprintf("127.0.0.1:%d", nextPort)
+	nextPort++
+
+	cleanup := getClearDir(t, mrRAFTAddr)
+	cleanup()
+	t.Cleanup(cleanup)
 
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Minute*10)
 	defer cancel()
@@ -241,50 +256,52 @@ func TestDemo(t *testing.T) {
 	for _, snInfo := range snInfos {
 		cmds = append(cmds, forkSN(ctx, snInfo.snid, snInfo.addr, t))
 	}
-	cmds = append(cmds, forkMR(ctx, t))
+
+	cmds = append(cmds, forkMR(ctx, mrRPCAddr, mrRAFTAddr, t))
 	time.Sleep(3 * time.Second)
-	cmds = append(cmds, forkVMS(ctx, t))
+
+	cmds = append(cmds, forkVMS(ctx, vmsAddr, mrRPCAddr, t))
 	time.Sleep(3 * time.Second)
 
 	// ok: add storagenode
 	for _, snInfo := range snInfos {
-		if err := addSN(ctx, snInfo.addr, t); err != nil {
+		if err := addSN(ctx, snInfo.addr, vmsAddr, t); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// error: add storagenode
 	for _, snInfo := range snInfos {
-		if err := addSN(ctx, snInfo.addr, t); err == nil {
+		if err := addSN(ctx, snInfo.addr, vmsAddr, t); err == nil {
 			t.Fatal("shoud not be nil")
 		}
 	}
 
 	// ok: add logstream
-	logStreamID := addLS(ctx, t)
+	logStreamID := addLS(ctx, vmsAddr, t)
 
 	// ok: seal logstream
-	if err := sealLS(ctx, logStreamID, t); err != nil {
+	if err := sealLS(ctx, logStreamID, vmsAddr, t); err != nil {
 		t.Fatal(err)
 	}
 
 	// ok: unseal logstream
-	if err := unsealLS(ctx, logStreamID, t); err != nil {
+	if err := unsealLS(ctx, logStreamID, vmsAddr, t); err != nil {
 		t.Fatal(err)
 	}
 
 	// ok: seal logstream
-	if err := sealLS(ctx, logStreamID, t); err != nil {
+	if err := sealLS(ctx, logStreamID, vmsAddr, t); err != nil {
 		t.Fatal(err)
 	}
 
 	// ok: rm logstream
-	if err := rmLS(ctx, logStreamID, t); err != nil {
+	if err := rmLS(ctx, logStreamID, vmsAddr, t); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, snInfo := range snInfos {
-		if err := rmSN(ctx, types.StorageNodeID(snInfo.snid), t); err != nil {
+		if err := rmSN(ctx, types.StorageNodeID(snInfo.snid), vmsAddr, t); err != nil {
 			t.Fatal(err)
 		}
 	}

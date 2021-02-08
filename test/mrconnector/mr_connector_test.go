@@ -17,15 +17,19 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
+	"github.daumkakao.com/varlog/varlog/test"
 )
 
 func TestMRConnector(t *testing.T) {
-	safeMRClose := func(env *VarlogCluster, idx int) [2]int {
-		mr := env.MRs[idx]
-		So(mr.Close(), ShouldBeNil)
+	safeMRClose := func(env *test.VarlogCluster, idx int, truncate bool) [2]int {
+		if truncate {
+			So(env.CloseMR(idx), ShouldBeNil)
+		} else {
+			So(env.MRs[idx].Close(), ShouldBeNil)
+		}
 
 		numCheckRPC := 0
-		ep := env.mrRPCEndpoints[idx]
+		ep := env.MRRPCEndpoints[idx]
 		So(testutil.CompareWaitN(100, func() bool {
 			numCheckRPC++
 			conn, err := rpc.NewBlockingConn(ep)
@@ -36,7 +40,7 @@ func TestMRConnector(t *testing.T) {
 		}), ShouldBeTrue)
 
 		numCheckRAFT := 0
-		peer := env.mrPeers[idx]
+		peer := env.MRPeers[idx]
 		So(testutil.CompareWaitN(100, func() bool {
 			numCheckRAFT++
 			_, err := http.Get(peer)
@@ -46,27 +50,27 @@ func TestMRConnector(t *testing.T) {
 		return [2]int{numCheckRPC, numCheckRAFT}
 	}
 
-	SetDefaultFailureMode(FailureHalts)
+	// SetDefaultFailureMode(FailureHalts)
 	Convey("Given 3 MR nodes", t, func() {
 		const clusterInfoFetchInterval = 1 * time.Second
-		opts := VarlogClusterOptions{
+		opts := test.VarlogClusterOptions{
 			NrMR:              3,
 			NrRep:             1,
 			ReporterClientFac: metadata_repository.NewEmptyReporterClientFactory(),
 		}
-		env := NewVarlogCluster(opts)
+		env := test.NewVarlogCluster(opts)
 		env.Start()
 
 		Reset(func() {
-			So(env.Close(), ShouldBeNil)
 			for idx := range env.MRs {
-				checks := safeMRClose(env, idx)
+				checks := safeMRClose(env, idx, true)
 				So(checks[0], ShouldEqual, 1)
 				So(checks[1], ShouldEqual, 1)
 			}
+			So(env.Close(), ShouldBeNil)
 		})
 
-		for _, rpcEndpoint := range env.mrRPCEndpoints {
+		for _, rpcEndpoint := range env.MRRPCEndpoints {
 			So(testutil.CompareWaitN(100, func() bool {
 				conn, err := rpc.NewBlockingConn(rpcEndpoint)
 				if err != nil {
@@ -106,7 +110,7 @@ func TestMRConnector(t *testing.T) {
 		}
 
 		Convey("When Connector is created", func() {
-			mrConn, err := mrconnector.New(context.TODO(), env.mrRPCEndpoints,
+			mrConn, err := mrconnector.New(context.TODO(), env.MRRPCEndpoints,
 				mrconnector.WithClusterID(env.ClusterID),
 				mrconnector.WithRPCAddrsFetchInterval(clusterInfoFetchInterval),
 				mrconnector.WithLogger(zap.L()),
@@ -172,7 +176,7 @@ func TestMRConnector(t *testing.T) {
 					for i := 1; i < opts.NrMR; i++ {
 						// Close MR: env.MRs[1], env.MRs[2]
 						time.Sleep(2 * clusterInfoFetchInterval)
-						checks := safeMRClose(env, i)
+						checks := safeMRClose(env, i, false)
 						So(checks[0], ShouldEqual, 1)
 						So(checks[1], ShouldEqual, 1)
 					}
@@ -182,7 +186,7 @@ func TestMRConnector(t *testing.T) {
 					So(testutil.CompareWaitN(100, func() bool {
 						// Active MR: env.MRs[0]
 						mrs := mrConn.ActiveMRs()
-						return len(mrs) == 1 && mrs[env.mrIDs[0]] != ""
+						return len(mrs) == 1 && mrs[env.MRIDs[0]] != ""
 					}), ShouldBeTrue)
 					So(mrConn.NumberOfMR(), ShouldEqual, 1)
 
@@ -203,7 +207,7 @@ func TestMRConnector(t *testing.T) {
 						time.Sleep(2 * clusterInfoFetchInterval)
 
 						So(testutil.CompareWaitN(100, func() bool {
-							ep := env.mrRPCEndpoints[mrIdx]
+							ep := env.MRRPCEndpoints[mrIdx]
 							conn, err := rpc.NewBlockingConn(ep)
 							if err != nil {
 								return false
@@ -219,14 +223,14 @@ func TestMRConnector(t *testing.T) {
 						So(testutil.CompareWaitN(100, func() bool {
 							// Active MR: env.MRs[0], env.MRs[1]
 							mrs := mrConn.ActiveMRs()
-							nodeID0 := env.mrIDs[0]
-							nodeID1 := env.mrIDs[1]
+							nodeID0 := env.MRIDs[0]
+							nodeID1 := env.MRIDs[1]
 							return len(mrs) == 2 && mrs[nodeID0] != "" && mrs[nodeID1] != ""
 						}), ShouldBeTrue)
 
 						Convey("Then MRConnector should reconnect to recovered MR", func() {
 							// env.MRs[0] failed
-							checks := safeMRClose(env, 0)
+							checks := safeMRClose(env, 0, false)
 							So(checks[0], ShouldEqual, 1)
 							So(checks[1], ShouldEqual, 1)
 							maybeFail(context.TODO())
@@ -239,7 +243,7 @@ func TestMRConnector(t *testing.T) {
 							// Active MR: env.MRs[1]
 							mrs := mrConn.ActiveMRs()
 							So(mrs, ShouldHaveLength, 1)
-							So(mrs, ShouldContainKey, env.mrIDs[1])
+							So(mrs, ShouldContainKey, env.MRIDs[1])
 						})
 					})
 				})
