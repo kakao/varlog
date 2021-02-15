@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: varlog-vms-rpc
+spec:
+  selector:
+    app: varlog-vms
+  ports:
+    - name: rpc
+      port: 9093

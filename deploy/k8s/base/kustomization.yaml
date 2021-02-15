@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- mr.yaml
+- sn.yaml
+- vms.yaml
+- mr-service.yaml
+- vms-service.yaml
+- otelcol.yaml
+- jaeger.yaml
+- prometheus.yaml
+- ingress-nginx-configmap.yaml
+- jaeger-vip-service.yaml
+- prometheus-vip-service.yaml
+- mr-vip-service.yaml
+- vms-vip-service.yaml
+

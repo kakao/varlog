@@ -1,31 +1,105 @@
+def masterBranch = "master"
+def masterCron = "H H(3-5),H(15-17) * * *" // for UTC
+
 pipeline {
+
   agent any
+
+  triggers {
+    cron("${masterCron}")
+  }
+
   stages {
 
-    stage('build') {
+    stage("build") {
       steps {
-        sh 'make all'
+        sh "make all"
       }
     }
 
-    stage('test') {
+    stage("test") {
       environment { 
-        VAULT_ADDR      = 'https://vault.daumkakao.io'
-        VAULT_ROLE_ID   = 'b6ce1ff0-fb27-f6b3-0eb6-0af8c4e54324'
-        VAULT_SECRET_ID = 'c020d160-e91f-d1da-a31b-8ee8e188dfd8'
+        TEST_USE_LOGGER = "0"
+      }
+      when {
+          not {
+              triggeredBy "TimerTrigger"
+          }
       }
       steps {
-        sh 'make test TEST_FAILFAST=1 TEST_TIMEOUT=1h TEST_COUNT=2 TEST_CPU=4,8,16 TEST_COVERAGE=1'
+        sh "make test TEST_FAILFAST=1 TEST_TIMEOUT=1h TEST_CPU=2,8,16 TEST_COUNT=1 TEST_COVERAGE=1"
+      }
+      post {
+        always {
+          sh "make test_report"
+          sh "make coverage_report"
+          junit "build/reports/*.xml"
+          cobertura coberturaReportFile: "build/reports/coverage.xml"
+        }
+        unsuccessful {
+          script {
+            if (env.BRANCH_NAME == "${masterBranch}") {
+              notify("${env.BRANCH_NAME} failed: ${env.BUILD_URL}")
+            }
+          }  
+        }
       }
     }
 
-  }
-  post {
-    always {
-      sh 'make test_report'
-      sh 'make coverage_report'
-      junit 'build/reports/*.xml'
-      cobertura coberturaReportFile: "build/reports/coverage.xml"
+    stage("test.master") {
+      environment { 
+        TEST_USE_LOGGER = "0"
+      }
+      when {
+        branch "${masterBranch}"
+        triggeredBy "TimerTrigger"
+      }
+      steps {
+        sh "make test TEST_FAILFAST=1 TEST_TIMEOUT=12h TEST_CPU=2,4,8,16,32 TEST_COUNT=5 TEST_COVERAGE=0"
+      }
+      post {
+        always {
+          sh "make test_report"
+          sh "make coverage_report"
+          junit "build/reports/*.xml"
+          cobertura coberturaReportFile: "build/reports/coverage.xml"
+        }
+        unsuccessful {
+          script {
+            if (env.BRANCH_NAME == "${masterBranch}") {
+              notify("${env.BRANCH_NAME} failed: ${env.BUILD_URL}")
+            }
+          }  
+        }
+      }
+    }
+
+    stage("test.e2e") {
+      when {
+        branch "${masterBranch}"
+        triggeredBy "TimerTrigger"
+      }
+      environment {
+        VAULT_ADDR = "https://vault.daumkakao.io"
+        VAULT_SECRET_PATH= "secret/varlog/dkosv3/e2e-03"
+        TEST_USE_LOGGER = 1
+      }
+      steps {
+        withCredentials([
+          string(credentialsId: "VAULT_ROLE_ID", variable: "VAULT_ROLE_ID"),
+          string(credentialsId: "VAULT_SECRET_ID", variable: "VAULT_SECRET_ID")
+        ]) {
+          sh "go test -v -count 1 -failfast -tags e2e ./test/e2e"
+        }
+      }
     }
   }
+
 }
+
+def notify(msg) {
+  def url = "http://api.noti.daumkakao.io/send/group/kakaotalk"
+  def to = "9761"
+  sh "curl -X POST ${url} -F to=${to} -F msg=\'${msg}\'"
+}
+

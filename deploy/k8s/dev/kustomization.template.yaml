@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+bases:
+- ../base
+images:
+  - name: idock.daumkakao.io/varlog/varlog-mr
+    newName: idock.daumkakao.io/varlog/varlog-mr
+    newTag: IMAGE_TAG
+  - name: idock.daumkakao.io/varlog/varlog-sn
+    newName: idock.daumkakao.io/varlog/varlog-sn
+    newTag: IMAGE_TAG
+  - name: idock.daumkakao.io/varlog/varlog-vms
+    newName: idock.daumkakao.io/varlog/varlog-vms
+    newTag: IMAGE_TAG
+
