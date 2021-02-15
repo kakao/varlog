@@ -70,8 +70,11 @@ func TestStoragUnregisterSN(t *testing.T) {
 			Convey("Then it should be unregistered", func(ctx C) {
 				err = ms.unregisterStorageNode(snID)
 				So(err, ShouldBeNil)
-
 				So(ms.lookupStorageNode(snID), ShouldBeNil)
+
+				ms.createMetadataCache(&jobMetadataCache{})
+				meta := ms.GetMetadata()
+				So(len(meta.GetStorageNodes()), ShouldEqual, 0)
 
 				Convey("unregistered SN should not be found after merge", func(ctx C) {
 					ms.mergeMetadata()
@@ -1035,7 +1038,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 }
 
 func TestStorageMetadataCache(t *testing.T) {
-	Convey("", t, func(ctx C) {
+	Convey("metadata storage returns empty cache, when it has no metadata", t, func(ctx C) {
 		cb := func(uint64, uint64, error) {}
 
 		ms := NewMetadataStorage(cb, DefaultSnapshotCount, nil)

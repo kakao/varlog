@@ -1327,11 +1327,17 @@ func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 
 	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
 		//TODO:: UpdateStorageNode
-		cache.InsertStorageNode(sn)
+		if sn.Status.Deleted() {
+			cache.DeleteStorageNode(sn.StorageNodeID)
+		} else {
+			cache.InsertStorageNode(sn)
+		}
 	}
 
 	for _, ls := range ms.diffStateMachine.Metadata.LogStreams {
-		if cache.InsertLogStream(ls) != nil {
+		if ls.Status.Deleted() {
+			cache.DeleteLogStream(ls.LogStreamID)
+		} else if cache.InsertLogStream(ls) != nil {
 			cache.UpdateLogStream(ls)
 		}
 	}
