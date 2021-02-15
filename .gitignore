@@ -27,6 +27,12 @@
 *.out
 *.app
 
+bin/sntool
+bin/vmc
+bin/vmr
+bin/vms
+bin/vsn
+
 # Python
 *.pyc
 
@@ -45,5 +51,14 @@ cache.mk
 /cmake/build
 cmake-build-debug/
 
+# Platform specific files
+.DS_Store
+
 # ctags
 tags
+
+# k8s
+deploy/k8s/dev/kustomization.yaml
+
+# temporary files
+build/reports/test_output.txt

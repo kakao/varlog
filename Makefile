@@ -202,3 +202,8 @@ push_mr:
 
 push_sn:
 	docker push ***REMOVED***/varlog/varlog-sn:$(DOCKER_TAG)
+
+.PHONY: kustomize
+kustomize:
+	sed "s/IMAGE_TAG/$(DOCKER_TAG)/" $(MAKEFILE_DIR)/deploy/k8s/dev/kustomization.template.yaml > $(MAKEFILE_DIR)/deploy/k8s/dev/kustomization.yaml
+	@echo "Run this command to apply: kubectl apply -k $(MAKEFILE_DIR)/deploy/k8s/dev/"

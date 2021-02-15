@@ -31,6 +31,7 @@ const (
 	VMS_RS_NAME   = "varlog-vms"
 	VMS_VIP_NAME  = "varlog-vms-rpc-vip"
 	MR_VIP_NAME   = "varlog-mr-rpc-vip"
+	MRServiceName = "varlog-mr-rpc"
 
 	ENV_REP_FACTOR = "REP_FACTOR"
 )
@@ -634,7 +635,7 @@ func (view *k8sVarlogView) Renew() error {
 	for _, pod := range pods.Items {
 		addr := fmt.Sprintf("%s:%d",
 			pod.Status.HostIP,
-			pod.Spec.Containers[0].ReadinessProbe.Handler.TCPSocket.Port.IntValue())
+			pod.Spec.Containers[0].Ports[0].ContainerPort)
 
 		ctx, cancel := context.WithTimeout(context.Background(), view.rpcTimeout)
 		cid, mrid, err := view.idGetter.MetadataRepositoryID(ctx, addr)
@@ -656,7 +657,7 @@ func (view *k8sVarlogView) Renew() error {
 	for _, pod := range pods.Items {
 		addr := fmt.Sprintf("%s:%d",
 			pod.Status.HostIP,
-			pod.Spec.Containers[0].ReadinessProbe.Handler.TCPSocket.Port.IntValue())
+			pod.Spec.Containers[0].Ports[0].ContainerPort)
 
 		ctx, cancel := context.WithTimeout(context.Background(), view.rpcTimeout)
 		snid, err := view.idGetter.StorageNodeID(ctx, addr, clusterID)
