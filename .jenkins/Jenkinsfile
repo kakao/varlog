@@ -55,14 +55,12 @@ pipeline {
         triggeredBy "TimerTrigger"
       }
       steps {
-        sh "make test TEST_FAILFAST=1 TEST_TIMEOUT=12h TEST_CPU=2,4,8,16,32 TEST_COUNT=5 TEST_COVERAGE=0"
+        sh "make test TEST_FAILFAST=1 TEST_TIMEOUT=3h TEST_CPU=2,4,8,16,32 TEST_COUNT=5 TEST_COVERAGE=0"
       }
       post {
         always {
           sh "make test_report"
-          sh "make coverage_report"
           junit "build/reports/*.xml"
-          cobertura coberturaReportFile: "build/reports/coverage.xml"
         }
         unsuccessful {
           script {
