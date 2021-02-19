@@ -112,8 +112,8 @@ func NewInternal(opts Options) (*zap.Logger, error) {
 	}
 	if opts.Debug {
 		zapOpts = append(zapOpts, zap.Development())
-	} else if samplerOptions == nil {
-		samplerOptions = defaultProductionSamplerOption()
+		//} else if samplerOptions == nil {
+		//	samplerOptions = defaultProductionSamplerOption()
 	}
 	if samplerOptions != nil {
 		zapOpts = append(zapOpts, zap.WrapCore(func(core zapcore.Core) zapcore.Core {

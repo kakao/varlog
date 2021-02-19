@@ -86,17 +86,20 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 	peers := make([]string, len(clus.peers))
 	copy(peers, clus.peers)
 	options := &MetadataRepositoryOptions{
+		RaftOptions: RaftOptions{
+			Join:             join,
+			SnapCount:        testSnapCount,
+			SnapCatchUpCount: testSnapCount,
+			RaftTick:         vtesting.TestRaftTick(),
+			RaftDir:          vtesting.TestRaftDir(),
+			Peers:            peers,
+		},
+
 		ClusterID:         types.ClusterID(1),
 		RaftAddress:       clus.peers[idx],
-		Join:              join,
-		SnapCount:         testSnapCount,
-		SnapCatchUpCount:  testSnapCount,
-		RaftTick:          vtesting.TestRaftTick(),
-		RaftDir:           vtesting.TestRaftDir(),
 		CommitTick:        vtesting.TestCommitTick(),
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
 		NumRep:            clus.nrRep,
-		Peers:             peers,
 		RPCBindAddress:    ":0",
 		ReporterClientFac: clus.reporterClientFac,
 		Logger:            clus.logger,

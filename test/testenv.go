@@ -123,15 +123,18 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 	nodeID := types.NewNodeID(url.Host)
 
 	opts := &metadata_repository.MetadataRepositoryOptions{
+		RaftOptions: metadata_repository.RaftOptions{
+			Join:      join,
+			SnapCount: uint64(clus.SnapCount),
+			RaftTick:  vtesting.TestRaftTick(),
+			RaftDir:   vtesting.TestRaftDir(),
+			Peers:     clus.MRPeers,
+		},
+
 		ClusterID:         clus.ClusterID,
 		RaftAddress:       clus.MRPeers[idx],
-		Join:              join,
-		SnapCount:         uint64(clus.SnapCount),
-		RaftTick:          vtesting.TestRaftTick(),
-		RaftDir:           vtesting.TestRaftDir(),
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
 		NumRep:            clus.NrRep,
-		Peers:             clus.MRPeers,
 		RPCBindAddress:    clus.MRRPCEndpoints[idx],
 		ReporterClientFac: clus.ReporterClientFac,
 		Logger:            clus.logger,

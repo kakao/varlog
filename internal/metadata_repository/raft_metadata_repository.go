@@ -130,15 +130,10 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 
 	mr.rnConfChangeC = make(chan raftpb.ConfChange, 1)
 	mr.rnProposeC = make(chan string)
+
+	options.SnapCount = 1
 	mr.raftNode = newRaftNode(
-		options.NodeID,
-		options.Peers,
-		options.Join, // if false, not to join an existing cluster
-		options.UnsafeNoSync,
-		1, // options.SnapCount
-		options.SnapCatchUpCount,
-		options.RaftTick,
-		options.RaftDir,
+		options.RaftOptions,
 		mr.storage,
 		mr.rnProposeC,
 		mr.rnConfChangeC,
@@ -160,6 +155,8 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 }
 
 func (mr *RaftMetadataRepository) Run() {
+	mr.logger.Info("starting metadata repository")
+
 	mr.storage.Run()
 	mr.reportCollector.Run()
 
@@ -216,8 +213,6 @@ func (mr *RaftMetadataRepository) Run() {
 	}); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
-
-	mr.logger.Info("starting metadata repository")
 }
 
 func (mr *RaftMetadataRepository) runDebugServer(ctx context.Context) {
@@ -253,9 +248,13 @@ func (mr *RaftMetadataRepository) runDebugServer(ctx context.Context) {
 
 //TODO:: handle pendding msg
 func (mr *RaftMetadataRepository) Close() error {
-	mr.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+	mr.logger.Info("metadata repository closing")
+	defer func() {
+		mr.sw.Stop()
+		mr.logger.Info("metadata repository closed")
+	}()
 
-	defer mr.sw.Stop()
+	mr.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 
 	mr.reportCollector.Close()
 	if mr.cancel != nil {

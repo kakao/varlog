@@ -69,14 +69,22 @@ func newCluster(n int) *cluster {
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
 		//logger, _ := zap.NewDevelopment()
 		logger := zap.NewNop()
-		rc := newRaftNode(nodeID,
-			clus.peers,
-			false,
-			false,
-			DefaultSnapshotCount,
-			DefaultSnapshotCatchUpCount,
-			vtesting.TestRaftTick(),
-			"raftdata",
+
+		options := RaftOptions{
+			NodeID:            nodeID,
+			Join:              false,
+			UnsafeNoSync:      false,
+			Peers:             clus.peers,
+			SnapCount:         DefaultSnapshotCount,
+			SnapCatchUpCount:  DefaultSnapshotCatchUpCount,
+			MaxSnapPurgeCount: 0,
+			MaxWalPurgeCount:  0,
+			RaftTick:          vtesting.TestRaftTick(),
+			RaftDir:           "raftdata",
+		}
+
+		rc := newRaftNode(
+			options,
 			nil,
 			clus.proposeC[i],
 			clus.confChangeC[i],
