@@ -115,6 +115,22 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 			EnvVars:     []string{"SNAPSHOT_COUNT"},
 			Destination: &options.SnapCount,
 		},
+		&cli.UintFlag{
+			Name:        "max-snap-purge-count",
+			Aliases:     []string{},
+			Value:       metadata_repository.DefaultSnapshotPurgeCount,
+			Usage:       "Count of purge files for Snapshot",
+			EnvVars:     []string{"MAX_SNAP_PURGE_COUNT"},
+			Destination: &options.MaxSnapPurgeCount,
+		},
+		&cli.UintFlag{
+			Name:        "max-wal-purge-count",
+			Aliases:     []string{},
+			Value:       metadata_repository.DefaultWalPurgeCount,
+			Usage:       "Count of purge files for WAL",
+			EnvVars:     []string{"MAX_WAL_PURGE_COUNT"},
+			Destination: &options.MaxWalPurgeCount,
+		},
 		&cli.StringSliceFlag{
 			Name:    "peers",
 			Aliases: []string{"p"},

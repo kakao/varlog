@@ -24,7 +24,8 @@ func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
 			MaxAgeDays: log.DefaultMaxAgeDay,
 			MaxBackups: log.DefaultMaxBackups,
 		},
-		Path: fmt.Sprintf("%s/log.txt", path),
+		DisableLogToStderr: true,
+		Path:               fmt.Sprintf("%s/log.txt", path),
 	}
 
 	logger, err := log.NewInternal(lopts)

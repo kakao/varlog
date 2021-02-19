@@ -321,17 +321,19 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 			// mr
 			mrOpts := &metadata_repository.MetadataRepositoryOptions{
-				ClusterID:   clusterID,
-				RaftAddress: mrRAFTAddr,
-				Join:        false,
-				SnapCount:   uint64(10),
-				RaftTick:    vtesting.TestRaftTick(),
-				// RaftDir:           vtesting.TestRaftDir(),
-				RaftDir:           filepath.Join(t.TempDir(), "raftdir"),
+				RaftOptions: metadata_repository.RaftOptions{
+					Join:      false,
+					SnapCount: uint64(10),
+					RaftTick:  vtesting.TestRaftTick(),
+					RaftDir:   filepath.Join(t.TempDir(), "raftdir"),
+					Peers:     []string{mrRAFTAddr},
+				},
+
+				ClusterID:         clusterID,
+				RaftAddress:       mrRAFTAddr,
 				LogDir:            filepath.Join(t.TempDir(), "log"),
 				RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
 				NumRep:            1,
-				Peers:             []string{mrRAFTAddr},
 				RPCBindAddress:    mrRPCAddr,
 				ReporterClientFac: metadata_repository.NewReporterClientFactory(),
 				Logger:            zap.L(),

@@ -58,10 +58,12 @@ type raftNode struct {
 	raftStorage *raft.MemoryStorage
 	wal         *wal.WAL
 
-	snapshotGetter   SnapshotGetter
-	snapshotter      *snap.Snapshotter
-	snapCount        uint64
-	snapCatchUpCount uint64
+	snapshotGetter    SnapshotGetter
+	snapshotter       *snap.Snapshotter
+	snapCount         uint64
+	snapCatchUpCount  uint64
+	maxSnapPurgeCount uint
+	maxWalPurgeCount  uint
 
 	transport *rafthttp.Transport
 
@@ -96,16 +98,14 @@ type raftMembership struct {
 	logger   *zap.Logger
 }
 
+var purgeInterval = 30 * time.Second
+
 // newRaftNode initiates a raft instance and returns a committed log entry
 // channel and error channel. Proposals for log updates are sent over the
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries.
-func newRaftNode(id vtypes.NodeID, peers []string,
-	join, unsafeNoSync bool,
-	snapCount, snapCatchUpCount uint64,
-	raftTick time.Duration,
-	raftDir string,
+func newRaftNode(options RaftOptions,
 	snapshotGetter SnapshotGetter,
 	proposeC chan string,
 	confChangeC chan raftpb.ConfChange,
@@ -116,25 +116,27 @@ func newRaftNode(id vtypes.NodeID, peers []string,
 	snapshotC := make(chan struct{})
 
 	rc := &raftNode{
-		proposeC:         proposeC,
-		snapshotC:        snapshotC,
-		confChangeC:      confChangeC,
-		commitC:          commitC,
-		id:               id,
-		bpeers:           peers,
-		membership:       newRaftMemebership(logger),
-		raftTick:         raftTick,
-		join:             join,
-		unsafeNoSync:     unsafeNoSync,
-		waldir:           fmt.Sprintf("%s/wal/%d", raftDir, id),
-		snapdir:          fmt.Sprintf("%s/snap/%d", raftDir, id),
-		snapshotGetter:   snapshotGetter,
-		snapCount:        snapCount,
-		snapCatchUpCount: snapCatchUpCount,
-		logger:           logger,
-		runner:           runner.New("raft-node", logger),
-		httprunner:       runner.New("http", logger),
-		tmStub:           tmStub,
+		proposeC:          proposeC,
+		snapshotC:         snapshotC,
+		confChangeC:       confChangeC,
+		commitC:           commitC,
+		id:                options.NodeID,
+		bpeers:            options.Peers,
+		membership:        newRaftMemebership(logger),
+		raftTick:          options.RaftTick,
+		join:              options.Join,
+		unsafeNoSync:      options.UnsafeNoSync,
+		waldir:            fmt.Sprintf("%s/wal/%d", options.RaftDir, options.NodeID),
+		snapdir:           fmt.Sprintf("%s/snap/%d", options.RaftDir, options.NodeID),
+		snapshotGetter:    snapshotGetter,
+		snapCount:         options.SnapCount,
+		snapCatchUpCount:  options.SnapCatchUpCount,
+		maxSnapPurgeCount: options.MaxSnapPurgeCount,
+		maxWalPurgeCount:  options.MaxWalPurgeCount,
+		logger:            logger,
+		runner:            runner.New("raft-node", logger),
+		httprunner:        runner.New("http", logger),
+		tmStub:            tmStub,
 	}
 
 	return rc
@@ -478,6 +480,9 @@ func (rc *raftNode) start() {
 	if err := rc.runner.RunC(ctx, rc.processPromote); err != nil {
 		rc.logger.Panic("could not run", zap.Error(err))
 	}
+	if err := rc.runner.RunC(ctx, rc.processPurge); err != nil {
+		rc.logger.Panic("could not run", zap.Error(err))
+	}
 }
 
 func (rc *raftNode) longestConnected() (types.ID, bool) {
@@ -780,6 +785,42 @@ func (rc *raftNode) processRaftEvent(ctx context.Context) {
 
 		case <-ctx.Done():
 			rc.stopRaft()
+			return
+		}
+	}
+}
+
+func (rc *raftNode) processPurge(ctx context.Context) {
+	var ddonec, sdonec, wdonec <-chan struct{}
+	var derrc, serrc, werrc <-chan error
+
+	if rc.maxSnapPurgeCount > 0 {
+		ddonec, derrc = fileutil.PurgeFileWithDoneNotify(rc.logger, rc.snapdir, "snap.db", rc.maxSnapPurgeCount, purgeInterval, ctx.Done())
+		sdonec, serrc = fileutil.PurgeFileWithDoneNotify(rc.logger, rc.snapdir, "snap", rc.maxSnapPurgeCount, purgeInterval, ctx.Done())
+	}
+
+	if rc.maxWalPurgeCount > 0 {
+		wdonec, werrc = fileutil.PurgeFileWithDoneNotify(rc.logger, rc.waldir, "wal", rc.maxWalPurgeCount, purgeInterval, ctx.Done())
+	}
+
+	for {
+		select {
+		case e := <-derrc:
+			rc.logger.Fatal("failed to purge snap db file", zap.Error(e))
+		case e := <-serrc:
+			rc.logger.Fatal("failed to purge snap file", zap.Error(e))
+		case e := <-werrc:
+			rc.logger.Fatal("failed to purge wal file", zap.Error(e))
+		case <-ctx.Done():
+			if ddonec != nil {
+				<-ddonec
+			}
+			if sdonec != nil {
+				<-sdonec
+			}
+			if wdonec != nil {
+				<-wdonec
+			}
 			return
 		}
 	}

@@ -19,6 +19,8 @@ const (
 	DefaultRaftPort                                = 10000
 	DefaultSnapshotCount             uint64        = 10000
 	DefaultSnapshotCatchUpCount      uint64        = 10000
+	DefaultSnapshotPurgeCount        uint          = 10
+	DefaultWalPurgeCount             uint          = 10
 	DefaultLogReplicationFactor      int           = 1
 	DefaultProposeTimeout            time.Duration = 100 * time.Millisecond
 	DefaultRaftTick                  time.Duration = 100 * time.Millisecond
@@ -47,28 +49,34 @@ func makeDefaultRaftAddress() string {
 
 type MetadataRepositoryOptions struct {
 	TelemetryOptions
+	RaftOptions
 
 	RPCBindAddress     string
 	RaftAddress        string
 	DebugAddress       string
 	ClusterID          types.ClusterID
-	NodeID             types.NodeID
-	Join               bool
 	Verbose            bool
-	UnsafeNoSync       bool
 	NumRep             int
-	SnapCount          uint64
-	SnapCatchUpCount   uint64
-	RaftTick           time.Duration
 	RaftProposeTimeout time.Duration
 	RPCTimeout         time.Duration
 	CommitTick         time.Duration
 	PromoteTick        time.Duration
-	Peers              []string
 	ReporterClientFac  ReporterClientFactory
-	RaftDir            string
 	LogDir             string
 	Logger             *zap.Logger
+}
+
+type RaftOptions struct {
+	NodeID            types.NodeID
+	Join              bool
+	UnsafeNoSync      bool
+	SnapCount         uint64
+	SnapCatchUpCount  uint64
+	MaxSnapPurgeCount uint
+	MaxWalPurgeCount  uint
+	RaftTick          time.Duration
+	RaftDir           string
+	Peers             []string
 }
 
 type TelemetryOptions struct {
