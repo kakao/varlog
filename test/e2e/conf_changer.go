@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -61,37 +62,37 @@ func (cc *confChanger) Do(ctx context.Context) error {
 			cc.setErr(err)
 		}()
 
-		fmt.Printf("Wait %v\n", cc.interval)
+		log.Printf("Wait %v\n", cc.interval)
 		if err = cc.waitInterval(ctx); err != nil {
 			return
 		}
 
-		fmt.Printf("%s\n", testutil.GetFunctionName(cc.change))
+		log.Printf("%s\n", testutil.GetFunctionName(cc.change))
 		if err = cc.change(); err != nil {
 			return
 		}
 
-		fmt.Printf("%s\n", testutil.GetFunctionName(cc.check))
+		log.Printf("%s\n", testutil.GetFunctionName(cc.check))
 		if err = cc.check(); err != nil {
 			return
 		}
 
-		fmt.Printf("Wait %v\n", cc.interval)
+		log.Printf("Wait %v\n", cc.interval)
 		if err = cc.waitInterval(ctx); err != nil {
 			return
 		}
 
-		fmt.Printf("%s\n", testutil.GetFunctionName(cc.recover))
+		log.Printf("%s\n", testutil.GetFunctionName(cc.recover))
 		if err = cc.recover(); err != nil {
 			return
 		}
 
-		fmt.Printf("%s\n", testutil.GetFunctionName(cc.recoverCheck))
+		log.Printf("%s\n", testutil.GetFunctionName(cc.recoverCheck))
 		if err = cc.recoverCheck(); err != nil {
 			return
 		}
 
-		fmt.Printf("Wait %v\n", cc.interval)
+		log.Printf("Wait %v\n", cc.interval)
 		if err = cc.waitInterval(ctx); err != nil {
 			return
 		}

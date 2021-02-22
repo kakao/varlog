@@ -35,8 +35,8 @@ type clusterManagerClient struct {
 	rpcClient vmspb.ClusterManagerClient
 }
 
-func NewClusterManagerClient(addr string) (ClusterManagerClient, error) {
-	rpcConn, err := rpc.NewBlockingConn(addr)
+func NewClusterManagerClient(ctx context.Context, addr string) (ClusterManagerClient, error) {
+	rpcConn, err := rpc.NewConn(ctx, addr)
 	if err != nil {
 		return nil, err
 	}

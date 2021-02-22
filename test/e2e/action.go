@@ -63,7 +63,8 @@ func (act *action) Do(ctx context.Context) error {
 	for i := 0; i < act.nrCli; i++ {
 		wg.Add(1)
 		if err := act.runner.RunC(mctx, func(rctx context.Context) {
-			vcli, err := varlog.Open(act.clusterID, []string{act.mrAddr},
+			// FIXME(jun): Use good timeout rather than context.TODO()
+			vcli, err := varlog.Open(context.TODO(), act.clusterID, []string{act.mrAddr},
 				varlog.WithDenyTTL(5*time.Second),
 				varlog.WithOpenTimeout(10*time.Second),
 			)

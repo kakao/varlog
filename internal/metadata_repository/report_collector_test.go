@@ -36,8 +36,8 @@ func NewDummyMetadataRepository(reporterCliFac ReporterClientFactory) *dummyMeta
 	}
 }
 
-func (mr *dummyMetadataRepository) GetClient(sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
-	return mr.reporterCliFac.GetClient(sn)
+func (mr *dummyMetadataRepository) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+	return mr.reporterCliFac.GetClient(ctx, sn)
 }
 
 func (mr *dummyMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []*snpb.LogStreamUncommitReport) error {
@@ -848,7 +848,7 @@ func TestReporterClientReconnect(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			var err error
 
-			cli[i], err = executor.getClient()
+			cli[i], err = executor.getClient(context.TODO())
 			So(err, ShouldBeNil)
 		}
 
@@ -858,7 +858,7 @@ func TestReporterClientReconnect(t *testing.T) {
 			var err error
 
 			executor.closeClient(cli[0])
-			cli[0], err = executor.getClient()
+			cli[0], err = executor.getClient(context.TODO())
 			So(err, ShouldBeNil)
 			So(cli[0], ShouldNotEqual, cli[1])
 
@@ -874,7 +874,7 @@ func TestReporterClientReconnect(t *testing.T) {
 				_, err = cli[0].GetReport(context.TODO())
 				So(err, ShouldBeNil)
 
-				cli[1], err = executor.getClient()
+				cli[1], err = executor.getClient(context.TODO())
 				So(err, ShouldBeNil)
 				So(cli[0], ShouldEqual, cli[1])
 

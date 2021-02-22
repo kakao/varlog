@@ -5,16 +5,13 @@ import (
 	"io"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
-	"golang.org/x/sync/singleflight"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/util/runner"
-	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -44,10 +41,7 @@ type allowlistItem struct {
 // transientAllowlist provides allowlist and denylist of log streams. It can provide stale
 // information.
 type transientAllowlist struct {
-	allowlist sync.Map     // map[types.LogStreamID]allowlistItem
-	cache     atomic.Value // []types.LogStreamID
-	group     singleflight.Group
-	dirty     atomicutil.AtomicBool
+	allowlist sync.Map // map[types.LogStreamID]allowlistItem
 	denyTTL   time.Duration
 	runner    *runner.Runner
 	cancel    context.CancelFunc
@@ -91,7 +85,6 @@ func (adl *transientAllowlist) expireDenyTTL(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			changed := false
 			adl.allowlist.Range(func(logStreamID interface{}, aitem interface{}) bool {
 				item := aitem.(allowlistItem)
 				if !item.denied {
@@ -100,67 +93,39 @@ func (adl *transientAllowlist) expireDenyTTL(ctx context.Context) {
 				if time.Since(item.ts) >= adl.denyTTL {
 					item.denied = false
 					adl.allowlist.Store(logStreamID, item)
-					changed = true
 				}
 				return true
 			})
-			adl.dirty.Store(changed)
 		}
 	}
-}
-
-func (adl *transientAllowlist) pick() (types.LogStreamID, bool) {
-	cacheIf := adl.cache.Load()
-	if cacheIf == nil {
-		return 0, false
-	}
-
-	cache := cacheIf.([]types.LogStreamID)
-	l := len(cache)
-	if l > 0 {
-		idx := rand.Intn(l)
-		return cache[idx], true
-	}
-
-	return 0, false
-}
-
-func (adl *transientAllowlist) warmup() {
-	adl.group.Do("warmup", func() (interface{}, error) {
-		lenHint := 0
-		cacheIf := adl.cache.Load()
-		if cacheIf != nil {
-			lenHint = len(cacheIf.([]types.LogStreamID))
-		}
-		cache := make([]types.LogStreamID, 0, lenHint)
-		adl.allowlist.Range(func(logStreamID interface{}, aitem interface{}) bool {
-			item := aitem.(allowlistItem)
-			if !item.denied {
-				cache = append(cache, logStreamID.(types.LogStreamID))
-			}
-			return true
-		})
-		adl.cache.Store(cache)
-		adl.dirty.Store(false)
-		return nil, nil
-	})
 }
 
 func (adl *transientAllowlist) Pick() (types.LogStreamID, bool) {
-	if !adl.dirty.Load() {
-		return adl.pick()
+	var allowlist []types.LogStreamID
+	adl.allowlist.Range(func(lsidI interface{}, itemI interface{}) bool {
+		item := itemI.(allowlistItem)
+		if !item.denied {
+			allowlist = append(allowlist, lsidI.(types.LogStreamID))
+		}
+		return true
+	})
+	l := len(allowlist)
+	if l > 0 {
+		idx := rand.Intn(l)
+		return allowlist[idx], true
 	}
-	adl.warmup()
-	return adl.pick()
+	return 0, false
 }
 
 func (adl *transientAllowlist) Deny(logStreamID types.LogStreamID) {
 	if aitem, loaded := adl.allowlist.LoadAndDelete(logStreamID); loaded {
 		item := aitem.(allowlistItem)
+		if item.denied {
+			return
+		}
 		item.denied = true
 		item.ts = time.Now()
 		adl.allowlist.Store(logStreamID, item)
-		adl.dirty.Store(true)
 	}
 }
 
@@ -176,12 +141,9 @@ func (adl *transientAllowlist) Renew(metadata *varlogpb.MetadataDescriptor) {
 		recentLSIDs.Add(lsdesc.GetLogStreamID())
 	}
 
-	changed := false
-
 	adl.allowlist.Range(func(logStreamID interface{}, aitem interface{}) bool {
 		if !recentLSIDs.Contains(logStreamID.(types.LogStreamID)) {
 			adl.allowlist.Delete(logStreamID)
-			changed = changed || !aitem.(allowlistItem).denied
 		}
 		return true
 	})
@@ -189,11 +151,6 @@ func (adl *transientAllowlist) Renew(metadata *varlogpb.MetadataDescriptor) {
 	now := time.Now()
 	for logStreamID := range recentLSIDs {
 		aitem := allowlistItem{denied: false, ts: now}
-		_, loaded := adl.allowlist.LoadOrStore(logStreamID, aitem)
-		changed = changed || !loaded
-	}
-
-	if changed {
-		adl.warmup()
+		adl.allowlist.LoadOrStore(logStreamID, aitem)
 	}
 }

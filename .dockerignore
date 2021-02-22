@@ -1,5 +1,23 @@
 build/
+docs/
+log/
+raftdata/
+
+.DS_Store
+.vscode
+.idea
+.golangci.yml
+*.log
+tags
 
 # python
 __pycache__
 *.pyc
+
+# executables
+bin/sntool
+bin/vmc
+bin/vmr
+bin/vms
+bin/vsn
+bin/rpc_test_server

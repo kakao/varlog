@@ -2,8 +2,9 @@ package e2e
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"math/rand"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -19,13 +20,15 @@ func anySNFail(k8s *K8sVarlogCluster, primary bool) error {
 		return err
 	}
 
-	mrcli, err := mrc.NewMetadataRepositoryClient(mrseed)
+	connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer connCancel()
+	mrcli, err := mrc.NewMetadataRepositoryClient(connCtx, mrseed)
 	if err != nil {
 		return err
 	}
 	defer mrcli.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
 	defer cancel()
 	meta, err := mrcli.GetMetadata(ctx)
 	if err != nil {
@@ -44,7 +47,7 @@ func anySNFail(k8s *K8sVarlogCluster, primary bool) error {
 	} else {
 		snID = lsdesc.Replicas[len(lsdesc.GetReplicas())-1].GetStorageNodeID()
 	}
-	fmt.Printf("SNFAIL: snid=%d, lsid=%d\n", snID, lsdesc.GetLogStreamID())
+	log.Printf("SNFAIL: snid=%d, lsid=%d\n", snID, lsdesc.GetLogStreamID())
 	return k8s.StopSN(snID)
 }
 
@@ -62,19 +65,27 @@ func AnyPrimarySNFail(k8s *K8sVarlogCluster) func() error {
 
 func WaitSNFail(k8s *K8sVarlogCluster) func() error {
 	return func() error {
-		ok := testutil.CompareWaitN(200, func() bool {
-			n, err := k8s.NumSNRunning()
-			if err != nil {
-				return false
+		var (
+			err   error
+			n     int
+			tries int
+		)
+		ok := testutil.CompareWaitN(300, func() bool {
+			tries++
+			n, err = k8s.NumSNRunning()
+			ret := err == nil && n < k8s.NrSN
+			if !ret {
+				defer time.Sleep(100 * time.Millisecond)
 			}
-			return n < k8s.NrSN
+			return ret
 		})
-
 		if ok {
 			return nil
 		}
-
-		return errors.New("change check timeout")
+		if err == nil {
+			err = errors.New("change check timeout")
+		}
+		return errors.WithMessagef(err, "tries = %d, n = %d", tries, n)
 	}
 }
 
@@ -84,19 +95,27 @@ func RecoverSN(k8s *K8sVarlogCluster) func() error {
 
 func RecoverSNCheck(k8s *K8sVarlogCluster) func() error {
 	return func() error {
-		ok := testutil.CompareWaitN(100, func() bool {
-			n, err := k8s.NumSNRunning()
-			if err != nil {
-				return false
+		var (
+			err   error
+			n     int
+			tries int
+		)
+		ok := testutil.CompareWaitN(300, func() bool {
+			tries++
+			n, err = k8s.NumSNRunning()
+			ret := err == nil && n == k8s.NrSN
+			if !ret {
+				defer time.Sleep(100 * time.Millisecond)
 			}
-			return n == k8s.NrSN
+			return ret
 		})
-
 		if ok {
 			return nil
 		}
-
-		return errors.New("recover check timeout")
+		if err == nil {
+			err = errors.New("recover check timeout")
+		}
+		return errors.WithMessagef(err, "tries = %d, n = %d", tries, n)
 	}
 }
 
@@ -106,13 +125,15 @@ func mrFail(k8s *K8sVarlogCluster, leader bool) error {
 		return err
 	}
 
-	mcli, err := varlog.NewClusterManagerClient(vmsaddr)
+	connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer connCancel()
+	mcli, err := varlog.NewClusterManagerClient(connCtx, vmsaddr)
 	if err != nil {
 		return err
 	}
 	defer mcli.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
 	defer cancel()
 	members, err := mcli.GetMRMembers(ctx)
 	if err != nil {
@@ -146,19 +167,27 @@ func LeaderMRFail(k8s *K8sVarlogCluster) func() error {
 
 func WaitMRFail(k8s *K8sVarlogCluster) func() error {
 	return func() error {
-		ok := testutil.CompareWaitN(100, func() bool {
+		var (
+			err   error
+			n     int
+			tries int
+		)
+		ok := testutil.CompareWaitN(300, func() bool {
+			tries++
 			n, err := k8s.NumMRRunning()
-			if err != nil {
-				return false
+			ret := err == nil && n < k8s.NrMR
+			if !ret {
+				defer time.Sleep(100 * time.Millisecond)
 			}
-			return n < k8s.NrMR
+			return ret
 		})
-
 		if ok {
 			return nil
 		}
-
-		return errors.New("chage check timeout")
+		if err == nil {
+			err = errors.New("change check timeout")
+		}
+		return errors.WithMessagef(err, "tries = %d, n = %d", tries, n)
 	}
 }
 
@@ -168,19 +197,27 @@ func RecoverMR(k8s *K8sVarlogCluster) func() error {
 
 func RecoverMRCheck(k8s *K8sVarlogCluster) func() error {
 	return func() error {
-		ok := testutil.CompareWaitN(100, func() bool {
-			n, err := k8s.NumMRRunning()
-			if err != nil {
-				return false
+		var (
+			err   error
+			n     int
+			tries int
+		)
+		ok := testutil.CompareWaitN(300, func() bool {
+			tries++
+			n, err = k8s.NumMRRunning()
+			ret := err == nil && n == k8s.NrMR
+			if !ret {
+				defer time.Sleep(100 * time.Millisecond)
 			}
-			return n == k8s.NrMR
+			return ret
 		})
-
 		if ok {
 			return nil
 		}
-
-		return errors.New("recover check timeout")
+		if err == nil {
+			err = errors.New("recover check timeout")
+		}
+		return errors.WithMessagef(err, "tries = %d, n = %d", tries, n)
 	}
 }
 
@@ -191,14 +228,16 @@ func AddLogStream(k8s *K8sVarlogCluster) func() error {
 			return err
 		}
 
-		mcli, err := varlog.NewClusterManagerClient(vmsaddr)
+		connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer connCancel()
+		mcli, err := varlog.NewClusterManagerClient(connCtx, vmsaddr)
 		if err != nil {
 			return err
 		}
 		defer mcli.Close()
 
 		for i := 0; i < k8s.NrLS; i++ {
-			ctx, cancel := context.WithTimeout(context.Background(), k8s.rpcTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
 			_, err = mcli.AddLogStream(ctx, nil)
 			cancel()
 			if err != nil {

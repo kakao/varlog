@@ -2,6 +2,7 @@ package storagenode
 
 import (
 	"context"
+	"fmt"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
@@ -51,10 +52,20 @@ func (s *LogIOService) withTelemetry(ctx context.Context, spanName string, req i
 	s.tmStub.metrics().requests.Add(ctx, 1)
 	rsp, err = h(ctx, req)
 	if err == nil {
-		s.logger.Info(spanName)
+		var rspMsg fmt.Stringer
+		if rsp != nil {
+			rspMsg = rsp.(fmt.Stringer)
+		}
+		s.logger.Info(spanName,
+			zap.Stringer("request", req.(fmt.Stringer)),
+			zap.Stringer("response", rspMsg),
+		)
 	} else {
 		span.RecordError(err)
-		s.logger.Error(spanName, zap.Error(err))
+		s.logger.Error(spanName,
+			zap.Error(err),
+			zap.Stringer("request", req.(fmt.Stringer)),
+		)
 	}
 	s.tmStub.metrics().requests.Add(ctx, -1)
 	span.End()

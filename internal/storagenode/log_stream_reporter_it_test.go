@@ -1,6 +1,7 @@
 package storagenode
 
 import (
+	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -34,7 +35,7 @@ func TestLogStreamReporterClientLogStreamReporterService(t *testing.T) {
 		service := NewLogStreamReporterService(lsr, newNopTelmetryStub(), nil)
 
 		Convey("And a LogStreamReporterClient calls GetReport", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
-			lsr, err := NewLogStreamReporterClient(addr)
+			lsr, err := NewLogStreamReporterClient(context.TODO(), addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {
@@ -49,7 +50,7 @@ func TestLogStreamReporterClientLogStreamReporterService(t *testing.T) {
 		}))
 
 		Convey("And a LogStreamReporterClient calls Commit", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
-			lsr, err := NewLogStreamReporterClient(addr)
+			lsr, err := NewLogStreamReporterClient(context.TODO(), addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {

@@ -7,17 +7,29 @@ import (
 )
 
 const (
-	defaultOpenTimeout             = 10 * time.Second
+	defaultOpenTimeout = 10 * time.Second
+
+	defaultMRConnectorConnTimeout = 1 * time.Second
+	defaultMRConnectorCallTimeout = 1 * time.Second
+
 	defaultMetadataRefreshInterval = 1 * time.Minute
-	defaultDenyTTL                 = 10 * time.Minute
+	defaultMetadataRefreshTimeout  = 1 * time.Second
+
+	defaultDenyTTL = 10 * time.Minute
 )
 
 func defaultOptions() options {
 	return options{
-		openTimeout:             defaultOpenTimeout,
+		openTimeout: defaultOpenTimeout,
+
+		mrConnectorConnTimeout: defaultMRConnectorConnTimeout,
+		mrConnectorCallTimeout: defaultMRConnectorCallTimeout,
+
 		metadataRefreshInterval: defaultMetadataRefreshInterval,
-		denyTTL:                 defaultDenyTTL,
-		logger:                  zap.NewNop(),
+		metadataRefreshTimeout:  defaultMetadataRefreshTimeout,
+
+		denyTTL: defaultDenyTTL,
+		logger:  zap.NewNop(),
 	}
 }
 
@@ -25,8 +37,14 @@ type options struct {
 	// openTimeout is the timeout for opening a log.
 	openTimeout time.Duration
 
+	// mrconnector
+	mrConnectorConnTimeout time.Duration
+	mrConnectorCallTimeout time.Duration
+
+	// metadata refresher
 	// metadataRefreshInterval is the period to refresh metadata.
 	metadataRefreshInterval time.Duration
+	metadataRefreshTimeout  time.Duration
 
 	// denyTTL is duration until the log stream in denylist is expired and goes back to
 	// allowlist.
@@ -57,9 +75,27 @@ func WithOpenTimeout(timeout time.Duration) Option {
 	})
 }
 
+func WithMRConnectorConnTimeout(timeout time.Duration) Option {
+	return newOption(func(opts *options) {
+		opts.mrConnectorConnTimeout = timeout
+	})
+}
+
+func WithMRConnectorCallTimeout(timeout time.Duration) Option {
+	return newOption(func(opts *options) {
+		opts.mrConnectorCallTimeout = timeout
+	})
+}
+
 func WithMetadataRefreshInterval(interval time.Duration) Option {
 	return newOption(func(opts *options) {
 		opts.metadataRefreshInterval = interval
+	})
+}
+
+func WithMetadataRefreshTimeout(timeout time.Duration) Option {
+	return newOption(func(opts *options) {
+		opts.metadataRefreshTimeout = timeout
 	})
 }
 

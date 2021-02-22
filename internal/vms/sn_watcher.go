@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
@@ -16,8 +17,6 @@ type StorageNodeWatcher interface {
 	Run() error
 	Close() error
 }
-
-const WATCHER_RPC_TIMEOUT = 150 * time.Millisecond
 
 var _ StorageNodeWatcher = (*snWatcher)(nil)
 
@@ -93,7 +92,7 @@ Loop:
 }
 
 func (w *snWatcher) heartbeat(c context.Context) {
-	ctx, cancel := context.WithTimeout(c, WATCHER_RPC_TIMEOUT)
+	ctx, cancel := context.WithTimeout(c, w.RPCTimeout)
 	defer cancel()
 	meta, err := w.cmView.ClusterMetadata(ctx)
 	if err != nil {
@@ -103,22 +102,19 @@ func (w *snWatcher) heartbeat(c context.Context) {
 
 	w.reload(meta.GetStorageNodes())
 
-	//TODO:: make it parallel
-	for _, s := range meta.GetStorageNodes() {
-		ctx, cancel := context.WithTimeout(c, WATCHER_RPC_TIMEOUT)
-		defer cancel()
-
-		// NOTE: Missing a storage node triggers refreshes of storage node manager, which
-		// can be a somewhat slow job.
-		_, err := w.snMgr.GetMetadata(ctx, s.StorageNodeID)
-		if err != nil {
-			continue
-		}
-
-		w.set(s.StorageNodeID)
+	grp, gCtx := errgroup.WithContext(ctx)
+	for idx := range meta.GetStorageNodes() {
+		snd := meta.GetStorageNodes()[idx]
+		grp.Go(func() error {
+			storageNodeID := snd.GetStorageNodeID()
+			if _, err := w.snMgr.GetMetadata(gCtx, storageNodeID); err == nil {
+				w.set(storageNodeID)
+			}
+			return nil
+		})
 	}
-
-	w.handleHeartbeat(c)
+	grp.Wait()
+	w.handleHeartbeat(ctx)
 }
 
 func (w *snWatcher) set(snID types.StorageNodeID) {
@@ -161,23 +157,24 @@ func (w *snWatcher) handleHeartbeat(ctx context.Context) {
 }
 
 func (w *snWatcher) report(c context.Context) {
-	ctx, cancel := context.WithTimeout(c, WATCHER_RPC_TIMEOUT)
+	ctx, cancel := context.WithTimeout(c, w.RPCTimeout)
 	defer cancel()
+
 	meta, err := w.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		w.logger.Warn("snWatcher: get ClusterMetadata fail", zap.String("err", err.Error()))
 		return
 	}
 
-	//TODO:: make it parallel
-	for _, s := range meta.GetStorageNodes() {
-		ctx, cancel := context.WithTimeout(c, WATCHER_RPC_TIMEOUT)
-		defer cancel()
-		sn, err := w.snMgr.GetMetadata(ctx, s.StorageNodeID)
-		if err != nil {
-			continue
-		}
-
-		w.snHandler.HandleReport(c, sn)
+	grp, gCtx := errgroup.WithContext(ctx)
+	for idx := range meta.GetStorageNodes() {
+		snd := meta.GetStorageNodes()[idx]
+		grp.Go(func() error {
+			if snmd, err := w.snMgr.GetMetadata(gCtx, snd.GetStorageNodeID()); err == nil {
+				w.snHandler.HandleReport(gCtx, snmd)
+			}
+			return nil
+		})
 	}
+	grp.Wait()
 }

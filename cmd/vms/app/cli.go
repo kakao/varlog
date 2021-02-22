@@ -47,6 +47,7 @@ func initStartCommand(options *vms.Options) *cli.Command {
 				}
 			}
 			options.MetadataRepositoryAddresses = parsedMRAddrs
+
 			return Main(options)
 		},
 	}
@@ -60,8 +61,6 @@ func initStartCommand(options *vms.Options) *cli.Command {
 			Destination: &options.Verbose,
 		},
 	}
-	startCmd.Flags = append(startCmd.Flags, initRPCFlags(&options.RPCOptions)...)
-
 	startCmd.Flags = append(startCmd.Flags,
 		&cli.UintFlag{
 			Name:    "cluster-id",
@@ -69,6 +68,14 @@ func initStartCommand(options *vms.Options) *cli.Command {
 			Value:   uint(vms.DefaultClusterID),
 			Usage:   "cluster id",
 			EnvVars: []string{"CLUSTER_ID"},
+		},
+		&cli.StringFlag{
+			Name:        "listen-address",
+			Aliases:     []string{"rpc-bind-address"},
+			Value:       vms.DefaultListenAddress,
+			Usage:       "RPC listemn address",
+			EnvVars:     []string{"LISTEN_ADDRESS", "RPC_BIND_ADDRESS"},
+			Destination: &options.ListenAddress,
 		},
 		&cli.UintFlag{
 			Name:        "replication-factor",
@@ -101,20 +108,31 @@ func initStartCommand(options *vms.Options) *cli.Command {
 			EnvVars:     []string{"INIT_MR_CONN_RETRY_BACKOFF"},
 			Destination: &options.InitialMRConnRetryBackoff,
 		},
+		&cli.DurationFlag{
+			Name:        "sn-watcher-rpc-timeout",
+			Aliases:     []string{},
+			Value:       vms.DefaultWatcherRPCTimeout,
+			Usage:       "sn watcher rpc timeout",
+			EnvVars:     []string{"SN_WATCHER_RPC_TIMEOUT"},
+			Destination: &options.WatcherOptions.RPCTimeout,
+		},
+		&cli.DurationFlag{
+			Name:        "mr-conn-timeout",
+			Aliases:     []string{},
+			Value:       vms.DefaultMRConnTimeout,
+			Usage:       "mr connection timeout",
+			EnvVars:     []string{"MR_CONN_TIMEOUT"},
+			Destination: &options.WatcherOptions.RPCTimeout,
+		},
+		&cli.DurationFlag{
+			Name:        "mr-call-timeout",
+			Aliases:     []string{},
+			Value:       vms.DefaultMRCallTimeout,
+			Usage:       "mr call timeout",
+			EnvVars:     []string{"MR_CALL_TIMEOUT"},
+			Destination: &options.WatcherOptions.RPCTimeout,
+		},
 	)
 
 	return startCmd
-}
-
-func initRPCFlags(options *vms.RPCOptions) []cli.Flag {
-	return []cli.Flag{
-		&cli.StringFlag{
-			Name:        "rpc-bind-address",
-			Aliases:     []string{},
-			Value:       vms.DefaultRPCBindAddress,
-			Usage:       "RPC bind address",
-			EnvVars:     []string{"RPC_BIND_ADDRESS"},
-			Destination: &options.RPCBindAddress,
-		},
-	}
 }

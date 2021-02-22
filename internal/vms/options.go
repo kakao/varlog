@@ -9,12 +9,15 @@ import (
 )
 
 const (
-	DefaultRPCBindAddress = "127.0.0.1:9090"
+	DefaultListenAddress     = "127.0.0.1:9090"
+	DefaultWatcherRPCTimeout = 3 * time.Second
 
 	DefaultClusterID                    = types.ClusterID(1)
 	DefaultReplicationFactor            = 1
 	DefaultInitialMRConnectRetryCount   = -1
 	DefaultInitialMRConnectRetryBackoff = 100 * time.Millisecond
+	DefaultMRConnTimeout                = 1 * time.Second
+	DefaultMRCallTimeout                = 3 * time.Second
 
 	DefaultTick             = 100 * time.Millisecond
 	DefaultReportInterval   = 10
@@ -23,10 +26,10 @@ const (
 )
 
 type Options struct {
-	RPCOptions
 	MRManagerOptions
 	WatcherOptions
 
+	ListenAddress     string
 	ClusterID         types.ClusterID
 	ReplicationFactor uint
 
@@ -34,14 +37,12 @@ type Options struct {
 	Logger  *zap.Logger
 }
 
-type RPCOptions struct {
-	RPCBindAddress string
-}
-
 type MRManagerOptions struct {
 	MetadataRepositoryAddresses []string
 	InitialMRConnRetryCount     int
 	InitialMRConnRetryBackoff   time.Duration
+	ConnTimeout                 time.Duration
+	CallTimeout                 time.Duration
 }
 
 // ReportInterval    : tick time * ReportInterval
@@ -52,21 +53,26 @@ type WatcherOptions struct {
 	ReportInterval   int
 	HeartbeatTimeout int
 	GCTimeout        time.Duration
+	// timeout for heartbeat and report
+	RPCTimeout time.Duration
 }
 
 func DefaultOptions() Options {
 	return Options{
-		RPCOptions: RPCOptions{RPCBindAddress: DefaultRPCBindAddress},
 		WatcherOptions: WatcherOptions{
 			Tick:             DefaultTick,
 			ReportInterval:   DefaultReportInterval,
 			HeartbeatTimeout: DefaultHeartbeatTimeout,
 			GCTimeout:        DefaultGCTimeout,
+			RPCTimeout:       DefaultWatcherRPCTimeout,
 		},
 		MRManagerOptions: MRManagerOptions{
 			InitialMRConnRetryCount:   DefaultInitialMRConnectRetryCount,
 			InitialMRConnRetryBackoff: DefaultInitialMRConnectRetryBackoff,
+			ConnTimeout:               DefaultMRConnTimeout,
+			CallTimeout:               DefaultMRCallTimeout,
 		},
+		ListenAddress:     DefaultListenAddress,
 		ClusterID:         DefaultClusterID,
 		ReplicationFactor: DefaultReplicationFactor,
 		Logger:            zap.NewNop(),

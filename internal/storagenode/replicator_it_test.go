@@ -43,7 +43,7 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 		rs := NewReplicatorService(types.StorageNodeID(1), lseGetter, nil)
 
 		Convey("And a ReplicatorClient tries to replicate data to it", conveyutil.WithServiceServer(rs, func(server *grpc.Server, addr string) {
-			rc, err := NewReplicatorClient(storageNodeID, logStreamID, addr, zap.NewNop())
+			rc, err := NewReplicatorClient(context.TODO(), storageNodeID, logStreamID, addr, zap.NewNop())
 			So(err, ShouldBeNil)
 
 			ctx, cancel := context.WithCancel(context.TODO())

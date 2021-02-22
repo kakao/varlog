@@ -3,6 +3,7 @@ package storagenode
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"go.opentelemetry.io/otel/codes"
@@ -68,9 +69,16 @@ func (s *managementService) withTelemetry(ctx context.Context, spanName string, 
 out:
 	if err == nil {
 		span.SetStatus(codes.Ok, "")
+		s.logger.Info(spanName,
+			zap.Stringer("request", req.(fmt.Stringer)),
+			zap.Stringer("response", rsp.(fmt.Stringer)),
+		)
 	} else {
 		span.RecordError(err)
-		s.logger.Error(spanName, zap.Error(err))
+		s.logger.Error(spanName,
+			zap.Error(err),
+			zap.Stringer("request", req.(fmt.Stringer)),
+		)
 	}
 	span.End()
 	return rsp, err

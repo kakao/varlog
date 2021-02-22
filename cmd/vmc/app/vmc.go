@@ -53,7 +53,10 @@ func (app *VMCApp) withExecutionContext(f CommandExecutor) {
 }
 
 func (app *VMCApp) execute(f CommandExecutor) error {
-	cli, err := varlog.NewClusterManagerClient(app.options.VMSAddress)
+	ctx, cancel := context.WithTimeout(context.Background(), app.options.Timeout)
+	defer cancel()
+
+	cli, err := varlog.NewClusterManagerClient(ctx, app.options.VMSAddress)
 	if err != nil {
 		app.logger.Error("could not create client", zap.Error(err))
 		return err
@@ -64,9 +67,6 @@ func (app *VMCApp) execute(f CommandExecutor) error {
 		}
 	}()
 	app.logger.Debug("connected to VMS", zap.String("vms", app.options.VMSAddress))
-
-	ctx, cancel := context.WithTimeout(context.Background(), app.options.Timeout)
-	defer cancel()
 
 	msg, err := f(ctx, cli)
 	if err != nil {

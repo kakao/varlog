@@ -2,6 +2,7 @@ package varlog
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -38,7 +39,7 @@ func (v *varlog) append(ctx context.Context, logStreamID types.LogStreamID, data
 			continue
 		}
 		primarySNID = replicas[0].GetStorageNodeID()
-		primaryLogCL, currErr = v.logCLManager.GetOrConnect(primarySNID, replicas[0].GetAddress())
+		primaryLogCL, currErr = v.logCLManager.GetOrConnect(ctx, primarySNID, replicas[0].GetAddress())
 		if currErr != nil {
 			err = multierr.Append(err, currErr)
 			v.allowlist.Deny(logStreamID)
@@ -51,7 +52,11 @@ func (v *varlog) append(ctx context.Context, logStreamID types.LogStreamID, data
 		}
 		glsn, currErr = primaryLogCL.Append(ctx, logStreamID, data, snList...)
 		if currErr != nil {
-			err = multierr.Append(err, errors.Wrapf(currErr, "varlog: append (snid=%d, lsid=%d)", primarySNID, logStreamID))
+			replicasInfo := make([]string, 0, len(replicas))
+			for _, replica := range replicas {
+				replicasInfo = append(replicasInfo, replica.String())
+			}
+			err = multierr.Append(err, errors.Wrapf(currErr, "varlog: append (snid=%d, lsid=%d, replicas=%s)", primarySNID, logStreamID, strings.Join(replicasInfo, ", ")))
 			// FIXME (jun): It affects other goroutines that are doing I/O.
 			// Close a client only when err is related to the connection.
 			primaryLogCL.Close()
@@ -69,7 +74,7 @@ func (v *varlog) read(ctx context.Context, logStreamID types.LogStreamID, glsn t
 		return types.InvalidLogEntry, errNoLogStream
 	}
 	primarySNID := replicas[0].GetStorageNodeID()
-	primaryLogCL, err := v.logCLManager.GetOrConnect(primarySNID, replicas[0].GetAddress())
+	primaryLogCL, err := v.logCLManager.GetOrConnect(ctx, primarySNID, replicas[0].GetAddress())
 	if err != nil {
 		return types.InvalidLogEntry, errNoLogIOClient
 	}

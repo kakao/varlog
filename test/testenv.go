@@ -257,7 +257,7 @@ func (clus *VarlogCluster) Close() error {
 
 func (clus *VarlogCluster) HealthCheck() bool {
 	for _, endpoint := range clus.MRRPCEndpoints {
-		conn, err := rpc.NewBlockingConn(endpoint)
+		conn, err := rpc.NewConn(context.TODO(), endpoint)
 		if err != nil {
 			return false
 		}
@@ -652,7 +652,7 @@ func (clus *VarlogCluster) NewLogIOClient(lsID types.LogStreamID) (logc.LogIOCli
 		return nil, err
 	}
 
-	return logc.NewLogIOClient(snMeta.StorageNode.Address)
+	return logc.NewLogIOClient(context.TODO(), snMeta.StorageNode.Address)
 }
 
 func (clus *VarlogCluster) RunClusterManager(mrAddrs []string, opts *vms.Options) (vms.ClusterManager, error) {
@@ -666,7 +666,7 @@ func (clus *VarlogCluster) RunClusterManager(mrAddrs []string, opts *vms.Options
 		opts.Logger = clus.logger
 	}
 
-	opts.RPCBindAddress = fmt.Sprintf("127.0.0.1:%d", clus.portLease.Base()+varlogClusterManagerPortBase)
+	opts.ListenAddress = fmt.Sprintf("127.0.0.1:%d", clus.portLease.Base()+varlogClusterManagerPortBase)
 	opts.ClusterID = clus.ClusterID
 	opts.MetadataRepositoryAddresses = mrAddrs
 	opts.ReplicationFactor = uint(clus.VarlogClusterOptions.NrRep)
@@ -684,7 +684,7 @@ func (clus *VarlogCluster) RunClusterManager(mrAddrs []string, opts *vms.Options
 
 func (clus *VarlogCluster) NewClusterManagerClient() (varlog.ClusterManagerClient, error) {
 	addr := clus.CM.Address()
-	cmcli, err := varlog.NewClusterManagerClient(addr)
+	cmcli, err := varlog.NewClusterManagerClient(context.TODO(), addr)
 	if err != nil {
 		return nil, err
 	}

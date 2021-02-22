@@ -15,30 +15,30 @@ import (
 	mrpb "github.com/kakao/varlog/proto/mrpb"
 )
 
-// MockManagementClient is a mock of ManagementClient interface
+// MockManagementClient is a mock of ManagementClient interface.
 type MockManagementClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockManagementClientMockRecorder
 }
 
-// MockManagementClientMockRecorder is the mock recorder for MockManagementClient
+// MockManagementClientMockRecorder is the mock recorder for MockManagementClient.
 type MockManagementClientMockRecorder struct {
 	mock *MockManagementClient
 }
 
-// NewMockManagementClient creates a new mock instance
+// NewMockManagementClient creates a new mock instance.
 func NewMockManagementClient(ctrl *gomock.Controller) *MockManagementClient {
 	mock := &MockManagementClient{ctrl: ctrl}
 	mock.recorder = &MockManagementClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockManagementClient) EXPECT() *MockManagementClientMockRecorder {
 	return m.recorder
 }
 
-// AddPeer mocks base method
+// AddPeer mocks base method.
 func (m *MockManagementClient) AddPeer(arg0 context.Context, arg1 *mrpb.AddPeerRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -51,14 +51,14 @@ func (m *MockManagementClient) AddPeer(arg0 context.Context, arg1 *mrpb.AddPeerR
 	return ret0, ret1
 }
 
-// AddPeer indicates an expected call of AddPeer
+// AddPeer indicates an expected call of AddPeer.
 func (mr *MockManagementClientMockRecorder) AddPeer(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPeer", reflect.TypeOf((*MockManagementClient)(nil).AddPeer), varargs...)
 }
 
-// GetClusterInfo mocks base method
+// GetClusterInfo mocks base method.
 func (m *MockManagementClient) GetClusterInfo(arg0 context.Context, arg1 *mrpb.GetClusterInfoRequest, arg2 ...grpc.CallOption) (*mrpb.GetClusterInfoResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -71,14 +71,14 @@ func (m *MockManagementClient) GetClusterInfo(arg0 context.Context, arg1 *mrpb.G
 	return ret0, ret1
 }
 
-// GetClusterInfo indicates an expected call of GetClusterInfo
+// GetClusterInfo indicates an expected call of GetClusterInfo.
 func (mr *MockManagementClientMockRecorder) GetClusterInfo(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockManagementClient)(nil).GetClusterInfo), varargs...)
 }
 
-// RemovePeer mocks base method
+// RemovePeer mocks base method.
 func (m *MockManagementClient) RemovePeer(arg0 context.Context, arg1 *mrpb.RemovePeerRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -91,37 +91,37 @@ func (m *MockManagementClient) RemovePeer(arg0 context.Context, arg1 *mrpb.Remov
 	return ret0, ret1
 }
 
-// RemovePeer indicates an expected call of RemovePeer
+// RemovePeer indicates an expected call of RemovePeer.
 func (mr *MockManagementClientMockRecorder) RemovePeer(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePeer", reflect.TypeOf((*MockManagementClient)(nil).RemovePeer), varargs...)
 }
 
-// MockManagementServer is a mock of ManagementServer interface
+// MockManagementServer is a mock of ManagementServer interface.
 type MockManagementServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockManagementServerMockRecorder
 }
 
-// MockManagementServerMockRecorder is the mock recorder for MockManagementServer
+// MockManagementServerMockRecorder is the mock recorder for MockManagementServer.
 type MockManagementServerMockRecorder struct {
 	mock *MockManagementServer
 }
 
-// NewMockManagementServer creates a new mock instance
+// NewMockManagementServer creates a new mock instance.
 func NewMockManagementServer(ctrl *gomock.Controller) *MockManagementServer {
 	mock := &MockManagementServer{ctrl: ctrl}
 	mock.recorder = &MockManagementServerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockManagementServer) EXPECT() *MockManagementServerMockRecorder {
 	return m.recorder
 }
 
-// AddPeer mocks base method
+// AddPeer mocks base method.
 func (m *MockManagementServer) AddPeer(arg0 context.Context, arg1 *mrpb.AddPeerRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddPeer", arg0, arg1)
@@ -130,13 +130,13 @@ func (m *MockManagementServer) AddPeer(arg0 context.Context, arg1 *mrpb.AddPeerR
 	return ret0, ret1
 }
 
-// AddPeer indicates an expected call of AddPeer
+// AddPeer indicates an expected call of AddPeer.
 func (mr *MockManagementServerMockRecorder) AddPeer(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPeer", reflect.TypeOf((*MockManagementServer)(nil).AddPeer), arg0, arg1)
 }
 
-// GetClusterInfo mocks base method
+// GetClusterInfo mocks base method.
 func (m *MockManagementServer) GetClusterInfo(arg0 context.Context, arg1 *mrpb.GetClusterInfoRequest) (*mrpb.GetClusterInfoResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClusterInfo", arg0, arg1)
@@ -145,13 +145,13 @@ func (m *MockManagementServer) GetClusterInfo(arg0 context.Context, arg1 *mrpb.G
 	return ret0, ret1
 }
 
-// GetClusterInfo indicates an expected call of GetClusterInfo
+// GetClusterInfo indicates an expected call of GetClusterInfo.
 func (mr *MockManagementServerMockRecorder) GetClusterInfo(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockManagementServer)(nil).GetClusterInfo), arg0, arg1)
 }
 
-// RemovePeer mocks base method
+// RemovePeer mocks base method.
 func (m *MockManagementServer) RemovePeer(arg0 context.Context, arg1 *mrpb.RemovePeerRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemovePeer", arg0, arg1)
@@ -160,36 +160,36 @@ func (m *MockManagementServer) RemovePeer(arg0 context.Context, arg1 *mrpb.Remov
 	return ret0, ret1
 }
 
-// RemovePeer indicates an expected call of RemovePeer
+// RemovePeer indicates an expected call of RemovePeer.
 func (mr *MockManagementServerMockRecorder) RemovePeer(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePeer", reflect.TypeOf((*MockManagementServer)(nil).RemovePeer), arg0, arg1)
 }
 
-// MockMetadataRepositoryServiceClient is a mock of MetadataRepositoryServiceClient interface
+// MockMetadataRepositoryServiceClient is a mock of MetadataRepositoryServiceClient interface.
 type MockMetadataRepositoryServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockMetadataRepositoryServiceClientMockRecorder
 }
 
-// MockMetadataRepositoryServiceClientMockRecorder is the mock recorder for MockMetadataRepositoryServiceClient
+// MockMetadataRepositoryServiceClientMockRecorder is the mock recorder for MockMetadataRepositoryServiceClient.
 type MockMetadataRepositoryServiceClientMockRecorder struct {
 	mock *MockMetadataRepositoryServiceClient
 }
 
-// NewMockMetadataRepositoryServiceClient creates a new mock instance
+// NewMockMetadataRepositoryServiceClient creates a new mock instance.
 func NewMockMetadataRepositoryServiceClient(ctrl *gomock.Controller) *MockMetadataRepositoryServiceClient {
 	mock := &MockMetadataRepositoryServiceClient{ctrl: ctrl}
 	mock.recorder = &MockMetadataRepositoryServiceClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockMetadataRepositoryServiceClient) EXPECT() *MockMetadataRepositoryServiceClientMockRecorder {
 	return m.recorder
 }
 
-// GetMetadata mocks base method
+// GetMetadata mocks base method.
 func (m *MockMetadataRepositoryServiceClient) GetMetadata(arg0 context.Context, arg1 *mrpb.GetMetadataRequest, arg2 ...grpc.CallOption) (*mrpb.GetMetadataResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -202,14 +202,14 @@ func (m *MockMetadataRepositoryServiceClient) GetMetadata(arg0 context.Context, 
 	return ret0, ret1
 }
 
-// GetMetadata indicates an expected call of GetMetadata
+// GetMetadata indicates an expected call of GetMetadata.
 func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetMetadata(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).GetMetadata), varargs...)
 }
 
-// RegisterLogStream mocks base method
+// RegisterLogStream mocks base method.
 func (m *MockMetadataRepositoryServiceClient) RegisterLogStream(arg0 context.Context, arg1 *mrpb.LogStreamRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -222,14 +222,14 @@ func (m *MockMetadataRepositoryServiceClient) RegisterLogStream(arg0 context.Con
 	return ret0, ret1
 }
 
-// RegisterLogStream indicates an expected call of RegisterLogStream
+// RegisterLogStream indicates an expected call of RegisterLogStream.
 func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterLogStream(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterLogStream", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).RegisterLogStream), varargs...)
 }
 
-// RegisterStorageNode mocks base method
+// RegisterStorageNode mocks base method.
 func (m *MockMetadataRepositoryServiceClient) RegisterStorageNode(arg0 context.Context, arg1 *mrpb.StorageNodeRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -242,14 +242,14 @@ func (m *MockMetadataRepositoryServiceClient) RegisterStorageNode(arg0 context.C
 	return ret0, ret1
 }
 
-// RegisterStorageNode indicates an expected call of RegisterStorageNode
+// RegisterStorageNode indicates an expected call of RegisterStorageNode.
 func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterStorageNode(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).RegisterStorageNode), varargs...)
 }
 
-// Seal mocks base method
+// Seal mocks base method.
 func (m *MockMetadataRepositoryServiceClient) Seal(arg0 context.Context, arg1 *mrpb.SealRequest, arg2 ...grpc.CallOption) (*mrpb.SealResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -262,14 +262,14 @@ func (m *MockMetadataRepositoryServiceClient) Seal(arg0 context.Context, arg1 *m
 	return ret0, ret1
 }
 
-// Seal indicates an expected call of Seal
+// Seal indicates an expected call of Seal.
 func (mr *MockMetadataRepositoryServiceClientMockRecorder) Seal(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).Seal), varargs...)
 }
 
-// UnregisterLogStream mocks base method
+// UnregisterLogStream mocks base method.
 func (m *MockMetadataRepositoryServiceClient) UnregisterLogStream(arg0 context.Context, arg1 *mrpb.LogStreamRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -282,14 +282,14 @@ func (m *MockMetadataRepositoryServiceClient) UnregisterLogStream(arg0 context.C
 	return ret0, ret1
 }
 
-// UnregisterLogStream indicates an expected call of UnregisterLogStream
+// UnregisterLogStream indicates an expected call of UnregisterLogStream.
 func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterLogStream(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterLogStream", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).UnregisterLogStream), varargs...)
 }
 
-// UnregisterStorageNode mocks base method
+// UnregisterStorageNode mocks base method.
 func (m *MockMetadataRepositoryServiceClient) UnregisterStorageNode(arg0 context.Context, arg1 *mrpb.StorageNodeRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -302,14 +302,14 @@ func (m *MockMetadataRepositoryServiceClient) UnregisterStorageNode(arg0 context
 	return ret0, ret1
 }
 
-// UnregisterStorageNode indicates an expected call of UnregisterStorageNode
+// UnregisterStorageNode indicates an expected call of UnregisterStorageNode.
 func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterStorageNode(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).UnregisterStorageNode), varargs...)
 }
 
-// Unseal mocks base method
+// Unseal mocks base method.
 func (m *MockMetadataRepositoryServiceClient) Unseal(arg0 context.Context, arg1 *mrpb.UnsealRequest, arg2 ...grpc.CallOption) (*mrpb.UnsealResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -322,14 +322,14 @@ func (m *MockMetadataRepositoryServiceClient) Unseal(arg0 context.Context, arg1 
 	return ret0, ret1
 }
 
-// Unseal indicates an expected call of Unseal
+// Unseal indicates an expected call of Unseal.
 func (mr *MockMetadataRepositoryServiceClientMockRecorder) Unseal(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).Unseal), varargs...)
 }
 
-// UpdateLogStream mocks base method
+// UpdateLogStream mocks base method.
 func (m *MockMetadataRepositoryServiceClient) UpdateLogStream(arg0 context.Context, arg1 *mrpb.LogStreamRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
@@ -342,37 +342,37 @@ func (m *MockMetadataRepositoryServiceClient) UpdateLogStream(arg0 context.Conte
 	return ret0, ret1
 }
 
-// UpdateLogStream indicates an expected call of UpdateLogStream
+// UpdateLogStream indicates an expected call of UpdateLogStream.
 func (mr *MockMetadataRepositoryServiceClientMockRecorder) UpdateLogStream(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLogStream", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).UpdateLogStream), varargs...)
 }
 
-// MockMetadataRepositoryServiceServer is a mock of MetadataRepositoryServiceServer interface
+// MockMetadataRepositoryServiceServer is a mock of MetadataRepositoryServiceServer interface.
 type MockMetadataRepositoryServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockMetadataRepositoryServiceServerMockRecorder
 }
 
-// MockMetadataRepositoryServiceServerMockRecorder is the mock recorder for MockMetadataRepositoryServiceServer
+// MockMetadataRepositoryServiceServerMockRecorder is the mock recorder for MockMetadataRepositoryServiceServer.
 type MockMetadataRepositoryServiceServerMockRecorder struct {
 	mock *MockMetadataRepositoryServiceServer
 }
 
-// NewMockMetadataRepositoryServiceServer creates a new mock instance
+// NewMockMetadataRepositoryServiceServer creates a new mock instance.
 func NewMockMetadataRepositoryServiceServer(ctrl *gomock.Controller) *MockMetadataRepositoryServiceServer {
 	mock := &MockMetadataRepositoryServiceServer{ctrl: ctrl}
 	mock.recorder = &MockMetadataRepositoryServiceServerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockMetadataRepositoryServiceServer) EXPECT() *MockMetadataRepositoryServiceServerMockRecorder {
 	return m.recorder
 }
 
-// GetMetadata mocks base method
+// GetMetadata mocks base method.
 func (m *MockMetadataRepositoryServiceServer) GetMetadata(arg0 context.Context, arg1 *mrpb.GetMetadataRequest) (*mrpb.GetMetadataResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadata", arg0, arg1)
@@ -381,13 +381,13 @@ func (m *MockMetadataRepositoryServiceServer) GetMetadata(arg0 context.Context, 
 	return ret0, ret1
 }
 
-// GetMetadata indicates an expected call of GetMetadata
+// GetMetadata indicates an expected call of GetMetadata.
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) GetMetadata(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).GetMetadata), arg0, arg1)
 }
 
-// RegisterLogStream mocks base method
+// RegisterLogStream mocks base method.
 func (m *MockMetadataRepositoryServiceServer) RegisterLogStream(arg0 context.Context, arg1 *mrpb.LogStreamRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RegisterLogStream", arg0, arg1)
@@ -396,13 +396,13 @@ func (m *MockMetadataRepositoryServiceServer) RegisterLogStream(arg0 context.Con
 	return ret0, ret1
 }
 
-// RegisterLogStream indicates an expected call of RegisterLogStream
+// RegisterLogStream indicates an expected call of RegisterLogStream.
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) RegisterLogStream(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterLogStream", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).RegisterLogStream), arg0, arg1)
 }
 
-// RegisterStorageNode mocks base method
+// RegisterStorageNode mocks base method.
 func (m *MockMetadataRepositoryServiceServer) RegisterStorageNode(arg0 context.Context, arg1 *mrpb.StorageNodeRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RegisterStorageNode", arg0, arg1)
@@ -411,13 +411,13 @@ func (m *MockMetadataRepositoryServiceServer) RegisterStorageNode(arg0 context.C
 	return ret0, ret1
 }
 
-// RegisterStorageNode indicates an expected call of RegisterStorageNode
+// RegisterStorageNode indicates an expected call of RegisterStorageNode.
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) RegisterStorageNode(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).RegisterStorageNode), arg0, arg1)
 }
 
-// Seal mocks base method
+// Seal mocks base method.
 func (m *MockMetadataRepositoryServiceServer) Seal(arg0 context.Context, arg1 *mrpb.SealRequest) (*mrpb.SealResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seal", arg0, arg1)
@@ -426,13 +426,13 @@ func (m *MockMetadataRepositoryServiceServer) Seal(arg0 context.Context, arg1 *m
 	return ret0, ret1
 }
 
-// Seal indicates an expected call of Seal
+// Seal indicates an expected call of Seal.
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) Seal(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).Seal), arg0, arg1)
 }
 
-// UnregisterLogStream mocks base method
+// UnregisterLogStream mocks base method.
 func (m *MockMetadataRepositoryServiceServer) UnregisterLogStream(arg0 context.Context, arg1 *mrpb.LogStreamRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UnregisterLogStream", arg0, arg1)
@@ -441,13 +441,13 @@ func (m *MockMetadataRepositoryServiceServer) UnregisterLogStream(arg0 context.C
 	return ret0, ret1
 }
 
-// UnregisterLogStream indicates an expected call of UnregisterLogStream
+// UnregisterLogStream indicates an expected call of UnregisterLogStream.
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) UnregisterLogStream(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterLogStream", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).UnregisterLogStream), arg0, arg1)
 }
 
-// UnregisterStorageNode mocks base method
+// UnregisterStorageNode mocks base method.
 func (m *MockMetadataRepositoryServiceServer) UnregisterStorageNode(arg0 context.Context, arg1 *mrpb.StorageNodeRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UnregisterStorageNode", arg0, arg1)
@@ -456,13 +456,13 @@ func (m *MockMetadataRepositoryServiceServer) UnregisterStorageNode(arg0 context
 	return ret0, ret1
 }
 
-// UnregisterStorageNode indicates an expected call of UnregisterStorageNode
+// UnregisterStorageNode indicates an expected call of UnregisterStorageNode.
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) UnregisterStorageNode(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).UnregisterStorageNode), arg0, arg1)
 }
 
-// Unseal mocks base method
+// Unseal mocks base method.
 func (m *MockMetadataRepositoryServiceServer) Unseal(arg0 context.Context, arg1 *mrpb.UnsealRequest) (*mrpb.UnsealResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Unseal", arg0, arg1)
@@ -471,13 +471,13 @@ func (m *MockMetadataRepositoryServiceServer) Unseal(arg0 context.Context, arg1 
 	return ret0, ret1
 }
 
-// Unseal indicates an expected call of Unseal
+// Unseal indicates an expected call of Unseal.
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) Unseal(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).Unseal), arg0, arg1)
 }
 
-// UpdateLogStream mocks base method
+// UpdateLogStream mocks base method.
 func (m *MockMetadataRepositoryServiceServer) UpdateLogStream(arg0 context.Context, arg1 *mrpb.LogStreamRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLogStream", arg0, arg1)
@@ -486,7 +486,7 @@ func (m *MockMetadataRepositoryServiceServer) UpdateLogStream(arg0 context.Conte
 	return ret0, ret1
 }
 
-// UpdateLogStream indicates an expected call of UpdateLogStream
+// UpdateLogStream indicates an expected call of UpdateLogStream.
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) UpdateLogStream(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLogStream", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).UpdateLogStream), arg0, arg1)

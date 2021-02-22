@@ -4,19 +4,19 @@ import (
 	"context"
 
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 )
 
 type logClientProxy struct {
 	client LogIOClient
-	closed atomicutil.AtomicBool
+	closer func() error
 }
 
 var _ LogIOClient = (*logClientProxy)(nil)
 
-func newLogIOProxy(client LogIOClient) *logClientProxy {
+func newLogIOProxy(client LogIOClient, closer func() error) *logClientProxy {
 	return &logClientProxy{
 		client: client,
+		closer: closer,
 	}
 }
 
@@ -37,6 +37,5 @@ func (l *logClientProxy) Trim(ctx context.Context, glsn types.GLSN) error {
 }
 
 func (l *logClientProxy) Close() error {
-	l.closed.Store(true)
-	return nil
+	return l.closer()
 }

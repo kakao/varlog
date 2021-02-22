@@ -28,6 +28,8 @@ import (
 	"github.com/kakao/varlog/vtesting"
 )
 
+const rpcTimeout = 3 * time.Second
+
 type metadataRepoCluster struct {
 	nrRep             int
 	peers             []string
@@ -35,6 +37,7 @@ type metadataRepoCluster struct {
 	reporterClientFac ReporterClientFactory
 	logger            *zap.Logger
 	portLease         *ports.Lease
+	rpcTimeout        time.Duration // conn + call
 }
 
 var testSnapCount uint64
@@ -59,6 +62,7 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoClu
 		reporterClientFac: NewDummyReporterClientFactory(1, !increseUncommit),
 		logger:            zap.L(),
 		portLease:         portLease,
+		rpcTimeout:        rpcTimeout,
 	}
 
 	for i := range clus.peers {
@@ -242,14 +246,17 @@ func (clus *metadataRepoCluster) healthCheck(idx int) bool {
 	_, port, _ := net.SplitHostPort(f.(string))
 	endpoint := fmt.Sprintf("localhost:%s", port)
 
-	conn, err := rpc.NewBlockingConn(endpoint)
+	ctx, cancel := context.WithTimeout(context.TODO(), clus.rpcTimeout)
+	defer cancel()
+
+	conn, err := rpc.NewConn(ctx, endpoint)
 	if err != nil {
 		return false
 	}
 	defer conn.Close()
 
 	healthClient := grpc_health_v1.NewHealthClient(conn.Conn)
-	if _, err := healthClient.Check(context.Background(), &grpc_health_v1.HealthCheckRequest{}); err != nil {
+	if _, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{}); err != nil {
 		return false
 	}
 

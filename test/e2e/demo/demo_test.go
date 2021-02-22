@@ -135,6 +135,7 @@ func addSN(ctx context.Context, addr string, vmsAddr string, t *testing.T) error
 	args := []string{
 		"vmc", "add", "sn",
 		"--storage-node-address", addr,
+		"--rpc-timeout", "3s",
 	}
 	cmd, stdout, stderr := forkVMC(ctx, args, vmsAddr, t)
 	runScanner(ctx, stdout, os.Stdout)
@@ -258,10 +259,10 @@ func TestDemo(t *testing.T) {
 	}
 
 	cmds = append(cmds, forkMR(ctx, mrRPCAddr, mrRAFTAddr, t))
-	time.Sleep(3 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	cmds = append(cmds, forkVMS(ctx, vmsAddr, mrRPCAddr, t))
-	time.Sleep(3 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	// ok: add storagenode
 	for _, snInfo := range snInfos {

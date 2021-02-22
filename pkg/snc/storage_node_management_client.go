@@ -46,7 +46,7 @@ func NewManagementClient(ctx context.Context, clusterID types.ClusterID, address
 	}
 	logger = logger.Named("snmcl").With(zap.Any("peer_addr", address))
 
-	rpcConn, err := rpc.NewBlockingConn(address)
+	rpcConn, err := rpc.NewConn(ctx, address)
 	if err != nil {
 		return nil, err
 	}
