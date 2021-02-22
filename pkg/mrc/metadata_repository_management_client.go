@@ -2,7 +2,6 @@ package mrc
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -26,16 +25,13 @@ type metadataRepositoryManagementClient struct {
 	client  mrpb.ManagementClient
 }
 
-// FIXME (jun, pharrell): Use context or timeout, or remove health check.
-func NewMetadataRepositoryManagementClient(address string) (MetadataRepositoryManagementClient, error) {
-	rpcConn, err := rpc.NewBlockingConn(address)
+func NewMetadataRepositoryManagementClient(ctx context.Context, address string) (MetadataRepositoryManagementClient, error) {
+	rpcConn, err := rpc.NewConn(ctx, address)
 	if err != nil {
 		return nil, err
 	}
 
 	client := grpc_health_v1.NewHealthClient(rpcConn.Conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
 	rsp, err := client.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
 	if err != nil {
 		err = errors.Wrapf(err, "mrmcl: addr = %s", address)

@@ -31,7 +31,7 @@ func (v *varlog) subscribe(ctx context.Context, begin, end types.GLSN, onNext On
 	for logStreamID, replicas := range replicasMap {
 		primarySNID := replicas[0].GetStorageNodeID()
 		primaryAddr := replicas[0].GetAddress()
-		primaryLogCL, err := v.logCLManager.GetOrConnect(primarySNID, primaryAddr)
+		primaryLogCL, err := v.logCLManager.GetOrConnect(ctx, primarySNID, primaryAddr)
 		if err != nil {
 			return nil, err
 		}

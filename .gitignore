@@ -32,6 +32,7 @@ bin/vmc
 bin/vmr
 bin/vms
 bin/vsn
+bin/rpc_test_server
 
 # Python
 *.pyc

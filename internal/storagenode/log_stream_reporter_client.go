@@ -25,8 +25,8 @@ type logStreamReporterClient struct {
 	rpcClient snpb.LogStreamReporterClient
 }
 
-func NewLogStreamReporterClient(address string) (LogStreamReporterClient, error) {
-	rpcConn, err := rpc.NewBlockingConn(address)
+func NewLogStreamReporterClient(ctx context.Context, address string) (LogStreamReporterClient, error) {
+	rpcConn, err := rpc.NewConn(ctx, address)
 	if err != nil {
 		return nil, err
 	}

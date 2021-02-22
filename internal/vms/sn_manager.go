@@ -269,6 +269,8 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
+	var err error
+
 	replicas, err := sm.replicas(ctx, logStreamID)
 	if err != nil {
 		return nil, err
@@ -281,9 +283,10 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 			sm.refresh(ctx)
 			return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 		}
-		status, highWatermark, err := cli.Seal(ctx, logStreamID, lastCommittedGLSN)
-		if err != nil {
-			sm.logger.Warn("could not seal logstream replica", zap.Error(err), zap.Any("snid", storageNodeID), zap.Any("lsid", logStreamID))
+		status, highWatermark, errSeal := cli.Seal(ctx, logStreamID, lastCommittedGLSN)
+		if errSeal != nil {
+			errSeal = errors.WithMessagef(errSeal, "snid = %d, lsid = %d", storageNodeID, logStreamID)
+			err = multierr.Append(err, errSeal)
 			continue
 		}
 		lsmetaDesc = append(lsmetaDesc, varlogpb.LogStreamMetadataDescriptor{
@@ -293,10 +296,9 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 			HighWatermark: highWatermark,
 			Path:          replica.GetPath(),
 		})
-		sm.logger.Debug("seal result", zap.Reflect("logstream_meta", lsmetaDesc))
 	}
-
-	return lsmetaDesc, nil
+	sm.logger.Info("seal result", zap.Reflect("logstream_meta", lsmetaDesc))
+	return lsmetaDesc, err
 }
 
 func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
@@ -336,6 +338,7 @@ func (sm *snManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) 
 	if err != nil {
 		return err
 	}
+	// TODO: use errgroup
 	for _, replica := range replicas {
 		storageNodeID := replica.GetStorageNodeID()
 		cli, ok := sm.cs[storageNodeID]

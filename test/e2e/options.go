@@ -24,7 +24,7 @@ const (
 	defaultClientCnt     = 10
 	defaultSubscriberCnt = 10
 
-	defaultRPCTimeout = 5 * time.Second
+	defaultTimeout = 10 * time.Second
 )
 
 type K8sVarlogClusterOptions struct {
@@ -38,8 +38,7 @@ type K8sVarlogClusterOptions struct {
 	NrLS      int
 	RepFactor int
 	Reset     bool
-
-	rpcTimeout time.Duration
+	timeout   time.Duration
 }
 
 func getK8sVarlogClusterOpts() K8sVarlogClusterOptions {
@@ -74,7 +73,7 @@ func getK8sVarlogClusterOpts() K8sVarlogClusterOptions {
 	opts.NrLS = DEFAULT_LS_CNT
 	opts.RepFactor = DEFAULT_REP_FACTOR
 	opts.Reset = true
-	opts.rpcTimeout = defaultRPCTimeout
+	opts.timeout = defaultTimeout
 
 	return opts
 }

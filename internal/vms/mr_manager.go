@@ -111,6 +111,8 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrOpts MRManag
 	opts := []mrconnector.Option{
 		mrconnector.WithClusterID(clusterID),
 		mrconnector.WithRPCAddrsInitialFetchRetryInterval(RPCAddrsFetchRetryInterval),
+		mrconnector.WithConnectTimeout(mrOpts.ConnTimeout),
+		mrconnector.WithRPCTimeout(mrOpts.CallTimeout),
 		mrconnector.WithLogger(logger),
 	}
 	tryCnt := mrOpts.InitialMRConnRetryCount + 1
@@ -118,20 +120,24 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrOpts MRManag
 		tryCnt = math.MaxInt32
 	}
 
-	var err error
+	var (
+		err       error
+		connector mrconnector.Connector
+	)
 	for i := 0; i < tryCnt; i++ {
-		connector, e := mrconnector.New(ctx, mrOpts.MetadataRepositoryAddresses, opts...)
-		if e == nil {
-			return &mrManager{
-				clusterID: clusterID,
-				dirty:     true,
-				connector: connector,
-				logger:    logger,
-			}, nil
+		connector, err = mrconnector.New(ctx, mrOpts.MetadataRepositoryAddresses, opts...)
+		if err != nil {
+			time.Sleep(mrOpts.InitialMRConnRetryBackoff)
+			continue
 		}
-		err = e
-		time.Sleep(mrOpts.InitialMRConnRetryBackoff)
+		return &mrManager{
+			clusterID: clusterID,
+			dirty:     true,
+			connector: connector,
+			logger:    logger,
+		}, nil
 	}
+	err = errors.WithMessagef(err, "mrmanager: tries = %d", tryCnt)
 	return nil, err
 }
 
@@ -355,7 +361,7 @@ func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
 
-	if mrm.dirty || time.Now().Sub(mrm.updated) > RELOAD_INTERVAL {
+	if mrm.dirty || time.Since(mrm.updated) > RELOAD_INTERVAL {
 		meta, err := mrm.clusterMetadata(ctx)
 		if err != nil {
 			return nil, err
@@ -373,12 +379,6 @@ func (mrm *mrManager) StorageNode(ctx context.Context, storageNodeID types.Stora
 		return nil, err
 	}
 	return meta.MustHaveStorageNode(storageNodeID)
-	/*
-		if sndesc := meta.GetStorageNode(storageNodeID); sndesc != nil {
-			return sndesc, nil
-		}
-		return nil, errors.Wrap(errNoStorageNode, "mrmanager")
-	*/
 }
 
 func (mrm *mrManager) NumberOfMR() int {

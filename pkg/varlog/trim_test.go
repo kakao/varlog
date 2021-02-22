@@ -42,8 +42,8 @@ func TestTrim(t *testing.T) {
 
 		createMockLogClientManager := func(expectedTrimResults []error) *logc.MockLogClientManager {
 			logCLManager := logc.NewMockLogClientManager(ctrl)
-			logCLManager.EXPECT().GetOrConnect(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(storageNodeID types.StorageNodeID, storagNodeAddr string) (logc.LogIOClient, error) {
+			logCLManager.EXPECT().GetOrConnect(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, storageNodeID types.StorageNodeID, storagNodeAddr string) (logc.LogIOClient, error) {
 					logCL := logc.NewMockLogIOClient(ctrl)
 					expectedTrimResult := expectedTrimResults[int(storageNodeID)]
 					logCL.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(expectedTrimResult)

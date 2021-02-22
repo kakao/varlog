@@ -18,7 +18,7 @@ type VarlogIDGetter interface {
 type varlogIDGetter struct{}
 
 func (v *varlogIDGetter) MetadataRepositoryID(ctx context.Context, addr string) (vtypes.ClusterID, vtypes.NodeID, error) {
-	cli, err := mrc.NewMetadataRepositoryManagementClient(addr)
+	cli, err := mrc.NewMetadataRepositoryManagementClient(ctx, addr)
 	if err != nil {
 		return vtypes.ClusterID(0), vtypes.InvalidNodeID, err
 	}

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package varlog.testpb;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option go_package = "github.daumkakao.com/varlog/varlog/pkg/rpc/testpb";
+
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+message TestRequest {
+    string msg = 1;
+}
+
+message TestResponse {
+    string msg = 1;
+}
+
+service Test {
+    rpc Call(TestRequest) returns (TestResponse) {}
+}

@@ -32,7 +32,10 @@ func TestMRConnector(t *testing.T) {
 		ep := env.MRRPCEndpoints[idx]
 		So(testutil.CompareWaitN(100, func() bool {
 			numCheckRPC++
-			conn, err := rpc.NewBlockingConn(ep)
+			ctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+			defer cancel()
+			// TODO (jun): Use NewConn
+			conn, err := rpc.NewBlockingConn(ctx, ep)
 			if err == nil {
 				So(conn.Close(), ShouldBeNil)
 			}
@@ -72,7 +75,7 @@ func TestMRConnector(t *testing.T) {
 
 		for _, rpcEndpoint := range env.MRRPCEndpoints {
 			So(testutil.CompareWaitN(100, func() bool {
-				conn, err := rpc.NewBlockingConn(rpcEndpoint)
+				conn, err := rpc.NewConn(context.TODO(), rpcEndpoint)
 				if err != nil {
 					return false
 				}
@@ -208,7 +211,7 @@ func TestMRConnector(t *testing.T) {
 
 						So(testutil.CompareWaitN(100, func() bool {
 							ep := env.MRRPCEndpoints[mrIdx]
-							conn, err := rpc.NewBlockingConn(ep)
+							conn, err := rpc.NewConn(context.TODO(), ep)
 							if err != nil {
 								return false
 							}

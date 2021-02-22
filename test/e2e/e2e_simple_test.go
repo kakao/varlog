@@ -4,15 +4,18 @@ package e2e
 
 import (
 	"context"
+	"log"
 	"testing"
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	vtypes "github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
 func TestK8sVarlogSimple(t *testing.T) {
@@ -22,52 +25,88 @@ func TestK8sVarlogSimple(t *testing.T) {
 		vmsaddr, err := k8s.VMSAddress()
 		So(err, ShouldBeNil)
 
-		mcli, err := varlog.NewClusterManagerClient(vmsaddr)
+		ctx, cancel := k8s.TimeoutContext()
+		defer cancel()
+		mcli, err := varlog.NewClusterManagerClient(ctx, vmsaddr)
 		So(err, ShouldBeNil)
 
 		Reset(func() {
-			mcli.Close()
+			So(mcli.Close(), ShouldBeNil)
 		})
 
 		Convey("AddLogStream - Simple", func() {
-			r, err := mcli.AddLogStream(context.TODO(), nil)
-			So(err, ShouldBeNil)
+			var lsID types.LogStreamID
 
-			lsID := r.LogStream.LogStreamID
+			testutil.CompareWaitN(100, func() bool {
+				var (
+					err error
+					rsp *vmspb.AddLogStreamResponse
+				)
+				k8s.WithTimeoutContext(func(ctx context.Context) {
+					rsp, err = mcli.AddLogStream(ctx, nil)
+					So(err, ShouldBeNil)
+					lsID = rsp.GetLogStream().GetLogStreamID()
+				})
+				return err == nil
+			})
 
 			mrseed, err := k8s.MRAddress()
 			So(err, ShouldBeNil)
 
-			varlog, err := varlog.Open(vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
-			So(err, ShouldBeNil)
-
-			Reset(func() {
-				varlog.Close()
+			var vlg varlog.Varlog
+			k8s.WithTimeoutContext(func(ctx context.Context) {
+				vlg, err = varlog.Open(
+					ctx,
+					vtypes.ClusterID(1),
+					[]string{mrseed},
+					varlog.WithDenyTTL(5*time.Second),
+					varlog.WithMRConnectorCallTimeout(3*time.Second),
+					varlog.WithMetadataRefreshTimeout(3*time.Second),
+					varlog.WithOpenTimeout(10*time.Second),
+				)
+				So(err, ShouldBeNil)
 			})
 
-			glsn, err := varlog.Append(context.TODO(), []byte("foo"))
+			Reset(func() {
+				So(vlg.Close(), ShouldBeNil)
+			})
+
+			appendCtx, appendCancel := k8s.TimeoutContext()
+			defer appendCancel()
+			glsn, err := vlg.Append(appendCtx, []byte("foo"))
 			So(err, ShouldBeNil)
 
-			_, err = varlog.Read(context.TODO(), lsID, glsn)
+			readCtx, readCancel := k8s.TimeoutContext()
+			defer readCancel()
+			_, err = vlg.Read(readCtx, lsID, glsn)
 			So(err, ShouldBeNil)
 
 			Convey("Seal", func() {
-				rsp, err := mcli.Seal(context.TODO(), lsID)
+				sealCtx, sealCancel := k8s.TimeoutContext()
+				defer sealCancel()
+				rsp, err := mcli.Seal(sealCtx, lsID)
 				So(err, ShouldBeNil)
 				lsmetaList := rsp.GetLogStreams()
 				So(len(lsmetaList), ShouldEqual, k8s.RepFactor)
 				So(lsmetaList[0].HighWatermark, ShouldEqual, glsn)
 
-				glsn, err := varlog.Append(context.TODO(), []byte("foo"))
+				appendCtx, appendCancel := k8s.TimeoutContext()
+				defer appendCancel()
+				glsn, err := vlg.Append(appendCtx, []byte("foo"))
 				So(err, ShouldNotBeNil)
 				So(glsn, ShouldEqual, vtypes.InvalidGLSN)
 
 				Convey("Unseal", func() {
-					_, err := mcli.Unseal(context.TODO(), lsID)
+					unsealCtx, unsealCancel := k8s.TimeoutContext()
+					defer unsealCancel()
+					_, err := mcli.Unseal(unsealCtx, lsID)
 					So(err, ShouldBeNil)
 
 					So(testutil.CompareWaitN(100, func() bool {
-						glsn, err := varlog.Append(context.TODO(), []byte("foo"))
+						ctx, cancel := k8s.TimeoutContext()
+						defer cancel()
+
+						glsn, err := vlg.Append(ctx, []byte("foo"))
 						return err == nil && glsn > lsmetaList[0].HighWatermark
 					}), ShouldBeTrue)
 				})
@@ -83,41 +122,52 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 		vmsaddr, err := k8s.VMSAddress()
 		So(err, ShouldBeNil)
 
-		mcli, err := varlog.NewClusterManagerClient(vmsaddr)
+		connCtx, connCancel := k8s.TimeoutContext()
+		defer connCancel()
+
+		mcli, err := varlog.NewClusterManagerClient(connCtx, vmsaddr)
 		So(err, ShouldBeNil)
 
 		Reset(func() {
-			mcli.Close()
+			So(mcli.Close(), ShouldBeNil)
 		})
 
-		_, err = mcli.AddLogStream(context.TODO(), nil)
+		callCtx, callCancel := k8s.TimeoutContext()
+		defer callCancel()
+		_, err = mcli.AddLogStream(callCtx, nil)
 		So(err, ShouldBeNil)
 
 		mrseed, err := k8s.MRAddress()
 		So(err, ShouldBeNil)
 
-		varlog, err := varlog.Open(vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
+		openCtx, openCancel := k8s.TimeoutContext()
+		defer openCancel()
+		varlog, err := varlog.Open(openCtx, vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
 		So(err, ShouldBeNil)
 
 		Reset(func() {
 			varlog.Close()
 		})
 
-		_, err = varlog.Append(context.TODO(), []byte("foo"))
+		appendCtx, appendCancel := k8s.TimeoutContext()
+		defer appendCancel()
+		_, err = varlog.Append(appendCtx, []byte("foo"))
 		So(err, ShouldBeNil)
 
 		Convey("When MR follower fail", func() {
-			members, err := mcli.GetMRMembers(context.TODO())
-			So(err, ShouldBeNil)
-			So(len(members.Members), ShouldEqual, opts.NrMR)
+			k8s.WithTimeoutContext(func(ctx context.Context) {
+				members, err := mcli.GetMRMembers(ctx)
+				So(err, ShouldBeNil)
+				So(len(members.Members), ShouldEqual, opts.NrMR)
 
-			for nodeID := range members.Members {
-				if nodeID != members.Leader {
-					err := k8s.StopMR(nodeID)
-					So(err, ShouldBeNil)
-					break
+				for nodeID := range members.Members {
+					if nodeID != members.Leader {
+						err := k8s.StopMR(nodeID)
+						So(err, ShouldBeNil)
+						break
+					}
 				}
-			}
+			})
 
 			Convey("Then it should be abel to append", func() {
 				for i := 0; i < 1000; i++ {
@@ -143,6 +193,7 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 
 func TestK8sVarlogFailoverSN(t *testing.T) {
 	opts := getK8sVarlogClusterOpts()
+	opts.timeout = 20 * time.Second
 
 	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
 		vmsaddr, err := k8s.VMSAddress()
@@ -151,59 +202,78 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 		mrseed, err := k8s.MRAddress()
 		So(err, ShouldBeNil)
 
-		mcli, err := varlog.NewClusterManagerClient(vmsaddr)
-		So(err, ShouldBeNil)
-
-		mrcli, err := mrc.NewMetadataRepositoryClient(mrseed)
-		So(err, ShouldBeNil)
-
-		Reset(func() {
-			mcli.Close()
-			mrcli.Close()
+		var (
+			mcli  varlog.ClusterManagerClient
+			mrcli mrc.MetadataRepositoryClient
+			lsID  types.LogStreamID
+		)
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			mcli, err = varlog.NewClusterManagerClient(ctx, vmsaddr)
+			So(err, ShouldBeNil)
 		})
 
-		r, err := mcli.AddLogStream(context.TODO(), nil)
-		So(err, ShouldBeNil)
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			mrcli, err = mrc.NewMetadataRepositoryClient(ctx, mrseed)
+			So(err, ShouldBeNil)
+		})
 
-		lsID := r.LogStream.LogStreamID
+		Reset(func() {
+			So(mcli.Close(), ShouldBeNil)
+			So(mrcli.Close(), ShouldBeNil)
+		})
+
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			r, err := mcli.AddLogStream(ctx, nil)
+			So(err, ShouldBeNil)
+			lsID = r.LogStream.LogStreamID
+		})
 
 		So(testutil.CompareWaitN(100, func() bool {
-			meta, err := mrcli.GetMetadata(context.TODO())
-			if err != nil {
-				return false
-			}
-
-			return meta.GetLogStream(lsID) != nil
+			ctx, cancel := k8s.TimeoutContext()
+			defer cancel()
+			meta, err := mrcli.GetMetadata(ctx)
+			return err == nil && meta.GetLogStream(lsID) != nil
 		}), ShouldBeTrue)
 
-		varlog, err := varlog.Open(vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
+		openCtx, openCancel := k8s.TimeoutContext()
+		defer openCancel()
+		vlg, err := varlog.Open(openCtx, vtypes.ClusterID(1), []string{mrseed},
+			varlog.WithDenyTTL(2*time.Second),
+			varlog.WithMRConnectorCallTimeout(3*time.Second),
+			varlog.WithMetadataRefreshTimeout(3*time.Second),
+			varlog.WithMetadataRefreshInterval(10*time.Second),
+			varlog.WithOpenTimeout(10*time.Second),
+		)
 		So(err, ShouldBeNil)
 
 		Reset(func() {
-			varlog.Close()
+			So(vlg.Close(), ShouldBeNil)
 		})
 
-		_, err = varlog.Append(context.TODO(), []byte("foo"))
-		So(err, ShouldBeNil)
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			_, err = vlg.Append(ctx, []byte("foo"))
+			So(err, ShouldBeNil)
+		})
 
 		Convey("When SN backup fail", func() {
 			meta, err := mrcli.GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 			lsdesc := meta.GetLogStream(lsID)
 
-			err = k8s.StopSN(lsdesc.Replicas[len(lsdesc.Replicas)-1].StorageNodeID)
+			victimStorageNodeID := lsdesc.Replicas[len(lsdesc.Replicas)-1].StorageNodeID
+			err = k8s.StopSN(victimStorageNodeID)
 			So(err, ShouldBeNil)
+			log.Printf("Failed SN: %v", victimStorageNodeID)
 
 			Convey("Then it should be sealed", func() {
 				So(testutil.CompareWaitN(100, func() bool {
-					varlog.Append(context.TODO(), []byte("foo"))
-
-					meta, err := mrcli.GetMetadata(context.TODO())
-					if err != nil {
-						return false
-					}
-
-					return meta.GetLogStream(lsID).Status.Sealed()
+					k8s.WithTimeoutContext(func(ctx context.Context) {
+						vlg.Append(context.TODO(), []byte("foo"))
+					})
+					ctx, cancel := k8s.TimeoutContext()
+					defer cancel()
+					meta, err := mrcli.GetMetadata(ctx)
+					return err == nil && meta.GetLogStream(lsID).GetStatus().Sealed()
 				}), ShouldBeTrue)
 
 				Convey("When SN recover", func() {
@@ -212,20 +282,51 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 
 					So(testutil.CompareWaitN(100, func() bool {
 						ok, err := k8s.IsSNRunning()
-						if err != nil {
-							return false
-						}
-
-						return ok
+						return err == nil && ok
 					}), ShouldBeTrue)
 
 					Convey("Then if should be able to append", func() {
-						So(testutil.CompareWaitN(100, func() bool {
-							mcli.Unseal(context.TODO(), lsID)
+						var (
+							err         error
+							start       time.Time
+							end         time.Time
+							firstUnseal time.Time
+							firstAppend time.Time
+						)
+						start = time.Now()
+						ok := testutil.CompareWaitN(500, func() bool {
+							ctx, cancel := k8s.TimeoutContext()
+							defer cancel()
+							if _, err = mcli.Unseal(ctx, lsID); err == nil {
+								if firstUnseal.IsZero() {
+									firstUnseal = time.Now()
+								}
+								if _, err = vlg.Append(ctx, []byte("foo")); err == nil {
+									firstAppend = time.Now()
+									return true
+								}
+							}
+							// NOTE: 5s is enough time to unseal the log
+							// stream.
+							time.Sleep(5 * time.Second)
+							return false
+						})
+						end = time.Now()
 
-							_, err := varlog.Append(context.TODO(), []byte("foo"))
-							return err == nil
-						}), ShouldBeTrue)
+						log.Printf("total wait time = %s", end.Sub(start).String())
+						log.Printf("unseal wait time = %s", firstUnseal.Sub(start).String())
+						log.Printf("append wait elapsed time = %s", firstAppend.Sub(start).String())
+
+						if err != nil {
+							t.Logf("err = %+v", err)
+						}
+						So(err, ShouldBeNil)
+						So(ok, ShouldBeTrue)
+
+						k8s.WithTimeoutContext(func(ctx context.Context) {
+							_, err = vlg.Append(ctx, []byte("foo"))
+							So(err, ShouldBeNil)
+						})
 					})
 				})
 			})
@@ -234,6 +335,8 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 }
 
 func TestK8sVarlogAppend(t *testing.T) {
+	t.SkipNow()
+
 	opts := getK8sVarlogClusterOpts()
 	opts.Reset = false
 
@@ -244,32 +347,50 @@ func TestK8sVarlogAppend(t *testing.T) {
 		mrseed, err := k8s.MRAddress()
 		So(err, ShouldBeNil)
 
-		mcli, err := varlog.NewClusterManagerClient(vmsaddr)
-		So(err, ShouldBeNil)
+		var (
+			mcli  varlog.ClusterManagerClient
+			mrcli mrc.MetadataRepositoryClient
+			vlg   varlog.Varlog
+		)
 
-		mrcli, err := mrc.NewMetadataRepositoryClient(mrseed)
-		So(err, ShouldBeNil)
-
-		varlog, err := varlog.Open(vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
-		So(err, ShouldBeNil)
-
-		Reset(func() {
-			mcli.Close()
-			mrcli.Close()
-			varlog.Close()
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			mcli, err = varlog.NewClusterManagerClient(ctx, vmsaddr)
+			So(err, ShouldBeNil)
 		})
 
-		meta, err := mrcli.GetMetadata(context.TODO())
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			mrcli, err = mrc.NewMetadataRepositoryClient(ctx, mrseed)
+			So(err, ShouldBeNil)
+		})
+
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			vlg, err = varlog.Open(ctx, vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
+			So(err, ShouldBeNil)
+		})
+
+		Reset(func() {
+			So(mcli.Close(), ShouldBeNil)
+			So(mrcli.Close(), ShouldBeNil)
+			So(vlg.Close(), ShouldBeNil)
+		})
+
+		ctx, cancel := k8s.TimeoutContext()
+		defer cancel()
+		meta, err := mrcli.GetMetadata(ctx)
 		So(err, ShouldBeNil)
 		So(len(meta.GetLogStreams()), ShouldBeGreaterThan, 0)
 		lsdesc := meta.GetLogStreams()[0]
 
 		if lsdesc.Status.Sealed() {
-			mcli.Unseal(context.TODO(), lsdesc.LogStreamID)
+			unsealCtx, unsealCancel := k8s.TimeoutContext()
+			mcli.Unseal(unsealCtx, lsdesc.LogStreamID)
+			unsealCancel()
 		}
 
-		_, err = varlog.Append(context.TODO(), []byte("foo"))
-		So(err, ShouldBeNil)
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			_, err = vlg.Append(ctx, []byte("foo"))
+			So(err, ShouldBeNil)
+		})
 	}))
 }
 
@@ -278,7 +399,7 @@ func TestK8sVarlogEnduranceExample(t *testing.T) {
 	opts.Reset = true
 	opts.NrSN = 5
 	opts.NrLS = 5
-	opts.rpcTimeout = 10 * time.Second
+	opts.timeout = 20 * time.Second
 	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
 		mrseed, err := k8s.MRAddress()
 		So(err, ShouldBeNil)
@@ -331,6 +452,9 @@ func TestK8sVarlogEnduranceFollowerMRFail(t *testing.T) {
 		)
 
 		err = action.Do(context.TODO())
+		if err != nil {
+			t.Logf("failed: %+v", err)
+		}
 		So(err, ShouldBeNil)
 	}))
 }

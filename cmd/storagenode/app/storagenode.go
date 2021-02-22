@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 )
@@ -15,6 +16,8 @@ func Main(opts *storagenode.Options) error {
 	loggerConfig := zap.NewProductionConfig()
 	loggerConfig.Sampling = nil
 	loggerConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+	loggerConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+
 	logger, err := loggerConfig.Build(zap.AddStacktrace(zap.DPanicLevel))
 	if err != nil {
 		return err

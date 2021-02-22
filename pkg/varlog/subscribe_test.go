@@ -50,8 +50,8 @@ func TestSubscribe(t *testing.T) {
 
 		createMockLogClientManager := func(results map[types.LogStreamID][]logc.SubscribeResult) *logc.MockLogClientManager {
 			logCLManager := logc.NewMockLogClientManager(ctrl)
-			logCLManager.EXPECT().GetOrConnect(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(storageNodeID types.StorageNodeID, addr string) (logc.LogIOClient, error) {
+			logCLManager.EXPECT().GetOrConnect(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, storageNodeID types.StorageNodeID, addr string) (logc.LogIOClient, error) {
 					logCL := logc.NewMockLogIOClient(ctrl)
 					logCL.EXPECT().Subscribe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, logStreamID types.LogStreamID, _ types.GLSN, _ types.GLSN) (<-chan logc.SubscribeResult, error) {
 						result := results[logStreamID]

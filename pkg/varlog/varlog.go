@@ -50,7 +50,7 @@ type varlog struct {
 var _ Varlog = (*varlog)(nil)
 
 // Open creates new logs or opens an already created logs.
-func Open(clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, error) {
+func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, error) {
 	logOpts := defaultOptions()
 	for _, opt := range opts {
 		opt.apply(&logOpts)
@@ -64,12 +64,16 @@ func Open(clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, 
 		runner:    runner.New("varlog", logOpts.logger),
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, v.opts.openTimeout)
+	defer cancel()
+
 	// mr connector
-	connectorOpts := []mrconnector.Option{
+	connector, err := mrconnector.New(ctx, mrAddrs,
 		mrconnector.WithClusterID(clusterID),
 		mrconnector.WithLogger(v.opts.logger),
-	}
-	connector, err := mrconnector.New(context.Background(), mrAddrs, connectorOpts...)
+		mrconnector.WithConnectTimeout(v.opts.mrConnectorConnTimeout),
+		mrconnector.WithRPCTimeout(v.opts.mrConnectorCallTimeout),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -90,9 +94,15 @@ func Open(clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, 
 
 	// metadata refresher
 	// NOTE: metadata refresher has ownership of mrconnector and allow/denylist
-	ctx, cancel := context.WithTimeout(context.Background(), v.opts.openTimeout)
-	defer cancel()
-	refresher, err := newMetadataRefresher(ctx, connector, allowlist, replicasRetriever, v.opts.metadataRefreshInterval, v.logger)
+	refresher, err := newMetadataRefresher(
+		ctx,
+		connector,
+		allowlist,
+		replicasRetriever,
+		v.opts.metadataRefreshInterval,
+		v.opts.metadataRefreshTimeout,
+		v.logger,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +112,7 @@ func Open(clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, 
 	// TODO (jun): metadataRefresher should implement ClusterMetadataView
 	metadata := refresher.metadata.Load().(*varlogpb.MetadataDescriptor)
 
-	logCLManager, err := logc.NewLogClientManager(metadata, v.logger)
+	logCLManager, err := logc.NewLogClientManager(ctx, metadata, v.logger)
 	if err != nil {
 		return nil, err
 	}

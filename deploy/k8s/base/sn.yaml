@@ -31,6 +31,7 @@ spec:
         volumeMounts:
         - name: varlog-sn-home
           mountPath: /varlog/data
+        imagePullPolicy: IfNotPresent
       containers:
       - name: varlog-sn
         image: idock.daumkakao.io/varlog/varlog-sn:latest

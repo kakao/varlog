@@ -3,6 +3,7 @@ package logc
 //go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/pkg/logc -package logc -destination log_io_client_manager_mock.go . LogClientManager
 
 import (
+	"context"
 	"io"
 	"strconv"
 	"sync"
@@ -13,86 +14,118 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type LogClientManager interface {
-	GetOrConnect(storageNodeID types.StorageNodeID, addr string) (LogIOClient, error)
+	GetOrConnect(ctx context.Context, storageNodeID types.StorageNodeID, addr string) (LogIOClient, error)
 	io.Closer
 }
 
 type logClientManager struct {
-	m      sync.Map // map[types.StorageNodeID]*logIOClientProxy
-	group  singleflight.Group
+	mu     sync.RWMutex
+	closed bool
+
+	clients struct {
+		m map[types.StorageNodeID]*logClientProxy
+		x sync.RWMutex
+
+		g singleflight.Group
+		k func(types.StorageNodeID) string
+	}
+
 	logger *zap.Logger
 }
 
 var _ LogClientManager = (*logClientManager)(nil)
 
-func NewLogClientManager(metadata *varlogpb.MetadataDescriptor, logger *zap.Logger) (mgr *logClientManager, err error) {
+func NewLogClientManager(ctx context.Context, metadata *varlogpb.MetadataDescriptor, logger *zap.Logger) (mgr *logClientManager, err error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("logclmanager")
 
-	mgr = &logClientManager{
-		logger: logger,
+	mgr = &logClientManager{logger: logger}
+	mgr.clients.m = make(map[types.StorageNodeID]*logClientProxy, len(metadata.GetStorageNodes()))
+	mgr.clients.k = func(storageNodeID types.StorageNodeID) string {
+		return strconv.FormatUint(uint64(storageNodeID), 10)
 	}
+
 	for _, sndesc := range metadata.GetStorageNodes() {
 		storageNodeID := sndesc.GetStorageNodeID()
 		addr := sndesc.GetAddress()
-		if _, err = mgr.GetOrConnect(storageNodeID, addr); err != nil {
-			break
+		if _, err := mgr.GetOrConnect(ctx, storageNodeID, addr); err != nil {
+			return nil, multierr.Append(err, mgr.Close())
 		}
-	}
-	if err != nil {
-		err = multierr.Append(err, mgr.Close())
-		mgr = nil
 	}
 	return mgr, err
 }
 
 func (mgr *logClientManager) Close() (err error) {
-	mgr.m.Range(func(storageNodeID interface{}, logCL interface{}) bool {
-		if e := logCL.(LogIOClient).Close(); e != nil {
-			err = multierr.Append(err, e)
-		}
-		mgr.m.Delete(storageNodeID)
-		return true
-	})
+	mgr.mu.Lock()
+	mgr.closed = true
+	mgr.mu.Unlock()
+
+	mgr.clients.x.RLock()
+	m := make(map[types.StorageNodeID]*logClientProxy, len(mgr.clients.m))
+	for storageNodeID, proxy := range mgr.clients.m {
+		m[storageNodeID] = proxy
+	}
+	mgr.clients.x.RUnlock()
+
+	for _, proxy := range m {
+		err = multierr.Append(err, proxy.Close())
+	}
+
+	mgr.clients.x.RLock()
+	if len(mgr.clients.m) > 0 {
+		panic("cleanup error")
+	}
+	mgr.clients.x.RUnlock()
+
 	return err
 }
 
-func (mgr *logClientManager) GetOrConnect(storageNodeID types.StorageNodeID, addr string) (LogIOClient, error) {
-	key := makeGroupKey(storageNodeID)
-	lip, err, _ := mgr.group.Do(key, func() (interface{}, error) {
-		lipTmp, ok := mgr.m.Load(storageNodeID)
-		if ok {
-			lip := lipTmp.(*logClientProxy)
-			if !lip.closed.Load() {
-				return lip, nil
-			}
-			lip.client.Close()
-			mgr.m.Delete(storageNodeID)
-		}
-
-		logcl, err := NewLogIOClient(addr)
-		if err != nil {
-			return nil, errors.Wrapf(err, "logclmanager: snid=%d", storageNodeID)
-		}
-
-		lip := newLogIOProxy(logcl)
-		mgr.m.Store(storageNodeID, lip)
-		return lip, nil
-	})
-
-	if lip == nil {
-		return nil, err
+func (mgr *logClientManager) GetOrConnect(ctx context.Context, storageNodeID types.StorageNodeID, addr string) (LogIOClient, error) {
+	mgr.mu.RLock()
+	defer mgr.mu.RUnlock()
+	if mgr.closed {
+		return nil, errors.Wrap(verrors.ErrClosed, "logclmanager")
 	}
 
-	return lip.(*logClientProxy), err
-}
+	key := mgr.clients.k(storageNodeID)
+	proxyI, err, _ := mgr.clients.g.Do(key, func() (interface{}, error) {
+		var (
+			proxy *logClientProxy
+			ok    bool
+		)
+		mgr.clients.x.RLock()
+		proxy, ok = mgr.clients.m[storageNodeID]
+		mgr.clients.x.RUnlock()
+		if ok {
+			return proxy, nil
+		}
 
-func makeGroupKey(storageNodeID types.StorageNodeID) string {
-	return strconv.FormatUint(uint64(storageNodeID), 10)
+		logcl, err := NewLogIOClient(ctx, addr)
+		if err != nil {
+			proxy = nil
+			return proxy, errors.WithMessagef(err, "logclmanager: snid=%d", storageNodeID)
+		}
+		closer := func() error {
+			mgr.clients.x.Lock()
+			delete(mgr.clients.m, storageNodeID)
+			mgr.clients.x.Unlock()
+			return logcl.Close()
+		}
+		proxy = newLogIOProxy(logcl, closer)
+		mgr.clients.x.Lock()
+		mgr.clients.m[storageNodeID] = proxy
+		mgr.clients.x.Unlock()
+		return proxy, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return proxyI.(*logClientProxy), nil
 }

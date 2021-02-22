@@ -4,6 +4,7 @@ package logc
 
 import (
 	"context"
+	stderrors "errors"
 	"io"
 
 	"github.com/pkg/errors"
@@ -27,7 +28,7 @@ type SubscribeResult struct {
 
 var InvalidSubscribeResult = SubscribeResult{
 	LogEntry: types.InvalidLogEntry,
-	Error:    errors.New("invalid subscribe result"),
+	Error:    stderrors.New("invalid subscribe result"),
 }
 
 // LogIOClient contains methods to use basic operations - append, read, subscribe, trim of
@@ -46,10 +47,10 @@ type logIOClient struct {
 	s         StorageNode
 }
 
-func NewLogIOClient(address string) (LogIOClient, error) {
-	rpcConn, err := rpc.NewBlockingConn(address)
+func NewLogIOClient(ctx context.Context, address string) (LogIOClient, error) {
+	rpcConn, err := rpc.NewConn(ctx, address)
 	if err != nil {
-		return nil, errors.Wrap(err, "log io client")
+		return nil, errors.WithMessage(err, "logiocl")
 	}
 	return NewLogIOClientFromRpcConn(rpcConn)
 }

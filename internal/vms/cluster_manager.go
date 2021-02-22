@@ -150,7 +150,7 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		mrMgr:          mrMgr,
 		cmView:         cmView,
 		snSelector:     snSelector,
-		statRepository: NewStatRepository(cmView),
+		statRepository: NewStatRepository(ctx, cmView),
 		logStreamIDGen: logStreamIDGen,
 		logger:         opts.Logger,
 		options:        opts,
@@ -162,7 +162,7 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 	cm.healthServer = health.NewServer()
 	grpc_health_v1.RegisterHealthServer(cm.server, cm.healthServer)
 
-	NewClusterManagerService(cm, cm.logger).Register(cm.server)
+	newClusterManagerService(cm, cm.logger).Register(cm.server)
 
 	return cm, nil
 }
@@ -186,7 +186,7 @@ func (cm *clusterManager) Run() error {
 	cm.cmState = clusterManagerRunning
 
 	// Listener
-	lis, err := net.Listen("tcp", cm.options.RPCBindAddress)
+	lis, err := net.Listen("tcp", cm.options.ListenAddress)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -622,35 +622,35 @@ func (cm *clusterManager) HandleHeartbeatTimeout(ctx context.Context, snID types
 	}
 }
 
-func (cm *clusterManager) checkLogStreamStatus(logStreamID types.LogStreamID, mrStatus, replicaStatus varlogpb.LogStreamStatus) {
-	lsStat := cm.statRepository.GetLogStream(logStreamID)
+func (cm *clusterManager) checkLogStreamStatus(ctx context.Context, logStreamID types.LogStreamID, mrStatus, replicaStatus varlogpb.LogStreamStatus) {
+	lsStat := cm.statRepository.GetLogStream(logStreamID).Copy()
 
-	switch lsStat.Status {
+	switch lsStat.Status() {
 	case varlogpb.LogStreamStatusRunning:
 		if mrStatus.Sealed() || replicaStatus.Sealed() {
 			cm.logger.Info("seal due to status mismatch", zap.Any("lsid", logStreamID))
-			cm.Seal(context.TODO(), logStreamID)
+			cm.Seal(ctx, logStreamID)
 		}
 
 	case varlogpb.LogStreamStatusSealing:
-		for _, r := range lsStat.Replicas {
+		for _, r := range lsStat.Replicas() {
 			if r.Status != varlogpb.LogStreamStatusSealed {
 				cm.logger.Info("seal due to status", zap.Any("lsid", logStreamID))
-				cm.Seal(context.TODO(), logStreamID)
+				cm.Seal(ctx, logStreamID)
 				return
 			}
 		}
 		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusSealed)
 
 	case varlogpb.LogStreamStatusUnsealing:
-		for _, r := range lsStat.Replicas {
+		for _, r := range lsStat.Replicas() {
 			if r.Status == varlogpb.LogStreamStatusRunning {
 				continue
 			} else if r.Status == varlogpb.LogStreamStatusSealed {
 				return
 			} else if r.Status == varlogpb.LogStreamStatusSealing {
 				cm.logger.Info("seal due to unexpected status", zap.Any("lsid", logStreamID))
-				cm.Seal(context.TODO(), logStreamID)
+				cm.Seal(ctx, logStreamID)
 				return
 			}
 		}
@@ -662,19 +662,22 @@ func (cm *clusterManager) syncLogStream(ctx context.Context, logStreamID types.L
 	min, max := types.MaxGLSN, types.InvalidGLSN
 	var src, tgt types.StorageNodeID
 
-	lsStat := cm.statRepository.GetLogStream(logStreamID)
-	if !lsStat.Status.Sealed() {
+	lsStat := cm.statRepository.GetLogStream(logStreamID).Copy()
+
+	if !lsStat.Status().Sealed() {
 		return
 	}
 
-	snIDs := make([]types.StorageNodeID, 0, len(lsStat.Replicas))
-	for snID := range lsStat.Replicas {
+	cm.logger.Info("syncLogStream", zap.Any("lsid", logStreamID), zap.Any("replicas", lsStat.Replicas()))
+
+	snIDs := make([]types.StorageNodeID, 0, len(lsStat.Replicas()))
+	for snID := range lsStat.Replicas() {
 		snIDs = append(snIDs, snID)
 	}
 	sort.Slice(snIDs, func(i, j int) bool { return snIDs[i] < snIDs[j] })
 
 	for i, snID := range snIDs {
-		r, _ := lsStat.Replicas[snID]
+		r, _ := lsStat.Replica(snID)
 
 		if !r.Status.Sealed() {
 			return
@@ -709,19 +712,17 @@ func (cm *clusterManager) HandleReport(ctx context.Context, snm *varlogpb.Storag
 		return
 	}
 
-	cm.statRepository.Report(snm)
+	cm.statRepository.Report(ctx, snm)
 
 	// Sync LogStreamStatus
 	for _, ls := range snm.GetLogStreams() {
 		mls := meta.GetLogStream(ls.LogStreamID)
-		if mls == nil {
-			if time.Now().Sub(ls.CreatedTime) > cm.options.WatcherOptions.GCTimeout {
-				cctx, cancel := context.WithTimeout(ctx, WATCHER_RPC_TIMEOUT)
-				defer cancel()
-				cm.RemoveLogStreamReplica(cctx, snm.StorageNode.StorageNodeID, ls.LogStreamID)
-			}
-		} else {
-			cm.checkLogStreamStatus(ls.LogStreamID, mls.Status, ls.Status)
+		if mls != nil {
+			cm.checkLogStreamStatus(ctx, ls.LogStreamID, mls.Status, ls.Status)
+			continue
+		}
+		if time.Since(ls.CreatedTime) > cm.options.WatcherOptions.GCTimeout {
+			cm.RemoveLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.LogStreamID)
 		}
 	}
 

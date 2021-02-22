@@ -50,7 +50,7 @@ func (v *varlog) trim(ctx context.Context, until types.GLSN, opts TrimOption) er
 func (v *varlog) makeTrimmer(trimArg *trimArgument, until types.GLSN, wg *sync.WaitGroup) func(context.Context) {
 	return func(ctx context.Context) {
 		defer wg.Done()
-		logCL, err := v.logCLManager.GetOrConnect(trimArg.storageNodeID, trimArg.address)
+		logCL, err := v.logCLManager.GetOrConnect(ctx, trimArg.storageNodeID, trimArg.address)
 		if err != nil {
 			trimArg.err = err
 			return

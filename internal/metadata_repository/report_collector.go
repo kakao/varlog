@@ -403,7 +403,7 @@ Loop:
 }
 
 func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
-	cli, err := rce.getClient()
+	cli, err := rce.getClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -506,7 +506,7 @@ func (rce *reportCollectExecutor) closeClient(cli storagenode.LogStreamReporterC
 	}
 }
 
-func (rce *reportCollectExecutor) getClient() (storagenode.LogStreamReporterClient, error) {
+func (rce *reportCollectExecutor) getClient(ctx context.Context) (storagenode.LogStreamReporterClient, error) {
 	rce.snConnector.mu.RLock()
 	cli := rce.snConnector.cli
 	rce.snConnector.mu.RUnlock()
@@ -520,13 +520,13 @@ func (rce *reportCollectExecutor) getClient() (storagenode.LogStreamReporterClie
 
 	var err error
 	if rce.snConnector.cli == nil {
-		rce.snConnector.cli, err = rce.helper.GetClient(rce.snConnector.sn)
+		rce.snConnector.cli, err = rce.helper.GetClient(ctx, rce.snConnector.sn)
 	}
 	return rce.snConnector.cli, err
 }
 
 func (rce *reportCollectExecutor) commit(ctx context.Context, cr *snpb.LogStreamCommitResult) error {
-	cli, err := rce.getClient()
+	cli, err := rce.getClient(ctx)
 	if err != nil {
 		return err
 	}

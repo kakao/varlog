@@ -32,7 +32,15 @@ type metadataRefresher struct {
 	logger            *zap.Logger
 }
 
-func newMetadataRefresher(ctx context.Context, connector mrconnector.Connector, allowlist RenewableAllowlist, replicasRetriever RenewableReplicasRetriever, refreshInterval time.Duration, logger *zap.Logger) (*metadataRefresher, error) {
+func newMetadataRefresher(
+	ctx context.Context,
+	connector mrconnector.Connector,
+	allowlist RenewableAllowlist,
+	replicasRetriever RenewableReplicasRetriever,
+	refreshInterval,
+	refreshTimeout time.Duration,
+	logger *zap.Logger) (*metadataRefresher, error) {
+
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -100,9 +108,11 @@ func (mr *metadataRefresher) refresh(ctx context.Context) error {
 		return multierr.Append(err, client.Close())
 	}
 
-	if clusmeta.Equal(mr.metadata.Load()) {
-		return nil
-	}
+	/*
+		if clusmeta.Equal(mr.metadata.Load()) {
+			return nil
+		}
+	*/
 
 	// update metadata
 	mr.metadata.Store(clusmeta)

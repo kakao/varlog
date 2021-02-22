@@ -302,8 +302,8 @@ func TestVarlogNewMRManager(t *testing.T) {
 		})
 
 		Convey("When MR starts within specified periods", func(c C) {
-			vmsOpts.InitialMRConnRetryCount = 5
-			vmsOpts.InitialMRConnRetryBackoff = 100 * time.Millisecond
+			vmsOpts.InitialMRConnRetryCount = 30
+			vmsOpts.InitialMRConnRetryBackoff = 1 * time.Second
 			vmsOpts.MetadataRepositoryAddresses = []string{mrRPCAddr}
 
 			// vms
@@ -311,6 +311,9 @@ func TestVarlogNewMRManager(t *testing.T) {
 			go func() {
 				defer close(mrmC)
 				mrm, err := vms.NewMRManager(context.TODO(), clusterID, vmsOpts.MRManagerOptions, zap.L())
+				if err != nil {
+					fmt.Printf("err: %+v\n", err)
+				}
 				c.So(err, ShouldBeNil)
 				if err == nil {
 					mrmC <- mrm
@@ -461,7 +464,7 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 				return !mr.IsMember()
 			}), ShouldBeTrue)
 
-			oldCL, err := mrc.NewMetadataRepositoryManagementClient(mrAddr)
+			oldCL, err := mrc.NewMetadataRepositoryManagementClient(context.TODO(), mrAddr)
 			So(err, ShouldBeNil)
 			_, err = oldCL.GetClusterInfo(context.TODO(), types.ClusterID(0))
 			So(errors.Is(err, verrors.ErrNotMember), ShouldBeTrue)

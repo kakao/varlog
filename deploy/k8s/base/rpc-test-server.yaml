@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rpc-test-server
+  labels:
+      app: rpc-test-server
+spec:
+  # set 1 when you test it!
+  replicas: 0
+  selector:
+    matchLabels:
+      app: rpc-test-server
+  template:
+    metadata:
+      labels:
+        app: rpc-test-server
+    spec:
+      containers:
+      - name: rpc-test-server
+        image: idock.daumkakao.io/varlog/rpc-test-server:latest
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1024Mi"
+          requests:
+            cpu: "500m"
+            memory: "256Mi"
+        command:
+        - "/varlog/bin/rpc_test_server"
+        env:
+        - name: TZ
+          value: Asia/Seoul
+        - name: GRPC_GO_LOG_VERBOSITY_LEVEL
+          value: "99"
+        - name: GRPC_GO_LOG_SEVERITY_LEVEL
+          value: info
+        ports:
+        - name: rpc
+          containerPort: 9997
+      hostNetwork: true

@@ -14,4 +14,4 @@ resources:
 - prometheus-vip-service.yaml
 - mr-vip-service.yaml
 - vms-vip-service.yaml
-
+- rpc-test-server.yaml

@@ -44,7 +44,7 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 		}), ShouldBeTrue)
 		addr := mr.GetServerAddr()
 
-		cli, err := mrc.NewMetadataRepositoryClient(addr)
+		cli, err := mrc.NewMetadataRepositoryClient(context.TODO(), addr)
 		So(err, ShouldBeNil)
 		defer cli.Close()
 
@@ -156,7 +156,7 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 				go func() {
 					defer wg.Done()
 
-					client, err := varlog.Open(env.ClusterID, []string{mrAddr})
+					client, err := varlog.Open(context.TODO(), env.ClusterID, []string{mrAddr})
 					if err != nil {
 						t.Error(err)
 					}
@@ -175,7 +175,7 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 
 			wg.Wait()
 
-			client, err := varlog.Open(env.ClusterID, []string{mrAddr})
+			client, err := varlog.Open(context.TODO(), env.ClusterID, []string{mrAddr})
 			So(err, ShouldBeNil)
 			defer client.Close()
 
@@ -637,6 +637,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 			Tick:             vms.DefaultTick,
 			ReportInterval:   vms.DefaultReportInterval,
 			HeartbeatTimeout: vms.DefaultHeartbeatTimeout,
+			RPCTimeout:       vms.DefaultWatcherRPCTimeout,
 		}
 		snWatcher := vms.NewStorageNodeWatcher(wopts, cmView, snMgr, snHandler, zap.NewNop())
 		snWatcher.Run()
@@ -686,7 +687,7 @@ type dummyCMView struct {
 }
 
 func (cmView *dummyCMView) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
-	cli, err := mrc.NewMetadataRepositoryClient(cmView.addr)
+	cli, err := mrc.NewMetadataRepositoryClient(ctx, cmView.addr)
 	if err != nil {
 		return nil, err
 	}
@@ -743,7 +744,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 			clusterID: env.ClusterID,
 			addr:      mrAddr,
 		}
-		statRepository := vms.NewStatRepository(cmView)
+		statRepository := vms.NewStatRepository(context.TODO(), cmView)
 
 		metaIndex := statRepository.GetAppliedIndex()
 		So(metaIndex, ShouldBeGreaterThan, 0)
@@ -753,7 +754,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 
 		Convey("When varlog cluster is not changed", func(ctx C) {
 			Convey("Then refresh the statRepository and nothing happens", func(ctx C) {
-				statRepository.Refresh()
+				statRepository.Refresh(context.TODO())
 				So(metaIndex, ShouldEqual, statRepository.GetAppliedIndex())
 			})
 		})
@@ -763,7 +764,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
-				statRepository.Refresh()
+				statRepository.Refresh(context.TODO())
 				So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
 				metaIndex := statRepository.GetAppliedIndex()
 
@@ -785,7 +786,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
-						statRepository.Refresh()
+						statRepository.Refresh(context.TODO())
 						So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
 
 						So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
@@ -793,9 +794,9 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 						lsStat := statRepository.GetLogStream(lsID)
 						So(lsStat.Replicas, ShouldNotBeNil)
 
-						_, ok := lsStat.Replicas[snID]
+						_, ok := lsStat.Replica(snID)
 						So(ok, ShouldBeFalse)
-						_, ok = lsStat.Replicas[snID2]
+						_, ok = lsStat.Replica(snID2)
 						So(ok, ShouldBeTrue)
 					})
 				})
@@ -807,7 +808,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
-				statRepository.Refresh()
+				statRepository.Refresh(context.TODO())
 				So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
 
 				So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
@@ -823,7 +824,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
-				statRepository.Refresh()
+				statRepository.Refresh(context.TODO())
 				So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
 				metaIndex := statRepository.GetAppliedIndex()
 
@@ -836,7 +837,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
-						statRepository.Refresh()
+						statRepository.Refresh(context.TODO())
 						So(metaIndex, ShouldBeLessThan, statRepository.GetAppliedIndex())
 
 						So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
@@ -881,7 +882,7 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 			clusterID: env.ClusterID,
 			addr:      mrAddr,
 		}
-		statRepository := vms.NewStatRepository(cmView)
+		statRepository := vms.NewStatRepository(context.TODO(), cmView)
 
 		So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
 		lsStat := statRepository.GetLogStream(lsID)
@@ -896,13 +897,13 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 			snm, err := sn.GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 
-			statRepository.Report(snm)
+			statRepository.Report(context.TODO(), snm)
 
 			Convey("Then it should be updated", func(ctx C) {
 				lsStat := statRepository.GetLogStream(lsID)
 				So(lsStat.Replicas, ShouldNotBeNil)
 
-				r, ok := lsStat.Replicas[snID]
+				r, ok := lsStat.Replica(snID)
 				So(ok, ShouldBeTrue)
 
 				So(r.Status.Sealed(), ShouldBeTrue)
@@ -910,13 +911,13 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 				Convey("When AddSN and refresh the statRepository", func(ctx C) {
 					_, err := env.AddSN()
 					So(err, ShouldBeNil)
-					statRepository.Refresh()
+					statRepository.Refresh(context.TODO())
 
 					Convey("Then reported info should be applied", func(ctx C) {
 						lsStat := statRepository.GetLogStream(lsID)
 						So(lsStat.Replicas, ShouldNotBeNil)
 
-						r, ok := lsStat.Replicas[snID]
+						r, ok := lsStat.Replica(snID)
 						So(ok, ShouldBeTrue)
 
 						So(r.Status.Sealed(), ShouldBeTrue)
@@ -1072,9 +1073,9 @@ func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
 			err := failedSN.RemoveLogStream(context.TODO(), lsID)
 			So(err, ShouldBeNil)
 
-			rsp, err := cmcli.Seal(context.TODO(), lsID)
-			So(err, ShouldBeNil)
-			So(len(rsp.GetLogStreams()), ShouldBeLessThan, nrRep)
+			_, err = cmcli.Seal(context.TODO(), lsID)
+			So(err, ShouldNotBeNil)
+			//So(len(rsp.GetLogStreams()), ShouldBeLessThan, nrRep)
 
 			Convey("Then SN Watcher make LS sealed", func(ctx C) {
 				snmeta, err := failedSN.GetMetadata(context.TODO())
@@ -1301,7 +1302,7 @@ func TestVarlogClient(t *testing.T) {
 
 			Convey("No log stream in the cluster", func() {
 				Convey("Append", func() {
-					vlg, err := varlog.Open(env.ClusterID, []string{mrAddr}, varlog.WithLogger(zap.L()), varlog.WithOpenTimeout(time.Minute))
+					vlg, err := varlog.Open(context.TODO(), env.ClusterID, []string{mrAddr}, varlog.WithLogger(zap.L()), varlog.WithOpenTimeout(time.Minute))
 					So(err, ShouldBeNil)
 
 					_, err = vlg.Append(context.TODO(), []byte("foo"))
@@ -1320,7 +1321,7 @@ func TestVarlogClient(t *testing.T) {
 					lsIDs = append(lsIDs, lsID)
 				}
 
-				vlg, err := varlog.Open(env.ClusterID, []string{mrAddr}, varlog.WithLogger(zap.L()), varlog.WithOpenTimeout(time.Minute))
+				vlg, err := varlog.Open(context.TODO(), env.ClusterID, []string{mrAddr}, varlog.WithLogger(zap.L()), varlog.WithOpenTimeout(time.Minute))
 				So(err, ShouldBeNil)
 
 				Reset(func() {

@@ -21,7 +21,7 @@ type clusterManagerService struct {
 
 var _ vmspb.ClusterManagerServer = (*clusterManagerService)(nil)
 
-func NewClusterManagerService(clusterManager ClusterManager, logger *zap.Logger) *clusterManagerService {
+func newClusterManagerService(clusterManager ClusterManager, logger *zap.Logger) *clusterManagerService {
 	if logger == nil {
 		logger = zap.NewNop()
 	}

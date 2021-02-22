@@ -36,7 +36,7 @@ func NewEmptyReporterClientFactory() *EmptyReporterClientFactory {
 	return &EmptyReporterClientFactory{}
 }
 
-func (rcf *EmptyReporterClientFactory) GetClient(*varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+func (rcf *EmptyReporterClientFactory) GetClient(context.Context, *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
 	return &EmptyReporterClient{}, nil
 }
 
@@ -109,7 +109,7 @@ func NewDummyReporterClientFactory(nrLogStreams int, manual bool) *DummyReporter
 	return fac
 }
 
-func (fac *DummyReporterClientFactory) GetClient(sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+func (fac *DummyReporterClientFactory) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
 	status := DUMMY_REPORTERCLIENT_STATUS_RUNNING
 
 	LSIDs := make([]types.LogStreamID, fac.nrLogStreams)

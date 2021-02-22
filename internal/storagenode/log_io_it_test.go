@@ -37,7 +37,7 @@ func TestLogIOClientLogIOServiceAppend(t *testing.T) {
 		).AnyTimes()
 
 		Convey("And a LogIOClient tries to append a log entry to a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
-			cli, err := logc.NewLogIOClient(addr)
+			cli, err := logc.NewLogIOClient(context.TODO(), addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {
@@ -112,7 +112,7 @@ func TestLogIOClientLogIOServiceRead(t *testing.T) {
 		).AnyTimes()
 
 		Convey("And a LogIOClient tries to read a log entry from a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
-			cli, err := logc.NewLogIOClient(addr)
+			cli, err := logc.NewLogIOClient(context.TODO(), addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {
@@ -202,7 +202,7 @@ func TestLogIOClientLogIOServiceSubscribe(t *testing.T) {
 		).AnyTimes()
 
 		Convey("And a LogIOClient tries to subscribe to log entries of a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
-			cli, err := logc.NewLogIOClient(addr)
+			cli, err := logc.NewLogIOClient(context.TODO(), addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {
@@ -269,7 +269,7 @@ func TestLogIOClientLogIOServiceTrim(t *testing.T) {
 
 		Convey("And a LogIOClient tries to trim log entries of a LogStream in the LogIOService", conveyutil.WithServiceServer(service, func(server *grpc.Server, addr string) {
 
-			cli, err := logc.NewLogIOClient(addr)
+			cli, err := logc.NewLogIOClient(context.TODO(), addr)
 			So(err, ShouldBeNil)
 
 			Reset(func() {

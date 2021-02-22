@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -146,8 +147,20 @@ func (s *ReplicatorService) send(ctx context.Context, stream snpb.Replicator_Rep
 func (s *ReplicatorService) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateRequest) (*snpb.SyncReplicateResponse, error) {
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
-		return nil, fmt.Errorf("no logstreamexecutor: %v", req.GetLogStreamID())
+		return nil, errors.Errorf("no logstreamexecutor: %v", req.GetLogStreamID())
 	}
+	var rsp *snpb.SyncReplicateResponse
 	err := lse.SyncReplicate(ctx, req.GetFirst(), req.GetLast(), req.GetCurrent(), req.GetData())
+	if err == nil {
+		s.logger.Info("SyncReplicate",
+			zap.String("request", req.String()),
+			zap.String("response", rsp.String()),
+		)
+	} else {
+		s.logger.Error("SyncReplicate",
+			zap.Error(err),
+			zap.String("request", req.String()),
+		)
+	}
 	return &snpb.SyncReplicateResponse{}, err
 }

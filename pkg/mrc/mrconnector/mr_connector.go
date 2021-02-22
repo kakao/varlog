@@ -394,7 +394,7 @@ func connectToReliableMR(ctx context.Context, clusterID types.ClusterID, addr st
 
 	connCtx, connCancel = context.WithTimeout(ctx, connTimeout)
 	defer connCancel()
-	conn, err := rpc.NewBlockingConnWithContext(connCtx, addr)
+	conn, err := rpc.NewConn(connCtx, addr)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -12,4 +12,6 @@ images:
   - name: idock.daumkakao.io/varlog/varlog-vms
     newName: idock.daumkakao.io/varlog/varlog-vms
     newTag: IMAGE_TAG
-
+  - name: idock.daumkakao.io/varlog/rpc-test-server
+    newName: idock.daumkakao.io/varlog/rpc-test-server
+    newTag: IMAGE_TAG

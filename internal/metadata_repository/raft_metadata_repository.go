@@ -37,7 +37,7 @@ const (
 type ReportCollectorHelper interface {
 	ProposeReport(types.StorageNodeID, []*snpb.LogStreamUncommitReport) error
 
-	GetClient(*varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error)
+	GetClient(context.Context, *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error)
 
 	LookupCommitResults(types.GLSN) *mrpb.LogStreamCommitResults
 
@@ -1182,8 +1182,8 @@ func (mr *RaftMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []*
 	return mr.proposeReport(snID, ur)
 }
 
-func (mr *RaftMetadataRepository) GetClient(sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
-	return mr.reporterClientFac.GetClient(sn)
+func (mr *RaftMetadataRepository) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+	return mr.reporterClientFac.GetClient(ctx, sn)
 }
 
 func (mr *RaftMetadataRepository) LookupCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {

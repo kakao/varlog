@@ -199,7 +199,7 @@ func TestSync(t *testing.T) {
 
 		var logclList []logc.LogIOClient
 		for _, sn := range snList {
-			logcl, err := logc.NewLogIOClient(sn.advertiseAddr)
+			logcl, err := logc.NewLogIOClient(context.TODO(), sn.advertiseAddr)
 			So(err, ShouldBeNil)
 
 			logclList = append(logclList, logcl)
@@ -440,7 +440,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		// logcl: connect
-		logCL, err := logc.NewLogIOClient(sn.advertiseAddr)
+		logCL, err := logc.NewLogIOClient(context.TODO(), sn.advertiseAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -502,7 +502,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		So(meta.GetLogStreams()[0].GetLogStreamID(), ShouldEqual, logStreamID)
 
 		// logcl: connect
-		logCL, err = logc.NewLogIOClient(sn.advertiseAddr)
+		logCL, err = logc.NewLogIOClient(context.TODO(), sn.advertiseAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
