@@ -156,6 +156,10 @@ func (k8s *K8sVarlogCluster) Reset() error {
 		return err
 	}
 
+	if err := k8s.clearMRDatas(); err != nil {
+		return err
+	}
+
 	if k8s.NrMR > 0 {
 		if err := k8s.startNodes(MR_LABEL, 1); err != nil {
 			return err
@@ -519,6 +523,40 @@ func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
 
 	if num != expected {
 		return errors.New("too many or not enough nodes")
+	}
+
+	return nil
+}
+
+func (k8s *K8sVarlogCluster) clearMRDatas() error {
+	label := "varlog-mr-clear"
+	podSelector := map[string]string{"app": label}
+
+	nodes, err := k8s.WorkerNodes()
+	if err != nil {
+		return err
+	}
+
+	for _, node := range nodes.Items {
+		if _, ok := node.Labels["type"]; ok {
+			continue
+		}
+
+		err := k8s.AddLabel(node.GetName(), "type", label)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := testutil.CompareWaitErrorWithRetryIntervalN(1000, 10*time.Second, func() (bool, error) {
+		numPods, err := k8s.numPodsReady("default", podSelector)
+		return numPods == len(nodes.Items), errors.Wrap(err, "k8s")
+	}); err != nil {
+		return err
+	}
+
+	if err := k8s.StopAll(); err != nil {
+		return err
 	}
 
 	return nil
