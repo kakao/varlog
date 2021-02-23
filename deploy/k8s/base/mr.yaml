@@ -58,15 +58,6 @@ spec:
         volumeMounts:
         - name: varlog-mr-home
           mountPath: /varlog/mr
-        startupProbe:
-          exec:
-            command:
-            - "sh"
-            - "-c"
-            - "/varlog/tools/grpc_health_probe -addr=${HOST_IP}:9092"
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          failureThreshold: 3
         readinessProbe:
           exec:
             command:

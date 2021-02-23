@@ -10,6 +10,7 @@ import socket
 import subprocess
 import sys
 import time
+import glob
 
 cwd = os.path.dirname(os.path.realpath(__file__))  # noqa
 binpath = os.path.join(cwd, "..", "bin")  # noqa
@@ -100,11 +101,21 @@ def add_raft_peer():
         logger.exception("could not add peer")
         return False
 
-
 def prepare_vmr_home():
     home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
     os.makedirs(home, exist_ok=True)
 
+def standalone():
+    home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
+    return os.path.exists(f"{home}/.standalone")
+
+def clear_standalone():
+    home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
+    os.remove(f"{home}/.standalone")
+
+def exists_wal(path):
+    wal = glob.glob(os.path.join(f"{path}/wal", "*", "*.wal")
+    return len(wal) > 0
 
 def main():
     limits.set_limits()
@@ -116,6 +127,17 @@ def main():
     rpc_addr = get_rpc_addr()
     raft_dir = get_raft_dir()
     log_dir = get_log_dir()
+
+    if peers is None:
+        if standalone():
+            logger.info("it starts standalone")
+        else if exists_wal():
+            logger.info("it runs standalone with wal")
+        else:
+            logger.info("it could not run as standalone. check configuration")
+            return
+
+    clear_standalone()
 
     common_command = [
         f"{binpath}/vmr",
@@ -139,13 +161,6 @@ def main():
 
     metadata_repository_restart = common_command.copy()
     metadata_repository_restart.append("--join=true")
-
-    if peers is None or need_add_peer:
-        logger.info(f"remove {raft_dir}")
-        try:
-            shutil.rmtree(raft_dir)
-        except FileNotFoundError:
-            pass
 
     restart = False
     killer = Killer()

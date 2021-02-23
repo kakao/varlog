@@ -353,6 +353,10 @@ cat mr.template.yaml | sed "s/{{VMR_HOME}}/${VMR_HOME}/g" | sed "s/{{DOCKER_TAG}
 
 kubectl apply -f mr.yaml
 
+# 초기화시 raftdata clear를 위한 daemonset 생성
+kubectl apply -f mr-clear.yaml
+
+
 # daemonset 생성 확인
 kubectl get daemonset
 ```

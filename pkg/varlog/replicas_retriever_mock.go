@@ -13,30 +13,30 @@ import (
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
-// MockReplicasRetriever is a mock of ReplicasRetriever interface.
+// MockReplicasRetriever is a mock of ReplicasRetriever interface
 type MockReplicasRetriever struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicasRetrieverMockRecorder
 }
 
-// MockReplicasRetrieverMockRecorder is the mock recorder for MockReplicasRetriever.
+// MockReplicasRetrieverMockRecorder is the mock recorder for MockReplicasRetriever
 type MockReplicasRetrieverMockRecorder struct {
 	mock *MockReplicasRetriever
 }
 
-// NewMockReplicasRetriever creates a new mock instance.
+// NewMockReplicasRetriever creates a new mock instance
 func NewMockReplicasRetriever(ctrl *gomock.Controller) *MockReplicasRetriever {
 	mock := &MockReplicasRetriever{ctrl: ctrl}
 	mock.recorder = &MockReplicasRetrieverMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockReplicasRetriever) EXPECT() *MockReplicasRetrieverMockRecorder {
 	return m.recorder
 }
 
-// All mocks base method.
+// All mocks base method
 func (m *MockReplicasRetriever) All() map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "All")
@@ -44,13 +44,13 @@ func (m *MockReplicasRetriever) All() map[types.LogStreamID][]varlogpb.LogStream
 	return ret0
 }
 
-// All indicates an expected call of All.
+// All indicates an expected call of All
 func (mr *MockReplicasRetrieverMockRecorder) All() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "All", reflect.TypeOf((*MockReplicasRetriever)(nil).All))
 }
 
-// Retrieve mocks base method.
+// Retrieve mocks base method
 func (m *MockReplicasRetriever) Retrieve(arg0 types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Retrieve", arg0)
@@ -59,36 +59,36 @@ func (m *MockReplicasRetriever) Retrieve(arg0 types.LogStreamID) ([]varlogpb.Log
 	return ret0, ret1
 }
 
-// Retrieve indicates an expected call of Retrieve.
+// Retrieve indicates an expected call of Retrieve
 func (mr *MockReplicasRetrieverMockRecorder) Retrieve(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockReplicasRetriever)(nil).Retrieve), arg0)
 }
 
-// MockRenewableReplicasRetriever is a mock of RenewableReplicasRetriever interface.
+// MockRenewableReplicasRetriever is a mock of RenewableReplicasRetriever interface
 type MockRenewableReplicasRetriever struct {
 	ctrl     *gomock.Controller
 	recorder *MockRenewableReplicasRetrieverMockRecorder
 }
 
-// MockRenewableReplicasRetrieverMockRecorder is the mock recorder for MockRenewableReplicasRetriever.
+// MockRenewableReplicasRetrieverMockRecorder is the mock recorder for MockRenewableReplicasRetriever
 type MockRenewableReplicasRetrieverMockRecorder struct {
 	mock *MockRenewableReplicasRetriever
 }
 
-// NewMockRenewableReplicasRetriever creates a new mock instance.
+// NewMockRenewableReplicasRetriever creates a new mock instance
 func NewMockRenewableReplicasRetriever(ctrl *gomock.Controller) *MockRenewableReplicasRetriever {
 	mock := &MockRenewableReplicasRetriever{ctrl: ctrl}
 	mock.recorder = &MockRenewableReplicasRetrieverMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockRenewableReplicasRetriever) EXPECT() *MockRenewableReplicasRetrieverMockRecorder {
 	return m.recorder
 }
 
-// All mocks base method.
+// All mocks base method
 func (m *MockRenewableReplicasRetriever) All() map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "All")
@@ -96,25 +96,25 @@ func (m *MockRenewableReplicasRetriever) All() map[types.LogStreamID][]varlogpb.
 	return ret0
 }
 
-// All indicates an expected call of All.
+// All indicates an expected call of All
 func (mr *MockRenewableReplicasRetrieverMockRecorder) All() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "All", reflect.TypeOf((*MockRenewableReplicasRetriever)(nil).All))
 }
 
-// Renew mocks base method.
+// Renew mocks base method
 func (m *MockRenewableReplicasRetriever) Renew(arg0 *varlogpb.MetadataDescriptor) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Renew", arg0)
 }
 
-// Renew indicates an expected call of Renew.
+// Renew indicates an expected call of Renew
 func (mr *MockRenewableReplicasRetrieverMockRecorder) Renew(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Renew", reflect.TypeOf((*MockRenewableReplicasRetriever)(nil).Renew), arg0)
 }
 
-// Retrieve mocks base method.
+// Retrieve mocks base method
 func (m *MockRenewableReplicasRetriever) Retrieve(arg0 types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Retrieve", arg0)
@@ -123,7 +123,7 @@ func (m *MockRenewableReplicasRetriever) Retrieve(arg0 types.LogStreamID) ([]var
 	return ret0, ret1
 }
 
-// Retrieve indicates an expected call of Retrieve.
+// Retrieve indicates an expected call of Retrieve
 func (mr *MockRenewableReplicasRetrieverMockRecorder) Retrieve(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockRenewableReplicasRetriever)(nil).Retrieve), arg0)
