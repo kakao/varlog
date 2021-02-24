@@ -49,7 +49,7 @@ spec:
         - name: VSN_HOME
           value: /varlog/data
         - name: COLLECTOR_NAME
-          value: "otel"
+          value: "nop"
         - name: COLLECTOR_ENDPOINT
           value: "localhost:55680"
         - name: HOST_IP
