@@ -114,7 +114,7 @@ def clear_standalone():
     os.remove(f"{home}/.standalone")
 
 def exists_wal(path):
-    wal = glob.glob(os.path.join(f"{path}/wal", "*", "*.wal")
+    wal = glob.glob(os.path.join(f"{path}/wal", "*", "*.wal"))
     return len(wal) > 0
 
 def main():
@@ -131,7 +131,7 @@ def main():
     if peers is None:
         if standalone():
             logger.info("it starts standalone")
-        else if exists_wal():
+        elif exists_wal(raft_dir):
             logger.info("it runs standalone with wal")
         else:
             logger.info("it could not run as standalone. check configuration")
