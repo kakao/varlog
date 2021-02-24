@@ -8,3 +8,4 @@ data:
   9092: 'default/varlog-mr-rpc:9092'
   9093: 'default/varlog-vms-rpc:9093'
   16686: 'default/jaeger-ui:16686'
+  1777: 'default/otel-collector:1777'

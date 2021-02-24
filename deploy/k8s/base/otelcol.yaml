@@ -107,9 +107,9 @@ data:
     processors:
       batch:
       memory_limiter:
-        ballast_size_mib: 2000
+        ballast_size_mib: 1000
         check_interval: 5s
-        limit_mib: 4000
+        limit_mib: 2000
         spike_limit_mib: 500
 
     extensions:
@@ -141,6 +141,24 @@ data:
           processors: [batch, memory_limiter]
           exporters: [prometheus]
       extensions: [health_check, pprof, zpages]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector-pprof-service
+  namespace: ingress-nginx
+  annotations:
+    service.beta.kubernetes.io/openstack-internal-load-balancer: "true"
+spec:
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+  type: LoadBalancer
+  ports:
+  - name: otel-collector
+    port: 1777
+    targetPort: 1777
+    protocol: TCP
 ---
 apiVersion: v1
 kind: Service
