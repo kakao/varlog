@@ -288,6 +288,8 @@ func (lse *logStreamExecutor) Run(ctx context.Context) (err error) {
 		lse.logger.Error("could not run replicator", zap.Error(err))
 		goto errOut
 	}
+
+	lse.logger.Info("start")
 	return nil
 
 errOut:
@@ -383,10 +385,14 @@ func (lse *logStreamExecutor) Seal(lastCommittedGLSN types.GLSN) (varlogpb.LogSt
 		logEntry, err := lse.storage.Read(lastCommittedGLSN)
 		if err != nil {
 			// MR may be ahead of LSE.
-			lse.logger.Debug("could not read lastCommittedGLSN",
+			lse.logger.Error("could not read lastCommittedGLSN",
 				zap.Any("lastCommittedGLSN", lastCommittedGLSN), zap.Error(err),
 			)
 		} else {
+			lse.logger.Debug("read lastCommittedGLSN",
+				zap.Any("lastCommittedGLSN", lastCommittedGLSN),
+				zap.Any("logEntry", logEntry),
+			)
 			lastCommittedLLSN = logEntry.LLSN
 		}
 
@@ -655,7 +661,7 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 		return verrors.ErrSealed
 	}
 
-	appendTask := newAppendTask(data, nil, llsn, &lse.trackers)
+	appendTask := newAppendTask(data, nil, llsn, &lse.trackers, lse.stopped)
 	if err := lse.addAppendC(ctx, appendTask); err != nil {
 		return err
 	}
@@ -687,7 +693,7 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 		return types.InvalidGLSN, errors.WithStack(verrors.ErrSealed)
 	}
 
-	appendT := newAppendTask(data, replicas, types.InvalidLLSN, &lse.trackers)
+	appendT := newAppendTask(data, replicas, types.InvalidLLSN, &lse.trackers, lse.stopped)
 	appendT.span = span
 	if err := lse.addAppendC(ctx, appendT); err != nil {
 		return types.InvalidGLSN, err
@@ -947,7 +953,6 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		commitErr error
 		nrCommits uint64
 
-		first    = true
 		commitOk = true
 		glsn     = t.committedGLSNBegin
 	)
@@ -955,22 +960,18 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 	lse.lsc.committedLLSNEnd.mu.Lock()
 	defer lse.lsc.committedLLSNEnd.mu.Unlock()
 
-	for glsn < t.committedGLSNEnd {
-		if first {
-			cc := CommitContext{
-				HighWatermark:      t.highWatermark,
-				PrevHighWatermark:  t.prevHighWatermark,
-				CommittedGLSNBegin: t.committedGLSNBegin,
-				CommittedGLSNEnd:   t.committedGLSNEnd,
-			}
-			if commitErr = lse.storage.StoreCommitContext(cc); commitErr != nil {
-				commitOk = false
-				lse.sealItself()
-				break
-			}
-			first = false
-		}
+	cc := CommitContext{
+		HighWatermark:      t.highWatermark,
+		PrevHighWatermark:  t.prevHighWatermark,
+		CommittedGLSNBegin: t.committedGLSNBegin,
+		CommittedGLSNEnd:   t.committedGLSNEnd,
+	}
+	if commitErr = lse.storage.StoreCommitContext(cc); commitErr != nil {
+		commitOk = false
+		lse.sealItself()
+	}
 
+	for commitOk && glsn < t.committedGLSNEnd {
 		llsn := lse.lsc.committedLLSNEnd.llsn
 		if commitErr = lse.storage.Commit(llsn, glsn); commitErr != nil {
 			// NOTE: The LogStreamExecutor fails to commit Log entries that are
@@ -1010,7 +1011,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 	// NOTE: This is a very subtle case. MR assigns GLSNs to these log entries, but the storage
 	// fails to commit it. Actually, these GLSNs are holes. See the above comments.
 	offset := types.LLSN(0)
-	for glsn < t.committedGLSNEnd {
+	for !commitOk && glsn < t.committedGLSNEnd {
 		// NOTE: To avoid a race condition, read committedLLSNEnd inside this for-loop.
 		// Empty commit whilst syncing as a destination doesn't traverse this for-loop.
 		llsn := lse.lsc.committedLLSNEnd.llsn + offset
@@ -1059,6 +1060,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 				zap.String("llsn", llsnRange),
 				zap.String("global_hwm", hwmUpdate),
 				zap.Uint64("local_hwm", uint64(lse.lsc.localHighWatermark.Load())),
+				zap.Any("cc", cc),
 			)
 		}
 		return

@@ -15,10 +15,16 @@ type commitWatcher struct {
 	done chan struct{}
 	err  error
 	once sync.Once
+
+	// notification channel for closing lse
+	stopc <-chan struct{}
 }
 
-func newCommitWatcher() *commitWatcher {
-	return &commitWatcher{done: make(chan struct{})}
+func newCommitWatcher(stopc <-chan struct{}) *commitWatcher {
+	return &commitWatcher{
+		done:  make(chan struct{}),
+		stopc: stopc,
+	}
 }
 
 func (w *commitWatcher) notify(err error) {
@@ -34,6 +40,8 @@ func (w *commitWatcher) watch(ctx context.Context) error {
 		return w.err
 	case <-ctx.Done():
 		return errors.WithStack(ctx.Err())
+	case <-w.stopc:
+		return errors.WithStack(errLSEClosed)
 	}
 }
 
@@ -57,12 +65,12 @@ type appendTask struct {
 	atTrk *appendTaskTracker
 }
 
-func newAppendTask(data []byte, replicas []Replica, llsn types.LLSN, atTrk *appendTaskTracker) *appendTask {
+func newAppendTask(data []byte, replicas []Replica, llsn types.LLSN, atTrk *appendTaskTracker, stopc <-chan struct{}) *appendTask {
 	return &appendTask{
 		data:     data,
 		replicas: replicas,
 		llsn:     llsn,
-		watcher:  newCommitWatcher(),
+		watcher:  newCommitWatcher(stopc),
 		primary:  llsn == types.InvalidLLSN,
 		atTrk:    atTrk,
 	}

@@ -228,6 +228,14 @@ type DB struct {
 
 	compactionLimiter limiter
 	flushLimiter      limiter
+	deletionLimiter   limiter
+
+	// Async deletion jobs spawned by cleaners increment this WaitGroup, and
+	// call Done when completed. Once `d.mu.cleaning` is false, the db.Close()
+	// goroutine needs to call Wait on this WaitGroup to ensure all cleaning
+	// and deleting goroutines have finished running. As deletion goroutines
+	// could grab db.mu, it must *not* be held while deleters.Wait() is called.
+	deleters sync.WaitGroup
 
 	// The main mutex protecting internal DB state. This mutex encompasses many
 	// fields because those fields need to be accessed and updated atomically. In
@@ -309,6 +317,9 @@ type DB struct {
 			manual []*manualCompaction
 			// inProgress is the set of in-progress flushes and compactions.
 			inProgress map[*compaction]struct{}
+			// readCompactions is a list of read triggered compactions. The next
+			// compaction to perform is as the start. New entries are added to the end.
+			readCompactions []readCompaction
 		}
 
 		cleaner struct {
@@ -317,7 +328,8 @@ type DB struct {
 			// serialized, and a caller trying to do a file cleaning operation may wait
 			// until the ongoing one is complete.
 			cond sync.Cond
-			// True when a file cleaning operation is in progress.
+			// True when a file cleaning operation is in progress. False does not necessarily
+			// mean all cleaning jobs have completed; see the comment on d.deleters.
 			cleaning bool
 			// Non-zero when file cleaning is disabled. The disabled count acts as a
 			// reference count to prohibit file cleaning. See
@@ -671,11 +683,9 @@ var iterAllocPool = sync.Pool{
 	},
 }
 
-// newIterInternal constructs a new iterator, merging in batchIter as an extra
+// newIterInternal constructs a new iterator, merging in batch iterators as an extra
 // level.
-func (d *DB) newIterInternal(
-	batchIter internalIterator, batchRangeDelIter internalIterator, s *Snapshot, o *IterOptions,
-) *Iterator {
+func (d *DB) newIterInternal(batch *Batch, s *Snapshot, o *IterOptions) *Iterator {
 	if err := d.closed.Load(); err != nil {
 		panic(err)
 	}
@@ -707,20 +717,38 @@ func (d *DB) newIterInternal(
 		split:     d.split,
 		readState: readState,
 		keyBuf:    buf.keyBuf,
+		batch:     batch,
+		newIters:  d.newIters,
+		seqNum:    seqNum,
 	}
 	if o != nil {
 		dbi.opts = *o
 	}
 	dbi.opts.logger = d.opts.Logger
+	return finishInitializingIter(buf)
+}
 
+// finishInitializingIter is a helper for doing the non-trivial initialization
+// of an Iterator.
+func finishInitializingIter(buf *iterAlloc) *Iterator {
+	// Short-hand.
+	dbi := &buf.dbi
+	readState := dbi.readState
+	batch := dbi.batch
+	seqNum := dbi.seqNum
+
+	// Merging levels.
 	mlevels := buf.mlevels[:0]
-	if batchIter != nil {
+
+	// Top-level is the batch, if any.
+	if batch != nil {
 		mlevels = append(mlevels, mergingIterLevel{
-			iter:         batchIter,
-			rangeDelIter: batchRangeDelIter,
+			iter:         batch.newInternalIter(&dbi.opts),
+			rangeDelIter: batch.newRangeDelIter(&dbi.opts),
 		})
 	}
 
+	// Next are the memtables.
 	memtables := readState.memtables
 	for i := len(memtables) - 1; i >= 0; i-- {
 		mem := memtables[i]
@@ -735,15 +763,15 @@ func (d *DB) newIterInternal(
 		})
 	}
 
+	// Next are the file levels: L0 sub-levels followed by lower levels.
+
 	// Determine the final size for mlevels so that we can avoid any more
 	// reallocations. This is important because each levelIter will hold a
 	// reference to elements in mlevels.
 	start := len(mlevels)
 	current := readState.current
 	for sl := 0; sl < len(current.L0Sublevels.Levels); sl++ {
-		if len(current.L0Sublevels.Levels[sl]) > 0 {
-			mlevels = append(mlevels, mergingIterLevel{})
-		}
+		mlevels = append(mlevels, mergingIterLevel{})
 	}
 	for level := 1; level < len(current.Levels); level++ {
 		if current.Levels[level].Empty() {
@@ -755,10 +783,7 @@ func (d *DB) newIterInternal(
 	mlevels = mlevels[start:]
 
 	levels := buf.levels[:]
-	addLevelIterForFiles := func(files manifest.LevelSlice, level manifest.Level) {
-		if files.Empty() {
-			return
-		}
+	addLevelIterForFiles := func(files manifest.LevelIterator, level manifest.Level) {
 		var li *levelIter
 		if len(levels) > 0 {
 			li = &levels[0]
@@ -767,7 +792,7 @@ func (d *DB) newIterInternal(
 			li = &levelIter{}
 		}
 
-		li.init(dbi.opts, d.cmp, d.newIters, files.Iter(), level, nil)
+		li.init(dbi.opts, dbi.cmp, dbi.newIters, files, level, nil)
 		li.initRangeDel(&mlevels[0].rangeDelIter)
 		li.initSmallestLargestUserKey(&mlevels[0].smallestUserKey, &mlevels[0].largestUserKey,
 			&mlevels[0].isLargestUserKeyRangeDelSentinel)
@@ -779,16 +804,18 @@ func (d *DB) newIterInternal(
 	// Add level iterators for the L0 sublevels, iterating from newest to
 	// oldest.
 	for i := len(current.L0Sublevels.Levels) - 1; i >= 0; i-- {
-		slice := manifest.NewLevelSlice(current.L0Sublevels.Levels[i])
-		addLevelIterForFiles(slice, manifest.L0Sublevel(i))
+		addLevelIterForFiles(current.L0Sublevels.Levels[i].Iter(), manifest.L0Sublevel(i))
 	}
 
 	// Add level iterators for the non-empty non-L0 levels.
 	for level := 1; level < len(current.Levels); level++ {
-		addLevelIterForFiles(current.Levels[level].Slice(), manifest.Level(level))
+		if current.Levels[level].Empty() {
+			continue
+		}
+		addLevelIterForFiles(current.Levels[level].Iter(), manifest.Level(level))
 	}
 
-	buf.merging.init(&dbi.opts, d.cmp, finalMLevels...)
+	buf.merging.init(&dbi.opts, dbi.cmp, finalMLevels...)
 	buf.merging.snapshot = seqNum
 	buf.merging.elideRangeTombstones = true
 	return dbi
@@ -818,8 +845,7 @@ func (d *DB) NewIndexedBatch() *Batch {
 // apparent memory and disk usage leak. Use snapshots (see NewSnapshot) for
 // point-in-time snapshots which avoids these problems.
 func (d *DB) NewIter(o *IterOptions) *Iterator {
-	return d.newIterInternal(nil, /* batchIter */
-		nil /* batchRangeDelIter */, nil /* snapshot */, o)
+	return d.newIterInternal(nil /* batch */, nil /* snapshot */, o)
 }
 
 // NewSnapshot returns a point-in-time view of the current DB state. Iterators
@@ -924,6 +950,10 @@ func (d *DB) Close() error {
 	if len(d.mu.versions.obsoleteTables) > 0 {
 		d.deleteObsoleteFiles(d.mu.nextJobID)
 	}
+	// Wait for all the deletion goroutines spawned by cleaning jobs to finish.
+	d.mu.Unlock()
+	d.deleters.Wait()
+	d.mu.Lock()
 	return err
 }
 
@@ -937,7 +967,10 @@ func (d *DB) Compact(
 	if d.opts.ReadOnly {
 		return ErrReadOnly
 	}
-
+	if d.cmp(start, end) >= 0 {
+		return errors.Errorf("Compact start %s is not less than end %s",
+			d.opts.Comparer.FormatKey(start), d.opts.Comparer.FormatKey(end))
+	}
 	iStart := base.MakeInternalKey(start, InternalKeySeqNumMax, InternalKeyKindMax)
 	iEnd := base.MakeInternalKey(end, 0, 0)
 	meta := []*fileMetadata{{Smallest: iStart, Largest: iEnd}}
@@ -946,7 +979,8 @@ func (d *DB) Compact(
 	maxLevelWithFiles := 1
 	cur := d.mu.versions.currentVersion()
 	for level := 0; level < numLevels; level++ {
-		if !cur.Overlaps(level, d.cmp, start, end).Empty() {
+		overlaps := cur.Overlaps(level, d.cmp, start, end)
+		if !overlaps.Empty() {
 			maxLevelWithFiles = level + 1
 		}
 	}
@@ -1094,11 +1128,43 @@ func (d *DB) Metrics() *Metrics {
 	return metrics
 }
 
+// sstablesOptions hold the optional parameters to retrieve TableInfo for all sstables.
+type sstablesOptions struct {
+	// set to true will return the sstable properties in TableInfo
+	withProperties bool
+}
+
+// SSTablesOption set optional parameter used by `DB.SSTables`.
+type SSTablesOption func(*sstablesOptions)
+
+// WithProperties enable return sstable properties in each TableInfo.
+//
+// NOTE: if most of the sstable properties need to be read from disk,
+// this options may make method `SSTables` quite slow.
+func WithProperties() SSTablesOption {
+	return func(opt *sstablesOptions) {
+		opt.withProperties = true
+	}
+}
+
+// SSTableInfo export manifest.TableInfo with sstable.Properties
+type SSTableInfo struct {
+	manifest.TableInfo
+
+	// Properties is the sstable properties of this table.
+	Properties *sstable.Properties
+}
+
 // SSTables retrieves the current sstables. The returned slice is indexed by
 // level and each level is indexed by the position of the sstable within the
 // level. Note that this information may be out of date due to concurrent
 // flushes and compactions.
-func (d *DB) SSTables() [][]TableInfo {
+func (d *DB) SSTables(opts ...SSTablesOption) ([][]SSTableInfo, error) {
+	opt := &sstablesOptions{}
+	for _, fn := range opts {
+		fn(opt)
+	}
+
 	// Grab and reference the current readState.
 	readState := d.loadReadState()
 	defer readState.unref()
@@ -1110,24 +1176,29 @@ func (d *DB) SSTables() [][]TableInfo {
 	srcLevels := readState.current.Levels
 	var totalTables int
 	for i := range srcLevels {
-		// TODO(jackson): Use metrics on the LevelMetadata once available
-		// rather than Slice().Len().
-		totalTables += srcLevels[i].Slice().Len()
+		totalTables += srcLevels[i].Len()
 	}
 
-	destTables := make([]TableInfo, totalTables)
-	destLevels := make([][]TableInfo, len(srcLevels))
+	destTables := make([]SSTableInfo, totalTables)
+	destLevels := make([][]SSTableInfo, len(srcLevels))
 	for i := range destLevels {
 		iter := srcLevels[i].Iter()
 		j := 0
 		for m := iter.First(); m != nil; m = iter.Next() {
-			destTables[j] = m.TableInfo()
+			destTables[j] = SSTableInfo{TableInfo: m.TableInfo()}
+			if opt.withProperties {
+				p, err := d.tableCache.getTableProperties(m)
+				if err != nil {
+					return nil, err
+				}
+				destTables[j].Properties = p
+			}
 			j++
 		}
 		destLevels[i] = destTables[:j]
 		destTables = destTables[j:]
 	}
-	return destLevels
+	return destLevels, nil
 }
 
 // EstimateDiskUsage returns the estimated filesystem space used in bytes for
@@ -1162,7 +1233,8 @@ func (d *DB) EstimateDiskUsage(start, end []byte) (uint64, error) {
 			// We can only use `Overlaps` to restrict `files` at L1+ since at L0 it
 			// expands the range iteratively until it has found a set of files that
 			// do not overlap any other L0 files outside that set.
-			iter = readState.current.Overlaps(level, d.opts.Comparer.Compare, start, end).Iter()
+			overlaps := readState.current.Overlaps(level, d.opts.Comparer.Compare, start, end)
+			iter = overlaps.Iter()
 		}
 		for file := iter.First(); file != nil; file = iter.Next() {
 			if d.opts.Comparer.Compare(start, file.Smallest.UserKey) <= 0 &&
@@ -1294,12 +1366,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 				continue
 			}
 		}
-		var l0ReadAmp int
-		if d.opts.Experimental.L0SublevelCompactions {
-			l0ReadAmp = d.mu.versions.currentVersion().L0Sublevels.ReadAmplification()
-		} else {
-			l0ReadAmp = d.mu.versions.currentVersion().Levels[0].Slice().Len()
-		}
+		l0ReadAmp := d.mu.versions.currentVersion().L0Sublevels.ReadAmplification()
 		if l0ReadAmp >= d.opts.L0StopWritesThreshold {
 			// There are too many level-0 files, so we wait.
 			if !stalled {
@@ -1346,8 +1413,10 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 				if recycleLogNum > 0 {
 					recycleLogName := base.MakeFilename(d.opts.FS, d.walDirname, fileTypeLog, recycleLogNum)
 					newLogFile, err = d.opts.FS.ReuseForWrite(recycleLogName, newLogName)
+					base.MustExist(d.opts.FS, newLogName, d.opts.Logger, err)
 				} else {
 					newLogFile, err = d.opts.FS.Create(newLogName)
+					base.MustExist(d.opts.FS, newLogName, d.opts.Logger, err)
 				}
 			}
 

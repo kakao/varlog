@@ -110,7 +110,33 @@ type InternalIterator interface {
 	// not supporting reverse iteration in prefix iteration mode until a
 	// different positioning routine (SeekGE, SeekLT, First or Last) switches the
 	// iterator out of prefix iteration.
-	SeekPrefixGE(prefix, key []byte) (*InternalKey, []byte)
+	//
+	// trySeekUsingNext is a performance optimization that callers can use to
+	// indicate that they have not done any action to move this iterator
+	// beyond the first key that would be found if this iterator were to
+	// honestly do the indicated seek. For example, say the caller did a
+	// SeekPrefixGE(k1...), followed by SeekPrefixGE(k2...) where k1 <= k2,
+	// without any intermediate positioning calls. The caller can safely
+	// specify true for this parameter in the second call. As another example,
+	// say the caller did do one call to Next between the two SeekPrefixGE
+	// calls, and k1 < k2. Again, the caller can safely specify a true value
+	// for this parameter. Note that a false value is always safe. The callee
+	// is free to ignore the true value if its implementation does not permit
+	// this optimization.
+	// - We make the caller do this determination since a string comparison of
+	//   k1, k2 is not necessarily cheap, and there may be many iterators in
+	//   the iterator stack. Doing it once at the root of the iterator stack
+	//   is cheaper.
+	// - This optimization could also be applied to SeekGE and SeekLT (where
+	//   it would be trySeekUsingPrev). We currently only do it for
+	//   SeekPrefixGE because this is where this optimization helps the
+	//   performance of CockroachDB. The SeekGE and SeekLT cases in
+	//   CockroachDB are typically accompanied with bounds that change between
+	//   seek calls, and is optimized inside certain iterator implementations,
+	//   like singleLevelIterator, without any extra parameter passing (though
+	//   the same amortization of string comparisons could be done to improve
+	//   that optimization, by making the root of the iterator stack do it).
+	SeekPrefixGE(prefix, key []byte, trySeekUsingNext bool) (*InternalKey, []byte)
 
 	// SeekLT moves the iterator to the last key/value pair whose key is less
 	// than the given key. Returns the key and value if the iterator is pointing
@@ -122,15 +148,15 @@ type InternalIterator interface {
 	// First moves the iterator the the first key/value pair. Returns the key and
 	// value if the iterator is pointing at a valid entry, and (nil, nil)
 	// otherwise. Note that First only checks the upper bound. It is up to the
-	// caller to ensure that key is greater than or equal to the lower bound
-	// (e.g. via a call to SeekGE(lower)).
+	// caller to ensure that First() is not called when there is a lower bound,
+	// and instead call SeekGE(lower).
 	First() (*InternalKey, []byte)
 
 	// Last moves the iterator the the last key/value pair. Returns the key and
 	// value if the iterator is pointing at a valid entry, and (nil, nil)
 	// otherwise. Note that Last only checks the lower bound. It is up to the
-	// caller to ensure that key is less than the upper bound (e.g. via a call
-	// to SeekLT(upper))
+	// caller to ensure that Last() is not called when there is an upper bound,
+	// and instead call SeekLT(upper).
 	Last() (*InternalKey, []byte)
 
 	// Next moves the iterator to the next key/value pair. Returns the key and
@@ -140,8 +166,8 @@ type InternalIterator interface {
 	//
 	// It is valid to call Next when the iterator is positioned before the first
 	// key/value pair due to either a prior call to SeekLT or Prev which returned
-	// (nil, nil). It is undefined to call Next when the previous call to SeekGE
-	// or Next returned (nil, nil).
+	// (nil, nil). It is not allowed to call Next when the previous call to SeekGE,
+	// SeekPrefixGE or Next returned (nil, nil).
 	Next() (*InternalKey, []byte)
 
 	// Prev moves the iterator to the previous key/value pair. Returns the key
@@ -151,7 +177,7 @@ type InternalIterator interface {
 	//
 	// It is valid to call Prev when the iterator is positioned after the last
 	// key/value pair due to either a prior call to SeekGE or Next which returned
-	// (nil, nil). It is undefined to call Next when the previous call to SeekLT
+	// (nil, nil). It is not allowed to call Prev when the previous call to SeekLT
 	// or Prev returned (nil, nil).
 	Prev() (*InternalKey, []byte)
 

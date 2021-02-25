@@ -371,9 +371,9 @@ func checkRangeTombstones(c *checkConfig) error {
 	addTombstonesFromLevel := func(files manifest.LevelIterator, lsmLevel int) error {
 		for f := files.First(); f != nil; f = files.Next() {
 			lf := files.Take()
-			atomicUnit, _ := expandToAtomicUnit(c.cmp, lf.Slice())
+			atomicUnit, _ := expandToAtomicUnit(c.cmp, lf.Slice(), true /* disableIsCompacting */)
 			lower, upper := manifest.KeyRange(c.cmp, atomicUnit.Iter())
-			iterToClose, iter, err := c.newIters(lf, nil, nil)
+			iterToClose, iter, err := c.newIters(lf.FileMetadata, nil, nil)
 			if err != nil {
 				return err
 			}
@@ -403,10 +403,10 @@ func checkRangeTombstones(c *checkConfig) error {
 	}
 	// Now the levels with untruncated tombsones.
 	for i := len(current.L0Sublevels.Levels) - 1; i >= 0; i-- {
-		if len(current.L0Sublevels.Levels[i]) == 0 {
+		if current.L0Sublevels.Levels[i].Empty() {
 			continue
 		}
-		err := addTombstonesFromLevel(manifest.NewLevelSlice(current.L0Sublevels.Levels[i]).Iter(), 0)
+		err := addTombstonesFromLevel(current.L0Sublevels.Levels[i].Iter(), 0)
 		if err != nil {
 			return err
 		}
@@ -423,8 +423,7 @@ func checkRangeTombstones(c *checkConfig) error {
 	}
 	// We now have truncated tombstones.
 	// Fragment them all.
-	var userKeys [][]byte
-	userKeys = collectAllUserKeys(c.cmp, tombstones)
+	userKeys := collectAllUserKeys(c.cmp, tombstones)
 	tombstones = fragmentUsingUserKeys(c.cmp, tombstones, userKeys)
 	return iterateAndCheckTombstones(c.cmp, c.formatKey, tombstones)
 }
@@ -502,7 +501,7 @@ func (v *userKeysSort) Swap(i, j int) {
 	v.buf[i], v.buf[j] = v.buf[j], v.buf[i]
 }
 func collectAllUserKeys(cmp Compare, tombstones []tombstoneWithLevel) [][]byte {
-	var keys [][]byte
+	keys := make([][]byte, 0, len(tombstones)*2)
 	for _, t := range tombstones {
 		keys = append(keys, t.Start.UserKey)
 		keys = append(keys, t.End)
@@ -617,13 +616,13 @@ func checkLevelsInternal(c *checkConfig) (err error) {
 	// reallocations. levelIter will hold a pointer to elements in mlevels.
 	start := len(mlevels)
 	for sublevel := len(current.L0Sublevels.Levels) - 1; sublevel >= 0; sublevel-- {
-		if len(current.L0Sublevels.Levels[sublevel]) == 0 {
+		if current.L0Sublevels.Levels[sublevel].Empty() {
 			continue
 		}
 		mlevels = append(mlevels, simpleMergingIterLevel{})
 	}
 	for level := 1; level < len(current.Levels); level++ {
-		if current.Levels[level].Slice().Empty() {
+		if current.Levels[level].Empty() {
 			continue
 		}
 		mlevels = append(mlevels, simpleMergingIterLevel{})
@@ -631,10 +630,10 @@ func checkLevelsInternal(c *checkConfig) (err error) {
 	mlevelAlloc := mlevels[start:]
 	// Add L0 files by sublevel.
 	for sublevel := len(current.L0Sublevels.Levels) - 1; sublevel >= 0; sublevel-- {
-		if len(current.L0Sublevels.Levels[sublevel]) == 0 {
+		if current.L0Sublevels.Levels[sublevel].Empty() {
 			continue
 		}
-		manifestIter := manifest.NewLevelSlice(current.L0Sublevels.Levels[sublevel]).Iter()
+		manifestIter := current.L0Sublevels.Levels[sublevel].Iter()
 		iterOpts := IterOptions{logger: c.logger}
 		li := &levelIter{}
 		li.init(iterOpts, c.cmp, c.newIters, manifestIter,

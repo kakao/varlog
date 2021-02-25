@@ -17,6 +17,7 @@ const (
 	DefaultCompression Compression = iota
 	NoCompression
 	SnappyCompression
+	ZstdCompression
 	NCompression
 )
 
@@ -28,6 +29,8 @@ func (c Compression) String() string {
 		return "NoCompression"
 	case SnappyCompression:
 		return "Snappy"
+	case ZstdCompression:
+		return "ZSTD"
 	default:
 		return "Unknown"
 	}
@@ -59,6 +62,18 @@ const (
 	TableFormatLevelDB
 )
 
+// ChecksumType specifies the checksum used for blocks. The default is CRC32c.
+type ChecksumType uint32
+
+// The available checksum types. Note that these values are not (and should not)
+// be serialized to disk (for the constants that are persisted, see table.go).
+const (
+	ChecksumTypeCRC32c ChecksumType = iota
+	ChecksumTypeNone
+	ChecksumTypeXXHash
+	ChecksumTypeXXHash64
+)
+
 // TablePropertyCollector provides a hook for collecting user-defined
 // properties based on the keys and values stored in an sstable. A new
 // TablePropertyCollector is created for an sstable when the sstable is being
@@ -78,15 +93,6 @@ type TablePropertyCollector interface {
 
 	// The name of the property collector.
 	Name() string
-}
-
-// NeedCompacter is an optional interface that may be implemented by a
-// TablePropertyCollector to force an sstable compaction.
-type NeedCompacter interface {
-	// NeedCompact is called when all the entries have been added to the
-	// sstable but before Finish. If NeedCompact returns true, the resulting
-	// table will be marked for compaction.
-	NeedCompact() bool
 }
 
 // ReaderOptions holds the parameters needed for reading an sstable.
@@ -204,6 +210,9 @@ type WriterOptions struct {
 	// functions. A new TablePropertyCollector is created for each sstable built
 	// and lives for the lifetime of the table.
 	TablePropertyCollectors []func() TablePropertyCollector
+
+	// Checksum specifies which checksum to use.
+	Checksum ChecksumType
 }
 
 func (o WriterOptions) ensureDefaults() WriterOptions {

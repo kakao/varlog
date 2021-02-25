@@ -242,7 +242,7 @@ func (i *compactionIter) Next() (*InternalKey, []byte) {
 	//   snapshot stripe.
 	// - `skip && pos == iterPosCur`: We are at the key that has been returned.
 	//   To move forward we skip skippable entries in the stripe.
-	if i.pos == iterPosCur {
+	if i.pos == iterPosCurForward {
 		if i.skip {
 			i.skipInStripe()
 		} else {
@@ -250,7 +250,7 @@ func (i *compactionIter) Next() (*InternalKey, []byte) {
 		}
 	}
 
-	i.pos = iterPosCur
+	i.pos = iterPosCurForward
 	i.valid = false
 	for i.iterKey != nil {
 		if i.iterKey.Kind() == InternalKeyKindRangeDelete {
@@ -390,6 +390,10 @@ func (i *compactionIter) skipInStripe() {
 
 func (i *compactionIter) iterNext() bool {
 	i.iterKey, i.iterValue = i.iter.Next()
+	// We should never see a range delete sentinel in the compaction input.
+	if i.iterKey != nil && i.iterKey.Trailer == InternalKeyRangeDeleteSentinel {
+		panic("pebble: unexpected range delete sentinel in compaction input")
+	}
 	return i.iterKey != nil
 }
 

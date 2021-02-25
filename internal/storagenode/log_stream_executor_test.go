@@ -234,7 +234,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 			defer close(stop)
 
 			// add dummy appendtask to block next requests
-			lse.(*logStreamExecutor).appendC <- newAppendTask(nil, nil, types.MinLLSN, &lse.(*logStreamExecutor).trackers)
+			lse.(*logStreamExecutor).appendC <- newAppendTask(nil, nil, types.MinLLSN, &lse.(*logStreamExecutor).trackers, lse.(*logStreamExecutor).stopped)
 			Convey("And the Append is blocked more than configured", func() {
 				lse.(*logStreamExecutor).options.AppendCTimeout = time.Duration(0)
 				Convey("Then the LogStreamExecutor should return timeout error", func() {
@@ -884,5 +884,59 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		})
 
 		wgClient.Wait()
+	})
+}
+
+func TestLogStreamExecutorCommit(t *testing.T) {
+	Convey("Given a LogStreamExecutor", t, func() {
+		const (
+			logStreamID = types.LogStreamID(1)
+		)
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		storage := NewMockStorage(ctrl)
+		storage.EXPECT().Close().Return(nil).AnyTimes()
+		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
+		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
+		options := DefaultLogStreamExecutorOptions()
+		lse, err := NewLogStreamExecutor(
+			zap.L(),
+			logStreamID,
+			storage,
+			newNopTelmetryStub(),
+			&options,
+		)
+		So(err, ShouldBeNil)
+		So(lse.Run(context.TODO()), ShouldBeNil)
+
+		Reset(func() {
+			lse.Close()
+		})
+
+		Convey("When empty commit result comes", func() {
+			cr := CommittedLogStreamStatus{
+				LogStreamID:         logStreamID,
+				HighWatermark:       types.GLSN(10),
+				PrevHighWatermark:   types.GLSN(0),
+				CommittedGLSNOffset: types.GLSN(1),
+				CommittedGLSNLength: 0,
+			}
+
+			Convey("Then CommitContext should be saved", func() {
+				called := make(chan bool, 1)
+				storage.EXPECT().StoreCommitContext(gomock.Any()).DoAndReturn(func(_ CommitContext) error {
+					defer close(called)
+					called <- true
+					return nil
+				})
+
+				lse.Commit(context.TODO(), cr)
+				So(<-called, ShouldBeTrue)
+			})
+
+		})
+
 	})
 }
