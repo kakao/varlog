@@ -48,6 +48,9 @@ type TableStats struct {
 	// The number of point and range deletion entries in the table.
 	NumDeletions uint64
 	// Estimate of the total disk space that may be dropped by this table's
+	// point deletions by compacting them.
+	PointDeletionsBytesEstimate uint64
+	// Estimate of the total disk space that may be dropped by this table's
 	// range deletions by compacting them. This estimate is at data-block
 	// granularity and is not updated if compactions beneath the table reduce
 	// the amount of reclaimable disk space. It also does not account for
@@ -81,8 +84,6 @@ type FileMetadata struct {
 	// Smallest and largest sequence numbers in the table.
 	SmallestSeqNum uint64
 	LargestSeqNum  uint64
-	// True if user asked us to compact this file.
-	MarkedForCompaction bool
 	// True if the file is actively being compacted. Protected by DB.mu.
 	Compacting bool
 	// Stats describe table statistics. Protected by DB.mu.
@@ -95,10 +96,23 @@ type FileMetadata struct {
 	// is true and IsIntraL0Compacting is false for an L0 file, the file must
 	// be part of a compaction to Lbase.
 	IsIntraL0Compacting bool
-	subLevel            int
-	l0Index             int
-	minIntervalIndex    int
-	maxIntervalIndex    int
+	// Fields inside the Atomic struct should be accessed atomically.
+	Atomic struct {
+		// AllowedSeeks is used to determine if a file should be picked for
+		// a read triggered compaction. It is decremented when read sampling
+		// in pebble.Iterator after every after every positioning operation
+		// that returns a user key (eg. Next, Prev, SeekGE, SeekLT, etc).
+		AllowedSeeks int64
+	}
+	subLevel         int
+	l0Index          int
+	minIntervalIndex int
+	maxIntervalIndex int
+
+	// True if user asked us to compact this file. This flag is only set and
+	// respected by RocksDB but exists here to preserve its value in the
+	// MANIFEST.
+	markedForCompaction bool
 }
 
 func (m *FileMetadata) String() string {
@@ -133,23 +147,38 @@ func (m *FileMetadata) TableInfo() TableInfo {
 	}
 }
 
-func (m *FileMetadata) lessSeqNum(b *FileMetadata) bool {
+func cmpUint64(a, b uint64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func (m *FileMetadata) cmpSeqNum(b *FileMetadata) int {
 	// NB: This is the same ordering that RocksDB uses for L0 files.
 
 	// Sort first by largest sequence number.
 	if m.LargestSeqNum != b.LargestSeqNum {
-		return m.LargestSeqNum < b.LargestSeqNum
+		return cmpUint64(m.LargestSeqNum, b.LargestSeqNum)
 	}
 	// Then by smallest sequence number.
 	if m.SmallestSeqNum != b.SmallestSeqNum {
-		return m.SmallestSeqNum < b.SmallestSeqNum
+		return cmpUint64(m.SmallestSeqNum, b.SmallestSeqNum)
 	}
 	// Break ties by file number.
-	return m.FileNum < b.FileNum
+	return cmpUint64(uint64(m.FileNum), uint64(b.FileNum))
 }
 
-func (m *FileMetadata) lessSmallestKey(b *FileMetadata, cmp Compare) bool {
-	return base.InternalCompare(cmp, m.Smallest, b.Smallest) < 0
+func (m *FileMetadata) lessSeqNum(b *FileMetadata) bool {
+	return m.cmpSeqNum(b) < 0
+}
+
+func (m *FileMetadata) cmpSmallestKey(b *FileMetadata, cmp Compare) int {
+	return base.InternalCompare(cmp, m.Smallest, b.Smallest)
 }
 
 // KeyRange returns the minimum smallest and maximum largest internalKey for
@@ -194,7 +223,7 @@ type bySmallest struct {
 
 func (b bySmallest) Len() int { return len(b.files) }
 func (b bySmallest) Less(i, j int) bool {
-	return b.files[i].lessSmallestKey(b.files[j], b.cmp)
+	return b.files[i].cmpSmallestKey(b.files[j], b.cmp) < 0
 }
 func (b bySmallest) Swap(i, j int) { b.files[i], b.files[j] = b.files[j], b.files[i] }
 
@@ -204,32 +233,54 @@ func SortBySmallest(files []*FileMetadata, cmp Compare) {
 	sort.Sort(bySmallest{files, cmp})
 }
 
-func overlaps(files []*FileMetadata, cmp Compare, start, end []byte) (lower, upper int) {
-	// Binary search to find the range of files which overlaps with our target
-	// range.
-	lower = sort.Search(len(files), func(i int) bool {
-		return cmp(files[i].Largest.UserKey, start) >= 0
-	})
-	upper = sort.Search(len(files), func(i int) bool {
-		return cmp(files[i].Smallest.UserKey, end) > 0
-	})
-	return lower, upper
+func overlaps(iter LevelIterator, cmp Compare, start, end []byte) LevelSlice {
+	startIter := iter.Clone()
+	startIter.SeekGE(cmp, start)
+
+	endIter := iter.Clone()
+	endIter.SeekGE(cmp, end)
+
+	// endIter is now pointing at the *first* file with a largest key >= end.
+	// If there are multiple files including the user key `end`, we want all
+	// of them, so move forward.
+	for endIter.Current() != nil && cmp(endIter.Current().Largest.UserKey, end) == 0 {
+		endIter.Next()
+	}
+	// LevelSlice uses inclusive bounds, so if we seeked to the end sentinel
+	// or nexted too far because Largest.UserKey equaled `end`, go back.
+	if !endIter.iter.valid() || cmp(endIter.Current().Smallest.UserKey, end) > 0 {
+		endIter.Prev()
+	}
+
+	iter = startIter.Clone()
+	return LevelSlice{
+		iter:  iter.iter,
+		start: &startIter.iter,
+		end:   &endIter.iter,
+	}
 }
 
 // NumLevels is the number of levels a Version contains.
 const NumLevels = 7
 
-// NewVersion constructs a new Version with the provided files. It assumes
+// NewVersion constructs a new Version with the provided files. It requires
 // the provided files are already well-ordered. It's intended for testing.
 func NewVersion(
-	cmp Compare,
-	formatKey base.FormatKey,
-	flushSplitBytes int64,
-	files [NumLevels][]*FileMetadata,
+	cmp Compare, formatKey base.FormatKey, flushSplitBytes int64, files [NumLevels][]*FileMetadata,
 ) *Version {
 	var v Version
-	for i := range files {
-		v.Levels[i].files = files[i]
+	for l := range files {
+		// NB: We specifically insert `files` into the B-Tree in the order
+		// they appear within `files`. Some tests depend on this behavior in
+		// order to test consistency checking, etc. Once we've constructed the
+		// initial B-Tree, we swap out the btreeCmp for the correct one.
+		v.Levels[l].tree, _ = makeBTree(btreeCmpSpecificOrder(files[l]), files[l])
+
+		if l == 0 {
+			v.Levels[l].tree.cmp = btreeCmpSeqNum
+		} else {
+			v.Levels[l].tree.cmp = btreeCmpSmallestKey(cmp)
+		}
 	}
 	if err := v.InitL0Sublevels(cmp, formatKey, flushSplitBytes); err != nil {
 		panic(err)
@@ -280,7 +331,7 @@ type Version struct {
 
 	// The callback to invoke when the last reference to a version is
 	// removed. Will be called with list.mu held.
-	Deleted func(obsolete []base.FileNum)
+	Deleted func(obsolete []*FileMetadata)
 
 	// The list the version is linked into.
 	list *VersionList
@@ -299,10 +350,10 @@ func (v *Version) Pretty(format base.FormatKey) string {
 	if v.L0Sublevels != nil {
 		for sublevel := len(v.L0Sublevels.Levels) - 1; sublevel >= 0; sublevel-- {
 			fmt.Fprintf(&buf, "0.%d:\n", sublevel)
-			for _, f := range v.L0Sublevels.Levels[sublevel] {
+			v.L0Sublevels.Levels[sublevel].Each(func(f *FileMetadata) {
 				fmt.Fprintf(&buf, "  %06d:[%s-%s]\n", f.FileNum,
 					format(f.Smallest.UserKey), format(f.Largest.UserKey))
-			}
+			})
 		}
 	}
 	for level := 1; level < NumLevels; level++ {
@@ -327,10 +378,10 @@ func (v *Version) DebugString(format base.FormatKey) string {
 	if v.L0Sublevels != nil {
 		for sublevel := len(v.L0Sublevels.Levels) - 1; sublevel >= 0; sublevel-- {
 			fmt.Fprintf(&buf, "0.%d:\n", sublevel)
-			for _, f := range v.L0Sublevels.Levels[sublevel] {
+			v.L0Sublevels.Levels[sublevel].Each(func(f *FileMetadata) {
 				fmt.Fprintf(&buf, "  %06d:[%s-%s]\n", f.FileNum,
 					f.Smallest.Pretty(format), f.Largest.Pretty(format))
-			}
+			})
 		}
 	}
 	for level := 1; level < NumLevels; level++ {
@@ -383,17 +434,10 @@ func (v *Version) UnrefLocked() {
 	}
 }
 
-func (v *Version) unrefFiles() []base.FileNum {
-	// TODO(jackson): Move responsibility of ref-ing of individual files into
-	// the LevelMetadata type.
-	var obsolete []base.FileNum
-	for _, files := range v.Levels {
-		iter := files.Iter()
-		for f := iter.First(); f != nil; f = iter.Next() {
-			if atomic.AddInt32(&f.refs, -1) == 0 {
-				obsolete = append(obsolete, f.FileNum)
-			}
-		}
+func (v *Version) unrefFiles() []*FileMetadata {
+	var obsolete []*FileMetadata
+	for _, lm := range v.Levels {
+		obsolete = append(obsolete, lm.release()...)
 	}
 	return obsolete
 }
@@ -417,9 +461,10 @@ func (v *Version) InitL0Sublevels(
 // searches among the files. If level is zero, Contains scans the entire
 // level.
 func (v *Version) Contains(level int, cmp Compare, m *FileMetadata) bool {
-	iter := v.Levels[level].Slice().Iter()
+	iter := v.Levels[level].Iter()
 	if level > 0 {
-		iter = v.Overlaps(level, cmp, m.Smallest.UserKey, m.Largest.UserKey).Iter()
+		overlaps := v.Overlaps(level, cmp, m.Smallest.UserKey, m.Largest.UserKey)
+		iter = overlaps.Iter()
 	}
 	for f := iter.First(); f != nil; f = iter.Next() {
 		if f == m {
@@ -440,7 +485,7 @@ func (v *Version) Contains(level int, cmp Compare, m *FileMetadata) bool {
 func (v *Version) Overlaps(level int, cmp Compare, start, end []byte) LevelSlice {
 	if level == 0 {
 		// Indices that have been selected as overlapping.
-		l0 := v.Levels[level].Slice()
+		l0 := v.Levels[level]
 		l0Iter := l0.Iter()
 		selectedIndices := make([]bool, l0.Len())
 		numSelected := 0
@@ -482,13 +527,22 @@ func (v *Version) Overlaps(level int, cmp Compare, start, end []byte) LevelSlice
 			}
 
 			if !restart {
-				slice.files = make([]*FileMetadata, 0, numSelected)
+				// Construct a B-Tree containing only the matching items.
+				var tr btree
+				tr.cmp = v.Levels[level].tree.cmp
 				for i, meta := 0, l0Iter.First(); meta != nil; i, meta = i+1, l0Iter.Next() {
 					if selectedIndices[i] {
-						slice.files = append(slice.files, meta)
+						err := tr.insert(meta)
+						if err != nil {
+							panic(err)
+						}
 					}
 				}
-				slice.end = len(slice.files)
+				slice = LevelSlice{iter: tr.iter(), length: tr.length}
+				// TODO(jackson): Avoid the oddity of constructing and
+				// immediately releasing a B-Tree. Make LevelSlice an
+				// interface?
+				tr.release()
 				break
 			}
 			// Continue looping to retry the files that were not selected.
@@ -496,14 +550,7 @@ func (v *Version) Overlaps(level int, cmp Compare, start, end []byte) LevelSlice
 		return slice
 	}
 
-	var slice LevelSlice
-	lower, upper := overlaps(v.Levels[level].files, cmp, start, end)
-	if lower < upper {
-		slice.files = v.Levels[level].files
-		slice.start = lower
-		slice.end = upper
-	}
-	return slice
+	return overlaps(v.Levels[level].Iter(), cmp, start, end)
 }
 
 // CheckOrdering checks that the files are consistent with respect to
@@ -511,8 +558,8 @@ func (v *Version) Overlaps(level int, cmp Compare, start, end []byte) LevelSlice
 // overlapping internal key ranges (for level non-0 files).
 func (v *Version) CheckOrdering(cmp Compare, format base.FormatKey) error {
 	for sublevel := len(v.L0Sublevels.Levels) - 1; sublevel >= 0; sublevel-- {
-		iter := NewLevelSlice(v.L0Sublevels.Levels[sublevel]).Iter()
-		if err := CheckOrdering(cmp, format, L0Sublevel(sublevel), iter); err != nil {
+		sublevelIter := v.L0Sublevels.Levels[sublevel].Iter()
+		if err := CheckOrdering(cmp, format, L0Sublevel(sublevel), sublevelIter); err != nil {
 			return base.CorruptionErrorf("%s\n%s", err, v.DebugString(format))
 		}
 	}
@@ -690,7 +737,7 @@ func CheckOrdering(cmp Compare, format base.FormatKey, level Level, files LevelI
 				return errors.Wrapf(err, "%s ", level)
 			}
 			if prev != nil {
-				if !prev.lessSmallestKey(f, cmp) {
+				if prev.cmpSmallestKey(f, cmp) >= 0 {
 					return base.CorruptionErrorf("%s files %s and %s are not properly ordered: [%s-%s] vs [%s-%s]",
 						errors.Safe(level), errors.Safe(prev.FileNum), errors.Safe(f.FileNum),
 						prev.Smallest.Pretty(format), prev.Largest.Pretty(format),

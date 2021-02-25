@@ -31,6 +31,7 @@ const (
 	DefaultCompression = sstable.DefaultCompression
 	NoCompression      = sstable.NoCompression
 	SnappyCompression  = sstable.SnappyCompression
+	ZstdCompression    = sstable.ZstdCompression
 )
 
 // FilterType exports the base.FilterType type.
@@ -50,9 +51,6 @@ type FilterPolicy = base.FilterPolicy
 // TablePropertyCollector exports the sstable.TablePropertyCollector type.
 type TablePropertyCollector = sstable.TablePropertyCollector
 
-// NeedCompacter exports the sstable.NeedCompacter type.
-type NeedCompacter = sstable.NeedCompacter
-
 // IterOptions hold the optional per-query parameters for NewIter.
 //
 // Like Options, a nil *IterOptions is valid and means to use the default
@@ -70,7 +68,8 @@ type IterOptions struct {
 	UpperBound []byte
 	// TableFilter can be used to filter the tables that are scanned during
 	// iteration based on the user properties. Return true to scan the table and
-	// false to skip scanning.
+	// false to skip scanning. This function must be thread-safe since the same
+	// function can be used by multiple iterators, if the iterator is cloned.
 	TableFilter func(userProps map[string]string) bool
 
 	// Internal options.
@@ -106,16 +105,15 @@ func (o *IterOptions) getLogger() Logger {
 // Like Options, a nil *WriteOptions is valid and means to use the default
 // values.
 type WriteOptions struct {
-	// Sync is whether to sync underlying writes from the OS buffer cache
-	// through to actual disk, if applicable. Setting Sync can result in
-	// slower writes.
+	// Sync is whether to sync writes through the OS buffer cache and down onto
+	// the actual disk, if applicable. Setting Sync is required for durability of
+	// individual write operations but can result in slower writes.
 	//
-	// If false, and the machine crashes, then some recent writes may be lost.
-	// Note that if it is just the process that crashes (and the machine does
-	// not) then no writes will be lost.
-	//
-	// In other words, Sync being false has the same semantics as a write
-	// system call. Sync being true means write followed by fsync.
+	// If false, and the process or machine crashes, then a recent write may be
+	// lost. This is due to the recently written data being buffered inside the
+	// process running Pebble. This differs from the semantics of a write system
+	// call in which the data is buffered in the OS buffer cache and would thus
+	// survive a process crash.
 	//
 	// The default value is true.
 	Sync bool
@@ -281,20 +279,6 @@ type Options struct {
 	// out of the experimental group, or made the non-adjustable default. These
 	// options may change at any time, so do not rely on them.
 	Experimental struct {
-		// FlushSplitBytes denotes the target number of bytes per sublevel in
-		// each flush split interval (i.e. range between two flush split keys)
-		// in L0 sstables. When set to zero, only a single sstable is generated
-		// by each flush. When set to a non-zero value, flushes are split at
-		// points to meet L0's TargetFileSize, any grandparent-related overlap
-		// options, and at boundary keys of L0 flush split intervals (which are
-		// targeted to contain around FlushSplitBytes bytes in each sublevel
-		// between pairs of boundary keys). Splitting sstables during flush
-		// allows increased compaction flexibility and concurrency when those
-		// tables are compacted to lower levels.
-		//
-		// TODO(bilal): Experiment with this option to pick a good value.
-		FlushSplitBytes int64
-
 		// The threshold of L0 read-amplification at which compaction concurrency
 		// is enabled (if CompactionDebtConcurrency was not already exceeded).
 		// Every multiple of this value enables another concurrent
@@ -309,20 +293,51 @@ type Options struct {
 		// concurrency slots as determined by the two options is chosen.
 		CompactionDebtConcurrency int
 
-		// L0SublevelCompactions enables the use of L0 sublevel-based compaction
-		// picking logic. Defaults to false for now. This logic will become
-		// a non-configurable default once it's better tuned.
-		//
-		// When true, this option also changes the interpretation of
-		// L0CompactionThreshold and L0StopWritesThreshold to refer to L0
-		// read amplification as opposed to the count of L0 files.
-		L0SublevelCompactions bool
-
 		// DeleteRangeFlushDelay configures how long the database should wait
 		// before forcing a flush of a memtable that contains a range
 		// deletion. Disk space cannot be reclaimed until the range deletion
 		// is flushed. No automatic flush occurs if zero.
 		DeleteRangeFlushDelay time.Duration
+
+		// MinDeletionRate is the minimum number of bytes per second that would
+		// be deleted. Deletion pacing is used to slow down deletions when
+		// compactions finish up or readers close, and newly-obsolete files need
+		// cleaning up. Deleting lots of files at once can cause disk latency to
+		// go up on some SSDs, which this functionality guards against. This is a
+		// minimum as the maximum is theoretically unlimited; pacing is disabled
+		// when there are too many obsolete files relative to live bytes, or
+		// there isn't enough disk space available. Setting this to 0 disables
+		// deletion pacing, which is also the default.
+		MinDeletionRate int
+
+		// ReadCompactionRate controls the frequency of read triggered
+		// compactions by adjusting `AllowedSeeks` in manifest.FileMetadata:
+		//
+		// AllowedSeeks = FileSize / ReadCompactionRate
+		//
+		// From LevelDB:
+		// ```
+		// We arrange to automatically compact this file after
+		// a certain number of seeks. Let's assume:
+		//   (1) One seek costs 10ms
+		//   (2) Writing or reading 1MB costs 10ms (100MB/s)
+		//   (3) A compaction of 1MB does 25MB of IO:
+		//         1MB read from this level
+		//         10-12MB read from next level (boundaries may be misaligned)
+		//         10-12MB written to next level
+		// This implies that 25 seeks cost the same as the compaction
+		// of 1MB of data.  I.e., one seek costs approximately the
+		// same as the compaction of 40KB of data.  We are a little
+		// conservative and allow approximately one seek for every 16KB
+		// of data before triggering a compaction.
+		// ```
+		ReadCompactionRate int64
+
+		// ReadSamplingMultiplier is a multiplier for the readSamplingPeriod in
+		// iterator.maybeSampleRead() to control the frequency of read sampling
+		// to trigger a read triggered compaction. A value of -1 prevents sampling
+		// and disables read triggered compactions.
+		ReadSamplingMultiplier uint64
 	}
 
 	// Filters is a map from filter policy name to filter policy. It is used for
@@ -330,6 +345,18 @@ type Options struct {
 	// different filter policies. It is not necessary to populate this filters
 	// map during normal usage of a DB.
 	Filters map[string]FilterPolicy
+
+	// FlushSplitBytes denotes the target number of bytes per sublevel in
+	// each flush split interval (i.e. range between two flush split keys)
+	// in L0 sstables. When set to zero, only a single sstable is generated
+	// by each flush. When set to a non-zero value, flushes are split at
+	// points to meet L0's TargetFileSize, any grandparent-related overlap
+	// options, and at boundary keys of L0 flush split intervals (which are
+	// targeted to contain around FlushSplitBytes bytes in each sublevel
+	// between pairs of boundary keys). Splitting sstables during flush
+	// allows increased compaction flexibility and concurrency when those
+	// tables are compacted to lower levels.
+	FlushSplitBytes int64
 
 	// FS provides the interface for persistent file storage.
 	//
@@ -565,6 +592,15 @@ func (o *Options) EnsureDefaults() *Options {
 				})
 			})
 	}
+	if o.FlushSplitBytes <= 0 {
+		o.FlushSplitBytes = 2 * o.Levels[0].TargetFileSize
+	}
+	if o.Experimental.ReadCompactionRate == 0 {
+		o.Experimental.ReadCompactionRate = 16000
+	}
+	if o.Experimental.ReadSamplingMultiplier == 0 {
+		o.Experimental.ReadSamplingMultiplier = 1
+	}
 
 	o.initMaps()
 	return o
@@ -633,11 +669,10 @@ func (o *Options) String() string {
 	fmt.Fprintf(&buf, "  comparer=%s\n", o.Comparer.Name)
 	fmt.Fprintf(&buf, "  delete_range_flush_delay=%s\n", o.Experimental.DeleteRangeFlushDelay)
 	fmt.Fprintf(&buf, "  disable_wal=%t\n", o.DisableWAL)
-	fmt.Fprintf(&buf, "  flush_split_bytes=%d\n", o.Experimental.FlushSplitBytes)
+	fmt.Fprintf(&buf, "  flush_split_bytes=%d\n", o.FlushSplitBytes)
 	fmt.Fprintf(&buf, "  l0_compaction_concurrency=%d\n", o.Experimental.L0CompactionConcurrency)
 	fmt.Fprintf(&buf, "  l0_compaction_threshold=%d\n", o.L0CompactionThreshold)
 	fmt.Fprintf(&buf, "  l0_stop_writes_threshold=%d\n", o.L0StopWritesThreshold)
-	fmt.Fprintf(&buf, "  l0_sublevel_compactions=%t\n", o.Experimental.L0SublevelCompactions)
 	fmt.Fprintf(&buf, "  lbase_max_bytes=%d\n", o.LBaseMaxBytes)
 	fmt.Fprintf(&buf, "  max_concurrent_compactions=%d\n", o.MaxConcurrentCompactions)
 	fmt.Fprintf(&buf, "  max_manifest_file_size=%d\n", o.MaxManifestFileSize)
@@ -795,7 +830,7 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 			case "disable_wal":
 				o.DisableWAL, err = strconv.ParseBool(value)
 			case "flush_split_bytes":
-				o.Experimental.FlushSplitBytes, err = strconv.ParseInt(value, 10, 64)
+				o.FlushSplitBytes, err = strconv.ParseInt(value, 10, 64)
 			case "l0_compaction_concurrency":
 				o.Experimental.L0CompactionConcurrency, err = strconv.Atoi(value)
 			case "l0_compaction_threshold":
@@ -803,7 +838,7 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 			case "l0_stop_writes_threshold":
 				o.L0StopWritesThreshold, err = strconv.Atoi(value)
 			case "l0_sublevel_compactions":
-				o.Experimental.L0SublevelCompactions, err = strconv.ParseBool(value)
+				// Do nothing; option existed in older versions of pebble.
 			case "lbase_max_bytes":
 				o.LBaseMaxBytes, err = strconv.ParseInt(value, 10, 64)
 			case "max_concurrent_compactions":
@@ -887,6 +922,8 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 					l.Compression = NoCompression
 				case "Snappy":
 					l.Compression = SnappyCompression
+				case "ZSTD":
+					l.Compression = ZstdCompression
 				default:
 					return errors.Errorf("pebble: unknown compression: %q", errors.Safe(value))
 				}

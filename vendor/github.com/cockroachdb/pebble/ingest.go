@@ -401,7 +401,7 @@ func ingestTargetLevel(
 			continue
 		}
 
-		iter, rangeDelIter, err := newIters(iter.Take(), nil, nil)
+		iter, rangeDelIter, err := newIters(iter.Current(), nil, nil)
 		if err != nil {
 			return 0, err
 		}
@@ -428,7 +428,8 @@ func ingestTargetLevel(
 		}
 
 		// Check boundary overlap.
-		if !v.Overlaps(level, cmp, meta.Smallest.UserKey, meta.Largest.UserKey).Empty() {
+		boundaryOverlaps := v.Overlaps(level, cmp, meta.Smallest.UserKey, meta.Largest.UserKey)
+		if !boundaryOverlaps.Empty() {
 			continue
 		}
 

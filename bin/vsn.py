@@ -78,6 +78,13 @@ def get_volume(truncate=False):
     return datapath
 
 
+def get_logdir():
+    home = os.getenv("VSN_HOME", DEFAULT_VSN_HOME)
+    logdir = f"{home}/logs"
+    os.makedirs(logdir, exist_ok=True)
+    return logdir
+
+
 def add_storage_node(addr):
     try:
         subprocess.check_output(
@@ -94,6 +101,7 @@ def main():
     listen_port = os.getenv("RPC_PORT", DEFAULT_RPC_PORT)
     listen_addr = f"0.0.0.0:{listen_port}"
     advertise_addr = get_advertise_addr()
+    logdir = get_logdir()
 
     killer = Killer()
     ok = False
@@ -114,10 +122,20 @@ def main():
                 f"--listen-address={listen_addr}",
                 f"--volumes={volume}",
                 f"--advertise-address={advertise_addr}"
-            ]
+            ] 
+
+            cmd = f"{binpath}/vsn start"
+            cmd += f" --cluster-id={cluster_id}"
+            cmd += f" --storage-node-id={snid}"
+            cmd += f" --listen-address={listen_addr}"
+            cmd += f" --volumes={volume}"
+            cmd += f" --advertise-address={advertise_addr}"
+            cmd += f" 2>&1 | tee -a {logdir}/log.txt"
 
             logger.info(f"running storage node: {storage_node}, already registered={exist}")
             subprocess.Popen(storage_node)
+            # subprocess.Popen(cmd, shell=True)
+
             ok = True
             time.sleep(ADD_STORAGE_NODE_INTERVAL_SEC)
             if not exist:

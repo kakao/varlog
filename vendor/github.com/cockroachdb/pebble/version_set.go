@@ -77,8 +77,8 @@ type versionSet struct {
 
 	// A pointer to versionSet.addObsoleteLocked. Avoids allocating a new closure
 	// on the creation of every version.
-	obsoleteFn        func(obsolete []FileNum)
-	obsoleteTables    []FileNum
+	obsoleteFn        func(obsolete []*manifest.FileMetadata)
+	obsoleteTables    []*manifest.FileMetadata
 	obsoleteManifests []FileNum
 	obsoleteOptions   []FileNum
 
@@ -203,6 +203,7 @@ func (vs *versionSet) load(dirname string, opts *Options, mu *sync.Mutex) error 
 
 	// Read the versionEdits in the manifest file.
 	var bve bulkVersionEdit
+	bve.AddedByFileNum = make(map[base.FileNum]*fileMetadata)
 	manifest, err := vs.fs.Open(vs.fs.PathJoin(dirname, string(b)))
 	if err != nil {
 		return errors.Wrapf(err, "pebble: could not open manifest file %q for DB %q",
@@ -273,7 +274,7 @@ func (vs *versionSet) load(dirname string, opts *Options, mu *sync.Mutex) error 
 	}
 	vs.markFileNumUsed(vs.minUnflushedLogNum)
 
-	newVersion, _, err := bve.Apply(nil, vs.cmp, opts.Comparer.FormatKey, opts.Experimental.FlushSplitBytes)
+	newVersion, _, err := bve.Apply(nil, vs.cmp, opts.Comparer.FormatKey, opts.FlushSplitBytes, opts.Experimental.ReadCompactionRate)
 	if err != nil {
 		return err
 	}
@@ -282,8 +283,9 @@ func (vs *versionSet) load(dirname string, opts *Options, mu *sync.Mutex) error 
 
 	for i := range vs.metrics.Levels {
 		l := &vs.metrics.Levels[i]
-		l.NumFiles = int64(newVersion.Levels[i].Slice().Len())
-		l.Size = int64(newVersion.Levels[i].Slice().SizeSum())
+		l.NumFiles = int64(newVersion.Levels[i].Len())
+		files := newVersion.Levels[i].Slice()
+		l.Size = int64(files.SizeSum())
 	}
 	vs.picker = newCompactionPicker(newVersion, vs.opts, nil, vs.metrics.levelSizes())
 	return nil
@@ -405,7 +407,7 @@ func (vs *versionSet) logAndApply(
 		}
 
 		var err error
-		newVersion, zombies, err = bve.Apply(currentVersion, vs.cmp, vs.opts.Comparer.FormatKey, vs.opts.Experimental.FlushSplitBytes)
+		newVersion, zombies, err = bve.Apply(currentVersion, vs.cmp, vs.opts.Comparer.FormatKey, vs.opts.FlushSplitBytes, vs.opts.Experimental.ReadCompactionRate)
 		if err != nil {
 			return err
 		}
@@ -498,10 +500,11 @@ func (vs *versionSet) logAndApply(
 			l.Sublevels = 1
 		}
 		if invariants.Enabled {
-			if count := int64(newVersion.Levels[i].Slice().Len()); l.NumFiles != count {
+			if count := int64(newVersion.Levels[i].Len()); l.NumFiles != count {
 				vs.opts.Logger.Fatalf("versionSet metrics L%d NumFiles = %d, actual count = %d", i, l.NumFiles, count)
 			}
-			if size := int64(newVersion.Levels[i].Slice().SizeSum()); l.Size != size {
+			levelFiles := newVersion.Levels[i].Slice()
+			if size := int64(levelFiles.SizeSum()); l.Size != size {
 				vs.opts.Logger.Fatalf("versionSet metrics L%d Size = %d, actual size = %d", i, l.Size, size)
 			}
 		}
@@ -643,16 +646,24 @@ func (vs *versionSet) addLiveFileNums(m map[FileNum]struct{}) {
 	}
 }
 
-func (vs *versionSet) addObsoleteLocked(obsolete []FileNum) {
-	for _, fileNum := range obsolete {
+func (vs *versionSet) addObsoleteLocked(obsolete []*manifest.FileMetadata) {
+	for _, fileMeta := range obsolete {
 		// Note that the obsolete tables are no longer zombie by the definition of
 		// zombie, but we leave them in the zombie tables map until they are
 		// deleted from disk.
-		if _, ok := vs.zombieTables[fileNum]; !ok {
-			vs.opts.Logger.Fatalf("MANIFEST obsolete table %s not marked as zombie", fileNum)
+		if _, ok := vs.zombieTables[fileMeta.FileNum]; !ok {
+			vs.opts.Logger.Fatalf("MANIFEST obsolete table %s not marked as zombie", fileMeta.FileNum)
 		}
 	}
 	vs.obsoleteTables = append(vs.obsoleteTables, obsolete...)
+	vs.incrementObsoleteTablesLocked(obsolete)
+}
+
+func (vs *versionSet) incrementObsoleteTablesLocked(obsolete []*manifest.FileMetadata) {
+	for _, fileMeta := range obsolete {
+		vs.metrics.Table.ObsoleteCount++
+		vs.metrics.Table.ObsoleteSize += fileMeta.Size
+	}
 }
 
 func newFileMetrics(newFiles []manifest.NewFileEntry) map[int]*LevelMetrics {

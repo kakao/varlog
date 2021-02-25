@@ -181,8 +181,10 @@ func (b *bitSet) clearAllBits() {
 type L0Sublevels struct {
 	// Levels are ordered from oldest sublevel to youngest sublevel in the
 	// outer slice, and the inner slice contains non-overlapping files for
-	// that sublevel in increasing key order.
-	Levels [][]*FileMetadata
+	// that sublevel in increasing key order. Levels is constructed from
+	// levelFiles and is used by callers that require a LevelSlice.
+	Levels     []LevelSlice
+	levelFiles [][]*FileMetadata
 
 	cmp       Compare
 	formatKey base.FormatKey
@@ -198,18 +200,21 @@ type L0Sublevels struct {
 	flushSplitUserKeys [][]byte
 }
 
-func insertIntoSubLevel(files []*FileMetadata, f *FileMetadata) []*FileMetadata {
-	index := sort.Search(len(files), func(i int) bool {
-		return f.minIntervalIndex < files[i].minIntervalIndex
-	})
-	if index == len(files) {
-		files = append(files, f)
-		return files
-	}
-	files = append(files, nil)
-	copy(files[index+1:], files[index:])
-	files[index] = f
-	return files
+type sublevelSorter []*FileMetadata
+
+// Len implements sort.Interface.
+func (sl sublevelSorter) Len() int {
+	return len(sl)
+}
+
+// Less implements sort.Interface.
+func (sl sublevelSorter) Less(i, j int) bool {
+	return sl[i].minIntervalIndex < sl[j].minIntervalIndex
+}
+
+// Swap implements sort.Interface.
+func (sl sublevelSorter) Swap(i, j int) {
+	sl[i], sl[j] = sl[j], sl[i]
 }
 
 // NewL0Sublevels creates an L0Sublevels instance for a given set of L0 files.
@@ -223,10 +228,7 @@ func insertIntoSubLevel(files []*FileMetadata, f *FileMetadata) []*FileMetadata 
 // IsIntraL0Compacting. Those fields are accessed in InitCompactingFileInfo
 // instead.
 func NewL0Sublevels(
-	levelMetadata *LevelMetadata,
-	cmp Compare,
-	formatKey base.FormatKey,
-	flushSplitMaxBytes int64,
+	levelMetadata *LevelMetadata, cmp Compare, formatKey base.FormatKey, flushSplitMaxBytes int64,
 ) (*L0Sublevels, error) {
 	s := &L0Sublevels{cmp: cmp, formatKey: formatKey}
 	s.levelMetadata = levelMetadata
@@ -261,10 +263,16 @@ func NewL0Sublevels(
 		if f.minIntervalIndex == len(keys) {
 			return nil, errors.Errorf("expected sstable bound to be in interval keys: %s", f.Smallest.UserKey)
 		}
-		f.maxIntervalIndex = sort.Search(len(keys), func(index int) bool {
-			return intervalKeyCompare(
-				cmp, intervalKey{key: f.Largest.UserKey, isLargest: f.Largest.Trailer != base.InternalKeyRangeDeleteSentinel}, keys[index]) <= 0
-		})
+		// Search starting from f.minIntervalIndex to prune the search.
+		f.maxIntervalIndex = f.minIntervalIndex +
+			sort.Search(len(keys)-f.minIntervalIndex, func(index int) bool {
+				return intervalKeyCompare(
+					cmp,
+					intervalKey{
+						key:       f.Largest.UserKey,
+						isLargest: f.Largest.Trailer != base.InternalKeyRangeDeleteSentinel},
+					keys[f.minIntervalIndex+index]) <= 0
+			})
 		if f.maxIntervalIndex == len(keys) {
 			return nil, errors.Errorf("expected sstable bound to be in interval keys: %s", f.Largest.UserKey)
 		}
@@ -298,19 +306,32 @@ func NewL0Sublevels(
 			interval.files = append(interval.files, f)
 		}
 		f.subLevel = subLevel
-		if subLevel > len(s.Levels) {
-			return nil, errors.Errorf("chose a sublevel beyond allowed range of sublevels: %d vs 0-%d", subLevel, len(s.Levels))
+		if subLevel > len(s.levelFiles) {
+			return nil, errors.Errorf("chose a sublevel beyond allowed range of sublevels: %d vs 0-%d", subLevel, len(s.levelFiles))
 		}
-		if subLevel == len(s.Levels) {
-			s.Levels = append(s.Levels, []*FileMetadata{f})
+		if subLevel == len(s.levelFiles) {
+			s.levelFiles = append(s.levelFiles, []*FileMetadata{f})
 		} else {
-			s.Levels[subLevel] = insertIntoSubLevel(s.Levels[subLevel], f)
+			s.levelFiles[subLevel] = append(s.levelFiles[subLevel], f)
 		}
 	}
+	// Sort each sublevel in increasing key order.
+	for i := range s.levelFiles {
+		sort.Sort(sublevelSorter(s.levelFiles[i]))
+	}
+
+	// Construct a parallel slice of sublevel B-Trees.
+	// TODO(jackson): Consolidate and only use the B-Trees.
+	for _, sublevelFiles := range s.levelFiles {
+		tr, ls := makeBTree(btreeCmpSmallestKey(cmp), sublevelFiles)
+		s.Levels = append(s.Levels, ls)
+		tr.release()
+	}
+
 	var cumulativeBytes uint64
 	// Multiply flushSplitMaxBytes by the number of sublevels. This prevents
 	// excessive flush splitting when the number of sublevels increases.
-	flushSplitMaxBytes *= int64(len(s.Levels))
+	flushSplitMaxBytes *= int64(len(s.levelFiles))
 	for i := 0; i < len(s.orderedIntervals); i++ {
 		interval := &s.orderedIntervals[i]
 		if flushSplitMaxBytes > 0 && cumulativeBytes > uint64(flushSplitMaxBytes) &&
@@ -405,7 +426,7 @@ func (s *L0Sublevels) String() string {
 func (s *L0Sublevels) describe(verbose bool) string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "file count: %d, sublevels: %d, intervals: %d\nflush split keys(%d): [",
-		s.levelMetadata.Len(), len(s.Levels), len(s.orderedIntervals), len(s.flushSplitUserKeys))
+		s.levelMetadata.Len(), len(s.levelFiles), len(s.orderedIntervals), len(s.flushSplitUserKeys))
 	for i := range s.flushSplitUserKeys {
 		fmt.Fprintf(&buf, "%s", s.formatKey(s.flushSplitUserKeys[i]))
 		if i < len(s.flushSplitUserKeys)-1 {
@@ -414,11 +435,11 @@ func (s *L0Sublevels) describe(verbose bool) string {
 	}
 	fmt.Fprintln(&buf, "]")
 	numCompactingFiles := 0
-	for i := len(s.Levels) - 1; i >= 0; i-- {
+	for i := len(s.levelFiles) - 1; i >= 0; i-- {
 		maxIntervals := 0
 		sumIntervals := 0
 		var totalBytes uint64
-		for _, f := range s.Levels[i] {
+		for _, f := range s.levelFiles[i] {
 			intervals := f.maxIntervalIndex - f.minIntervalIndex + 1
 			if intervals > maxIntervals {
 				maxIntervals = intervals
@@ -430,9 +451,9 @@ func (s *L0Sublevels) describe(verbose bool) string {
 			}
 		}
 		fmt.Fprintf(&buf, "0.%d: file count: %d, bytes: %d, width (mean, max): %0.1f, %d, interval range: [%d, %d]\n",
-			i, len(s.Levels[i]), totalBytes, float64(sumIntervals)/float64(len(s.Levels[i])), maxIntervals, s.Levels[i][0].minIntervalIndex,
-			s.Levels[i][len(s.Levels[i])-1].maxIntervalIndex)
-		for _, f := range s.Levels[i] {
+			i, len(s.levelFiles[i]), totalBytes, float64(sumIntervals)/float64(len(s.levelFiles[i])), maxIntervals, s.levelFiles[i][0].minIntervalIndex,
+			s.levelFiles[i][len(s.levelFiles[i])-1].maxIntervalIndex)
+		for _, f := range s.levelFiles[i] {
 			intervals := f.maxIntervalIndex - f.minIntervalIndex + 1
 			if verbose {
 				fmt.Fprintf(&buf, "\t%s\n", f)
@@ -536,7 +557,7 @@ func (s *L0Sublevels) checkCompaction(c *L0CompactionFiles) error {
 	fileIntervalsByLevel := make([]struct {
 		min int
 		max int
-	}, len(s.Levels))
+	}, len(s.levelFiles))
 	for i := range fileIntervalsByLevel {
 		fileIntervalsByLevel[i].min = math.MaxInt32
 		fileIntervalsByLevel[i].max = 0
@@ -545,10 +566,10 @@ func (s *L0Sublevels) checkCompaction(c *L0CompactionFiles) error {
 	var increment int
 	var limitReached func(int) bool
 	if c.isIntraL0 {
-		topLevel = len(s.Levels) - 1
+		topLevel = len(s.levelFiles) - 1
 		increment = +1
 		limitReached = func(level int) bool {
-			return level == len(s.Levels)
+			return level == len(s.levelFiles)
 		}
 	} else {
 		topLevel = 0
@@ -584,12 +605,12 @@ func (s *L0Sublevels) checkCompaction(c *L0CompactionFiles) error {
 		if fileIntervalsByLevel[level].max > max {
 			max = fileIntervalsByLevel[level].max
 		}
-		index := sort.Search(len(s.Levels[level]), func(i int) bool {
-			return s.Levels[level][i].maxIntervalIndex >= min
+		index := sort.Search(len(s.levelFiles[level]), func(i int) bool {
+			return s.levelFiles[level][i].maxIntervalIndex >= min
 		})
 		// start := index
-		for ; index < len(s.Levels[level]); index++ {
-			f := s.Levels[level][index]
+		for ; index < len(s.levelFiles[level]); index++ {
+			f := s.levelFiles[level][index]
 			if f.minIntervalIndex > max {
 				break
 			}
@@ -885,7 +906,7 @@ func (s *L0Sublevels) PickBaseCompaction(
 	// and pick the best one. If microbenchmarks show that we can afford
 	// this cost we can eliminate this heuristic.
 	scoredIntervals := make([]intervalAndScore, 0, len(s.orderedIntervals))
-	sublevelCount := len(s.Levels)
+	sublevelCount := len(s.levelFiles)
 	for i := range s.orderedIntervals {
 		interval := &s.orderedIntervals[i]
 		depth := interval.fileCount - interval.compactingFileCount
@@ -1068,11 +1089,11 @@ func (s *L0Sublevels) baseCompactionUsingSeed(
 func (s *L0Sublevels) extendFiles(
 	sl int, earliestUnflushedSeqNum uint64, cFiles *L0CompactionFiles,
 ) bool {
-	index := sort.Search(len(s.Levels[sl]), func(i int) bool {
-		return s.Levels[sl][i].maxIntervalIndex >= cFiles.minIntervalIndex
+	index := sort.Search(len(s.levelFiles[sl]), func(i int) bool {
+		return s.levelFiles[sl][i].maxIntervalIndex >= cFiles.minIntervalIndex
 	})
-	for ; index < len(s.Levels[sl]); index++ {
-		f := s.Levels[sl][index]
+	for ; index < len(s.levelFiles[sl]); index++ {
+		f := s.levelFiles[sl][index]
 		if f.minIntervalIndex > cFiles.maxIntervalIndex {
 			break
 		}
@@ -1100,14 +1121,14 @@ func (s *L0Sublevels) extendFiles(
 func (s *L0Sublevels) PickIntraL0Compaction(
 	earliestUnflushedSeqNum uint64, minCompactionDepth int,
 ) (*L0CompactionFiles, error) {
-	var scoredIntervals []intervalAndScore
+	scoredIntervals := make([]intervalAndScore, len(s.orderedIntervals))
 	for i := range s.orderedIntervals {
 		interval := &s.orderedIntervals[i]
 		depth := interval.fileCount - interval.compactingFileCount
 		if minCompactionDepth > depth {
 			continue
 		}
-		scoredIntervals = append(scoredIntervals, intervalAndScore{interval: i, score: depth})
+		scoredIntervals[i] = intervalAndScore{interval: i, score: depth}
 	}
 	sort.Sort(intervalSorterByDecreasingScore(scoredIntervals))
 
@@ -1177,7 +1198,7 @@ func (s *L0Sublevels) intraL0CompactionUsingSeed(
 	c := &L0CompactionFiles{
 		FilesIncluded:           newBitSet(s.levelMetadata.Len()),
 		seedInterval:            intervalIndex,
-		seedIntervalMaxLevel:    len(s.Levels) - 1,
+		seedIntervalMaxLevel:    len(s.levelFiles) - 1,
 		minIntervalIndex:        f.minIntervalIndex,
 		maxIntervalIndex:        f.maxIntervalIndex,
 		isIntraL0:               true,
@@ -1229,7 +1250,7 @@ func (s *L0Sublevels) intraL0CompactionUsingSeed(
 		// shape we will be forced to pull in a file that is already compacting.
 		// We assume that the performance concern is not a practical issue.
 		done := false
-		for currLevel := sl + 1; currLevel < len(s.Levels); currLevel++ {
+		for currLevel := sl + 1; currLevel < len(s.levelFiles); currLevel++ {
 			if !s.extendFiles(currLevel, earliestUnflushedSeqNum, c) {
 				// Failed to extend due to ongoing compaction.
 				done = true
@@ -1403,7 +1424,7 @@ func (s *L0Sublevels) extendCandidateToRectangle(
 		// seedIntervalMaxLevel is inclusive, while endLevel is exclusive.
 		endLevel = candidate.seedIntervalMaxLevel + 1
 	} else {
-		startLevel = len(s.Levels) - 1
+		startLevel = len(s.levelFiles) - 1
 		increment = -1
 		// seedIntervalMinLevel is inclusive, while endLevel is exclusive.
 		endLevel = candidate.seedIntervalMinLevel - 1
@@ -1416,7 +1437,7 @@ func (s *L0Sublevels) extendCandidateToRectangle(
 	// the next level. This change in constraint is directly incorporated
 	// into minIntervalIndex, maxIntervalIndex.
 	for sl := startLevel; sl != endLevel; sl += increment {
-		files := s.Levels[sl]
+		files := s.levelFiles[sl]
 		// Find the first file that overlaps with minIntervalIndex.
 		index := sort.Search(len(files), func(i int) bool {
 			return minIntervalIndex <= files[i].maxIntervalIndex

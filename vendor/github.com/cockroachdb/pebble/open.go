@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/internal/arenaskl"
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/cache"
@@ -112,6 +113,9 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	d.flushLimiter = rate.NewLimiter(
 		rate.Limit(d.opts.private.minFlushRate),
 		d.opts.private.minFlushRate)
+	d.deletionLimiter = rate.NewLimiter(
+		rate.Limit(d.opts.Experimental.MinDeletionRate),
+		d.opts.Experimental.MinDeletionRate)
 	d.mu.nextJobID = 1
 	d.mu.mem.nextSize = opts.MemTableSize
 	if d.mu.mem.nextSize > initialMemTableSize {
@@ -182,7 +186,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	d.mu.nextJobID++
 
 	currentName := base.MakeFilename(opts.FS, dirname, fileTypeCurrent, 0)
-	if _, err := opts.FS.Stat(currentName); os.IsNotExist(err) &&
+	if _, err := opts.FS.Stat(currentName); oserror.IsNotExist(err) &&
 		!d.opts.ReadOnly && !d.opts.ErrorIfNotExists {
 		// Create the DB if it did not already exist.
 		if err := d.mu.versions.create(jobID, dirname, d.dataDir, opts, &d.mu.Mutex); err != nil {
@@ -525,7 +529,7 @@ func (d *DB) replayWAL(
 		seqNum := b.SeqNum()
 		maxSeqNum = seqNum + uint64(b.Count())
 
-		if b.memTableSize >= uint32(d.largeBatchThreshold) {
+		if b.memTableSize >= uint64(d.largeBatchThreshold) {
 			flushMem()
 			// Make a copy of the data slice since it is currently owned by buf and will
 			// be reused in the next iteration.

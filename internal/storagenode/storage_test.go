@@ -401,6 +401,127 @@ func TestStorageDeleteUncommitted(t *testing.T) {
 	})
 }
 
+func TestStorageCommitContext(t *testing.T) {
+	Convey("Given a storage", t, func() {
+		Convey("When a CommitContext is stored", withForeachStorage(t, func(storage Storage) {
+			if storage.Name() != "pebble" {
+				t.Skip(storage.Name())
+			}
+
+			var (
+				lsc  LogStreamContext
+				cc   CommitContext
+				data = []byte("foo")
+			)
+
+			So(storage.RestoreLogStreamContext(&lsc), ShouldBeFalse)
+
+			// LLSN:[1,2), GLSN:[1,2), GHWM: 0->1
+			cc = CommitContext{
+				HighWatermark:      1,
+				PrevHighWatermark:  0,
+				CommittedGLSNBegin: 1,
+				CommittedGLSNEnd:   2,
+			}
+			So(storage.Write(1, data), ShouldBeNil)
+			So(storage.StoreCommitContext(cc), ShouldBeNil)
+			So(storage.Commit(1, 1), ShouldBeNil)
+
+			So(storage.RestoreLogStreamContext(&lsc), ShouldBeTrue)
+			lsc.rcc.mu.RLock()
+			So(lsc.rcc.globalHighwatermark, ShouldEqual, 1)
+			So(lsc.rcc.uncommittedLLSNBegin, ShouldEqual, 2)
+			lsc.rcc.mu.RUnlock()
+			lsc.committedLLSNEnd.mu.RLock()
+			So(lsc.committedLLSNEnd.llsn, ShouldEqual, 2)
+			lsc.committedLLSNEnd.mu.RUnlock()
+			So(lsc.localHighWatermark.Load(), ShouldEqual, 1)
+			So(lsc.localLowWatermark.Load(), ShouldEqual, 1)
+
+			// LLSN = [2,5), GLSN: [8,11), GHWM: 1->15
+			cc = CommitContext{
+				HighWatermark:      15,
+				PrevHighWatermark:  1,
+				CommittedGLSNBegin: 8,
+				CommittedGLSNEnd:   11,
+			}
+			So(storage.Write(2, data), ShouldBeNil)
+			So(storage.Write(3, data), ShouldBeNil)
+			So(storage.Write(4, data), ShouldBeNil)
+			So(storage.StoreCommitContext(cc), ShouldBeNil)
+			So(storage.Commit(2, 8), ShouldBeNil)
+			So(storage.Commit(3, 9), ShouldBeNil)
+			So(storage.Commit(4, 10), ShouldBeNil)
+
+			So(storage.RestoreLogStreamContext(&lsc), ShouldBeTrue)
+			lsc.rcc.mu.RLock()
+			So(lsc.rcc.globalHighwatermark, ShouldEqual, 15)
+			So(lsc.rcc.uncommittedLLSNBegin, ShouldEqual, 5)
+			lsc.rcc.mu.RUnlock()
+			lsc.committedLLSNEnd.mu.RLock()
+			So(lsc.committedLLSNEnd.llsn, ShouldEqual, 5)
+			lsc.committedLLSNEnd.mu.RUnlock()
+			So(lsc.localHighWatermark.Load(), ShouldEqual, 10)
+			So(lsc.localLowWatermark.Load(), ShouldEqual, 1)
+
+			// LLSN = [5,5), GLSN: [11,11), GHWM: 15->115
+			for i := 1; i <= 100; i++ {
+				cc = CommitContext{
+					HighWatermark:      types.GLSN(15 + i),
+					PrevHighWatermark:  types.GLSN(15 + i - 1),
+					CommittedGLSNBegin: 11,
+					CommittedGLSNEnd:   11,
+				}
+				So(storage.StoreCommitContext(cc), ShouldBeNil)
+			}
+
+			So(storage.RestoreLogStreamContext(&lsc), ShouldBeTrue)
+			lsc.rcc.mu.RLock()
+			So(lsc.rcc.globalHighwatermark, ShouldEqual, 115)
+			So(lsc.rcc.uncommittedLLSNBegin, ShouldEqual, 5)
+			lsc.rcc.mu.RUnlock()
+			lsc.committedLLSNEnd.mu.RLock()
+			So(lsc.committedLLSNEnd.llsn, ShouldEqual, 5)
+			lsc.committedLLSNEnd.mu.RUnlock()
+			So(lsc.localHighWatermark.Load(), ShouldEqual, 10)
+			So(lsc.localLowWatermark.Load(), ShouldEqual, 1)
+
+			// LLSN = [5,6), GLSN: [120,121), GHWM: 115->125
+			cc = CommitContext{
+				HighWatermark:      125,
+				PrevHighWatermark:  115,
+				CommittedGLSNBegin: 120,
+				CommittedGLSNEnd:   121,
+			}
+			So(storage.Write(5, data), ShouldBeNil)
+			So(storage.StoreCommitContext(cc), ShouldBeNil)
+			So(storage.Commit(5, 120), ShouldBeNil)
+
+			// LLSN = [6,6), GLSN: [121,121), GHWM: 125->225
+			for i := 1; i <= 100; i++ {
+				cc = CommitContext{
+					HighWatermark:      types.GLSN(125 + i),
+					PrevHighWatermark:  types.GLSN(125 + i - 1),
+					CommittedGLSNBegin: 121,
+					CommittedGLSNEnd:   121,
+				}
+				So(storage.StoreCommitContext(cc), ShouldBeNil)
+			}
+
+			So(storage.RestoreLogStreamContext(&lsc), ShouldBeTrue)
+			lsc.rcc.mu.RLock()
+			So(lsc.rcc.globalHighwatermark, ShouldEqual, 225)
+			So(lsc.rcc.uncommittedLLSNBegin, ShouldEqual, 6)
+			lsc.rcc.mu.RUnlock()
+			lsc.committedLLSNEnd.mu.RLock()
+			So(lsc.committedLLSNEnd.llsn, ShouldEqual, 6)
+			lsc.committedLLSNEnd.mu.RUnlock()
+			So(lsc.localHighWatermark.Load(), ShouldEqual, 120)
+			So(lsc.localLowWatermark.Load(), ShouldEqual, 1)
+		}))
+	})
+}
+
 func TestStorageOps(t *testing.T) {
 	Convey("StorageOps for all storages", t, func() {
 		const (

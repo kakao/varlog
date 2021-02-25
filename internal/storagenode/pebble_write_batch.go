@@ -1,10 +1,8 @@
 package storagenode
 
 import (
-	"errors"
-	"fmt"
-
 	"github.com/cockroachdb/pebble"
+	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/pkg/types"
 )
@@ -30,14 +28,11 @@ func (pwb *pebbleWriteBatch) Put(llsn types.LLSN, data []byte) error {
 	}
 
 	if !prevWrittenLLSN.Invalid() && prevWrittenLLSN+1 != llsn {
-		return fmt.Errorf("storage: incorrect LLSN, prev_llsn=%v curr_llsn=%v", prevWrittenLLSN, llsn)
+		return errors.Errorf("storage: incorrect LLSN, prev_llsn=%v curr_llsn=%v", prevWrittenLLSN, llsn)
 	}
 
 	dk := encodeDataKey(llsn)
-	if err := pwb.b.Set(dk, data, pwb.ps.writeOption); err != nil {
-		return err
-	}
-	return nil
+	return errors.WithStack(pwb.b.Set(dk, data, pwb.ps.writeOption))
 }
 
 func (pwb *pebbleWriteBatch) Apply() error {

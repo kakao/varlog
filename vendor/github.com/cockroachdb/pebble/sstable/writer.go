@@ -12,26 +12,25 @@ import (
 	"io"
 	"math"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/cache"
 	"github.com/cockroachdb/pebble/internal/crc"
 	"github.com/cockroachdb/pebble/internal/private"
 	"github.com/cockroachdb/pebble/internal/rangedel"
-	"github.com/golang/snappy"
 )
 
 // WriterMetadata holds info about a finished sstable.
 type WriterMetadata struct {
-	Size                uint64
-	SmallestPoint       InternalKey
-	SmallestRange       InternalKey
-	LargestPoint        InternalKey
-	LargestRange        InternalKey
-	SmallestSeqNum      uint64
-	LargestSeqNum       uint64
-	Properties          Properties
-	MarkedForCompaction bool
+	Size           uint64
+	SmallestPoint  InternalKey
+	SmallestRange  InternalKey
+	LargestPoint   InternalKey
+	LargestRange   InternalKey
+	SmallestSeqNum uint64
+	LargestSeqNum  uint64
+	Properties     Properties
 }
 
 func (m *WriterMetadata) updateSeqNum(seqNum uint64) {
@@ -104,6 +103,7 @@ type Writer struct {
 	separator               Separator
 	successor               Successor
 	tableFormat             TableFormat
+	checksumType            ChecksumType
 	cache                   *cache.Cache
 	// disableKeyOrderChecks disables the checks that keys are added to an
 	// sstable in order. It is intended for internal use only in the construction
@@ -134,7 +134,7 @@ type Writer struct {
 	rangeDelBlock    blockWriter
 	props            Properties
 	propCollectors   []TablePropertyCollector
-	// compressedBuf is the destination buffer for snappy compression. It is
+	// compressedBuf is the destination buffer for compression. It is
 	// re-used over the lifetime of the writer, avoiding the allocation of a
 	// temporary buffer for each block.
 	compressedBuf []byte
@@ -145,6 +145,8 @@ type Writer struct {
 	// tmp is a scratch buffer, large enough to hold either footerLen bytes,
 	// blockTrailerLen bytes, or (5 * binary.MaxVarintLen64) bytes.
 	tmp [rocksDBFooterLen]byte
+
+	xxHasher *xxhash.Digest
 
 	topLevelIndexBlock blockWriter
 	indexPartitions    []blockWriter
@@ -297,6 +299,11 @@ func (w *Writer) addTombstone(key InternalKey, value []byte) error {
 		}
 	}
 
+	if key.Trailer == InternalKeyRangeDeleteSentinel {
+		w.err = errors.Errorf("pebble: cannot add range delete sentinel: %s", key.Pretty(w.formatKey))
+		return w.err
+	}
+
 	for i := range w.propCollectors {
 		if err := w.propCollectors[i].Add(key, value); err != nil {
 			return err
@@ -305,18 +312,36 @@ func (w *Writer) addTombstone(key InternalKey, value []byte) error {
 
 	w.meta.updateSeqNum(key.SeqNum())
 
-	if w.props.NumRangeDeletions == 0 {
-		w.meta.SmallestRange = key.Clone()
-		w.meta.LargestRange = base.MakeRangeDeleteSentinelKey(value).Clone()
-	} else if w.rangeDelV1Format {
-		if base.InternalCompare(w.compare, w.meta.SmallestRange, key) > 0 {
+	switch {
+	case w.rangeDelV1Format:
+		// Range tombstones are not fragmented in the v1 (i.e. RocksDB) range
+		// deletion block format, so we need to track the largest range tombstone
+		// end key as every range tombstone is added.
+		//
+		// Note that writing the v1 format is only supported for tests.
+		if w.props.NumRangeDeletions == 0 {
+			w.meta.SmallestRange = key.Clone()
+			w.meta.LargestRange = base.MakeRangeDeleteSentinelKey(value).Clone()
+		} else {
+			if base.InternalCompare(w.compare, w.meta.SmallestRange, key) > 0 {
+				w.meta.SmallestRange = key.Clone()
+			}
+			end := base.MakeRangeDeleteSentinelKey(value)
+			if base.InternalCompare(w.compare, w.meta.LargestRange, end) < 0 {
+				w.meta.LargestRange = end.Clone()
+			}
+		}
+
+	default:
+		// Range tombstones are fragmented in the v2 range deletion block format,
+		// so the start key of the first range tombstone added will be the smallest
+		// range tombstone key. The largest range tombstone key will be determined
+		// in Writer.Close() as the end key of the last range tombstone added.
+		if w.props.NumRangeDeletions == 0 {
 			w.meta.SmallestRange = key.Clone()
 		}
-		end := base.MakeRangeDeleteSentinelKey(value)
-		if base.InternalCompare(w.compare, w.meta.LargestRange, end) < 0 {
-			w.meta.LargestRange = end.Clone()
-		}
 	}
+
 	w.props.NumEntries++
 	w.props.NumDeletions++
 	w.props.NumRangeDeletions++
@@ -445,21 +470,37 @@ func (w *Writer) writeTwoLevelIndex() (BlockHandle, error) {
 }
 
 func (w *Writer) writeBlock(b []byte, compression Compression) (BlockHandle, error) {
-	blockType := noCompressionBlockType
-	if compression == SnappyCompression {
-		// Compress the buffer, discarding the result if the improvement isn't at
-		// least 12.5%.
-		compressed := snappy.Encode(w.compressedBuf, b)
+	// Compress the buffer, discarding the result if the improvement isn't at
+	// least 12.5%.
+	blockType, compressed := compressBlock(compression, b, w.compressedBuf)
+	if blockType != noCompressionBlockType && cap(compressed) > cap(w.compressedBuf) {
 		w.compressedBuf = compressed[:cap(compressed)]
-		if len(compressed) < len(b)-len(b)/8 {
-			blockType = snappyCompressionBlockType
-			b = compressed
-		}
 	}
+	if len(compressed) < len(b)-len(b)/8 {
+		b = compressed
+	} else {
+		blockType = noCompressionBlockType
+	}
+
 	w.tmp[0] = blockType
 
 	// Calculate the checksum.
-	checksum := crc.New(b).Update(w.tmp[:1]).Value()
+	var checksum uint32
+	switch w.checksumType {
+	case ChecksumTypeCRC32c:
+		checksum = crc.New(b).Update(w.tmp[:1]).Value()
+	case ChecksumTypeXXHash64:
+		if w.xxHasher == nil {
+			w.xxHasher = xxhash.New()
+		} else {
+			w.xxHasher.Reset()
+		}
+		w.xxHasher.Write(b)
+		w.xxHasher.Write(w.tmp[:1])
+		checksum = uint32(w.xxHasher.Sum64())
+	default:
+		return BlockHandle{}, errors.Newf("unsupported checksum type: %d", w.checksumType)
+	}
 	binary.LittleEndian.PutUint32(w.tmp[1:5], checksum)
 	bh := BlockHandle{w.meta.Size, uint64(len(b))}
 
@@ -567,25 +608,22 @@ func (w *Writer) Close() (err error) {
 	var rangeDelBH BlockHandle
 	if w.props.NumRangeDeletions > 0 {
 		if !w.rangeDelV1Format {
-			// Because the range tombstones are fragmented, the end key of the last
-			// added range tombstone will be the largest range tombstone key. Note
-			// that we need to make this into a range deletion sentinel because
-			// sstable boundaries are inclusive while the end key of a range deletion
-			// tombstone is exclusive.
-			w.meta.LargestRange = base.MakeRangeDeleteSentinelKey(w.rangeDelBlock.curValue)
+			// Because the range tombstones are fragmented in the v2 format, the end
+			// key of the last added range tombstone will be the largest range
+			// tombstone key. Note that we need to make this into a range deletion
+			// sentinel because sstable boundaries are inclusive while the end key of
+			// a range deletion tombstone is exclusive. A Clone() is necessary as
+			// rangeDelBlock.curValue is the same slice that will get passed
+			// into w.writer, and some implementations of vfs.File mutate the
+			// slice passed into Write(). Also, w.meta will often outlive the
+			// blockWriter, and so cloning curValue allows the rangeDelBlock's
+			// internal buffer to get gc'd.
+			w.meta.LargestRange = base.MakeRangeDeleteSentinelKey(w.rangeDelBlock.curValue).Clone()
 		}
 		rangeDelBH, err = w.writeBlock(w.rangeDelBlock.finish(), NoCompression)
 		if err != nil {
 			w.err = err
 			return w.err
-		}
-	}
-
-	{
-		for i := range w.propCollectors {
-			if nc, ok := w.propCollectors[i].(NeedCompacter); ok {
-				w.meta.MarkedForCompaction = w.meta.MarkedForCompaction || nc.NeedCompact()
-			}
 		}
 	}
 
@@ -644,7 +682,7 @@ func (w *Writer) Close() (err error) {
 	// Write the table footer.
 	footer := footer{
 		format:      w.tableFormat,
-		checksum:    checksumCRC32c,
+		checksum:    w.checksumType,
 		metaindexBH: metaindexBH,
 		indexBH:     indexBH,
 	}
@@ -728,6 +766,7 @@ func NewWriter(f writeCloseSyncer, o WriterOptions, extraOpts ...WriterOption) *
 		separator:               o.Comparer.Separator,
 		successor:               o.Comparer.Successor,
 		tableFormat:             o.TableFormat,
+		checksumType:            o.Checksum,
 		cache:                   o.Cache,
 		block: blockWriter{
 			restartInterval: o.BlockRestartInterval,

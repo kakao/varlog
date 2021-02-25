@@ -51,9 +51,13 @@ func (c *tableCache) getShard(fileNum FileNum) *tableCacheShard {
 }
 
 func (c *tableCache) newIters(
-	file manifest.LevelFile, opts *IterOptions, bytesIterated *uint64,
+	file *manifest.FileMetadata, opts *IterOptions, bytesIterated *uint64,
 ) (internalIterator, internalIterator, error) {
 	return c.getShard(file.FileNum).newIters(file, opts, bytesIterated)
+}
+
+func (c *tableCache) getTableProperties(file *fileMetadata) (*sstable.Properties, error) {
+	return c.getShard(file.FileNum).getTableProperties(file)
 }
 
 func (c *tableCache) evict(fileNum FileNum) {
@@ -83,6 +87,7 @@ func (c *tableCache) withReader(meta *fileMetadata, fn func(*sstable.Reader) err
 	v := s.findNode(meta)
 	defer s.unrefValue(v)
 	if v.err != nil {
+		base.MustExist(s.fs, v.filename, s.logger, v.err)
 		return v.err
 	}
 	return fn(v.reader)
@@ -175,15 +180,16 @@ func (c *tableCacheShard) releaseLoop() {
 }
 
 func (c *tableCacheShard) newIters(
-	file manifest.LevelFile, opts *IterOptions, bytesIterated *uint64,
+	file *manifest.FileMetadata, opts *IterOptions, bytesIterated *uint64,
 ) (internalIterator, internalIterator, error) {
 	// Calling findNode gives us the responsibility of decrementing v's
 	// refCount. If opening the underlying table resulted in error, then we
 	// decrement this straight away. Otherwise, we pass that responsibility to
 	// the sstable iterator, which decrements when it is closed.
-	v := c.findNode(file.FileMetadata)
+	v := c.findNode(file)
 	if v.err != nil {
-		c.unrefValue(v)
+		defer c.unrefValue(v)
+		base.MustExist(c.fs, v.filename, c.logger, v.err)
 		return nil, nil, v.err
 	}
 
@@ -229,6 +235,18 @@ func (c *tableCacheShard) newIters(
 	}
 	// NB: Translate a nil range-del iterator into a nil interface.
 	return iter, nil, nil
+}
+
+// getTableProperties return sst table properties for target file
+func (c *tableCacheShard) getTableProperties(file *fileMetadata) (*sstable.Properties, error) {
+	// Calling findNode gives us the responsibility of decrementing v's refCount here
+	v := c.findNode(file)
+	defer c.unrefValue(v)
+
+	if v.err != nil {
+		return nil, v.err
+	}
+	return &v.reader.Properties, nil
 }
 
 // releaseNode releases a node from the tableCacheShard.
@@ -559,6 +577,7 @@ func (c *tableCacheShard) Close() error {
 type tableCacheValue struct {
 	closeHook func(i sstable.Iterator) error
 	reader    *sstable.Reader
+	filename  string
 	err       error
 	loaded    chan struct{}
 	// Reference count for the value. The reader is closed when the reference
@@ -569,11 +588,11 @@ type tableCacheValue struct {
 func (v *tableCacheValue) load(meta *fileMetadata, c *tableCacheShard) {
 	// Try opening the fileTypeTable first.
 	var f vfs.File
-	filename := base.MakeFilename(c.fs, c.dirname, fileTypeTable, meta.FileNum)
-	f, v.err = c.fs.Open(filename, vfs.RandomReadsOption)
+	v.filename = base.MakeFilename(c.fs, c.dirname, fileTypeTable, meta.FileNum)
+	f, v.err = c.fs.Open(v.filename, vfs.RandomReadsOption)
 	if v.err == nil {
 		cacheOpts := private.SSTableCacheOpts(c.cacheID, meta.FileNum).(sstable.ReaderOption)
-		reopenOpt := sstable.FileReopenOpt{FS: c.fs, Filename: filename}
+		reopenOpt := sstable.FileReopenOpt{FS: c.fs, Filename: v.filename}
 		v.reader, v.err = sstable.NewReader(f, c.opts, cacheOpts, c.filterMetrics, reopenOpt)
 	}
 	if v.err == nil {

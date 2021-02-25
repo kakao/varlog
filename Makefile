@@ -133,7 +133,7 @@ test_e2e_docker: image_builder_dev push_builder_dev
 		--env="VAULT_ROLE_ID=$(VAULT_ROLE_ID)" \
 		--env="VAULT_SECRET_ID=$(VAULT_SECRET_ID)" \
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
-		--command -- $(GO) test ./test/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1 
+		--command -- $(GO) test ./test/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1
 
 .PHONY: generate
 generate:
