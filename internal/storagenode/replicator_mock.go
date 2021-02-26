@@ -14,42 +14,42 @@ import (
 	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
-// MockReplicator is a mock of Replicator interface
+// MockReplicator is a mock of Replicator interface.
 type MockReplicator struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicatorMockRecorder
 }
 
-// MockReplicatorMockRecorder is the mock recorder for MockReplicator
+// MockReplicatorMockRecorder is the mock recorder for MockReplicator.
 type MockReplicatorMockRecorder struct {
 	mock *MockReplicator
 }
 
-// NewMockReplicator creates a new mock instance
+// NewMockReplicator creates a new mock instance.
 func NewMockReplicator(ctrl *gomock.Controller) *MockReplicator {
 	mock := &MockReplicator{ctrl: ctrl}
 	mock.recorder = &MockReplicatorMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockReplicator) EXPECT() *MockReplicatorMockRecorder {
 	return m.recorder
 }
 
-// Close mocks base method
+// Close mocks base method.
 func (m *MockReplicator) Close() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Close")
 }
 
-// Close indicates an expected call of Close
+// Close indicates an expected call of Close.
 func (mr *MockReplicatorMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockReplicator)(nil).Close))
 }
 
-// Replicate mocks base method
+// Replicate mocks base method.
 func (m *MockReplicator) Replicate(arg0 context.Context, arg1 types.LLSN, arg2 []byte, arg3 []Replica) <-chan error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Replicate", arg0, arg1, arg2, arg3)
@@ -57,13 +57,13 @@ func (m *MockReplicator) Replicate(arg0 context.Context, arg1 types.LLSN, arg2 [
 	return ret0
 }
 
-// Replicate indicates an expected call of Replicate
+// Replicate indicates an expected call of Replicate.
 func (mr *MockReplicatorMockRecorder) Replicate(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockReplicator)(nil).Replicate), arg0, arg1, arg2, arg3)
 }
 
-// Run mocks base method
+// Run mocks base method.
 func (m *MockReplicator) Run(arg0 context.Context) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", arg0)
@@ -71,13 +71,13 @@ func (m *MockReplicator) Run(arg0 context.Context) error {
 	return ret0
 }
 
-// Run indicates an expected call of Run
+// Run indicates an expected call of Run.
 func (mr *MockReplicatorMockRecorder) Run(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockReplicator)(nil).Run), arg0)
 }
 
-// SyncReplicate mocks base method
+// SyncReplicate mocks base method.
 func (m *MockReplicator) SyncReplicate(arg0 context.Context, arg1 Replica, arg2, arg3, arg4 snpb.SyncPosition, arg5 []byte) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncReplicate", arg0, arg1, arg2, arg3, arg4, arg5)
@@ -85,7 +85,7 @@ func (m *MockReplicator) SyncReplicate(arg0 context.Context, arg1 Replica, arg2,
 	return ret0
 }
 
-// SyncReplicate indicates an expected call of SyncReplicate
+// SyncReplicate indicates an expected call of SyncReplicate.
 func (mr *MockReplicatorMockRecorder) SyncReplicate(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicator)(nil).SyncReplicate), arg0, arg1, arg2, arg3, arg4, arg5)

@@ -73,6 +73,7 @@ func initStartCommand(options *storagenode.Options) *cli.Command {
 	startCmd.Flags = append(startCmd.Flags, initLSRFlags(&options.LogStreamReporterOptions)...)
 	startCmd.Flags = append(startCmd.Flags, initStorageFlags(&options.StorageOptions)...)
 	startCmd.Flags = append(startCmd.Flags, initTelemetryFlags(&options.TelemetryOptions)...)
+	startCmd.Flags = append(startCmd.Flags, initPProfServerFlags(&options.PProfServerConfig)...)
 	return startCmd
 }
 
@@ -283,6 +284,32 @@ func initTelemetryFlags(options *storagenode.TelemetryOptions) []cli.Flag {
 			Usage:       "Collector endpoint",
 			EnvVars:     []string{"COLLECTOR_ENDPOINT"},
 			Destination: &options.CollectorEndpoint,
+		},
+	}
+}
+
+func initPProfServerFlags(cfg *storagenode.PProfServerConfig) []cli.Flag {
+	return []cli.Flag{
+		&cli.DurationFlag{
+			Name:        "pprof-read-header-timeout",
+			Value:       storagenode.DefaultPProfReadHeaderTimeout,
+			Usage:       "Timeout to read HTTP header for pprof",
+			EnvVars:     []string{"PPROF_READ_HEADER_TIMEOUT"},
+			Destination: &cfg.ReadHeaderTimeout,
+		},
+		&cli.DurationFlag{
+			Name:        "pprof-write-timeout",
+			Value:       storagenode.DefaultPProfWriteTimeout,
+			Usage:       "Timeout to write HTTP response for pprof",
+			EnvVars:     []string{"PPROF_WRITE_TIMEOUT"},
+			Destination: &cfg.WriteTimeout,
+		},
+		&cli.DurationFlag{
+			Name:        "pprof-idle-timeout",
+			Value:       storagenode.DefaultPProfIdleTimeout,
+			Usage:       "Timeout to read HTTP header for pprof",
+			EnvVars:     []string{"PPROF_IDLE_TIMEOUT"},
+			Destination: &cfg.IdleTimeout,
 		},
 	}
 }

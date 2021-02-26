@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/soheilhy/cmux"
 	"go.opentelemetry.io/otel/label"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -69,6 +70,8 @@ type StorageNode struct {
 	healthServer  *health.Server
 	advertiseAddr string
 
+	pprofServer *pprofServer
+
 	running   bool
 	muRunning sync.Mutex
 	sw        *stopwaiter.StopWaiter
@@ -103,6 +106,7 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 		logger:           options.Logger,
 		sw:               stopwaiter.New(),
 		tmStub:           newTelemetryStub(options.TelemetryOptions.CollectorName, options.TelemetryOptions.CollectorEndpoint),
+		pprofServer:      newPprofServer(options.PProfServerConfig),
 	}
 	if sn.logger == nil {
 		sn.logger = zap.NewNop()
@@ -163,10 +167,29 @@ func (sn *StorageNode) Run() error {
 		sn.advertiseAddr = addrs[0]
 	}
 
+	// mux
+	mux := cmux.New(lis)
+	httpL := mux.Match(cmux.HTTP1Fast())
+	grpcL := mux.Match(cmux.Any())
+
 	// RPC Server
 	go func() {
-		if err := sn.server.Serve(lis); err != nil {
+		if err := sn.server.Serve(grpcL); err != nil {
 			sn.logger.Error("rpc server error", zap.Error(err))
+			sn.Close()
+		}
+	}()
+
+	go func() {
+		if err := sn.pprofServer.run(httpL); err != nil {
+			sn.logger.Error("pprof server error", zap.Error(err))
+			sn.Close()
+		}
+	}()
+
+	go func() {
+		if err := mux.Serve(); err != nil {
+			sn.logger.Error("mux error", zap.Error(err))
 			sn.Close()
 		}
 	}()
@@ -229,6 +252,9 @@ func (sn *StorageNode) Close() {
 
 	// TODO: set close timeout
 	sn.tmStub.close(context.TODO())
+
+	// TODO: Use close timeout
+	sn.pprofServer.close(context.TODO())
 
 	sn.sw.Stop()
 	sn.logger.Info("stop")

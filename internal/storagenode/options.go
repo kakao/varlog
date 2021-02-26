@@ -51,6 +51,7 @@ func DefaultOptions() Options {
 		LogStreamExecutorOptions: DefaultLogStreamExecutorOptions(),
 		LogStreamReporterOptions: DefaultLogStreamReporterOptions(),
 		StorageOptions:           DefaultStorageOptions(),
+		PProfServerConfig:        defaultPProfServerConfig(),
 		ClusterID:                DefaultClusterID,
 		StorageNodeID:            DefaultStorageNodeID,
 		Volumes:                  map[Volume]struct{}{DefaultVolume: {}},
@@ -91,6 +92,7 @@ type Options struct {
 	LogStreamReporterOptions
 	StorageOptions
 	TelemetryOptions
+	PProfServerConfig
 
 	ClusterID     types.ClusterID
 	StorageNodeID types.StorageNodeID
