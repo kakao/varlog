@@ -79,7 +79,7 @@ pipeline {
       }
       environment {
         VAULT_ADDR = "https://vault.daumkakao.io"
-        VAULT_SECRET_PATH= "secret/varlog/dkosv3/e2e-00"
+        VAULT_SECRET_PATH= "secret/varlog/dkosv3/dev"
         TEST_USE_LOGGER = 1
       }
       steps {
