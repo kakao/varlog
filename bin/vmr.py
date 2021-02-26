@@ -111,7 +111,8 @@ def standalone():
 
 def clear_standalone():
     home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
-    os.remove(f"{home}/.standalone")
+    if os.path.exists(f"{home}/.standalone"):
+        os.remove(f"{home}/.standalone")
 
 def exists_wal(path):
     wal = glob.glob(os.path.join(f"{path}/wal", "*", "*.wal"))
