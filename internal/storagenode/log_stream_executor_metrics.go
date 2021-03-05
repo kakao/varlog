@@ -2,9 +2,9 @@ package storagenode
 
 /*
 type LogStreamExecutorMetrics struct {
-	AppendCMetrics metrics.ChannelMetrics
-	CommitCMetrics metrics.ChannelMetrics
-	TrimCMetrics   metrics.ChannelMetrics
+	AppendCMetrics metric.ChannelMetrics
+	CommitCMetrics metric.ChannelMetrics
+	TrimCMetrics   metric.ChannelMetrics
 
 	AppendMetrics    OperationMetrics
 	ReadMetrics      OperationMetrics
@@ -17,10 +17,10 @@ type LogStreamExecutorMetrics struct {
 }
 
 type OperationMetrics struct {
-	Count    metrics.Counter
-	BytesIn  metrics.Counter
-	BytesOut metrics.Counter
-	Latency  metrics.Guage
+	Count    metric.Counter
+	BytesIn  metric.Counter
+	BytesOut metric.Counter
+	Latency  metric.Guage
 
 	startTime time.Time
 }

@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
-	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/trace"
+	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/label"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
@@ -46,10 +46,18 @@ func (s *LogIOService) Register(server *grpc.Server) {
 
 func (s *LogIOService) withTelemetry(ctx context.Context, spanName string, req interface{}, h handler) (rsp interface{}, err error) {
 	ctx, span := s.tmStub.startSpan(ctx, spanName,
-		oteltrace.WithAttributes(trace.StorageNodeIDLabel(s.storageNodeID)),
+		oteltrace.WithAttributes(label.StorageNodeIDLabel(s.storageNodeID)),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
-	s.tmStub.metrics().requests.Add(ctx, 1)
+	labels := []label.KeyValue{
+		label.RPCName(spanName),
+		label.StorageNodeIDLabel(s.storageNodeID),
+	}
+	s.tmStub.mt.RecordBatch(ctx, labels,
+		s.tmStub.metrics().totalRequests.Measurement(1),
+		s.tmStub.metrics().activeRequests.Measurement(1),
+	)
+
 	rsp, err = h(ctx, req)
 	if err == nil {
 		var rspMsg fmt.Stringer
@@ -67,14 +75,15 @@ func (s *LogIOService) withTelemetry(ctx context.Context, spanName string, req i
 			zap.Stringer("request", req.(fmt.Stringer)),
 		)
 	}
-	s.tmStub.metrics().requests.Add(ctx, -1)
+
+	s.tmStub.metrics().activeRequests.Add(ctx, -1, labels...)
 	span.End()
 	return rsp, err
 }
 
 func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.AppendResponse, error) {
 	code := codes.Internal
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO.Append", req,
+	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/Append", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.AppendRequest)
 			var rsp *snpb.AppendResponse
@@ -106,7 +115,7 @@ func (s *LogIOService) Append(ctx context.Context, req *snpb.AppendRequest) (*sn
 
 func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.ReadResponse, error) {
 	code := codes.Internal
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO.Read", req,
+	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/Read", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.ReadRequest)
 			var rsp *snpb.ReadResponse
@@ -155,7 +164,7 @@ func (s *LogIOService) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.R
 
 func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) error {
 	code := codes.Internal
-	_, err := s.withTelemetry(stream.Context(), "varlog.snpb.LogIO.Subscribe", req,
+	_, err := s.withTelemetry(stream.Context(), "varlog.snpb.LogIO/Subscribe", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.SubscribeRequest)
 
@@ -198,7 +207,7 @@ func (s *LogIOService) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_S
 
 func (s *LogIOService) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtypes.Empty, error) {
 	code := codes.Internal
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO.Trim", req,
+	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/Trim", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.TrimRequest)
 

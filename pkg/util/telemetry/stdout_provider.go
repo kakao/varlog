@@ -3,25 +3,39 @@ package telemetry
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/exporters/stdout"
-	"go.opentelemetry.io/otel/sdk/metric/controller/push"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.uber.org/zap"
 )
 
-type stdoutProvider struct {
-	pipeline *push.Controller
+type stdoutTelemetry struct {
+	cont *controller.Controller
 }
 
-var _ Provider = (*stdoutProvider)(nil)
+// var _ Telemetry = (*stdoutTelemetry)(nil)
 
-func newStdoutProvider() (*stdoutProvider, error) {
-	pipeline, err := stdout.InstallNewPipeline(nil, nil)
-	if err != nil {
-		return nil, err
+func newStdoutPipeline(res *resource.Resource, logger *zap.Logger) (*stdoutTelemetry, error) {
+	exportOpts := []stdout.Option{
+		stdout.WithPrettyPrint(),
 	}
-	return &stdoutProvider{pipeline: pipeline}, nil
+
+	if logger != nil {
+		stdLogger, err := zap.NewStdLogAt(logger, zap.InfoLevel)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		exportOpts = append(exportOpts, stdout.WithWriter(stdLogger.Writer()))
+	}
+
+	pipeline, err := stdout.InstallNewPipeline(exportOpts, nil)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return &stdoutTelemetry{cont: pipeline}, nil
 }
 
-func (sp *stdoutProvider) Close(_ context.Context) error {
-	sp.pipeline.Stop()
-	return nil
+func (sp *stdoutTelemetry) Close(ctx context.Context) error {
+	return errors.WithStack(sp.cont.Stop(ctx))
 }

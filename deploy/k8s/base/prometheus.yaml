@@ -16,24 +16,24 @@ data:
         - targets:
 
     scrape_configs:
-      - job_name: 'collector'
-        scrape_interval: 15s
-        static_configs:
-            - targets: ['otel-collector.default:8889']
+    - job_name: "collector"
+      scrape_interval: 15s
+      static_configs:
+      - targets: ["otel-collector.default:8889"]
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: prometheus-ui
   annotations:
-    prometheus.io/scrape: 'true'
-    prometheus.io/port:   '9090'
+    prometheus.io/scrape: "true"
+    prometheus.io/port:   "9090"
 spec:
   selector:
     app: prometheus
   ports:
-    - name: ui
-      port: 9090
+  - name: ui
+    port: 9090
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,25 +52,33 @@ spec:
         app: prometheus
     spec:
       containers:
-        - name: prometheus
-          image: mdock.daumkakao.io/prom/prometheus:latest
-          args:
-            - '--config.file=/etc/prometheus/prometheus.yml'
-            - '--storage.tsdb.path=/prometheus/'
-          ports:
-            - containerPort: 9090
-          readinessProbe:
-              tcpSocket:
-                  port: 9090
-          volumeMounts:
-            - name: prometheus-config-volume
-              mountPath: /etc/prometheus/
-            - name: prometheus-storage-volume
-              mountPath: /prometheus/
-      volumes:
+      - name: prometheus
+        image: mdock.daumkakao.io/prom/prometheus:latest
+        args:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+        - "--storage.tsdb.path=/prometheus/"
+        ports:
+          - name: ui
+            containerPort: 9090
+        resources:
+          limits:
+            cpu: 4000m
+            memory: 4Gi
+          requests:
+            cpu: 4000m
+            memory: 4Gi
+        readinessProbe:
+            tcpSocket:
+                port: 9090
+        volumeMounts:
         - name: prometheus-config-volume
-          configMap:
-            defaultMode: 420
-            name: prometheus-server-conf
+          mountPath: /etc/prometheus/
         - name: prometheus-storage-volume
-          emptyDir: {}
+          mountPath: /prometheus/
+      volumes:
+      - name: prometheus-config-volume
+        configMap:
+          defaultMode: 420
+          name: prometheus-server-conf
+      - name: prometheus-storage-volume
+        emptyDir: {}

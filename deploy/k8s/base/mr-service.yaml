@@ -6,5 +6,5 @@ spec:
   selector:
     app: varlog-mr
   ports:
-    - name: rpc
-      port: 9092
+  - name: rpc
+    port: 9092

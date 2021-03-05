@@ -324,7 +324,7 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 	opts.Logger = clus.logger
 	opts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
 
-	sn, err := storagenode.NewStorageNode(&opts)
+	sn, err := storagenode.NewStorageNode(context.TODO(), &opts)
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
@@ -368,7 +368,7 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 	opts.CollectorName = "nop"
 	opts.CollectorEndpoint = "localhost:55680"
 
-	sn, err := storagenode.NewStorageNode(&opts)
+	sn, err := storagenode.NewStorageNode(context.TODO(), &opts)
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
@@ -413,7 +413,7 @@ func (clus *VarlogCluster) RecoverSN(snID types.StorageNodeID) (*storagenode.Sto
 	opts.Logger = clus.logger
 	opts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
 
-	sn, err := storagenode.NewStorageNode(&opts)
+	sn, err := storagenode.NewStorageNode(context.TODO(), &opts)
 	if err != nil {
 		return nil, err
 	}

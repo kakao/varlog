@@ -6,8 +6,8 @@ spec:
   selector:
     app: jaeger
   ports:
-    - name: ui
-      port: 16686
+  - name: ui
+    port: 16686
 ---
 apiVersion: v1
 kind: Service
@@ -17,8 +17,8 @@ spec:
   selector:
     app: jaeger
   ports:
-    - name: collector
-      port: 14268
+  - name: collector
+    port: 14250
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -37,13 +37,21 @@ spec:
         app: jaeger
     spec:
       containers:
-        - name: jaeger
-          image: mdock.daumkakao.io/jaegertracing/all-in-one:1.21
-          ports:
-            - name: collector
-              containerPort: 14268
-            - name: ui
-              containerPort: 16686
-          readinessProbe:
-            tcpSocket:
-              port: 14268
+      - name: jaeger
+        image: mdock.daumkakao.io/jaegertracing/all-in-one:latest
+        resources:
+          limits:
+            cpu: 6000m
+            memory: 6Gi
+          requests:
+            cpu: 6000m
+            memory: 6Gi
+        ports:
+        - name: collector
+          containerPort: 14250
+        - name: ui
+          containerPort: 16686
+        readinessProbe:
+          tcpSocket:
+            port: 14250
+      dnsPolicy: ClusterFirst

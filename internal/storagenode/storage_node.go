@@ -91,11 +91,15 @@ type StorageNode struct {
 	logger *zap.Logger
 }
 
-func NewStorageNode(options *Options) (*StorageNode, error) {
+func NewStorageNode(ctx context.Context, options *Options) (*StorageNode, error) {
 	if err := options.Valid(); err != nil {
 		return nil, err
 	}
 
+	tmStub, err := newTelemetryStub(ctx, options.TelemetryOptions.CollectorName, options.StorageNodeID, options.TelemetryOptions.CollectorEndpoint)
+	if err != nil {
+		return nil, err
+	}
 	sn := &StorageNode{
 		clusterID:        options.ClusterID,
 		storageNodeID:    options.StorageNodeID,
@@ -105,7 +109,7 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 		options:          options,
 		logger:           options.Logger,
 		sw:               stopwaiter.New(),
-		tmStub:           newTelemetryStub(options.TelemetryOptions.CollectorName, options.TelemetryOptions.CollectorEndpoint),
+		tmStub:           tmStub,
 		pprofServer:      newPprofServer(options.PProfServerConfig),
 	}
 	if sn.logger == nil {
@@ -137,7 +141,7 @@ func NewStorageNode(options *Options) (*StorageNode, error) {
 	NewLogStreamReporterService(sn.lsr, sn.tmStub, sn.logger).Register(sn.server)
 	NewLogIOService(sn.storageNodeID, sn, sn.tmStub, sn.logger).Register(sn.server)
 	NewManagementService(sn, sn.tmStub, sn.logger).Register(sn.server)
-	NewReplicatorService(sn.storageNodeID, sn, sn.logger).Register(sn.server)
+	NewReplicatorService(sn.storageNodeID, sn, sn.tmStub, sn.logger).Register(sn.server)
 
 	return sn, nil
 }
@@ -401,7 +405,7 @@ func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.Log
 		span.End()
 	}()
 
-	lse, err := NewLogStreamExecutor(sn.logger, logStreamID, storage, sn.tmStub, &sn.options.LogStreamExecutorOptions)
+	lse, err := NewLogStreamExecutor(sn.logger, sn.storageNodeID, logStreamID, storage, sn.tmStub, &sn.options.LogStreamExecutorOptions)
 	if err != nil {
 		return err
 	}

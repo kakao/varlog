@@ -52,6 +52,7 @@ func DefaultOptions() Options {
 		LogStreamReporterOptions: DefaultLogStreamReporterOptions(),
 		StorageOptions:           DefaultStorageOptions(),
 		PProfServerConfig:        defaultPProfServerConfig(),
+		TelemetryOptions:         DefaultTelemetryOptions(),
 		ClusterID:                DefaultClusterID,
 		StorageNodeID:            DefaultStorageNodeID,
 		Volumes:                  map[Volume]struct{}{DefaultVolume: {}},
@@ -83,6 +84,13 @@ func DefaultLogStreamReporterOptions() LogStreamReporterOptions {
 		ReportCSize:       DefaultLSRReportCSize,
 		ReportCTimeout:    DefaultLSRReportCTimeout,
 		ReportWaitTimeout: DefaultLSRReportWaitTimeout,
+	}
+}
+
+func DefaultTelemetryOptions() TelemetryOptions {
+	return TelemetryOptions{
+		CollectorName:     DefaultTelemetryCollectorName,
+		CollectorEndpoint: DefaultTelmetryCollectorEndpoint,
 	}
 }
 

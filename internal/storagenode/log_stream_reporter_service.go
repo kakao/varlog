@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
-	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/trace"
+	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/label"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
@@ -42,10 +42,18 @@ func (s *LogStreamReporterService) Register(server *grpc.Server) {
 
 func (s *LogStreamReporterService) withTelemetry(ctx context.Context, spanName string, req interface{}, h handler) (rsp interface{}, err error) {
 	ctx, span := s.tmStub.startSpan(ctx, spanName,
-		oteltrace.WithAttributes(trace.StorageNodeIDLabel(s.lsr.StorageNodeID())),
+		oteltrace.WithAttributes(label.StorageNodeIDLabel(s.lsr.StorageNodeID())),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
-	s.tmStub.metrics().requests.Add(ctx, 1)
+	labels := []label.KeyValue{
+		label.RPCName(spanName),
+		label.StorageNodeIDLabel(s.lsr.StorageNodeID()),
+	}
+	s.tmStub.mt.RecordBatch(ctx, labels,
+		s.tmStub.metrics().totalRequests.Measurement(1),
+		s.tmStub.metrics().activeRequests.Measurement(1),
+	)
+
 	rsp, err = h(ctx, req)
 	if err == nil {
 		s.logger.Info(spanName,
@@ -59,13 +67,14 @@ func (s *LogStreamReporterService) withTelemetry(ctx context.Context, spanName s
 			zap.Stringer("request", req.(fmt.Stringer)),
 		)
 	}
-	s.tmStub.metrics().requests.Add(ctx, -1)
+
+	s.tmStub.metrics().activeRequests.Add(ctx, -1, labels...)
 	span.End()
 	return rsp, err
 }
 
 func (s *LogStreamReporterService) GetReport(ctx context.Context, req *snpb.GetReportRequest) (*snpb.GetReportResponse, error) {
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogStreamReporter.GetReport", req,
+	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogStreamReporter/GetReport", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			var rsp *snpb.GetReportResponse
 			reports, err := s.lsr.GetReport(ctx)
@@ -94,7 +103,7 @@ func (s *LogStreamReporterService) GetReport(ctx context.Context, req *snpb.GetR
 
 func (s *LogStreamReporterService) Commit(ctx context.Context, req *snpb.CommitRequest) (*snpb.CommitResponse, error) {
 	code := codes.Internal
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogStreamReporter.Commit", req,
+	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogStreamReporter/Commit", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.CommitRequest)
 			rsp := &snpb.CommitResponse{}

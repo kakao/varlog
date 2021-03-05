@@ -81,7 +81,7 @@ func TestStorageNode(t *testing.T) {
 			opts.Volumes = map[Volume]struct{}{volume: {}}
 			opts.Logger = zap.L()
 
-			sn, err := NewStorageNode(&opts)
+			sn, err := NewStorageNode(context.TODO(), &opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -160,7 +160,7 @@ func TestSync(t *testing.T) {
 			opts.Volumes = map[Volume]struct{}{volume: {}}
 			opts.Logger = zap.L()
 
-			sn, err := NewStorageNode(&opts)
+			sn, err := NewStorageNode(context.TODO(), &opts)
 			So(err, ShouldBeNil)
 			snList = append(snList, sn)
 
@@ -412,7 +412,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		opts.Volumes = map[Volume]struct{}{volume: {}}
 		opts.Logger = zap.L()
 
-		sn, err := NewStorageNode(&opts)
+		sn, err := NewStorageNode(context.TODO(), &opts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -481,7 +481,7 @@ func TestStorageNodeRestart(t *testing.T) {
 		So(logCL.Close(), ShouldBeNil)
 
 		// restart
-		sn, err = NewStorageNode(&opts)
+		sn, err = NewStorageNode(context.TODO(), &opts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -554,7 +554,7 @@ func TestRPCAddress(t *testing.T) {
 			opts.AdvertiseAddress = "127.0.0.1:9999"
 
 			Convey("Then advertise address of the StorageNode should be equal to opts.AdvertiseAddress", func() {
-				sn, err := NewStorageNode(&opts)
+				sn, err := NewStorageNode(context.TODO(), &opts)
 				So(err, ShouldBeNil)
 				So(sn.Run(), ShouldBeNil)
 				Reset(func() {
@@ -570,7 +570,7 @@ func TestRPCAddress(t *testing.T) {
 
 		Convey("When the advertise address is not specified", func() {
 			Convey("Then advertise address of StorageNode should be set", func() {
-				sn, err := NewStorageNode(&opts)
+				sn, err := NewStorageNode(context.TODO(), &opts)
 				So(err, ShouldBeNil)
 				So(sn.Run(), ShouldBeNil)
 				Reset(func() {

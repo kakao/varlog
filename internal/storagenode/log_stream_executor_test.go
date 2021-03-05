@@ -23,7 +23,7 @@ import (
 func TestLogStreamExecutorNew(t *testing.T) {
 	Convey("LogStreamExecutor", t, func() {
 		Convey("it should not be created with nil storage", func() {
-			_, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), nil, newNopTelmetryStub(), &LogStreamExecutorOptions{})
+			_, err := NewLogStreamExecutor(zap.L(), types.StorageNodeID(0), types.LogStreamID(0), nil, newNopTelmetryStub(), &LogStreamExecutorOptions{})
 			So(err, ShouldNotBeNil)
 		})
 
@@ -33,7 +33,7 @@ func TestLogStreamExecutorNew(t *testing.T) {
 			storage := NewMockStorage(ctrl)
 			storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
 			storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
-			lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{})
+			lse, err := NewLogStreamExecutor(zap.L(), 0, types.LogStreamID(0), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
 			So(lse.(*logStreamExecutor).isSealed(), ShouldBeFalse)
 		})
@@ -49,7 +49,7 @@ func TestLogStreamExecutorRunClose(t *testing.T) {
 			storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
 			storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 			storage.EXPECT().Close().Return(nil).AnyTimes()
-			lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(0), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{})
+			lse, err := NewLogStreamExecutor(zap.L(), 0, types.LogStreamID(0), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{})
 			So(err, ShouldBeNil)
 
 			err = lse.Run(context.TODO())
@@ -74,7 +74,7 @@ func TestLogStreamExecutorOperations(t *testing.T) {
 		replicator := NewMockReplicator(ctrl)
 
 		opts := DefaultLogStreamExecutorOptions()
-		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, storage, newNopTelmetryStub(), &opts)
+		lse, err := NewLogStreamExecutor(zap.L(), 0, logStreamID, storage, newNopTelmetryStub(), &opts)
 		So(err, ShouldBeNil)
 
 		err = lse.Run(context.TODO())
@@ -182,7 +182,7 @@ func TestLogStreamExecutorAppend(t *testing.T) {
 		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
 		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 		replicator := NewMockReplicator(ctrl)
-		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{
+		lse, err := NewLogStreamExecutor(zap.L(), 0, types.LogStreamID(1), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{
 			AppendCTimeout:    DefaultLSEAppendCTimeout,
 			CommitWaitTimeout: DefaultLSECommitWaitTimeout,
 			TrimCTimeout:      DefaultLSETrimCTimeout,
@@ -408,7 +408,7 @@ func TestLogStreamExecutorRead(t *testing.T) {
 		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
 		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 		storage.EXPECT().Close().Return(nil).AnyTimes()
-		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{})
+		lse, err := NewLogStreamExecutor(zap.L(), 0, types.LogStreamID(1), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		err = lse.Run(context.TODO())
@@ -456,7 +456,7 @@ func TestLogStreamExecutorSubscribe(t *testing.T) {
 		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
 		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 		storage.EXPECT().Close().Return(nil).AnyTimes()
-		lse, err := NewLogStreamExecutor(zap.L(), types.LogStreamID(1), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{})
+		lse, err := NewLogStreamExecutor(zap.L(), 0, types.LogStreamID(1), storage, newNopTelmetryStub(), &LogStreamExecutorOptions{})
 		So(err, ShouldBeNil)
 
 		err = lse.Run(context.TODO())
@@ -544,7 +544,7 @@ func TestLogStreamExecutorSeal(t *testing.T) {
 		storage.EXPECT().RestoreLogStreamContext(gomock.Any()).Return(false)
 		storage.EXPECT().RestoreStorage(gomock.Any(), gomock.Any())
 		opts := DefaultLogStreamExecutorOptions()
-		lseI, err := NewLogStreamExecutor(zap.L(), lsid, storage, newNopTelmetryStub(), &opts)
+		lseI, err := NewLogStreamExecutor(zap.L(), 0, lsid, storage, newNopTelmetryStub(), &opts)
 		So(err, ShouldBeNil)
 		lse := lseI.(*logStreamExecutor)
 		updatedAt := lse.LastUpdated()
@@ -613,7 +613,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		opts := DefaultLogStreamExecutorOptions()
-		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, stg, newNopTelmetryStub(), &opts)
+		lse, err := NewLogStreamExecutor(zap.L(), 0, logStreamID, stg, newNopTelmetryStub(), &opts)
 		So(err, ShouldBeNil)
 
 		lse.Run(context.TODO())
@@ -634,7 +634,7 @@ func TestLogStreamExecutorAndStorage(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		opts := DefaultLogStreamExecutorOptions()
-		lse, err := NewLogStreamExecutor(zap.L(), logStreamID, stg, newNopTelmetryStub(), &opts)
+		lse, err := NewLogStreamExecutor(zap.L(), 0, logStreamID, stg, newNopTelmetryStub(), &opts)
 		So(err, ShouldBeNil)
 
 		lse.Run(context.TODO())
@@ -903,6 +903,7 @@ func TestLogStreamExecutorCommit(t *testing.T) {
 		options := DefaultLogStreamExecutorOptions()
 		lse, err := NewLogStreamExecutor(
 			zap.L(),
+			0,
 			logStreamID,
 			storage,
 			newNopTelmetryStub(),

@@ -50,6 +50,10 @@ func ParseStorageNodeID(s string) (StorageNodeID, error) {
 	return StorageNodeID(id), err
 }
 
+func (snid StorageNodeID) String() string {
+	return strconv.FormatUint(uint64(snid), 10)
+}
+
 type LogStreamID uint32
 
 func ParseLogStreamID(s string) (LogStreamID, error) {

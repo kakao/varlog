@@ -62,6 +62,9 @@ type appendTask struct {
 	writeCompletedTime atomicutil.AtomicTime
 	commitWaitTime     atomicutil.AtomicDuration
 
+	writeResponseTime  atomicutil.AtomicDuration
+	commitResponseTime atomicutil.AtomicDuration
+
 	atTrk *appendTaskTracker
 }
 

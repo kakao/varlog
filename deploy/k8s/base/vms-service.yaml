@@ -6,5 +6,5 @@ spec:
   selector:
     app: varlog-vms
   ports:
-    - name: rpc
-      port: 9093
+  - name: rpc
+    port: 9093

@@ -1,10 +1,12 @@
 package app
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -26,7 +28,11 @@ func Main(opts *storagenode.Options) error {
 
 	opts.Logger = logger
 
-	sn, err := storagenode.NewStorageNode(opts)
+	// TODO: add initTimeout option
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sn, err := storagenode.NewStorageNode(ctx, opts)
 	if err != nil {
 		log.Fatalf("could not create StorageNode: %v", err)
 		return err

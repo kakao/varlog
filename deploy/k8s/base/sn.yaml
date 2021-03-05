@@ -39,8 +39,8 @@ spec:
         - "python3"
         - "/varlog/bin/vsn.py"
         ports:
-          - name: rpc
-            containerPort: 9091
+        - name: rpc
+          containerPort: 9091
         env:
         - name: TZ
           value: Asia/Seoul
@@ -49,13 +49,20 @@ spec:
         - name: VSN_HOME
           value: /varlog/data
         - name: COLLECTOR_NAME
-          value: "nop"
+          value: "otel"
         - name: COLLECTOR_ENDPOINT
-          value: "localhost:55680"
+          value: "localhost:4317"
         - name: HOST_IP
           valueFrom:
             fieldRef:
               fieldPath: status.hostIP
+        resources:
+          limits:
+            cpu: 1500m
+            memory: 1500Mi
+          requests:
+            cpu: 1500m
+            memory: 1500Mi
         volumeMounts:
         - name: varlog-sn-home
           mountPath: /varlog/data
@@ -76,8 +83,8 @@ spec:
         imagePullPolicy: IfNotPresent
       restartPolicy: Always
       terminationGracePeriodSeconds: 60
-      dnsPolicy: None
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -105,4 +112,3 @@ spec:
     rollingUpdate:
       maxUnavailable: 1
   revisionHistoryLimit: 10
-

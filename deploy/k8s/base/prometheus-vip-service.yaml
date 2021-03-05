@@ -4,12 +4,12 @@ metadata:
   name: prometheus-ui-vip
   namespace: ingress-nginx
   annotations:
-    service.beta.kubernetes.io/openstack-internal-load-balancer: 'true'
+    service.beta.kubernetes.io/openstack-internal-load-balancer: "true"
 spec:
   externalTrafficPolicy: Local
   selector:
     app.kubernetes.io/name: ingress-nginx
   type: LoadBalancer
   ports:
-    - name: prometheus-ui
-      port: 9090
+  - name: prometheus-ui
+    port: 9090

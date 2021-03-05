@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
-	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/trace"
+	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/label"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
@@ -48,9 +48,18 @@ type handler func(ctx context.Context, req interface{}) (rsp interface{}, err er
 func (s *managementService) withTelemetry(ctx context.Context, spanName string, req interface{}, h handler) (rsp interface{}, err error) {
 	// TODO: use resource to tag storage node id
 	ctx, span := s.tmStub.startSpan(ctx, spanName,
-		oteltrace.WithAttributes(trace.StorageNodeIDLabel(s.m.StorageNodeID())),
+		oteltrace.WithAttributes(label.StorageNodeIDLabel(s.m.StorageNodeID())),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
+	labels := []label.KeyValue{
+		label.RPCName(spanName),
+		label.StorageNodeIDLabel(s.m.StorageNodeID()),
+	}
+	s.tmStub.mt.RecordBatch(ctx, labels,
+		s.tmStub.metrics().totalRequests.Measurement(1),
+		s.tmStub.metrics().activeRequests.Measurement(1),
+	)
+
 	if cidGetter, ok := req.(interface{ GetClusterID() types.ClusterID }); ok {
 		if cidGetter.GetClusterID() != s.m.ClusterID() {
 			err = errors.New("storagenode: invalid ClusterID")
@@ -64,8 +73,6 @@ func (s *managementService) withTelemetry(ctx context.Context, spanName string, 
 		}
 	}
 	rsp, err = h(ctx, req)
-	// FIXME (jun): This is meaningless line.
-	s.tmStub.metrics().requests.Add(ctx, 1)
 out:
 	if err == nil {
 		span.SetStatus(codes.Ok, "")
@@ -80,6 +87,8 @@ out:
 			zap.Stringer("request", req.(fmt.Stringer)),
 		)
 	}
+
+	s.tmStub.metrics().activeRequests.Add(ctx, -1, labels...)
 	span.End()
 	return rsp, err
 }
