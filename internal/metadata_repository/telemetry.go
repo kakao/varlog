@@ -3,34 +3,44 @@ package metadata_repository
 import (
 	"context"
 
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/telemetry"
-	"github.com/kakao/varlog/pkg/util/telemetry/metrics"
+	"github.com/kakao/varlog/pkg/util/telemetry/metric"
 	"github.com/kakao/varlog/pkg/util/telemetry/trace"
 )
 
+const serviceName = "mr"
+
 type telemetryStub struct {
-	tm *telemetry.Telemetry
+	tm telemetry.Telemetry
 	tr trace.Tracer
-	mt metrics.Meter
+	mt metric.Meter
 	mb *metricsBag
 }
 
-func newTelemetryStub(name string, endpoint string) *telemetryStub {
-	tm, err := telemetry.New(name, endpoint)
+func newTelemetryStub(ctx context.Context, name string, nodeID types.NodeID, endpoint string) (*telemetryStub, error) {
+	tm, err := telemetry.New(ctx, name, serviceName, nodeID.String(), telemetry.WithEndpoint(endpoint))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	stub := &telemetryStub{
 		tm: tm,
-		tr: trace.NamedTracer("varlog.mr"),
-		mt: metrics.NamedMeter("varlog.mr"),
+		tr: telemetry.Tracer(telemetry.ServiceNamespace + "." + serviceName),
+		mt: telemetry.Meter(telemetry.ServiceNamespace + "." + serviceName),
 	}
 	stub.mb = newMetricsBag(stub)
-	return stub
+	return stub, nil
 }
 
 func newNopTelmetryStub() *telemetryStub {
-	return newTelemetryStub("nop", "")
+	tm := telemetry.NewNopTelemetry()
+	stub := &telemetryStub{
+		tm: tm,
+		tr: telemetry.Tracer(telemetry.ServiceNamespace + "." + serviceName),
+		mt: telemetry.Meter(telemetry.ServiceNamespace + "." + serviceName),
+	}
+	stub.mb = newMetricsBag(stub)
+	return stub
 }
 
 func (ts *telemetryStub) close(ctx context.Context) {

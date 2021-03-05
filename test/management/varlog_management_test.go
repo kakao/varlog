@@ -54,7 +54,7 @@ func TestVarlogManagerServer(t *testing.T) {
 			snopts.Logger = env.Logger()
 			snopts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
 
-			sn, err := storagenode.NewStorageNode(&snopts)
+			sn, err := storagenode.NewStorageNode(context.TODO(), &snopts)
 			So(err, ShouldBeNil)
 			So(sn.Run(), ShouldBeNil)
 			env.SNs[storageNodeID] = sn

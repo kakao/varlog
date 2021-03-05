@@ -108,6 +108,14 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 
 	logger := options.Logger.Named("vmr").With(zap.Any("nodeid", options.NodeID))
 
+	// TODO: use initTimeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tmStub, err := newTelemetryStub(ctx, options.TelemetryOptions.CollectorName, options.NodeID, options.TelemetryOptions.CollectorEndpoint)
+	if err != nil {
+		logger.Panic("telemetry", zap.Error(err))
+	}
+
 	mr := &RaftMetadataRepository{
 		clusterID:         options.ClusterID,
 		nodeID:            options.NodeID,
@@ -117,7 +125,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		options:           options,
 		runner:            runner.New("mr", options.Logger),
 		sw:                stopwaiter.New(),
-		tmStub:            newTelemetryStub(options.TelemetryOptions.CollectorName, options.TelemetryOptions.CollectorEndpoint),
+		tmStub:            tmStub,
 	}
 
 	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))

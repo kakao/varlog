@@ -6,10 +6,12 @@ import (
 	"io"
 
 	"github.com/pkg/errors"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/telemetry/label"
 	"github.com/kakao/varlog/proto/snpb"
 )
 
@@ -26,12 +28,13 @@ const (
 type ReplicatorService struct {
 	storageNodeID types.StorageNodeID
 	lseGetter     LogStreamExecutorGetter
+	tmStub        *telemetryStub
 	logger        *zap.Logger
 }
 
 var _ snpb.ReplicatorServer = (*ReplicatorService)(nil)
 
-func NewReplicatorService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, logger *zap.Logger) *ReplicatorService {
+func NewReplicatorService(storageNodeID types.StorageNodeID, lseGetter LogStreamExecutorGetter, tmStub *telemetryStub, logger *zap.Logger) *ReplicatorService {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -39,6 +42,7 @@ func NewReplicatorService(storageNodeID types.StorageNodeID, lseGetter LogStream
 	return &ReplicatorService{
 		storageNodeID: storageNodeID,
 		lseGetter:     lseGetter,
+		tmStub:        tmStub,
 		logger:        logger,
 	}
 }
@@ -48,20 +52,24 @@ func (s *ReplicatorService) Register(server *grpc.Server) {
 	snpb.RegisterReplicatorServer(server, s)
 }
 
-func (s *ReplicatorService) Replicate(stream snpb.Replicator_ReplicateServer) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func (s *ReplicatorService) Replicate(stream snpb.Replicator_ReplicateServer) (err error) {
+	// ctx, cancel := context.WithCancel(context.Background())
+	// defer cancel()
+	ctx := stream.Context()
 	c := s.send(ctx, stream, s.replicate(ctx, s.recv(ctx, stream)))
 	for repCtx := range c {
 		if repCtx.err == io.EOF {
+			err = nil
 			return nil
 		}
 		if repCtx.err != nil {
+			err = repCtx.err
 			return repCtx.err
 		}
 	}
 	// TODO: use proper error and message
-	return fmt.Errorf("stream is broken")
+	err = fmt.Errorf("stream is broken")
+	return err
 }
 
 func (s *ReplicatorService) recv(ctx context.Context, stream snpb.Replicator_ReplicateServer) <-chan *replicationContext {
@@ -144,23 +152,35 @@ func (s *ReplicatorService) send(ctx context.Context, stream snpb.Replicator_Rep
 	return c
 }
 
-func (s *ReplicatorService) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateRequest) (*snpb.SyncReplicateResponse, error) {
+func (s *ReplicatorService) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateRequest) (rsp *snpb.SyncReplicateResponse, err error) {
+	var spanName = "varlog.snpb.Replicator/SyncReplicate"
+	ctx, span := s.tmStub.startSpan(ctx, spanName,
+		oteltrace.WithAttributes(label.StorageNodeIDLabel(s.storageNodeID)),
+		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
+	)
+	s.tmStub.metrics().activeRequests.Add(ctx, 1, label.String("call", spanName))
+	defer func() {
+		if err == nil {
+			s.logger.Info("SyncReplicate",
+				zap.String("request", req.String()),
+				zap.String("response", rsp.String()),
+			)
+		} else {
+			s.logger.Error("SyncReplicate",
+				zap.Error(err),
+				zap.String("request", req.String()),
+			)
+		}
+		s.tmStub.metrics().activeRequests.Add(ctx, -1, label.String("call", spanName))
+		span.End()
+	}()
+
 	lse, ok := s.lseGetter.GetLogStreamExecutor(req.GetLogStreamID())
 	if !ok {
-		return nil, errors.Errorf("no logstreamexecutor: %v", req.GetLogStreamID())
+		err = errors.Errorf("no logstreamexecutor: %v", req.GetLogStreamID())
+		return rsp, err
 	}
-	var rsp *snpb.SyncReplicateResponse
-	err := lse.SyncReplicate(ctx, req.GetFirst(), req.GetLast(), req.GetCurrent(), req.GetData())
-	if err == nil {
-		s.logger.Info("SyncReplicate",
-			zap.String("request", req.String()),
-			zap.String("response", rsp.String()),
-		)
-	} else {
-		s.logger.Error("SyncReplicate",
-			zap.Error(err),
-			zap.String("request", req.String()),
-		)
-	}
-	return &snpb.SyncReplicateResponse{}, err
+	err = lse.SyncReplicate(ctx, req.GetFirst(), req.GetLast(), req.GetCurrent(), req.GetData())
+	rsp = &snpb.SyncReplicateResponse{}
+	return rsp, err
 }

@@ -26,7 +26,7 @@ services:
     ports:
       - "1777:1777"   # pprof extension
       - "55679:55679" # zpages extension
-      - "8889"   # Prometheus exporter metrics
+      - "8889"   # Prometheus exporter metric
       - "13133:13133" # health_check extension
       - "55680:55680" # grpc protocol
       - "55681:55681" # http protocol

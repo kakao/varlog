@@ -117,7 +117,6 @@ func benchmarkLogger(b *testing.B, benchmark loggerBenchmark) {
 	)
 	if benchmark.telemetry {
 		exporter, err := stdout.NewExporter(
-			stdout.WithQuantiles([]float64{0.5, 0.9, 0.99}),
 			stdout.WithPrettyPrint(),
 		)
 		if err != nil {
@@ -150,7 +149,6 @@ func TestNewLogger(t *testing.T) {
 	}()
 
 	exporter, err := stdout.NewExporter(
-		stdout.WithQuantiles([]float64{0.5, 0.9, 0.99}),
 		stdout.WithPrettyPrint(),
 	)
 	if err != nil {

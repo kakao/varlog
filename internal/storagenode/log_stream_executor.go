@@ -13,14 +13,13 @@ import (
 
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/label"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
-	"github.com/kakao/varlog/pkg/util/telemetry/trace"
+	"github.com/kakao/varlog/pkg/util/telemetry/label"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -144,9 +143,10 @@ type commitTask struct {
 // TODO:
 // - handle read or subscribe operations competing with trim operations
 type logStreamExecutor struct {
-	logStreamID types.LogStreamID
-	storage     Storage
-	replicator  Replicator
+	storageNodeID types.StorageNodeID
+	logStreamID   types.LogStreamID
+	storage       Storage
+	replicator    Replicator
 
 	running     bool
 	muRunning   sync.RWMutex
@@ -177,7 +177,7 @@ type logStreamExecutor struct {
 	options *LogStreamExecutorOptions
 }
 
-func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, storage Storage, tmStub *telemetryStub, options *LogStreamExecutorOptions) (LogStreamExecutor, error) {
+func NewLogStreamExecutor(logger *zap.Logger, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID, storage Storage, tmStub *telemetryStub, options *LogStreamExecutorOptions) (LogStreamExecutor, error) {
 	if storage == nil {
 		return nil, errors.New("logstream: no storage")
 	}
@@ -187,21 +187,22 @@ func NewLogStreamExecutor(logger *zap.Logger, logStreamID types.LogStreamID, sto
 	logger = logger.Named("logstreamexecutor").With(zap.Any("lsid", logStreamID))
 
 	lse := &logStreamExecutor{
-		logStreamID: logStreamID,
-		storage:     storage,
-		replicator:  NewReplicator(logStreamID, logger),
-		stopped:     make(chan struct{}),
-		runner:      runner.New(fmt.Sprintf("logstreamexecutor-%v", logStreamID), logger),
-		trackers:    newAppendTracker(),
-		appendC:     make(chan *appendTask, options.AppendCSize),
-		trimC:       make(chan *trimTask, options.TrimCSize),
-		commitC:     make(chan commitTask, options.CommitCSize),
-		status:      varlogpb.LogStreamStatusRunning,
-		syncTracker: make(map[types.StorageNodeID]*SyncTaskStatus),
-		tst:         NewTimestamper(),
-		tmStub:      tmStub,
-		logger:      logger,
-		options:     options,
+		storageNodeID: storageNodeID,
+		logStreamID:   logStreamID,
+		storage:       storage,
+		replicator:    NewReplicator(logStreamID, logger),
+		stopped:       make(chan struct{}),
+		runner:        runner.New(fmt.Sprintf("logstreamexecutor-%v", logStreamID), logger),
+		trackers:      newAppendTracker(),
+		appendC:       make(chan *appendTask, options.AppendCSize),
+		trimC:         make(chan *trimTask, options.TrimCSize),
+		commitC:       make(chan commitTask, options.CommitCSize),
+		status:        varlogpb.LogStreamStatusRunning,
+		syncTracker:   make(map[types.StorageNodeID]*SyncTaskStatus),
+		tst:           NewTimestamper(),
+		tmStub:        tmStub,
+		logger:        logger,
+		options:       options,
 	}
 
 	lse.lsc.committedLLSNEnd.mu.Lock()
@@ -647,7 +648,7 @@ func (lse *logStreamExecutor) scan(ctx context.Context, begin, end types.GLSN) (
 }
 
 func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) error {
-	ctx, span := lse.tmStub.startSpan(ctx, "Replicate", oteltrace.WithAttributes(trace.LogStreamIDLabel(lse.logStreamID)))
+	ctx, span := lse.tmStub.startSpan(ctx, "Replicate", oteltrace.WithAttributes(label.LogStreamIDLabel(lse.logStreamID)))
 	defer func() {
 		span.End()
 	}()
@@ -676,13 +677,8 @@ func (lse *logStreamExecutor) Replicate(ctx context.Context, llsn types.LLSN, da
 // If the log stream is locked, the append is failed.
 // All Appends are processed sequentially by using the appendC.
 func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas ...Replica) (types.GLSN, error) {
-	commitWaitTime := int64(-1)
-
-	ctx, span := lse.tmStub.startSpan(ctx, "Append", oteltrace.WithAttributes(trace.LogStreamIDLabel(lse.logStreamID)))
-	defer func() {
-		span.SetAttributes(label.Int64("commit_wait_time_ms", commitWaitTime))
-		span.End()
-	}()
+	ctx, span := lse.tmStub.startSpan(ctx, "Append", oteltrace.WithAttributes(label.LogStreamIDLabel(lse.logStreamID)))
+	defer span.End()
 
 	lse.muRunning.RLock()
 	defer lse.muRunning.RUnlock()
@@ -703,7 +699,20 @@ func (lse *logStreamExecutor) Append(ctx context.Context, data []byte, replicas 
 	defer cancel()
 	err := appendT.wait(tctx)
 	appendT.close()
-	commitWaitTime = appendT.commitWaitTime.Load().Milliseconds()
+	lse.tmStub.metrics().storageResponseTime.Record(
+		ctx,
+		float64(appendT.writeResponseTime.Load().Nanoseconds())/float64(time.Millisecond),
+		label.StorageNodeIDLabel(lse.storageNodeID),
+		label.LogStreamIDLabel(lse.logStreamID),
+		label.String("kind", "write"),
+	)
+	lse.tmStub.metrics().storageResponseTime.Record(
+		ctx,
+		float64(appendT.commitResponseTime.Load().Nanoseconds())/float64(time.Millisecond),
+		label.StorageNodeIDLabel(lse.storageNodeID),
+		label.LogStreamIDLabel(lse.logStreamID),
+		label.String("kind", "commit"),
+	)
 	return appendT.getGLSN(), err
 }
 
@@ -769,10 +778,11 @@ func (lse *logStreamExecutor) write(t *appendTask) error {
 		// return fmt.Errorf("%w (llsn=%v uncommittedLLSNEnd=%v)", verrors.ErrCorruptLogStream, llsn, lse.lsc.uncommittedLLSNEnd.Load())
 	}
 
+	tick := time.Now()
 	if err := lse.storage.Write(llsn, data); err != nil {
 		return err
 	}
-
+	t.writeResponseTime.Store(time.Since(tick))
 	t.writeCompletedTime.Store(time.Now())
 
 	// NOTE (jun): Tracking the appendTask MUST be starting before incrementing
@@ -966,6 +976,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 		CommittedGLSNBegin: t.committedGLSNBegin,
 		CommittedGLSNEnd:   t.committedGLSNEnd,
 	}
+
 	if commitErr = lse.storage.StoreCommitContext(cc); commitErr != nil {
 		commitOk = false
 		lse.sealItself()
@@ -973,6 +984,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 
 	for commitOk && glsn < t.committedGLSNEnd {
 		llsn := lse.lsc.committedLLSNEnd.llsn
+		tick := time.Now()
 		if commitErr = lse.storage.Commit(llsn, glsn); commitErr != nil {
 			// NOTE: The LogStreamExecutor fails to commit Log entries that are
 			// assigned GLSN by MR, for example, because of the storage failure.
@@ -983,6 +995,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			lse.sealItself()
 			break
 		}
+		commitResponseTime := time.Since(tick)
 		nrCommits++
 		lse.lsc.committedLLSNEnd.llsn++
 		// NB: Mutating localHighWatermark here is somewhat nasty.
@@ -997,6 +1010,7 @@ func (lse *logStreamExecutor) commit(t commitTask) {
 			if !writeCompletedTime.IsZero() {
 				appendT.commitWaitTime.Store(time.Since(writeCompletedTime))
 			}
+			appendT.commitResponseTime.Store(commitResponseTime)
 			appendT.setGLSN(glsn)
 			appendT.notify(nil)
 		}

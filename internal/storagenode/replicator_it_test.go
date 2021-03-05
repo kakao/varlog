@@ -40,7 +40,7 @@ func TestReplicatorClientReplicatorService(t *testing.T) {
 			},
 		).AnyTimes()
 
-		rs := NewReplicatorService(types.StorageNodeID(1), lseGetter, nil)
+		rs := NewReplicatorService(types.StorageNodeID(1), lseGetter, newNopTelmetryStub(), zap.L())
 
 		Convey("And a ReplicatorClient tries to replicate data to it", conveyutil.WithServiceServer(rs, func(server *grpc.Server, addr string) {
 			rc, err := NewReplicatorClient(context.TODO(), storageNodeID, logStreamID, addr, zap.NewNop())
@@ -147,7 +147,7 @@ func TestReplicatorIntegration(t *testing.T) {
 			lseGetterList = append(lseGetterList, lseGetter)
 
 			// ReplicatorService
-			rs := NewReplicatorService(storageNodeID, lseGetter, nil)
+			rs := NewReplicatorService(storageNodeID, lseGetter, newNopTelmetryStub(), zap.L())
 			rsList = append(rsList, rs)
 
 			// RPC Server
@@ -310,7 +310,7 @@ func TestReplicatorClientReplicatorServiceReplicator(t *testing.T) {
 			},
 		).AnyTimes()
 
-		rs1 := NewReplicatorService(types.StorageNodeID(1), lseGetter, nil)
+		rs1 := NewReplicatorService(types.StorageNodeID(1), lseGetter, newNopTelmetryStub(), zap.L())
 
 		Convey("And another Replicator is running", conveyutil.WithServiceServer(rs1, func(server *grpc.Server, addr string) {
 			replicas = append(replicas, Replica{
