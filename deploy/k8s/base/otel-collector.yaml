@@ -125,7 +125,7 @@ spec:
         - "until nslookup jaeger-collector.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for jaeger-collector; sleep 2; done"
       containers:
       - name: otel-collector
-        image: mdock.daumkakao.io/otel/opentelemetry-collector:latest
+        image: otel/opentelemetry-collector:latest
         command:
         - "/otelcol"
         - "--config=/conf/otel-collector-config.yaml"
@@ -162,3 +162,17 @@ spec:
           - key: otel-collector-config
             path: otel-collector-config.yaml
       dnsPolicy: ClusterFirst
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: NotIn
+                values:
+                - "varlog-mr"
+                - "varlog-sn"
+                - "varlog-vms"
+                - "prometheus"
+                - "jaeger"
+            topologyKey: "kubernetes.io/hostname"

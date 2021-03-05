@@ -53,7 +53,7 @@ spec:
     spec:
       containers:
       - name: prometheus
-        image: mdock.daumkakao.io/prom/prometheus:latest
+        image: prom/prometheus:latest
         args:
         - "--config.file=/etc/prometheus/prometheus.yml"
         - "--storage.tsdb.path=/prometheus/"
@@ -82,3 +82,19 @@ spec:
           name: prometheus-server-conf
       - name: prometheus-storage-volume
         emptyDir: {}
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: NotIn
+                values:
+                - "varlog-mr"
+                - "varlog-sn"
+                - "varlog-vms"
+              - key: "component"
+                operator: NotIn
+                values:
+                - "otel-collector"
+            topologyKey: "kubernetes.io/hostname"

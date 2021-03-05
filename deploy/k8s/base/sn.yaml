@@ -94,6 +94,22 @@ spec:
                 operator: In
                 values:
                 - varlog-sn
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: NotIn
+                  values:
+                  - "varlog-mr"
+                  - "varlog-vms"
+                  - "prometheus"
+                  - "jaeger"
+                - key: "component"
+                  operator: NotIn
+                  values:
+                  - "otel-collector"
+            topologyKey: "kubernetes.io/hostname"
       schedulerName: default-scheduler
       dnsConfig:
         nameservers:

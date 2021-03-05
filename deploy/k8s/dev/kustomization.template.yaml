@@ -15,9 +15,15 @@ images:
 - name: idock.daumkakao.io/varlog/rpc-test-server
   newName: idock.daumkakao.io/varlog/rpc-test-server
   newTag: IMAGE_TAG
-- name: mdock.daumkakao.io/otel/opentelemetry-collector
+- name: otel/opentelemetry-collector
   newName: mdock.daumkakao.io/otel/opentelemetry-collector
   newTag: 0.21.0
-- name: mdock.daumkakao.io/jaegertracing/all-in-one
+- name: jaegertracing/all-in-one
   newName: mdock.daumkakao.io/jaegertracing/all-in-one
   newTag: 1.22.0
+- name: prom/prometheus
+  newName: mdock.daumkakao.io/prom/prometheus
+  newTag: v2.25.0
+- name: busybox
+  newName: mdock.daumkakao.io/busybox
+  newTag: stable

@@ -93,10 +93,25 @@ spec:
                 operator: In
                 values:
                 - varlog-mr
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: NotIn
+                  values:
+                  - "varlog-sn"
+                  - "varlog-vms"
+                  - "prometheus"
+                  - "jaeger"
+                - key: "component"
+                  operator: NotIn
+                  values:
+                  - "otel-collector"
+            topologyKey: "kubernetes.io/hostname"
       schedulerName: default-scheduler
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
   revisionHistoryLimit: 10
-

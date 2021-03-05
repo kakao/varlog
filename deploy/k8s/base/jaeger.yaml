@@ -38,7 +38,7 @@ spec:
     spec:
       containers:
       - name: jaeger
-        image: mdock.daumkakao.io/jaegertracing/all-in-one:latest
+        image: jaegertracing/all-in-one:latest
         resources:
           limits:
             cpu: 6000m
@@ -55,3 +55,20 @@ spec:
           tcpSocket:
             port: 14250
       dnsPolicy: ClusterFirst
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: NotIn
+                  values:
+                  - "varlog-mr"
+                  - "varlog-sn"
+                  - "varlog-vms"
+                  - "prometheus"
+                - key: "component"
+                  operator: NotIn
+                  values:
+                  - "otel-collector"
+            topologyKey: "kubernetes.io/hostname"

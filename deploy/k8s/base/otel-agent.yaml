@@ -72,7 +72,7 @@ spec:
       - command:
         - "/otelcol"
         - "--config=/conf/otel-agent-config.yaml"
-        image: mdock.daumkakao.io/otel/opentelemetry-collector:latest
+        image: otel/opentelemetry-collector:latest
         name: otel-agent
         resources:
           limits:
