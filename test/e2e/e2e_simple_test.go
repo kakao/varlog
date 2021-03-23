@@ -12,7 +12,6 @@ import (
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
-	vtypes "github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/proto/vmspb"
@@ -57,7 +56,7 @@ func TestK8sVarlogSimple(t *testing.T) {
 			k8s.WithTimeoutContext(func(ctx context.Context) {
 				vlg, err = varlog.Open(
 					ctx,
-					vtypes.ClusterID(1),
+					types.ClusterID(1),
 					[]string{mrseed},
 					varlog.WithDenyTTL(5*time.Second),
 					varlog.WithMRConnectorCallTimeout(3*time.Second),
@@ -94,7 +93,7 @@ func TestK8sVarlogSimple(t *testing.T) {
 				defer appendCancel()
 				glsn, err := vlg.Append(appendCtx, []byte("foo"))
 				So(err, ShouldNotBeNil)
-				So(glsn, ShouldEqual, vtypes.InvalidGLSN)
+				So(glsn, ShouldEqual, types.InvalidGLSN)
 
 				Convey("Unseal", func() {
 					unsealCtx, unsealCancel := k8s.TimeoutContext()
@@ -142,7 +141,7 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 
 		openCtx, openCancel := k8s.TimeoutContext()
 		defer openCancel()
-		varlog, err := varlog.Open(openCtx, vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
+		varlog, err := varlog.Open(openCtx, types.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
 		So(err, ShouldBeNil)
 
 		Reset(func() {
@@ -237,7 +236,7 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 
 		openCtx, openCancel := k8s.TimeoutContext()
 		defer openCancel()
-		vlg, err := varlog.Open(openCtx, vtypes.ClusterID(1), []string{mrseed},
+		vlg, err := varlog.Open(openCtx, types.ClusterID(1), []string{mrseed},
 			varlog.WithDenyTTL(2*time.Second),
 			varlog.WithMRConnectorCallTimeout(3*time.Second),
 			varlog.WithMetadataRefreshTimeout(3*time.Second),
@@ -364,7 +363,7 @@ func TestK8sVarlogAppend(t *testing.T) {
 		})
 
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			vlg, err = varlog.Open(ctx, vtypes.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
+			vlg, err = varlog.Open(ctx, types.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
 			So(err, ShouldBeNil)
 		})
 
@@ -413,7 +412,7 @@ func TestK8sVarlogEnduranceExample(t *testing.T) {
 		)
 
 		action := NewAction(WithTitle("backup sn fail"),
-			WithClusterID(vtypes.ClusterID(1)),
+			WithClusterID(types.ClusterID(1)),
 			WithMRAddr(mrseed),
 			WithConfChange(confChange),
 			WithPrevFunc(AddLogStream(k8s)),
@@ -445,7 +444,7 @@ func TestK8sVarlogEnduranceFollowerMRFail(t *testing.T) {
 		)
 
 		action := NewAction(WithTitle("follower mr fail"),
-			WithClusterID(vtypes.ClusterID(1)),
+			WithClusterID(types.ClusterID(1)),
 			WithMRAddr(mrseed),
 			WithConfChange(confChange),
 			WithPrevFunc(AddLogStream(k8s)),
