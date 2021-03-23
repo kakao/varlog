@@ -120,7 +120,7 @@ coverage_report:
 TEST_DOCKER_CPUS := 8
 TEST_DOCKER_MEMORY := 4GB
 
-.PHONY: test_docker test_e2e_docker
+.PHONY: test_docker test_e2e_docker test_e2e_docker_long
 test_docker: image_builder_dev
 	docker run --rm -it --cpus $(TEST_DOCKER_CPUS) --memory $(TEST_DOCKER_MEMORY) idock.daumkakao.io/varlog/builder-dev:$(DOCKER_TAG) make test
 
@@ -135,6 +135,17 @@ test_e2e_docker: image_builder_dev push_builder_dev
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
 		--command -- $(GO) test ./test/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1
 
+test_e2e_docker_long: image_builder_dev push_builder_dev
+	kubectl run --rm -it test-e2e \
+		--image=idock.daumkakao.io/varlog/builder-dev:$(DOCKER_TAG) \
+		--image-pull-policy=Always \
+		--restart=Never \
+		--env="VAULT_ADDR=$(VAULT_ADDR)" \
+		--env="VAULT_ROLE_ID=$(VAULT_ROLE_ID)" \
+		--env="VAULT_SECRET_ID=$(VAULT_SECRET_ID)" \
+		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
+		--command -- $(GO) test ./test/e2e -tags=long_e2e -v -timeout 12h -failfast -count 1 -race -p 1
+	
 .PHONY: generate
 generate:
 	$(GO) generate ./...
