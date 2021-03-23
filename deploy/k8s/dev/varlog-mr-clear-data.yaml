@@ -1,0 +1,16 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: varlog-mr-clear
+  namespace: default
+  labels:
+    app: varlog-mr-clear
+    name: vvarlog-mr-clear
+spec:
+  template:
+    spec:
+      volumes:
+      - name: varlog-mr-home
+        hostPath:
+          path: /data1/varlog/mr
+          type: DirectoryOrCreate

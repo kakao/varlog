@@ -89,7 +89,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
-              - key: type
+              - key: varlog-type
                 operator: In
                 values:
                 - varlog-mr

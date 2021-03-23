@@ -22,16 +22,30 @@ import (
 )
 
 const (
-	MR_LABEL      = "varlog-mr"
-	MR_STOP_LABEL = "varlog-mr-stop"
-	MR_DROP_LABEL = "varlog-mr-drop"
-	SN_LABEL      = "varlog-sn"
-	SN_STOP_LABEL = "varlog-sn-stop"
-	SN_DROP_LABEL = "varlog-sn-drop"
-	VMS_RS_NAME   = "varlog-vms"
-	VMS_VIP_NAME  = "varlog-vms-rpc-vip"
-	MR_VIP_NAME   = "varlog-mr-rpc-vip"
-	MRServiceName = "varlog-mr-rpc"
+	TypeLabelKey = "varlog-type"
+	AppLabelKey  = "app"
+
+	// metadata repository
+	MRLabel      = "varlog-mr"
+	MRStopLabel  = "varlog-mr-stop"
+	MRDropLabel  = "varlog-mr-drop"
+	MRClearLabel = "varlog-mr-clear"
+
+	// storage node
+	SNLabel     = "varlog-sn"
+	SNStopLabel = "varlog-sn-stop"
+	SNDropLabel = "varlog-sn-drop"
+
+	// vms
+	VMSRSName = "varlog-vms"
+
+	// vip
+	VMSVIPName = "varlog-vms-rpc-vip"
+	MRVIPName  = "varlog-mr-rpc-vip"
+
+	// namespaces
+	VarlogNamespace       = "default"
+	IngressNginxNamespace = "ingress-nginx"
 
 	ENV_REP_FACTOR = "REP_FACTOR"
 )
@@ -138,7 +152,7 @@ func (k8s *K8sVarlogCluster) Reset() error {
 
 	var numPods int
 	if err := testutil.CompareWaitErrorN(500, func() (bool, error) {
-		numPods, err := k8s.numPodsReady("default", nil)
+		numPods, err := k8s.numPodsReady(VarlogNamespace, nil)
 		if err != nil {
 			return false, errors.Wrap(err, "k8s")
 		}
@@ -148,11 +162,11 @@ func (k8s *K8sVarlogCluster) Reset() error {
 	}
 
 	rep := fmt.Sprintf("%d", k8s.RepFactor)
-	if err := k8s.ReplaceEnvToDeployment(VMS_RS_NAME, ENV_REP_FACTOR, rep); err != nil {
+	if err := k8s.ReplaceEnvToDeployment(VMSRSName, ENV_REP_FACTOR, rep); err != nil {
 		return err
 	}
 
-	if err := k8s.ReplaceEnvToDaemonset(MR_LABEL, ENV_REP_FACTOR, rep); err != nil {
+	if err := k8s.ReplaceEnvToDaemonset(MRLabel, ENV_REP_FACTOR, rep); err != nil {
 		return err
 	}
 
@@ -161,7 +175,7 @@ func (k8s *K8sVarlogCluster) Reset() error {
 	}
 
 	if k8s.NrMR > 0 {
-		if err := k8s.startNodes(MR_LABEL, 1); err != nil {
+		if err := k8s.startNodes(MRLabel, 1); err != nil {
 			return err
 		}
 	}
@@ -196,10 +210,11 @@ func (k8s *K8sVarlogCluster) Reset() error {
 func (k8s *K8sVarlogCluster) VMSAddress() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
 	defer cancel()
+
 	s, err := k8s.cli.
 		CoreV1().
-		Services("ingress-nginx").
-		Get(ctx, VMS_VIP_NAME, metav1.GetOptions{})
+		Services(IngressNginxNamespace).
+		Get(ctx, VMSVIPName, metav1.GetOptions{})
 	if err != nil {
 		return "", errors.Wrap(err, "k8s")
 	}
@@ -212,8 +227,8 @@ func (k8s *K8sVarlogCluster) MRAddress() (string, error) {
 	defer cancel()
 	s, err := k8s.cli.
 		CoreV1().
-		Services("ingress-nginx").
-		Get(ctx, MR_VIP_NAME, metav1.GetOptions{})
+		Services(IngressNginxNamespace).
+		Get(ctx, MRVIPName, metav1.GetOptions{})
 	if err != nil {
 		return "", errors.Wrap(err, "k8s")
 	}
@@ -276,7 +291,7 @@ func (k8s *K8sVarlogCluster) ScaleReplicaSet(replicasetName string, scale int32)
 	defer gCancel()
 	s, err := k8s.cli.
 		AppsV1().
-		Deployments("default").
+		Deployments(VarlogNamespace).
 		GetScale(gCtx, replicasetName, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "k8s")
@@ -293,7 +308,7 @@ func (k8s *K8sVarlogCluster) ScaleReplicaSet(replicasetName string, scale int32)
 	defer uCancel()
 	_, err = k8s.cli.
 		AppsV1().
-		Deployments("default").
+		Deployments(VarlogNamespace).
 		UpdateScale(uCtx, replicasetName, &sc, metav1.UpdateOptions{})
 	return errors.Wrap(err, "k8s")
 }
@@ -303,7 +318,7 @@ func (k8s *K8sVarlogCluster) ReplaceEnvToDeployment(deployment, name, value stri
 	defer gCancel()
 	d, err := k8s.cli.
 		AppsV1().
-		Deployments("default").
+		Deployments(VarlogNamespace).
 		Get(gCtx, deployment, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "k8s")
@@ -332,7 +347,7 @@ func (k8s *K8sVarlogCluster) ReplaceEnvToDeployment(deployment, name, value stri
 	defer uCancel()
 	_, err = k8s.cli.
 		AppsV1().
-		Deployments("default").
+		Deployments(VarlogNamespace).
 		Update(uCtx, d, metav1.UpdateOptions{})
 
 	return errors.Wrap(err, "k8s")
@@ -343,7 +358,7 @@ func (k8s *K8sVarlogCluster) ReplaceEnvToDaemonset(daemonset, name, value string
 	defer gCancel()
 	d, err := k8s.cli.
 		AppsV1().
-		DaemonSets("default").
+		DaemonSets(VarlogNamespace).
 		Get(gCtx, daemonset, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "k8s")
@@ -372,7 +387,7 @@ func (k8s *K8sVarlogCluster) ReplaceEnvToDaemonset(daemonset, name, value string
 	defer uCancel()
 	_, err = k8s.cli.
 		AppsV1().
-		DaemonSets("default").
+		DaemonSets(VarlogNamespace).
 		Update(uCtx, d, metav1.UpdateOptions{})
 
 	return errors.Wrap(err, "k8s")
@@ -388,7 +403,7 @@ func (k8s *K8sVarlogCluster) StopAll() error {
 	}
 
 	return testutil.CompareWaitErrorN(300, func() (bool, error) {
-		numPods, err := k8s.numPodsReady("default", nil)
+		numPods, err := k8s.numPodsReady(VarlogNamespace, nil)
 		if err != nil {
 			return false, err
 		}
@@ -419,8 +434,8 @@ func (k8s *K8sVarlogCluster) RemoveLabelAll() (err error) {
 	}
 
 	for _, node := range nodes.Items {
-		if _, ok := node.Labels["type"]; ok {
-			if erri := k8s.RemoveLabel(node.GetName(), "type"); erri != nil {
+		if _, ok := node.Labels[TypeLabelKey]; ok {
+			if erri := k8s.RemoveLabel(node.GetName(), TypeLabelKey); erri != nil {
 				err = multierr.Append(err, erri)
 			}
 		}
@@ -430,23 +445,23 @@ func (k8s *K8sVarlogCluster) RemoveLabelAll() (err error) {
 }
 
 func (k8s *K8sVarlogCluster) StopMRs() error {
-	return k8s.ReplaceLabelAll("type", MR_LABEL, MR_STOP_LABEL)
+	return k8s.ReplaceLabelAll(TypeLabelKey, MRLabel, MRStopLabel)
 }
 
 func (k8s *K8sVarlogCluster) StopDropMRs() error {
-	return k8s.ReplaceLabelAll("type", MR_DROP_LABEL, MR_STOP_LABEL)
+	return k8s.ReplaceLabelAll(TypeLabelKey, MRDropLabel, MRStopLabel)
 }
 
 func (k8s *K8sVarlogCluster) StopSNs() error {
-	return k8s.ReplaceLabelAll("type", SN_LABEL, SN_STOP_LABEL)
+	return k8s.ReplaceLabelAll(TypeLabelKey, SNLabel, SNStopLabel)
 }
 
 func (k8s *K8sVarlogCluster) StopDropSNs() error {
-	return k8s.ReplaceLabelAll("type", SN_DROP_LABEL, SN_STOP_LABEL)
+	return k8s.ReplaceLabelAll(TypeLabelKey, SNDropLabel, SNStopLabel)
 }
 
 func (k8s *K8sVarlogCluster) StopVMS() error {
-	return k8s.ScaleReplicaSet(VMS_RS_NAME, 0)
+	return k8s.ScaleReplicaSet(VMSRSName, 0)
 }
 
 func (k8s *K8sVarlogCluster) StopMR(mrID vtypes.NodeID) error {
@@ -455,7 +470,7 @@ func (k8s *K8sVarlogCluster) StopMR(mrID vtypes.NodeID) error {
 		return err
 	}
 
-	return k8s.ReplaceLabel(nodeName, "type", MR_STOP_LABEL)
+	return k8s.ReplaceLabel(nodeName, TypeLabelKey, MRStopLabel)
 }
 
 func (k8s *K8sVarlogCluster) StopSN(snID vtypes.StorageNodeID) error {
@@ -464,20 +479,20 @@ func (k8s *K8sVarlogCluster) StopSN(snID vtypes.StorageNodeID) error {
 		return err
 	}
 
-	return k8s.ReplaceLabel(nodeName, "type", SN_STOP_LABEL)
+	return k8s.ReplaceLabel(nodeName, TypeLabelKey, SNStopLabel)
 }
 
 func (k8s *K8sVarlogCluster) RecoverMR() error {
-	return k8s.ReplaceLabelAll("type", MR_STOP_LABEL, MR_LABEL)
+	return k8s.ReplaceLabelAll(TypeLabelKey, MRStopLabel, MRLabel)
 }
 
 func (k8s *K8sVarlogCluster) RecoverSN() error {
-	return k8s.ReplaceLabelAll("type", SN_STOP_LABEL, SN_LABEL)
+	return k8s.ReplaceLabelAll(TypeLabelKey, SNStopLabel, SNLabel)
 }
 
 func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
-	nodeSelector := map[string]string{"type": label}
-	podSelector := map[string]string{"app": label}
+	nodeSelector := map[string]string{TypeLabelKey: label}
+	podSelector := map[string]string{AppLabelKey: label}
 	nodes, err := k8s.Nodes(nodeSelector)
 	if err != nil {
 		return err
@@ -498,11 +513,11 @@ func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
 	}
 
 	for _, node := range nodes.Items {
-		if _, ok := node.Labels["type"]; ok {
+		if _, ok := node.Labels[TypeLabelKey]; ok {
 			continue
 		}
 
-		err := k8s.AddLabel(node.GetName(), "type", label)
+		err := k8s.AddLabel(node.GetName(), TypeLabelKey, label)
 		if err != nil {
 			return err
 		}
@@ -510,7 +525,7 @@ func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
 		num++
 		numPods := 0
 		if err := testutil.CompareWaitErrorWithRetryIntervalN(1000, 10*time.Second, func() (bool, error) {
-			numPods, err := k8s.numPodsReady("default", podSelector)
+			numPods, err := k8s.numPodsReady(VarlogNamespace, podSelector)
 			return numPods == num, errors.Wrap(err, "k8s")
 		}); err != nil {
 			return errors.Wrapf(err, "k8s: node=%s, numPodsReady=%d", node.GetName(), numPods)
@@ -529,8 +544,7 @@ func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
 }
 
 func (k8s *K8sVarlogCluster) clearMRDatas() error {
-	label := "varlog-mr-clear"
-	podSelector := map[string]string{"app": label}
+	podSelector := map[string]string{AppLabelKey: MRClearLabel}
 
 	nodes, err := k8s.WorkerNodes()
 	if err != nil {
@@ -538,18 +552,18 @@ func (k8s *K8sVarlogCluster) clearMRDatas() error {
 	}
 
 	for _, node := range nodes.Items {
-		if _, ok := node.Labels["type"]; ok {
+		if _, ok := node.Labels[TypeLabelKey]; ok {
 			continue
 		}
 
-		err := k8s.AddLabel(node.GetName(), "type", label)
+		err := k8s.AddLabel(node.GetName(), TypeLabelKey, MRClearLabel)
 		if err != nil {
 			return err
 		}
 	}
 
 	if err := testutil.CompareWaitErrorWithRetryIntervalN(1000, 10*time.Second, func() (bool, error) {
-		numPods, err := k8s.numPodsReady("default", podSelector)
+		numPods, err := k8s.numPodsReady(VarlogNamespace, podSelector)
 		return numPods == len(nodes.Items), errors.Wrap(err, "k8s")
 	}); err != nil {
 		return err
@@ -563,15 +577,15 @@ func (k8s *K8sVarlogCluster) clearMRDatas() error {
 }
 
 func (k8s *K8sVarlogCluster) StartMRs() error {
-	return k8s.startNodes(MR_LABEL, k8s.NrMR)
+	return k8s.startNodes(MRLabel, k8s.NrMR)
 }
 
 func (k8s *K8sVarlogCluster) StartSNs() error {
-	return k8s.startNodes(SN_LABEL, k8s.NrSN)
+	return k8s.startNodes(SNLabel, k8s.NrSN)
 }
 
 func (k8s *K8sVarlogCluster) StartVMS() error {
-	return k8s.ScaleReplicaSet(VMS_RS_NAME, 1)
+	return k8s.ScaleReplicaSet(VMSRSName, 1)
 }
 
 func (k8s *K8sVarlogCluster) NodeNames(labels map[string]string) ([]string, error) {
@@ -589,11 +603,11 @@ func (k8s *K8sVarlogCluster) NodeNames(labels map[string]string) ([]string, erro
 }
 
 func (k8s *K8sVarlogCluster) GetMRs() ([]string, error) {
-	return k8s.NodeNames(map[string]string{"type": MR_LABEL})
+	return k8s.NodeNames(map[string]string{TypeLabelKey: MRLabel})
 }
 
 func (k8s *K8sVarlogCluster) GetSNs() ([]string, error) {
-	return k8s.NodeNames(map[string]string{"type": SN_LABEL})
+	return k8s.NodeNames(map[string]string{TypeLabelKey: SNLabel})
 }
 
 func (k8s *K8sVarlogCluster) numPodsReady(namespace string, labels map[string]string) (int, error) {
@@ -621,26 +635,26 @@ func (k8s *K8sVarlogCluster) numPodsReady(namespace string, labels map[string]st
 }
 
 func (k8s *K8sVarlogCluster) IsVMSRunning() (bool, error) {
-	n, err := k8s.numPodsReady("default", map[string]string{"app": VMS_RS_NAME})
+	n, err := k8s.numPodsReady(VarlogNamespace, map[string]string{AppLabelKey: VMSRSName})
 	return n == 1, err
 }
 
 func (k8s *K8sVarlogCluster) IsMRRunning() (bool, error) {
-	n, err := k8s.numPodsReady("default", map[string]string{"app": MR_LABEL})
+	n, err := k8s.numPodsReady(VarlogNamespace, map[string]string{AppLabelKey: MRLabel})
 	return n == k8s.NrMR, err
 }
 
 func (k8s *K8sVarlogCluster) IsSNRunning() (bool, error) {
-	n, err := k8s.numPodsReady("default", map[string]string{"app": SN_LABEL})
+	n, err := k8s.numPodsReady(VarlogNamespace, map[string]string{AppLabelKey: SNLabel})
 	return n == k8s.NrSN, err
 }
 
 func (k8s *K8sVarlogCluster) NumMRRunning() (int, error) {
-	return k8s.numPodsReady("default", map[string]string{"app": MR_LABEL})
+	return k8s.numPodsReady(VarlogNamespace, map[string]string{AppLabelKey: MRLabel})
 }
 
 func (k8s *K8sVarlogCluster) NumSNRunning() (int, error) {
-	return k8s.numPodsReady("default", map[string]string{"app": SN_LABEL})
+	return k8s.numPodsReady(VarlogNamespace, map[string]string{AppLabelKey: SNLabel})
 }
 
 func withTestCluster(opts K8sVarlogClusterOptions, f func(k8s *K8sVarlogCluster)) func() {
@@ -676,7 +690,7 @@ func newK8sVarlogView(podGetter K8sVarlogPodGetter, timeout time.Duration) *k8sV
 }
 
 func (view *k8sVarlogView) Renew() error {
-	pods, err := view.podGetter.Pods("default", map[string]string{"app": MR_LABEL})
+	pods, err := view.podGetter.Pods(VarlogNamespace, map[string]string{AppLabelKey: MRLabel})
 	if err != nil {
 		return errors.Wrap(err, "k8s")
 	}
@@ -699,7 +713,7 @@ func (view *k8sVarlogView) Renew() error {
 		mrs[mrid] = pod.Spec.NodeName
 	}
 
-	pods, err = view.podGetter.Pods("default", map[string]string{"app": SN_LABEL})
+	pods, err = view.podGetter.Pods(VarlogNamespace, map[string]string{AppLabelKey: SNLabel})
 	if err != nil {
 		return errors.Wrap(err, "k8s")
 	}

@@ -60,6 +60,8 @@ tags
 
 # k8s
 deploy/k8s/dev/kustomization.yaml
+deploy/k8s/dev/varlog-mr-data.yaml
+deploy/k8s/dev/varlog-sn-data.yaml
 
 # temporary files
 build/reports/test_output.txt

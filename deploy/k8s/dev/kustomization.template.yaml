@@ -1,7 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
 bases:
 - ../base
+
 images:
 - name: idock.daumkakao.io/varlog/varlog-mr
   newName: idock.daumkakao.io/varlog/varlog-mr
@@ -27,3 +29,8 @@ images:
 - name: busybox
   newName: mdock.daumkakao.io/busybox
   newTag: stable
+
+patches:
+- varlog-mr-data.yaml
+- varlog-mr-clear-data.yaml
+- varlog-sn-data.yaml

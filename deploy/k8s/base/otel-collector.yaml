@@ -29,7 +29,7 @@ data:
       logging:
         loglevel: debug
       jaeger:
-        endpoint: "jaeger-collector.default.svc.cluster.local:14250"
+        endpoint: "jaeger-collector.default:14250"
         insecure: true
       prometheus:
         endpoint: "0.0.0.0:8889"
@@ -122,7 +122,7 @@ spec:
         command:
         - "sh"
         - "-c"
-        - "until nslookup jaeger-collector.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for jaeger-collector; sleep 2; done"
+        - "until nslookup jaeger-collector; do echo waiting for jaeger-collector; sleep 2; done"
       containers:
       - name: otel-collector
         image: otel/opentelemetry-collector:latest

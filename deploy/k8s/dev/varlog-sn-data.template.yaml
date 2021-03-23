@@ -1,0 +1,16 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: varlog-sn
+  namespace: default
+  labels:
+    app: varlog-sn
+    name: varlog-sn
+spec:
+  template:
+    spec:
+      volumes:
+      - name: varlog-sn-home
+        hostPath:
+          path: VARLOG_DATA_SN
+          type: DirectoryOrCreate

@@ -67,7 +67,7 @@ spec:
         command:
         - "sh"
         - "-c"
-        - "until nslookup otel-collector.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for otel-collector; sleep 2; done"
+        - "until nslookup otel-collector; do echo waiting for otel-collector; sleep 2; done"
       containers:
       - command:
         - "/otelcol"
