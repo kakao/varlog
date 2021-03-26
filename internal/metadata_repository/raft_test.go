@@ -73,7 +73,6 @@ func newCluster(n int) *cluster {
 		options := RaftOptions{
 			NodeID:            nodeID,
 			Join:              false,
-			UnsafeNoSync:      false,
 			Peers:             clus.peers,
 			SnapCount:         DefaultSnapshotCount,
 			SnapCatchUpCount:  DefaultSnapshotCatchUpCount,

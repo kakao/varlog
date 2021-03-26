@@ -52,7 +52,8 @@ type RaftMetadataRepository struct {
 	raftNode          *raftNode
 	reporterClientFac ReporterClientFactory
 
-	storage *MetadataStorage
+	storage         *MetadataStorage
+	stateMachineLog StateMachineLog
 
 	// for ack
 	requestNum uint64
@@ -130,6 +131,17 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 
 	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
 	mr.membership = mr.storage
+
+	mr.stateMachineLog = newStateMachineLog(logger.Named("sml"),
+		fmt.Sprintf("%s/sml/%d", options.RaftDir, options.NodeID),
+		mr)
+
+	// TODO:: recover read
+	if options.EnableSML {
+		if err = mr.stateMachineLog.OpenForWrite(); err != nil {
+			logger.Panic("stateMachineLog", zap.Error(err))
+		}
+	}
 
 	mr.listenNotifyC = make(chan struct{})
 
@@ -463,6 +475,13 @@ func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, e
 	}
 }
 
+func (mr *RaftMetadataRepository) saveSML(entry *mrpb.StateMachineLogEntry) {
+	mr.withTelemetry(context.TODO(), "save_sml", func(ctx context.Context) (interface{}, error) {
+		mr.stateMachineLog.Append(entry)
+		return nil, nil
+	})
+}
+
 func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 	mr.withTelemetry(context.TODO(), "apply", func(ctx context.Context) (interface{}, error) {
 		if c == nil || c.entry == nil {
@@ -471,6 +490,14 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 
 		e := c.entry
 		f := e.Request.GetValue()
+
+		if mr.options.EnableSML {
+			lentry := &mrpb.StateMachineLogEntry{}
+			lentry.AppliedIndex = e.AppliedIndex
+			if lentry.Payload.SetValue(f) {
+				mr.saveSML(lentry)
+			}
+		}
 
 		switch r := f.(type) {
 		case *mrpb.RegisterStorageNode:
@@ -486,9 +513,9 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 		case *mrpb.Report:
 			mr.applyReport(r)
 		case *mrpb.Commit:
-			mr.applyCommit(r)
+			mr.applyCommit(r, e.AppliedIndex)
 		case *mrpb.Seal:
-			mr.applySeal(r, e.NodeIndex, e.RequestIndex)
+			mr.applySeal(r, e.NodeIndex, e.RequestIndex, e.AppliedIndex)
 		case *mrpb.Unseal:
 			mr.applyUnseal(r, e.NodeIndex, e.RequestIndex)
 		case *mrpb.AddPeer:
@@ -627,7 +654,7 @@ func (mr *RaftMetadataRepository) applyReport(r *mrpb.Report) error {
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit) error {
+func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint64) error {
 	if r.GetNodeID() == mr.nodeID {
 		mr.tmStub.mb.Records("raft_delay").Record(context.TODO(),
 			float64(time.Since(r.CreatedTime).Nanoseconds())/float64(time.Millisecond),
@@ -699,6 +726,17 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit) error {
 		crs.HighWatermark = curHWM + types.GLSN(totalCommitted)
 
 		if totalCommitted > 0 {
+			if mr.options.EnableSML {
+				lentry := &mrpb.StateMachineLogEntry{
+					AppliedIndex: appliedIndex,
+				}
+
+				lentry.Payload.SetValue(&mrpb.StateMachineLogCommitResult{
+					TrimGlsn:     trimHWM,
+					CommitResult: crs,
+				})
+				mr.saveSML(lentry)
+			}
 			mr.storage.AppendLogStreamCommitHistory(crs)
 		}
 
@@ -716,8 +754,8 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit) error {
 	return err
 }
 
-func (mr *RaftMetadataRepository) applySeal(r *mrpb.Seal, nodeIndex, requestIndex uint64) error {
-	mr.applyCommit(nil)
+func (mr *RaftMetadataRepository) applySeal(r *mrpb.Seal, nodeIndex, requestIndex, appliedIndex uint64) error {
+	mr.applyCommit(nil, appliedIndex)
 	err := mr.storage.SealLogStream(r.LogStreamID, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -1214,4 +1252,15 @@ func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string
 			Value: label.Uint64Value(uint64(mr.nodeID)),
 		})
 	return rsp, err
+}
+
+func (mr *RaftMetadataRepository) GetStateMachineLogSnapshot() *mrpb.StateMachineLogSnapshot {
+	snap := &mrpb.StateMachineLogSnapshot{
+		AppliedIndex: mr.storage.appliedIndex,
+	}
+
+	snap.Metadata = mr.storage.GetMetadata()
+	snap.CommitResults = mr.storage.GetLogStreamCommitResults()
+
+	return snap
 }

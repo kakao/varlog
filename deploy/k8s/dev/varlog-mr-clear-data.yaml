@@ -12,5 +12,5 @@ spec:
       volumes:
       - name: varlog-mr-home
         hostPath:
-          path: /data1/varlog/mr
+          path: /varlog/mr
           type: DirectoryOrCreate

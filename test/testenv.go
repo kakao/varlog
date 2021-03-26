@@ -38,6 +38,7 @@ type VarlogClusterOptions struct {
 	NrMR              int
 	SnapCount         int
 	CollectorName     string
+	UnsafeNoWal       bool
 	ReporterClientFac metadata_repository.ReporterClientFactory
 	VMSOpts           *vms.Options
 }
@@ -96,7 +97,7 @@ func NewVarlogCluster(opts VarlogClusterOptions) *VarlogCluster {
 
 	for i := range clus.MRPeers {
 		clus.clearMR(i)
-		clus.createMR(i, false)
+		clus.createMR(i, false, clus.UnsafeNoWal)
 	}
 
 	return clus
@@ -112,9 +113,10 @@ func (clus *VarlogCluster) clearMR(idx int) {
 
 	os.RemoveAll(fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID))
 	os.RemoveAll(fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID))
+	os.RemoveAll(fmt.Sprintf("%s/sml/%d", vtesting.TestRaftDir(), nodeID))
 }
 
-func (clus *VarlogCluster) createMR(idx int, join bool) error {
+func (clus *VarlogCluster) createMR(idx int, join, unsafeNoWal bool) error {
 	if idx < 0 || idx >= len(clus.MRs) {
 		return errors.New("out of range")
 	}
@@ -124,11 +126,13 @@ func (clus *VarlogCluster) createMR(idx int, join bool) error {
 
 	opts := &metadata_repository.MetadataRepositoryOptions{
 		RaftOptions: metadata_repository.RaftOptions{
-			Join:      join,
-			SnapCount: uint64(clus.SnapCount),
-			RaftTick:  vtesting.TestRaftTick(),
-			RaftDir:   vtesting.TestRaftDir(),
-			Peers:     clus.MRPeers,
+			Join:        join,
+			UnsafeNoWal: unsafeNoWal,
+			EnableSML:   unsafeNoWal,
+			SnapCount:   uint64(clus.SnapCount),
+			RaftTick:    vtesting.TestRaftTick(),
+			RaftDir:     vtesting.TestRaftDir(),
+			Peers:       clus.MRPeers,
 		},
 
 		ClusterID:         clus.ClusterID,
@@ -163,7 +167,7 @@ func (clus *VarlogCluster) AppendMR() error {
 
 	clus.clearMR(idx)
 
-	return clus.createMR(idx, true)
+	return clus.createMR(idx, true, clus.UnsafeNoWal)
 }
 
 func (clus *VarlogCluster) StartMR(idx int) error {
@@ -198,7 +202,7 @@ func (clus *VarlogCluster) RestartMR(idx int) error {
 	}
 
 	clus.StopMR(idx)
-	clus.createMR(idx, false)
+	clus.createMR(idx, false, clus.UnsafeNoWal)
 	return clus.StartMR(idx)
 }
 

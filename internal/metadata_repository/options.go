@@ -69,7 +69,8 @@ type MetadataRepositoryOptions struct {
 type RaftOptions struct {
 	NodeID            types.NodeID
 	Join              bool
-	UnsafeNoSync      bool
+	UnsafeNoWal       bool
+	EnableSML         bool
 	SnapCount         uint64
 	SnapCatchUpCount  uint64
 	MaxSnapPurgeCount uint
