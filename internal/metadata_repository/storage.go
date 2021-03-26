@@ -1087,6 +1087,27 @@ func (ms *MetadataStorage) GetMetadata() *varlogpb.MetadataDescriptor {
 	return ms.metaCache
 }
 
+func (ms *MetadataStorage) GetLogStreamCommitResults() []*mrpb.LogStreamCommitResults {
+	trimGLSN := ms.origStateMachine.LogStream.TrimGLSN
+	if ms.origStateMachine.LogStream.TrimGLSN < ms.diffStateMachine.LogStream.TrimGLSN {
+		trimGLSN = ms.diffStateMachine.LogStream.TrimGLSN
+	}
+
+	crs := append(ms.origStateMachine.LogStream.CommitHistory, ms.diffStateMachine.LogStream.CommitHistory...)
+
+	i := sort.Search(len(crs), func(i int) bool {
+		return crs[i].HighWatermark >= trimGLSN
+	})
+
+	if 0 < i &&
+		i < len(crs) &&
+		crs[i].HighWatermark == trimGLSN {
+		crs = crs[i-1:]
+	}
+
+	return crs
+}
+
 func (ms *MetadataStorage) getSnapshotConfState() *raftpb.ConfState {
 	f := ms.snapConfState.Load()
 	if f == nil {

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"go.etcd.io/etcd/etcdserver/api/rafthttp"
@@ -37,16 +38,16 @@ type raftNode struct {
 	commitC     chan *raftCommittedEntry // entries committed to app
 	snapshotC   chan struct{}            // snapshot trigger
 
-	id           vtypes.NodeID   // node ID for raft
-	bpeers       []string        // raft bootstrap peer URLs
-	url          string          // raft listen url
-	membership   *raftMembership // raft membership
-	raftTick     time.Duration   // raft tick
-	join         bool            // node is joining an existing cluster
-	unsafeNoSync bool            // unsafe nosync
-	waldir       string          // path to WAL directory
-	snapdir      string          // path to snapshot directory
-	lastIndex    uint64          // index of log at start
+	id          vtypes.NodeID   // node ID for raft
+	bpeers      []string        // raft bootstrap peer URLs
+	url         string          // raft listen url
+	membership  *raftMembership // raft membership
+	raftTick    time.Duration   // raft tick
+	join        bool            // node is joining an existing cluster
+	unsafeNoWal bool            // unsafe nosync
+	waldir      string          // path to WAL directory
+	snapdir     string          // path to snapshot directory
+	lastIndex   uint64          // index of log at start
 
 	raftState raft.StateType
 
@@ -125,7 +126,7 @@ func newRaftNode(options RaftOptions,
 		membership:        newRaftMemebership(logger),
 		raftTick:          options.RaftTick,
 		join:              options.Join,
-		unsafeNoSync:      options.UnsafeNoSync,
+		unsafeNoWal:       options.UnsafeNoWal,
 		waldir:            fmt.Sprintf("%s/wal/%d", options.RaftDir, options.NodeID),
 		snapdir:           fmt.Sprintf("%s/snap/%d", options.RaftDir, options.NodeID),
 		snapshotGetter:    snapshotGetter,
@@ -143,6 +144,10 @@ func newRaftNode(options RaftOptions,
 }
 
 func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
+	if rc.unsafeNoWal {
+		return nil
+	}
+
 	// must save the snapshot index to the WAL before saving the
 	// snapshot to maintain the invariant that we only Open the
 	// wal at previously-saved snapshot indexes.
@@ -165,6 +170,10 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 }
 
 func (rc *raftNode) saveWal(st raftpb.HardState, ents []raftpb.Entry) error {
+	if rc.unsafeNoWal {
+		return nil
+	}
+
 	_, err := rc.withTelemetry(context.TODO(), "save_wal", func(ctx context.Context) (interface{}, error) {
 		return nil, rc.wal.Save(st, ents)
 	})
@@ -313,6 +322,10 @@ func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 
 // openWAL returns a WAL ready for reading.
 func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
+	if rc.unsafeNoWal {
+		return nil
+	}
+
 	if !wal.Exist(rc.waldir) {
 		if err := os.MkdirAll(rc.waldir, 0750); err != nil {
 			rc.logger.Panic("cannot create dir for wal", zap.String("err", err.Error()))
@@ -343,11 +356,21 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 
 // replayWAL replays WAL entries into the raft instance.
 func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
-	w := rc.openWAL(snapshot)
-	_, st, ents, err := w.ReadAll()
-	if err != nil {
-		rc.logger.Panic("failed to read wal", zap.String("err", err.Error()))
+	var w *wal.WAL
+	var st raftpb.HardState
+	var ents []raftpb.Entry
+	var err error
+
+	if rc.unsafeNoWal {
+		st.Reset()
+	} else {
+		w = rc.openWAL(snapshot)
+		_, st, ents, err = w.ReadAll()
+		if err != nil {
+			rc.logger.Panic("failed to read wal", zap.String("err", err.Error()))
+		}
 	}
+
 	rc.raftStorage = raft.NewMemoryStorage()
 	if snapshot != nil {
 		rc.raftStorage.ApplySnapshot(*snapshot)
@@ -380,6 +403,7 @@ func (rc *raftNode) start() {
 			rc.logger.Panic("cannot create dir for snapshot", zap.String("err", err.Error()))
 		}
 	}
+
 	rc.snapshotter = snap.New(rc.logger.Named("snapshot"), rc.snapdir)
 	snapshot := rc.loadSnapshot()
 
@@ -393,9 +417,6 @@ func (rc *raftNode) start() {
 
 	oldwal := wal.Exist(rc.waldir)
 	rc.wal = rc.replayWAL(snapshot)
-	if rc.unsafeNoSync {
-		rc.wal.SetUnsafeNoFsync()
-	}
 
 	rpeers := make([]raft.Peer, len(rc.bpeers))
 	for i, peer := range rc.bpeers {
@@ -806,10 +827,19 @@ func (rc *raftNode) processPurge(ctx context.Context) {
 	for {
 		select {
 		case e := <-derrc:
+			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
+				continue
+			}
 			rc.logger.Fatal("failed to purge snap db file", zap.Error(e))
 		case e := <-serrc:
+			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
+				continue
+			}
 			rc.logger.Fatal("failed to purge snap file", zap.Error(e))
 		case e := <-werrc:
+			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
+				continue
+			}
 			rc.logger.Fatal("failed to purge wal file", zap.Error(e))
 		case <-ctx.Done():
 			if ddonec != nil {
