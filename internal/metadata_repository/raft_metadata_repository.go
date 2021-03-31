@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/pprof"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
+	"go.etcd.io/etcd/pkg/fileutil"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.opentelemetry.io/otel/label"
@@ -133,12 +136,11 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	mr.membership = mr.storage
 
 	mr.stateMachineLog = newStateMachineLog(logger.Named("sml"),
-		fmt.Sprintf("%s/sml/%d", options.RaftDir, options.NodeID),
-		mr)
+		fmt.Sprintf("%s/sml/%d", options.RaftDir, options.NodeID))
 
 	// TODO:: recover read
 	if options.EnableSML {
-		if err = mr.stateMachineLog.OpenForWrite(); err != nil {
+		if err = mr.stateMachineLog.OpenForWrite(0); err != nil {
 			logger.Panic("stateMachineLog", zap.Error(err))
 		}
 	}
@@ -193,6 +195,9 @@ func (mr *RaftMetadataRepository) Run() {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 	if err := mr.runner.RunC(mctx, mr.runCommitTrigger); err != nil {
+		mr.logger.Panic("could not run", zap.Error(err))
+	}
+	if err := mr.runner.RunC(mctx, mr.processPurge); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 	if mr.options.DebugAddress != "" {
@@ -456,6 +461,69 @@ func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
 	}
 
 	close(mr.commitC)
+}
+
+func (mr *RaftMetadataRepository) processPurge(ctx context.Context) {
+	var ddonec, sdonec, wdonec, mdonec <-chan struct{}
+	var derrc, serrc, werrc, merrc <-chan error
+
+	waldir := fmt.Sprintf("%s/wal/%d", mr.options.RaftDir, mr.nodeID)
+	smldir := fmt.Sprintf("%s/sml/%d", mr.options.RaftDir, mr.nodeID)
+	snapdir := fmt.Sprintf("%s/snap/%d", mr.options.RaftDir, mr.nodeID)
+
+	if mr.options.MaxSnapPurgeCount > 0 {
+		ddonec, derrc = fileutil.PurgeFileWithDoneNotify(mr.logger, snapdir, "snap.db",
+			mr.options.MaxSnapPurgeCount, purgeInterval, ctx.Done())
+		sdonec, serrc = fileutil.PurgeFileWithDoneNotify(mr.logger, snapdir, "snap",
+			mr.options.MaxSnapPurgeCount, purgeInterval, ctx.Done())
+	}
+
+	if mr.options.MaxWalPurgeCount > 0 {
+		wdonec, werrc = fileutil.PurgeFileWithDoneNotify(mr.logger, waldir, "wal",
+			mr.options.MaxWalPurgeCount, purgeInterval, ctx.Done())
+
+		mdonec, merrc = fileutil.PurgeFileWithDoneNotify(mr.logger, smldir, "sml",
+			mr.options.MaxWalPurgeCount, purgeInterval, ctx.Done())
+	}
+
+	for {
+		select {
+		case e := <-derrc:
+			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
+				continue
+			}
+			mr.logger.Fatal("failed to purge snap db file", zap.Error(e))
+		case e := <-serrc:
+			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
+				continue
+			}
+			mr.logger.Fatal("failed to purge snap file", zap.Error(e))
+		case e := <-werrc:
+			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
+				continue
+			}
+			mr.logger.Fatal("failed to purge wal file", zap.Error(e))
+		case e := <-merrc:
+			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
+				continue
+			}
+			mr.logger.Fatal("failed to purge state machine log file", zap.Error(e))
+		case <-ctx.Done():
+			if ddonec != nil {
+				<-ddonec
+			}
+			if sdonec != nil {
+				<-sdonec
+			}
+			if wdonec != nil {
+				<-wdonec
+			}
+			if mdonec != nil {
+				<-mdonec
+			}
+			return
+		}
+	}
 }
 
 func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, err error) {
@@ -1252,15 +1320,4 @@ func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string
 			Value: label.Uint64Value(uint64(mr.nodeID)),
 		})
 	return rsp, err
-}
-
-func (mr *RaftMetadataRepository) GetStateMachineLogSnapshot() *mrpb.StateMachineLogSnapshot {
-	snap := &mrpb.StateMachineLogSnapshot{
-		AppliedIndex: mr.storage.appliedIndex,
-	}
-
-	snap.Metadata = mr.storage.GetMetadata()
-	snap.CommitResults = mr.storage.GetLogStreamCommitResults()
-
-	return snap
 }

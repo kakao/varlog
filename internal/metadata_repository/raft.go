@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"go.etcd.io/etcd/etcdserver/api/rafthttp"
@@ -59,12 +58,10 @@ type raftNode struct {
 	raftStorage *raft.MemoryStorage
 	wal         *wal.WAL
 
-	snapshotGetter    SnapshotGetter
-	snapshotter       *snap.Snapshotter
-	snapCount         uint64
-	snapCatchUpCount  uint64
-	maxSnapPurgeCount uint
-	maxWalPurgeCount  uint
+	snapshotGetter   SnapshotGetter
+	snapshotter      *snap.Snapshotter
+	snapCount        uint64
+	snapCatchUpCount uint64
 
 	transport *rafthttp.Transport
 
@@ -117,48 +114,49 @@ func newRaftNode(options RaftOptions,
 	snapshotC := make(chan struct{})
 
 	rc := &raftNode{
-		proposeC:          proposeC,
-		snapshotC:         snapshotC,
-		confChangeC:       confChangeC,
-		commitC:           commitC,
-		id:                options.NodeID,
-		bpeers:            options.Peers,
-		membership:        newRaftMemebership(logger),
-		raftTick:          options.RaftTick,
-		join:              options.Join,
-		unsafeNoWal:       options.UnsafeNoWal,
-		waldir:            fmt.Sprintf("%s/wal/%d", options.RaftDir, options.NodeID),
-		snapdir:           fmt.Sprintf("%s/snap/%d", options.RaftDir, options.NodeID),
-		snapshotGetter:    snapshotGetter,
-		snapCount:         options.SnapCount,
-		snapCatchUpCount:  options.SnapCatchUpCount,
-		maxSnapPurgeCount: options.MaxSnapPurgeCount,
-		maxWalPurgeCount:  options.MaxWalPurgeCount,
-		logger:            logger,
-		runner:            runner.New("raft-node", logger),
-		httprunner:        runner.New("http", logger),
-		tmStub:            tmStub,
+		proposeC:         proposeC,
+		snapshotC:        snapshotC,
+		confChangeC:      confChangeC,
+		commitC:          commitC,
+		id:               options.NodeID,
+		bpeers:           options.Peers,
+		membership:       newRaftMemebership(logger),
+		raftTick:         options.RaftTick,
+		join:             options.Join,
+		unsafeNoWal:      options.UnsafeNoWal,
+		waldir:           fmt.Sprintf("%s/wal/%d", options.RaftDir, options.NodeID),
+		snapdir:          fmt.Sprintf("%s/snap/%d", options.RaftDir, options.NodeID),
+		snapshotGetter:   snapshotGetter,
+		snapCount:        options.SnapCount,
+		snapCatchUpCount: options.SnapCatchUpCount,
+		logger:           logger,
+		runner:           runner.New("raft-node", logger),
+		httprunner:       runner.New("http", logger),
+		tmStub:           tmStub,
 	}
 
 	return rc
 }
 
 func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
-	if rc.unsafeNoWal {
-		return nil
-	}
-
 	// must save the snapshot index to the WAL before saving the
 	// snapshot to maintain the invariant that we only Open the
 	// wal at previously-saved snapshot indexes.
 	_, err := rc.withTelemetry(context.TODO(), "save_snap", func(ctx context.Context) (interface{}, error) {
+		if rc.unsafeNoWal {
+			err := rc.snapshotter.SaveSnap(snap)
+			return nil, err
+		}
+
 		walSnap := walpb.Snapshot{
 			Index: snap.Metadata.Index,
 			Term:  snap.Metadata.Term,
 		}
+
 		if err := rc.wal.SaveSnapshot(walSnap); err != nil {
 			return nil, err
 		}
+
 		if err := rc.snapshotter.SaveSnap(snap); err != nil {
 			return nil, err
 		}
@@ -372,7 +370,7 @@ func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	}
 
 	rc.raftStorage = raft.NewMemoryStorage()
-	if snapshot != nil {
+	if snapshot != nil && len(ents) > 0 {
 		rc.raftStorage.ApplySnapshot(*snapshot)
 		rc.publishSnapshot(*snapshot)
 	}
@@ -499,9 +497,6 @@ func (rc *raftNode) start() {
 		rc.logger.Panic("could not run", zap.Error(err))
 	}
 	if err := rc.runner.RunC(ctx, rc.processPromote); err != nil {
-		rc.logger.Panic("could not run", zap.Error(err))
-	}
-	if err := rc.runner.RunC(ctx, rc.processPurge); err != nil {
 		rc.logger.Panic("could not run", zap.Error(err))
 	}
 }
@@ -806,51 +801,6 @@ func (rc *raftNode) processRaftEvent(ctx context.Context) {
 
 		case <-ctx.Done():
 			rc.stopRaft()
-			return
-		}
-	}
-}
-
-func (rc *raftNode) processPurge(ctx context.Context) {
-	var ddonec, sdonec, wdonec <-chan struct{}
-	var derrc, serrc, werrc <-chan error
-
-	if rc.maxSnapPurgeCount > 0 {
-		ddonec, derrc = fileutil.PurgeFileWithDoneNotify(rc.logger, rc.snapdir, "snap.db", rc.maxSnapPurgeCount, purgeInterval, ctx.Done())
-		sdonec, serrc = fileutil.PurgeFileWithDoneNotify(rc.logger, rc.snapdir, "snap", rc.maxSnapPurgeCount, purgeInterval, ctx.Done())
-	}
-
-	if rc.maxWalPurgeCount > 0 {
-		wdonec, werrc = fileutil.PurgeFileWithDoneNotify(rc.logger, rc.waldir, "wal", rc.maxWalPurgeCount, purgeInterval, ctx.Done())
-	}
-
-	for {
-		select {
-		case e := <-derrc:
-			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
-				continue
-			}
-			rc.logger.Fatal("failed to purge snap db file", zap.Error(e))
-		case e := <-serrc:
-			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
-				continue
-			}
-			rc.logger.Fatal("failed to purge snap file", zap.Error(e))
-		case e := <-werrc:
-			if err, ok := e.(*os.PathError); ok && err.Err == syscall.ENOENT {
-				continue
-			}
-			rc.logger.Fatal("failed to purge wal file", zap.Error(e))
-		case <-ctx.Done():
-			if ddonec != nil {
-				<-ddonec
-			}
-			if sdonec != nil {
-				<-sdonec
-			}
-			if wdonec != nil {
-				<-wdonec
-			}
 			return
 		}
 	}

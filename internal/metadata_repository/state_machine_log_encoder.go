@@ -14,6 +14,8 @@ import (
 
 type StateMachineLogEncoder interface {
 	Encode(*mrpb.StateMachineLogRecord) (int, error)
+
+	SumCRC() uint32
 }
 
 type stateMachineLogEncoder struct {
@@ -23,7 +25,7 @@ type stateMachineLogEncoder struct {
 	buf []byte
 }
 
-func newStateMachineLogEncoder(f *os.File) (StateMachineLogEncoder, error) {
+func newStateMachineLogEncoder(f *os.File, prevCrc uint32) (StateMachineLogEncoder, error) {
 	_, err := f.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return nil, err
@@ -31,7 +33,7 @@ func newStateMachineLogEncoder(f *os.File) (StateMachineLogEncoder, error) {
 
 	return &stateMachineLogEncoder{
 		w:   f,
-		crc: crc.New(0, crcTable),
+		crc: crc.New(prevCrc, crcTable),
 		buf: make([]byte, 1024*1024),
 	}, nil
 }
@@ -69,4 +71,8 @@ func (e *stateMachineLogEncoder) Encode(rec *mrpb.StateMachineLogRecord) (int, e
 	}
 
 	return lenFieldLength + lenRec, nil
+}
+
+func (e *stateMachineLogEncoder) SumCRC() uint32 {
+	return e.crc.Sum32()
 }

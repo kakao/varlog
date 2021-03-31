@@ -14,6 +14,10 @@ import (
 
 type StateMachineLogDecoder interface {
 	Decode(*mrpb.StateMachineLogRecord) error
+
+	SumCRC() uint32
+
+	UpdateCRC(uint32)
 }
 
 type stateMachineLogDecoder struct {
@@ -22,10 +26,10 @@ type stateMachineLogDecoder struct {
 	crc hash.Hash32
 }
 
-func newStateMachineLogDecoder(r io.Reader) *stateMachineLogDecoder {
+func newStateMachineLogDecoder(r io.Reader, prev uint32) *stateMachineLogDecoder {
 	return &stateMachineLogDecoder{
 		br:  bufio.NewReader(r),
-		crc: crc.New(0, crcTable),
+		crc: crc.New(prev, crcTable),
 	}
 }
 
@@ -62,11 +66,20 @@ func (d *stateMachineLogDecoder) Decode(rec *mrpb.StateMachineLogRecord) error {
 	}
 
 	d.crc.Write(rec.Data)
-	if !rec.Validate(d.crc.Sum32()) {
-		return fmt.Errorf("crc mismatch")
+	if rec.Type != mrpb.StateMechineLogRecordType_crc &&
+		!rec.Validate(d.crc.Sum32()) {
+		return fmt.Errorf("crc mismatch. rec:%v, decoder:%v", rec.GetCrc(), d.crc.Sum32())
 	}
 
 	return nil
+}
+
+func (d *stateMachineLogDecoder) SumCRC() uint32 {
+	return d.crc.Sum32()
+}
+
+func (d *stateMachineLogDecoder) UpdateCRC(prevCrc uint32) {
+	d.crc = crc.New(prevCrc, crcTable)
 }
 
 func (d *stateMachineLogDecoder) readLength() (uint64, error) {
