@@ -8,40 +8,23 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
-	"go.etcd.io/etcd/pkg/fileutil"
-	"go.uber.org/zap"
-
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	"go.etcd.io/etcd/pkg/fileutil"
+	"go.uber.org/zap"
 )
-
-type dummySnapGetter struct {
-	snap *mrpb.StateMachineLogSnapshot
-}
-
-func (d *dummySnapGetter) GetStateMachineLogSnapshot() *mrpb.StateMachineLogSnapshot {
-	return d.snap
-}
-
-func newDummySnapGetter() *dummySnapGetter {
-	d := &dummySnapGetter{}
-	d.snap = &mrpb.StateMachineLogSnapshot{}
-	d.snap.Metadata = &varlogpb.MetadataDescriptor{}
-
-	return d
-}
 
 func TestStateMachineLogOpenForWrite(t *testing.T) {
 	Convey("Given not exist directory", t, func(ctx C) {
 		lg := zap.NewNop()
 		dir := "./sml"
-		snapGetter := newDummySnapGetter()
 
 		Reset(func() {
 			os.RemoveAll(dir)
 		})
 
-		sml := newStateMachineLog(lg, dir, snapGetter)
+		sml := newStateMachineLog(lg, dir)
 		So(sml, ShouldNotBeNil)
 
 		Reset(func() {
@@ -49,136 +32,153 @@ func TestStateMachineLogOpenForWrite(t *testing.T) {
 		})
 
 		Convey("When state machine log open with write", func(ctx C) {
-			err := sml.OpenForWrite()
-			Convey("Then it should be succeed", func(ctx C) {
-				So(err, ShouldBeNil)
+			err := sml.OpenForWrite(0)
+			So(err, ShouldBeNil)
+			Convey("Then it should have file", func(ctx C) {
 				So(sml.file, ShouldNotBeNil)
-				So(exist(dir), ShouldBeTrue)
+				So(existStateMachineLog(dir), ShouldBeTrue)
 			})
 		})
 	})
 }
 
-func TestStateMachineLogCleanupTemp(t *testing.T) {
-	Convey("Given directory with temp file", t, func(ctx C) {
-		lg := zap.NewNop()
-		dir := "./sml"
-		snapGetter := newDummySnapGetter()
-
-		Reset(func() {
-			os.RemoveAll(dir)
-		})
-
-		os.Mkdir(dir, 0777)
-
-		f, err := os.Create(filepath.Join(dir, "0000.tmp"))
-		So(err, ShouldBeNil)
-		f.Close()
-
-		names, err := fileutil.ReadDir(dir, fileutil.WithExt(".tmp"))
-		So(err, ShouldBeNil)
-		So(len(names), ShouldEqual, 1)
-
-		Convey("When new state machine log", func(ctx C) {
-			sml := newStateMachineLog(lg, dir, snapGetter)
-			So(sml, ShouldNotBeNil)
-
-			Convey("Then there are no temp file", func(ctx C) {
-				names, err := fileutil.ReadDir(dir, fileutil.WithExt(".tmp"))
-				So(err, ShouldBeNil)
-				So(len(names), ShouldEqual, 0)
-			})
-		})
-	})
-}
-
-func TestStateMachineLogSegment(t *testing.T) {
+func TestStateMachineLogCreateSegment(t *testing.T) {
 	Convey("Given directory", t, func(ctx C) {
 		lg := zap.NewNop()
-		dir := "./sml"
-		snapGetter := newDummySnapGetter()
+		raftdir := "./raftdata"
+		dir := filepath.Join(raftdir, "sml")
 
 		Reset(func() {
-			os.RemoveAll(dir)
+			os.RemoveAll(raftdir)
 		})
 
-		os.Mkdir(dir, 0777)
+		os.Mkdir(raftdir, 0777)
 
-		sml := newStateMachineLog(lg, dir, snapGetter)
+		sml := newStateMachineLog(lg, dir)
 		So(sml, ShouldNotBeNil)
 
 		Reset(func() {
 			sml.Close()
 		})
 
+		err := sml.OpenForWrite(0)
+		So(err, ShouldBeNil)
+
 		Convey("When state machine log create new segment", func(ctx C) {
-			for i := 0; i < 10; i++ {
-				err := sml.createNewSegment()
+			nrSeg := 10
+			for i := 1; i < nrSeg; i++ {
+				err := sml.createNewSegment(uint64(i), 0)
 				So(err, ShouldBeNil)
 				So(sml.file, ShouldNotBeNil)
+			}
 
+			Convey("Then it should have .sml", func(ctx C) {
 				names, err := fileutil.ReadDir(dir, fileutil.WithExt(".sml"))
 				So(err, ShouldBeNil)
-				So(len(names), ShouldEqual, i+1)
-			}
+				So(len(names), ShouldEqual, nrSeg)
+			})
 		})
 	})
 }
 
-func TestStateMachineLogContinueTail(t *testing.T) {
-	Convey("Given state machine log", t, func(ctx C) {
+func TestStateMachineLogCleanup(t *testing.T) {
+	Convey("Given outdated state machine log", t, func(ctx C) {
 		lg := zap.NewNop()
-		dir := "./sml"
-		snapGetter := newDummySnapGetter()
+		raftdir := "./raftdata"
+		dir := filepath.Join(raftdir, "sml")
 
 		Reset(func() {
-			os.RemoveAll(dir)
+			os.RemoveAll(raftdir)
 		})
 
-		os.Mkdir(dir, 0777)
+		os.Mkdir(raftdir, 0777)
 
-		sml := newStateMachineLog(lg, dir, snapGetter)
+		sml := newStateMachineLog(lg, dir)
 		So(sml, ShouldNotBeNil)
 
-		Reset(func() {
-			sml.Close()
-		})
-
-		err := sml.OpenForWrite()
+		err := sml.OpenForWrite(0)
 		So(err, ShouldBeNil)
 
-		for i := 1; i < 10; i++ {
-			err := sml.createNewSegment()
+		nrSeg := 10
+		for i := 1; i < nrSeg; i++ {
+			err := sml.createNewSegment(uint64(i), 0)
 			So(err, ShouldBeNil)
 			So(sml.file, ShouldNotBeNil)
-
-			names, err := fileutil.ReadDir(dir, fileutil.WithExt(".sml"))
-			So(err, ShouldBeNil)
-			So(len(names), ShouldEqual, i+1)
 		}
 
 		sml.Close()
 
-		Convey("When re-create state machine log", func(ctx C) {
-			sml := newStateMachineLog(lg, dir, snapGetter)
-			So(sml, ShouldNotBeNil)
-
-			err := sml.OpenForWrite()
+		Convey("When open for write", func(ctx C) {
+			err := sml.OpenForWrite(0)
 			So(err, ShouldBeNil)
+			Reset(func() {
+				sml.Close()
+			})
 
-			Convey("Then it should ", func(ctx C) {
-				So(tailSeq(dir), ShouldEqual, 10)
-				So(sml.seq, ShouldEqual, 11)
+			Convey("Then it should cleanup outdated sml", func(ctx C) {
+				names, err := fileutil.ReadDir(dir, fileutil.WithExt(".sml"))
+				So(err, ShouldBeNil)
+				So(len(names), ShouldEqual, 1)
 			})
 		})
 	})
 }
 
-func TestStateMachineLogOpenForRead(t *testing.T) {
-	Convey("Given state machine log", t, func(ctx C) {
+func TestStateMachineLogCut(t *testing.T) {
+	Convey("Given state machine log with segmentSizeByte = 1KB", t, func(ctx C) {
 		lg := zap.NewNop()
+		raftdir := "./raftdata"
+		dir := filepath.Join(raftdir, "sml")
+
+		Reset(func() {
+			os.RemoveAll(raftdir)
+		})
+
+		os.Mkdir(raftdir, 0777)
+
+		segmentSizeBytes = 1024 // 1KB
+		sml := newStateMachineLog(lg, dir)
+		So(sml, ShouldNotBeNil)
+
+		err := sml.OpenForWrite(0)
+		So(err, ShouldBeNil)
+
+		Reset(func() {
+			sml.Close()
+		})
+
+		Convey("When append more than 1KB", func(ctx C) {
+			total := 0
+			for i := 0; int64(total) < segmentSizeBytes; i++ {
+				l := &mrpb.RegisterStorageNode{
+					StorageNode: &varlogpb.StorageNodeDescriptor{
+						StorageNodeID: types.StorageNodeID(1),
+						Address:       "127.0.0.1:50000",
+					},
+				}
+
+				entry := &mrpb.StateMachineLogEntry{
+					AppliedIndex: uint64(i),
+				}
+
+				entry.Payload.SetValue(l)
+				sml.Append(entry)
+
+				total += entry.ProtoSize()
+			}
+
+			Convey("Then it should cut", func(ctx C) {
+				names, err := fileutil.ReadDir(dir, fileutil.WithExt(".sml"))
+				So(err, ShouldBeNil)
+				So(len(names), ShouldBeGreaterThan, 1)
+			})
+		})
+	})
+}
+
+func TestStateMachineLogSelectSegment(t *testing.T) {
+	Convey("Given state machine log", t, func(ctx C) {
 		dir := "./sml"
-		snapGetter := newDummySnapGetter()
 
 		Reset(func() {
 			os.RemoveAll(dir)
@@ -186,146 +186,150 @@ func TestStateMachineLogOpenForRead(t *testing.T) {
 
 		os.Mkdir(dir, 0777)
 
-		sml := newStateMachineLog(lg, dir, snapGetter)
-		So(sml, ShouldNotBeNil)
+		Convey("When it has multi segments", func(ctx C) {
+			var segments []string
+			for i := 0; i < 10; i++ {
+				segment := fmt.Sprintf("%020d.sml", 100*i)
+				path := filepath.Join(dir, segment)
+				segments = append(segments, segment)
+
+				f, err := os.Create(path)
+				So(err, ShouldBeNil)
+				Reset(func() {
+					f.Close()
+				})
+			}
+
+			Convey("Then it should select profer file", func(ctx C) {
+				for i := 0; i < 10; i++ {
+					idx, err := selectStateMachineLogSegment(segments, uint64(100*i+1))
+					So(err, ShouldBeNil)
+					So(idx, ShouldEqual, i)
+				}
+			})
+		})
+	})
+}
+
+func TestStateMachineLogReadFrom(t *testing.T) {
+	Convey("Given state machine log", t, func(ctx C) {
+		lg := zap.NewNop()
+		raftdir := "./raftdata"
+		dir := filepath.Join(raftdir, "sml")
 
 		Reset(func() {
-			sml.Close()
+			os.RemoveAll(raftdir)
 		})
+
+		os.Mkdir(raftdir, 0777)
+
+		sml := newStateMachineLog(lg, dir)
+		So(sml, ShouldNotBeNil)
 
 		Convey("When dir is empty", func(ctx C) {
 			Convey("Then it should return EOF", func(ctx C) {
-				err := sml.OpenForRead()
+				_, err := sml.ReadFrom(0)
 				So(err, ShouldResemble, io.EOF)
 			})
 		})
 
-		Convey("When dir have temp file only", func(ctx C) {
-			f, err := os.Create(filepath.Join(dir, "0000.tmp"))
+		Convey("When append entries", func(ctx C) {
+			segmentSizeBytes = 1024 // 1KB
+			err := sml.OpenForWrite(0)
 			So(err, ShouldBeNil)
-			f.Close()
 
-			Convey("Then it should return EOF", func(ctx C) {
-				err := sml.OpenForRead()
-				So(err, ShouldResemble, io.EOF)
-			})
-		})
+			appliedIndex := uint64(0)
+			for {
+				l := &mrpb.RegisterStorageNode{
+					StorageNode: &varlogpb.StorageNodeDescriptor{
+						StorageNodeID: types.StorageNodeID(1),
+						Address:       "127.0.0.1:50000",
+					},
+				}
 
-		Convey("When dir have multi sml file", func(ctx C) {
-			var i int
-			for i = 0; i < 10; i++ {
-				f, err := os.Create(filepath.Join(dir, fmt.Sprintf("%020d.sml", i)))
-				So(err, ShouldBeNil)
-				f.Close()
+				entry := &mrpb.StateMachineLogEntry{
+					AppliedIndex: appliedIndex,
+				}
+
+				entry.Payload.SetValue(l)
+				sml.Append(entry)
+
+				segments, _ := getStateMachineLogSegments(dir)
+				if len(segments) == 3 {
+					break
+				}
+
+				appliedIndex++
 			}
 
-			Convey("Then it should open tail sml file", func(ctx C) {
-				err := sml.OpenForRead()
-				So(err, ShouldBeNil)
-				So(sml.file.Name(), ShouldEqual, filepath.Join(dir, fmt.Sprintf("%020d.sml", i-1)))
-			})
-		})
+			sml.Close()
 
-		Convey("When dir have sml file and temp", func(ctx C) {
-			var i int
-			for i = 0; i < 10; i++ {
-				f, err := os.Create(filepath.Join(dir, fmt.Sprintf("%020d.sml", i)))
-				So(err, ShouldBeNil)
-				f.Close()
-			}
-
-			for j := i; j < 20; j++ {
-				f, err := os.Create(filepath.Join(dir, fmt.Sprintf("%020d.tmp", j)))
-				So(err, ShouldBeNil)
-				f.Close()
-			}
-
-			Convey("Then it should ignore temp file", func(ctx C) {
-				err := sml.OpenForRead()
-				So(err, ShouldBeNil)
-				So(sml.file.Name(), ShouldEqual, filepath.Join(dir, fmt.Sprintf("%020d.sml", i-1)))
+			Convey("Then ReadFrom should return profer entries", func(ctx C) {
+				for i := uint64(0); i <= appliedIndex; i++ {
+					entries, err := sml.ReadFrom(i)
+					So(err, ShouldBeNil)
+					So(len(entries), ShouldBeGreaterThan, 0)
+					So(entries[0].GetAppliedIndex(), ShouldEqual, i)
+				}
 			})
 		})
 	})
 }
 
-func TestStateMachineLogReplay(t *testing.T) {
-	Convey("Given state machine log", t, func(ctx C) {
+func TestStateMachineLogReadFromHole(t *testing.T) {
+	Convey("Given state machine log with 3 segments", t, func(ctx C) {
 		lg := zap.NewNop()
-		dir := "./sml"
-		snapGetter := newDummySnapGetter()
+		raftdir := "./raftdata"
+		dir := filepath.Join(raftdir, "sml")
 
 		Reset(func() {
-			os.RemoveAll(dir)
+			os.RemoveAll(raftdir)
 		})
 
-		os.Mkdir(dir, 0777)
+		os.Mkdir(raftdir, 0777)
 
-		sml := newStateMachineLog(lg, dir, snapGetter)
+		segmentSizeBytes = 1024 // 1KB
+
+		sml := newStateMachineLog(lg, dir)
 		So(sml, ShouldNotBeNil)
 
-		Reset(func() {
-			sml.Close()
-		})
+		err := sml.OpenForWrite(0)
+		So(err, ShouldBeNil)
 
-		Convey("When OpenForWite", func(ctx C) {
-			err := sml.OpenForWrite()
-			So(err, ShouldBeNil)
-			sml.Close()
-
-			Convey("Then it should have snapshot", func(ctx C) {
-				err := sml.OpenForRead()
-				So(err, ShouldBeNil)
-
-				Reset(func() {
-					sml.Close()
-				})
-
-				f, err := sml.Read()
-				So(err, ShouldBeNil)
-				_, ok := f.(*mrpb.StateMachineLogSnapshot)
-				So(ok, ShouldBeTrue)
-			})
-		})
-
-		Convey("When Append 10 entries ", func(ctx C) {
-			err := sml.OpenForWrite()
-			So(err, ShouldBeNil)
-
-			for i := 0; i < 10; i++ {
-				entry := &mrpb.StateMachineLogEntry{}
-				entry.AppliedIndex = uint64(i)
-				entry.Payload.SetValue(&mrpb.RegisterStorageNode{})
-
-				err := sml.Append(entry)
-				So(err, ShouldBeNil)
+		appliedIndex := uint64(0)
+		for {
+			l := &mrpb.RegisterStorageNode{
+				StorageNode: &varlogpb.StorageNodeDescriptor{
+					StorageNodeID: types.StorageNodeID(1),
+					Address:       "127.0.0.1:50000",
+				},
 			}
 
-			sml.Close()
-			Convey("Then it should have 10 entries ", func(ctx C) {
-				err := sml.OpenForRead()
-				So(err, ShouldBeNil)
+			entry := &mrpb.StateMachineLogEntry{
+				AppliedIndex: appliedIndex,
+			}
 
-				Reset(func() {
-					sml.Close()
-				})
+			entry.Payload.SetValue(l)
+			sml.Append(entry)
 
-				f, err := sml.Read()
-				So(err, ShouldBeNil)
-				_, ok := f.(*mrpb.StateMachineLogSnapshot)
-				So(ok, ShouldBeTrue)
+			segments, _ := getStateMachineLogSegments(dir)
+			if len(segments) == 3 {
+				break
+			}
 
-				for i := 0; i < 10; i++ {
-					f, err := sml.Read()
-					So(err, ShouldBeNil)
-					entry, ok := f.(*mrpb.StateMachineLogEntry)
-					So(ok, ShouldBeTrue)
+			appliedIndex++
+		}
 
-					So(entry.AppliedIndex, ShouldEqual, uint64(i))
-				}
+		sml.Close()
 
-				_, err = sml.Read()
-				So(err, ShouldResemble, io.EOF)
+		Convey("When Second segment is deleted", func(ctx C) {
+			segments, _ := getStateMachineLogSegments(dir)
+			So(len(segments), ShouldEqual, 3)
+			os.Remove(filepath.Join(dir, segments[1]))
+
+			Convey("Then ReadFrom returns crc mismatch", func(ctx C) {
+				_, err := sml.ReadFrom(0)
+				So(err, ShouldNotBeNil)
 			})
 		})
 	})

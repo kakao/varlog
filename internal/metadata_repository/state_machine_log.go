@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
+	"strings"
+	"syscall"
+	"time"
 
 	"go.etcd.io/etcd/pkg/fileutil"
 	"go.uber.org/zap"
@@ -14,18 +16,12 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 )
 
-type StateMachineLogSnapshotGetter interface {
-	GetStateMachineLogSnapshot() *mrpb.StateMachineLogSnapshot
-}
-
 type StateMachineLog interface {
-	OpenForWrite() error
-
-	OpenForRead() error
+	OpenForWrite(uint64) error
 
 	Append(*mrpb.StateMachineLogEntry) error
 
-	Read() (interface{}, error)
+	ReadFrom(uint64) ([]*mrpb.StateMachineLogEntry, error)
 
 	Close()
 }
@@ -40,33 +36,42 @@ var (
 type stateMachineLog struct {
 	lg      *zap.Logger
 	dir     string
-	seq     uint64
+	enti    uint64
 	file    *os.File
 	filePos int
 
-	encoder    StateMachineLogEncoder
-	decoder    StateMachineLogDecoder
-	snapGetter StateMachineLogSnapshotGetter
+	encoder StateMachineLogEncoder
+	decoder StateMachineLogDecoder
 }
 
-func newStateMachineLog(lg *zap.Logger, dirpath string, snapGetter StateMachineLogSnapshotGetter) *stateMachineLog {
-	cleanupTemp(dirpath)
-
+func newStateMachineLog(lg *zap.Logger, dirpath string) *stateMachineLog {
 	return &stateMachineLog{
-		lg:         lg,
-		dir:        dirpath,
-		snapGetter: snapGetter,
+		lg:  lg,
+		dir: dirpath,
 	}
 }
 
-func (sml *stateMachineLog) createNewSegment() error {
+func (sml *stateMachineLog) createNewSegment(appliedIndex uint64, prevCrc uint32) error {
 	var err error
 
-	sml.Close()
+	if sml.file != nil {
+		off, serr := sml.file.Seek(0, io.SeekCurrent)
+		if serr != nil {
+			return serr
+		}
 
-	path := filepath.Join(sml.dir, fmt.Sprintf("%020d.sml", sml.seq))
-	tpath := filepath.Join(sml.dir, fmt.Sprintf("%020d.tmp", sml.seq))
-	sml.seq++
+		if err := sml.file.Truncate(off); err != nil {
+			return err
+		}
+
+		if err = fileutil.Fdatasync(sml.file); err != nil {
+			return err
+		}
+		sml.Close()
+	}
+
+	path := filepath.Join(sml.dir, fmt.Sprintf("%020d.sml", appliedIndex))
+	tpath := filepath.Join(sml.dir, fmt.Sprintf("%020d.tmp", appliedIndex))
 
 	sml.file, err = os.OpenFile(tpath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -103,26 +108,16 @@ func (sml *stateMachineLog) createNewSegment() error {
 		return err
 	}
 
-	if _, err = sml.file.Seek(0, io.SeekStart); err != nil {
-		sml.lg.Warn(
-			"failed to seek an initial SML file",
-			zap.String("path", tpath),
-			zap.Error(err),
-		)
-		return err
-	}
-
-	sml.encoder, err = newStateMachineLogEncoder(sml.file)
+	sml.encoder, err = newStateMachineLogEncoder(sml.file, prevCrc)
 	if err != nil {
 		return err
 	}
 
-	snap := sml.snapGetter.GetStateMachineLogSnapshot()
-	err = sml.saveSnapshot(snap)
-	if err != nil {
+	if err := sml.saveCrc(prevCrc); err != nil {
 		sml.lg.Warn(
-			"failed to save snapshot to SML",
-			zap.String("path", tpath),
+			"failed to save crc",
+			zap.String("tmp-path", tpath),
+			zap.String("path", path),
 			zap.Error(err),
 		)
 		return err
@@ -145,17 +140,13 @@ func (sml *stateMachineLog) createNewSegment() error {
 	return nil
 }
 
-func (sml *stateMachineLog) OpenForWrite() error {
+func (sml *stateMachineLog) OpenForWrite(appliedIndex uint64) error {
 	var err error
 
 	if fileutil.Exist(sml.dir) {
-		if exist(sml.dir) {
-			sml.seq = tailSeq(sml.dir) + 1
-		}
-	} else {
-		if err := fileutil.CreateDirAll(sml.dir); err != nil {
+		if err = cleanupStateMachineLog(sml.dir); err != nil {
 			sml.lg.Warn(
-				"failed to create a temporary SML directory",
+				"failed to cleanup SML directory",
 				zap.String("dir-path", sml.dir),
 				zap.Error(err),
 			)
@@ -163,33 +154,19 @@ func (sml *stateMachineLog) OpenForWrite() error {
 		}
 	}
 
-	err = sml.createNewSegment()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (sml *stateMachineLog) OpenForRead() error {
-	var err error
-
-	if !exist(sml.dir) {
-		return io.EOF
-	}
-
-	p := filepath.Join(sml.dir, tail(sml.dir))
-	sml.file, err = os.OpenFile(p, os.O_RDONLY, 0644)
-	if err != nil {
+	if err := fileutil.CreateDirAll(sml.dir); err != nil {
 		sml.lg.Warn(
-			"failed to open SML file",
-			zap.String("path", p),
+			"failed to create a temporary SML directory",
+			zap.String("dir-path", sml.dir),
 			zap.Error(err),
 		)
 		return err
 	}
 
-	sml.decoder = newStateMachineLogDecoder(sml.file)
+	err = sml.createNewSegment(appliedIndex, 0)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -204,25 +181,27 @@ func (sml *stateMachineLog) Append(entry *mrpb.StateMachineLogEntry) error {
 		Data: data,
 	}
 
-	return sml.appendRecord(rec)
-}
-
-func (sml *stateMachineLog) saveSnapshot(snap *mrpb.StateMachineLogSnapshot) error {
-	data, err := snap.Marshal()
-	if err != nil {
+	if err = sml.appendRecord(rec); err != nil {
 		return err
 	}
-	rec := &mrpb.StateMachineLogRecord{
-		Type: mrpb.StateMechineLogRecordType_snapshot,
-		Data: data,
+
+	sml.enti = entry.AppliedIndex
+
+	if sml.filePos < int(segmentSizeBytes) {
+		return nil
 	}
 
-	return sml.appendRecord(rec)
+	return sml.cut()
+}
+
+func (sml *stateMachineLog) saveCrc(prevCrc uint32) error {
+	return sml.appendRecord(&mrpb.StateMachineLogRecord{
+		Type: mrpb.StateMechineLogRecordType_crc,
+		Crc:  prevCrc,
+	})
 }
 
 func (sml *stateMachineLog) appendRecord(rec *mrpb.StateMachineLogRecord) error {
-	sml.cut(rec)
-
 	n, err := sml.encoder.Encode(rec)
 	if err != nil {
 		return err
@@ -238,38 +217,113 @@ func (sml *stateMachineLog) appendRecord(rec *mrpb.StateMachineLogRecord) error 
 	return nil
 }
 
-func (sml *stateMachineLog) cut(rec *mrpb.StateMachineLogRecord) error {
-	if sml.filePos+lenFieldLength+rec.ProtoSize() > int(segmentSizeBytes) {
-		return sml.createNewSegment()
+func (sml *stateMachineLog) cut() error {
+	prevCrc := sml.encoder.SumCRC()
+	return sml.createNewSegment(sml.enti+1, prevCrc)
+}
+
+func (sml *stateMachineLog) openSegmentForRead(segment string, prevCrc uint32) error {
+	var err error
+
+	p := filepath.Join(sml.dir, segment)
+	sml.file, err = os.OpenFile(p, os.O_RDONLY, 0644)
+	if err != nil {
+		sml.lg.Warn(
+			"failed to open SML file",
+			zap.String("path", p),
+			zap.Error(err),
+		)
+		return err
 	}
+
+	sml.decoder = newStateMachineLogDecoder(sml.file, prevCrc)
 
 	return nil
 }
 
-func (sml *stateMachineLog) Read() (interface{}, error) {
+func (sml *stateMachineLog) readSegmentAll(appliedIndex uint64, head bool) ([]*mrpb.StateMachineLogEntry, uint32, error) {
+	var err error
+	var entries []*mrpb.StateMachineLogEntry
 	var rec mrpb.StateMachineLogRecord
-	if err := sml.decoder.Decode(&rec); err != nil {
+
+	for err == nil {
+		err = sml.decoder.Decode(&rec)
+		if err != nil {
+			continue
+		}
+
+		switch rec.Type {
+		case mrpb.StateMechineLogRecordType_entry:
+			entry := &mrpb.StateMachineLogEntry{}
+			if err = entry.Unmarshal(rec.Data); err == nil {
+				if entry.AppliedIndex >= appliedIndex {
+					entries = append(entries, entry)
+				}
+			}
+		case mrpb.StateMechineLogRecordType_crc:
+			if head {
+				sml.decoder.UpdateCRC(rec.Crc)
+			}
+
+			if sml.decoder.SumCRC() != rec.Crc {
+				err = fmt.Errorf("crc mismatch. file:%v, head:%v, cur:%v, readn:%v",
+					sml.file.Name(), head, sml.decoder.SumCRC(), rec.Crc)
+			}
+
+		default:
+			err = fmt.Errorf("uknown record")
+		}
+	}
+
+	if err != io.EOF {
+		return nil, 0, err
+	}
+
+	return entries, sml.decoder.SumCRC(), nil
+}
+
+func (sml *stateMachineLog) ReadFrom(appliedIndex uint64) ([]*mrpb.StateMachineLogEntry, error) {
+	segments, err := getStateMachineLogSegments(sml.dir)
+	if err != nil {
+		if e, ok := err.(*os.PathError); ok && e.Err == syscall.ENOENT {
+			return nil, io.EOF
+		}
 		return nil, err
 	}
 
-	switch rec.Type {
-	case mrpb.StateMechineLogRecordType_snapshot:
-		snap := &mrpb.StateMachineLogSnapshot{}
-		if err := snap.Unmarshal(rec.Data); err != nil {
-			return nil, err
-		}
-
-		return snap, nil
-	case mrpb.StateMechineLogRecordType_entry:
-		entry := &mrpb.StateMachineLogEntry{}
-		if err := entry.Unmarshal(rec.Data); err != nil {
-			return nil, err
-		}
-
-		return entry, nil
-	default:
-		return nil, fmt.Errorf("unknown record")
+	if len(segments) == 0 {
+		return nil, io.EOF
 	}
+
+	headi, err := selectStateMachineLogSegment(segments, appliedIndex)
+	if err != nil {
+		return nil, err
+	}
+
+	if headi < 0 {
+		return nil, io.EOF
+	}
+
+	var prevCrc uint32
+	var ret []*mrpb.StateMachineLogEntry
+
+	for i := headi; i < len(segments); i++ {
+		if err = sml.openSegmentForRead(segments[i], prevCrc); err != nil {
+			return nil, err
+		}
+
+		var entries []*mrpb.StateMachineLogEntry
+
+		entries, prevCrc, err = sml.readSegmentAll(appliedIndex, i == headi)
+		sml.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		ret = append(ret, entries...)
+	}
+
+	return ret, err
 }
 
 func (sml *stateMachineLog) Close() {
@@ -279,6 +333,7 @@ func (sml *stateMachineLog) Close() {
 
 	sml.file.Close()
 	sml.file = nil
+	sml.filePos = 0
 }
 
 func (sml *stateMachineLog) fsyncDir() error {
@@ -315,51 +370,45 @@ func (sml *stateMachineLog) fsyncDir() error {
 	return nil
 }
 
-func exist(dir string) bool {
-	names, err := fileutil.ReadDir(dir, fileutil.WithExt(".sml"))
+func getStateMachineLogSegments(dir string) ([]string, error) {
+	return fileutil.ReadDir(dir, fileutil.WithExt(".sml"))
+}
+
+func existStateMachineLog(dir string) bool {
+	names, err := getStateMachineLogSegments(dir)
 	if err != nil {
 		return false
 	}
 	return len(names) != 0
 }
 
-func cleanupTemp(dir string) error {
-	names, err := fileutil.ReadDir(dir, fileutil.WithExt(".tmp"))
-	if err != nil {
+func cleanupStateMachineLog(dir string) error {
+	cleanupDirName := fmt.Sprintf("%s.cleanup.%v", dir, time.Now().Format("20060102.150405.999999"))
+	if err := os.Rename(dir, cleanupDirName); err != nil {
 		return err
-	}
-
-	for _, name := range names {
-		if err = os.Remove(filepath.Join(dir, name)); err != nil {
-			return err
-		}
 	}
 
 	return nil
 }
 
-func tail(dir string) string {
-	names, err := fileutil.ReadDir(dir, fileutil.WithExt(".sml"))
-	if err != nil {
-		return ""
+func selectStateMachineLogSegment(segments []string, appliedIndex uint64) (int, error) {
+	var index uint64
+
+	for i := len(segments) - 1; i >= 0; i-- {
+		segment := segments[i]
+
+		if !strings.HasSuffix(segment, ".sml") {
+			continue
+		}
+
+		if _, err := fmt.Sscanf(segment, "%20d.sml", &index); err != nil {
+			return -1, err
+		}
+
+		if appliedIndex >= index {
+			return i, nil
+		}
 	}
 
-	if len(names) == 0 {
-		return ""
-	}
-
-	return names[len(names)-1]
-}
-
-func tailSeq(dir string) uint64 {
-	t := tail(dir)
-	if len(t) == 0 {
-		return 0
-	}
-
-	ext := filepath.Ext(t)
-	t = t[0 : len(t)-len(ext)]
-	seq, _ := strconv.Atoi(t)
-
-	return uint64(seq)
+	return -1, nil
 }

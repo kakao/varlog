@@ -4,7 +4,6 @@ package varlog.mrpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-import "varlogpb/metadata.proto";
 import "mrpb/raft_entry.proto";
 import "mrpb/raft_metadata_repository.proto";
 
@@ -13,12 +12,6 @@ option go_package = "github.daumkakao.com/varlog/varlog/proto/mrpb";
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
-
-message StateMachineLogSnapshot {
-    uint64 applied_index = 1;
-    varlogpb.MetadataDescriptor metadata = 2;
-    repeated LogStreamCommitResults commit_results = 3;
-}
 
 message StateMachineLogCommitResult {
     uint64 trim_glsn = 1
@@ -43,9 +36,8 @@ message StateMachineLogEntry {
 }
 
 enum StateMechineLogRecordType {
-    crc = 0;
-    snapshot = 1;
-    entry = 2;
+    entry = 0;
+    crc = 1;
 }
 
 message StateMachineLogRecord {
