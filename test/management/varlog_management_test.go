@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +40,7 @@ func TestVarlogManagerServer(t *testing.T) {
 
 	Convey("AddStorageNode", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
 		nrSN := opts.NrRep
+		snWg := sync.WaitGroup{}
 
 		cmcli := env.GetClusterManagerClient()
 
@@ -47,16 +49,18 @@ func TestVarlogManagerServer(t *testing.T) {
 			volume, err := storagenode.NewVolume(t.TempDir())
 			So(err, ShouldBeNil)
 
-			snopts := storagenode.DefaultOptions()
-			snopts.ListenAddress = "127.0.0.1:0"
-			snopts.ClusterID = env.ClusterID
-			snopts.StorageNodeID = storageNodeID
-			snopts.Logger = env.Logger()
-			snopts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
-
-			sn, err := storagenode.NewStorageNode(context.TODO(), &snopts)
+			sn, err := storagenode.New(context.TODO(),
+				storagenode.WithClusterID(env.ClusterID),
+				storagenode.WithStorageNodeID(storageNodeID),
+				storagenode.WithListenAddress("127.0.0.1:0"),
+				storagenode.WithVolumes(volume),
+			)
 			So(err, ShouldBeNil)
-			So(sn.Run(), ShouldBeNil)
+			snWg.Add(1)
+			go func() {
+				defer snWg.Done()
+				_ = sn.Run()
+			}()
 			env.SNs[storageNodeID] = sn
 		}
 
@@ -64,6 +68,7 @@ func TestVarlogManagerServer(t *testing.T) {
 			for _, sn := range env.SNs {
 				sn.Close()
 			}
+			snWg.Wait()
 		}()
 
 		var replicas []*varlogpb.ReplicaDescriptor

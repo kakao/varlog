@@ -1,6 +1,7 @@
 package atomicutil
 
 import (
+	"math"
 	"sync/atomic"
 	"time"
 )
@@ -56,4 +57,18 @@ func (d *AtomicDuration) Load() time.Duration {
 
 func (d *AtomicDuration) Store(duration time.Duration) {
 	atomic.StoreInt64((*int64)(d), int64(duration))
+}
+
+func (d *AtomicDuration) Add(duration time.Duration) {
+	atomic.AddInt64((*int64)(d), int64(duration))
+}
+
+type AtomicFloat64 uint64
+
+func (b *AtomicFloat64) Load() float64 {
+	return math.Float64frombits(atomic.LoadUint64((*uint64)(b)))
+}
+
+func (b *AtomicFloat64) Store(val float64) {
+	atomic.StoreUint64((*uint64)(b), math.Float64bits(val))
 }

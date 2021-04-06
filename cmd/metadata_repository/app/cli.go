@@ -4,7 +4,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
-	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/types"
 )
 
@@ -39,7 +38,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.UintFlag{
 			Name:    "cluster-id",
 			Aliases: []string{"cid"},
-			Value:   uint(storagenode.DefaultClusterID),
+			Value:   uint(0),
 			Usage:   "cluster id",
 			EnvVars: []string{"CLUSTER_ID"},
 		},

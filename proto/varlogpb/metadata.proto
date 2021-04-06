@@ -120,7 +120,7 @@ message LogStreamMetadataDescriptor {
         (gogoproto.customname) = "LogStreamID"
     ];
     LogStreamStatus status = 3;
-    uint32 high_watermark = 4 [
+    uint64 high_watermark = 4 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "HighWatermark"
@@ -144,4 +144,37 @@ message LogStreamReplicaDescriptor {
         (gogoproto.customname) = "LogStreamID"
     ];
     string address = 3;
+}
+
+message LogEntry {
+    uint64 glsn = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.GLSN",
+        (gogoproto.customname) = "GLSN"
+    ];
+    uint64 llsn = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.LLSN",
+        (gogoproto.customname) = "LLSN"
+    ];
+    bytes data = 3;
+}
+
+message CommitContext {
+    uint64 high_watermark = 1
+        [(gogoproto.casttype) =
+             "github.com/kakao/varlog/pkg/types.GLSN"];
+    uint64 prev_high_watermark = 2
+        [(gogoproto.casttype) =
+             "github.com/kakao/varlog/pkg/types.GLSN"];
+    uint64 committed_glsn_begin = 3 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.GLSN",
+        (gogoproto.customname) = "CommittedGLSNBegin"
+    ];
+    uint64 committed_glsn_end = 4 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.GLSN",
+        (gogoproto.customname) = "CommittedGLSNEnd"
+    ];
 }

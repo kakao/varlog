@@ -3,7 +3,7 @@ package metadata_repository
 import (
 	"context"
 
-	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -14,6 +14,6 @@ func NewReporterClientFactory() *reporterClientFactory {
 	return &reporterClientFactory{}
 }
 
-func (rcf *reporterClientFactory) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
-	return storagenode.NewLogStreamReporterClient(ctx, sn.Address)
+func (rcf *reporterClientFactory) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
+	return reportcommitter.NewClient(ctx, sn.Address)
 }

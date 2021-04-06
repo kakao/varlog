@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/smartystreets/assertions"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
@@ -403,10 +404,7 @@ func TestVarlogSeal(t *testing.T) {
 						break Loop
 					}
 				case err := <-errC:
-					// TODO (jun): Sentry error should be fixed.
-					// So(err, ShouldEqual, verrors.ErrSealed)
-					So(err, ShouldNotBeNil)
-					So(err.Error(), ShouldContainSubstring, "sealed")
+					assertions.ShouldWrap(err, verrors.ErrSealed)
 				}
 			}
 
@@ -929,6 +927,8 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 }
 
 func TestVarlogLogStreamSync(t *testing.T) {
+	t.Skip("[WIP] Sync API")
+
 	vmsOpts := vms.DefaultOptions()
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
@@ -1238,6 +1238,7 @@ func TestVarlogClient(t *testing.T) {
 		vmsOpts := vms.DefaultOptions()
 		vmsOpts.HeartbeatTimeout *= 20
 		vmsOpts.Logger = zap.L()
+		snWg := sync.WaitGroup{}
 
 		clusterOpts := test.VarlogClusterOptions{
 			NrMR:              1,
@@ -1254,16 +1255,18 @@ func TestVarlogClient(t *testing.T) {
 				volume, err := storagenode.NewVolume(t.TempDir())
 				So(err, ShouldBeNil)
 
-				snopts := storagenode.DefaultOptions()
-				snopts.ListenAddress = "127.0.0.1:0"
-				snopts.ClusterID = env.ClusterID
-				snopts.StorageNodeID = storageNodeID
-				snopts.Logger = env.Logger()
-				snopts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
-
-				sn, err := storagenode.NewStorageNode(context.TODO(), &snopts)
+				sn, err := storagenode.New(context.TODO(),
+					storagenode.WithClusterID(env.ClusterID),
+					storagenode.WithStorageNodeID(storageNodeID),
+					storagenode.WithListenAddress("127.0.0.1:0"),
+					storagenode.WithVolumes(volume),
+				)
 				So(err, ShouldBeNil)
-				So(sn.Run(), ShouldBeNil)
+				snWg.Add(1)
+				go func() {
+					defer snWg.Done()
+					_ = sn.Run()
+				}()
 				env.SNs[storageNodeID] = sn
 			}
 
@@ -1298,6 +1301,7 @@ func TestVarlogClient(t *testing.T) {
 				for _, sn := range env.SNs {
 					sn.Close()
 				}
+				snWg.Wait()
 			})
 
 			Convey("No log stream in the cluster", func() {

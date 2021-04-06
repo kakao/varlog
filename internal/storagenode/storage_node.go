@@ -1,11 +1,13 @@
 package storagenode
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/storagenode -package storagenode -destination storage_node_mock.go . Management,LogStreamExecutorGetter
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"net"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,14 +15,23 @@ import (
 	"github.com/soheilhy/cmux"
 	"go.opentelemetry.io/otel/label"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.com/kakao/varlog/internal/storagenode/executor"
+	"github.com/kakao/varlog/internal/storagenode/id"
+	"github.com/kakao/varlog/internal/storagenode/logio"
+	"github.com/kakao/varlog/internal/storagenode/pprof"
+	"github.com/kakao/varlog/internal/storagenode/replication"
+	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
+	"github.com/kakao/varlog/internal/storagenode/rpcserver"
+	"github.com/kakao/varlog/internal/storagenode/storage"
+	"github.com/kakao/varlog/internal/storagenode/timestamper"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/util/netutil"
-	"github.com/kakao/varlog/pkg/util/runner/stopwaiter"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -30,266 +41,256 @@ var (
 	errNoLogStream = stderrors.New("storagenode: no such log stream")
 )
 
-// Management is the interface that wraps methods for managing StorageNode.
-type Management interface {
-	ClusterID() types.ClusterID
-
-	StorageNodeID() types.StorageNodeID
-
-	// GetMetadata returns metadata of StorageNode. The metadata contains
-	// configurations and statistics for StorageNode.
-	GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error)
-
-	// AddLogStream adds a new LogStream to StorageNode.
-	AddLogStream(ctx context.Context, logStreamID types.LogStreamID, storageNodePath string) (string, error)
-
-	// RemoveLogStream removes a LogStream from StorageNode.
-	RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error
-
-	// Seal changes status of LogStreamExecutor corresponding to the
-	// LogStreamID to LogStreamStatusSealing or LogStreamStatusSealed.
-	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
-
-	// Unseal changes status of LogStreamExecutor corresponding to the
-	// LogStreamID to LogStreamStatusRunning.
-	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
-
-	Sync(ctx context.Context, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
-}
-
-type LogStreamExecutorGetter interface {
-	GetLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool)
-	GetLogStreamExecutors() []LogStreamExecutor
-}
-
 type StorageNode struct {
-	clusterID     types.ClusterID
-	storageNodeID types.StorageNodeID
+	config
+	muAddr sync.RWMutex
 
-	server        *grpc.Server
-	healthServer  *health.Server
-	advertiseAddr string
+	listener     net.Listener
+	rpcServer    *grpc.Server
+	healthServer *health.Server
+	pprofServer  pprof.Server
+	servers      errgroup.Group
 
-	pprofServer *pprofServer
+	stopper struct {
+		running bool
+		mu      sync.RWMutex
+	}
 
-	running   bool
-	muRunning sync.Mutex
-	sw        *stopwaiter.StopWaiter
+	lsr reportcommitter.Reporter
 
-	lseMtx sync.RWMutex
-	lseMap map[types.LogStreamID]LogStreamExecutor
-
-	lsr LogStreamReporter
+	executors struct {
+		es map[types.LogStreamID]executor.Executor
+		mu sync.RWMutex
+	}
 
 	storageNodePaths set.Set
 
-	options *Options
-	tst     Timestamper
-
-	tmStub *telemetryStub
-
-	logger *zap.Logger
+	// options *Options
+	tsp timestamper.Timestamper
 }
 
-func NewStorageNode(ctx context.Context, options *Options) (*StorageNode, error) {
-	if err := options.Valid(); err != nil {
-		return nil, err
-	}
+var _ id.StorageNodeIDGetter = (*StorageNode)(nil)
+var _ id.ClusterIDGetter = (*StorageNode)(nil)
+var _ replication.Getter = (*StorageNode)(nil)
+var _ reportcommitter.Getter = (*StorageNode)(nil)
+var _ logio.Getter = (*StorageNode)(nil)
+var _ fmt.Stringer = (*StorageNode)(nil)
 
-	tmStub, err := newTelemetryStub(ctx, options.TelemetryOptions.CollectorName, options.StorageNodeID, options.TelemetryOptions.CollectorEndpoint)
+func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
+	cfg, err := newConfig(opts)
 	if err != nil {
 		return nil, err
 	}
 	sn := &StorageNode{
-		clusterID:        options.ClusterID,
-		storageNodeID:    options.StorageNodeID,
-		lseMap:           make(map[types.LogStreamID]LogStreamExecutor),
-		tst:              NewTimestamper(),
-		storageNodePaths: set.New(len(options.Volumes)),
-		options:          options,
-		logger:           options.Logger,
-		sw:               stopwaiter.New(),
-		tmStub:           tmStub,
-		pprofServer:      newPprofServer(options.PProfServerConfig),
+		config:           *cfg,
+		storageNodePaths: set.New(len(cfg.volumes)),
+		tsp:              timestamper.New(),
 	}
-	if sn.logger == nil {
-		sn.logger = zap.NewNop()
-	}
+	sn.executors.es = make(map[types.LogStreamID]executor.Executor)
+	sn.pprofServer = pprof.New(sn.pprofOpts...)
+
+	/*
+		tmStub, err := newTelemetryStub(ctx, options.TelemetryOptions.CollectorName, options.StorageNodeID, options.TelemetryOptions.CollectorEndpoint)
+		if err != nil {
+			return nil, err
+		}
+		sn := &StorageNode{
+			clusterID:        options.ClusterID,
+			storageNodeID:    options.StorageNodeID,
+			lseMap:           make(map[types.LogStreamID]Executor),
+			tst:              NewTimestamper(),
+			storageNodePaths: set.New(len(options.Volumes)),
+			options:          options,
+			logger:           options.Logger,
+			sw:               stopwaiter.New(),
+			tmStub:           tmStub,
+			pprofServer:      newPprofServer(options.PProfServerConfig),
+		}
+	*/
 	sn.logger = sn.logger.Named("storagenode").With(
-		zap.Uint32("cid", uint32(sn.clusterID)),
-		zap.Uint32("snid", uint32(sn.storageNodeID)),
+		zap.Uint32("cid", uint32(sn.cid)),
+		zap.Uint32("snid", uint32(sn.snid)),
 	)
 
-	for volume := range options.Volumes {
-		snPath, err := volume.CreateStorageNodePath(sn.clusterID, sn.storageNodeID)
+	for v := range sn.volumes {
+		vol := v.(Volume)
+		snPath, err := vol.CreateStorageNodePath(sn.cid, sn.snid)
 		if err != nil {
 			return nil, err
 		}
 		sn.storageNodePaths.Add(snPath)
 	}
-
 	if len(sn.storageNodePaths) == 0 {
 		return nil, errors.New("storagenode: no valid storage node path")
 	}
 
-	sn.lsr = NewLogStreamReporter(sn.logger, sn.storageNodeID, sn, sn.tmStub, &options.LogStreamReporterOptions)
-	sn.server = grpc.NewServer()
-
+	lsrOpts := []reportcommitter.Option{
+		reportcommitter.WithStorageNodeIDGetter(sn),
+		reportcommitter.WithReportCommitterGetter(sn),
+		// TODO: WithLogger
+	}
+	sn.lsr = reportcommitter.New(lsrOpts...)
+	sn.rpcServer = grpc.NewServer()
 	sn.healthServer = health.NewServer()
-	grpc_health_v1.RegisterHealthServer(sn.server, sn.healthServer)
-
-	NewLogStreamReporterService(sn.lsr, sn.tmStub, sn.logger).Register(sn.server)
-	NewLogIOService(sn.storageNodeID, sn, sn.tmStub, sn.logger).Register(sn.server)
-	NewManagementService(sn, sn.tmStub, sn.logger).Register(sn.server)
-	NewReplicatorService(sn.storageNodeID, sn, sn.tmStub, sn.logger).Register(sn.server)
-
-	return sn, nil
-}
-
-func (sn *StorageNode) Run() error {
-	sn.muRunning.Lock()
-	defer sn.muRunning.Unlock()
-
-	if sn.running {
-		return nil
-	}
-	sn.running = true
-
-	// LogStreamReporter
-	if err := sn.lsr.Run(context.Background()); err != nil {
-		return err
-	}
 
 	// Listener
-	lis, err := net.Listen("tcp", sn.options.ListenAddress)
+	lis, err := net.Listen("tcp", sn.listenAddress)
 	if err != nil {
-		return errors.Wrapf(err, "storagenode")
+		return nil, errors.WithStack(err)
 	}
-	sn.advertiseAddr = sn.options.AdvertiseAddress
-	if sn.advertiseAddr == "" {
+	sn.listener = lis
+	if sn.advertiseAddress == "" {
 		addrs, _ := netutil.GetListenerAddrs(lis.Addr())
-		sn.advertiseAddr = addrs[0]
+		sn.muAddr.Lock()
+		sn.advertiseAddress = addrs[0]
+		sn.muAddr.Unlock()
 	}
 
-	// mux
-	mux := cmux.New(lis)
-	httpL := mux.Match(cmux.HTTP1Fast())
-	grpcL := mux.Match(cmux.Any())
-
-	// RPC Server
-	go func() {
-		if err := sn.server.Serve(grpcL); err != nil {
-			sn.logger.Error("rpc server error", zap.Error(err))
-			sn.Close()
-		}
-	}()
-
-	go func() {
-		if err := sn.pprofServer.run(httpL); err != nil {
-			sn.logger.Error("pprof server error", zap.Error(err))
-			sn.Close()
-		}
-	}()
-
-	go func() {
-		if err := mux.Serve(); err != nil {
-			sn.logger.Error("mux error", zap.Error(err))
-			sn.Close()
-		}
-	}()
-
+	// log stream path
 	logStreamPaths := set.New(0)
-	for volume := range sn.options.Volumes {
-		paths := volume.ReadLogStreamPaths(sn.clusterID, sn.storageNodeID)
+	for v := range sn.volumes {
+		vol := v.(Volume)
+		paths := vol.ReadLogStreamPaths(sn.cid, sn.snid)
 		for _, path := range paths {
 			if logStreamPaths.Contains(path) {
-				return errors.Errorf("storagenode: duplicated log stream path (%s)", path)
+				return nil, errors.Errorf("storagenode: duplicated log stream path (%s)", path)
 			}
 			logStreamPaths.Add(path)
 		}
 	}
 
-	sn.lseMtx.Lock()
-	defer sn.lseMtx.Unlock()
 	for logStreamPathIf := range logStreamPaths {
 		logStreamPath := logStreamPathIf.(string)
 		_, _, _, logStreamID, err := ParseLogStreamPath(logStreamPath)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		storage, err := sn.createStorage(context.Background(), logStreamPath)
+		strg, err := sn.createStorage(context.Background(), logStreamPath)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if err := sn.startLogStream(context.Background(), logStreamID, storage); err != nil {
-			return err
+		if err := sn.startLogStream(context.Background(), logStreamID, strg); err != nil {
+			return nil, err
 		}
 	}
 
+	// services
+	grpc_health_v1.RegisterHealthServer(sn.rpcServer, sn.healthServer)
+	rpcserver.RegisterRPCServer(sn.rpcServer,
+		reportcommitter.NewServer(sn.lsr),
+		logio.NewServer(
+			logio.WithStorageNodeIDGetter(sn),
+			logio.WithReadWriterGetter(sn),
+		),
+		replication.NewServer(
+			replication.WithStorageNodeIDGetter(sn),
+			replication.WithLogReplicatorGetter(sn),
+			replication.WithPipelineQueueSize(1),
+			replication.WithLogger(sn.logger),
+		),
+		NewServer(WithStorageNode(sn)),
+	)
+
+	return sn, nil
+}
+
+func (sn *StorageNode) Run() error {
+	sn.stopper.mu.Lock()
+	if sn.stopper.running {
+		sn.stopper.mu.Unlock()
+		return nil
+	}
+	sn.stopper.running = true
+	sn.stopper.mu.Unlock()
+
 	sn.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+
+	// mux
+	mux := cmux.New(sn.listener)
+	httpL := mux.Match(cmux.HTTP1Fast())
+	grpcL := mux.Match(cmux.Any())
+
+	// RPC Server
+	sn.servers.Go(func() error {
+		defer sn.Close()
+		return errors.WithStack(sn.rpcServer.Serve(grpcL))
+	})
+	sn.servers.Go(func() error {
+		defer sn.Close()
+		if err := sn.pprofServer.Run(httpL); !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, cmux.ErrListenerClosed) {
+			return err
+		}
+		return nil
+	})
+	sn.servers.Go(func() error {
+		defer sn.Close()
+		if err := mux.Serve(); err != nil && !strings.Contains(err.Error(), "use of closed") {
+			return errors.WithStack(err)
+		}
+		return nil
+	})
+
 	sn.logger.Info("start")
-	return nil
+	return sn.servers.Wait()
 }
 
 func (sn *StorageNode) Close() {
-	sn.muRunning.Lock()
-	defer sn.muRunning.Unlock()
-
-	sn.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
-	if !sn.running {
+	sn.stopper.mu.Lock()
+	defer sn.stopper.mu.Unlock()
+	if !sn.stopper.running {
 		return
 	}
-	sn.running = false
+	sn.stopper.running = false
 
-	// LogStreamReporter
+	sn.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+
+	// Reporter
 	sn.lsr.Close()
 
 	// LogStreamExecutors
-	for _, lse := range sn.GetLogStreamExecutors() {
+	for _, lse := range sn.logStreamExecutors() {
 		lse.Close()
 	}
 
 	// RPC Server
 	// FIXME (jun): Use GracefulStop
-	sn.server.Stop()
+	sn.rpcServer.Stop()
 
 	// TODO: set close timeout
-	sn.tmStub.close(context.TODO())
+	// sn.tmStub.close(context.TODO())
 
 	// TODO: Use close timeout
-	sn.pprofServer.close(context.TODO())
-
-	sn.sw.Stop()
+	sn.pprofServer.Close(context.TODO())
 	sn.logger.Info("stop")
 }
 
-func (sn *StorageNode) Wait() {
-	sn.sw.Wait()
-}
-
 func (sn *StorageNode) ClusterID() types.ClusterID {
-	return sn.clusterID
+	return sn.cid
 }
 
 func (sn *StorageNode) StorageNodeID() types.StorageNodeID {
-	return sn.storageNodeID
+	return sn.snid
 }
 
-// GetMeGetMetadata implements the Management GetMetadata method.
+// GetMeGetMetadata implements the Server GetMetadata method.
 func (sn *StorageNode) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
-	ctx, span := sn.tmStub.startSpan(ctx, "storagenode.GetMetadata")
+	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode.GetMetadata")
 	defer span.End()
 
+	sn.muAddr.RLock()
+	addr := sn.advertiseAddress
+	sn.muAddr.RUnlock()
+
 	snmeta := &varlogpb.StorageNodeMetadataDescriptor{
-		ClusterID: sn.clusterID,
+		ClusterID: sn.cid,
 		StorageNode: &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: sn.storageNodeID,
-			Address:       sn.advertiseAddr,
+			StorageNodeID: sn.snid,
+			Address:       addr,
 			Status:        varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
 		},
-		CreatedTime: sn.tst.Created(),
-		UpdatedTime: sn.tst.LastUpdated(),
+		CreatedTime: sn.tsp.Created(),
+		UpdatedTime: sn.tsp.LastUpdated(),
 	}
 	for snPathIf := range sn.storageNodePaths {
 		snPath := snPathIf.(string)
@@ -305,32 +306,24 @@ func (sn *StorageNode) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMe
 }
 
 func (sn *StorageNode) logStreamMetadataDescriptors(ctx context.Context) []varlogpb.LogStreamMetadataDescriptor {
-	ctx, span := sn.tmStub.startSpan(ctx, "storagenode.logStreamMetadataDescriptors")
+	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode.logStreamMetadataDescriptors")
 	defer span.End()
 
 	tick := time.Now()
-	lseList := sn.GetLogStreamExecutors()
+	lseList := sn.logStreamExecutors()
 	span.SetAttributes(label.Int64("get_log_stream_executors_ms", time.Since(tick).Milliseconds()))
 
 	if len(lseList) == 0 {
 		return nil
 	}
-	lsmetas := make([]varlogpb.LogStreamMetadataDescriptor, len(lseList))
-	for i, lse := range lseList {
-		lsmetas[i] = varlogpb.LogStreamMetadataDescriptor{
-			StorageNodeID: sn.storageNodeID,
-			LogStreamID:   lse.LogStreamID(),
-			Status:        lse.Status(),
-			HighWatermark: lse.HighWatermark(),
-			Path:          lse.Path(),
-			CreatedTime:   lse.Created(),
-			UpdatedTime:   lse.LastUpdated(),
-		}
+	lsmetas := make([]varlogpb.LogStreamMetadataDescriptor, 0, len(lseList))
+	for _, lse := range lseList {
+		lsmetas = append(lsmetas, lse.Metadata())
 	}
 	return lsmetas
 }
 
-// AddLogStream implements the Management AddLogStream method.
+// AddLogStream implements the Server AddLogStream method.
 func (sn *StorageNode) AddLogStream(ctx context.Context, logStreamID types.LogStreamID, storageNodePath string) (string, error) {
 	logStreamPath, err := sn.addLogStream(ctx, logStreamID, storageNodePath)
 	if err != nil {
@@ -350,87 +343,81 @@ func (sn *StorageNode) addLogStream(ctx context.Context, logStreamID types.LogSt
 		return "", err
 	}
 
-	sn.lseMtx.Lock()
-	defer sn.lseMtx.Unlock()
+	sn.executors.mu.Lock()
+	defer sn.executors.mu.Unlock()
 
-	if _, ok := sn.lseMap[logStreamID]; ok {
+	if _, ok := sn.executors.es[logStreamID]; ok {
 		return "", errors.New("storagenode: log stream already exists")
 	}
 
-	storage, err := sn.createStorage(ctx, lsPath)
+	strg, err := sn.createStorage(ctx, lsPath)
 	if err != nil {
 		return "", err
 	}
 
-	if err := sn.startLogStream(ctx, logStreamID, storage); err != nil {
+	if err := sn.startLogStream(ctx, logStreamID, strg); err != nil {
 		return "", err
 	}
 	return lsPath, nil
 }
 
-func (sn *StorageNode) createStorage(ctx context.Context, logStreamPath string) (Storage, error) {
-	ctx, span := sn.tmStub.startSpan(ctx, "storagenode/StorageNode.createStorage")
+func (sn *StorageNode) createStorage(ctx context.Context, logStreamPath string) (storage.Storage, error) {
+	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode/StorageNode.createStorage")
 	defer span.End()
 
-	snOpts := []StorageOption{
-		WithPath(logStreamPath),
-		WithLogger(sn.logger),
-	}
-	if sn.options.StorageOptions.EnableWriteFsync {
-		snOpts = append(snOpts, WithEnableWriteFsync())
-	}
-	if sn.options.StorageOptions.EnableCommitFsync {
-		snOpts = append(snOpts, WithEnableCommitFsync())
-	}
-	if sn.options.StorageOptions.EnableCommitContextFsync {
-		snOpts = append(snOpts, WithEnableCommitContextFsync())
-	}
-	if sn.options.StorageOptions.EnableDeleteCommittedFsync {
-		snOpts = append(snOpts, WithEnableDeleteCommittedFsync())
-	}
-	if sn.options.StorageOptions.DisableDeleteUncommittedFsync {
-		snOpts = append(snOpts, WithDisableDeleteUncommittedFsync())
-	}
-	storage, err := NewStorage(sn.options.StorageOptions.Name, snOpts...)
+	strg, err := storage.NewStorage(
+		storage.WithPath(logStreamPath),
+		storage.WithLogger(sn.logger),
+		storage.WithoutWriteSync(),
+		storage.WithoutCommitSync(),
+		storage.WithoutDeleteCommittedSync(),
+	)
 	if err != nil {
 		span.RecordError(err)
 	}
-	return storage, err
+	return strg, err
 }
 
-func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.LogStreamID, storage Storage) (err error) {
-	ctx, span := sn.tmStub.startSpan(ctx, "storagenode/StorageNode.startLogStream")
+func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.LogStreamID, storage storage.Storage) (err error) {
+	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode/StorageNode.startLogStream")
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
 
-	lse, err := NewLogStreamExecutor(sn.logger, sn.storageNodeID, logStreamID, storage, sn.tmStub, &sn.options.LogStreamExecutorOptions)
+	lseOptions := append(sn.executorOpts,
+		executor.WithStorage(storage),
+		executor.WithLogStreamID(logStreamID),
+		executor.WithLogger(sn.logger),
+	)
+	lse, err := executor.New(lseOptions...)
 	if err != nil {
 		return err
 	}
-	if err = lse.Run(ctx); err != nil {
-		lse.Close()
-		return err
-	}
-	sn.tst.Touch()
-	sn.lseMap[logStreamID] = lse
+	/*
+		if err = lse.Run(ctx); err != nil {
+			lse.Close()
+			return err
+		}
+	*/
+	sn.tsp.Touch()
+	sn.executors.es[logStreamID] = lse
 	return nil
 }
 
-// RemoveLogStream implements the Management RemoveLogStream method.
+// RemoveLogStream implements the Server RemoveLogStream method.
 func (sn *StorageNode) RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
-	ctx, span := sn.tmStub.startSpan(ctx, "storagenode/StorageNode.RemoveLogStream")
+	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode/StorageNode.RemoveLogStream")
 	defer span.End()
 
-	sn.lseMtx.Lock()
-	defer sn.lseMtx.Unlock()
+	sn.executors.mu.Lock()
+	defer sn.executors.mu.Unlock()
 
-	lse, ok := sn.lseMap[logStreamID]
+	lse, ok := sn.executors.es[logStreamID]
 	if !ok {
 		return verrors.ErrNotExist
 	}
-	delete(sn.lseMap, logStreamID)
+	delete(sn.executors.es, logStreamID)
 
 	tick := time.Now()
 	lse.Close()
@@ -442,36 +429,38 @@ func (sn *StorageNode) RemoveLogStream(ctx context.Context, logStreamID types.Lo
 		sn.logger.Warn("error while removing log stream path")
 	}
 	removeDuration := time.Since(tick)
-	sn.tst.Touch()
+	sn.tsp.Touch()
 
 	span.SetAttributes(label.Int64("close_duration_ms", closeDuration.Milliseconds()),
 		label.Int64("remove_duration_ms", removeDuration.Milliseconds()))
 	return nil
 }
 
-// Seal implements the Management Seal method.
+// Seal implements the Server Seal method.
 func (sn *StorageNode) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
-	lse, ok := sn.GetLogStreamExecutor(logStreamID)
+	lse, ok := sn.logStreamExecutor(logStreamID)
 	if !ok {
 		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, errors.WithStack(errNoLogStream)
 	}
-	status, hwm := lse.Seal(lastCommittedGLSN)
-	sn.tst.Touch()
+	// TODO: check err
+	status, hwm, _ := lse.Seal(ctx, lastCommittedGLSN)
+
+	sn.tsp.Touch()
 	return status, hwm, nil
 }
 
-// Unseal implements the Management Unseal method.
+// Unseal implements the Server Unseal method.
 func (sn *StorageNode) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
-	lse, ok := sn.GetLogStreamExecutor(logStreamID)
+	lse, ok := sn.logStreamExecutor(logStreamID)
 	if !ok {
 		return errors.WithStack(errNoLogStream)
 	}
-	sn.tst.Touch()
-	return lse.Unseal()
+	sn.tsp.Touch()
+	return lse.Unseal(ctx)
 }
 
-func (sn *StorageNode) Sync(ctx context.Context, logStreamID types.LogStreamID, replica Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
-	lse, ok := sn.GetLogStreamExecutor(logStreamID)
+func (sn *StorageNode) Sync(ctx context.Context, logStreamID types.LogStreamID, replica snpb.Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
+	lse, ok := sn.logStreamExecutor(logStreamID)
 	if !ok {
 		return nil, errors.WithStack(errNoLogStream)
 	}
@@ -487,27 +476,72 @@ func (sn *StorageNode) Sync(ctx context.Context, logStreamID types.LogStreamID, 
 	}, nil
 }
 
-func (sn *StorageNode) GetLogStreamExecutor(logStreamID types.LogStreamID) (LogStreamExecutor, bool) {
-	sn.lseMtx.RLock()
-	defer sn.lseMtx.RUnlock()
-	lse, ok := sn.lseMap[logStreamID]
+func (sn *StorageNode) logStreamExecutor(logStreamID types.LogStreamID) (executor.Executor, bool) {
+	sn.executors.mu.RLock()
+	defer sn.executors.mu.RUnlock()
+	lse, ok := sn.executors.es[logStreamID]
 	return lse, ok
 }
 
-func (sn *StorageNode) GetLogStreamExecutors() []LogStreamExecutor {
-	sn.lseMtx.RLock()
-	ret := make([]LogStreamExecutor, 0, len(sn.lseMap))
-	for _, lse := range sn.lseMap {
+func (sn *StorageNode) logStreamExecutors() []executor.Executor {
+	sn.executors.mu.RLock()
+	defer sn.executors.mu.RUnlock()
+	ret := make([]executor.Executor, 0, len(sn.executors.es))
+	for _, lse := range sn.executors.es {
 		ret = append(ret, lse)
 	}
-	sn.lseMtx.RUnlock()
 	return ret
 }
 
 func (sn *StorageNode) verifyClusterID(cid types.ClusterID) bool {
-	return sn.clusterID == cid
+	return sn.cid == cid
 }
 
 func (sn *StorageNode) verifyStorageNodeID(snid types.StorageNodeID) bool {
-	return sn.storageNodeID == snid
+	return sn.snid == snid
+}
+
+func (sn *StorageNode) ReportCommitter(logStreamID types.LogStreamID) (reportcommitter.ReportCommitter, bool) {
+	return sn.logStreamExecutor(logStreamID)
+}
+
+func (sn *StorageNode) ReportCommitters() []reportcommitter.ReportCommitter {
+	es := sn.logStreamExecutors()
+	ret := make([]reportcommitter.ReportCommitter, 0, len(es))
+	for _, e := range es {
+		ret = append(ret, e)
+	}
+	return ret
+}
+
+func (sn *StorageNode) Replicator(logStreamID types.LogStreamID) (replication.Replicator, bool) {
+	return sn.logStreamExecutor(logStreamID)
+}
+
+func (sn *StorageNode) Replicators() []replication.Replicator {
+	es := sn.logStreamExecutors()
+	ret := make([]replication.Replicator, 0, len(es))
+	for _, e := range es {
+		ret = append(ret, e)
+	}
+	return ret
+}
+
+func (sn *StorageNode) ReadWriter(logStreamID types.LogStreamID) (logio.ReadWriter, bool) {
+	return sn.logStreamExecutor(logStreamID)
+}
+
+func (sn *StorageNode) ReadWriters() []logio.ReadWriter {
+	es := sn.logStreamExecutors()
+	ret := make([]logio.ReadWriter, 0, len(es))
+	for _, e := range es {
+		ret = append(ret, e)
+	}
+	return ret
+}
+
+func (sn *StorageNode) String() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "storagenode (cid=%d, snid=%d)", sn.ClusterID(), sn.StorageNodeID())
+	return sb.String()
 }

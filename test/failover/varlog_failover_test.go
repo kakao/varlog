@@ -9,13 +9,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
-	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/vms"
 	"github.com/kakao/varlog/pkg/logc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/test"
 	"github.com/kakao/varlog/vtesting"
@@ -130,6 +130,7 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 }
 
 func TestVarlogFailoverSNBackupFail(t *testing.T) {
+	t.Skip("[WIP] Sync API")
 	nrRep := 2
 	nrCli := 5
 	vmsOpts := vms.DefaultOptions()
@@ -263,7 +264,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 
 						status, _, _ := sn.Seal(context.TODO(), lsID, sealedGLSN)
 						if status == varlogpb.LogStreamStatusSealing {
-							replica := storagenode.Replica{
+							replica := snpb.Replica{
 								StorageNodeID: ls.Replicas[1].StorageNodeID,
 								LogStreamID:   lsID,
 								Address:       snmeta.StorageNode.Address,

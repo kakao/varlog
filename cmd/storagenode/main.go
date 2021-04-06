@@ -4,12 +4,11 @@ import (
 	"os"
 
 	"github.com/kakao/varlog/cmd/storagenode/app"
-	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/cmd/storagenode/config"
 )
 
 func main() {
-	options := storagenode.DefaultOptions()
-	app := app.InitCLI(&options)
+	app := app.InitCLI(&config.Config{})
 	if err := app.Run(os.Args); err != nil {
 		os.Exit(1)
 	}

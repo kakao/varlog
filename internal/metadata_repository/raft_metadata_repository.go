@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/util/netutil"
@@ -40,7 +40,7 @@ const (
 type ReportCollectorHelper interface {
 	ProposeReport(types.StorageNodeID, []*snpb.LogStreamUncommitReport) error
 
-	GetClient(context.Context, *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error)
+	GetClient(context.Context, *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error)
 
 	LookupCommitResults(types.GLSN) *mrpb.LogStreamCommitResults
 
@@ -633,7 +633,7 @@ func (mr *RaftMetadataRepository) applyRegisterLogStream(r *mrpb.RegisterLogStre
 		if err != nil &&
 			err != verrors.ErrExist &&
 			err != verrors.ErrStopped {
-			mr.logger.Panic("could not register reporter", zap.String("err", err.Error()))
+			mr.logger.Panic("could not register reportcommitter", zap.String("err", err.Error()))
 		}
 	}
 
@@ -1296,7 +1296,7 @@ func (mr *RaftMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []*
 	return mr.proposeReport(snID, ur)
 }
 
-func (mr *RaftMetadataRepository) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+func (mr *RaftMetadataRepository) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
 	return mr.reporterClientFac.GetClient(ctx, sn)
 }
 

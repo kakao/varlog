@@ -11,10 +11,11 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/kakao/varlog/cmd/storagenode/config"
 	"github.com/kakao/varlog/internal/storagenode"
 )
 
-func Main(opts *storagenode.Options) error {
+func Main(cfg *config.Config) error {
 	loggerConfig := zap.NewProductionConfig()
 	loggerConfig.Sampling = nil
 	loggerConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
@@ -26,19 +27,19 @@ func Main(opts *storagenode.Options) error {
 	}
 	defer logger.Sync()
 
-	opts.Logger = logger
-
 	// TODO: add initTimeout option
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	sn, err := storagenode.NewStorageNode(ctx, opts)
+	sn, err := storagenode.New(ctx,
+		storagenode.WithClusterID(cfg.ClusterID),
+		storagenode.WithStorageNodeID(cfg.StorageNodeID),
+		storagenode.WithListenAddress(cfg.ListenAddress),
+		storagenode.WithAdvertiseAddress(cfg.AdvertiseAddress),
+		storagenode.WithVolumes(cfg.Volumes...),
+	)
 	if err != nil {
 		log.Fatalf("could not create StorageNode: %v", err)
-		return err
-	}
-	if err = sn.Run(); err != nil {
-		log.Fatalf("could not run StorageNode: %v", err)
 		return err
 	}
 
@@ -51,7 +52,5 @@ func Main(opts *storagenode.Options) error {
 		}
 	}()
 
-	sn.Wait()
-	// TODO (jun): it should be the reason why storagenode process is stopped
-	return nil
+	return sn.Run()
 }

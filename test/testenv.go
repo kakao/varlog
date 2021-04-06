@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -47,6 +48,7 @@ type VarlogCluster struct {
 	VarlogClusterOptions
 	MRs            []*metadata_repository.RaftMetadataRepository
 	SNs            map[types.StorageNodeID]*storagenode.StorageNode
+	snWG           sync.WaitGroup
 	volumes        map[types.StorageNodeID]storagenode.Volume
 	snRPCEndpoints map[types.StorageNodeID]string
 	CM             vms.ClusterManager
@@ -255,6 +257,7 @@ func (clus *VarlogCluster) Close() error {
 		// TODO:: sn.Close() does not close connect
 		sn.Close()
 	}
+	clus.snWG.Wait()
 
 	return multierr.Combine(err, clus.portLease.Release())
 }
@@ -321,21 +324,21 @@ func (clus *VarlogCluster) AddSN() (types.StorageNodeID, error) {
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
-	opts := storagenode.DefaultOptions()
-	opts.ListenAddress = "127.0.0.1:0"
-	opts.ClusterID = clus.ClusterID
-	opts.StorageNodeID = snID
-	opts.Logger = clus.logger
-	opts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
 
-	sn, err := storagenode.NewStorageNode(context.TODO(), &opts)
+	sn, err := storagenode.New(context.TODO(),
+		storagenode.WithListenAddress("127.0.0.1:0"),
+		storagenode.WithClusterID(clus.ClusterID),
+		storagenode.WithStorageNodeID(snID),
+		storagenode.WithVolumes(volume),
+	)
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
-	err = sn.Run()
-	if err != nil {
-		return types.StorageNodeID(0), err
-	}
+	clus.snWG.Add(1)
+	go func() {
+		defer clus.snWG.Done()
+		_ = sn.Run()
+	}()
 
 	meta, err := sn.GetMetadata(context.TODO())
 	if err != nil {
@@ -363,25 +366,22 @@ func (clus *VarlogCluster) AddSNByVMS() (types.StorageNodeID, error) {
 		return types.StorageNodeID(0), err
 	}
 
-	opts := storagenode.DefaultOptions()
-	opts.ListenAddress = "127.0.0.1:0"
-	opts.ClusterID = clus.ClusterID
-	opts.StorageNodeID = snID
-	opts.Logger = clus.logger
-	opts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
-	opts.CollectorName = "nop"
-	opts.CollectorEndpoint = "localhost:55680"
-
-	sn, err := storagenode.NewStorageNode(context.TODO(), &opts)
+	sn, err := storagenode.New(context.TODO(),
+		storagenode.WithListenAddress("127.0.0.1:0"),
+		storagenode.WithClusterID(clus.ClusterID),
+		storagenode.WithStorageNodeID(snID),
+		storagenode.WithVolumes(volume),
+	)
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
+	clus.snWG.Add(1)
+	go func() {
+		defer clus.snWG.Done()
+		_ = sn.Run()
+	}()
 
 	var meta *varlogpb.StorageNodeMetadataDescriptor
-	if err = sn.Run(); err != nil {
-		goto err_out
-	}
-
 	meta, err = sn.GetMetadata(context.TODO())
 	if err != nil {
 		goto err_out
@@ -410,21 +410,20 @@ func (clus *VarlogCluster) RecoverSN(snID types.StorageNodeID) (*storagenode.Sto
 
 	addr, _ := clus.snRPCEndpoints[snID]
 
-	opts := storagenode.DefaultOptions()
-	opts.ListenAddress = addr
-	opts.ClusterID = clus.ClusterID
-	opts.StorageNodeID = snID
-	opts.Logger = clus.logger
-	opts.Volumes = map[storagenode.Volume]struct{}{volume: {}}
-
-	sn, err := storagenode.NewStorageNode(context.TODO(), &opts)
+	sn, err := storagenode.New(context.TODO(),
+		storagenode.WithClusterID(clus.ClusterID),
+		storagenode.WithStorageNodeID(snID),
+		storagenode.WithListenAddress(addr),
+		storagenode.WithVolumes(volume),
+	)
 	if err != nil {
 		return nil, err
 	}
-	err = sn.Run()
-	if err != nil {
-		return nil, err
-	}
+	clus.snWG.Add(1)
+	go func() {
+		defer clus.snWG.Done()
+		_ = sn.Run()
+	}()
 
 	clus.SNs[snID] = sn
 
