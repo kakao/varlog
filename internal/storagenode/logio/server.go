@@ -14,8 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/internal/storagenode/rpcserver"
-
-	"github.com/kakao/varlog/pkg/util/telemetry/label"
+	"github.com/kakao/varlog/pkg/util/telemetry/attribute"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
@@ -46,15 +45,15 @@ func (s *server) Register(server *grpc.Server) {
 func (s *server) withTelemetry(ctx context.Context, spanName string, req interface{}, h rpcserver.Handler) (rsp interface{}, err error) {
 	storageNodeID := s.storageNodeIDGetter.StorageNodeID()
 	ctx, span := s.tmStub.StartSpan(ctx, spanName,
-		oteltrace.WithAttributes(label.StorageNodeIDLabel(storageNodeID)),
+		oteltrace.WithAttributes(attribute.StorageNodeID(storageNodeID)),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
 	/*
-		labels := []label.KeyValue{
-			label.RPCName(spanName),
-			label.StorageNodeIDLabel(s.storageNodeID),
+		attributes := []label.KeyValue{
+			attribute.RPCName(spanName),
+			attribute.StorageNodeIDLabel(s.storageNodeID),
 		}
-			s.tmStub.mt.RecordBatch(ctx, labels,
+			s.tmStub.mt.RecordBatch(ctx, attributes,
 				s.tmStub.metrics().totalRequests.Measurement(1),
 				s.tmStub.metrics().activeRequests.Measurement(1),
 			)
@@ -78,7 +77,7 @@ func (s *server) withTelemetry(ctx context.Context, spanName string, req interfa
 		)
 	}
 
-	// s.tmStub.metrics().activeRequests.Add(ctx, -1, labels...)
+	// s.tmStub.metrics().activeRequests.Add(ctx, -1, attributes...)
 	span.End()
 	return rsp, err
 }

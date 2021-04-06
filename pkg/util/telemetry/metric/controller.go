@@ -27,7 +27,7 @@ func NewDefaultControllerConfig() *ControllerConfig {
 func NewController(metricProcessor Checkpointer, exporter Exporter, config *ControllerConfig) *Controller {
 	return basic.New(
 		metricProcessor,
-		basic.WithPusher(exporter),
+		basic.WithExporter(exporter),
 		basic.WithCollectPeriod(config.CollectPeriod),
 		basic.WithCollectTimeout(config.CollectTimeout),
 		basic.WithPushTimeout(config.PushTimeout),

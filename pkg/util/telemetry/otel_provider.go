@@ -53,11 +53,7 @@ func newOTELProvider(ctx context.Context, serviceName string, agentEndpoint stri
 		sdktrace.WithMaxExportBatchSize(1024),
 	)
 	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithConfig(sdktrace.Config{
-			DefaultSampler: sdktrace.TraceIDRatioBased(0.25),
-			// sdktrace.AlwaysSample(),
-
-		}),
+		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(0.25)),
 		sdktrace.WithResource(res),
 		sdktrace.WithSpanProcessor(bsp),
 	)
@@ -67,7 +63,7 @@ func newOTELProvider(ctx context.Context, serviceName string, agentEndpoint stri
 			simple.NewWithExactDistribution(),
 			exporter,
 		),
-		controller.WithPusher(exporter),
+		controller.WithExporter(exporter),
 		controller.WithCollectPeriod(2*time.Second),
 	)
 

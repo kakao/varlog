@@ -96,10 +96,8 @@ func New(ctx context.Context, telemetryType, serviceName, serviceInstanceID stri
 	// trace provider
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithSpanProcessor(sp),
-		sdktrace.WithConfig(sdktrace.Config{
-			DefaultSampler: sdktrace.ParentBased(sdktrace.TraceIDRatioBased(0.3)),
-			Resource:       res,
-		}),
+		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(0.3))),
+		sdktrace.WithResource(res),
 	)
 
 	// metric processor
