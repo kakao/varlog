@@ -13,7 +13,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/soheilhy/cmux"
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -311,7 +311,7 @@ func (sn *StorageNode) logStreamMetadataDescriptors(ctx context.Context) []varlo
 
 	tick := time.Now()
 	lseList := sn.logStreamExecutors()
-	span.SetAttributes(label.Int64("get_log_stream_executors_ms", time.Since(tick).Milliseconds()))
+	span.SetAttributes(attribute.Int64("get_log_stream_executors_ms", time.Since(tick).Milliseconds()))
 
 	if len(lseList) == 0 {
 		return nil
@@ -431,8 +431,8 @@ func (sn *StorageNode) RemoveLogStream(ctx context.Context, logStreamID types.Lo
 	removeDuration := time.Since(tick)
 	sn.tsp.Touch()
 
-	span.SetAttributes(label.Int64("close_duration_ms", closeDuration.Milliseconds()),
-		label.Int64("remove_duration_ms", removeDuration.Milliseconds()))
+	span.SetAttributes(attribute.Int64("close_duration_ms", closeDuration.Milliseconds()),
+		attribute.Int64("remove_duration_ms", removeDuration.Milliseconds()))
 	return nil
 }
 

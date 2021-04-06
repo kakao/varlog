@@ -15,7 +15,7 @@ import (
 	"go.etcd.io/etcd/pkg/fileutil"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -726,9 +726,9 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 	if r.GetNodeID() == mr.nodeID {
 		mr.tmStub.mb.Records("raft_delay").Record(context.TODO(),
 			float64(time.Since(r.CreatedTime).Nanoseconds())/float64(time.Millisecond),
-			label.KeyValue{
+			attribute.KeyValue{
 				Key:   "nodeid",
-				Value: label.Uint64Value(uint64(mr.nodeID)),
+				Value: attribute.StringValue(mr.nodeID.String()),
 			})
 	}
 
@@ -1315,9 +1315,9 @@ func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string
 	rsp, err := h(ctx)
 	mr.tmStub.mb.Records(name).Record(ctx,
 		float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
-		label.KeyValue{
+		attribute.KeyValue{
 			Key:   "nodeid",
-			Value: label.Uint64Value(uint64(mr.nodeID)),
+			Value: attribute.StringValue(mr.nodeID.String()),
 		})
 	return rsp, err
 }

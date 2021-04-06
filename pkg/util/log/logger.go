@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -25,26 +25,26 @@ const (
 )
 
 var (
-	codeFilepathAttributeKey = label.Key("code.filepath")
-	codeLinenoAtrributeKey   = label.Key("code.lineno")
+	codeFilepathAttributeKey = attribute.Key("code.filepath")
+	codeLinenoAtrributeKey   = attribute.Key("code.lineno")
 )
 
 var (
-	debugLabel  = label.String(loggerLevelAttributeKey, "debug")
-	infoLabel   = label.String(loggerLevelAttributeKey, "info")
-	warnLabel   = label.String(loggerLevelAttributeKey, "warn")
-	errorLabel  = label.String(loggerLevelAttributeKey, "error")
-	dpanicLabel = label.String(loggerLevelAttributeKey, "dpanic")
-	panicLabel  = label.String(loggerLevelAttributeKey, "panic")
-	fatalLabel  = label.String(loggerLevelAttributeKey, "fatal")
+	debugattribute  = attribute.String(loggerLevelAttributeKey, "debug")
+	infoattribute   = attribute.String(loggerLevelAttributeKey, "info")
+	warnattribute   = attribute.String(loggerLevelAttributeKey, "warn")
+	errorattribute  = attribute.String(loggerLevelAttributeKey, "error")
+	dpanicattribute = attribute.String(loggerLevelAttributeKey, "dpanic")
+	panicattribute  = attribute.String(loggerLevelAttributeKey, "panic")
+	fatalattribute  = attribute.String(loggerLevelAttributeKey, "fatal")
 )
 
 type Level = zapcore.Level
 
 type Logger struct {
 	z        *zap.Logger
-	nameAttr label.KeyValue
-	attrs    []label.KeyValue
+	nameAttr attribute.KeyValue
+	attrs    []attribute.KeyValue
 }
 
 func New(opts Options) (*Logger, error) {
@@ -72,11 +72,11 @@ func (log *Logger) Named(name string) *Logger {
 	} else {
 		newName = strings.Join([]string{oldName, name}, ".")
 	}
-	return &Logger{z: log.z.Named(name), nameAttr: label.String(loggerNameAttributeKey, newName)}
+	return &Logger{z: log.z.Named(name), nameAttr: attribute.String(loggerNameAttributeKey, newName)}
 }
 
 func (log *Logger) With(fields ...zap.Field) *Logger {
-	newAttrs := make([]label.KeyValue, 0, len(log.attrs)+len(fields))
+	newAttrs := make([]attribute.KeyValue, 0, len(log.attrs)+len(fields))
 	copy(newAttrs, log.attrs)
 	newAttrs = append(newAttrs, fieldsToAttributes(fields...)...)
 	return &Logger{z: log.z.With(fields...), nameAttr: log.nameAttr, attrs: newAttrs}
@@ -95,7 +95,7 @@ func (log *Logger) Debug(msg string, fields ...zap.Field) {
 }
 
 func (log *Logger) DebugWithTrace(ctx context.Context, msg string, fields ...zap.Field) {
-	log.setAttributesToSpan(ctx, msg, debugLabel, fields...)
+	log.setAttributesToSpan(ctx, msg, debugattribute, fields...)
 	log.z.Debug(msg, fields...)
 }
 
@@ -104,7 +104,7 @@ func (log *Logger) Info(msg string, fields ...zap.Field) {
 }
 
 func (log *Logger) InfoWithTrace(ctx context.Context, msg string, fields ...zap.Field) {
-	log.setAttributesToSpan(ctx, msg, infoLabel, fields...)
+	log.setAttributesToSpan(ctx, msg, infoattribute, fields...)
 	log.z.Info(msg, fields...)
 }
 
@@ -113,7 +113,7 @@ func (log *Logger) Warn(msg string, fields ...zap.Field) {
 }
 
 func (log *Logger) WarnWithTrace(ctx context.Context, msg string, fields ...zap.Field) {
-	log.setAttributesToSpan(ctx, msg, warnLabel, fields...)
+	log.setAttributesToSpan(ctx, msg, warnattribute, fields...)
 	log.z.Warn(msg, fields...)
 }
 
@@ -122,7 +122,7 @@ func (log *Logger) Error(msg string, fields ...zap.Field) {
 }
 
 func (log *Logger) ErrorWithTrace(ctx context.Context, msg string, fields ...zap.Field) {
-	log.setAttributesToSpan(ctx, msg, errorLabel, fields...)
+	log.setAttributesToSpan(ctx, msg, errorattribute, fields...)
 	log.z.Error(msg, fields...)
 }
 
@@ -131,7 +131,7 @@ func (log *Logger) DPanic(msg string, fields ...zap.Field) {
 }
 
 func (log *Logger) DPanicWithTrace(ctx context.Context, msg string, fields ...zap.Field) {
-	log.setAttributesToSpan(ctx, msg, dpanicLabel, fields...)
+	log.setAttributesToSpan(ctx, msg, dpanicattribute, fields...)
 	log.z.DPanic(msg, fields...)
 }
 
@@ -140,7 +140,7 @@ func (log *Logger) Panic(msg string, fields ...zap.Field) {
 }
 
 func (log *Logger) PanicWithTrace(ctx context.Context, msg string, fields ...zap.Field) {
-	log.setAttributesToSpan(ctx, msg, panicLabel, fields...)
+	log.setAttributesToSpan(ctx, msg, panicattribute, fields...)
 	log.z.Panic(msg, fields...)
 }
 
@@ -149,19 +149,19 @@ func (log *Logger) Fatal(msg string, fields ...zap.Field) {
 }
 
 func (log *Logger) FatalWithTrace(ctx context.Context, msg string, fields ...zap.Field) {
-	log.setAttributesToSpan(ctx, msg, fatalLabel, fields...)
+	log.setAttributesToSpan(ctx, msg, fatalattribute, fields...)
 	log.z.Fatal(msg, fields...)
 }
 
-func (log *Logger) setAttributesToSpan(ctx context.Context, msg string, lvl label.KeyValue, fields ...zap.Field) {
+func (log *Logger) setAttributesToSpan(ctx context.Context, msg string, lvl attribute.KeyValue, fields ...zap.Field) {
 	span := trace.SpanFromContext(ctx)
 	if span.IsRecording() {
-		attrs := make([]label.KeyValue, 0, len(log.attrs)+len(fields)+2)
+		attrs := make([]attribute.KeyValue, 0, len(log.attrs)+len(fields)+2)
 		// TODO: use Severity in OTEL
 		attrs = append(attrs, lvl)
 		if _, file, line, ok := runtime.Caller(attrCallDepth); ok {
 			attrs = append(attrs, codeFilepathAttributeKey.String(file), codeLinenoAtrributeKey.Int(line))
-			// attrs = append(attrs, label.String(callerAttributeKey, getCaller(file, line)))
+			// attrs = append(attrs, attribute.String(callerAttributeKey, getCaller(file, line)))
 		}
 		attrs = append(attrs, log.attrs...)
 		attrs = appendAttributesByFields(attrs, fields...)

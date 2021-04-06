@@ -21,7 +21,7 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/wal"
 	"go.etcd.io/etcd/wal/walpb"
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 
 	vtypes "github.daumkakao.com/varlog/varlog/pkg/types"
@@ -1054,9 +1054,9 @@ func (rc *raftNode) withTelemetry(ctx context.Context, name string, h handler) (
 
 	rc.tmStub.mb.Records(name).Record(ctx,
 		float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
-		label.KeyValue{
+		attribute.KeyValue{
 			Key:   "nodeid",
-			Value: label.Uint64Value(uint64(rc.id)),
+			Value: attribute.StringValue(rc.id.String()),
 		})
 	return rsp, err
 }

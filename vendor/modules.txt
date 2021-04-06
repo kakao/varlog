@@ -87,11 +87,11 @@ github.com/gogo/protobuf/types
 # github.com/gogo/status v1.1.0
 ## explicit
 github.com/gogo/status
-# github.com/golang/mock v1.4.4
+# github.com/golang/mock v1.5.0
 ## explicit
 github.com/golang/mock/gomock
 github.com/golang/mock/mockgen/model
-# github.com/golang/protobuf v1.4.2
+# github.com/golang/protobuf v1.5.0
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
@@ -272,17 +272,18 @@ go.etcd.io/etcd/raft/tracker
 go.etcd.io/etcd/version
 go.etcd.io/etcd/wal
 go.etcd.io/etcd/wal/walpb
-# go.opentelemetry.io/contrib v0.17.0
+# go.opentelemetry.io/contrib v0.19.0
 go.opentelemetry.io/contrib
-# go.opentelemetry.io/contrib/instrumentation/host v0.17.0
+# go.opentelemetry.io/contrib/instrumentation/host v0.19.0
 ## explicit
 go.opentelemetry.io/contrib/instrumentation/host
-# go.opentelemetry.io/contrib/instrumentation/runtime v0.17.0
+# go.opentelemetry.io/contrib/instrumentation/runtime v0.19.0
 ## explicit
 go.opentelemetry.io/contrib/instrumentation/runtime
-# go.opentelemetry.io/otel v0.17.0
+# go.opentelemetry.io/otel v0.19.0
 ## explicit
 go.opentelemetry.io/otel
+go.opentelemetry.io/otel/attribute
 go.opentelemetry.io/otel/codes
 go.opentelemetry.io/otel/internal
 go.opentelemetry.io/otel/internal/baggage
@@ -290,11 +291,10 @@ go.opentelemetry.io/otel/internal/global
 go.opentelemetry.io/otel/internal/metric
 go.opentelemetry.io/otel/internal/trace/noop
 go.opentelemetry.io/otel/internal/trace/parent
-go.opentelemetry.io/otel/label
 go.opentelemetry.io/otel/propagation
 go.opentelemetry.io/otel/semconv
 go.opentelemetry.io/otel/unit
-# go.opentelemetry.io/otel/exporters/otlp v0.17.0
+# go.opentelemetry.io/otel/exporters/otlp v0.19.0
 ## explicit
 go.opentelemetry.io/otel/exporters/otlp
 go.opentelemetry.io/otel/exporters/otlp/internal/opentelemetry-proto-gen/collector/metrics/v1
@@ -305,27 +305,27 @@ go.opentelemetry.io/otel/exporters/otlp/internal/opentelemetry-proto-gen/resourc
 go.opentelemetry.io/otel/exporters/otlp/internal/opentelemetry-proto-gen/trace/v1
 go.opentelemetry.io/otel/exporters/otlp/internal/transform
 go.opentelemetry.io/otel/exporters/otlp/otlpgrpc
-# go.opentelemetry.io/otel/exporters/stdout v0.17.0
+# go.opentelemetry.io/otel/exporters/stdout v0.19.0
 ## explicit
 go.opentelemetry.io/otel/exporters/stdout
-# go.opentelemetry.io/otel/metric v0.17.0
+# go.opentelemetry.io/otel/metric v0.19.0
 ## explicit
 go.opentelemetry.io/otel/metric
 go.opentelemetry.io/otel/metric/global
 go.opentelemetry.io/otel/metric/number
 go.opentelemetry.io/otel/metric/registry
-# go.opentelemetry.io/otel/sdk v0.17.0
+# go.opentelemetry.io/otel/sdk v0.19.0
 ## explicit
 go.opentelemetry.io/otel/sdk/export/trace
 go.opentelemetry.io/otel/sdk/instrumentation
 go.opentelemetry.io/otel/sdk/internal
 go.opentelemetry.io/otel/sdk/resource
 go.opentelemetry.io/otel/sdk/trace
-# go.opentelemetry.io/otel/sdk/export/metric v0.17.0
+# go.opentelemetry.io/otel/sdk/export/metric v0.19.0
 ## explicit
 go.opentelemetry.io/otel/sdk/export/metric
 go.opentelemetry.io/otel/sdk/export/metric/aggregation
-# go.opentelemetry.io/otel/sdk/metric v0.17.0
+# go.opentelemetry.io/otel/sdk/metric v0.19.0
 ## explicit
 go.opentelemetry.io/otel/sdk/metric
 go.opentelemetry.io/otel/sdk/metric/aggregator
@@ -338,7 +338,7 @@ go.opentelemetry.io/otel/sdk/metric/controller/basic
 go.opentelemetry.io/otel/sdk/metric/controller/time
 go.opentelemetry.io/otel/sdk/metric/processor/basic
 go.opentelemetry.io/otel/sdk/metric/selector/simple
-# go.opentelemetry.io/otel/trace v0.17.0
+# go.opentelemetry.io/otel/trace v0.19.0
 ## explicit
 go.opentelemetry.io/otel/trace
 # go.uber.org/atomic v1.7.0
@@ -410,7 +410,7 @@ google.golang.org/appengine/internal/urlfetch
 google.golang.org/appengine/urlfetch
 # google.golang.org/genproto v0.0.0-20200806141610-86f49bd18e98
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.35.0
+# google.golang.org/grpc v1.36.1
 ## explicit
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -459,9 +459,9 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# google.golang.org/grpc/examples v0.0.0-20210226164526-c949703b4b98
+# google.golang.org/grpc/examples v0.0.0-20210402181922-5730f8d113ee
 ## explicit
-# google.golang.org/protobuf v1.25.0
+# google.golang.org/protobuf v1.26.0
 ## explicit
 google.golang.org/protobuf/encoding/prototext
 google.golang.org/protobuf/encoding/protowire
@@ -473,22 +473,23 @@ google.golang.org/protobuf/internal/encoding/messageset
 google.golang.org/protobuf/internal/encoding/tag
 google.golang.org/protobuf/internal/encoding/text
 google.golang.org/protobuf/internal/errors
-google.golang.org/protobuf/internal/fieldsort
 google.golang.org/protobuf/internal/filedesc
 google.golang.org/protobuf/internal/filetype
 google.golang.org/protobuf/internal/flags
 google.golang.org/protobuf/internal/genid
 google.golang.org/protobuf/internal/impl
-google.golang.org/protobuf/internal/mapsort
+google.golang.org/protobuf/internal/order
 google.golang.org/protobuf/internal/pragma
 google.golang.org/protobuf/internal/set
 google.golang.org/protobuf/internal/strs
 google.golang.org/protobuf/internal/version
 google.golang.org/protobuf/proto
+google.golang.org/protobuf/reflect/protodesc
 google.golang.org/protobuf/reflect/protoreflect
 google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
+google.golang.org/protobuf/types/descriptorpb
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/timestamppb

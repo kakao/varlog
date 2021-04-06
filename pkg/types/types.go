@@ -61,6 +61,10 @@ func ParseLogStreamID(s string) (LogStreamID, error) {
 	return LogStreamID(id), err
 }
 
+func (lsid LogStreamID) String() string {
+	return strconv.FormatUint(uint64(lsid), 10)
+}
+
 type GLSN uint64
 
 const (

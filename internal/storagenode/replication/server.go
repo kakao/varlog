@@ -13,7 +13,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/rpcserver"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/stopchannel"
-	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/label"
+	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/attribute"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
@@ -188,10 +188,10 @@ func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateR
 
 	var spanName = "varlog.snpb.Replicator/SyncReplicate"
 	ctx, span := s.tmStub.StartSpan(ctx, spanName,
-		oteltrace.WithAttributes(label.StorageNodeIDLabel(s.storageNodeIDGetter.StorageNodeID())),
+		oteltrace.WithAttributes(attribute.StorageNodeID(s.storageNodeIDGetter.StorageNodeID())),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
-	s.tmStub.Metrics().ActiveRequests.Add(ctx, 1, label.String("call", spanName))
+	s.tmStub.Metrics().ActiveRequests.Add(ctx, 1, attribute.String("call", spanName))
 	defer func() {
 		if err == nil {
 			s.logger.Info("SyncReplicate",
@@ -204,7 +204,7 @@ func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateR
 				zap.String("request", req.String()),
 			)
 		}
-		s.tmStub.Metrics().ActiveRequests.Add(ctx, -1, label.String("call", spanName))
+		s.tmStub.Metrics().ActiveRequests.Add(ctx, -1, attribute.String("call", spanName))
 		span.End()
 	}()
 
