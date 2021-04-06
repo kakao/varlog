@@ -24,7 +24,7 @@ var (
 	ErrTrimmed          = errors.New("logstream: trimmed")
 	ErrUndecidable      = errors.New("logstream: undecidable")
 	ErrCorruptLogStream = errors.New("logstream: corrupt")
-	ErrSealed           = errors.New("logstream: sealed")
+	ErrSealed           = errors.New("sealed")
 	ErrUnordered        = errors.New("logstream: unordered scanner")
 )
 

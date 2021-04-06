@@ -19,8 +19,6 @@ const (
 	storageDirPrefix   = "snid"
 	logStreamDirPrefix = "lsid"
 
-	touchFileName = ".touch"
-
 	VolumeFileMode = os.FileMode(0700)
 )
 
@@ -129,12 +127,12 @@ func createPath(dir string) (string, error) {
 func ParseLogStreamPath(path string) (vol Volume, cid types.ClusterID, snid types.StorageNodeID, lsid types.LogStreamID, err error) {
 	path = filepath.Clean(path)
 	if !filepath.IsAbs(path) {
-		return Volume(""), 0, 0, 0, errors.New("not absolute path")
+		return "", 0, 0, 0, errors.New("not absolute path")
 	}
 
 	toks := strings.Split(path, string(filepath.Separator))
 	if len(toks) < 4 {
-		return Volume(""), 0, 0, 0, errors.New("invalid path")
+		return "", 0, 0, 0, errors.New("invalid path")
 	}
 
 	lsidPath := toks[len(toks)-1]
@@ -155,5 +153,5 @@ func ParseLogStreamPath(path string) (vol Volume, cid types.ClusterID, snid type
 	return vol, cid, snid, lsid, nil
 
 errOut:
-	return Volume(""), 0, 0, 0, errors.New("invalid path")
+	return "", 0, 0, 0, errors.New("invalid path")
 }

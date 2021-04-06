@@ -8,7 +8,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -73,7 +73,7 @@ type reportContext struct {
 
 type storageNodeConnector struct {
 	sn  *varlogpb.StorageNodeDescriptor
-	cli storagenode.LogStreamReporterClient
+	cli reportcommitter.Client
 	mu  sync.RWMutex
 }
 
@@ -495,7 +495,7 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 	return diff
 }
 
-func (rce *reportCollectExecutor) closeClient(cli storagenode.LogStreamReporterClient) {
+func (rce *reportCollectExecutor) closeClient(cli reportcommitter.Client) {
 	rce.snConnector.mu.Lock()
 	defer rce.snConnector.mu.Unlock()
 
@@ -506,7 +506,7 @@ func (rce *reportCollectExecutor) closeClient(cli storagenode.LogStreamReporterC
 	}
 }
 
-func (rce *reportCollectExecutor) getClient(ctx context.Context) (storagenode.LogStreamReporterClient, error) {
+func (rce *reportCollectExecutor) getClient(ctx context.Context) (reportcommitter.Client, error) {
 	rce.snConnector.mu.RLock()
 	cli := rce.snConnector.cli
 	rce.snConnector.mu.RUnlock()

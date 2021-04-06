@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.etcd.io/etcd/pkg/fileutil"
+	"go.uber.org/zap"
+
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
-	"go.etcd.io/etcd/pkg/fileutil"
-	"go.uber.org/zap"
 )
 
 func TestStateMachineLogOpenForWrite(t *testing.T) {

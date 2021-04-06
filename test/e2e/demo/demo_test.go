@@ -213,6 +213,7 @@ func forkVMC(ctx context.Context, args []string, vmsAddr string, t *testing.T) (
 }
 
 func TestDemo(t *testing.T) {
+	t.Skip("[WIP]")
 	portLease, err := ports.ReserveWeaklyWithRetry(10000)
 	if err != nil {
 		t.Fatal(err)

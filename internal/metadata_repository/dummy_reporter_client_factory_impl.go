@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
@@ -36,7 +36,7 @@ func NewEmptyReporterClientFactory() *EmptyReporterClientFactory {
 	return &EmptyReporterClientFactory{}
 }
 
-func (rcf *EmptyReporterClientFactory) GetClient(context.Context, *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+func (rcf *EmptyReporterClientFactory) GetClient(context.Context, *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
 	return &EmptyReporterClient{}, nil
 }
 
@@ -109,7 +109,7 @@ func NewDummyReporterClientFactory(nrLogStreams int, manual bool) *DummyReporter
 	return fac
 }
 
-func (fac *DummyReporterClientFactory) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+func (fac *DummyReporterClientFactory) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
 	status := DUMMY_REPORTERCLIENT_STATUS_RUNNING
 
 	LSIDs := make([]types.LogStreamID, fac.nrLogStreams)

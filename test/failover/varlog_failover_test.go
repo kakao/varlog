@@ -9,13 +9,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
-	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/vms"
 	"github.daumkakao.com/varlog/varlog/pkg/logc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/test"
 	"github.daumkakao.com/varlog/varlog/vtesting"
@@ -130,6 +130,7 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 }
 
 func TestVarlogFailoverSNBackupFail(t *testing.T) {
+	t.Skip("[WIP] Sync API")
 	nrRep := 2
 	nrCli := 5
 	vmsOpts := vms.DefaultOptions()
@@ -263,7 +264,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 
 						status, _, _ := sn.Seal(context.TODO(), lsID, sealedGLSN)
 						if status == varlogpb.LogStreamStatusSealing {
-							replica := storagenode.Replica{
+							replica := snpb.Replica{
 								StorageNodeID: ls.Replicas[1].StorageNodeID,
 								LogStreamID:   lsID,
 								Address:       snmeta.StorageNode.Address,

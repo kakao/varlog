@@ -3,6 +3,7 @@ syntax = "proto3";
 package varlog.snpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "varlogpb/metadata.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
 
@@ -76,16 +77,21 @@ message SyncStatus {
     SyncPosition current = 4 [(gogoproto.nullable) = false];
 }
 
+message SyncPayload {
+    option (gogoproto.onlyone) = true;
+    varlogpb.CommitContext commit_context = 1;
+    varlogpb.LogEntry log_entry = 2;
+}
+
 message SyncReplicateRequest {
-    SyncPosition first = 1 [(gogoproto.nullable) = false];
-    SyncPosition last = 2 [(gogoproto.nullable) = false];
-    SyncPosition current = 3 [(gogoproto.nullable) = false];
-    bytes data = 4;
-    uint32 log_stream_id = 5 [
+    uint32 log_stream_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
+    SyncPayload payload = 2 [(gogoproto.nullable) = false];
+    SyncPosition first = 3 [(gogoproto.nullable) = false];
+    SyncPosition last = 4 [(gogoproto.nullable) = false];
 }
 
 message SyncReplicateResponse {

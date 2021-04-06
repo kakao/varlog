@@ -11,7 +11,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
@@ -36,7 +36,7 @@ func NewDummyMetadataRepository(reporterCliFac ReporterClientFactory) *dummyMeta
 	}
 }
 
-func (mr *dummyMetadataRepository) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (storagenode.LogStreamReporterClient, error) {
+func (mr *dummyMetadataRepository) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
 	return mr.reporterCliFac.GetClient(ctx, sn)
 }
 
@@ -844,7 +844,7 @@ func TestReporterClientReconnect(t *testing.T) {
 			logger:        logger,
 		}
 
-		cli := make([]storagenode.LogStreamReporterClient, 2)
+		cli := make([]reportcommitter.Client, 2)
 		for i := 0; i < 2; i++ {
 			var err error
 
