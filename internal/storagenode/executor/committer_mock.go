@@ -34,18 +34,16 @@ func (m *MockCommitter) EXPECT() *MockCommitterMockRecorder {
 	return m.recorder
 }
 
-// sendCommitWaitTask mocks base method.
-func (m *MockCommitter) sendCommitWaitTask(ctx context.Context, tb *appendTask) error {
+// drainCommitQ mocks base method.
+func (m *MockCommitter) drainCommitQ(err error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "sendCommitWaitTask", ctx, tb)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "drainCommitQ", err)
 }
 
-// sendCommitWaitTask indicates an expected call of sendCommitWaitTask.
-func (mr *MockCommitterMockRecorder) sendCommitWaitTask(ctx, tb interface{}) *gomock.Call {
+// drainCommitQ indicates an expected call of drainCommitQ.
+func (mr *MockCommitterMockRecorder) drainCommitQ(err interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "sendCommitWaitTask", reflect.TypeOf((*MockCommitter)(nil).sendCommitWaitTask), ctx, tb)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "drainCommitQ", reflect.TypeOf((*MockCommitter)(nil).drainCommitQ), err)
 }
 
 // sendCommitTask mocks base method.
@@ -62,16 +60,18 @@ func (mr *MockCommitterMockRecorder) sendCommitTask(ctx, ctb interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "sendCommitTask", reflect.TypeOf((*MockCommitter)(nil).sendCommitTask), ctx, ctb)
 }
 
-// drainCommitQ mocks base method.
-func (m *MockCommitter) drainCommitQ(err error) {
+// sendCommitWaitTask mocks base method.
+func (m *MockCommitter) sendCommitWaitTask(ctx context.Context, tb *appendTask) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "drainCommitQ", err)
+	ret := m.ctrl.Call(m, "sendCommitWaitTask", ctx, tb)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// drainCommitQ indicates an expected call of drainCommitQ.
-func (mr *MockCommitterMockRecorder) drainCommitQ(err interface{}) *gomock.Call {
+// sendCommitWaitTask indicates an expected call of sendCommitWaitTask.
+func (mr *MockCommitterMockRecorder) sendCommitWaitTask(ctx, tb interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "drainCommitQ", reflect.TypeOf((*MockCommitter)(nil).drainCommitQ), err)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "sendCommitWaitTask", reflect.TypeOf((*MockCommitter)(nil).sendCommitWaitTask), ctx, tb)
 }
 
 // stop mocks base method.

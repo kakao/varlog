@@ -143,6 +143,8 @@ func (sml *stateMachineLog) createNewSegment(appliedIndex uint64, prevCrc uint32
 func (sml *stateMachineLog) OpenForWrite(appliedIndex uint64) error {
 	var err error
 
+	sml.Close()
+
 	if fileutil.Exist(sml.dir) {
 		if err = cleanupStateMachineLog(sml.dir); err != nil {
 			sml.lg.Warn(
