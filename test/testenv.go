@@ -100,7 +100,7 @@ func NewVarlogCluster(opts VarlogClusterOptions) *VarlogCluster {
 
 	for i := range clus.MRPeers {
 		clus.clearMR(i)
-		clus.createMR(i, false, clus.UnsafeNoWal)
+		clus.createMR(i, false, clus.UnsafeNoWal, false)
 	}
 
 	return clus
@@ -119,7 +119,7 @@ func (clus *VarlogCluster) clearMR(idx int) {
 	os.RemoveAll(fmt.Sprintf("%s/sml/%d", vtesting.TestRaftDir(), nodeID))
 }
 
-func (clus *VarlogCluster) createMR(idx int, join, unsafeNoWal bool) error {
+func (clus *VarlogCluster) createMR(idx int, join, unsafeNoWal, recoverFromSML bool) error {
 	if idx < 0 || idx >= len(clus.MRs) {
 		return errors.New("out of range")
 	}
@@ -142,6 +142,7 @@ func (clus *VarlogCluster) createMR(idx int, join, unsafeNoWal bool) error {
 		RaftAddress:       clus.MRPeers[idx],
 		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
 		NumRep:            clus.NrRep,
+		RecoverFromSML:    recoverFromSML,
 		RPCBindAddress:    clus.MRRPCEndpoints[idx],
 		ReporterClientFac: clus.ReporterClientFac,
 		Logger:            clus.logger,
@@ -170,7 +171,7 @@ func (clus *VarlogCluster) AppendMR() error {
 
 	clus.clearMR(idx)
 
-	return clus.createMR(idx, true, clus.UnsafeNoWal)
+	return clus.createMR(idx, true, clus.UnsafeNoWal, false)
 }
 
 func (clus *VarlogCluster) StartMR(idx int) error {
@@ -205,7 +206,7 @@ func (clus *VarlogCluster) RestartMR(idx int) error {
 	}
 
 	clus.StopMR(idx)
-	clus.createMR(idx, false, clus.UnsafeNoWal)
+	clus.createMR(idx, false, clus.UnsafeNoWal, clus.UnsafeNoWal)
 	return clus.StartMR(idx)
 }
 

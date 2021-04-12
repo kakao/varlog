@@ -34,6 +34,18 @@ func (m *MockReplicator) EXPECT() *MockReplicatorMockRecorder {
 	return m.recorder
 }
 
+// drainQueue mocks base method.
+func (m *MockReplicator) drainQueue() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "drainQueue")
+}
+
+// drainQueue indicates an expected call of drainQueue.
+func (mr *MockReplicatorMockRecorder) drainQueue() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "drainQueue", reflect.TypeOf((*MockReplicator)(nil).drainQueue))
+}
+
 // send mocks base method.
 func (m *MockReplicator) send(ctx context.Context, t *replicateTask) error {
 	m.ctrl.T.Helper()
@@ -58,16 +70,4 @@ func (m *MockReplicator) stop() {
 func (mr *MockReplicatorMockRecorder) stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "stop", reflect.TypeOf((*MockReplicator)(nil).stop))
-}
-
-// drainQueue mocks base method.
-func (m *MockReplicator) drainQueue() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "drainQueue")
-}
-
-// drainQueue indicates an expected call of drainQueue.
-func (mr *MockReplicatorMockRecorder) drainQueue() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "drainQueue", reflect.TypeOf((*MockReplicator)(nil).drainQueue))
 }

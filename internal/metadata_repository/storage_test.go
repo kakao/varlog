@@ -8,6 +8,7 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
@@ -65,7 +66,8 @@ func TestStoragUnregisterSN(t *testing.T) {
 			err := ms.RegisterStorageNode(sn, 0, 0)
 			So(err, ShouldBeNil)
 
-			So(ms.isCopyOnWrite(), ShouldBeTrue)
+			// simulate copy on write
+			ms.setCopyOnWrite()
 
 			Convey("Then it should be unregistered", func(ctx C) {
 				err = ms.unregisterStorageNode(snID)
@@ -75,6 +77,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 				ms.createMetadataCache(&jobMetadataCache{})
 				meta := ms.GetMetadata()
 				So(len(meta.GetStorageNodes()), ShouldEqual, 0)
+				So(len(ms.diffStateMachine.Metadata.StorageNodes), ShouldEqual, 1)
 
 				Convey("unregistered SN should not be found after merge", func(ctx C) {
 					ms.mergeMetadata()
@@ -83,6 +86,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 					ms.releaseCopyOnWrite()
 
 					So(ms.lookupStorageNode(snID), ShouldBeNil)
+					So(len(ms.diffStateMachine.Metadata.StorageNodes), ShouldEqual, 0)
 				})
 			})
 
@@ -126,12 +130,13 @@ func TestStoragGetAllSN(t *testing.T) {
 			err := ms.RegisterStorageNode(sn, 0, 0)
 			So(err, ShouldBeNil)
 
+			ms.setCopyOnWrite()
+
 			Convey("Then it should return 1 SN", func(ctx C) {
 				sns := ms.GetStorageNodes()
 				So(len(sns), ShouldEqual, 1)
 
 				Convey("Wnen one more SN register to diff", func(ctx C) {
-					So(ms.isCopyOnWrite(), ShouldBeTrue)
 					snID2 := types.StorageNodeID(time.Now().UnixNano())
 					sn := &varlogpb.StorageNodeDescriptor{
 						StorageNodeID: snID2,
@@ -202,12 +207,13 @@ func TestStoragGetAllLS(t *testing.T) {
 			err = ms.RegisterLogStream(ls, 0, 0)
 			So(err, ShouldBeNil)
 
+			ms.setCopyOnWrite()
+
 			Convey("Then it should return 1 LS", func(ctx C) {
 				lss := ms.GetLogStreams()
 				So(len(lss), ShouldEqual, 1)
 
 				Convey("Wnen update LS to diff", func(ctx C) {
-					So(ms.isCopyOnWrite(), ShouldBeTrue)
 					snID2 := snID + 1
 					sn := &varlogpb.StorageNodeDescriptor{
 						StorageNodeID: snID2,
@@ -340,9 +346,10 @@ func TestStoragUnregisterLS(t *testing.T) {
 
 			err := ms.RegisterLogStream(ls, 0, 0)
 			So(err, ShouldBeNil)
-			So(len(ms.GetUncommitReportIDs()), ShouldEqual, 1)
 
-			So(ms.isCopyOnWrite(), ShouldBeTrue)
+			ms.setCopyOnWrite()
+
+			So(len(ms.GetUncommitReportIDs()), ShouldEqual, 1)
 
 			err = ms.unregisterLogStream(lsID)
 			So(err, ShouldBeNil)
@@ -860,6 +867,11 @@ func TestStorageCopyOnWrite(t *testing.T) {
 
 	Convey("update matadata should make storage copyOnWrite", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
+		ms.Run()
+		Reset(func() {
+			ms.Close()
+			testutil.GC()
+		})
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -873,6 +885,11 @@ func TestStorageCopyOnWrite(t *testing.T) {
 
 	Convey("copyOnWrite storage should give the same response for registerStorageNode", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
+		ms.Run()
+		Reset(func() {
+			ms.Close()
+			testutil.GC()
+		})
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -929,7 +946,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 
 		err := ms.RegisterLogStream(ls, 0, 0)
 		So(err, ShouldBeNil)
-		So(ms.isCopyOnWrite(), ShouldBeTrue)
+		ms.setCopyOnWrite()
 
 		pre, cur := ms.getStateMachine()
 		So(pre.Metadata.GetLogStream(lsID), ShouldNotBeNil)
@@ -949,6 +966,11 @@ func TestStorageCopyOnWrite(t *testing.T) {
 
 	Convey("update UncommitReport does not make storage copyOnWrite", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
+		ms.Run()
+		Reset(func() {
+			ms.Close()
+			testutil.GC()
+		})
 
 		rep := 2
 		lsID := types.LogStreamID(time.Now().UnixNano())
@@ -1095,7 +1117,10 @@ func TestStorageMetadataCache(t *testing.T) {
 	Convey("createMetadataCache should dedup", t, func(ctx C) {
 		ch := make(chan struct{}, 2)
 		cb := func(uint64, uint64, error) {
-			ch <- struct{}{}
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
 		}
 
 		ms := NewMetadataStorage(cb, DefaultSnapshotCount, nil)
@@ -1108,6 +1133,10 @@ func TestStorageMetadataCache(t *testing.T) {
 		err := ms.RegisterStorageNode(sn, 0, 0)
 		So(err, ShouldBeNil)
 
+		ms.setCopyOnWrite()
+		atomic.AddInt64(&ms.nrRunning, 1)
+		ms.jobC <- &storageAsyncJob{job: &jobMetadataCache{}}
+
 		snID2 := snID + types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
 			StorageNodeID: snID2,
@@ -1115,6 +1144,9 @@ func TestStorageMetadataCache(t *testing.T) {
 
 		err = ms.RegisterStorageNode(sn, 0, 0)
 		So(err, ShouldBeNil)
+
+		atomic.AddInt64(&ms.nrRunning, 1)
+		ms.jobC <- &storageAsyncJob{job: &jobMetadataCache{}}
 
 		ms.Run()
 		Reset(func() {
@@ -1143,7 +1175,10 @@ func TestStorageStateMachineMerge(t *testing.T) {
 	Convey("merge stateMachine should not operate while job running", t, func(ctx C) {
 		ch := make(chan struct{}, 1)
 		cb := func(uint64, uint64, error) {
-			ch <- struct{}{}
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
 		}
 
 		ms := NewMetadataStorage(cb, DefaultSnapshotCount, nil)
@@ -1155,12 +1190,21 @@ func TestStorageStateMachineMerge(t *testing.T) {
 
 		err := ms.RegisterStorageNode(sn, 0, 0)
 		So(err, ShouldBeNil)
-		So(ms.isCopyOnWrite(), ShouldBeTrue)
+
+		ms.setCopyOnWrite()
+		atomic.AddInt64(&ms.nrRunning, 1)
+		ms.jobC <- &storageAsyncJob{job: &jobMetadataCache{}}
 
 		ms.mergeStateMachine()
 		So(ms.isCopyOnWrite(), ShouldBeTrue)
 
 		Convey("merge stateMachine should operate if no more job", func(ctx C) {
+			ms.Run()
+			Reset(func() {
+				ms.Close()
+				testutil.GC()
+			})
+
 			snID = snID + types.StorageNodeID(1)
 			sn := &varlogpb.StorageNodeDescriptor{
 				StorageNodeID: snID,
@@ -1173,12 +1217,6 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			So(pre == cur, ShouldBeFalse)
 			So(pre.Metadata.GetStorageNode(snID), ShouldBeNil)
 			So(cur.Metadata.GetStorageNode(snID), ShouldNotBeNil)
-
-			ms.Run()
-			Reset(func() {
-				ms.Close()
-				testutil.GC()
-			})
 
 			<-ch
 
@@ -1243,12 +1281,17 @@ func TestStorageStateMachineMerge(t *testing.T) {
 
 func TestStorageSnapshot(t *testing.T) {
 	Convey("create snapshot should not operate while job running", t, func(ctx C) {
-		ch := make(chan struct{}, 1)
+		ch := make(chan struct{}, 0)
 		cb := func(uint64, uint64, error) {
 			ch <- struct{}{}
 		}
 
-		ms := NewMetadataStorage(cb, 0, nil)
+		ms := NewMetadataStorage(cb, 1, nil)
+		ms.Run()
+		Reset(func() {
+			ms.Close()
+			testutil.GC()
+		})
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -1263,12 +1306,6 @@ func TestStorageSnapshot(t *testing.T) {
 		appliedIndex++
 		ms.UpdateAppliedIndex(appliedIndex)
 		ms.triggerSnapshot(appliedIndex)
-
-		ms.Run()
-		Reset(func() {
-			ms.Close()
-			testutil.GC()
-		})
 
 		<-ch
 
@@ -1289,6 +1326,10 @@ func TestStorageSnapshot(t *testing.T) {
 		}), ShouldBeTrue)
 
 		Convey("create snapshot should operate if no more job", func(ctx C) {
+			So(testutil.CompareWaitN(10, func() bool {
+				return atomic.LoadInt64(&ms.nrRunning) == 0
+			}), ShouldBeTrue)
+
 			appliedIndex++
 			ms.UpdateAppliedIndex(appliedIndex)
 			ms.triggerSnapshot(appliedIndex)
@@ -1324,7 +1365,7 @@ func TestStorageApplySnapshot(t *testing.T) {
 			ch <- struct{}{}
 		}
 
-		ms := NewMetadataStorage(cb, 0, nil)
+		ms := NewMetadataStorage(cb, 1, nil)
 		ms.Run()
 		Reset(func() {
 			ms.Close()
@@ -1574,6 +1615,77 @@ func TestStorageVerifyReport(t *testing.T) {
 				}
 				So(ms.verifyUncommitReport(r), ShouldBeFalse)
 			}
+		})
+	})
+}
+
+func TestStorageRecoverStateMachine(t *testing.T) {
+	Convey("Given MetadataStorage", t, func(ctx C) {
+		ch := make(chan struct{}, 1)
+		cb := func(uint64, uint64, error) {
+			ch <- struct{}{}
+		}
+
+		ms := NewMetadataStorage(cb, 1, nil)
+
+		appliedIndex := uint64(0)
+
+		nrSN := 5
+		snIDs := make([]types.StorageNodeID, nrSN)
+		base := types.StorageNodeID(time.Now().UnixNano())
+		for i := 0; i < nrSN; i++ {
+			snIDs[i] = base + types.StorageNodeID(i)
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: snIDs[i],
+			}
+
+			err := ms.RegisterStorageNode(sn, 0, 0)
+			So(err, ShouldBeNil)
+			ms.setCopyOnWrite()
+
+			appliedIndex++
+			ms.UpdateAppliedIndex(appliedIndex)
+		}
+
+		err := ms.AddPeer(types.NodeID(0), "test", false, &raftpb.ConfState{})
+		So(err, ShouldBeNil)
+
+		err = ms.RegisterEndpoint(types.NodeID(0), "test", 0, 0)
+		So(err, ShouldBeNil)
+
+		<-ch
+
+		ms.Run()
+		Reset(func() {
+			ms.Close()
+			testutil.GC()
+		})
+
+		Convey("When recover state machine ", func(ctx C) {
+			stateMachine := &mrpb.MetadataRepositoryDescriptor{}
+			stateMachine.Metadata = &varlogpb.MetadataDescriptor{}
+			stateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
+			stateMachine.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
+
+			stateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+			stateMachine.Endpoints = make(map[types.NodeID]string)
+
+			newAppliedIndex := uint64(1)
+
+			err := ms.RecoverStateMachine(stateMachine, newAppliedIndex, 0, 0)
+			So(err, ShouldBeNil)
+
+			Convey("Then MetadataStorage should recover", func(ctx C) {
+				<-ch
+
+				So(ms.appliedIndex, ShouldEqual, newAppliedIndex)
+				So(ms.LookupEndpoint(types.NodeID(0)), ShouldEqual, "test")
+				So(ms.IsMember(types.NodeID(0)), ShouldBeTrue)
+				for i := 0; i < nrSN; i++ {
+					So(ms.lookupStorageNode(snIDs[i]), ShouldBeNil)
+				}
+				So(ms.running.Load(), ShouldBeTrue)
+			})
 		})
 	})
 }

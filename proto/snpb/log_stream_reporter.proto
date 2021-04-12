@@ -55,17 +55,22 @@ message LogStreamCommitResult {
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    uint64 committed_glsn_offset = 2 [
+    uint64 committed_llsn_offset = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
+        (gogoproto.customname) = "CommittedLLSNOffset"
+    ];
+    uint64 committed_glsn_offset = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "CommittedGLSNOffset"
     ];
-    uint64 committed_glsn_length = 3
+    uint64 committed_glsn_length = 4
         [(gogoproto.customname) = "CommittedGLSNLength"];
-    uint64 high_watermark = 4
+    uint64 high_watermark = 5
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
-    uint64 prev_high_watermark = 5
+    uint64 prev_high_watermark = 6
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
 }

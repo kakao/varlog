@@ -9,9 +9,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	grpc "google.golang.org/grpc"
-
 	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
+	grpc "google.golang.org/grpc"
 )
 
 // MockServer is a mock of Server interface.

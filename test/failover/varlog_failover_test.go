@@ -309,3 +309,91 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		})
 	}))
 }
+
+func TestVarlogFailoverRecoverFromSML(t *testing.T) {
+	vmsOpts := vms.DefaultOptions()
+	vmsOpts.HeartbeatTimeout *= 10
+	vmsOpts.Logger = zap.L()
+	opts := test.VarlogClusterOptions{
+		NrMR:              1,
+		NrRep:             1,
+		UnsafeNoWal:       true,
+		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		VMSOpts:           &vmsOpts,
+	}
+
+	Convey("Given Varlog cluster with StateMachineLog", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
+		So(testutil.CompareWaitN(10, func() bool {
+			return env.HealthCheck()
+		}), ShouldBeTrue)
+
+		leader := env.Leader()
+
+		_, err := env.AddSNByVMS()
+		So(err, ShouldBeNil)
+
+		lsID, err := env.AddLSByVMS()
+		So(err, ShouldBeNil)
+
+		cli, err := env.NewLogIOClient(lsID)
+		So(err, ShouldBeNil)
+		defer cli.Close()
+
+		var glsn types.GLSN
+		for i := 0; i < 5; i++ {
+			glsn, err = cli.Append(context.TODO(), lsID, []byte("foo"))
+			So(err, ShouldBeNil)
+		}
+
+		Convey("When MR leader restart", func(ctx C) {
+			env.RestartMR(leader)
+
+			So(testutil.CompareWaitN(10, func() bool {
+				return env.HealthCheck()
+			}), ShouldBeTrue)
+
+			Convey("Then it should be recovered", func(ctx C) {
+				mr := env.GetMR()
+				So(mr.GetHighWatermark(), ShouldEqual, glsn)
+
+				metadata, err := mr.GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+
+				So(len(metadata.LogStreams), ShouldEqual, 1)
+
+				Convey("Then ls metadata from SN should be sealed", func(ctx C) {
+					ls := metadata.LogStreams[0]
+					So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+
+					So(testutil.CompareWaitN(10, func() bool {
+						meta, err := env.SNs[0].GetMetadata(context.TODO())
+						if err != nil {
+							return false
+						}
+
+						lsmeta, ok := meta.GetLogStream(lsID)
+						if !ok {
+							return false
+						}
+
+						return lsmeta.Status == varlogpb.LogStreamStatusSealed
+					}), ShouldBeTrue)
+
+					cmCli := env.GetClusterManagerClient()
+
+					recoveredGLSN := types.InvalidGLSN
+					So(testutil.CompareWaitN(10, func() bool {
+						cmCli.Unseal(context.TODO(), lsID)
+
+						rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
+						defer cancel()
+						recoveredGLSN, err = cli.Append(rctx, lsID, []byte("foo"))
+						return err == nil
+					}), ShouldBeTrue)
+
+					So(recoveredGLSN, ShouldEqual, glsn+1)
+				})
+			})
+		})
+	}))
+}

@@ -10,9 +10,8 @@ import (
 
 	types "github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
-	grpc "google.golang.org/grpc"
-
 	mrpb "github.daumkakao.com/varlog/varlog/proto/mrpb"
+	grpc "google.golang.org/grpc"
 )
 
 // MockManagementClient is a mock of ManagementClient interface.

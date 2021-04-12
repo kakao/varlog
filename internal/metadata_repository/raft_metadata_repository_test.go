@@ -2173,3 +2173,53 @@ func TestMRUnsafeNoWal(t *testing.T) {
 		})
 	})
 }
+
+func TestMRFailoverRecoverFromStateMachineLog(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		nrRep := 1
+		nrNode := 1
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		clus.Start()
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.healthCheckAll()
+		}), ShouldBeTrue)
+
+		mr := clus.nodes[0]
+
+		Convey("When apply recover request", func(ctx C) {
+			sm := &mrpb.MetadataRepositoryDescriptor{}
+			sm.Metadata = &varlogpb.MetadataDescriptor{}
+			sm.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
+			sm.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
+
+			sm.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+			sm.Endpoints = make(map[types.NodeID]string)
+
+			snIDs := make([]types.StorageNodeID, 2)
+			for i := range snIDs {
+				snIDs[i] = types.StorageNodeID(i)
+				sn := &varlogpb.StorageNodeDescriptor{
+					StorageNodeID: snIDs[i],
+				}
+
+				sm.Metadata.InsertStorageNode(sn)
+			}
+
+			r := &mrpb.RecoverStateMachine{
+				StateMachine: sm,
+			}
+
+			mr.propose(context.TODO(), r, true)
+
+			Convey("Then ReportCollector should recover", func(ctx C) {
+				So(testutil.CompareWaitN(10, func() bool {
+					return mr.reportCollector.NumExecutors() == len(snIDs)
+				}), ShouldBeTrue)
+			})
+		})
+	})
+}

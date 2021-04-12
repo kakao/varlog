@@ -3,6 +3,7 @@ package metadata_repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -153,6 +154,8 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger
 	ms.metaCache = &varlogpb.MetadataDescriptor{}
 
 	ms.jobC = make(chan *storageAsyncJob, 4096)
+	ms.running.Store(false)
+	ms.releaseCopyOnWrite()
 
 	return ms
 }
@@ -1163,6 +1166,8 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 		stateMachine.Endpoints = make(map[types.NodeID]string)
 	}
 
+	running := ms.running.Load()
+
 	ms.Close()
 	ms.releaseCopyOnWrite()
 
@@ -1172,13 +1177,89 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 	atomic.StoreUint64(&ms.snapIndex, snapIndex)
 	ms.ssMu.Unlock()
 
+	ms.recoverCache(stateMachine, snapIndex)
+	ms.recoverStateMachine(stateMachine, snapIndex)
+
+	// make nrUpdateSinceCommit > 0 to enable commit
+	ms.nrUpdateSinceCommit = 1
+	ms.appliedIndex = snapIndex
+	ms.origConfState = snapConfState
+
+	ms.jobC = make(chan *storageAsyncJob, 4096)
+
+	if running {
+		ms.Run()
+	}
+
+	return nil
+}
+
+func (ms *MetadataStorage) RecoverStateMachine(stateMachine *mrpb.MetadataRepositoryDescriptor, appliedIndex, nodeIndex, requestIndex uint64) error {
+	defer func() {
+		if ms.cacheCompleteCB != nil {
+			fmt.Printf("recover done\n")
+			ms.cacheCompleteCB(nodeIndex, requestIndex, nil)
+		}
+	}()
+
+	running := ms.running.Load()
+
+	ms.Close()
+	ms.releaseCopyOnWrite()
+
+	ms.mergePeers()
+
+	stateMachine.Endpoints = ms.origStateMachine.Endpoints
+	stateMachine.Peers = ms.origStateMachine.Peers
+
+	ms.recoverLogStreams(stateMachine)
+	ms.recoverCache(stateMachine, appliedIndex)
+	ms.recoverStateMachine(stateMachine, appliedIndex)
+
+	ms.jobC = make(chan *storageAsyncJob, 4096)
+
+	if running {
+		ms.Run()
+	}
+
+	return nil
+}
+
+func (ms *MetadataStorage) recoverLogStreams(stateMachine *mrpb.MetadataRepositoryDescriptor) {
+	commitResults := stateMachine.GetLastCommitResults()
+
+	for _, ls := range stateMachine.Metadata.LogStreams {
+		ls.Status = varlogpb.LogStreamStatusSealed
+
+		lm, ok := stateMachine.LogStream.UncommitReports[ls.LogStreamID]
+		if !ok {
+			ms.logger.Panic("it could not recover state machine. invalid image")
+		}
+		lm.Status = varlogpb.LogStreamStatusSealed
+
+		committedLLSNOffset := types.MinLLSN
+		cr := commitResults.LookupCommitResult(ls.LogStreamID)
+		if cr != nil {
+			committedLLSNOffset = cr.CommittedLLSNOffset + types.LLSN(cr.CommittedGLSNLength)
+		}
+		for _, r := range lm.Replicas {
+			r.HighWatermark = cr.HighWatermark
+			r.UncommittedLLSNOffset = committedLLSNOffset
+			r.UncommittedLLSNLength = 0
+		}
+	}
+}
+
+func (ms *MetadataStorage) recoverCache(stateMachine *mrpb.MetadataRepositoryDescriptor, appliedIndex uint64) {
 	cache := proto.Clone(stateMachine.Metadata).(*varlogpb.MetadataDescriptor)
-	cache.AppliedIndex = snapIndex
+	cache.AppliedIndex = appliedIndex
 
 	ms.mcMu.Lock()
 	ms.metaCache = cache
 	ms.mcMu.Unlock()
+}
 
+func (ms *MetadataStorage) recoverStateMachine(stateMachine *mrpb.MetadataRepositoryDescriptor, appliedIndex uint64) {
 	ms.mtMu.Lock()
 	ms.lsMu.Lock()
 	ms.prMu.Lock()
@@ -1192,21 +1273,12 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 	ms.diffStateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
 
-	ms.metaAppliedIndex = snapIndex
+	ms.metaAppliedIndex = appliedIndex
+	ms.appliedIndex = appliedIndex
 
 	ms.prMu.Unlock()
 	ms.lsMu.Unlock()
 	ms.mtMu.Unlock()
-
-	// make nrUpdateSinceCommit > 0 to enable commit
-	ms.nrUpdateSinceCommit = 1
-	ms.appliedIndex = snapIndex
-	ms.origConfState = snapConfState
-
-	ms.jobC = make(chan *storageAsyncJob, 4096)
-	ms.Run()
-
-	return nil
 }
 
 func (ms *MetadataStorage) GetStorageNodes() []*varlogpb.StorageNodeDescriptor {
@@ -1497,7 +1569,11 @@ func (ms *MetadataStorage) mergeStateMachine() {
 }
 
 func (ms *MetadataStorage) needSnapshot() bool {
-	if ms.appliedIndex-ms.getSnapshotIndex() > ms.snapCount {
+	if ms.snapCount == 0 {
+		return false
+	}
+
+	if ms.appliedIndex-ms.getSnapshotIndex() >= ms.snapCount {
 		return true
 	}
 
@@ -1506,6 +1582,10 @@ func (ms *MetadataStorage) needSnapshot() bool {
 }
 
 func (ms *MetadataStorage) triggerSnapshot(appliedIndex uint64) {
+	if !ms.running.Load() {
+		return
+	}
+
 	if ms.isCopyOnWrite() {
 		return
 	}
@@ -1530,6 +1610,10 @@ func (ms *MetadataStorage) triggerSnapshot(appliedIndex uint64) {
 }
 
 func (ms *MetadataStorage) triggerMetadataCache(nodeIndex, requestIndex uint64) {
+	if !ms.running.Load() {
+		return
+	}
+
 	atomic.AddInt64(&ms.nrRunning, 1)
 	ms.setCopyOnWrite()
 

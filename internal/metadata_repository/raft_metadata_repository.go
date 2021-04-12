@@ -139,7 +139,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		fmt.Sprintf("%s/sml/%d", options.RaftDir, options.NodeID))
 
 	// TODO:: recover read
-	if options.EnableSML {
+	if options.EnableSML && !options.RecoverFromSML {
 		if err = mr.stateMachineLog.OpenForWrite(0); err != nil {
 			logger.Panic("stateMachineLog", zap.Error(err))
 		}
@@ -213,6 +213,12 @@ func (mr *RaftMetadataRepository) Run() {
 		case <-ctx.Done():
 			return
 		case <-mr.listenNotifyC:
+		}
+
+		if mr.options.RecoverFromSML {
+			if err := mr.recoverStateMachine(mctx); err != nil {
+				mr.logger.Panic("could not recover", zap.Error(err))
+			}
 		}
 
 		mr.logger.Info("listening", zap.String("address", mr.options.RPCBindAddress))
@@ -592,6 +598,15 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 			mr.applyRemovePeer(r, c.confState)
 		case *mrpb.Endpoint:
 			mr.applyEndpoint(r, e.NodeIndex, e.RequestIndex)
+		case *mrpb.RecoverStateMachine:
+			// TODO:: handle duplicated recover entry
+			mr.applyRecoverStateMachine(r, e.AppliedIndex, e.NodeIndex, e.RequestIndex)
+			if mr.options.EnableSML {
+				if err := mr.stateMachineLog.OpenForWrite(0); err != nil {
+					mr.logger.Panic("stateMachineLog", zap.Error(err))
+				}
+			}
+
 		}
 
 		mr.storage.UpdateAppliedIndex(e.AppliedIndex)
@@ -733,7 +748,8 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 	}
 
 	_, err := mr.withTelemetry(context.TODO(), "commit", func(ctx context.Context) (interface{}, error) {
-		curHWM := mr.storage.getHighWatermarkNoLock()
+		prevCommitResults := mr.storage.GetLastCommitResults()
+		curHWM := prevCommitResults.GetHighWatermark()
 		trimHWM := types.MaxGLSN
 		committedOffset := curHWM + types.GLSN(1)
 		totalCommitted := uint64(0)
@@ -774,8 +790,15 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 					}
 				}
 
+				committedLLSNOffset := types.MinLLSN
+				prevCommitResult := prevCommitResults.LookupCommitResult(lsID)
+				if prevCommitResult != nil {
+					committedLLSNOffset = prevCommitResult.CommittedLLSNOffset + types.LLSN(prevCommitResult.CommittedGLSNLength)
+				}
+
 				commit := &snpb.LogStreamCommitResult{
 					LogStreamID:         lsID,
+					CommittedLLSNOffset: committedLLSNOffset,
 					CommittedGLSNOffset: committedOffset,
 					CommittedGLSNLength: nrUncommit,
 				}
@@ -866,6 +889,21 @@ func (mr *RaftMetadataRepository) applyEndpoint(r *mrpb.Endpoint, nodeIndex, req
 	}
 
 	return nil
+}
+
+func (mr *RaftMetadataRepository) applyRecoverStateMachine(r *mrpb.RecoverStateMachine, appliedIndex, nodeIndex, requestIndex uint64) error {
+	err := mr.storage.RecoverStateMachine(r.StateMachine, appliedIndex, nodeIndex, requestIndex)
+	if err != nil {
+		return err
+	}
+
+	mr.reportCollector.Reset()
+
+	return mr.reportCollector.Recover(
+		mr.storage.GetStorageNodes(),
+		mr.storage.GetLogStreams(),
+		mr.storage.GetFirstCommitResults().GetHighWatermark(),
+	)
 }
 
 func (mr *RaftMetadataRepository) numCommitSince(lsID types.LogStreamID, glsn types.GLSN) uint64 {
@@ -1320,4 +1358,67 @@ func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string
 			Value: attribute.StringValue(mr.nodeID.String()),
 		})
 	return rsp, err
+}
+
+func (mr *RaftMetadataRepository) recoverStateMachine(ctx context.Context) error {
+	stateMachine, err := mr.restoreFromStateMachineLog(ctx)
+	if err != nil {
+		return err
+	}
+
+	// TODO:: sync with SNs. recover commitResults & UncommitReports
+
+	r := &mrpb.RecoverStateMachine{
+		StateMachine: stateMachine,
+	}
+
+	mr.propose(ctx, r, true)
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) restoreFromStateMachineLog(ctx context.Context) (*mrpb.MetadataRepositoryDescriptor, error) {
+	logIndex := uint64(0)
+
+	storage := NewMetadataStorage(nil, 0, mr.logger.Named("storage"))
+	snap := mr.raftNode.loadSnapshot()
+	if snap != nil {
+		err := storage.ApplySnapshot(snap.Data, nil, 0)
+		if err != nil {
+			return nil, err
+		}
+
+		logIndex = snap.Metadata.Index + 1
+	}
+
+	ents, err := mr.stateMachineLog.ReadFrom(logIndex)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, ent := range ents {
+		f := ent.Payload.GetValue()
+		switch r := f.(type) {
+		case *mrpb.RegisterStorageNode:
+			storage.RegisterStorageNode(r.StorageNode, 0, 0)
+		case *mrpb.UnregisterStorageNode:
+			storage.UnregisterStorageNode(r.StorageNodeID, 0, 0)
+		case *mrpb.RegisterLogStream:
+			storage.RegisterLogStream(r.LogStream, 0, 0)
+		case *mrpb.UnregisterLogStream:
+			storage.UnregisterLogStream(r.LogStreamID, 0, 0)
+		case *mrpb.UpdateLogStream:
+			storage.UpdateLogStream(r.LogStream, 0, 0)
+		case *mrpb.StateMachineLogCommitResult:
+			storage.AppendLogStreamCommitHistory(r.CommitResult)
+			if !r.TrimGlsn.Invalid() {
+				storage.TrimLogStreamCommitHistory(r.TrimGlsn)
+			}
+		}
+	}
+
+	// reset applied index & merge state machine
+	storage.UpdateAppliedIndex(0)
+
+	return storage.origStateMachine, nil
 }

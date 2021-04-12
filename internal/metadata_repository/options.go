@@ -56,6 +56,7 @@ type MetadataRepositoryOptions struct {
 	DebugAddress       string
 	ClusterID          types.ClusterID
 	Verbose            bool
+	RecoverFromSML     bool
 	NumRep             int
 	RaftProposeTimeout time.Duration
 	RPCTimeout         time.Duration

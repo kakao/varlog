@@ -7,6 +7,7 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 import "varlogpb/metadata.proto";
 import "snpb/log_stream_reporter.proto";
+import "mrpb/raft_metadata_repository.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/mrpb";
 
@@ -105,6 +106,10 @@ message Endpoint {
     string url = 2;
 }
 
+message RecoverStateMachine {
+    MetadataRepositoryDescriptor state_machine = 1;
+}
+
 message RaftEntry {
     message Request {
         option (gogoproto.onlyone) = true;
@@ -121,6 +126,7 @@ message RaftEntry {
         AddPeer add_peer = 10;
         RemovePeer remove_peer = 11;
         Endpoint endpoint = 12;
+        RecoverStateMachine recover_state_machine = 13;
     }
     uint64 node_index = 1;
     uint64 request_index = 2;
