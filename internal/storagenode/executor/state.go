@@ -13,7 +13,7 @@ import (
 type executorState int32
 
 const (
-	executorMutable executorState = iota
+	executorMutable executorState = iota + 1
 	executorSealing
 	executorSealed
 )

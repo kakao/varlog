@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"io"
 	"sync"
 
@@ -10,6 +11,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/logio"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/replication"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/timestamper"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -36,8 +38,7 @@ type executor struct {
 	rp               replicator
 	replicaConnector replication.Connector
 
-	committer   committer
-	commitTaskQ commitTaskQueue
+	committer committer
 
 	deferredTrim struct {
 		safetyGap types.GLSN
@@ -81,38 +82,60 @@ func New(opts ...Option) (*executor, error) {
 	}
 
 	lse.running.val = true
+	// NOTE: To push commitWaitTask into the commitWaitQ, the state of this executor is
+	// executorMutable temporarily.
+	lse.stateBarrier.state.store(executorMutable)
 
-	lsc, err := lse.restoreLogStreamContext()
+	// read RecoveryInfo from storage
+	ri, err := lse.storage.ReadRecoveryInfo()
+	if err != nil {
+		return nil, err
+	}
+
+	// restore LogStreamContext
+	// NOTE: LogStreamContext should be restored before initLogPipeline is called.
+	lsc, err := lse.restoreLogStreamContext(ri)
 	if err != nil {
 		return nil, err
 	}
 	lse.lsc = lsc
 	lse.decider = newDecidableCondition(lsc)
 
+	// replica connector
+	// NOTE: replicaConnector should be created before replicator is created in initLogPipeline.
 	replicaConnector, err := replication.NewConnector()
 	if err != nil {
 		return nil, err
 	}
 	lse.replicaConnector = replicaConnector
 
-	// resettable fields
-	if err := lse.init(); err != nil {
-		return nil, multierr.Append(err, replicaConnector.Close())
+	// init log pipeline
+	if err := lse.initLogPipeline(); err != nil {
+		return nil, err
 	}
+
+	// regenerate commitWaitTasks
+	if err := lse.regenerateCommitWaitTasks(ri); err != nil {
+		return nil, err
+	}
+
+	// NOTE: Storage doesn't need to be stateful, but the current implementation has information
+	// about the progress of LLSN and GLSN. If the implementations of executor and storage are
+	// stable, those states in the storage can be removed.
+	lastWrittenLLSN := lse.lsc.uncommittedLLSNEnd.Load() - 1
+	lastCommittedLLSN := lse.lsc.commitProgress.committedLLSNEnd - 1
+	lastCommittedGLSN := lse.lsc.localGLSN.localHighWatermark.Load()
+	lse.storage.RestoreStorage(lastWrittenLLSN, lastCommittedLLSN, lastCommittedGLSN)
+
+	// The executor should start in the sealing phase.
+	lse.stateBarrier.state.store(executorSealing)
 
 	return lse, nil
 }
 
-func (e *executor) init() error {
-	var (
-		err       error
-		rp        *replicatorImpl
-		writer    *writerImpl
-		committer *committerImpl
-	)
-
+func (e *executor) initLogPipeline() error {
 	// replication processor
-	rp, err = newReplicator(replicatorConfig{
+	rp, err := newReplicator(replicatorConfig{
 		queueSize: e.replicateQueueSize,
 		connector: e.replicaConnector,
 		state:     e,
@@ -122,7 +145,7 @@ func (e *executor) init() error {
 	}
 	e.rp = rp
 
-	committer, err = newCommitter(committerConfig{
+	committer, err := newCommitter(committerConfig{
 		commitTaskQueueSize: e.commitTaskQueueSize,
 		commitTaskBatchSize: e.committerBatchSize,
 		commitQueueSize:     e.commitQueueSize,
@@ -136,7 +159,7 @@ func (e *executor) init() error {
 	}
 	e.committer = committer
 
-	writer, err = newWriter(writerConfig{
+	writer, err := newWriter(writerConfig{
 		queueSize:  e.writeQueueSize,
 		batchSize:  e.writerBatchSize,
 		strg:       e.storage,
@@ -171,12 +194,7 @@ func (e *executor) Close() (err error) {
 	return multierr.Append(err, e.storage.Close())
 }
 
-func (e *executor) restoreLogStreamContext() (*logStreamContext, error) {
-	ri, err := e.storage.ReadRecoveryInfo()
-	if err != nil {
-		return nil, err
-	}
-
+func (e *executor) restoreLogStreamContext(ri storage.RecoveryInfo) (*logStreamContext, error) {
 	lsc := newLogStreamContext()
 	globalHighWatermark, uncommittedLLSNBegin := lsc.reportCommitBase()
 	uncommittedLLSNEnd := lsc.uncommittedLLSNEnd.Load()
@@ -206,8 +224,27 @@ func (e *executor) restoreLogStreamContext() (*logStreamContext, error) {
 	lsc.commitProgress.mu.Unlock()
 	lsc.localGLSN.localHighWatermark.Store(localHighWatermark)
 	lsc.localGLSN.localLowWatermark.Store(localLowWatermark)
-
 	return lsc, nil
+}
+
+func (e *executor) regenerateCommitWaitTasks(ri storage.RecoveryInfo) error {
+	if ri.UncommittedLogEntryBoundary.First.Invalid() {
+		return nil
+	}
+
+	firstLLSN := ri.UncommittedLogEntryBoundary.First
+	lastLLSN := ri.UncommittedLogEntryBoundary.Last
+	for llsn := firstLLSN; llsn <= lastLLSN; llsn++ {
+		cwt := newAppendTask()
+		cwt.llsn = llsn
+		cwt.wg.Add(1)
+
+		if err := e.committer.sendCommitWaitTask(context.Background(), cwt); err != nil {
+			return err
+		}
+	}
+	e.lsc.uncommittedLLSNEnd.Store(lastLLSN + 1)
+	return nil
 }
 
 func (e *executor) guard() error {

@@ -32,6 +32,17 @@ func newTestStorage(t *testing.T) (tss []testStorage) {
 	return tss
 }
 
+func testEachStorage(t *testing.T, testFunc func(t *testing.T, strg Storage)) {
+	tss := newTestStorage(t)
+	for i := range tss {
+		ts := tss[i]
+		t.Run(ts.name, func(t *testing.T) {
+			strg := ts.getter()
+			testFunc(t, strg)
+		})
+	}
+}
+
 func TestStorageWrite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
@@ -474,128 +485,194 @@ func TestStorageInterleavedCommit(t *testing.T) {
 	}
 }
 
-func TestStorageReadRecoveryInfo(t *testing.T) {
-	tss := newTestStorage(t)
-	for i := range tss {
-		ts := tss[i]
-		t.Run(ts.name, func(t *testing.T) {
-			strg := ts.getter()
-			defer func() {
-				require.NoError(t, strg.Close())
-			}()
+func TestStorageReadRecoveryInfoEmptyStorage(t *testing.T) {
+	testEachStorage(t, func(t *testing.T, strg Storage) {
+		ri, err := strg.ReadRecoveryInfo()
+		require.NoError(t, err)
+		require.False(t, ri.LastCommitContext.Found)
+		require.False(t, ri.LastNonEmptyCommitContext.Found)
+		require.False(t, ri.LogEntryBoundary.Found)
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.First)
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.Last)
 
-			var (
-				err error
-				ri  RecoveryInfo
-				wb  WriteBatch
-				cb  CommitBatch
-			)
+		require.NoError(t, strg.Close())
+	})
+}
 
-			// recovery info: empty storage
-			ri, err = strg.ReadRecoveryInfo()
-			require.NoError(t, err)
-			require.False(t, ri.LastCommitContext.Found)
-			require.False(t, ri.LastNonEmptyCommitContext.Found)
-			require.False(t, ri.LogEntryBoundary.Found)
-
-			// empty cc, hwm=1
-			cb, err = strg.NewCommitBatch(CommitContext{
-				HighWatermark:      1,
-				PrevHighWatermark:  0,
-				CommittedGLSNBegin: 1,
-				CommittedGLSNEnd:   1,
-			})
-			require.NoError(t, err)
-			require.NoError(t, cb.Apply())
-			require.NoError(t, cb.Close())
-
-			// recovery info: only empty cc
-			ri, err = strg.ReadRecoveryInfo()
-			require.NoError(t, err)
-			require.True(t, ri.LastCommitContext.Found)
-			require.False(t, ri.LastNonEmptyCommitContext.Found)
-			require.False(t, ri.LogEntryBoundary.Found)
-			require.Equal(t, types.GLSN(1), ri.LastCommitContext.CC.HighWatermark)
-
-			// empty cc, hwm=2
-			cb, err = strg.NewCommitBatch(CommitContext{
-				HighWatermark:      2,
-				PrevHighWatermark:  1,
-				CommittedGLSNBegin: 1,
-				CommittedGLSNEnd:   1,
-			})
-			require.NoError(t, err)
-			require.NoError(t, cb.Apply())
-			require.NoError(t, cb.Close())
-
-			// recovery info: only empty cc
-			ri, err = strg.ReadRecoveryInfo()
-			require.NoError(t, err)
-			require.True(t, ri.LastCommitContext.Found)
-			require.False(t, ri.LastNonEmptyCommitContext.Found)
-			require.False(t, ri.LogEntryBoundary.Found)
-			require.Equal(t, types.GLSN(2), ri.LastCommitContext.CC.HighWatermark)
-
-			// cc, hwm=5, le=(1,3), (2,4)
-			wb = strg.NewWriteBatch()
-			require.NoError(t, wb.Put(1, nil))
-			require.NoError(t, wb.Put(2, nil))
-			require.NoError(t, wb.Apply())
-			require.NoError(t, wb.Close())
-			cb, err = strg.NewCommitBatch(CommitContext{
-				HighWatermark:      5,
-				PrevHighWatermark:  2,
-				CommittedGLSNBegin: 3,
-				CommittedGLSNEnd:   5,
-			})
-			require.NoError(t, cb.Put(1, 3))
-			require.NoError(t, cb.Put(2, 4))
-			require.NoError(t, cb.Apply())
-			require.NoError(t, cb.Close())
-
-			// recovery info: last cc = non-empty and le
-			ri, err = strg.ReadRecoveryInfo()
-			require.NoError(t, err)
-			require.True(t, ri.LastCommitContext.Found)
-			require.True(t, ri.LastNonEmptyCommitContext.Found)
-			require.True(t, ri.LogEntryBoundary.Found)
-			require.Equal(t, types.GLSN(5), ri.LastCommitContext.CC.HighWatermark) // global hwm
-			require.Equal(t, types.GLSN(4), ri.LogEntryBoundary.Last.GLSN)         // local hwm
-			require.Equal(t, types.GLSN(3), ri.LogEntryBoundary.First.GLSN)        // local lwm
-			require.Equal(t, types.LLSN(2), ri.LogEntryBoundary.Last.LLSN)
-
-			// empty cc, hwm=6
-			cb, err = strg.NewCommitBatch(CommitContext{
-				HighWatermark:      6,
-				PrevHighWatermark:  5,
-				CommittedGLSNBegin: 5,
-				CommittedGLSNEnd:   5,
-			})
-			require.NoError(t, err)
-			require.NoError(t, cb.Apply())
-			require.NoError(t, cb.Close())
-
-			// empty cc, hwm=7
-			cb, err = strg.NewCommitBatch(CommitContext{
-				HighWatermark:      7,
-				PrevHighWatermark:  6,
-				CommittedGLSNBegin: 6, // or 5? TODO: clarify it
-				CommittedGLSNEnd:   6, // or 5? TODO: clarify it
-			})
-			require.NoError(t, err)
-			require.NoError(t, cb.Apply())
-			require.NoError(t, cb.Close())
-
-			// recovery info: last cc = empty and le
-			ri, err = strg.ReadRecoveryInfo()
-			require.NoError(t, err)
-			require.True(t, ri.LastCommitContext.Found)
-			require.True(t, ri.LastNonEmptyCommitContext.Found)
-			require.True(t, ri.LogEntryBoundary.Found)
-			require.Equal(t, types.GLSN(7), ri.LastCommitContext.CC.HighWatermark) // global hwm
-			require.Equal(t, types.GLSN(4), ri.LogEntryBoundary.Last.GLSN)         // local hwm
-			require.Equal(t, types.GLSN(3), ri.LogEntryBoundary.First.GLSN)        // local lwm
-			require.Equal(t, types.LLSN(2), ri.LogEntryBoundary.Last.LLSN)
+func TestStorageReadRecoveryInfoOnlyEmptyCommitContext(t *testing.T) {
+	testEachStorage(t, func(t *testing.T, strg Storage) {
+		// empty cc, hwm=1
+		cb, err := strg.NewCommitBatch(CommitContext{
+			HighWatermark:      1,
+			PrevHighWatermark:  0,
+			CommittedGLSNBegin: 1,
+			CommittedGLSNEnd:   1,
 		})
-	}
+		require.NoError(t, err)
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		// recovery info: only empty cc
+		ri, err := strg.ReadRecoveryInfo()
+		require.NoError(t, err)
+		require.True(t, ri.LastCommitContext.Found)
+		require.False(t, ri.LastNonEmptyCommitContext.Found)
+		require.False(t, ri.LogEntryBoundary.Found)
+		require.Equal(t, types.GLSN(1), ri.LastCommitContext.CC.HighWatermark)
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.First)
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.Last)
+
+		// empty cc, hwm=2
+		cb, err = strg.NewCommitBatch(CommitContext{
+			HighWatermark:      2,
+			PrevHighWatermark:  1,
+			CommittedGLSNBegin: 1,
+			CommittedGLSNEnd:   1,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		// recovery info: only empty cc
+		ri, err = strg.ReadRecoveryInfo()
+		require.NoError(t, err)
+		require.True(t, ri.LastCommitContext.Found)
+		require.False(t, ri.LastNonEmptyCommitContext.Found)
+		require.False(t, ri.LogEntryBoundary.Found)
+		require.Equal(t, types.GLSN(2), ri.LastCommitContext.CC.HighWatermark)
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.First)
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.Last)
+
+		require.NoError(t, strg.Close())
+	})
+}
+
+func TestStorageReadRecoveryInfoNonEmptyCommitContext(t *testing.T) {
+	testEachStorage(t, func(t *testing.T, strg Storage) {
+		// cc, hwm=5, le=(1,3), (2,4)
+		wb := strg.NewWriteBatch()
+		require.NoError(t, wb.Put(1, nil))
+		require.NoError(t, wb.Put(2, nil))
+		require.NoError(t, wb.Apply())
+		require.NoError(t, wb.Close())
+		cb, err := strg.NewCommitBatch(CommitContext{
+			HighWatermark:      5,
+			PrevHighWatermark:  0,
+			CommittedGLSNBegin: 3,
+			CommittedGLSNEnd:   5,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Put(1, 3))
+		require.NoError(t, cb.Put(2, 4))
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		// recovery info: last cc = non-empty and le
+		ri, err := strg.ReadRecoveryInfo()
+		require.NoError(t, err)
+		require.True(t, ri.LastCommitContext.Found)
+		require.True(t, ri.LastNonEmptyCommitContext.Found)
+		require.True(t, ri.LogEntryBoundary.Found)
+		require.Equal(t, types.GLSN(5), ri.LastCommitContext.CC.HighWatermark) // global hwm
+		require.Equal(t, types.GLSN(4), ri.LogEntryBoundary.Last.GLSN)         // local hwm
+		require.Equal(t, types.GLSN(3), ri.LogEntryBoundary.First.GLSN)        // local lwm
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.First)
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.Last)
+
+		require.NoError(t, strg.Close())
+	})
+}
+
+func TestStorageReadRecoveryInfoMixed(t *testing.T) {
+	testEachStorage(t, func(t *testing.T, strg Storage) {
+		wb := strg.NewWriteBatch()
+		require.NoError(t, wb.Put(1, nil))
+		require.NoError(t, wb.Put(2, nil))
+		require.NoError(t, wb.Apply())
+		require.NoError(t, wb.Close())
+		cb, err := strg.NewCommitBatch(CommitContext{
+			HighWatermark:      5,
+			PrevHighWatermark:  0,
+			CommittedGLSNBegin: 3,
+			CommittedGLSNEnd:   5,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Put(1, 3))
+		require.NoError(t, cb.Put(2, 4))
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		// empty cc, hwm=6
+		cb, err = strg.NewCommitBatch(CommitContext{
+			HighWatermark:      6,
+			PrevHighWatermark:  5,
+			CommittedGLSNBegin: 5,
+			CommittedGLSNEnd:   5,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		// empty cc, hwm=7
+		cb, err = strg.NewCommitBatch(CommitContext{
+			HighWatermark:      7,
+			PrevHighWatermark:  6,
+			CommittedGLSNBegin: 6, // or 5? TODO: clarify it
+			CommittedGLSNEnd:   6, // or 5? TODO: clarify it
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		// recovery info: last cc = empty and le
+		ri, err := strg.ReadRecoveryInfo()
+		require.NoError(t, err)
+		require.True(t, ri.LastCommitContext.Found)
+		require.True(t, ri.LastNonEmptyCommitContext.Found)
+		require.True(t, ri.LogEntryBoundary.Found)
+		require.Equal(t, types.GLSN(7), ri.LastCommitContext.CC.HighWatermark) // global hwm
+		require.Equal(t, types.GLSN(4), ri.LogEntryBoundary.Last.GLSN)         // local hwm
+		require.Equal(t, types.GLSN(3), ri.LogEntryBoundary.First.GLSN)        // local lwm
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.First)
+		require.Equal(t, types.InvalidLLSN, ri.UncommittedLogEntryBoundary.Last)
+
+		require.NoError(t, strg.Close())
+	})
+}
+
+func TestStorageRecoveryInfoUncommitted(t *testing.T) {
+	testEachStorage(t, func(t *testing.T, strg Storage) {
+		wb := strg.NewWriteBatch()
+		require.NoError(t, wb.Put(1, nil))
+		require.NoError(t, wb.Put(2, nil))
+		require.NoError(t, wb.Put(3, nil))
+		require.NoError(t, wb.Put(4, nil))
+		require.NoError(t, wb.Apply())
+		require.NoError(t, wb.Close())
+
+		cb, err := strg.NewCommitBatch(CommitContext{
+			HighWatermark:      5,
+			PrevHighWatermark:  0,
+			CommittedGLSNBegin: 1,
+			CommittedGLSNEnd:   3,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Put(1, 1))
+		require.NoError(t, cb.Put(2, 2))
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		ri, err := strg.ReadRecoveryInfo()
+		require.NoError(t, err)
+		require.True(t, ri.LastCommitContext.Found)
+		require.True(t, ri.LastNonEmptyCommitContext.Found)
+		require.True(t, ri.LogEntryBoundary.Found)
+		require.Equal(t, types.GLSN(5), ri.LastCommitContext.CC.HighWatermark) // global hwm
+		require.Equal(t, types.GLSN(2), ri.LogEntryBoundary.Last.GLSN)         // local hwm
+		require.Equal(t, types.GLSN(1), ri.LogEntryBoundary.First.GLSN)        // local lwm
+		require.Equal(t, types.LLSN(3), ri.UncommittedLogEntryBoundary.First)
+		require.Equal(t, types.LLSN(4), ri.UncommittedLogEntryBoundary.Last)
+
+		require.NoError(t, strg.Close())
+	})
 }

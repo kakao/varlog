@@ -20,7 +20,7 @@ import (
 const (
 	fakeWorkTime    = 10 * time.Millisecond
 	testConnTimeout = 10 * time.Microsecond
-	testCallTimeout = fakeWorkTime / 3
+	testCallTimeout = fakeWorkTime / 100
 )
 
 type TestServer struct {

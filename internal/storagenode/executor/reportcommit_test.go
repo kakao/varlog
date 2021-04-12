@@ -15,6 +15,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 func TestLogStreamReporter(t *testing.T) {
@@ -39,6 +40,13 @@ func TestLogStreamReporter(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, lse1.Close()) }()
 
+	status, sealedGLSN, err := lse1.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+	require.NoError(t, lse1.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse1.Metadata().Status)
+
 	strg2, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 	lse2, err := New(
@@ -48,6 +56,13 @@ func TestLogStreamReporter(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, lse2.Close()) }()
+
+	status, sealedGLSN, err = lse2.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+	require.NoError(t, lse2.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse2.Metadata().Status)
 
 	rcg := reportcommitter.NewMockGetter(ctrl)
 	rcg.EXPECT().ReportCommitter(gomock.Any()).DoAndReturn(

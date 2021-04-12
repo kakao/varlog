@@ -134,6 +134,27 @@ func (ps *pebbleStorage) readLogEntryBoundary() (types.LogEntry, types.LogEntry,
 	return firstLE, lastLE, true, err
 }
 
+func (ps *pebbleStorage) readUncommittedLogEntryBoundary(lastCommittedLogEntry types.LogEntry) (types.LLSN, types.LLSN) {
+	dk := encodeDataKey(lastCommittedLogEntry.LLSN + 1)
+	iter := ps.db.NewIter(&pebble.IterOptions{
+		LowerBound: dk,
+		UpperBound: []byte{dataKeySentinelPrefix},
+	})
+	defer func() {
+		_ = iter.Close()
+	}()
+
+	if !iter.First() {
+		return types.InvalidLLSN, types.InvalidLLSN
+	}
+	firstUncommittedLLSN := decodeDataKey(iter.Key())
+
+	iter.Last()
+	lastUncommittedLLSN := decodeDataKey(iter.Key())
+
+	return firstUncommittedLLSN, lastUncommittedLLSN
+}
+
 func (ps *pebbleStorage) ReadRecoveryInfo() (RecoveryInfo, error) {
 	ri := RecoveryInfo{}
 
@@ -155,6 +176,12 @@ func (ps *pebbleStorage) ReadRecoveryInfo() (RecoveryInfo, error) {
 	ri.LastNonEmptyCommitContext.CC = lastNonEmptyCC
 	ri.LastNonEmptyCommitContext.Found = foundLastNonEmptyCC
 
+	if foundLE {
+		firstUncommittedLLSN, lastUncommittedLLSN := ps.readUncommittedLogEntryBoundary(lastLE)
+		ri.UncommittedLogEntryBoundary.First = firstUncommittedLLSN
+		ri.UncommittedLogEntryBoundary.Last = lastUncommittedLLSN
+	}
+
 	if foundLastNonEmptyCC && (!foundLE || lastNonEmptyCC.CommittedGLSNEnd-1 != lastLE.GLSN) {
 		return ri, errors.New("corrupt: mismatch between commit context and log entries")
 	}
@@ -162,65 +189,6 @@ func (ps *pebbleStorage) ReadRecoveryInfo() (RecoveryInfo, error) {
 		return ri, errors.New("corrupt: mismatch between commit context and log entries")
 	}
 	return ri, nil
-	/*
-		ri.FirstLogEntry = firstLE
-		existLastLE := !lastLE.Invalid()
-
-		lastCC, existCC := ps.readLastCommitContext([]byte{commitContextKeySentinelPrefix})
-		var (
-			lastNonEmptyCC CommitContext
-			existLastNECC  bool
-		)
-
-		if !existCC {
-			if !existLastLE {
-				// ok: empty storage
-				return ri, nil
-			}
-			// corrupt: not exist CC, but exist LE
-			return ri, errors.New("corrupt: no commit context")
-		}
-
-		ri.LastCommitContext = lastCC
-		if !ri.LastCommitContext.Empty() {
-			ri.LastNonEmptyCommitContext = ri.LastCommitContext
-			// If the GLSN of the last committed log matches with the CommitContext, the storage can be
-			// restored by the CommitContext.
-			if existLastLE && ri.LastCommitContext.CommittedGLSNEnd-1 == lastLE.GLSN {
-				ri.LastLogEntry = lastLE
-				// ok: happy path
-				return ri, nil
-			}
-			// corrupt: exist CC (non-empty), but not exist enough LE
-			return ri, errors.New("corrupt: not enough log entries")
-		}
-
-		for existCC {
-			lastCC, existCC = ps.readLastCommitContext(encodeCommitContextKey(lastCC))
-			if lastCC.Empty() {
-				continue
-			}
-
-			ri.LastNonEmptyCommitContext = lastCC
-			le, err := ps.Read(lastCC.CommittedGLSNEnd - 1)
-			if err != nil {
-				// corrupt: exit CC (non-empty), but not exist enough LE
-				return ri, errors.New("corrupt: not enough log entries")
-			}
-			// ok: last CC (empty), non-empty CC, last LE
-			ri.LastLogEntry = le
-			return ri, nil
-		}
-
-		if !existLastLE {
-			// ok: all CCs are empty, and no LE
-			return ri, nil
-		}
-
-		// corrupt: all CCs are empty, but exist LE
-		// NB: CC-trimming issue
-		return ri, errors.New("corrupt: no usable commit context")
-	*/
 }
 
 //func (ps *pebbleStorage) RestoreLogStreamContext(lsc *logstreamcontext.LogStreamContext) bool {
@@ -281,14 +249,14 @@ func (ps *pebbleStorage) ReadRecoveryInfo() (RecoveryInfo, error) {
 //	lsc.LocalLowWatermark.Store(firstGLSN)
 //}
 
-func (ps *pebbleStorage) RestoreStorage(lastLLSN types.LLSN, lastGLSN types.GLSN) {
+func (ps *pebbleStorage) RestoreStorage(lastWrittenLLSN types.LLSN, lastCommittedLLSN types.LLSN, lastCommittedGLSN types.GLSN) {
 	ps.commitProgress.mu.Lock()
 	defer ps.commitProgress.mu.Unlock()
 	ps.writeProgress.mu.Lock()
 	defer ps.writeProgress.mu.Unlock()
-	ps.writeProgress.prevLLSN = lastLLSN
-	ps.commitProgress.prevLLSN = lastLLSN
-	ps.commitProgress.prevGLSN = lastGLSN
+	ps.writeProgress.prevLLSN = lastWrittenLLSN
+	ps.commitProgress.prevLLSN = lastCommittedLLSN
+	ps.commitProgress.prevGLSN = lastCommittedGLSN
 }
 
 func (ps *pebbleStorage) Path() string {

@@ -20,6 +20,10 @@ type RecoveryInfo struct {
 		Last  types.LogEntry
 		Found bool
 	}
+	UncommittedLogEntryBoundary struct {
+		First types.LLSN
+		Last  types.LLSN
+	}
 }
 
 // ScanResult represents a result of Scanner.Next() method. It should be immutable.
@@ -118,7 +122,7 @@ type Storage interface {
 	ReadRecoveryInfo() (RecoveryInfo, error)
 
 	// RestoreStorage restores the status of storage.
-	RestoreStorage(lastLLSN types.LLSN, lastGLSN types.GLSN)
+	RestoreStorage(lastWrittenLLSN types.LLSN, lastCommittedLLSN types.LLSN, lastCommittedGLSN types.GLSN)
 
 	// StoreCommitContext writes context information to storage when a group of logs are
 	// committed. It must be called ahead of commits that are requested by a metadata

@@ -2,7 +2,6 @@ package test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -46,20 +46,21 @@ type VarlogClusterOptions struct {
 
 type VarlogCluster struct {
 	VarlogClusterOptions
-	MRs            []*metadata_repository.RaftMetadataRepository
-	SNs            map[types.StorageNodeID]*storagenode.StorageNode
-	snWG           sync.WaitGroup
-	volumes        map[types.StorageNodeID]storagenode.Volume
-	snRPCEndpoints map[types.StorageNodeID]string
-	CM             vms.ClusterManager
-	CMCli          varlog.ClusterManagerClient
-	MRPeers        []string
-	MRRPCEndpoints []string
-	MRIDs          []types.NodeID
-	snID           types.StorageNodeID
-	lsID           types.LogStreamID
-	ClusterID      types.ClusterID
-	logger         *zap.Logger
+	MRs                []*metadata_repository.RaftMetadataRepository
+	SNs                map[types.StorageNodeID]*storagenode.StorageNode
+	snWG               sync.WaitGroup
+	volumes            map[types.StorageNodeID]storagenode.Volume
+	snRPCEndpoints     map[types.StorageNodeID]string
+	CM                 vms.ClusterManager
+	CMCli              varlog.ClusterManagerClient
+	MRPeers            []string
+	MRRPCEndpoints     []string
+	MRIDs              []types.NodeID
+	snID               types.StorageNodeID
+	lsID               types.LogStreamID
+	issuedLogStreamIDs []types.LogStreamID
+	ClusterID          types.ClusterID
+	logger             *zap.Logger
 
 	portLease *ports.Lease
 }
@@ -258,6 +259,8 @@ func (clus *VarlogCluster) Close() error {
 		sn.Close()
 	}
 	clus.snWG.Wait()
+
+	clus.issuedLogStreamIDs = nil
 
 	return multierr.Combine(err, clus.portLease.Release())
 }
@@ -470,24 +473,196 @@ func (clus *VarlogCluster) AddLS() (types.LogStreamID, error) {
 		Replicas:    replicas,
 	}
 
-	err := clus.MRs[0].RegisterLogStream(context.TODO(), ls)
-	return lsID, err
+	if err := clus.MRs[0].RegisterLogStream(context.TODO(), ls); err != nil {
+		return types.LogStreamID(0), err
+	}
+
+	// seal: assume that there is no vms
+	for _, replica := range replicas {
+		snid := replica.GetStorageNodeID()
+		_, _, err := clus.SNs[snid].Seal(context.TODO(), lsID, types.InvalidGLSN)
+		if err != nil {
+			return types.LogStreamID(0), err
+		}
+	}
+
+	// wait for sealed
+	sealed := testutil.CompareWaitN(50, func() bool {
+		for _, replica := range replicas {
+			snid := replica.GetStorageNodeID()
+			snmd, err := clus.SNs[snid].GetMetadata(context.TODO())
+			if err != nil {
+				return false
+			}
+			lsmd, ok := snmd.GetLogStream(lsID)
+			if !ok {
+				return false
+			}
+			if lsmd.GetStatus() != varlogpb.LogStreamStatusSealed {
+				return false
+			}
+		}
+		return true
+	})
+	if !sealed {
+		return types.LogStreamID(0), errors.New("invalid status, expected=LogStreamStatusSealed")
+	}
+
+	// unseal
+	for _, replica := range replicas {
+		snid := replica.GetStorageNodeID()
+		err := clus.SNs[snid].Unseal(context.TODO(), lsID)
+		if err != nil {
+			return types.LogStreamID(0), err
+		}
+	}
+
+	running := testutil.CompareWaitN(50, func() bool {
+		for _, replica := range replicas {
+			snid := replica.GetStorageNodeID()
+			snmd, err := clus.SNs[snid].GetMetadata(context.TODO())
+			if err != nil {
+				return false
+			}
+			lsmd, ok := snmd.GetLogStream(lsID)
+			if !ok {
+				return false
+			}
+			if !lsmd.GetStatus().Running() {
+				return false
+			}
+		}
+		return true
+	})
+	if !running {
+		return types.LogStreamID(0), errors.New("invalid status, expected=LogStreamStatusRunning")
+	}
+
+	return lsID, nil
 }
 
-func (clus *VarlogCluster) AddLSByVMS() (types.LogStreamID, error) {
+func (clus *VarlogCluster) AddLSByVMS() (logStreamID types.LogStreamID, err error) {
 	if len(clus.SNs) < clus.NrRep {
 		return types.LogStreamID(0), verrors.ErrInvalid
 	}
 
+	// FIXME: Use client api to add log stream since it is an integration test.
 	logStreamDesc, err := clus.CM.AddLogStream(context.TODO(), nil)
 	if err != nil {
 		return types.LogStreamID(0), err
 	}
 
-	lsID := logStreamDesc.GetLogStreamID()
-	clus.lsID = lsID + types.LogStreamID(1)
+	logStreamID = logStreamDesc.GetLogStreamID()
+	clus.lsID = logStreamID + types.LogStreamID(1)
 
-	return lsID, nil
+	// wait for sealed
+	sealed := testutil.CompareWaitN(50, func() bool {
+		time.Sleep(100 * time.Millisecond) // backoff
+
+		for _, rd := range logStreamDesc.GetReplicas() {
+			var snmd *varlogpb.StorageNodeMetadataDescriptor
+			snid := rd.GetStorageNodeID()
+			snmd, err = clus.SNs[snid].GetMetadata(context.TODO())
+			if err != nil {
+				return false
+			}
+			lsmd, ok := snmd.GetLogStream(logStreamID)
+			if !ok {
+				err = errors.Errorf("no such LogStreamID: %d", logStreamID)
+				return false
+			}
+			if lsmd.GetStatus() != varlogpb.LogStreamStatusSealed {
+				err = errors.Errorf("invalid status: expected=%v actual=%v",
+					varlogpb.LogStreamStatusSealed,
+					lsmd.GetStatus(),
+				)
+				return false
+			}
+		}
+
+		var md *varlogpb.MetadataDescriptor
+		md, err = clus.CM.Metadata(context.TODO())
+		if err != nil {
+			return false
+		}
+
+		var lsd *varlogpb.LogStreamDescriptor
+		lsd, err = md.HaveLogStream(logStreamID)
+		if err != nil {
+			return false
+		}
+
+		if lsd.GetStatus() != varlogpb.LogStreamStatusSealed {
+			err = errors.Errorf("invalid status: expected=%v actual=%v",
+				varlogpb.LogStreamStatusSealed,
+				lsd.GetStatus(),
+			)
+		}
+		return err == nil
+
+	})
+	if !sealed {
+		return types.LogStreamID(0), err
+	}
+
+	running := testutil.CompareWaitN(50, func() bool {
+		time.Sleep(100 * time.Millisecond) // backoff
+
+		// unseal
+		_, err = clus.CMCli.Unseal(context.TODO(), logStreamID)
+		if err != nil {
+			return false
+		}
+
+		for _, rd := range logStreamDesc.GetReplicas() {
+			var snmd *varlogpb.StorageNodeMetadataDescriptor
+			snid := rd.GetStorageNodeID()
+			snmd, err = clus.SNs[snid].GetMetadata(context.TODO())
+			if err != nil {
+				return false
+			}
+
+			lsmd, ok := snmd.GetLogStream(logStreamID)
+			if !ok {
+				err = errors.Errorf("no such LogStreamID: %d", logStreamID)
+				return false
+			}
+
+			if !lsmd.GetStatus().Running() {
+				err = errors.Errorf("invalid status: expected=%v actual=%v",
+					varlogpb.LogStreamStatusRunning,
+					lsmd.GetStatus(),
+				)
+				return false
+			}
+		}
+
+		var md *varlogpb.MetadataDescriptor
+		md, err = clus.CM.Metadata(context.TODO())
+		if err != nil {
+			return false
+
+		}
+		var lsd *varlogpb.LogStreamDescriptor
+		lsd, err = md.HaveLogStream(logStreamID)
+		if err != nil {
+			return false
+		}
+		if lsd.GetStatus() != varlogpb.LogStreamStatusRunning {
+			err = errors.Errorf("invalid status: expected=%v actual=%v",
+				varlogpb.LogStreamStatusRunning,
+				lsd.GetStatus(),
+			)
+		}
+
+		return err == nil
+	})
+	if !running {
+		return types.LogStreamID(0), err
+	}
+
+	clus.issuedLogStreamIDs = append(clus.issuedLogStreamIDs, logStreamID)
+	return logStreamID, nil
 }
 
 func (clus *VarlogCluster) UpdateLS(lsID types.LogStreamID, oldsn, newsn types.StorageNodeID) error {
@@ -701,6 +876,12 @@ func (clus *VarlogCluster) GetClusterManagerClient() varlog.ClusterManagerClient
 
 func (clus *VarlogCluster) Logger() *zap.Logger {
 	return clus.logger
+}
+
+func (clus *VarlogCluster) IssuedLogStreams() []types.LogStreamID {
+	ret := make([]types.LogStreamID, len(clus.issuedLogStreamIDs))
+	copy(ret, clus.issuedLogStreamIDs)
+	return ret
 }
 
 func WithTestCluster(opts VarlogClusterOptions, f func(env *VarlogCluster)) func() {

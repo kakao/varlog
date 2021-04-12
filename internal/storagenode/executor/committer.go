@@ -253,9 +253,7 @@ func (c *committerImpl) commit(ctx context.Context) error {
 	return nil
 }
 
-func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (err error) {
-	//defer ct.release()
-
+func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error {
 	globalHighWatermark, uncommittedLLSNBegin := c.lsc.reportCommitBase()
 	if globalHighWatermark != ct.prevHighWatermark {
 		// skip this commit
@@ -305,7 +303,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (err e
 			return errors.New("llsn mismatch")
 		}
 		cwt.glsn = glsn
-		if err = batch.Put(cwt.llsn, cwt.glsn); err != nil {
+		if err := batch.Put(cwt.llsn, cwt.glsn); err != nil {
 			return err
 		}
 		iter.next()
