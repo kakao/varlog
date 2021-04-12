@@ -76,7 +76,7 @@ func (e *executor) seal(_ context.Context, lastCommittedGLSN types.GLSN) (varlog
 	if err := e.storage.DeleteUncommitted(lastCommittedLLSN + 1); err != nil {
 		panic(err)
 	}
-	e.storage.RestoreStorage(lastCommittedLLSN, lastCommittedGLSN)
+	e.storage.RestoreStorage(lastCommittedLLSN, lastCommittedLLSN, lastCommittedGLSN)
 
 	// reset lsc
 	e.lsc.uncommittedLLSNEnd.Store(lastCommittedLLSN + 1)

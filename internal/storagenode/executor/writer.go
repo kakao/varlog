@@ -219,7 +219,10 @@ func (w *writerImpl) writeLoop(ctx context.Context) {
 		}
 
 		if !w.lsc.uncommittedLLSNEnd.CompareAndSwap(oldLLSN, newLLSN) {
-			panic("more than one writer?")
+			panic(errors.Errorf(
+				"uncommittedLLSNEnd swap failure: current=%d old=%d new=%d: more than one writer?",
+				w.lsc.uncommittedLLSNEnd.Load(), oldLLSN, newLLSN,
+			))
 			// w.state.setSealing()
 			// continue
 		}

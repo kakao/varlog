@@ -346,15 +346,15 @@ func (mr *MockStorageMockRecorder) ReadRecoveryInfo() *gomock.Call {
 }
 
 // RestoreStorage mocks base method.
-func (m *MockStorage) RestoreStorage(arg0 types.LLSN, arg1 types.GLSN) {
+func (m *MockStorage) RestoreStorage(arg0, arg1 types.LLSN, arg2 types.GLSN) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RestoreStorage", arg0, arg1)
+	m.ctrl.Call(m, "RestoreStorage", arg0, arg1, arg2)
 }
 
 // RestoreStorage indicates an expected call of RestoreStorage.
-func (mr *MockStorageMockRecorder) RestoreStorage(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockStorageMockRecorder) RestoreStorage(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoreStorage", reflect.TypeOf((*MockStorage)(nil).RestoreStorage), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoreStorage", reflect.TypeOf((*MockStorage)(nil).RestoreStorage), arg0, arg1, arg2)
 }
 
 // Scan mocks base method.

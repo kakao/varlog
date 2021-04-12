@@ -112,6 +112,7 @@ func newTestStorage(ctrl *gomock.Controller, cfg *testStorageConfig) storage.Sto
 	strg.EXPECT().NewCommitBatch(gomock.Any()).Return(commitBatch, nil).AnyTimes()
 	strg.EXPECT().ReadRecoveryInfo().Return(storage.RecoveryInfo{}, nil).AnyTimes()
 	strg.EXPECT().Close().Return(nil).AnyTimes()
+	strg.EXPECT().RestoreStorage(gomock.Any(), gomock.Any(), gomock.Any()).Return().AnyTimes()
 	return strg
 }
 
@@ -130,6 +131,14 @@ func TestExecutorAppend(t *testing.T) {
 		err = lse.Close()
 		require.NoError(t, err)
 	}()
+
+	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	for hwm := types.GLSN(1); hwm <= types.GLSN(numAppends); hwm++ {
 		wg := sync.WaitGroup{}
@@ -180,6 +189,14 @@ func TestExecutorRead(t *testing.T) {
 		err = lse.Close()
 		require.NoError(t, err)
 	}()
+
+	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	// read invalid position
 	_, err = lse.Read(context.TODO(), 0)
@@ -259,6 +276,14 @@ func TestExecutorTrim(t *testing.T) {
 		err = lse.Close()
 		require.NoError(t, err)
 	}()
+
+	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	// HWM:         5          10
 	// COMMIT:  +-------+  +---- ...
@@ -351,6 +376,14 @@ func TestExecutorSubscribe(t *testing.T) {
 		err = lse.Close()
 		require.NoError(t, err)
 	}()
+
+	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	// HWM:         5          10
 	// COMMIT:  +-------+  +---- ...
@@ -505,6 +538,14 @@ func TestReplicate(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
+	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
+
 	for i := 1; i <= numAppends; i++ {
 		expectedHWM := types.GLSN(i * 5)
 		expectedLLSN := types.LLSN(i)
@@ -555,6 +596,14 @@ func TestExecutorSeal(t *testing.T) {
 		err = lse.Close()
 		require.NoError(t, err)
 	}()
+
+	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	// append
 	wg := sync.WaitGroup{}
@@ -694,6 +743,14 @@ func TestExecutorWithRecover(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
+	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
+
 	err = lse.withRecover(func() error {
 		return nil
 	})
@@ -729,6 +786,14 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 
 	lse, err := New(WithStorage(strg))
 	require.NoError(t, err)
+
+	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	var lastGLSNs [numWriter]types.AtomicGLSN
 	var wg sync.WaitGroup
@@ -818,4 +883,111 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 	t.Logf("MaxGLSN: %d", maxGLSN)
 
 	wg.Wait()
+}
+
+func TestExecutorNew(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	path := t.TempDir()
+
+	strg, err := storage.NewStorage(storage.WithPath(path))
+	require.NoError(t, err)
+	lse, err := New(WithStorage(strg))
+	require.NoError(t, err)
+
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+
+	var (
+		appendWg sync.WaitGroup
+		commitWg sync.WaitGroup
+	)
+
+	appendWg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func() {
+			defer appendWg.Done()
+			_, _ = lse.Append(context.TODO(), []byte("foo"))
+		}()
+	}
+
+	commitWg.Add(1)
+	go func() {
+		defer commitWg.Done()
+		require.Eventually(t, func() bool {
+			report, err := lse.GetReport(context.TODO())
+			require.NoError(t, err)
+			return report.UncommittedLLSNLength == 10
+		}, time.Second, time.Millisecond)
+		err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+			HighWatermark:       5,
+			PrevHighWatermark:   0,
+			CommittedGLSNOffset: 1,
+			CommittedGLSNLength: 5,
+		})
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			report, err := lse.GetReport(context.TODO())
+			require.NoError(t, err)
+			return report.HighWatermark == 5
+		}, time.Second, time.Millisecond)
+	}()
+
+	commitWg.Wait()
+
+	report, err := lse.GetReport(context.TODO())
+	require.NoError(t, err)
+	require.Equal(t, types.GLSN(5), report.HighWatermark)
+	require.Equal(t, types.LLSN(6), report.UncommittedLLSNOffset)
+	require.EqualValues(t, 5, report.UncommittedLLSNLength)
+
+	require.NoError(t, lse.Close())
+	appendWg.Wait()
+
+	// Restart executor
+	strg, err = storage.NewStorage(storage.WithPath(path))
+	require.NoError(t, err)
+	lse, err = New(WithStorage(strg))
+	require.NoError(t, err)
+
+	report, err = lse.GetReport(context.TODO())
+	require.NoError(t, err)
+	require.Equal(t, types.GLSN(5), report.HighWatermark)
+	require.Equal(t, types.LLSN(6), report.UncommittedLLSNOffset)
+	require.EqualValues(t, 5, report.UncommittedLLSNLength)
+
+	err = lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+		HighWatermark:       8,
+		PrevHighWatermark:   5,
+		CommittedGLSNOffset: 6,
+		CommittedGLSNLength: 3,
+	})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		report, err := lse.GetReport(context.TODO())
+		require.NoError(t, err)
+		return report.HighWatermark == 8
+	}, time.Second, time.Millisecond)
+
+	// Seal
+	status, _, err = lse.Seal(context.TODO(), types.GLSN(8))
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	// Check if uncommitted logs are deleted
+	report, err = lse.GetReport(context.TODO())
+	require.NoError(t, err)
+	require.Equal(t, types.GLSN(8), report.HighWatermark)
+	require.Equal(t, types.LLSN(9), report.UncommittedLLSNOffset)
+	require.EqualValues(t, 0, report.UncommittedLLSNLength)
+
+	// Unseal
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
+
+	require.NoError(t, lse.Close())
+
 }

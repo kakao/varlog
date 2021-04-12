@@ -376,7 +376,7 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 
 	logStreamDesc := &varlogpb.LogStreamDescriptor{
 		LogStreamID: logStreamID,
-		Status:      varlogpb.LogStreamStatusRunning,
+		Status:      varlogpb.LogStreamStatusSealing,
 		Replicas:    replicas,
 	}
 
@@ -600,6 +600,8 @@ func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStrea
 	if clusmeta, err = cm.cmView.ClusterMetadata(ctx); err != nil {
 		goto errOut
 	}
+
+	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
 	return clusmeta.GetLogStream(logStreamID), nil
 
 errOut:

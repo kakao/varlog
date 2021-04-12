@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/rand"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
-	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/vms"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
@@ -29,7 +27,9 @@ import (
 
 func TestVarlogManagerServer(t *testing.T) {
 	vmsOpts := vms.DefaultOptions()
-	vmsOpts.HeartbeatTimeout *= 10
+	vmsOpts.Tick = 100 * time.Millisecond
+	vmsOpts.HeartbeatTimeout = 30
+	vmsOpts.ReportInterval = 10
 	vmsOpts.Logger = zap.L()
 	opts := test.VarlogClusterOptions{
 		NrMR:              1,
@@ -40,60 +40,31 @@ func TestVarlogManagerServer(t *testing.T) {
 
 	Convey("AddStorageNode", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
 		nrSN := opts.NrRep
-		snWg := sync.WaitGroup{}
+
+		defer env.Close()
 
 		cmcli := env.GetClusterManagerClient()
 
-		for i := 0; i < nrSN; i++ {
-			storageNodeID := types.StorageNodeID(i + 1)
-			volume, err := storagenode.NewVolume(t.TempDir())
-			So(err, ShouldBeNil)
-
-			sn, err := storagenode.New(context.TODO(),
-				storagenode.WithClusterID(env.ClusterID),
-				storagenode.WithStorageNodeID(storageNodeID),
-				storagenode.WithListenAddress("127.0.0.1:0"),
-				storagenode.WithVolumes(volume),
-			)
-			So(err, ShouldBeNil)
-			snWg.Add(1)
-			go func() {
-				defer snWg.Done()
-				_ = sn.Run()
-			}()
-			env.SNs[storageNodeID] = sn
-		}
-
-		defer func() {
-			for _, sn := range env.SNs {
-				sn.Close()
-			}
-			snWg.Wait()
-		}()
-
 		var replicas []*varlogpb.ReplicaDescriptor
 		snAddrs := make(map[types.StorageNodeID]string, nrSN)
-		for snid, sn := range env.SNs {
-			meta, err := sn.GetMetadata(context.TODO())
-			So(err, ShouldBeNil)
-			snAddr := meta.GetStorageNode().GetAddress()
-			So(len(snAddr), ShouldBeGreaterThan, 0)
-			snAddrs[snid] = snAddr
 
-			rsp, err := cmcli.AddStorageNode(context.TODO(), snAddr)
+		for i := 0; i < nrSN; i++ {
+			snid, err := env.AddSNByVMS()
 			So(err, ShouldBeNil)
-			snmeta := rsp.GetStorageNode()
-			So(snmeta.GetStorageNode().GetStorageNodeID(), ShouldEqual, snid)
-
-			storages := snmeta.GetStorageNode().GetStorages()
-			So(len(storages), ShouldBeGreaterThan, 0)
-			path := storages[0].GetPath()
-			So(len(path), ShouldBeGreaterThan, 0)
+			sn, ok := env.SNs[snid]
+			So(ok, ShouldBeTrue)
+			snmd, err := sn.GetMetadata(context.TODO())
+			So(err, ShouldBeNil)
+			path := snmd.GetStorageNode().GetStorages()[0].GetPath()
 			replica := &varlogpb.ReplicaDescriptor{
 				StorageNodeID: snid,
 				Path:          path,
 			}
 			replicas = append(replicas, replica)
+
+			snAddr := snmd.GetStorageNode().GetAddress()
+			So(len(snAddr), ShouldBeGreaterThan, 0)
+			snAddrs[snid] = snAddr
 		}
 
 		Convey("UnregisterStorageNode", func() {
@@ -120,34 +91,8 @@ func TestVarlogManagerServer(t *testing.T) {
 		})
 
 		Convey("AddLogStream - Simple", func() {
-			timeCheckSN := env.SNs[1]
-			snmeta, err := timeCheckSN.GetMetadata(context.TODO())
+			logStreamID, err := env.AddLSByVMS()
 			So(err, ShouldBeNil)
-			updatedAt := snmeta.GetUpdatedTime()
-
-			rsp, err := cmcli.AddLogStream(context.TODO(), nil)
-			So(err, ShouldBeNil)
-			logStreamDesc := rsp.GetLogStream()
-			So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
-			logStreamID := logStreamDesc.GetLogStreamID()
-
-			snmeta, err = timeCheckSN.GetMetadata(context.TODO())
-			So(err, ShouldBeNil)
-			So(snmeta.GetUpdatedTime(), ShouldNotEqual, updatedAt)
-			updatedAt = snmeta.GetUpdatedTime()
-
-			// pass since NrRep equals to NrSN
-			var snidList []types.StorageNodeID
-			for _, replica := range logStreamDesc.GetReplicas() {
-				snidList = append(snidList, replica.GetStorageNodeID())
-			}
-			for snid := range env.SNs {
-				So(snidList, ShouldContain, snid)
-			}
-
-			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
-			So(err, ShouldBeNil)
-			So(clusmeta.GetLogStream(logStreamID), ShouldNotBeNil)
 
 			Convey("UnregisterLogStream ERROR: running log stream", func() {
 				_, err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
@@ -174,7 +119,6 @@ func TestVarlogManagerServer(t *testing.T) {
 					snmeta, err := sn.GetMetadata(context.TODO())
 					So(err, ShouldBeNil)
 					So(snmeta.GetLogStreams()[0].GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
-					So(snmeta.GetUpdatedTime(), ShouldNotEqual, updatedAt)
 				}
 
 				Convey("UnregisterLogStream OK: sealed log stream", func() {
