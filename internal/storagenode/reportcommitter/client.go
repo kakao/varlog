@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
@@ -17,6 +18,7 @@ import (
 type Client interface {
 	GetReport(context.Context) (*snpb.GetReportResponse, error)
 	Commit(context.Context, *snpb.CommitRequest) error
+	GetPrevCommitResult(ctx context.Context, hwm types.GLSN) (*snpb.GetPrevCommitResultResponse, error)
 	Close() error
 }
 
@@ -45,6 +47,13 @@ func (c *client) GetReport(ctx context.Context) (*snpb.GetReportResponse, error)
 func (c *client) Commit(ctx context.Context, cr *snpb.CommitRequest) error {
 	_, err := c.rpcClient.Commit(ctx, cr)
 	return errors.WithStack(verrors.FromStatusError(err))
+}
+
+func (c *client) GetPrevCommitResult(ctx context.Context, hwm types.GLSN) (*snpb.GetPrevCommitResultResponse, error) {
+	rsp, err := c.rpcClient.GetPrevCommitResult(ctx, &snpb.GetPrevCommitResultRequest{
+		HighWatermark: hwm,
+	})
+	return rsp, errors.WithStack(verrors.FromStatusError(err))
 }
 
 func (c *client) Close() error {

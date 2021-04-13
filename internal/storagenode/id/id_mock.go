@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
 	types "github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
