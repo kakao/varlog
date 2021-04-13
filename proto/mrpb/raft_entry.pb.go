@@ -13,7 +13,7 @@ import (
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-	_ "github.com/golang/protobuf/ptypes/timestamp"
+	_ "google.golang.org/protobuf/types/known/timestamppb"
 
 	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
 	snpb "github.com/kakao/varlog/proto/snpb"

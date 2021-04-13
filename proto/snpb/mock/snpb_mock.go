@@ -10,9 +10,10 @@ import (
 
 	types "github.com/gogo/protobuf/types"
 	gomock "github.com/golang/mock/gomock"
-	snpb "github.com/kakao/varlog/proto/snpb"
 	grpc "google.golang.org/grpc"
 	metadata "google.golang.org/grpc/metadata"
+
+	snpb "github.com/kakao/varlog/proto/snpb"
 )
 
 // MockReplicatorClient is a mock of ReplicatorClient interface.
@@ -871,6 +872,26 @@ func (mr *MockLogStreamReporterClientMockRecorder) Commit(arg0, arg1 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporterClient)(nil).Commit), varargs...)
 }
 
+// GetPrevCommitResult mocks base method.
+func (m *MockLogStreamReporterClient) GetPrevCommitResult(arg0 context.Context, arg1 *snpb.GetPrevCommitResultRequest, arg2 ...grpc.CallOption) (*snpb.GetPrevCommitResultResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetPrevCommitResult", varargs...)
+	ret0, _ := ret[0].(*snpb.GetPrevCommitResultResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPrevCommitResult indicates an expected call of GetPrevCommitResult.
+func (mr *MockLogStreamReporterClientMockRecorder) GetPrevCommitResult(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrevCommitResult", reflect.TypeOf((*MockLogStreamReporterClient)(nil).GetPrevCommitResult), varargs...)
+}
+
 // GetReport mocks base method.
 func (m *MockLogStreamReporterClient) GetReport(arg0 context.Context, arg1 *snpb.GetReportRequest, arg2 ...grpc.CallOption) (*snpb.GetReportResponse, error) {
 	m.ctrl.T.Helper()
@@ -927,6 +948,21 @@ func (m *MockLogStreamReporterServer) Commit(arg0 context.Context, arg1 *snpb.Co
 func (mr *MockLogStreamReporterServerMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporterServer)(nil).Commit), arg0, arg1)
+}
+
+// GetPrevCommitResult mocks base method.
+func (m *MockLogStreamReporterServer) GetPrevCommitResult(arg0 context.Context, arg1 *snpb.GetPrevCommitResultRequest) (*snpb.GetPrevCommitResultResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPrevCommitResult", arg0, arg1)
+	ret0, _ := ret[0].(*snpb.GetPrevCommitResultResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPrevCommitResult indicates an expected call of GetPrevCommitResult.
+func (mr *MockLogStreamReporterServerMockRecorder) GetPrevCommitResult(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrevCommitResult", reflect.TypeOf((*MockLogStreamReporterServer)(nil).GetPrevCommitResult), arg0, arg1)
 }
 
 // GetReport mocks base method.
