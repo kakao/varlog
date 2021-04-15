@@ -111,7 +111,3 @@ func (s *server) Commit(ctx context.Context, req *snpb.CommitRequest) (*snpb.Com
 	)
 	return rspI.(*snpb.CommitResponse), verrors.ToStatusErrorWithCode(err, code)
 }
-
-func (s *server) GetPrevCommitResult(ctx context.Context, req *snpb.GetPrevCommitResultRequest) (*snpb.GetPrevCommitResultResponse, error) {
-	panic("not yet implemented")
-}

@@ -4,6 +4,7 @@
 package snpb
 
 import (
+	bytes "bytes"
 	context "context"
 	fmt "fmt"
 	io "io"
@@ -31,6 +32,34 @@ var _ = math.Inf
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
+
+type LogStreamCommitInfo_Status int32
+
+const (
+	GetPrevCommitStatusOK           LogStreamCommitInfo_Status = 0
+	GetPrevCommitStatusNotFound     LogStreamCommitInfo_Status = 1
+	GetPrevCommitStatusInconsistent LogStreamCommitInfo_Status = 2
+)
+
+var LogStreamCommitInfo_Status_name = map[int32]string{
+	0: "OK",
+	1: "NOT_FOUND",
+	2: "INCONSISTENT",
+}
+
+var LogStreamCommitInfo_Status_value = map[string]int32{
+	"OK":           0,
+	"NOT_FOUND":    1,
+	"INCONSISTENT": 2,
+}
+
+func (x LogStreamCommitInfo_Status) String() string {
+	return proto.EnumName(LogStreamCommitInfo_Status_name, int32(x))
+}
+
+func (LogStreamCommitInfo_Status) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_b2a108895042472a, []int{11, 0}
+}
 
 type GetMetadataRequest struct {
 	ClusterID            github_com_kakao_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
@@ -678,7 +707,213 @@ func (m *SyncResponse) GetStatus() *SyncStatus {
 	return nil
 }
 
+type GetPrevCommitInfoRequest struct {
+	HighWatermark        github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,1,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
+	XXX_unrecognized     []byte                                            `json:"-"`
+	XXX_sizecache        int32                                             `json:"-"`
+}
+
+func (m *GetPrevCommitInfoRequest) Reset()         { *m = GetPrevCommitInfoRequest{} }
+func (m *GetPrevCommitInfoRequest) String() string { return proto.CompactTextString(m) }
+func (*GetPrevCommitInfoRequest) ProtoMessage()    {}
+func (*GetPrevCommitInfoRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b2a108895042472a, []int{10}
+}
+func (m *GetPrevCommitInfoRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetPrevCommitInfoRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetPrevCommitInfoRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetPrevCommitInfoRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetPrevCommitInfoRequest.Merge(m, src)
+}
+func (m *GetPrevCommitInfoRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetPrevCommitInfoRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetPrevCommitInfoRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetPrevCommitInfoRequest proto.InternalMessageInfo
+
+func (m *GetPrevCommitInfoRequest) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.HighWatermark
+	}
+	return 0
+}
+
+type LogStreamCommitInfo struct {
+	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	Status               LogStreamCommitInfo_Status                               `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.snpb.LogStreamCommitInfo_Status" json:"status,omitempty"`
+	CommittedLLSNOffset  github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,3,opt,name=committed_llsn_offset,json=committedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"committed_llsn_offset,omitempty"`
+	CommittedGLSNOffset  github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,4,opt,name=committed_glsn_offset,json=committedGlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_offset,omitempty"`
+	CommittedGLSNLength  uint64                                                   `protobuf:"varint,5,opt,name=committed_glsn_length,json=committedGlsnLength,proto3" json:"committed_glsn_length,omitempty"`
+	HighestWrittenLLSN   github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,6,opt,name=highest_written_llsn,json=highestWrittenLlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"highest_written_llsn,omitempty"`
+	HighWatermark        github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,7,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
+	PrevHighWatermark    github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,8,opt,name=prev_high_watermark,json=prevHighWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"prev_high_watermark,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
+	XXX_unrecognized     []byte                                                   `json:"-"`
+	XXX_sizecache        int32                                                    `json:"-"`
+}
+
+func (m *LogStreamCommitInfo) Reset()         { *m = LogStreamCommitInfo{} }
+func (m *LogStreamCommitInfo) String() string { return proto.CompactTextString(m) }
+func (*LogStreamCommitInfo) ProtoMessage()    {}
+func (*LogStreamCommitInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b2a108895042472a, []int{11}
+}
+func (m *LogStreamCommitInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogStreamCommitInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_LogStreamCommitInfo.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *LogStreamCommitInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogStreamCommitInfo.Merge(m, src)
+}
+func (m *LogStreamCommitInfo) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *LogStreamCommitInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogStreamCommitInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogStreamCommitInfo proto.InternalMessageInfo
+
+func (m *LogStreamCommitInfo) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
+	if m != nil {
+		return m.LogStreamID
+	}
+	return 0
+}
+
+func (m *LogStreamCommitInfo) GetStatus() LogStreamCommitInfo_Status {
+	if m != nil {
+		return m.Status
+	}
+	return GetPrevCommitStatusOK
+}
+
+func (m *LogStreamCommitInfo) GetCommittedLLSNOffset() github_com_kakao_varlog_pkg_types.LLSN {
+	if m != nil {
+		return m.CommittedLLSNOffset
+	}
+	return 0
+}
+
+func (m *LogStreamCommitInfo) GetCommittedGLSNOffset() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.CommittedGLSNOffset
+	}
+	return 0
+}
+
+func (m *LogStreamCommitInfo) GetCommittedGLSNLength() uint64 {
+	if m != nil {
+		return m.CommittedGLSNLength
+	}
+	return 0
+}
+
+func (m *LogStreamCommitInfo) GetHighestWrittenLLSN() github_com_kakao_varlog_pkg_types.LLSN {
+	if m != nil {
+		return m.HighestWrittenLLSN
+	}
+	return 0
+}
+
+func (m *LogStreamCommitInfo) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.HighWatermark
+	}
+	return 0
+}
+
+func (m *LogStreamCommitInfo) GetPrevHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.PrevHighWatermark
+	}
+	return 0
+}
+
+type GetPrevCommitInfoResponse struct {
+	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	CommitInfos          []*LogStreamCommitInfo                                     `protobuf:"bytes,2,rep,name=commit_infos,json=commitInfos,proto3" json:"commit_infos,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
+	XXX_unrecognized     []byte                                                     `json:"-"`
+	XXX_sizecache        int32                                                      `json:"-"`
+}
+
+func (m *GetPrevCommitInfoResponse) Reset()         { *m = GetPrevCommitInfoResponse{} }
+func (m *GetPrevCommitInfoResponse) String() string { return proto.CompactTextString(m) }
+func (*GetPrevCommitInfoResponse) ProtoMessage()    {}
+func (*GetPrevCommitInfoResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_b2a108895042472a, []int{12}
+}
+func (m *GetPrevCommitInfoResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetPrevCommitInfoResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetPrevCommitInfoResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetPrevCommitInfoResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetPrevCommitInfoResponse.Merge(m, src)
+}
+func (m *GetPrevCommitInfoResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetPrevCommitInfoResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetPrevCommitInfoResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetPrevCommitInfoResponse proto.InternalMessageInfo
+
+func (m *GetPrevCommitInfoResponse) GetStorageNodeID() github_com_kakao_varlog_pkg_types.StorageNodeID {
+	if m != nil {
+		return m.StorageNodeID
+	}
+	return 0
+}
+
+func (m *GetPrevCommitInfoResponse) GetCommitInfos() []*LogStreamCommitInfo {
+	if m != nil {
+		return m.CommitInfos
+	}
+	return nil
+}
+
 func init() {
+	proto.RegisterEnum("varlog.snpb.LogStreamCommitInfo_Status", LogStreamCommitInfo_Status_name, LogStreamCommitInfo_Status_value)
 	proto.RegisterType((*GetMetadataRequest)(nil), "varlog.snpb.GetMetadataRequest")
 	proto.RegisterType((*GetMetadataResponse)(nil), "varlog.snpb.GetMetadataResponse")
 	proto.RegisterType((*AddLogStreamRequest)(nil), "varlog.snpb.AddLogStreamRequest")
@@ -690,63 +925,140 @@ func init() {
 	proto.RegisterType((*SyncRequest)(nil), "varlog.snpb.SyncRequest")
 	proto.RegisterType((*SyncRequest_BackupNode)(nil), "varlog.snpb.SyncRequest.BackupNode")
 	proto.RegisterType((*SyncResponse)(nil), "varlog.snpb.SyncResponse")
+	proto.RegisterType((*GetPrevCommitInfoRequest)(nil), "varlog.snpb.GetPrevCommitInfoRequest")
+	proto.RegisterType((*LogStreamCommitInfo)(nil), "varlog.snpb.LogStreamCommitInfo")
+	proto.RegisterType((*GetPrevCommitInfoResponse)(nil), "varlog.snpb.GetPrevCommitInfoResponse")
 }
 
 func init() { proto.RegisterFile("proto/snpb/management.proto", fileDescriptor_b2a108895042472a) }
 
 var fileDescriptor_b2a108895042472a = []byte{
-	// 808 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x57, 0xcb, 0x6e, 0xf3, 0x44,
-	0x14, 0xae, 0x93, 0xfc, 0x69, 0x73, 0xdc, 0x50, 0x75, 0x42, 0xdb, 0xe0, 0x4a, 0x75, 0x31, 0x2c,
-	0xd8, 0xd4, 0x11, 0x41, 0x42, 0x15, 0x57, 0x35, 0x2d, 0xaa, 0x0a, 0x6d, 0x41, 0x8e, 0xba, 0x01,
-	0x89, 0x68, 0x62, 0x4f, 0x4d, 0x14, 0xdb, 0x63, 0x3c, 0x93, 0xa2, 0x20, 0xde, 0x05, 0x16, 0xf0,
-	0x26, 0x48, 0x74, 0xc9, 0x1e, 0xc9, 0x12, 0x61, 0xc7, 0x23, 0x74, 0x85, 0x3c, 0xbe, 0xc4, 0x6e,
-	0x12, 0xa0, 0xbf, 0x94, 0xae, 0xb2, 0x4a, 0x66, 0xce, 0xe5, 0x3b, 0x77, 0x9f, 0x81, 0x7d, 0x3f,
-	0xa0, 0x9c, 0xb6, 0x98, 0xe7, 0xf7, 0x5b, 0x2e, 0xf6, 0xb0, 0x4d, 0x5c, 0xe2, 0x71, 0x5d, 0xdc,
-	0x22, 0xf9, 0x0e, 0x07, 0x0e, 0xb5, 0xf5, 0x88, 0xaa, 0x1c, 0xd9, 0x03, 0xfe, 0xcd, 0xa8, 0xaf,
-	0x9b, 0xd4, 0x6d, 0xd9, 0xd4, 0xa6, 0x2d, 0xc1, 0xd3, 0x1f, 0xdd, 0x8a, 0x53, 0xac, 0x26, 0xfa,
-	0x17, 0xcb, 0x2a, 0xfb, 0x36, 0xa5, 0xb6, 0x43, 0xa6, 0x5c, 0xc4, 0xf5, 0xf9, 0x38, 0x21, 0xee,
-	0xc5, 0x8a, 0x23, 0x4c, 0xc2, 0xb1, 0x85, 0x39, 0x4e, 0x08, 0x3b, 0xc2, 0x90, 0x80, 0xf8, 0xce,
-	0xc0, 0xc4, 0x9c, 0x06, 0xf1, 0xb5, 0xf6, 0x03, 0xa0, 0x73, 0xc2, 0xaf, 0x12, 0x5e, 0x83, 0x7c,
-	0x3b, 0x22, 0x8c, 0xa3, 0x5b, 0x00, 0xd3, 0x19, 0x31, 0x4e, 0x82, 0xde, 0xc0, 0x6a, 0x4a, 0x87,
-	0xd2, 0x5b, 0xf5, 0xce, 0xf9, 0x24, 0x54, 0x6b, 0xa7, 0xf1, 0xed, 0xc5, 0xd9, 0x43, 0xa8, 0xbe,
-	0x9b, 0x98, 0x6d, 0xe1, 0x91, 0x3b, 0xc4, 0x43, 0x4c, 0x85, 0x03, 0x31, 0x7e, 0xfa, 0xe3, 0x0f,
-	0xed, 0x16, 0x1f, 0xfb, 0x84, 0xe9, 0x99, 0xa4, 0x51, 0x4b, 0x54, 0x5f, 0x58, 0xda, 0x18, 0x1a,
-	0x05, 0x74, 0xe6, 0x53, 0x8f, 0x11, 0xd4, 0x87, 0x1d, 0xc6, 0x69, 0x80, 0x6d, 0xd2, 0xf3, 0xa8,
-	0x45, 0x7a, 0xa9, 0x2b, 0xc2, 0x12, 0xb9, 0xad, 0xeb, 0x49, 0xf4, 0x52, 0x5f, 0xf5, 0x6e, 0xcc,
-	0x7d, 0x4d, 0x2d, 0x92, 0x2a, 0x3b, 0x23, 0xcc, 0x0c, 0x06, 0x3e, 0xa7, 0x81, 0xd1, 0x60, 0xb3,
-	0x64, 0xed, 0x97, 0x32, 0x34, 0x4e, 0x2c, 0xeb, 0x92, 0xda, 0x5d, 0x1e, 0x10, 0xec, 0x3e, 0xb3,
-	0xeb, 0xe8, 0x3b, 0xd8, 0x2a, 0xf8, 0x38, 0xb0, 0x9a, 0x25, 0x01, 0xf6, 0xf9, 0x24, 0x54, 0xeb,
-	0x39, 0x87, 0x04, 0xe0, 0x7b, 0x4f, 0x02, 0x2c, 0x48, 0x1b, 0xf5, 0x9c, 0xfb, 0x17, 0x16, 0xa2,
-	0x50, 0x77, 0xa8, 0xdd, 0x63, 0xc2, 0xeb, 0x08, 0xb6, 0x2c, 0x60, 0x3f, 0x9b, 0x84, 0xaa, 0x9c,
-	0x45, 0x43, 0x80, 0x1e, 0x3f, 0x09, 0x34, 0x27, 0x6b, 0xc8, 0x4e, 0x76, 0xb0, 0xd0, 0x07, 0xb0,
-	0x9e, 0x58, 0xd0, 0xac, 0x88, 0xfc, 0x69, 0x8b, 0xf2, 0x97, 0xcb, 0x59, 0x2a, 0xa2, 0x7d, 0x05,
-	0xaf, 0x16, 0xd3, 0x94, 0xd4, 0xc8, 0x29, 0xc0, 0xd4, 0x8d, 0xa4, 0x30, 0xde, 0x9c, 0x51, 0x9c,
-	0xc9, 0xe5, 0x54, 0xd7, 0x32, 0xe3, 0xb4, 0xbf, 0x4b, 0xb0, 0x6b, 0x10, 0x97, 0xde, 0x91, 0x55,
-	0x1d, 0x2c, 0xbb, 0x0e, 0xb4, 0x3f, 0xca, 0x20, 0x77, 0x09, 0x76, 0x56, 0x11, 0x5e, 0x56, 0xa7,
-	0x7d, 0x0f, 0x0d, 0x07, 0x33, 0xde, 0x33, 0xa9, 0xeb, 0x0e, 0x38, 0x27, 0x56, 0xcf, 0x76, 0x98,
-	0x27, 0xba, 0xae, 0xd2, 0xf9, 0x74, 0x12, 0xaa, 0xdb, 0x97, 0x98, 0xf1, 0xd3, 0x94, 0x7a, 0x7e,
-	0xd9, 0xbd, 0x7e, 0x08, 0xd5, 0xb7, 0x9f, 0x04, 0x1e, 0x09, 0x19, 0xdb, 0x4e, 0x41, 0x8f, 0xc3,
-	0x3c, 0xed, 0x57, 0x09, 0x36, 0xe3, 0xec, 0x26, 0x0d, 0x7a, 0x0c, 0x55, 0xc6, 0x31, 0x1f, 0x31,
-	0x91, 0xda, 0x57, 0xda, 0x87, 0x8b, 0x9b, 0xb3, 0x2b, 0xf8, 0x8c, 0x84, 0x7f, 0x91, 0x1b, 0xa5,
-	0xe7, 0x70, 0xe3, 0xcf, 0x12, 0xd4, 0x6f, 0x3c, 0xb6, 0x2a, 0xd3, 0x25, 0x0e, 0x82, 0x9f, 0x5f,
-	0x80, 0xdc, 0x1d, 0x7b, 0xe6, 0x2a, 0xc2, 0xcb, 0x1a, 0x04, 0x27, 0x50, 0xed, 0x63, 0x73, 0x38,
-	0xf2, 0x93, 0x2f, 0xee, 0x1b, 0x7a, 0x6e, 0xdf, 0xd4, 0x73, 0xb1, 0xd7, 0x3b, 0x82, 0x2d, 0xb2,
-	0xb3, 0x53, 0xb9, 0x0f, 0x55, 0xc9, 0x48, 0x04, 0xd1, 0xd7, 0x50, 0x13, 0x4d, 0x28, 0x5a, 0xef,
-	0x85, 0x68, 0xbd, 0x93, 0x49, 0xa8, 0x6e, 0x44, 0xad, 0xf7, 0xf2, 0x1d, 0xb7, 0x11, 0xe9, 0x8c,
-	0x1a, 0x4d, 0xf9, 0x51, 0x02, 0x98, 0x82, 0xcf, 0xcb, 0x8d, 0xf4, 0x2c, 0xb9, 0x69, 0xc2, 0x3a,
-	0xb6, 0xac, 0x80, 0x30, 0x26, 0x8a, 0xa1, 0x66, 0xa4, 0x47, 0xed, 0x63, 0xd8, 0x8c, 0x23, 0x95,
-	0x0c, 0xb4, 0x56, 0x61, 0xa0, 0xc9, 0xed, 0xbd, 0x99, 0xa0, 0x16, 0xe7, 0x58, 0xfb, 0xb7, 0x32,
-	0xc0, 0x55, 0xb6, 0xf9, 0x23, 0x03, 0xe4, 0xdc, 0xb2, 0x8b, 0xd4, 0x82, 0xf8, 0xec, 0x12, 0xae,
-	0x1c, 0x2e, 0x66, 0x88, 0x2d, 0xd2, 0xd6, 0xd0, 0x0d, 0x6c, 0xe6, 0xb7, 0x23, 0x54, 0x94, 0x99,
-	0xb3, 0xdf, 0x2a, 0xaf, 0xff, 0x0b, 0x47, 0xa6, 0xf6, 0x0b, 0xd8, 0x7a, 0xb4, 0x16, 0xa1, 0x62,
-	0x09, 0xcd, 0x5f, 0x9a, 0x94, 0x5d, 0x3d, 0x7e, 0x9b, 0xe8, 0xe9, 0xdb, 0x44, 0xff, 0x24, 0x7a,
-	0x9b, 0x68, 0x6b, 0xe8, 0x43, 0xa8, 0x44, 0x5f, 0x07, 0xd4, 0x2c, 0x06, 0x6d, 0x3a, 0x67, 0x95,
-	0xd7, 0xe6, 0x50, 0x32, 0x83, 0x3e, 0x82, 0x6a, 0x3c, 0x95, 0x91, 0x52, 0x60, 0x2b, 0x8c, 0xea,
-	0xff, 0x80, 0x1f, 0x7b, 0xe6, 0x63, 0xf8, 0x69, 0x23, 0x3c, 0x86, 0xcf, 0x25, 0x5e, 0x5b, 0xeb,
-	0xbc, 0x7f, 0x3f, 0x39, 0x90, 0x7e, 0x9f, 0x1c, 0x48, 0x3f, 0xfd, 0x75, 0x20, 0x7d, 0x79, 0xf4,
-	0x7f, 0xaa, 0x2f, 0x7b, 0xfc, 0xf5, 0xab, 0xe2, 0xff, 0x3b, 0xff, 0x04, 0x00, 0x00, 0xff, 0xff,
-	0x06, 0xbb, 0x3e, 0x4b, 0x11, 0x0e, 0x00, 0x00,
+	// 1209 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x58, 0x5f, 0x6f, 0xdb, 0x54,
+	0x14, 0xaf, 0xd3, 0x2c, 0x5d, 0x4e, 0x9a, 0x6d, 0xbd, 0x59, 0xb7, 0xd4, 0x95, 0xea, 0xcc, 0xe3,
+	0xcf, 0x5e, 0xe6, 0x88, 0xa2, 0xa1, 0x69, 0xfc, 0x99, 0x9a, 0x76, 0xcb, 0x42, 0xb3, 0x64, 0x72,
+	0x5a, 0x4d, 0x02, 0x84, 0xe5, 0xc4, 0x37, 0x6e, 0x54, 0xc7, 0x37, 0xf8, 0xde, 0xb4, 0x04, 0x81,
+	0xc4, 0x23, 0xea, 0x27, 0xe0, 0xa5, 0x62, 0x12, 0xf0, 0xc8, 0xb7, 0xe0, 0x61, 0x8f, 0xbc, 0x22,
+	0xa4, 0x48, 0x84, 0x17, 0xc4, 0x47, 0xd8, 0x0b, 0xc8, 0xd7, 0x8e, 0x13, 0x27, 0x2e, 0xa3, 0x85,
+	0x96, 0x97, 0x3e, 0x25, 0xf6, 0xf9, 0xf3, 0x3b, 0xe7, 0xdc, 0xdf, 0x39, 0xf7, 0xfa, 0xc2, 0x72,
+	0xc7, 0x21, 0x8c, 0xe4, 0xa9, 0xdd, 0xa9, 0xe7, 0xdb, 0xba, 0xad, 0x9b, 0xb8, 0x8d, 0x6d, 0xa6,
+	0xf0, 0xb7, 0x28, 0xb5, 0xa7, 0x3b, 0x16, 0x31, 0x15, 0x57, 0x2a, 0xde, 0x36, 0x5b, 0x6c, 0xa7,
+	0x5b, 0x57, 0x1a, 0xa4, 0x9d, 0x37, 0x89, 0x49, 0xf2, 0x5c, 0xa7, 0xde, 0x6d, 0xf2, 0x27, 0xcf,
+	0x8d, 0xfb, 0xcf, 0xb3, 0x15, 0x97, 0x4d, 0x42, 0x4c, 0x0b, 0x8f, 0xb4, 0x70, 0xbb, 0xc3, 0x7a,
+	0xbe, 0xf0, 0xba, 0xe7, 0xd8, 0xc5, 0xc4, 0x4c, 0x37, 0x74, 0xa6, 0xfb, 0x82, 0x45, 0x1e, 0x88,
+	0x83, 0x3b, 0x56, 0xab, 0xa1, 0x33, 0xe2, 0x78, 0xaf, 0xe5, 0xcf, 0x01, 0x15, 0x31, 0x7b, 0xec,
+	0xeb, 0xaa, 0xf8, 0x93, 0x2e, 0xa6, 0x0c, 0x35, 0x01, 0x1a, 0x56, 0x97, 0x32, 0xec, 0x68, 0x2d,
+	0x23, 0x2b, 0xe4, 0x84, 0x5b, 0xe9, 0x42, 0x71, 0xd0, 0x97, 0x92, 0xeb, 0xde, 0xdb, 0xd2, 0xc6,
+	0x8b, 0xbe, 0xf4, 0x96, 0x1f, 0xb6, 0xa1, 0x77, 0xdb, 0xbb, 0xfa, 0xae, 0x4e, 0x78, 0x02, 0x1e,
+	0xfe, 0xf0, 0xa7, 0xb3, 0x6b, 0xe6, 0x59, 0xaf, 0x83, 0xa9, 0x12, 0x58, 0xaa, 0x49, 0xdf, 0x75,
+	0xc9, 0x90, 0x7b, 0x90, 0x09, 0xa1, 0xd3, 0x0e, 0xb1, 0x29, 0x46, 0x75, 0x58, 0xa4, 0x8c, 0x38,
+	0xba, 0x89, 0x35, 0x9b, 0x18, 0x58, 0x1b, 0xa6, 0xc2, 0x23, 0x49, 0xad, 0x2a, 0x8a, 0x5f, 0xbd,
+	0x61, 0xae, 0x4a, 0xcd, 0xd3, 0xae, 0x10, 0x03, 0x0f, 0x9d, 0x6d, 0x60, 0xda, 0x70, 0x5a, 0x1d,
+	0x46, 0x1c, 0x35, 0x43, 0xa7, 0xc5, 0xf2, 0xf7, 0xb3, 0x90, 0x59, 0x33, 0x8c, 0x32, 0x31, 0x6b,
+	0xcc, 0xc1, 0x7a, 0xfb, 0x8c, 0x53, 0x47, 0xfb, 0x70, 0x39, 0x94, 0x63, 0xcb, 0xc8, 0xc6, 0x38,
+	0x58, 0x75, 0xd0, 0x97, 0xd2, 0x63, 0x09, 0x71, 0xc0, 0x7b, 0xc7, 0x02, 0x0c, 0x59, 0xab, 0xe9,
+	0xb1, 0xf4, 0x4b, 0x06, 0x22, 0x90, 0xb6, 0x88, 0xa9, 0x51, 0x9e, 0xb5, 0x0b, 0x3b, 0xcb, 0x61,
+	0x37, 0x07, 0x7d, 0x29, 0x15, 0x54, 0x83, 0x83, 0xde, 0x3d, 0x16, 0xe8, 0x98, 0xad, 0x9a, 0xb2,
+	0x82, 0x07, 0x03, 0xbd, 0x03, 0x73, 0x7e, 0x04, 0xd9, 0x38, 0x5f, 0x3f, 0xf9, 0xa8, 0xf5, 0x1b,
+	0x5b, 0xb3, 0xa1, 0x89, 0xfc, 0x21, 0x5c, 0x0d, 0x2f, 0x93, 0xcf, 0x91, 0x75, 0x80, 0x51, 0x1a,
+	0x3e, 0x31, 0x5e, 0x99, 0x72, 0x1c, 0xd8, 0x8d, 0xb9, 0x4e, 0x06, 0xc1, 0xc9, 0x7f, 0xc4, 0xe0,
+	0x9a, 0x8a, 0xdb, 0x64, 0x0f, 0x9f, 0xf3, 0xe0, 0xb4, 0x79, 0x20, 0xff, 0x32, 0x0b, 0xa9, 0x1a,
+	0xd6, 0xad, 0xf3, 0x0a, 0x9f, 0x56, 0xa7, 0x7d, 0x06, 0x19, 0x4b, 0xa7, 0x4c, 0x6b, 0x90, 0x76,
+	0xbb, 0xc5, 0x18, 0x36, 0x34, 0xd3, 0xa2, 0x36, 0xef, 0xba, 0x78, 0xe1, 0xfd, 0x41, 0x5f, 0x5a,
+	0x28, 0xeb, 0x94, 0xad, 0x0f, 0xa5, 0xc5, 0x72, 0xad, 0xf2, 0xa2, 0x2f, 0xbd, 0x71, 0x2c, 0x70,
+	0xd7, 0x48, 0x5d, 0xb0, 0x42, 0x7e, 0x2c, 0x6a, 0xcb, 0x3f, 0x0a, 0x30, 0xef, 0xad, 0xae, 0xdf,
+	0xa0, 0x77, 0x21, 0x41, 0x99, 0xce, 0xba, 0x94, 0x2f, 0xed, 0xa5, 0xd5, 0xdc, 0xd1, 0xcd, 0x59,
+	0xe3, 0x7a, 0xaa, 0xaf, 0x7f, 0x54, 0x1a, 0xb1, 0xb3, 0x48, 0xe3, 0xd7, 0x18, 0xa4, 0xb7, 0x6d,
+	0x7a, 0x4e, 0xd3, 0x53, 0x1c, 0x04, 0xdf, 0x5d, 0x80, 0x54, 0xad, 0x67, 0x37, 0xce, 0x2b, 0x7c,
+	0x5a, 0x83, 0x60, 0x0d, 0x12, 0x75, 0xbd, 0xb1, 0xdb, 0xed, 0xf8, 0x3b, 0xee, 0x4d, 0x65, 0xec,
+	0xbc, 0xa9, 0x8c, 0xd5, 0x5e, 0x29, 0x70, 0x35, 0x37, 0xce, 0x42, 0xfc, 0x79, 0x5f, 0x12, 0x54,
+	0xdf, 0x10, 0x7d, 0x0c, 0x49, 0xde, 0x84, 0xbc, 0xf5, 0x2e, 0xf0, 0xd6, 0x5b, 0x1b, 0xf4, 0xa5,
+	0x8b, 0x6e, 0xeb, 0x9d, 0xbc, 0xe3, 0x2e, 0xba, 0x3e, 0xdd, 0x46, 0x13, 0xbf, 0x11, 0x00, 0x46,
+	0xe0, 0x51, 0x6b, 0x23, 0x9c, 0xc9, 0xda, 0x64, 0x61, 0x4e, 0x37, 0x0c, 0x07, 0x53, 0xca, 0xc9,
+	0x90, 0x54, 0x87, 0x8f, 0xf2, 0x7d, 0x98, 0xf7, 0x2a, 0xe5, 0x0f, 0xb4, 0x7c, 0x68, 0xa0, 0xa5,
+	0x56, 0xaf, 0x4f, 0x15, 0x35, 0x3c, 0xc7, 0xe4, 0x4f, 0x21, 0x5b, 0xc4, 0xec, 0x89, 0x83, 0xf7,
+	0xbc, 0x19, 0x53, 0xb2, 0x9b, 0x64, 0xc8, 0xf9, 0x8f, 0xe0, 0xd2, 0x4e, 0xcb, 0xdc, 0xd1, 0xf6,
+	0x75, 0x86, 0x9d, 0xb6, 0xee, 0xec, 0x72, 0xa7, 0xf1, 0xc2, 0x9d, 0x93, 0xd5, 0x35, 0xed, 0x3a,
+	0x7b, 0x3a, 0xf4, 0x25, 0xff, 0x39, 0x07, 0x99, 0x80, 0x1c, 0x23, 0xf0, 0x69, 0x22, 0x0a, 0xa7,
+	0x4c, 0xc4, 0xfb, 0x41, 0xcd, 0x62, 0x7c, 0x13, 0x78, 0x3d, 0x54, 0xb3, 0x88, 0x10, 0x95, 0x89,
+	0xbd, 0xe0, 0x4b, 0x01, 0x16, 0x47, 0xfb, 0x80, 0x65, 0x51, 0x5b, 0x23, 0xcd, 0x26, 0xc5, 0x8c,
+	0xf7, 0x50, 0xbc, 0x50, 0x1e, 0xf4, 0xa5, 0x4c, 0x30, 0xc2, 0xcb, 0xe5, 0x5a, 0xa5, 0xca, 0xc5,
+	0xc7, 0x2e, 0xa3, 0x6b, 0xaa, 0x66, 0x02, 0xa8, 0xb2, 0x45, 0x6d, 0xcf, 0xd3, 0x44, 0x08, 0xe6,
+	0x58, 0x08, 0xf1, 0x88, 0x10, 0x8a, 0x27, 0x0f, 0xa1, 0x18, 0x0e, 0xa1, 0x38, 0x0a, 0x61, 0x73,
+	0x2a, 0x02, 0x0b, 0xdb, 0x26, 0xdb, 0xf1, 0x1b, 0xf3, 0xfa, 0x54, 0x04, 0x65, 0x2e, 0x9e, 0x70,
+	0xe6, 0xbd, 0x44, 0x5f, 0xc0, 0x55, 0x97, 0x2d, 0x98, 0x32, 0x6d, 0xdf, 0x71, 0x85, 0x36, 0xaf,
+	0x6b, 0x36, 0xc1, 0x7d, 0xb9, 0x5c, 0x40, 0x8f, 0x3c, 0xf9, 0x53, 0x4f, 0x5c, 0x3e, 0x49, 0xbb,
+	0xf3, 0x7a, 0xa2, 0x9d, 0xb0, 0x23, 0x8b, 0xda, 0x11, 0xcc, 0x9f, 0xfb, 0xef, 0x98, 0x8f, 0x30,
+	0x64, 0x3a, 0x0e, 0xde, 0xd3, 0x26, 0x20, 0x2e, 0xfe, 0x1b, 0x88, 0x05, 0xd7, 0xe3, 0xa3, 0x50,
+	0x83, 0x7d, 0x2d, 0x40, 0xc2, 0x63, 0x2a, 0xba, 0x01, 0xb1, 0xea, 0xe6, 0x95, 0x19, 0x71, 0xe9,
+	0xe0, 0x30, 0xb7, 0x18, 0xea, 0x77, 0x4f, 0xa1, 0xba, 0x89, 0x14, 0x48, 0x56, 0xaa, 0x5b, 0xda,
+	0xc3, 0xea, 0x76, 0x65, 0xe3, 0x8a, 0x20, 0x4a, 0x07, 0x87, 0xb9, 0xe5, 0x08, 0xcd, 0x0a, 0x61,
+	0x0f, 0x49, 0xd7, 0x36, 0xd0, 0x1d, 0x98, 0x2f, 0x55, 0xd6, 0xab, 0x95, 0x5a, 0xa9, 0xb6, 0xf5,
+	0xa0, 0xb2, 0x75, 0x25, 0x26, 0xde, 0x3c, 0x38, 0xcc, 0x49, 0x11, 0x26, 0x25, 0xbb, 0x41, 0x6c,
+	0xda, 0xa2, 0x0c, 0xdb, 0x4c, 0x8c, 0x7f, 0xf5, 0xed, 0xca, 0xcc, 0xbd, 0xf8, 0xef, 0xcf, 0x24,
+	0x41, 0xfe, 0x59, 0x80, 0xa5, 0x88, 0xe1, 0xe3, 0x8f, 0xb2, 0xff, 0x6d, 0xda, 0xae, 0xc3, 0xbc,
+	0x47, 0x49, 0xad, 0x65, 0x37, 0x89, 0x3b, 0x15, 0x66, 0x6f, 0xa5, 0x46, 0x47, 0xc3, 0xa3, 0xa6,
+	0x82, 0x9a, 0x6a, 0x04, 0xff, 0xe9, 0xea, 0x0f, 0x71, 0x80, 0xc7, 0xc1, 0x8d, 0x0a, 0x52, 0x21,
+	0x35, 0x76, 0x89, 0x80, 0xa4, 0x90, 0xb3, 0xe9, 0xcb, 0x0d, 0x31, 0x77, 0xb4, 0x82, 0x57, 0x1e,
+	0x79, 0x06, 0x6d, 0xc3, 0xfc, 0xf8, 0x57, 0x27, 0x0a, 0xdb, 0x44, 0xdc, 0x1b, 0x88, 0x37, 0xfe,
+	0x46, 0x23, 0x70, 0xfb, 0x04, 0x2e, 0x4f, 0x7c, 0x6e, 0xa2, 0xf0, 0xd6, 0x1c, 0xfd, 0x31, 0x2a,
+	0x5e, 0x53, 0xbc, 0x3b, 0x1f, 0x65, 0x78, 0xe7, 0xa3, 0x3c, 0x68, 0x77, 0x58, 0x4f, 0x9e, 0x41,
+	0xef, 0x42, 0xdc, 0x3d, 0x75, 0xa3, 0x6c, 0x78, 0x33, 0x1a, 0x9d, 0x5f, 0xc5, 0xa5, 0x08, 0x49,
+	0x10, 0xd0, 0x7b, 0x90, 0xf0, 0x4e, 0xbb, 0x48, 0x0c, 0xa9, 0x85, 0x8e, 0xc0, 0x2f, 0x81, 0xef,
+	0xd9, 0x8d, 0x49, 0xf8, 0xd1, 0x01, 0x63, 0x12, 0x7e, 0x6c, 0x43, 0x95, 0x67, 0x90, 0x01, 0x0b,
+	0x53, 0x24, 0x45, 0xaf, 0x4e, 0xae, 0x4f, 0xe4, 0x0e, 0x2a, 0xbe, 0xf6, 0x32, 0xb5, 0x21, 0x4a,
+	0xe1, 0xed, 0xe7, 0x83, 0x15, 0xe1, 0xa7, 0xc1, 0x8a, 0xf0, 0xec, 0xb7, 0x15, 0xe1, 0x83, 0xdb,
+	0xff, 0x84, 0xcd, 0xc1, 0xd5, 0x5d, 0x3d, 0xc1, 0xff, 0xbf, 0xf9, 0x57, 0x00, 0x00, 0x00, 0xff,
+	0xff, 0x63, 0xe8, 0x9a, 0x8b, 0xcf, 0x13, 0x00, 0x00,
+}
+
+func (this *LogStreamCommitInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*LogStreamCommitInfo)
+	if !ok {
+		that2, ok := that.(LogStreamCommitInfo)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.LogStreamID != that1.LogStreamID {
+		return false
+	}
+	if this.Status != that1.Status {
+		return false
+	}
+	if this.CommittedLLSNOffset != that1.CommittedLLSNOffset {
+		return false
+	}
+	if this.CommittedGLSNOffset != that1.CommittedGLSNOffset {
+		return false
+	}
+	if this.CommittedGLSNLength != that1.CommittedGLSNLength {
+		return false
+	}
+	if this.HighestWrittenLLSN != that1.HighestWrittenLLSN {
+		return false
+	}
+	if this.HighWatermark != that1.HighWatermark {
+		return false
+	}
+	if this.PrevHighWatermark != that1.PrevHighWatermark {
+		return false
+	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+		return false
+	}
+	return true
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -774,6 +1086,7 @@ type ManagementClient interface {
 	Unseal(ctx context.Context, in *UnsealRequest, opts ...grpc.CallOption) (*types.Empty, error)
 	// Sync starts mirroring between two StorageNodes.
 	Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
+	GetPrevCommitInfo(ctx context.Context, in *GetPrevCommitInfoRequest, opts ...grpc.CallOption) (*GetPrevCommitInfoResponse, error)
 }
 
 type managementClient struct {
@@ -838,6 +1151,15 @@ func (c *managementClient) Sync(ctx context.Context, in *SyncRequest, opts ...gr
 	return out, nil
 }
 
+func (c *managementClient) GetPrevCommitInfo(ctx context.Context, in *GetPrevCommitInfoRequest, opts ...grpc.CallOption) (*GetPrevCommitInfoResponse, error) {
+	out := new(GetPrevCommitInfoResponse)
+	err := c.cc.Invoke(ctx, "/varlog.snpb.Management/GetPrevCommitInfo", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ManagementServer is the server API for Management service.
 type ManagementServer interface {
 	// GetMetadata returns metadata of StorageNode.
@@ -853,6 +1175,7 @@ type ManagementServer interface {
 	Unseal(context.Context, *UnsealRequest) (*types.Empty, error)
 	// Sync starts mirroring between two StorageNodes.
 	Sync(context.Context, *SyncRequest) (*SyncResponse, error)
+	GetPrevCommitInfo(context.Context, *GetPrevCommitInfoRequest) (*GetPrevCommitInfoResponse, error)
 }
 
 // UnimplementedManagementServer can be embedded to have forward compatible implementations.
@@ -876,6 +1199,9 @@ func (*UnimplementedManagementServer) Unseal(ctx context.Context, req *UnsealReq
 }
 func (*UnimplementedManagementServer) Sync(ctx context.Context, req *SyncRequest) (*SyncResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Sync not implemented")
+}
+func (*UnimplementedManagementServer) GetPrevCommitInfo(ctx context.Context, req *GetPrevCommitInfoRequest) (*GetPrevCommitInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPrevCommitInfo not implemented")
 }
 
 func RegisterManagementServer(s *grpc.Server, srv ManagementServer) {
@@ -990,6 +1316,24 @@ func _Management_Sync_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Management_GetPrevCommitInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPrevCommitInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagementServer).GetPrevCommitInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.snpb.Management/GetPrevCommitInfo",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagementServer).GetPrevCommitInfo(ctx, req.(*GetPrevCommitInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Management_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "varlog.snpb.Management",
 	HandlerType: (*ManagementServer)(nil),
@@ -1017,6 +1361,10 @@ var _Management_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Sync",
 			Handler:    _Management_Sync_Handler,
+		},
+		{
+			MethodName: "GetPrevCommitInfo",
+			Handler:    _Management_GetPrevCommitInfo_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -1492,6 +1840,151 @@ func (m *SyncResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *GetPrevCommitInfoRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetPrevCommitInfoRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetPrevCommitInfoRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.HighWatermark != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.HighWatermark))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *LogStreamCommitInfo) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LogStreamCommitInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LogStreamCommitInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.PrevHighWatermark != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.PrevHighWatermark))
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.HighWatermark != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.HighWatermark))
+		i--
+		dAtA[i] = 0x38
+	}
+	if m.HighestWrittenLLSN != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.HighestWrittenLLSN))
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.CommittedGLSNLength != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.CommittedGLSNLength))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.CommittedGLSNOffset != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.CommittedGLSNOffset))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.CommittedLLSNOffset != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.CommittedLLSNOffset))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.Status != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.Status))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.LogStreamID != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetPrevCommitInfoResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetPrevCommitInfoResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetPrevCommitInfoResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.CommitInfos) > 0 {
+		for iNdEx := len(m.CommitInfos) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.CommitInfos[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintManagement(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.StorageNodeID != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.StorageNodeID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintManagement(dAtA []byte, offset int, v uint64) int {
 	offset -= sovManagement(v)
 	base := offset
@@ -1722,6 +2215,78 @@ func (m *SyncResponse) ProtoSize() (n int) {
 	return n
 }
 
+func (m *GetPrevCommitInfoRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.HighWatermark != 0 {
+		n += 1 + sovManagement(uint64(m.HighWatermark))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *LogStreamCommitInfo) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.LogStreamID != 0 {
+		n += 1 + sovManagement(uint64(m.LogStreamID))
+	}
+	if m.Status != 0 {
+		n += 1 + sovManagement(uint64(m.Status))
+	}
+	if m.CommittedLLSNOffset != 0 {
+		n += 1 + sovManagement(uint64(m.CommittedLLSNOffset))
+	}
+	if m.CommittedGLSNOffset != 0 {
+		n += 1 + sovManagement(uint64(m.CommittedGLSNOffset))
+	}
+	if m.CommittedGLSNLength != 0 {
+		n += 1 + sovManagement(uint64(m.CommittedGLSNLength))
+	}
+	if m.HighestWrittenLLSN != 0 {
+		n += 1 + sovManagement(uint64(m.HighestWrittenLLSN))
+	}
+	if m.HighWatermark != 0 {
+		n += 1 + sovManagement(uint64(m.HighWatermark))
+	}
+	if m.PrevHighWatermark != 0 {
+		n += 1 + sovManagement(uint64(m.PrevHighWatermark))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetPrevCommitInfoResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.StorageNodeID != 0 {
+		n += 1 + sovManagement(uint64(m.StorageNodeID))
+	}
+	if len(m.CommitInfos) > 0 {
+		for _, e := range m.CommitInfos {
+			l = e.ProtoSize()
+			n += 1 + l + sovManagement(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func sovManagement(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
@@ -1782,7 +2347,10 @@ func (m *GetMetadataRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -1869,7 +2437,10 @@ func (m *GetMetadataResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -2013,7 +2584,10 @@ func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -2100,7 +2674,10 @@ func (m *AddLogStreamResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -2208,7 +2785,10 @@ func (m *RemoveLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -2335,7 +2915,10 @@ func (m *SealRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -2424,7 +3007,10 @@ func (m *SealResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -2532,7 +3118,10 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -2695,7 +3284,10 @@ func (m *SyncRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -2797,7 +3389,10 @@ func (m *SyncRequest_BackupNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {
@@ -2884,7 +3479,396 @@ func (m *SyncResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetPrevCommitInfoRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowManagement
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetPrevCommitInfoRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetPrevCommitInfoRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
+			}
+			m.HighWatermark = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.HighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipManagement(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LogStreamCommitInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowManagement
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LogStreamCommitInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LogStreamCommitInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
+			}
+			m.LogStreamID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LogStreamID |= github_com_kakao_varlog_pkg_types.LogStreamID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			m.Status = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Status |= LogStreamCommitInfo_Status(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommittedLLSNOffset", wireType)
+			}
+			m.CommittedLLSNOffset = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CommittedLLSNOffset |= github_com_kakao_varlog_pkg_types.LLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommittedGLSNOffset", wireType)
+			}
+			m.CommittedGLSNOffset = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CommittedGLSNOffset |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommittedGLSNLength", wireType)
+			}
+			m.CommittedGLSNLength = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CommittedGLSNLength |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HighestWrittenLLSN", wireType)
+			}
+			m.HighestWrittenLLSN = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.HighestWrittenLLSN |= github_com_kakao_varlog_pkg_types.LLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
+			}
+			m.HighWatermark = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.HighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrevHighWatermark", wireType)
+			}
+			m.PrevHighWatermark = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PrevHighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipManagement(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetPrevCommitInfoResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowManagement
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetPrevCommitInfoResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetPrevCommitInfoResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
+			}
+			m.StorageNodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StorageNodeID |= github_com_kakao_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommitInfos", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthManagement
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CommitInfos = append(m.CommitInfos, &LogStreamCommitInfo{})
+			if err := m.CommitInfos[len(m.CommitInfos)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipManagement(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthManagement
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthManagement
 			}
 			if (iNdEx + skippy) > l {

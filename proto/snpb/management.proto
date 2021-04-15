@@ -153,6 +153,64 @@ message SyncResponse {
     SyncStatus status = 1;
 }
 
+message GetPrevCommitInfoRequest {
+    uint64 high_watermark = 1
+        [(gogoproto.casttype) =
+             "github.com/kakao/varlog/pkg/types.GLSN"];
+}
+
+message LogStreamCommitInfo {
+    option (gogoproto.equal) = true;
+
+    enum Status {
+        option (gogoproto.goproto_enum_prefix) = false;
+        OK = 0 [(gogoproto.enumvalue_customname) = "GetPrevCommitStatusOK"];
+        NOT_FOUND = 1
+            [(gogoproto.enumvalue_customname) = "GetPrevCommitStatusNotFound"];
+        INCONSISTENT = 2 [(gogoproto.enumvalue_customname) =
+                              "GetPrevCommitStatusInconsistent"];
+    }
+
+    uint32 log_stream_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+    Status status = 2;
+    uint64 committed_llsn_offset = 3 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.LLSN",
+        (gogoproto.customname) = "CommittedLLSNOffset"
+    ];
+    uint64 committed_glsn_offset = 4 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.GLSN",
+        (gogoproto.customname) = "CommittedGLSNOffset"
+    ];
+    uint64 committed_glsn_length = 5
+        [(gogoproto.customname) = "CommittedGLSNLength"];
+    uint64 highest_written_llsn = 6 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.LLSN",
+        (gogoproto.customname) = "HighestWrittenLLSN"
+    ];
+    uint64 high_watermark = 7
+        [(gogoproto.casttype) =
+             "github.com/kakao/varlog/pkg/types.GLSN"];
+    uint64 prev_high_watermark = 8
+        [(gogoproto.casttype) =
+             "github.com/kakao/varlog/pkg/types.GLSN"];
+}
+
+message GetPrevCommitInfoResponse {
+    uint32 storage_node_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
+        (gogoproto.customname) = "StorageNodeID"
+    ];
+    repeated LogStreamCommitInfo commit_infos = 2;
+}
+
 // Management defines the public APIs for managing StorageNode.
 service Management {
     // GetMetadata returns metadata of StorageNode.
@@ -169,4 +227,6 @@ service Management {
     rpc Unseal(UnsealRequest) returns (google.protobuf.Empty) {}
     // Sync starts mirroring between two StorageNodes.
     rpc Sync(SyncRequest) returns (SyncResponse) {}
+    rpc GetPrevCommitInfo(GetPrevCommitInfoRequest)
+        returns (GetPrevCommitInfoResponse) {}
 }
