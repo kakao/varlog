@@ -88,37 +88,7 @@ message CommitResponse {
     // TODO:
 }
 
-message GetPrevCommitResultRequest {
-    uint64 high_watermark = 1
-        [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
-}
-
-message GetPrevCommitResultResponse {
-    enum ReturnCode {
-        option (gogoproto.goproto_enum_prefix) = false;
-        OK = 0 [(gogoproto.enumvalue_customname) = "GetPrevCommitResultOK"];
-        TRIMMED = 1
-            [(gogoproto.enumvalue_customname) = "GetPrevCommitResultTrimmed"];
-        NOT_FOUND = 2
-            [(gogoproto.enumvalue_customname) = "GetPrevCommitResultNotFound"];
-        INCONSISTENT = 3 [(gogoproto.enumvalue_customname) =
-                              "GetPrevCommitResultInconsistent"];
-    }
-
-    uint32 storage_node_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
-    ];
-    ReturnCode code = 2;
-    repeated LogStreamCommitResult commit_results = 3;
-    repeated LogStreamUncommitReport uncommit_report = 4;
-}
-
 service LogStreamReporter {
     rpc GetReport(GetReportRequest) returns (GetReportResponse) {}
     rpc Commit(CommitRequest) returns (CommitResponse) {}
-    rpc GetPrevCommitResult(GetPrevCommitResultRequest)
-        returns (GetPrevCommitResultResponse) {}
 }

@@ -191,3 +191,7 @@ func (s *server) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncRes
 	}
 	return rspI.(*snpb.SyncResponse), nil
 }
+
+func (s *server) GetPrevCommitInfo(ctx context.Context, req *snpb.GetPrevCommitInfoRequest) (*snpb.GetPrevCommitInfoResponse, error) {
+	panic("not yet implemented")
+}

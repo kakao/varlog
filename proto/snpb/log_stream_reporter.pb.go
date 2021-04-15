@@ -31,37 +31,6 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-type GetPrevCommitResultResponse_ReturnCode int32
-
-const (
-	GetPrevCommitResultOK           GetPrevCommitResultResponse_ReturnCode = 0
-	GetPrevCommitResultTrimmed      GetPrevCommitResultResponse_ReturnCode = 1
-	GetPrevCommitResultNotFound     GetPrevCommitResultResponse_ReturnCode = 2
-	GetPrevCommitResultInconsistent GetPrevCommitResultResponse_ReturnCode = 3
-)
-
-var GetPrevCommitResultResponse_ReturnCode_name = map[int32]string{
-	0: "OK",
-	1: "TRIMMED",
-	2: "NOT_FOUND",
-	3: "INCONSISTENT",
-}
-
-var GetPrevCommitResultResponse_ReturnCode_value = map[string]int32{
-	"OK":           0,
-	"TRIMMED":      1,
-	"NOT_FOUND":    2,
-	"INCONSISTENT": 3,
-}
-
-func (x GetPrevCommitResultResponse_ReturnCode) String() string {
-	return proto.EnumName(GetPrevCommitResultResponse_ReturnCode_name, int32(x))
-}
-
-func (GetPrevCommitResultResponse_ReturnCode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_b6a839cf0bdc32d5, []int{7, 0}
-}
-
 // LogStreamUncommitReport is manifest that log stream reports to metadata
 // repository about log entries those are waiting to commit.
 type LogStreamUncommitReport struct {
@@ -415,134 +384,13 @@ func (m *CommitResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_CommitResponse proto.InternalMessageInfo
 
-type GetPrevCommitResultRequest struct {
-	HighWatermark        github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,1,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
-	XXX_unrecognized     []byte                                            `json:"-"`
-	XXX_sizecache        int32                                             `json:"-"`
-}
-
-func (m *GetPrevCommitResultRequest) Reset()         { *m = GetPrevCommitResultRequest{} }
-func (m *GetPrevCommitResultRequest) String() string { return proto.CompactTextString(m) }
-func (*GetPrevCommitResultRequest) ProtoMessage()    {}
-func (*GetPrevCommitResultRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b6a839cf0bdc32d5, []int{6}
-}
-func (m *GetPrevCommitResultRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *GetPrevCommitResultRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_GetPrevCommitResultRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *GetPrevCommitResultRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetPrevCommitResultRequest.Merge(m, src)
-}
-func (m *GetPrevCommitResultRequest) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *GetPrevCommitResultRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetPrevCommitResultRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_GetPrevCommitResultRequest proto.InternalMessageInfo
-
-func (m *GetPrevCommitResultRequest) GetHighWatermark() github_daumkakao_com_varlog_varlog_pkg_types.GLSN {
-	if m != nil {
-		return m.HighWatermark
-	}
-	return 0
-}
-
-type GetPrevCommitResultResponse struct {
-	StorageNodeID        github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	Code                 GetPrevCommitResultResponse_ReturnCode                     `protobuf:"varint,2,opt,name=code,proto3,enum=varlog.snpb.GetPrevCommitResultResponse_ReturnCode" json:"code,omitempty"`
-	CommitResults        []*LogStreamCommitResult                                   `protobuf:"bytes,3,rep,name=commit_results,json=commitResults,proto3" json:"commit_results,omitempty"`
-	UncommitReport       []*LogStreamUncommitReport                                 `protobuf:"bytes,4,rep,name=uncommit_report,json=uncommitReport,proto3" json:"uncommit_report,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
-}
-
-func (m *GetPrevCommitResultResponse) Reset()         { *m = GetPrevCommitResultResponse{} }
-func (m *GetPrevCommitResultResponse) String() string { return proto.CompactTextString(m) }
-func (*GetPrevCommitResultResponse) ProtoMessage()    {}
-func (*GetPrevCommitResultResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_b6a839cf0bdc32d5, []int{7}
-}
-func (m *GetPrevCommitResultResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *GetPrevCommitResultResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_GetPrevCommitResultResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *GetPrevCommitResultResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetPrevCommitResultResponse.Merge(m, src)
-}
-func (m *GetPrevCommitResultResponse) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *GetPrevCommitResultResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetPrevCommitResultResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_GetPrevCommitResultResponse proto.InternalMessageInfo
-
-func (m *GetPrevCommitResultResponse) GetStorageNodeID() github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID {
-	if m != nil {
-		return m.StorageNodeID
-	}
-	return 0
-}
-
-func (m *GetPrevCommitResultResponse) GetCode() GetPrevCommitResultResponse_ReturnCode {
-	if m != nil {
-		return m.Code
-	}
-	return GetPrevCommitResultOK
-}
-
-func (m *GetPrevCommitResultResponse) GetCommitResults() []*LogStreamCommitResult {
-	if m != nil {
-		return m.CommitResults
-	}
-	return nil
-}
-
-func (m *GetPrevCommitResultResponse) GetUncommitReport() []*LogStreamUncommitReport {
-	if m != nil {
-		return m.UncommitReport
-	}
-	return nil
-}
-
 func init() {
-	proto.RegisterEnum("varlog.snpb.GetPrevCommitResultResponse_ReturnCode", GetPrevCommitResultResponse_ReturnCode_name, GetPrevCommitResultResponse_ReturnCode_value)
 	proto.RegisterType((*LogStreamUncommitReport)(nil), "varlog.snpb.LogStreamUncommitReport")
 	proto.RegisterType((*GetReportRequest)(nil), "varlog.snpb.GetReportRequest")
 	proto.RegisterType((*GetReportResponse)(nil), "varlog.snpb.GetReportResponse")
 	proto.RegisterType((*LogStreamCommitResult)(nil), "varlog.snpb.LogStreamCommitResult")
 	proto.RegisterType((*CommitRequest)(nil), "varlog.snpb.CommitRequest")
 	proto.RegisterType((*CommitResponse)(nil), "varlog.snpb.CommitResponse")
-	proto.RegisterType((*GetPrevCommitResultRequest)(nil), "varlog.snpb.GetPrevCommitResultRequest")
-	proto.RegisterType((*GetPrevCommitResultResponse)(nil), "varlog.snpb.GetPrevCommitResultResponse")
 }
 
 func init() {
@@ -550,60 +398,46 @@ func init() {
 }
 
 var fileDescriptor_b6a839cf0bdc32d5 = []byte{
-	// 844 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x56, 0xc1, 0x8b, 0xe3, 0x54,
-	0x18, 0x9f, 0xb4, 0xdd, 0x91, 0x7d, 0xb5, 0x9d, 0xce, 0x2b, 0x65, 0xba, 0x59, 0x6c, 0x6a, 0x5c,
-	0xb0, 0x20, 0x9b, 0xe2, 0x2c, 0x0b, 0xb2, 0xde, 0xa6, 0xb3, 0x5b, 0x4b, 0x33, 0x89, 0xa6, 0x1d,
-	0x04, 0x11, 0x42, 0xda, 0xbc, 0x49, 0x6b, 0x93, 0xbc, 0x9a, 0xf7, 0x32, 0x8b, 0x9e, 0x3c, 0x89,
-	0xf4, 0xe8, 0xbd, 0xb0, 0x20, 0xf8, 0x9f, 0x08, 0xea, 0x49, 0xf0, 0x6c, 0x0f, 0xf5, 0xe2, 0xdf,
-	0xb0, 0x27, 0xe9, 0x4b, 0x9a, 0x26, 0xd3, 0xcc, 0xba, 0x5d, 0x07, 0xe6, 0x94, 0xbc, 0xbc, 0xef,
-	0xfb, 0x7d, 0xbf, 0x97, 0xef, 0xf7, 0xfb, 0x12, 0xf0, 0x60, 0xea, 0x61, 0x8a, 0x9b, 0xc4, 0x9d,
-	0x0e, 0x9a, 0x36, 0xb6, 0x74, 0x42, 0x3d, 0x64, 0x38, 0xba, 0x87, 0xa6, 0xd8, 0xa3, 0xc8, 0x93,
-	0xd8, 0x36, 0xcc, 0x5f, 0x1a, 0x9e, 0x8d, 0x2d, 0x69, 0x15, 0xc6, 0x3f, 0xb4, 0xc6, 0x74, 0xe4,
-	0x0f, 0xa4, 0x21, 0x76, 0x9a, 0x16, 0xb6, 0x70, 0x93, 0xc5, 0x0c, 0xfc, 0x0b, 0xb6, 0x0a, 0xf0,
-	0x56, 0x77, 0x41, 0xae, 0xf8, 0x7b, 0x16, 0x1c, 0xc9, 0xd8, 0xea, 0x31, 0xe0, 0x73, 0x77, 0x88,
-	0x1d, 0x67, 0x4c, 0x35, 0x86, 0x0f, 0x31, 0x28, 0xc4, 0x8a, 0x8e, 0xcd, 0x2a, 0x57, 0xe7, 0x1a,
-	0x85, 0x93, 0xee, 0x72, 0x21, 0xe4, 0xa3, 0x9c, 0xce, 0xe9, 0xcb, 0x85, 0xf0, 0x51, 0x58, 0xd4,
-	0x34, 0x7c, 0x67, 0x62, 0x4c, 0x0c, 0xcc, 0xca, 0x07, 0xb4, 0xd6, 0x97, 0xe9, 0xc4, 0x6a, 0xd2,
-	0x6f, 0xa6, 0x88, 0x48, 0xb1, 0x5c, 0x2d, 0x6f, 0x47, 0x0b, 0x13, 0x7e, 0xcf, 0x81, 0x23, 0x3f,
-	0xe4, 0x40, 0x91, 0xa9, 0xdb, 0x36, 0x71, 0x75, 0x7c, 0x71, 0x41, 0x10, 0xad, 0x66, 0xea, 0x5c,
-	0x23, 0x77, 0xa2, 0x2c, 0x17, 0x42, 0xe5, 0x7c, 0x13, 0x22, 0xcb, 0x3d, 0x45, 0x65, 0x01, 0x2f,
-	0x17, 0xc2, 0x87, 0xbb, 0xb1, 0x90, 0x7b, 0x8a, 0x56, 0x89, 0x95, 0x93, 0x6d, 0xe2, 0x06, 0x58,
-	0xf0, 0xb3, 0x14, 0x1e, 0x36, 0x72, 0x2d, 0x3a, 0xaa, 0x66, 0x19, 0x8f, 0x7b, 0x29, 0x3c, 0x64,
-	0x16, 0xb0, 0x05, 0x19, 0x3c, 0x86, 0x5f, 0x82, 0xe2, 0x68, 0x6c, 0x8d, 0xf4, 0xe7, 0x06, 0x45,
-	0x9e, 0x63, 0x78, 0x93, 0x6a, 0x8e, 0x21, 0x3d, 0xde, 0x99, 0x78, 0x7b, 0x45, 0xbc, 0xb0, 0x02,
-	0xfb, 0x7c, 0x8d, 0xf5, 0x24, 0xf7, 0xcf, 0x0b, 0x81, 0x13, 0x21, 0x28, 0xb5, 0x51, 0xd8, 0x3d,
-	0x0d, 0x7d, 0xed, 0x23, 0x42, 0xc5, 0xbf, 0x38, 0x70, 0x18, 0x7b, 0x48, 0xa6, 0xd8, 0x25, 0x08,
-	0x3e, 0x07, 0x07, 0x84, 0x62, 0xcf, 0xb0, 0x90, 0xee, 0x62, 0x13, 0x6d, 0x9a, 0xab, 0x2e, 0x17,
-	0x42, 0xa1, 0x17, 0x6c, 0x29, 0xd8, 0x44, 0xac, 0xbd, 0x4f, 0x76, 0xe2, 0x97, 0xc8, 0xd6, 0x0a,
-	0x24, 0xb6, 0x34, 0xa1, 0x0a, 0x4a, 0xeb, 0xf7, 0x13, 0xca, 0x98, 0x54, 0x33, 0xf5, 0x6c, 0x23,
-	0x7f, 0xfc, 0x40, 0x8a, 0xc9, 0x58, 0xba, 0x46, 0x93, 0xda, 0x81, 0x9f, 0x58, 0x13, 0xf1, 0xe7,
-	0x3b, 0xa0, 0x12, 0x05, 0xb7, 0xc2, 0x2d, 0xe2, 0xdb, 0xb7, 0x20, 0xdf, 0xef, 0x38, 0x50, 0x79,
-	0x95, 0x78, 0xe5, 0xe5, 0x42, 0x28, 0xb7, 0x6e, 0x4a, 0xba, 0xe5, 0x34, 0xe1, 0x26, 0x29, 0x58,
-	0x31, 0x0a, 0xd9, 0x14, 0x0a, 0xed, 0x37, 0xa7, 0xd0, 0x4e, 0x52, 0x68, 0x6f, 0x28, 0x74, 0xb7,
-	0x18, 0x84, 0xce, 0x09, 0xf4, 0x7e, 0xb4, 0xc5, 0x20, 0xf4, 0x4d, 0x12, 0xec, 0x5a, 0xd7, 0xdc,
-	0xb9, 0x39, 0xd7, 0x40, 0x04, 0xca, 0x53, 0x0f, 0x5d, 0xea, 0x57, 0x4a, 0xec, 0xff, 0x9f, 0x12,
-	0x87, 0x2b, 0xc4, 0x4f, 0x52, 0xcc, 0xf9, 0x27, 0x07, 0x0a, 0x6b, 0x7d, 0x32, 0x6b, 0xde, 0x9e,
-	0x09, 0x3b, 0xa0, 0x18, 0x59, 0x70, 0x65, 0x95, 0xb5, 0x05, 0xc5, 0x74, 0x0b, 0xc6, 0x5d, 0xa5,
-	0x15, 0x86, 0xb1, 0x15, 0x11, 0x4b, 0xa0, 0x18, 0x6d, 0xb3, 0xd1, 0x22, 0x7e, 0x0b, 0xf8, 0x36,
-	0xa2, 0x9f, 0x7a, 0xe8, 0x32, 0x91, 0x17, 0x9e, 0x79, 0xbb, 0xa1, 0xdc, 0xcd, 0x35, 0x54, 0xfc,
-	0x25, 0x07, 0xee, 0xa7, 0x16, 0xbf, 0xed, 0xb1, 0xd7, 0x06, 0xb9, 0x21, 0x36, 0x11, 0x1b, 0x04,
-	0xc5, 0xe3, 0x47, 0x89, 0xf7, 0xfc, 0x0a, 0xc2, 0x92, 0x86, 0xa8, 0xef, 0xb9, 0x2d, 0x6c, 0x22,
-	0x8d, 0x01, 0xa4, 0xb4, 0x2e, 0xfb, 0x86, 0xad, 0x83, 0x67, 0xe0, 0xe0, 0xca, 0x28, 0xae, 0xe6,
-	0x76, 0x98, 0xc4, 0xc5, 0xe4, 0x24, 0x16, 0x7f, 0xe3, 0x00, 0xd8, 0xd0, 0x85, 0xef, 0x82, 0x8c,
-	0xda, 0x2d, 0xed, 0xf1, 0xf7, 0x66, 0xf3, 0x7a, 0x25, 0xe5, 0x88, 0x6a, 0x17, 0x7e, 0x00, 0xde,
-	0xea, 0x6b, 0x9d, 0xb3, 0xb3, 0xa7, 0xa7, 0x25, 0x8e, 0xaf, 0xcd, 0xe6, 0xf5, 0x34, 0xe1, 0xf4,
-	0xbd, 0xb1, 0xe3, 0x20, 0x13, 0x4a, 0xe0, 0xae, 0xa2, 0xf6, 0xf5, 0x67, 0xea, 0xb9, 0x72, 0x5a,
-	0xca, 0xf0, 0xc2, 0x6c, 0x5e, 0x4f, 0x6b, 0xb5, 0x82, 0xe9, 0x33, 0xec, 0xbb, 0x26, 0x7c, 0x0c,
-	0xde, 0xee, 0x28, 0x2d, 0x55, 0xe9, 0x75, 0x7a, 0xfd, 0xa7, 0x4a, 0xbf, 0x94, 0xe5, 0xdf, 0x9b,
-	0xcd, 0xeb, 0x42, 0x4a, 0x4a, 0xc7, 0x1d, 0x62, 0x97, 0x8c, 0x09, 0x45, 0x2e, 0xe5, 0x73, 0x3f,
-	0xfc, 0x54, 0xdb, 0x3b, 0xfe, 0x31, 0x03, 0x0e, 0xa3, 0x73, 0x6b, 0xe1, 0xdf, 0x16, 0x94, 0xc1,
-	0xdd, 0xe8, 0x4b, 0x0a, 0xdf, 0xb9, 0xda, 0xc3, 0xc4, 0x67, 0x97, 0xaf, 0x5d, 0xb7, 0x1d, 0xba,
-	0x64, 0x0f, 0xb6, 0xc0, 0x7e, 0xc0, 0x02, 0xf2, 0x89, 0xd8, 0xc4, 0x8c, 0xe0, 0xef, 0xa7, 0xee,
-	0x45, 0x20, 0x5f, 0x81, 0x72, 0xca, 0x89, 0xe0, 0xfb, 0xff, 0x2d, 0xb0, 0x00, 0xbe, 0xf1, 0xba,
-	0x4a, 0x14, 0xf7, 0x4e, 0x3e, 0xfe, 0x75, 0x59, 0xe3, 0xfe, 0x58, 0xd6, 0xb8, 0x17, 0x7f, 0xd7,
-	0xb8, 0x2f, 0x1e, 0xbe, 0x8e, 0x39, 0xa2, 0xbf, 0xd7, 0xc1, 0x3e, 0xbb, 0x7f, 0xf4, 0x6f, 0x00,
-	0x00, 0x00, 0xff, 0xff, 0x76, 0x24, 0xf4, 0x86, 0xd2, 0x0a, 0x00, 0x00,
+	// 623 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x55, 0xcd, 0x6a, 0xdb, 0x40,
+	0x18, 0xec, 0xc6, 0x49, 0xa0, 0x6b, 0x94, 0x9f, 0x0d, 0x26, 0xae, 0x4b, 0xad, 0x20, 0x72, 0xc8,
+	0x25, 0x32, 0x4d, 0x29, 0x94, 0xf4, 0x16, 0x17, 0xdc, 0x10, 0x61, 0x53, 0x99, 0x50, 0x28, 0x05,
+	0x21, 0x5b, 0x6b, 0xd9, 0x58, 0xd2, 0xaa, 0xda, 0x55, 0x42, 0x6f, 0x3d, 0xf5, 0x39, 0x72, 0xca,
+	0xb3, 0x94, 0x9e, 0x0a, 0x3d, 0x57, 0x07, 0xf5, 0xd2, 0x67, 0xc8, 0xa9, 0x68, 0xf5, 0x63, 0x29,
+	0x96, 0x4b, 0xdd, 0x06, 0x72, 0x92, 0x56, 0xdf, 0xf7, 0xcd, 0x0c, 0xbb, 0x33, 0x2b, 0xb8, 0xef,
+	0x7a, 0x84, 0x91, 0x16, 0x75, 0xdc, 0x41, 0xcb, 0x22, 0xa6, 0x46, 0x99, 0x87, 0x75, 0x5b, 0xf3,
+	0xb0, 0x4b, 0x3c, 0x86, 0x3d, 0x99, 0x97, 0x51, 0xf5, 0x42, 0xf7, 0x2c, 0x62, 0xca, 0x51, 0x5b,
+	0xe3, 0xd0, 0x9c, 0xb0, 0xb1, 0x3f, 0x90, 0x87, 0xc4, 0x6e, 0x99, 0xc4, 0x24, 0x2d, 0xde, 0x33,
+	0xf0, 0x47, 0x7c, 0x15, 0xe3, 0x45, 0x6f, 0xf1, 0xac, 0xf4, 0xb5, 0x02, 0x77, 0x15, 0x62, 0xf6,
+	0x39, 0xf0, 0xb9, 0x33, 0x24, 0xb6, 0x3d, 0x61, 0x2a, 0xc7, 0x47, 0x04, 0x0a, 0x39, 0xd2, 0x89,
+	0x51, 0x07, 0x7b, 0xe0, 0x40, 0x38, 0x39, 0x0b, 0x03, 0xb1, 0x9a, 0xcd, 0x9c, 0xbe, 0xba, 0x09,
+	0xc4, 0x17, 0x09, 0xa9, 0xa1, 0xfb, 0xf6, 0x54, 0x9f, 0xea, 0x84, 0xd3, 0xc7, 0xb2, 0xd2, 0x87,
+	0x3b, 0x35, 0x5b, 0xec, 0xa3, 0x8b, 0xa9, 0x9c, 0x9b, 0x55, 0xab, 0x56, 0xb6, 0x30, 0xd0, 0x67,
+	0x00, 0x77, 0xfd, 0x44, 0x03, 0xc3, 0x86, 0x66, 0x59, 0xd4, 0xd1, 0xc8, 0x68, 0x44, 0x31, 0xab,
+	0xaf, 0xec, 0x81, 0x83, 0xd5, 0x93, 0x6e, 0x18, 0x88, 0xb5, 0xf3, 0x59, 0x8b, 0xa2, 0xf4, 0xbb,
+	0x3d, 0xde, 0x70, 0x13, 0x88, 0x4f, 0x97, 0x53, 0xa1, 0xf4, 0xbb, 0x6a, 0x2d, 0x47, 0xa7, 0x58,
+	0xd4, 0x89, 0xb1, 0xd0, 0x9b, 0x12, 0x1d, 0x16, 0x76, 0x4c, 0x36, 0xae, 0x57, 0xb8, 0x8e, 0x47,
+	0x25, 0x3a, 0x14, 0xde, 0x30, 0x07, 0x19, 0x7f, 0x46, 0xef, 0xe1, 0xc6, 0x78, 0x62, 0x8e, 0xb5,
+	0x4b, 0x9d, 0x61, 0xcf, 0xd6, 0xbd, 0x69, 0x7d, 0x95, 0x23, 0x3d, 0x5f, 0x5a, 0x78, 0x27, 0x12,
+	0x2e, 0x44, 0x60, 0x6f, 0x53, 0xac, 0xe3, 0xd5, 0x5f, 0x57, 0x22, 0x90, 0x10, 0xdc, 0xea, 0xe0,
+	0xe4, 0xf4, 0x54, 0xfc, 0xc1, 0xc7, 0x94, 0x49, 0x3f, 0x00, 0xdc, 0xce, 0x7d, 0xa4, 0x2e, 0x71,
+	0x28, 0x46, 0x97, 0x70, 0x93, 0x32, 0xe2, 0xe9, 0x26, 0xd6, 0x1c, 0x62, 0xe0, 0xd9, 0xe1, 0xf6,
+	0xc2, 0x40, 0x14, 0xfa, 0x71, 0xa9, 0x4b, 0x0c, 0xcc, 0x8f, 0xf7, 0x78, 0x29, 0x7d, 0x85, 0x69,
+	0x55, 0xa0, 0xb9, 0xa5, 0x81, 0x7a, 0x70, 0x2b, 0xdd, 0x9f, 0xc4, 0xc6, 0xb4, 0xbe, 0xb2, 0x57,
+	0x39, 0xa8, 0x1e, 0xed, 0xcb, 0x39, 0x1b, 0xcb, 0x0b, 0x3c, 0xa9, 0x6e, 0xfa, 0x85, 0x35, 0x95,
+	0xae, 0xd7, 0x60, 0x2d, 0x6b, 0x6e, 0x27, 0x25, 0xea, 0x5b, 0xf7, 0x60, 0xdf, 0x4f, 0x00, 0xd6,
+	0xfe, 0x64, 0x5e, 0x25, 0x0c, 0xc4, 0x9d, 0xf6, 0x5d, 0x59, 0x77, 0xa7, 0xcc, 0xb8, 0x45, 0x09,
+	0x66, 0x4e, 0x42, 0xa5, 0x44, 0x42, 0xe7, 0xdf, 0x25, 0x74, 0x8a, 0x12, 0x3a, 0x33, 0x09, 0x67,
+	0x73, 0x0a, 0x92, 0xe4, 0xc4, 0x7e, 0xdf, 0x9d, 0x53, 0x90, 0xe4, 0xa6, 0x08, 0xb6, 0x30, 0x35,
+	0x6b, 0x77, 0x97, 0x1a, 0x84, 0xe1, 0x8e, 0xeb, 0xe1, 0x0b, 0xed, 0x16, 0xc5, 0xfa, 0xff, 0x50,
+	0x6c, 0x47, 0x88, 0xaf, 0x4b, 0xc2, 0xf9, 0x1d, 0x40, 0x21, 0xf5, 0x27, 0x8f, 0xe6, 0xfd, 0x85,
+	0xf0, 0x14, 0x6e, 0x64, 0x11, 0x8c, 0xa2, 0x92, 0x46, 0x50, 0x2a, 0x8f, 0x60, 0x3e, 0x55, 0xaa,
+	0x30, 0xcc, 0xad, 0xa8, 0xb4, 0x05, 0x37, 0xb2, 0x32, 0xbf, 0x5a, 0x8e, 0xae, 0x01, 0xdc, 0xce,
+	0x46, 0xd5, 0xe4, 0x4f, 0x85, 0x14, 0xf8, 0x30, 0xbb, 0x85, 0xd0, 0x93, 0x02, 0xcf, 0xed, 0x2b,
+	0xab, 0xd1, 0x5c, 0x54, 0x8e, 0x19, 0xa4, 0x07, 0xa8, 0x0d, 0xd7, 0x63, 0x56, 0xd4, 0x28, 0xf4,
+	0x16, 0xf6, 0xb7, 0xf1, 0xb8, 0xb4, 0x96, 0x82, 0x9c, 0xbc, 0xfc, 0x12, 0x36, 0xc1, 0xb7, 0xb0,
+	0x09, 0xae, 0x7e, 0x36, 0xc1, 0xbb, 0xc3, 0xbf, 0xd9, 0xde, 0xec, 0x6f, 0x3c, 0x58, 0xe7, 0xef,
+	0xcf, 0x7e, 0x07, 0x00, 0x00, 0xff, 0xff, 0x48, 0x32, 0x28, 0xce, 0xa2, 0x07, 0x00, 0x00,
 }
 
 func (this *LogStreamUncommitReport) Equal(that interface{}) bool {
@@ -699,7 +533,6 @@ const _ = grpc.SupportPackageIsVersion4
 type LogStreamReporterClient interface {
 	GetReport(ctx context.Context, in *GetReportRequest, opts ...grpc.CallOption) (*GetReportResponse, error)
 	Commit(ctx context.Context, in *CommitRequest, opts ...grpc.CallOption) (*CommitResponse, error)
-	GetPrevCommitResult(ctx context.Context, in *GetPrevCommitResultRequest, opts ...grpc.CallOption) (*GetPrevCommitResultResponse, error)
 }
 
 type logStreamReporterClient struct {
@@ -728,20 +561,10 @@ func (c *logStreamReporterClient) Commit(ctx context.Context, in *CommitRequest,
 	return out, nil
 }
 
-func (c *logStreamReporterClient) GetPrevCommitResult(ctx context.Context, in *GetPrevCommitResultRequest, opts ...grpc.CallOption) (*GetPrevCommitResultResponse, error) {
-	out := new(GetPrevCommitResultResponse)
-	err := c.cc.Invoke(ctx, "/varlog.snpb.LogStreamReporter/GetPrevCommitResult", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // LogStreamReporterServer is the server API for LogStreamReporter service.
 type LogStreamReporterServer interface {
 	GetReport(context.Context, *GetReportRequest) (*GetReportResponse, error)
 	Commit(context.Context, *CommitRequest) (*CommitResponse, error)
-	GetPrevCommitResult(context.Context, *GetPrevCommitResultRequest) (*GetPrevCommitResultResponse, error)
 }
 
 // UnimplementedLogStreamReporterServer can be embedded to have forward compatible implementations.
@@ -753,9 +576,6 @@ func (*UnimplementedLogStreamReporterServer) GetReport(ctx context.Context, req 
 }
 func (*UnimplementedLogStreamReporterServer) Commit(ctx context.Context, req *CommitRequest) (*CommitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Commit not implemented")
-}
-func (*UnimplementedLogStreamReporterServer) GetPrevCommitResult(ctx context.Context, req *GetPrevCommitResultRequest) (*GetPrevCommitResultResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetPrevCommitResult not implemented")
 }
 
 func RegisterLogStreamReporterServer(s *grpc.Server, srv LogStreamReporterServer) {
@@ -798,24 +618,6 @@ func _LogStreamReporter_Commit_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _LogStreamReporter_GetPrevCommitResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetPrevCommitResultRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(LogStreamReporterServer).GetPrevCommitResult(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/varlog.snpb.LogStreamReporter/GetPrevCommitResult",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(LogStreamReporterServer).GetPrevCommitResult(ctx, req.(*GetPrevCommitResultRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 var _LogStreamReporter_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "varlog.snpb.LogStreamReporter",
 	HandlerType: (*LogStreamReporterServer)(nil),
@@ -827,10 +629,6 @@ var _LogStreamReporter_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Commit",
 			Handler:    _LogStreamReporter_Commit_Handler,
-		},
-		{
-			MethodName: "GetPrevCommitResult",
-			Handler:    _LogStreamReporter_GetPrevCommitResult_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -1087,103 +885,6 @@ func (m *CommitResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *GetPrevCommitResultRequest) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *GetPrevCommitResultRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *GetPrevCommitResultRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.HighWatermark != 0 {
-		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.HighWatermark))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *GetPrevCommitResultResponse) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *GetPrevCommitResultResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *GetPrevCommitResultResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if len(m.UncommitReport) > 0 {
-		for iNdEx := len(m.UncommitReport) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.UncommitReport[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintLogStreamReporter(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x22
-		}
-	}
-	if len(m.CommitResults) > 0 {
-		for iNdEx := len(m.CommitResults) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.CommitResults[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintLogStreamReporter(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x1a
-		}
-	}
-	if m.Code != 0 {
-		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.Code))
-		i--
-		dAtA[i] = 0x10
-	}
-	if m.StorageNodeID != 0 {
-		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.StorageNodeID))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
 func encodeVarintLogStreamReporter(dAtA []byte, offset int, v uint64) int {
 	offset -= sovLogStreamReporter(v)
 	base := offset
@@ -1315,51 +1016,6 @@ func (m *CommitResponse) ProtoSize() (n int) {
 	return n
 }
 
-func (m *GetPrevCommitResultRequest) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.HighWatermark != 0 {
-		n += 1 + sovLogStreamReporter(uint64(m.HighWatermark))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *GetPrevCommitResultResponse) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.StorageNodeID != 0 {
-		n += 1 + sovLogStreamReporter(uint64(m.StorageNodeID))
-	}
-	if m.Code != 0 {
-		n += 1 + sovLogStreamReporter(uint64(m.Code))
-	}
-	if len(m.CommitResults) > 0 {
-		for _, e := range m.CommitResults {
-			l = e.ProtoSize()
-			n += 1 + l + sovLogStreamReporter(uint64(l))
-		}
-	}
-	if len(m.UncommitReport) > 0 {
-		for _, e := range m.UncommitReport {
-			l = e.ProtoSize()
-			n += 1 + l + sovLogStreamReporter(uint64(l))
-		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
 func sovLogStreamReporter(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
@@ -1477,7 +1133,10 @@ func (m *LogStreamUncommitReport) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1528,7 +1187,10 @@ func (m *GetReportRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1632,7 +1294,10 @@ func (m *GetReportResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1797,7 +1462,10 @@ func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1901,7 +1569,10 @@ func (m *CommitRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1952,234 +1623,10 @@ func (m *CommitResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *GetPrevCommitResultRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowLogStreamReporter
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: GetPrevCommitResultRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GetPrevCommitResultRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
-			}
-			m.HighWatermark = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.HighWatermark |= github_daumkakao_com_varlog_varlog_pkg_types.GLSN(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipLogStreamReporter(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *GetPrevCommitResultResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowLogStreamReporter
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: GetPrevCommitResultResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GetPrevCommitResultResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
-			}
-			m.StorageNodeID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.StorageNodeID |= github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Code", wireType)
-			}
-			m.Code = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Code |= GetPrevCommitResultResponse_ReturnCode(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CommitResults", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.CommitResults = append(m.CommitResults, &LogStreamCommitResult{})
-			if err := m.CommitResults[len(m.CommitResults)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field UncommitReport", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.UncommitReport = append(m.UncommitReport, &LogStreamUncommitReport{})
-			if err := m.UncommitReport[len(m.UncommitReport)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipLogStreamReporter(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {

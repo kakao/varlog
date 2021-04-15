@@ -25,10 +25,6 @@ func (rc *EmptyReporterClient) Commit(ctx context.Context, gls *snpb.CommitReque
 	return nil
 }
 
-func (rc *EmptyReporterClient) GetPrevCommitResult(_ context.Context, hwm types.GLSN) (*snpb.GetPrevCommitResultResponse, error) {
-	return &snpb.GetPrevCommitResultResponse{}, nil
-}
-
 func (rc *EmptyReporterClient) Close() error {
 	return nil
 }
@@ -236,10 +232,6 @@ func (r *DummyReporterClient) Commit(ctx context.Context, cr *snpb.CommitRequest
 	}
 
 	return nil
-}
-
-func (r *DummyReporterClient) GetPrevCommitResult(_ context.Context, hwm types.GLSN) (*snpb.GetPrevCommitResultResponse, error) {
-	return &snpb.GetPrevCommitResultResponse{}, nil
 }
 
 func (r *DummyReporterClient) Close() error {
