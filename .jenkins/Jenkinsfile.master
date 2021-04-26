@@ -1,4 +1,3 @@
-def masterBranch = "master"
 def masterCron = "H H(3-5),H(15-17) * * *" // for UTC
 
 pipeline {
@@ -21,10 +20,6 @@ pipeline {
       environment { 
         TEST_USE_LOGGER = "0"
       }
-      when {
-        branch "${masterBranch}"
-        triggeredBy "TimerTrigger"
-      }
       steps {
         sh "make test TEST_FAILFAST=1 TEST_TIMEOUT=3h TEST_CPU=2,4,8,16,32 TEST_COUNT=5 TEST_COVERAGE=0"
       }
@@ -35,9 +30,7 @@ pipeline {
         }
         unsuccessful {
           script {
-            if (env.BRANCH_NAME == "${masterBranch}") {
-              notify("${env.BRANCH_NAME} failed: ${env.BUILD_URL}")
-            }
+            notify("${env.BRANCH_NAME} failed: ${env.BUILD_URL}")
           }  
         }
       }
@@ -45,7 +38,6 @@ pipeline {
 
     stage("test.e2e") {
       when {
-        branch "${masterBranch}"
         triggeredBy "TimerTrigger"
       }
       environment {
