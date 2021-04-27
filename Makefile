@@ -130,8 +130,7 @@ test_e2e_docker: image_builder_dev push_builder_dev
 		--image-pull-policy=Always \
 		--restart=Never \
 		--env="VAULT_ADDR=$(VAULT_ADDR)" \
-		--env="VAULT_ROLE_ID=$(VAULT_ROLE_ID)" \
-		--env="VAULT_SECRET_ID=$(VAULT_SECRET_ID)" \
+		--env="VAULT_TOKEN=$(VAULT_TOKEN)" \
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
 		--command -- $(GO) test ./test/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1
 
@@ -141,8 +140,7 @@ test_e2e_docker_long: image_builder_dev push_builder_dev
 		--image-pull-policy=Always \
 		--restart=Never \
 		--env="VAULT_ADDR=$(VAULT_ADDR)" \
-		--env="VAULT_ROLE_ID=$(VAULT_ROLE_ID)" \
-		--env="VAULT_SECRET_ID=$(VAULT_SECRET_ID)" \
+		--env="VAULT_TOKEN=$(VAULT_TOKEN)" \
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
 		--command -- $(GO) test ./test/e2e -tags=long_e2e -v -timeout 12h -failfast -count 1 -race -p 1
 	
