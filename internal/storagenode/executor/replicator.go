@@ -5,6 +5,7 @@ package executor
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -36,20 +37,30 @@ func (c replicatorConfig) validate() error {
 type replicator interface {
 	send(ctx context.Context, t *replicateTask) error
 	stop()
-	drainQueue()
+	waitForDrainage(ctx context.Context) error
 }
 
 type replicatorImpl struct {
 	replicatorConfig
-	q          replicateQueue
+
+	q replicateQueue
+
 	dispatcher struct {
 		runner *runner.Runner
 		cancel context.CancelFunc
 		mu     sync.Mutex
 	}
+
+	inflight int64
+
 	running struct {
 		val bool
 		mu  sync.RWMutex
+	}
+
+	popCv struct {
+		cv *sync.Cond
+		mu sync.Mutex
 	}
 }
 
@@ -73,6 +84,8 @@ func (r *replicatorImpl) init() error {
 		return err
 	}
 	r.q = q
+
+	r.popCv.cv = sync.NewCond(&r.popCv.mu)
 
 	rn := runner.New("replicator", nil)
 	cancel, err := rn.Run(r.replicateLoop)
@@ -101,22 +114,38 @@ func (r *replicatorImpl) send(ctx context.Context, t *replicateTask) error {
 	}
 	defer r.state.releaseBarrier()
 
+	atomic.AddInt64(&r.inflight, 1)
+
 	return r.q.pushWithContext(ctx, t)
 }
 
 func (r *replicatorImpl) replicateLoop(ctx context.Context) {
 	for ctx.Err() == nil {
-		rt, err := r.q.popWithContext(ctx)
-		if err != nil {
+
+		if err := r.replicateLoopInternal(ctx); err != nil {
 			r.state.setSealing()
-			continue
 		}
 
-		if err := r.replicate(ctx, rt); err != nil {
-			r.state.setSealing()
-			continue
-		}
+		r.popCv.cv.L.Lock()
+		r.popCv.cv.Signal()
+		r.popCv.cv.L.Unlock()
 	}
+}
+
+func (r *replicatorImpl) replicateLoopInternal(ctx context.Context) error {
+	rt, err := r.q.popWithContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		atomic.AddInt64(&r.inflight, -1)
+	}()
+
+	if err := r.replicate(ctx, rt); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *replicatorImpl) replicate(ctx context.Context, t *replicateTask) error {
@@ -163,4 +192,36 @@ func (r *replicatorImpl) drainQueue() {
 	for r.q.size() > 0 {
 		_ = r.q.pop()
 	}
+}
+
+func (r *replicatorImpl) waitForDrainage(ctx context.Context) error {
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+
+	defer func() {
+		close(done)
+		wg.Wait()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+			r.popCv.cv.L.Lock()
+			r.popCv.cv.Signal()
+			r.popCv.cv.L.Unlock()
+		case <-done:
+		}
+	}()
+
+	r.popCv.cv.L.Lock()
+	defer r.popCv.cv.L.Unlock()
+	for atomic.LoadInt64(&r.inflight) > 0 && ctx.Err() == nil {
+		r.popCv.cv.Wait()
+	}
+	if r.q.size() == 0 {
+		return nil
+	}
+	return ctx.Err()
 }

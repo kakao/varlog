@@ -5,6 +5,7 @@ import (
 	"io"
 	"math/rand"
 	"runtime"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -581,6 +582,120 @@ func TestReplicate(t *testing.T) {
 				report.UncommittedLLSNLength == 0
 		}, time.Second, time.Millisecond)
 	}
+}
+
+func TestExecutorSealSuddenly(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	const (
+		numWriters = 10
+	)
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+
+	lse, err := New(WithStorage(strg))
+	require.NoError(t, err)
+
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, types.InvalidGLSN, sealedGLSN)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
+
+	var wg sync.WaitGroup
+	maxGLSNs := make([]types.GLSN, numWriters)
+	lastErrs := make([]error, numWriters)
+	for i := 0; i < numWriters; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			for {
+				glsn, err := lse.Append(context.TODO(), []byte("foo"))
+				if err == nil {
+					maxGLSNs[idx] = glsn
+				}
+				lastErrs[idx] = err
+				if err != nil {
+					return
+				}
+			}
+		}(i)
+	}
+
+	var commitResults []*snpb.LogStreamCommitResult
+	var lastCommittedGLSN types.GLSN
+	var sealed bool
+	var muSealed sync.Mutex
+	done := make(chan struct{})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			report, err := lse.GetReport(context.TODO())
+			assert.NoError(t, err)
+
+			if report.UncommittedLLSNLength == 0 {
+				continue
+			}
+
+			var cr *snpb.LogStreamCommitResult
+			i := sort.Search(len(commitResults), func(i int) bool {
+				return report.GetHighWatermark() <= commitResults[i].GetPrevHighWatermark()
+			})
+			if i < len(commitResults) {
+				assert.Equal(t, commitResults[i].GetPrevHighWatermark(), report.GetHighWatermark())
+				for i < len(commitResults) {
+					lse.Commit(context.TODO(), commitResults[i])
+					i++
+				}
+				continue
+			}
+
+			muSealed.Lock()
+			if sealed {
+				muSealed.Unlock()
+				continue
+			}
+
+			cr = &snpb.LogStreamCommitResult{
+				HighWatermark:       report.GetHighWatermark() + types.GLSN(report.GetUncommittedLLSNLength()),
+				PrevHighWatermark:   report.GetHighWatermark(),
+				CommittedGLSNOffset: types.GLSN(report.GetUncommittedLLSNOffset()),
+				CommittedGLSNLength: report.GetUncommittedLLSNLength(),
+			}
+			lastCommittedGLSN = cr.GetHighWatermark()
+			commitResults = append(commitResults, cr)
+			lse.Commit(context.TODO(), cr)
+			muSealed.Unlock()
+		}
+	}()
+
+	time.Sleep(time.Second)
+	muSealed.Lock()
+	sealed = true
+	muSealed.Unlock()
+
+	require.Eventually(t, func() bool {
+		status, glsn, err := lse.Seal(context.TODO(), lastCommittedGLSN)
+		require.NoError(t, err)
+		return status == varlogpb.LogStreamStatusSealed && glsn == lastCommittedGLSN
+	}, time.Second, 10*time.Millisecond)
+
+	close(done)
+	wg.Wait()
 }
 
 func TestExecutorSeal(t *testing.T) {
