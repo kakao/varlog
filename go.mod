@@ -7,9 +7,9 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.5.0
+	github.com/golang/protobuf v1.5.0
 	github.com/google/gofuzz v1.2.0
 	github.com/hashicorp/go-multierror v1.0.0
-	github.com/hashicorp/vault/api v1.0.4
 	github.com/pkg/errors v0.9.1
 	github.com/smartystreets/assertions v1.2.0
 	github.com/smartystreets/goconvey v1.6.4
@@ -37,7 +37,7 @@ require (
 	golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13
 	google.golang.org/grpc v1.36.1
 	google.golang.org/grpc/examples v0.0.0-20210402181922-5730f8d113ee // indirect
-	google.golang.org/protobuf v1.26.0
+	google.golang.org/protobuf v1.26.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.19.0
 	k8s.io/apimachinery v0.19.0
