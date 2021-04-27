@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,8 +14,6 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/mathutil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
-	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
-	"github.daumkakao.com/varlog/varlog/pkg/util/timeutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 )
 
@@ -77,7 +74,7 @@ const (
 type writer interface {
 	send(ctx context.Context, tb *appendTask) error
 	stop()
-	drainQueue(err error)
+	waitForDrainage(ctx context.Context) error
 }
 
 type writerImpl struct {
@@ -90,6 +87,8 @@ type writerImpl struct {
 		cancel context.CancelFunc
 	}
 
+	inflight int64
+
 	// NOTE: atomic variable can be used to stop writer.
 	// Can it avoid leak of appendTask absolutely?
 	// ws int32
@@ -100,23 +99,13 @@ type writerImpl struct {
 		mu  sync.RWMutex
 	}
 
+	popCv struct {
+		cv *sync.Cond
+		mu sync.Mutex
+	}
+
 	writeTaskBatch     []*appendTask
 	replicateTaskBatch []*replicateTask
-
-	stat struct {
-		wtPassDur time.Duration
-		wtPassMin time.Duration
-		wtPassMax time.Duration
-		wtPassCnt int
-
-		popSize int
-		popCnt  int
-
-		lockDur    atomicutil.AtomicDuration
-		lockDurMin atomicutil.AtomicDuration
-		lockDurMax atomicutil.AtomicDuration
-		lockCnt    int32
-	}
 }
 
 var _ writer = (*writerImpl)(nil)
@@ -144,6 +133,8 @@ func (w *writerImpl) init() error {
 	}
 	w.q = q
 
+	w.popCv.cv = sync.NewCond(&w.popCv.mu)
+
 	r := runner.New("writer", nil)
 	cancel, err := r.Run(w.writeLoop)
 	if err != nil {
@@ -153,17 +144,10 @@ func (w *writerImpl) init() error {
 	w.dispatcher.cancel = cancel
 	w.running.val = true
 
-	w.stat.wtPassMin = timeutil.MaxDuration
-	w.stat.wtPassMax = time.Duration(0)
-	w.stat.lockDurMin.Store(timeutil.MaxDuration)
-	w.stat.lockDurMax.Store(time.Duration(0))
-
 	return nil
 }
 
 func (w *writerImpl) send(ctx context.Context, tb *appendTask) error {
-	tick := time.Now()
-
 	if tb == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
@@ -185,17 +169,7 @@ func (w *writerImpl) send(ctx context.Context, tb *appendTask) error {
 	}
 	defer w.state.releaseBarrier()
 
-	dur := time.Since(tick)
-	w.stat.lockDur.Add(dur)
-	/*
-		if w.stat.lockDurMax.Load() < dur {
-			w.stat.lockDurMax = dur
-		}
-		if w.stat.lockDurMin > dur {
-			w.stat.lockDurMin = dur
-		}
-	*/
-	atomic.AddInt32(&w.stat.lockCnt, 1)
+	atomic.AddInt64(&w.inflight, 1)
 
 	tb.ctime = time.Now()
 	return w.q.pushWithContext(ctx, tb)
@@ -205,35 +179,50 @@ func (w *writerImpl) writeLoop(ctx context.Context) {
 	for ctx.Err() == nil {
 		w.resetBatch()
 
-		oldLLSN, newLLSN, err := w.ready(ctx)
-		if err != nil {
-			w.batchError(err)
+		if err := w.writeLoopInternal(ctx); err != nil {
 			w.state.setSealing()
-			continue
 		}
 
-		if err := w.fanout(ctx); err != nil {
-			// NOTE: ownership of write/replicate tasks is moved.
-			w.state.setSealing()
-			continue
-		}
-
-		if !w.lsc.uncommittedLLSNEnd.CompareAndSwap(oldLLSN, newLLSN) {
-			panic(errors.Errorf(
-				"uncommittedLLSNEnd swap failure: current=%d old=%d new=%d: more than one writer?",
-				w.lsc.uncommittedLLSNEnd.Load(), oldLLSN, newLLSN,
-			))
-			// w.state.setSealing()
-			// continue
-		}
+		w.popCv.cv.L.Lock()
+		w.popCv.cv.Signal()
+		w.popCv.cv.L.Unlock()
 	}
 }
 
-func (w *writerImpl) ready(ctx context.Context) (types.LLSN, types.LLSN, error) {
+func (w *writerImpl) writeLoopInternal(ctx context.Context) error {
+	oldLLSN, newLLSN, numPopped, err := w.ready(ctx)
+	defer func() {
+		atomic.AddInt64(&w.inflight, -numPopped)
+	}()
+	if err != nil {
+		w.batchError(err)
+		return err
+	}
+
+	if err := w.fanout(ctx); err != nil {
+		// NOTE: ownership of write/replicate tasks is moved.
+		return err
+	}
+
+	if !w.lsc.uncommittedLLSNEnd.CompareAndSwap(oldLLSN, newLLSN) {
+		// NOTE: If this CAS operation fails, it means other goroutine changes
+		// uncommittedLLSNEnd of LogStreamContext.
+		panic(errors.Errorf(
+			"uncommittedLLSNEnd swap failure: current=%d old=%d new=%d: more than one writer?",
+			w.lsc.uncommittedLLSNEnd.Load(), oldLLSN, newLLSN,
+		))
+	}
+	return nil
+}
+
+func (w *writerImpl) ready(ctx context.Context) (types.LLSN, types.LLSN, int64, error) {
+	numPopped := int64(0)
+
 	t, err := w.q.popWithContext(ctx)
 	if err != nil {
-		return types.InvalidLLSN, types.InvalidLLSN, err
+		return types.InvalidLLSN, types.InvalidLLSN, numPopped, err
 	}
+	numPopped++
 
 	oldLLSN := w.lsc.uncommittedLLSNEnd.Load()
 	newLLSN := oldLLSN
@@ -241,24 +230,20 @@ func (w *writerImpl) ready(ctx context.Context) (types.LLSN, types.LLSN, error) 
 	primary := t.primary
 	backup := !t.primary
 
-	w.addDebugStat(t)
-
 	if err := w.fillBatch(t, newLLSN); err != nil {
-		return types.InvalidLLSN, types.InvalidLLSN, err
+		return types.InvalidLLSN, types.InvalidLLSN, numPopped, err
 	}
 	newLLSN++
 
 	popSize := mathutil.MinInt(w.batchSize-1, w.q.size())
-	w.stat.popSize += popSize + 1
-	w.stat.popCnt++
-
 	for i := 0; i < popSize; i++ {
 		t := w.q.pop()
-		w.addDebugStat(t)
+		numPopped++
 
 		if err := w.fillBatch(t, newLLSN); err != nil {
-			return types.InvalidLLSN, types.InvalidLLSN, err
+			return types.InvalidLLSN, types.InvalidLLSN, numPopped, err
 		}
+
 		newLLSN++
 
 		primary = primary || t.primary
@@ -268,19 +253,7 @@ func (w *writerImpl) ready(ctx context.Context) (types.LLSN, types.LLSN, error) 
 	if primary && backup {
 		panic("mixed primary and non-primary requests")
 	}
-	return oldLLSN, newLLSN, nil
-}
-
-func (w *writerImpl) addDebugStat(t *appendTask) {
-	d := time.Since(t.ctime)
-	w.stat.wtPassDur += d
-	if d < w.stat.wtPassMin {
-		w.stat.wtPassMin = d
-	}
-	if d > w.stat.wtPassMax {
-		w.stat.wtPassMax = d
-	}
-	w.stat.wtPassCnt++
+	return oldLLSN, newLLSN, numPopped, nil
 }
 
 func (w *writerImpl) fillBatch(t *appendTask, llsn types.LLSN) error {
@@ -389,26 +362,6 @@ func (w *writerImpl) stop() {
 
 	w.drainQueue(errors.WithStack(verrors.ErrClosed))
 	w.resetBatch()
-
-	if w.stat.wtPassCnt > 0 {
-		log.Printf("wtPass: mean=%v min=%+v max=%+v",
-			w.stat.wtPassDur/time.Duration(w.stat.wtPassCnt),
-			w.stat.wtPassMin,
-			w.stat.wtPassMax,
-		)
-	}
-
-	if atomic.LoadInt32(&w.stat.lockCnt) > 0 {
-		log.Printf("lockDur: mean=%v min=%+v max=%+v",
-			w.stat.lockDur.Load()/time.Duration(atomic.LoadInt32(&w.stat.lockCnt)),
-			w.stat.lockDurMin.Load(),
-			w.stat.lockDurMax.Load(),
-		)
-	}
-
-	if w.stat.popCnt > 0 {
-		log.Printf("popSize: mean=%f", float64(w.stat.popSize)/float64(w.stat.popCnt))
-	}
 }
 
 func (w *writerImpl) drainQueue(err error) {
@@ -417,6 +370,38 @@ func (w *writerImpl) drainQueue(err error) {
 		tb.err = err
 		tb.wg.Done()
 	}
+}
+
+func (w *writerImpl) waitForDrainage(ctx context.Context) error {
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+
+	defer func() {
+		close(done)
+		wg.Wait()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+			w.popCv.cv.L.Lock()
+			w.popCv.cv.Signal()
+			w.popCv.cv.L.Unlock()
+		case <-done:
+		}
+	}()
+
+	w.popCv.cv.L.Lock()
+	defer w.popCv.cv.L.Unlock()
+	for atomic.LoadInt64(&w.inflight) > 0 && ctx.Err() == nil {
+		w.popCv.cv.Wait()
+	}
+	if w.q.size() == 0 {
+		return nil
+	}
+	return ctx.Err()
 }
 
 func (w *writerImpl) resetBatch() {

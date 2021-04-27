@@ -34,16 +34,16 @@ func (m *MockCommitter) EXPECT() *MockCommitterMockRecorder {
 	return m.recorder
 }
 
-// drainCommitQ mocks base method.
-func (m *MockCommitter) drainCommitQ(err error) {
+// drainCommitWaitQ mocks base method.
+func (m *MockCommitter) drainCommitWaitQ(err error) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "drainCommitQ", err)
+	m.ctrl.Call(m, "drainCommitWaitQ", err)
 }
 
-// drainCommitQ indicates an expected call of drainCommitQ.
-func (mr *MockCommitterMockRecorder) drainCommitQ(err interface{}) *gomock.Call {
+// drainCommitWaitQ indicates an expected call of drainCommitWaitQ.
+func (mr *MockCommitterMockRecorder) drainCommitWaitQ(err interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "drainCommitQ", reflect.TypeOf((*MockCommitter)(nil).drainCommitQ), err)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "drainCommitWaitQ", reflect.TypeOf((*MockCommitter)(nil).drainCommitWaitQ), err)
 }
 
 // sendCommitTask mocks base method.

@@ -27,7 +27,7 @@ func (e *executor) Seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varl
 	return e.seal(ctx, lastCommittedGLSN)
 }
 
-func (e *executor) seal(_ context.Context, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
+func (e *executor) seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	// TODO: need lock to run setSealed not to run concurrently
 	// use lock or singleflight in Seal API
 	//
@@ -67,10 +67,13 @@ func (e *executor) seal(_ context.Context, lastCommittedGLSN types.GLSN) (varlog
 
 	// make sure that writer, commiter, replicator are empty
 	// TODO: need seal timeout?
-	err = errors.WithStack(verrors.ErrSealed)
-	e.writer.drainQueue(err)
-	e.rp.drainQueue()
-	e.committer.drainCommitQ(err)
+	if err := e.writer.waitForDrainage(ctx); err != nil {
+		return varlogpb.LogStreamStatusSealing, lastCommittedGLSN, err
+	}
+	if err := e.rp.waitForDrainage(ctx); err != nil {
+		return varlogpb.LogStreamStatusSealing, lastCommittedGLSN, err
+	}
+	e.committer.drainCommitWaitQ(errors.WithStack(verrors.ErrSealed))
 
 	// wipe-out unnecessary logs
 	if err := e.storage.DeleteUncommitted(lastCommittedLLSN + 1); err != nil {
@@ -88,7 +91,6 @@ func (e *executor) sealInternal(lastCommittedGLSN types.GLSN) (varlogpb.LogStrea
 	e.stateBarrier.lock.Lock()
 	defer e.stateBarrier.lock.Unlock()
 	e.stateBarrier.state.store(executorSealed)
-
 	e.tsp.Touch()
 	return varlogpb.LogStreamStatusSealed, lastCommittedGLSN, nil
 }

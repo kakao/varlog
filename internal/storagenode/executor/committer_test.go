@@ -252,7 +252,7 @@ func TestCommitter(t *testing.T) {
 	require.Error(t, err)
 
 	// sealed
-	committer.drainCommitQ(verrors.ErrSealed)
+	committer.drainCommitWaitQ(verrors.ErrSealed)
 	lsc.uncommittedLLSNEnd.Store(3)
 	sealed.Store(false)
 

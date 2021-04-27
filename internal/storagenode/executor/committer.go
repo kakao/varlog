@@ -4,10 +4,8 @@ package executor
 
 import (
 	"context"
-	"log"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -15,7 +13,6 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/mathutil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
-	"github.daumkakao.com/varlog/varlog/pkg/util/timeutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 )
 
@@ -59,7 +56,7 @@ func (c committerConfig) validate() error {
 type committer interface {
 	sendCommitWaitTask(ctx context.Context, tb *appendTask) error
 	sendCommitTask(ctx context.Context, ctb *commitTask) error
-	drainCommitQ(err error)
+	drainCommitWaitQ(err error)
 	stop()
 }
 
@@ -80,13 +77,6 @@ type committerImpl struct {
 	running struct {
 		val bool
 		mu  sync.RWMutex
-	}
-
-	stat struct {
-		ctPassDur time.Duration
-		ctPassMin time.Duration
-		ctPassMax time.Duration
-		ctPassCnt int
 	}
 }
 
@@ -134,9 +124,6 @@ func (c *committerImpl) init() error {
 	c.dispatcher.cancel = cancel
 	c.running.val = true
 
-	c.stat.ctPassMin = timeutil.MaxDuration
-	c.stat.ctPassMax = time.Duration(0)
-
 	return nil
 }
 
@@ -177,17 +164,22 @@ func (c *committerImpl) commitLoop(ctx context.Context) {
 	for ctx.Err() == nil {
 		c.resetBatch()
 
-		if err := c.ready(ctx); err != nil {
-			// sealing
+		if err := c.commitLoopInternal(ctx); err != nil {
 			c.state.setSealing()
-			continue
-		}
-		if err := c.commit(ctx); err != nil {
-			// sealing
-			c.state.setSealing()
-			continue
 		}
 	}
+}
+
+func (c *committerImpl) commitLoopInternal(ctx context.Context) error {
+	if err := c.ready(ctx); err != nil {
+		// sealing
+		return err
+	}
+	if err := c.commit(ctx); err != nil {
+		// sealing
+		return err
+	}
+	return nil
 }
 
 func (c *committerImpl) ready(ctx context.Context) error {
@@ -196,18 +188,6 @@ func (c *committerImpl) ready(ctx context.Context) error {
 		return err
 	}
 	c.commitTaskBatch = append(c.commitTaskBatch, ct)
-
-	// -- debug / stat
-	d := time.Since(ct.ctime)
-	c.stat.ctPassDur += d
-	if d < c.stat.ctPassMin {
-		c.stat.ctPassMin = d
-	}
-	if d > c.stat.ctPassMax {
-		c.stat.ctPassMax = d
-	}
-	c.stat.ctPassCnt++
-	// -- debug / stat
 
 	globalHighWatermark, _ := c.lsc.reportCommitBase()
 
@@ -218,18 +198,6 @@ func (c *committerImpl) ready(ctx context.Context) error {
 			ct.release()
 			continue
 		}
-
-		// -- debug / stat
-		d := time.Since(ct.ctime)
-		c.stat.ctPassDur += d
-		if d < c.stat.ctPassMin {
-			c.stat.ctPassMin = d
-		}
-		if d > c.stat.ctPassMax {
-			c.stat.ctPassMax = d
-		}
-		c.stat.ctPassCnt++
-		// -- debug / stat
 
 		c.commitTaskBatch = append(c.commitTaskBatch, ct)
 	}
@@ -312,6 +280,20 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 		return err
 	}
 
+	// NOTE: Popping committed tasks should be happened before assigning a new
+	// localHighWatermark.
+	//
+	// Seal RPC decides whether the LSE can be sealed or not by using the localHighWatermark.
+	// If Seal RPC tries to make the LSE sealed, the committer should not pop anything from
+	// commitWaitQ.
+	committedTasks := make([]*appendTask, 0, numCommits)
+	for i := 0; i < numCommits; i++ {
+		tb := c.commitWaitQ.pop()
+		// NOTE: This tb should not be nil, because the size of commitWaitQ is inspected
+		// above.
+		committedTasks = append(committedTasks, tb)
+	}
+
 	// only the first commit changes local low watermark
 	c.lsc.localGLSN.localLowWatermark.CompareAndSwap(types.InvalidGLSN, ct.committedGLSNBegin)
 	c.lsc.localGLSN.localHighWatermark.Store(ct.committedGLSNEnd - 1)
@@ -320,9 +302,14 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 		c.lsc.storeReportCommitBase(ct.highWatermark, uncommittedLLSNBegin)
 	})
 
-	for i := 0; i < numCommits; i++ {
-		tb := c.commitWaitQ.pop()
-		tb.wg.Done()
+	// NOTE: Notifying the completion of append should be happened after assigning a new
+	// localHighWatermark.
+	//
+	// A client that receives the response of Append RPC should be able to read that log
+	// immediately. If updating localHighWatermark occurs later, the client can receive
+	// ErrUndecidable if ErrUndecidable is allowed.
+	for _, ct := range committedTasks {
+		ct.wg.Done()
 	}
 
 	return nil
@@ -337,19 +324,11 @@ func (c *committerImpl) stop() {
 	c.dispatcher.runner.Stop()
 
 	c.drainCommitTaskQ()
-	c.drainCommitQ(errors.WithStack(verrors.ErrClosed))
+	c.drainCommitWaitQ(errors.WithStack(verrors.ErrClosed))
 	c.resetBatch()
-
-	if c.stat.ctPassCnt > 0 {
-		log.Printf("ctPass: mean=%v min=%+v max=%+v",
-			c.stat.ctPassDur/time.Duration(c.stat.ctPassCnt),
-			c.stat.ctPassMin,
-			c.stat.ctPassMax,
-		)
-	}
 }
 
-func (c *committerImpl) drainCommitQ(err error) {
+func (c *committerImpl) drainCommitWaitQ(err error) {
 	for c.commitWaitQ.size() > 0 {
 		tb := c.commitWaitQ.pop()
 		tb.err = err
