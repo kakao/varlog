@@ -1557,6 +1557,10 @@ func TestMRFailoverRestart(t *testing.T) {
 
 			Convey("Then GetMembership should return 6 peers", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
+					if !clus.healthCheck(restartNode) {
+						return false
+					}
+
 					cinfo, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
@@ -1591,6 +1595,10 @@ func TestMRFailoverRestart(t *testing.T) {
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
+					if !clus.healthCheck(restartNode) {
+						return false
+					}
+
 					cinfo, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
@@ -1656,6 +1664,10 @@ func TestMRLoadSnapshot(t *testing.T) {
 			So(clus.restart(restartNode), ShouldBeNil)
 			Convey("Then GetMembership should recover metadata", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
+					if !clus.healthCheck(restartNode) {
+						return false
+					}
+
 					meta, err := clus.nodes[restartNode].GetMetadata(context.TODO())
 					if err != nil {
 						return false
@@ -1793,6 +1805,10 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
+					if !clus.healthCheck(restartNode) {
+						return false
+					}
+
 					cinfo, err := clus.nodes[restartNode].GetClusterInfo(context.TODO(), 0)
 					if err != nil {
 						return false
@@ -1844,6 +1860,10 @@ func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
 
 			Convey("Then node which is restarted should serve", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
+					if !clus.healthCheck(restartNode) {
+						return false
+					}
+
 					return clus.nodes[restartNode].GetServerAddr() != ""
 				}), ShouldBeTrue)
 			})
@@ -1973,6 +1993,10 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 			clus.restart(restartNode)
 
 			So(testutil.CompareWaitN(50, func() bool {
+				if !clus.healthCheck(restartNode) {
+					return false
+				}
+
 				return clus.nodes[restartNode].GetServerAddr() != ""
 			}), ShouldBeTrue)
 
@@ -2157,6 +2181,10 @@ func TestMRUnsafeNoWal(t *testing.T) {
 			So(clus.restart(leader), ShouldBeNil)
 			Convey("Then it should have empty metadata", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
+					if !clus.healthCheck(leader) {
+						return false
+					}
+
 					meta, err := clus.nodes[leader].GetMetadata(context.TODO())
 					if err != nil {
 						return false
