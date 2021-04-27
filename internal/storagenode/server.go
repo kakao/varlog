@@ -193,5 +193,19 @@ func (s *server) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncRes
 }
 
 func (s *server) GetPrevCommitInfo(ctx context.Context, req *snpb.GetPrevCommitInfoRequest) (*snpb.GetPrevCommitInfoResponse, error) {
-	panic("not yet implemented")
+	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/GetPrevCommitInfo", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			req := reqI.(*snpb.GetPrevCommitInfoRequest)
+			info, err := s.storageNode.GetPrevCommitInfo(ctx, req.GetHighWatermark())
+			rsp := &snpb.GetPrevCommitInfoResponse{
+				StorageNodeID: s.storageNode.StorageNodeID(),
+				CommitInfos:   info,
+			}
+			return rsp, err
+		},
+	)
+	if err != nil {
+		return nil, verrors.ToStatusError(err)
+	}
+	return rspI.(*snpb.GetPrevCommitInfoResponse), nil
 }

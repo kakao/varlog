@@ -3,7 +3,14 @@ package storage
 //go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/storagenode/storage -package storage -destination storage_mock.go . Scanner,WriteBatch,CommitBatch,Storage
 
 import (
+	"errors"
+
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+)
+
+var (
+	ErrNotFoundCommitContext     = errors.New("storage: no commit context")
+	ErrInconsistentCommitContext = errors.New("storage: inconsistent commit context")
 )
 
 type RecoveryInfo struct {
@@ -112,6 +119,8 @@ type Storage interface {
 
 	// NewCommitBatch creates a batch for commit operations.
 	NewCommitBatch(commitContext CommitContext) (CommitBatch, error)
+
+	ReadCommitContext(highWatermark types.GLSN) (CommitContext, error)
 
 	// RestoreLogStreamContext restores the LogStreamContext that can be recovered by contents
 	// of the storage. The LogStreamContext referred to by the parameter is filled with restored

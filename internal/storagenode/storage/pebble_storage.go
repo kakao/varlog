@@ -435,6 +435,45 @@ func (ps *pebbleStorage) StoreCommitContext(cc CommitContext) error {
 	return ps.db.Set(cck, nil, ps.commitContextOption)
 }
 
+func (ps *pebbleStorage) ReadCommitContext(highWatermark types.GLSN) (CommitContext, error) {
+	if highWatermark.Invalid() {
+		return InvalidCommitContext, errors.WithStack(verrors.ErrInvalid)
+	}
+
+	iter := ps.db.NewIter(&pebble.IterOptions{
+		LowerBound: []byte{commitContextKeyPrefix},
+		UpperBound: []byte{commitContextKeySentinelPrefix},
+	})
+	defer func() {
+		_ = iter.Close()
+	}()
+
+	// NotFound
+	if !iter.First() {
+		return InvalidCommitContext, ErrNotFoundCommitContext
+	}
+	if cc := decodeCommitContextKey(iter.Key()); highWatermark < cc.HighWatermark {
+		if cc.CommittedGLSNEnd-cc.CommittedGLSNBegin > 0 && cc.CommittedGLSNBegin <= highWatermark {
+			// If the first cc is not empty and the given hwm is between begin and end
+			// of committed GLSN, it is not consistent.
+			return InvalidCommitContext, ErrInconsistentCommitContext
+		}
+		return InvalidCommitContext, ErrNotFoundCommitContext
+	}
+
+	cck := encodeCommitContextKey(CommitContext{HighWatermark: highWatermark})
+	if iter.SeekGE(cck) {
+		if cc := decodeCommitContextKey(iter.Key()); highWatermark == cc.HighWatermark {
+			// OK
+			return cc, nil
+		}
+		// Inconsistent
+		return InvalidCommitContext, ErrInconsistentCommitContext
+	}
+	// NotFound
+	return InvalidCommitContext, ErrNotFoundCommitContext
+}
+
 func (ps *pebbleStorage) DeleteCommitted(prefixEnd types.GLSN) error {
 	if prefixEnd.Invalid() {
 		return errors.New("storage: invalid range")

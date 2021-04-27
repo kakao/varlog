@@ -476,6 +476,23 @@ func (sn *StorageNode) Sync(ctx context.Context, logStreamID types.LogStreamID, 
 	}, nil
 }
 
+func (sn *StorageNode) GetPrevCommitInfo(ctx context.Context, hwm types.GLSN) ([]*snpb.LogStreamCommitInfo, error) {
+	es := sn.logStreamExecutors()
+	infos := make([]*snpb.LogStreamCommitInfo, len(es))
+	grp, ctx := errgroup.WithContext(ctx)
+	for i := range es {
+		idx := i
+		grp.Go(func() (err error) {
+			infos[idx], err = es[idx].GetPrevCommitInfo(hwm)
+			return err
+		})
+	}
+	if err := grp.Wait(); err != nil {
+		return nil, err
+	}
+	return infos, nil
+}
+
 func (sn *StorageNode) logStreamExecutor(logStreamID types.LogStreamID) (executor.Executor, bool) {
 	sn.executors.mu.RLock()
 	defer sn.executors.mu.RUnlock()

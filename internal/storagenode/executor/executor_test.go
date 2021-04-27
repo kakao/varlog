@@ -1104,5 +1104,159 @@ func TestExecutorNew(t *testing.T) {
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	require.NoError(t, lse.Close())
+}
 
+func TestExecutorGetPrevCommitInfo(t *testing.T) {
+	const (
+		logStreamID = types.LogStreamID(2)
+	)
+
+	defer goleak.VerifyNone(t)
+
+	path := t.TempDir()
+
+	strg, err := storage.NewStorage(storage.WithPath(path))
+	require.NoError(t, err)
+	lse, err := New(
+		WithLogStreamID(logStreamID),
+		WithStorage(strg),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			wg.Done()
+			_, _ = lse.Append(context.TODO(), []byte("foo"))
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Eventually(t, func() bool {
+			report, err := lse.GetReport(context.TODO())
+			require.NoError(t, err)
+			return report.UncommittedLLSNLength == 10
+		}, time.Second, time.Millisecond)
+
+		err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+			HighWatermark:       5,
+			PrevHighWatermark:   0,
+			CommittedGLSNOffset: 1,
+			CommittedGLSNLength: 5,
+		})
+		require.NoError(t, err)
+
+		require.Eventually(t, func() bool {
+			report, err := lse.GetReport(context.TODO())
+			require.NoError(t, err)
+			return report.HighWatermark == 5
+		}, time.Second, time.Millisecond)
+
+		err = lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+			HighWatermark:       20,
+			PrevHighWatermark:   5,
+			CommittedGLSNOffset: 11,
+			CommittedGLSNLength: 5,
+		})
+		require.NoError(t, err)
+
+		require.Eventually(t, func() bool {
+			report, err := lse.GetReport(context.TODO())
+			require.NoError(t, err)
+			return report.HighWatermark == 20
+		}, time.Second, time.Millisecond)
+	}()
+	wg.Wait()
+
+	// LLSN | GLSN | HWM
+	//    1 |    1 |   5
+	//    2 |    2 |   5
+	//    3 |    3 |   5
+	//    4 |    4 |   5
+	//    5 |    5 |   5
+	//    6 |   11 |  20
+	//    7 |   12 |  20
+	//    8 |   13 |  20
+	//    9 |   14 |  20
+	//   10 |   15 |  20
+
+	commitInfo, err := lse.GetPrevCommitInfo(5)
+	require.NoError(t, err)
+	require.Equal(t, &snpb.LogStreamCommitInfo{
+		LogStreamID:         logStreamID,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 1,
+		CommittedGLSNOffset: 1,
+		CommittedGLSNLength: 5,
+		HighestWrittenLLSN:  10,
+		HighWatermark:       5,
+		PrevHighWatermark:   0,
+	}, commitInfo)
+
+	commitInfo, err = lse.GetPrevCommitInfo(20)
+	require.NoError(t, err)
+	require.Equal(t, &snpb.LogStreamCommitInfo{
+		LogStreamID:         logStreamID,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 6,
+		CommittedGLSNOffset: 11,
+		CommittedGLSNLength: 5,
+		HighestWrittenLLSN:  10,
+		HighWatermark:       20,
+		PrevHighWatermark:   5,
+	}, commitInfo)
+
+	commitInfo, err = lse.GetPrevCommitInfo(21)
+	require.NoError(t, err)
+	require.Equal(t, &snpb.LogStreamCommitInfo{
+		LogStreamID:         logStreamID,
+		Status:              snpb.GetPrevCommitStatusNotFound,
+		CommittedLLSNOffset: types.InvalidLLSN,
+		CommittedGLSNOffset: types.InvalidGLSN,
+		CommittedGLSNLength: 0,
+		HighestWrittenLLSN:  10,
+		HighWatermark:       types.InvalidGLSN,
+		PrevHighWatermark:   types.InvalidGLSN,
+	}, commitInfo)
+
+	commitInfo, err = lse.GetPrevCommitInfo(1)
+	require.NoError(t, err)
+	require.Equal(t, &snpb.LogStreamCommitInfo{
+		LogStreamID:         logStreamID,
+		Status:              snpb.GetPrevCommitStatusInconsistent,
+		CommittedLLSNOffset: types.InvalidLLSN,
+		CommittedGLSNOffset: types.InvalidGLSN,
+		CommittedGLSNLength: 0,
+		HighestWrittenLLSN:  10,
+		HighWatermark:       types.InvalidGLSN,
+		PrevHighWatermark:   types.InvalidGLSN,
+	}, commitInfo)
+
+	commitInfo, err = lse.GetPrevCommitInfo(10)
+	require.NoError(t, err)
+	require.Equal(t, &snpb.LogStreamCommitInfo{
+		LogStreamID:         logStreamID,
+		Status:              snpb.GetPrevCommitStatusInconsistent,
+		CommittedLLSNOffset: types.InvalidLLSN,
+		CommittedGLSNOffset: types.InvalidGLSN,
+		CommittedGLSNLength: 0,
+		HighestWrittenLLSN:  10,
+		HighWatermark:       types.InvalidGLSN,
+		PrevHighWatermark:   types.InvalidGLSN,
+	}, commitInfo)
+
+	commitInfo, err = lse.GetPrevCommitInfo(0)
+	require.Error(t, err)
 }
