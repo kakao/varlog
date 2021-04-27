@@ -24,8 +24,6 @@ type Executor interface {
 	SealUnsealer
 	replication.Replicator
 	MetadataProvider
-
-	Path() string
 }
 
 type executor struct {

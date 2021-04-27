@@ -676,3 +676,70 @@ func TestStorageRecoveryInfoUncommitted(t *testing.T) {
 		require.NoError(t, strg.Close())
 	})
 }
+
+func TestStorageReadCommitContext(t *testing.T) {
+	testEachStorage(t, func(t *testing.T, strg Storage) {
+		_, err := strg.ReadCommitContext(1)
+		require.ErrorIs(t, ErrNotFoundCommitContext, err)
+
+		// LLSN | GLSN  | HWM | PrevHWM
+		//    1 |    5  |   6 |       0
+		//    2 |    6  |   6 |       0
+		//    3 |    9  |  10 |       6
+		//    4 |    10 |  10 |       6
+		wb := strg.NewWriteBatch()
+		require.NoError(t, wb.Put(1, nil))
+		require.NoError(t, wb.Put(2, nil))
+		require.NoError(t, wb.Put(3, nil))
+		require.NoError(t, wb.Put(4, nil))
+		require.NoError(t, wb.Apply())
+		require.NoError(t, wb.Close())
+
+		cb, err := strg.NewCommitBatch(CommitContext{
+			HighWatermark:      6,
+			PrevHighWatermark:  0,
+			CommittedGLSNBegin: 5,
+			CommittedGLSNEnd:   7,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Put(1, 5))
+		require.NoError(t, cb.Put(2, 6))
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		cb, err = strg.NewCommitBatch(CommitContext{
+			HighWatermark:      10,
+			PrevHighWatermark:  6,
+			CommittedGLSNBegin: 9,
+			CommittedGLSNEnd:   11,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Put(3, 9))
+		require.NoError(t, cb.Put(4, 10))
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		_, err = strg.ReadCommitContext(0)
+		require.Error(t, err)
+
+		_, err = strg.ReadCommitContext(4)
+		require.ErrorIs(t, ErrNotFoundCommitContext, err)
+
+		_, err = strg.ReadCommitContext(5)
+		require.ErrorIs(t, ErrInconsistentCommitContext, err)
+
+		_, err = strg.ReadCommitContext(6)
+		require.NoError(t, err)
+
+		_, err = strg.ReadCommitContext(7)
+		require.ErrorIs(t, ErrInconsistentCommitContext, err)
+
+		_, err = strg.ReadCommitContext(10)
+		require.NoError(t, err)
+
+		_, err = strg.ReadCommitContext(11)
+		require.ErrorIs(t, ErrNotFoundCommitContext, err)
+
+		require.NoError(t, strg.Close())
+	})
+}
