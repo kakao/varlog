@@ -15,6 +15,23 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
+func TestStorageNodeRunAndClose(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	sn, err := New(context.TODO(), WithListenAddress("localhost:0"), WithVolumes(testVolume(t)))
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = sn.Run()
+	}()
+
+	sn.Close()
+	wg.Wait()
+}
+
 func TestStorageNodeAddLogStream(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
