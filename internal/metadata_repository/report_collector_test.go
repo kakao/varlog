@@ -36,8 +36,8 @@ func NewDummyMetadataRepository(reporterCliFac ReporterClientFactory) *dummyMeta
 	}
 }
 
-func (mr *dummyMetadataRepository) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
-	return mr.reporterCliFac.GetClient(ctx, sn)
+func (mr *dummyMetadataRepository) GetReporterClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
+	return mr.reporterCliFac.GetReporterClient(ctx, sn)
 }
 
 func (mr *dummyMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []*snpb.LogStreamUncommitReport) error {
@@ -108,7 +108,7 @@ func (mr *dummyMetadataRepository) trimGLS(glsn types.GLSN) {
 
 func TestRegisterStorageNode(t *testing.T) {
 	Convey("Registering nil storage node should return an error", t, func() {
-		a := NewDummyReporterClientFactory(1, false)
+		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -121,7 +121,7 @@ func TestRegisterStorageNode(t *testing.T) {
 	})
 
 	Convey("Registering dup storage node should return an error", t, func() {
-		a := NewDummyReporterClientFactory(1, false)
+		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -149,7 +149,7 @@ func TestRegisterStorageNode(t *testing.T) {
 
 func TestRegisterLogStream(t *testing.T) {
 	Convey("Register LogStream", t, func() {
-		a := NewDummyReporterClientFactory(1, false)
+		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -188,7 +188,7 @@ func TestRegisterLogStream(t *testing.T) {
 
 func TestUnregisterStorageNode(t *testing.T) {
 	Convey("Unregister StorageNode", t, func() {
-		a := NewDummyReporterClientFactory(1, false)
+		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -241,7 +241,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 
 func TestUnregisterLogStream(t *testing.T) {
 	Convey("Register LogStream", t, func() {
-		a := NewDummyReporterClientFactory(1, false)
+		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -280,7 +280,7 @@ func TestUnregisterLogStream(t *testing.T) {
 
 func TestRecoverStorageNode(t *testing.T) {
 	Convey("Given ReportCollector", t, func() {
-		a := NewDummyReporterClientFactory(1, false)
+		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -385,7 +385,7 @@ func TestRecoverStorageNode(t *testing.T) {
 func TestReport(t *testing.T) {
 	Convey("ReportCollector should collect report from registered storage node", t, func() {
 		nrStorage := 5
-		a := NewDummyReporterClientFactory(1, false)
+		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -444,7 +444,7 @@ func TestReport(t *testing.T) {
 
 func TestReportDedup(t *testing.T) {
 	Convey("Given ReportCollector", t, func() {
-		a := NewDummyReporterClientFactory(3, true)
+		a := NewDummyStorageNodeClientFactory(3, true)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -527,7 +527,7 @@ func TestCommit(t *testing.T) {
 		nrLogStream := nrStorage
 		knownHWM := types.InvalidGLSN
 
-		a := NewDummyReporterClientFactory(1, false)
+		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -567,7 +567,7 @@ func TestCommit(t *testing.T) {
 			reportCollector.Commit()
 
 			a.m.Range(func(k, v interface{}) bool {
-				cli := v.(*DummyReporterClient)
+				cli := v.(*DummyStorageNodeClient)
 				So(testutil.CompareWaitN(10, func() bool {
 					reportCollector.Commit()
 
@@ -588,7 +588,7 @@ func TestCommit(t *testing.T) {
 				reportCollector.Commit()
 
 				a.m.Range(func(k, v interface{}) bool {
-					cli := v.(*DummyReporterClient)
+					cli := v.(*DummyStorageNodeClient)
 					So(testutil.CompareWaitN(10, func() bool {
 						reportCollector.Commit()
 
@@ -635,7 +635,7 @@ func TestCommit(t *testing.T) {
 					So(testutil.CompareWaitN(10, func() bool {
 						nrCli := 0
 						a.m.Range(func(k, v interface{}) bool {
-							cli := v.(*DummyReporterClient)
+							cli := v.(*DummyStorageNodeClient)
 							So(testutil.CompareWaitN(10, func() bool {
 								reportCollector.Commit()
 
@@ -657,7 +657,7 @@ func TestCommitWithDelay(t *testing.T) {
 	Convey("Given ReportCollector", t, func() {
 		knownHWM := types.InvalidGLSN
 
-		a := NewDummyReporterClientFactory(1, false)
+		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
@@ -759,7 +759,7 @@ func TestRPCFail(t *testing.T) {
 	Convey("Given ReportCollector", t, func(ctx C) {
 		//knownHWM := types.InvalidGLSN
 
-		clientFac := NewDummyReporterClientFactory(1, false)
+		clientFac := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(clientFac)
 
 		logger, _ := zap.NewDevelopment()
@@ -825,7 +825,7 @@ func TestRPCFail(t *testing.T) {
 
 func TestReporterClientReconnect(t *testing.T) {
 	Convey("Given Reporter Client", t, func(ctx C) {
-		clientFac := NewDummyReporterClientFactory(1, false)
+		clientFac := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(clientFac)
 
 		sn := &varlogpb.StorageNodeDescriptor{

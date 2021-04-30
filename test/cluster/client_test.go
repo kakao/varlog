@@ -26,10 +26,11 @@ func testCluster(t *testing.T) (*test.VarlogCluster, func()) {
 	vmsOpts.Logger = zap.L()
 
 	opts := test.VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             3,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vmsOpts,
+		NrMR:                  1,
+		NrRep:                 3,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewStorageNodeManagementClientFactory(),
+		VMSOpts:               &vmsOpts,
 	}
 
 	clus := test.NewVarlogCluster(opts)

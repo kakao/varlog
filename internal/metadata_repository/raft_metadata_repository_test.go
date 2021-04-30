@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -32,14 +33,15 @@ import (
 const rpcTimeout = 3 * time.Second
 
 type metadataRepoCluster struct {
-	nrRep             int
-	unsafeNoWal       bool
-	peers             []string
-	nodes             []*RaftMetadataRepository
-	reporterClientFac ReporterClientFactory
-	logger            *zap.Logger
-	portLease         *ports.Lease
-	rpcTimeout        time.Duration // conn + call
+	nrRep                 int
+	unsafeNoWal           bool
+	peers                 []string
+	nodes                 []*RaftMetadataRepository
+	reporterClientFac     ReporterClientFactory
+	snManagementClientFac StorageNodeManagementClientFactory
+	logger                *zap.Logger
+	portLease             *ports.Lease
+	rpcTimeout            time.Duration // conn + call
 }
 
 var testSnapCount uint64
@@ -57,15 +59,17 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool, unsafeNoWal bool
 		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", portLease.Base()+i)
 	}
 
+	sncf := NewDummyStorageNodeClientFactory(1, !increseUncommit)
 	clus := &metadataRepoCluster{
-		nrRep:             nrRep,
-		unsafeNoWal:       unsafeNoWal,
-		peers:             peers,
-		nodes:             nodes,
-		reporterClientFac: NewDummyReporterClientFactory(1, !increseUncommit),
-		logger:            zap.L(),
-		portLease:         portLease,
-		rpcTimeout:        rpcTimeout,
+		nrRep:                 nrRep,
+		unsafeNoWal:           unsafeNoWal,
+		peers:                 peers,
+		nodes:                 nodes,
+		reporterClientFac:     sncf,
+		snManagementClientFac: sncf,
+		logger:                zap.L(),
+		portLease:             portLease,
+		rpcTimeout:            rpcTimeout,
 	}
 
 	for i := range clus.peers {
@@ -102,16 +106,62 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 			RaftDir:          vtesting.TestRaftDir(),
 			Peers:            peers,
 			UnsafeNoWal:      clus.unsafeNoWal,
+			EnableSML:        clus.unsafeNoWal,
 		},
 
-		ClusterID:         types.ClusterID(1),
-		RaftAddress:       clus.peers[idx],
-		CommitTick:        vtesting.TestCommitTick(),
-		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
-		NumRep:            clus.nrRep,
-		RPCBindAddress:    ":0",
-		ReporterClientFac: clus.reporterClientFac,
-		Logger:            clus.logger,
+		ClusterID:                      types.ClusterID(1),
+		RaftAddress:                    clus.peers[idx],
+		CommitTick:                     vtesting.TestCommitTick(),
+		RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
+		NumRep:                         clus.nrRep,
+		RPCBindAddress:                 ":0",
+		ReporterClientFac:              clus.reporterClientFac,
+		StorageNodeManagementClientFac: clus.snManagementClientFac,
+		Logger:                         clus.logger,
+	}
+
+	options.CollectorName = "nop"
+	options.CollectorEndpoint = "localhost:55680"
+
+	clus.nodes[idx] = NewRaftMetadataRepository(options)
+	return nil
+}
+
+func (clus *metadataRepoCluster) createForRecoverMetadataRepo(idx int) error {
+	if idx < 0 || idx >= len(clus.nodes) {
+		return errors.New("out of range")
+	}
+
+	peers := make([]string, len(clus.peers))
+	copy(peers, clus.peers)
+
+	options := &MetadataRepositoryOptions{
+		RaftOptions: RaftOptions{
+			Join:             false,
+			SnapCount:        testSnapCount,
+			SnapCatchUpCount: testSnapCount,
+			RaftTick:         vtesting.TestRaftTick(),
+			RaftDir:          vtesting.TestRaftDir(),
+			Peers:            peers,
+			UnsafeNoWal:      clus.unsafeNoWal,
+			EnableSML:        clus.unsafeNoWal,
+		},
+
+		RecoverFromSML:                 true,
+		ClusterID:                      types.ClusterID(1),
+		RaftAddress:                    clus.peers[idx],
+		CommitTick:                     vtesting.TestCommitTick(),
+		RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
+		NumRep:                         clus.nrRep,
+		RPCBindAddress:                 ":0",
+		ReporterClientFac:              clus.reporterClientFac,
+		StorageNodeManagementClientFac: clus.snManagementClientFac,
+		Logger:                         clus.logger,
+	}
+
+	// DummyStorageNodeClient recognizes id as addr
+	for _, id := range clus.reporterClientFac.(*DummyStorageNodeClientFactory).getClientIDs() {
+		options.SyncStorageNodes = append(options.SyncStorageNodes, strconv.Itoa(int(id)))
 	}
 
 	options.CollectorName = "nop"
@@ -331,6 +381,62 @@ func (clus *metadataRepoCluster) closeNoErrors(t *testing.T) {
 	clus.logger.Info("cluster stop complete")
 }
 
+func (clus *metadataRepoCluster) recoverMetadataRepo(idx int) error {
+	if idx < 0 || idx >= len(clus.nodes) {
+		return errors.New("out of range")
+	}
+
+	clus.createForRecoverMetadataRepo(idx)
+	return clus.start(idx)
+}
+
+func (clus *metadataRepoCluster) initDummyStorageNode(nrSN int) error {
+	for i := 0; i < nrSN; i++ {
+		snID := types.StorageNodeID(i)
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNodeID: snID,
+		}
+
+		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		defer cancel()
+
+		if err := clus.nodes[0].RegisterStorageNode(rctx, sn); err != nil {
+			return err
+		}
+
+		lsID := types.LogStreamID(snID)
+		ls := makeLogStream(lsID, []types.StorageNodeID{snID})
+
+		rctx, cancel = context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		defer cancel()
+
+		if err := clus.nodes[0].RegisterLogStream(rctx, ls); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (clus *metadataRepoCluster) getSNIDs() []types.StorageNodeID {
+	return clus.reporterClientFac.(*DummyStorageNodeClientFactory).getClientIDs()
+}
+
+func (clus *metadataRepoCluster) incrSNRefAll() {
+	for _, snID := range clus.getSNIDs() {
+		snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+		snCli.incrRef()
+	}
+}
+
+func (clus *metadataRepoCluster) descSNRefAll() {
+	for _, snID := range clus.getSNIDs() {
+		snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+		snCli.descRef()
+	}
+}
+
 func makeUncommitReport(snID types.StorageNodeID, knownHighWatermark types.GLSN, lsID types.LogStreamID, offset types.LLSN, length uint64) *mrpb.Report {
 	report := &mrpb.Report{
 		StorageNodeID: snID,
@@ -373,6 +479,28 @@ func makeLogStream(lsID types.LogStreamID, snIDs []types.StorageNodeID) *varlogp
 	}
 
 	return ls
+}
+
+func makeCommitResult(snID types.StorageNodeID, lsIDs []types.LogStreamID, prevHighwatermark, highWatermark, offset types.GLSN) *snpb.CommitRequest {
+	var commitResults []*snpb.LogStreamCommitResult
+	for i, lsID := range lsIDs {
+		commitResult := &snpb.LogStreamCommitResult{
+			LogStreamID:         lsID,
+			PrevHighWatermark:   prevHighwatermark,
+			HighWatermark:       highWatermark,
+			CommittedGLSNOffset: offset + types.GLSN(i),
+			CommittedGLSNLength: 1,
+		}
+
+		commitResults = append(commitResults, commitResult)
+	}
+
+	cr := &snpb.CommitRequest{
+		StorageNodeID: snID,
+		CommitResults: commitResults,
+	}
+
+	return cr
 }
 
 func TestMRApplyReport(t *testing.T) {
@@ -723,7 +851,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		So(testutil.CompareWaitN(50, func() bool {
-			return clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID) != nil
+			return clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID) != nil
 		}), ShouldBeTrue)
 
 		ls := makeLogStream(lsID, snIDs)
@@ -732,7 +860,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 		err = clus.nodes[0].RegisterLogStream(rctx, ls)
 		So(err, ShouldBeNil)
 
-		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snID)
+		reporterClient := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
 		reporterClient.increaseUncommitted(0)
 
 		So(testutil.CompareWaitN(50, func() bool {
@@ -1238,7 +1366,7 @@ func TestMRUpdateLogStream(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(10, func() bool {
-					reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[0])
+					reporterClient := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[0])
 					return reporterClient == nil
 				}), ShouldBeTrue)
 
@@ -1246,7 +1374,7 @@ func TestMRUpdateLogStream(t *testing.T) {
 					return mr.reportCollector.NumCommitter() == 1
 				}), ShouldBeTrue)
 
-				reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[1])
+				reporterClient := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[1])
 				So(reporterClient == nil, ShouldBeFalse)
 			})
 		})
@@ -1290,7 +1418,7 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 		err := clus.nodes[0].RegisterLogStream(rctx, ls)
 		So(err, ShouldBeNil)
 
-		reporterClient := clus.reporterClientFac.(*DummyReporterClientFactory).lookupClient(snIDs[0])
+		reporterClient := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[0])
 		So(testutil.CompareWaitN(50, func() bool {
 			return !reporterClient.getKnownHighWatermark(0).Invalid()
 		}), ShouldBeTrue)
@@ -2247,6 +2375,179 @@ func TestMRFailoverRecoverFromStateMachineLog(t *testing.T) {
 				So(testutil.CompareWaitN(10, func() bool {
 					return mr.reportCollector.NumExecutors() == len(snIDs)
 				}), ShouldBeTrue)
+			})
+		})
+	})
+}
+
+func TestMRFailoverRecoverFromStateMachineLogWithIncompleteLog(t *testing.T) {
+	Convey("Given MR cluster with unsafeNoWal", t, func(ctx C) {
+		testSnapCount = 10
+		defer func() { testSnapCount = 0 }()
+		nrRep := 1
+		nrNode := 1
+		nrSN := 5
+
+		clus := newMetadataRepoCluster(nrNode, nrRep, false, true)
+		clus.Start()
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.healthCheckAll()
+		}), ShouldBeTrue)
+
+		leader := clus.leader()
+		So(leader, ShouldBeGreaterThan, -1)
+
+		// register SN & LS
+		err := clus.initDummyStorageNode(nrSN)
+		So(err, ShouldBeNil)
+
+		snIDs := clus.getSNIDs()
+
+		// make sn alive during mr crash
+		clus.incrSNRefAll()
+		defer clus.descSNRefAll()
+
+		// append to SN
+		written := 0
+		for _, snID := range snIDs {
+			snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+			snCli.increaseUncommitted(0)
+			written++
+		}
+
+		highWatermark := types.GLSN(written)
+
+		for _, snID := range snIDs {
+			snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+
+			So(testutil.CompareWaitN(50, func() bool {
+				return snCli.getKnownHighWatermark(0) == highWatermark
+			}), ShouldBeTrue)
+		}
+
+		Convey("When mr crashed and then commit to sn before restart mr. (it's for simulating lost data)", func(ctx C) {
+			/*
+				        LS0        LS1        LS2        LS3        LS4
+				status  ok         ok         ok         ok         ok
+				highest 2          2          2          2          2
+				LLSN
+			*/
+			So(clus.stop(leader), ShouldBeNil)
+
+			//dummy commit result to SN direct
+			prevHighwatermark := highWatermark
+			highWatermark = highWatermark * 2
+
+			offset := prevHighwatermark + types.GLSN(1)
+
+			expected := make(map[types.LogStreamID]uint64)
+			for _, snID := range snIDs {
+				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+				lsID := snCli.logStreamID(0)
+				cr := makeCommitResult(snID, []types.LogStreamID{lsID}, prevHighwatermark, highWatermark, offset)
+
+				snCli.increaseUncommitted(0)
+				expected[lsID] = 1
+				offset += types.GLSN(1)
+
+				snCli.Commit(context.TODO(), cr)
+				So(snCli.getKnownHighWatermark(0), ShouldEqual, highWatermark)
+			}
+
+			So(clus.recoverMetadataRepo(leader), ShouldBeNil)
+
+			Convey("Then it should sync from SN", func(ctx C) {
+				So(testutil.CompareWaitN(100, func() bool {
+					return clus.healthCheck(leader)
+				}), ShouldBeTrue)
+
+				So(clus.nodes[leader].GetHighWatermark(), ShouldEqual, highWatermark)
+
+				/*
+					             LS0        LS1        LS2        LS3        LS4
+					committedOff 2          2          2          2          2
+					committedLen 1          1          1          1          1
+				*/
+				for _, snID := range snIDs {
+					snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+					lsID := snCli.logStreamID(0)
+
+					l, ok := expected[lsID]
+					So(ok, ShouldBeTrue)
+					So(clus.nodes[leader].getLastCommittedLength(lsID), ShouldEqual, l)
+				}
+			})
+		})
+
+		Convey("When some SN lost commit result", func(ctx C) {
+			/*
+				        LS0        LS1        LS2        LS3        LS4
+				status  notfound   notfound   ok         ok         ok
+				highest 3          2          2          2          2
+				LLSN
+			*/
+			So(clus.stop(leader), ShouldBeNil)
+
+			//dummy commit result to SN direct
+			prevHighwatermark := highWatermark
+			highWatermark = highWatermark * 2
+
+			offset := prevHighwatermark + types.GLSN(1)
+
+			expected := make(map[types.LogStreamID]uint64)
+			for i, snID := range snIDs {
+				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+				lsID := snCli.logStreamID(0)
+
+				cr := makeCommitResult(snID, []types.LogStreamID{lsID}, prevHighwatermark, highWatermark, offset)
+
+				snCli.increaseUncommitted(0)
+				expected[lsID] = 1
+				offset += types.GLSN(1)
+
+				if i == 0 {
+					// increase uncommitted for make different commit result
+					snCli.increaseUncommitted(0)
+					expected[lsID] = 2
+
+					// for simulate loss commit result
+					continue
+				} else if i == 1 {
+					expected[lsID] = 0
+
+					// for simulate loss commit result
+					continue
+				}
+
+				snCli.Commit(context.TODO(), cr)
+				So(snCli.getKnownHighWatermark(0), ShouldEqual, highWatermark)
+			}
+
+			So(clus.recoverMetadataRepo(leader), ShouldBeNil)
+
+			Convey("Then it should recover valid", func(ctx C) {
+				So(testutil.CompareWaitN(100, func() bool {
+					return clus.healthCheck(leader)
+				}), ShouldBeTrue)
+
+				So(clus.nodes[leader].GetHighWatermark(), ShouldEqual, highWatermark)
+
+				/*
+					             LS0        LS1        LS2        LS3        LS4
+					committedOff 2          2          2          2          2
+					committedLen 2          0          1          1          1
+				*/
+				for _, snID := range snIDs {
+					snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+					lsID := snCli.logStreamID(0)
+
+					l, ok := expected[lsID]
+					So(ok, ShouldBeTrue)
+					So(clus.nodes[leader].getLastCommittedLength(lsID), ShouldEqual, l)
+				}
 			})
 		})
 	})

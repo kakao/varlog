@@ -32,9 +32,10 @@ import (
 func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewEmptyReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewEmptyStorageNodeClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -79,9 +80,10 @@ func TestMetadataRepositoryClientSimpleRegister(t *testing.T) {
 func TestVarlogRegisterStorageNode(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -129,10 +131,11 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 		vmsOpts.Logger = zap.L()
 
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             2,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-			VMSOpts:           &vmsOpts,
+			NrMR:                  1,
+			NrRep:                 2,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+			VMSOpts:               &vmsOpts,
 		}
 
 		Convey("Varlog cluster", test.WithTestCluster(opts, func(env *test.VarlogCluster) {
@@ -230,9 +233,10 @@ func TestVarlogAppendLogManyLogStreams(t *testing.T) {
 func TestVarlogAppendLog(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -273,9 +277,10 @@ func TestVarlogReplicateLog(t *testing.T) {
 	nrRep := 2
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             nrRep,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 nrRep,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -338,9 +343,10 @@ func TestVarlogReplicateLog(t *testing.T) {
 func TestVarlogSeal(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -451,10 +457,11 @@ func TestVarlogTrimGLS(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		nrLS := 2
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			SnapCount:         10,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			SnapCount:             10,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -516,10 +523,11 @@ func TestVarlogTrimGLSWithSealedLS(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		nrLS := 2
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			SnapCount:         10,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			SnapCount:             10,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -619,9 +627,10 @@ func (sh *testSnHandler) HandleReport(ctx context.Context, sn *varlogpb.StorageN
 func TestVarlogSNWatcher(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		vmsOpts := vms.DefaultOptions()
 		opts.VMSOpts = &vmsOpts
@@ -738,9 +747,10 @@ func (cmView *dummyCMView) StorageNode(ctx context.Context, storageNodeID types.
 func TestVarlogStatRepositoryRefresh(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -876,9 +886,10 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 func TestVarlogStatRepositoryReport(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -959,10 +970,11 @@ func TestVarlogLogStreamSync(t *testing.T) {
 	vmsOpts.Logger = zap.L()
 	nrRep := 2
 	opts := test.VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             nrRep,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vmsOpts,
+		NrMR:                  1,
+		NrRep:                 nrRep,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+		VMSOpts:               &vmsOpts,
 	}
 	opts.VMSOpts.HeartbeatTimeout *= 5
 	opts.VMSOpts.Logger = zap.L()
@@ -1064,9 +1076,10 @@ func TestVarlogLogStreamSync(t *testing.T) {
 func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
 	nrRep := 2
 	opts := test.VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             nrRep,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		NrMR:                  1,
+		NrRep:                 nrRep,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 	}
 
 	Convey("Given LogStream", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
@@ -1132,9 +1145,10 @@ func TestVarlogLogStreamIncompleteSeal(t *testing.T) {
 func TestVarlogLogStreamIncompleteUnseal(t *testing.T) {
 	nrRep := 2
 	opts := test.VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             nrRep,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+		NrMR:                  1,
+		NrRep:                 nrRep,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 	}
 
 	Convey("Given Sealed LogStream", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
@@ -1205,10 +1219,11 @@ func TestVarlogLogStreamGCZombie(t *testing.T) {
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
 	opts := test.VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             nrRep,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vmsOpts,
+		NrMR:                  1,
+		NrRep:                 nrRep,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+		VMSOpts:               &vmsOpts,
 	}
 
 	opts.VMSOpts.GCTimeout = 6 * time.Duration(opts.VMSOpts.ReportInterval) * opts.VMSOpts.Tick
@@ -1267,10 +1282,11 @@ func TestVarlogClient(t *testing.T) {
 		vmsOpts.Logger = zap.L()
 
 		clusterOpts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             3,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-			VMSOpts:           &vmsOpts,
+			NrMR:                  1,
+			NrRep:                 3,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+			VMSOpts:               &vmsOpts,
 		}
 
 		Convey("and running cluster", test.WithTestCluster(clusterOpts, func(env *test.VarlogCluster) {
@@ -1480,11 +1496,12 @@ func TestVarlogRaftDelay(t *testing.T) {
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
 	opts := test.VarlogClusterOptions{
-		NrMR:              3,
-		NrRep:             nrRep,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		CollectorName:     "otel",
-		VMSOpts:           &vmsOpts,
+		NrMR:                  3,
+		NrRep:                 nrRep,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+		CollectorName:         "otel",
+		VMSOpts:               &vmsOpts,
 	}
 
 	Convey("Given Varlog cluster", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {

@@ -35,13 +35,14 @@ const varlogClusterPortBase = 10000
 const varlogClusterManagerPortBase = 999
 
 type VarlogClusterOptions struct {
-	NrRep             int
-	NrMR              int
-	SnapCount         int
-	CollectorName     string
-	UnsafeNoWal       bool
-	ReporterClientFac metadata_repository.ReporterClientFactory
-	VMSOpts           *vms.Options
+	NrRep                 int
+	NrMR                  int
+	SnapCount             int
+	CollectorName         string
+	UnsafeNoWal           bool
+	ReporterClientFac     metadata_repository.ReporterClientFactory
+	SNManagementClientFac metadata_repository.StorageNodeManagementClientFactory
+	VMSOpts               *vms.Options
 }
 
 type VarlogCluster struct {
@@ -138,14 +139,15 @@ func (clus *VarlogCluster) createMR(idx int, join, unsafeNoWal, recoverFromSML b
 			Peers:       clus.MRPeers,
 		},
 
-		ClusterID:         clus.ClusterID,
-		RaftAddress:       clus.MRPeers[idx],
-		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
-		NumRep:            clus.NrRep,
-		RecoverFromSML:    recoverFromSML,
-		RPCBindAddress:    clus.MRRPCEndpoints[idx],
-		ReporterClientFac: clus.ReporterClientFac,
-		Logger:            clus.logger,
+		ClusterID:                      clus.ClusterID,
+		RaftAddress:                    clus.MRPeers[idx],
+		RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
+		NumRep:                         clus.NrRep,
+		RecoverFromSML:                 recoverFromSML,
+		RPCBindAddress:                 clus.MRRPCEndpoints[idx],
+		ReporterClientFac:              clus.ReporterClientFac,
+		StorageNodeManagementClientFac: clus.SNManagementClientFac,
+		Logger:                         clus.logger,
 	}
 
 	opts.CollectorName = "nop"

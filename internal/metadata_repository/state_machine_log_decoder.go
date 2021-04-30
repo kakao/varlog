@@ -37,7 +37,7 @@ func (d *stateMachineLogDecoder) Decode(rec *mrpb.StateMachineLogRecord) error {
 	rec.Reset()
 
 	if d.br == nil {
-		return io.EOF
+		return fmt.Errorf("no reader")
 	}
 
 	recLen, err := d.readLength()

@@ -57,9 +57,10 @@ func TestMRConnector(t *testing.T) {
 	Convey("Given 3 MR nodes", t, func() {
 		const clusterInfoFetchInterval = 1 * time.Second
 		opts := test.VarlogClusterOptions{
-			NrMR:              3,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewEmptyReporterClientFactory(),
+			NrMR:                  3,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewEmptyStorageNodeClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()

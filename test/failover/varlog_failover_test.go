@@ -24,9 +24,10 @@ import (
 func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              3,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  3,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		env := test.NewVarlogCluster(opts)
 		env.Start()
@@ -137,10 +138,11 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
 	opts := test.VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             nrRep,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vmsOpts,
+		NrMR:                  1,
+		NrRep:                 nrRep,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+		VMSOpts:               &vmsOpts,
 	}
 
 	Convey("Given Varlog cluster", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
@@ -315,11 +317,12 @@ func TestVarlogFailoverRecoverFromSML(t *testing.T) {
 	vmsOpts.HeartbeatTimeout *= 10
 	vmsOpts.Logger = zap.L()
 	opts := test.VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             1,
-		UnsafeNoWal:       true,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vmsOpts,
+		NrMR:                  1,
+		NrRep:                 1,
+		UnsafeNoWal:           true,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+		VMSOpts:               &vmsOpts,
 	}
 
 	Convey("Given Varlog cluster with StateMachineLog", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
