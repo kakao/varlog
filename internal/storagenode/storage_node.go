@@ -41,6 +41,14 @@ var (
 	errNoLogStream = stderrors.New("storagenode: no such log stream")
 )
 
+type storageNodeState int
+
+const (
+	storageNodeInit storageNodeState = iota
+	storageNodeRunning
+	storageNodeClosed
+)
+
 type StorageNode struct {
 	config
 	muAddr sync.RWMutex
@@ -52,8 +60,8 @@ type StorageNode struct {
 	servers      errgroup.Group
 
 	stopper struct {
-		running bool
-		mu      sync.RWMutex
+		state storageNodeState
+		mu    sync.RWMutex
 	}
 
 	lsr reportcommitter.Reporter
@@ -197,12 +205,16 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 
 func (sn *StorageNode) Run() error {
 	sn.stopper.mu.Lock()
-	if sn.stopper.running {
+	switch sn.stopper.state {
+	case storageNodeRunning:
 		sn.stopper.mu.Unlock()
 		return nil
+	case storageNodeClosed:
+		sn.stopper.mu.Unlock()
+		return errors.WithStack(verrors.ErrClosed)
+	case storageNodeInit:
+		sn.stopper.state = storageNodeRunning
 	}
-	sn.stopper.running = true
-	sn.stopper.mu.Unlock()
 
 	sn.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
@@ -213,24 +225,22 @@ func (sn *StorageNode) Run() error {
 
 	// RPC Server
 	sn.servers.Go(func() error {
-		defer sn.Close()
 		return errors.WithStack(sn.rpcServer.Serve(grpcL))
 	})
 	sn.servers.Go(func() error {
-		defer sn.Close()
 		if err := sn.pprofServer.Run(httpL); !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, cmux.ErrListenerClosed) {
 			return err
 		}
 		return nil
 	})
 	sn.servers.Go(func() error {
-		defer sn.Close()
 		if err := mux.Serve(); err != nil && !strings.Contains(err.Error(), "use of closed") {
 			return errors.WithStack(err)
 		}
 		return nil
 	})
 
+	sn.stopper.mu.Unlock()
 	sn.logger.Info("start")
 	return sn.servers.Wait()
 }
@@ -238,10 +248,12 @@ func (sn *StorageNode) Run() error {
 func (sn *StorageNode) Close() {
 	sn.stopper.mu.Lock()
 	defer sn.stopper.mu.Unlock()
-	if !sn.stopper.running {
+
+	switch sn.stopper.state {
+	case storageNodeClosed:
 		return
 	}
-	sn.stopper.running = false
+	sn.stopper.state = storageNodeClosed
 
 	sn.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 
