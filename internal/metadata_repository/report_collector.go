@@ -520,7 +520,7 @@ func (rce *reportCollectExecutor) getClient(ctx context.Context) (reportcommitte
 
 	var err error
 	if rce.snConnector.cli == nil {
-		rce.snConnector.cli, err = rce.helper.GetClient(ctx, rce.snConnector.sn)
+		rce.snConnector.cli, err = rce.helper.GetReporterClient(ctx, rce.snConnector.sn)
 	}
 	return rce.snConnector.cli, err
 }
@@ -538,6 +538,7 @@ func (rce *reportCollectExecutor) commit(ctx context.Context, cr *snpb.LogStream
 
 	ctx, cancel := context.WithTimeout(ctx, rce.rpcTimeout)
 	defer cancel()
+
 	err = cli.Commit(ctx, &r)
 	if err != nil {
 		rce.closeClient(cli)

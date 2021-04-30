@@ -32,10 +32,11 @@ func TestVarlogManagerServer(t *testing.T) {
 	vmsOpts.ReportInterval = 10
 	vmsOpts.Logger = zap.L()
 	opts := test.VarlogClusterOptions{
-		NrMR:              1,
-		NrRep:             3,
-		ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-		VMSOpts:           &vmsOpts,
+		NrMR:                  1,
+		NrRep:                 3,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+		VMSOpts:               &vmsOpts,
 	}
 
 	Convey("AddStorageNode", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
@@ -281,14 +282,15 @@ func TestVarlogNewMRManager(t *testing.T) {
 					Peers:     []string{mrRAFTAddr},
 				},
 
-				ClusterID:         clusterID,
-				RaftAddress:       mrRAFTAddr,
-				LogDir:            filepath.Join(t.TempDir(), "log"),
-				RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
-				NumRep:            1,
-				RPCBindAddress:    mrRPCAddr,
-				ReporterClientFac: metadata_repository.NewReporterClientFactory(),
-				Logger:            zap.L(),
+				ClusterID:                      clusterID,
+				RaftAddress:                    mrRAFTAddr,
+				LogDir:                         filepath.Join(t.TempDir(), "log"),
+				RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
+				NumRep:                         1,
+				RPCBindAddress:                 mrRPCAddr,
+				ReporterClientFac:              metadata_repository.NewReporterClientFactory(),
+				StorageNodeManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+				Logger:                         zap.L(),
 			}
 			mr := metadata_repository.NewRaftMetadataRepository(mrOpts)
 			mr.Run()
@@ -308,9 +310,10 @@ func TestVarlogNewMRManager(t *testing.T) {
 
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		vmsOpts := vms.DefaultOptions()
 		vmsOpts.InitialMRConnRetryCount = 3
@@ -364,9 +367,10 @@ func TestVarlogNewMRManager(t *testing.T) {
 func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := test.VarlogClusterOptions{
-			NrMR:              1,
-			NrRep:             1,
-			ReporterClientFac: metadata_repository.NewReporterClientFactory(),
+			NrMR:                  1,
+			NrRep:                 1,
+			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
 		vmsOpts := vms.DefaultOptions()
 		opts.VMSOpts = &vmsOpts

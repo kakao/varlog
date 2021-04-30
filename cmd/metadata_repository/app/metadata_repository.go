@@ -38,6 +38,7 @@ func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
 
 	opts.Logger = logger
 	opts.ReporterClientFac = metadata_repository.NewReporterClientFactory()
+	opts.StorageNodeManagementClientFac = metadata_repository.NewStorageNodeManagementClientFactory()
 
 	mr := metadata_repository.NewRaftMetadataRepository(opts)
 	mr.Run()

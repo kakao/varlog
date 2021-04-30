@@ -2,7 +2,6 @@ package metadata_repository
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -228,9 +228,9 @@ func TestStateMachineLogReadFrom(t *testing.T) {
 		So(sml, ShouldNotBeNil)
 
 		Convey("When dir is empty", func(ctx C) {
-			Convey("Then it should return EOF", func(ctx C) {
+			Convey("Then it should return ErrNotExist", func(ctx C) {
 				_, err := sml.ReadFrom(0)
-				So(err, ShouldResemble, io.EOF)
+				So(err, ShouldResemble, verrors.ErrNotExist)
 			})
 		})
 
@@ -329,8 +329,59 @@ func TestStateMachineLogReadFromHole(t *testing.T) {
 			os.Remove(filepath.Join(dir, segments[1]))
 
 			Convey("Then ReadFrom returns crc mismatch", func(ctx C) {
-				_, err := sml.ReadFrom(0)
+				entries, err := sml.ReadFrom(0)
 				So(err, ShouldNotBeNil)
+				So(len(entries), ShouldBeGreaterThan, 0)
+			})
+		})
+	})
+}
+
+func TestStateMachineLogReadFromWithDirty(t *testing.T) {
+	Convey("Given state machine log", t, func(ctx C) {
+		lg := zap.NewNop()
+		raftdir := "./raftdata"
+		dir := filepath.Join(raftdir, "sml")
+
+		Reset(func() {
+			os.RemoveAll(raftdir)
+		})
+
+		os.Mkdir(raftdir, 0777)
+
+		sml := newStateMachineLog(lg, dir)
+		So(sml, ShouldNotBeNil)
+
+		segmentSizeBytes = 1024 // 1KB
+		err := sml.OpenForWrite(0)
+		So(err, ShouldBeNil)
+
+		appliedIndex := uint64(0)
+		for ; appliedIndex < uint64(5); appliedIndex++ {
+			l := &mrpb.RegisterStorageNode{
+				StorageNode: &varlogpb.StorageNodeDescriptor{
+					StorageNodeID: types.StorageNodeID(1),
+					Address:       "127.0.0.1:50000",
+				},
+			}
+
+			entry := &mrpb.StateMachineLogEntry{
+				AppliedIndex: appliedIndex,
+			}
+
+			entry.Payload.SetValue(l)
+			sml.Append(entry)
+		}
+
+		Convey("When append dirty entry", func(ctx C) {
+			sml.file.Write([]byte("foo"))
+			sml.Close()
+
+			Convey("Then ReadFrom should return all valid entries", func(ctx C) {
+				entries, err := sml.ReadFrom(0)
+				So(err, ShouldNotBeNil)
+				So(len(entries), ShouldEqual, appliedIndex)
+				So(entries[0].GetAppliedIndex(), ShouldEqual, 0)
 			})
 		})
 	})

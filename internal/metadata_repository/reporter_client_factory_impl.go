@@ -14,6 +14,6 @@ func NewReporterClientFactory() *reporterClientFactory {
 	return &reporterClientFactory{}
 }
 
-func (rcf *reporterClientFactory) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
+func (rcf *reporterClientFactory) GetReporterClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
 	return reportcommitter.NewClient(ctx, sn.Address)
 }

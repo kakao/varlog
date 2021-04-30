@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
+	"github.com/kakao/varlog/pkg/snc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/util/netutil"
@@ -40,7 +41,7 @@ const (
 type ReportCollectorHelper interface {
 	ProposeReport(types.StorageNodeID, []*snpb.LogStreamUncommitReport) error
 
-	GetClient(context.Context, *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error)
+	GetReporterClient(context.Context, *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error)
 
 	LookupCommitResults(types.GLSN) *mrpb.LogStreamCommitResults
 
@@ -48,12 +49,13 @@ type ReportCollectorHelper interface {
 }
 
 type RaftMetadataRepository struct {
-	clusterID         types.ClusterID
-	nodeID            types.NodeID
-	nrReplica         int
-	reportCollector   ReportCollector
-	raftNode          *raftNode
-	reporterClientFac ReporterClientFactory
+	clusterID             types.ClusterID
+	nodeID                types.NodeID
+	nrReplica             int
+	reportCollector       ReportCollector
+	raftNode              *raftNode
+	reporterClientFac     ReporterClientFactory
+	snManagementClientFac StorageNodeManagementClientFactory
 
 	storage         *MetadataStorage
 	stateMachineLog StateMachineLog
@@ -121,15 +123,16 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	}
 
 	mr := &RaftMetadataRepository{
-		clusterID:         options.ClusterID,
-		nodeID:            options.NodeID,
-		nrReplica:         options.NumRep,
-		logger:            logger,
-		reporterClientFac: options.ReporterClientFac,
-		options:           options,
-		runner:            runner.New("mr", options.Logger),
-		sw:                stopwaiter.New(),
-		tmStub:            tmStub,
+		clusterID:             options.ClusterID,
+		nodeID:                options.NodeID,
+		nrReplica:             options.NumRep,
+		logger:                logger,
+		reporterClientFac:     options.ReporterClientFac,
+		snManagementClientFac: options.StorageNodeManagementClientFac,
+		options:               options,
+		runner:                runner.New("mr", options.Logger),
+		sw:                    stopwaiter.New(),
+		tmStub:                tmStub,
 	}
 
 	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
@@ -217,6 +220,7 @@ func (mr *RaftMetadataRepository) Run() {
 
 		if mr.options.RecoverFromSML {
 			if err := mr.recoverStateMachine(mctx); err != nil {
+				fmt.Printf("recover fail %v\n", err)
 				mr.logger.Panic("could not recover", zap.Error(err))
 			}
 		}
@@ -1334,8 +1338,12 @@ func (mr *RaftMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []*
 	return mr.proposeReport(snID, ur)
 }
 
-func (mr *RaftMetadataRepository) GetClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
-	return mr.reporterClientFac.GetClient(ctx, sn)
+func (mr *RaftMetadataRepository) GetReporterClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
+	return mr.reporterClientFac.GetReporterClient(ctx, sn)
+}
+
+func (mr *RaftMetadataRepository) GetSNManagementClient(ctx context.Context, address string) (snc.StorageNodeManagementClient, error) {
+	return mr.snManagementClientFac.GetManagementClient(ctx, mr.clusterID, address, mr.logger)
 }
 
 func (mr *RaftMetadataRepository) LookupCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
@@ -1361,15 +1369,21 @@ func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string
 }
 
 func (mr *RaftMetadataRepository) recoverStateMachine(ctx context.Context) error {
-	stateMachine, err := mr.restoreFromStateMachineLog(ctx)
+	storage := NewMetadataStorage(nil, 0, mr.logger.Named("storage"))
+
+	err := mr.restoreStateMachineFromStateMachineLog(ctx, storage)
 	if err != nil {
 		return err
 	}
 
 	// TODO:: sync with SNs. recover commitResults & UncommitReports
+	err = mr.syncStateMachineFromStorageNodes(ctx, storage)
+	if err != nil {
+		return err
+	}
 
 	r := &mrpb.RecoverStateMachine{
-		StateMachine: stateMachine,
+		StateMachine: storage.origStateMachine,
 	}
 
 	mr.propose(ctx, r, true)
@@ -1377,15 +1391,14 @@ func (mr *RaftMetadataRepository) recoverStateMachine(ctx context.Context) error
 	return nil
 }
 
-func (mr *RaftMetadataRepository) restoreFromStateMachineLog(ctx context.Context) (*mrpb.MetadataRepositoryDescriptor, error) {
+func (mr *RaftMetadataRepository) restoreStateMachineFromStateMachineLog(ctx context.Context, storage *MetadataStorage) error {
 	logIndex := uint64(0)
 
-	storage := NewMetadataStorage(nil, 0, mr.logger.Named("storage"))
 	snap := mr.raftNode.loadSnapshot()
 	if snap != nil {
 		err := storage.ApplySnapshot(snap.Data, nil, 0)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		logIndex = snap.Metadata.Index + 1
@@ -1393,7 +1406,7 @@ func (mr *RaftMetadataRepository) restoreFromStateMachineLog(ctx context.Context
 
 	ents, err := mr.stateMachineLog.ReadFrom(logIndex)
 	if err != nil {
-		return nil, err
+		mr.logger.Warn("read stateMachineLog", zap.Uint64("from", logIndex), zap.Error(err))
 	}
 
 	for _, ent := range ents {
@@ -1420,5 +1433,16 @@ func (mr *RaftMetadataRepository) restoreFromStateMachineLog(ctx context.Context
 	// reset applied index & merge state machine
 	storage.UpdateAppliedIndex(0)
 
-	return storage.origStateMachine, nil
+	return nil
+}
+
+func (mr *RaftMetadataRepository) syncStateMachineFromStorageNodes(ctx context.Context, storage *MetadataStorage) error {
+	syncer, err := NewStateMachineSyncer(mr.options.SyncStorageNodes, mr.nrReplica, mr.GetSNManagementClient)
+	if err != nil {
+		return err
+	}
+
+	defer syncer.Close()
+
+	return syncer.SyncCommitResults(ctx, storage)
 }

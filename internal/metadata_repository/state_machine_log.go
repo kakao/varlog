@@ -13,6 +13,7 @@ import (
 	"go.etcd.io/etcd/pkg/fileutil"
 	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 )
 
@@ -243,6 +244,8 @@ func (sml *stateMachineLog) openSegmentForRead(segment string, prevCrc uint32) e
 	return nil
 }
 
+// Return valid log entries
+// If there is a problem during decoding, the previous entries is returned with error.
 func (sml *stateMachineLog) readSegmentAll(appliedIndex uint64, head bool) ([]*mrpb.StateMachineLogEntry, uint32, error) {
 	var err error
 	var entries []*mrpb.StateMachineLogEntry
@@ -277,24 +280,24 @@ func (sml *stateMachineLog) readSegmentAll(appliedIndex uint64, head bool) ([]*m
 		}
 	}
 
-	if err != io.EOF {
-		return nil, 0, err
+	if err == io.EOF {
+		err = nil
 	}
 
-	return entries, sml.decoder.SumCRC(), nil
+	return entries, sml.decoder.SumCRC(), err
 }
 
 func (sml *stateMachineLog) ReadFrom(appliedIndex uint64) ([]*mrpb.StateMachineLogEntry, error) {
 	segments, err := getStateMachineLogSegments(sml.dir)
 	if err != nil {
 		if e, ok := err.(*os.PathError); ok && e.Err == syscall.ENOENT {
-			return nil, io.EOF
+			return nil, verrors.ErrNotExist
 		}
 		return nil, err
 	}
 
 	if len(segments) == 0 {
-		return nil, io.EOF
+		return nil, verrors.ErrNotExist
 	}
 
 	headi, err := selectStateMachineLogSegment(segments, appliedIndex)
@@ -303,26 +306,30 @@ func (sml *stateMachineLog) ReadFrom(appliedIndex uint64) ([]*mrpb.StateMachineL
 	}
 
 	if headi < 0 {
-		return nil, io.EOF
+		return nil, verrors.ErrNotExist
 	}
 
 	var prevCrc uint32
 	var ret []*mrpb.StateMachineLogEntry
 
+SCAN:
 	for i := headi; i < len(segments); i++ {
 		if err = sml.openSegmentForRead(segments[i], prevCrc); err != nil {
-			return nil, err
+			break SCAN
 		}
 
 		var entries []*mrpb.StateMachineLogEntry
 
 		entries, prevCrc, err = sml.readSegmentAll(appliedIndex, i == headi)
 		sml.Close()
-		if err != nil {
-			return nil, err
+
+		if len(entries) > 0 {
+			ret = append(ret, entries...)
 		}
 
-		ret = append(ret, entries...)
+		if err != nil {
+			break SCAN
+		}
 	}
 
 	return ret, err

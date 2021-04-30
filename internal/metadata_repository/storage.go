@@ -3,7 +3,6 @@ package metadata_repository
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -1197,7 +1196,6 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 func (ms *MetadataStorage) RecoverStateMachine(stateMachine *mrpb.MetadataRepositoryDescriptor, appliedIndex, nodeIndex, requestIndex uint64) error {
 	defer func() {
 		if ms.cacheCompleteCB != nil {
-			fmt.Printf("recover done\n")
 			ms.cacheCompleteCB(nodeIndex, requestIndex, nil)
 		}
 	}()

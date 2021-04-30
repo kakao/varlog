@@ -51,20 +51,22 @@ type MetadataRepositoryOptions struct {
 	TelemetryOptions
 	RaftOptions
 
-	RPCBindAddress     string
-	RaftAddress        string
-	DebugAddress       string
-	ClusterID          types.ClusterID
-	Verbose            bool
-	RecoverFromSML     bool
-	NumRep             int
-	RaftProposeTimeout time.Duration
-	RPCTimeout         time.Duration
-	CommitTick         time.Duration
-	PromoteTick        time.Duration
-	ReporterClientFac  ReporterClientFactory
-	LogDir             string
-	Logger             *zap.Logger
+	RPCBindAddress                 string
+	RaftAddress                    string
+	DebugAddress                   string
+	ClusterID                      types.ClusterID
+	Verbose                        bool
+	RecoverFromSML                 bool
+	NumRep                         int
+	RaftProposeTimeout             time.Duration
+	RPCTimeout                     time.Duration
+	CommitTick                     time.Duration
+	PromoteTick                    time.Duration
+	ReporterClientFac              ReporterClientFactory
+	StorageNodeManagementClientFac StorageNodeManagementClientFactory
+	LogDir                         string
+	SyncStorageNodes               []string
+	Logger                         *zap.Logger
 }
 
 type RaftOptions struct {
@@ -125,6 +127,10 @@ func (options *MetadataRepositoryOptions) validate() error {
 		return errors.New("reporterClientFac should not be nil")
 	}
 
+	if options.StorageNodeManagementClientFac == nil {
+		return errors.New("storageNodeManagementClientFac should not be nil")
+	}
+
 	if options.SnapCount == 0 {
 		options.SnapCount = DefaultSnapshotCount
 	}
@@ -159,6 +165,11 @@ func (options *MetadataRepositoryOptions) validate() error {
 
 	if options.LogDir == "" {
 		options.LogDir = DefaultLogDir
+	}
+
+	if (options.UnsafeNoWal && !options.EnableSML) ||
+		(!options.UnsafeNoWal && options.EnableSML) {
+		return errors.New("only one of wal and sml must be enabled.")
 	}
 
 	return nil

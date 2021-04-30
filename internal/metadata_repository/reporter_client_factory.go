@@ -8,5 +8,5 @@ import (
 )
 
 type ReporterClientFactory interface {
-	GetClient(context.Context, *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error)
+	GetReporterClient(context.Context, *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error)
 }
