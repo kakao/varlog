@@ -210,7 +210,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	//    2 |    2 |   12 |  20 |       0
 	//    2 |    3 |   13 |  20 |       0
 	//    2 |    4 |   14 |  20 |       0
-	//    2 |    5 |   15 |  20 ||      0
+	//    2 |    5 |   15 |  20 |       0
 	sn.lsr.Commit(context.TODO(), []*snpb.LogStreamCommitResult{
 		{
 			LogStreamID:         logStreamID1,
@@ -237,7 +237,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 		return reports[0].GetHighWatermark() == 20 && reports[1].GetHighWatermark() == 20
 	}, time.Second, 10*time.Millisecond)
 
-	infos, err := sn.GetPrevCommitInfo(context.TODO(), 20)
+	infos, err := sn.GetPrevCommitInfo(context.TODO(), 0)
 	require.NoError(t, err)
 	require.Len(t, infos, 2)
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
@@ -261,36 +261,12 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 		PrevHighWatermark:   0,
 	})
 
-	infos, err = sn.GetPrevCommitInfo(context.TODO(), 21)
-	require.NoError(t, err)
-	require.Len(t, infos, 2)
-	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
-		LogStreamID:         logStreamID1,
-		Status:              snpb.GetPrevCommitStatusNotFound,
-		CommittedLLSNOffset: 0,
-		CommittedGLSNOffset: 0,
-		CommittedGLSNLength: 0,
-		HighestWrittenLLSN:  5,
-		HighWatermark:       0,
-		PrevHighWatermark:   0,
-	})
-	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
-		LogStreamID:         logStreamID2,
-		Status:              snpb.GetPrevCommitStatusNotFound,
-		CommittedLLSNOffset: 0,
-		CommittedGLSNOffset: 0,
-		CommittedGLSNLength: 0,
-		HighestWrittenLLSN:  5,
-		HighWatermark:       0,
-		PrevHighWatermark:   0,
-	})
-
 	infos, err = sn.GetPrevCommitInfo(context.TODO(), 1)
 	require.NoError(t, err)
 	require.Len(t, infos, 2)
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID1,
-		Status:              snpb.GetPrevCommitStatusNotFound,
+		Status:              snpb.GetPrevCommitStatusInconsistent,
 		CommittedLLSNOffset: 0,
 		CommittedGLSNOffset: 0,
 		CommittedGLSNLength: 0,
@@ -300,7 +276,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	})
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID2,
-		Status:              snpb.GetPrevCommitStatusNotFound,
+		Status:              snpb.GetPrevCommitStatusInconsistent,
 		CommittedLLSNOffset: 0,
 		CommittedGLSNOffset: 0,
 		CommittedGLSNLength: 0,
@@ -324,7 +300,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	})
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID2,
-		Status:              snpb.GetPrevCommitStatusNotFound,
+		Status:              snpb.GetPrevCommitStatusInconsistent,
 		CommittedLLSNOffset: 0,
 		CommittedGLSNOffset: 0,
 		CommittedGLSNLength: 0,
@@ -333,12 +309,12 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 		PrevHighWatermark:   0,
 	})
 
-	infos, err = sn.GetPrevCommitInfo(context.TODO(), 10)
+	infos, err = sn.GetPrevCommitInfo(context.TODO(), 20)
 	require.NoError(t, err)
 	require.Len(t, infos, 2)
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID1,
-		Status:              snpb.GetPrevCommitStatusInconsistent,
+		Status:              snpb.GetPrevCommitStatusNotFound,
 		CommittedLLSNOffset: 0,
 		CommittedGLSNOffset: 0,
 		CommittedGLSNLength: 0,
@@ -357,12 +333,12 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 		PrevHighWatermark:   0,
 	})
 
-	infos, err = sn.GetPrevCommitInfo(context.TODO(), 19)
+	infos, err = sn.GetPrevCommitInfo(context.TODO(), 21)
 	require.NoError(t, err)
 	require.Len(t, infos, 2)
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID1,
-		Status:              snpb.GetPrevCommitStatusInconsistent,
+		Status:              snpb.GetPrevCommitStatusNotFound,
 		CommittedLLSNOffset: 0,
 		CommittedGLSNOffset: 0,
 		CommittedGLSNLength: 0,
@@ -372,7 +348,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	})
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID2,
-		Status:              snpb.GetPrevCommitStatusInconsistent,
+		Status:              snpb.GetPrevCommitStatusNotFound,
 		CommittedLLSNOffset: 0,
 		CommittedGLSNOffset: 0,
 		CommittedGLSNLength: 0,

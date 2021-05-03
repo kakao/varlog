@@ -96,10 +96,10 @@ func encodeCommitContextKey(cc CommitContext) commitContextKey {
 
 	offset := 1
 	sz := types.GLSNLen
-	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.HighWatermark))
+	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.PrevHighWatermark))
 
 	offset += sz
-	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.PrevHighWatermark))
+	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.HighWatermark))
 
 	offset += sz
 	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.CommittedGLSNBegin))
@@ -116,10 +116,10 @@ func decodeCommitContextKey(k commitContextKey) (cc CommitContext) {
 	}
 	sz := types.GLSNLen
 	offset := 1
-	cc.HighWatermark = types.GLSN(binary.BigEndian.Uint64(k[offset : offset+sz]))
+	cc.PrevHighWatermark = types.GLSN(binary.BigEndian.Uint64(k[offset : offset+sz]))
 
 	offset += sz
-	cc.PrevHighWatermark = types.GLSN(binary.BigEndian.Uint64(k[offset : offset+sz]))
+	cc.HighWatermark = types.GLSN(binary.BigEndian.Uint64(k[offset : offset+sz]))
 
 	offset += sz
 	cc.CommittedGLSNBegin = types.GLSN(binary.BigEndian.Uint64(k[offset : offset+sz]))

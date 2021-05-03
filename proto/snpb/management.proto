@@ -154,7 +154,7 @@ message SyncResponse {
 }
 
 message GetPrevCommitInfoRequest {
-    uint64 high_watermark = 1
+    uint64 prev_high_watermark = 1
         [(gogoproto.casttype) =
              "github.com/kakao/varlog/pkg/types.GLSN"];
 }

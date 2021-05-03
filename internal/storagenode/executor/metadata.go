@@ -1,11 +1,8 @@
 package executor
 
 import (
-	"github.com/pkg/errors"
-
 	"github.com/kakao/varlog/internal/storagenode/storage"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -40,17 +37,13 @@ func (e *executor) Metadata() varlogpb.LogStreamMetadataDescriptor {
 	}
 }
 
-func (e *executor) GetPrevCommitInfo(hwm types.GLSN) (*snpb.LogStreamCommitInfo, error) {
-	if hwm == types.InvalidGLSN {
-		return nil, errors.WithStack(verrors.ErrInvalid)
-	}
-
+func (e *executor) GetPrevCommitInfo(prevHWM types.GLSN) (*snpb.LogStreamCommitInfo, error) {
 	info := &snpb.LogStreamCommitInfo{
 		LogStreamID:        e.logStreamID,
 		HighestWrittenLLSN: e.lsc.uncommittedLLSNEnd.Load() - 1,
 	}
 
-	cc, err := e.storage.ReadCommitContext(hwm)
+	cc, err := e.storage.ReadCommitContext(prevHWM)
 	switch err {
 	case storage.ErrNotFoundCommitContext:
 		info.Status = snpb.GetPrevCommitStatusNotFound
