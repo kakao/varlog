@@ -720,10 +720,10 @@ func TestStorageReadCommitContext(t *testing.T) {
 		require.NoError(t, cb.Close())
 
 		_, err = strg.ReadCommitContext(0)
-		require.Error(t, err)
+		require.NoError(t, err)
 
 		_, err = strg.ReadCommitContext(4)
-		require.ErrorIs(t, ErrNotFoundCommitContext, err)
+		require.ErrorIs(t, ErrInconsistentCommitContext, err)
 
 		_, err = strg.ReadCommitContext(5)
 		require.ErrorIs(t, ErrInconsistentCommitContext, err)
@@ -735,7 +735,7 @@ func TestStorageReadCommitContext(t *testing.T) {
 		require.ErrorIs(t, ErrInconsistentCommitContext, err)
 
 		_, err = strg.ReadCommitContext(10)
-		require.NoError(t, err)
+		require.ErrorIs(t, ErrNotFoundCommitContext, err)
 
 		_, err = strg.ReadCommitContext(11)
 		require.ErrorIs(t, ErrNotFoundCommitContext, err)

@@ -196,7 +196,7 @@ func (s *server) GetPrevCommitInfo(ctx context.Context, req *snpb.GetPrevCommitI
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/GetPrevCommitInfo", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.GetPrevCommitInfoRequest)
-			info, err := s.storageNode.GetPrevCommitInfo(ctx, req.GetHighWatermark())
+			info, err := s.storageNode.GetPrevCommitInfo(ctx, req.GetPrevHighWatermark())
 			rsp := &snpb.GetPrevCommitInfoResponse{
 				StorageNodeID: s.storageNode.StorageNodeID(),
 				CommitInfos:   info,

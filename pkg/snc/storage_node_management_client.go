@@ -26,7 +26,7 @@ type StorageNodeManagementClient interface {
 	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
 	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
 	Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
-	GetPrevCommitInfo(ctx context.Context, hwm types.GLSN) (*snpb.GetPrevCommitInfoResponse, error)
+	GetPrevCommitInfo(ctx context.Context, prevHWM types.GLSN) (*snpb.GetPrevCommitInfoResponse, error)
 	Close() error
 }
 
@@ -145,9 +145,9 @@ func (c *snManagementClient) Sync(ctx context.Context, logStreamID types.LogStre
 	return rsp.GetStatus(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
-func (c *snManagementClient) GetPrevCommitInfo(ctx context.Context, hwm types.GLSN) (*snpb.GetPrevCommitInfoResponse, error) {
+func (c *snManagementClient) GetPrevCommitInfo(ctx context.Context, prevHWM types.GLSN) (*snpb.GetPrevCommitInfoResponse, error) {
 	rsp, err := c.rpcClient.GetPrevCommitInfo(ctx, &snpb.GetPrevCommitInfoRequest{
-		HighWatermark: hwm,
+		PrevHighWatermark: prevHWM,
 	})
 	return rsp, errors.WithStack(verrors.FromStatusError(err))
 }

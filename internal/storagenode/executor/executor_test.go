@@ -1180,19 +1180,19 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 	}()
 	wg.Wait()
 
-	// LLSN | GLSN | HWM
-	//    1 |    1 |   5
-	//    2 |    2 |   5
-	//    3 |    3 |   5
-	//    4 |    4 |   5
-	//    5 |    5 |   5
-	//    6 |   11 |  20
-	//    7 |   12 |  20
-	//    8 |   13 |  20
-	//    9 |   14 |  20
-	//   10 |   15 |  20
+	// LLSN | GLSN | HWM | PrevHWM
+	//    1 |    1 |   5 |       0
+	//    2 |    2 |   5 |       0
+	//    3 |    3 |   5 |       0
+	//    4 |    4 |   5 |       0
+	//    5 |    5 |   5 |       0
+	//    6 |   11 |  20 |       5
+	//    7 |   12 |  20 |       5
+	//    8 |   13 |  20 |       5
+	//    9 |   14 |  20 |       5
+	//   10 |   15 |  20 |       5
 
-	commitInfo, err := lse.GetPrevCommitInfo(5)
+	commitInfo, err := lse.GetPrevCommitInfo(0)
 	require.NoError(t, err)
 	require.Equal(t, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID,
@@ -1203,32 +1203,6 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 		HighestWrittenLLSN:  10,
 		HighWatermark:       5,
 		PrevHighWatermark:   0,
-	}, commitInfo)
-
-	commitInfo, err = lse.GetPrevCommitInfo(20)
-	require.NoError(t, err)
-	require.Equal(t, &snpb.LogStreamCommitInfo{
-		LogStreamID:         logStreamID,
-		Status:              snpb.GetPrevCommitStatusOK,
-		CommittedLLSNOffset: 6,
-		CommittedGLSNOffset: 11,
-		CommittedGLSNLength: 5,
-		HighestWrittenLLSN:  10,
-		HighWatermark:       20,
-		PrevHighWatermark:   5,
-	}, commitInfo)
-
-	commitInfo, err = lse.GetPrevCommitInfo(21)
-	require.NoError(t, err)
-	require.Equal(t, &snpb.LogStreamCommitInfo{
-		LogStreamID:         logStreamID,
-		Status:              snpb.GetPrevCommitStatusNotFound,
-		CommittedLLSNOffset: types.InvalidLLSN,
-		CommittedGLSNOffset: types.InvalidGLSN,
-		CommittedGLSNLength: 0,
-		HighestWrittenLLSN:  10,
-		HighWatermark:       types.InvalidGLSN,
-		PrevHighWatermark:   types.InvalidGLSN,
 	}, commitInfo)
 
 	commitInfo, err = lse.GetPrevCommitInfo(1)
@@ -1244,7 +1218,20 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 		PrevHighWatermark:   types.InvalidGLSN,
 	}, commitInfo)
 
-	commitInfo, err = lse.GetPrevCommitInfo(10)
+	commitInfo, err = lse.GetPrevCommitInfo(5)
+	require.NoError(t, err)
+	require.Equal(t, &snpb.LogStreamCommitInfo{
+		LogStreamID:         logStreamID,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 6,
+		CommittedGLSNOffset: 11,
+		CommittedGLSNLength: 5,
+		HighestWrittenLLSN:  10,
+		HighWatermark:       20,
+		PrevHighWatermark:   5,
+	}, commitInfo)
+
+	commitInfo, err = lse.GetPrevCommitInfo(6)
 	require.NoError(t, err)
 	require.Equal(t, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID,
@@ -1257,6 +1244,16 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 		PrevHighWatermark:   types.InvalidGLSN,
 	}, commitInfo)
 
-	commitInfo, err = lse.GetPrevCommitInfo(0)
-	require.Error(t, err)
+	commitInfo, err = lse.GetPrevCommitInfo(20)
+	require.NoError(t, err)
+	require.Equal(t, &snpb.LogStreamCommitInfo{
+		LogStreamID:         logStreamID,
+		Status:              snpb.GetPrevCommitStatusNotFound,
+		CommittedLLSNOffset: types.InvalidLLSN,
+		CommittedGLSNOffset: types.InvalidGLSN,
+		CommittedGLSNLength: 0,
+		HighestWrittenLLSN:  10,
+		HighWatermark:       types.InvalidGLSN,
+		PrevHighWatermark:   types.InvalidGLSN,
+	}, commitInfo)
 }
