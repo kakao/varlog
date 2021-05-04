@@ -10,72 +10,22 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
-	"github.daumkakao.com/varlog/varlog/internal/vms"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
-	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/test"
 )
 
 func testCluster(t *testing.T) (*test.VarlogCluster, func()) {
-	vmsOpts := vms.DefaultOptions()
-	vmsOpts.Tick = 100 * time.Millisecond
-	vmsOpts.HeartbeatTimeout = 30
-	vmsOpts.ReportInterval = 10
-	vmsOpts.Logger = zap.L()
-
-	opts := test.VarlogClusterOptions{
-		NrMR:                  1,
-		NrRep:                 3,
-		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
-		SNManagementClientFac: metadata_repository.NewStorageNodeManagementClientFactory(),
-		VMSOpts:               &vmsOpts,
-	}
-
-	clus := test.NewVarlogCluster(opts)
-	clus.Start()
-
-	// MR HealthCheck
-	require.Eventually(t, clus.HealthCheck, 10*time.Second, time.Second)
-	require.Eventually(t, func() bool {
-		return clus.GetMR().GetServerAddr() != ""
-	}, time.Second, 10*time.Millisecond)
-
-	// VMS
-	_, err := clus.RunClusterManager([]string{clus.GetMR().GetServerAddr()}, opts.VMSOpts)
-	require.NoError(t, err)
-
-	_, err = clus.NewClusterManagerClient()
-	require.NoError(t, err)
-
-	closer := func() {
-		require.NoError(t, clus.CMCli.Close())
-		require.NoError(t, clus.Close())
-		testutil.GC()
-	}
-
-	return clus, closer
+	return test.CreateTestCluster(t)
 }
 
 func testStartSN(t *testing.T, clus *test.VarlogCluster, num int) {
-	for i := 0; i < num; i++ {
-		_, err := clus.AddSNByVMS()
-		require.NoError(t, err)
-	}
-
-	// TODO: move this assertions to integration testing framework
-	rsp, err := clus.CMCli.GetStorageNodes(context.TODO())
-	require.NoError(t, err)
-	require.Len(t, rsp.GetStoragenodes(), num)
-
-	t.Logf("Started %d SNs", num)
+	test.StartTestSN(t, clus, num)
 }
 
 func testAddLS(t *testing.T, clus *test.VarlogCluster, num int) {
 	for i := 0; i < num; i++ {
-		_, err := clus.AddLSByVMS()
-		require.NoError(t, err)
+		_ = clus.AddLS(t)
 	}
 
 	t.Logf("Started %d LSs", num)
@@ -98,7 +48,7 @@ func TestClientNoLogStream(t *testing.T) {
 	vcl, err := varlog.Open(
 		context.TODO(),
 		clus.ClusterID,
-		[]string{clus.GetMR().GetServerAddr()},
+		[]string{clus.GetMR(t).GetServerAddr()},
 		varlog.WithLogger(zap.L()),
 		varlog.WithOpenTimeout(3*time.Second),
 	)
@@ -128,7 +78,7 @@ func TestClientAppendTo(t *testing.T) {
 	vcl, err := varlog.Open(
 		context.TODO(),
 		clus.ClusterID,
-		[]string{clus.GetMR().GetServerAddr()},
+		[]string{clus.GetMR(t).GetServerAddr()},
 		varlog.WithLogger(zap.L()),
 		varlog.WithOpenTimeout(3*time.Second),
 	)
@@ -164,7 +114,7 @@ func TestClientAppend(t *testing.T) {
 	vcl, err := varlog.Open(
 		context.TODO(),
 		clus.ClusterID,
-		[]string{clus.GetMR().GetServerAddr()},
+		[]string{clus.GetMR(t).GetServerAddr()},
 		varlog.WithLogger(zap.L()),
 		varlog.WithOpenTimeout(3*time.Second),
 	)
@@ -206,7 +156,7 @@ func TestClientSubscribe(t *testing.T) {
 	vcl, err := varlog.Open(
 		context.TODO(),
 		clus.ClusterID,
-		[]string{clus.GetMR().GetServerAddr()},
+		[]string{clus.GetMR(t).GetServerAddr()},
 		varlog.WithLogger(zap.L()),
 		varlog.WithOpenTimeout(3*time.Second),
 	)

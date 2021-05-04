@@ -29,104 +29,98 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
 			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
-		env := test.NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
 
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.HealthCheck()
-		}), ShouldBeTrue)
+		Convey("cluster", test.WithTestCluster(t, opts, func(env *test.VarlogCluster) {
+			leader := env.Leader()
 
-		leader := env.Leader()
+			_ = env.AddSN(t)
 
-		_, err := env.AddSN()
-		So(err, ShouldBeNil)
+			lsID := env.AddLS(t)
 
-		lsID, err := env.AddLS()
-		So(err, ShouldBeNil)
+			errC := make(chan error, 1024)
+			glsnC := make(chan types.GLSN, 1024)
 
-		errC := make(chan error, 1024)
-		glsnC := make(chan types.GLSN, 1024)
-
-		appendf := func(actx context.Context) {
-			cli, err := env.NewLogIOClient(lsID)
-			if err != nil {
-				errC <- err
-				return
-			}
-			defer cli.Close()
-
-			for {
-				select {
-				case <-actx.Done():
-					return
-				default:
-					rctx, cancel := context.WithTimeout(actx, vtesting.TimeoutUnitTimesFactor(50))
-					glsn, err := cli.Append(rctx, lsID, []byte("foo"))
-					cancel()
+			appendf := func(actx context.Context) {
+				cli := env.NewLogIOClient(t, lsID)
+				/*
 					if err != nil {
-						if err != context.DeadlineExceeded {
-							errC <- err
-						}
-					} else {
-						glsnC <- glsn
+						errC <- err
+						return
 					}
-				}
-			}
-		}
-
-		runner := runner.New("failover-leader-test", zap.NewNop())
-		defer runner.Stop()
-
-		for i := 0; i < 5; i++ {
-			runner.Run(appendf)
-		}
-
-		Convey("When MR leader fail", func(ctx C) {
-			maxGLSN := types.InvalidGLSN
-			triggerGLSN := types.GLSN(20)
-			goalGLSN := types.GLSN(3) * triggerGLSN
-			stopped := false
-
-			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
-			defer timer.Stop()
-
-		Loop:
-			for {
-				select {
-				case <-timer.C:
-					t.Fatal("timeout")
-				case glsn := <-glsnC:
-					if maxGLSN < glsn {
-						maxGLSN = glsn
-					}
-					if !stopped && maxGLSN > triggerGLSN {
-						So(env.LeaderFail(), ShouldBeTrue)
-						stopped = true
-
-						So(testutil.CompareWaitN(50, func() bool {
-							return env.Leader() != leader
-						}), ShouldBeTrue)
-
-					} else if maxGLSN > goalGLSN {
-						break Loop
-					}
-				case err := <-errC:
-					So(err, ShouldBeNil)
-				}
-			}
-
-			Convey("Then it should be able to keep appending log", func(ctx C) {
-				cli, err := env.NewLogIOClient(lsID)
-				So(err, ShouldBeNil)
+				*/
 				defer cli.Close()
 
-				for glsn := types.MinGLSN; glsn <= maxGLSN; glsn += types.GLSN(1) {
-					_, err := cli.Read(context.TODO(), lsID, glsn)
-					So(err, ShouldBeNil)
+				for {
+					select {
+					case <-actx.Done():
+						return
+					default:
+						rctx, cancel := context.WithTimeout(actx, vtesting.TimeoutUnitTimesFactor(50))
+						glsn, err := cli.Append(rctx, lsID, []byte("foo"))
+						cancel()
+						if err != nil {
+							if err != context.DeadlineExceeded {
+								errC <- err
+							}
+						} else {
+							glsnC <- glsn
+						}
+					}
 				}
+			}
+
+			runner := runner.New("failover-leader-test", zap.NewNop())
+			defer runner.Stop()
+
+			for i := 0; i < 5; i++ {
+				runner.Run(appendf)
+			}
+
+			Convey("When MR leader fail", func(ctx C) {
+				maxGLSN := types.InvalidGLSN
+				triggerGLSN := types.GLSN(20)
+				goalGLSN := types.GLSN(3) * triggerGLSN
+				stopped := false
+
+				timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
+				defer timer.Stop()
+
+			Loop:
+				for {
+					select {
+					case <-timer.C:
+						t.Fatal("timeout")
+					case glsn := <-glsnC:
+						if maxGLSN < glsn {
+							maxGLSN = glsn
+						}
+						if !stopped && maxGLSN > triggerGLSN {
+							So(env.LeaderFail(t), ShouldBeTrue)
+							stopped = true
+
+							So(testutil.CompareWaitN(50, func() bool {
+								return env.Leader() != leader
+							}), ShouldBeTrue)
+
+						} else if maxGLSN > goalGLSN {
+							break Loop
+						}
+					case err := <-errC:
+						So(err, ShouldBeNil)
+					}
+				}
+
+				Convey("Then it should be able to keep appending log", func(ctx C) {
+					cli := env.NewLogIOClient(t, lsID)
+					defer cli.Close()
+
+					for glsn := types.MinGLSN; glsn <= maxGLSN; glsn += types.GLSN(1) {
+						_, err := cli.Read(context.TODO(), lsID, glsn)
+						So(err, ShouldBeNil)
+					}
+				})
 			})
-		})
+		}))
 	})
 }
 
@@ -145,16 +139,14 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		VMSOpts:               &vmsOpts,
 	}
 
-	Convey("Given Varlog cluster", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
+	Convey("Given Varlog cluster", t, test.WithTestCluster(t, opts, func(env *test.VarlogCluster) {
 		for i := 0; i < nrRep; i++ {
-			_, err := env.AddSNByVMS()
-			So(err, ShouldBeNil)
+			_ = env.AddSN(t)
 		}
 
-		lsID, err := env.AddLSByVMS()
-		So(err, ShouldBeNil)
+		lsID := env.AddLS(t)
 
-		meta, _ := env.GetMR().GetMetadata(context.TODO())
+		meta, _ := env.GetMR(t).GetMetadata(context.TODO())
 		So(meta, ShouldNotBeNil)
 
 		ls := meta.LogStreams[0]
@@ -163,11 +155,13 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		glsnC := make(chan types.GLSN, 1024)
 
 		appendf := func(actx context.Context) {
-			cli, err := env.NewLogIOClient(lsID)
-			if err != nil {
-				errC <- err
-				return
-			}
+			cli := env.NewLogIOClient(t, lsID)
+			/*
+				if err != nil {
+					errC <- err
+					return
+				}
+			*/
 			defer cli.Close()
 
 			var backups []logc.StorageNode
@@ -213,7 +207,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		Convey("When backup SN fail", func(ctx C) {
 			errCnt := 0
 			maxGLSN := types.InvalidGLSN
-			oldsn, _ := env.GetBackupSN(lsID, 1)
+			oldsn := env.GetBackupSN(t, lsID)
 
 			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
 			defer timer.Stop()
@@ -240,11 +234,10 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 			}
 
 			Convey("Then it should not be able to append", func(ctx C) {
-				sealedGLSN, _ := env.GetMR().Seal(context.TODO(), lsID)
+				sealedGLSN, _ := env.GetMR(t).Seal(context.TODO(), lsID)
 				So(sealedGLSN, ShouldBeGreaterThanOrEqualTo, maxGLSN)
 
-				psn, _ := env.GetPrimarySN(lsID)
-				So(psn, ShouldNotBeNil)
+				psn := env.GetPrimarySN(t, lsID)
 
 				So(testutil.CompareWaitN(50, func() bool {
 					status, _, _ := psn.Seal(context.TODO(), lsID, sealedGLSN)
@@ -255,8 +248,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 				So(hwm, ShouldEqual, sealedGLSN)
 
 				Convey("When backup SN recover", func(ctx C) {
-					sn, err := env.RecoverSN(ls.Replicas[1].StorageNodeID)
-					So(err, ShouldBeNil)
+					sn := env.RecoverSN(t, ls.Replicas[1].StorageNodeID)
 
 					So(testutil.CompareWaitN(50, func() bool {
 						snmeta, err := sn.GetMetadata(context.TODO())
@@ -278,9 +270,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					}), ShouldBeTrue)
 
 					Convey("Then it should be abel to append", func(ctx C) {
-
-						cli, err := env.NewLogIOClient(lsID)
-						So(err, ShouldBeNil)
+						cli := env.NewLogIOClient(t, lsID)
 						Reset(func() {
 							cli.Close()
 						})
@@ -302,7 +292,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 
 							rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 							defer cancel()
-							_, err = cli.Append(rctx, lsID, []byte("foo"), backups...)
+							_, err := cli.Append(rctx, lsID, []byte("foo"), backups...)
 							return err == nil
 						}), ShouldBeTrue)
 					})
@@ -325,38 +315,34 @@ func TestVarlogFailoverRecoverFromSML(t *testing.T) {
 		VMSOpts:               &vmsOpts,
 	}
 
-	Convey("Given Varlog cluster with StateMachineLog", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
-		So(testutil.CompareWaitN(10, func() bool {
-			return env.HealthCheck()
-		}), ShouldBeTrue)
-
+	Convey("Given Varlog cluster with StateMachineLog", t, test.WithTestCluster(t, opts, func(env *test.VarlogCluster) {
 		leader := env.Leader()
 
-		_, err := env.AddSNByVMS()
-		So(err, ShouldBeNil)
+		_ = env.AddSN(t)
 
-		lsID, err := env.AddLSByVMS()
-		So(err, ShouldBeNil)
+		lsID := env.AddLS(t)
 
-		cli, err := env.NewLogIOClient(lsID)
-		So(err, ShouldBeNil)
+		cli := env.NewLogIOClient(t, lsID)
 		defer cli.Close()
 
-		var glsn types.GLSN
+		var (
+			err  error
+			glsn types.GLSN
+		)
 		for i := 0; i < 5; i++ {
 			glsn, err = cli.Append(context.TODO(), lsID, []byte("foo"))
 			So(err, ShouldBeNil)
 		}
 
 		Convey("When MR leader restart", func(ctx C) {
-			env.RestartMR(leader)
+			env.RestartMR(t, leader)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				return env.HealthCheck()
+				return env.HealthCheck(t)
 			}), ShouldBeTrue)
 
 			Convey("Then it should be recovered", func(ctx C) {
-				mr := env.GetMR()
+				mr := env.GetMR(t)
 				So(mr.GetHighWatermark(), ShouldEqual, glsn)
 
 				metadata, err := mr.GetMetadata(context.TODO())
@@ -369,7 +355,7 @@ func TestVarlogFailoverRecoverFromSML(t *testing.T) {
 					So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
 
 					So(testutil.CompareWaitN(10, func() bool {
-						meta, err := env.SNs[0].GetMetadata(context.TODO())
+						meta, err := env.StorageNodes()[0].GetMetadata(context.TODO())
 						if err != nil {
 							return false
 						}
