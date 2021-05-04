@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/pkg/errors"
 )
@@ -25,13 +26,17 @@ type Lease struct {
 	base    int
 	name    string
 	release func() error
+	once    sync.Once
 }
 
-func (r *Lease) Release() error {
-	return r.release()
+func (r *Lease) Release() (err error) {
+	r.once.Do(func() {
+		err = r.release()
+	})
+	return err
 }
 
-func (r Lease) Base() int {
+func (r *Lease) Base() int {
 	return r.base
 }
 

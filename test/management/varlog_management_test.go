@@ -39,10 +39,8 @@ func TestVarlogManagerServer(t *testing.T) {
 		VMSOpts:               &vmsOpts,
 	}
 
-	Convey("AddStorageNode", t, test.WithTestCluster(opts, func(env *test.VarlogCluster) {
+	Convey("AddStorageNode", t, test.WithTestCluster(t, opts, func(env *test.VarlogCluster) {
 		nrSN := opts.NrRep
-
-		defer env.Close()
 
 		cmcli := env.GetClusterManagerClient()
 
@@ -50,10 +48,8 @@ func TestVarlogManagerServer(t *testing.T) {
 		snAddrs := make(map[types.StorageNodeID]string, nrSN)
 
 		for i := 0; i < nrSN; i++ {
-			snid, err := env.AddSNByVMS()
-			So(err, ShouldBeNil)
-			sn, ok := env.SNs[snid]
-			So(ok, ShouldBeTrue)
+			snid := env.AddSN(t)
+			sn := env.LookupSN(t, snid)
 			snmd, err := sn.GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 			path := snmd.GetStorageNode().GetStorages()[0].GetPath()
@@ -69,11 +65,11 @@ func TestVarlogManagerServer(t *testing.T) {
 		}
 
 		Convey("UnregisterStorageNode", func() {
-			for snid := range env.SNs {
+			for snid := range env.StorageNodes() {
 				_, err := cmcli.UnregisterStorageNode(context.TODO(), snid)
 				So(err, ShouldBeNil)
 
-				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+				clusmeta, err := env.GetMR(t).GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 				So(clusmeta.GetStorageNode(snid), ShouldBeNil)
 			}
@@ -92,8 +88,7 @@ func TestVarlogManagerServer(t *testing.T) {
 		})
 
 		Convey("AddLogStream - Simple", func() {
-			logStreamID, err := env.AddLSByVMS()
-			So(err, ShouldBeNil)
+			logStreamID := env.AddLS(t)
 
 			Convey("UnregisterLogStream ERROR: running log stream", func() {
 				_, err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
@@ -108,7 +103,7 @@ func TestVarlogManagerServer(t *testing.T) {
 				So(lsmetaList[0].HighWatermark, ShouldEqual, types.InvalidGLSN)
 
 				// check MR metadata: sealed
-				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+				clusmeta, err := env.GetMR(t).GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 				lsdesc := clusmeta.GetLogStream(logStreamID)
 				So(lsdesc, ShouldNotBeNil)
@@ -116,7 +111,7 @@ func TestVarlogManagerServer(t *testing.T) {
 				So(len(lsdesc.GetReplicas()), ShouldEqual, opts.NrRep)
 
 				// check SN metadata: sealed
-				for _, sn := range env.SNs {
+				for _, sn := range env.StorageNodes() {
 					snmeta, err := sn.GetMetadata(context.TODO())
 					So(err, ShouldBeNil)
 					So(snmeta.GetLogStreams()[0].GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
@@ -126,7 +121,7 @@ func TestVarlogManagerServer(t *testing.T) {
 					_, err := cmcli.UnregisterLogStream(context.TODO(), logStreamID)
 					So(err, ShouldBeNil)
 
-					clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+					clusmeta, err := env.GetMR(t).GetMetadata(context.TODO())
 					So(err, ShouldBeNil)
 
 					So(clusmeta.GetLogStream(logStreamID), ShouldBeNil)
@@ -136,7 +131,7 @@ func TestVarlogManagerServer(t *testing.T) {
 					_, err := cmcli.Unseal(context.TODO(), logStreamID)
 					So(err, ShouldBeNil)
 
-					clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+					clusmeta, err := env.GetMR(t).GetMetadata(context.TODO())
 					So(err, ShouldBeNil)
 					lsdesc := clusmeta.GetLogStream(logStreamID)
 					So(lsdesc, ShouldNotBeNil)
@@ -156,11 +151,11 @@ func TestVarlogManagerServer(t *testing.T) {
 			for _, replica := range logStreamDesc.GetReplicas() {
 				snidList = append(snidList, replica.GetStorageNodeID())
 			}
-			for snid := range env.SNs {
+			for snid := range env.StorageNodes() {
 				So(snidList, ShouldContain, snid)
 			}
 
-			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+			clusmeta, err := env.GetMR(t).GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 			So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
 		})
@@ -178,14 +173,14 @@ func TestVarlogManagerServer(t *testing.T) {
 		Convey("AddLogStream - Error: duplicated, but not registered logstream", func() {
 			// Add logstream to storagenode
 			badSNID := replicas[0].GetStorageNodeID()
-			badSN := env.SNs[badSNID]
+			badSN := env.LookupSN(t, badSNID)
 			badLSID := types.LogStreamID(1)
 			path := replicas[0].GetPath()
 			_, err := badSN.AddLogStream(context.TODO(), badLSID, path)
 			So(err, ShouldBeNil)
 
 			// Not registered logstream
-			clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+			clusmeta, err := env.GetMR(t).GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 			So(clusmeta.GetLogStream(badLSID), ShouldBeNil)
 
@@ -205,7 +200,7 @@ func TestVarlogManagerServer(t *testing.T) {
 				logStreamDesc := rsp.GetLogStream()
 				So(len(logStreamDesc.GetReplicas()), ShouldEqual, opts.NrRep)
 
-				clusmeta, err := env.GetMR().GetMetadata(context.TODO())
+				clusmeta, err := env.GetMR(t).GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 				So(clusmeta.GetLogStream(logStreamDesc.GetLogStreamID()), ShouldNotBeNil)
 
@@ -318,11 +313,11 @@ func TestVarlogNewMRManager(t *testing.T) {
 		vmsOpts := vms.DefaultOptions()
 		vmsOpts.InitialMRConnRetryCount = 3
 		opts.VMSOpts = &vmsOpts
-		env := test.NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
+		env := test.NewVarlogCluster(t, opts)
+		env.Start(t)
+		defer env.Close(t)
 
-		mr := env.MRs[0]
+		mr := env.GetMR(t)
 		So(testutil.CompareWaitN(50, func() bool {
 			return mr.GetServerAddr() != ""
 		}), ShouldBeTrue)
@@ -374,11 +369,11 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 		}
 		vmsOpts := vms.DefaultOptions()
 		opts.VMSOpts = &vmsOpts
-		env := test.NewVarlogCluster(opts)
-		env.Start()
-		defer env.Close()
+		env := test.NewVarlogCluster(t, opts)
+		env.Start(t)
+		defer env.Close(t)
 
-		mr := env.MRs[0]
+		mr := env.GetMR(t)
 		So(testutil.CompareWaitN(50, func() bool {
 			return mr.GetServerAddr() != ""
 		}), ShouldBeTrue)
@@ -391,11 +386,10 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 		defer mrm.Close()
 
 		Convey("When all the cluster configuration nodes are changed", func(ctx C) {
-			env.AppendMR()
-			err := env.StartMR(1)
-			So(err, ShouldBeNil)
+			env.AppendMR(t)
+			env.StartMR(t, 1)
 
-			nmr := env.MRs[1]
+			nmr := env.GetMRByIndex(t, 1)
 
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()

@@ -23,9 +23,9 @@ import (
 func TestMRConnector(t *testing.T) {
 	safeMRClose := func(env *test.VarlogCluster, idx int, truncate bool) [2]int {
 		if truncate {
-			So(env.CloseMR(idx), ShouldBeNil)
+			env.CloseMR(t, idx)
 		} else {
-			So(env.MRs[idx].Close(), ShouldBeNil)
+			So(env.GetMRByIndex(t, idx).Close(), ShouldBeNil)
 		}
 
 		numCheckRPC := 0
@@ -62,16 +62,16 @@ func TestMRConnector(t *testing.T) {
 			ReporterClientFac:     metadata_repository.NewEmptyStorageNodeClientFactory(),
 			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
 		}
-		env := test.NewVarlogCluster(opts)
-		env.Start()
+		env := test.NewVarlogCluster(t, opts)
+		env.Start(t)
 
 		Reset(func() {
-			for idx := range env.MRs {
+			for idx := range env.MetadataRepositories() {
 				checks := safeMRClose(env, idx, true)
 				So(checks[0], ShouldEqual, 1)
 				So(checks[1], ShouldEqual, 1)
 			}
-			So(env.Close(), ShouldBeNil)
+			env.Close(t)
 		})
 
 		for _, rpcEndpoint := range env.MRRPCEndpoints {
@@ -195,7 +195,7 @@ func TestMRConnector(t *testing.T) {
 					So(mrConn.NumberOfMR(), ShouldEqual, 1)
 
 					Convey("When the active MR (idx=0) fails", func() {
-						So(env.MRs[0].Close(), ShouldBeNil)
+						So(env.GetMR(t).Close(), ShouldBeNil)
 						Convey("Then MRConnector should not work", func() {
 							maybeFail(context.TODO())
 							_, err := mrConn.Client()
@@ -207,7 +207,7 @@ func TestMRConnector(t *testing.T) {
 						So(mrConn.NumberOfMR(), ShouldEqual, 1)
 						// Recover MR: env.MRs[1]
 						mrIdx := 1
-						So(env.RestartMR(mrIdx), ShouldBeNil)
+						env.RestartMR(t, mrIdx)
 						time.Sleep(2 * clusterInfoFetchInterval)
 
 						So(testutil.CompareWaitN(100, func() bool {
