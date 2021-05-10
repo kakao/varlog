@@ -631,8 +631,13 @@ func (lc *logStreamCommitter) isNewbie(prevHighWatermark, highWatermark types.GL
 		if newHighWatermark, _ := lc.helper.getHighWatermark(lc.lsID); newHighWatermark > highWatermark {
 			// could not verify
 			return false, false
+		} else {
+			lc.logger.Panic("no commit result",
+				zap.Any("prevHWM", prevHighWatermark),
+				zap.Any("HWM", highWatermark),
+				zap.Any("reportedHWM", newHighWatermark),
+			)
 		}
-		lc.logger.Panic("no commit result", zap.Any("hwm", prevHighWatermark))
 	}
 
 	return cr.LookupCommitResult(lc.lsID) == nil, true

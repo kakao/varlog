@@ -17,6 +17,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/internal/vms"
 	"github.daumkakao.com/varlog/varlog/pkg/logc"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
@@ -26,6 +27,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 )
@@ -54,6 +56,7 @@ type VarlogCluster struct {
 	MRIDs                []types.NodeID
 	mrCLs                map[types.NodeID]mrc.MetadataRepositoryClient
 	mrMCLs               map[types.NodeID]mrc.MetadataRepositoryManagementClient
+	cachedMetadata       *varlogpb.MetadataDescriptor
 
 	muSNs          sync.Mutex
 	storageNodes   map[types.StorageNodeID]*storagenode.StorageNode
@@ -135,6 +138,17 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal, re
 	nodeID := types.NewNodeIDFromURL(clus.MRPeers[idx])
 	require.NotEqual(t, types.InvalidNodeID, nodeID)
 
+	peers := clus.MRPeers
+
+	var syncStorageNodes []string
+	if recoverFromSML {
+		for _, addr := range clus.snRPCEndpoints {
+			syncStorageNodes = append(syncStorageNodes, addr)
+		}
+
+		peers = nil
+	}
+
 	opts := &metadata_repository.MetadataRepositoryOptions{
 		RaftOptions: metadata_repository.RaftOptions{
 			Join:        join,
@@ -143,7 +157,7 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal, re
 			SnapCount:   uint64(clus.SnapCount),
 			RaftTick:    vtesting.TestRaftTick(),
 			RaftDir:     vtesting.TestRaftDir(),
-			Peers:       clus.MRPeers,
+			Peers:       peers,
 		},
 
 		ClusterID:                      clus.ClusterID,
@@ -154,6 +168,7 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal, re
 		RPCBindAddress:                 clus.MRRPCEndpoints[idx],
 		ReporterClientFac:              clus.ReporterClientFac,
 		StorageNodeManagementClientFac: clus.SNManagementClientFac,
+		SyncStorageNodes:               syncStorageNodes,
 		Logger:                         clus.logger,
 	}
 
@@ -182,6 +197,22 @@ func (clus *VarlogCluster) AppendMR(t *testing.T) {
 	clus.clearMR(t, idx)
 
 	clus.createMR(t, idx, true, clus.UnsafeNoWal, false)
+}
+
+func (clus *VarlogCluster) RecoverMR(t *testing.T) {
+	clus.muMRs.Lock()
+	defer clus.muMRs.Unlock()
+
+	idx := 0
+	raftPort := 2*idx + clus.portLease.Base()
+	rpcPort := 2*idx + 1 + clus.portLease.Base()
+	clus.MRPeers = []string{fmt.Sprintf("http://127.0.0.1:%d", raftPort)}
+	clus.MRRPCEndpoints = []string{fmt.Sprintf("127.0.0.1:%d", rpcPort)}
+	clus.MRIDs = []types.NodeID{types.InvalidNodeID}
+	clus.metadataRepositories = []*metadata_repository.RaftMetadataRepository{nil}
+
+	clus.createMR(t, idx, false, clus.UnsafeNoWal, true)
+	clus.StartMR(t, idx)
 }
 
 func (clus *VarlogCluster) StartMR(t *testing.T, idx int) {
@@ -221,6 +252,12 @@ func (clus *VarlogCluster) CloseMR(t *testing.T, idx int) {
 	clus.clearMR(t, idx)
 
 	clus.logger.Info("cluster node stop", zap.Int("idx", idx))
+}
+
+func (clus *VarlogCluster) CloseMRAllForRestart(t *testing.T) {
+	for i := range clus.MRPeers {
+		clus.StopMR(t, i)
+	}
 }
 
 // Close closes all cluster MRs
@@ -493,6 +530,18 @@ func (clus *VarlogCluster) StorageNodes() map[types.StorageNodeID]*storagenode.S
 	for id, sn := range clus.storageNodes {
 		ret[id] = sn
 	}
+	return ret
+}
+
+func (clus *VarlogCluster) StorageNodesManagementClients() map[types.StorageNodeID]snc.StorageNodeManagementClient {
+	clus.muSNs.Lock()
+	defer clus.muSNs.Unlock()
+
+	ret := make(map[types.StorageNodeID]snc.StorageNodeManagementClient, len(clus.snMCLs))
+	for id, sn := range clus.snMCLs {
+		ret[id] = sn
+	}
+
 	return ret
 }
 
@@ -796,4 +845,152 @@ func StartTestSN(t *testing.T, clus *VarlogCluster, num int) {
 	require.Len(t, rsp.GetStoragenodes(), num)
 
 	t.Logf("Started %d SNs", num)
+}
+
+func (clus *VarlogCluster) GetMetadata(t *testing.T) *varlogpb.MetadataDescriptor {
+	clus.muMRs.Lock()
+	defer clus.muMRs.Unlock()
+
+	var (
+		err error
+		md  *varlogpb.MetadataDescriptor
+	)
+	require.Positive(t, len(clus.mrCLs))
+	for _, mrcl := range clus.mrCLs {
+		md, err = mrcl.GetMetadata(context.Background())
+		if err == nil {
+			break
+		}
+	}
+	require.NoError(t, err)
+	require.NotNil(t, md)
+
+	clus.cachedMetadata = md
+	return md
+}
+
+func (clus *VarlogCluster) getRPCEndpoint(snID types.StorageNodeID) (string, bool) {
+	clus.muSNs.Lock()
+	defer clus.muSNs.Unlock()
+
+	addr, ok := clus.snRPCEndpoints[snID]
+	return addr, ok
+}
+
+func (clus *VarlogCluster) getCachedMetadata() *varlogpb.MetadataDescriptor {
+	clus.muMRs.Lock()
+	defer clus.muMRs.Unlock()
+
+	return clus.cachedMetadata
+}
+
+func (clus *VarlogCluster) AppendWithoutMR(t *testing.T, lsID types.LogStreamID, data []byte) {
+	md := clus.getCachedMetadata()
+	require.NotNil(t, md)
+
+	lsd, err := md.HaveLogStream(lsID)
+	require.NoError(t, err)
+	require.Greater(t, len(lsd.GetReplicas()), 0)
+
+	for _, r := range lsd.GetReplicas() {
+		addr, ok := clus.getRPCEndpoint(r.StorageNodeID)
+		require.Equal(t, ok, true)
+
+		cli, err := logc.NewLogIOClient(context.TODO(), addr)
+		require.NoError(t, err)
+		defer cli.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		_, err = cli.Append(ctx, lsID, data)
+		require.Error(t, err)
+	}
+}
+
+func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
+	committedLLSNOffset types.LLSN, committedGLSNOffset types.GLSN, committedGLSNLen uint64,
+	prevHighWatermark, highWatermark types.GLSN) {
+	md := clus.getCachedMetadata()
+	require.NotNil(t, md)
+
+	lsd, err := md.HaveLogStream(lsID)
+	require.NoError(t, err)
+	require.Greater(t, len(lsd.GetReplicas()), 0)
+
+	cr := &snpb.LogStreamCommitResult{
+		LogStreamID:         lsID,
+		CommittedLLSNOffset: committedLLSNOffset,
+		CommittedGLSNOffset: committedGLSNOffset,
+		CommittedGLSNLength: committedGLSNLen,
+		PrevHighWatermark:   prevHighWatermark,
+		HighWatermark:       highWatermark,
+	}
+
+	for _, r := range lsd.Replicas {
+		cr := &snpb.CommitRequest{
+			StorageNodeID: r.StorageNodeID,
+			CommitResults: []*snpb.LogStreamCommitResult{cr},
+		}
+
+		addr, ok := clus.getRPCEndpoint(r.StorageNodeID)
+		require.Equal(t, ok, true)
+
+		cli, err := reportcommitter.NewClient(context.TODO(), addr)
+		require.NoError(t, err)
+		defer cli.Close()
+
+		err = cli.Commit(context.TODO(), cr)
+		require.NoError(t, err)
+	}
+}
+
+func (clus *VarlogCluster) WaitCommit(t *testing.T, lsID types.LogStreamID, highWatermark types.GLSN) {
+	require.Eventually(t, func() bool {
+		snMCLs := clus.StorageNodesManagementClients()
+		committed := 0
+
+		for _, snMCL := range snMCLs {
+			meta, err := snMCL.GetMetadata(context.TODO())
+			if err != nil {
+				return false
+			}
+
+			lsmeta, ok := meta.GetLogStream(lsID)
+			if !ok {
+				continue
+			}
+
+			if lsmeta.HighWatermark == highWatermark {
+				committed++
+			}
+		}
+
+		return committed == clus.NrRep
+	}, vtesting.TimeoutUnitTimesFactor(10), 10*time.Millisecond)
+}
+
+func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
+	require.Eventually(t, func() bool {
+		snMCLs := clus.StorageNodesManagementClients()
+		sealed := 0
+
+		for _, snMCL := range snMCLs {
+			meta, err := snMCL.GetMetadata(context.TODO())
+			if err != nil {
+				return false
+			}
+
+			lsmeta, ok := meta.GetLogStream(lsID)
+			if !ok {
+				continue
+			}
+
+			if lsmeta.Status == varlogpb.LogStreamStatusSealed {
+				sealed++
+			}
+		}
+
+		return sealed == clus.NrRep
+	}, vtesting.TimeoutUnitTimesFactor(10), 10*time.Millisecond)
 }

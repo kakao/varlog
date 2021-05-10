@@ -6,18 +6,16 @@ package snpb
 import (
 	context "context"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	types "github.com/gogo/protobuf/types"
+	github_daumkakao_com_varlog_varlog_pkg_types "github.daumkakao.com/varlog/varlog/pkg/types"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-
-	github_daumkakao_com_varlog_varlog_pkg_types "github.daumkakao.com/varlog/varlog/pkg/types"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1408,7 +1406,10 @@ func (m *AppendRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1510,7 +1511,10 @@ func (m *AppendRequest_BackupNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1599,7 +1603,10 @@ func (m *AppendResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1688,7 +1695,10 @@ func (m *ReadRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1811,7 +1821,10 @@ func (m *ReadResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1919,7 +1932,10 @@ func (m *SubscribeRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -2042,7 +2058,10 @@ func (m *SubscribeResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -2112,7 +2131,10 @@ func (m *TrimRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
