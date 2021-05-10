@@ -30,6 +30,7 @@ func (e *executor) Metadata() varlogpb.LogStreamMetadataDescriptor {
 	return varlogpb.LogStreamMetadataDescriptor{
 		StorageNodeID: e.storageNodeID,
 		LogStreamID:   e.logStreamID,
+		HighWatermark: e.lsc.localGLSN.localHighWatermark.Load(),
 		Status:        status,
 		Path:          e.storage.Path(),
 		CreatedTime:   e.tsp.Created(),

@@ -2,7 +2,6 @@ package metadata_repository
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -609,9 +608,8 @@ func TestCommit(t *testing.T) {
 				}
 				reportCollector.mu.RUnlock()
 
-				fmt.Printf("knowHWM:%v, trim:%v\n", knownHWM, trimHWM)
-
 				mr.trimGLS(trimHWM)
+				logger.Debug("trimGLS", zap.Any("knowHWM", knownHWM), zap.Any("trimHWM", trimHWM), zap.Any("result", len(mr.m)))
 
 				Convey("ReportCollector should send proper commit against new StorageNode", func() {
 					sn := &varlogpb.StorageNodeDescriptor{
@@ -699,21 +697,27 @@ func TestCommitWithDelay(t *testing.T) {
 		dummySN := a.lookupClient(sn.StorageNodeID)
 
 		Convey("disable report to catchup using old hwm", func() {
-			dummySN.DisableReport()
-
 			gls := newDummyCommitResults(knownHWM, 1)
 			mr.appendGLS(gls)
-			prevHWM := knownHWM
+			knownHWM = gls.HighWatermark
+
+			reportCollector.Commit()
+
+			So(testutil.CompareWaitN(10, func() bool {
+				return executor.reportCtx.getReport().UncommitReports[0].HighWatermark == knownHWM
+			}), ShouldBeTrue)
+			reportedHWM := executor.reportCtx.getReport().UncommitReports[0].HighWatermark
+
+			dummySN.DisableReport()
+
+			time.Sleep(10 * time.Millisecond)
+
+			gls = newDummyCommitResults(knownHWM, 1)
+			mr.appendGLS(gls)
 			knownHWM = gls.HighWatermark
 
 			gls = newDummyCommitResults(knownHWM, 1)
 			mr.appendGLS(gls)
-			prevHWM = knownHWM
-			knownHWM = gls.HighWatermark
-
-			gls = newDummyCommitResults(knownHWM, 1)
-			mr.appendGLS(gls)
-			prevHWM = knownHWM
 			knownHWM = gls.HighWatermark
 
 			reportCollector.Commit()
@@ -722,7 +726,8 @@ func TestCommitWithDelay(t *testing.T) {
 				return dummySN.getKnownHighWatermark(0) == knownHWM
 			}), ShouldBeTrue)
 
-			So(executor.reportCtx.getReport().UncommitReports[0].HighWatermark, ShouldBeLessThan, prevHWM)
+			time.Sleep(10 * time.Millisecond)
+			So(executor.reportCtx.getReport().UncommitReports[0].HighWatermark, ShouldEqual, reportedHWM)
 
 			Convey("set commit delay & enable report to trim during catchup", func() {
 				dummySN.SetCommitDelay(30 * time.Millisecond)

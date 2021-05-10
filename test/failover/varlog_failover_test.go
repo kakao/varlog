@@ -27,7 +27,7 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 			NrMR:                  3,
 			NrRep:                 1,
 			ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
-			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+			SNManagementClientFac: metadata_repository.NewStorageNodeManagementClientFactory(),
 		}
 
 		Convey("cluster", test.WithTestCluster(t, opts, func(env *test.VarlogCluster) {
@@ -135,7 +135,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		NrMR:                  1,
 		NrRep:                 nrRep,
 		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
-		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+		SNManagementClientFac: metadata_repository.NewStorageNodeManagementClientFactory(),
 		VMSOpts:               &vmsOpts,
 	}
 
@@ -311,7 +311,7 @@ func TestVarlogFailoverRecoverFromSML(t *testing.T) {
 		NrRep:                 1,
 		UnsafeNoWal:           true,
 		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
-		SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+		SNManagementClientFac: metadata_repository.NewStorageNodeManagementClientFactory(),
 		VMSOpts:               &vmsOpts,
 	}
 
@@ -377,6 +377,120 @@ func TestVarlogFailoverRecoverFromSML(t *testing.T) {
 						rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 						defer cancel()
 						recoveredGLSN, err = cli.Append(rctx, lsID, []byte("foo"))
+						return err == nil
+					}), ShouldBeTrue)
+
+					So(recoveredGLSN, ShouldEqual, glsn+1)
+				})
+			})
+		})
+	}))
+}
+
+func TestVarlogFailoverRecoverFromIncompleteSML(t *testing.T) {
+	nrRep := 1
+	vmsOpts := vms.DefaultOptions()
+	vmsOpts.HeartbeatTimeout *= 10
+	vmsOpts.Logger = zap.L()
+	opts := test.VarlogClusterOptions{
+		NrMR:                  1,
+		NrRep:                 nrRep,
+		UnsafeNoWal:           true,
+		ReporterClientFac:     metadata_repository.NewReporterClientFactory(),
+		SNManagementClientFac: metadata_repository.NewStorageNodeManagementClientFactory(),
+		VMSOpts:               &vmsOpts,
+	}
+
+	Convey("Given Varlog cluster with StateMachineLog", t, test.WithTestCluster(t, opts, func(env *test.VarlogCluster) {
+		for i := 0; i < nrRep; i++ {
+			env.AddSN(t)
+		}
+
+		lsID := env.AddLS(t)
+
+		meta := env.GetMetadata(t)
+		So(meta, ShouldNotBeNil)
+
+		ls := meta.LogStreams[0]
+
+		cli := env.NewLogIOClient(t, lsID)
+		defer cli.Close()
+
+		var (
+			err  error
+			glsn types.GLSN
+		)
+
+		nrAppend := uint64(5)
+		for i := uint64(0); i < nrAppend; i++ {
+			var backups []logc.StorageNode
+			backups = make([]logc.StorageNode, nrRep-1)
+			for i := 1; i < nrRep; i++ {
+				replicaID := ls.Replicas[i].StorageNodeID
+				replica := meta.GetStorageNode(replicaID)
+
+				backups[i-1].ID = replicaID
+				backups[i-1].Addr = replica.Address
+			}
+			glsn, err = cli.Append(context.TODO(), lsID, []byte("foo"), backups...)
+			So(err, ShouldBeNil)
+		}
+
+		env.WaitCommit(t, lsID, glsn)
+
+		Convey("When commit happens during MR close all without writing SML", func(ctx C) {
+			env.CloseMRAllForRestart(t)
+
+			for i := uint64(0); i < nrAppend; i++ {
+				env.AppendWithoutMR(t, lsID, []byte("foo"))
+			}
+
+			prev := glsn
+			offset := glsn + 1
+			glsn = glsn + types.GLSN(nrAppend)
+			env.CommitWithoutMR(t, lsID, types.LLSN(offset), offset, nrAppend, prev, glsn)
+
+			env.RecoverMR(t)
+
+			So(testutil.CompareWaitN(10, func() bool {
+				return env.HealthCheck(t)
+			}), ShouldBeTrue)
+
+			Convey("Then it should be recovered", func(ctx C) {
+				mr := env.GetMR(t)
+				So(mr.GetHighWatermark(), ShouldEqual, glsn)
+
+				metadata, err := mr.GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+
+				So(len(metadata.LogStreams), ShouldEqual, 1)
+
+				Convey("Then ls metadata from SN should be sealed", func(ctx C) {
+					ls := metadata.LogStreams[0]
+					So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+
+					env.WaitSealed(t, lsID)
+
+					cmCli := env.GetClusterManagerClient()
+
+					recoveredGLSN := types.InvalidGLSN
+					So(testutil.CompareWaitN(10, func() bool {
+						cmCli.Unseal(context.TODO(), lsID)
+
+						rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
+						defer cancel()
+
+						var backups []logc.StorageNode
+						backups = make([]logc.StorageNode, nrRep-1)
+						for i := 1; i < nrRep; i++ {
+							replicaID := ls.Replicas[i].StorageNodeID
+							replica := meta.GetStorageNode(replicaID)
+
+							backups[i-1].ID = replicaID
+							backups[i-1].Addr = replica.Address
+						}
+
+						recoveredGLSN, err = cli.Append(rctx, lsID, []byte("foo"), backups...)
 						return err == nil
 					}), ShouldBeTrue)
 

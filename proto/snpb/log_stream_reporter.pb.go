@@ -7,17 +7,15 @@ import (
 	bytes "bytes"
 	context "context"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
+	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-
-	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1133,7 +1131,10 @@ func (m *LogStreamUncommitReport) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1184,7 +1185,10 @@ func (m *GetReportRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1288,7 +1292,10 @@ func (m *GetReportResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1453,7 +1460,10 @@ func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1557,7 +1567,10 @@ func (m *CommitRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1608,7 +1621,10 @@ func (m *CommitResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogStreamReporter
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {

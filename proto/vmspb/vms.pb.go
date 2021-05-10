@@ -6,20 +6,18 @@ package vmspb
 import (
 	context "context"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	types "github.com/gogo/protobuf/types"
-	grpc "google.golang.org/grpc"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
-
 	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
 	snpb "github.com/kakao/varlog/proto/snpb"
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
+	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -2983,7 +2981,10 @@ func (m *AddStorageNodeRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3070,7 +3071,10 @@ func (m *AddStorageNodeResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3140,7 +3144,10 @@ func (m *UnregisterStorageNodeRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3191,7 +3198,10 @@ func (m *UnregisterStorageNodeResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3276,7 +3286,10 @@ func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3363,7 +3376,10 @@ func (m *AddLogStreamResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3433,7 +3449,10 @@ func (m *UnregisterLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3484,7 +3503,10 @@ func (m *UnregisterLogStreamResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3573,7 +3595,10 @@ func (m *RemoveLogStreamReplicaRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3624,7 +3649,10 @@ func (m *RemoveLogStreamReplicaResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3766,7 +3794,10 @@ func (m *UpdateLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3853,7 +3884,10 @@ func (m *UpdateLogStreamResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -3923,7 +3957,10 @@ func (m *SealRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -4008,7 +4045,10 @@ func (m *SealResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -4116,7 +4156,10 @@ func (m *SyncRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -4203,7 +4246,10 @@ func (m *SyncResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -4273,7 +4319,10 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -4360,7 +4409,10 @@ func (m *UnsealResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -4545,7 +4597,7 @@ func (m *GetMRMembersResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if (skippy < 0) || (iNdEx+skippy) < 0 {
+					if skippy < 0 {
 						return ErrInvalidLengthVms
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -4562,7 +4614,10 @@ func (m *GetMRMembersResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -4709,7 +4764,7 @@ func (m *GetStorageNodesResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if (skippy < 0) || (iNdEx+skippy) < 0 {
+					if skippy < 0 {
 						return ErrInvalidLengthVms
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -4726,7 +4781,10 @@ func (m *GetStorageNodesResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -4841,7 +4899,10 @@ func (m *AddMRPeerRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {
@@ -4911,7 +4972,10 @@ func (m *AddMRPeerResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthVms
 			}
 			if (iNdEx + skippy) > l {

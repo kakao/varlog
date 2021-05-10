@@ -5,14 +5,12 @@ package snpb
 
 import (
 	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"
-
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
-
-	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -304,7 +302,10 @@ func (m *Replica) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthReplica
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthReplica
 			}
 			if (iNdEx + skippy) > l {
