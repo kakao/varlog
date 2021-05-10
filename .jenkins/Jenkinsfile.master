@@ -21,7 +21,7 @@ pipeline {
         TEST_USE_LOGGER = "0"
       }
       steps {
-        sh "make test TEST_FAILFAST=1 TEST_TIMEOUT=3h TEST_CPU=2,4,8,16,32 TEST_COUNT=5 TEST_COVERAGE=0"
+        sh "make test TEST_FAILFAST=1 TEST_TIMEOUT=3h TEST_CPU=4,8,16 TEST_COUNT=5 TEST_COVERAGE=0"
       }
       post {
         always {
