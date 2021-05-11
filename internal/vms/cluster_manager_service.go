@@ -113,8 +113,11 @@ func (s *clusterManagerService) UpdateLogStream(ctx context.Context, req *vmspb.
 func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/Seal", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			lsmetas, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
-			return &vmspb.SealResponse{LogStreams: lsmetas}, err
+			lsmetas, sealedGLSN, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
+			return &vmspb.SealResponse{
+				LogStreams: lsmetas,
+				SealedGLSN: sealedGLSN,
+			}, err
 		},
 	)
 	return rspI.(*vmspb.SealResponse), verrors.ToStatusError(err)

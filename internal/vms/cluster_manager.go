@@ -52,7 +52,7 @@ type ClusterManager interface {
 	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
-	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error)
+	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, types.GLSN, error)
 
 	// Sync copies the log entries of the src to the dst. Sync may be long-running, thus it
 	// returns immediately without waiting for the completion of sync. Callers of Sync
@@ -550,7 +550,7 @@ func (cm *clusterManager) removableLogStreamReplica(clusmeta *varlogpb.MetadataD
 	return nil
 }
 
-func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, error) {
+func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, types.GLSN, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -559,7 +559,7 @@ func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamI
 	lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
 	if err != nil {
 		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
-		return nil, err
+		return nil, types.InvalidGLSN, err
 	}
 
 	result, err := cm.snMgr.Seal(ctx, logStreamID, lastGLSN)
@@ -567,7 +567,7 @@ func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamI
 		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
 	}
 
-	return result, err
+	return result, lastGLSN, err
 }
 
 func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
