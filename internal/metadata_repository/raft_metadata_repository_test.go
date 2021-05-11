@@ -2,7 +2,6 @@ package metadata_repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.etcd.io/etcd/pkg/fileutil"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -74,7 +74,7 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool, unsafeNoWal bool
 
 	for i := range clus.peers {
 		clus.clear(i)
-		clus.createMetadataRepo(i, false)
+		So(clus.createMetadataRepo(i, false), ShouldBeNil)
 	}
 
 	return clus
@@ -191,12 +191,15 @@ func (clus *metadataRepoCluster) start(idx int) error {
 	return nil
 }
 
-func (clus *metadataRepoCluster) Start() {
+func (clus *metadataRepoCluster) Start() error {
 	clus.logger.Info("cluster start")
 	for i := range clus.nodes {
-		clus.start(i)
+		if err := clus.start(i); err != nil {
+			return errors.WithStack(err)
+		}
 	}
 	clus.logger.Info("cluster complete")
+	return nil
 }
 
 func (clus *metadataRepoCluster) stop(idx int) error {
@@ -212,8 +215,12 @@ func (clus *metadataRepoCluster) restart(idx int) error {
 		return errors.New("out of range")
 	}
 
-	clus.stop(idx)
-	clus.createMetadataRepo(idx, false)
+	if err := clus.stop(idx); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := clus.createMetadataRepo(idx, false); err != nil {
+		return errors.WithStack(err)
+	}
 	return clus.start(idx)
 }
 
@@ -683,7 +690,7 @@ func TestMRGlobalCommit(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -789,7 +796,7 @@ func TestMRGlobalCommitConsistency(t *testing.T) {
 			}
 		}
 
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -829,7 +836,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -974,7 +981,7 @@ func TestMRRequestMap(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(50, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1034,7 +1041,7 @@ func TestMRGetLastCommitted(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1170,7 +1177,7 @@ func TestMRSeal(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1251,7 +1258,7 @@ func TestMRUnseal(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1320,7 +1327,7 @@ func TestMRUpdateLogStream(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1390,7 +1397,7 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1453,7 +1460,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			clus.closeNoErrors(t)
 		})
 
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1583,7 +1590,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1652,7 +1659,7 @@ func TestMRFailoverRestart(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1746,7 +1753,7 @@ func TestMRLoadSnapshot(t *testing.T) {
 		nrNode := 3
 
 		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1821,7 +1828,7 @@ func TestMRRemoteSnapshot(t *testing.T) {
 		nrNode := 3
 
 		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1900,7 +1907,7 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1959,7 +1966,7 @@ func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2010,7 +2017,7 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2065,7 +2072,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 			clus.closeNoErrors(t)
 			testSnapCount = 0
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2165,7 +2172,7 @@ func TestMRProposeTimeout(t *testing.T) {
 func TestMRProposeRetry(t *testing.T) {
 	Convey("Given MR", t, func(ctx C) {
 		clus := newMetadataRepoCluster(3, 1, false, false)
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2204,7 +2211,7 @@ func TestMRScaleOutJoin(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2260,7 +2267,7 @@ func TestMRUnsafeNoWal(t *testing.T) {
 		nrNode := 1
 
 		clus := newMetadataRepoCluster(nrNode, nrRep, false, true)
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2339,7 +2346,7 @@ func TestMRFailoverRecoverFromStateMachineLog(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		clus.Start()
+		So(clus.Start(), ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
