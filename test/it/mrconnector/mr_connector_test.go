@@ -11,17 +11,16 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
-	"github.com/kakao/varlog/test"
+	"github.com/kakao/varlog/test/it"
 )
 
 func TestMRConnector(t *testing.T) {
-	safeMRClose := func(env *test.VarlogCluster, idx int, truncate bool) [2]int {
+	safeMRClose := func(env *it.VarlogCluster, idx int, truncate bool) [2]int {
 		if truncate {
 			env.CloseMR(t, idx)
 		} else {
@@ -29,7 +28,7 @@ func TestMRConnector(t *testing.T) {
 		}
 
 		numCheckRPC := 0
-		ep := env.MRRPCEndpoints[idx]
+		ep := env.MRRPCEndpointAtIndex(t, idx)
 		So(testutil.CompareWaitN(100, func() bool {
 			numCheckRPC++
 			ctx, cancel := context.WithTimeout(context.TODO(), time.Second)
@@ -43,7 +42,7 @@ func TestMRConnector(t *testing.T) {
 		}), ShouldBeTrue)
 
 		numCheckRAFT := 0
-		peer := env.MRPeers[idx]
+		peer := env.MRPeerAtIndex(t, idx)
 		So(testutil.CompareWaitN(100, func() bool {
 			numCheckRAFT++
 			_, err := http.Get(peer)
@@ -56,14 +55,10 @@ func TestMRConnector(t *testing.T) {
 	// SetDefaultFailureMode(FailureHalts)
 	Convey("Given 3 MR nodes", t, func() {
 		const clusterInfoFetchInterval = 1 * time.Second
-		opts := test.VarlogClusterOptions{
-			NrMR:                  3,
-			NrRep:                 1,
-			ReporterClientFac:     metadata_repository.NewEmptyStorageNodeClientFactory(),
-			SNManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
-		}
-		env := test.NewVarlogCluster(t, opts)
-		env.Start(t)
+		env := it.NewVarlogCluster(t,
+			it.WithMRCount(3),
+			it.WithVMSOptions(it.NewTestVMSOptions()),
+		)
 
 		Reset(func() {
 			for idx := range env.MetadataRepositories() {
@@ -74,7 +69,7 @@ func TestMRConnector(t *testing.T) {
 			env.Close(t)
 		})
 
-		for _, rpcEndpoint := range env.MRRPCEndpoints {
+		for _, rpcEndpoint := range env.MRRPCEndpoints() {
 			So(testutil.CompareWaitN(100, func() bool {
 				conn, err := rpc.NewConn(context.TODO(), rpcEndpoint)
 				if err != nil {
@@ -95,12 +90,12 @@ func TestMRConnector(t *testing.T) {
 				if err != nil {
 					return false
 				}
-				clusinfo, err := mcl.GetClusterInfo(context.TODO(), env.ClusterID)
+				clusinfo, err := mcl.GetClusterInfo(context.TODO(), env.ClusterID())
 				if err != nil {
 					return false
 				}
 				members := clusinfo.GetClusterInfo().GetMembers()
-				if len(members) != env.NrMR {
+				if len(members) != env.NumberOfMetadataRepositories() {
 					return false
 				}
 				for _, member := range members {
@@ -114,15 +109,15 @@ func TestMRConnector(t *testing.T) {
 		}
 
 		Convey("When Connector is created", func() {
-			mrConn, err := mrconnector.New(context.TODO(), env.MRRPCEndpoints,
-				mrconnector.WithClusterID(env.ClusterID),
+			mrConn, err := mrconnector.New(context.TODO(), env.MRRPCEndpoints(),
+				mrconnector.WithClusterID(env.ClusterID()),
 				mrconnector.WithRPCAddrsFetchInterval(clusterInfoFetchInterval),
 				mrconnector.WithLogger(zap.L()),
 			)
 			So(err, ShouldBeNil)
 
 			testutil.CompareWaitN(100, func() bool {
-				return mrConn.NumberOfMR() == env.NrMR
+				return mrConn.NumberOfMR() == env.NumberOfMetadataRepositories()
 			})
 
 			Reset(func() {
@@ -174,10 +169,10 @@ func TestMRConnector(t *testing.T) {
 
 				Convey("Then tolerable MR failures should be okay", func() {
 					So(testutil.CompareWaitN(100, func() bool {
-						return mrConn.NumberOfMR() == opts.NrMR
+						return mrConn.NumberOfMR() == env.NumberOfMetadataRepositories()
 					}), ShouldBeTrue)
 
-					for i := 1; i < opts.NrMR; i++ {
+					for i := 1; i < env.NumberOfMetadataRepositories(); i++ {
 						// Close MR: env.MRs[1], env.MRs[2]
 						time.Sleep(2 * clusterInfoFetchInterval)
 						checks := safeMRClose(env, i, false)
@@ -190,7 +185,7 @@ func TestMRConnector(t *testing.T) {
 					So(testutil.CompareWaitN(100, func() bool {
 						// Active MR: env.MRs[0]
 						mrs := mrConn.ActiveMRs()
-						return len(mrs) == 1 && mrs[env.MRIDs[0]] != ""
+						return len(mrs) == 1 && mrs[env.MetadataRepositoryIDAtIndex(t, 0)] != ""
 					}), ShouldBeTrue)
 					So(mrConn.NumberOfMR(), ShouldEqual, 1)
 
@@ -211,7 +206,7 @@ func TestMRConnector(t *testing.T) {
 						time.Sleep(2 * clusterInfoFetchInterval)
 
 						So(testutil.CompareWaitN(100, func() bool {
-							ep := env.MRRPCEndpoints[mrIdx]
+							ep := env.MRRPCEndpointAtIndex(t, mrIdx)
 							conn, err := rpc.NewConn(context.TODO(), ep)
 							if err != nil {
 								return false
@@ -227,8 +222,8 @@ func TestMRConnector(t *testing.T) {
 						So(testutil.CompareWaitN(100, func() bool {
 							// Active MR: env.MRs[0], env.MRs[1]
 							mrs := mrConn.ActiveMRs()
-							nodeID0 := env.MRIDs[0]
-							nodeID1 := env.MRIDs[1]
+							nodeID0 := env.MetadataRepositoryIDAtIndex(t, 0)
+							nodeID1 := env.MetadataRepositoryIDAtIndex(t, 1)
 							return len(mrs) == 2 && mrs[nodeID0] != "" && mrs[nodeID1] != ""
 						}), ShouldBeTrue)
 
@@ -247,7 +242,7 @@ func TestMRConnector(t *testing.T) {
 							// Active MR: env.MRs[1]
 							mrs := mrConn.ActiveMRs()
 							So(mrs, ShouldHaveLength, 1)
-							So(mrs, ShouldContainKey, env.MRIDs[1])
+							So(mrs, ShouldContainKey, env.MetadataRepositoryIDAtIndex(t, 1))
 						})
 					})
 				})
@@ -261,14 +256,14 @@ func TestMRConnector(t *testing.T) {
 
 				mcl, err := mrConn.ManagementClient()
 				So(err, ShouldBeNil)
-				_, err = mcl.GetClusterInfo(context.TODO(), env.ClusterID)
+				_, err = mcl.GetClusterInfo(context.TODO(), env.ClusterID())
 				So(err, ShouldBeNil)
 			})
 
 			Convey("Then Connector.ManagementClient should return the connection", func() {
 				mcl, err := mrConn.ManagementClient()
 				So(err, ShouldBeNil)
-				_, err = mcl.GetClusterInfo(context.TODO(), env.ClusterID)
+				_, err = mcl.GetClusterInfo(context.TODO(), env.ClusterID())
 				So(err, ShouldBeNil)
 
 				cl, err := mrConn.Client()
@@ -290,7 +285,7 @@ func TestMRConnector(t *testing.T) {
 
 					mcl, err := mrConn.ManagementClient()
 					So(err, ShouldBeNil)
-					_, err = mcl.GetClusterInfo(context.TODO(), env.ClusterID)
+					_, err = mcl.GetClusterInfo(context.TODO(), env.ClusterID())
 					So(err, ShouldBeNil)
 
 					So(mrConn.ConnectedNodeID(), ShouldNotEqual, types.InvalidNodeID)
@@ -326,7 +321,7 @@ func TestMRConnector(t *testing.T) {
 						newMCL, err := mrConn.ManagementClient()
 						So(err, ShouldBeNil)
 
-						_, err = newMCL.GetClusterInfo(context.TODO(), env.ClusterID)
+						_, err = newMCL.GetClusterInfo(context.TODO(), env.ClusterID())
 						So(err, ShouldBeNil)
 
 						So(mrConn.ConnectedNodeID(), ShouldNotEqual, badNodeID)

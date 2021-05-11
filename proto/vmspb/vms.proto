@@ -101,6 +101,11 @@ message SealRequest {
 message SealResponse {
     repeated varlogpb.LogStreamMetadataDescriptor log_streams = 1
         [(gogoproto.nullable) = false];
+    uint64 sealed_glsn = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.GLSN",
+        (gogoproto.customname) = "SealedGLSN"
+    ];
 }
 
 message SyncRequest {
