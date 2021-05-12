@@ -79,7 +79,7 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	}
 
 	// allowlist
-	allowlist, err := newTransientAllowlist(v.opts.denyTTL, v.logger)
+	allowlist, err := newTransientAllowlist(v.opts.denyTTL, v.opts.expireDenyInterval, v.logger)
 	if err != nil {
 		return nil, err
 	}

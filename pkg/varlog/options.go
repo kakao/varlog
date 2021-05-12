@@ -15,7 +15,8 @@ const (
 	defaultMetadataRefreshInterval = 1 * time.Minute
 	defaultMetadataRefreshTimeout  = 1 * time.Second
 
-	defaultDenyTTL = 10 * time.Minute
+	defaultDenyTTL            = 10 * time.Minute
+	defaultExpireDenyInterval = 1 * time.Second
 )
 
 func defaultOptions() options {
@@ -28,8 +29,9 @@ func defaultOptions() options {
 		metadataRefreshInterval: defaultMetadataRefreshInterval,
 		metadataRefreshTimeout:  defaultMetadataRefreshTimeout,
 
-		denyTTL: defaultDenyTTL,
-		logger:  zap.NewNop(),
+		denyTTL:            defaultDenyTTL,
+		expireDenyInterval: defaultExpireDenyInterval,
+		logger:             zap.NewNop(),
 	}
 }
 
@@ -48,7 +50,8 @@ type options struct {
 
 	// denyTTL is duration until the log stream in denylist is expired and goes back to
 	// allowlist.
-	denyTTL time.Duration
+	denyTTL            time.Duration
+	expireDenyInterval time.Duration
 
 	logger *zap.Logger
 }
@@ -102,6 +105,12 @@ func WithMetadataRefreshTimeout(timeout time.Duration) Option {
 func WithDenyTTL(denyTTL time.Duration) Option {
 	return newOption(func(opts *options) {
 		opts.denyTTL = denyTTL
+	})
+}
+
+func WithExpireDenyInterval(interval time.Duration) Option {
+	return newOption(func(opts *options) {
+		opts.expireDenyInterval = interval
 	})
 }
 
