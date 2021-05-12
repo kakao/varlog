@@ -18,7 +18,7 @@ const (
 
 	commitContextKeyPrefix         = byte('x')
 	commitContextKeySentinelPrefix = byte('y')
-	commitContextKeyLength         = 33 // prefix(1) + CommitContext(32)
+	commitContextKeyLength         = 41 // prefix(1) + CommitContext(40)
 )
 
 type dataKey []byte
@@ -107,6 +107,9 @@ func encodeCommitContextKey(cc CommitContext) commitContextKey {
 	offset += sz
 	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.CommittedGLSNEnd))
 
+	offset += sz
+	binary.BigEndian.PutUint64(key[offset:offset+sz], uint64(cc.CommittedLLSNBegin))
+
 	return key
 }
 
@@ -126,6 +129,9 @@ func decodeCommitContextKey(k commitContextKey) (cc CommitContext) {
 
 	offset += sz
 	cc.CommittedGLSNEnd = types.GLSN(binary.BigEndian.Uint64(k[offset : offset+sz]))
+
+	offset += sz
+	cc.CommittedLLSNBegin = types.LLSN(binary.BigEndian.Uint64(k[offset : offset+sz]))
 
 	return cc
 }

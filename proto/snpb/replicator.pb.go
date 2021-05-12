@@ -7,17 +7,19 @@ import (
 	bytes "bytes"
 	context "context"
 	fmt "fmt"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
-	github_daumkakao_com_varlog_varlog_pkg_types "github.daumkakao.com/varlog/varlog/pkg/types"
-	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
-	grpc "google.golang.org/grpc"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 	io "io"
 	math "math"
 	math_bits "math/bits"
 	strconv "strconv"
+
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+
+	github_daumkakao_com_varlog_varlog_pkg_types "github.daumkakao.com/varlog/varlog/pkg/types"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
