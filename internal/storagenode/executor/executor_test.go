@@ -1107,15 +1107,11 @@ func TestExecutorNew(t *testing.T) {
 }
 
 func TestExecutorGetPrevCommitInfo(t *testing.T) {
-	const (
-		logStreamID = types.LogStreamID(2)
-	)
-
 	defer goleak.VerifyNone(t)
 
-	path := t.TempDir()
+	const logStreamID = types.LogStreamID(1)
 
-	strg, err := storage.NewStorage(storage.WithPath(path))
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 	lse, err := New(
 		WithLogStreamID(logStreamID),
@@ -1255,5 +1251,55 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 		HighestWrittenLLSN:  10,
 		HighWatermark:       types.InvalidGLSN,
 		PrevHighWatermark:   types.InvalidGLSN,
+	}, commitInfo)
+}
+
+func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	const logStreamID = types.LogStreamID(1)
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+	lse, err := New(
+		WithLogStreamID(logStreamID),
+		WithStorage(strg),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO()))
+
+	require.NoError(t, lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+		HighWatermark:       5,
+		PrevHighWatermark:   0,
+		CommittedGLSNOffset: 1,
+		CommittedGLSNLength: 0,
+	}))
+
+	require.Eventually(t, func() bool {
+		report, err := lse.GetReport(context.TODO())
+		require.NoError(t, err)
+		return report.HighWatermark == 5
+	}, time.Second, time.Millisecond)
+
+	commitInfo, err := lse.GetPrevCommitInfo(0)
+	require.NoError(t, err)
+
+	require.Equal(t, &snpb.LogStreamCommitInfo{
+		LogStreamID:         logStreamID,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 1,
+		CommittedGLSNOffset: 1,
+		CommittedGLSNLength: 0,
+		HighestWrittenLLSN:  0,
+		HighWatermark:       5,
+		PrevHighWatermark:   0,
 	}, commitInfo)
 }

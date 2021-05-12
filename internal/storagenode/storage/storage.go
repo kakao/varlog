@@ -83,6 +83,7 @@ type CommitContext struct {
 	PrevHighWatermark  types.GLSN
 	CommittedGLSNBegin types.GLSN
 	CommittedGLSNEnd   types.GLSN
+	CommittedLLSNBegin types.LLSN
 }
 
 func (cc CommitContext) Empty() bool {

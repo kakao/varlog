@@ -56,12 +56,7 @@ func (e *executor) GetPrevCommitInfo(prevHWM types.GLSN) (*snpb.LogStreamCommitI
 		info.Status = snpb.GetPrevCommitStatusOK
 	}
 
-	lastLE, err := e.storage.Read(cc.CommittedGLSNBegin)
-	if err != nil {
-		return info, err
-	}
-
-	info.CommittedLLSNOffset = lastLE.LLSN
+	info.CommittedLLSNOffset = cc.CommittedLLSNBegin
 	info.CommittedGLSNOffset = cc.CommittedGLSNBegin
 	info.CommittedGLSNLength = uint64(cc.CommittedGLSNEnd - cc.CommittedGLSNBegin)
 	info.HighWatermark = cc.HighWatermark

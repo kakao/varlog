@@ -252,6 +252,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 		PrevHighWatermark:  ct.prevHighWatermark,
 		CommittedGLSNBegin: ct.committedGLSNBegin,
 		CommittedGLSNEnd:   ct.committedGLSNEnd,
+		CommittedLLSNBegin: uncommittedLLSNBegin,
 	}
 
 	batch, err := c.strg.NewCommitBatch(commitContext)
