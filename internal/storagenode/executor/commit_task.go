@@ -18,6 +18,7 @@ type commitTask struct {
 	prevHighWatermark  types.GLSN
 	committedGLSNBegin types.GLSN
 	committedGLSNEnd   types.GLSN
+	committedLLSNBegin types.LLSN
 
 	ctime time.Time
 }
@@ -31,5 +32,6 @@ func (t *commitTask) release() {
 	t.prevHighWatermark = types.InvalidGLSN
 	t.committedGLSNBegin = types.InvalidGLSN
 	t.committedGLSNEnd = types.InvalidGLSN
+	t.committedLLSNBegin = types.InvalidLLSN
 	commitTaskPool.Put(t)
 }

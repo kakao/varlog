@@ -162,6 +162,7 @@ func TestExecutorAppend(t *testing.T) {
 				PrevHighWatermark:   hwm - 1,
 				CommittedGLSNOffset: hwm,
 				CommittedGLSNLength: 1,
+				CommittedLLSNOffset: types.LLSN(hwm),
 			})
 			require.NoError(t, err)
 		}()
@@ -249,6 +250,7 @@ func TestExecutorRead(t *testing.T) {
 				PrevHighWatermark:   expectedHWM - 3,
 				CommittedGLSNOffset: expectedGLSN,
 				CommittedGLSNLength: 1,
+				CommittedLLSNOffset: expectedLLSN,
 			})
 			require.NoError(t, err)
 		}()
@@ -315,6 +317,7 @@ func TestExecutorTrim(t *testing.T) {
 				PrevHighWatermark:   expectedHWM - 5,
 				CommittedGLSNOffset: expectedGLSN,
 				CommittedGLSNLength: 1,
+				CommittedLLSNOffset: expectedLLSN,
 			})
 			require.NoError(t, err)
 		}()
@@ -415,6 +418,7 @@ func TestExecutorSubscribe(t *testing.T) {
 				PrevHighWatermark:   expectedHWM - 5,
 				CommittedGLSNOffset: expectedGLSN,
 				CommittedGLSNLength: 1,
+				CommittedLLSNOffset: expectedLLSN,
 			})
 			require.NoError(t, err)
 		}()
@@ -502,6 +506,7 @@ func TestExecutorSubscribe(t *testing.T) {
 			PrevHighWatermark:   50,
 			CommittedGLSNOffset: 53,
 			CommittedGLSNLength: 1,
+			CommittedLLSNOffset: 11,
 		})
 		require.NoError(t, err)
 	}()
@@ -571,6 +576,7 @@ func TestReplicate(t *testing.T) {
 				PrevHighWatermark:   expectedHWM - 5,
 				CommittedGLSNOffset: expectedGLSN,
 				CommittedGLSNLength: 1,
+				CommittedLLSNOffset: expectedLLSN,
 			})
 			require.NoError(t, err)
 		}()
@@ -675,6 +681,7 @@ func TestExecutorSealSuddenly(t *testing.T) {
 				PrevHighWatermark:   report.GetHighWatermark(),
 				CommittedGLSNOffset: types.GLSN(report.GetUncommittedLLSNOffset()),
 				CommittedGLSNLength: report.GetUncommittedLLSNLength(),
+				CommittedLLSNOffset: report.GetUncommittedLLSNOffset(),
 			}
 			lastCommittedGLSN = cr.GetHighWatermark()
 			commitResults = append(commitResults, cr)
@@ -743,6 +750,7 @@ func TestExecutorSeal(t *testing.T) {
 		PrevHighWatermark:   0,
 		CommittedGLSNOffset: 1,
 		CommittedGLSNLength: 2,
+		CommittedLLSNOffset: 1,
 	})
 	assert.NoError(t, err)
 
@@ -763,6 +771,7 @@ func TestExecutorSeal(t *testing.T) {
 		PrevHighWatermark:   2,
 		CommittedGLSNOffset: 3,
 		CommittedGLSNLength: 1,
+		CommittedLLSNOffset: 3,
 	})
 	assert.NoError(t, err)
 
@@ -820,6 +829,7 @@ func TestExecutorSeal(t *testing.T) {
 		PrevHighWatermark:   3,
 		CommittedGLSNOffset: 4,
 		CommittedGLSNLength: 10,
+		CommittedLLSNOffset: 4,
 	})
 	assert.NoError(t, err)
 
@@ -953,6 +963,7 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 				PrevHighWatermark:   report.GetHighWatermark(),
 				CommittedGLSNOffset: types.GLSN(report.GetUncommittedLLSNOffset()),
 				CommittedGLSNLength: report.GetUncommittedLLSNLength(),
+				CommittedLLSNOffset: report.GetUncommittedLLSNOffset(),
 			}); err != nil {
 				runtime.Gosched()
 				continue
@@ -1042,6 +1053,7 @@ func TestExecutorNew(t *testing.T) {
 			PrevHighWatermark:   0,
 			CommittedGLSNOffset: 1,
 			CommittedGLSNLength: 5,
+			CommittedLLSNOffset: 1,
 		})
 		require.NoError(t, err)
 		require.Eventually(t, func() bool {
@@ -1079,6 +1091,7 @@ func TestExecutorNew(t *testing.T) {
 		PrevHighWatermark:   5,
 		CommittedGLSNOffset: 6,
 		CommittedGLSNLength: 3,
+		CommittedLLSNOffset: 6,
 	})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
@@ -1151,6 +1164,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 			PrevHighWatermark:   0,
 			CommittedGLSNOffset: 1,
 			CommittedGLSNLength: 5,
+			CommittedLLSNOffset: 1,
 		})
 		require.NoError(t, err)
 
@@ -1165,6 +1179,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 			PrevHighWatermark:   5,
 			CommittedGLSNOffset: 11,
 			CommittedGLSNLength: 5,
+			CommittedLLSNOffset: 6,
 		})
 		require.NoError(t, err)
 
@@ -1281,6 +1296,7 @@ func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 		PrevHighWatermark:   0,
 		CommittedGLSNOffset: 1,
 		CommittedGLSNLength: 0,
+		CommittedLLSNOffset: 1,
 	}))
 
 	require.Eventually(t, func() bool {

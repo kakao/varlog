@@ -168,6 +168,7 @@ func TestCommitterStop(t *testing.T) {
 		prevHighWatermark:  0,
 		committedGLSNBegin: 1,
 		committedGLSNEnd:   2,
+		committedLLSNBegin: 1,
 	})
 	require.NoError(t, err)
 	tb.wg.Wait()
@@ -235,6 +236,7 @@ func TestCommitter(t *testing.T) {
 		prevHighWatermark:  0,
 		committedGLSNBegin: 1,
 		committedGLSNEnd:   3,
+		committedLLSNBegin: 1,
 	})
 	require.NoError(t, err)
 
@@ -271,6 +273,7 @@ func TestCommitter(t *testing.T) {
 		prevHighWatermark:  2,
 		committedGLSNBegin: 3,
 		committedGLSNEnd:   5,
+		committedLLSNBegin: 3,
 	})
 	require.NoError(t, err)
 
