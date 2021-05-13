@@ -149,6 +149,7 @@ func TestLogStreamReporter(t *testing.T) {
 				PrevHighWatermark:   0,
 				CommittedGLSNOffset: 1,
 				CommittedGLSNLength: 1,
+				CommittedLLSNOffset: 1,
 			},
 			{
 				LogStreamID:         lsid2,
@@ -156,6 +157,7 @@ func TestLogStreamReporter(t *testing.T) {
 				PrevHighWatermark:   0,
 				CommittedGLSNOffset: 2,
 				CommittedGLSNLength: 1,
+				CommittedLLSNOffset: 1,
 			},
 		})
 		require.NoError(t, err)
@@ -181,6 +183,7 @@ func TestLogStreamReporter(t *testing.T) {
 			PrevHighWatermark:   2,
 			CommittedGLSNOffset: 3,
 			CommittedGLSNLength: 1,
+			CommittedLLSNOffset: 2,
 		},
 		{
 			LogStreamID:         lsid2,
@@ -188,6 +191,7 @@ func TestLogStreamReporter(t *testing.T) {
 			PrevHighWatermark:   2,
 			CommittedGLSNOffset: 4,
 			CommittedGLSNLength: 1,
+			CommittedLLSNOffset: 2,
 		},
 	})
 	require.Error(t, err)

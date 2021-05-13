@@ -44,6 +44,7 @@ func (e *executor) Commit(ctx context.Context, commitResult *snpb.LogStreamCommi
 	ct.prevHighWatermark = commitResult.PrevHighWatermark
 	ct.committedGLSNBegin = commitResult.CommittedGLSNOffset
 	ct.committedGLSNEnd = commitResult.CommittedGLSNOffset + types.GLSN(commitResult.CommittedGLSNLength)
+	ct.committedLLSNBegin = commitResult.CommittedLLSNOffset
 	ct.ctime = time.Now()
 	if err := e.committer.sendCommitTask(ctx, ct); err != nil {
 		return err

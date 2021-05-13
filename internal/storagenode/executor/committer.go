@@ -222,9 +222,10 @@ func (c *committerImpl) commit(ctx context.Context) error {
 }
 
 func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error {
-	globalHighWatermark, uncommittedLLSNBegin := c.lsc.reportCommitBase()
-	if globalHighWatermark != ct.prevHighWatermark {
+	_, uncommittedLLSNBegin := c.lsc.reportCommitBase()
+	if uncommittedLLSNBegin != ct.committedLLSNBegin {
 		// skip this commit
+		// See #VARLOG-453 (VARLOG-453).
 		return nil
 	}
 
