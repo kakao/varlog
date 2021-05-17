@@ -2,6 +2,7 @@ package metadata_repository
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -53,34 +54,28 @@ func (mr *dummyMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []
 	return nil
 }
 
-func (mr *dummyMetadataRepository) LookupCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
+func (mr *dummyMetadataRepository) LookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
 	mr.mt.Lock()
 	defer mr.mt.Unlock()
 
-	i := sort.Search(len(mr.m), func(i int) bool {
-		return mr.m[i].HighWatermark >= glsn
-	})
-
-	if i < len(mr.m) && mr.m[i].HighWatermark == glsn {
-		return mr.m[i]
+	var err error
+	if len(mr.m) == 0 {
+		return nil, err
 	}
 
-	return nil
-}
-
-func (mr *dummyMetadataRepository) LookupNextCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
-	mr.mt.Lock()
-	defer mr.mt.Unlock()
+	if mr.m[0].PrevHighWatermark > glsn {
+		err = fmt.Errorf("already trimmed glsn:%v, oldest:%v", glsn, mr.m[0].PrevHighWatermark)
+	}
 
 	i := sort.Search(len(mr.m), func(i int) bool {
 		return mr.m[i].PrevHighWatermark >= glsn
 	})
 
 	if i < len(mr.m) && mr.m[i].PrevHighWatermark == glsn {
-		return mr.m[i]
+		return mr.m[i], err
 	}
 
-	return nil
+	return nil, err
 }
 
 func (mr *dummyMetadataRepository) appendGLS(gls *mrpb.LogStreamCommitResults) {
@@ -499,19 +494,29 @@ func TestReportDedup(t *testing.T) {
 	})
 }
 
-func newDummyCommitResults(prev types.GLSN, nrLogStream int) *mrpb.LogStreamCommitResults {
+type dummyCommitContext struct {
+	committedLLSNBeginOffset []types.LLSN
+}
+
+func (cc *dummyCommitContext) newDummyCommitResults(prev types.GLSN, nrLogStream int) *mrpb.LogStreamCommitResults {
 	cr := &mrpb.LogStreamCommitResults{
 		HighWatermark:     prev + types.GLSN(nrLogStream),
 		PrevHighWatermark: prev,
 	}
 	glsn := prev + types.GLSN(1)
 
+	for i := len(cc.committedLLSNBeginOffset); i < nrLogStream; i++ {
+		cc.committedLLSNBeginOffset = append(cc.committedLLSNBeginOffset, types.MinLLSN)
+	}
+
 	for i := 0; i < nrLogStream; i++ {
 		r := &snpb.LogStreamCommitResult{
 			LogStreamID:         types.LogStreamID(i),
 			CommittedGLSNOffset: glsn,
+			CommittedLLSNOffset: cc.committedLLSNBeginOffset[i],
 			CommittedGLSNLength: 1,
 		}
+		cc.committedLLSNBeginOffset[i] = cc.committedLLSNBeginOffset[i] + types.LLSN(1)
 		glsn += 1
 
 		cr.CommitResults = append(cr.CommitResults, r)
@@ -528,6 +533,7 @@ func TestCommit(t *testing.T) {
 
 		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
+		cc := &dummyCommitContext{}
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
@@ -559,7 +565,7 @@ func TestCommit(t *testing.T) {
 		}
 
 		Convey("ReportCollector should broadcast commit result to registered storage node", func() {
-			gls := newDummyCommitResults(knownHWM, nrStorage)
+			gls := cc.newDummyCommitResults(knownHWM, nrStorage)
 			mr.appendGLS(gls)
 			knownHWM = gls.HighWatermark
 
@@ -576,11 +582,11 @@ func TestCommit(t *testing.T) {
 			})
 
 			Convey("ReportCollector should send ordered commit result to registered storage node", func() {
-				gls := newDummyCommitResults(knownHWM, nrStorage)
+				gls := cc.newDummyCommitResults(knownHWM, nrStorage)
 				mr.appendGLS(gls)
 				knownHWM = gls.HighWatermark
 
-				gls = newDummyCommitResults(knownHWM, nrStorage)
+				gls = cc.newDummyCommitResults(knownHWM, nrStorage)
 				mr.appendGLS(gls)
 				knownHWM = gls.HighWatermark
 
@@ -626,7 +632,7 @@ func TestCommit(t *testing.T) {
 
 					nrLogStream += 1
 
-					gls := newDummyCommitResults(knownHWM, nrStorage)
+					gls := cc.newDummyCommitResults(knownHWM, nrStorage)
 					mr.appendGLS(gls)
 					knownHWM = gls.HighWatermark
 
@@ -657,6 +663,7 @@ func TestCommitWithDelay(t *testing.T) {
 
 		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
+		cc := &dummyCommitContext{}
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, time.Second, logger)
@@ -697,7 +704,7 @@ func TestCommitWithDelay(t *testing.T) {
 		dummySN := a.lookupClient(sn.StorageNodeID)
 
 		Convey("disable report to catchup using old hwm", func() {
-			gls := newDummyCommitResults(knownHWM, 1)
+			gls := cc.newDummyCommitResults(knownHWM, 1)
 			mr.appendGLS(gls)
 			knownHWM = gls.HighWatermark
 
@@ -712,11 +719,11 @@ func TestCommitWithDelay(t *testing.T) {
 
 			time.Sleep(10 * time.Millisecond)
 
-			gls = newDummyCommitResults(knownHWM, 1)
+			gls = cc.newDummyCommitResults(knownHWM, 1)
 			mr.appendGLS(gls)
 			knownHWM = gls.HighWatermark
 
-			gls = newDummyCommitResults(knownHWM, 1)
+			gls = cc.newDummyCommitResults(knownHWM, 1)
 			mr.appendGLS(gls)
 			knownHWM = gls.HighWatermark
 
@@ -743,7 +750,7 @@ func TestCommitWithDelay(t *testing.T) {
 
 				mr.trimGLS(knownHWM)
 
-				gls = newDummyCommitResults(knownHWM, 1)
+				gls = cc.newDummyCommitResults(knownHWM, 1)
 				mr.appendGLS(gls)
 				knownHWM = gls.HighWatermark
 

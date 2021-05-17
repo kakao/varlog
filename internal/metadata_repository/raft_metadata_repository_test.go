@@ -488,7 +488,7 @@ func makeLogStream(lsID types.LogStreamID, snIDs []types.StorageNodeID) *varlogp
 	return ls
 }
 
-func makeCommitResult(snID types.StorageNodeID, lsIDs []types.LogStreamID, prevHighwatermark, highWatermark, offset types.GLSN) *snpb.CommitRequest {
+func makeCommitResult(snID types.StorageNodeID, lsIDs []types.LogStreamID, llsn []types.LLSN, prevHighwatermark, highWatermark, offset types.GLSN) *snpb.CommitRequest {
 	var commitResults []*snpb.LogStreamCommitResult
 	for i, lsID := range lsIDs {
 		commitResult := &snpb.LogStreamCommitResult{
@@ -496,6 +496,7 @@ func makeCommitResult(snID types.StorageNodeID, lsIDs []types.LogStreamID, prevH
 			PrevHighWatermark:   prevHighwatermark,
 			HighWatermark:       highWatermark,
 			CommittedGLSNOffset: offset + types.GLSN(i),
+			CommittedLLSNOffset: llsn[i],
 			CommittedGLSNLength: 1,
 		}
 
@@ -2454,7 +2455,7 @@ func TestMRFailoverRecoverFromStateMachineLogWithIncompleteLog(t *testing.T) {
 			for _, snID := range snIDs {
 				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
 				lsID := snCli.logStreamID(0)
-				cr := makeCommitResult(snID, []types.LogStreamID{lsID}, prevHighwatermark, highWatermark, offset)
+				cr := makeCommitResult(snID, []types.LogStreamID{lsID}, []types.LLSN{snCli.uncommittedLLSNOffset[0]}, prevHighwatermark, highWatermark, offset)
 
 				snCli.increaseUncommitted(0)
 				expected[lsID] = 1
@@ -2509,7 +2510,7 @@ func TestMRFailoverRecoverFromStateMachineLogWithIncompleteLog(t *testing.T) {
 				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
 				lsID := snCli.logStreamID(0)
 
-				cr := makeCommitResult(snID, []types.LogStreamID{lsID}, prevHighwatermark, highWatermark, offset)
+				cr := makeCommitResult(snID, []types.LogStreamID{lsID}, []types.LLSN{snCli.uncommittedLLSNOffset[0]}, prevHighwatermark, highWatermark, offset)
 
 				snCli.increaseUncommitted(0)
 				expected[lsID] = 1

@@ -46,11 +46,9 @@ type ReportCollector interface {
 type commitHelper interface {
 	commit(context.Context, *snpb.LogStreamCommitResult) error
 
-	getHighWatermark(types.LogStreamID) (types.GLSN, bool)
+	getReportedHighWatermark(types.LogStreamID) (types.GLSN, bool)
 
-	lookupCommitResults(types.GLSN) *mrpb.LogStreamCommitResults
-
-	lookupNextCommitResults(types.GLSN) *mrpb.LogStreamCommitResults
+	lookupNextCommitResults(types.GLSN) (*mrpb.LogStreamCommitResults, error)
 }
 
 type logStreamCommitter struct {
@@ -548,7 +546,7 @@ func (rce *reportCollectExecutor) commit(ctx context.Context, cr *snpb.LogStream
 	return nil
 }
 
-func (rce *reportCollectExecutor) getHighWatermark(lsID types.LogStreamID) (types.GLSN, bool) {
+func (rce *reportCollectExecutor) getReportedHighWatermark(lsID types.LogStreamID) (types.GLSN, bool) {
 	report := rce.reportCtx.getReport()
 	if report == nil {
 		return types.InvalidGLSN, false
@@ -562,11 +560,7 @@ func (rce *reportCollectExecutor) getHighWatermark(lsID types.LogStreamID) (type
 	return r.HighWatermark, true
 }
 
-func (rce *reportCollectExecutor) lookupCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
-	return rce.helper.LookupCommitResults(glsn)
-}
-
-func (rce *reportCollectExecutor) lookupNextCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
+func (rce *reportCollectExecutor) lookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
 	return rce.helper.LookupNextCommitResults(glsn)
 }
 
@@ -621,63 +615,41 @@ Loop:
 	close(lc.triggerC)
 }
 
-func (lc *logStreamCommitter) isNewbie(prevHighWatermark, highWatermark types.GLSN) (bool, bool) {
-	if prevHighWatermark.Invalid() {
-		return true, true
-	}
-
-	cr := lc.helper.lookupCommitResults(prevHighWatermark)
-	if cr == nil {
-		if newHighWatermark, _ := lc.helper.getHighWatermark(lc.lsID); newHighWatermark > highWatermark {
-			// could not verify
-			return false, false
-		} else {
-			lc.logger.Panic("no commit result",
-				zap.Any("prevHWM", prevHighWatermark),
-				zap.Any("HWM", highWatermark),
-				zap.Any("reportedHWM", newHighWatermark),
-			)
-		}
-	}
-
-	return cr.LookupCommitResult(lc.lsID) == nil, true
-}
-
 func (lc *logStreamCommitter) catchup(ctx context.Context) {
-	highWatermark, ok := lc.helper.getHighWatermark(lc.lsID)
+	highWatermark, ok := lc.helper.getReportedHighWatermark(lc.lsID)
 	if !ok {
 		return
 	}
 
-CATCHUP:
 	for ctx.Err() == nil {
-		results := lc.helper.lookupNextCommitResults(highWatermark)
+		results, err := lc.helper.lookupNextCommitResults(highWatermark)
+		if err != nil {
+			latestHighWatermark, _ := lc.helper.getReportedHighWatermark(lc.lsID)
+			if latestHighWatermark > highWatermark {
+				highWatermark = latestHighWatermark
+				continue
+			}
+
+			lc.logger.Panic(err.Error())
+		}
+
 		if results == nil {
 			return
 		}
-		highWatermark = results.HighWatermark
 
 		cr := results.LookupCommitResult(lc.lsID)
 		if cr != nil {
-			isNewbie, ok := lc.isNewbie(results.PrevHighWatermark, results.HighWatermark)
-			if !ok {
-				highWatermark, _ = lc.helper.getHighWatermark(lc.lsID)
-				continue CATCHUP
-			}
-
 			cr = proto.Clone(cr).(*snpb.LogStreamCommitResult)
 			cr.HighWatermark = results.HighWatermark
-			if isNewbie {
-				cr.PrevHighWatermark = types.InvalidGLSN
-			} else {
-				cr.PrevHighWatermark = results.PrevHighWatermark
-			}
+			cr.PrevHighWatermark = results.PrevHighWatermark
 
 			err := lc.helper.commit(ctx, cr)
 			if err != nil {
 				return
 			}
 		}
+
+		highWatermark = results.HighWatermark
 	}
 }
 

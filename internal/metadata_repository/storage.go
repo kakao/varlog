@@ -3,6 +3,7 @@ package metadata_repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -1054,18 +1055,16 @@ func (ms *MetadataStorage) NumUpdateSinceCommit() uint64 {
 	return ms.nrUpdateSinceCommit
 }
 
-func (ms *MetadataStorage) LookupCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
+func (ms *MetadataStorage) LookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
 	ms.lsMu.RLock()
 	defer ms.lsMu.RUnlock()
 
-	return ms.lookupCommitResultsNoLock(glsn)
-}
+	var err error
+	if oldest := ms.getFirstCommitResultsNoLock(); oldest != nil && oldest.PrevHighWatermark > glsn {
+		err = fmt.Errorf("already trimmed glsn:%v, oldest:%v", glsn, oldest.PrevHighWatermark)
+	}
 
-func (ms *MetadataStorage) LookupNextCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
-	ms.lsMu.RLock()
-	defer ms.lsMu.RUnlock()
-
-	return ms.lookupNextCommitResultsNoLock(glsn)
+	return ms.lookupNextCommitResultsNoLock(glsn), err
 }
 
 func (ms *MetadataStorage) GetFirstCommitResults() *mrpb.LogStreamCommitResults {

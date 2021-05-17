@@ -43,9 +43,7 @@ type ReportCollectorHelper interface {
 
 	GetReporterClient(context.Context, *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error)
 
-	LookupCommitResults(types.GLSN) *mrpb.LogStreamCommitResults
-
-	LookupNextCommitResults(types.GLSN) *mrpb.LogStreamCommitResults
+	LookupNextCommitResults(types.GLSN) (*mrpb.LogStreamCommitResults, error)
 }
 
 type RaftMetadataRepository struct {
@@ -220,7 +218,6 @@ func (mr *RaftMetadataRepository) Run() {
 
 		if mr.options.RecoverFromSML {
 			if err := mr.recoverStateMachine(mctx); err != nil {
-				fmt.Printf("recover fail %v\n", err)
 				mr.logger.Panic("could not recover", zap.Error(err))
 			}
 		}
@@ -776,7 +773,9 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 				if reports.Status.Sealed() {
 					nrUncommit = 0
-				} else {
+				}
+
+				if nrUncommit > 0 {
 					if knownHWM != curHWM {
 						nrCommitted := mr.numCommitSince(lsID, knownHWM)
 						if nrCommitted > nrUncommit {
@@ -1346,11 +1345,7 @@ func (mr *RaftMetadataRepository) GetSNManagementClient(ctx context.Context, add
 	return mr.snManagementClientFac.GetManagementClient(ctx, mr.clusterID, address, mr.logger)
 }
 
-func (mr *RaftMetadataRepository) LookupCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
-	return mr.storage.LookupCommitResults(glsn)
-}
-
-func (mr *RaftMetadataRepository) LookupNextCommitResults(glsn types.GLSN) *mrpb.LogStreamCommitResults {
+func (mr *RaftMetadataRepository) LookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
 	return mr.storage.LookupNextCommitResults(glsn)
 }
 
