@@ -353,6 +353,7 @@ func (ps *pebbleStorage) applyWriteBatch(pwb *pebbleWriteBatch) error {
 		return errors.WithStack(err)
 	}
 	ps.writeProgress.prevLLSN += types.LLSN(count)
+
 	return nil
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
@@ -419,4 +420,123 @@ func TestWriterCleanup(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	writer.stop()
 	sendWg.Wait()
+}
+
+func TestWriterVarlog444(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	const (
+		queueSize = 1
+		batchSize = 1
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+	lsc := newLogStreamContext()
+	testCommitter := NewMockCommitter(ctrl)
+	testReplicator := newTestReplicator(ctrl)
+	state := NewMockStateProvider(ctrl)
+	state.EXPECT().mutableWithBarrier().Return(nil).AnyTimes()
+	state.EXPECT().releaseBarrier().Return().AnyTimes()
+	state.EXPECT().mutable().Return(nil).AnyTimes()
+	state.EXPECT().setSealing().Return().AnyTimes()
+
+	// create writer
+	writer, err := newWriter(writerConfig{
+		queueSize:  queueSize,
+		batchSize:  batchSize,
+		strg:       strg,
+		lsc:        lsc,
+		committer:  testCommitter,
+		replicator: testReplicator.r,
+		state:      state,
+	})
+	require.NoError(t, err)
+
+	defer func() {
+		writer.stop()
+		require.NoError(t, strg.Close())
+	}()
+
+	// initial state
+	require.Equal(t, lsc.uncommittedLLSNEnd.Load(), types.MinLLSN)
+
+	var wg sync.WaitGroup
+
+	// LLSN=1, Write=OK
+	testCommitter.EXPECT().sendCommitWaitTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, tb *appendTask) error {
+			defer tb.wg.Done()
+			return nil
+		},
+	).Times(1)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		task := newAppendTask()
+		task.primary = true
+		task.wg.Add(1)
+		if !assert.NoError(t, writer.send(context.Background(), task)) {
+			task.wg.Done()
+		}
+		task.wg.Wait()
+		assert.NoError(t, task.err)
+		task.release()
+	}()
+	wg.Wait()
+
+	require.Eventually(t, func() bool {
+		return lsc.uncommittedLLSNEnd.Load() == types.LLSN(2)
+	}, time.Second, 10*time.Millisecond)
+
+	// LLSN=2, Write=OK, SendToCommit=Fail
+	testCommitter.EXPECT().sendCommitWaitTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, tb *appendTask) error {
+			return errors.New("fake")
+		},
+	).Times(2)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		task := newAppendTask()
+		task.primary = true
+		task.wg.Add(1)
+		if !assert.NoError(t, writer.send(context.Background(), task)) {
+			task.wg.Done()
+		}
+		task.wg.Wait()
+		assert.Error(t, task.err)
+		task.release()
+	}()
+	wg.Wait()
+
+	require.Eventually(t, func() bool {
+		return lsc.uncommittedLLSNEnd.Load() == types.LLSN(3)
+	}, time.Second, 10*time.Millisecond)
+
+	// LLSN=3, Write=OK, SendToCommit=Fail
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		task := newAppendTask()
+		task.primary = true
+		task.wg.Add(1)
+		if !assert.NoError(t, writer.send(context.Background(), task)) {
+			task.wg.Done()
+		}
+		task.wg.Wait()
+		assert.Error(t, task.err)
+		task.release()
+	}()
+	wg.Wait()
+
+	require.Eventually(t, func() bool {
+		return lsc.uncommittedLLSNEnd.Load() == types.LLSN(4)
+	}, time.Second, 10*time.Millisecond)
+
 }
