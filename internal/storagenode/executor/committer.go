@@ -243,7 +243,15 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 		return nil
 	}
 
-	// NOTE: It is equal to the above condition.
+	// NOTE: It seems to be similar to the above condition. The actual purpose of this
+	// condition is to avoid an invalid commit situation that the number of commitWaitTasks is
+	// less than numCommits.
+	// `numUncommitted` might be greater than or equal to the `numCommits`, but the number of
+	// commitWaitTasks can be not. Since uncommittedLLSNEnd of the log stream context is
+	// increased whenever each log entry is written to the storage, it doesn't represent the
+	// size of commitWaitQueue. For instance, a batch of log entries could be written to the
+	// storage, however, it is failed to push them into the commitWaitQueue.
+	// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
 	if c.commitWaitQ.size() < numCommits {
 		return nil
 	}

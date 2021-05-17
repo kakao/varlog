@@ -199,18 +199,9 @@ func (w *writerImpl) writeLoopInternal(ctx context.Context) error {
 		return err
 	}
 
-	if err := w.fanout(ctx); err != nil {
+	if err := w.fanout(ctx, oldLLSN, newLLSN); err != nil {
 		// NOTE: ownership of write/replicate tasks is moved.
 		return err
-	}
-
-	if !w.lsc.uncommittedLLSNEnd.CompareAndSwap(oldLLSN, newLLSN) {
-		// NOTE: If this CAS operation fails, it means other goroutine changes
-		// uncommittedLLSNEnd of LogStreamContext.
-		panic(errors.Errorf(
-			"uncommittedLLSNEnd swap failure: current=%d old=%d new=%d: more than one writer?",
-			w.lsc.uncommittedLLSNEnd.Load(), oldLLSN, newLLSN,
-		))
 	}
 	return nil
 }
@@ -279,13 +270,6 @@ func (w *writerImpl) fillBatch(t *appendTask, llsn types.LLSN) error {
 	return nil
 }
 
-func (w *writerImpl) writePipeline(ctx context.Context) error {
-	if err := w.write(); err != nil {
-		return err
-	}
-	return w.sendToCommitter(ctx)
-}
-
 func (w *writerImpl) write() (err error) {
 	batch := w.strg.NewWriteBatch()
 
@@ -336,12 +320,32 @@ func (w *writerImpl) sendToReplicator(ctx context.Context) (err error) {
 	return err
 }
 
-func (w *writerImpl) fanout(ctx context.Context) error {
+func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) error {
 	grp, ctx := errgroup.WithContext(ctx)
 	grp.Go(func() error {
-		return w.writePipeline(ctx)
+		// write pipeline
+		if err := w.write(); err != nil {
+			return err
+		}
+		// NOTE: Updating uncommittedLLSNEnd should be done when the writing logs to the
+		// storage succeeds. The reason why the uncommittedLLSNEnd is changed after sending
+		// commitWaitTasks to the committer is that the committer compares the size of
+		// commitWaitQ with numCommits.
+		// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
+		defer func() {
+			if !w.lsc.uncommittedLLSNEnd.CompareAndSwap(oldLLSN, newLLSN) {
+				// NOTE: If this CAS operation fails, it means other goroutine changes
+				// uncommittedLLSNEnd of LogStreamContext.
+				panic(errors.Errorf(
+					"uncommittedLLSNEnd swap failure: current=%d old=%d new=%d: more than one writer?",
+					w.lsc.uncommittedLLSNEnd.Load(), oldLLSN, newLLSN,
+				))
+			}
+		}()
+		return w.sendToCommitter(ctx)
 	})
 	grp.Go(func() error {
+		// replication
 		return w.sendToReplicator(ctx)
 	})
 	return grp.Wait()

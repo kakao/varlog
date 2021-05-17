@@ -42,7 +42,9 @@ func (pwb *pebbleWriteBatch) Put(llsn types.LLSN, data []byte) error {
 	numWrite := pwb.b.Count()
 	prevWrittenLLSN := pwb.prevWrittenLLSN + types.LLSN(numWrite)
 	if prevWrittenLLSN+1 != llsn {
-		return errors.Errorf("storage: incorrect LLSN, prev_llsn=%v curr_llsn=%v", prevWrittenLLSN, llsn)
+		return errors.Errorf(
+			"storage: invalid write batch, incorrect LLSN, expected=%d actual=%d, snapshot=%d, count=%d",
+			prevWrittenLLSN+1, llsn, pwb.prevWrittenLLSN, numWrite)
 	}
 
 	/*
@@ -56,7 +58,10 @@ func (pwb *pebbleWriteBatch) Put(llsn types.LLSN, data []byte) error {
 	*/
 
 	dk := encodeDataKey(llsn)
-	return errors.WithStack(pwb.b.Set(dk[:], data, pwb.ps.writeOption))
+	if err := pwb.b.Set(dk, data, pwb.ps.writeOption); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (pwb *pebbleWriteBatch) Apply() error {
