@@ -386,7 +386,7 @@ func TestWriterCleanup(t *testing.T) {
 
 	strg := newTestStorage(ctrl, newTestStorageConfig())
 	lsc := newLogStreamContext()
-	testCommitter := newTestCommitter(ctrl)
+	testCommitter := newTestCommitterWithTaskDone(ctrl)
 	testReplicator := newTestReplicator(ctrl)
 	state := NewMockStateProvider(ctrl)
 	state.EXPECT().mutableWithBarrier().Return(nil).AnyTimes()
@@ -400,7 +400,7 @@ func TestWriterCleanup(t *testing.T) {
 		batchSize:  batchSize,
 		strg:       strg,
 		lsc:        lsc,
-		committer:  testCommitter.c,
+		committer:  testCommitter,
 		replicator: testReplicator.r,
 		state:      state,
 	})
@@ -412,8 +412,11 @@ func TestWriterCleanup(t *testing.T) {
 		go func() {
 			defer sendWg.Done()
 			t := newAppendTask()
+			defer t.release()
 			t.wg.Add(1)
-			_ = writer.send(context.TODO(), t)
+			if err := writer.send(context.TODO(), t); err != nil {
+				t.wg.Done()
+			}
 			t.wg.Wait()
 		}()
 	}
