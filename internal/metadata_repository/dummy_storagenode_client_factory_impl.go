@@ -281,7 +281,7 @@ func (r *DummyStorageNodeClient) Commit(ctx context.Context, cr *snpb.CommitRequ
 			return errors.New("invalid log stream ID")
 		}
 
-		if r.knownHighWatermark[idx] != result.PrevHighWatermark {
+		if r.uncommittedLLSNOffset[idx] != result.CommittedLLSNOffset {
 			continue
 		}
 

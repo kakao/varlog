@@ -239,3 +239,47 @@ func TestTrimGLSWithSealedLS(t *testing.T) {
 		}))
 	})
 }
+
+func TestNewbieLogStream(t *testing.T) {
+	opts := []it.Option{
+		it.WithSnapCount(10),
+		it.WithNumberOfStorageNodes(1),
+		it.WithNumberOfLogStreams(2),
+		it.WithNumberOfClients(1),
+		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+	}
+
+	Convey("Given LogStream", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		lsIDs := env.LogStreamIDs()
+		client := env.ClientAtIndex(t, 0)
+
+		var err error
+		glsn := types.InvalidGLSN
+		for i := 0; i < 32; i++ {
+			lsid := lsIDs[i%env.NumberOfLogStreams()]
+			glsn, err = client.AppendTo(context.Background(), lsid, []byte("foo"))
+			So(err, ShouldBeNil)
+			So(glsn, ShouldNotEqual, types.InvalidGLSN)
+		}
+
+		Convey("When add new logStream", func(ctx C) {
+			env.AddLS(t)
+			env.ClientRefresh(t)
+
+			Convey("Then it should be appendable", func(ctx C) {
+				lsIDs := env.LogStreamIDs()
+				client := env.ClientAtIndex(t, 0)
+
+				var err error
+				glsn := types.InvalidGLSN
+				for i := 0; i < 32; i++ {
+					lsid := lsIDs[i%env.NumberOfLogStreams()]
+					glsn, err = client.AppendTo(context.Background(), lsid, []byte("foo"))
+					So(err, ShouldBeNil)
+					So(glsn, ShouldNotEqual, types.InvalidGLSN)
+				}
+			})
+		})
+	}))
+}

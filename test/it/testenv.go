@@ -1064,6 +1064,16 @@ func (clus *VarlogCluster) ClientAtIndex(t *testing.T, idx int) varlog.Varlog {
 	return clus.clients[idx]
 }
 
+func (clus *VarlogCluster) ClientRefresh(t *testing.T) {
+	clus.muCL.Lock()
+	defer clus.muCL.Unlock()
+
+	clus.closeClients(t)
+	clus.clients = nil
+
+	clus.initClients(t)
+}
+
 func WithTestCluster(t *testing.T, opts []Option, f func(env *VarlogCluster)) func() {
 	return func() {
 		env := NewVarlogCluster(t, opts...)

@@ -1033,7 +1033,8 @@ func TestStorageCopyOnWrite(t *testing.T) {
 
 		ms.AppendLogStreamCommitHistory(gls)
 		So(ms.isCopyOnWrite(), ShouldBeFalse)
-		So(ms.LookupNextCommitResults(types.GLSN(5)), ShouldNotBeNil)
+		cr, _ := ms.LookupNextCommitResults(types.GLSN(5))
+		So(cr, ShouldNotBeNil)
 		So(ms.GetHighWatermark(), ShouldEqual, types.GLSN(10))
 
 		Convey("lookup GlobalLogStream with copyOnWrite should give merged response", func(ctx C) {
@@ -1052,8 +1053,10 @@ func TestStorageCopyOnWrite(t *testing.T) {
 			gls.CommitResults = append(gls.CommitResults, commit)
 
 			ms.AppendLogStreamCommitHistory(gls)
-			So(ms.LookupNextCommitResults(types.GLSN(5)), ShouldNotBeNil)
-			So(ms.LookupNextCommitResults(types.GLSN(10)), ShouldNotBeNil)
+			cr, _ := ms.LookupNextCommitResults(types.GLSN(5))
+			So(cr, ShouldNotBeNil)
+			cr, _ = ms.LookupNextCommitResults(types.GLSN(10))
+			So(cr, ShouldNotBeNil)
 			So(ms.GetHighWatermark(), ShouldEqual, types.GLSN(15))
 		})
 	})
@@ -1514,7 +1517,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 			appliedIndex++
 			ms.UpdateAppliedIndex(appliedIndex)
 
-			gls = ms.LookupNextCommitResults(preGLSN)
+			gls, _ = ms.LookupNextCommitResults(preGLSN)
 			if gls != nil &&
 				gls.HighWatermark == newGLSN &&
 				ms.GetHighWatermark() == newGLSN {
