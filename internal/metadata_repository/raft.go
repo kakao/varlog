@@ -370,7 +370,7 @@ func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	}
 
 	rc.raftStorage = raft.NewMemoryStorage()
-	if snapshot != nil && len(ents) > 0 {
+	if snapshot != nil {
 		rc.raftStorage.ApplySnapshot(*snapshot)
 		rc.publishSnapshot(*snapshot)
 	}
@@ -659,6 +659,7 @@ func (rc *raftNode) publishSnapshot(snapshotToSave raftpb.Snapshot) {
 
 	atomic.StoreUint64(&rc.snapshotIndex, snapshotToSave.Metadata.Index)
 	rc.appliedIndex = snapshotToSave.Metadata.Index
+	rc.lastIndex = snapshotToSave.Metadata.Index
 
 	rc.logger.Info("finish snapshot",
 		zap.Uint64("snapIdx", snapshotToSave.Metadata.Index),
