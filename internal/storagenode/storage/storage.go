@@ -123,6 +123,10 @@ type Storage interface {
 
 	ReadCommitContext(prevHighWatermark types.GLSN) (CommitContext, error)
 
+	// CommitContextOf looks up a commit context that contains the log entry positioned at the
+	// given glsn.
+	CommitContextOf(glsn types.GLSN) (CommitContext, error)
+
 	// RestoreLogStreamContext restores the LogStreamContext that can be recovered by contents
 	// of the storage. The LogStreamContext referred to by the parameter is filled with restored
 	// context. If the LogStreamContext is recovered, the RestoreLogStreamContext returns true,

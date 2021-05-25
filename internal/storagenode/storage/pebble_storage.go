@@ -462,6 +462,30 @@ func (ps *pebbleStorage) ReadCommitContext(prevHighWatermark types.GLSN) (Commit
 	return InvalidCommitContext, ErrNotFoundCommitContext
 }
 
+func (ps *pebbleStorage) CommitContextOf(glsn types.GLSN) (CommitContext, error) {
+	if glsn.Invalid() {
+		return InvalidCommitContext, ErrNotFoundCommitContext
+	}
+	upperKey := encodeCommitContextKey(CommitContext{
+		PrevHighWatermark: glsn,
+	})
+	iter := ps.db.NewIter(&pebble.IterOptions{
+		LowerBound: []byte{commitContextKeyPrefix},
+		UpperBound: upperKey,
+	})
+	defer func() {
+		_ = iter.Close()
+	}()
+
+	if !iter.Last() {
+		return InvalidCommitContext, ErrNotFoundCommitContext
+	}
+	if cc := decodeCommitContextKey(iter.Key()); cc.CommittedGLSNBegin <= glsn && glsn < cc.CommittedGLSNEnd {
+		return cc, nil
+	}
+	return InvalidCommitContext, ErrNotFoundCommitContext
+}
+
 func (ps *pebbleStorage) DeleteCommitted(prefixEnd types.GLSN) error {
 	if prefixEnd.Invalid() {
 		return errors.New("storage: invalid range")

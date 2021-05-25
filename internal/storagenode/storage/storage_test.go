@@ -743,3 +743,122 @@ func TestStorageReadCommitContext(t *testing.T) {
 		require.NoError(t, strg.Close())
 	})
 }
+
+func TestStorageCommitContextOf(t *testing.T) {
+	testEachStorage(t, func(t *testing.T, strg Storage) {
+		defer func() {
+			require.NoError(t, strg.Close())
+		}()
+
+		// Type | LLSN | GLSN | HWM | PrevHWM | GLSNBegin | GLSNEnd | LLSNBegin
+		//   cc |      |      |   5 |       0 |         1 |       1 |         1
+		//   cc |      |      |  10 |       5 |         9 |      11 |         1
+		//   le |    1 |    9 |     |         |           |         |
+		//   le |    2 |   10 |     |         |           |         |
+		//   cc |      |      |  15 |      10 |        11 |      11 |         3
+		//   cc |      |      |  20 |      15 |        11 |      11 |         3  => FIXME
+		//   cc |      |      |  25 |      20 |        21 |      23 |         3
+		//   le |    3 |   21 |     |         |           |         |
+		//   le |    4 |   22 |     |         |           |         |
+		wb := strg.NewWriteBatch()
+		require.NoError(t, wb.Put(1, nil))
+		require.NoError(t, wb.Put(2, nil))
+		require.NoError(t, wb.Put(3, nil))
+		require.NoError(t, wb.Put(4, nil))
+		require.NoError(t, wb.Apply())
+		require.NoError(t, wb.Close())
+
+		cb, err := strg.NewCommitBatch(CommitContext{
+			PrevHighWatermark:  0,
+			HighWatermark:      5,
+			CommittedGLSNBegin: 1,
+			CommittedGLSNEnd:   1,
+			CommittedLLSNBegin: 1,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		cc1 := CommitContext{
+			PrevHighWatermark:  5,
+			HighWatermark:      10,
+			CommittedGLSNBegin: 9,
+			CommittedGLSNEnd:   11,
+			CommittedLLSNBegin: 1,
+		}
+		cb, err = strg.NewCommitBatch(cc1)
+		require.NoError(t, err)
+		require.NoError(t, cb.Put(1, 9))
+		require.NoError(t, cb.Put(2, 10))
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		cb, err = strg.NewCommitBatch(CommitContext{
+			PrevHighWatermark:  10,
+			HighWatermark:      15,
+			CommittedGLSNBegin: 11,
+			CommittedGLSNEnd:   11,
+			CommittedLLSNBegin: 3,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		cb, err = strg.NewCommitBatch(CommitContext{
+			PrevHighWatermark:  15,
+			HighWatermark:      20,
+			CommittedGLSNBegin: 11,
+			CommittedGLSNEnd:   11,
+			CommittedLLSNBegin: 3,
+		})
+		require.NoError(t, err)
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		cc2 := CommitContext{
+			PrevHighWatermark:  20,
+			HighWatermark:      25,
+			CommittedGLSNBegin: 21,
+			CommittedGLSNEnd:   23,
+			CommittedLLSNBegin: 3,
+		}
+		cb, err = strg.NewCommitBatch(cc2)
+		require.NoError(t, err)
+		require.NoError(t, cb.Put(3, 21))
+		require.NoError(t, cb.Put(4, 22))
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		// No commit context for GLSN(0)
+		_, err = strg.CommitContextOf(0)
+		require.Error(t, err)
+
+		_, err = strg.CommitContextOf(8)
+		require.Error(t, err)
+
+		cc, err := strg.CommitContextOf(9)
+		require.NoError(t, err)
+		require.Equal(t, cc1, cc)
+
+		cc, err = strg.CommitContextOf(10)
+		require.NoError(t, err)
+		require.Equal(t, cc1, cc)
+
+		_, err = strg.CommitContextOf(11)
+		require.Error(t, err)
+
+		_, err = strg.CommitContextOf(20)
+		require.Error(t, err)
+
+		cc, err = strg.CommitContextOf(21)
+		require.NoError(t, err)
+		require.Equal(t, cc2, cc)
+
+		cc, err = strg.CommitContextOf(22)
+		require.NoError(t, err)
+		require.Equal(t, cc2, cc)
+
+		_, err = strg.CommitContextOf(23)
+		require.Error(t, err)
+	})
+}

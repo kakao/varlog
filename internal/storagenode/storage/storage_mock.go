@@ -230,6 +230,21 @@ func (mr *MockStorageMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockStorage)(nil).Close))
 }
 
+// CommitContextOf mocks base method.
+func (m *MockStorage) CommitContextOf(arg0 types.GLSN) (CommitContext, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitContextOf", arg0)
+	ret0, _ := ret[0].(CommitContext)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CommitContextOf indicates an expected call of CommitContextOf.
+func (mr *MockStorageMockRecorder) CommitContextOf(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitContextOf", reflect.TypeOf((*MockStorage)(nil).CommitContextOf), arg0)
+}
+
 // DeleteCommitted mocks base method.
 func (m *MockStorage) DeleteCommitted(arg0 types.GLSN) error {
 	m.ctrl.T.Helper()
