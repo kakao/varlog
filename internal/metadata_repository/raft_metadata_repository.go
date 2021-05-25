@@ -195,9 +195,6 @@ func (mr *RaftMetadataRepository) Run() {
 	if err := mr.runner.RunC(mctx, mr.processRNCommit); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
-	if err := mr.runner.RunC(mctx, mr.runCommitTrigger); err != nil {
-		mr.logger.Panic("could not run", zap.Error(err))
-	}
 	if err := mr.runner.RunC(mctx, mr.processPurge); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
@@ -218,8 +215,14 @@ func (mr *RaftMetadataRepository) Run() {
 
 		if mr.options.RecoverFromSML {
 			if err := mr.recoverStateMachine(mctx); err != nil {
+				fmt.Printf("could not recover. err:%v\n", err)
 				mr.logger.Panic("could not recover", zap.Error(err))
 			}
+		}
+
+		// commit trigger should run after recover complete
+		if err := mr.runner.RunC(mctx, mr.runCommitTrigger); err != nil {
+			mr.logger.Panic("could not run", zap.Error(err))
 		}
 
 		mr.logger.Info("listening", zap.String("address", mr.options.RPCBindAddress))
