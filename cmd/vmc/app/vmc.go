@@ -6,15 +6,14 @@ import (
 	"os"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 )
 
 type VMCApp struct {
-	rootCmd *cobra.Command
+	app     *cli.App
 	options Options
 	logger  *zap.Logger
 }
@@ -35,13 +34,12 @@ func New() (*VMCApp, error) {
 }
 
 func (app *VMCApp) Execute() error {
-	return app.rootCmd.Execute()
+	return app.app.Run(os.Args)
 }
 
 type CommandExecutor func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error)
 
 func (app *VMCApp) withExecutionContext(f CommandExecutor) {
-	app.readOptions()
 	if !app.options.Verbose {
 		app.logger = zap.NewNop()
 	}
@@ -78,11 +76,4 @@ func (app *VMCApp) execute(f CommandExecutor) error {
 		zap.L().Error("print error", zap.Error(err))
 	}
 	return nil
-}
-
-func (app *VMCApp) readOptions() {
-	app.options.VMSAddress = viper.GetString("vms-address")
-	app.options.Timeout = viper.GetDuration("rpc-timeout")
-	app.options.Output = viper.GetString("output")
-	app.options.Verbose = viper.GetBool("verbose")
 }

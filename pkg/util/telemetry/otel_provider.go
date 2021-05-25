@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp"
@@ -16,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/semconv"
+	"go.uber.org/multierr"
 )
 
 type openTelmetry struct {
@@ -82,5 +82,5 @@ func newOTELProvider(ctx context.Context, serviceName string, agentEndpoint stri
 }
 
 func (p *openTelmetry) Close(ctx context.Context) error {
-	return multierror.Append(p.tracerProvider.Shutdown(ctx), p.controller.Stop(ctx))
+	return multierr.Append(p.tracerProvider.Shutdown(ctx), p.controller.Stop(ctx))
 }
