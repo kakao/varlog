@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/snc"
@@ -20,14 +20,15 @@ type sntool struct {
 	clusterID types.ClusterID
 	timeout   time.Duration
 
-	cmd *cobra.Command
+	cmd *cli.App
 }
 
 func main() {
 	snt := &sntool{}
 	snt.initCommand()
-	if err := snt.cmd.Execute(); err != nil {
+	if err := snt.cmd.Run(os.Args); err != nil {
 		fmt.Println(err)
+		os.Exit(1)
 	}
 }
 
@@ -55,25 +56,39 @@ func (snt *sntool) get() (string, error) {
 }
 
 func (snt *sntool) initCommand() {
-	snt.cmd = &cobra.Command{
-		Use:  "sntool",
-		Long: "sntool",
-	}
-	getCmd := &cobra.Command{
-		Use:  "get",
-		Args: cobra.NoArgs,
-	}
-	getCmd.Flags().DurationVar(&snt.timeout, "timeout", 10*time.Second, "timeout")
-	getCmd.Flags().StringVar(&snt.snAddr, "storage-node-address", "", "storage node address")
-	getCmd.MarkFlagRequired("storage-node-address")
-	getCmd.Flags().Uint32Var((*uint32)(&snt.clusterID), "cluster-id", 1, "cluster id")
-	getCmd.Run = func(cmd *cobra.Command, args []string) {
+	snt.cmd = cli.NewApp()
+	snt.cmd.Name = "sntool"
+	snt.cmd.Version = "v0.0.1"
+	snt.cmd.Commands = append(snt.cmd.Commands, &cli.Command{
+		Name: "get",
+		Flags: []cli.Flag{
+			&cli.DurationFlag{
+				Name:        "timeout",
+				Value:       10 * time.Second,
+				Destination: &snt.timeout,
+			},
+			&cli.StringFlag{
+				Name:        "storage-node-address",
+				Required:    true,
+				Destination: &snt.snAddr,
+			},
+			&cli.StringFlag{
+				Name:  "cluster-id",
+				Value: "1",
+			},
+		},
+	})
+	snt.cmd.Action = func(c *cli.Context) error {
+		cid, err := types.ParseClusterID(c.String("cluster-id"))
+		if err != nil {
+			return err
+		}
+		snt.clusterID = cid
 		str, err := snt.get()
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			return err
 		}
 		fmt.Println(str)
+		return nil
 	}
-	snt.cmd.AddCommand(getCmd)
 }

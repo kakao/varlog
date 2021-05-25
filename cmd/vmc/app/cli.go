@@ -1,37 +1,47 @@
 package app
 
 import (
-	"fmt"
-	"strings"
-
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
+	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 func (app *VMCApp) initCLI() {
-	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	app.app = cli.NewApp()
+	app.app.Name = "vmc"
+	app.app.Description = "vmc is client for varlog manager server"
+	app.app.Version = "v0.0.1"
 
-	app.rootCmd = &cobra.Command{
-		Use:   "vmc",
-		Short: "vmc is client for varlog manager server",
-	}
-	app.rootCmd.PersistentFlags().String("vms-address", DefaultVMSAddress, "vms address")
-	app.rootCmd.PersistentFlags().Duration("rpc-timeout", DefaultTimeout, "rpc timeout")
-	app.rootCmd.PersistentFlags().String("output", DefaultPrinter, "output printer")
-	app.rootCmd.PersistentFlags().Bool("verbose", DefaultVerbose, "verbose")
+	// cli.VersionFlag = &cli.BoolFlag{Name: "version"}
+	app.app.Flags = append(app.app.Flags,
+		&cli.StringFlag{
+			Name:        "vms-address",
+			EnvVars:     []string{"VMS_ADDRESS"},
+			Value:       DefaultVMSAddress,
+			Destination: &app.options.VMSAddress,
+		},
+		&cli.DurationFlag{
+			Name:        "rpc-timeout",
+			EnvVars:     []string{"RPC_TIMEOUT"},
+			Value:       DefaultTimeout,
+			Destination: &app.options.Timeout,
+		},
+		&cli.StringFlag{
+			Name:        "output",
+			EnvVars:     []string{"OUTPUT"},
+			Value:       DefaultPrinter,
+			Destination: &app.options.Output,
+		},
+		&cli.BoolFlag{
+			Name:        "verbose",
+			EnvVars:     []string{"VERBOSE"},
+			Value:       DefaultVerbose,
+			Destination: &app.options.Verbose,
+		},
+	)
 
-	viper.BindEnv("vms-address")
-	viper.BindEnv("rpc-timeout")
-	viper.BindEnv("output")
-	viper.BindEnv("verbose")
-	viper.BindPFlags(app.rootCmd.PersistentFlags())
-
-	app.rootCmd.AddCommand(
-		app.initVersionCmd(),
+	app.app.Commands = append(app.app.Commands,
 		app.initAddCmd(),
 		app.initRmCmd(),
 		app.initUpdateCmd(),
@@ -43,281 +53,377 @@ func (app *VMCApp) initCLI() {
 	)
 }
 
-func (app *VMCApp) initVersionCmd() *cobra.Command {
-	return &cobra.Command{
-		Use: "version",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("v0.0.1")
-		},
-	}
-}
-
-func (app *VMCApp) initAddCmd() *cobra.Command {
+func (app *VMCApp) initAddCmd() *cli.Command {
 	// vmc add
-	cmd := &cobra.Command{
-		Use:     "add",
-		Args:    cobra.NoArgs,
-		Aliases: []string{},
+	cmd := &cli.Command{
+		Name: "add",
 	}
-
-	var subCmd *cobra.Command
 
 	// vmc add storagenode
-	snAddr := ""
-	subCmd = newSNCmd()
-	subCmd.Flags().StringVar(&snAddr, "storage-node-address", "", "storage node address")
-	subCmd.MarkFlagRequired("storage-node-address")
-	subCmd.Run = func(cmd *cobra.Command, args []string) {
+	snCmd := newSNCmd()
+	snCmd.Flags = append(snCmd.Flags, &cli.StringFlag{
+		Name:    "storage-node-address",
+		Usage:   "storage node address",
+		EnvVars: []string{"STORAGE_NODE_ADDRESS"},
+	})
+	snCmd.Action = func(c *cli.Context) error {
+		snAddr := c.String("storage-node-address")
 		app.addStorageNode(snAddr)
+		return nil
 	}
-	cmd.AddCommand(subCmd)
 
 	// vmc add logstream
-	subCmd = newLSCmd()
-	subCmd.Run = func(cmd *cobra.Command, args []string) {
+	lsCmd := newLSCmd()
+	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{})
+	lsCmd.Action = func(c *cli.Context) error {
 		app.addLogStream()
+		return nil
 	}
-	cmd.AddCommand(subCmd)
 
+	cmd.Subcommands = append(cmd.Subcommands, snCmd, lsCmd)
 	return cmd
 }
 
-func (app *VMCApp) initRmCmd() *cobra.Command {
+func (app *VMCApp) initRmCmd() *cli.Command {
 	// vmc remove
-	cmd := &cobra.Command{
-		Use:     "remove",
+	cmd := &cli.Command{
+		Name:    "remove",
 		Aliases: []string{"rm"},
-		Args:    cobra.NoArgs,
 	}
-
-	var subCmd *cobra.Command
 
 	// vmc remove storagenode
-	var storageNodeID uint32
-	subCmd = newSNCmd()
-	subCmd.Flags().Uint32Var(&storageNodeID, "storage-node-id", 0, "storage node identifier")
-	subCmd.MarkFlagRequired("storage-node-id")
-	subCmd.Run = func(cmd *cobra.Command, args []string) {
-		app.removeStorageNode(types.StorageNodeID(storageNodeID))
+	snCmd := newSNCmd()
+	snCmd.Flags = append(snCmd.Flags, &cli.StringFlag{
+		Name:     "storage-node-id",
+		Usage:    "storage node identifier",
+		EnvVars:  []string{"STORAGE_NODE_ID"},
+		Required: true,
+	})
+	snCmd.Action = func(c *cli.Context) error {
+		snID, err := types.ParseStorageNodeID(c.String("storage-node-id"))
+		if err != nil {
+			return err
+		}
+		app.removeStorageNode(snID)
+		return nil
 	}
-	cmd.AddCommand(subCmd)
 
 	// vmc remove logstream
-	var logStreamID uint32
-	subCmd = newLSCmd()
-	subCmd.Flags().Uint32Var(&logStreamID, "log-stream-id", 0, "log stream identifier")
-	subCmd.MarkFlagRequired("log-stream-id")
-	subCmd.Run = func(cmd *cobra.Command, args []string) {
-		app.removeLogStream(types.LogStreamID(logStreamID))
+	lsCmd := newLSCmd()
+	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{
+		Name:     "log-stream-id",
+		Usage:    "log stream identifier",
+		EnvVars:  []string{"LOG_STREAM_ID"},
+		Required: true,
+	})
+	lsCmd.Action = func(c *cli.Context) error {
+		lsID, err := types.ParseLogStreamID(c.String("log-stream-id"))
+		if err != nil {
+			return err
+		}
+		app.removeLogStream(lsID)
+		return nil
 	}
-	cmd.AddCommand(subCmd)
 
+	cmd.Subcommands = append(cmd.Subcommands, snCmd, lsCmd)
 	return cmd
 }
 
-func (app *VMCApp) initUpdateCmd() *cobra.Command {
+func (app *VMCApp) initUpdateCmd() *cli.Command {
 	// vmc update
-	cmd := &cobra.Command{
-		Use:     "update",
+	cmd := &cli.Command{
+		Name:    "update",
 		Aliases: []string{"mv"},
-		Args:    cobra.NoArgs,
 	}
 
 	// vmc update logstream
-	var (
-		logStreamID       uint32
-		popStorageNodeID  uint32
-		pushStorageNodeID uint32
-		pushPath          string
+	lsCmd := newLSCmd()
+	lsCmd.Flags = append(lsCmd.Flags,
+		&cli.StringFlag{
+			Name:     "log-stream-id",
+			Usage:    "log stream identifier",
+			EnvVars:  []string{"LOG_STREAM_ID"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "pop-storage-node-id",
+			Usage:   "storage node identifier",
+			EnvVars: []string{"POP_STORAGE_NODE_ID"},
+		},
+		&cli.StringFlag{
+			Name:    "push-storage-node-id",
+			Usage:   "storage node identifier",
+			EnvVars: []string{"PUSH_STORAGE_NODE_ID"},
+		},
+		&cli.StringFlag{
+			Name:    "push-storage-path",
+			Usage:   "storage node path",
+			EnvVars: []string{"PUSH_STORAGE_PATH"},
+		},
 	)
-
-	subCmd := newLSCmd()
-	subCmd.Flags().Uint32Var(&logStreamID, "log-stream-id", 0, "log stream identifier")
-	subCmd.MarkFlagRequired("log-stream-id")
-	subCmd.Flags().Uint32Var(&popStorageNodeID, "pop-storage-node-id", 0, "storage node identifier")
-	subCmd.Flags().Uint32Var(&pushStorageNodeID, "push-storage-node-id", 0, "storage node identifier")
-	subCmd.Flags().StringVar(&pushPath, "push-storage-path", "", "storage node path")
-	subCmd.Run = func(cmd *cobra.Command, args []string) {
+	lsCmd.Action = func(c *cli.Context) error {
 		var (
 			popReplica  *varlogpb.ReplicaDescriptor
 			pushReplica *varlogpb.ReplicaDescriptor
 		)
-		if viper.IsSet("pop-storage-node-id") {
+
+		lsID, err := types.ParseLogStreamID(c.String("log-stream-id"))
+		if err != nil {
+			return err
+		}
+		if c.IsSet("pop-storage-node-id") {
+			popSNID, err := types.ParseStorageNodeID(c.String("pop-storage-node-id"))
+			if err != nil {
+				return err
+			}
 			popReplica = &varlogpb.ReplicaDescriptor{
-				StorageNodeID: types.StorageNodeID(popStorageNodeID),
+				StorageNodeID: popSNID,
 			}
 		}
-		if viper.IsSet("push-storage-node-id") && viper.IsSet("push-storage-path") {
+
+		if c.IsSet("push-storage-node-id") && c.IsSet("push-storage-path") {
+			pushSNID, err := types.ParseStorageNodeID(c.String("push-storage-node-id"))
+			if err != nil {
+				return err
+			}
+			pushPath := c.String("push-storage-path")
 			pushReplica = &varlogpb.ReplicaDescriptor{
-				StorageNodeID: types.StorageNodeID(pushStorageNodeID),
+				StorageNodeID: pushSNID,
 				Path:          pushPath,
 			}
+
 		}
-		app.updateLogStream(types.LogStreamID(logStreamID), popReplica, pushReplica)
+		app.updateLogStream(lsID, popReplica, pushReplica)
+		return nil
 	}
-	cmd.AddCommand(subCmd)
+
+	cmd.Subcommands = append(cmd.Subcommands, lsCmd)
 	return cmd
 }
 
-func (app *VMCApp) initSealCmd() *cobra.Command {
+func (app *VMCApp) initSealCmd() *cli.Command {
 	// vmc seal lotstream
-	cmd := &cobra.Command{
-		Use:  "seal",
-		Args: cobra.NoArgs,
+	cmd := &cli.Command{
+		Name: "seal",
 	}
-	var logStreamID uint32
-	subCmd := newLSCmd()
-	subCmd.Flags().Uint32Var(&logStreamID, "log-stream-id", 0, "log stream identifier")
-	subCmd.MarkFlagRequired("log-stream-id")
-	subCmd.Run = func(cmd *cobra.Command, args []string) {
-		app.sealLogStream(types.LogStreamID(logStreamID))
+
+	lsCmd := newLSCmd()
+	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{
+		Name:     "log-stream-id",
+		Usage:    "log stream identifier",
+		EnvVars:  []string{"LOG_STREAM_ID"},
+		Required: true,
+	})
+	lsCmd.Action = func(c *cli.Context) error {
+		lsID, err := types.ParseLogStreamID(c.String("log-stream-id"))
+		if err != nil {
+			return err
+		}
+		app.sealLogStream(lsID)
+		return nil
 	}
-	cmd.AddCommand(subCmd)
+
+	cmd.Subcommands = append(cmd.Subcommands, lsCmd)
 	return cmd
 }
 
-func (app *VMCApp) initUnsealCmd() *cobra.Command {
+func (app *VMCApp) initUnsealCmd() *cli.Command {
 	// vmc unseal lotstream
-	cmd := &cobra.Command{
-		Use:  "unseal",
-		Args: cobra.NoArgs,
+	cmd := &cli.Command{
+		Name: "unseal",
 	}
-	var logStreamID uint32
-	subCmd := newLSCmd()
-	subCmd.Flags().Uint32Var(&logStreamID, "log-stream-id", 0, "log stream identifier")
-	subCmd.MarkFlagRequired("log-stream-id")
-	subCmd.Run = func(cmd *cobra.Command, args []string) {
-		app.unsealLogStream(types.LogStreamID(logStreamID))
+
+	lsCmd := newLSCmd()
+	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{
+		Name:     "log-stream-id",
+		Usage:    "log stream identifier",
+		EnvVars:  []string{"LOG_STREAM_ID"},
+		Required: true,
+	})
+	lsCmd.Action = func(c *cli.Context) error {
+		lsID, err := types.ParseLogStreamID(c.String("log-stream-id"))
+		if err != nil {
+			return err
+		}
+		app.unsealLogStream(lsID)
+		return nil
 	}
-	cmd.AddCommand(subCmd)
+
+	cmd.Subcommands = append(cmd.Subcommands, lsCmd)
+
 	return cmd
 }
 
-func (app *VMCApp) initSyncCmd() *cobra.Command {
+func (app *VMCApp) initSyncCmd() *cli.Command {
 	// vmc sync lotstream
-	cmd := &cobra.Command{
-		Use:  "sync",
-		Args: cobra.NoArgs,
+	cmd := &cli.Command{
+		Name: "sync",
 	}
-	var (
-		logStreamID      uint32
-		srcStorageNodeID uint32
-		dstStorageNodeID uint32
+
+	lsCmd := newLSCmd()
+	lsCmd.Flags = append(lsCmd.Flags,
+		&cli.StringFlag{
+			Name:     "log-stream-id",
+			Usage:    "log stream identifier",
+			EnvVars:  []string{"LOG_STREAM_ID"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "source-storage-node-id",
+			Usage:    "source storage node identifier",
+			EnvVars:  []string{"SOURCE_STORAGE_NODE_ID"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "destination-storage-node-id",
+			Usage:    "destination storage node identifier",
+			EnvVars:  []string{"DESTINATION_STORAGE_NODE_ID"},
+			Required: true,
+		},
 	)
-	subCmd := newLSCmd()
-	subCmd.Flags().Uint32Var(&logStreamID, "log-stream-id", 0, "log stream identifier")
-	subCmd.Flags().Uint32("source-storage-node-id", 0, "source storage node identifier")
-	subCmd.Flags().Uint32("destination-storage-node-id", 0, "destination storage node identifier")
-	subCmd.MarkFlagRequired("log-stream-id")
-	subCmd.Run = func(cmd *cobra.Command, args []string) {
-		app.syncLogStream(types.LogStreamID(logStreamID), types.StorageNodeID(srcStorageNodeID), types.StorageNodeID(dstStorageNodeID))
+	lsCmd.Action = func(c *cli.Context) error {
+		lsID, err := types.ParseLogStreamID(c.String("log-stream-id"))
+		if err != nil {
+			return err
+		}
+		srcSNID, err := types.ParseStorageNodeID(c.String("source-storage-node-id"))
+		if err != nil {
+			return err
+		}
+		dstSNID, err := types.ParseStorageNodeID(c.String("destination-storage-node-id"))
+		if err != nil {
+			return err
+		}
+		app.syncLogStream(lsID, srcSNID, dstSNID)
+		return nil
 	}
-	cmd.AddCommand(subCmd)
+
+	cmd.Subcommands = append(cmd.Subcommands, lsCmd)
 	return cmd
 }
 
-func (app *VMCApp) initMetaCmd() *cobra.Command {
+func (app *VMCApp) initMetaCmd() *cli.Command {
 	// vmc metadata
-	cmd := &cobra.Command{
-		Use:     "metadata",
+	cmd := &cli.Command{
+		Name:    "metadata",
 		Aliases: []string{"meta"},
-		Args:    cobra.NoArgs,
 	}
-
-	var subCmd *cobra.Command
 
 	// vmc metdata storagenode
-	subCmd = newSNCmd()
-	addStorageNodeIDFlag(subCmd.Flags())
-	subCmd.Run = func(cmd *cobra.Command, args []string) {
+	snCmd := newSNCmd()
+	snCmd.Action = func(c *cli.Context) error {
 		app.infoStoragenodes()
+		return nil
 	}
-	cmd.AddCommand(subCmd)
 
 	// vmc metdata logstream
-	subCmd = newLSCmd()
-	addLogStreamIDFlag(subCmd.Flags())
-	cmd.AddCommand(subCmd)
+	lsCmd := newLSCmd()
+	lsCmd.Action = func(c *cli.Context) error {
+		panic("not implemented")
+	}
 
 	// vmc metdata metadatarepository
-	subCmd = newMRCmd()
-	cmd.AddCommand(subCmd)
+	mrCmd := newMRCmd()
+	mrCmd.Action = func(c *cli.Context) error {
+		panic("not implemented")
+	}
 
 	// vmc metadata cluster
-	subCmd = &cobra.Command{
-		Use:  "cluster",
-		Args: cobra.NoArgs,
+	clusCmd := newClusterCmd()
+	clusCmd.Action = func(c *cli.Context) error {
+		panic("not implemented")
 	}
-	cmd.AddCommand(subCmd)
+
+	cmd.Subcommands = append(cmd.Subcommands, snCmd, lsCmd, mrCmd, clusCmd)
 
 	return cmd
 }
 
-func (app *VMCApp) initMRMgmtCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "metadatarepository",
+func (app *VMCApp) initMRMgmtCmd() *cli.Command {
+	cmd := &cli.Command{
+		Name:    "metadatarepository",
 		Aliases: []string{"mr"},
 	}
 
-	infoCmd := &cobra.Command{
-		Use:  "info",
-		Args: cobra.NoArgs,
+	infoCmd := &cli.Command{
+		Name: "info",
 	}
-	infoCmd.Run = func(cmd *cobra.Command, args []string) {
+	infoCmd.Action = func(c *cli.Context) error {
 		app.infoMRMembers()
+		return nil
 	}
 
-	raftURL := ""
-	rpcAddr := ""
-	addCmd := &cobra.Command{
-		Use:  "add",
-		Args: cobra.NoArgs,
+	addCmd := &cli.Command{
+		Name: "add",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "raft-url",
+				Usage:    "metadata repository raft url",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "rpc-addr",
+				Usage:    "metadata repository rpc addr",
+				Required: true,
+			},
+		},
 	}
-	addCmd.Flags().StringVar(&raftURL, "raft-url", "", "metadata repository raft url")
-	addCmd.Flags().StringVar(&rpcAddr, "rpc-addr", "", "metadata repository rpc addr")
-	addCmd.MarkFlagRequired("raft-url")
-	addCmd.MarkFlagRequired("rpc-addr")
-	addCmd.Run = func(cmd *cobra.Command, args []string) {
+	addCmd.Action = func(c *cli.Context) error {
+		raftURL := c.String("raft-url")
+		rpcAddr := c.String("rpc-addr")
 		app.addMRPeer(raftURL, rpcAddr)
+		return nil
 	}
 
-	rmCmd := &cobra.Command{
-		Use:  "remove",
-		Args: cobra.NoArgs,
+	rmCmd := &cli.Command{
+		Name: "remove",
 	}
 
-	cmd.AddCommand(infoCmd, addCmd, rmCmd)
+	cmd.Subcommands = append(cmd.Subcommands, infoCmd, addCmd, rmCmd)
 	return cmd
 }
 
-func addStorageNodeIDFlag(flags *pflag.FlagSet) {
-	flags.String("storage-node-id", "", "storage node identifier")
+func addStorageNodeIDFlag(flags []cli.Flag, required bool) []cli.Flag {
+	return append(flags, &cli.StringFlag{
+		Name:     "storage-node-id",
+		Usage:    "storage node identifier",
+		EnvVars:  []string{"STORAGE_NODE_ID"},
+		Required: required,
+	})
 }
 
-func addLogStreamIDFlag(flags *pflag.FlagSet) {
-	flags.String("log-stream-id", "", "log stream identifier")
+func addLogStreamIDFlag(flags []cli.Flag, required bool) []cli.Flag {
+	return append(flags, &cli.StringFlag{
+		Name:     "log-stream-id",
+		Usage:    "log stream identifier",
+		EnvVars:  []string{"LOG_STREAM_ID"},
+		Required: required,
+	})
 }
 
-func newSNCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:     "storagenode",
+func newSNCmd() *cli.Command {
+	return &cli.Command{
+		Name:    "storagenode",
 		Aliases: []string{"sn"},
-		Args:    cobra.NoArgs,
 	}
 }
 
-func newLSCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:     "logstream",
+func newLSCmd() *cli.Command {
+	return &cli.Command{
+		Name:    "logstream",
 		Aliases: []string{"ls"},
-		Args:    cobra.NoArgs,
 	}
 }
 
-func newMRCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:     "metadatarepository",
+func newMRCmd() *cli.Command {
+	return &cli.Command{
+		Name:    "metadatarepository",
 		Aliases: []string{"mr"},
-		Args:    cobra.NoArgs,
+	}
+}
+
+func newClusterCmd() *cli.Command {
+	return &cli.Command{
+		Name: "cluster",
 	}
 }
