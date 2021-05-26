@@ -179,6 +179,10 @@ func (s *serverImpl) send(ctx context.Context, stream snpb.Replicator_ReplicateS
 	return c
 }
 
+func (s *serverImpl) SyncInit(ctx context.Context, req *snpb.SyncInitRequest) (rsp *snpb.SyncInitResponse, err error) {
+	panic("not implemented")
+}
+
 func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateRequest) (rsp *snpb.SyncReplicateResponse, err error) {
 	s.barrier.mu.RLock()
 	defer s.barrier.mu.RUnlock()
@@ -208,12 +212,13 @@ func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateR
 		span.End()
 	}()
 
-	logReplicator, ok := s.logReplicatorGetter.Replicator(req.GetLogStreamID())
+	lsID := req.GetDestination().LogStreamID
+	logReplicator, ok := s.logReplicatorGetter.Replicator(lsID)
 	if !ok {
-		err = errors.Errorf("no executor: %v", req.GetLogStreamID())
+		err = errors.Errorf("no executor: %v", lsID)
 		return rsp, err
 	}
-	err = logReplicator.SyncReplicate(ctx, req.GetFirst(), req.GetLast(), req.GetPayload())
+	err = logReplicator.SyncReplicate(ctx, req.GetPayload())
 	rsp = &snpb.SyncReplicateResponse{}
 	return rsp, err
 }

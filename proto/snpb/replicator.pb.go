@@ -367,21 +367,147 @@ func (m *SyncPayload) GetLogEntry() *varlogpb.LogEntry {
 	return nil
 }
 
+type SyncInitRequest struct {
+	ClusterID            github_daumkakao_com_varlog_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	Source               Replica                                                `protobuf:"bytes,2,opt,name=source,proto3" json:"source"`
+	Destination          Replica                                                `protobuf:"bytes,3,opt,name=destination,proto3" json:"destination"`
+	First                SyncPosition                                           `protobuf:"bytes,4,opt,name=first,proto3" json:"first"`
+	Last                 SyncPosition                                           `protobuf:"bytes,5,opt,name=last,proto3" json:"last"`
+	XXX_NoUnkeyedLiteral struct{}                                               `json:"-"`
+	XXX_unrecognized     []byte                                                 `json:"-"`
+	XXX_sizecache        int32                                                  `json:"-"`
+}
+
+func (m *SyncInitRequest) Reset()         { *m = SyncInitRequest{} }
+func (m *SyncInitRequest) String() string { return proto.CompactTextString(m) }
+func (*SyncInitRequest) ProtoMessage()    {}
+func (*SyncInitRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_85705cb817486b63, []int{5}
+}
+func (m *SyncInitRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SyncInitRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SyncInitRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SyncInitRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncInitRequest.Merge(m, src)
+}
+func (m *SyncInitRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *SyncInitRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncInitRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncInitRequest proto.InternalMessageInfo
+
+func (m *SyncInitRequest) GetClusterID() github_daumkakao_com_varlog_varlog_pkg_types.ClusterID {
+	if m != nil {
+		return m.ClusterID
+	}
+	return 0
+}
+
+func (m *SyncInitRequest) GetSource() Replica {
+	if m != nil {
+		return m.Source
+	}
+	return Replica{}
+}
+
+func (m *SyncInitRequest) GetDestination() Replica {
+	if m != nil {
+		return m.Destination
+	}
+	return Replica{}
+}
+
+func (m *SyncInitRequest) GetFirst() SyncPosition {
+	if m != nil {
+		return m.First
+	}
+	return SyncPosition{}
+}
+
+func (m *SyncInitRequest) GetLast() SyncPosition {
+	if m != nil {
+		return m.Last
+	}
+	return SyncPosition{}
+}
+
+type SyncInitResponse struct {
+	First                SyncPosition `protobuf:"bytes,1,opt,name=first,proto3" json:"first"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
+}
+
+func (m *SyncInitResponse) Reset()         { *m = SyncInitResponse{} }
+func (m *SyncInitResponse) String() string { return proto.CompactTextString(m) }
+func (*SyncInitResponse) ProtoMessage()    {}
+func (*SyncInitResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_85705cb817486b63, []int{6}
+}
+func (m *SyncInitResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SyncInitResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SyncInitResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SyncInitResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncInitResponse.Merge(m, src)
+}
+func (m *SyncInitResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *SyncInitResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncInitResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncInitResponse proto.InternalMessageInfo
+
+func (m *SyncInitResponse) GetFirst() SyncPosition {
+	if m != nil {
+		return m.First
+	}
+	return SyncPosition{}
+}
+
 type SyncReplicateRequest struct {
-	LogStreamID          github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	Payload              SyncPayload                                              `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload"`
-	First                SyncPosition                                             `protobuf:"bytes,3,opt,name=first,proto3" json:"first"`
-	Last                 SyncPosition                                             `protobuf:"bytes,4,opt,name=last,proto3" json:"last"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	ClusterID            github_daumkakao_com_varlog_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	Source               Replica                                                `protobuf:"bytes,2,opt,name=source,proto3" json:"source"`
+	Destination          Replica                                                `protobuf:"bytes,3,opt,name=destination,proto3" json:"destination"`
+	Payload              SyncPayload                                            `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload"`
+	XXX_NoUnkeyedLiteral struct{}                                               `json:"-"`
+	XXX_unrecognized     []byte                                                 `json:"-"`
+	XXX_sizecache        int32                                                  `json:"-"`
 }
 
 func (m *SyncReplicateRequest) Reset()         { *m = SyncReplicateRequest{} }
 func (m *SyncReplicateRequest) String() string { return proto.CompactTextString(m) }
 func (*SyncReplicateRequest) ProtoMessage()    {}
 func (*SyncReplicateRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_85705cb817486b63, []int{5}
+	return fileDescriptor_85705cb817486b63, []int{7}
 }
 func (m *SyncReplicateRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -410,11 +536,25 @@ func (m *SyncReplicateRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SyncReplicateRequest proto.InternalMessageInfo
 
-func (m *SyncReplicateRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
+func (m *SyncReplicateRequest) GetClusterID() github_daumkakao_com_varlog_varlog_pkg_types.ClusterID {
 	if m != nil {
-		return m.LogStreamID
+		return m.ClusterID
 	}
 	return 0
+}
+
+func (m *SyncReplicateRequest) GetSource() Replica {
+	if m != nil {
+		return m.Source
+	}
+	return Replica{}
+}
+
+func (m *SyncReplicateRequest) GetDestination() Replica {
+	if m != nil {
+		return m.Destination
+	}
+	return Replica{}
 }
 
 func (m *SyncReplicateRequest) GetPayload() SyncPayload {
@@ -422,20 +562,6 @@ func (m *SyncReplicateRequest) GetPayload() SyncPayload {
 		return m.Payload
 	}
 	return SyncPayload{}
-}
-
-func (m *SyncReplicateRequest) GetFirst() SyncPosition {
-	if m != nil {
-		return m.First
-	}
-	return SyncPosition{}
-}
-
-func (m *SyncReplicateRequest) GetLast() SyncPosition {
-	if m != nil {
-		return m.Last
-	}
-	return SyncPosition{}
 }
 
 type SyncReplicateResponse struct {
@@ -449,7 +575,7 @@ func (m *SyncReplicateResponse) Reset()         { *m = SyncReplicateResponse{} }
 func (m *SyncReplicateResponse) String() string { return proto.CompactTextString(m) }
 func (*SyncReplicateResponse) ProtoMessage()    {}
 func (*SyncReplicateResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_85705cb817486b63, []int{6}
+	return fileDescriptor_85705cb817486b63, []int{8}
 }
 func (m *SyncReplicateResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -492,6 +618,8 @@ func init() {
 	proto.RegisterType((*SyncPosition)(nil), "varlog.snpb.SyncPosition")
 	proto.RegisterType((*SyncStatus)(nil), "varlog.snpb.SyncStatus")
 	proto.RegisterType((*SyncPayload)(nil), "varlog.snpb.SyncPayload")
+	proto.RegisterType((*SyncInitRequest)(nil), "varlog.snpb.SyncInitRequest")
+	proto.RegisterType((*SyncInitResponse)(nil), "varlog.snpb.SyncInitResponse")
 	proto.RegisterType((*SyncReplicateRequest)(nil), "varlog.snpb.SyncReplicateRequest")
 	proto.RegisterType((*SyncReplicateResponse)(nil), "varlog.snpb.SyncReplicateResponse")
 }
@@ -499,56 +627,63 @@ func init() {
 func init() { proto.RegisterFile("proto/snpb/replicator.proto", fileDescriptor_85705cb817486b63) }
 
 var fileDescriptor_85705cb817486b63 = []byte{
-	// 773 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x55, 0x4f, 0x6f, 0xd3, 0x48,
-	0x14, 0xcf, 0xa4, 0xee, 0xbf, 0x49, 0xd3, 0xed, 0x4e, 0xb7, 0xdb, 0xac, 0x57, 0x1b, 0x67, 0xcd,
-	0x25, 0x42, 0x34, 0x81, 0x54, 0xa0, 0x52, 0xc4, 0x25, 0x21, 0x2a, 0x15, 0x21, 0x49, 0xc7, 0x3d,
-	0x20, 0x2e, 0x91, 0x13, 0x4f, 0x4d, 0x54, 0xc7, 0x63, 0x3c, 0x13, 0x20, 0x9f, 0x00, 0xd4, 0x23,
-	0xf7, 0x4a, 0x95, 0xe8, 0x81, 0x0b, 0x12, 0x67, 0xc4, 0x07, 0xe8, 0x11, 0xf1, 0x01, 0x22, 0x11,
-	0x2e, 0x9c, 0x39, 0xf6, 0x84, 0x3c, 0x8e, 0xdd, 0xfc, 0x01, 0xd4, 0x56, 0x15, 0x9c, 0x3c, 0xcf,
-	0xef, 0xf7, 0x7e, 0xf3, 0xde, 0xef, 0xbd, 0x99, 0x81, 0xff, 0x3a, 0x2e, 0xe5, 0x34, 0xcb, 0x6c,
-	0xa7, 0x9e, 0x75, 0x89, 0x63, 0x35, 0x1b, 0x3a, 0xa7, 0x6e, 0x46, 0xfc, 0x45, 0xb1, 0x27, 0xba,
-	0x6b, 0x51, 0x33, 0xe3, 0x79, 0xe5, 0x15, 0xb3, 0xc9, 0x1f, 0xb5, 0xeb, 0x99, 0x06, 0x6d, 0x65,
-	0x4d, 0x6a, 0xd2, 0xac, 0xc0, 0xd4, 0xdb, 0x3b, 0xc2, 0xf2, 0x69, 0xbc, 0x95, 0x1f, 0x2b, 0x2f,
-	0xfb, 0xb1, 0x4e, 0x3d, 0xdb, 0x22, 0x5c, 0x37, 0x74, 0xae, 0xfb, 0x0e, 0xf5, 0x2b, 0x80, 0x08,
-	0xf7, 0x77, 0x6a, 0x52, 0x1b, 0x93, 0xc7, 0x6d, 0xc2, 0x38, 0xa2, 0x30, 0x6e, 0x51, 0xb3, 0xc6,
-	0xb8, 0x4b, 0xf4, 0x56, 0xad, 0x69, 0x24, 0x40, 0x0a, 0xa4, 0xe3, 0xf9, 0x7b, 0xbd, 0xae, 0x12,
-	0x2b, 0x51, 0x53, 0x13, 0xff, 0x37, 0xef, 0x1c, 0x77, 0x95, 0xb5, 0x7e, 0x22, 0x86, 0xde, 0x6e,
-	0xed, 0xea, 0xbb, 0x3a, 0x15, 0x29, 0xf9, 0xdb, 0x05, 0x1f, 0x67, 0xd7, 0xcc, 0xf2, 0x8e, 0x43,
-	0x58, 0x66, 0x20, 0x16, 0xc7, 0xac, 0xd0, 0x30, 0xd0, 0x16, 0x94, 0x2c, 0x8b, 0xd9, 0x89, 0x68,
-	0x0a, 0xa4, 0xa5, 0xfc, 0xed, 0x5e, 0x57, 0x91, 0x4a, 0x25, 0xad, 0x7c, 0xdc, 0x55, 0xae, 0x9d,
-	0x6d, 0x83, 0x92, 0x56, 0xc6, 0x82, 0x0a, 0x25, 0xe0, 0xb4, 0xa3, 0x77, 0x2c, 0xaa, 0x1b, 0x89,
-	0x89, 0x14, 0x48, 0xcf, 0xe1, 0xc0, 0x54, 0x3f, 0x46, 0xe1, 0xe2, 0x50, 0xd1, 0xcc, 0xa1, 0x36,
-	0x23, 0xe8, 0x29, 0xfc, 0x83, 0x71, 0xea, 0xea, 0x26, 0xa9, 0xd9, 0xd4, 0x20, 0x27, 0x75, 0x57,
-	0x7a, 0x5d, 0x25, 0xae, 0xf9, 0xae, 0x32, 0x35, 0x88, 0xa8, 0x7c, 0xfd, 0x4c, 0x89, 0x0d, 0x45,
-	0xe3, 0x38, 0x1b, 0x30, 0x8d, 0x71, 0xb9, 0xa3, 0xbf, 0x48, 0xee, 0x89, 0x0b, 0x93, 0x5b, 0x7d,
-	0x07, 0xe0, 0x9c, 0xd6, 0xb1, 0x1b, 0x55, 0xca, 0x9a, 0x9e, 0xaa, 0xe1, 0x1e, 0xe0, 0xe2, 0x5a,
-	0xba, 0x05, 0x25, 0x73, 0x64, 0x4a, 0x36, 0xce, 0x43, 0xb9, 0x21, 0x28, 0x3d, 0xaa, 0x75, 0xe9,
-	0xcb, 0x81, 0x02, 0xd4, 0x4f, 0x00, 0x42, 0x2f, 0x79, 0x8d, 0xeb, 0xbc, 0xcd, 0xd0, 0x15, 0x38,
-	0xc9, 0xb8, 0xce, 0x89, 0xc8, 0x7d, 0x3e, 0xf7, 0x77, 0x66, 0xe0, 0xe8, 0x65, 0x02, 0x1c, 0xc1,
-	0x3e, 0x08, 0x5d, 0x87, 0x93, 0x3b, 0x4d, 0x97, 0x71, 0x91, 0x56, 0x2c, 0xf7, 0xcf, 0x18, 0x3a,
-	0x90, 0x24, 0x2f, 0x1d, 0x75, 0x95, 0x08, 0xf6, 0xd1, 0x68, 0x15, 0x4a, 0x96, 0xce, 0xb8, 0xe8,
-	0xc1, 0x29, 0xa2, 0x04, 0x18, 0xdd, 0x84, 0xd3, 0x8d, 0xb6, 0xeb, 0x12, 0x9b, 0x27, 0xa4, 0xd3,
-	0xc5, 0x05, 0x78, 0xf5, 0x25, 0x80, 0x31, 0xe1, 0xf7, 0x4f, 0x01, 0x2a, 0xc2, 0xf9, 0x06, 0x6d,
-	0xb5, 0x9a, 0xbc, 0xd6, 0xa0, 0x36, 0x27, 0xcf, 0xb8, 0xa8, 0x36, 0x96, 0x4b, 0x06, 0x8c, 0xc1,
-	0x9d, 0x91, 0x29, 0x08, 0x58, 0xc1, 0x47, 0xe1, 0x78, 0x63, 0xd0, 0x44, 0x37, 0xe0, 0xac, 0x37,
-	0xbb, 0xc4, 0xe6, 0x6e, 0x67, 0x54, 0x81, 0x90, 0xa1, 0x44, 0xcd, 0xa2, 0x07, 0xc0, 0x33, 0x56,
-	0x7f, 0xb5, 0x2e, 0x1d, 0x79, 0xc2, 0xbf, 0x89, 0xc2, 0xbf, 0xbc, 0xa4, 0x82, 0xe3, 0x48, 0x7e,
-	0xdb, 0x0d, 0xb4, 0x76, 0x72, 0x5d, 0xf8, 0x55, 0x24, 0xc6, 0x95, 0xf5, 0xfd, 0x81, 0xb0, 0x7d,
-	0xf8, 0x49, 0xff, 0x27, 0xce, 0xd5, 0x7f, 0xe9, 0x0c, 0xfd, 0x57, 0xef, 0xc2, 0xa5, 0x11, 0xb9,
-	0xfa, 0x77, 0x57, 0x16, 0x4e, 0x31, 0x31, 0xbc, 0xfd, 0x2e, 0x2e, 0x7f, 0x77, 0x66, 0xdb, 0x0c,
-	0xf7, 0x61, 0x97, 0x9f, 0x03, 0x38, 0x1b, 0x8e, 0x32, 0xfa, 0x0f, 0x4e, 0x16, 0x31, 0xae, 0xe0,
-	0x85, 0x88, 0x8c, 0xf6, 0xf6, 0x53, 0xf3, 0xa1, 0xa7, 0xe8, 0xba, 0xd4, 0x45, 0x69, 0x18, 0xdb,
-	0x2c, 0xd7, 0xaa, 0xb8, 0xb2, 0x81, 0x8b, 0x9a, 0xb6, 0x00, 0xe4, 0xe5, 0xbd, 0xfd, 0xd4, 0x62,
-	0x08, 0xda, 0xb4, 0xab, 0x2e, 0x35, 0x5d, 0xc2, 0x18, 0xba, 0x04, 0x67, 0x0a, 0x95, 0xfb, 0xd5,
-	0x52, 0x71, 0xbb, 0xb8, 0x10, 0x95, 0x97, 0xf6, 0xf6, 0x53, 0x7f, 0x86, 0xb0, 0x02, 0x6d, 0x39,
-	0x16, 0xe1, 0x44, 0x9e, 0x7b, 0xf1, 0x2a, 0x19, 0x79, 0x7d, 0x98, 0x8c, 0xbc, 0x3d, 0x4c, 0x82,
-	0xdc, 0x7b, 0x00, 0x21, 0x0e, 0x5f, 0x3b, 0xb4, 0x0d, 0x67, 0xc3, 0xf2, 0x90, 0x32, 0x54, 0xc6,
-	0xf8, 0x4b, 0x25, 0xa7, 0x7e, 0x0c, 0xf0, 0x95, 0x51, 0x23, 0x69, 0x70, 0x15, 0xa0, 0x07, 0x30,
-	0x3e, 0x24, 0x1c, 0xfa, 0x7f, 0x4c, 0xa0, 0xd1, 0x19, 0x94, 0xd5, 0x9f, 0x41, 0x02, 0xf6, 0xfc,
-	0xad, 0xa3, 0x5e, 0x12, 0x7c, 0xe8, 0x25, 0xc1, 0xc1, 0xe7, 0x24, 0x78, 0xb8, 0x72, 0x9a, 0x69,
-	0x0c, 0x5f, 0xf9, 0xfa, 0x94, 0x58, 0xaf, 0x7e, 0x0b, 0x00, 0x00, 0xff, 0xff, 0x22, 0x47, 0x5b,
-	0xb6, 0xfa, 0x07, 0x00, 0x00,
+	// 888 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x56, 0xcd, 0x6f, 0x1b, 0x45,
+	0x14, 0xf7, 0xb8, 0x9b, 0x34, 0x7e, 0x8e, 0xd3, 0x30, 0x6d, 0x89, 0x59, 0xa8, 0xd7, 0x2c, 0x17,
+	0x0b, 0x51, 0x1b, 0x5c, 0x51, 0x95, 0x00, 0x97, 0x18, 0x2b, 0x58, 0x98, 0x24, 0x1d, 0xf7, 0x80,
+	0xb8, 0x58, 0xeb, 0xdd, 0xc9, 0xb2, 0xca, 0x7a, 0x67, 0x99, 0x99, 0x05, 0xf2, 0x17, 0x14, 0xe5,
+	0xc8, 0x3d, 0x52, 0x25, 0x7a, 0x40, 0x9c, 0x38, 0xf3, 0x17, 0xe4, 0x88, 0xb8, 0x70, 0xb3, 0x84,
+	0xb9, 0x70, 0xe6, 0xd8, 0x13, 0xda, 0xd9, 0x0f, 0x3b, 0x71, 0x5b, 0xc5, 0x55, 0xc5, 0x81, 0xd3,
+	0xce, 0xcc, 0xfb, 0xbd, 0x8f, 0xf9, 0xbd, 0x8f, 0x1d, 0x78, 0x3d, 0xe4, 0x4c, 0xb2, 0x96, 0x08,
+	0xc2, 0x51, 0x8b, 0xd3, 0xd0, 0xf7, 0x6c, 0x4b, 0x32, 0xde, 0x54, 0xa7, 0xb8, 0xfc, 0x8d, 0xc5,
+	0x7d, 0xe6, 0x36, 0x63, 0xa9, 0x7e, 0xdb, 0xf5, 0xe4, 0x57, 0xd1, 0xa8, 0x69, 0xb3, 0x71, 0xcb,
+	0x65, 0x2e, 0x6b, 0x29, 0xcc, 0x28, 0x3a, 0x54, 0xbb, 0xc4, 0x4c, 0xbc, 0x4a, 0x74, 0xf5, 0xad,
+	0x44, 0x37, 0x1c, 0xb5, 0xc6, 0x54, 0x5a, 0x8e, 0x25, 0xad, 0x54, 0x80, 0xe7, 0x7d, 0x25, 0x67,
+	0xe6, 0x3f, 0x08, 0x30, 0x49, 0xbd, 0x7b, 0x2c, 0x20, 0xf4, 0xeb, 0x88, 0x0a, 0x89, 0x19, 0x54,
+	0x7c, 0xe6, 0x0e, 0x85, 0xe4, 0xd4, 0x1a, 0x0f, 0x3d, 0xa7, 0x8a, 0xea, 0xa8, 0x51, 0xd9, 0xf9,
+	0x6c, 0x3a, 0x31, 0xca, 0x7d, 0xe6, 0x0e, 0xd4, 0x79, 0xef, 0x93, 0x27, 0x13, 0xe3, 0x5e, 0x1a,
+	0x9c, 0x63, 0x45, 0xe3, 0x23, 0xeb, 0xc8, 0x62, 0x2a, 0xcc, 0x24, 0x84, 0xec, 0x13, 0x1e, 0xb9,
+	0x2d, 0x79, 0x1c, 0x52, 0xd1, 0x9c, 0xd3, 0x25, 0x65, 0x3f, 0xdf, 0x38, 0xf8, 0x3e, 0x68, 0xbe,
+	0x2f, 0x82, 0x6a, 0xb1, 0x8e, 0x1a, 0xda, 0xce, 0xc7, 0xd3, 0x89, 0xa1, 0xf5, 0xfb, 0x83, 0xbd,
+	0x27, 0x13, 0xe3, 0xbd, 0xe5, 0x1c, 0xf4, 0x07, 0x7b, 0x44, 0x99, 0xc2, 0x55, 0xb8, 0x1a, 0x5a,
+	0xc7, 0x3e, 0xb3, 0x9c, 0xea, 0x95, 0x3a, 0x6a, 0xac, 0x93, 0x6c, 0x6b, 0xfe, 0x5e, 0x84, 0xeb,
+	0xe7, 0x2e, 0x2d, 0x42, 0x16, 0x08, 0x8a, 0xbf, 0x85, 0x6b, 0x42, 0x32, 0x6e, 0xb9, 0x74, 0x18,
+	0x30, 0x87, 0xce, 0xee, 0xbd, 0x3f, 0x9d, 0x18, 0x95, 0x41, 0x22, 0xda, 0x63, 0x0e, 0x55, 0x37,
+	0xdf, 0x5e, 0x2a, 0xb0, 0x73, 0xda, 0xa4, 0x22, 0xe6, 0xb6, 0xce, 0x22, 0xdd, 0xc5, 0xff, 0x88,
+	0xee, 0x2b, 0x2f, 0x8d, 0x6e, 0xf3, 0x57, 0x04, 0xeb, 0x83, 0xe3, 0xc0, 0x3e, 0x60, 0xc2, 0x8b,
+	0x59, 0xcd, 0x7d, 0xa0, 0x97, 0x97, 0xd2, 0xfb, 0xa0, 0xb9, 0x17, 0xaa, 0x64, 0xf7, 0x45, 0x4c,
+	0xee, 0x2a, 0x93, 0xb1, 0xa9, 0x6d, 0xed, 0xef, 0x47, 0x06, 0x32, 0xff, 0x44, 0x00, 0x71, 0xf0,
+	0x03, 0x69, 0xc9, 0x48, 0xe0, 0x77, 0x60, 0x45, 0x48, 0x4b, 0x52, 0x15, 0xfb, 0x46, 0xfb, 0xd5,
+	0xe6, 0x5c, 0x3b, 0x36, 0x33, 0x1c, 0x25, 0x09, 0x08, 0xbf, 0x0f, 0x2b, 0x87, 0x1e, 0x17, 0x52,
+	0x85, 0x55, 0x6e, 0xbf, 0xb6, 0x80, 0xce, 0x28, 0xd9, 0xd1, 0xce, 0x26, 0x46, 0x81, 0x24, 0x68,
+	0x7c, 0x07, 0x34, 0xdf, 0x12, 0x52, 0xe5, 0xe0, 0x12, 0x5a, 0x0a, 0x8c, 0x3f, 0x80, 0xab, 0x76,
+	0xc4, 0x39, 0x0d, 0x64, 0x55, 0xbb, 0x9c, 0x5e, 0x86, 0x37, 0x7f, 0x40, 0x50, 0x56, 0xf2, 0xa4,
+	0x0b, 0x70, 0x17, 0x36, 0x6c, 0x36, 0x1e, 0x7b, 0x72, 0x68, 0xb3, 0x40, 0xd2, 0xef, 0xa4, 0xba,
+	0x6d, 0xb9, 0x5d, 0xcb, 0x2c, 0x66, 0x73, 0xa4, 0xd9, 0x51, 0xb0, 0x4e, 0x82, 0x22, 0x15, 0x7b,
+	0x7e, 0x8b, 0xef, 0x42, 0x29, 0xae, 0x5d, 0x1a, 0x48, 0x7e, 0x7c, 0x91, 0x81, 0xdc, 0x42, 0x9f,
+	0xb9, 0xdd, 0x18, 0x40, 0xd6, 0xfc, 0x74, 0xb5, 0xad, 0x9d, 0xc5, 0xc4, 0xff, 0x51, 0x84, 0x6b,
+	0x71, 0x50, 0xbd, 0xc0, 0x93, 0xd9, 0xf0, 0x39, 0x04, 0xb0, 0xfd, 0x48, 0x48, 0xca, 0x67, 0x1d,
+	0xb8, 0x3b, 0x9d, 0x18, 0xa5, 0x4e, 0x72, 0xaa, 0x1a, 0xe1, 0xee, 0x52, 0x09, 0xcf, 0x35, 0x49,
+	0x29, 0x35, 0xdd, 0x73, 0x70, 0x1b, 0x56, 0x05, 0x8b, 0xb8, 0x4d, 0xd3, 0xb0, 0x6f, 0x9c, 0xa3,
+	0x32, 0x1d, 0x10, 0x29, 0x8b, 0x29, 0x12, 0x7f, 0x04, 0x65, 0x87, 0x0a, 0xe9, 0x05, 0x6a, 0x72,
+	0xa4, 0xb9, 0x7b, 0x9e, 0xe2, 0x3c, 0x7c, 0x56, 0x29, 0xda, 0x0b, 0x55, 0xca, 0xca, 0x12, 0x95,
+	0x62, 0xf6, 0x60, 0x73, 0x46, 0x6c, 0x3a, 0xe0, 0x72, 0xff, 0x68, 0x19, 0xff, 0xe6, 0xcf, 0x45,
+	0xb8, 0x11, 0x4b, 0xb3, 0x99, 0x49, 0xff, 0xff, 0x99, 0xba, 0x37, 0xfb, 0x79, 0x24, 0xb9, 0xaa,
+	0x2e, 0x72, 0x95, 0xc8, 0xb3, 0x36, 0xcb, 0x7e, 0x2e, 0x9f, 0xc2, 0xcd, 0x0b, 0x5c, 0xa5, 0xe4,
+	0xb7, 0x60, 0x55, 0xa8, 0xf1, 0x92, 0xb2, 0xbf, 0xf5, 0xd4, 0xa9, 0x12, 0x09, 0x92, 0xc2, 0xde,
+	0x7e, 0x88, 0xa0, 0x94, 0x0f, 0x1b, 0x7c, 0x0b, 0x56, 0xba, 0x84, 0xec, 0x93, 0xcd, 0x82, 0x8e,
+	0x4f, 0x4e, 0xeb, 0x1b, 0xb9, 0xa4, 0xcb, 0x39, 0xe3, 0xb8, 0x01, 0xe5, 0xde, 0xde, 0xf0, 0x80,
+	0xec, 0xef, 0x92, 0xee, 0x60, 0xb0, 0x89, 0xf4, 0xad, 0x93, 0xd3, 0xfa, 0xf5, 0x1c, 0xd4, 0x0b,
+	0x0e, 0x38, 0x73, 0x39, 0x15, 0x02, 0xbf, 0x05, 0x6b, 0x9d, 0xfd, 0xcf, 0x0f, 0xfa, 0xdd, 0x07,
+	0xdd, 0xcd, 0xa2, 0x7e, 0xf3, 0xe4, 0xb4, 0xfe, 0x4a, 0x0e, 0xeb, 0xb0, 0x71, 0xe8, 0x53, 0x49,
+	0xf5, 0xf5, 0xef, 0x7f, 0xac, 0x15, 0x7e, 0x7a, 0x5c, 0x2b, 0xfc, 0xf2, 0xb8, 0x86, 0xda, 0x0f,
+	0x8b, 0x00, 0x24, 0x7f, 0xa3, 0xe0, 0x07, 0x50, 0xca, 0xaf, 0x87, 0x8d, 0xa7, 0x51, 0x3a, 0xf7,
+	0x96, 0xd0, 0xeb, 0xcf, 0x06, 0x24, 0xcc, 0x98, 0x85, 0x06, 0x7a, 0x17, 0xe1, 0x1e, 0xac, 0x65,
+	0x05, 0x8b, 0xdf, 0x58, 0xe0, 0x66, 0x6e, 0x40, 0xe8, 0xb7, 0x9e, 0x21, 0xcd, 0xcc, 0xe1, 0x2f,
+	0xa0, 0x72, 0x2e, 0x07, 0xf8, 0xcd, 0x05, 0x8d, 0x8b, 0xb5, 0xac, 0x9b, 0xcf, 0x83, 0x64, 0x96,
+	0x77, 0x3e, 0x3c, 0x9b, 0xd6, 0xd0, 0x6f, 0xd3, 0x1a, 0x7a, 0xf4, 0x57, 0x0d, 0x7d, 0x79, 0xfb,
+	0x32, 0xa5, 0x9d, 0x3f, 0xf3, 0x46, 0xab, 0x6a, 0x7d, 0xe7, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff,
+	0x79, 0xe0, 0x24, 0x52, 0xfb, 0x09, 0x00, 0x00,
 }
 
 func (x SyncState) String() string {
@@ -602,6 +737,7 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ReplicatorClient interface {
 	Replicate(ctx context.Context, opts ...grpc.CallOption) (Replicator_ReplicateClient, error)
+	SyncInit(ctx context.Context, in *SyncInitRequest, opts ...grpc.CallOption) (*SyncInitResponse, error)
 	SyncReplicate(ctx context.Context, in *SyncReplicateRequest, opts ...grpc.CallOption) (*SyncReplicateResponse, error)
 }
 
@@ -644,6 +780,15 @@ func (x *replicatorReplicateClient) Recv() (*ReplicationResponse, error) {
 	return m, nil
 }
 
+func (c *replicatorClient) SyncInit(ctx context.Context, in *SyncInitRequest, opts ...grpc.CallOption) (*SyncInitResponse, error) {
+	out := new(SyncInitResponse)
+	err := c.cc.Invoke(ctx, "/varlog.snpb.Replicator/SyncInit", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *replicatorClient) SyncReplicate(ctx context.Context, in *SyncReplicateRequest, opts ...grpc.CallOption) (*SyncReplicateResponse, error) {
 	out := new(SyncReplicateResponse)
 	err := c.cc.Invoke(ctx, "/varlog.snpb.Replicator/SyncReplicate", in, out, opts...)
@@ -656,6 +801,7 @@ func (c *replicatorClient) SyncReplicate(ctx context.Context, in *SyncReplicateR
 // ReplicatorServer is the server API for Replicator service.
 type ReplicatorServer interface {
 	Replicate(Replicator_ReplicateServer) error
+	SyncInit(context.Context, *SyncInitRequest) (*SyncInitResponse, error)
 	SyncReplicate(context.Context, *SyncReplicateRequest) (*SyncReplicateResponse, error)
 }
 
@@ -665,6 +811,9 @@ type UnimplementedReplicatorServer struct {
 
 func (*UnimplementedReplicatorServer) Replicate(srv Replicator_ReplicateServer) error {
 	return status.Errorf(codes.Unimplemented, "method Replicate not implemented")
+}
+func (*UnimplementedReplicatorServer) SyncInit(ctx context.Context, req *SyncInitRequest) (*SyncInitResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncInit not implemented")
 }
 func (*UnimplementedReplicatorServer) SyncReplicate(ctx context.Context, req *SyncReplicateRequest) (*SyncReplicateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncReplicate not implemented")
@@ -700,6 +849,24 @@ func (x *replicatorReplicateServer) Recv() (*ReplicationRequest, error) {
 	return m, nil
 }
 
+func _Replicator_SyncInit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncInitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReplicatorServer).SyncInit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.snpb.Replicator/SyncInit",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReplicatorServer).SyncInit(ctx, req.(*SyncInitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Replicator_SyncReplicate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SyncReplicateRequest)
 	if err := dec(in); err != nil {
@@ -722,6 +889,10 @@ var _Replicator_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "varlog.snpb.Replicator",
 	HandlerType: (*ReplicatorServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SyncInit",
+			Handler:    _Replicator_SyncInit_Handler,
+		},
 		{
 			MethodName: "SyncReplicate",
 			Handler:    _Replicator_SyncReplicate_Handler,
@@ -974,6 +1145,115 @@ func (m *SyncPayload) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *SyncInitRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SyncInitRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SyncInitRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	{
+		size, err := m.Last.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintReplicator(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x2a
+	{
+		size, err := m.First.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintReplicator(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x22
+	{
+		size, err := m.Destination.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintReplicator(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.Source.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintReplicator(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	if m.ClusterID != 0 {
+		i = encodeVarintReplicator(dAtA, i, uint64(m.ClusterID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SyncInitResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SyncInitResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SyncInitResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	{
+		size, err := m.First.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintReplicator(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
 func (m *SyncReplicateRequest) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
@@ -999,7 +1279,7 @@ func (m *SyncReplicateRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	{
-		size, err := m.Last.MarshalToSizedBuffer(dAtA[:i])
+		size, err := m.Payload.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
 			return 0, err
 		}
@@ -1009,7 +1289,7 @@ func (m *SyncReplicateRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i--
 	dAtA[i] = 0x22
 	{
-		size, err := m.First.MarshalToSizedBuffer(dAtA[:i])
+		size, err := m.Destination.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
 			return 0, err
 		}
@@ -1019,7 +1299,7 @@ func (m *SyncReplicateRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i--
 	dAtA[i] = 0x1a
 	{
-		size, err := m.Payload.MarshalToSizedBuffer(dAtA[:i])
+		size, err := m.Source.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
 			return 0, err
 		}
@@ -1028,8 +1308,8 @@ func (m *SyncReplicateRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	}
 	i--
 	dAtA[i] = 0x12
-	if m.LogStreamID != 0 {
-		i = encodeVarintReplicator(dAtA, i, uint64(m.LogStreamID))
+	if m.ClusterID != 0 {
+		i = encodeVarintReplicator(dAtA, i, uint64(m.ClusterID))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -1188,20 +1468,57 @@ func (m *SyncPayload) ProtoSize() (n int) {
 	return n
 }
 
+func (m *SyncInitRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.ClusterID != 0 {
+		n += 1 + sovReplicator(uint64(m.ClusterID))
+	}
+	l = m.Source.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	l = m.Destination.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	l = m.First.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	l = m.Last.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *SyncInitResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.First.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *SyncReplicateRequest) ProtoSize() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.LogStreamID != 0 {
-		n += 1 + sovReplicator(uint64(m.LogStreamID))
+	if m.ClusterID != 0 {
+		n += 1 + sovReplicator(uint64(m.ClusterID))
 	}
+	l = m.Source.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	l = m.Destination.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
 	l = m.Payload.ProtoSize()
-	n += 1 + l + sovReplicator(uint64(l))
-	l = m.First.ProtoSize()
-	n += 1 + l + sovReplicator(uint64(l))
-	l = m.Last.ProtoSize()
 	n += 1 + l + sovReplicator(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -1864,7 +2181,7 @@ func (m *SyncPayload) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SyncReplicateRequest) Unmarshal(dAtA []byte) error {
+func (m *SyncInitRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1887,17 +2204,17 @@ func (m *SyncReplicateRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SyncReplicateRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: SyncInitRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SyncReplicateRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SyncInitRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterID", wireType)
 			}
-			m.LogStreamID = 0
+			m.ClusterID = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowReplicator
@@ -1907,14 +2224,14 @@ func (m *SyncReplicateRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LogStreamID |= github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID(b&0x7F) << shift
+				m.ClusterID |= github_daumkakao_com_varlog_varlog_pkg_types.ClusterID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Payload", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Source", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1941,11 +2258,44 @@ func (m *SyncReplicateRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.Payload.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Source.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Destination", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Destination.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field First", wireType)
 			}
@@ -1978,7 +2328,7 @@ func (m *SyncReplicateRequest) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 4:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Last", wireType)
 			}
@@ -2008,6 +2358,259 @@ func (m *SyncReplicateRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.Last.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipReplicator(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SyncInitResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowReplicator
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SyncInitResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SyncInitResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field First", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.First.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipReplicator(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SyncReplicateRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowReplicator
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SyncReplicateRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SyncReplicateRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterID", wireType)
+			}
+			m.ClusterID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ClusterID |= github_daumkakao_com_varlog_varlog_pkg_types.ClusterID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Source", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Source.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Destination", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Destination.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Payload", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Payload.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

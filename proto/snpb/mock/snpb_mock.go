@@ -59,6 +59,26 @@ func (mr *MockReplicatorClientMockRecorder) Replicate(arg0 interface{}, arg1 ...
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockReplicatorClient)(nil).Replicate), varargs...)
 }
 
+// SyncInit mocks base method.
+func (m *MockReplicatorClient) SyncInit(arg0 context.Context, arg1 *snpb.SyncInitRequest, arg2 ...grpc.CallOption) (*snpb.SyncInitResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncInit", varargs...)
+	ret0, _ := ret[0].(*snpb.SyncInitResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncInit indicates an expected call of SyncInit.
+func (mr *MockReplicatorClientMockRecorder) SyncInit(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncInit", reflect.TypeOf((*MockReplicatorClient)(nil).SyncInit), varargs...)
+}
+
 // SyncReplicate mocks base method.
 func (m *MockReplicatorClient) SyncReplicate(arg0 context.Context, arg1 *snpb.SyncReplicateRequest, arg2 ...grpc.CallOption) (*snpb.SyncReplicateResponse, error) {
 	m.ctrl.T.Helper()
@@ -114,6 +134,21 @@ func (m *MockReplicatorServer) Replicate(arg0 snpb.Replicator_ReplicateServer) e
 func (mr *MockReplicatorServerMockRecorder) Replicate(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockReplicatorServer)(nil).Replicate), arg0)
+}
+
+// SyncInit mocks base method.
+func (m *MockReplicatorServer) SyncInit(arg0 context.Context, arg1 *snpb.SyncInitRequest) (*snpb.SyncInitResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncInit", arg0, arg1)
+	ret0, _ := ret[0].(*snpb.SyncInitResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncInit indicates an expected call of SyncInit.
+func (mr *MockReplicatorServerMockRecorder) SyncInit(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncInit", reflect.TypeOf((*MockReplicatorServer)(nil).SyncInit), arg0, arg1)
 }
 
 // SyncReplicate mocks base method.

@@ -66,18 +66,33 @@ func (mr *MockReplicatorMockRecorder) Sync(arg0, arg1, arg2 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockReplicator)(nil).Sync), arg0, arg1, arg2)
 }
 
-// SyncReplicate mocks base method.
-func (m *MockReplicator) SyncReplicate(arg0 context.Context, arg1, arg2 snpb.SyncPosition, arg3 snpb.SyncPayload) error {
+// SyncInit mocks base method.
+func (m *MockReplicator) SyncInit(arg0 context.Context, arg1, arg2 snpb.SyncPosition) (snpb.SyncPosition, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncReplicate", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "SyncInit", arg0, arg1, arg2)
+	ret0, _ := ret[0].(snpb.SyncPosition)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncInit indicates an expected call of SyncInit.
+func (mr *MockReplicatorMockRecorder) SyncInit(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncInit", reflect.TypeOf((*MockReplicator)(nil).SyncInit), arg0, arg1, arg2)
+}
+
+// SyncReplicate mocks base method.
+func (m *MockReplicator) SyncReplicate(arg0 context.Context, arg1 snpb.SyncPayload) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncReplicate", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SyncReplicate indicates an expected call of SyncReplicate.
-func (mr *MockReplicatorMockRecorder) SyncReplicate(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockReplicatorMockRecorder) SyncReplicate(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicator)(nil).SyncReplicate), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicator)(nil).SyncReplicate), arg0, arg1)
 }
 
 // MockGetter is a mock of Getter interface.

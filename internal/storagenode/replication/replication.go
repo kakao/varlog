@@ -23,7 +23,8 @@ type SyncTaskStatus struct {
 
 type Replicator interface {
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
-	SyncReplicate(ctx context.Context, first, last snpb.SyncPosition, payload snpb.SyncPayload) error
+	SyncInit(ctx context.Context, first, last snpb.SyncPosition) (snpb.SyncPosition, error)
+	SyncReplicate(ctx context.Context, payload snpb.SyncPayload) error
 	Sync(ctx context.Context, replica snpb.Replica, lastGLSN types.GLSN) (*SyncTaskStatus, error)
 }
 
