@@ -35,3 +35,7 @@ func (t *commitTask) release() {
 	t.committedLLSNBegin = types.InvalidLLSN
 	commitTaskPool.Put(t)
 }
+
+func (t *commitTask) stale(globalHWM types.GLSN) bool {
+	return t.highWatermark <= globalHWM
+}

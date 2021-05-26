@@ -89,10 +89,7 @@ func (s *server) GetReport(ctx context.Context, req *snpb.GetReportRequest) (*sn
 			}
 			rsp = &snpb.GetReportResponse{
 				StorageNodeID:   s.lsr.StorageNodeID(),
-				UncommitReports: make([]*snpb.LogStreamUncommitReport, 0, len(reports)),
-			}
-			for _, report := range reports {
-				rsp.UncommitReports = append(rsp.UncommitReports, report)
+				UncommitReports: reports,
 			}
 			return rsp, nil
 		},

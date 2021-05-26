@@ -187,18 +187,20 @@ func (c *committerImpl) ready(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	c.commitTaskBatch = append(c.commitTaskBatch, ct)
-
 	globalHighWatermark, _ := c.lsc.reportCommitBase()
+	if ct.stale(globalHighWatermark) {
+		ct.release()
+	} else {
+		c.commitTaskBatch = append(c.commitTaskBatch, ct)
+	}
 
-	popSize := mathutil.MinInt(c.commitTaskBatchSize-1, c.commitTaskQ.size())
+	popSize := mathutil.MinInt(c.commitTaskBatchSize-len(c.commitTaskBatch), c.commitTaskQ.size())
 	for i := 0; i < popSize; i++ {
 		ct := c.commitTaskQ.pop()
-		if ct.highWatermark <= globalHighWatermark {
+		if ct.stale(globalHighWatermark) {
 			ct.release()
 			continue
 		}
-
 		c.commitTaskBatch = append(c.commitTaskBatch, ct)
 	}
 	return nil
@@ -214,6 +216,11 @@ func (c *committerImpl) commit(ctx context.Context) error {
 		return c.commitTaskBatch[i].highWatermark < c.commitTaskBatch[j].highWatermark
 	})
 	for _, ct := range c.commitTaskBatch {
+		globalHighWatermark, _ := c.lsc.reportCommitBase()
+		if ct.stale(globalHighWatermark) {
+			continue
+		}
+
 		if err := c.commitInternal(ctx, ct); err != nil {
 			return err
 		}

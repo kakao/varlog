@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"golang.org/x/sync/singleflight"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -24,7 +23,6 @@ type Reporter interface {
 
 type reporter struct {
 	config
-	reportSG singleflight.Group
 	commitWG sync.WaitGroup
 	running  struct {
 		r  bool
@@ -68,11 +66,8 @@ func (r *reporter) GetReport(ctx context.Context) ([]*snpb.LogStreamUncommitRepo
 		return nil, errors.WithStack(verrors.ErrClosed)
 	}
 
-	reports, err, _ := r.reportSG.Do("report", func() (interface{}, error) {
-		reports := r.report(ctx)
-		return reports, nil
-	})
-	return reports.([]*snpb.LogStreamUncommitReport), err
+	reports := r.report(ctx)
+	return reports, nil
 }
 
 func (r *reporter) report(ctx context.Context) (reports []*snpb.LogStreamUncommitReport) {
