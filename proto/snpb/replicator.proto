@@ -4,6 +4,7 @@ package varlog.snpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "varlogpb/metadata.proto";
+import "snpb/replica.proto";
 
 option go_package = "github.com/kakao/varlog/proto/snpb";
 
@@ -83,15 +84,31 @@ message SyncPayload {
     varlogpb.LogEntry log_entry = 2;
 }
 
-message SyncReplicateRequest {
-    uint32 log_stream_id = 1 [
+message SyncInitRequest {
+    uint32 cluster_id = 1 [
         (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
+            "github.com/kakao/varlog/pkg/types.ClusterID",
+        (gogoproto.customname) = "ClusterID"
     ];
-    SyncPayload payload = 2 [(gogoproto.nullable) = false];
-    SyncPosition first = 3 [(gogoproto.nullable) = false];
-    SyncPosition last = 4 [(gogoproto.nullable) = false];
+    Replica source = 2 [(gogoproto.nullable) = false];
+    Replica destination = 3 [(gogoproto.nullable) = false];
+    SyncPosition first = 4 [(gogoproto.nullable) = false];
+    SyncPosition last = 5 [(gogoproto.nullable) = false];
+}
+
+message SyncInitResponse {
+    SyncPosition first = 1 [(gogoproto.nullable) = false];
+}
+
+message SyncReplicateRequest {
+    uint32 cluster_id = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.ClusterID",
+        (gogoproto.customname) = "ClusterID"
+    ];
+    Replica source = 2 [(gogoproto.nullable) = false];
+    Replica destination = 3 [(gogoproto.nullable) = false];
+    SyncPayload payload = 4 [(gogoproto.nullable) = false];
 }
 
 message SyncReplicateResponse {
@@ -101,5 +118,6 @@ message SyncReplicateResponse {
 service Replicator {
     rpc Replicate(stream ReplicationRequest)
         returns (stream ReplicationResponse) {}
+    rpc SyncInit(SyncInitRequest) returns (SyncInitResponse) {}
     rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}
 }

@@ -192,6 +192,10 @@ Loop:
 	}
 }
 
+func (c *client) SyncInit(ctx context.Context, first, last snpb.SyncPosition) (snpb.SyncPosition, error) {
+	panic("not implemented")
+}
+
 func (c *client) SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current snpb.SyncPosition, data []byte) error {
 	c.closed.mu.RLock()
 	if c.closed.val {
@@ -201,8 +205,6 @@ func (c *client) SyncReplicate(ctx context.Context, logStreamID types.LogStreamI
 	defer c.closed.mu.RUnlock()
 
 	req := &snpb.SyncReplicateRequest{
-		First: first,
-		Last:  last,
 		Payload: snpb.SyncPayload{
 			LogEntry: &varlogpb.LogEntry{
 				GLSN: current.GLSN,
@@ -210,7 +212,6 @@ func (c *client) SyncReplicate(ctx context.Context, logStreamID types.LogStreamI
 				Data: data,
 			},
 		},
-		LogStreamID: logStreamID,
 	}
 	_, err := c.rpcClient.SyncReplicate(ctx, req)
 	return errors.WithStack(verrors.FromStatusError(err))

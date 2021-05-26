@@ -38,7 +38,11 @@ func (e *executor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) 
 	return nil
 }
 
-func (e *executor) SyncReplicate(ctx context.Context, first, last snpb.SyncPosition, payload snpb.SyncPayload) error {
+func (e *executor) SyncInit(ctx context.Context, first, last snpb.SyncPosition) (snpb.SyncPosition, error) {
+	panic("not implemented")
+}
+
+func (e *executor) SyncReplicate(ctx context.Context, payload snpb.SyncPayload) error {
 	if err := e.guard(); err != nil {
 		return err
 	}
@@ -148,7 +152,7 @@ func (e *executor) syncer(ctx context.Context, sts *replication.SyncTaskStatus) 
 					Data: result.LogEntry.Data,
 				},
 			}
-			if err = e.SyncReplicate(ctx, first, last, payload); err != nil {
+			if err = e.SyncReplicate(ctx, payload); err != nil {
 				break
 			}
 
