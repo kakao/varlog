@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/goleak"
+
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/verrors"
 
@@ -282,4 +284,70 @@ func TestCommitter(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	committer.stop()
+}
+
+func TestCommitterCatchupCommitVarlog459(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	const (
+		commitTaskQueueSize = 1000
+		commitQueueSize     = 1000
+		committerBatchSize  = 1000
+		goal                = 100
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	strg := newTestStorage(ctrl, newTestStorageConfig())
+	lsc := newLogStreamContext()
+	decider := newDecidableCondition(lsc)
+	state := NewMockStateProvider(ctrl)
+
+	state.EXPECT().mutableWithBarrier().Return(nil).AnyTimes()
+	state.EXPECT().releaseBarrier().Return().AnyTimes()
+	state.EXPECT().setSealing().Return().AnyTimes()
+
+	// create committer
+	committer, err := newCommitter(committerConfig{
+		commitTaskQueueSize: commitTaskQueueSize,
+		commitTaskBatchSize: committerBatchSize,
+		commitQueueSize:     commitQueueSize,
+		strg:                strg,
+		lsc:                 lsc,
+		decider:             decider,
+		state:               state,
+	})
+	require.NoError(t, err)
+	defer committer.stop()
+
+	require.Zero(t, committer.commitTaskQ.size())
+
+	for i := 0; i < goal; i++ {
+		committer.sendCommitTask(context.Background(), &commitTask{
+			highWatermark:      types.GLSN(i + 1),
+			prevHighWatermark:  types.GLSN(i),
+			committedGLSNBegin: types.MinGLSN,
+			committedGLSNEnd:   types.MinGLSN,
+			committedLLSNBegin: types.MinLLSN,
+		})
+		if i > 0 {
+			committer.sendCommitTask(context.Background(), &commitTask{
+				highWatermark:      types.GLSN(i),
+				prevHighWatermark:  types.GLSN(i - 1),
+				committedGLSNBegin: types.MinGLSN,
+				committedGLSNEnd:   types.MinGLSN,
+				committedLLSNBegin: types.MinLLSN,
+			})
+		}
+	}
+
+	require.Eventually(t, func() bool {
+		return committer.commitTaskQ.size() == 0
+	}, 5*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		hwm, _ := lsc.reportCommitBase()
+		return hwm == goal
+	}, 5*time.Second, 10*time.Millisecond)
 }
