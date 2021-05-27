@@ -2412,6 +2412,10 @@ func TestMRFailoverRecoverFromStateMachineLogWithIncompleteLog(t *testing.T) {
 		err := clus.initDummyStorageNode(nrSN)
 		So(err, ShouldBeNil)
 
+		So(testutil.CompareWaitN(50, func() bool {
+			return len(clus.getSNIDs()) == nrSN
+		}), ShouldBeTrue)
+
 		snIDs := clus.getSNIDs()
 
 		// make sn alive during mr crash
