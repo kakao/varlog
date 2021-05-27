@@ -1213,6 +1213,9 @@ func (ms *MetadataStorage) RecoverStateMachine(stateMachine *mrpb.MetadataReposi
 	ms.recoverCache(stateMachine, appliedIndex)
 	ms.recoverStateMachine(stateMachine, appliedIndex)
 
+	fmt.Printf("recover commit result from [hwm:%v, prev:%v]\n",
+		ms.GetFirstCommitResults().GetHighWatermark(), ms.GetFirstCommitResults().GetPrevHighWatermark())
+
 	ms.jobC = make(chan *storageAsyncJob, 4096)
 
 	if running {
@@ -1238,11 +1241,12 @@ func (ms *MetadataStorage) recoverLogStreams(stateMachine *mrpb.MetadataReposito
 		cr := commitResults.LookupCommitResult(ls.LogStreamID)
 		if cr != nil {
 			committedLLSNOffset = cr.CommittedLLSNOffset + types.LLSN(cr.CommittedGLSNLength)
-		}
-		for _, r := range lm.Replicas {
-			r.HighWatermark = cr.HighWatermark
-			r.UncommittedLLSNOffset = committedLLSNOffset
-			r.UncommittedLLSNLength = 0
+
+			for _, r := range lm.Replicas {
+				r.HighWatermark = cr.HighWatermark
+				r.UncommittedLLSNOffset = committedLLSNOffset
+				r.UncommittedLLSNLength = 0
+			}
 		}
 	}
 }

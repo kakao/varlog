@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -24,6 +25,7 @@ type StatRepository interface {
 
 type statRepository struct {
 	cmView       ClusterMetadataView
+	meta         *varlogpb.MetadataDescriptor
 	appliedIndex uint64
 	logStreams   map[types.LogStreamID]*LogStreamStat
 	storageNodes map[types.StorageNodeID]*varlogpb.StorageNodeDescriptor
@@ -94,7 +96,7 @@ func (s *statRepository) Refresh(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.appliedIndex >= meta.AppliedIndex {
+	if s.meta.Equal(meta) {
 		return
 	}
 
@@ -144,6 +146,7 @@ func (s *statRepository) Refresh(ctx context.Context) {
 	s.logStreams = logStreams
 	s.storageNodes = storageNodes
 	s.appliedIndex = meta.AppliedIndex
+	s.meta = proto.Clone(meta).(*varlogpb.MetadataDescriptor)
 }
 
 func (s *statRepository) Report(ctx context.Context, r *varlogpb.StorageNodeMetadataDescriptor) {

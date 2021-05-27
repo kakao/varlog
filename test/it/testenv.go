@@ -208,6 +208,8 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal, re
 			syncStorageNodes = append(syncStorageNodes, addr)
 		}
 
+		fmt.Printf("sync %+v\n", syncStorageNodes)
+
 		peers = nil
 	}
 
@@ -677,6 +679,197 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, lsID types.LogStreamID, oldsn,
 	}
 }
 
+func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T) types.LogStreamID {
+	clus.muSN.Lock()
+	defer clus.muSN.Unlock()
+
+	clus.muLS.Lock()
+	defer clus.muLS.Unlock()
+
+	log.Println("AddLS without MR")
+
+	require.GreaterOrEqual(t, len(clus.storageNodes), clus.nrRep)
+
+	//rsp, err := clus.vmsCL.AddLogStream(context.Background(), nil)
+	logStreamDesc, err := clus.vmsServer.AddLogStream(context.Background(), nil)
+	require.Error(t, err)
+	//require.NotNil(t, rsp)
+	//log.Printf("AddLS: AddLogStream: %+v", rsp)
+	require.NotNil(t, logStreamDesc)
+	log.Printf("AddLS: AddLogStream: %+v", logStreamDesc)
+
+	//logStreamDesc := rsp.GetLogStream()
+	logStreamID := logStreamDesc.GetLogStreamID()
+
+	// FIXME: Can ReplicaDescriptor have address of storage node?
+	require.Eventually(t, func() bool {
+		for _, rd := range logStreamDesc.GetReplicas() {
+			snid := rd.GetStorageNodeID()
+			if !assert.Contains(t, clus.snMCLs, snid) {
+				return false
+			}
+
+			snmd, err := clus.snMCLs[snid].GetMetadata(context.Background())
+			require.NoError(t, err)
+
+			lsmd, ok := snmd.GetLogStream(logStreamID)
+			require.True(t, ok)
+
+			if lsmd.GetStatus() != varlogpb.LogStreamStatusSealing {
+				return false
+			}
+
+			_, _, err = clus.snMCLs[snid].Seal(context.Background(), logStreamID, types.InvalidGLSN)
+			require.NoError(t, err)
+
+			err = clus.snMCLs[snid].Unseal(context.Background(), logStreamID)
+			require.NoError(t, err)
+		}
+		return true
+	}, 3*time.Second, 100*time.Millisecond)
+
+	log.Printf("AddLS: AddLogStream (%v): Running", logStreamID)
+
+	// FIXME: use map to store logstream and its replicas
+	clus.logStreamIDs = append(clus.logStreamIDs, logStreamID)
+	clus.replicas[logStreamID] = logStreamDesc.GetReplicas()
+	return logStreamID
+}
+
+func (clus *VarlogCluster) AddLSIncomplete(t *testing.T) types.LogStreamID {
+	clus.muSN.Lock()
+	defer clus.muSN.Unlock()
+
+	clus.muLS.Lock()
+	defer clus.muLS.Unlock()
+
+	log.Println("AddLS Incomplete")
+
+	require.Greater(t, clus.nrRep, 1)
+	require.GreaterOrEqual(t, len(clus.storageNodes), clus.nrRep)
+
+	logStreamDesc, err := clus.vmsServer.AddLogStream(context.Background(), nil)
+	log.Printf("AddLS: AddLogStream: %+v, %v", logStreamDesc, err)
+
+	require.Error(t, err)
+	require.NotNil(t, logStreamDesc)
+
+	logStreamID := logStreamDesc.GetLogStreamID()
+
+	// make it incomplete
+	rd := logStreamDesc.GetReplicas()[0]
+	snid := rd.GetStorageNodeID()
+	require.Contains(t, clus.snMCLs, snid)
+
+	err = clus.snMCLs[snid].RemoveLogStream(context.Background(), logStreamID)
+	require.NoError(t, err)
+
+	return logStreamID
+}
+
+func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, clear bool) {
+	clus.muSN.Lock()
+	defer clus.muSN.Unlock()
+
+	clus.muLS.Lock()
+	defer clus.muLS.Unlock()
+
+	log.Println("UpdateLS without MR")
+
+	require.GreaterOrEqual(t, len(clus.storageNodes), clus.nrRep)
+
+	replicas, ok := clus.replicas[logStreamID]
+	require.Equal(t, ok, true)
+
+	require.Eventually(t, func() bool {
+		for _, rd := range replicas {
+			snid := rd.GetStorageNodeID()
+			if !assert.Contains(t, clus.snMCLs, snid) {
+				return false
+			}
+
+			snmd, err := clus.snMCLs[snid].GetMetadata(context.Background())
+			require.NoError(t, err)
+
+			lsmd, ok := snmd.GetLogStream(logStreamID)
+			require.True(t, ok)
+
+			if lsmd.GetStatus() != varlogpb.LogStreamStatusRunning {
+				return false
+			}
+
+			_, _, err = clus.snMCLs[snid].Seal(context.Background(), logStreamID, lsmd.HighWatermark)
+			require.NoError(t, err)
+		}
+		return true
+	}, 3*time.Second, 100*time.Millisecond)
+
+	victim := replicas[0]
+
+	meta, err := clus.snMCLs[storageNodeID].GetMetadata(context.Background())
+	require.NoError(t, err)
+
+	path := meta.GetStorageNode().GetStorages()[0].GetPath()
+
+	require.NoError(t, clus.snMCLs[storageNodeID].AddLogStream(context.Background(), logStreamID, path))
+
+	replicas[0] = &varlogpb.ReplicaDescriptor{
+		StorageNodeID: storageNodeID,
+		Path:          path,
+	}
+
+	clus.replicas[logStreamID] = replicas
+
+	if clear {
+		require.NoError(t, clus.snMCLs[victim.StorageNodeID].RemoveLogStream(context.Background(), logStreamID))
+	}
+}
+
+func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, logStreamID types.LogStreamID, expectedHighWatermark types.GLSN) {
+	clus.muSN.Lock()
+	defer clus.muSN.Unlock()
+
+	clus.muLS.Lock()
+	defer clus.muLS.Unlock()
+
+	log.Println("Unseal without MR")
+
+	replicas, ok := clus.replicas[logStreamID]
+	require.Equal(t, ok, true)
+
+	for _, rd := range replicas {
+		snid := rd.GetStorageNodeID()
+		require.Contains(t, clus.snMCLs, snid)
+
+		snmd, err := clus.snMCLs[snid].GetMetadata(context.Background())
+		require.NoError(t, err)
+
+		lsmd, ok := snmd.GetLogStream(logStreamID)
+		require.True(t, ok)
+		require.NotEqual(t, lsmd.GetStatus(), varlogpb.LogStreamStatusRunning)
+
+		require.Equal(t, expectedHighWatermark, lsmd.GetHighWatermark())
+	}
+
+	for _, rd := range replicas {
+		snid := rd.GetStorageNodeID()
+
+		snmd, err := clus.snMCLs[snid].GetMetadata(context.Background())
+		require.NoError(t, err)
+
+		lsmd, ok := snmd.GetLogStream(logStreamID)
+		require.True(t, ok)
+
+		if lsmd.GetStatus() == varlogpb.LogStreamStatusSealing {
+			_, _, err = clus.snMCLs[snid].Seal(context.Background(), logStreamID, types.InvalidGLSN)
+			require.NoError(t, err)
+		}
+
+		err = clus.snMCLs[snid].Unseal(context.Background(), logStreamID)
+		require.NoError(t, err)
+	}
+}
+
 func (clus *VarlogCluster) StorageNodes() map[types.StorageNodeID]*storagenode.StorageNode {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
@@ -1123,7 +1316,7 @@ func (clus *VarlogCluster) getCachedMetadata() *varlogpb.MetadataDescriptor {
 
 func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, lsID types.LogStreamID, data []byte) {
 	clus.muSN.Lock()
-	clus.muSN.Unlock()
+	defer clus.muSN.Unlock()
 
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
@@ -1257,6 +1450,13 @@ func (clus *VarlogCluster) WaitCommit(t *testing.T, lsID types.LogStreamID, high
 
 func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
 	require.Eventually(t, func() bool {
+		vmsMeta, err := clus.vmsServer.Metadata(context.Background())
+		require.NoError(t, err)
+
+		return vmsMeta.GetLogStream(lsID) != nil
+	}, vms.RELOAD_INTERVAL*2, 100*time.Millisecond)
+
+	require.Eventually(t, func() bool {
 		snMCLs := clus.StorageNodesManagementClients()
 		sealed := 0
 
@@ -1271,13 +1471,15 @@ func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
 				continue
 			}
 
+			fmt.Printf("WaitSealed %v\n", lsmeta)
+
 			if lsmeta.Status == varlogpb.LogStreamStatusSealed {
 				sealed++
 			}
 		}
 
 		return sealed == clus.nrRep
-	}, vtesting.TimeoutUnitTimesFactor(10), 10*time.Millisecond)
+	}, vtesting.TimeoutUnitTimesFactor(100), 100*time.Millisecond)
 }
 
 // TODO (jun): non-nullable slice of replica descriptors

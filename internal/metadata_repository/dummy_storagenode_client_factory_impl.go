@@ -270,18 +270,17 @@ func (r *DummyStorageNodeClient) Commit(ctx context.Context, cr *snpb.CommitRequ
 		return errors.New("closed")
 	}
 
-	highWatermark := types.InvalidGLSN
 	for _, result := range cr.CommitResults {
-		if result.HighWatermark > highWatermark {
-			highWatermark = result.HighWatermark
-		}
-
 		idx := int(result.LogStreamID - types.LogStreamID(r.storageNodeID))
 		if idx < 0 || idx >= len(r.logStreamIDs) {
 			return errors.New("invalid log stream ID")
 		}
 
 		if r.uncommittedLLSNOffset[idx] != result.CommittedLLSNOffset {
+			continue
+		}
+
+		if r.knownHighWatermark[idx] >= result.HighWatermark {
 			continue
 		}
 

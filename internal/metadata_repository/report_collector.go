@@ -2,6 +2,7 @@ package metadata_repository
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -465,6 +466,8 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 			j++
 		} else {
 			if cur.HighWatermark < prev.HighWatermark {
+				fmt.Printf("invalid report prev:%v, cur:%v\n",
+					prev.HighWatermark, cur.HighWatermark)
 				rce.logger.Panic("invalid report",
 					zap.Any("prev", prev.HighWatermark),
 					zap.Any("cur", cur.HighWatermark))
@@ -630,7 +633,7 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 				continue
 			}
 
-			lc.logger.Panic(err.Error())
+			lc.logger.Panic(fmt.Sprintf("lsid:%v latest:%v err:%v", lc.lsID, latestHighWatermark, err.Error()))
 		}
 
 		if results == nil {

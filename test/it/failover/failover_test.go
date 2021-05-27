@@ -7,6 +7,7 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
@@ -366,6 +367,338 @@ func TestVarlogFailoverRecoverFromIncompleteSML(t *testing.T) {
 
 					So(recoveredGLSN, ShouldEqual, glsn+1)
 				})
+			})
+		})
+	}))
+}
+
+func TestVarlogFailoverSyncLogStream(t *testing.T) {
+	opts := []it.Option{
+		it.WithoutWAL(),
+		it.WithReplicationFactor(1),
+		it.WithNumberOfStorageNodes(1),
+		it.WithNumberOfLogStreams(1),
+		it.WithMRCount(1),
+		it.WithNumberOfClients(1),
+	}
+
+	Convey("Given Varlog cluster with StateMachineLog", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		const nrAppend = 5
+
+		meta := env.GetMetadata(t)
+		So(meta, ShouldNotBeNil)
+
+		client := env.ClientAtIndex(t, 0)
+
+		var (
+			err  error
+			glsn types.GLSN
+		)
+		for i := 0; i < nrAppend; i++ {
+			glsn, err = client.Append(context.TODO(), []byte("foo"))
+			So(err, ShouldBeNil)
+		}
+
+		lsID := env.LogStreamID(t, 0)
+		env.WaitCommit(t, lsID, glsn)
+
+		Convey("When add log stream without writeing SML", func(ctx C) {
+			env.CloseMRAllForRestart(t)
+
+			addedLSID := env.AddLSWithoutMR(t)
+
+			for i := 0; i < nrAppend; i++ {
+				env.AppendUncommittedLog(t, addedLSID, []byte("foo"))
+			}
+
+			prev := glsn
+			offset := glsn + 1
+			glsn = glsn + types.GLSN(nrAppend)
+
+			env.CommitWithoutMR(t, lsID, types.LLSN(offset), offset, 0, prev, glsn)
+			env.WaitCommit(t, lsID, glsn)
+
+			env.CommitWithoutMR(t, addedLSID, types.MinLLSN, offset, nrAppend, prev, glsn)
+			env.WaitCommit(t, addedLSID, glsn)
+
+			env.RecoverMR(t)
+
+			env.HealthCheckForMR(t)
+
+			Convey("Then it should be recovered", func(ctx C) {
+				mr := env.GetMR(t)
+				So(mr.GetHighWatermark(), ShouldEqual, glsn)
+
+				metadata, err := mr.GetMetadata(context.TODO())
+				So(err, ShouldBeNil)
+
+				So(len(metadata.LogStreams), ShouldEqual, 2)
+
+				Convey("Then ls metadata from SN should be sealed", func(ctx C) {
+					for _, ls := range metadata.LogStreams {
+						So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+
+						env.WaitSealed(t, ls.LogStreamID)
+					}
+
+					cmCli := env.GetVMSClient(t)
+
+					recoveredGLSN := types.InvalidGLSN
+					So(testutil.CompareWaitN(10, func() bool {
+						cmCli.Unseal(context.TODO(), addedLSID)
+
+						rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
+						defer cancel()
+
+						env.ClientRefresh(t)
+						client := env.ClientAtIndex(t, 0)
+
+						recoveredGLSN, err = client.Append(rctx, []byte("foo"))
+						return err == nil
+					}), ShouldBeTrue)
+
+					So(recoveredGLSN, ShouldEqual, glsn+1)
+				})
+			})
+		})
+
+		Convey("When update log stream without writing SML", func(ctx C) {
+			addedSNID := env.AddSN(t)
+
+			env.CloseMRAllForRestart(t)
+
+			env.UpdateLSWithoutMR(t, lsID, addedSNID, true)
+
+			env.RecoverMR(t)
+
+			env.HealthCheckForMR(t)
+
+			Convey("Then it should update LS", func(ctx C) {
+				mr := env.GetMR(t)
+				meta, err := mr.GetMetadata(context.Background())
+				require.NoError(t, err)
+
+				logStreamDesc := meta.GetLogStream(lsID)
+				require.NotNil(t, logStreamDesc)
+				require.Equal(t, logStreamDesc.Replicas[0].StorageNodeID, addedSNID)
+			})
+		})
+	}))
+}
+
+func TestVarlogFailoverSyncLogStreamSelectReplica(t *testing.T) {
+	opts := []it.Option{
+		it.WithoutWAL(),
+		it.WithReplicationFactor(1),
+		it.WithNumberOfStorageNodes(1),
+		it.WithNumberOfLogStreams(1),
+		it.WithMRCount(1),
+		it.WithNumberOfClients(1),
+	}
+
+	Convey("Given Varlog cluster with StateMachineLog", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		const nrAppend = 5
+
+		meta := env.GetMetadata(t)
+		So(meta, ShouldNotBeNil)
+
+		snID := env.StorageNodeIDAtIndex(t, 0)
+		lsID := env.LogStreamID(t, 0)
+
+		Convey("When update log stream without writing SML, and do not clear victim replica", func(ctx C) {
+			client := env.ClientAtIndex(t, 0)
+
+			var (
+				err  error
+				glsn types.GLSN
+			)
+			for i := 0; i < nrAppend; i++ {
+				glsn, err = client.Append(context.TODO(), []byte("foo"))
+				So(err, ShouldBeNil)
+			}
+			env.WaitCommit(t, lsID, glsn)
+
+			addedSNID := env.AddSN(t)
+
+			env.CloseMRAllForRestart(t)
+
+			env.UpdateLSWithoutMR(t, lsID, addedSNID, false)
+
+			env.RecoverMR(t)
+
+			env.HealthCheckForMR(t)
+
+			Convey("Then it should select exist replica", func(ctx C) {
+				mr := env.GetMR(t)
+				meta, err := mr.GetMetadata(context.Background())
+				require.NoError(t, err)
+
+				logStreamDesc := meta.GetLogStream(lsID)
+				require.NotNil(t, logStreamDesc)
+				require.Equal(t, logStreamDesc.Replicas[0].StorageNodeID, snID)
+			})
+		})
+
+		Convey("When update log stream without writing SML, and append", func(ctx C) {
+			addedSNID := env.AddSN(t)
+
+			env.CloseMRAllForRestart(t)
+
+			env.UpdateLSWithoutMR(t, lsID, addedSNID, false)
+			env.UnsealWithoutMR(t, lsID, types.InvalidGLSN)
+
+			for i := 0; i < nrAppend; i++ {
+				env.AppendUncommittedLog(t, lsID, []byte("foo"))
+			}
+
+			glsn := types.GLSN(nrAppend)
+
+			env.CommitWithoutMR(t, lsID, types.MinLLSN, types.MinGLSN, nrAppend, types.InvalidGLSN, glsn)
+			env.WaitCommit(t, lsID, glsn)
+
+			env.RecoverMR(t)
+
+			env.HealthCheckForMR(t)
+
+			Convey("Then it should select exist replica", func(ctx C) {
+				mr := env.GetMR(t)
+				meta, err := mr.GetMetadata(context.Background())
+				require.NoError(t, err)
+
+				logStreamDesc := meta.GetLogStream(lsID)
+				require.NotNil(t, logStreamDesc)
+				require.Equal(t, logStreamDesc.Replicas[0].StorageNodeID, addedSNID)
+			})
+		})
+	}))
+}
+
+func TestVarlogFailoverSyncLogStreamIgnore(t *testing.T) {
+	opts := []it.Option{
+		it.WithoutWAL(),
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfLogStreams(1),
+		it.WithMRCount(1),
+		it.WithNumberOfClients(1),
+	}
+
+	Convey("Given Varlog cluster with StateMachineLog", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		const nrAppend = 5
+
+		meta := env.GetMetadata(t)
+		So(meta, ShouldNotBeNil)
+
+		client := env.ClientAtIndex(t, 0)
+
+		var (
+			err  error
+			glsn types.GLSN
+		)
+		for i := 0; i < nrAppend; i++ {
+			glsn, err = client.Append(context.TODO(), []byte("foo"))
+			So(err, ShouldBeNil)
+		}
+
+		lsID := env.LogStreamID(t, 0)
+		env.WaitCommit(t, lsID, glsn)
+
+		Convey("When add log stream incomplete without writeing SML", func(ctx C) {
+			env.CloseMRAllForRestart(t)
+
+			incompleteLSID := env.AddLSIncomplete(t)
+
+			env.RecoverMR(t)
+
+			env.HealthCheckForMR(t)
+
+			Convey("Then it should be recovered", func(ctx C) {
+				mr := env.GetMR(t)
+				meta, err := mr.GetMetadata(context.Background())
+				require.NoError(t, err)
+
+				logStreamDesc := meta.GetLogStream(incompleteLSID)
+				require.Nil(t, logStreamDesc)
+			})
+		})
+	}))
+}
+
+func TestVarlogFailoverSyncLogStreamError(t *testing.T) {
+	t.Skip()
+
+	opts := []it.Option{
+		it.WithoutWAL(),
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfLogStreams(1),
+		it.WithMRCount(1),
+		it.WithNumberOfClients(1),
+	}
+
+	Convey("Given Varlog cluster with StateMachineLog", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		const nrAppend = 5
+
+		meta := env.GetMetadata(t)
+		So(meta, ShouldNotBeNil)
+
+		client := env.ClientAtIndex(t, 0)
+
+		var (
+			err  error
+			glsn types.GLSN
+		)
+		for i := 0; i < nrAppend; i++ {
+			glsn, err = client.Append(context.TODO(), []byte("foo"))
+			So(err, ShouldBeNil)
+		}
+
+		lsID := env.LogStreamID(t, 0)
+		env.WaitCommit(t, lsID, glsn)
+
+		Convey("When remove replica without writing SML", func(ctx C) {
+			env.CloseMRAllForRestart(t)
+
+			snID := env.StorageNodeIDAtIndex(t, 0)
+
+			snMCL := env.SNClientOf(t, snID)
+			snMCL.RemoveLogStream(context.Background(), lsID)
+
+			env.RecoverMR(t)
+
+			env.HealthCheckForMR(t)
+
+			// TODO:: how to catch panic
+			Convey("Then it should not be recovered", func(ctx C) {
+			})
+		})
+
+		Convey("When remove replica without writing SML", func(ctx C) {
+			env.CloseMRAllForRestart(t)
+
+			addedLSID := env.AddLSWithoutMR(t)
+
+			for i := 0; i < nrAppend; i++ {
+				env.AppendUncommittedLog(t, addedLSID, []byte("foo"))
+			}
+
+			prev := glsn
+			offset := glsn + 1
+			glsn = glsn + types.GLSN(nrAppend)
+			env.CommitWithoutMR(t, addedLSID, types.MinLLSN, offset, nrAppend, prev, glsn)
+			env.WaitCommit(t, addedLSID, glsn)
+
+			snID := env.StorageNodeIDAtIndex(t, 0)
+
+			snMCL := env.SNClientOf(t, snID)
+			snMCL.RemoveLogStream(context.Background(), addedLSID)
+
+			env.RecoverMR(t)
+
+			env.HealthCheckForMR(t)
+
+			// TODO:: how to catch panic
+			Convey("Then it should not be recovered", func(ctx C) {
 			})
 		})
 	}))

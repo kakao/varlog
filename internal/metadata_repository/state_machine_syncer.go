@@ -73,11 +73,15 @@ func (s *StateMachineSyncer) Close() {
 	}
 }
 
-// TODO:: sync LogStream
 func (s *StateMachineSyncer) syncMetadata(ctx context.Context, storage *MetadataStorage) error {
-	//collectedLSs := make(map[types.LogStreamID][]*varlogpb.LogStreamMetadataDescriptor)
+	var err error
+
+	collectedLSs := make(map[types.LogStreamID][]*varlogpb.LogStreamMetadataDescriptor)
 	for _, cli := range s.clients {
 		meta, err := cli.GetMetadata(ctx)
+		fmt.Printf("syncMetadata:: sn[%v] GetMetadata %+v. err:%v\n",
+			cli.PeerStorageNodeID(), meta, err)
+
 		if err != nil {
 			return err
 		}
@@ -87,59 +91,93 @@ func (s *StateMachineSyncer) syncMetadata(ctx context.Context, storage *Metadata
 			continue
 		}
 
+		// sync StorageNodeDescriptor
 		if err := storage.RegisterStorageNode(sn, 0, 0); err != nil && err != verrors.ErrAlreadyExists {
 			return err
 		}
 
-		/*
-			for _, ls := range meta.GetLogStreams() {
-				lss, _ := collectedLSs[ls.LogStreamID]
-				lss = append(lss, &ls)
-				collectedLSs[ls.LogStreamID] = lss
-			}
-		*/
+		// collect LogStreamDescriptor
+		for _, tmp := range meta.GetLogStreams() {
+			ls := tmp
+			ls.StorageNodeID = sn.StorageNodeID
+
+			collectedLSs[ls.LogStreamID] = append(collectedLSs[ls.LogStreamID], &ls)
+		}
 	}
 
-	/*
-		for lsID, collectedLS := range collectedLSs {
-			oldLS := storage.LookupLogStream(lsID)
-			if oldLS != nil && compareLogStreamReplica(oldLS.Replicas, collectedLS) {
+	for _, ls := range storage.GetLogStreams() {
+		if _, ok := collectedLSs[ls.LogStreamID]; !ok {
+			return fmt.Errorf("sync metadata error. ls[%v] should exist in the collected log streams", ls.LogStreamID)
+		}
+	}
+
+	// sync LogStreamDescriptor
+	for lsID, collectedLS := range collectedLSs {
+		oldLS := storage.LookupLogStream(lsID)
+		if oldLS != nil {
+			if compareLogStreamReplica(oldLS.Replicas, collectedLS) {
+				// already exist logstream
 				continue
-			}
-
-			if len(collectedLS) < s.nrReplica {
-				//TODO:: ignore or error
-				continue
-			}
-
-			if len(collectedLS) > s.nrReplica {
-				sort.Slice(collectedLS, func(i, j int) bool { return collectedLS[i].UpdatedTime.After(collectedLS[j].UpdatedTime) })
-				collectedLS = collectedLS[:s.nrReplica]
-			}
-
-			ls := &varlogpb.LogStreamDescriptor{
-				LogStreamID: lsID,
-				Status:      varlogpb.LogStreamStatusSealed,
-			}
-
-			for _, collectedReplica := range collectedLS {
-				r := &varlogpb.ReplicaDescriptor{
-					StorageNodeID: collectedReplica.StorageNodeID,
-					Path:          collectedReplica.Path,
-				}
-
-				ls.Replicas = append(ls.Replicas, r)
-			}
-
-			if oldLS == nil {
-				storage.RegisterLogStream(ls, 0, 0)
-			} else {
-				storage.UpdateLogStream(ls, 0, 0)
 			}
 		}
-	*/
 
-	return nil
+		if len(collectedLS) < s.nrReplica {
+			if oldLS != nil {
+				return fmt.Errorf("sync metadata error. ls[%d] # of collectedLS < repFactor", lsID)
+			}
+
+			for _, r := range collectedLS {
+				if !r.HighWatermark.Invalid() {
+					return fmt.Errorf("sync metadata error. newbie ls[%d] # of collectedLS < repFactor & has valid HWM", lsID)
+				}
+			}
+
+			// not yet created logstream
+			continue
+		}
+
+		if len(collectedLS) > s.nrReplica {
+			collectedLS = s.selectReplicas(collectedLS)
+		}
+
+		ls := &varlogpb.LogStreamDescriptor{
+			LogStreamID: lsID,
+			Status:      varlogpb.LogStreamStatusSealed,
+		}
+
+		for _, collectedReplica := range collectedLS {
+			r := &varlogpb.ReplicaDescriptor{
+				StorageNodeID: collectedReplica.StorageNodeID,
+				Path:          collectedReplica.Path,
+			}
+
+			ls.Replicas = append(ls.Replicas, r)
+		}
+
+		if oldLS == nil {
+			err = storage.RegisterLogStream(ls, 0, 0)
+		} else {
+			err = storage.UpdateLogStream(ls, 0, 0)
+		}
+	}
+
+	return err
+}
+
+func (s *StateMachineSyncer) selectReplicas(replicas []*varlogpb.LogStreamMetadataDescriptor) []*varlogpb.LogStreamMetadataDescriptor {
+	if len(replicas) <= s.nrReplica {
+		return replicas
+	}
+
+	sort.Slice(replicas, func(i, j int) bool {
+		if replicas[i].HighWatermark == replicas[j].HighWatermark {
+			return replicas[i].UpdatedTime.After(replicas[j].UpdatedTime)
+		}
+
+		return replicas[i].HighWatermark > replicas[j].HighWatermark
+	})
+
+	return replicas[:s.nrReplica]
 }
 
 func compareLogStreamReplica(orig []*varlogpb.ReplicaDescriptor, diff []*varlogpb.LogStreamMetadataDescriptor) bool {
@@ -151,7 +189,7 @@ func compareLogStreamReplica(orig []*varlogpb.ReplicaDescriptor, diff []*varlogp
 	sort.Slice(diff, func(i, j int) bool { return diff[i].StorageNodeID < diff[j].StorageNodeID })
 
 	for i := 0; i < len(orig); i++ {
-		if orig[i].StorageNodeID != diff[i].StorageNodeID {
+		if !orig[i].Equal(diff[i]) {
 			return false
 		}
 	}
@@ -167,7 +205,7 @@ func (s *StateMachineSyncer) SyncCommitResults(ctx context.Context, storage *Met
 	for {
 		cc, err := s.initCommitResultContext(ctx, storage.GetLastCommitResults())
 		if err != nil {
-			return err
+			return fmt.Errorf("sync commit result init fail. %v", err)
 		}
 
 		if cc.commitResults.HighWatermark.Invalid() {
@@ -175,11 +213,13 @@ func (s *StateMachineSyncer) SyncCommitResults(ctx context.Context, storage *Met
 		}
 
 		if err := cc.buildCommitResults(); err != nil {
-			return err
+			return fmt.Errorf("sync commit result build fail. %v. info:%+v, prev:%+v",
+				err, cc.commitInfos, cc.prevCommitResults)
 		}
 
 		if err := cc.validate(); err != nil {
-			return err
+			return fmt.Errorf("sync commit result validate fail. %v. info:%+v, prev:%+v, cur:%+v",
+				err, cc.commitInfos, cc.prevCommitResults, cc.commitResults)
 		}
 
 		storage.AppendLogStreamCommitHistory(cc.commitResults)
@@ -198,14 +238,16 @@ func (s *StateMachineSyncer) initCommitResultContext(ctx context.Context, prevCo
 
 	for _, cli := range s.clients {
 		snID := cli.PeerStorageNodeID()
-		commitInfo, err := cli.GetPrevCommitInfo(ctx, prevCommitResults.HighWatermark)
+		commitInfo, err := cli.GetPrevCommitInfo(ctx, prevCommitResults.GetHighWatermark())
+
 		if err != nil {
 			return nil, err
 		}
 
 		for _, lsCommitInfo := range commitInfo.CommitInfos {
 			if lsCommitInfo.Status == snpb.GetPrevCommitStatusInconsistent {
-				return nil, fmt.Errorf("inconsistency commit info")
+				return nil, fmt.Errorf("inconsistency commit info[snID:%v, hwm:%v]",
+					snID, prevCommitResults.GetHighWatermark())
 			} else if lsCommitInfo.Status == snpb.GetPrevCommitStatusOK {
 				cc.commitResults.HighWatermark = lsCommitInfo.HighWatermark
 				cc.commitResults.PrevHighWatermark = lsCommitInfo.PrevHighWatermark
@@ -274,7 +316,7 @@ func (cc *commitResultContext) validate() error {
 	j := 0
 
 	nrCommitted := uint64(0)
-	for i < len(cc.prevCommitResults.CommitResults) && j < len(cc.commitResults.CommitResults) {
+	for i < len(cc.prevCommitResults.GetCommitResults()) && j < len(cc.commitResults.GetCommitResults()) {
 		prev := cc.prevCommitResults.CommitResults[i]
 		cur := cc.commitResults.CommitResults[j]
 		if prev.LogStreamID < cur.LogStreamID {
@@ -288,7 +330,7 @@ func (cc *commitResultContext) validate() error {
 			j++
 		} else {
 			if prev.CommittedLLSNOffset+types.LLSN(prev.CommittedGLSNLength) != cur.CommittedLLSNOffset {
-				return fmt.Errorf("invalid commit result. prev[%+v] new[%+v]", prev, cur)
+				return fmt.Errorf("invalid commit result")
 			}
 
 			nrCommitted += cur.CommittedGLSNLength
@@ -297,7 +339,7 @@ func (cc *commitResultContext) validate() error {
 		}
 	}
 
-	if i < len(cc.prevCommitResults.CommitResults) {
+	if i < len(cc.prevCommitResults.GetCommitResults()) {
 		return fmt.Errorf("new commit reuslts should include all prev commit results")
 	}
 
@@ -319,7 +361,7 @@ func (cc *commitResultContext) validate() error {
 }
 
 func (cc *commitResultContext) fillCommitResult() error {
-	committedGLSNOffset := cc.prevCommitResults.HighWatermark + 1
+	committedGLSNOffset := cc.prevCommitResults.GetHighWatermark() + 1
 	for i, commitResult := range cc.commitResults.CommitResults {
 		if !commitResult.CommittedGLSNOffset.Invalid() {
 			if committedGLSNOffset != commitResult.CommittedGLSNOffset {
