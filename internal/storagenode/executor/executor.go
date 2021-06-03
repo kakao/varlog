@@ -15,6 +15,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/timestamper"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/snpb"
 )
 
 type Executor interface {
@@ -64,6 +65,9 @@ type executor struct {
 	}
 
 	tsp timestamper.Timestamper
+
+	// replicas atomic.Value // []snpb.Replica
+	replicas []snpb.Replica
 }
 
 var _ Executor = (*executor)(nil)
@@ -78,6 +82,8 @@ func New(opts ...Option) (*executor, error) {
 		config: *cfg,
 		tsp:    timestamper.New(),
 	}
+
+	// lse.replicas.Store([]snpb.Replica{})
 
 	lse.running.val = true
 	// NOTE: To push commitWaitTask into the commitWaitQ, the state of this executor is

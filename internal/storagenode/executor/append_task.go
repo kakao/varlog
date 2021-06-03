@@ -2,7 +2,6 @@ package executor
 
 import (
 	"sync"
-	"time"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
@@ -10,21 +9,26 @@ import (
 
 var appendTaskPool = sync.Pool{
 	New: func() interface{} {
-		return &appendTask{}
+		t := &appendTask{}
+		return t
 	},
 }
 
 type appendTask struct {
-	llsn     types.LLSN
-	glsn     types.GLSN
-	data     []byte
+	llsn types.LLSN
+	glsn types.GLSN
+	data []byte
+
+	// replicas is a list of replicas of the log stream. The first element is the primary
+	// replica, and the others are backup replicas.
 	replicas []snpb.Replica
-	primary  bool
+
+	primary bool
 
 	wg  sync.WaitGroup
 	err error
 
-	ctime time.Time
+	validate func() error
 }
 
 func newAppendTask() *appendTask {
@@ -39,6 +43,7 @@ func (t *appendTask) release() {
 	t.replicas = nil
 	t.err = nil
 	t.primary = false
+	t.validate = nil
 	appendTaskPool.Put(t)
 }
 

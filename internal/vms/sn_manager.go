@@ -271,7 +271,7 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 
 	var err error
 
-	replicas, err := sm.replicas(ctx, logStreamID)
+	replicas, err := sm.replicaDescriptors(ctx, logStreamID)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +305,7 @@ func (sm *snManager) Sync(ctx context.Context, logStreamID types.LogStreamID, sr
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	replicas, err := sm.replicas(ctx, logStreamID)
+	replicas, err := sm.replicaDescriptors(ctx, logStreamID)
 	if err != nil {
 		return nil, err
 	}
@@ -334,26 +334,36 @@ func (sm *snManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) 
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	replicas, err := sm.replicas(ctx, logStreamID)
+	rds, err := sm.replicaDescriptors(ctx, logStreamID)
 	if err != nil {
 		return err
 	}
+
+	replicas := make([]snpb.Replica, 0, len(rds))
+	for _, rd := range rds {
+		replicas = append(replicas, snpb.Replica{
+			StorageNodeID: rd.StorageNodeID,
+			LogStreamID:   logStreamID,
+			// TODO: need address field?
+		})
+	}
+
 	// TODO: use errgroup
-	for _, replica := range replicas {
+	for _, replica := range rds {
 		storageNodeID := replica.GetStorageNodeID()
 		cli, ok := sm.cs[storageNodeID]
 		if !ok {
 			sm.refresh(ctx)
 			return errors.Wrap(verrors.ErrNotExist, "storage node")
 		}
-		if err := cli.Unseal(ctx, logStreamID); err != nil {
+		if err := cli.Unseal(ctx, logStreamID, replicas); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (sm *snManager) replicas(ctx context.Context, logStreamID types.LogStreamID) ([]*varlogpb.ReplicaDescriptor, error) {
+func (sm *snManager) replicaDescriptors(ctx context.Context, logStreamID types.LogStreamID) ([]*varlogpb.ReplicaDescriptor, error) {
 	clusmeta, err := sm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err

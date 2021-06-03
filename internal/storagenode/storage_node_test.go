@@ -162,8 +162,18 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	status, _, err = sn.Seal(context.TODO(), logStreamID2, types.InvalidGLSN)
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	assert.NoError(t, sn.Unseal(context.TODO(), logStreamID1))
-	assert.NoError(t, sn.Unseal(context.TODO(), logStreamID2))
+	assert.NoError(t, sn.Unseal(context.TODO(), logStreamID1, []snpb.Replica{
+		{
+			StorageNodeID: storageNodeID,
+			LogStreamID:   logStreamID1,
+		},
+	}))
+	assert.NoError(t, sn.Unseal(context.TODO(), logStreamID2, []snpb.Replica{
+		{
+			StorageNodeID: storageNodeID,
+			LogStreamID:   logStreamID2,
+		},
+	}))
 
 	snmd, err = sn.GetMetadata(context.TODO())
 	assert.NoError(t, err)

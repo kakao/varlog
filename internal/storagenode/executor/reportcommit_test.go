@@ -44,7 +44,12 @@ func TestLogStreamReporter(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
-	require.NoError(t, lse1.Unseal(context.TODO()))
+	require.NoError(t, lse1.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse1.storageNodeID,
+			LogStreamID:   lse1.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse1.Metadata().Status)
 
 	strg2, err := storage.NewStorage(storage.WithPath(t.TempDir()))
@@ -61,7 +66,12 @@ func TestLogStreamReporter(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
-	require.NoError(t, lse2.Unseal(context.TODO()))
+	require.NoError(t, lse2.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse2.storageNodeID,
+			LogStreamID:   lse2.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse2.Metadata().Status)
 
 	rcg := reportcommitter.NewMockGetter(ctrl)

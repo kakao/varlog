@@ -138,7 +138,12 @@ func TestExecutorAppend(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	for hwm := types.GLSN(1); hwm <= types.GLSN(numAppends); hwm++ {
@@ -197,7 +202,12 @@ func TestExecutorRead(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	// read invalid position
@@ -285,7 +295,12 @@ func TestExecutorTrim(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	// HWM:         5          10
@@ -386,7 +401,12 @@ func TestExecutorSubscribe(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	// HWM:         5          10
@@ -549,7 +569,12 @@ func TestReplicate(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	for i := 1; i <= numAppends; i++ {
@@ -612,7 +637,12 @@ func TestExecutorSealSuddenly(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	var wg sync.WaitGroup
@@ -724,7 +754,12 @@ func TestExecutorSeal(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	// append
@@ -799,7 +834,12 @@ func TestExecutorSeal(t *testing.T) {
 	assert.Equal(t, 7, numErrs)
 
 	// unseal
-	err = lse.Unseal(context.TODO())
+	err = lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	})
 	assert.NoError(t, err)
 
 	report, err := lse.GetReport(context.TODO())
@@ -873,7 +913,12 @@ func TestExecutorWithRecover(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	err = lse.withRecover(func() error {
@@ -917,7 +962,12 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	var lastGLSNs [numWriter]types.AtomicGLSN
@@ -1025,7 +1075,12 @@ func TestExecutorNew(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 
 	var (
 		appendWg sync.WaitGroup
@@ -1113,7 +1168,12 @@ func TestExecutorNew(t *testing.T) {
 	require.EqualValues(t, 0, report.UncommittedLLSNLength)
 
 	// Unseal
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
 	require.NoError(t, lse.Close())
@@ -1139,7 +1199,12 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 
 	var wg sync.WaitGroup
 
@@ -1289,7 +1354,12 @@ func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO()))
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{
+			StorageNodeID: lse.storageNodeID,
+			LogStreamID:   lse.logStreamID,
+		},
+	}))
 
 	require.NoError(t, lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
 		HighWatermark:       5,
@@ -1318,4 +1388,26 @@ func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 		HighWatermark:       5,
 		PrevHighWatermark:   0,
 	}, commitInfo)
+}
+
+func TestExecutorUnsealWithoutReplica(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+	lse, err := New(
+		WithLogStreamID(1),
+		WithStorage(strg),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.Error(t, lse.Unseal(context.TODO(), nil))
+	require.Error(t, lse.Unseal(context.TODO(), []snpb.Replica{}))
 }

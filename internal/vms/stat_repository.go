@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
+
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
 )

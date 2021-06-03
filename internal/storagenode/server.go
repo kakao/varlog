@@ -162,7 +162,7 @@ func (s *server) Unseal(ctx context.Context, req *snpb.UnsealRequest) (*pbtypes.
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/Unseal", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.UnsealRequest)
-			err := s.storageNode.Unseal(ctx, req.GetLogStreamID())
+			err := s.storageNode.Unseal(ctx, req.GetLogStreamID(), req.GetReplicas())
 			return &pbtypes.Empty{}, err
 		},
 	)

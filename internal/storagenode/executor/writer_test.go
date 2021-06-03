@@ -193,8 +193,9 @@ func TestWriterStop(t *testing.T) {
 
 	// add new task
 	tb := &appendTask{
-		llsn:    1,
-		primary: true,
+		llsn:     1,
+		primary:  true,
+		validate: func() error { return nil },
 	}
 	tb.wg.Add(1)
 	err = writer.send(context.TODO(), tb)
@@ -335,11 +336,12 @@ func TestWriter(t *testing.T) {
 						prodWg.Done()
 					}()
 					for {
-						tb := &appendTask{
-							primary: true,
+						t := &appendTask{
+							primary:  true,
+							validate: func() error { return nil },
 						}
-						tb.wg.Add(1)
-						if err := writer.send(context.TODO(), tb); err != nil {
+						t.wg.Add(1)
+						if err := writer.send(context.TODO(), t); err != nil {
 							return
 						}
 						numSent++
@@ -412,6 +414,7 @@ func TestWriterCleanup(t *testing.T) {
 		go func() {
 			defer sendWg.Done()
 			t := newAppendTask()
+			t.validate = func() error { return nil }
 			defer t.release()
 			t.wg.Add(1)
 			if err := writer.send(context.TODO(), t); err != nil {
@@ -482,6 +485,7 @@ func TestWriterVarlog444(t *testing.T) {
 		defer wg.Done()
 		task := newAppendTask()
 		task.primary = true
+		task.validate = func() error { return nil }
 		task.wg.Add(1)
 		if !assert.NoError(t, writer.send(context.Background(), task)) {
 			task.wg.Done()
@@ -508,6 +512,7 @@ func TestWriterVarlog444(t *testing.T) {
 		defer wg.Done()
 		task := newAppendTask()
 		task.primary = true
+		task.validate = func() error { return nil }
 		task.wg.Add(1)
 		if !assert.NoError(t, writer.send(context.Background(), task)) {
 			task.wg.Done()
@@ -528,6 +533,7 @@ func TestWriterVarlog444(t *testing.T) {
 		defer wg.Done()
 		task := newAppendTask()
 		task.primary = true
+		task.validate = func() error { return nil }
 		task.wg.Add(1)
 		if !assert.NoError(t, writer.send(context.Background(), task)) {
 			task.wg.Done()
