@@ -57,6 +57,10 @@ func initStartCommand(cfg *config.Config) *cli.Command {
 				cfg.Volumes = append(cfg.Volumes, volume)
 			}
 
+			// Addresses
+			cfg.ListenAddress = listenAddress
+			cfg.AdvertiseAddress = advertiseAddress
+
 			return Main(cfg)
 		},
 	}
