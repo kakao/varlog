@@ -1,0 +1,25 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: varlog-mr
+  namespace: default
+  labels:
+    app: varlog-mr
+    name: varlog-mr
+spec:
+  template:
+    spec:
+      volumes:
+      - name: varlog-mr-home
+        hostPath:
+          path: /varlog/mr
+          type: DirectoryOrCreate
+      containers:
+      - name: varlog-mr
+        resources:
+          limits:
+            cpu: 3000m
+            memory: 3Gi
+          requests:
+            cpu: 3000m
+            memory: 3Gi

@@ -1,0 +1,9 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: jaeger
+  namespace: default
+  labels:
+    app: jaeger
+spec:
+  replicas: 0

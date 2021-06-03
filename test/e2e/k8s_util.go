@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -512,7 +513,8 @@ func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
 		return err
 	}
 
-	for _, node := range nodes.Items {
+	for idx := range rand.Perm(len(nodes.Items)) {
+		node := nodes.Items[idx]
 		if _, ok := node.Labels[TypeLabelKey]; ok {
 			continue
 		}

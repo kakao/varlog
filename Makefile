@@ -255,17 +255,13 @@ push_builder_dev:
 push_rpc_test_server:
 	docker push idock.daumkakao.io/varlog/rpc-test-server:$(DOCKER_TAG)
 
-VARLOG_DATA_MR := /varlog/mr
-VARLOG_DATA_SN := /varlog/sn
-.PHONY: kustomize
+.PHONY: kustomize sandbox
+KUSTOMIZE_ENV := dev
+BUILD_ENV := $(shell echo $(BUILD_ENV) | tr A-Z a-z)
+ifeq ($(BUILD_ENV),sandbox)
+	KUSTOMIZE_ENV := sbx
+endif
 kustomize:
-	@sed "s/IMAGE_TAG/$(DOCKER_TAG)/" $(MAKEFILE_DIR)/deploy/k8s/dev/kustomization.template.yaml > \
-		$(MAKEFILE_DIR)/deploy/k8s/dev/kustomization.yaml	
-	@sed "s#VARLOG_DATA_MR#$(VARLOG_DATA_MR)#" $(MAKEFILE_DIR)/deploy/k8s/dev/varlog-mr-data.template.yaml > \
-		$(MAKEFILE_DIR)/deploy/k8s/dev/varlog-mr-data.yaml	
-	@sed "s#VARLOG_DATA_MR#$(VARLOG_DATA_MR)#" $(MAKEFILE_DIR)/deploy/k8s/dev/varlog-mr-clear-data.template.yaml > \
-		$(MAKEFILE_DIR)/deploy/k8s/dev/varlog-mr-clear-data.yaml
-	@sed "s#VARLOG_DATA_SN#$(VARLOG_DATA_SN)#" $(MAKEFILE_DIR)/deploy/k8s/dev/varlog-sn-data.template.yaml > \
-		$(MAKEFILE_DIR)/deploy/k8s/dev/varlog-sn-data.yaml	
-	@echo "Run this command to apply: kubectl apply -k $(MAKEFILE_DIR)/deploy/k8s/dev/"
-
+	@sed "s/IMAGE_TAG/$(DOCKER_TAG)/" $(MAKEFILE_DIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.template.yaml > \
+		$(MAKEFILE_DIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.yaml
+	@echo "Run this command to apply: kubectl apply -k $(MAKEFILE_DIR)/deploy/k8s/$(KUSTOMIZE_ENV)/"

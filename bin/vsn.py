@@ -50,8 +50,7 @@ def get_vms_addr():
 def get_storage_node_id():
     try:
         out = subprocess.check_output(
-            [f"{binpath}/vmc", "meta", "sn",
-             "--vms-address=%s" % get_vms_addr()])
+            [f"{binpath}/vmc", "--vms-address=%s" % get_vms_addr(), "meta", "sn"])
         meta = json.loads(out)
         my_addr = get_advertise_addr()
         for snid, addr in meta["storagenodes"].items():
@@ -88,8 +87,8 @@ def get_logdir():
 def add_storage_node(addr):
     try:
         subprocess.check_output(
-            [f"{binpath}/vmc", "add", "sn", f"--storage-node-address={addr}",
-             "--vms-address=%s" % get_vms_addr()])
+            [f"{binpath}/vmc", "--vms-address=%s" % get_vms_addr(),
+                "add", "sn", f"--storage-node-address={addr}"])
     except subprocess.CalledProcessError as e:
         logger.exception("could not add storagenode")
         raise e

@@ -1,16 +1,16 @@
 kind: DaemonSet
 apiVersion: apps/v1
 metadata:
-  name: varlog-mr-clear
+  name: varlog-sn
   namespace: default
   labels:
-    app: varlog-mr-clear
-    name: vvarlog-mr-clear
+    app: varlog-sn
+    name: varlog-sn
 spec:
   template:
     spec:
       volumes:
-      - name: varlog-mr-home
+      - name: varlog-sn-home
         hostPath:
-          path: /varlog/mr
+          path: /varlog/sn
           type: DirectoryOrCreate

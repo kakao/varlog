@@ -5,12 +5,12 @@ metadata:
   namespace: default
   labels:
     app: varlog-mr-clear
-    name: vvarlog-mr-clear
+    name: varlog-mr-clear
 spec:
   template:
     spec:
       volumes:
       - name: varlog-mr-home
         hostPath:
-          path: VARLOG_DATA_MR
+          path: /varlog/mr
           type: DirectoryOrCreate

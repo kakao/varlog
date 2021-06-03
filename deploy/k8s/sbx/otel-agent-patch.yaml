@@ -1,0 +1,20 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: otel-agent
+  namespace: default
+  labels:
+    app: opentelemetry
+    component: otel-agent
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: type
+                operator: In
+                values:
+                - otel-agent

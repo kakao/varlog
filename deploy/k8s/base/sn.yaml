@@ -56,13 +56,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.hostIP
-        resources:
-          limits:
-            cpu: 1500m
-            memory: 1500Mi
-          requests:
-            cpu: 1500m
-            memory: 1500Mi
         volumeMounts:
         - name: varlog-sn-home
           mountPath: /varlog/data
@@ -94,19 +87,19 @@ spec:
                 operator: In
                 values:
                 - varlog-sn
-        podAffinity:
+        podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:
                 - key: app
-                  operator: NotIn
+                  operator: In
                   values:
                   - "varlog-mr"
                   - "varlog-vms"
                   - "prometheus"
                   - "jaeger"
                 - key: "component"
-                  operator: NotIn
+                  operator: In
                   values:
                   - "otel-collector"
             topologyKey: "kubernetes.io/hostname"

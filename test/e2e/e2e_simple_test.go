@@ -457,3 +457,15 @@ func TestK8sVarlogEnduranceFollowerMRFail(t *testing.T) {
 		So(err, ShouldBeNil)
 	}))
 }
+
+func TestK8sCreateCluster(t *testing.T) {
+	opts := getK8sVarlogClusterOpts()
+	opts.NrMR = 3
+	opts.NrSN = 12
+	opts.NrLS = 4
+	opts.RepFactor = 3
+
+	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
+	}))
+
+}

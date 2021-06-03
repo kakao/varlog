@@ -34,3 +34,7 @@ patches:
 - varlog-mr-patch.yaml
 - varlog-mr-clear-patch.yaml
 - varlog-sn-patch.yaml
+- otel-agent-patch.yaml
+- otel-collector-patch.yaml
+- jaeger-patch.yaml
+- prometheus-patch.yaml
