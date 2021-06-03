@@ -170,15 +170,15 @@ func (mr *MockStorageNodeManagementClientMockRecorder) Sync(arg0, arg1, arg2, ar
 }
 
 // Unseal mocks base method.
-func (m *MockStorageNodeManagementClient) Unseal(arg0 context.Context, arg1 types.LogStreamID) error {
+func (m *MockStorageNodeManagementClient) Unseal(arg0 context.Context, arg1 types.LogStreamID, arg2 []snpb.Replica) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Unseal", arg0, arg1)
+	ret := m.ctrl.Call(m, "Unseal", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Unseal indicates an expected call of Unseal.
-func (mr *MockStorageNodeManagementClientMockRecorder) Unseal(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockStorageNodeManagementClientMockRecorder) Unseal(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Unseal), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Unseal), arg0, arg1, arg2)
 }

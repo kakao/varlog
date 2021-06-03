@@ -7,6 +7,7 @@ import "google/protobuf/empty.proto";
 
 import "varlogpb/metadata.proto";
 import "snpb/replicator.proto";
+import "snpb/replica.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
 
@@ -115,6 +116,7 @@ message UnsealRequest {
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
+    repeated Replica replicas = 4 [(gogoproto.nullable) = false];
 }
 
 message SyncRequest {

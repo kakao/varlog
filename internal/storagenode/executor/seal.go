@@ -7,12 +7,13 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type SealUnsealer interface {
 	Seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
-	Unseal(ctx context.Context) error
+	Unseal(ctx context.Context, replicas []snpb.Replica) error
 }
 
 func (e *executor) Seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
@@ -95,7 +96,11 @@ func (e *executor) sealInternal(lastCommittedGLSN types.GLSN) (varlogpb.LogStrea
 	return varlogpb.LogStreamStatusSealed, lastCommittedGLSN, nil
 }
 
-func (e *executor) Unseal(_ context.Context) error {
+func (e *executor) Unseal(_ context.Context, replicas []snpb.Replica) error {
+	if len(replicas) < 1 {
+		return errors.Wrap(verrors.ErrInvalid, "no replica")
+	}
+
 	if err := e.guard(); err != nil {
 		return err
 	}
@@ -109,5 +114,6 @@ func (e *executor) Unseal(_ context.Context) error {
 		return errors.Wrap(verrors.ErrInvalid, "state not ready")
 	}
 	e.tsp.Touch()
+	e.replicas = replicas
 	return nil
 }

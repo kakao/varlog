@@ -57,7 +57,7 @@ func (r *EmptyStorageNodeClient) Seal(ctx context.Context, logStreamID types.Log
 	panic("not implemented")
 }
 
-func (r *EmptyStorageNodeClient) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
+func (r *EmptyStorageNodeClient) Unseal(ctx context.Context, logStreamID types.LogStreamID, replicas []snpb.Replica) error {
 	panic("not implemented")
 }
 
@@ -469,7 +469,7 @@ func (r *DummyStorageNodeClient) Seal(ctx context.Context, logStreamID types.Log
 	panic("not implemented")
 }
 
-func (r *DummyStorageNodeClient) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
+func (r *DummyStorageNodeClient) Unseal(ctx context.Context, logStreamID types.LogStreamID, replicas []snpb.Replica) error {
 	panic("not implemented")
 }
 

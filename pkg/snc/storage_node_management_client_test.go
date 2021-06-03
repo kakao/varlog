@@ -149,7 +149,12 @@ func TestManagementClientUnseal(t *testing.T) {
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(nil, verrors.ErrInternal)
 			Convey("Then the ManagementClient should return the error", func() {
-				err := mc.Unseal(context.TODO(), types.LogStreamID(1))
+				err := mc.Unseal(context.TODO(), types.LogStreamID(1), []snpb.Replica{
+					{
+						StorageNodeID: 1,
+						LogStreamID:   1,
+					},
+				})
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -157,7 +162,12 @@ func TestManagementClientUnseal(t *testing.T) {
 		Convey("When the ManagementService succeeds to unseal the LogStream", func() {
 			mockClient.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(&pbtypes.Empty{}, nil)
 			Convey("Then the ManagementClient should not return an error", func() {
-				err := mc.Unseal(context.TODO(), types.LogStreamID(1))
+				err := mc.Unseal(context.TODO(), types.LogStreamID(1), []snpb.Replica{
+					{
+						StorageNodeID: 1,
+						LogStreamID:   1,
+					},
+				})
 				So(err, ShouldBeNil)
 			})
 		})

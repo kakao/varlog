@@ -462,13 +462,13 @@ func (sn *StorageNode) Seal(ctx context.Context, logStreamID types.LogStreamID, 
 }
 
 // Unseal implements the Server Unseal method.
-func (sn *StorageNode) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
+func (sn *StorageNode) Unseal(ctx context.Context, logStreamID types.LogStreamID, replicas []snpb.Replica) error {
 	lse, ok := sn.logStreamExecutor(logStreamID)
 	if !ok {
 		return errors.WithStack(errNoLogStream)
 	}
 	sn.tsp.Touch()
-	return lse.Unseal(ctx)
+	return lse.Unseal(ctx, replicas)
 }
 
 func (sn *StorageNode) Sync(ctx context.Context, logStreamID types.LogStreamID, replica snpb.Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {

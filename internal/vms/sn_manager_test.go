@@ -273,9 +273,9 @@ func TestUnseal(t *testing.T) {
 			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil).AnyTimes()
 			for i := 0; i < len(snmclList)-1; i++ {
 				snmcl := snmclList[i]
-				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(nil)
+				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			}
-			snmclList[len(sndescList)-1].EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(verrors.ErrInternal)
+			snmclList[len(sndescList)-1].EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any()).Return(verrors.ErrInternal)
 
 			Convey("Then Unseal should fail", func() {
 				err := snManager.Unseal(context.TODO(), logStreamID)
@@ -287,7 +287,7 @@ func TestUnseal(t *testing.T) {
 			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil).AnyTimes()
 			for i := 0; i < len(snmclList); i++ {
 				snmcl := snmclList[i]
-				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(nil)
+				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			}
 
 			Convey("Then Unseal should succeed", func() {

@@ -24,7 +24,7 @@ type StorageNodeManagementClient interface {
 	AddLogStream(ctx context.Context, logStreamID types.LogStreamID, path string) error
 	RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error
 	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
-	Unseal(ctx context.Context, logStreamID types.LogStreamID) error
+	Unseal(ctx context.Context, logStreamID types.LogStreamID, replicas []snpb.Replica) error
 	Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
 	GetPrevCommitInfo(ctx context.Context, prevHWM types.GLSN) (*snpb.GetPrevCommitInfoResponse, error)
 	Close() error
@@ -121,12 +121,13 @@ func (c *snManagementClient) Seal(ctx context.Context, lsid types.LogStreamID, l
 	return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
-func (c *snManagementClient) Unseal(ctx context.Context, lsid types.LogStreamID) error {
+func (c *snManagementClient) Unseal(ctx context.Context, lsid types.LogStreamID, replicas []snpb.Replica) error {
 	// TODO(jun): Check ranges CID, SNID and LSID
 	_, err := c.rpcClient.Unseal(ctx, &snpb.UnsealRequest{
 		ClusterID:     c.clusterID,
 		StorageNodeID: c.storageNodeID,
 		LogStreamID:   lsid,
+		Replicas:      replicas,
 	})
 	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }

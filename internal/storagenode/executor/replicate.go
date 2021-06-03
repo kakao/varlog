@@ -19,22 +19,23 @@ func (e *executor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) 
 	}
 	defer e.unguard()
 
-	tb := newAppendTask()
-	defer tb.release()
+	t := newAppendTask()
+	defer t.release()
 
-	tb.primary = false
-	tb.replicas = nil
-	tb.llsn = llsn
-	tb.data = data
-	tb.wg.Add(1)
+	t.primary = false
+	t.replicas = nil
+	t.llsn = llsn
+	t.data = data
+	t.validate = func() error { return nil }
+	t.wg.Add(1)
 
-	if err := e.writer.send(ctx, tb); err != nil {
-		tb.wg.Done()
-		tb.wg.Wait()
+	if err := e.writer.send(ctx, t); err != nil {
+		t.wg.Done()
+		t.wg.Wait()
 		return err
 	}
 
-	tb.wg.Wait()
+	t.wg.Wait()
 	return nil
 }
 

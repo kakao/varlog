@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -169,9 +168,11 @@ func (w *writerImpl) send(ctx context.Context, tb *appendTask) error {
 	}
 	defer w.state.releaseBarrier()
 
+	// Check whether replicas are correct
+	if err := tb.validate(); err != nil {
+		return err
+	}
 	atomic.AddInt64(&w.inflight, 1)
-
-	tb.ctime = time.Now()
 	return w.q.pushWithContext(ctx, tb)
 }
 

@@ -701,6 +701,14 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T) types.LogStreamID {
 	//logStreamDesc := rsp.GetLogStream()
 	logStreamID := logStreamDesc.GetLogStreamID()
 
+	replicas := make([]snpb.Replica, 0, len(logStreamDesc.GetReplicas()))
+	for _, rd := range logStreamDesc.GetReplicas() {
+		replicas = append(replicas, snpb.Replica{
+			StorageNodeID: rd.GetStorageNodeID(),
+			LogStreamID:   logStreamID,
+		})
+	}
+
 	// FIXME: Can ReplicaDescriptor have address of storage node?
 	require.Eventually(t, func() bool {
 		for _, rd := range logStreamDesc.GetReplicas() {
@@ -722,7 +730,7 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T) types.LogStreamID {
 			_, _, err = clus.snMCLs[snid].Seal(context.Background(), logStreamID, types.InvalidGLSN)
 			require.NoError(t, err)
 
-			err = clus.snMCLs[snid].Unseal(context.Background(), logStreamID)
+			err = clus.snMCLs[snid].Unseal(context.Background(), logStreamID, replicas)
 			require.NoError(t, err)
 		}
 		return true
@@ -834,10 +842,11 @@ func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, logStreamID types.LogSt
 
 	log.Println("Unseal without MR")
 
-	replicas, ok := clus.replicas[logStreamID]
+	rds, ok := clus.replicas[logStreamID]
 	require.Equal(t, ok, true)
 
-	for _, rd := range replicas {
+	replicas := make([]snpb.Replica, 0, len(rds))
+	for _, rd := range rds {
 		snid := rd.GetStorageNodeID()
 		require.Contains(t, clus.snMCLs, snid)
 
@@ -849,9 +858,14 @@ func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, logStreamID types.LogSt
 		require.NotEqual(t, lsmd.GetStatus(), varlogpb.LogStreamStatusRunning)
 
 		require.Equal(t, expectedHighWatermark, lsmd.GetHighWatermark())
+
+		replicas = append(replicas, snpb.Replica{
+			StorageNodeID: snid,
+			LogStreamID:   logStreamID,
+		})
 	}
 
-	for _, rd := range replicas {
+	for _, rd := range rds {
 		snid := rd.GetStorageNodeID()
 
 		snmd, err := clus.snMCLs[snid].GetMetadata(context.Background())
@@ -865,7 +879,7 @@ func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, logStreamID types.LogSt
 			require.NoError(t, err)
 		}
 
-		err = clus.snMCLs[snid].Unseal(context.Background(), logStreamID)
+		err = clus.snMCLs[snid].Unseal(context.Background(), logStreamID, replicas)
 		require.NoError(t, err)
 	}
 }
