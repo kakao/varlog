@@ -1408,7 +1408,10 @@ func (m *AppendRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1510,7 +1513,10 @@ func (m *AppendRequest_BackupNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1599,7 +1605,10 @@ func (m *AppendResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1688,7 +1697,10 @@ func (m *ReadRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1811,7 +1823,10 @@ func (m *ReadResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1919,7 +1934,10 @@ func (m *SubscribeRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -2042,7 +2060,10 @@ func (m *SubscribeResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {
@@ -2112,7 +2133,10 @@ func (m *TrimRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthLogIo
 			}
 			if (iNdEx + skippy) > l {

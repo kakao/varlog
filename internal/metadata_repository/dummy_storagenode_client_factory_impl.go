@@ -271,6 +271,7 @@ func (r *DummyStorageNodeClient) Commit(ctx context.Context, cr *snpb.CommitRequ
 	}
 
 	for _, result := range cr.CommitResults {
+
 		idx := int(result.LogStreamID - types.LogStreamID(r.storageNodeID))
 		if idx < 0 || idx >= len(r.logStreamIDs) {
 			return errors.New("invalid log stream ID")
@@ -487,6 +488,10 @@ func (r *DummyStorageNodeClient) lookupPrevCommitInfo(idx int, hwm types.GLSN) (
 		return r.commitResultHistory[idx][i], true
 	}
 
+	if i > 0 {
+		return r.commitResultHistory[idx][i-1], true
+	}
+
 	return snpb.LogStreamCommitInfo{}, false
 }
 
@@ -516,7 +521,7 @@ func (r *DummyStorageNodeClient) GetPrevCommitInfo(ctx context.Context, hwm type
 			lsci.HighWatermark = cr.HighWatermark
 			lsci.PrevHighWatermark = cr.PrevHighWatermark
 		} else {
-			lsci.Status = snpb.GetPrevCommitStatusInconsistent
+			lsci.Status = snpb.GetPrevCommitStatusNotFound
 		}
 
 		ci.CommitInfos[i] = lsci

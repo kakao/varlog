@@ -625,7 +625,7 @@ func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *mrpb.RegisterStora
 		return err
 	}
 
-	mr.reportCollector.RegisterStorageNode(r.StorageNode, mr.storage.GetHighWatermark())
+	mr.reportCollector.RegisterStorageNode(r.StorageNode)
 
 	return nil
 }
@@ -648,7 +648,7 @@ func (mr *RaftMetadataRepository) applyRegisterLogStream(r *mrpb.RegisterLogStre
 	}
 
 	for _, replica := range r.LogStream.Replicas {
-		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID)
+		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetHighWatermark())
 		if err != nil &&
 			err != verrors.ErrExist &&
 			err != verrors.ErrStopped {
@@ -714,7 +714,7 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, 
 	})
 
 	for _, replica := range r.LogStream.Replicas {
-		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID)
+		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetHighWatermark())
 		if err != nil &&
 			err != verrors.ErrExist &&
 			err != verrors.ErrStopped {
@@ -731,8 +731,12 @@ func (mr *RaftMetadataRepository) applyReport(r *mrpb.Report) error {
 	snID := r.StorageNodeID
 	for _, u := range r.UncommitReport {
 		s := mr.storage.LookupUncommitReport(u.LogStreamID, snID)
-		if s == nil ||
-			s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd() ||
+		if s == nil {
+			continue
+		}
+
+		if (s.HighWatermark == u.HighWatermark &&
+			s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd()) ||
 			s.HighWatermark < u.HighWatermark {
 			mr.storage.UpdateUncommitReport(u.LogStreamID, snID, u)
 		}
@@ -770,12 +774,23 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 			for _, lsID := range lsIDs {
 				reports := mr.storage.LookupUncommitReports(lsID)
 				knownHWM, minHWM, nrUncommit := mr.calculateCommit(reports)
-				if minHWM < trimHWM {
-					trimHWM = minHWM
-				}
-
 				if reports.Status.Sealed() {
 					nrUncommit = 0
+				}
+
+				if reports.Status == varlogpb.LogStreamStatusSealed {
+					minHWM = curHWM
+				}
+
+				if reports.Status == varlogpb.LogStreamStatusSealing &&
+					mr.getLastCommitted(lsID) == knownHWM {
+					if err := mr.storage.SealLogStream(lsID, 0, 0); err == nil {
+						mr.reportCollector.Seal(lsID)
+					}
+				}
+
+				if minHWM < trimHWM {
+					trimHWM = minHWM
 				}
 
 				if nrUncommit > 0 {
@@ -853,7 +868,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 func (mr *RaftMetadataRepository) applySeal(r *mrpb.Seal, nodeIndex, requestIndex, appliedIndex uint64) error {
 	mr.applyCommit(nil, appliedIndex)
-	err := mr.storage.SealLogStream(r.LogStreamID, nodeIndex, requestIndex)
+	err := mr.storage.SealingLogStream(r.LogStreamID, nodeIndex, requestIndex)
 	if err != nil {
 		return err
 	}
@@ -866,6 +881,8 @@ func (mr *RaftMetadataRepository) applyUnseal(r *mrpb.Unseal, nodeIndex, request
 	if err != nil {
 		return err
 	}
+
+	mr.reportCollector.Unseal(r.LogStreamID, mr.GetHighWatermark())
 
 	return nil
 }
