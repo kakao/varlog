@@ -33,6 +33,20 @@ func (m *MockStateProvider) EXPECT() *MockStateProviderMockRecorder {
 	return m.recorder
 }
 
+// committableWithBarrier mocks base method.
+func (m *MockStateProvider) committableWithBarrier() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "committableWithBarrier")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// committableWithBarrier indicates an expected call of committableWithBarrier.
+func (mr *MockStateProviderMockRecorder) committableWithBarrier() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "committableWithBarrier", reflect.TypeOf((*MockStateProvider)(nil).committableWithBarrier))
+}
+
 // mutable mocks base method.
 func (m *MockStateProvider) mutable() error {
 	m.ctrl.T.Helper()

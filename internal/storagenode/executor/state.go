@@ -15,6 +15,7 @@ type executorState int32
 const (
 	executorMutable executorState = iota + 1
 	executorSealing
+	executorLearning
 	executorSealed
 )
 
@@ -35,6 +36,7 @@ func (aes *atomicExecutorState) compareAndSwap(oldState, newState executorState)
 type stateProvider interface {
 	mutable() error
 	mutableWithBarrier() error
+	committableWithBarrier() error
 	releaseBarrier()
 	setSealing()
 }
@@ -47,9 +49,26 @@ func (e *executor) mutable() error {
 	return errors.WithStack(verrors.ErrSealed)
 }
 
+func (e *executor) committable() error {
+	state := e.stateBarrier.state.load()
+	if state == executorMutable || state == executorSealing {
+		return nil
+	}
+	return errors.Wrapf(verrors.ErrInvalid, "not committable state (%+v)", state)
+}
+
 func (e *executor) mutableWithBarrier() error {
 	e.stateBarrier.lock.RLock()
 	if err := e.mutable(); err != nil {
+		e.stateBarrier.lock.RUnlock()
+		return err
+	}
+	return nil
+}
+
+func (e *executor) committableWithBarrier() error {
+	e.stateBarrier.lock.RLock()
+	if err := e.committable(); err != nil {
 		e.stateBarrier.lock.RUnlock()
 		return err
 	}

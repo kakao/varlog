@@ -140,8 +140,9 @@ func TestCommitterStop(t *testing.T) {
 	state := NewMockStateProvider(ctrl)
 
 	state.EXPECT().mutableWithBarrier().Return(nil)
-	state.EXPECT().releaseBarrier().Return()
+	state.EXPECT().releaseBarrier().Return().Times(2)
 	state.EXPECT().setSealing().Return()
+	state.EXPECT().committableWithBarrier().Return(nil)
 
 	// create committer
 	committer, err := newCommitter(committerConfig{
@@ -208,6 +209,7 @@ func TestCommitter(t *testing.T) {
 	state.EXPECT().setSealing().DoAndReturn(func() {
 		sealed.Store(true)
 	}).AnyTimes()
+	state.EXPECT().committableWithBarrier().Return(nil).AnyTimes()
 
 	// create committer
 	committer, err := newCommitter(committerConfig{
@@ -307,6 +309,7 @@ func TestCommitterCatchupCommitVarlog459(t *testing.T) {
 	state.EXPECT().mutableWithBarrier().Return(nil).AnyTimes()
 	state.EXPECT().releaseBarrier().Return().AnyTimes()
 	state.EXPECT().setSealing().Return().AnyTimes()
+	state.EXPECT().committableWithBarrier().Return(nil).AnyTimes()
 
 	// create committer
 	committer, err := newCommitter(committerConfig{

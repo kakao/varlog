@@ -2,7 +2,6 @@ package executor
 
 import (
 	"sync"
-	"time"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
@@ -19,8 +18,6 @@ type commitTask struct {
 	committedGLSNBegin types.GLSN
 	committedGLSNEnd   types.GLSN
 	committedLLSNBegin types.LLSN
-
-	ctime time.Time
 }
 
 func newCommitTask() *commitTask {
