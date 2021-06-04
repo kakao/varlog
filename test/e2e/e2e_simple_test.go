@@ -466,6 +466,59 @@ func TestK8sCreateCluster(t *testing.T) {
 	opts.RepFactor = 3
 
 	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
-	}))
+		vmsAddr, err := k8s.VMSAddress()
+		So(err, ShouldBeNil)
 
+		ctx, cancel := k8s.TimeoutContext()
+		defer cancel()
+
+		vmsCL, err := varlog.NewClusterManagerClient(ctx, vmsAddr)
+		So(err, ShouldBeNil)
+
+		Reset(func() {
+			So(vmsCL.Close(), ShouldBeNil)
+		})
+
+		logStreamIDs := make([]types.LogStreamID, 0, opts.NrLS)
+		for i := 0; i < opts.NrLS; i++ {
+			testutil.CompareWaitN(100, func() bool {
+				var (
+					rsp *vmspb.AddLogStreamResponse
+					err error
+				)
+				k8s.WithTimeoutContext(func(ctx context.Context) {
+					rsp, err = vmsCL.AddLogStream(ctx, nil)
+					So(err, ShouldBeNil)
+					logStreamID := rsp.GetLogStream().GetLogStreamID()
+					logStreamIDs = append(logStreamIDs, logStreamID)
+					log.Printf("AddLogStream (%d)", logStreamID)
+				})
+				return err == nil
+			})
+		}
+
+		for _, logStreamID := range logStreamIDs {
+			testutil.CompareWaitN(100, func() bool {
+				var err error
+				k8s.WithTimeoutContext(func(ctx context.Context) {
+					_, err = vmsCL.Seal(ctx, logStreamID)
+					So(err, ShouldBeNil)
+				})
+				log.Printf("Seal (%d)", logStreamID)
+				return err == nil
+			})
+		}
+
+		for _, logStreamID := range logStreamIDs {
+			testutil.CompareWaitN(100, func() bool {
+				var err error
+				k8s.WithTimeoutContext(func(ctx context.Context) {
+					_, err = vmsCL.Unseal(ctx, logStreamID)
+					So(err, ShouldBeNil)
+				})
+				log.Printf("Unseal (%d)", logStreamID)
+				return err == nil
+			})
+		}
+	}))
 }
