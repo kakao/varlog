@@ -110,7 +110,7 @@ func TestRegisterStorageNode(t *testing.T) {
 		reportCollector.Run()
 		defer reportCollector.Close()
 
-		err := reportCollector.RegisterStorageNode(nil, types.InvalidGLSN)
+		err := reportCollector.RegisterStorageNode(nil)
 		So(err, ShouldNotBeNil)
 	})
 
@@ -127,7 +127,7 @@ func TestRegisterStorageNode(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(time.Now().UnixNano()),
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+		err := reportCollector.RegisterStorageNode(sn)
 		So(err, ShouldBeNil)
 
 		reportCollector.mu.RLock()
@@ -136,7 +136,7 @@ func TestRegisterStorageNode(t *testing.T) {
 
 		So(ok, ShouldBeTrue)
 
-		err = reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+		err = reportCollector.RegisterStorageNode(sn)
 		So(err, ShouldNotBeNil)
 	})
 }
@@ -155,7 +155,7 @@ func TestRegisterLogStream(t *testing.T) {
 		lsID := types.LogStreamID(0)
 
 		Convey("registeration LogStream with not existing storageNodeID should be failed", func() {
-			err := reportCollector.RegisterLogStream(snID, lsID)
+			err := reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
 			So(err, ShouldResemble, verrors.ErrNotExist)
 		})
 
@@ -164,16 +164,16 @@ func TestRegisterLogStream(t *testing.T) {
 				StorageNodeID: snID,
 			}
 
-			err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+			err := reportCollector.RegisterStorageNode(sn)
 			So(err, ShouldBeNil)
 			So(reportCollector.NumExecutors(), ShouldEqual, 1)
 
-			err = reportCollector.RegisterLogStream(snID, lsID)
+			err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
 			So(err, ShouldBeNil)
 			So(reportCollector.NumCommitter(), ShouldEqual, 1)
 
 			Convey("duplicated registeration LogStream should be failed", func() {
-				err = reportCollector.RegisterLogStream(snID, lsID)
+				err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
 				So(err, ShouldResemble, verrors.ErrExist)
 			})
 		})
@@ -197,7 +197,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 			StorageNodeID: snID,
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+		err := reportCollector.RegisterStorageNode(sn)
 		So(err, ShouldBeNil)
 		So(reportCollector.NumExecutors(), ShouldEqual, 1)
 
@@ -209,7 +209,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 		})
 
 		Convey("unregisteration storageNode with logstream should be failed", func() {
-			err = reportCollector.RegisterLogStream(snID, lsID)
+			err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
 			So(err, ShouldBeNil)
 			So(reportCollector.NumCommitter(), ShouldEqual, 1)
 
@@ -256,11 +256,11 @@ func TestUnregisterLogStream(t *testing.T) {
 				StorageNodeID: snID,
 			}
 
-			err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+			err := reportCollector.RegisterStorageNode(sn)
 			So(err, ShouldBeNil)
 			So(reportCollector.NumExecutors(), ShouldEqual, 1)
 
-			err = reportCollector.RegisterLogStream(snID, lsID)
+			err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
 			So(err, ShouldBeNil)
 			So(reportCollector.NumCommitter(), ShouldEqual, 1)
 
@@ -286,6 +286,8 @@ func TestRecoverStorageNode(t *testing.T) {
 		hwm := types.MinGLSN
 		var SNs []*varlogpb.StorageNodeDescriptor
 		var LSs []*varlogpb.LogStreamDescriptor
+		var sealingLSID types.LogStreamID
+		var sealedLSID types.LogStreamID
 
 		for i := 0; i < nrSN; i++ {
 			sn := &varlogpb.StorageNodeDescriptor{
@@ -294,17 +296,26 @@ func TestRecoverStorageNode(t *testing.T) {
 
 			SNs = append(SNs, sn)
 
-			err := reportCollector.RegisterStorageNode(sn, hwm)
+			err := reportCollector.RegisterStorageNode(sn)
 			So(err, ShouldBeNil)
 
 			ls := &varlogpb.LogStreamDescriptor{
 				LogStreamID: types.LogStreamID(time.Now().UnixNano()),
 			}
+
+			if sealingLSID == types.LogStreamID(0) {
+				sealingLSID = ls.LogStreamID
+				ls.Status = varlogpb.LogStreamStatusSealing
+			} else if sealedLSID == types.LogStreamID(0) {
+				sealedLSID = ls.LogStreamID
+				ls.Status = varlogpb.LogStreamStatusSealed
+			}
+
 			ls.Replicas = append(ls.Replicas, &varlogpb.ReplicaDescriptor{StorageNodeID: sn.StorageNodeID})
 
 			LSs = append(LSs, ls)
 
-			err = reportCollector.RegisterLogStream(sn.StorageNodeID, ls.LogStreamID)
+			err = reportCollector.RegisterLogStream(sn.StorageNodeID, ls.LogStreamID, types.InvalidGLSN)
 			So(err, ShouldBeNil)
 		}
 
@@ -333,15 +344,36 @@ func TestRecoverStorageNode(t *testing.T) {
 				Convey("When ReportCollector Recover", func(ctx C) {
 					reportCollector.Recover(SNs, LSs, hwm)
 					Convey("Then there should be ReportCollectExecutor", func(ctx C) {
+
+						sealing := false
+						sealed := false
 						for i := 0; i < nrSN; i++ {
 							reportCollector.mu.RLock()
 							executor, ok := reportCollector.executors[SNs[i].StorageNodeID]
 							nrCommitter := len(executor.committers)
+
+							executor.cmmu.RLock()
+
+							if cm, ok := executor.committers[sealingLSID]; ok {
+								status, _ := cm.getCommitStatus()
+								sealing = status == varlogpb.LogStreamStatusRunning
+							}
+
+							if cm, ok := executor.committers[sealedLSID]; ok {
+								status, _ := cm.getCommitStatus()
+								sealed = status == varlogpb.LogStreamStatusSealed
+							}
+
+							executor.cmmu.RUnlock()
+
 							reportCollector.mu.RUnlock()
 
 							So(ok, ShouldBeTrue)
 							So(nrCommitter, ShouldEqual, 1)
 						}
+
+						So(sealing, ShouldBeTrue)
+						So(sealed, ShouldBeTrue)
 					})
 				})
 			})
@@ -426,7 +458,7 @@ func TestReport(t *testing.T) {
 				StorageNodeID: types.StorageNodeID(i),
 			}
 
-			err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+			err := reportCollector.RegisterStorageNode(sn)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -450,7 +482,7 @@ func TestReportDedup(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+		err := reportCollector.RegisterStorageNode(sn)
 		So(err, ShouldBeNil)
 
 		r := <-mr.reportC
@@ -494,8 +526,148 @@ func TestReportDedup(t *testing.T) {
 	})
 }
 
+func TestReportCollectorSeal(t *testing.T) {
+	Convey("Given ReportCollector", t, func() {
+		nrStorage := 5
+		nrLogStream := nrStorage
+		knownHWM := types.InvalidGLSN
+
+		a := NewDummyStorageNodeClientFactory(1, false)
+		mr := NewDummyMetadataRepository(a)
+		cc := newDummyCommitContext()
+
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector.Run()
+		Reset(func() {
+			reportCollector.Close()
+		})
+
+		for i := 0; i < nrStorage; i++ {
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNodeID: types.StorageNodeID(i),
+			}
+
+			err := reportCollector.RegisterStorageNode(sn)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			So(testutil.CompareWaitN(1, func() bool {
+				return a.lookupClient(sn.StorageNodeID) != nil
+			}), ShouldBeTrue)
+		}
+
+		var sealedLSID types.LogStreamID
+
+		for i := 0; i < nrLogStream; i++ {
+			err := reportCollector.RegisterLogStream(types.StorageNodeID(i%nrStorage), types.LogStreamID(i), types.InvalidGLSN)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			sealedLSID = types.LogStreamID(i)
+		}
+
+		gls := cc.newDummyCommitResults(knownHWM, nrStorage)
+		mr.appendGLS(gls)
+		knownHWM = gls.HighWatermark
+
+		So(testutil.CompareWaitN(10, func() bool {
+			reportCollector.Commit()
+
+			reportCollector.mu.RLock()
+			defer reportCollector.mu.RUnlock()
+
+			for _, executor := range reportCollector.executors {
+				executor.cmmu.RLock()
+				defer executor.cmmu.RUnlock()
+
+				if reportedHWM, ok := executor.getReportedHighWatermark(sealedLSID); ok && reportedHWM == knownHWM {
+					return true
+				}
+			}
+
+			return false
+		}), ShouldBeTrue)
+
+		Convey("When ReportCollector Seal", func() {
+			reportCollector.Seal(sealedLSID)
+			cc.seal(sealedLSID)
+
+			time.Sleep(time.Second)
+
+			Convey("Then it should not commit", func() {
+				gls = cc.newDummyCommitResults(knownHWM, nrStorage)
+				mr.appendGLS(gls)
+				knownHWM = gls.HighWatermark
+
+				for i := 0; i < 10; i++ {
+					reportCollector.Commit()
+					time.Sleep(100 * time.Millisecond)
+				}
+
+				{
+					reportCollector.mu.RLock()
+					defer reportCollector.mu.RUnlock()
+
+					for _, executor := range reportCollector.executors {
+						executor.cmmu.RLock()
+						defer executor.cmmu.RUnlock()
+
+						reportedHWM, ok := executor.getReportedHighWatermark(sealedLSID)
+						So(ok && reportedHWM == knownHWM, ShouldBeFalse)
+					}
+				}
+
+				Convey("When ReportCollector Unseal", func() {
+					reportCollector.Unseal(sealedLSID, knownHWM)
+					cc.unseal(sealedLSID)
+
+					Convey("Then it should commit", func() {
+						gls = cc.newDummyCommitResults(knownHWM, nrStorage)
+						mr.appendGLS(gls)
+						knownHWM = gls.HighWatermark
+
+						a.m.Range(func(k, v interface{}) bool {
+							cli := v.(*DummyStorageNodeClient)
+							So(testutil.CompareWaitN(10, func() bool {
+								reportCollector.Commit()
+
+								return cli.getKnownHighWatermark(0) == knownHWM
+							}), ShouldBeTrue)
+							return true
+						})
+					})
+				})
+			})
+		})
+	})
+}
+
 type dummyCommitContext struct {
 	committedLLSNBeginOffset []types.LLSN
+	sealedLSID               map[types.LogStreamID]struct{}
+}
+
+func newDummyCommitContext() *dummyCommitContext {
+	cc := &dummyCommitContext{}
+	cc.sealedLSID = make(map[types.LogStreamID]struct{})
+
+	return cc
+}
+
+func (cc *dummyCommitContext) seal(lsID types.LogStreamID) {
+	cc.sealedLSID[lsID] = struct{}{}
+}
+
+func (cc *dummyCommitContext) unseal(lsID types.LogStreamID) {
+	delete(cc.sealedLSID, lsID)
+}
+
+func (cc *dummyCommitContext) sealed(lsID types.LogStreamID) bool {
+	_, ok := cc.sealedLSID[lsID]
+	return ok
 }
 
 func (cc *dummyCommitContext) newDummyCommitResults(prev types.GLSN, nrLogStream int) *mrpb.LogStreamCommitResults {
@@ -510,14 +682,19 @@ func (cc *dummyCommitContext) newDummyCommitResults(prev types.GLSN, nrLogStream
 	}
 
 	for i := 0; i < nrLogStream; i++ {
+		numUncommitLen := 0
+		if !cc.sealed(types.LogStreamID(i)) {
+			numUncommitLen = 1
+		}
+
 		r := &snpb.LogStreamCommitResult{
 			LogStreamID:         types.LogStreamID(i),
 			CommittedGLSNOffset: glsn,
 			CommittedLLSNOffset: cc.committedLLSNBeginOffset[i],
-			CommittedGLSNLength: 1,
+			CommittedGLSNLength: uint64(numUncommitLen),
 		}
-		cc.committedLLSNBeginOffset[i] = cc.committedLLSNBeginOffset[i] + types.LLSN(1)
-		glsn += 1
+		cc.committedLLSNBeginOffset[i] = cc.committedLLSNBeginOffset[i] + types.LLSN(numUncommitLen)
+		glsn += types.GLSN(numUncommitLen)
 
 		cr.CommitResults = append(cr.CommitResults, r)
 	}
@@ -533,7 +710,7 @@ func TestCommit(t *testing.T) {
 
 		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
-		cc := &dummyCommitContext{}
+		cc := newDummyCommitContext()
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
@@ -547,7 +724,7 @@ func TestCommit(t *testing.T) {
 				StorageNodeID: types.StorageNodeID(i),
 			}
 
-			err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+			err := reportCollector.RegisterStorageNode(sn)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -558,7 +735,7 @@ func TestCommit(t *testing.T) {
 		}
 
 		for i := 0; i < nrLogStream; i++ {
-			err := reportCollector.RegisterLogStream(types.StorageNodeID(i%nrStorage), types.LogStreamID(i))
+			err := reportCollector.RegisterLogStream(types.StorageNodeID(i%nrStorage), types.LogStreamID(i), types.InvalidGLSN)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -614,6 +791,8 @@ func TestCommit(t *testing.T) {
 				}
 				reportCollector.mu.RUnlock()
 
+				// wait for prev catchup job to finish
+				time.Sleep(time.Second)
 				mr.trimGLS(trimHWM)
 				logger.Debug("trimGLS", zap.Any("knowHWM", knownHWM), zap.Any("trimHWM", trimHWM), zap.Any("result", len(mr.m)))
 
@@ -622,12 +801,12 @@ func TestCommit(t *testing.T) {
 						StorageNodeID: types.StorageNodeID(nrStorage),
 					}
 
-					err := reportCollector.RegisterStorageNode(sn, knownHWM)
+					err := reportCollector.RegisterStorageNode(sn)
 					So(err, ShouldBeNil)
 
 					nrStorage += 1
 
-					err = reportCollector.RegisterLogStream(sn.StorageNodeID, types.LogStreamID(nrLogStream))
+					err = reportCollector.RegisterLogStream(sn.StorageNodeID, types.LogStreamID(nrLogStream), knownHWM)
 					So(err, ShouldBeNil)
 
 					nrLogStream += 1
@@ -663,7 +842,7 @@ func TestCommitWithDelay(t *testing.T) {
 
 		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
-		cc := &dummyCommitContext{}
+		cc := newDummyCommitContext()
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, time.Second, logger)
@@ -676,7 +855,7 @@ func TestCommitWithDelay(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+		err := reportCollector.RegisterStorageNode(sn)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -685,7 +864,7 @@ func TestCommitWithDelay(t *testing.T) {
 			return a.lookupClient(sn.StorageNodeID) != nil
 		}), ShouldBeTrue)
 
-		err = reportCollector.RegisterLogStream(types.StorageNodeID(0), types.LogStreamID(0))
+		err = reportCollector.RegisterLogStream(types.StorageNodeID(0), types.LogStreamID(0), types.InvalidGLSN)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -748,6 +927,8 @@ func TestCommitWithDelay(t *testing.T) {
 					return reports.UncommitReports[0].HighWatermark == knownHWM
 				}), ShouldBeTrue)
 
+				// wait for prev catchup job to finish
+				time.Sleep(time.Second)
 				mr.trimGLS(knownHWM)
 
 				gls = cc.newDummyCommitResults(knownHWM, 1)
@@ -785,7 +966,7 @@ func TestRPCFail(t *testing.T) {
 			StorageNodeID: types.StorageNodeID(0),
 		}
 
-		err := reportCollector.RegisterStorageNode(sn, types.InvalidGLSN)
+		err := reportCollector.RegisterStorageNode(sn)
 		So(err, ShouldBeNil)
 
 		So(testutil.CompareWaitN(1, func() bool {

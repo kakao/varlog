@@ -256,7 +256,16 @@ func TestVarlogFailoverRecoverFromSML(t *testing.T) {
 
 				Convey("Then ls metadata from SN should be sealed", func(ctx C) {
 					ls := metadata.LogStreams[0]
-					So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+					So(ls.Status.Sealed(), ShouldBeTrue)
+
+					So(testutil.CompareWaitN(10, func() bool {
+						metadata, err := mr.GetMetadata(context.TODO())
+						if err != nil {
+							return false
+						}
+
+						return metadata.LogStreams[0].Status == varlogpb.LogStreamStatusSealed
+					}), ShouldBeTrue)
 
 					So(testutil.CompareWaitN(10, func() bool {
 						meta, err := env.StorageNodes()[0].GetMetadata(context.TODO())
@@ -348,7 +357,7 @@ func TestVarlogFailoverRecoverFromIncompleteSML(t *testing.T) {
 
 				Convey("Then ls metadata from SN should be sealed", func(ctx C) {
 					ls := metadata.LogStreams[0]
-					So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+					So(ls.Status.Sealed(), ShouldBeTrue)
 
 					env.WaitSealed(t, lsID)
 
@@ -436,7 +445,7 @@ func TestVarlogFailoverSyncLogStream(t *testing.T) {
 
 				Convey("Then ls metadata from SN should be sealed", func(ctx C) {
 					for _, ls := range metadata.LogStreams {
-						So(ls.Status, ShouldEqual, varlogpb.LogStreamStatusSealed)
+						So(ls.Status.Sealed(), ShouldBeTrue)
 
 						env.WaitSealed(t, ls.LogStreamID)
 					}

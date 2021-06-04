@@ -695,8 +695,8 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T) types.LogStreamID {
 	require.Error(t, err)
 	//require.NotNil(t, rsp)
 	//log.Printf("AddLS: AddLogStream: %+v", rsp)
+	log.Printf("AddLS: AddLogStream: %+v, err:%v", logStreamDesc, err)
 	require.NotNil(t, logStreamDesc)
-	log.Printf("AddLS: AddLogStream: %+v", logStreamDesc)
 
 	//logStreamDesc := rsp.GetLogStream()
 	logStreamID := logStreamDesc.GetLogStreamID()

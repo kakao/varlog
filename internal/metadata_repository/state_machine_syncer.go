@@ -245,10 +245,8 @@ func (s *StateMachineSyncer) initCommitResultContext(ctx context.Context, prevCo
 		}
 
 		for _, lsCommitInfo := range commitInfo.CommitInfos {
-			if lsCommitInfo.Status == snpb.GetPrevCommitStatusInconsistent {
-				return nil, fmt.Errorf("inconsistency commit info[snID:%v, hwm:%v]",
-					snID, prevCommitResults.GetHighWatermark())
-			} else if lsCommitInfo.Status == snpb.GetPrevCommitStatusOK {
+			if lsCommitInfo.Status == snpb.GetPrevCommitStatusOK &&
+				cc.commitResults.HighWatermark < lsCommitInfo.HighWatermark {
 				cc.commitResults.HighWatermark = lsCommitInfo.HighWatermark
 				cc.commitResults.PrevHighWatermark = lsCommitInfo.PrevHighWatermark
 			}
@@ -293,9 +291,16 @@ func (cc *commitResultContext) buildCommitResults() error {
 	SET_COMMIT_INFO:
 		for _, r := range commitInfo {
 			if r.Status == snpb.GetPrevCommitStatusOK {
-				c.CommittedLLSNOffset = r.CommittedLLSNOffset
-				c.CommittedGLSNOffset = r.CommittedGLSNOffset
-				c.CommittedGLSNLength = r.CommittedGLSNLength
+				if c.HighWatermark == r.HighWatermark {
+					c.CommittedLLSNOffset = r.CommittedLLSNOffset
+					c.CommittedGLSNOffset = r.CommittedGLSNOffset
+					c.CommittedGLSNLength = r.CommittedGLSNLength
+				} else {
+					// empty commit
+					c.CommittedLLSNOffset = r.CommittedLLSNOffset + types.LLSN(r.CommittedGLSNLength)
+					c.CommittedGLSNOffset = cc.commitResults.PrevHighWatermark + types.GLSN(cc.numCommit+1)
+					c.CommittedGLSNLength = 0
+				}
 
 				break SET_COMMIT_INFO
 			}

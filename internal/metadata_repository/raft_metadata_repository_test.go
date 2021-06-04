@@ -1286,9 +1286,9 @@ func TestMRUnseal(t *testing.T) {
 
 		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		defer cancel()
-		lc, err := mr.Seal(rctx, lsIds[1])
+		sealedHWM, err := mr.Seal(rctx, lsIds[1])
 		So(err, ShouldBeNil)
-		So(lc, ShouldEqual, mr.getLastCommitted(lsIds[1]))
+		So(sealedHWM, ShouldEqual, mr.getLastCommitted(lsIds[1]))
 
 		Convey("Unealed LS should update report", func(ctx C) {
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
@@ -1296,21 +1296,21 @@ func TestMRUnseal(t *testing.T) {
 			err := mr.Unseal(rctx, lsIds[1])
 			So(err, ShouldBeNil)
 
-			for i := 0; i < 10; i++ {
+			for i := 1; i < 10; i++ {
 				preHighWatermark := mr.storage.GetHighWatermark()
 
 				So(testutil.CompareWaitN(10, func() bool {
-					report := makeUncommitReport(snIDs[1][0], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
+					report := makeUncommitReport(snIDs[1][0], sealedHWM, lsIds[1], types.LLSN(4), uint64(i))
 					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 				}), ShouldBeTrue)
 
 				So(testutil.CompareWaitN(10, func() bool {
-					report := makeUncommitReport(snIDs[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, uint64(4+i))
+					report := makeUncommitReport(snIDs[1][1], sealedHWM, lsIds[1], types.LLSN(4), uint64(i))
 					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 				}), ShouldBeTrue)
 
 				So(testutil.CompareWaitN(50, func() bool {
-					return mr.storage.GetHighWatermark() == types.GLSN(6+i)
+					return mr.storage.GetHighWatermark() == types.GLSN(5+i)
 				}), ShouldBeTrue)
 
 				So(mr.numCommitSince(lsIds[1], preHighWatermark), ShouldEqual, 1)
@@ -2451,7 +2451,7 @@ func TestMRFailoverRecoverFromStateMachineLogWithIncompleteLog(t *testing.T) {
 
 			//dummy commit result to SN direct
 			prevHighwatermark := highWatermark
-			highWatermark = highWatermark * 2
+			highWatermark = highWatermark + types.GLSN(nrSN)
 
 			offset := prevHighwatermark + types.GLSN(1)
 
@@ -2477,6 +2477,7 @@ func TestMRFailoverRecoverFromStateMachineLogWithIncompleteLog(t *testing.T) {
 				}), ShouldBeTrue)
 
 				So(clus.nodes[leader].GetHighWatermark(), ShouldEqual, highWatermark)
+				fmt.Printf("recover highWatermark:%v\n", clus.nodes[leader].GetHighWatermark())
 
 				/*
 					             LS0        LS1        LS2        LS3        LS4
@@ -2505,7 +2506,7 @@ func TestMRFailoverRecoverFromStateMachineLogWithIncompleteLog(t *testing.T) {
 
 			//dummy commit result to SN direct
 			prevHighwatermark := highWatermark
-			highWatermark = highWatermark * 2
+			highWatermark = highWatermark + types.GLSN(nrSN)
 
 			offset := prevHighwatermark + types.GLSN(1)
 
@@ -2546,11 +2547,99 @@ func TestMRFailoverRecoverFromStateMachineLogWithIncompleteLog(t *testing.T) {
 				}), ShouldBeTrue)
 
 				So(clus.nodes[leader].GetHighWatermark(), ShouldEqual, highWatermark)
+				fmt.Printf("recover highWatermark:%v\n", clus.nodes[leader].GetHighWatermark())
 
 				/*
 					             LS0        LS1        LS2        LS3        LS4
 					committedOff 2          2          2          2          2
 					committedLen 2          0          1          1          1
+				*/
+				for _, snID := range snIDs {
+					snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+					lsID := snCli.logStreamID(0)
+
+					l, ok := expected[lsID]
+					So(ok, ShouldBeTrue)
+					So(clus.nodes[leader].getLastCommittedLength(lsID), ShouldEqual, l)
+				}
+			})
+		})
+
+		Convey("When some SN has empty commit", func(ctx C) {
+			/*
+				        LS0        LS1        LS2        LS3        LS4
+
+				status  ok         ok         ok         ok         ok
+				highest 2          2          3          3          3
+				LLSN
+
+				status  empty      empty      ok         ok         ok
+				highest 2          2          3          3          3
+				LLSN
+			*/
+
+			So(clus.stop(leader), ShouldBeNil)
+
+			//dummy commit result to SN direct
+			nrEmpty := 2
+			prevHighwatermark := highWatermark
+			highWatermark = highWatermark + types.GLSN(nrSN-nrEmpty)
+
+			offset := prevHighwatermark + types.GLSN(1)
+
+			for i, snID := range snIDs {
+				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+				lsID := snCli.logStreamID(0)
+
+				if i < nrEmpty {
+					// for simulate empty commit
+					continue
+				}
+
+				cr := makeCommitResult(snID, []types.LogStreamID{lsID}, []types.LLSN{snCli.uncommittedLLSNOffset[0]}, prevHighwatermark, highWatermark, offset)
+				offset += types.GLSN(1)
+
+				snCli.increaseUncommitted(0)
+
+				snCli.Commit(context.TODO(), cr)
+				So(snCli.getKnownHighWatermark(0), ShouldEqual, highWatermark)
+			}
+
+			prevHighwatermark = highWatermark
+			highWatermark = highWatermark + types.GLSN(nrSN)
+
+			expected := make(map[types.LogStreamID]uint64)
+			for _, snID := range snIDs {
+				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+				lsID := snCli.logStreamID(0)
+
+				cr := makeCommitResult(snID, []types.LogStreamID{lsID}, []types.LLSN{snCli.uncommittedLLSNOffset[0]}, prevHighwatermark, highWatermark, offset)
+				offset += types.GLSN(1)
+
+				expected[lsID] = 1
+				snCli.increaseUncommitted(0)
+
+				snCli.Commit(context.TODO(), cr)
+				So(snCli.getKnownHighWatermark(0), ShouldEqual, highWatermark)
+			}
+
+			So(clus.recoverMetadataRepo(leader), ShouldBeNil)
+
+			Convey("Then it should recover valid", func(ctx C) {
+				So(testutil.CompareWaitN(100, func() bool {
+					return clus.healthCheck(leader)
+				}), ShouldBeTrue)
+
+				So(clus.nodes[leader].GetHighWatermark(), ShouldEqual, highWatermark)
+				fmt.Printf("recover highWatermark:%v\n", clus.nodes[leader].GetHighWatermark())
+
+				/*
+					             LS0        LS1        LS2        LS3        LS4
+					committedOff 2          2          3          3          3
+					committedLen 1          1          1          1          1
+
+					committedOff 2          2          2          2          2
+					committedLen 0          0          1          1          1
 				*/
 				for _, snID := range snIDs {
 					snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)

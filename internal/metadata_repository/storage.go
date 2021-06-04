@@ -385,8 +385,13 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 		Status:   varlogpb.LogStreamStatusRunning,
 	}
 
+	if ls.Status.Sealed() {
+		lm.Status = varlogpb.LogStreamStatusSealing
+	}
+
 	for _, r := range ls.Replicas {
 		lm.Replicas[r.StorageNodeID] = &snpb.LogStreamUncommitReport{
+			HighWatermark:         ms.getHighWatermarkNoLock(),
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 0,
 		}
@@ -548,7 +553,7 @@ func (ms *MetadataStorage) UpdateLogStream(ls *varlogpb.LogStreamDescriptor, nod
 	return nil
 }
 
-func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status varlogpb.LogStreamStatus) error {
+func (ms *MetadataStorage) updateLogStreamDescStatus(lsID types.LogStreamID, status varlogpb.LogStreamStatus) error {
 	ls := ms.lookupLogStream(lsID)
 	if ls == nil {
 		return verrors.ErrNotExist
@@ -556,10 +561,11 @@ func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status 
 
 	ls = proto.Clone(ls).(*varlogpb.LogStreamDescriptor)
 
-	if ls.Status == status {
-		// To ensure that it is applied to the meta cache
+	if ls.Status == status ||
+		(ls.Status.Sealed() && status == varlogpb.LogStreamStatusSealing) {
 		return nil
 	}
+
 	ls.Status = status
 
 	_, cur := ms.getStateMachine()
@@ -588,12 +594,12 @@ func (ms *MetadataStorage) updateUncommitReportStatus(lsID types.LogStreamID, st
 		cur.LogStream.UncommitReports[lsID] = lls
 	}
 
-	if lls.Status == status {
-		// To ensure that it is applied to the meta cache
+	if lls.Status == status ||
+		(lls.Status.Sealed() && status == varlogpb.LogStreamStatusSealing) {
 		return nil
 	}
 
-	if status == varlogpb.LogStreamStatusSealed {
+	if status.Sealed() {
 		min := types.InvalidLLSN
 		for _, r := range lls.Replicas {
 			if min.Invalid() || min > r.UncommittedLLSNEnd() {
@@ -606,6 +612,11 @@ func (ms *MetadataStorage) updateUncommitReportStatus(lsID types.LogStreamID, st
 				return verrors.ErrInternal
 			}
 		}
+	} else {
+		highWatermark := ms.getHighWatermarkNoLock()
+		for _, r := range lls.Replicas {
+			r.HighWatermark = highWatermark
+		}
 	}
 
 	lls.Status = status
@@ -613,8 +624,8 @@ func (ms *MetadataStorage) updateUncommitReportStatus(lsID types.LogStreamID, st
 	return nil
 }
 
-func (ms *MetadataStorage) SealLogStream(lsID types.LogStreamID, nodeIndex, requestIndex uint64) error {
-	err := ms.updateLogStreamStatus(lsID, varlogpb.LogStreamStatusSealed)
+func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status varlogpb.LogStreamStatus, nodeIndex, requestIndex uint64) error {
+	err := ms.updateLogStreamDescStatus(lsID, status)
 	if err != nil {
 		if ms.cacheCompleteCB != nil {
 			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
@@ -622,7 +633,7 @@ func (ms *MetadataStorage) SealLogStream(lsID types.LogStreamID, nodeIndex, requ
 		return err
 	}
 
-	err = ms.updateUncommitReportStatus(lsID, varlogpb.LogStreamStatusSealed)
+	err = ms.updateUncommitReportStatus(lsID, status)
 	if err != nil {
 		if ms.cacheCompleteCB != nil {
 			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
@@ -635,26 +646,16 @@ func (ms *MetadataStorage) SealLogStream(lsID types.LogStreamID, nodeIndex, requ
 	return nil
 }
 
+func (ms *MetadataStorage) SealingLogStream(lsID types.LogStreamID, nodeIndex, requestIndex uint64) error {
+	return ms.updateLogStreamStatus(lsID, varlogpb.LogStreamStatusSealing, nodeIndex, requestIndex)
+}
+
+func (ms *MetadataStorage) SealLogStream(lsID types.LogStreamID, nodeIndex, requestIndex uint64) error {
+	return ms.updateLogStreamStatus(lsID, varlogpb.LogStreamStatusSealed, nodeIndex, requestIndex)
+}
+
 func (ms *MetadataStorage) UnsealLogStream(lsID types.LogStreamID, nodeIndex, requestIndex uint64) error {
-	err := ms.updateLogStreamStatus(lsID, varlogpb.LogStreamStatusRunning)
-	if err != nil {
-		if ms.cacheCompleteCB != nil {
-			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
-		}
-		return err
-	}
-
-	err = ms.updateUncommitReportStatus(lsID, varlogpb.LogStreamStatusRunning)
-	if err != nil {
-		if ms.cacheCompleteCB != nil {
-			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
-		}
-		return err
-	}
-
-	ms.triggerMetadataCache(nodeIndex, requestIndex)
-
-	return nil
+	return ms.updateLogStreamStatus(lsID, varlogpb.LogStreamStatusRunning, nodeIndex, requestIndex)
 }
 
 func (ms *MetadataStorage) SetLeader(nodeID types.NodeID) {
@@ -1213,8 +1214,12 @@ func (ms *MetadataStorage) RecoverStateMachine(stateMachine *mrpb.MetadataReposi
 	ms.recoverCache(stateMachine, appliedIndex)
 	ms.recoverStateMachine(stateMachine, appliedIndex)
 
+	ms.trimLogStreamCommitHistory()
+
 	fmt.Printf("recover commit result from [hwm:%v, prev:%v]\n",
-		ms.GetFirstCommitResults().GetHighWatermark(), ms.GetFirstCommitResults().GetPrevHighWatermark())
+		ms.GetFirstCommitResults().GetHighWatermark(),
+		ms.GetFirstCommitResults().GetPrevHighWatermark(),
+	)
 
 	ms.jobC = make(chan *storageAsyncJob, 4096)
 
@@ -1229,24 +1234,24 @@ func (ms *MetadataStorage) recoverLogStreams(stateMachine *mrpb.MetadataReposito
 	commitResults := stateMachine.GetLastCommitResults()
 
 	for _, ls := range stateMachine.Metadata.LogStreams {
-		ls.Status = varlogpb.LogStreamStatusSealed
+		ls.Status = varlogpb.LogStreamStatusSealing
 
 		lm, ok := stateMachine.LogStream.UncommitReports[ls.LogStreamID]
 		if !ok {
 			ms.logger.Panic("it could not recover state machine. invalid image")
 		}
-		lm.Status = varlogpb.LogStreamStatusSealed
+		lm.Status = varlogpb.LogStreamStatusSealing
 
-		committedLLSNOffset := types.MinLLSN
+		uncommittedLLSNLength := uint64(0)
 		cr := commitResults.LookupCommitResult(ls.LogStreamID)
 		if cr != nil {
-			committedLLSNOffset = cr.CommittedLLSNOffset + types.LLSN(cr.CommittedGLSNLength)
+			uncommittedLLSNLength = uint64(cr.CommittedLLSNOffset) + cr.CommittedGLSNLength - 1
+		}
 
-			for _, r := range lm.Replicas {
-				r.HighWatermark = cr.HighWatermark
-				r.UncommittedLLSNOffset = committedLLSNOffset
-				r.UncommittedLLSNLength = 0
-			}
+		for _, r := range lm.Replicas {
+			r.HighWatermark = types.InvalidGLSN
+			r.UncommittedLLSNOffset = types.MinLLSN
+			r.UncommittedLLSNLength = uncommittedLLSNLength
 		}
 	}
 }
