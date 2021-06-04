@@ -44,7 +44,7 @@ func (e *executor) GetPrevCommitInfo(prevHWM types.GLSN) (*snpb.LogStreamCommitI
 		HighestWrittenLLSN: e.lsc.uncommittedLLSNEnd.Load() - 1,
 	}
 
-	cc, err := e.storage.ReadCommitContext(prevHWM)
+	cc, err := e.storage.ReadFloorCommitContext(prevHWM)
 	switch err {
 	case storage.ErrNotFoundCommitContext:
 		info.Status = snpb.GetPrevCommitStatusNotFound

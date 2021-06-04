@@ -121,7 +121,7 @@ type Storage interface {
 	// NewCommitBatch creates a batch for commit operations.
 	NewCommitBatch(commitContext CommitContext) (CommitBatch, error)
 
-	ReadCommitContext(prevHighWatermark types.GLSN) (CommitContext, error)
+	ReadFloorCommitContext(prevHighWatermark types.GLSN) (CommitContext, error)
 
 	// CommitContextOf looks up a commit context that contains the log entry positioned at the
 	// given glsn.

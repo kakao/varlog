@@ -276,22 +276,22 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	require.Len(t, infos, 2)
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID1,
-		Status:              snpb.GetPrevCommitStatusInconsistent,
-		CommittedLLSNOffset: 0,
-		CommittedGLSNOffset: 0,
-		CommittedGLSNLength: 0,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 1,
+		CommittedGLSNOffset: 5,
+		CommittedGLSNLength: 5,
 		HighestWrittenLLSN:  5,
-		HighWatermark:       0,
+		HighWatermark:       20,
 		PrevHighWatermark:   0,
 	})
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID2,
-		Status:              snpb.GetPrevCommitStatusInconsistent,
-		CommittedLLSNOffset: 0,
-		CommittedGLSNOffset: 0,
-		CommittedGLSNLength: 0,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 1,
+		CommittedGLSNOffset: 11,
+		CommittedGLSNLength: 5,
 		HighestWrittenLLSN:  5,
-		HighWatermark:       0,
+		HighWatermark:       20,
 		PrevHighWatermark:   0,
 	})
 
@@ -300,22 +300,22 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	require.Len(t, infos, 2)
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID1,
-		Status:              snpb.GetPrevCommitStatusInconsistent,
-		CommittedLLSNOffset: 0,
-		CommittedGLSNOffset: 0,
-		CommittedGLSNLength: 0,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 1,
+		CommittedGLSNOffset: 5,
+		CommittedGLSNLength: 5,
 		HighestWrittenLLSN:  5,
-		HighWatermark:       0,
+		HighWatermark:       20,
 		PrevHighWatermark:   0,
 	})
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID2,
-		Status:              snpb.GetPrevCommitStatusInconsistent,
-		CommittedLLSNOffset: 0,
-		CommittedGLSNOffset: 0,
-		CommittedGLSNLength: 0,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 1,
+		CommittedGLSNOffset: 11,
+		CommittedGLSNLength: 5,
 		HighestWrittenLLSN:  5,
-		HighWatermark:       0,
+		HighWatermark:       20,
 		PrevHighWatermark:   0,
 	})
 

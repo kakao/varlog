@@ -1285,13 +1285,13 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID,
-		Status:              snpb.GetPrevCommitStatusInconsistent,
-		CommittedLLSNOffset: types.InvalidLLSN,
-		CommittedGLSNOffset: types.InvalidGLSN,
-		CommittedGLSNLength: 0,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 1,
+		CommittedGLSNOffset: 1,
+		CommittedGLSNLength: 5,
 		HighestWrittenLLSN:  10,
-		HighWatermark:       types.InvalidGLSN,
-		PrevHighWatermark:   types.InvalidGLSN,
+		HighWatermark:       5,
+		PrevHighWatermark:   0,
 	}, commitInfo)
 
 	commitInfo, err = lse.GetPrevCommitInfo(5)
@@ -1311,13 +1311,13 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, &snpb.LogStreamCommitInfo{
 		LogStreamID:         logStreamID,
-		Status:              snpb.GetPrevCommitStatusInconsistent,
-		CommittedLLSNOffset: types.InvalidLLSN,
-		CommittedGLSNOffset: types.InvalidGLSN,
-		CommittedGLSNLength: 0,
+		Status:              snpb.GetPrevCommitStatusOK,
+		CommittedLLSNOffset: 6,
+		CommittedGLSNOffset: 11,
+		CommittedGLSNLength: 5,
 		HighestWrittenLLSN:  10,
-		HighWatermark:       types.InvalidGLSN,
-		PrevHighWatermark:   types.InvalidGLSN,
+		HighWatermark:       20,
+		PrevHighWatermark:   5,
 	}, commitInfo)
 
 	commitInfo, err = lse.GetPrevCommitInfo(20)

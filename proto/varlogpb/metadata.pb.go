@@ -6,15 +6,16 @@ package varlogpb
 import (
 	bytes "bytes"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-	time "time"
 
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	_ "github.com/golang/protobuf/ptypes/timestamp"
+
+	io "io"
+	math "math"
+	math_bits "math/bits"
+	time "time"
 
 	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
 )

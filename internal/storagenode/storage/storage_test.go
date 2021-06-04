@@ -677,9 +677,9 @@ func TestStorageRecoveryInfoUncommitted(t *testing.T) {
 	})
 }
 
-func TestStorageReadCommitContext(t *testing.T) {
+func TestStorageReadFloorCommitContext(t *testing.T) {
 	testEachStorage(t, func(t *testing.T, strg Storage) {
-		_, err := strg.ReadCommitContext(1)
+		_, err := strg.ReadFloorCommitContext(1)
 		require.ErrorIs(t, ErrNotFoundCommitContext, err)
 
 		// LLSN | GLSN  | HWM | PrevHWM
@@ -719,25 +719,31 @@ func TestStorageReadCommitContext(t *testing.T) {
 		require.NoError(t, cb.Apply())
 		require.NoError(t, cb.Close())
 
-		_, err = strg.ReadCommitContext(0)
+		var cc CommitContext
+		cc, err = strg.ReadFloorCommitContext(0)
 		require.NoError(t, err)
+		require.Equal(t, cc.HighWatermark, types.GLSN(6))
 
-		_, err = strg.ReadCommitContext(4)
-		require.ErrorIs(t, ErrInconsistentCommitContext, err)
-
-		_, err = strg.ReadCommitContext(5)
-		require.ErrorIs(t, ErrInconsistentCommitContext, err)
-
-		_, err = strg.ReadCommitContext(6)
+		cc, err = strg.ReadFloorCommitContext(4)
 		require.NoError(t, err)
+		require.Equal(t, cc.HighWatermark, types.GLSN(6))
 
-		_, err = strg.ReadCommitContext(7)
-		require.ErrorIs(t, ErrInconsistentCommitContext, err)
+		cc, err = strg.ReadFloorCommitContext(5)
+		require.NoError(t, err)
+		require.Equal(t, cc.HighWatermark, types.GLSN(6))
 
-		_, err = strg.ReadCommitContext(10)
+		cc, err = strg.ReadFloorCommitContext(6)
+		require.NoError(t, err)
+		require.Equal(t, cc.HighWatermark, types.GLSN(10))
+
+		cc, err = strg.ReadFloorCommitContext(7)
+		require.NoError(t, err)
+		require.Equal(t, cc.HighWatermark, types.GLSN(10))
+
+		_, err = strg.ReadFloorCommitContext(10)
 		require.ErrorIs(t, ErrNotFoundCommitContext, err)
 
-		_, err = strg.ReadCommitContext(11)
+		_, err = strg.ReadFloorCommitContext(11)
 		require.ErrorIs(t, ErrNotFoundCommitContext, err)
 
 		require.NoError(t, strg.Close())
