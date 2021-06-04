@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -45,8 +44,8 @@ func (e *executor) Commit(ctx context.Context, commitResult *snpb.LogStreamCommi
 	ct.committedGLSNBegin = commitResult.CommittedGLSNOffset
 	ct.committedGLSNEnd = commitResult.CommittedGLSNOffset + types.GLSN(commitResult.CommittedGLSNLength)
 	ct.committedLLSNBegin = commitResult.CommittedLLSNOffset
-	ct.ctime = time.Now()
 	if err := e.committer.sendCommitTask(ctx, ct); err != nil {
+		ct.release()
 		return err
 	}
 	return nil

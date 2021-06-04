@@ -157,6 +157,11 @@ func (c *committerImpl) sendCommitTask(ctx context.Context, ct *commitTask) erro
 		return errors.WithStack(verrors.ErrClosed)
 	}
 
+	if err := c.state.committableWithBarrier(); err != nil {
+		return err
+	}
+	defer c.state.releaseBarrier()
+
 	return c.commitTaskQ.pushWithContext(ctx, ct)
 }
 
