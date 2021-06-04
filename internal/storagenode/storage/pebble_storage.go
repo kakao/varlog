@@ -427,6 +427,7 @@ func (ps *pebbleStorage) applyCommitBatch(pcb *pebbleCommitBatch) error {
 	}
 	ps.commitProgress.prevLLSN = pcb.progress.prevCommittedLLSN
 	ps.commitProgress.prevGLSN = pcb.progress.prevCommittedGLSN
+
 	return nil
 }
 
@@ -436,7 +437,7 @@ func (ps *pebbleStorage) StoreCommitContext(cc CommitContext) error {
 	return ps.db.Set(cck, nil, ps.commitContextOption)
 }
 
-func (ps *pebbleStorage) ReadCommitContext(prevHighWatermark types.GLSN) (CommitContext, error) {
+func (ps *pebbleStorage) ReadFloorCommitContext(prevHighWatermark types.GLSN) (CommitContext, error) {
 	iter := ps.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitContextKeyPrefix},
 		UpperBound: []byte{commitContextKeySentinelPrefix},
@@ -444,6 +445,15 @@ func (ps *pebbleStorage) ReadCommitContext(prevHighWatermark types.GLSN) (Commit
 	defer func() {
 		_ = iter.Close()
 	}()
+
+	if !iter.Last() {
+		return InvalidCommitContext, ErrNotFoundCommitContext
+	}
+
+	last := decodeCommitContextKey(iter.Key())
+	if last.HighWatermark <= prevHighWatermark {
+		return InvalidCommitContext, ErrNotFoundCommitContext
+	}
 
 	// NotFound
 	if !iter.SeekLT(encodeCommitContextKey(CommitContext{
@@ -453,13 +463,7 @@ func (ps *pebbleStorage) ReadCommitContext(prevHighWatermark types.GLSN) (Commit
 	}
 
 	cc := decodeCommitContextKey(iter.Key())
-	if prevHighWatermark == cc.PrevHighWatermark {
-		return cc, nil
-	}
-	if cc.PrevHighWatermark < prevHighWatermark && prevHighWatermark < cc.HighWatermark {
-		return InvalidCommitContext, ErrInconsistentCommitContext
-	}
-	return InvalidCommitContext, ErrNotFoundCommitContext
+	return cc, nil
 }
 
 func (ps *pebbleStorage) CommitContextOf(glsn types.GLSN) (CommitContext, error) {

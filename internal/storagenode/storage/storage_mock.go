@@ -345,19 +345,19 @@ func (mr *MockStorageMockRecorder) Read(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockStorage)(nil).Read), arg0)
 }
 
-// ReadCommitContext mocks base method.
-func (m *MockStorage) ReadCommitContext(arg0 types.GLSN) (CommitContext, error) {
+// ReadFloorCommitContext mocks base method.
+func (m *MockStorage) ReadFloorCommitContext(arg0 types.GLSN) (CommitContext, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadCommitContext", arg0)
+	ret := m.ctrl.Call(m, "ReadFloorCommitContext", arg0)
 	ret0, _ := ret[0].(CommitContext)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ReadCommitContext indicates an expected call of ReadCommitContext.
-func (mr *MockStorageMockRecorder) ReadCommitContext(arg0 interface{}) *gomock.Call {
+// ReadFloorCommitContext indicates an expected call of ReadFloorCommitContext.
+func (mr *MockStorageMockRecorder) ReadFloorCommitContext(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadCommitContext", reflect.TypeOf((*MockStorage)(nil).ReadCommitContext), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadFloorCommitContext", reflect.TypeOf((*MockStorage)(nil).ReadFloorCommitContext), arg0)
 }
 
 // ReadRecoveryInfo mocks base method.
