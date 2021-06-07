@@ -381,6 +381,95 @@ func TestVarlogFailoverRecoverFromIncompleteSML(t *testing.T) {
 	}))
 }
 
+func TestVarlogFailoverRecoverFromIncompleteSMLWithEmptyCommit(t *testing.T) {
+	opts := []it.Option{
+		it.WithoutWAL(),
+		it.WithReplicationFactor(1),
+		it.WithNumberOfStorageNodes(1),
+		it.WithNumberOfLogStreams(2),
+		it.WithMRCount(1),
+		it.WithNumberOfClients(1),
+	}
+
+	Convey("Given Varlog cluster with StateMachineLog", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		const nrAppend = 10
+
+		meta := env.GetMetadata(t)
+		So(meta, ShouldNotBeNil)
+
+		client := env.ClientAtIndex(t, 0)
+
+		var (
+			err  error
+			glsn types.GLSN
+		)
+		for i := 0; i < nrAppend; i++ {
+			glsn, err = client.Append(context.TODO(), []byte("foo"))
+			So(err, ShouldBeNil)
+		}
+
+		for _, lsID := range env.LogStreamIDs() {
+			env.WaitCommit(t, lsID, glsn)
+		}
+
+		Convey("When empty commit happens during MR close all without writing SML", func(ctx C) {
+			env.CloseMRAllForRestart(t)
+			/*
+				       HWM | PrevHWM
+				LS1 |  11  | 10
+				LS2 |  <EMPTY>
+
+				LS1 |  <EMPTY>
+				LS2 |  12  | 11
+
+				LS1 |  13  | 12
+				LS2 |  <EMPTY>
+
+
+				LS1 |  <EMPTY>
+				LS2 |  14  | 13
+			*/
+
+			for i := 0; i < 2; i++ {
+				for _, lsID := range env.LogStreamIDs() {
+					llsn := env.GetUncommittedLLSNOffset(t, lsID)
+
+					env.AppendUncommittedLog(t, lsID, []byte("foo"))
+
+					env.CommitWithoutMR(t, lsID, llsn, glsn+types.GLSN(1), 1, glsn, glsn+types.GLSN(1))
+					glsn += types.GLSN(1)
+
+					env.WaitCommit(t, lsID, glsn)
+				}
+			}
+
+			env.RecoverMR(t)
+
+			env.HealthCheckForMR(t)
+
+			Convey("Then it should be recovered", func(ctx C) {
+				mr := env.GetMR(t)
+				So(mr.GetHighWatermark(), ShouldEqual, glsn)
+
+				prevHWM := mr.GetPrevHighWatermark()
+
+				crs, _ := mr.LookupNextCommitResults(prevHWM)
+				So(crs, ShouldNotBeNil)
+
+				for _, lsID := range env.LogStreamIDs() {
+					cr := crs.LookupCommitResult(lsID)
+					So(cr, ShouldNotBeNil)
+
+					llsn := env.GetUncommittedLLSNOffset(t, lsID)
+
+					So(cr.CommittedLLSNOffset+types.LLSN(cr.CommittedGLSNLength), ShouldEqual, llsn)
+
+				}
+			})
+		})
+	}))
+}
+
 func TestVarlogFailoverSyncLogStream(t *testing.T) {
 	opts := []it.Option{
 		it.WithoutWAL(),
