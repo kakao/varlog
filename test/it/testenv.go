@@ -1485,7 +1485,7 @@ func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
 				continue
 			}
 
-			fmt.Printf("WaitSealed %v\n", lsmeta)
+			fmt.Printf("WaitSealed %+v\n", lsmeta)
 
 			if lsmeta.Status == varlogpb.LogStreamStatusSealed {
 				sealed++
@@ -1494,6 +1494,38 @@ func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
 
 		return sealed == clus.nrRep
 	}, vtesting.TimeoutUnitTimesFactor(100), 100*time.Millisecond)
+}
+
+func (clus *VarlogCluster) GetUncommittedLLSNOffset(t *testing.T, lsID types.LogStreamID) types.LLSN {
+
+	clus.muSN.Lock()
+	defer clus.muSN.Unlock()
+
+	clus.muLS.Lock()
+	defer clus.muLS.Unlock()
+
+	rds := clus.replicasOf(t, lsID)
+	reportCommitters := make([]reportcommitter.Client, 0, len(rds))
+	for _, rd := range rds {
+		reportCommitter := clus.reportCommitters[rd.GetStorageNodeID()]
+		reportCommitters = append(reportCommitters, reportCommitter)
+	}
+
+	for _, reporter := range reportCommitters {
+		rsp, err := reporter.GetReport(context.Background())
+		require.NoError(t, err)
+
+		reports := rsp.GetUncommitReports()
+		for _, report := range reports {
+			if report.GetLogStreamID() == lsID {
+				return report.UncommittedLLSNEnd()
+			}
+		}
+	}
+
+	require.FailNow(t, "not found")
+
+	return types.InvalidLLSN
 }
 
 // TODO (jun): non-nullable slice of replica descriptors
