@@ -24,6 +24,7 @@ type ClusterManagerClient interface {
 	Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*vmspb.SyncResponse, error)
 	GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error)
 	AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (*vmspb.AddMRPeerResponse, error)
+	RemoveMRPeer(ctx context.Context, raftURL string) (*vmspb.RemoveMRPeerResponse, error)
 	GetStorageNodes(ctx context.Context) (*vmspb.GetStorageNodesResponse, error)
 	Close() error
 }
@@ -114,6 +115,11 @@ func (c *clusterManagerClient) GetMRMembers(ctx context.Context) (*vmspb.GetMRMe
 
 func (c *clusterManagerClient) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (*vmspb.AddMRPeerResponse, error) {
 	rsp, err := c.rpcClient.AddMRPeer(ctx, &vmspb.AddMRPeerRequest{RaftURL: raftURL, RPCAddr: rpcAddr})
+	return rsp, verrors.FromStatusError(err)
+}
+
+func (c *clusterManagerClient) RemoveMRPeer(ctx context.Context, raftURL string) (*vmspb.RemoveMRPeerResponse, error) {
+	rsp, err := c.rpcClient.RemoveMRPeer(ctx, &vmspb.RemoveMRPeerRequest{RaftURL: raftURL})
 	return rsp, verrors.FromStatusError(err)
 }
 

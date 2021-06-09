@@ -101,15 +101,40 @@ def add_raft_peer():
         logger.exception("could not add peer")
         return False
 
+def remove_raft_peer():
+    try:
+        raft_url = get_raft_url()
+
+        _, members = get_info()
+        if members is None:
+            return False
+        elif raft_url not in members:
+            return True
+
+        out = subprocess.check_output([
+            f"{binpath}/vmc",
+            "mr",
+            "remove",
+            f"--raft-url={raft_url}"
+        ])
+        logger.info("remove raft:" + str(out))
+        json.loads(out)
+
+        return True
+    except Exception:
+        logger.exception("")
+        return False
+
 def prepare_vmr_home():
     home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
     os.makedirs(home, exist_ok=True)
 
-def standalone():
+def check_standalone():
     home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
     return os.path.exists(f"{home}/.standalone")
 
 def clear_standalone():
+    logger.info("clear standalone")
     home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
     if os.path.exists(f"{home}/.standalone"):
         os.remove(f"{home}/.standalone")
@@ -118,10 +143,11 @@ def exists_wal(path):
     wal = glob.glob(os.path.join(f"{path}/wal", "*", "*.wal"))
     return len(wal) > 0
 
-def main():
-    limits.set_limits()
-    prepare_vmr_home()
+def exists_cluster():
+    _, peers = get_info()
+    return peers is not None
 
+def get_metadata_repository_cmd(standalone):
     cluster_id = os.getenv("CLUSTER_ID", DEFAULT_CLUSTER_ID)
     rep_factor, peers = get_info()
     raft_url = get_raft_url()
@@ -129,18 +155,7 @@ def main():
     raft_dir = get_raft_dir()
     log_dir = get_log_dir()
 
-    if peers is None:
-        if standalone():
-            logger.info("it starts standalone")
-        elif exists_wal(raft_dir):
-            logger.info("it runs standalone with wal")
-        else:
-            logger.info("it could not run as standalone. check configuration")
-            return
-
-    clear_standalone()
-
-    common_command = [
+    command = [
         f"{binpath}/vmr",
         "start",
         f"--cluster-id={cluster_id}",
@@ -150,20 +165,44 @@ def main():
         f"--raft-dir={raft_dir}",
         f"--log-dir={log_dir}"
     ]
-    metadata_repository = common_command.copy()
+
+    if peers is not None:
+        command.append("--join=true")
+        for peer in peers:
+            command.append(f"--peers={peer}")
+    elif not standalone:
+        return None
+
+    return command
+
+def print_mr_home():
+    home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
+    arr = os.listdir(f"{home}")
+    logger.info(arr)
+
+def main():
+    logger.info("start")
+
+    print_mr_home()
+
+    limits.set_limits()
+    prepare_vmr_home()
+
+    standalone = False
+    if not exists_cluster():
+        if check_standalone():
+            standalone = True
+            logger.info("it starts standalone")
+        elif exists_wal(get_raft_dir()):
+            standalone = True
+            logger.info("it runs standalone with wal")
+        else:
+            logger.info("it could not run as standalone. check configuration")
+            return
+
+    clear_standalone()
 
     need_add_peer = False
-    if peers is not None:
-        metadata_repository.append("--join=true")
-        for peer in peers:
-            metadata_repository.append(f"--peers={peer}")
-        if raft_url not in peers:
-            need_add_peer = True
-
-    metadata_repository_restart = common_command.copy()
-    metadata_repository_restart.append("--join=true")
-
-    restart = False
     killer = Killer()
     while not killer.kill_now:
         if procutil.check_liveness("vmr"):
@@ -174,10 +213,21 @@ def main():
             continue
         try:
             procutil.kill("vmr")
-            cmd = metadata_repository_restart if restart else metadata_repository
-            restart = True
+
+            if not standalone and not remove_raft_peer():
+                logger.info("could not leave peer")
+                return
+
+            cmd = get_metadata_repository_cmd(standalone)
+            if cmd is None:
+                logger.info(f"could not make command. check configuration")
+                return
+
             logger.info(f"running metadata repository: {cmd}")
             subprocess.Popen(cmd)
+
+            need_add_peer = not standalone
+            standalone = False
         except (OSError, ValueError, subprocess.SubprocessError):
             logger.exception("could not run metadata repository")
         time.sleep(RETRY_INTERVAL_SEC)

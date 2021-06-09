@@ -175,6 +175,16 @@ func (s *clusterManagerService) AddMRPeer(ctx context.Context, req *vmspb.AddMRP
 	return rspI.(*vmspb.AddMRPeerResponse), verrors.ToStatusError(err)
 }
 
+func (s *clusterManagerService) RemoveMRPeer(ctx context.Context, req *vmspb.RemoveMRPeerRequest) (*vmspb.RemoveMRPeerResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/RemoveMRPeer", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			err := s.clusManager.RemoveMRPeer(ctx, req.RaftURL)
+			return &vmspb.RemoveMRPeerResponse{}, err
+		},
+	)
+	return rspI.(*vmspb.RemoveMRPeerResponse), verrors.ToStatusError(err)
+}
+
 func (s *clusterManagerService) GetStorageNodes(ctx context.Context, req *pbtypes.Empty) (*vmspb.GetStorageNodesResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/GetStorageNodes", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
