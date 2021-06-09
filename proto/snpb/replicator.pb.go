@@ -1676,10 +1676,7 @@ func (m *ReplicationRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthReplicator
 			}
 			if (iNdEx + skippy) > l {
@@ -1787,10 +1784,7 @@ func (m *ReplicationResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthReplicator
 			}
 			if (iNdEx + skippy) > l {
@@ -1879,10 +1873,7 @@ func (m *SyncPosition) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthReplicator
 			}
 			if (iNdEx + skippy) > l {
@@ -2051,10 +2042,7 @@ func (m *SyncStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthReplicator
 			}
 			if (iNdEx + skippy) > l {
@@ -2177,10 +2165,7 @@ func (m *SyncPayload) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthReplicator
 			}
 			if (iNdEx + skippy) > l {
@@ -2382,10 +2367,7 @@ func (m *SyncInitRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthReplicator
 			}
 			if (iNdEx + skippy) > l {
@@ -2469,10 +2451,7 @@ func (m *SyncInitResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthReplicator
 			}
 			if (iNdEx + skippy) > l {
@@ -2641,10 +2620,7 @@ func (m *SyncReplicateRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthReplicator
 			}
 			if (iNdEx + skippy) > l {
@@ -2731,10 +2707,7 @@ func (m *SyncReplicateResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthReplicator
 			}
 			if (iNdEx + skippy) > l {

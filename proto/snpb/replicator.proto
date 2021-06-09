@@ -59,6 +59,7 @@ enum SyncState {
 
 message SyncPosition {
     option (gogoproto.equal) = true;
+
     uint64 llsn = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
