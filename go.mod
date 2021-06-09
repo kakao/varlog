@@ -4,11 +4,13 @@ go 1.16
 
 require (
 	github.com/cockroachdb/pebble v0.0.0-20210222213630-560af6e14c3c
+	github.com/docker/go-units v0.4.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.5.0
 	github.com/golang/protobuf v1.5.2
 	github.com/google/gofuzz v1.2.0
+	github.com/jstemmer/go-junit-report v0.9.1
 	github.com/pkg/errors v0.9.1
 	github.com/smartystreets/assertions v1.2.0
 	github.com/smartystreets/goconvey v1.6.4
@@ -30,7 +32,8 @@ require (
 	go.uber.org/multierr v1.7.0
 	go.uber.org/zap v1.16.0
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
-	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f
+	golang.org/x/sys v0.0.0-20210304124612-50617c2ba197
+	gonum.org/v1/gonum v0.9.1
 	google.golang.org/grpc v1.38.0
 	google.golang.org/grpc/examples v0.0.0-20210521225445-359fdbb7b310 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0

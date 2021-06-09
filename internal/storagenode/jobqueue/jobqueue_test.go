@@ -21,7 +21,7 @@ type testQueueCreator struct {
 func newTestJobQueueCreators() []testQueueCreator {
 	benchmarkQueueCreators := []testQueueCreator{
 		{
-			name: "channel-queue",
+			name: "channelQueue",
 			create: func(queueSize int) (JobQueue, error) {
 				return NewChQueue(queueSize)
 			},

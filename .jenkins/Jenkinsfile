@@ -22,12 +22,34 @@ pipeline {
       post {
         always {
           sh "make test_report"
-          sh "make coverage_report"
           junit "build/reports/*.xml"
+
+          sh "make coverage_report"
           cobertura coberturaReportFile: "build/reports/coverage.xml"
         }
       }
+    }
 
+    stage("benchmark") {
+      environment {
+        TEST_USE_LOGGER = "0"
+      }
+
+      steps {
+        sh "make bench"
+
+        lock("varlog-sandbox-01") {
+          sh "./scripts/benchmark.sh > build/reports/load.xml"
+        }
+      }
+
+      post {
+        always {
+          sh "make bench_report"
+          perfReport "build/reports/bench.xml"
+          perfReport "build/reports/load.xml"
+        }
+      }
     }
 
   }
