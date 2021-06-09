@@ -6,6 +6,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 
@@ -78,6 +79,14 @@ type committerImpl struct {
 		val bool
 		mu  sync.RWMutex
 	}
+
+	inflightCommitTasks struct {
+		cnt int64
+		cv  *sync.Cond
+		mu  sync.Mutex
+	}
+
+	inflightCommitWaitTasks int64
 }
 
 var _ committer = (*committerImpl)(nil)
@@ -108,6 +117,8 @@ func (c *committerImpl) init() error {
 		return err
 	}
 	c.commitTaskQ = commitTaskQ
+
+	c.inflightCommitTasks.cv = sync.NewCond(&c.inflightCommitTasks.mu)
 
 	commitWaitQ, err := newCommitWaitQueue()
 	if err != nil {
@@ -143,6 +154,7 @@ func (c *committerImpl) sendCommitWaitTask(_ context.Context, tb *appendTask) er
 	}
 	defer c.state.releaseBarrier()
 
+	atomic.AddInt64(&c.inflightCommitWaitTasks, 1)
 	return c.commitWaitQ.push(tb)
 }
 
@@ -162,6 +174,7 @@ func (c *committerImpl) sendCommitTask(ctx context.Context, ct *commitTask) erro
 	}
 	defer c.state.releaseBarrier()
 
+	atomic.AddInt64(&c.inflightCommitTasks.cnt, 1)
 	return c.commitTaskQ.pushWithContext(ctx, ct)
 }
 
@@ -172,26 +185,43 @@ func (c *committerImpl) commitLoop(ctx context.Context) {
 		if err := c.commitLoopInternal(ctx); err != nil {
 			c.state.setSealing()
 		}
+
+		c.inflightCommitTasks.cv.L.Lock()
+		c.inflightCommitTasks.cv.Signal()
+		c.inflightCommitTasks.cv.L.Unlock()
 	}
 }
 
 func (c *committerImpl) commitLoopInternal(ctx context.Context) error {
-	if err := c.ready(ctx); err != nil {
+	numPoppedCTs, err := c.ready(ctx)
+	defer func() {
+		atomic.AddInt64(&c.inflightCommitTasks.cnt, -numPoppedCTs)
+	}()
+	if err != nil {
 		// sealing
 		return err
 	}
-	if err := c.commit(ctx); err != nil {
+
+	numPoppedCWTs, err := c.commit(ctx)
+	defer func() {
+		atomic.AddInt64(&c.inflightCommitWaitTasks, -numPoppedCWTs)
+	}()
+	if err != nil {
 		// sealing
 		return err
 	}
 	return nil
 }
 
-func (c *committerImpl) ready(ctx context.Context) error {
+func (c *committerImpl) ready(ctx context.Context) (int64, error) {
+	numPopped := int64(0)
+
 	ct, err := c.commitTaskQ.popWithContext(ctx)
 	if err != nil {
-		return err
+		return numPopped, err
 	}
+	numPopped++
+
 	globalHighWatermark, _ := c.lsc.reportCommitBase()
 	if ct.stale(globalHighWatermark) {
 		ct.release()
@@ -202,16 +232,20 @@ func (c *committerImpl) ready(ctx context.Context) error {
 	popSize := mathutil.MinInt(c.commitTaskBatchSize-len(c.commitTaskBatch), c.commitTaskQ.size())
 	for i := 0; i < popSize; i++ {
 		ct := c.commitTaskQ.pop()
+		numPopped++
+
 		if ct.stale(globalHighWatermark) {
 			ct.release()
 			continue
 		}
 		c.commitTaskBatch = append(c.commitTaskBatch, ct)
 	}
-	return nil
+	return numPopped, nil
 }
 
-func (c *committerImpl) commit(ctx context.Context) error {
+func (c *committerImpl) commit(ctx context.Context) (int64, error) {
+	numPoppedCWTs := int64(0)
+
 	// NOTE: Sort is not needed, and it needs to be evaluated whether it is helpful or not.
 	// - How many commit messages are processed at one time?
 	// - What is the proper batch size?
@@ -220,25 +254,28 @@ func (c *committerImpl) commit(ctx context.Context) error {
 	sort.Slice(c.commitTaskBatch, func(i, j int) bool {
 		return c.commitTaskBatch[i].highWatermark < c.commitTaskBatch[j].highWatermark
 	})
+
 	for _, ct := range c.commitTaskBatch {
 		globalHighWatermark, _ := c.lsc.reportCommitBase()
 		if ct.stale(globalHighWatermark) {
 			continue
 		}
 
-		if err := c.commitInternal(ctx, ct); err != nil {
-			return err
+		numPopped, err := c.commitInternal(ctx, ct)
+		numPoppedCWTs += numPopped
+		if err != nil {
+			return numPoppedCWTs, err
 		}
 	}
-	return nil
+	return numPoppedCWTs, nil
 }
 
-func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error {
+func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (int64, error) {
 	_, uncommittedLLSNBegin := c.lsc.reportCommitBase()
 	if uncommittedLLSNBegin != ct.committedLLSNBegin {
 		// skip this commit
 		// See #VARLOG-453 (VARLOG-453).
-		return nil
+		return 0, nil
 	}
 
 	uncommittedLLSNEnd := c.lsc.uncommittedLLSNEnd.Load()
@@ -252,7 +289,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 		// skip this commit
 		// NB: recovering phase?
 		// MR just sends past commit messages to recovered SN that has no written logs
-		return nil
+		return 0, nil
 	}
 
 	// NOTE: It seems to be similar to the above condition. The actual purpose of this
@@ -265,7 +302,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 	// storage, however, it is failed to push them into the commitWaitQueue.
 	// See [#VARLOG-444](VARLOG-444).
 	if c.commitWaitQ.size() < numCommits {
-		return nil
+		return 0, nil
 	}
 
 	commitContext := storage.CommitContext{
@@ -278,7 +315,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 
 	batch, err := c.strg.NewCommitBatch(commitContext)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() {
 		_ = batch.Close()
@@ -290,16 +327,16 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 		glsn := ct.committedGLSNBegin + types.GLSN(i)
 		cwt := iter.task()
 		if uncommittedLLSNBegin+types.LLSN(i) != cwt.llsn {
-			return errors.New("llsn mismatch")
+			return 0, errors.New("llsn mismatch")
 		}
 		cwt.glsn = glsn
 		if err := batch.Put(cwt.llsn, cwt.glsn); err != nil {
-			return err
+			return 0, err
 		}
 		iter.next()
 	}
 	if err := batch.Apply(); err != nil {
-		return err
+		return 0, err
 	}
 
 	// NOTE: Popping committed tasks should be happened before assigning a new
@@ -334,7 +371,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 		ct.wg.Done()
 	}
 
-	return nil
+	return int64(numCommits), nil
 }
 
 func (c *committerImpl) stop() {
@@ -351,18 +388,58 @@ func (c *committerImpl) stop() {
 }
 
 func (c *committerImpl) drainCommitWaitQ(err error) {
-	for c.commitWaitQ.size() > 0 {
-		tb := c.commitWaitQ.pop()
-		tb.err = err
-		tb.wg.Done()
+	for atomic.LoadInt64(&c.inflightCommitWaitTasks) > 0 {
+		numPopped := int64(0)
+		for c.commitWaitQ.size() > 0 {
+			tb := c.commitWaitQ.pop()
+			numPopped++
+			tb.err = err
+			tb.wg.Done()
+		}
+		atomic.AddInt64(&c.inflightCommitWaitTasks, -numPopped)
 	}
 }
 
 func (c *committerImpl) drainCommitTaskQ() {
+	numPopped := int64(0)
 	for c.commitTaskQ.size() > 0 {
 		ctb := c.commitTaskQ.pop()
+		numPopped++
 		ctb.release()
 	}
+	atomic.AddInt64(&c.inflightCommitTasks.cnt, -numPopped)
+}
+
+func (c *committerImpl) waitForDrainageOfCommitTasks(ctx context.Context) error {
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+
+	defer func() {
+		close(done)
+		wg.Wait()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+			c.inflightCommitTasks.cv.L.Lock()
+			c.inflightCommitTasks.cv.Signal()
+			c.inflightCommitTasks.cv.L.Unlock()
+		case <-done:
+		}
+	}()
+
+	c.inflightCommitTasks.cv.L.Lock()
+	defer c.inflightCommitTasks.cv.L.Unlock()
+	for atomic.LoadInt64(&c.inflightCommitTasks.cnt) > 0 && ctx.Err() == nil {
+		c.inflightCommitTasks.cv.Wait()
+	}
+	if c.commitTaskQ.size() == 0 {
+		return nil
+	}
+	return ctx.Err()
 }
 
 func (c *committerImpl) resetBatch() {

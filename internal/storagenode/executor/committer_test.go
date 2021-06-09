@@ -354,3 +354,127 @@ func TestCommitterCatchupCommitVarlog459(t *testing.T) {
 		return hwm == goal
 	}, 5*time.Second, 10*time.Millisecond)
 }
+
+func TestCommitterState(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	const (
+		commitTaskQueueSize = 16
+		commitQueueSize     = 16
+		committerBatchSize  = 16
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	strg := newTestStorage(ctrl, newTestStorageConfig())
+	lsc := newLogStreamContext()
+	decider := newDecidableCondition(lsc)
+	state := NewMockStateProvider(ctrl)
+
+	// create committer
+	committer, err := newCommitter(committerConfig{
+		commitTaskQueueSize: commitTaskQueueSize,
+		commitTaskBatchSize: committerBatchSize,
+		commitQueueSize:     commitQueueSize,
+		strg:                strg,
+		lsc:                 lsc,
+		decider:             decider,
+		state:               state,
+	})
+	require.NoError(t, err)
+	defer committer.stop()
+
+	state.EXPECT().setSealing().Return().AnyTimes()
+
+	// check initial conditions
+	require.Zero(t, committer.commitTaskQ.size())
+	require.Zero(t, committer.inflightCommitTasks.cnt)
+	require.Zero(t, committer.commitWaitQ.size())
+
+	// state == mutable
+	// - writing new log entries are enabled.
+	// - committing written logs are enabled.
+	state.EXPECT().mutableWithBarrier().Return(nil).Times(2)
+	state.EXPECT().releaseBarrier().Return().Times(2)
+	state.EXPECT().committableWithBarrier().Return(nil)
+	state.EXPECT().releaseBarrier().Return()
+
+	// push commitWaitTask
+	cwt := &appendTask{llsn: 1}
+	cwt.wg.Add(1)
+	require.NoError(t, committer.sendCommitWaitTask(context.Background(), cwt))
+	lsc.uncommittedLLSNEnd.Add(1)
+
+	// #commitWaitTasks = 1
+	// TODO (jun): add assertion for inflightCommitWaitTasks
+	require.EqualValues(t, 1, committer.commitWaitQ.size())
+
+	// push commitWaitTask
+	cwt = &appendTask{llsn: 2}
+	cwt.wg.Add(1)
+	require.NoError(t, committer.sendCommitWaitTask(context.Background(), cwt))
+	lsc.uncommittedLLSNEnd.Add(1)
+
+	// #commitWaitTasks = 2
+	// TODO (jun): add assertion for inflightCommitWaitTasks
+	require.EqualValues(t, 2, committer.commitWaitQ.size())
+
+	// push commitTask
+	require.NoError(t, committer.sendCommitTask(context.Background(), &commitTask{
+		highWatermark:      1,
+		prevHighWatermark:  0,
+		committedGLSNBegin: 1,
+		committedGLSNEnd:   2,
+		committedLLSNBegin: 1,
+	}))
+
+	// committed
+	require.Eventually(t, func() bool {
+		hwm, _ := lsc.reportCommitBase()
+		return committer.commitWaitQ.size() == 1 && hwm == 1
+	}, time.Second, 10*time.Millisecond)
+
+	// state == sealing
+	// - writing new log entries are disabled.
+	// - committing written logs are enabled.
+	state.EXPECT().mutableWithBarrier().Return(verrors.ErrSealed)
+	state.EXPECT().committableWithBarrier().Return(nil)
+	state.EXPECT().releaseBarrier().Return()
+
+	cwt = &appendTask{llsn: 3}
+	cwt.wg.Add(1)
+	require.Error(t, committer.sendCommitWaitTask(context.Background(), cwt))
+
+	require.NoError(t, committer.sendCommitTask(context.Background(), &commitTask{
+		highWatermark:      2,
+		prevHighWatermark:  1,
+		committedGLSNBegin: 2,
+		committedGLSNEnd:   3,
+		committedLLSNBegin: 2,
+	}))
+
+	// committed
+	require.Eventually(t, func() bool {
+		hwm, _ := lsc.reportCommitBase()
+		return committer.commitWaitQ.size() == 0 && hwm == 2
+	}, time.Second, 10*time.Millisecond)
+
+	// state == learning | sealed
+	// - writing new log entries are disabled.
+	// - committing written logs are disabled.
+	state.EXPECT().mutableWithBarrier().Return(verrors.ErrSealed)
+	state.EXPECT().committableWithBarrier().Return(verrors.ErrInvalid)
+
+	cwt = &appendTask{llsn: 3}
+	cwt.wg.Add(1)
+	require.Error(t, committer.sendCommitWaitTask(context.Background(), cwt))
+
+	require.Error(t, committer.sendCommitTask(context.Background(), &commitTask{
+		highWatermark:      3,
+		prevHighWatermark:  2,
+		committedGLSNBegin: 3,
+		committedGLSNEnd:   3,
+		committedLLSNBegin: 3,
+	}))
+}
