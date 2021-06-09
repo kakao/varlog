@@ -173,6 +173,12 @@ message AddMRPeerResponse {
     ];
 }
 
+message RemoveMRPeerRequest {
+    string raft_url = 1 [(gogoproto.customname) = "RaftURL"];
+}
+
+message RemoveMRPeerResponse {}
+
 service ClusterManager {
     rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {
     }
@@ -200,6 +206,8 @@ service ClusterManager {
     rpc GetMRMembers(google.protobuf.Empty) returns (GetMRMembersResponse) {}
 
     rpc AddMRPeer(AddMRPeerRequest) returns (AddMRPeerResponse) {}
+
+    rpc RemoveMRPeer(RemoveMRPeerRequest) returns (RemoveMRPeerResponse) {}
 
     rpc GetStorageNodes(google.protobuf.Empty)
         returns (GetStorageNodesResponse) {}

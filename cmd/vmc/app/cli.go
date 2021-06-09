@@ -377,6 +377,18 @@ func (app *VMCApp) initMRMgmtCmd() *cli.Command {
 
 	rmCmd := &cli.Command{
 		Name: "remove",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "raft-url",
+				Usage:    "metadata repository raft url",
+				Required: true,
+			},
+		},
+	}
+	rmCmd.Action = func(c *cli.Context) error {
+		raftURL := c.String("raft-url")
+		app.removeMRPeer(raftURL)
+		return nil
 	}
 
 	cmd.Subcommands = append(cmd.Subcommands, infoCmd, addCmd, rmCmd)

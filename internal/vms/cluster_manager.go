@@ -75,6 +75,8 @@ type ClusterManager interface {
 
 	AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error)
 
+	RemoveMRPeer(ctx context.Context, raftURL string) error
+
 	Run() error
 
 	Address() string
@@ -270,6 +272,25 @@ func (cm *clusterManager) AddMRPeer(ctx context.Context, raftURL, rpcAddr string
 	}
 
 	return nodeID, nil
+}
+
+func (cm *clusterManager) RemoveMRPeer(ctx context.Context, raftURL string) error {
+	nodeID := types.NewNodeIDFromURL(raftURL)
+	if nodeID == types.InvalidNodeID {
+		return errors.Wrap(verrors.ErrInvalid, "raft address")
+	}
+
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	err := cm.mrMgr.RemovePeer(ctx, nodeID)
+	if err != nil {
+		if !errors.Is(err, verrors.ErrAlreadyExists) {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (snmeta *varlogpb.StorageNodeMetadataDescriptor, err error) {
