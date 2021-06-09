@@ -33,11 +33,12 @@ VSN := $(BIN_DIR)/vsn
 VMR := $(BIN_DIR)/vmr
 SNTOOL := $(BIN_DIR)/sntool
 RPC_TEST_SERVER := $(BIN_DIR)/rpc_test_server
+BENCHMARK := $(BIN_DIR)/benchmark
 
-BUILD_OUTPUT := $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(RPC_TEST_SERVER)
+BUILD_OUTPUT := $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(RPC_TEST_SERVER) $(BENCHMARK)
 
-.PHONY: build vms vmc vsn vmr sntool rpc_test_server
-build: vms vmc vsn vmr sntool rpc_test_server
+.PHONY: build vms vmc vsn vmr sntool rpc_test_server benchmark
+build: vms vmc vsn vmr sntool rpc_test_server benchmark
 
 vms: proto
 	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMS) cmd/vms/main.go
@@ -56,6 +57,9 @@ sntool: proto
 
 rpc_test_server: proto
 	$(GO) build -tags rpc_e2e $(GOFLAGS) $(GCFLAGS) -o $(RPC_TEST_SERVER) cmd/rpc_test_server/main.go
+
+benchmark: proto
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(BENCHMARK) cmd/benchmark/main.go
 
 .PHONY: proto
 proto: $(PROTO_PBS)
@@ -116,6 +120,19 @@ test_report:
 
 coverage_report:
 	gocov convert $(BUILD_DIR)/reports/coverage.out | gocov-xml > $(BUILD_DIR)/reports/coverage.xml
+
+bench: build
+	tmpfile=$$(mktemp); \
+	(TERM=sh $(GO) test -v -run=^$$ -count 1 -bench=. -benchmem ./... 2>&1; echo $$? > $$tmpfile) | \
+	tee $(BUILD_DIR)/reports/bench_output.txt; \
+	ret=$$(cat $$tmpfile); \
+	rm -f $$tmpfile; \
+	exit $$ret
+
+bench_report:
+	cat $(BUILD_DIR)/reports/bench_output.txt | \
+		go-junit-report > $(BUILD_DIR)/reports/bench.xml
+	rm $(BUILD_DIR)/reports/bench_output.txt
 
 TEST_DOCKER_CPUS := 8
 TEST_DOCKER_MEMORY := 4GB
