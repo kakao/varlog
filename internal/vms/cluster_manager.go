@@ -368,6 +368,20 @@ func (cm *clusterManager) UnregisterStorageNode(ctx context.Context, storageNode
 }
 
 func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+	lsdesc, err := cm.addLogStreamInternal(ctx, replicas)
+	if err != nil {
+		return lsdesc, err
+	}
+
+	err = cm.waitSealed(ctx, lsdesc.LogStreamID)
+	if err != nil {
+		return lsdesc, err
+	}
+
+	return cm.Unseal(ctx, lsdesc.LogStreamID)
+}
+
+func (cm *clusterManager) addLogStreamInternal(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -407,6 +421,23 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 
 	// TODO: Choose the primary - e.g., shuffle logStreamReplicaMetas
 	return cm.addLogStream(ctx, logStreamDesc)
+}
+
+func (cm *clusterManager) waitSealed(ctx context.Context, logStreamID types.LogStreamID) error {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			lsStat := cm.statRepository.GetLogStream(logStreamID).Copy()
+			if lsStat.status == varlogpb.LogStreamStatusSealed {
+				return nil
+			}
+		}
+	}
 }
 
 func (cm *clusterManager) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
