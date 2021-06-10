@@ -572,64 +572,6 @@ func (clus *VarlogCluster) AddLS(t *testing.T) types.LogStreamID {
 	logStreamDesc := rsp.GetLogStream()
 	logStreamID := logStreamDesc.GetLogStreamID()
 
-	// FIXME: Can ReplicaDescriptor have address of storage node?
-	require.Eventually(t, func() bool {
-		for _, rd := range logStreamDesc.GetReplicas() {
-			snid := rd.GetStorageNodeID()
-			if !assert.Contains(t, clus.snMCLs, snid) {
-				return false
-			}
-
-			snmd, err := clus.snMCLs[snid].GetMetadata(context.Background())
-			require.NoError(t, err)
-
-			lsmd, ok := snmd.GetLogStream(logStreamID)
-			require.True(t, ok)
-
-			if lsmd.GetStatus() != varlogpb.LogStreamStatusSealed {
-				return false
-			}
-		}
-		return true
-	}, 3*time.Second, 100*time.Millisecond)
-
-	log.Printf("AddLS: AddLogStream (%v): Sealed", logStreamID)
-
-	require.Eventually(t, func() bool {
-		// FIXME: Should the Unseal is called repeatedly?
-		_, err := clus.vmsCL.Unseal(context.Background(), logStreamID)
-		if !assert.NoError(t, err) {
-			return false
-		}
-
-		for _, rd := range logStreamDesc.GetReplicas() {
-			snid := rd.GetStorageNodeID()
-			if !assert.Contains(t, clus.snMCLs, snid) {
-				return false
-			}
-
-			snmd, err := clus.snMCLs[snid].GetMetadata(context.Background())
-			if !assert.NoError(t, err) {
-				return false
-			}
-
-			lsmd, ok := snmd.GetLogStream(logStreamID)
-			if !assert.True(t, ok) || !lsmd.GetStatus().Running() {
-				return false
-			}
-		}
-
-		// TODO: use RPC API to get metadata
-		md, err := clus.vmsServer.Metadata(context.Background())
-		if !assert.NoError(t, err) {
-			return false
-		}
-		lsd, err := md.HaveLogStream(logStreamID)
-		return assert.NoError(t, err) && lsd.GetStatus().Running()
-	}, 3*time.Second, 100*time.Millisecond)
-
-	log.Printf("AddLS: AddLogStream (%v): Running", logStreamID)
-
 	// FIXME: use map to store logstream and its replicas
 	clus.logStreamIDs = append(clus.logStreamIDs, logStreamID)
 	clus.replicas[logStreamID] = logStreamDesc.GetReplicas()
