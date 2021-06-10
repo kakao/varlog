@@ -34,8 +34,7 @@ type executor struct {
 
 	writer writer
 
-	rp               replicator
-	replicaConnector replication.Connector
+	rp replicator
 
 	committer committer
 
@@ -105,14 +104,6 @@ func New(opts ...Option) (*executor, error) {
 	lse.lsc = lsc
 	lse.decider = newDecidableCondition(lsc)
 
-	// replica connector
-	// NOTE: replicaConnector should be created before replicator is created in initLogPipeline.
-	replicaConnector, err := replication.NewConnector()
-	if err != nil {
-		return nil, err
-	}
-	lse.replicaConnector = replicaConnector
-
 	// init log pipeline
 	if err := lse.initLogPipeline(); err != nil {
 		return nil, err
@@ -141,7 +132,6 @@ func (e *executor) initLogPipeline() error {
 	// replication processor
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: e.replicateQueueSize,
-		connector: e.replicaConnector,
 		state:     e,
 	})
 	if err != nil {
@@ -187,9 +177,6 @@ func (e *executor) Close() (err error) {
 	e.writer.stop()
 	e.rp.stop()
 	e.committer.stop()
-
-	// close replica connector
-	err = multierr.Append(err, e.replicaConnector.Close())
 
 	e.guardForClose()
 

@@ -34,6 +34,20 @@ func (m *MockReplicator) EXPECT() *MockReplicatorMockRecorder {
 	return m.recorder
 }
 
+// resetConnector mocks base method.
+func (m *MockReplicator) resetConnector() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "resetConnector")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// resetConnector indicates an expected call of resetConnector.
+func (mr *MockReplicatorMockRecorder) resetConnector() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "resetConnector", reflect.TypeOf((*MockReplicator)(nil).resetConnector))
+}
+
 // send mocks base method.
 func (m *MockReplicator) send(ctx context.Context, t *replicateTask) error {
 	m.ctrl.T.Helper()
