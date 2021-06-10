@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/storagenode/replication"
@@ -16,16 +17,13 @@ import (
 )
 
 type replicatorConfig struct {
-	queueSize int
-	connector replication.Connector
-	state     stateProvider
+	queueSize     int
+	state         stateProvider
+	connectorOpts []replication.ConnectorOption
 }
 
 func (c replicatorConfig) validate() error {
 	if c.queueSize <= 0 {
-		return errors.WithStack(verrors.ErrInvalid)
-	}
-	if c.connector == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
 	if c.state == nil {
@@ -38,6 +36,11 @@ type replicator interface {
 	send(ctx context.Context, t *replicateTask) error
 	stop()
 	waitForDrainage(ctx context.Context) error
+
+	// resetConnector closes the underlying connector and recreates a new connector. Closing the
+	// underlying connector means that it closes all clients to replicas. The newly created
+	// connector has no clients.
+	resetConnector() error
 }
 
 type replicatorImpl struct {
@@ -45,12 +48,15 @@ type replicatorImpl struct {
 
 	q replicateQueue
 
+	connector replication.Connector
+
 	dispatcher struct {
 		runner *runner.Runner
 		cancel context.CancelFunc
 		mu     sync.Mutex
 	}
 
+	// inflight is the number of replicate calls in progress.
 	inflight int64
 
 	running struct {
@@ -78,7 +84,20 @@ func newReplicator(cfg replicatorConfig) (*replicatorImpl, error) {
 	return r, nil
 }
 
+func (r *replicatorImpl) initConnector() error {
+	connector, err := replication.NewConnector(r.connectorOpts...)
+	if err != nil {
+		return err
+	}
+	r.connector = connector
+	return nil
+}
+
 func (r *replicatorImpl) init() error {
+	if err := r.initConnector(); err != nil {
+		return err
+	}
+
 	q, err := newReplicateQueue(r.queueSize)
 	if err != nil {
 		return err
@@ -114,7 +133,7 @@ func (r *replicatorImpl) send(ctx context.Context, t *replicateTask) error {
 	}
 	defer r.state.releaseBarrier()
 
-	atomic.AddInt64(&r.inflight, 1)
+	atomic.AddInt64(&r.inflight, int64(len(t.replicas)))
 
 	return r.q.pushWithContext(ctx, t)
 }
@@ -137,10 +156,6 @@ func (r *replicatorImpl) replicateLoopInternal(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	defer func() {
-		atomic.AddInt64(&r.inflight, -1)
-	}()
 
 	if err := r.replicate(ctx, rt); err != nil {
 		return err
@@ -172,6 +187,11 @@ func (r *replicatorImpl) replicate(ctx context.Context, t *replicateTask) error 
 }
 
 func (r *replicatorImpl) replicateCallback(err error) {
+	// NOTE: `inflight` should be decreased when the callback is called since all responses
+	// // either success and failure should be come before unsealing.
+	defer func() {
+		atomic.AddInt64(&r.inflight, -1)
+	}()
 	if err != nil {
 		r.state.setSealing()
 	}
@@ -185,13 +205,17 @@ func (r *replicatorImpl) stop() {
 	r.dispatcher.cancel()
 	r.dispatcher.runner.Stop()
 
+	_ = r.connector.Close()
 	r.drainQueue()
 }
 
 func (r *replicatorImpl) drainQueue() {
+	dropped := int64(0)
 	for r.q.size() > 0 {
-		_ = r.q.pop()
+		rt := r.q.pop()
+		dropped += int64(len(rt.replicas))
 	}
+	atomic.AddInt64(&r.inflight, -dropped)
 }
 
 func (r *replicatorImpl) waitForDrainage(ctx context.Context) error {
@@ -224,4 +248,8 @@ func (r *replicatorImpl) waitForDrainage(ctx context.Context) error {
 		return nil
 	}
 	return ctx.Err()
+}
+
+func (r *replicatorImpl) resetConnector() error {
+	return multierr.Append(r.connector.Close(), r.initConnector())
 }
