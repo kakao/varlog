@@ -1,5 +1,12 @@
 package snpb
 
+import (
+	"github.com/pkg/errors"
+
+	"github.com/kakao/varlog/pkg/util/container/set"
+	"github.com/kakao/varlog/pkg/verrors"
+)
+
 func EqualReplicas(xs []Replica, ys []Replica) bool {
 	if len(xs) != len(ys) {
 		return false
@@ -19,4 +26,26 @@ func EqualReplicas(xs []Replica, ys []Replica) bool {
 		}
 	}
 	return true
+}
+
+// ValidReplicas checks whether given replicas are valid. Valid replicas should contain at least one
+// replica, and all replicas have the same LogStreamID. They also have different StorageNodeIDs.
+func ValidReplicas(replicas []Replica) error {
+	if len(replicas) < 1 {
+		return errors.Wrap(verrors.ErrInvalid, "no replica")
+	}
+
+	lsidSet := set.New(len(replicas))
+	snidSet := set.New(len(replicas))
+	for _, replica := range replicas {
+		lsidSet.Add(replica.LogStreamID)
+		snidSet.Add(replica.StorageNodeID)
+	}
+	if lsidSet.Size() != 1 {
+		return errors.Wrap(verrors.ErrInvalid, "LogStreamID mismatch")
+	}
+	if snidSet.Size() != len(replicas) {
+		return errors.Wrap(verrors.ErrInvalid, "StorageNodeID duplicated")
+	}
+	return nil
 }

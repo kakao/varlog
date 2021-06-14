@@ -140,7 +140,6 @@ func (r *replicatorImpl) send(ctx context.Context, t *replicateTask) error {
 
 func (r *replicatorImpl) replicateLoop(ctx context.Context) {
 	for ctx.Err() == nil {
-
 		if err := r.replicateLoopInternal(ctx); err != nil {
 			r.state.setSealing()
 		}

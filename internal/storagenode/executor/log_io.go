@@ -26,30 +26,33 @@ func (e *executor) Append(ctx context.Context, data []byte, backups ...snpb.Repl
 		return types.InvalidGLSN, err
 	}
 
-	t := newAppendTask()
-	defer t.release()
+	twg := newTaskWaitGroup()
+	wt := newPrimaryWriteTask(twg, data, backups)
+	defer func() {
+		wt.release()
+		twg.release()
+	}()
 
-	t.primary = true
-	t.replicas = backups
-	t.data = data
 	// Note: It should be called within the scope of the mutex for stateBarrier.
-	t.validate = func() error {
-		if !snpb.EqualReplicas(e.replicas[1:], t.replicas) {
-			return errors.Wrapf(verrors.ErrInvalid, "replicas mismatch: expected=%+v, actual=%+v", e.replicas[1:], t.replicas)
+	wt.validate = func() error {
+		if !e.isPrimay() {
+			return errors.Wrapf(verrors.ErrInvalid, "backup replica")
+		}
+		if !snpb.EqualReplicas(e.primaryBackups[1:], wt.backups) {
+			return errors.Wrapf(verrors.ErrInvalid, "replicas mismatch: expected=%+v, actual=%+v", e.primaryBackups[1:], wt.backups)
 		}
 		return nil
 	}
-	t.wg.Add(1)
 
-	if err := e.writer.send(ctx, t); err != nil {
-		t.wg.Done()
-		t.wg.Wait()
+	if err := e.writer.send(ctx, wt); err != nil {
+		twg.wg.Done()
+		twg.wg.Wait()
 		return types.InvalidGLSN, err
 	}
 
-	t.wg.Wait()
-	glsn := t.glsn
-	err := t.err
+	twg.wg.Wait()
+	glsn := twg.glsn
+	err := twg.err
 	return glsn, err
 }
 

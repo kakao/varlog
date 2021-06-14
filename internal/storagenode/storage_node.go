@@ -399,6 +399,7 @@ func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.Log
 
 	lseOptions := append(sn.executorOpts,
 		executor.WithStorage(storage),
+		executor.WithStorageNodeID(sn.snid),
 		executor.WithLogStreamID(logStreamID),
 		executor.WithLogger(sn.logger),
 	)
@@ -406,12 +407,6 @@ func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.Log
 	if err != nil {
 		return err
 	}
-	/*
-		if err = lse.Run(ctx); err != nil {
-			lse.Close()
-			return err
-		}
-	*/
 	sn.tsp.Touch()
 	sn.executors.es[logStreamID] = lse
 	return nil

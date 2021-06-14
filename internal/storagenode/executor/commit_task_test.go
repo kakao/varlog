@@ -74,7 +74,6 @@ func BenchmarkCommitTaskBlockBatch(b *testing.B) {
 			benchFunc.f(b, commitTasks)
 		})
 	}
-
 }
 
 func benchmarkCommitTaskBlockBatchSort(b *testing.B, commitTasks []*commitTask) {

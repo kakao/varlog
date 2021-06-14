@@ -55,8 +55,8 @@ func (c committerConfig) validate() error {
 }
 
 type committer interface {
-	sendCommitWaitTask(ctx context.Context, tb *appendTask) error
-	sendCommitTask(ctx context.Context, ctb *commitTask) error
+	sendCommitWaitTask(ctx context.Context, cwt *commitWaitTask) error
+	sendCommitTask(ctx context.Context, ct *commitTask) error
 	drainCommitWaitQ(err error)
 	stop()
 }
@@ -138,8 +138,8 @@ func (c *committerImpl) init() error {
 	return nil
 }
 
-func (c *committerImpl) sendCommitWaitTask(_ context.Context, tb *appendTask) error {
-	if tb == nil {
+func (c *committerImpl) sendCommitWaitTask(_ context.Context, cwt *commitWaitTask) error {
+	if cwt == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
 
@@ -155,7 +155,7 @@ func (c *committerImpl) sendCommitWaitTask(_ context.Context, tb *appendTask) er
 	defer c.state.releaseBarrier()
 
 	atomic.AddInt64(&c.inflightCommitWaitTasks, 1)
-	return c.commitWaitQ.push(tb)
+	return c.commitWaitQ.push(cwt)
 }
 
 func (c *committerImpl) sendCommitTask(ctx context.Context, ct *commitTask) error {
@@ -329,8 +329,10 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (int64
 		if uncommittedLLSNBegin+types.LLSN(i) != cwt.llsn {
 			return 0, errors.New("llsn mismatch")
 		}
-		cwt.glsn = glsn
-		if err := batch.Put(cwt.llsn, cwt.glsn); err != nil {
+		if cwt.twg != nil {
+			cwt.twg.glsn = glsn
+		}
+		if err := batch.Put(cwt.llsn, glsn); err != nil {
 			return 0, err
 		}
 		iter.next()
@@ -345,7 +347,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (int64
 	// Seal RPC decides whether the LSE can be sealed or not by using the localHighWatermark.
 	// If Seal RPC tries to make the LSE sealed, the committer should not pop anything from
 	// commitWaitQ.
-	committedTasks := make([]*appendTask, 0, numCommits)
+	committedTasks := make([]*commitWaitTask, 0, numCommits)
 	for i := 0; i < numCommits; i++ {
 		tb := c.commitWaitQ.pop()
 		// NOTE: This tb should not be nil, because the size of commitWaitQ is inspected
@@ -367,8 +369,9 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (int64
 	// A client that receives the response of Append RPC should be able to read that log
 	// immediately. If updating localHighWatermark occurs later, the client can receive
 	// ErrUndecidable if ErrUndecidable is allowed.
-	for _, ct := range committedTasks {
-		ct.wg.Done()
+	for _, cwt := range committedTasks {
+		cwt.twg.done(nil)
+		cwt.release()
 	}
 
 	return int64(numCommits), nil
@@ -391,10 +394,10 @@ func (c *committerImpl) drainCommitWaitQ(err error) {
 	for atomic.LoadInt64(&c.inflightCommitWaitTasks) > 0 {
 		numPopped := int64(0)
 		for c.commitWaitQ.size() > 0 {
-			tb := c.commitWaitQ.pop()
+			cwt := c.commitWaitQ.pop()
 			numPopped++
-			tb.err = err
-			tb.wg.Done()
+			cwt.twg.done(err)
+			cwt.release()
 		}
 		atomic.AddInt64(&c.inflightCommitWaitTasks, -numPopped)
 	}

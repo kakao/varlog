@@ -65,8 +65,9 @@ type executor struct {
 
 	tsp timestamper.Timestamper
 
-	// replicas atomic.Value // []snpb.Replica
-	replicas []snpb.Replica
+	// The primaryBackups is a slice of replicas of a log stream. It is updated by Unseal
+	// and is read by many codes.
+	primaryBackups []snpb.Replica
 }
 
 var _ Executor = (*executor)(nil)
@@ -226,10 +227,7 @@ func (e *executor) regenerateCommitWaitTasks(ri storage.RecoveryInfo) error {
 	firstLLSN := ri.UncommittedLogEntryBoundary.First
 	lastLLSN := ri.UncommittedLogEntryBoundary.Last
 	for llsn := firstLLSN; llsn <= lastLLSN; llsn++ {
-		cwt := newAppendTask()
-		cwt.llsn = llsn
-		cwt.wg.Add(1)
-
+		cwt := newCommitWaitTask(llsn, nil)
 		if err := e.committer.sendCommitWaitTask(context.Background(), cwt); err != nil {
 			return err
 		}
@@ -270,4 +268,14 @@ func (e *executor) withRecover(f func() error) (err error) {
 	}()
 	err = f()
 	return err
+}
+
+// isPrimary returns true if the executor is behind of primary replica. Note that isPrimary should
+// be called within the scope of the mutex for stateBarrier.
+func (e *executor) isPrimay() bool {
+	// NOTE: A new log stream replica that has not received Unseal request is not primary
+	// replica.
+	return len(e.primaryBackups) > 0 &&
+		e.primaryBackups[0].StorageNodeID == e.storageNodeID &&
+		e.primaryBackups[0].LogStreamID == e.logStreamID
 }

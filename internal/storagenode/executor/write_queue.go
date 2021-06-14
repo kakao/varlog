@@ -8,9 +8,9 @@ import (
 
 // writeQueue is type-safe wrapper of jobqueue.Queue.
 type writeQueue interface {
-	pushWithContext(ctx context.Context, task *appendTask) error
-	popWithContext(ctx context.Context) (*appendTask, error)
-	pop() *appendTask
+	pushWithContext(ctx context.Context, task *writeTask) error
+	popWithContext(ctx context.Context) (*writeTask, error)
+	pop() *writeTask
 	size() int
 }
 
@@ -33,20 +33,20 @@ func newWriteQueue(queueSize int) (*writeQueueImpl, error) {
 	return wq, nil
 }
 
-func (wq *writeQueueImpl) pushWithContext(ctx context.Context, task *appendTask) error {
+func (wq *writeQueueImpl) pushWithContext(ctx context.Context, task *writeTask) error {
 	return wq.q.PushWithContext(ctx, task)
 }
 
-func (wq *writeQueueImpl) popWithContext(ctx context.Context) (*appendTask, error) {
+func (wq *writeQueueImpl) popWithContext(ctx context.Context) (*writeTask, error) {
 	item, err := wq.q.PopWithContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return item.(*appendTask), nil
+	return item.(*writeTask), nil
 }
 
-func (wq *writeQueueImpl) pop() *appendTask {
-	return wq.q.Pop().(*appendTask)
+func (wq *writeQueueImpl) pop() *writeTask {
+	return wq.q.Pop().(*writeTask)
 }
 
 func (wq *writeQueueImpl) size() int {

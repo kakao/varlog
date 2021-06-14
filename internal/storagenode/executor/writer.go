@@ -71,7 +71,7 @@ const (
 )
 
 type writer interface {
-	send(ctx context.Context, tb *appendTask) error
+	send(ctx context.Context, tb *writeTask) error
 	stop()
 	waitForDrainage(ctx context.Context) error
 }
@@ -103,8 +103,9 @@ type writerImpl struct {
 		mu sync.Mutex
 	}
 
-	writeTaskBatch     []*appendTask
-	replicateTaskBatch []*replicateTask
+	writeTaskBatch      []*writeTask
+	commitWaitTaskBatch []*commitWaitTask
+	replicateTaskBatch  []*replicateTask
 }
 
 var _ writer = (*writerImpl)(nil)
@@ -114,9 +115,10 @@ func newWriter(cfg writerConfig) (*writerImpl, error) {
 		return nil, err
 	}
 	w := &writerImpl{
-		writerConfig:       cfg,
-		writeTaskBatch:     make([]*appendTask, 0, cfg.batchSize),
-		replicateTaskBatch: make([]*replicateTask, 0, cfg.batchSize),
+		writerConfig:        cfg,
+		writeTaskBatch:      make([]*writeTask, 0, cfg.batchSize),
+		commitWaitTaskBatch: make([]*commitWaitTask, 0, cfg.batchSize),
+		replicateTaskBatch:  make([]*replicateTask, 0, cfg.batchSize),
 	}
 	if err := w.init(); err != nil {
 		return nil, err
@@ -146,7 +148,7 @@ func (w *writerImpl) init() error {
 	return nil
 }
 
-func (w *writerImpl) send(ctx context.Context, tb *appendTask) error {
+func (w *writerImpl) send(ctx context.Context, tb *writeTask) error {
 	if tb == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
@@ -219,6 +221,8 @@ func (w *writerImpl) ready(ctx context.Context) (types.LLSN, types.LLSN, int64, 
 	oldLLSN := w.lsc.uncommittedLLSNEnd.Load()
 	newLLSN := oldLLSN
 
+	// NOTE: These variables check whether tasks in writeQ are mixed by Append RPC and Replicate
+	// RPC. They will be removed after stabilizing codebases.
 	primary := t.primary
 	backup := !t.primary
 
@@ -248,25 +252,25 @@ func (w *writerImpl) ready(ctx context.Context) (types.LLSN, types.LLSN, int64, 
 	return oldLLSN, newLLSN, numPopped, nil
 }
 
-func (w *writerImpl) fillBatch(t *appendTask, llsn types.LLSN) error {
-	w.writeTaskBatch = append(w.writeTaskBatch, t)
+func (w *writerImpl) fillBatch(wt *writeTask, llsn types.LLSN) error {
+	w.writeTaskBatch = append(w.writeTaskBatch, wt)
 
 	//priamry
-	if t.primary {
+	if wt.primary {
 		// assign llsn
-		t.llsn = llsn
+		wt.llsn = llsn
 		// put into replicateTaskBatch
 		rt := newReplicateTask()
-		rt.llsn = t.llsn
-		rt.data = t.data
-		rt.replicas = t.replicas
+		rt.llsn = wt.llsn
+		rt.data = wt.data
+		rt.replicas = wt.backups
 		w.replicateTaskBatch = append(w.replicateTaskBatch, rt)
 		return nil
 	}
 
 	// backup: check llsn
-	if t.llsn != llsn {
-		return errors.Errorf("llsn mismatch: %d != %d", llsn, t.llsn)
+	if wt.llsn != llsn {
+		return errors.Errorf("llsn mismatch: %d != %d", llsn, wt.llsn)
 	}
 	return nil
 }
@@ -295,23 +299,23 @@ func (w *writerImpl) write() (err error) {
 
 func (w *writerImpl) sendToCommitter(ctx context.Context) (err error) {
 	idx := 0
-	for idx < len(w.writeTaskBatch) {
-		tb := w.writeTaskBatch[idx]
-		err = w.committer.sendCommitWaitTask(ctx, tb)
+	for idx < len(w.commitWaitTaskBatch) {
+		cwt := w.commitWaitTaskBatch[idx]
+		err = w.committer.sendCommitWaitTask(ctx, cwt)
 		if err != nil {
 			break
 		}
 		idx++
 	}
-	w.writeTaskBatchError(w.writeTaskBatch[idx:], err)
+	w.commitWaitTaskBatchError(w.commitWaitTaskBatch[idx:], err)
 	return err
 }
 
 func (w *writerImpl) sendToReplicator(ctx context.Context) (err error) {
 	idx := 0
 	for idx < len(w.replicateTaskBatch) {
-		rtb := w.replicateTaskBatch[idx]
-		err = w.replicator.send(ctx, rtb)
+		rt := w.replicateTaskBatch[idx]
+		err = w.replicator.send(ctx, rt)
 		if err != nil {
 			break
 		}
@@ -328,6 +332,33 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 		if err := w.write(); err != nil {
 			return err
 		}
+
+		// After successful writing, commitWatiTaskBatch should be made.
+		for _, wt := range w.writeTaskBatch {
+			var cwt *commitWaitTask
+			if wt.primary { // primary
+				cwt = newCommitWaitTask(wt.llsn, wt.twg)
+			} else { // backup
+				cwt = newCommitWaitTask(wt.llsn, nil)
+			}
+			w.commitWaitTaskBatch = append(w.commitWaitTaskBatch, cwt)
+		}
+
+		// NOTE: To avoid race, Below condition expression should be called before
+		// commitWaitTask is sent to committer.
+		// Assumes that the below expression is executed after commitWaitTask is passed to
+		// committer and committer calls the Done of twg very quickly. Since the Done of twg
+		// is called, the Append RPC tries to release the writeTask. At that times, if the
+		// conditions are executed, the race condition will happend.
+		for _, wt := range w.writeTaskBatch {
+			// Replication tasks succeed after writing the logs into the
+			// storage. Thus here notifies the Replicate RPC handler to return
+			// nil.
+			if !wt.primary {
+				wt.twg.done(nil)
+			}
+		}
+
 		// NOTE: Updating uncommittedLLSNEnd should be done when the writing logs to the
 		// storage succeeds. The reason why the uncommittedLLSNEnd is changed after sending
 		// commitWaitTasks to the committer is that the committer compares the size of
@@ -342,6 +373,7 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 					w.lsc.uncommittedLLSNEnd.Load(), oldLLSN, newLLSN,
 				))
 			}
+
 		}()
 		return w.sendToCommitter(ctx)
 	})
@@ -372,8 +404,8 @@ func (w *writerImpl) stop() {
 func (w *writerImpl) drainQueue(err error) {
 	for w.q.size() > 0 {
 		tb := w.q.pop()
-		tb.err = err
-		tb.wg.Done()
+		tb.twg.err = err
+		tb.twg.wg.Done()
 	}
 }
 
@@ -411,25 +443,37 @@ func (w *writerImpl) waitForDrainage(ctx context.Context) error {
 
 func (w *writerImpl) resetBatch() {
 	w.writeTaskBatch = w.writeTaskBatch[0:0]
+	w.commitWaitTaskBatch = w.commitWaitTaskBatch[0:0]
 	w.replicateTaskBatch = w.replicateTaskBatch[0:0]
 }
 
+// batchError is called only when ready fails, thus its error is writeErr.
 func (w *writerImpl) batchError(err error) {
 	w.writeTaskBatchError(w.writeTaskBatch, err)
 	w.releaseReplicateTaskBatch(w.replicateTaskBatch)
 }
 
-func (w *writerImpl) writeTaskBatchError(batch []*appendTask, err error) {
+func (w *writerImpl) writeTaskBatchError(batch []*writeTask, err error) {
 	for i := 0; i < len(batch); i++ {
-		tb := batch[i]
-		tb.err = err
-		tb.wg.Done()
+		wt := batch[i]
+		wt.twg.err = err
+		wt.twg.wg.Done()
 	}
 }
 
+func (w *writerImpl) commitWaitTaskBatchError(batch []*commitWaitTask, err error) {
+	for i := 0; i < len(batch); i++ {
+		cwt := batch[i]
+		cwt.twg.err = err
+		cwt.twg.wg.Done()
+	}
+}
+
+// releaseReplicateTaskBatch releases replicateTasks of the given batch. It is called when sending
+// replication tasks to the relicateQ fails.
 func (w *writerImpl) releaseReplicateTaskBatch(batch []*replicateTask) {
 	for i := 0; i < len(batch); i++ {
-		rtb := batch[i]
-		rtb.release()
+		rt := batch[i]
+		rt.release()
 	}
 }

@@ -548,15 +548,22 @@ func TestExecutorSubscribe(t *testing.T) {
 	wg.Wait()
 }
 
-func TestReplicate(t *testing.T) {
-	const numAppends = 10
+func TestExecutorReplicate(t *testing.T) {
+	const (
+		numAppends  = 10
+		logStreamID = 1
+		primarySNID = 1
+		backupSNID  = 2
+	)
 
 	defer goleak.VerifyNone(t)
 
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(WithStorage(strg),
+		WithStorageNodeID(backupSNID),
+		WithLogStreamID(logStreamID))
 	require.NoError(t, err)
 
 	defer func() {
@@ -571,8 +578,12 @@ func TestReplicate(t *testing.T) {
 
 	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
 		{
-			StorageNodeID: lse.storageNodeID,
-			LogStreamID:   lse.logStreamID,
+			StorageNodeID: primarySNID,
+			LogStreamID:   logStreamID,
+		},
+		{
+			StorageNodeID: backupSNID,
+			LogStreamID:   logStreamID,
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -582,36 +593,28 @@ func TestReplicate(t *testing.T) {
 		expectedLLSN := types.LLSN(i)
 		expectedGLSN := expectedHWM - 2
 
-		wg := sync.WaitGroup{}
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			err := lse.Replicate(context.TODO(), expectedLLSN, []byte("foo"))
+		assert.NoError(t, lse.Replicate(context.TODO(), expectedLLSN, []byte("foo")))
+
+		require.Eventually(t, func() bool {
+			report, err := lse.GetReport(context.TODO())
 			require.NoError(t, err)
-		}()
-		go func() {
-			defer wg.Done()
-			require.Eventually(t, func() bool {
-				report, err := lse.GetReport(context.TODO())
-				require.NoError(t, err)
-				return report.UncommittedLLSNLength > 0
-			}, time.Second, time.Millisecond)
-			err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
-				HighWatermark:       expectedHWM,
-				PrevHighWatermark:   expectedHWM - 5,
-				CommittedGLSNOffset: expectedGLSN,
-				CommittedGLSNLength: 1,
-				CommittedLLSNOffset: expectedLLSN,
-			})
-			require.NoError(t, err)
-		}()
-		wg.Wait()
+			return report.UncommittedLLSNLength == 1
+		}, time.Second, 10*time.Millisecond)
+
+		require.NoError(t, lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+			HighWatermark:       expectedHWM,
+			PrevHighWatermark:   expectedHWM - 5,
+			CommittedGLSNOffset: expectedGLSN,
+			CommittedGLSNLength: 1,
+			CommittedLLSNOffset: expectedLLSN,
+		}))
+
 		require.Eventually(t, func() bool {
 			report, err := lse.GetReport(context.TODO())
 			require.NoError(t, err)
 			return report.HighWatermark == expectedHWM && report.UncommittedLLSNOffset == expectedLLSN+1 &&
 				report.UncommittedLLSNLength == 0
-		}, time.Second, time.Millisecond)
+		}, time.Second, 10*time.Millisecond)
 	}
 }
 
@@ -1390,7 +1393,7 @@ func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 	}, commitInfo)
 }
 
-func TestExecutorUnsealWithoutReplica(t *testing.T) {
+func TestExecutorUnsealWithInvalidReplicas(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
@@ -1410,4 +1413,58 @@ func TestExecutorUnsealWithoutReplica(t *testing.T) {
 
 	require.Error(t, lse.Unseal(context.TODO(), nil))
 	require.Error(t, lse.Unseal(context.TODO(), []snpb.Replica{}))
+	require.Error(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 1, LogStreamID: 1},
+		{StorageNodeID: 2, LogStreamID: 2},
+	}))
+	require.Error(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 1, LogStreamID: 1},
+		{StorageNodeID: 1, LogStreamID: 1},
+	}))
+}
+
+func TestExecutorPrimaryBackup(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+	lse, err := New(
+		WithStorageNodeID(1),
+		WithLogStreamID(1),
+		WithStorage(strg),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	// Primary
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 1, LogStreamID: 1},
+	}))
+	require.True(t, lse.isPrimay())
+
+	// Backup
+	status, _, err = lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 2, LogStreamID: 1},
+		{StorageNodeID: 1, LogStreamID: 1},
+	}))
+	require.False(t, lse.isPrimay())
+
+	// Not found
+	status, _, err = lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+	require.Error(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 2, LogStreamID: 1},
+	}))
+	require.Error(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 1, LogStreamID: 2},
+	}))
 }

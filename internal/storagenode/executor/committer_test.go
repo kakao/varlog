@@ -159,10 +159,12 @@ func TestCommitterStop(t *testing.T) {
 	defer committer.stop()
 
 	// send task
-	tb := &appendTask{llsn: 1}
-	tb.wg.Add(1)
+	twg := taskWaitGroup{}
+	twg.wg.Add(1)
+	cwt := newCommitWaitTask(1, &twg)
+	// NOTE: cwt is released by commiter.
 
-	err = committer.sendCommitWaitTask(context.TODO(), tb)
+	err = committer.sendCommitWaitTask(context.TODO(), cwt)
 	require.NoError(t, err)
 	lsc.uncommittedLLSNEnd.Add(1)
 
@@ -174,7 +176,10 @@ func TestCommitterStop(t *testing.T) {
 		committedLLSNBegin: 1,
 	})
 	require.NoError(t, err)
-	tb.wg.Wait()
+
+	twg.wg.Wait()
+	require.NoError(t, twg.err)
+	require.EqualValues(t, 1, twg.glsn)
 
 	// commitLoop works
 	require.Eventually(t, func() bool {
@@ -225,9 +230,9 @@ func TestCommitter(t *testing.T) {
 
 	// write logs, LLSN=[1, 10]
 	for i := 1; i <= 10; i++ {
-		tb := &appendTask{llsn: types.LLSN(i)}
-		tb.wg.Add(1)
-		err := committer.sendCommitWaitTask(context.TODO(), tb)
+		// Because twg is nil, it is handled like backup replication.
+		cwt := newCommitWaitTask(types.LLSN(i), nil)
+		err := committer.sendCommitWaitTask(context.TODO(), cwt)
 		require.NoError(t, err)
 		lsc.uncommittedLLSNEnd.Add(1)
 	}
@@ -252,9 +257,8 @@ func TestCommitter(t *testing.T) {
 	state.setSealing()
 
 	// sending new task into commitQ should fail.
-	tb := &appendTask{llsn: types.LLSN(11)}
-	tb.wg.Add(1)
-	err = committer.sendCommitWaitTask(context.TODO(), tb)
+	cwt := newCommitWaitTask(11, nil)
+	err = committer.sendCommitWaitTask(context.TODO(), cwt)
 	require.Error(t, err)
 
 	// sealed
@@ -264,9 +268,8 @@ func TestCommitter(t *testing.T) {
 
 	// write new logs, LLSN=[3,4]
 	for i := 3; i <= 4; i++ {
-		tb := &appendTask{llsn: types.LLSN(i)}
-		tb.wg.Add(1)
-		err := committer.sendCommitWaitTask(context.TODO(), tb)
+		cwt := newCommitWaitTask(types.LLSN(i), nil)
+		err := committer.sendCommitWaitTask(context.TODO(), cwt)
 		require.NoError(t, err)
 		lsc.uncommittedLLSNEnd.Add(1)
 	}
@@ -401,8 +404,7 @@ func TestCommitterState(t *testing.T) {
 	state.EXPECT().releaseBarrier().Return()
 
 	// push commitWaitTask
-	cwt := &appendTask{llsn: 1}
-	cwt.wg.Add(1)
+	cwt := newCommitWaitTask(1, nil)
 	require.NoError(t, committer.sendCommitWaitTask(context.Background(), cwt))
 	lsc.uncommittedLLSNEnd.Add(1)
 
@@ -411,8 +413,7 @@ func TestCommitterState(t *testing.T) {
 	require.EqualValues(t, 1, committer.commitWaitQ.size())
 
 	// push commitWaitTask
-	cwt = &appendTask{llsn: 2}
-	cwt.wg.Add(1)
+	cwt = newCommitWaitTask(2, nil)
 	require.NoError(t, committer.sendCommitWaitTask(context.Background(), cwt))
 	lsc.uncommittedLLSNEnd.Add(1)
 
@@ -442,8 +443,7 @@ func TestCommitterState(t *testing.T) {
 	state.EXPECT().committableWithBarrier().Return(nil)
 	state.EXPECT().releaseBarrier().Return()
 
-	cwt = &appendTask{llsn: 3}
-	cwt.wg.Add(1)
+	cwt = newCommitWaitTask(3, nil)
 	require.Error(t, committer.sendCommitWaitTask(context.Background(), cwt))
 
 	require.NoError(t, committer.sendCommitTask(context.Background(), &commitTask{
@@ -466,8 +466,7 @@ func TestCommitterState(t *testing.T) {
 	state.EXPECT().mutableWithBarrier().Return(verrors.ErrSealed)
 	state.EXPECT().committableWithBarrier().Return(verrors.ErrInvalid)
 
-	cwt = &appendTask{llsn: 3}
-	cwt.wg.Add(1)
+	cwt = newCommitWaitTask(3, nil)
 	require.Error(t, committer.sendCommitWaitTask(context.Background(), cwt))
 
 	require.Error(t, committer.sendCommitTask(context.Background(), &commitTask{

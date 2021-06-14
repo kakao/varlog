@@ -47,31 +47,31 @@ func (mr *MockCommitterMockRecorder) drainCommitWaitQ(err interface{}) *gomock.C
 }
 
 // sendCommitTask mocks base method.
-func (m *MockCommitter) sendCommitTask(ctx context.Context, ctb *commitTask) error {
+func (m *MockCommitter) sendCommitTask(ctx context.Context, ct *commitTask) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "sendCommitTask", ctx, ctb)
+	ret := m.ctrl.Call(m, "sendCommitTask", ctx, ct)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // sendCommitTask indicates an expected call of sendCommitTask.
-func (mr *MockCommitterMockRecorder) sendCommitTask(ctx, ctb interface{}) *gomock.Call {
+func (mr *MockCommitterMockRecorder) sendCommitTask(ctx, ct interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "sendCommitTask", reflect.TypeOf((*MockCommitter)(nil).sendCommitTask), ctx, ctb)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "sendCommitTask", reflect.TypeOf((*MockCommitter)(nil).sendCommitTask), ctx, ct)
 }
 
 // sendCommitWaitTask mocks base method.
-func (m *MockCommitter) sendCommitWaitTask(ctx context.Context, tb *appendTask) error {
+func (m *MockCommitter) sendCommitWaitTask(ctx context.Context, cwt *commitWaitTask) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "sendCommitWaitTask", ctx, tb)
+	ret := m.ctrl.Call(m, "sendCommitWaitTask", ctx, cwt)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // sendCommitWaitTask indicates an expected call of sendCommitWaitTask.
-func (mr *MockCommitterMockRecorder) sendCommitWaitTask(ctx, tb interface{}) *gomock.Call {
+func (mr *MockCommitterMockRecorder) sendCommitWaitTask(ctx, cwt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "sendCommitWaitTask", reflect.TypeOf((*MockCommitter)(nil).sendCommitWaitTask), ctx, tb)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "sendCommitWaitTask", reflect.TypeOf((*MockCommitter)(nil).sendCommitWaitTask), ctx, cwt)
 }
 
 // stop mocks base method.
