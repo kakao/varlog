@@ -20,50 +20,41 @@ import (
 )
 
 type testCommitter struct {
-	c *MockCommitter
-	q []*appendTask
-	l sync.Mutex
+	mock           *MockCommitter
+	incommingLLSNs []types.LLSN
+	mu             sync.Mutex
 }
 
 func newTestCommitter(ctrl *gomock.Controller) *testCommitter {
-	ret := &testCommitter{}
-	ret.c = NewMockCommitter(ctrl)
-	ret.c.EXPECT().sendCommitWaitTask(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, tb *appendTask) error {
-			ret.l.Lock()
-			defer ret.l.Unlock()
-			ret.q = append(ret.q, tb)
-			return nil
-		},
-	).AnyTimes()
-	return ret
-}
+	cmt := &testCommitter{}
+	cmt.mock = NewMockCommitter(ctrl)
+	cmt.mock.EXPECT().sendCommitWaitTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, cwt *commitWaitTask) error {
+			defer cwt.twg.wg.Done()
 
-func newTestCommitterWithTaskDone(ctrl *gomock.Controller) *MockCommitter {
-	c := NewMockCommitter(ctrl)
-	c.EXPECT().sendCommitWaitTask(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, t *appendTask) error {
-			t.wg.Done()
+			cmt.mu.Lock()
+			defer cmt.mu.Unlock()
+			cmt.incommingLLSNs = append(cmt.incommingLLSNs, cwt.llsn)
 			return nil
 		},
 	).AnyTimes()
-	return c
+	return cmt
 }
 
 type testReplicator struct {
-	r *MockReplicator
-	q []*replicateTask
-	l sync.Mutex
+	mock *MockReplicator
+	rts  []*replicateTask
+	mu   sync.Mutex
 }
 
 func newTestReplicator(ctrl *gomock.Controller) *testReplicator {
 	ret := &testReplicator{}
-	ret.r = NewMockReplicator(ctrl)
-	ret.r.EXPECT().send(gomock.Any(), gomock.Any()).DoAndReturn(
+	ret.mock = NewMockReplicator(ctrl)
+	ret.mock.EXPECT().send(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, rtb *replicateTask) error {
-			ret.l.Lock()
-			defer ret.l.Unlock()
-			ret.q = append(ret.q, rtb)
+			ret.mu.Lock()
+			defer ret.mu.Unlock()
+			ret.rts = append(ret.rts, rtb)
 			return nil
 		},
 	).AnyTimes()
@@ -185,33 +176,33 @@ func TestWriterStop(t *testing.T) {
 		batchSize:  1,
 		strg:       strg,
 		lsc:        lsc,
-		committer:  testCommitter.c,
-		replicator: testReplicator.r,
+		committer:  testCommitter.mock,
+		replicator: testReplicator.mock,
 		state:      state,
 	})
 	require.NoError(t, err)
 
 	// add new task
-	tb := &appendTask{
-		llsn:     1,
-		primary:  true,
-		validate: func() error { return nil },
-	}
-	tb.wg.Add(1)
-	err = writer.send(context.TODO(), tb)
+	twg := newTaskWaitGroup()
+	defer twg.release()
+	wt := newPrimaryWriteTask(twg, nil, nil)
+	wt.validate = func() error { return nil }
+	defer wt.release()
+
+	err = writer.send(context.TODO(), wt)
 	require.NoError(t, err)
 
 	// wait for transferring the task to committer and replicator
 	require.Eventually(t, func() bool {
-		testCommitter.l.Lock()
-		defer testCommitter.l.Unlock()
-		return len(testCommitter.q) == 1 && testCommitter.q[0].llsn == 1
+		testCommitter.mu.Lock()
+		defer testCommitter.mu.Unlock()
+		return len(testCommitter.incommingLLSNs) == 1 && testCommitter.incommingLLSNs[0] == 1
 	}, time.Second, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		testReplicator.l.Lock()
-		defer testReplicator.l.Unlock()
-		return len(testReplicator.q) == 1 && testReplicator.q[0].llsn == 1
+		testReplicator.mu.Lock()
+		defer testReplicator.mu.Unlock()
+		return len(testReplicator.rts) == 1 && testReplicator.rts[0].llsn == 1
 	}, time.Second, 10*time.Millisecond)
 
 	// stop
@@ -317,8 +308,8 @@ func TestWriter(t *testing.T) {
 			batchSize:  batchSize,
 			strg:       strg,
 			lsc:        lsc,
-			committer:  testCommitter.c,
-			replicator: testReplicator.r,
+			committer:  testCommitter.mock,
+			replicator: testReplicator.mock,
 			state:      state,
 		})
 		require.NoError(t, err)
@@ -336,11 +327,11 @@ func TestWriter(t *testing.T) {
 						prodWg.Done()
 					}()
 					for {
-						t := &appendTask{
-							primary:  true,
-							validate: func() error { return nil },
-						}
-						t.wg.Add(1)
+						// NOTE: twg and t do not call release method, it is
+						// okay.
+						twg := newTaskWaitGroup()
+						t := newPrimaryWriteTask(twg, nil, nil)
+						t.validate = func() error { return nil }
 						if err := writer.send(context.TODO(), t); err != nil {
 							return
 						}
@@ -388,7 +379,7 @@ func TestWriterCleanup(t *testing.T) {
 
 	strg := newTestStorage(ctrl, newTestStorageConfig())
 	lsc := newLogStreamContext()
-	testCommitter := newTestCommitterWithTaskDone(ctrl)
+	testCommitter := newTestCommitter(ctrl)
 	testReplicator := newTestReplicator(ctrl)
 	state := NewMockStateProvider(ctrl)
 	state.EXPECT().mutableWithBarrier().Return(nil).AnyTimes()
@@ -402,8 +393,8 @@ func TestWriterCleanup(t *testing.T) {
 		batchSize:  batchSize,
 		strg:       strg,
 		lsc:        lsc,
-		committer:  testCommitter,
-		replicator: testReplicator.r,
+		committer:  testCommitter.mock,
+		replicator: testReplicator.mock,
 		state:      state,
 	})
 	require.NoError(t, err)
@@ -413,14 +404,16 @@ func TestWriterCleanup(t *testing.T) {
 		sendWg.Add(1)
 		go func() {
 			defer sendWg.Done()
-			t := newAppendTask()
-			t.validate = func() error { return nil }
-			defer t.release()
-			t.wg.Add(1)
-			if err := writer.send(context.TODO(), t); err != nil {
-				t.wg.Done()
+
+			twg := newTaskWaitGroup()
+			wt := newPrimaryWriteTask(twg, nil, nil)
+			wt.validate = func() error { return nil }
+			defer wt.release()
+
+			if err := writer.send(context.TODO(), wt); err != nil {
+				twg.wg.Done()
 			}
-			t.wg.Wait()
+			twg.wg.Wait()
 		}()
 	}
 	time.Sleep(100 * time.Millisecond)
@@ -457,7 +450,7 @@ func TestWriterVarlog444(t *testing.T) {
 		strg:       strg,
 		lsc:        lsc,
 		committer:  testCommitter,
-		replicator: testReplicator.r,
+		replicator: testReplicator.mock,
 		state:      state,
 	})
 	require.NoError(t, err)
@@ -474,8 +467,8 @@ func TestWriterVarlog444(t *testing.T) {
 
 	// LLSN=1, Write=OK
 	testCommitter.EXPECT().sendCommitWaitTask(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, tb *appendTask) error {
-			defer tb.wg.Done()
+		func(_ context.Context, cwt *commitWaitTask) error {
+			defer cwt.twg.wg.Done()
 			return nil
 		},
 	).Times(1)
@@ -483,16 +476,17 @@ func TestWriterVarlog444(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		task := newAppendTask()
-		task.primary = true
-		task.validate = func() error { return nil }
-		task.wg.Add(1)
-		if !assert.NoError(t, writer.send(context.Background(), task)) {
-			task.wg.Done()
+
+		twg := newTaskWaitGroup()
+		wt := newPrimaryWriteTask(twg, nil, nil)
+		wt.validate = func() error { return nil }
+		defer wt.release()
+
+		if !assert.NoError(t, writer.send(context.Background(), wt)) {
+			twg.wg.Done()
 		}
-		task.wg.Wait()
-		assert.NoError(t, task.err)
-		task.release()
+		twg.wg.Wait()
+		assert.NoError(t, twg.err)
 	}()
 	wg.Wait()
 
@@ -502,7 +496,7 @@ func TestWriterVarlog444(t *testing.T) {
 
 	// LLSN=2, Write=OK, SendToCommit=Fail
 	testCommitter.EXPECT().sendCommitWaitTask(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, tb *appendTask) error {
+		func(_ context.Context, _ *commitWaitTask) error {
 			return errors.New("fake")
 		},
 	).Times(2)
@@ -510,16 +504,18 @@ func TestWriterVarlog444(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		task := newAppendTask()
-		task.primary = true
-		task.validate = func() error { return nil }
-		task.wg.Add(1)
-		if !assert.NoError(t, writer.send(context.Background(), task)) {
-			task.wg.Done()
+
+		twg := newTaskWaitGroup()
+		wt := newPrimaryWriteTask(twg, nil, nil)
+		wt.validate = func() error { return nil }
+		defer wt.release()
+
+		if !assert.NoError(t, writer.send(context.Background(), wt)) {
+			twg.wg.Done()
+			return
 		}
-		task.wg.Wait()
-		assert.Error(t, task.err)
-		task.release()
+		twg.wg.Wait()
+		assert.Error(t, twg.err)
 	}()
 	wg.Wait()
 
@@ -531,16 +527,17 @@ func TestWriterVarlog444(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		task := newAppendTask()
-		task.primary = true
-		task.validate = func() error { return nil }
-		task.wg.Add(1)
-		if !assert.NoError(t, writer.send(context.Background(), task)) {
-			task.wg.Done()
+
+		twg := newTaskWaitGroup()
+		wt := newPrimaryWriteTask(twg, nil, nil)
+		wt.validate = func() error { return nil }
+		defer wt.release()
+
+		if !assert.NoError(t, writer.send(context.Background(), wt)) {
+			twg.wg.Done()
 		}
-		task.wg.Wait()
-		assert.Error(t, task.err)
-		task.release()
+		twg.wg.Wait()
+		assert.Error(t, twg.err)
 	}()
 	wg.Wait()
 

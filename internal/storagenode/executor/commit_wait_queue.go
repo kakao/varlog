@@ -10,7 +10,7 @@ import (
 )
 
 type commitWaitQueueIterator interface {
-	task() *appendTask
+	task() *commitWaitTask
 	next() bool
 	valid() bool
 }
@@ -22,8 +22,8 @@ type commitWaitQueueIteratorImpl struct {
 
 var _ commitWaitQueueIterator = (*commitWaitQueueIteratorImpl)(nil)
 
-func (iter *commitWaitQueueIteratorImpl) task() *appendTask {
-	return iter.curr.Value.(*appendTask)
+func (iter *commitWaitQueueIteratorImpl) task() *commitWaitTask {
+	return iter.curr.Value.(*commitWaitTask)
 }
 
 func (iter *commitWaitQueueIteratorImpl) next() bool {
@@ -38,9 +38,9 @@ func (iter *commitWaitQueueIteratorImpl) valid() bool {
 }
 
 type commitWaitQueue interface {
-	push(tb *appendTask) error
+	push(tb *commitWaitTask) error
 	peekIterator() commitWaitQueueIterator
-	pop() *appendTask
+	pop() *commitWaitTask
 	size() int
 }
 
@@ -52,45 +52,45 @@ type commitWaitQueueImpl struct {
 var _ commitWaitQueue = (*commitWaitQueueImpl)(nil)
 
 func newCommitWaitQueue() (commitWaitQueue, error) {
-	cq := &commitWaitQueueImpl{
+	cwq := &commitWaitQueueImpl{
 		queue: list.New(),
 	}
-	return cq, nil
+	return cwq, nil
 }
 
-func (cq *commitWaitQueueImpl) push(tb *appendTask) error {
-	if tb == nil {
+func (cwq *commitWaitQueueImpl) push(cwt *commitWaitTask) error {
+	if cwt == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
-	cq.mu.Lock()
-	cq.queue.PushFront(tb)
-	cq.mu.Unlock()
+	cwq.mu.Lock()
+	cwq.queue.PushFront(cwt)
+	cwq.mu.Unlock()
 	return nil
 }
 
-func (cq *commitWaitQueueImpl) peekIterator() commitWaitQueueIterator {
-	cq.mu.RLock()
+func (cwq *commitWaitQueueImpl) peekIterator() commitWaitQueueIterator {
+	cwq.mu.RLock()
 	iter := &commitWaitQueueIteratorImpl{
-		curr:  cq.queue.Back(),
-		queue: cq,
+		curr:  cwq.queue.Back(),
+		queue: cwq,
 	}
-	cq.mu.RUnlock()
+	cwq.mu.RUnlock()
 	return iter
 }
 
-func (cq *commitWaitQueueImpl) pop() *appendTask {
-	cq.mu.Lock()
-	defer cq.mu.Unlock()
-	elem := cq.queue.Back()
+func (cwq *commitWaitQueueImpl) pop() *commitWaitTask {
+	cwq.mu.Lock()
+	defer cwq.mu.Unlock()
+	elem := cwq.queue.Back()
 	if elem == nil {
 		return nil
 	}
-	return cq.queue.Remove(elem).(*appendTask)
+	return cwq.queue.Remove(elem).(*commitWaitTask)
 }
 
-func (cq *commitWaitQueueImpl) size() int {
-	cq.mu.RLock()
-	ret := cq.queue.Len()
-	cq.mu.RUnlock()
+func (cwq *commitWaitQueueImpl) size() int {
+	cwq.mu.RLock()
+	ret := cwq.queue.Len()
+	cwq.mu.RUnlock()
 	return ret
 }

@@ -97,8 +97,9 @@ func (e *executor) sealInternal(lastCommittedGLSN types.GLSN) (varlogpb.LogStrea
 }
 
 func (e *executor) Unseal(_ context.Context, replicas []snpb.Replica) error {
-	if len(replicas) < 1 {
-		return errors.Wrap(verrors.ErrInvalid, "no replica")
+	if err := snpb.ValidReplicas(replicas); err != nil {
+		return err
+
 	}
 
 	if err := e.guard(); err != nil {
@@ -109,11 +110,22 @@ func (e *executor) Unseal(_ context.Context, replicas []snpb.Replica) error {
 	e.stateBarrier.lock.Lock()
 	defer e.stateBarrier.lock.Unlock()
 
+	found := false
+	for _, replica := range replicas {
+		if replica.StorageNodeID == e.storageNodeID && replica.LogStreamID == e.logStreamID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return errors.Wrap(verrors.ErrInvalid, "no replica")
+	}
+
 	if !e.stateBarrier.state.compareAndSwap(executorSealed, executorMutable) {
 		// FIXME: error type and message
 		return errors.Wrap(verrors.ErrInvalid, "state not ready")
 	}
 	e.tsp.Touch()
-	e.replicas = replicas
+	e.primaryBackups = replicas
 	return nil
 }

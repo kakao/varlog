@@ -9,6 +9,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/replication"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
@@ -19,24 +20,27 @@ func (e *executor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) 
 	}
 	defer e.unguard()
 
-	t := newAppendTask()
-	defer t.release()
+	twg := newTaskWaitGroup()
+	wt := newBackupWriteTask(twg, data, llsn)
+	defer func() {
+		wt.release()
+		twg.release()
+	}()
 
-	t.primary = false
-	t.replicas = nil
-	t.llsn = llsn
-	t.data = data
-	t.validate = func() error { return nil }
-	t.wg.Add(1)
+	wt.validate = func() error {
+		if e.isPrimay() {
+			return errors.Wrapf(verrors.ErrInvalid, "primary replica")
+		}
+		return nil
+	}
 
-	if err := e.writer.send(ctx, t); err != nil {
-		t.wg.Done()
-		t.wg.Wait()
+	if err := e.writer.send(ctx, wt); err != nil {
+		twg.wg.Done()
 		return err
 	}
 
-	t.wg.Wait()
-	return nil
+	twg.wg.Wait()
+	return twg.err
 }
 
 func (e *executor) SyncInit(ctx context.Context, first, last snpb.SyncPosition) (snpb.SyncPosition, error) {
