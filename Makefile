@@ -278,6 +278,12 @@ BUILD_ENV := $(shell echo $(BUILD_ENV) | tr A-Z a-z)
 ifeq ($(BUILD_ENV),sandbox)
 	KUSTOMIZE_ENV := sbx
 endif
+ifeq ($(BUILD_ENV),sbx)
+	KUSTOMIZE_ENV := sbx
+endif
+ifeq ($(BUILD_ENV),pm)
+	KUSTOMIZE_ENV := pm
+endif
 kustomize:
 	@sed "s/IMAGE_TAG/$(DOCKER_TAG)/" $(MAKEFILE_DIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.template.yaml > \
 		$(MAKEFILE_DIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.yaml

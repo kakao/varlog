@@ -19,7 +19,7 @@ import (
 
 func TestK8sVarlogAppendLongTime(t *testing.T) {
 	const (
-		testTimeout = 10 * time.Minute
+		testTimeout = 5 * time.Minute
 		numMRs      = 3
 		numSNs      = 5
 		numLSs      = 10
