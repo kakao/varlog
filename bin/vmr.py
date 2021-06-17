@@ -163,7 +163,9 @@ def get_metadata_repository_cmd(standalone):
         f"--raft-address={raft_url}",
         f"--bind={rpc_addr}",
         f"--raft-dir={raft_dir}",
-        f"--log-dir={log_dir}"
+        f"--log-dir={log_dir}",
+        "--enable-sml",
+        "--nowal"
     ]
 
     if peers is not None:
