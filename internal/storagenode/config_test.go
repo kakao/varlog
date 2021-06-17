@@ -4,14 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func testVolume(t *testing.T) Volume {
-	vol, err := NewVolume(t.TempDir())
-	require.NoError(t, err)
-	return vol
-}
 
 func TestConfig(t *testing.T) {
 	testCases := []struct {
@@ -27,7 +20,7 @@ func TestConfig(t *testing.T) {
 		{
 			name: "single volume",
 			opts: []Option{
-				WithVolumes(testVolume(t)),
+				WithVolumes(t.TempDir()),
 			},
 			expected: true,
 		},

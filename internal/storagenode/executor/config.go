@@ -9,12 +9,12 @@ import (
 )
 
 const (
-	DefaultWriteQueueSize  = 1024
-	DefaultWriterBatchSize = 1024
+	DefaultWriteQueueSize = 1024
+	DefaultWriteBatchSize = 1024
 
 	DefaultCommitQueueSize     = 1024
 	DefaultCommitTaskQueueSize = 1024
-	DefaultCommitterBatchSize  = 1024
+	DefaultCommitBatchSize     = 1024
 
 	DefaultReplicateQueueSize = 1024
 )
@@ -24,12 +24,12 @@ type config struct {
 	logStreamID   types.LogStreamID
 	storage       storage.Storage
 
-	writeQueueSize  int
-	writerBatchSize int
+	writeQueueSize int
+	writeBatchSize int
 
 	commitQueueSize     int
 	commitTaskQueueSize int
-	committerBatchSize  int
+	commitBatchSize     int
 
 	replicateQueueSize int
 	logger             *zap.Logger
@@ -42,7 +42,7 @@ func (c config) validate() error {
 	if c.writeQueueSize <= 0 {
 		return errors.New("write queue size: negative or zero")
 	}
-	if c.writerBatchSize <= 0 {
+	if c.writeBatchSize <= 0 {
 		return errors.New("batch size: negative or zero")
 	}
 	if c.commitQueueSize <= 0 {
@@ -51,7 +51,7 @@ func (c config) validate() error {
 	if c.commitTaskQueueSize <= 0 {
 		return errors.New("commit task queue size: negative or zero")
 	}
-	if c.committerBatchSize <= 0 {
+	if c.commitBatchSize <= 0 {
 		return errors.New("committer batch size: negative or zero")
 	}
 	if c.replicateQueueSize <= 0 {
@@ -70,10 +70,10 @@ type Option interface {
 func newConfig(opts []Option) (*config, error) {
 	cfg := &config{
 		writeQueueSize:      DefaultWriteQueueSize,
-		writerBatchSize:     DefaultWriterBatchSize,
+		writeBatchSize:      DefaultWriteBatchSize,
 		commitQueueSize:     DefaultCommitQueueSize,
 		commitTaskQueueSize: DefaultCommitTaskQueueSize,
-		committerBatchSize:  DefaultCommitterBatchSize,
+		commitBatchSize:     DefaultCommitBatchSize,
 		replicateQueueSize:  DefaultReplicateQueueSize,
 		logger:              zap.NewNop(),
 	}
@@ -170,14 +170,14 @@ func WithWriteQueueSize(queueSize int) Option {
 	return writeQueueSizeOption(queueSize)
 }
 
-type writerBatchSizeOption int
+type writeBatchSizeOption int
 
-func (o writerBatchSizeOption) apply(c *config) {
-	c.writerBatchSize = int(o)
+func (o writeBatchSizeOption) apply(c *config) {
+	c.writeBatchSize = int(o)
 }
 
-func WithWriterBatchSize(batchSize int) Option {
-	return writerBatchSizeOption(batchSize)
+func WithWriteBatchSize(batchSize int) Option {
+	return writeBatchSizeOption(batchSize)
 }
 
 type commitQueueSizeOption int
@@ -200,14 +200,14 @@ func WithCommitTaskQueueSize(queueSize int) Option {
 	return commitTaskQueueSizOption(queueSize)
 }
 
-type committerBatchSizeOption int
+type commitBatchSizeOption int
 
-func (o committerBatchSizeOption) apply(c *config) {
-	c.committerBatchSize = int(o)
+func (o commitBatchSizeOption) apply(c *config) {
+	c.commitBatchSize = int(o)
 }
 
-func WithCommitterBatchSize(batchSize int) Option {
-	return committerBatchSizeOption(batchSize)
+func WithCommitBatchSize(batchSize int) Option {
+	return commitBatchSizeOption(batchSize)
 }
 
 type replicateQueueSizeOption int

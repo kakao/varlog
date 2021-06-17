@@ -377,13 +377,8 @@ func (sn *StorageNode) createStorage(ctx context.Context, logStreamPath string) 
 	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode/StorageNode.createStorage")
 	defer span.End()
 
-	strg, err := storage.NewStorage(
-		storage.WithPath(logStreamPath),
-		storage.WithLogger(sn.logger),
-		storage.WithoutWriteSync(),
-		storage.WithoutCommitSync(),
-		storage.WithoutDeleteCommittedSync(),
-	)
+	opts := append(sn.storageOpts, storage.WithPath(logStreamPath), storage.WithLogger(sn.logger))
+	strg, err := storage.NewStorage(opts...)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -397,13 +392,13 @@ func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.Log
 		span.End()
 	}()
 
-	lseOptions := append(sn.executorOpts,
+	opts := append(sn.executorOpts,
 		executor.WithStorage(storage),
 		executor.WithStorageNodeID(sn.snid),
 		executor.WithLogStreamID(logStreamID),
 		executor.WithLogger(sn.logger),
 	)
-	lse, err := executor.New(lseOptions...)
+	lse, err := executor.New(opts...)
 	if err != nil {
 		return err
 	}
