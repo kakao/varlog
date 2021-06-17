@@ -17,6 +17,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/logio"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/replication"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/stopchannel"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -1467,4 +1468,474 @@ func TestExecutorPrimaryBackup(t *testing.T) {
 	require.Error(t, lse.Unseal(context.TODO(), []snpb.Replica{
 		{StorageNodeID: 1, LogStreamID: 2},
 	}))
+}
+
+func TestExecutorSyncInitNewReplica(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+	lse, err := New(
+		WithStorageNodeID(1),
+		WithLogStreamID(1),
+		WithStorage(strg),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	// state: sealing
+	span, err := lse.SyncInit(
+		context.Background(),
+		snpb.SyncRange{FirstLLSN: 1, LastLLSN: 10},
+	)
+	require.NoError(t, err)
+	require.Equal(t, snpb.SyncRange{FirstLLSN: 1, LastLLSN: 10}, span)
+	require.Equal(t, executorLearning, lse.stateBarrier.state.load())
+}
+
+func TestExecutorSyncInitInvalidState(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+	lse, err := New(
+		WithStorageNodeID(1),
+		WithLogStreamID(1),
+		WithStorage(strg),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	// SEALED
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+	_, err = lse.SyncInit(
+		context.Background(),
+		snpb.SyncRange{FirstLLSN: 1, LastLLSN: 10},
+	)
+	require.Error(t, err)
+
+	// RUNNING
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 1, LogStreamID: 1},
+	}))
+	// FIXME (jun): use varlogpb.LogStreamStatus!
+	require.Equal(t, executorMutable, lse.stateBarrier.state.load())
+	_, err = lse.SyncInit(
+		context.Background(),
+		snpb.SyncRange{FirstLLSN: 1, LastLLSN: 10},
+	)
+	require.Error(t, err)
+}
+
+func TestExecutorSyncBackupReplica(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+	lse, err := New(
+		WithStorageNodeID(1),
+		WithLogStreamID(1),
+		WithStorage(strg),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 2, LogStreamID: 1},
+		{StorageNodeID: 1, LogStreamID: 1},
+	}))
+	require.False(t, lse.isPrimay())
+
+	for i := 1; i <= 2; i++ {
+		llsn := types.LLSN(i)
+		glsn := types.GLSN(i)
+
+		assert.NoError(t, lse.Replicate(context.Background(), llsn, []byte("foo")))
+
+		assert.Eventually(t, func() bool {
+			report, err := lse.GetReport(context.TODO())
+			require.NoError(t, err)
+			return report.UncommittedLLSNLength == 1
+		}, time.Second, 10*time.Millisecond)
+
+		assert.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+			HighWatermark:       glsn,
+			PrevHighWatermark:   glsn - 1,
+			CommittedGLSNOffset: glsn,
+			CommittedGLSNLength: 1,
+			CommittedLLSNOffset: llsn,
+		}))
+
+		require.Eventually(t, func() bool {
+			report, err := lse.GetReport(context.TODO())
+			require.NoError(t, err)
+			return report.HighWatermark == glsn && report.UncommittedLLSNOffset == llsn+1 &&
+				report.UncommittedLLSNLength == 0
+		}, time.Second, 10*time.Millisecond)
+	}
+
+	for i := 3; i <= 4; i++ {
+		llsn := types.LLSN(i)
+		assert.NoError(t, lse.Replicate(context.Background(), llsn, []byte("foo")))
+	}
+
+	require.Eventually(t, func() bool {
+		rpt, err := lse.GetReport(context.Background())
+		assert.NoError(t, err)
+		return 3 == rpt.GetUncommittedLLSNOffset() && 2 == rpt.GetUncommittedLLSNLength()
+	}, time.Second, 10*time.Millisecond)
+
+	// LLSN | GLSN
+	//    1 |    1
+	//    2 |    2
+	//    3 |    -
+	//    4 |    -
+
+	status, _, err = lse.Seal(context.Background(), 4)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealing, status)
+
+	last, err := lse.SyncInit(context.Background(), snpb.SyncRange{FirstLLSN: 1, LastLLSN: 4})
+	require.NoError(t, err)
+	require.Equal(t, snpb.SyncRange{FirstLLSN: 3, LastLLSN: 4}, last)
+	// NOTE: This assertion checks private variable.
+	require.Equal(t, executorLearning, lse.stateBarrier.state.load())
+
+	// Replica in learning state should not accept commit request.
+	assert.Error(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+		HighWatermark:       4,
+		PrevHighWatermark:   2,
+		CommittedGLSNOffset: 3,
+		CommittedGLSNLength: 2,
+		CommittedLLSNOffset: 3,
+	}))
+
+	rpt, err := lse.GetReport(context.Background())
+	assert.NoError(t, err)
+	assert.EqualValues(t, 3, rpt.GetUncommittedLLSNOffset())
+	assert.EqualValues(t, 0, rpt.GetUncommittedLLSNLength())
+
+	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
+		CommitContext: &varlogpb.CommitContext{
+			HighWatermark:      4,
+			PrevHighWatermark:  2,
+			CommittedGLSNBegin: 3,
+			CommittedGLSNEnd:   5,
+			CommittedLLSNBegin: 3,
+		},
+	}))
+	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
+		LogEntry: &varlogpb.LogEntry{LLSN: 3, GLSN: 3},
+	}))
+	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
+		LogEntry: &varlogpb.LogEntry{LLSN: 4, GLSN: 4},
+	}))
+
+	require.Equal(t, executorSealing, lse.stateBarrier.state.load())
+}
+
+func TestExecutorSyncPrimaryReplica(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+	lse, err := New(
+		WithStorageNodeID(1),
+		WithLogStreamID(1),
+		WithStorage(strg),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 1, LogStreamID: 1},
+	}))
+	require.True(t, lse.isPrimay())
+
+	for i := 1; i <= 2; i++ {
+		var wg sync.WaitGroup
+		llsn := types.LLSN(i)
+		glsn := types.GLSN(i)
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := lse.Append(context.Background(), []byte("foo"))
+			assert.NoError(t, err)
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.Eventually(t, func() bool {
+				report, err := lse.GetReport(context.TODO())
+				require.NoError(t, err)
+				return report.UncommittedLLSNLength == 1
+			}, time.Second, 10*time.Millisecond)
+
+			assert.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+				HighWatermark:       glsn,
+				PrevHighWatermark:   glsn - 1,
+				CommittedGLSNOffset: glsn,
+				CommittedGLSNLength: 1,
+				CommittedLLSNOffset: llsn,
+			}))
+			assert.Eventually(t, func() bool {
+				report, err := lse.GetReport(context.TODO())
+				assert.NoError(t, err)
+				return report.HighWatermark == glsn && report.UncommittedLLSNOffset == llsn+1 &&
+					report.UncommittedLLSNLength == 0
+			}, time.Second, 10*time.Millisecond)
+		}()
+		wg.Wait()
+	}
+
+	var wg sync.WaitGroup
+	for i := 3; i <= 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := lse.Append(context.Background(), []byte("foo"))
+			assert.NoError(t, err)
+		}()
+	}
+
+	require.Eventually(t, func() bool {
+		report, err := lse.GetReport(context.TODO())
+		assert.NoError(t, err)
+		return report.UncommittedLLSNOffset == 3 && report.UncommittedLLSNLength == 2
+	}, time.Second, 10*time.Millisecond)
+
+	// LLSN | GLSN
+	//    1 |    1
+	//    2 |    2
+	//    3 |    -
+	//    4 |    -
+
+	status, _, err = lse.Seal(context.Background(), 4)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealing, status)
+
+	last, err := lse.SyncInit(context.Background(), snpb.SyncRange{FirstLLSN: 1, LastLLSN: 4})
+	require.NoError(t, err)
+	require.Equal(t, snpb.SyncRange{FirstLLSN: 3, LastLLSN: 4}, last)
+	// NOTE: This assertion checks private variable.
+	require.Equal(t, executorLearning, lse.stateBarrier.state.load())
+
+	// Replica in learning state should not accept commit request.
+	assert.Error(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+		HighWatermark:       4,
+		PrevHighWatermark:   2,
+		CommittedGLSNOffset: 3,
+		CommittedGLSNLength: 2,
+		CommittedLLSNOffset: 3,
+	}))
+
+	rpt, err := lse.GetReport(context.Background())
+	assert.NoError(t, err)
+	assert.EqualValues(t, 3, rpt.GetUncommittedLLSNOffset())
+	assert.EqualValues(t, 0, rpt.GetUncommittedLLSNLength())
+
+	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
+		CommitContext: &varlogpb.CommitContext{
+			HighWatermark:      4,
+			PrevHighWatermark:  2,
+			CommittedGLSNBegin: 3,
+			CommittedGLSNEnd:   5,
+			CommittedLLSNBegin: 3,
+		},
+	}))
+	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
+		LogEntry: &varlogpb.LogEntry{LLSN: 3, GLSN: 3},
+	}))
+	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
+		LogEntry: &varlogpb.LogEntry{LLSN: 4, GLSN: 4},
+	}))
+	require.Equal(t, executorSealing, lse.stateBarrier.state.load())
+	wg.Wait()
+}
+
+func TestExecutorSync(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
+	require.NoError(t, err)
+	lse, err := New(
+		WithStorageNodeID(1),
+		WithLogStreamID(1),
+		WithStorage(strg),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, lse.Close())
+	}()
+
+	dstClient := replication.NewMockClient(ctrl)
+	dstClient.EXPECT().Close().Return(nil).AnyTimes()
+	connector := replication.NewMockConnector(ctrl)
+	connector.EXPECT().Get(gomock.Any(), gomock.Any()).Return(dstClient, nil).AnyTimes()
+
+	rp := NewMockReplicator(ctrl)
+	rp.EXPECT().send(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	rp.EXPECT().stop().Return().AnyTimes()
+	rp.EXPECT().waitForDrainage(gomock.Any()).Return(nil).AnyTimes()
+	rp.EXPECT().clientOf(gomock.Any(), gomock.Any()).Return(dstClient, nil).AnyTimes()
+	lse.writer.(*writerImpl).replicator.stop()
+	lse.rp = rp
+	lse.writer.(*writerImpl).replicator = rp
+
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.NoError(t, lse.Unseal(context.TODO(), []snpb.Replica{
+		{StorageNodeID: 1, LogStreamID: 1},
+		{StorageNodeID: 2, LogStreamID: 1},
+	}))
+	require.True(t, lse.isPrimay())
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
+
+	require.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+		HighWatermark:       5,
+		PrevHighWatermark:   0,
+		CommittedGLSNOffset: 1,
+		CommittedGLSNLength: 0,
+		CommittedLLSNOffset: 1,
+	}))
+
+	require.Eventually(t, func() bool {
+		report, err := lse.GetReport(context.Background())
+		assert.NoError(t, err)
+		return report.HighWatermark == 5
+	}, time.Second, 10*time.Millisecond)
+
+	require.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+		HighWatermark:       10,
+		PrevHighWatermark:   5,
+		CommittedGLSNOffset: 1,
+		CommittedGLSNLength: 0,
+		CommittedLLSNOffset: 1,
+	}))
+
+	require.Eventually(t, func() bool {
+		report, err := lse.GetReport(context.Background())
+		assert.NoError(t, err)
+		return report.HighWatermark == 10
+	}, time.Second, 10*time.Millisecond)
+
+	for i := 1; i <= 2; i++ {
+		llsn := types.LLSN(i)
+		glsn := types.GLSN(10 + i)
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := lse.Append(context.Background(), []byte("foo"), snpb.Replica{StorageNodeID: 2, LogStreamID: 1})
+			assert.NoError(t, err)
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.Eventually(t, func() bool {
+				report, err := lse.GetReport(context.TODO())
+				require.NoError(t, err)
+				return report.UncommittedLLSNLength == 1
+			}, time.Second, 10*time.Millisecond)
+
+			assert.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+				HighWatermark:       glsn,
+				PrevHighWatermark:   glsn - 1,
+				CommittedGLSNOffset: glsn,
+				CommittedGLSNLength: 1,
+				CommittedLLSNOffset: llsn,
+			}))
+			assert.Eventually(t, func() bool {
+				report, err := lse.GetReport(context.TODO())
+				assert.NoError(t, err)
+				return report.HighWatermark == glsn && report.UncommittedLLSNOffset == llsn+1 &&
+					report.UncommittedLLSNLength == 0
+			}, time.Second, 10*time.Millisecond)
+		}()
+		wg.Wait()
+	}
+
+	// Type | LLSN | GLSN | HWM | PrevHWM | GLSNBegin | GLSNEnd | LLSNBegin
+	//   cc |      |      |   5 |       0 |         1 |       1 |         1
+	//   cc |      |      |  10 |       5 |         1 |       1 |         1
+	// * cc |      |      |  11 |      10 |        11 |      12 |         1
+	// * le |    1 |   11 |     |         |           |         |
+	// * cc |      |      |  12 |      11 |        12 |      13 |         2
+	// * le |    2 |   12 |     |         |           |         |
+
+	done := make(chan struct{}, 0)
+	dstClient.EXPECT().SyncInit(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, srcRnage snpb.SyncRange) (snpb.SyncRange, error) {
+			select {
+			default:
+				return snpb.SyncRange{FirstLLSN: 1, LastLLSN: 2}, nil
+			case <-done:
+				return snpb.InvalidSyncRange(), errors.WithStack(verrors.ErrExist)
+			}
+		},
+	).AnyTimes()
+
+	step := 0
+	expectedLLSN := types.LLSN(1)
+	exptectedGLSN := types.GLSN(11)
+	dstClient.EXPECT().SyncReplicate(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, replica snpb.Replica, payload snpb.SyncPayload) error {
+			defer func() {
+				step++
+			}()
+
+			if step%2 == 0 { // cc
+				assert.NotNil(t, payload.CommitContext)
+				assert.Equal(t, exptectedGLSN, payload.CommitContext.HighWatermark)
+				assert.Equal(t, exptectedGLSN-1, payload.CommitContext.PrevHighWatermark)
+			} else { // le
+				assert.NotNil(t, payload.LogEntry)
+				assert.Equal(t, exptectedGLSN, payload.LogEntry.GLSN)
+				assert.Equal(t, expectedLLSN, payload.LogEntry.LLSN)
+				expectedLLSN++
+				exptectedGLSN++
+			}
+			if expectedLLSN > types.LLSN(2) {
+				close(done)
+			}
+			return nil
+		},
+	).Times(4)
+
+	status, _, err = lse.Seal(context.TODO(), 12)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	require.Eventually(t, func() bool {
+		sts, err := lse.Sync(context.Background(), snpb.Replica{})
+		assert.NoError(t, err)
+		return sts != nil && sts.State == snpb.SyncStateComplete
+	}, time.Second, 10*time.Millisecond)
 }

@@ -141,7 +141,6 @@ func (c *snManagementClient) Sync(ctx context.Context, logStreamID types.LogStre
 			StorageNodeID: backupStorageNodeID,
 			Address:       backupAddress,
 		},
-		LastGLSN: lastGLSN,
 	})
 	return rsp.GetStatus(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }

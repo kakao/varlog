@@ -77,16 +77,31 @@ func (mr *MockClientMockRecorder) Replicate(arg0, arg1, arg2, arg3 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockClient)(nil).Replicate), arg0, arg1, arg2, arg3)
 }
 
-// SyncReplicate mocks base method.
-func (m *MockClient) SyncReplicate(arg0 context.Context, arg1 types.LogStreamID, arg2, arg3, arg4 snpb.SyncPosition, arg5 []byte) error {
+// SyncInit mocks base method.
+func (m *MockClient) SyncInit(arg0 context.Context, arg1 snpb.SyncRange) (snpb.SyncRange, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncReplicate", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret := m.ctrl.Call(m, "SyncInit", arg0, arg1)
+	ret0, _ := ret[0].(snpb.SyncRange)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncInit indicates an expected call of SyncInit.
+func (mr *MockClientMockRecorder) SyncInit(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncInit", reflect.TypeOf((*MockClient)(nil).SyncInit), arg0, arg1)
+}
+
+// SyncReplicate mocks base method.
+func (m *MockClient) SyncReplicate(arg0 context.Context, arg1 snpb.Replica, arg2 snpb.SyncPayload) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncReplicate", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SyncReplicate indicates an expected call of SyncReplicate.
-func (mr *MockClientMockRecorder) SyncReplicate(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) SyncReplicate(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockClient)(nil).SyncReplicate), arg0, arg1, arg2, arg3, arg4, arg5)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockClient)(nil).SyncReplicate), arg0, arg1, arg2)
 }

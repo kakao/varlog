@@ -9,6 +9,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
+	storage "github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 )
 
 // MockCommitter is a mock of committer interface.
@@ -32,6 +34,20 @@ func NewMockCommitter(ctrl *gomock.Controller) *MockCommitter {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockCommitter) EXPECT() *MockCommitterMockRecorder {
 	return m.recorder
+}
+
+// commitDirectly mocks base method.
+func (m *MockCommitter) commitDirectly(cc storage.CommitContext, requireCommitWaitTasks bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "commitDirectly", cc, requireCommitWaitTasks)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// commitDirectly indicates an expected call of commitDirectly.
+func (mr *MockCommitterMockRecorder) commitDirectly(cc, requireCommitWaitTasks interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "commitDirectly", reflect.TypeOf((*MockCommitter)(nil).commitDirectly), cc, requireCommitWaitTasks)
 }
 
 // drainCommitWaitQ mocks base method.
@@ -84,4 +100,18 @@ func (m *MockCommitter) stop() {
 func (mr *MockCommitterMockRecorder) stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "stop", reflect.TypeOf((*MockCommitter)(nil).stop))
+}
+
+// waitForDrainageOfCommitTasks mocks base method.
+func (m *MockCommitter) waitForDrainageOfCommitTasks(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "waitForDrainageOfCommitTasks", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// waitForDrainageOfCommitTasks indicates an expected call of waitForDrainageOfCommitTasks.
+func (mr *MockCommitterMockRecorder) waitForDrainageOfCommitTasks(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "waitForDrainageOfCommitTasks", reflect.TypeOf((*MockCommitter)(nil).waitForDrainageOfCommitTasks), ctx)
 }

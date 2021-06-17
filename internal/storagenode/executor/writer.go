@@ -464,8 +464,7 @@ func (w *writerImpl) writeTaskBatchError(batch []*writeTask, err error) {
 func (w *writerImpl) commitWaitTaskBatchError(batch []*commitWaitTask, err error) {
 	for i := 0; i < len(batch); i++ {
 		cwt := batch[i]
-		cwt.twg.err = err
-		cwt.twg.wg.Done()
+		cwt.twg.done(err)
 	}
 }
 

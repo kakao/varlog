@@ -84,3 +84,9 @@ func (e *executor) setSealing() {
 	defer e.stateBarrier.lock.Unlock()
 	e.stateBarrier.state.compareAndSwap(executorMutable, executorSealing)
 }
+
+func (e *executor) setLearning() bool {
+	e.stateBarrier.lock.Lock()
+	defer e.stateBarrier.lock.Unlock()
+	return e.stateBarrier.state.compareAndSwap(executorSealing, executorLearning)
+}

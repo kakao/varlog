@@ -14,6 +14,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/replication"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 type replicatorConfig struct {
@@ -41,6 +42,8 @@ type replicator interface {
 	// underlying connector means that it closes all clients to replicas. The newly created
 	// connector has no clients.
 	resetConnector() error
+
+	clientOf(ctx context.Context, replica snpb.Replica) (replication.Client, error)
 }
 
 type replicatorImpl struct {
@@ -251,4 +254,9 @@ func (r *replicatorImpl) waitForDrainage(ctx context.Context) error {
 
 func (r *replicatorImpl) resetConnector() error {
 	return multierr.Append(r.connector.Close(), r.initConnector())
+}
+
+// TODO (jun): Is this good method? If not, replicator can have interface for sync.
+func (r *replicatorImpl) clientOf(ctx context.Context, replica snpb.Replica) (replication.Client, error) {
+	return r.connector.Get(ctx, replica)
 }

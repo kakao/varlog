@@ -316,6 +316,21 @@ func (mr *MockStorageMockRecorder) NewWriteBatch() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewWriteBatch", reflect.TypeOf((*MockStorage)(nil).NewWriteBatch))
 }
 
+// NextCommitContextOf mocks base method.
+func (m *MockStorage) NextCommitContextOf(arg0 CommitContext) (CommitContext, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextCommitContextOf", arg0)
+	ret0, _ := ret[0].(CommitContext)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NextCommitContextOf indicates an expected call of NextCommitContextOf.
+func (mr *MockStorageMockRecorder) NextCommitContextOf(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextCommitContextOf", reflect.TypeOf((*MockStorage)(nil).NextCommitContextOf), arg0)
+}
+
 // Path mocks base method.
 func (m *MockStorage) Path() string {
 	m.ctrl.T.Helper()

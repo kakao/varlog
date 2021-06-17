@@ -16,14 +16,14 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
-	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type Client interface {
 	io.Closer
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte, cb func(error))
 	PeerStorageNodeID() types.StorageNodeID
-	SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current snpb.SyncPosition, data []byte) error
+	SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.SyncRange, error)
+	SyncReplicate(ctx context.Context, replica snpb.Replica, payload snpb.SyncPayload) error
 }
 
 type client struct {
@@ -192,11 +192,22 @@ Loop:
 	}
 }
 
-func (c *client) SyncInit(ctx context.Context, first, last snpb.SyncPosition) (snpb.SyncPosition, error) {
-	panic("not implemented")
+func (c *client) SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.SyncRange, error) {
+	c.closed.mu.RLock()
+	if c.closed.val {
+		c.closed.mu.RUnlock()
+		return snpb.InvalidSyncRange(), errors.WithStack(verrors.ErrClosed)
+	}
+	defer c.closed.mu.RUnlock()
+
+	rsp, err := c.rpcClient.SyncInit(ctx, &snpb.SyncInitRequest{
+		Destination: c.replica,
+		Range:       srcRnage,
+	})
+	return rsp.GetRange(), errors.WithStack(verrors.FromStatusError(err))
 }
 
-func (c *client) SyncReplicate(ctx context.Context, logStreamID types.LogStreamID, first, last, current snpb.SyncPosition, data []byte) error {
+func (c *client) SyncReplicate(ctx context.Context, replica snpb.Replica, payload snpb.SyncPayload) error {
 	c.closed.mu.RLock()
 	if c.closed.val {
 		c.closed.mu.RUnlock()
@@ -205,13 +216,8 @@ func (c *client) SyncReplicate(ctx context.Context, logStreamID types.LogStreamI
 	defer c.closed.mu.RUnlock()
 
 	req := &snpb.SyncReplicateRequest{
-		Payload: snpb.SyncPayload{
-			LogEntry: &varlogpb.LogEntry{
-				GLSN: current.GLSN,
-				LLSN: current.LLSN,
-				Data: data,
-			},
-		},
+		Destination: replica,
+		Payload:     payload,
 	}
 	_, err := c.rpcClient.SyncReplicate(ctx, req)
 	return errors.WithStack(verrors.FromStatusError(err))

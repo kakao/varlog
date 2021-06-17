@@ -180,7 +180,44 @@ func (s *serverImpl) send(ctx context.Context, stream snpb.Replicator_ReplicateS
 }
 
 func (s *serverImpl) SyncInit(ctx context.Context, req *snpb.SyncInitRequest) (rsp *snpb.SyncInitResponse, err error) {
-	panic("not implemented")
+	s.barrier.mu.RLock()
+	defer s.barrier.mu.RUnlock()
+	if !s.barrier.running {
+		return nil, errors.WithStack(verrors.ErrClosed)
+	}
+
+	var spanName = "varlog.snpb.Replicator/SyncInit"
+	ctx, span := s.tmStub.StartSpan(ctx, spanName,
+		oteltrace.WithAttributes(attribute.StorageNodeID(s.storageNodeIDGetter.StorageNodeID())),
+		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
+	)
+	s.tmStub.Metrics().ActiveRequests.Add(ctx, 1, attribute.String("call", spanName))
+
+	defer func() {
+		if err == nil {
+			s.logger.Info("SyncInit",
+				zap.String("request", req.String()),
+				zap.String("response", rsp.String()),
+			)
+		} else {
+			s.logger.Error("SyncInit",
+				zap.Error(err),
+				zap.String("request", req.String()),
+			)
+		}
+		s.tmStub.Metrics().ActiveRequests.Add(ctx, -1, attribute.String("call", spanName))
+		span.End()
+	}()
+
+	lsID := req.GetDestination().LogStreamID
+	logReplicator, ok := s.logReplicatorGetter.Replicator(lsID)
+	if !ok {
+		err = errors.Errorf("no executor: %v", lsID)
+		return rsp, err
+	}
+	dstRange, err := logReplicator.SyncInit(ctx, req.GetRange())
+	rsp = &snpb.SyncInitResponse{Range: dstRange}
+	return rsp, err
 }
 
 func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateRequest) (rsp *snpb.SyncReplicateResponse, err error) {

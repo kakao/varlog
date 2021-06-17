@@ -182,7 +182,7 @@ func (s *server) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncRes
 				LogStreamID:   req.GetLogStreamID(),
 				Address:       req.GetBackup().GetAddress(),
 			}
-			status, err := s.storageNode.Sync(ctx, req.GetLogStreamID(), replica, req.GetLastGLSN())
+			status, err := s.storageNode.Sync(ctx, req.GetLogStreamID(), replica)
 			return &snpb.SyncResponse{Status: status}, err
 		},
 	)

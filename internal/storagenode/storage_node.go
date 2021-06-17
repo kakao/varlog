@@ -461,21 +461,13 @@ func (sn *StorageNode) Unseal(ctx context.Context, logStreamID types.LogStreamID
 	return lse.Unseal(ctx, replicas)
 }
 
-func (sn *StorageNode) Sync(ctx context.Context, logStreamID types.LogStreamID, replica snpb.Replica, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
+func (sn *StorageNode) Sync(ctx context.Context, logStreamID types.LogStreamID, replica snpb.Replica) (*snpb.SyncStatus, error) {
 	lse, ok := sn.logStreamExecutor(logStreamID)
 	if !ok {
 		return nil, errors.WithStack(errNoLogStream)
 	}
-	sts, err := lse.Sync(ctx, replica, lastGLSN)
-	if err != nil {
-		return nil, err
-	}
-	return &snpb.SyncStatus{
-		State:   sts.State,
-		First:   sts.First,
-		Last:    sts.Last,
-		Current: sts.Current,
-	}, nil
+	sts, err := lse.Sync(ctx, replica)
+	return sts, err
 }
 
 func (sn *StorageNode) GetPrevCommitInfo(ctx context.Context, hwm types.GLSN) ([]*snpb.LogStreamCommitInfo, error) {

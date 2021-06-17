@@ -3,11 +3,11 @@ package executor
 import (
 	"context"
 
-	"go.uber.org/zap"
-
 	"github.com/pkg/errors"
 
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/logio"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/replication"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
@@ -43,8 +43,99 @@ func (e *executor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) 
 	return twg.err
 }
 
-func (e *executor) SyncInit(ctx context.Context, first, last snpb.SyncPosition) (snpb.SyncPosition, error) {
-	panic("not implemented")
+func (e *executor) SyncInit(ctx context.Context, srcRange snpb.SyncRange) (syncRange snpb.SyncRange, err error) {
+	syncRange = snpb.InvalidSyncRange()
+
+	if srcRange.Invalid() {
+		return syncRange, errors.WithStack(verrors.ErrInvalid)
+	}
+	if err := e.guard(); err != nil {
+		return syncRange, err
+	}
+	defer e.unguard()
+
+	e.muState.Lock()
+	defer e.muState.Unlock()
+
+	// TODO: check range of sync
+	// if the executor already has last position committed, this RPC should be rejected.
+	_, uncommittedLLSNBegin := e.lsc.reportCommitBase()
+	lastCommittedLLSN := uncommittedLLSNBegin - 1
+	if lastCommittedLLSN > srcRange.LastLLSN {
+		panic("oops")
+	} else if lastCommittedLLSN == srcRange.LastLLSN {
+		return syncRange, errors.WithStack(verrors.ErrExist)
+	}
+
+	if !e.setLearning() {
+		return syncRange, errors.WithStack(verrors.ErrInvalid)
+	}
+
+	// now LEARNING
+	defer func() {
+		// FIXME: extract to method
+		// When the error is occurred, state should be reverted to SEALING.
+		if err != nil {
+			e.stateBarrier.lock.Lock()
+			defer e.stateBarrier.lock.Unlock()
+			e.stateBarrier.state.store(executorSealing)
+		}
+	}()
+
+	err = e.writer.waitForDrainage(ctx)
+	if err != nil {
+		return syncRange, err
+	}
+
+	err = e.rp.resetConnector()
+	if err != nil {
+		return syncRange, err
+	}
+	err = e.rp.waitForDrainage(ctx)
+	if err != nil {
+		return syncRange, err
+	}
+
+	err = e.committer.waitForDrainageOfCommitTasks(ctx)
+	if err != nil {
+		return syncRange, err
+	}
+
+	if !e.isPrimay() {
+		// Since there is no commitTask in commitTaskQ, it is safe to call drainCommitWaitQ.
+		e.committer.drainCommitWaitQ(errors.WithStack(verrors.ErrSealed))
+	}
+
+	err = e.storage.DeleteUncommitted(uncommittedLLSNBegin)
+	if err != nil {
+		return syncRange, err
+	}
+	e.storage.RestoreStorage(uncommittedLLSNBegin-1, uncommittedLLSNBegin-1, e.lsc.localGLSN.localHighWatermark.Load())
+	e.lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
+
+	syncRange = snpb.SyncRange{
+		FirstLLSN: uncommittedLLSNBegin,
+		LastLLSN:  srcRange.LastLLSN,
+	}
+
+	e.srs = newSyncReplicateState(syncRange)
+
+	return syncRange, nil
+
+	// If this executor is primary replica,
+	// - wait for writer to be empty
+	// - wait for replicator to be empty (P->B)
+	// - wait for committer's commitTasks to be empty (MR's Commit RPCs)
+	// - do not drop commitWaitTasks (C's Append RPCs)
+	// - delete uncommitted logs in storage
+	// - restore storage status
+	//
+	// If this executor is backup replica,
+	// - wait for writer to be empty
+	// - wait for committer's commitTasks to be empty (MR's Commit RPCs)
+	// - drop commitWaitTasks (P->B)
+	// - delete uncommitted logs in storage
+	// - restore storage status
 }
 
 func (e *executor) SyncReplicate(ctx context.Context, payload snpb.SyncPayload) error {
@@ -53,22 +144,79 @@ func (e *executor) SyncReplicate(ctx context.Context, payload snpb.SyncPayload) 
 	}
 	defer e.unguard()
 
-	if e.stateBarrier.state.load() != executorSealing {
-		return errors.New("invalid state")
+	e.muState.Lock()
+	defer e.muState.Unlock()
+
+	if e.stateBarrier.state.load() != executorLearning {
+		return errors.New("invalid executor state")
 	}
 
-	e.lsc.commitProgress.mu.RLock()
-	committedLLSNEnd := e.lsc.commitProgress.committedLLSNEnd
-	e.lsc.commitProgress.mu.RUnlock()
+	// The state of executor is now executorSealing. If SyncReplicate fails, the state of
+	// executor becomes executorSealing.
+	var err error
+	defer func() {
+		if err != nil {
+			if e.srs != nil {
+				e.srs.resetCommitContext()
+				e.srs = nil
+			}
+			e.stateBarrier.lock.Lock()
+			defer e.stateBarrier.lock.Unlock()
+			e.stateBarrier.state.store(executorSealing)
+		}
+	}()
 
-	if payload.GetLogEntry().GetLLSN() < committedLLSNEnd {
-		return nil
+	err = e.srs.putSyncReplicatePayload(payload)
+	if err != nil {
+		return err
 	}
 
-	return errors.New("not yet implemented")
+	if uint64(e.srs.cc.CommittedGLSNEnd-e.srs.cc.CommittedGLSNBegin) == uint64(len(e.srs.ents)) {
+		numCommits := uint64(len(e.srs.ents))
+
+		// TODO: consider that cnt is zero
+		wb := e.storage.NewWriteBatch()
+		defer func() {
+			_ = wb.Close()
+		}()
+		for _, logEntry := range e.srs.ents {
+			wb.Put(logEntry.GetLLSN(), logEntry.GetData())
+		}
+		err = wb.Apply()
+		if err != nil {
+			return err
+		}
+		e.lsc.uncommittedLLSNEnd.Add(numCommits)
+
+		err = e.committer.commitDirectly(storage.CommitContext{
+			HighWatermark:      e.srs.cc.HighWatermark,
+			PrevHighWatermark:  e.srs.cc.PrevHighWatermark,
+			CommittedGLSNBegin: e.srs.cc.CommittedGLSNBegin,
+			CommittedGLSNEnd:   e.srs.cc.CommittedGLSNEnd,
+			CommittedLLSNBegin: e.srs.cc.CommittedLLSNBegin,
+		}, false)
+		if err != nil {
+			return err
+		}
+
+		e.srs.resetCommitContext()
+
+		// end of sync
+		if e.srs.endOfSync() {
+			// learning -> sealing
+			e.stateBarrier.lock.Lock()
+			defer e.stateBarrier.lock.Unlock()
+			e.stateBarrier.state.store(executorSealing)
+
+			// invalidate syncReplicateState
+			e.srs = nil
+		}
+	}
+
+	return nil
 }
 
-func (e *executor) Sync(ctx context.Context, replica snpb.Replica, lastGLSN types.GLSN) (*replication.SyncTaskStatus, error) {
+func (e *executor) Sync(ctx context.Context, replica snpb.Replica) (*snpb.SyncStatus, error) {
 	if err := e.guard(); err != nil {
 		return nil, err
 	}
@@ -79,77 +227,95 @@ func (e *executor) Sync(ctx context.Context, replica snpb.Replica, lastGLSN type
 		return nil, errors.New("invalid state")
 	}
 
-	e.syncTracker.mu.Lock()
-	defer e.syncTracker.mu.Unlock()
+	e.syncTrackers.mu.Lock()
+	defer e.syncTrackers.mu.Unlock()
 
-	if sts, ok := e.syncTracker.tracker[replica.GetStorageNodeID()]; ok {
-		sts.Mu.RLock()
-		defer sts.Mu.RUnlock()
-		// FIXME (jun): Deleting sync history this point is not good.
-		if sts.Err != nil {
-			delete(e.syncTracker.tracker, replica.GetStorageNodeID())
-		}
-		return &replication.SyncTaskStatus{
-			Replica: sts.Replica,
-			State:   sts.State,
-			First:   sts.First,
-			Last:    sts.Last,
-			Current: sts.Current,
-		}, nil
+	if state, ok := e.syncTrackers.trk.get(replica.GetStorageNodeID()); ok {
+		return state.ToSyncStatus(), nil
 	}
 
 	firstGLSN := e.lsc.localGLSN.localLowWatermark.Load()
 	firstLE, err := e.storage.Read(firstGLSN)
 	if err != nil {
-		// error
+		return nil, err
 	}
-	firstLLSN := firstLE.LLSN
 
-	lastLE, err := e.storage.Read(lastGLSN)
+	lastLE, err := e.storage.Read(e.lsc.localGLSN.localHighWatermark.Load())
 	if err != nil {
-		// error
+		return nil, err
 	}
-	lastLLSN := lastLE.LLSN
 
-	first := snpb.SyncPosition{LLSN: firstLLSN, GLSN: firstGLSN}
-	last := snpb.SyncPosition{LLSN: lastLLSN, GLSN: lastGLSN}
-	current := snpb.SyncPosition{LLSN: types.InvalidLLSN, GLSN: types.InvalidGLSN}
+	span := snpb.SyncRange{FirstLLSN: firstLE.LLSN, LastLLSN: lastLE.LLSN}
 
-	sts := &replication.SyncTaskStatus{
-		Replica: replica,
-		State:   snpb.SyncStateInProgress,
-		First:   first,
-		Last:    last,
-		Current: current,
+	client, err := e.rp.clientOf(ctx, replica)
+	if err != nil {
+		return nil, err
 	}
-	e.syncTracker.tracker[replica.GetStorageNodeID()] = sts
+	span, err = client.SyncInit(ctx, span)
+	if err != nil {
+		if errors.Is(err, verrors.ErrExist) {
+			return &snpb.SyncStatus{
+				State: snpb.SyncStateComplete,
+			}, nil
+		}
+		return nil, err
+	}
 
-	// TODO: copy
-	return sts, err
+	syncCtx, syncCancel := context.WithCancel(context.Background())
+	state := newSyncState(syncCancel, replica, firstLE, lastLE)
+	e.syncTrackers.trk.run(syncCtx, state, &e.syncTrackers.mu)
+	return state.ToSyncStatus(), err
 }
 
-func (e *executor) syncer(ctx context.Context, sts *replication.SyncTaskStatus) func(context.Context) {
-	first, last, current := sts.First, sts.Last, sts.Current
-	return func(ctx context.Context) {
-		defer sts.Cancel()
+func (e *executor) sync(ctx context.Context, state *syncState) (err error) {
+	var (
+		cc     storage.CommitContext
+		client replication.Client
+	)
 
-		var err error
-		numLogs := types.LLSN(0)
-
-		subEnv, err := e.Subscribe(ctx, first.GLSN, last.GLSN+1)
+	defer func() {
 		if err != nil {
-			// handle it
-			goto errOut
+			state.mu.Lock()
+			state.err = err
+			state.mu.Unlock()
 		}
-		defer subEnv.Stop()
+	}()
 
+	cc, err = e.storage.CommitContextOf(state.first.GLSN)
+	if err != nil {
+		return err
+	}
+
+	client, err = e.rp.clientOf(ctx, state.dst)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = client.Close()
+	}()
+
+	for {
+		// send cc
+		err = client.SyncReplicate(ctx, state.dst, snpb.SyncPayload{
+			CommitContext: &varlogpb.CommitContext{
+				HighWatermark:      cc.HighWatermark,
+				PrevHighWatermark:  cc.PrevHighWatermark,
+				CommittedGLSNBegin: cc.CommittedGLSNBegin,
+				CommittedGLSNEnd:   cc.CommittedGLSNEnd,
+				CommittedLLSNBegin: cc.CommittedLLSNBegin,
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		// scan log entries & send them
+		var subEnv logio.SubscribeEnv
+		subEnv, err = e.Subscribe(ctx, cc.CommittedGLSNBegin, cc.CommittedGLSNEnd)
+		if err != nil {
+			return err
+		}
 		for result := range subEnv.ScanResultC() {
-			if result.LogEntry.LLSN != first.LLSN+numLogs {
-				err = errors.Errorf("logstream: unexpected LLSN (expected = %v, actual = %v)", first.LLSN+numLogs, result.LogEntry.LLSN)
-				break
-			}
-			numLogs++
-
 			payload := snpb.SyncPayload{
 				LogEntry: &varlogpb.LogEntry{
 					LLSN: result.LogEntry.LLSN,
@@ -157,26 +323,27 @@ func (e *executor) syncer(ctx context.Context, sts *replication.SyncTaskStatus) 
 					Data: result.LogEntry.Data,
 				},
 			}
-			if err = e.SyncReplicate(ctx, payload); err != nil {
-				break
+			err = client.SyncReplicate(ctx, state.dst, payload)
+			if err != nil {
+				return err
 			}
 
 			// update status
-			sts.Mu.Lock()
-			sts.Current = current
-			sts.Mu.Unlock()
+			state.mu.Lock()
+			state.curr = result.LogEntry
+			state.mu.Unlock()
+		}
+		subEnv.Stop()
+
+		// check if sync completes
+		if cc.CommittedGLSNEnd-1 == state.last.GLSN {
+			return nil
 		}
 
-	errOut:
-		sts.Mu.Lock()
-		if err == nil {
-			e.logger.Debug("syncer completed", zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
-			sts.State = snpb.SyncStateComplete
-		} else {
-			e.logger.Error("syncer failed", zap.Error(err), zap.Any("first", first), zap.Any("last", last), zap.Any("current", current))
-			sts.State = snpb.SyncStateError
+		// next cc
+		cc, err = e.storage.NextCommitContextOf(cc)
+		if err != nil {
+			return err
 		}
-		sts.Err = err
-		sts.Mu.Unlock()
 	}
 }

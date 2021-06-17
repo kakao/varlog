@@ -59,6 +59,8 @@ type committer interface {
 	sendCommitTask(ctx context.Context, ct *commitTask) error
 	drainCommitWaitQ(err error)
 	stop()
+	waitForDrainageOfCommitTasks(ctx context.Context) error
+	commitDirectly(cc storage.CommitContext, requireCommitWaitTasks bool) error
 }
 
 type committerImpl struct {
@@ -202,14 +204,20 @@ func (c *committerImpl) commitLoopInternal(ctx context.Context) error {
 		return err
 	}
 
-	numPoppedCWTs, err := c.commit(ctx)
-	defer func() {
-		atomic.AddInt64(&c.inflightCommitWaitTasks, -numPoppedCWTs)
-	}()
-	if err != nil {
+	if err := c.commit(ctx); err != nil {
 		// sealing
 		return err
 	}
+	/*
+		numPoppedCWTs, err := c.commit(ctx)
+		defer func() {
+			atomic.AddInt64(&c.inflightCommitWaitTasks, -numPoppedCWTs)
+		}()
+		if err != nil {
+			// sealing
+			return err
+		}
+	*/
 	return nil
 }
 
@@ -243,8 +251,8 @@ func (c *committerImpl) ready(ctx context.Context) (int64, error) {
 	return numPopped, nil
 }
 
-func (c *committerImpl) commit(ctx context.Context) (int64, error) {
-	numPoppedCWTs := int64(0)
+func (c *committerImpl) commit(ctx context.Context) error {
+	// numPoppedCWTs := int64(0)
 
 	// NOTE: Sort is not needed, and it needs to be evaluated whether it is helpful or not.
 	// - How many commit messages are processed at one time?
@@ -261,21 +269,26 @@ func (c *committerImpl) commit(ctx context.Context) (int64, error) {
 			continue
 		}
 
-		numPopped, err := c.commitInternal(ctx, ct)
-		numPoppedCWTs += numPopped
-		if err != nil {
-			return numPoppedCWTs, err
+		if err := c.commitInternal(ctx, ct); err != nil {
+			return err
 		}
+		/*
+			numPopped, err := c.commitInternal(ctx, ct)
+			numPoppedCWTs += numPopped
+			if err != nil {
+				return numPoppedCWTs, err
+			}
+		*/
 	}
-	return numPoppedCWTs, nil
+	return nil
 }
 
-func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (int64, error) {
+func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error {
 	_, uncommittedLLSNBegin := c.lsc.reportCommitBase()
 	if uncommittedLLSNBegin != ct.committedLLSNBegin {
 		// skip this commit
 		// See #VARLOG-453 (https://jira.daumkakao.com/browse/VARLOG-453).
-		return 0, nil
+		return nil
 	}
 
 	uncommittedLLSNEnd := c.lsc.uncommittedLLSNEnd.Load()
@@ -289,7 +302,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (int64
 		// skip this commit
 		// NB: recovering phase?
 		// MR just sends past commit messages to recovered SN that has no written logs
-		return 0, nil
+		return nil
 	}
 
 	// NOTE: It seems to be similar to the above condition. The actual purpose of this
@@ -302,7 +315,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (int64
 	// storage, however, it is failed to push them into the commitWaitQueue.
 	// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
 	if c.commitWaitQ.size() < numCommits {
-		return 0, nil
+		return nil
 	}
 
 	commitContext := storage.CommitContext{
@@ -313,68 +326,71 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) (int64
 		CommittedLLSNBegin: uncommittedLLSNBegin,
 	}
 
-	batch, err := c.strg.NewCommitBatch(commitContext)
-	if err != nil {
-		return 0, err
-	}
-	defer func() {
-		_ = batch.Close()
-	}()
+	return c.commitDirectly(commitContext, true)
 
-	// TODO: LLSN check
-	iter := c.commitWaitQ.peekIterator()
-	for i := 0; i < numCommits; i++ {
-		glsn := ct.committedGLSNBegin + types.GLSN(i)
-		cwt := iter.task()
-		if uncommittedLLSNBegin+types.LLSN(i) != cwt.llsn {
-			return 0, errors.New("llsn mismatch")
-		}
-		if cwt.twg != nil {
-			cwt.twg.glsn = glsn
-		}
-		if err := batch.Put(cwt.llsn, glsn); err != nil {
+	/*
+		batch, err := c.strg.NewCommitBatch(commitContext)
+		if err != nil {
 			return 0, err
 		}
-		iter.next()
-	}
-	if err := batch.Apply(); err != nil {
-		return 0, err
-	}
+		defer func() {
+			_ = batch.Close()
+		}()
 
-	// NOTE: Popping committed tasks should be happened before assigning a new
-	// localHighWatermark.
-	//
-	// Seal RPC decides whether the LSE can be sealed or not by using the localHighWatermark.
-	// If Seal RPC tries to make the LSE sealed, the committer should not pop anything from
-	// commitWaitQ.
-	committedTasks := make([]*commitWaitTask, 0, numCommits)
-	for i := 0; i < numCommits; i++ {
-		tb := c.commitWaitQ.pop()
-		// NOTE: This tb should not be nil, because the size of commitWaitQ is inspected
-		// above.
-		committedTasks = append(committedTasks, tb)
-	}
+		iter := c.commitWaitQ.peekIterator()
+		for i := 0; i < numCommits; i++ {
+			glsn := ct.committedGLSNBegin + types.GLSN(i)
+			cwt := iter.task()
+			if uncommittedLLSNBegin+types.LLSN(i) != cwt.llsn {
+				return 0, errors.New("llsn mismatch")
+			}
+			if cwt.twg != nil {
+				cwt.twg.glsn = glsn
+			}
+			if err := batch.Put(cwt.llsn, glsn); err != nil {
+				return 0, err
+			}
+			iter.next()
+		}
+		if err := batch.Apply(); err != nil {
+			return 0, err
+		}
 
-	// only the first commit changes local low watermark
-	c.lsc.localGLSN.localLowWatermark.CompareAndSwap(types.InvalidGLSN, ct.committedGLSNBegin)
-	c.lsc.localGLSN.localHighWatermark.Store(ct.committedGLSNEnd - 1)
-	uncommittedLLSNBegin += types.LLSN(numCommits)
-	c.decider.change(func() {
-		c.lsc.storeReportCommitBase(ct.highWatermark, uncommittedLLSNBegin)
-	})
+		// NOTE: Popping committed tasks should be happened before assigning a new
+		// localHighWatermark.
+		//
+		// Seal RPC decides whether the LSE can be sealed or not by using the localHighWatermark.
+		// If Seal RPC tries to make the LSE sealed, the committer should not pop anything from
+		// commitWaitQ.
+		committedTasks := make([]*commitWaitTask, 0, numCommits)
+		for i := 0; i < numCommits; i++ {
+			tb := c.commitWaitQ.pop()
+			// NOTE: This tb should not be nil, because the size of commitWaitQ is inspected
+			// above.
+			committedTasks = append(committedTasks, tb)
+		}
 
-	// NOTE: Notifying the completion of append should be happened after assigning a new
-	// localHighWatermark.
-	//
-	// A client that receives the response of Append RPC should be able to read that log
-	// immediately. If updating localHighWatermark occurs later, the client can receive
-	// ErrUndecidable if ErrUndecidable is allowed.
-	for _, cwt := range committedTasks {
-		cwt.twg.done(nil)
-		cwt.release()
-	}
+		// only the first commit changes local low watermark
+		c.lsc.localGLSN.localLowWatermark.CompareAndSwap(types.InvalidGLSN, ct.committedGLSNBegin)
+		c.lsc.localGLSN.localHighWatermark.Store(ct.committedGLSNEnd - 1)
+		uncommittedLLSNBegin += types.LLSN(numCommits)
+		c.decider.change(func() {
+			c.lsc.storeReportCommitBase(ct.highWatermark, uncommittedLLSNBegin)
+		})
 
-	return int64(numCommits), nil
+		// NOTE: Notifying the completion of append should be happened after assigning a new
+		// localHighWatermark.
+		//
+		// A client that receives the response of Append RPC should be able to read that log
+		// immediately. If updating localHighWatermark occurs later, the client can receive
+		// ErrUndecidable if ErrUndecidable is allowed.
+		for _, cwt := range committedTasks {
+			cwt.twg.done(nil)
+			cwt.release()
+		}
+
+		return int64(numCommits), nil
+	*/
 }
 
 func (c *committerImpl) stop() {
@@ -450,4 +466,99 @@ func (c *committerImpl) resetBatch() {
 		ctb.release()
 	}
 	c.commitTaskBatch = c.commitTaskBatch[0:0]
+}
+
+func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requireCommitWaitTasks bool) error {
+	_, uncommittedLLSNBegin := c.lsc.reportCommitBase()
+	numCommits := int(commitContext.CommittedGLSNEnd - commitContext.CommittedGLSNBegin)
+
+	// NOTE: It seems to be similar to the above condition. The actual purpose of this
+	// condition is to avoid an invalid commit situation that the number of commitWaitTasks is
+	// less than numCommits.
+	// `numUncommitted` might be greater than or equal to the `numCommits`, but the number of
+	// commitWaitTasks can be not. Since uncommittedLLSNEnd of the log stream context is
+	// increased whenever each log entry is written to the storage, it doesn't represent the
+	// size of commitWaitQueue. For instance, a batch of log entries could be written to the
+	// storage, however, it is failed to push them into the commitWaitQueue.
+	// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
+	if requireCommitWaitTasks && c.commitWaitQ.size() < numCommits {
+		return nil
+	}
+
+	batch, err := c.strg.NewCommitBatch(commitContext)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = batch.Close()
+	}()
+
+	iter := c.commitWaitQ.peekIterator()
+	for i := 0; i < numCommits; i++ {
+		llsn := commitContext.CommittedLLSNBegin + types.LLSN(i)
+		glsn := commitContext.CommittedGLSNBegin + types.GLSN(i)
+
+		if uncommittedLLSNBegin+types.LLSN(i) != llsn {
+			return errors.New("llsn mismatch")
+		}
+
+		// If requireCommitWaitTasks is true, since the number of tasks in commitWaitQ is
+		// inspected above, cwt must exist.
+		// If cwt is null, it means that there is no task in commitWaitQ anymore. When this
+		// method is executed by SyncReplicate, it is okay for cwt not to exist.
+		cwt := iter.task()
+		if cwt != nil && cwt.twg != nil {
+			cwt.twg.glsn = glsn
+		}
+
+		if err := batch.Put(llsn, glsn); err != nil {
+			return err
+		}
+		iter.next()
+	}
+	if err := batch.Apply(); err != nil {
+		return err
+	}
+
+	// NOTE: Popping committed tasks should be happened before assigning a new
+	// localHighWatermark.
+	//
+	// Seal RPC decides whether the LSE can be sealed or not by using the localHighWatermark.
+	// If Seal RPC tries to make the LSE sealed, the committer should not pop anything from
+	// commitWaitQ.
+
+	popSize := mathutil.MinInt(numCommits, c.commitWaitQ.size())
+	committedTasks := make([]*commitWaitTask, 0, popSize)
+	for i := 0; i < popSize; i++ {
+		// NOTE: This cwt should not be nil, because the size of commitWaitQ is inspected
+		// above.
+		cwt := c.commitWaitQ.pop()
+		committedTasks = append(committedTasks, cwt)
+	}
+
+	// NOTE: localGLSN should be increased only when numCommits is greater than zero.
+	if numCommits > 0 {
+		// only the first commit changes local low watermark
+		c.lsc.localGLSN.localLowWatermark.CompareAndSwap(types.InvalidGLSN, commitContext.CommittedGLSNBegin)
+		c.lsc.localGLSN.localHighWatermark.Store(commitContext.CommittedGLSNEnd - 1)
+	}
+	uncommittedLLSNBegin += types.LLSN(numCommits)
+	c.decider.change(func() {
+		c.lsc.storeReportCommitBase(commitContext.HighWatermark, uncommittedLLSNBegin)
+	})
+
+	// NOTE: Notifying the completion of append should be happened after assigning a new
+	// localHighWatermark.
+	//
+	// A client that receives the response of Append RPC should be able to read that log
+	// immediately. If updating localHighWatermark occurs later, the client can receive
+	// ErrUndecidable if ErrUndecidable is allowed.
+	for _, cwt := range committedTasks {
+		cwt.twg.done(nil)
+		cwt.release()
+	}
+
+	atomic.AddInt64(&c.inflightCommitWaitTasks, -int64(popSize))
+
+	return nil
 }

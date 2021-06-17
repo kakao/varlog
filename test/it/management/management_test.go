@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
-	"github.daumkakao.com/varlog/varlog/pkg/logc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
@@ -183,55 +182,37 @@ func TestSealUnseal(t *testing.T) {
 }
 
 func TestSyncLogStream(t *testing.T) {
-	t.Skip("[WIP] Sync API")
+	const numLogs = 100
 
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfLogStreams(1),
+		it.WithNumberOfClients(1),
 		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
 		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
 	}
 
 	Convey("Given LogStream", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
-		for i := 0; i < env.ReplicationFactor(); i++ {
-			_ = env.AddSN(t)
-		}
+		client := env.ClientAtIndex(t, 0)
 
-		lsID := env.AddLS(t)
-
-		meta, err := env.GetVMS().Metadata(context.TODO())
-		So(err, ShouldBeNil)
-
-		ls := meta.GetLogStream(lsID)
-		So(ls, ShouldNotBeNil)
-
-		var backups []logc.StorageNode
-		backups = make([]logc.StorageNode, env.ReplicationFactor()-1)
-		for i := 1; i < env.ReplicationFactor(); i++ {
-			replicaID := ls.Replicas[i].StorageNodeID
-			replica := meta.GetStorageNode(replicaID)
-			So(replica, ShouldNotBeNil)
-
-			backups[i-1].ID = replicaID
-			backups[i-1].Addr = replica.Address
-		}
-
-		cli := env.NewLogIOClient(t, lsID)
-		defer cli.Close()
-
-		for i := 0; i < 100; i++ {
-			glsn, err := cli.Append(context.TODO(), lsID, []byte("foo"), backups...)
+		for i := 0; i < numLogs; i++ {
+			_, err := client.Append(context.Background(), []byte("foo"))
 			So(err, ShouldBeNil)
-			So(glsn, ShouldEqual, types.GLSN(i+1))
 		}
 
 		Convey("Seal", func(ctx C) {
-			result, _, err := env.GetVMS().Seal(context.TODO(), lsID)
+			lsID := env.LogStreamID(t, 0)
+
+			rsp, err := env.GetVMSClient(t).Seal(context.Background(), lsID)
 			So(err, ShouldBeNil)
+			So(rsp.GetSealedGLSN(), ShouldEqual, types.GLSN(numLogs))
 
 			Convey("Update LS", func(ctx C) {
 				newsn := env.AddSN(t)
 
-				victim := result[len(result)-1].StorageNodeID
+				rds := env.ReplicasOf(t, lsID)
+				victim := rds[len(rds)-1].GetStorageNodeID()
 
 				// test if victim exists in the logstream and newsn does not exist
 				// in the log stream
