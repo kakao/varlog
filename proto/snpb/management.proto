@@ -120,6 +120,7 @@ message UnsealRequest {
 }
 
 message SyncRequest {
+    // FIXME: Use Replica instead of BackupNode
     message BackupNode {
         uint32 storage_node_id = 1 [
             (gogoproto.casttype) =
@@ -144,11 +145,6 @@ message SyncRequest {
         (gogoproto.customname) = "LogStreamID"
     ];
     BackupNode backup = 4 [(gogoproto.nullable) = true];
-    uint64 last_glsn = 5 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "LastGLSN"
-    ];
 }
 
 message SyncResponse {

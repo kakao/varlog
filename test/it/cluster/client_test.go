@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,6 +103,52 @@ func TestClientAppend(t *testing.T) {
 		}
 		return false
 	})
+}
+
+func TestClientAppendCancel(t *testing.T) {
+	// defer goleak.VerifyNone(t)
+	clus := it.NewVarlogCluster(t,
+		it.WithReplicationFactor(1),
+		it.WithNumberOfStorageNodes(1),
+		it.WithNumberOfLogStreams(1),
+		it.WithNumberOfClients(1),
+		it.WithVMSOptions(it.NewTestVMSOptions()),
+	)
+
+	defer func() {
+		clus.Close(t)
+		testutil.GC()
+	}()
+
+	client := clus.ClientAtIndex(t, 0)
+
+	var (
+		atomicGLSN types.AtomicGLSN
+		wg         sync.WaitGroup
+	)
+	wg.Add(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		defer wg.Done()
+		expectedGLSN := types.MinGLSN
+		for {
+			glsn, err := client.Append(ctx, []byte("foo"))
+			if err == nil {
+				require.Equal(t, expectedGLSN, glsn)
+				expectedGLSN++
+				atomicGLSN.Store(glsn)
+			} else {
+				t.Logf("canceled")
+				return
+			}
+		}
+	}()
+
+	for atomicGLSN.Load() < 10 {
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	wg.Wait()
 }
 
 func TestClientSubscribe(t *testing.T) {

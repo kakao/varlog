@@ -13,3 +13,11 @@ func (sp SyncPosition) Invalid() bool {
 func (sp SyncPosition) LessThan(other SyncPosition) bool {
 	return sp.LLSN < other.LLSN && sp.GLSN < other.GLSN
 }
+
+func InvalidSyncRange() SyncRange {
+	return SyncRange{FirstLLSN: types.InvalidLLSN, LastLLSN: types.InvalidLLSN}
+}
+
+func (sr SyncRange) Invalid() bool {
+	return sr.FirstLLSN.Invalid() || sr.LastLLSN.Invalid() || sr.FirstLLSN > sr.LastLLSN
+}

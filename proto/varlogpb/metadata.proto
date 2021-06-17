@@ -177,4 +177,9 @@ message CommitContext {
             "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "CommittedGLSNEnd"
     ];
+    uint64 committed_llsn_begin = 5 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.LLSN",
+        (gogoproto.customname) = "CommittedLLSNBegin"
+    ];
 }

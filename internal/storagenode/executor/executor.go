@@ -49,7 +49,10 @@ type executor struct {
 		lock  sync.RWMutex
 	}
 
-	muSeal sync.Mutex
+	// muState guards the state of executor from RPCs, for instance, Seal, Unseal, SyncInit, and
+	// SyncReplicate. By this mutex, only one RPC handler can execute at the same time, thus,
+	// the state of executor is updated mutually exclusively.
+	muState sync.Mutex
 
 	running struct {
 		val bool
@@ -58,9 +61,13 @@ type executor struct {
 
 	decider *decidableCondition
 
-	syncTracker struct {
-		tracker map[types.StorageNodeID]*replication.SyncTaskStatus
-		mu      sync.Mutex
+	// srs is guarded by muState.
+	// TODO: watchdog
+	srs *syncReplicateState
+
+	syncTrackers struct {
+		mu  sync.Mutex
+		trk *syncTracker
 	}
 
 	tsp timestamper.Timestamper
@@ -83,7 +90,7 @@ func New(opts ...Option) (*executor, error) {
 		tsp:    timestamper.New(),
 	}
 
-	// lse.replicas.Store([]snpb.Replica{})
+	lse.syncTrackers.trk = newSyncTracker(lse.sync)
 
 	lse.running.val = true
 	// NOTE: To push commitWaitTask into the commitWaitQ, the state of this executor is

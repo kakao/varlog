@@ -9,6 +9,9 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
+	replication "github.com/kakao/varlog/internal/storagenode/replication"
+	snpb "github.com/kakao/varlog/proto/snpb"
 )
 
 // MockReplicator is a mock of replicator interface.
@@ -32,6 +35,21 @@ func NewMockReplicator(ctrl *gomock.Controller) *MockReplicator {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockReplicator) EXPECT() *MockReplicatorMockRecorder {
 	return m.recorder
+}
+
+// clientOf mocks base method.
+func (m *MockReplicator) clientOf(ctx context.Context, replica snpb.Replica) (replication.Client, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "clientOf", ctx, replica)
+	ret0, _ := ret[0].(replication.Client)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// clientOf indicates an expected call of clientOf.
+func (mr *MockReplicatorMockRecorder) clientOf(ctx, replica interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "clientOf", reflect.TypeOf((*MockReplicator)(nil).clientOf), ctx, replica)
 }
 
 // resetConnector mocks base method.

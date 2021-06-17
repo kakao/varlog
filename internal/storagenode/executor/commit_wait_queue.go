@@ -23,13 +23,18 @@ type commitWaitQueueIteratorImpl struct {
 var _ commitWaitQueueIterator = (*commitWaitQueueIteratorImpl)(nil)
 
 func (iter *commitWaitQueueIteratorImpl) task() *commitWaitTask {
+	if !iter.valid() {
+		return nil
+	}
 	return iter.curr.Value.(*commitWaitTask)
 }
 
 func (iter *commitWaitQueueIteratorImpl) next() bool {
 	iter.queue.mu.RLock()
 	defer iter.queue.mu.RUnlock()
-	iter.curr = iter.curr.Prev()
+	if iter.curr != nil {
+		iter.curr = iter.curr.Prev()
+	}
 	return iter.valid()
 }
 

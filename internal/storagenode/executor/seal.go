@@ -22,8 +22,8 @@ func (e *executor) Seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varl
 	}
 	defer e.unguard()
 
-	e.muSeal.Lock()
-	defer e.muSeal.Unlock()
+	e.muState.Lock()
+	defer e.muState.Unlock()
 
 	return e.seal(ctx, lastCommittedGLSN)
 }

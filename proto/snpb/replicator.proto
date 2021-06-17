@@ -59,7 +59,6 @@ enum SyncState {
 
 message SyncPosition {
     option (gogoproto.equal) = true;
-
     uint64 llsn = 1 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.LLSN",
@@ -69,6 +68,19 @@ message SyncPosition {
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
+    ];
+}
+
+message SyncRange {
+    uint64 first_llsn = 1 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.LLSN",
+        (gogoproto.customname) = "FirstLLSN"
+    ];
+    uint64 last_llsn = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.LLSN",
+        (gogoproto.customname) = "LastLLSN"
     ];
 }
 
@@ -93,12 +105,11 @@ message SyncInitRequest {
     ];
     Replica source = 2 [(gogoproto.nullable) = false];
     Replica destination = 3 [(gogoproto.nullable) = false];
-    SyncPosition first = 4 [(gogoproto.nullable) = false];
-    SyncPosition last = 5 [(gogoproto.nullable) = false];
+    SyncRange range = 4 [(gogoproto.nullable) = false];
 }
 
 message SyncInitResponse {
-    SyncPosition first = 1 [(gogoproto.nullable) = false];
+    SyncRange range = 1 [(gogoproto.nullable) = false];
 }
 
 message SyncReplicateRequest {

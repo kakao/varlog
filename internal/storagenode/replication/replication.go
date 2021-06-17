@@ -13,9 +13,8 @@ import (
 type SyncTaskStatus struct {
 	Replica snpb.Replica
 	State   snpb.SyncState
-	First   snpb.SyncPosition
-	Last    snpb.SyncPosition
-	Current snpb.SyncPosition
+	Span    snpb.SyncRange
+	Curr    types.LLSN
 	Err     error
 	Cancel  context.CancelFunc
 	Mu      sync.RWMutex
@@ -23,9 +22,9 @@ type SyncTaskStatus struct {
 
 type Replicator interface {
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
-	SyncInit(ctx context.Context, first, last snpb.SyncPosition) (snpb.SyncPosition, error)
+	SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.SyncRange, error)
 	SyncReplicate(ctx context.Context, payload snpb.SyncPayload) error
-	Sync(ctx context.Context, replica snpb.Replica, lastGLSN types.GLSN) (*SyncTaskStatus, error)
+	Sync(ctx context.Context, replica snpb.Replica) (*snpb.SyncStatus, error)
 }
 
 type Getter interface {
