@@ -39,13 +39,6 @@ spec:
       containers:
       - name: jaeger
         image: jaegertracing/all-in-one:latest
-        resources:
-          limits:
-            cpu: 6000m
-            memory: 6Gi
-          requests:
-            cpu: 6000m
-            memory: 6Gi
         ports:
         - name: collector
           containerPort: 14250

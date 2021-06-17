@@ -1,22 +1,20 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: otel-collector
+  name: prometheus
   namespace: default
   labels:
-    app: opentelemetry
-    component: otel-collector
+    app: prometheus
 spec:
   replicas: 0
   template:
     spec:
       containers:
-        - name: otel-collector
-          resources:
-            limits:
+      - name: prometheus
+        resources:
+          limits:
             cpu: 1000m
             memory: 1Gi
           requests:
             cpu: 1000m
             memory: 1Gi
-

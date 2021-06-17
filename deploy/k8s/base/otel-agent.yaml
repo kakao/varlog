@@ -69,18 +69,11 @@ spec:
         - "-c"
         - "until nslookup otel-collector; do echo waiting for otel-collector; sleep 2; done"
       containers:
-      - command:
+      - name: otel-agent
+        command:
         - "/otelcol"
         - "--config=/conf/otel-agent-config.yaml"
         image: otel/opentelemetry-collector:latest
-        name: otel-agent
-        resources:
-          limits:
-            cpu: 1000m
-            memory: 1Gi
-          requests:
-            cpu: 1000m
-            memory: 1Gi
         volumeMounts:
         - name: otel-agent-config-vol
           mountPath: /conf

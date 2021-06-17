@@ -1,0 +1,41 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: varlog-mr-clear
+  namespace: default
+  labels:
+    app: varlog-mr-clear
+    name: varlog-mr-clear
+spec:
+  template:
+    spec:
+      volumes:
+      - name: varlog-mr-home
+        hostPath:
+          path: /data1/varlog/mr
+          type: DirectoryOrCreate
+      initContainers:
+      - name: volume-mr-clear
+        command:
+        - "sh"
+        - "-c"
+        - "rm -rf /data1/varlog/mr/raftdata"
+        volumeMounts:
+        - name: varlog-mr-home 
+          mountPath: /data1/varlog/mr
+      - name: volume-set-standalone
+        command:
+        - "sh"
+        - "-c"
+        - "touch /data1/varlog/mr/.standalone"
+        volumeMounts:
+        - name: varlog-mr-home 
+          mountPath: /data1/varlog/mr
+      containers:
+      - name: varlog-mr-clear
+        env:
+        - name: VMR_HOME
+          value: "/data1/varlog/mr"
+        volumeMounts:
+        - name: varlog-mr-home
+          mountPath: /data1/varlog/mr

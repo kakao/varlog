@@ -14,6 +14,11 @@ spec:
         hostPath:
           path: /varlog/mr
           type: DirectoryOrCreate
+      initContainers:
+      - name: volume-perm
+        volumeMounts:
+        - name: varlog-mr-home
+          mountPath: /varlog/mr
       containers:
       - name: varlog-mr
         resources:
@@ -23,3 +28,9 @@ spec:
           requests:
             cpu: 3000m
             memory: 3Gi
+        env:
+        - name: VMR_HOME
+          value: "/varlog/mr"
+        volumeMounts:
+        - name: varlog-mr-home
+          mountPath: /varlog/mr

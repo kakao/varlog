@@ -10,7 +10,17 @@ spec:
   template:
     spec:
       volumes:
-      - name: varlog-sn-home
+      - name: varlog-sn-data
         hostPath:
           path: /varlog/sn
           type: DirectoryOrCreate
+      initContainers:
+      - name: volume-perm
+        volumeMounts:
+        - name: varlog-sn-data
+          mountPath: /varlog/sn
+      containers:
+      - name: varlog-sn
+        env:
+        - name: VOLUMES
+          value: "/varlog/sn" 

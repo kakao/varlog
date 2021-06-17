@@ -130,13 +130,6 @@ spec:
         - "/otelcol"
         - "--config=/conf/otel-collector-config.yaml"
         - "--mem-ballast-size-mib=1000"
-        resources:
-          limits:
-            cpu: 4000m
-            memory: 4Gi
-          requests:
-            cpu: 4000m
-            memory: 4Gi
         ports:
         - containerPort: 1777  # Default endpoint for pprof.
         - containerPort: 55679 # Default endpoint for ZPages.

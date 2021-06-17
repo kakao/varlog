@@ -60,13 +60,6 @@ spec:
         ports:
           - name: ui
             containerPort: 9090
-        resources:
-          limits:
-            cpu: 4000m
-            memory: 4Gi
-          requests:
-            cpu: 4000m
-            memory: 4Gi
         readinessProbe:
             tcpSocket:
                 port: 9090

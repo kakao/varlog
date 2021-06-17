@@ -29,7 +29,7 @@ RETRY_INTERVAL_SEC = 3
 ADD_STORAGE_NODE_INTERVAL_SEC = 1
 DEFAULT_CLUSTER_ID = "1"
 DEFAULT_RPC_PORT = "9091"
-DEFAULT_VSN_HOME = "/home/deploy/varlog-sn"
+DEFAULT_VOLUMES = "/varlog/sn"
 TEST_STORAGE = "/home/deploy/storage"
 LOCAL_ADDRESS = socket.gethostbyname(socket.gethostname())
 
@@ -62,23 +62,29 @@ def get_storage_node_id():
         raise e
 
 
-def get_volume(truncate=False):
-    home = os.getenv("VSN_HOME", DEFAULT_VSN_HOME)
-    datapath = f"{home}/data"
+def get_volumes(truncate=False):
+    datapaths = []
+    volumes = os.getenv("VOLUMES", DEFAULT_VOLUMES).strip().split(",")
+    # FIXME: Do not add "data" subdirectory.
+    for volume in volumes:
+        datapath = f"{volume}/data"
+        datapaths.append(datapath)
 
     if truncate:
-        try:
-            logger.info(f"remove volume {datapath}")
-            shutil.rmtree(datapath)
-        except FileNotFoundError:
-            pass
+        for datapath in datapaths:
+            try:
+                logger.info(f"remove volume {datapath}")
+                shutil.rmtree(datapath)
+            except FileNotFoundError:
+                pass
 
-    os.makedirs(datapath, exist_ok=True)
-    return datapath
+    for datapath in datapaths:
+        os.makedirs(datapath, exist_ok=True)
+    return datapaths
 
 
 def get_logdir():
-    home = os.getenv("VSN_HOME", DEFAULT_VSN_HOME)
+    home = os.getenv("VOLUMES", DEFAULT_VOLUMES)
     logdir = f"{home}/logs"
     os.makedirs(logdir, exist_ok=True)
     return logdir
@@ -100,7 +106,7 @@ def main():
     listen_port = os.getenv("RPC_PORT", DEFAULT_RPC_PORT)
     listen_addr = f"0.0.0.0:{listen_port}"
     advertise_addr = get_advertise_addr()
-    logdir = get_logdir()
+    # logdir = get_logdir()
 
     killer = Killer()
     ok = False
@@ -112,26 +118,27 @@ def main():
             procutil.kill("vsn")
 
             snid, exist = get_storage_node_id()
-            volume = get_volume(truncate=not exist)
+            volumes = get_volumes(truncate=not exist)
             storage_node = [
                 f"{binpath}/vsn",
                 "start",
                 f"--cluster-id={cluster_id}",
                 f"--storage-node-id={snid}",
                 f"--listen-address={listen_addr}",
-                f"--volumes={volume}",
                 f"--advertise-address={advertise_addr}",
                 "--disable-write-sync",
                 "--disable-commit-sync",
-            ] 
+            ]
+            for volume in volumes:
+                storage_node.append(f"--volumes={volume}")
 
-            cmd = f"{binpath}/vsn start"
-            cmd += f" --cluster-id={cluster_id}"
-            cmd += f" --storage-node-id={snid}"
-            cmd += f" --listen-address={listen_addr}"
-            cmd += f" --volumes={volume}"
-            cmd += f" --advertise-address={advertise_addr}"
-            cmd += f" 2>&1 | tee -a {logdir}/log.txt"
+            # cmd = f"{binpath}/vsn start"
+            # cmd += f" --cluster-id={cluster_id}"
+            # cmd += f" --storage-node-id={snid}"
+            # cmd += f" --listen-address={listen_addr}"
+            # cmd += f" --volumes={volume}"
+            # cmd += f" --advertise-address={advertise_addr}"
+            # cmd += f" 2>&1 | tee -a {logdir}/log.txt"
 
             logger.info(f"running storage node: {storage_node}, already registered={exist}")
             subprocess.Popen(storage_node)

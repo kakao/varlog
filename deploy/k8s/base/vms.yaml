@@ -17,13 +17,6 @@ spec:
       containers:
       - name: varlog-vms
         image: idock.daumkakao.io/varlog/varlog-vms:latest
-        resources:
-          limits:
-            cpu: 4000m
-            memory: 2Gi
-          requests:
-            cpu: 2000m
-            memory: 1Gi
         command:
         - "python3"
         - "/varlog/bin/vms.py"

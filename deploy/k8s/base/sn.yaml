@@ -17,7 +17,7 @@ spec:
         name: varlog-sn
     spec:
       volumes:
-      - name: varlog-sn-home
+      - name: varlog-sn-data
         hostPath:
           path: /varlog/data
           type: DirectoryOrCreate
@@ -29,7 +29,7 @@ spec:
         - "-c"
         - "chmod -R 777 /varlog/data"
         volumeMounts:
-        - name: varlog-sn-home
+        - name: varlog-sn-data
           mountPath: /varlog/data
         imagePullPolicy: IfNotPresent
       containers:
@@ -46,7 +46,7 @@ spec:
           value: Asia/Seoul
         - name: VMS_ADDRESS
           value: "$(VARLOG_VMS_RPC_SERVICE_HOST):$(VARLOG_VMS_RPC_SERVICE_PORT)"
-        - name: VSN_HOME
+        - name: VOLUMES
           value: /varlog/data
         - name: COLLECTOR_NAME
           value: "otel"
@@ -57,7 +57,7 @@ spec:
             fieldRef:
               fieldPath: status.hostIP
         volumeMounts:
-        - name: varlog-sn-home
+        - name: varlog-sn-data
           mountPath: /varlog/data
         readinessProbe:
           exec:

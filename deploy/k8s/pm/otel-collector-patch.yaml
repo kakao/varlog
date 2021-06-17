@@ -7,16 +7,15 @@ metadata:
     app: opentelemetry
     component: otel-collector
 spec:
-  replicas: 0
+  replicas: 1
   template:
     spec:
       containers:
-        - name: otel-collector
-          resources:
-            limits:
-            cpu: 1000m
-            memory: 1Gi
+      - name: otel-collector
+        resources:
+          limits:
+            cpu: 8000m
+            memory: 16Gi
           requests:
-            cpu: 1000m
-            memory: 1Gi
-
+            cpu: 8000m
+            memory: 16Gi

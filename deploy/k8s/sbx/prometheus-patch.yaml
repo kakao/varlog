@@ -7,3 +7,14 @@ metadata:
     app: prometheus
 spec:
   replicas: 0
+  template:
+    spec:
+      containers:
+        - name: prometheus
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 1000m
+              memory: 1Gi

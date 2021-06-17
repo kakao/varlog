@@ -1,0 +1,20 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: jaeger
+  namespace: default
+  labels:
+    app: jaeger
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: jaeger
+        resources:
+          limits:
+            cpu: 8000m
+            memory: 16Gi
+          requests:
+            cpu: 8000m
+            memory: 16Gi

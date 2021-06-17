@@ -1,0 +1,70 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: varlog-sn
+  namespace: default
+  labels:
+    app: varlog-sn
+    name: varlog-sn
+spec:
+  template:
+    spec:
+      volumes:
+      - name: varlog-sn-data
+        $patch: delete
+      - name: data1
+        hostPath:
+          path: /data1/varlog/sn
+          type: DirectoryOrCreate
+      - name: data2
+        hostPath:
+          path: /data2/varlog/sn
+          type: DirectoryOrCreate
+      - name: data3
+        hostPath:
+          path: /data3/varlog/sn
+          type: DirectoryOrCreate
+      - name: data4
+        hostPath:
+          path: /data4/varlog/sn
+          type: DirectoryOrCreate
+      initContainers:
+      - name: volume-perm
+        command:
+        - "sh"
+        - "-c"
+        - "chmod -R 777 /data1/varlog/sn && chmod -R 777 /data2/varlog/sn && chmod -R 777 /data3/varlog/sn && chmod -R 777 /data4/varlog/sn"
+        volumeMounts:
+        - name: varlog-sn-data
+          $patch: delete
+        - name: data1
+          mountPath: /data1/varlog/sn
+        - name: data2
+          mountPath: /data2/varlog/sn
+        - name: data3
+          mountPath: /data3/varlog/sn
+        - name: data4
+          mountPath: /data4/varlog/sn
+      containers:
+      - name: varlog-sn
+        resources:
+          limits:
+            cpu: 16000m
+            memory: 32Gi
+          requests:
+            cpu: 16000m
+            memory: 32Gi
+        env:
+        - name: VOLUMES
+          value: "/data1/varlog/sn,/data2/varlog/sn,/data3/varlog/sn,/data4/varlog/sn"
+        volumeMounts:
+        - name: data1
+          mountPath: /data1/varlog/sn
+        - name: data2
+          mountPath: /data2/varlog/sn
+        - name: data3
+          mountPath: /data3/varlog/sn
+        - name: data4
+          mountPath: /data4/varlog/sn
+        - name: varlog-sn-data
+          $patch: delete
