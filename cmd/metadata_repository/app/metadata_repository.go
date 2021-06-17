@@ -18,17 +18,10 @@ func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
 		return err
 	}
 
-	lopts := log.Options{
-		RotateOptions: log.RotateOptions{
-			MaxSizeMB:  log.DefaultMaxSizeMB,
-			MaxAgeDays: log.DefaultMaxAgeDay,
-			MaxBackups: log.DefaultMaxBackups,
-		},
-		DisableLogToStderr: true,
-		Path:               fmt.Sprintf("%s/log.txt", path),
-	}
-
-	logger, err := log.NewInternal(lopts)
+	logger, err := log.New(
+		log.WithoutLogToStderr(),
+		log.WithPath(fmt.Sprintf("%s/log.txt", path)),
+	)
 	if err != nil {
 		fmt.Printf("could not create logger:: %v\n", err)
 		return err
