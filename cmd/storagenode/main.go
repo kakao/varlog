@@ -4,11 +4,10 @@ import (
 	"os"
 
 	"github.daumkakao.com/varlog/varlog/cmd/storagenode/app"
-	"github.daumkakao.com/varlog/varlog/cmd/storagenode/config"
 )
 
 func main() {
-	app := app.InitCLI(&config.Config{})
+	app := app.InitCLI()
 	if err := app.Run(os.Args); err != nil {
 		os.Exit(1)
 	}

@@ -449,14 +449,15 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 	snID := clus.nextSNID
 	clus.nextSNID++
 
-	volume, err := storagenode.NewVolume(t.TempDir())
+	volumeDir := t.TempDir()
+	volume, err := storagenode.NewVolume(volumeDir)
 	require.NoError(t, err)
 
 	sn, err := storagenode.New(context.TODO(),
 		storagenode.WithListenAddress("127.0.0.1:0"),
 		storagenode.WithClusterID(clus.clusterID),
 		storagenode.WithStorageNodeID(snID),
-		storagenode.WithVolumes(volume),
+		storagenode.WithVolumes(volumeDir),
 	)
 	require.NoError(t, err)
 
@@ -539,7 +540,7 @@ func (clus *VarlogCluster) RecoverSN(t *testing.T, snID types.StorageNodeID) *st
 		storagenode.WithClusterID(clus.clusterID),
 		storagenode.WithStorageNodeID(snID),
 		storagenode.WithListenAddress(addr),
-		storagenode.WithVolumes(volume),
+		storagenode.WithVolumes(string(volume)),
 	)
 	require.NoError(t, err)
 

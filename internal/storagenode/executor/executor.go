@@ -142,7 +142,7 @@ func (e *executor) initLogPipeline() error {
 
 	committer, err := newCommitter(committerConfig{
 		commitTaskQueueSize: e.commitTaskQueueSize,
-		commitTaskBatchSize: e.committerBatchSize,
+		commitTaskBatchSize: e.commitBatchSize,
 		commitQueueSize:     e.commitQueueSize,
 		strg:                e.storage,
 		lsc:                 e.lsc,
@@ -156,7 +156,7 @@ func (e *executor) initLogPipeline() error {
 
 	writer, err := newWriter(writerConfig{
 		queueSize:  e.writeQueueSize,
-		batchSize:  e.writerBatchSize,
+		batchSize:  e.writeBatchSize,
 		strg:       e.storage,
 		lsc:        e.lsc,
 		committer:  e.committer,

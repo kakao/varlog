@@ -32,7 +32,7 @@ type config struct {
 
 	executorOpts []executor.Option
 
-	storageOpts []storage.Storage
+	storageOpts []storage.Option
 
 	pprofOpts []pprof.Option
 
@@ -114,8 +114,20 @@ func (o lseOptions) apply(c *config) {
 	c.executorOpts = o.opts
 }
 
-func WithLogStreamExecutorOptions(opts ...executor.Option) Option {
+func WithExecutorOptions(opts ...executor.Option) Option {
 	return lseOptions{opts: opts}
+}
+
+type storageOptions struct {
+	opts []storage.Option
+}
+
+func (o storageOptions) apply(c *config) {
+	c.storageOpts = o.opts
+}
+
+func WithStorageOptions(opts ...storage.Option) Option {
+	return storageOptions{opts: opts}
 }
 
 type volumesOption struct {
@@ -126,12 +138,16 @@ func (o volumesOption) apply(c *config) {
 	c.volumes = o.volumes
 }
 
-func WithVolumes(volumes ...Volume) Option {
-	vol := set.New(len(volumes))
-	for _, v := range volumes {
-		vol.Add(v)
+func WithVolumes(dirs ...string) Option {
+	volumes := set.New(len(dirs))
+	for _, dir := range dirs {
+		vol, err := NewVolume(dir)
+		if err != nil {
+			panic(err)
+		}
+		volumes.Add(vol)
 	}
-	return volumesOption{vol}
+	return volumesOption{volumes}
 }
 
 type pprofOptions struct {
@@ -190,11 +206,11 @@ type loggerOption struct {
 	logger *zap.Logger
 }
 
-func (o loggerOption) applyServer(c *serverConfig) {
+func (o loggerOption) apply(c *config) {
 	c.logger = o.logger
 }
 
-func WithLogger(logger *zap.Logger) ServerOption {
+func WithLogger(logger *zap.Logger) Option {
 	return loggerOption{logger}
 }
 

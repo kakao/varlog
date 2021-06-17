@@ -18,7 +18,7 @@ import (
 func TestStorageNodeRunAndClose(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	sn, err := New(context.TODO(), WithListenAddress("localhost:0"), WithVolumes(testVolume(t)))
+	sn, err := New(context.TODO(), WithListenAddress("localhost:0"), WithVolumes(t.TempDir()))
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
@@ -44,7 +44,7 @@ func TestStorageNodeAddLogStream(t *testing.T) {
 	sn, err := New(
 		context.TODO(),
 		WithListenAddress("localhost:0"),
-		WithVolumes(testVolume(t)),
+		WithVolumes(t.TempDir()),
 		WithStorageNodeID(storageNodeID),
 	)
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	sn, err := New(
 		context.TODO(),
 		WithListenAddress("localhost:0"),
-		WithVolumes(testVolume(t), testVolume(t)),
+		WithVolumes(t.TempDir(), t.TempDir()),
 		WithStorageNodeID(storageNodeID),
 	)
 	require.NoError(t, err)

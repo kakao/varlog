@@ -15,6 +15,8 @@ import (
 
 type ClusterID uint32
 
+var _ fmt.Stringer = (*ClusterID)(nil)
+
 func NewClusterIDFromUint(u uint) (ClusterID, error) {
 	if u > math.MaxUint32 {
 		return 0, fmt.Errorf("cluster id overflow %v", u)
@@ -27,7 +29,13 @@ func ParseClusterID(s string) (ClusterID, error) {
 	return ClusterID(id), err
 }
 
+func (cid ClusterID) String() string {
+	return strconv.FormatUint(uint64(cid), 10)
+}
+
 type StorageNodeID uint32
+
+var _ fmt.Stringer = (*StorageNodeID)(nil)
 
 func NewStorageNodeIDFromUint(u uint) (StorageNodeID, error) {
 	if u > math.MaxUint32 {
@@ -55,6 +63,8 @@ func (snid StorageNodeID) String() string {
 }
 
 type LogStreamID uint32
+
+var _ fmt.Stringer = (*LogStreamID)(nil)
 
 func ParseLogStreamID(s string) (LogStreamID, error) {
 	id, err := strconv.ParseUint(s, 10, 32)

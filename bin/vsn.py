@@ -120,7 +120,9 @@ def main():
                 f"--storage-node-id={snid}",
                 f"--listen-address={listen_addr}",
                 f"--volumes={volume}",
-                f"--advertise-address={advertise_addr}"
+                f"--advertise-address={advertise_addr}",
+                "--disable-write-sync",
+                "--disable-commit-sync",
             ] 
 
             cmd = f"{binpath}/vsn start"

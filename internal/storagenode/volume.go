@@ -11,6 +11,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/fputil"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 )
 
 // /<volume>/cid_<cluster_id>/snid_<storage_node_id>/lsid_<log_stream_id>
@@ -39,7 +40,11 @@ func NewVolume(volume string) (Volume, error) {
 }
 
 func (vol Volume) Valid() error {
-	return ValidDir(string(vol))
+	dir := string(vol)
+	if !filepath.IsAbs(dir) {
+		return errors.Wrapf(verrors.ErrInvalid, "not absolute path: %s", dir)
+	}
+	return ValidDir(dir)
 }
 
 // ValidDir check if the volume (or path) is valid. Valid volume (or path) should be:
