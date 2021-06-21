@@ -286,9 +286,10 @@ func TestSealLogStreamSealedIncompletely(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			vmsCL := env.GetVMSClient(t)
-			_, err = vmsCL.Seal(context.TODO(), lsID)
-			So(err, ShouldNotBeNil)
-			//So(len(rsp.GetLogStreams()), ShouldBeLessThan, nrRep)
+			rsp, err := vmsCL.Seal(context.TODO(), lsID)
+			// So(err, ShouldNotBeNil)
+			So(err, ShouldBeNil)
+			So(len(rsp.GetLogStreams()), ShouldBeLessThan, env.ReplicationFactor())
 
 			Convey("Then SN Watcher makes LS sealed", func() {
 				snmeta, err := failedSN.GetMetadata(context.TODO())
