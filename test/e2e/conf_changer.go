@@ -19,6 +19,7 @@ type ConfChanger interface {
 	Done() <-chan struct{}
 	Err() error
 	Close()
+	Clone() ConfChanger
 }
 
 type confChanger struct {
@@ -37,7 +38,7 @@ func NewConfChanger(opts ...ConfChangerOption) ConfChanger {
 
 	return &confChanger{
 		confChangerOptions: ccOpts,
-		runner:             runner.New("changer", zap.NewNop()),
+		runner:             runner.New("conf-changer", zap.NewNop()),
 		done:               make(chan struct{}),
 	}
 }
@@ -81,21 +82,6 @@ func (cc *confChanger) Do(ctx context.Context) error {
 		if err = cc.waitInterval(ctx); err != nil {
 			return
 		}
-
-		log.Printf("%s\n", testutil.GetFunctionName(cc.recover))
-		if err = cc.recover(); err != nil {
-			return
-		}
-
-		log.Printf("%s\n", testutil.GetFunctionName(cc.recoverCheck))
-		if err = cc.recoverCheck(); err != nil {
-			return
-		}
-
-		log.Printf("Wait %v\n", cc.interval)
-		if err = cc.waitInterval(ctx); err != nil {
-			return
-		}
 	})
 
 	return err
@@ -118,6 +104,14 @@ func (cc *confChanger) Err() error {
 
 func (cc *confChanger) Close() {
 	cc.runner.Stop()
+}
+
+func (cc *confChanger) Clone() ConfChanger {
+	return &confChanger{
+		confChangerOptions: cc.confChangerOptions,
+		runner:             runner.New("conf-changer", zap.NewNop()),
+		done:               make(chan struct{}),
+	}
 }
 
 func (cc *confChanger) setErr(err error) {

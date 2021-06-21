@@ -527,6 +527,10 @@ func (ms *MetadataStorage) updateUncommitReport(ls *varlogpb.LogStreamDescriptor
 
 	newReports.Status = ls.Status
 
+	ms.logger.Info("reconfigure uncommit report",
+		zap.Any("as-is", fmt.Sprintf("%+v", oldReports)),
+		zap.Any("to-be", fmt.Sprintf("%+v", newReports)))
+
 	cur.LogStream.UncommitReports[ls.LogStreamID] = newReports
 
 	return nil
@@ -576,6 +580,8 @@ func (ms *MetadataStorage) updateLogStreamDescStatus(lsID types.LogStreamID, sta
 	cur.Metadata.UpsertLogStream(ls)
 
 	ms.metaAppliedIndex++
+
+	ms.logger.Info("update log stream status", zap.Any("lsid", lsID), zap.Any("status", status))
 
 	return nil
 }
@@ -1548,7 +1554,7 @@ func (ms *MetadataStorage) trimLogStreamCommitHistory() {
 		return s.LogStream.CommitHistory[i].HighWatermark >= s.LogStream.TrimGLSN
 	})
 
-	if 0 < i &&
+	if 1 < i &&
 		i < len(s.LogStream.CommitHistory) &&
 		s.LogStream.CommitHistory[i].HighWatermark == s.LogStream.TrimGLSN {
 		ms.logger.Info("trim", zap.Any("glsn", s.LogStream.TrimGLSN))

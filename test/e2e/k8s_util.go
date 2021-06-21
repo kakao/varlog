@@ -66,15 +66,24 @@ type K8sVarlogView interface {
 	Renew() error
 	GetMRNodeName(vtypes.NodeID) (string, error)
 	GetSNNodeName(vtypes.StorageNodeID) (string, error)
+
+	SetStoppedMR(vtypes.NodeID)
+	SetStoppedSN(vtypes.StorageNodeID)
+	UnsetStoppedMR()
+	UnsetStoppedSN()
+	StoppedMR(vtypes.NodeID) bool
+	StoppedSN(vtypes.StorageNodeID) bool
 }
 
 type k8sVarlogView struct {
-	podGetter K8sVarlogPodGetter
-	idGetter  VarlogIDGetter
-	mrs       map[vtypes.NodeID]string
-	sns       map[vtypes.StorageNodeID]string
-	mu        sync.RWMutex
-	timeout   time.Duration
+	podGetter  K8sVarlogPodGetter
+	idGetter   VarlogIDGetter
+	mrs        map[vtypes.NodeID]string
+	sns        map[vtypes.StorageNodeID]string
+	stoppedMRs map[vtypes.NodeID]struct{}
+	stoppedSNs map[vtypes.StorageNodeID]struct{}
+	mu         sync.RWMutex
+	timeout    time.Duration
 }
 
 type patchStringValue struct {
@@ -471,7 +480,12 @@ func (k8s *K8sVarlogCluster) StopMR(mrID vtypes.NodeID) error {
 		return err
 	}
 
-	return k8s.ReplaceLabel(nodeName, TypeLabelKey, MRStopLabel)
+	err = k8s.ReplaceLabel(nodeName, TypeLabelKey, MRStopLabel)
+	if err == nil {
+		k8s.view.SetStoppedMR(mrID)
+	}
+
+	return err
 }
 
 func (k8s *K8sVarlogCluster) StopSN(snID vtypes.StorageNodeID) error {
@@ -480,15 +494,30 @@ func (k8s *K8sVarlogCluster) StopSN(snID vtypes.StorageNodeID) error {
 		return err
 	}
 
-	return k8s.ReplaceLabel(nodeName, TypeLabelKey, SNStopLabel)
+	err = k8s.ReplaceLabel(nodeName, TypeLabelKey, SNStopLabel)
+	if err == nil {
+		k8s.view.SetStoppedSN(snID)
+	}
+
+	return err
 }
 
 func (k8s *K8sVarlogCluster) RecoverMR() error {
-	return k8s.ReplaceLabelAll(TypeLabelKey, MRStopLabel, MRLabel)
+	err := k8s.ReplaceLabelAll(TypeLabelKey, MRStopLabel, MRLabel)
+	if err == nil {
+		k8s.view.UnsetStoppedMR()
+	}
+
+	return err
 }
 
 func (k8s *K8sVarlogCluster) RecoverSN() error {
-	return k8s.ReplaceLabelAll(TypeLabelKey, SNStopLabel, SNLabel)
+	err := k8s.ReplaceLabelAll(TypeLabelKey, SNStopLabel, SNLabel)
+	if err == nil {
+		k8s.view.UnsetStoppedSN()
+	}
+
+	return err
 }
 
 func (k8s *K8sVarlogCluster) startNodes(label string, expected int) error {
@@ -659,6 +688,14 @@ func (k8s *K8sVarlogCluster) NumSNRunning() (int, error) {
 	return k8s.numPodsReady(VarlogNamespace, map[string]string{AppLabelKey: SNLabel})
 }
 
+func (k8s *K8sVarlogCluster) StoppedMR(mrID vtypes.NodeID) bool {
+	return k8s.view.StoppedMR(mrID)
+}
+
+func (k8s *K8sVarlogCluster) StoppedSN(snID vtypes.StorageNodeID) bool {
+	return k8s.view.StoppedSN(snID)
+}
+
 func withTestCluster(opts K8sVarlogClusterOptions, f func(k8s *K8sVarlogCluster)) func() {
 	return func() {
 		k8s, err := NewK8sVarlogCluster(opts)
@@ -683,11 +720,13 @@ func withTestCluster(opts K8sVarlogClusterOptions, f func(k8s *K8sVarlogCluster)
 
 func newK8sVarlogView(podGetter K8sVarlogPodGetter, timeout time.Duration) *k8sVarlogView {
 	return &k8sVarlogView{
-		podGetter: podGetter,
-		idGetter:  &varlogIDGetter{},
-		mrs:       make(map[vtypes.NodeID]string),
-		sns:       make(map[vtypes.StorageNodeID]string),
-		timeout:   timeout,
+		podGetter:  podGetter,
+		idGetter:   &varlogIDGetter{},
+		mrs:        make(map[vtypes.NodeID]string),
+		sns:        make(map[vtypes.StorageNodeID]string),
+		stoppedMRs: make(map[vtypes.NodeID]struct{}),
+		stoppedSNs: make(map[vtypes.StorageNodeID]struct{}),
+		timeout:    timeout,
 	}
 }
 
@@ -770,4 +809,54 @@ func (view *k8sVarlogView) GetSNNodeName(snID vtypes.StorageNodeID) (string, err
 	}
 
 	return nodeID, nil
+}
+
+func (view *k8sVarlogView) SetStoppedMR(mrID vtypes.NodeID) {
+	view.mu.Lock()
+	defer view.mu.Unlock()
+
+	_, ok := view.mrs[mrID]
+	if ok {
+		view.stoppedMRs[mrID] = struct{}{}
+	}
+}
+
+func (view *k8sVarlogView) UnsetStoppedMR() {
+	view.mu.Lock()
+	defer view.mu.Unlock()
+
+	view.stoppedMRs = make(map[vtypes.NodeID]struct{})
+}
+
+func (view *k8sVarlogView) SetStoppedSN(snID vtypes.StorageNodeID) {
+	view.mu.Lock()
+	defer view.mu.Unlock()
+
+	_, ok := view.sns[snID]
+	if ok {
+		view.stoppedSNs[snID] = struct{}{}
+	}
+}
+
+func (view *k8sVarlogView) UnsetStoppedSN() {
+	view.mu.Lock()
+	defer view.mu.Unlock()
+
+	view.stoppedSNs = make(map[vtypes.StorageNodeID]struct{})
+}
+
+func (view *k8sVarlogView) StoppedMR(mrID vtypes.NodeID) bool {
+	view.mu.Lock()
+	defer view.mu.Unlock()
+
+	_, ok := view.stoppedMRs[mrID]
+	return ok
+}
+
+func (view *k8sVarlogView) StoppedSN(snID vtypes.StorageNodeID) bool {
+	view.mu.Lock()
+	defer view.mu.Unlock()
+
+	_, ok := view.stoppedSNs[snID]
+	return ok
 }

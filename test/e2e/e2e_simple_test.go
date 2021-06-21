@@ -403,19 +403,32 @@ func TestK8sVarlogEnduranceExample(t *testing.T) {
 		mrseed, err := k8s.MRAddress()
 		So(err, ShouldBeNil)
 
-		confChange := NewConfChanger(
+		snFail := NewConfChanger(
 			WithChangeFunc(AnyBackupSNFail(k8s)),
 			WithCheckFunc(WaitSNFail(k8s)),
-			WithRecoverFunc(RecoverSN(k8s)),
-			WithRecoverCheckFunc(RecoverSNCheck(k8s)),
 			WithConfChangeInterval(10*time.Second),
+		)
+
+		updateLS := NewConfChanger(
+			WithChangeFunc(ReconfigureSealedLogStreams(k8s)),
+			WithCheckFunc(WaitSealed(k8s)),
+			WithConfChangeInterval(10*time.Second),
+		)
+
+		recoverSN := NewConfChanger(
+			WithChangeFunc(RecoverSN(k8s)),
+			WithCheckFunc(RecoverSNCheck(k8s)),
 		)
 
 		action := NewAction(WithTitle("backup sn fail"),
 			WithClusterID(types.ClusterID(1)),
 			WithMRAddr(mrseed),
-			WithConfChange(confChange),
-			WithPrevFunc(AddLogStream(k8s)),
+			WithPrevFunc(InitLogStream(k8s)),
+			WithConfChange(snFail),
+			WithConfChange(updateLS),
+			WithConfChange(recoverSN),
+			WithNumClient(1),
+			WithNumSubscriber(0),
 		)
 
 		err = action.Do(context.TODO())
@@ -435,19 +448,27 @@ func TestK8sVarlogEnduranceFollowerMRFail(t *testing.T) {
 		mrseed, err := k8s.MRAddress()
 		So(err, ShouldBeNil)
 
-		confChange := NewConfChanger(
+		mrFail := NewConfChanger(
 			WithChangeFunc(FollowerMRFail(k8s)),
 			WithCheckFunc(WaitMRFail(k8s)),
-			WithRecoverFunc(RecoverMR(k8s)),
-			WithRecoverCheckFunc(RecoverMRCheck(k8s)),
+			WithConfChangeInterval(10*time.Second),
+		)
+
+		recoverMR := NewConfChanger(
+			WithChangeFunc(RecoverMR(k8s)),
+			WithCheckFunc(RecoverMRCheck(k8s)),
 			WithConfChangeInterval(10*time.Second),
 		)
 
 		action := NewAction(WithTitle("follower mr fail"),
 			WithClusterID(types.ClusterID(1)),
 			WithMRAddr(mrseed),
-			WithConfChange(confChange),
-			WithPrevFunc(AddLogStream(k8s)),
+			WithConfChange(mrFail),
+			WithConfChange(recoverMR),
+			WithNumRepeat(3),
+			WithPrevFunc(InitLogStream(k8s)),
+			WithNumClient(1),
+			WithNumSubscriber(0),
 		)
 
 		err = action.Do(context.TODO())

@@ -648,7 +648,7 @@ func (mr *RaftMetadataRepository) applyRegisterLogStream(r *mrpb.RegisterLogStre
 	}
 
 	for _, replica := range r.LogStream.Replicas {
-		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetHighWatermark())
+		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetHighWatermark(), varlogpb.LogStreamStatusRunning)
 		if err != nil &&
 			err != verrors.ErrExist &&
 			err != verrors.ErrStopped {
@@ -713,8 +713,13 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, 
 		return true
 	})
 
+	rcstatus := varlogpb.LogStreamStatusRunning
+	if ls.Status == varlogpb.LogStreamStatusSealed {
+		rcstatus = varlogpb.LogStreamStatusSealed
+	}
+
 	for _, replica := range r.LogStream.Replicas {
-		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetHighWatermark())
+		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetHighWatermark(), rcstatus)
 		if err != nil &&
 			err != verrors.ErrExist &&
 			err != verrors.ErrStopped {
@@ -783,7 +788,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 				}
 
 				if reports.Status == varlogpb.LogStreamStatusSealing &&
-					mr.getLastCommitted(lsID) == knownHWM {
+					mr.getLastCommitted(lsID) <= knownHWM {
 					if err := mr.storage.SealLogStream(lsID, 0, 0); err == nil {
 						mr.reportCollector.Seal(lsID)
 					}

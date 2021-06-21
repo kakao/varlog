@@ -856,6 +856,8 @@ func (clus *VarlogCluster) CloseSN(t *testing.T, snID types.StorageNodeID) {
 
 	require.Contains(t, clus.storageNodes, snID)
 	clus.storageNodes[snID].Close()
+
+	log.Printf("SN.Close: %v", snID)
 }
 
 func (clus *VarlogCluster) LookupSN(t *testing.T, snID types.StorageNodeID) *storagenode.StorageNode {
@@ -1022,7 +1024,10 @@ func (clus *VarlogCluster) PrimarySNOf(t *testing.T, lsID types.LogStreamID) *st
 }
 
 func (clus *VarlogCluster) BackupSNOf(t *testing.T, lsID types.LogStreamID) *storagenode.StorageNode {
-	idx := rand.Intn(clus.nrRep) + 1
+	idx := 1
+	if clus.nrRep > 2 {
+		idx += rand.Intn(clus.nrRep - 1)
+	}
 	return clus.getSN(t, lsID, idx)
 }
 

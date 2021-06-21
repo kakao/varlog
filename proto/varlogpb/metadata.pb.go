@@ -14,7 +14,7 @@ import (
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-	_ "google.golang.org/protobuf/types/known/timestamppb"
+	_ "github.com/golang/protobuf/ptypes/timestamp"
 
 	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
 )
@@ -1973,7 +1973,10 @@ func (m *StorageDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2128,7 +2131,10 @@ func (m *StorageNodeDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2230,7 +2236,10 @@ func (m *ReplicaDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2353,7 +2362,10 @@ func (m *LogStreamDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2491,7 +2503,10 @@ func (m *MetadataDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2697,7 +2712,10 @@ func (m *StorageNodeMetadataDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2922,7 +2940,10 @@ func (m *LogStreamMetadataDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -3043,7 +3064,10 @@ func (m *LogStreamReplicaDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -3166,7 +3190,10 @@ func (m *LogEntry) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -3312,7 +3339,10 @@ func (m *CommitContext) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {

@@ -801,3 +801,91 @@ func TestVarlogFailoverSyncLogStreamError(t *testing.T) {
 		})
 	}))
 }
+
+func TestVarlogFailoverUpdateLS(t *testing.T) {
+	opts := []it.Option{
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(3),
+		it.WithNumberOfLogStreams(2),
+		it.WithNumberOfClients(5),
+	}
+
+	Convey("Given Varlog cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		client := env.ClientAtIndex(t, 0)
+
+		for i := 0; i < 32; i++ {
+			_, err := client.Append(context.Background(), []byte("foo"))
+			So(err, ShouldBeNil)
+		}
+
+		Convey("When SN fail", func(ctx C) {
+
+			var victim types.StorageNodeID
+			var updateLS types.LogStreamID
+			for _, lsID := range env.LogStreamIDs() {
+				sn := env.PrimarySNOf(t, lsID)
+				snCL := env.SNClientOf(t, sn.StorageNodeID())
+				snmd, _ := snCL.GetMetadata(context.TODO())
+				if len(snmd.GetLogStreams()) == 1 {
+					updateLS = lsID
+					victim = sn.StorageNodeID()
+					break
+				}
+
+				sn = env.BackupSNOf(t, lsID)
+				snCL = env.SNClientOf(t, sn.StorageNodeID())
+				snmd, _ = snCL.GetMetadata(context.TODO())
+				if len(snmd.GetLogStreams()) == 1 {
+					updateLS = lsID
+					victim = sn.StorageNodeID()
+					break
+				}
+			}
+
+			addedSN := env.AddSN(t)
+
+			env.CloseSN(t, victim)
+			env.CloseSNClientOf(t, victim)
+
+			for i := 0; i < 32; i++ {
+				_, err := client.Append(context.Background(), []byte("foo"))
+				So(err, ShouldBeNil)
+			}
+
+			Convey("Then it should not be able to append", func(ctx C) {
+				So(testutil.CompareWaitN(50, func() bool {
+					meta := env.GetMetadata(t)
+					lsdesc := meta.GetLogStream(updateLS)
+					return lsdesc.Status == varlogpb.LogStreamStatusSealed
+				}), ShouldBeTrue)
+
+				env.UpdateLS(t, updateLS, victim, addedSN)
+
+				for i := 0; i < 32; i++ {
+					_, err := client.Append(context.Background(), []byte("foo"))
+					So(err, ShouldBeNil)
+				}
+
+				Convey("When backup SN recover", func(ctx C) {
+					env.RecoverSN(t, victim)
+					env.NewSNClient(t, victim)
+
+					So(testutil.CompareWaitN(50, func() bool {
+						mcl := env.SNClientOf(t, victim)
+						snmeta, err := mcl.GetMetadata(context.Background())
+						if err != nil {
+							return false
+						}
+						_, ok := snmeta.GetLogStream(updateLS)
+						return ok
+					}), ShouldBeTrue)
+
+					for i := 0; i < 32; i++ {
+						_, err := client.Append(context.Background(), []byte("foo"))
+						So(err, ShouldBeNil)
+					}
+				})
+			})
+		})
+	}))
+}

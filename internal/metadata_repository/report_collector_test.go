@@ -155,7 +155,7 @@ func TestRegisterLogStream(t *testing.T) {
 		lsID := types.LogStreamID(0)
 
 		Convey("registeration LogStream with not existing storageNodeID should be failed", func() {
-			err := reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
+			err := reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN, varlogpb.LogStreamStatusRunning)
 			So(err, ShouldResemble, verrors.ErrNotExist)
 		})
 
@@ -168,12 +168,12 @@ func TestRegisterLogStream(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(reportCollector.NumExecutors(), ShouldEqual, 1)
 
-			err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
+			err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN, varlogpb.LogStreamStatusRunning)
 			So(err, ShouldBeNil)
 			So(reportCollector.NumCommitter(), ShouldEqual, 1)
 
 			Convey("duplicated registeration LogStream should be failed", func() {
-				err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
+				err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN, varlogpb.LogStreamStatusRunning)
 				So(err, ShouldResemble, verrors.ErrExist)
 			})
 		})
@@ -209,7 +209,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 		})
 
 		Convey("unregisteration storageNode with logstream should be failed", func() {
-			err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
+			err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN, varlogpb.LogStreamStatusRunning)
 			So(err, ShouldBeNil)
 			So(reportCollector.NumCommitter(), ShouldEqual, 1)
 
@@ -260,7 +260,7 @@ func TestUnregisterLogStream(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(reportCollector.NumExecutors(), ShouldEqual, 1)
 
-			err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN)
+			err = reportCollector.RegisterLogStream(snID, lsID, types.InvalidGLSN, varlogpb.LogStreamStatusRunning)
 			So(err, ShouldBeNil)
 			So(reportCollector.NumCommitter(), ShouldEqual, 1)
 
@@ -315,7 +315,7 @@ func TestRecoverStorageNode(t *testing.T) {
 
 			LSs = append(LSs, ls)
 
-			err = reportCollector.RegisterLogStream(sn.StorageNodeID, ls.LogStreamID, types.InvalidGLSN)
+			err = reportCollector.RegisterLogStream(sn.StorageNodeID, ls.LogStreamID, types.InvalidGLSN, varlogpb.LogStreamStatusRunning)
 			So(err, ShouldBeNil)
 		}
 
@@ -561,7 +561,7 @@ func TestReportCollectorSeal(t *testing.T) {
 		var sealedLSID types.LogStreamID
 
 		for i := 0; i < nrLogStream; i++ {
-			err := reportCollector.RegisterLogStream(types.StorageNodeID(i%nrStorage), types.LogStreamID(i), types.InvalidGLSN)
+			err := reportCollector.RegisterLogStream(types.StorageNodeID(i%nrStorage), types.LogStreamID(i), types.InvalidGLSN, varlogpb.LogStreamStatusRunning)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -735,7 +735,7 @@ func TestCommit(t *testing.T) {
 		}
 
 		for i := 0; i < nrLogStream; i++ {
-			err := reportCollector.RegisterLogStream(types.StorageNodeID(i%nrStorage), types.LogStreamID(i), types.InvalidGLSN)
+			err := reportCollector.RegisterLogStream(types.StorageNodeID(i%nrStorage), types.LogStreamID(i), types.InvalidGLSN, varlogpb.LogStreamStatusRunning)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -806,7 +806,7 @@ func TestCommit(t *testing.T) {
 
 					nrStorage += 1
 
-					err = reportCollector.RegisterLogStream(sn.StorageNodeID, types.LogStreamID(nrLogStream), knownHWM)
+					err = reportCollector.RegisterLogStream(sn.StorageNodeID, types.LogStreamID(nrLogStream), knownHWM, varlogpb.LogStreamStatusRunning)
 					So(err, ShouldBeNil)
 
 					nrLogStream += 1
@@ -864,7 +864,7 @@ func TestCommitWithDelay(t *testing.T) {
 			return a.lookupClient(sn.StorageNodeID) != nil
 		}), ShouldBeTrue)
 
-		err = reportCollector.RegisterLogStream(types.StorageNodeID(0), types.LogStreamID(0), types.InvalidGLSN)
+		err = reportCollector.RegisterLogStream(types.StorageNodeID(0), types.LogStreamID(0), types.InvalidGLSN, varlogpb.LogStreamStatusRunning)
 		if err != nil {
 			t.Fatal(err)
 		}

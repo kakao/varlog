@@ -33,7 +33,7 @@ type ReportCollector interface {
 
 	UnregisterStorageNode(types.StorageNodeID) error
 
-	RegisterLogStream(types.StorageNodeID, types.LogStreamID, types.GLSN) error
+	RegisterLogStream(types.StorageNodeID, types.LogStreamID, types.GLSN, varlogpb.LogStreamStatus) error
 
 	UnregisterLogStream(types.StorageNodeID, types.LogStreamID) error
 
@@ -175,15 +175,16 @@ func (rc *reportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, lss []
 			continue
 		}
 
+		status := varlogpb.LogStreamStatusRunning
+		if ls.Status == varlogpb.LogStreamStatusSealed {
+			status = varlogpb.LogStreamStatusSealed
+		}
+
 		for _, r := range ls.Replicas {
-			err := rc.RegisterLogStream(r.StorageNodeID, ls.LogStreamID, highWatermark)
+			err := rc.RegisterLogStream(r.StorageNodeID, ls.LogStreamID, highWatermark, status)
 			if err != nil {
 				return err
 			}
-		}
-
-		if ls.Status == varlogpb.LogStreamStatusSealed {
-			rc.Seal(ls.LogStreamID)
 		}
 	}
 
@@ -250,7 +251,7 @@ func (rc *reportCollector) UnregisterStorageNode(snID types.StorageNodeID) error
 	return nil
 }
 
-func (rc *reportCollector) RegisterLogStream(snID types.StorageNodeID, lsID types.LogStreamID, highWatermark types.GLSN) error {
+func (rc *reportCollector) RegisterLogStream(snID types.StorageNodeID, lsID types.LogStreamID, highWatermark types.GLSN, status varlogpb.LogStreamStatus) error {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
@@ -263,7 +264,7 @@ func (rc *reportCollector) RegisterLogStream(snID types.StorageNodeID, lsID type
 		return verrors.ErrNotExist
 	}
 
-	return executor.registerLogStream(lsID, highWatermark)
+	return executor.registerLogStream(lsID, highWatermark, status)
 }
 
 func (rc *reportCollector) UnregisterLogStream(snID types.StorageNodeID, lsID types.LogStreamID) error {
@@ -303,6 +304,7 @@ func (rc *reportCollector) Seal(lsID types.LogStreamID) {
 		return
 	}
 
+	rc.logger.Info("Seal", zap.Any("lsid", lsID))
 	for _, executor := range rc.executors {
 		executor.seal(lsID)
 	}
@@ -374,7 +376,7 @@ func (rce *reportCollectExecutor) stopNoWait() {
 	go rce.stop()
 }
 
-func (rce *reportCollectExecutor) registerLogStream(lsID types.LogStreamID, highWatermark types.GLSN) error {
+func (rce *reportCollectExecutor) registerLogStream(lsID types.LogStreamID, highWatermark types.GLSN, status varlogpb.LogStreamStatus) error {
 	rce.cmmu.Lock()
 	defer rce.cmmu.Unlock()
 
@@ -382,7 +384,7 @@ func (rce *reportCollectExecutor) registerLogStream(lsID types.LogStreamID, high
 		return verrors.ErrExist
 	}
 
-	c := newLogStreamCommitter(lsID, rce, highWatermark, rce.logger)
+	c := newLogStreamCommitter(lsID, rce, highWatermark, status, rce.logger)
 	err := c.run()
 	if err != nil {
 		return err
@@ -617,7 +619,7 @@ func (rce *reportCollectExecutor) lookupNextCommitResults(glsn types.GLSN) (*mrp
 	return rce.helper.LookupNextCommitResults(glsn)
 }
 
-func newLogStreamCommitter(lsID types.LogStreamID, helper commitHelper, highWatermark types.GLSN, logger *zap.Logger) *logStreamCommitter {
+func newLogStreamCommitter(lsID types.LogStreamID, helper commitHelper, highWatermark types.GLSN, status varlogpb.LogStreamStatus, logger *zap.Logger) *logStreamCommitter {
 	triggerC := make(chan struct{}, 1)
 
 	c := &logStreamCommitter{
@@ -628,7 +630,7 @@ func newLogStreamCommitter(lsID types.LogStreamID, helper commitHelper, highWate
 		logger:   logger,
 	}
 
-	c.commitStatus.status = varlogpb.LogStreamStatusRunning
+	c.commitStatus.status = status
 	c.commitStatus.beginHighWatermark = highWatermark
 
 	return c
