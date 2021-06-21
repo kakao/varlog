@@ -23,6 +23,7 @@ const (
 
 	defaultClientCnt     = 10
 	defaultSubscriberCnt = 10
+	defaultRepeatCnt     = 1
 
 	defaultTimeout = 10 * time.Second
 )
@@ -115,29 +116,27 @@ type actionOptions struct {
 	mrAddr      string
 	nrCli       int
 	nrSub       int
-	confChanger ConfChanger
+	nrRepeat    int
+	confChanger []ConfChanger
 	logger      *zap.Logger
 }
 
 type confChangerOptions struct {
-	change       func() error
-	check        func() error
-	recover      func() error
-	recoverCheck func() error
-	interval     time.Duration
+	change   func() error
+	check    func() error
+	interval time.Duration
 }
 
 var defaultActionOptions = actionOptions{
-	nrCli:  defaultClientCnt,
-	nrSub:  defaultSubscriberCnt,
-	logger: zap.NewNop(),
+	nrCli:    defaultClientCnt,
+	nrSub:    defaultSubscriberCnt,
+	nrRepeat: defaultRepeatCnt,
+	logger:   zap.NewNop(),
 }
 
 var defaultConfChangerOptions = confChangerOptions{
-	change:       func() error { return nil },
-	check:        func() error { return nil },
-	recover:      func() error { return nil },
-	recoverCheck: func() error { return nil },
+	change: func() error { return nil },
+	check:  func() error { return nil },
 }
 
 type ActionOption func(*actionOptions)
@@ -147,6 +146,12 @@ type ConfChangerOption func(*confChangerOptions)
 func WithTitle(title string) ActionOption {
 	return func(opts *actionOptions) {
 		opts.title = title
+	}
+}
+
+func WithNumRepeat(n int) ActionOption {
+	return func(opts *actionOptions) {
+		opts.nrRepeat = n
 	}
 }
 
@@ -182,7 +187,7 @@ func WithLogger(logger *zap.Logger) ActionOption {
 
 func WithConfChange(cc ConfChanger) ActionOption {
 	return func(opts *actionOptions) {
-		opts.confChanger = cc
+		opts.confChanger = append(opts.confChanger, cc)
 	}
 }
 
@@ -207,18 +212,6 @@ func WithChangeFunc(f func() error) ConfChangerOption {
 func WithCheckFunc(f func() error) ConfChangerOption {
 	return func(opts *confChangerOptions) {
 		opts.check = f
-	}
-}
-
-func WithRecoverFunc(f func() error) ConfChangerOption {
-	return func(opts *confChangerOptions) {
-		opts.recover = f
-	}
-}
-
-func WithRecoverCheckFunc(f func() error) ConfChangerOption {
-	return func(opts *confChangerOptions) {
-		opts.recoverCheck = f
 	}
 }
 

@@ -2,16 +2,21 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
+	"github.daumkakao.com/varlog/varlog/pkg/snc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 func anySNFail(k8s *K8sVarlogCluster, primary bool) error {
@@ -221,7 +226,7 @@ func RecoverMRCheck(k8s *K8sVarlogCluster) func() error {
 	}
 }
 
-func AddLogStream(k8s *K8sVarlogCluster) func() error {
+func InitLogStream(k8s *K8sVarlogCluster) func() error {
 	return func() error {
 		vmsaddr, err := k8s.VMSAddress()
 		if err != nil {
@@ -247,4 +252,373 @@ func AddLogStream(k8s *K8sVarlogCluster) func() error {
 
 		return nil
 	}
+}
+
+func AddLogStream(k8s *K8sVarlogCluster) func() error {
+	return func() error {
+		vmsaddr, err := k8s.VMSAddress()
+		if err != nil {
+			return err
+		}
+
+		connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer connCancel()
+		mcli, err := varlog.NewClusterManagerClient(connCtx, vmsaddr)
+		if err != nil {
+			return err
+		}
+		defer mcli.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
+		_, err = mcli.AddLogStream(ctx, nil)
+		defer cancel()
+
+		return err
+	}
+}
+
+func SealAnyLogStream(k8s *K8sVarlogCluster) func() error {
+	return func() error {
+		vmsaddr, err := k8s.VMSAddress()
+		if err != nil {
+			return err
+		}
+
+		mrseed, err := k8s.MRAddress()
+		if err != nil {
+			return err
+		}
+
+		connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer connCancel()
+		mrcli, err := mrc.NewMetadataRepositoryClient(connCtx, mrseed)
+		if err != nil {
+			return err
+		}
+		defer mrcli.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer cancel()
+		meta, err := mrcli.GetMetadata(ctx)
+		if err != nil {
+			return err
+		}
+		lsdescs := meta.GetLogStreams()
+		if len(lsdescs) == 0 {
+			return errors.New("no logstream")
+		}
+
+		idx := rand.Intn(len(lsdescs))
+		for i := 0; i < len(lsdescs); i++ {
+			if !lsdescs[idx].Status.Sealed() {
+				break
+			}
+
+			if i == len(lsdescs)-1 {
+				return errors.New("no more running logstream")
+			}
+
+			idx = (idx + 1) % len(lsdescs)
+		}
+
+		mconnCtx, mconnCancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer mconnCancel()
+		mcli, err := varlog.NewClusterManagerClient(mconnCtx, vmsaddr)
+		if err != nil {
+			return err
+		}
+		defer mcli.Close()
+
+		mctx, mcancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer mcancel()
+		_, err = mcli.Seal(mctx, lsdescs[idx].LogStreamID)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+}
+
+func ReconfigureSealedLogStreams(k8s *K8sVarlogCluster) func() error {
+	return func() error {
+		mrseed, err := k8s.MRAddress()
+		if err != nil {
+			return err
+		}
+
+		connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer connCancel()
+		mrcli, err := mrc.NewMetadataRepositoryClient(connCtx, mrseed)
+		if err != nil {
+			return err
+		}
+		defer mrcli.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer cancel()
+		meta, err := mrcli.GetMetadata(ctx)
+		if err != nil {
+			return err
+		}
+		lsdescs := meta.GetLogStreams()
+		if len(lsdescs) == 0 {
+			return errors.New("no logstream")
+		}
+
+		for _, lsdesc := range lsdescs {
+			if lsdesc.Status.Sealed() {
+				err = updateSealedLogStream(k8s, meta, lsdesc)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	}
+}
+
+func updateSealedLogStream(k8s *K8sVarlogCluster, meta *varlogpb.MetadataDescriptor, lsdesc *varlogpb.LogStreamDescriptor) error {
+	vmsaddr, err := k8s.VMSAddress()
+	if err != nil {
+		return err
+	}
+
+	lsID := lsdesc.LogStreamID
+	pushReplica, popReplica := getPushPopReplicas(k8s, meta, lsdesc.LogStreamID)
+
+	if pushReplica == nil || popReplica == nil {
+		return errors.New("no push/pop replicas")
+	}
+
+	mconnCtx, mconnCancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer mconnCancel()
+	mcli, err := varlog.NewClusterManagerClient(mconnCtx, vmsaddr)
+	if err != nil {
+		return err
+	}
+	defer mcli.Close()
+
+	mctx, mcancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer mcancel()
+	_, err = mcli.UpdateLogStream(mctx, lsID, popReplica, pushReplica)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("UPDATELS: lsid=%d, pop:%+v, push:+%v\n", lsID, popReplica, pushReplica)
+
+	return nil
+}
+
+func getPushPopReplicas(k8s *K8sVarlogCluster, meta *varlogpb.MetadataDescriptor, lsID types.LogStreamID) (*varlogpb.ReplicaDescriptor, *varlogpb.ReplicaDescriptor) {
+	lsdesc := meta.GetLogStream(lsID)
+	if lsdesc == nil {
+		return nil, nil
+	}
+
+	v, ok := victimReplica(k8s, lsdesc)
+	if !ok {
+		return nil, nil
+	}
+
+	pop := proto.Clone(v).(*varlogpb.ReplicaDescriptor)
+
+	var push *varlogpb.ReplicaDescriptor
+	meta = proto.Clone(meta).(*varlogpb.MetadataDescriptor)
+
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(meta.StorageNodes), func(i, j int) {
+		meta.StorageNodes[i], meta.StorageNodes[j] = meta.StorageNodes[j], meta.StorageNodes[i]
+	})
+
+	for _, sndesc := range meta.GetStorageNodes() {
+		if !lsdesc.IsReplica(sndesc.StorageNodeID) {
+			push = &varlogpb.ReplicaDescriptor{
+				StorageNodeID: sndesc.StorageNodeID,
+				Path:          sndesc.Storages[0].Path,
+			}
+		}
+	}
+
+	return push, pop
+}
+
+func victimReplica(k8s *K8sVarlogCluster, lsdesc *varlogpb.LogStreamDescriptor) (*varlogpb.ReplicaDescriptor, bool) {
+	for _, r := range lsdesc.Replicas {
+		if k8s.StoppedSN(r.StorageNodeID) {
+			return r, true
+		}
+	}
+
+	idx := rand.Intn(len(lsdesc.Replicas))
+	return lsdesc.Replicas[idx], false
+}
+
+func UnregisterStoppedSN(k8s *K8sVarlogCluster) func() error {
+	return func() error {
+		mrseed, err := k8s.MRAddress()
+		if err != nil {
+			return err
+		}
+
+		connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer connCancel()
+		mrcli, err := mrc.NewMetadataRepositoryClient(connCtx, mrseed)
+		if err != nil {
+			return err
+		}
+		defer mrcli.Close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer cancel()
+		meta, err := mrcli.GetMetadata(ctx)
+		if err != nil {
+			return err
+		}
+
+		for _, sndesc := range meta.GetStorageNodes() {
+			if k8s.StoppedSN(sndesc.StorageNodeID) {
+				if err := unregisterSN(k8s, sndesc.StorageNodeID); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+}
+
+func unregisterSN(k8s *K8sVarlogCluster, snID types.StorageNodeID) error {
+	vmsaddr, err := k8s.VMSAddress()
+	if err != nil {
+		return err
+	}
+
+	mconnCtx, mconnCancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer mconnCancel()
+	mcli, err := varlog.NewClusterManagerClient(mconnCtx, vmsaddr)
+	if err != nil {
+		return err
+	}
+	defer mcli.Close()
+
+	mctx, mcancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer mcancel()
+	_, err = mcli.UnregisterStorageNode(mctx, snID)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("UNREGISTERSN: snid:%d\n", snID)
+
+	return nil
+}
+
+func WaitSealed(k8s *K8sVarlogCluster) func() error {
+	return func() error {
+		var (
+			err   error
+			tries int
+		)
+		dur := time.Now()
+		ok := testutil.CompareWaitN(300, func() bool {
+			tries++
+			sealed, err := isAllSealed(k8s)
+			ret := err == nil && sealed
+			if !ret {
+				defer time.Sleep(100 * time.Millisecond)
+			}
+			return ret
+		})
+		if ok {
+			return nil
+		}
+		if err == nil {
+			err = errors.New("change check timeout")
+		}
+		return errors.WithMessagef(err, "tries = %d, dur = %v", tries, time.Since(dur))
+	}
+}
+
+func isAllSealed(k8s *K8sVarlogCluster) (bool, error) {
+	mrseed, err := k8s.MRAddress()
+	if err != nil {
+		return false, err
+	}
+
+	connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer connCancel()
+	mrcli, err := mrc.NewMetadataRepositoryClient(connCtx, mrseed)
+	if err != nil {
+		return false, err
+	}
+	defer mrcli.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer cancel()
+	meta, err := mrcli.GetMetadata(ctx)
+	if err != nil {
+		return false, err
+	}
+	lsdescs := meta.GetLogStreams()
+	if len(lsdescs) == 0 {
+		return true, nil
+	}
+
+	for _, lsdesc := range lsdescs {
+		if lsdesc.Status.Sealed() {
+			sealed, err := isSealed(k8s, meta, lsdesc.LogStreamID)
+			if !sealed || err != nil {
+				return sealed, err
+			}
+		}
+	}
+
+	return true, nil
+}
+
+func isSealed(k8s *K8sVarlogCluster, meta *varlogpb.MetadataDescriptor, lsID types.LogStreamID) (bool, error) {
+	lsdesc := meta.GetLogStream(lsID)
+	if lsdesc == nil {
+		return false, fmt.Errorf("no lsdesc")
+	}
+
+	for _, r := range lsdesc.Replicas {
+		sndesc := meta.GetStorageNode(r.StorageNodeID)
+		if sndesc == nil {
+			return false, fmt.Errorf("no sndesc")
+		}
+
+		sealed, err := isReplicaSealed(k8s, sndesc.Address, lsID)
+		if !sealed || err != nil {
+			return sealed, err
+		}
+	}
+
+	return true, nil
+}
+
+func isReplicaSealed(k8s *K8sVarlogCluster, addr string, lsID types.LogStreamID) (bool, error) {
+	connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer connCancel()
+	sncli, err := snc.NewManagementClient(connCtx, types.ClusterID(1), addr, zap.NewNop())
+	if err != nil {
+		return false, err
+	}
+	defer sncli.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
+	defer cancel()
+	meta, err := sncli.GetMetadata(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	lsdesc, ok := meta.GetLogStream(lsID)
+	if !ok {
+		return false, fmt.Errorf("no sn metadata")
+	}
+
+	return lsdesc.Status == varlogpb.LogStreamStatusSealed, nil
 }
