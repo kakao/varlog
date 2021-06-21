@@ -2,20 +2,20 @@ package app
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/executor"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/log"
 )
 
 func Main(c *cli.Context) error {
@@ -28,11 +28,18 @@ func Main(c *cli.Context) error {
 		return err
 	}
 
-	loggerConfig := zap.NewProductionConfig()
-	loggerConfig.Sampling = nil
-	loggerConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
-	loggerConfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := loggerConfig.Build(zap.AddStacktrace(zap.DPanicLevel))
+	logOpts := []log.Option{
+		log.WithHumanFriendly(),
+		log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)),
+	}
+	if logDir := c.String(flagLogDir.Name); len(logDir) != 0 {
+		absDir, err := filepath.Abs(logDir)
+		if err != nil {
+			return err
+		}
+		logOpts = append(logOpts, log.WithPath(filepath.Join(absDir, "storagenode.log")))
+	}
+	logger, err := log.New(logOpts...)
 	if err != nil {
 		return err
 	}
@@ -72,7 +79,6 @@ func Main(c *cli.Context) error {
 		storagenode.WithLogger(logger),
 	)
 	if err != nil {
-		log.Fatalf("could not create StorageNode: %v", err)
 		return err
 	}
 

@@ -31,3 +31,7 @@ spec:
         env:
         - name: VOLUMES
           value: "/varlog/sn" 
+        - name: LOG_DIR
+          value: "/varlog/sn/log"
+        - name: LOGTOSTDERR
+          value: "true"

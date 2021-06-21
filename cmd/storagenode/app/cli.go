@@ -36,6 +36,10 @@ func initStartCommand() *cli.Command {
 		flagListenAddress.StringFlag(),
 		flagAdvertiseAddress.StringFlag(),
 
+		// flags for logging
+		flagLogDir.StringFlag(),
+		flagLogToStderr.BoolFlag(),
+
 		// flags for executor
 		flagWriteQueueSize.IntFlagV(executor.DefaultWriteQueueSize),
 		flagWriteBatchSize.IntFlagV(executor.DefaultWriteBatchSize),

@@ -57,6 +57,10 @@ spec:
         env:
         - name: VOLUMES
           value: "/data1/varlog/sn,/data2/varlog/sn,/data3/varlog/sn,/data4/varlog/sn"
+        - name: LOG_DIR
+          value: "/data1/varlog/sn/log"
+        - name: LOGTOSTDERR
+          value: "true"
         volumeMounts:
         - name: data1
           mountPath: /data1/varlog/sn
