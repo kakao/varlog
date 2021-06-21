@@ -34,6 +34,16 @@ var (
 		EnvVars: []string{"ADVERTISE_ADDRESS", "ADVERTISE"},
 	}
 
+	// logging
+	flagLogDir = vflag.FlagDescriptor{
+		Name:    "log-dir",
+		EnvVars: []string{"LOG_DIR"},
+	}
+	flagLogToStderr = vflag.FlagDescriptor{
+		Name:    "logtostderr",
+		EnvVars: []string{"LOGTOSTDERR"},
+	}
+
 	// flags for executors
 	flagWriteQueueSize = vflag.FlagDescriptor{
 		Name:    "write-queue-size",

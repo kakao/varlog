@@ -83,13 +83,6 @@ def get_volumes(truncate=False):
     return datapaths
 
 
-def get_logdir():
-    home = os.getenv("VOLUMES", DEFAULT_VOLUMES)
-    logdir = f"{home}/logs"
-    os.makedirs(logdir, exist_ok=True)
-    return logdir
-
-
 def add_storage_node(addr):
     try:
         subprocess.check_output(
@@ -132,17 +125,8 @@ def main():
             for volume in volumes:
                 storage_node.append(f"--volumes={volume}")
 
-            # cmd = f"{binpath}/vsn start"
-            # cmd += f" --cluster-id={cluster_id}"
-            # cmd += f" --storage-node-id={snid}"
-            # cmd += f" --listen-address={listen_addr}"
-            # cmd += f" --volumes={volume}"
-            # cmd += f" --advertise-address={advertise_addr}"
-            # cmd += f" 2>&1 | tee -a {logdir}/log.txt"
-
             logger.info(f"running storage node: {storage_node}, already registered={exist}")
             subprocess.Popen(storage_node)
-            # subprocess.Popen(cmd, shell=True)
 
             ok = True
             time.sleep(ADD_STORAGE_NODE_INTERVAL_SEC)
