@@ -285,8 +285,8 @@ func (sm *snManager) Seal(ctx context.Context, logStreamID types.LogStreamID, la
 		}
 		status, highWatermark, errSeal := cli.Seal(ctx, logStreamID, lastCommittedGLSN)
 		if errSeal != nil {
-			errSeal = errors.WithMessagef(errSeal, "snid = %d, lsid = %d", storageNodeID, logStreamID)
-			err = multierr.Append(err, errSeal)
+			// NOTE: The sealing log stream ignores the failure of sealing its replica.
+			sm.logger.Warn("could not seal replica", zap.Uint32("snid", uint32(storageNodeID)), zap.Uint32("lsid", uint32(logStreamID)))
 			continue
 		}
 		lsmetaDesc = append(lsmetaDesc, varlogpb.LogStreamMetadataDescriptor{
