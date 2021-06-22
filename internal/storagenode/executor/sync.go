@@ -87,7 +87,7 @@ func (st *syncTracker) run(ctx context.Context, state *syncState, locker sync.Lo
 			locker.Unlock()
 			st.wg.Done()
 		}()
-		st.syncer(ctx, state)
+		_ = st.syncer(ctx, state)
 	}()
 }
 

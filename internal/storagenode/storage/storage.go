@@ -113,6 +113,9 @@ type Storage interface {
 	// If there is no entry at the given position, it returns varlog.ErrNoEntry.
 	Read(glsn types.GLSN) (types.LogEntry, error)
 
+	// ReadAt reads the log entry at the llsn.
+	ReadAt(llsn types.LLSN) (types.LogEntry, error)
+
 	// Scan returns Scanner that reads log entries from the glsn.
 	Scan(begin, end types.GLSN) Scanner
 

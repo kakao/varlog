@@ -7,6 +7,7 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -114,34 +115,90 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 	})
 }
 
-func TestVarlogFailoverSNBackupFail(t *testing.T) {
-	t.Skip("[WIP] Sync API")
+func TestVarlogFailoverSNBackupInitialFault(t *testing.T) {
+	clus := it.NewVarlogCluster(t,
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfLogStreams(1),
+		it.WithNumberOfClients(1),
+		it.WithVMSOptions(it.NewTestVMSOptions()),
+	)
 
+	defer func() {
+		clus.Close(t)
+		testutil.GC()
+	}()
+
+	_, err := clus.ClientAtIndex(t, 0).Append(context.Background(), []byte("foo"))
+	require.NoError(t, err)
+
+	lsID := clus.LogStreamID(t, 0)
+	backupSNID := clus.BackupStorageNodeIDOf(t, lsID)
+
+	clus.CloseSN(t, backupSNID)
+	clus.CloseSNClientOf(t, backupSNID)
+
+	clus.RecoverSN(t, backupSNID)
+	clus.NewSNClient(t, backupSNID)
+	clus.NewReportCommitterClient(t, backupSNID)
+
+	require.Eventually(t, func() bool {
+		snmd, err := clus.SNClientOf(t, backupSNID).GetMetadata(context.Background())
+		if !assert.NoError(t, err) {
+			return false
+		}
+
+		lsmd, ok := snmd.GetLogStream(lsID)
+		if !assert.True(t, ok) {
+			return false
+		}
+
+		return varlogpb.LogStreamStatusSealed == lsmd.GetStatus()
+	}, 10*time.Second, 100*time.Millisecond)
+
+	_, err = clus.GetVMSClient(t).Unseal(context.Background(), lsID)
+	require.NoError(t, err)
+
+	clus.ClientRefresh(t)
+	_, err = clus.ClientAtIndex(t, 0).Append(context.Background(), []byte("foo"))
+	require.NoError(t, err)
+}
+
+func TestVarlogFailoverSNBackupFail(t *testing.T) {
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(5),
+		it.WithVMSOptions(it.NewTestVMSOptions()),
 	}
 
 	Convey("Given Varlog cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
 		errC := make(chan error, 1024)
 		glsnC := make(chan types.GLSN, 1024)
 
+		done := make(chan struct{})
+		defer close(done)
+
 		var wg sync.WaitGroup
 		for i := 0; i < env.NumberOfClients(); i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-
 				client := env.ClientAtIndex(t, idx)
-				glsn, err := client.Append(context.Background(), []byte("foo"))
-				if err != nil {
-					errC <- err
-					return
+				for {
+					select {
+					case <-done:
+						return
+					default:
+					}
+					glsn, err := client.Append(context.Background(), []byte("foo"))
+					if err != nil {
+						errC <- err
+						return
+					}
+					glsnC <- glsn
 				}
-				glsnC <- glsn
-
 			}(i)
 		}
 
@@ -149,9 +206,8 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 			errCnt := 0
 			maxGLSN := types.InvalidGLSN
 
-			lsID := env.LogStreamIDs()[0]
-			oldsn := env.BackupSNOf(t, lsID)
-			oldSNID := oldsn.StorageNodeID()
+			lsID := env.LogStreamID(t, 0)
+			backupSNID := env.BackupStorageNodeIDOf(t, lsID)
 
 			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
 			defer timer.Stop()
@@ -166,8 +222,8 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					}
 
 					if glsn == types.GLSN(32) {
-						env.CloseSN(t, oldSNID)
-						env.CloseSNClientOf(t, oldSNID)
+						env.CloseSN(t, backupSNID)
+						env.CloseSNClientOf(t, backupSNID)
 					}
 				case <-errC:
 					errCnt++
@@ -179,22 +235,26 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 				So(err, ShouldBeNil)
 				sealedGLSN := rsp.GetSealedGLSN()
 				So(sealedGLSN, ShouldBeGreaterThanOrEqualTo, maxGLSN)
+				t.Logf("SealedGLSN=%d", sealedGLSN)
 
-				psn := env.PrimarySNOf(t, lsID)
-				psnCL := env.SNClientOf(t, psn.StorageNodeID())
-				snmd, err := psnCL.GetMetadata(context.Background())
+				primarySNID := env.PrimaryStorageNodeIDOf(t, lsID)
+				snmd, err := env.SNClientOf(t, primarySNID).GetMetadata(context.Background())
 				lsmd, ok := snmd.GetLogStream(lsID)
 				So(ok, ShouldBeTrue)
 				So(lsmd.GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
+
+				// check if all clients stopped
+				wg.Wait()
+
 				// TODO (jun): Add assertion that HWM of the LS equals to sealedGLSN
 
 				Convey("When backup SN recover", func(ctx C) {
-					env.RecoverSN(t, oldSNID)
-					env.NewSNClient(t, oldSNID)
+					env.RecoverSN(t, backupSNID)
+					env.NewSNClient(t, backupSNID)
+					env.NewReportCommitterClient(t, backupSNID)
 
-					So(testutil.CompareWaitN(50, func() bool {
-						mcl := env.SNClientOf(t, oldSNID)
-						snmeta, err := mcl.GetMetadata(context.Background())
+					So(testutil.CompareWaitN(100, func() bool {
+						snmeta, err := env.SNClientOf(t, backupSNID).GetMetadata(context.Background())
 						if err != nil {
 							return false
 						}
@@ -202,10 +262,16 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 						return ok && lsmd.GetStatus() == varlogpb.LogStreamStatusSealed
 					}), ShouldBeTrue)
 
-					Convey("Then it should be abel to append", func(ctx C) {
+					_, err := env.GetVMSClient(t).Unseal(context.TODO(), lsID)
+					So(err, ShouldBeNil)
+
+					Convey("Then it should be able to append", func(ctx C) {
+						// FIXME (jun): Explicit refreshing clients is not
+						// necessary. Rather automated refreshing metadata
+						// and connections in clients should be worked.
+						env.ClientRefresh(t)
 						client := env.ClientAtIndex(t, 0)
 						So(testutil.CompareWaitN(10, func() bool {
-							env.GetVMSClient(t).Unseal(context.TODO(), lsID)
 							_, err := client.Append(context.Background(), []byte("foo"))
 							return err == nil
 						}), ShouldBeTrue)
@@ -268,7 +334,7 @@ func TestVarlogFailoverRecoverFromSML(t *testing.T) {
 					}), ShouldBeTrue)
 
 					So(testutil.CompareWaitN(10, func() bool {
-						meta, err := env.StorageNodes()[0].GetMetadata(context.TODO())
+						meta, err := env.SNClientOf(t, env.StorageNodeIDAtIndex(t, 0)).GetMetadata(context.Background())
 						if err != nil {
 							return false
 						}
@@ -819,25 +885,24 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 		}
 
 		Convey("When SN fail", func(ctx C) {
-
 			var victim types.StorageNodeID
 			var updateLS types.LogStreamID
 			for _, lsID := range env.LogStreamIDs() {
-				sn := env.PrimarySNOf(t, lsID)
-				snCL := env.SNClientOf(t, sn.StorageNodeID())
+				sn := env.PrimaryStorageNodeIDOf(t, lsID)
+				snCL := env.SNClientOf(t, sn)
 				snmd, _ := snCL.GetMetadata(context.TODO())
 				if len(snmd.GetLogStreams()) == 1 {
 					updateLS = lsID
-					victim = sn.StorageNodeID()
+					victim = sn
 					break
 				}
 
-				sn = env.BackupSNOf(t, lsID)
-				snCL = env.SNClientOf(t, sn.StorageNodeID())
+				sn = env.BackupStorageNodeIDOf(t, lsID)
+				snCL = env.SNClientOf(t, sn)
 				snmd, _ = snCL.GetMetadata(context.TODO())
 				if len(snmd.GetLogStreams()) == 1 {
 					updateLS = lsID
-					victim = sn.StorageNodeID()
+					victim = sn
 					break
 				}
 			}
@@ -869,6 +934,7 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 				Convey("When backup SN recover", func(ctx C) {
 					env.RecoverSN(t, victim)
 					env.NewSNClient(t, victim)
+					env.NewReportCommitterClient(t, victim)
 
 					So(testutil.CompareWaitN(50, func() bool {
 						mcl := env.SNClientOf(t, victim)

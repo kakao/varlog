@@ -195,7 +195,6 @@ func TestSyncLogStream(t *testing.T) {
 
 	Convey("Given LogStream", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
 		client := env.ClientAtIndex(t, 0)
-
 		for i := 0; i < numLogs; i++ {
 			_, err := client.Append(context.Background(), []byte("foo"))
 			So(err, ShouldBeNil)
@@ -203,58 +202,64 @@ func TestSyncLogStream(t *testing.T) {
 
 		Convey("Seal", func(ctx C) {
 			lsID := env.LogStreamID(t, 0)
-
 			rsp, err := env.GetVMSClient(t).Seal(context.Background(), lsID)
 			So(err, ShouldBeNil)
 			So(rsp.GetSealedGLSN(), ShouldEqual, types.GLSN(numLogs))
 
 			Convey("Update LS", func(ctx C) {
-				newsn := env.AddSN(t)
-
+				newSNID := env.AddSN(t)
 				rds := env.ReplicasOf(t, lsID)
-				victim := rds[len(rds)-1].GetStorageNodeID()
+				victimSNID := rds[len(rds)-1].GetStorageNodeID()
 
-				// test if victim exists in the logstream and newsn does not exist
+				// test if victimSNID exists in the logstream and newSNID does not exist
 				// in the log stream
-				meta, err := env.GetMR(t).GetMetadata(context.TODO())
+				meta, err := env.MRClient(t, 0).GetMetadata(context.Background())
 				So(err, ShouldBeNil)
 				snidmap := make(map[types.StorageNodeID]bool)
-				replicas := meta.GetLogStream(lsID).GetReplicas()
-				for _, replica := range replicas {
+				for _, replica := range meta.GetLogStream(lsID).GetReplicas() {
 					snidmap[replica.GetStorageNodeID()] = true
 				}
-				So(snidmap, ShouldNotContainKey, newsn)
-				So(snidmap, ShouldContainKey, victim)
+				So(snidmap, ShouldNotContainKey, newSNID)
+				So(snidmap, ShouldContainKey, victimSNID)
 
 				// update LS
-				env.UpdateLS(t, lsID, victim, newsn)
+				env.UpdateLS(t, lsID, victimSNID, newSNID)
 
-				// test if victim does not exist in the logstream and newsn exists
+				// test if victimSNID does not exist in the logstream and newSNID exists
 				// in the log stream
-				meta, err = env.GetMR(t).GetMetadata(context.TODO())
+				meta, err = env.MRClient(t, 0).GetMetadata(context.Background())
 				So(err, ShouldBeNil)
 				snidmap = make(map[types.StorageNodeID]bool)
-				replicas = meta.GetLogStream(lsID).GetReplicas()
-				for _, replica := range replicas {
+				for _, replica := range meta.GetLogStream(lsID).GetReplicas() {
 					snidmap[replica.GetStorageNodeID()] = true
 				}
-				So(snidmap, ShouldContainKey, newsn)
-				So(snidmap, ShouldNotContainKey, victim)
+				So(snidmap, ShouldContainKey, newSNID)
+				So(snidmap, ShouldNotContainKey, victimSNID)
 
 				Convey("Then it should be synced", func(ctx C) {
 					So(testutil.CompareWaitN(200, func() bool {
-						snMeta, err := env.LookupSN(t, newsn).GetMetadata(context.TODO())
+						snmd, err := env.SNClientOf(t, newSNID).GetMetadata(context.Background())
 						if err != nil {
 							return false
 						}
-
-						replica, exist := snMeta.FindLogStream(lsID)
+						lsmd, exist := snmd.FindLogStream(lsID)
 						if !exist {
 							return false
 						}
 
-						return replica.Status == varlogpb.LogStreamStatusSealed
+						rsp, err := env.ReportCommitterClientOf(t, newSNID).GetReport(context.Background())
+						if err != nil {
+							return false
+						}
+						rpt := rsp.GetUncommitReports()[0]
+						return rpt.GetHighWatermark() == types.GLSN(numLogs) &&
+							rpt.GetUncommittedLLSNOffset() == types.LLSN(numLogs+1) &&
+							rpt.GetUncommittedLLSNLength() == 0 &&
+							lsmd.Status == varlogpb.LogStreamStatusSealed
 					}), ShouldBeTrue)
+
+					_, err := env.GetVMSClient(t).Unseal(context.Background(), lsID)
+					So(err, ShouldBeNil)
 				})
 			})
 		})

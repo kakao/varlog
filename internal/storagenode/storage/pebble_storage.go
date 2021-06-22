@@ -302,6 +302,27 @@ func (ps *pebbleStorage) Read(glsn types.GLSN) (types.LogEntry, error) {
 	return logEntry, nil
 }
 
+func (ps *pebbleStorage) ReadAt(llsn types.LLSN) (types.LogEntry, error) {
+	// NOTE: Scanning by commit context can be better.
+	iter := ps.db.NewIter(&pebble.IterOptions{
+		LowerBound: []byte{commitKeyPrefix},
+		UpperBound: []byte{commitKeySentinelPrefix},
+	})
+	defer func() {
+		_ = iter.Close()
+	}()
+
+	iter.First()
+	for iter.Valid() && decodeCommitValue(iter.Value()) <= llsn {
+		if decodeCommitValue(iter.Value()) == llsn {
+			glsn := decodeCommitKey(iter.Key())
+			return ps.Read(glsn)
+		}
+		iter.Next()
+	}
+	return types.InvalidLogEntry, errors.WithStack(verrors.ErrNoEntry)
+}
+
 func (ps *pebbleStorage) Scan(begin, end types.GLSN) Scanner {
 	lkBuf := newCommitKeyBuffer()
 	lower := encodeCommitKeyInternal(begin, lkBuf.ck[:])

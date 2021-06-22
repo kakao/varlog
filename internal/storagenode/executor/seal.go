@@ -66,24 +66,9 @@ func (e *executor) seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varl
 	}
 	lastCommittedLLSN := lastLE.LLSN
 
-	// make sure that writer, commiter, replicator are empty
-	// TODO: need seal timeout?
-	if err := e.writer.waitForDrainage(ctx); err != nil {
+	if err := e.resetInternalState(ctx, lastCommittedLLSN, lastCommittedGLSN, true); err != nil {
 		return varlogpb.LogStreamStatusSealing, lastCommittedGLSN, err
 	}
-	if err := e.rp.waitForDrainage(ctx); err != nil {
-		return varlogpb.LogStreamStatusSealing, lastCommittedGLSN, err
-	}
-	e.committer.drainCommitWaitQ(errors.WithStack(verrors.ErrSealed))
-
-	// wipe-out unnecessary logs
-	if err := e.storage.DeleteUncommitted(lastCommittedLLSN + 1); err != nil {
-		panic(err)
-	}
-	e.storage.RestoreStorage(lastCommittedLLSN, lastCommittedLLSN, lastCommittedGLSN)
-
-	// reset lsc
-	e.lsc.uncommittedLLSNEnd.Store(lastCommittedLLSN + 1)
 
 	return e.sealInternal(lastCommittedGLSN)
 }
@@ -127,5 +112,42 @@ func (e *executor) Unseal(_ context.Context, replicas []snpb.Replica) error {
 	}
 	e.tsp.Touch()
 	e.primaryBackups = replicas
+	return nil
+}
+
+// resetInternalState resets internal components of executor when it becomes SEALED or LEARNING.
+func (e *executor) resetInternalState(ctx context.Context, lastCommittedLLSN types.LLSN, lastCommittedGLSN types.GLSN, discardCommitWaitTasks bool) error {
+	// reset writer
+	if err := e.writer.waitForDrainage(ctx); err != nil {
+		return err
+	}
+
+	// reset replicator and its connector
+	if err := e.rp.resetConnector(); err != nil {
+		return err
+	}
+	if err := e.rp.waitForDrainage(ctx); err != nil {
+		return err
+	}
+
+	// reset committer
+	if err := e.committer.waitForDrainageOfCommitTasks(ctx); err != nil {
+		return err
+	}
+	if discardCommitWaitTasks {
+		e.committer.drainCommitWaitQ(errors.WithStack(verrors.ErrSealed))
+	}
+
+	// remove uncommitted logs
+	if err := e.storage.DeleteUncommitted(lastCommittedLLSN + 1); err != nil {
+		return err
+	}
+
+	// reset storage state
+	e.storage.RestoreStorage(lastCommittedLLSN, lastCommittedLLSN, lastCommittedGLSN)
+
+	// reset log stream context
+	e.lsc.uncommittedLLSNEnd.Store(lastCommittedLLSN + 1)
+
 	return nil
 }
