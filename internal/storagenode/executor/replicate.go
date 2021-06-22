@@ -82,36 +82,10 @@ func (e *executor) SyncInit(ctx context.Context, srcRange snpb.SyncRange) (syncR
 		}
 	}()
 
-	err = e.writer.waitForDrainage(ctx)
+	err = e.resetInternalState(ctx, uncommittedLLSNBegin-1, e.lsc.localGLSN.localHighWatermark.Load(), !e.isPrimay())
 	if err != nil {
 		return syncRange, err
 	}
-
-	err = e.rp.resetConnector()
-	if err != nil {
-		return syncRange, err
-	}
-	err = e.rp.waitForDrainage(ctx)
-	if err != nil {
-		return syncRange, err
-	}
-
-	err = e.committer.waitForDrainageOfCommitTasks(ctx)
-	if err != nil {
-		return syncRange, err
-	}
-
-	if !e.isPrimay() {
-		// Since there is no commitTask in commitTaskQ, it is safe to call drainCommitWaitQ.
-		e.committer.drainCommitWaitQ(errors.WithStack(verrors.ErrSealed))
-	}
-
-	err = e.storage.DeleteUncommitted(uncommittedLLSNBegin)
-	if err != nil {
-		return syncRange, err
-	}
-	e.storage.RestoreStorage(uncommittedLLSNBegin-1, uncommittedLLSNBegin-1, e.lsc.localGLSN.localHighWatermark.Load())
-	e.lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
 
 	syncRange = snpb.SyncRange{
 		FirstLLSN: uncommittedLLSNBegin,
@@ -216,13 +190,16 @@ func (e *executor) SyncReplicate(ctx context.Context, payload snpb.SyncPayload) 
 	return nil
 }
 
+// Sync triggers syncrhonization work.
+// TODO: Add unit tests for various situations.
+// NOTE:
+// - What if it has no entries to sync because they are trimmed?
 func (e *executor) Sync(ctx context.Context, replica snpb.Replica) (*snpb.SyncStatus, error) {
 	if err := e.guard(); err != nil {
 		return nil, err
 	}
 	defer e.unguard()
 
-	// TODO (jun): Delete SyncTaskStatus, but when?
 	if e.stateBarrier.state.load() != executorSealed {
 		return nil, errors.New("invalid state")
 	}
@@ -258,6 +235,11 @@ func (e *executor) Sync(ctx context.Context, replica snpb.Replica) (*snpb.SyncSt
 				State: snpb.SyncStateComplete,
 			}, nil
 		}
+		return nil, err
+	}
+
+	firstLE, err = e.storage.ReadAt(span.FirstLLSN)
+	if err != nil {
 		return nil, err
 	}
 
@@ -309,31 +291,33 @@ func (e *executor) sync(ctx context.Context, state *syncState) (err error) {
 			return err
 		}
 
-		// scan log entries & send them
-		var subEnv logio.SubscribeEnv
-		subEnv, err = e.Subscribe(ctx, cc.CommittedGLSNBegin, cc.CommittedGLSNEnd)
-		if err != nil {
-			return err
-		}
-		for result := range subEnv.ScanResultC() {
-			payload := snpb.SyncPayload{
-				LogEntry: &varlogpb.LogEntry{
-					LLSN: result.LogEntry.LLSN,
-					GLSN: result.LogEntry.GLSN,
-					Data: result.LogEntry.Data,
-				},
-			}
-			err = client.SyncReplicate(ctx, state.dst, payload)
+		if uint64(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin) > uint64(0) {
+			// scan log entries & send them
+			var subEnv logio.SubscribeEnv
+			subEnv, err = e.Subscribe(ctx, cc.CommittedGLSNBegin, cc.CommittedGLSNEnd)
 			if err != nil {
 				return err
 			}
+			for result := range subEnv.ScanResultC() {
+				payload := snpb.SyncPayload{
+					LogEntry: &varlogpb.LogEntry{
+						LLSN: result.LogEntry.LLSN,
+						GLSN: result.LogEntry.GLSN,
+						Data: result.LogEntry.Data,
+					},
+				}
+				err = client.SyncReplicate(ctx, state.dst, payload)
+				if err != nil {
+					return err
+				}
 
-			// update status
-			state.mu.Lock()
-			state.curr = result.LogEntry
-			state.mu.Unlock()
+				// update status
+				state.mu.Lock()
+				state.curr = result.LogEntry
+				state.mu.Unlock()
+			}
+			subEnv.Stop()
 		}
-		subEnv.Stop()
 
 		// check if sync completes
 		if cc.CommittedGLSNEnd-1 == state.last.GLSN {

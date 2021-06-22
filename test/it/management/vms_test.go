@@ -302,8 +302,8 @@ func TestVarlogSNWatcher(t *testing.T) {
 			defer snWatcher.Close()
 
 			Convey("When seal LS", func(ctx C) {
-				sn := env.PrimarySNOf(t, lsID)
-				_, _, err := sn.Seal(context.TODO(), lsID, types.InvalidGLSN)
+				snID := env.PrimaryStorageNodeIDOf(t, lsID)
+				_, _, err := env.SNClientOf(t, snID).Seal(context.TODO(), lsID, types.InvalidGLSN)
 				So(err, ShouldBeNil)
 
 				Convey("Then it should be reported by watcher", func(ctx C) {
@@ -321,8 +321,8 @@ func TestVarlogSNWatcher(t *testing.T) {
 			})
 
 			Convey("When close SN", func(ctx C) {
-				sn := env.PrimarySNOf(t, lsID)
-				env.CloseSN(t, sn.StorageNodeID())
+				sn := env.PrimaryStorageNodeIDOf(t, lsID)
+				env.CloseSN(t, sn)
 
 				Convey("Then it should be heartbeat timeout", func(ctx C) {
 					So(testutil.CompareWaitN(50, func() bool {

@@ -1801,6 +1801,7 @@ func TestExecutorSync(t *testing.T) {
 	rp.EXPECT().stop().Return().AnyTimes()
 	rp.EXPECT().waitForDrainage(gomock.Any()).Return(nil).AnyTimes()
 	rp.EXPECT().clientOf(gomock.Any(), gomock.Any()).Return(dstClient, nil).AnyTimes()
+	rp.EXPECT().resetConnector().Return(nil).AnyTimes()
 	lse.writer.(*writerImpl).replicator.stop()
 	lse.rp = rp
 	lse.writer.(*writerImpl).replicator = rp

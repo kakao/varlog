@@ -360,6 +360,21 @@ func (mr *MockStorageMockRecorder) Read(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockStorage)(nil).Read), arg0)
 }
 
+// ReadAt mocks base method.
+func (m *MockStorage) ReadAt(arg0 types.LLSN) (types.LogEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadAt", arg0)
+	ret0, _ := ret[0].(types.LogEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadAt indicates an expected call of ReadAt.
+func (mr *MockStorageMockRecorder) ReadAt(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadAt", reflect.TypeOf((*MockStorage)(nil).ReadAt), arg0)
+}
+
 // ReadFloorCommitContext mocks base method.
 func (m *MockStorage) ReadFloorCommitContext(arg0 types.GLSN) (CommitContext, error) {
 	m.ctrl.T.Helper()

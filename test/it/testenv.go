@@ -54,7 +54,7 @@ type VarlogCluster struct {
 	snAddrs          map[types.StorageNodeID]string
 	storageNodeIDs   []types.StorageNodeID
 	nextSNID         types.StorageNodeID
-	snWG             sync.WaitGroup
+	snWGs            map[types.StorageNodeID]*sync.WaitGroup
 
 	// log streams
 	muLS         sync.Mutex
@@ -89,6 +89,8 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 		snAddrs:              make(map[types.StorageNodeID]string),
 		reportCommitters:     make(map[types.StorageNodeID]reportcommitter.Client),
 		replicas:             make(map[types.LogStreamID][]*varlogpb.ReplicaDescriptor),
+		snWGs:                make(map[types.StorageNodeID]*sync.WaitGroup),
+		nextSNID:             types.StorageNodeID(1),
 	}
 
 	// ports
@@ -377,7 +379,9 @@ func (clus *VarlogCluster) Close(t *testing.T) {
 	for _, sn := range clus.storageNodes {
 		sn.Close()
 	}
-	clus.snWG.Wait()
+	for _, wg := range clus.snWGs {
+		wg.Wait()
+	}
 	clus.logStreamIDs = nil
 
 	require.NoError(t, clus.portLease.Release())
@@ -461,9 +465,13 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 	)
 	require.NoError(t, err)
 
-	clus.snWG.Add(1)
+	if _, ok := clus.snWGs[snID]; !ok {
+		clus.snWGs[snID] = new(sync.WaitGroup)
+	}
+
+	clus.snWGs[snID].Add(1)
 	go func() {
-		defer clus.snWG.Done()
+		defer clus.snWGs[snID].Done()
 		_ = sn.Run()
 	}()
 
@@ -501,6 +509,17 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 	return snID
 }
 
+func (clus *VarlogCluster) NewReportCommitterClient(t *testing.T, snID types.StorageNodeID) {
+	clus.muSN.Lock()
+	defer clus.muSN.Unlock()
+
+	require.Contains(t, clus.storageNodes, snID)
+	require.NotContains(t, clus.reportCommitters, snID)
+
+	require.Contains(t, clus.snAddrs, snID)
+	clus.newReportCommitterClient(t, snID, clus.snAddrs[snID])
+}
+
 func (clus *VarlogCluster) newReportCommitterClient(t *testing.T, snID types.StorageNodeID, addr string) {
 	require.NotContains(t, clus.reportCommitters, snID)
 	client, err := reportcommitter.NewClient(context.Background(), addr)
@@ -525,6 +544,7 @@ func (clus *VarlogCluster) NewSNClient(t *testing.T, snID types.StorageNodeID) {
 	clus.snMCLs[snID] = mcl
 }
 
+// FIXME: Extract common codes between AddSN.
 func (clus *VarlogCluster) RecoverSN(t *testing.T, snID types.StorageNodeID) *storagenode.StorageNode {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
@@ -544,11 +564,20 @@ func (clus *VarlogCluster) RecoverSN(t *testing.T, snID types.StorageNodeID) *st
 	)
 	require.NoError(t, err)
 
-	clus.snWG.Add(1)
+	if _, ok := clus.snWGs[snID]; !ok {
+		clus.snWGs[snID] = new(sync.WaitGroup)
+	}
+
+	clus.snWGs[snID].Add(1)
 	go func() {
-		defer clus.snWG.Done()
+		defer clus.snWGs[snID].Done()
 		_ = sn.Run()
 	}()
+
+	require.Eventually(t, func() bool {
+		meta, err := sn.GetMetadata(context.Background())
+		return assert.NoError(t, err) && meta.GetStorageNode().GetAddress() != ""
+	}, time.Second, 10*time.Millisecond)
 
 	clus.storageNodes[snID] = sn
 
@@ -856,6 +885,7 @@ func (clus *VarlogCluster) CloseSN(t *testing.T, snID types.StorageNodeID) {
 
 	require.Contains(t, clus.storageNodes, snID)
 	clus.storageNodes[snID].Close()
+	clus.snWGs[snID].Wait()
 
 	log.Printf("SN.Close: %v", snID)
 }
@@ -1019,22 +1049,21 @@ func (clus *VarlogCluster) newClient(t *testing.T) varlog.Varlog {
 	return cl
 }
 
-func (clus *VarlogCluster) PrimarySNOf(t *testing.T, lsID types.LogStreamID) *storagenode.StorageNode {
-	return clus.getSN(t, lsID, 0)
+func (clus *VarlogCluster) PrimaryStorageNodeIDOf(t *testing.T, lsID types.LogStreamID) types.StorageNodeID {
+	return clus.getSN(t, lsID, 0).StorageNodeID()
 }
 
-func (clus *VarlogCluster) BackupSNOf(t *testing.T, lsID types.LogStreamID) *storagenode.StorageNode {
+func (clus *VarlogCluster) BackupStorageNodeIDOf(t *testing.T, lsID types.LogStreamID) types.StorageNodeID {
 	idx := 1
 	if clus.nrRep > 2 {
 		idx += rand.Intn(clus.nrRep - 1)
 	}
-	return clus.getSN(t, lsID, idx)
+	return clus.getSN(t, lsID, idx).StorageNodeID()
 }
 
 func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) logc.LogIOClient {
-	sn := clus.PrimarySNOf(t, lsID)
-
-	snmd, err := sn.GetMetadata(context.TODO())
+	snID := clus.PrimaryStorageNodeIDOf(t, lsID)
+	snmd, err := clus.SNClientOf(t, snID).GetMetadata(context.Background())
 	require.NoError(t, err)
 
 	cl, err := logc.NewLogIOClient(context.TODO(), snmd.GetStorageNode().GetAddress())
@@ -1140,6 +1169,10 @@ func (clus *VarlogCluster) closeSNClientOf(t *testing.T, snID types.StorageNodeI
 	require.Contains(t, clus.snMCLs, snID)
 	require.NoErrorf(t, clus.snMCLs[snID].Close(), "StorageNodeID=%d", snID)
 	delete(clus.snMCLs, snID)
+
+	require.Contains(t, clus.reportCommitters, snID)
+	require.NoErrorf(t, clus.reportCommitters[snID].Close(), "StorageNodeID=%d", snID)
+	delete(clus.reportCommitters, snID)
 }
 
 func (clus *VarlogCluster) closeSNClients(t *testing.T) {
@@ -1165,6 +1198,13 @@ func (clus *VarlogCluster) SNClientOf(t *testing.T, snID types.StorageNodeID) sn
 	defer clus.muSN.Unlock()
 
 	return clus.storageNodeManagementClientOf(t, snID)
+}
+
+func (clus *VarlogCluster) ReportCommitterClientOf(t *testing.T, snID types.StorageNodeID) reportcommitter.Client {
+	clus.muSN.Lock()
+	defer clus.muSN.Unlock()
+	require.Contains(t, clus.reportCommitters, snID)
+	return clus.reportCommitters[snID]
 }
 
 func (clus *VarlogCluster) storageNodeManagementClientOf(t *testing.T, snID types.StorageNodeID) snc.StorageNodeManagementClient {
@@ -1219,6 +1259,7 @@ func (clus *VarlogCluster) ClientAtIndex(t *testing.T, idx int) varlog.Varlog {
 	return clus.clients[idx]
 }
 
+// TODO: Use built-in refreshing mechanism in clients instead of this.
 func (clus *VarlogCluster) ClientRefresh(t *testing.T) {
 	clus.muCL.Lock()
 	defer clus.muCL.Unlock()
