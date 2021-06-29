@@ -34,11 +34,13 @@ VMR := $(BIN_DIR)/vmr
 SNTOOL := $(BIN_DIR)/sntool
 RPC_TEST_SERVER := $(BIN_DIR)/rpc_test_server
 BENCHMARK := $(BIN_DIR)/benchmark
+RPCBENCH_SERVER := $(BIN_DIR)/rpcbench_server 
+RPCBENCH_CLIENT := $(BIN_DIR)/rpcbench_client
 
-BUILD_OUTPUT := $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(RPC_TEST_SERVER) $(BENCHMARK)
+BUILD_OUTPUT := $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH)
 
 .PHONY: build vms vmc vsn vmr sntool rpc_test_server benchmark
-build: vms vmc vsn vmr sntool rpc_test_server benchmark
+build: vms vmc vsn vmr sntool rpc_test_server benchmark rpcbench
 
 vms: proto
 	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMS) cmd/vms/main.go
@@ -60,6 +62,11 @@ rpc_test_server: proto
 
 benchmark: proto
 	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(BENCHMARK) cmd/benchmark/main.go
+
+rpcbench: proto
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(RPCBENCH_SERVER) cmd/rpcbench/server/main.go
+	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(RPCBENCH_CLIENT) cmd/rpcbench/client/main.go
+
 
 .PHONY: proto
 proto: $(PROTO_PBS)

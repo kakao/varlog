@@ -16,4 +16,4 @@ func RegisterRPCServer(rpcServer *grpc.Server, servers ...Registrable) {
 	}
 }
 
-type Handler func(context.Context, interface{}) (interface{}, error)
+type Handler func(ctx context.Context, req interface{}) (rsp interface{}, err error)

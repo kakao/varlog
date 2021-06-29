@@ -94,9 +94,8 @@ var (
 	}
 
 	// flags for telemetry
-	flagCollectorName = vflag.FlagDescriptor{
-		Name:    "collector-name",
-		Aliases: []string{"collector"},
-		EnvVars: []string{"COLLECTOR_NAME", "COLLECTOR"},
+	flagTelemetry = vflag.FlagDescriptor{
+		Name:    "telemetry",
+		EnvVars: []string{"TELEMETRY"},
 	}
 )

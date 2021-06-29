@@ -31,6 +31,10 @@ func String(k string, v string) KeyValue {
 	return Key(k).String(v)
 }
 
+func Bool(k string, v bool) KeyValue {
+	return Key(k).Bool(v)
+}
+
 func StorageNodeID(storageNodeID types.StorageNodeID) KeyValue {
 	return storageNodeIDattributeKey.String(storageNodeID.String())
 }

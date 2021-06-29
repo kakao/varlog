@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/storagenode/id"
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
 	"github.com/kakao/varlog/proto/snpb"
@@ -27,17 +28,26 @@ func TestReplicationBadConnectorClient(t *testing.T) {
 		connector Connector
 	)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	// no address
-	connector, err = NewConnector()
+	connector, err = NewConnector(
+		WithClientOptions(
+			WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+		),
+	)
 	require.NoError(t, err)
 	_, err = connector.Get(context.TODO(), snpb.Replica{})
 	require.Error(t, err)
 	require.NoError(t, connector.Close())
 
 	// bad requestQueueSize
-	connector, err = NewConnector(WithClientOptions(
-		WithRequestQueueSize(-1),
-	))
+	connector, err = NewConnector(
+		WithClientOptions(
+			WithRequestQueueSize(-1),
+			WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+		))
 	require.NoError(t, err)
 	_, err = connector.Get(context.TODO(),
 		snpb.Replica{
@@ -50,6 +60,7 @@ func TestReplicationBadConnectorClient(t *testing.T) {
 	// bad address
 	connector, err = NewConnector(WithClientOptions(
 		WithRequestQueueSize(1),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	))
 	require.NoError(t, err)
 	_, err = connector.Get(context.TODO(),
@@ -81,6 +92,7 @@ func TestReplicationClosedClient(t *testing.T) {
 	server := NewServer(
 		WithStorageNodeIDGetter(snidGetter),
 		WithLogReplicatorGetter(replicatorGetter),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 
 	grpcServer := grpc.NewServer()
@@ -95,7 +107,11 @@ func TestReplicationClosedClient(t *testing.T) {
 	}()
 
 	// connector
-	connector, err := NewConnector()
+	connector, err := NewConnector(
+		WithClientOptions(
+			WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+		),
+	)
 	require.NoError(t, err)
 
 	// replicator client
@@ -198,6 +214,7 @@ func TestReplication(t *testing.T) {
 	server := NewServer(
 		WithStorageNodeIDGetter(snidGetter),
 		WithLogReplicatorGetter(replicatorGetter),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 
 	grpcServer := grpc.NewServer()
@@ -212,7 +229,11 @@ func TestReplication(t *testing.T) {
 	}()
 
 	// connector
-	connector, err := NewConnector()
+	connector, err := NewConnector(
+		WithClientOptions(
+			WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+		),
+	)
 	require.NoError(t, err)
 
 	defer func() {

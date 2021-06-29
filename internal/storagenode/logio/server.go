@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
@@ -40,25 +41,12 @@ func (s *server) Register(server *grpc.Server) {
 	snpb.RegisterLogIOServer(server, s)
 }
 
-// FIXME
-
 func (s *server) withTelemetry(ctx context.Context, spanName string, req interface{}, h rpcserver.Handler) (rsp interface{}, err error) {
 	storageNodeID := s.storageNodeIDGetter.StorageNodeID()
-	ctx, span := s.tmStub.StartSpan(ctx, spanName,
+	ctx, span := s.measurable.Stub().StartSpan(ctx, spanName,
 		oteltrace.WithAttributes(attribute.StorageNodeID(storageNodeID)),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
-	/*
-		attributes := []label.KeyValue{
-			attribute.RPCName(spanName),
-			attribute.StorageNodeIDLabel(s.storageNodeID),
-		}
-			s.tmStub.mt.RecordBatch(ctx, attributes,
-				s.tmStub.metrics().totalRequests.Measurement(1),
-				s.tmStub.metrics().activeRequests.Measurement(1),
-			)
-	*/
-
 	rsp, err = h(ctx, req)
 	if err == nil {
 		var rspMsg fmt.Stringer
@@ -76,8 +64,6 @@ func (s *server) withTelemetry(ctx context.Context, spanName string, req interfa
 			zap.Stringer("request", req.(fmt.Stringer)),
 		)
 	}
-
-	// s.tmStub.metrics().activeRequests.Add(ctx, -1, attributes...)
 	span.End()
 	return rsp, err
 }
@@ -86,6 +72,15 @@ func (s *server) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.App
 	code := codes.Internal
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/Append", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			startTime := time.Now()
+			defer func() {
+				dur := time.Since(startTime)
+				s.measurable.Stub().Metrics().RpcServerAppendDuration.Record(
+					ctx,
+					float64(dur.Microseconds())/1000.0,
+				)
+			}()
+
 			req := reqI.(*snpb.AppendRequest)
 			var rsp *snpb.AppendResponse
 			lse, ok := s.readWriterGetter.ReadWriter(req.GetLogStreamID())

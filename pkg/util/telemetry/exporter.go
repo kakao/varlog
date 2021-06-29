@@ -4,25 +4,27 @@ import (
 	"context"
 	"time"
 
-	"github.com/pkg/errors"
-	otlpexporter "go.opentelemetry.io/otel/exporters/otlp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
-	"go.opentelemetry.io/otel/exporters/stdout"
-	stdoutexporter "go.opentelemetry.io/otel/exporters/stdout"
-	"go.uber.org/zap"
-	_ "google.golang.org/grpc/encoding/gzip"
+	metricsdk "go.opentelemetry.io/otel/sdk/export/metric"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/kakao/varlog/pkg/util/telemetry/metric"
-	"github.com/kakao/varlog/pkg/util/telemetry/trace"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+
+	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	_ "google.golang.org/grpc/encoding/gzip"
 )
 
 const (
 	defaultReconnectPeriod = 10 * time.Second
 )
 
-type exporter interface {
-	trace.SpanExporter
-	metric.Exporter
+type exporter struct {
+	traceExporter  tracesdk.SpanExporter
+	metricExporter metricsdk.Exporter
 }
 
 type exporterConfig struct {
@@ -35,54 +37,65 @@ type exporterConfig struct {
 	prettyPrint  bool
 }
 
-func newExporter(ctx context.Context, exporterType string, cfg exporterConfig) (exporter, error) {
+func newExporter(ctx context.Context, exporterType string, cfg exporterConfig) (*exporter, error) {
 	switch exporterType {
 	case "stdout", "console":
-		return newStdoutExporter(cfg.stdoutLogger, cfg.prettyPrint, false, false)
+		return newStdoutExporter(cfg.stdoutLogger, cfg.prettyPrint)
 	case "otlp", "otel":
-		return newOTLPExporter(ctx, cfg.otlpEndpoint, cfg.otlpCompressor)
-	case "nop":
-		return newNopExporter()
+		return newOTLPExporter(ctx, cfg.otlpEndpoint)
 	default:
 		return nil, errors.Errorf("unknown exporter: %s", exporterType)
 	}
 }
 
-func newOTLPExporter(ctx context.Context, endpoint string, compressor string) (exporter, error) {
-	driverOpts := []otlpgrpc.Option{
-		otlpgrpc.WithInsecure(),
-		otlpgrpc.WithEndpoint(endpoint),
-		otlpgrpc.WithReconnectionPeriod(defaultReconnectPeriod),
+func newOTLPExporter(ctx context.Context, endpoint string) (*exporter, error) {
+	traceExporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithDialOption(grpc.WithBlock()),
+		otlptracegrpc.WithReconnectionPeriod(defaultReconnectPeriod),
+	)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
-	if compressor == "gzip" {
-		driverOpts = append(driverOpts, otlpgrpc.WithCompressor(compressor))
+
+	metricExporter, err := otlpmetricgrpc.New(ctx,
+		otlpmetricgrpc.WithInsecure(),
+		otlpmetricgrpc.WithEndpoint(endpoint),
+		otlpmetricgrpc.WithDialOption(grpc.WithBlock()),
+		otlpmetricgrpc.WithReconnectionPeriod(defaultReconnectPeriod),
+	)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
-	driver := otlpgrpc.NewDriver(driverOpts...)
-	exp, err := otlpexporter.NewExporter(ctx, driver)
-	return exp, errors.WithStack(err)
+
+	return &exporter{traceExporter: traceExporter, metricExporter: metricExporter}, nil
 }
 
-func newStdoutExporter(logger *zap.Logger, pretty, disableTrace, disableMetric bool) (exporter, error) {
-	var opts []stdoutexporter.Option
+func newStdoutExporter(logger *zap.Logger, pretty bool) (*exporter, error) {
+	var opts []stdouttrace.Option
 	if pretty {
-		opts = append(opts, stdoutexporter.WithPrettyPrint())
-	}
-	if disableTrace {
-		opts = append(opts, stdoutexporter.WithoutTraceExport())
-	}
-	if disableMetric {
-		opts = append(opts, stdoutexporter.WithoutMetricExport())
+		opts = append(opts, stdouttrace.WithPrettyPrint())
 	}
 	if logger != nil {
 		stdLogger, err := zap.NewStdLogAt(logger, zap.InfoLevel)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
-		opts = append(opts, stdout.WithWriter(stdLogger.Writer()))
+		opts = append(opts, stdouttrace.WithWriter(stdLogger.Writer()))
 	}
-	return stdoutexporter.NewExporter(opts...)
-}
 
-func newNopExporter() (exporter, error) {
-	return newStdoutExporter(nil, false, true, true)
+	traceExporter, err := stdouttrace.New(stdouttrace.WithPrettyPrint())
+	if err != nil {
+		return nil, err
+	}
+
+	metricExporter, err := stdoutmetric.New(
+		stdoutmetric.WithPrettyPrint(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &exporter{traceExporter: traceExporter, metricExporter: metricExporter}, nil
 }

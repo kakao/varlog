@@ -1,7 +1,9 @@
 package executor
 
 import (
+	"context"
 	"sync"
+	"time"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
@@ -30,6 +32,10 @@ type writeTask struct {
 	twg *taskWaitGroup
 
 	validate func() error
+
+	createdTime    time.Time
+	poppedTime     time.Time
+	processingTime time.Time
 }
 
 // newWriteTask creates a new appendTask. The parameter twg should not be nil.
@@ -40,6 +46,7 @@ func newWriteTaskInternal(twg *taskWaitGroup, data []byte) *writeTask {
 	wt := writeTaskPool.Get().(*writeTask)
 	wt.twg = twg
 	wt.data = data
+	wt.createdTime = time.Now()
 	return wt
 }
 
@@ -68,5 +75,25 @@ func (wt *writeTask) release() {
 	// wt.primary = false
 	wt.validate = nil
 	wt.twg = nil
+	wt.createdTime = time.Time{}
+	wt.poppedTime = time.Time{}
+	wt.processingTime = time.Time{}
 	writeTaskPool.Put(wt)
+}
+
+func (wt *writeTask) annotate(ctx context.Context, m MeasurableExecutor) {
+	if wt.createdTime.IsZero() || wt.poppedTime.IsZero() || !wt.poppedTime.After(wt.createdTime) {
+		return
+	}
+
+	// write queue latency
+	ms := float64(wt.poppedTime.Sub(wt.createdTime).Microseconds()) / 1000.0
+	m.Stub().Metrics().ExecutorWriteQueueTime.Record(ctx, ms)
+
+	// processing time
+	if wt.processingTime.IsZero() || !wt.processingTime.After(wt.poppedTime) {
+		return
+	}
+	ms = float64(wt.processingTime.Sub(wt.poppedTime).Microseconds()) / 1000.0
+	m.Stub().Metrics().ExecutorWriteTime.Record(ctx, ms)
 }

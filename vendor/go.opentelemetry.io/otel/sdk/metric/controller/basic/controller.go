@@ -78,13 +78,13 @@ type Controller struct {
 // options (including optional exporter) to configure a metric
 // export pipeline.
 func New(checkpointer export.Checkpointer, opts ...Option) *Controller {
-	c := &Config{
+	c := &config{
 		CollectPeriod:  DefaultPeriod,
 		CollectTimeout: DefaultPeriod,
 		PushTimeout:    DefaultPeriod,
 	}
 	for _, opt := range opts {
-		opt.Apply(c)
+		opt.apply(c)
 	}
 	if c.Resource == nil {
 		c.Resource = resource.Default()
@@ -196,12 +196,10 @@ func (c *Controller) collect(ctx context.Context) error {
 	if c.exporter == nil {
 		return nil
 	}
+
 	// Note: this is not subject to collectTimeout.  This blocks the next
 	// collection despite collectTimeout because it holds a lock.
-	if err := c.export(ctx); err != nil {
-		return err
-	}
-	return nil
+	return c.export(ctx)
 }
 
 // checkpoint calls the Accumulator and Checkpointer interfaces to
@@ -262,7 +260,7 @@ func (c *Controller) export(ctx context.Context) error {
 	return c.exporter.Export(ctx, ckpt)
 }
 
-// Foreach gives the caller read-locked access to the current
+// ForEach gives the caller read-locked access to the current
 // export.CheckpointSet.
 func (c *Controller) ForEach(ks export.ExportKindSelector, f func(export.Record) error) error {
 	ckpt := c.checkpointer.CheckpointSet()

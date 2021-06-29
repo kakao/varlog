@@ -1,5 +1,7 @@
 package telemetry
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/storagenode/telemetry -package telemetry -destination telemetry_mock.go . Measurable
+
 import (
 	"context"
 
@@ -13,6 +15,10 @@ const (
 	serviceName = "sn"
 )
 
+type Measurable interface {
+	Stub() *TelemetryStub
+}
+
 type TelemetryStub struct {
 	tm telemetry.Telemetry
 	tr trace.Tracer
@@ -20,8 +26,11 @@ type TelemetryStub struct {
 	mb *MetricsBag
 }
 
-func newTelemetryStub(ctx context.Context, telemetryType string, storageNodeID types.StorageNodeID, endpoint string) (*TelemetryStub, error) {
-	tm, err := telemetry.New(ctx, telemetryType, serviceName, storageNodeID.String(), telemetry.WithEndpoint(endpoint))
+func NewTelemetryStub(ctx context.Context, telemetryType string, storageNodeID types.StorageNodeID, endpoint string) (*TelemetryStub, error) {
+	tm, err := telemetry.New(ctx, serviceName, storageNodeID.String(),
+		telemetry.WithExporterType(telemetryType),
+		telemetry.WithEndpoint(endpoint),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -49,10 +58,14 @@ func (ts *TelemetryStub) close(ctx context.Context) {
 	ts.tm.Close(ctx)
 }
 
-func (ts *TelemetryStub) StartSpan(ctx context.Context, name string, opts ...trace.SpanOption) (context.Context, trace.Span) {
+func (ts *TelemetryStub) StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	return ts.tr.Start(ctx, name, opts...)
 }
 
 func (ts *TelemetryStub) Metrics() *MetricsBag {
 	return ts.mb
+}
+
+func (ts *TelemetryStub) Meter() metric.Meter {
+	return ts.mt
 }

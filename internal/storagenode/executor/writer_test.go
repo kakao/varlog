@@ -83,6 +83,7 @@ func TestWriterInvalidArgument(t *testing.T) {
 		committer:  committer,
 		replicator: replicator,
 		state:      state,
+		me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.Error(t, err)
 
@@ -94,6 +95,7 @@ func TestWriterInvalidArgument(t *testing.T) {
 		committer:  committer,
 		replicator: replicator,
 		state:      state,
+		me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.Error(t, err)
 
@@ -105,6 +107,7 @@ func TestWriterInvalidArgument(t *testing.T) {
 		committer:  committer,
 		replicator: replicator,
 		state:      state,
+		me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.Error(t, err)
 
@@ -116,6 +119,7 @@ func TestWriterInvalidArgument(t *testing.T) {
 		committer:  committer,
 		replicator: replicator,
 		state:      state,
+		me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.Error(t, err)
 
@@ -127,6 +131,7 @@ func TestWriterInvalidArgument(t *testing.T) {
 		lsc:        lsc,
 		replicator: replicator,
 		state:      state,
+		me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.Error(t, err)
 
@@ -138,6 +143,7 @@ func TestWriterInvalidArgument(t *testing.T) {
 		lsc:       lsc,
 		committer: committer,
 		state:     state,
+		me:        NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.Error(t, err)
 
@@ -149,6 +155,7 @@ func TestWriterInvalidArgument(t *testing.T) {
 		lsc:        lsc,
 		committer:  committer,
 		replicator: replicator,
+		me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.Error(t, err)
 }
@@ -179,6 +186,7 @@ func TestWriterStop(t *testing.T) {
 		committer:  testCommitter.mock,
 		replicator: testReplicator.mock,
 		state:      state,
+		me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.NoError(t, err)
 
@@ -311,6 +319,7 @@ func TestWriter(t *testing.T) {
 			committer:  testCommitter.mock,
 			replicator: testReplicator.mock,
 			state:      state,
+			me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 		})
 		require.NoError(t, err)
 
@@ -396,6 +405,7 @@ func TestWriterCleanup(t *testing.T) {
 		committer:  testCommitter.mock,
 		replicator: testReplicator.mock,
 		state:      state,
+		me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.NoError(t, err)
 
@@ -452,6 +462,7 @@ func TestWriterVarlog444(t *testing.T) {
 		committer:  testCommitter,
 		replicator: testReplicator.mock,
 		state:      state,
+		me:         NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.NoError(t, err)
 

@@ -5,6 +5,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/storagenode/storage"
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 )
 
@@ -32,7 +33,9 @@ type config struct {
 	commitBatchSize     int
 
 	replicateQueueSize int
-	logger             *zap.Logger
+
+	measure telemetry.Measurable
+	logger  *zap.Logger
 }
 
 func (c config) validate() error {
@@ -56,6 +59,9 @@ func (c config) validate() error {
 	}
 	if c.replicateQueueSize <= 0 {
 		return errors.New("replicate queue size: negative or zero")
+	}
+	if c.measure == nil {
+		return errors.New("no measurable")
 	}
 	if c.logger == nil {
 		return errors.New("logger: nil")
@@ -230,6 +236,18 @@ func (o loggerOption) apply(c *config) {
 
 func WithLogger(logger *zap.Logger) Option {
 	return loggerOption{logger: logger}
+}
+
+type measurableOption struct {
+	m telemetry.Measurable
+}
+
+func (o measurableOption) apply(c *config) {
+	c.measure = o.m
+}
+
+func WithMeasurable(measure telemetry.Measurable) Option {
+	return measurableOption{measure}
 }
 
 /*

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -101,6 +102,12 @@ func (s *serverImpl) recv(ctx context.Context, stream snpb.Replicator_ReplicateS
 		var err error
 		for {
 			req, err = stream.Recv()
+			/*
+				s.measure.Stub().Metrics().ExecutorReplicateRequestPropagationTime.Record(
+					ctx,
+					float64(time.Since(req.GetCreatedTime()).Milliseconds())/1000.0,
+				)
+			*/
 			repCtx := &replicateTask{
 				req: req,
 				err: err,
@@ -128,6 +135,7 @@ func (s *serverImpl) replicate(ctx context.Context, repCtxC <-chan *replicateTas
 		for repCtx := range repCtxC {
 			err = repCtx.err
 			if repCtx.err == nil {
+				startTime := time.Now()
 				lsid := repCtx.req.GetLogStreamID()
 				if logReplicator, ok := s.logReplicatorGetter.Replicator(lsid); ok {
 					err = logReplicator.Replicate(ctx, repCtx.req.GetLLSN(), repCtx.req.GetPayload())
@@ -135,6 +143,10 @@ func (s *serverImpl) replicate(ctx context.Context, repCtxC <-chan *replicateTas
 					err = fmt.Errorf("no executor: %v", lsid)
 				}
 				repCtx.err = err
+				s.measure.Stub().Metrics().RpcServerReplicateDuration.Record(
+					ctx,
+					float64(time.Since(startTime).Microseconds())/1000.0,
+				)
 			}
 			select {
 			case c <- repCtx:
@@ -163,6 +175,7 @@ func (s *serverImpl) send(ctx context.Context, stream snpb.Replicator_ReplicateS
 					StorageNodeID: s.storageNodeIDGetter.StorageNodeID(),
 					LogStreamID:   repCtx.req.GetLogStreamID(),
 					LLSN:          repCtx.req.GetLLSN(),
+					CreatedTime:   time.Now(),
 				})
 				repCtx.err = err
 			}
@@ -187,11 +200,10 @@ func (s *serverImpl) SyncInit(ctx context.Context, req *snpb.SyncInitRequest) (r
 	}
 
 	var spanName = "varlog.snpb.Replicator/SyncInit"
-	ctx, span := s.tmStub.StartSpan(ctx, spanName,
+	ctx, span := s.measure.Stub().StartSpan(ctx, spanName,
 		oteltrace.WithAttributes(attribute.StorageNodeID(s.storageNodeIDGetter.StorageNodeID())),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
-	s.tmStub.Metrics().ActiveRequests.Add(ctx, 1, attribute.String("call", spanName))
 
 	defer func() {
 		if err == nil {
@@ -205,7 +217,6 @@ func (s *serverImpl) SyncInit(ctx context.Context, req *snpb.SyncInitRequest) (r
 				zap.String("request", req.String()),
 			)
 		}
-		s.tmStub.Metrics().ActiveRequests.Add(ctx, -1, attribute.String("call", spanName))
 		span.End()
 	}()
 
@@ -228,11 +239,10 @@ func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateR
 	}
 
 	var spanName = "varlog.snpb.Replicator/SyncReplicate"
-	ctx, span := s.tmStub.StartSpan(ctx, spanName,
+	ctx, span := s.measure.Stub().StartSpan(ctx, spanName,
 		oteltrace.WithAttributes(attribute.StorageNodeID(s.storageNodeIDGetter.StorageNodeID())),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
-	s.tmStub.Metrics().ActiveRequests.Add(ctx, 1, attribute.String("call", spanName))
 	defer func() {
 		if err == nil {
 			s.logger.Info("SyncReplicate",
@@ -245,7 +255,6 @@ func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateR
 				zap.String("request", req.String()),
 			)
 		}
-		s.tmStub.Metrics().ActiveRequests.Add(ctx, -1, attribute.String("call", spanName))
 		span.End()
 	}()
 

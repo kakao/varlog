@@ -26,7 +26,7 @@ type config struct {
 
 	advertiseAddress string
 
-	tmStub *telemetry.TelemetryStub
+	telemetryEndpoint string
 
 	volumes set.Set // set[Volume]
 
@@ -42,7 +42,6 @@ type config struct {
 func newConfig(opts []Option) (*config, error) {
 	cfg := &config{
 		listenAddress: DefaultListenAddress,
-		tmStub:        telemetry.NewNopTelmetryStub(),
 		logger:        zap.NewNop(),
 	}
 	for _, opt := range opts {
@@ -162,6 +161,16 @@ func WithPProfOptions(opts ...pprof.Option) Option {
 	return pprofOptions{opts}
 }
 
+type telemetryOption string
+
+func (o telemetryOption) apply(c *config) {
+	c.telemetryEndpoint = string(o)
+}
+
+func WithTelemetry(endpoint string) Option {
+	return telemetryOption(endpoint)
+}
+
 type serverConfig struct {
 	storageNode *StorageNode
 	tmStub      *telemetry.TelemetryStub
@@ -188,18 +197,6 @@ func (c serverConfig) validate() error {
 
 type ServerOption interface {
 	applyServer(*serverConfig)
-}
-
-type telemetryOption struct {
-	tmStub *telemetry.TelemetryStub
-}
-
-func (o telemetryOption) applyServer(c *serverConfig) {
-	c.tmStub = o.tmStub
-}
-
-func WithTelemetry(tmStub *telemetry.TelemetryStub) ServerOption {
-	return telemetryOption{tmStub}
 }
 
 type loggerOption struct {

@@ -165,7 +165,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	)
 	mr.rnCommitC = mr.raftNode.commitC
 
-	mr.reportCollector = NewReportCollector(mr, mr.options.RPCTimeout,
+	mr.reportCollector = NewReportCollector(mr, mr.options.RPCTimeout, mr.tmStub,
 		mr.logger.Named("report"))
 
 	mr.server = grpc.NewServer()
@@ -760,6 +760,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 			})
 	}
 
+	startTime := time.Now()
 	_, err := mr.withTelemetry(context.TODO(), "commit", func(ctx context.Context) (interface{}, error) {
 		prevCommitResults := mr.storage.GetLastCommitResults()
 		curHWM := prevCommitResults.GetHighWatermark()
@@ -867,6 +868,14 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 		return nil, nil
 	})
+
+	mr.tmStub.mb.Records("mr.build_commit_results.duration").Record(context.Background(),
+		float64(time.Since(startTime).Nanoseconds())/float64(time.Millisecond),
+		attribute.KeyValue{
+			Key:   "nodeid",
+			Value: attribute.StringValue(mr.nodeID.String()),
+		},
+	)
 
 	return err
 }

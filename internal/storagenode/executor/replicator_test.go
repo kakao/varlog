@@ -9,21 +9,20 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc"
-
-	"github.com/kakao/varlog/pkg/verrors"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/storagenode/id"
 	"github.com/kakao/varlog/internal/storagenode/replication"
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
 
@@ -39,6 +38,12 @@ func TestReplicationProcessorFailure(t *testing.T) {
 	_, err := newReplicator(replicatorConfig{
 		queueSize: 0,
 		state:     state,
+		me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+		connectorOpts: []replication.ConnectorOption{
+			replication.WithClientOptions(
+				replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+			),
+		},
 	})
 	require.Error(t, err)
 
@@ -46,6 +51,12 @@ func TestReplicationProcessorFailure(t *testing.T) {
 	_, err = newReplicator(replicatorConfig{
 		queueSize: 1,
 		state:     nil,
+		me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+		connectorOpts: []replication.ConnectorOption{
+			replication.WithClientOptions(
+				replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+			),
+		},
 	})
 	require.Error(t, err)
 }
@@ -71,6 +82,12 @@ func TestReplicationProcessorNoClient(t *testing.T) {
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: queueSize,
 		state:     state,
+		me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+		connectorOpts: []replication.ConnectorOption{
+			replication.WithClientOptions(
+				replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+			),
+		},
 	})
 	require.NoError(t, err)
 	defer rp.stop()
@@ -142,6 +159,12 @@ func TestReplicationProcessor(t *testing.T) {
 		rp, err := newReplicator(replicatorConfig{
 			queueSize: queueSize,
 			state:     state,
+			me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+			connectorOpts: []replication.ConnectorOption{
+				replication.WithClientOptions(
+					replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+				),
+			},
 		})
 		require.NoError(t, err)
 
@@ -246,6 +269,7 @@ func TestReplicatorResetConnector(t *testing.T) {
 	server := replication.NewServer(
 		replication.WithStorageNodeIDGetter(snidGetter),
 		replication.WithLogReplicatorGetter(replicatorGetter),
+		replication.WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 
 	grpcServer := grpc.NewServer()
@@ -267,6 +291,12 @@ func TestReplicatorResetConnector(t *testing.T) {
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: queueSize,
 		state:     state,
+		me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+		connectorOpts: []replication.ConnectorOption{
+			replication.WithClientOptions(
+				replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+			),
+		},
 	})
 	require.NoError(t, err)
 	defer rp.stop()

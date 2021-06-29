@@ -8,10 +8,12 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
+	"github.com/kakao/varlog/internal/storagenode/id"
 	"github.com/kakao/varlog/internal/storagenode/logio"
 	"github.com/kakao/varlog/internal/storagenode/replication"
 	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode/storage"
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/internal/storagenode/timestamper"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -25,6 +27,8 @@ type Executor interface {
 	SealUnsealer
 	replication.Replicator
 	MetadataProvider
+	id.StorageNodeIDGetter
+	id.LogStreamIDGetter
 }
 
 type executor struct {
@@ -141,6 +145,12 @@ func (e *executor) initLogPipeline() error {
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: e.replicateQueueSize,
 		state:     e,
+		me:        e,
+		connectorOpts: []replication.ConnectorOption{
+			replication.WithClientOptions(
+				replication.WithMeasurable(e),
+			),
+		},
 	})
 	if err != nil {
 		return err
@@ -155,6 +165,7 @@ func (e *executor) initLogPipeline() error {
 		lsc:                 e.lsc,
 		decider:             e.decider,
 		state:               e,
+		me:                  e,
 	})
 	if err != nil {
 		return err
@@ -169,6 +180,7 @@ func (e *executor) initLogPipeline() error {
 		committer:  e.committer,
 		replicator: e.rp,
 		state:      e,
+		me:         e,
 	})
 	if err != nil {
 		rp.stop()
@@ -285,4 +297,16 @@ func (e *executor) isPrimay() bool {
 	return len(e.primaryBackups) > 0 &&
 		e.primaryBackups[0].StorageNodeID == e.storageNodeID &&
 		e.primaryBackups[0].LogStreamID == e.logStreamID
+}
+
+func (e *executor) StorageNodeID() types.StorageNodeID {
+	return e.storageNodeID
+}
+
+func (e *executor) LogStreamID() types.LogStreamID {
+	return e.logStreamID
+}
+
+func (e *executor) Stub() *telemetry.TelemetryStub {
+	return e.measure.Stub()
 }
