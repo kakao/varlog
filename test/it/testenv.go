@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"sync"
@@ -54,6 +55,7 @@ type VarlogCluster struct {
 	snAddrs          map[types.StorageNodeID]string
 	storageNodeIDs   []types.StorageNodeID
 	nextSNID         types.StorageNodeID
+	manualNextLSID   types.LogStreamID
 	snWGs            map[types.StorageNodeID]*sync.WaitGroup
 
 	// log streams
@@ -71,6 +73,8 @@ type VarlogCluster struct {
 	vmsCL     varlog.ClusterManagerClient
 
 	portLease *ports.Lease
+
+	rng *rand.Rand
 }
 
 func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
@@ -91,6 +95,8 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 		replicas:             make(map[types.LogStreamID][]*varlogpb.ReplicaDescriptor),
 		snWGs:                make(map[types.StorageNodeID]*sync.WaitGroup),
 		nextSNID:             types.StorageNodeID(1),
+		manualNextLSID:       types.LogStreamID(math.MaxUint32),
+		rng:                  rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
 	// ports
@@ -658,62 +664,51 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T) types.LogStreamID {
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
 
-	log.Println("AddLS without MR")
-
 	require.GreaterOrEqual(t, len(clus.storageNodes), clus.nrRep)
 
-	//rsp, err := clus.vmsCL.AddLogStream(context.Background(), nil)
-	logStreamDesc, err := clus.vmsServer.AddLogStream(context.Background(), nil)
-	require.Error(t, err)
-	//require.NotNil(t, rsp)
-	//log.Printf("AddLS: AddLogStream: %+v", rsp)
-	log.Printf("AddLS: AddLogStream: %+v, err:%v", logStreamDesc, err)
-	require.NotNil(t, logStreamDesc)
+	lsID := clus.manualNextLSID
+	clus.manualNextLSID--
 
-	//logStreamDesc := rsp.GetLogStream()
-	logStreamID := logStreamDesc.GetLogStreamID()
-
-	replicas := make([]snpb.Replica, 0, len(logStreamDesc.GetReplicas()))
-	for _, rd := range logStreamDesc.GetReplicas() {
+	rds := make([]*varlogpb.ReplicaDescriptor, 0, clus.nrRep)
+	replicas := make([]snpb.Replica, 0, clus.nrRep)
+	for idx := range clus.rng.Perm(len(clus.storageNodeIDs))[:clus.nrRep] {
+		snID := clus.storageNodeIDs[idx]
 		replicas = append(replicas, snpb.Replica{
-			StorageNodeID: rd.GetStorageNodeID(),
-			LogStreamID:   logStreamID,
+			StorageNodeID: snID,
+			LogStreamID:   lsID,
+			Address:       clus.snAddrs[snID],
+		})
+
+		snmd, err := clus.storageNodeManagementClientOf(t, snID).GetMetadata(context.Background())
+		require.NoError(t, err)
+		path := snmd.GetStorageNode().GetStorages()[0].GetPath()
+		rds = append(rds, &varlogpb.ReplicaDescriptor{
+			StorageNodeID: snID,
+			Path:          path,
 		})
 	}
 
-	// FIXME: Can ReplicaDescriptor have address of storage node?
-	require.Eventually(t, func() bool {
-		for _, rd := range logStreamDesc.GetReplicas() {
-			snid := rd.GetStorageNodeID()
-			if !assert.Contains(t, clus.snMCLs, snid) {
-				return false
-			}
+	for _, rd := range rds {
+		snID := rd.StorageNodeID
+		path := rd.Path
+		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStream(
+			context.Background(),
+			lsID,
+			path,
+		))
 
-			snmd, err := clus.snMCLs[snid].GetMetadata(context.Background())
-			require.NoError(t, err)
+		status, _, err := clus.storageNodeManagementClientOf(t, snID).Seal(context.Background(), lsID, types.InvalidGLSN)
+		require.NoError(t, err)
+		require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-			lsmd, ok := snmd.GetLogStream(logStreamID)
-			require.True(t, ok)
-
-			if lsmd.GetStatus() != varlogpb.LogStreamStatusSealing {
-				return false
-			}
-
-			_, _, err = clus.snMCLs[snid].Seal(context.Background(), logStreamID, types.InvalidGLSN)
-			require.NoError(t, err)
-
-			err = clus.snMCLs[snid].Unseal(context.Background(), logStreamID, replicas)
-			require.NoError(t, err)
-		}
-		return true
-	}, 3*time.Second, 100*time.Millisecond)
-
-	log.Printf("AddLS: AddLogStream (%v): Running", logStreamID)
+		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).Unseal(context.Background(), lsID, replicas))
+	}
 
 	// FIXME: use map to store logstream and its replicas
-	clus.logStreamIDs = append(clus.logStreamIDs, logStreamID)
-	clus.replicas[logStreamID] = logStreamDesc.GetReplicas()
-	return logStreamID
+	clus.logStreamIDs = append(clus.logStreamIDs, lsID)
+	clus.replicas[lsID] = rds
+	t.Logf("AddLS without MR: lsid=%d, replicas=%+v", lsID, replicas)
+	return lsID
 }
 
 func (clus *VarlogCluster) AddLSIncomplete(t *testing.T) types.LogStreamID {
@@ -725,26 +720,35 @@ func (clus *VarlogCluster) AddLSIncomplete(t *testing.T) types.LogStreamID {
 
 	log.Println("AddLS Incomplete")
 
-	require.Greater(t, clus.nrRep, 1)
 	require.GreaterOrEqual(t, len(clus.storageNodes), clus.nrRep)
 
-	logStreamDesc, err := clus.vmsServer.AddLogStream(context.Background(), nil)
-	log.Printf("AddLS: AddLogStream: %+v, %v", logStreamDesc, err)
+	lsID := clus.manualNextLSID
+	clus.manualNextLSID--
 
-	require.Error(t, err)
-	require.NotNil(t, logStreamDesc)
+	replicas := make([]snpb.Replica, 0, clus.nrRep-1)
+	for idx := range clus.rng.Perm(len(clus.storageNodeIDs))[:clus.nrRep-1] {
+		snID := clus.storageNodeIDs[idx]
+		replicas = append(replicas, snpb.Replica{
+			StorageNodeID: snID,
+			LogStreamID:   lsID,
+			Address:       clus.snAddrs[snID],
+		})
+	}
 
-	logStreamID := logStreamDesc.GetLogStreamID()
+	for _, replica := range replicas {
+		snID := replica.StorageNodeID
+		snmd, err := clus.storageNodeManagementClientOf(t, snID).GetMetadata(context.Background())
+		require.NoError(t, err)
+		path := snmd.GetStorageNode().GetStorages()[0].GetPath()
 
-	// make it incomplete
-	rd := logStreamDesc.GetReplicas()[0]
-	snid := rd.GetStorageNodeID()
-	require.Contains(t, clus.snMCLs, snid)
-
-	err = clus.snMCLs[snid].RemoveLogStream(context.Background(), logStreamID)
-	require.NoError(t, err)
-
-	return logStreamID
+		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStream(
+			context.Background(),
+			lsID,
+			path,
+		))
+	}
+	t.Logf("AddLS incompletely: lsid=%d, replicas=%+v", lsID, replicas)
+	return lsID
 }
 
 func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, clear bool) {
