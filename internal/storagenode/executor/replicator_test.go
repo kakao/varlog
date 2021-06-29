@@ -324,7 +324,7 @@ func TestReplicatorResetConnector(t *testing.T) {
 	// (replicatedLogs) logs were replicated, but (maxTestLLSN-maxReplicatedLLSN) logs are still
 	// waiting for replicated completely.
 	require.Eventually(t, func() bool {
-		return assert.EqualValues(t, 1, atomic.LoadInt64(&rp.inflight))
+		return 1 == atomic.LoadInt64(&rp.inflight)
 	}, time.Second, 10*time.Millisecond)
 
 	// Resetting connector cancels inflight replications.
