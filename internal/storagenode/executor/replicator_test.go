@@ -104,7 +104,7 @@ func TestReplicationProcessorNoClient(t *testing.T) {
 
 	err = rp.send(context.TODO(), rtb)
 	require.NoError(t, err)
-	require.Eventually(t, called.Load, time.Second, 10*time.Millisecond)
+	require.Eventually(t, called.Load, 2*time.Second, 10*time.Millisecond)
 }
 
 func TestReplicationProcessor(t *testing.T) {

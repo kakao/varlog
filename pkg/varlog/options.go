@@ -15,6 +15,8 @@ const (
 	defaultMetadataRefreshInterval = 1 * time.Minute
 	defaultMetadataRefreshTimeout  = 1 * time.Second
 
+	defaultSubscribeTimeout = 10 * time.Millisecond
+
 	defaultDenyTTL            = 10 * time.Minute
 	defaultExpireDenyInterval = 1 * time.Second
 )
@@ -161,5 +163,37 @@ func WithRetryCount(retryCount int) AppendOption {
 func withoutSelectLogStream() AppendOption {
 	return newAppendOption(func(opts *appendOptions) {
 		opts.selectLogStream = false
+	})
+}
+
+func defaultSubscribeOptions() subscribeOptions {
+	return subscribeOptions{
+		timeout: defaultSubscribeTimeout,
+	}
+}
+
+type subscribeOptions struct {
+	timeout time.Duration
+}
+
+type SubscribeOption interface {
+	apply(*subscribeOptions)
+}
+
+type subscribeOption struct {
+	f func(*subscribeOptions)
+}
+
+func (opt *subscribeOption) apply(opts *subscribeOptions) {
+	opt.f(opts)
+}
+
+func newSubscribeOption(f func(*subscribeOptions)) *subscribeOption {
+	return &subscribeOption{f: f}
+}
+
+func WithSubscribeTimeout(timeout time.Duration) SubscribeOption {
+	return newSubscribeOption(func(opts *subscribeOptions) {
+		opts.timeout = timeout
 	})
 }

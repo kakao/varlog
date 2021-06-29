@@ -14,7 +14,6 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/test/it"
 )
@@ -69,7 +68,7 @@ func TestAppendLogs(t *testing.T) {
 	}
 
 	client := clus.ClientAtIndex(t, rand.Intn(clus.NumberOfClients()))
-	closer, err := client.Subscribe(context.Background(), types.MinGLSN, maxGLSN+1, onNext, varlog.SubscribeOption{})
+	closer, err := client.Subscribe(context.Background(), types.MinGLSN, maxGLSN+1, onNext)
 	require.NoError(t, err)
 	defer closer()
 

@@ -175,7 +175,7 @@ func (act *action) subscribe(ctx context.Context) error {
 	fmt.Printf("[%v] Sub ~%v\n", time.Now(), limit)
 	defer fmt.Printf("[%v] Sub ~%v Close\n", time.Now(), limit)
 
-	closer, err := vcli.Subscribe(ctx, types.MinGLSN, limit+types.GLSN(1), nopOnNext, varlog.SubscribeOption{})
+	closer, err := vcli.Subscribe(ctx, types.MinGLSN, limit+types.GLSN(1), nopOnNext)
 	if err != nil {
 		return err
 	}
