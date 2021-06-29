@@ -12,13 +12,12 @@ import (
 type config struct {
 	storageNodeIDGetter id.StorageNodeIDGetter
 	readWriterGetter    Getter
-	tmStub              *telemetry.TelemetryStub
+	measurable          telemetry.Measurable
 	logger              *zap.Logger
 }
 
 func newConfig(opts []Option) config {
 	cfg := config{
-		tmStub: telemetry.NewNopTelmetryStub(),
 		logger: zap.NewNop(),
 	}
 	for _, opt := range opts {
@@ -37,7 +36,7 @@ func (c *config) validate() error {
 	if c.readWriterGetter == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
-	if c.tmStub == nil {
+	if c.measurable == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
 	if c.logger == nil {
@@ -72,4 +71,28 @@ func (o readWriterGetterOption) apply(c *config) {
 
 func WithReadWriterGetter(getter Getter) Option {
 	return readWriterGetterOption{getter}
+}
+
+type measurableOption struct {
+	m telemetry.Measurable
+}
+
+func (o measurableOption) apply(c *config) {
+	c.measurable = o.m
+}
+
+func WithMeasurable(measurable telemetry.Measurable) Option {
+	return measurableOption{measurable}
+}
+
+type loggerOption struct {
+	logger *zap.Logger
+}
+
+func (o loggerOption) apply(c *config) {
+	c.logger = o.logger
+}
+
+func WithLogger(logger *zap.Logger) Option {
+	return loggerOption{logger}
 }

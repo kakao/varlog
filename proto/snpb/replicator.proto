@@ -2,9 +2,11 @@ syntax = "proto3";
 
 package varlog.snpb;
 
+import "google/protobuf/timestamp.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-import "varlogpb/metadata.proto";
+
 import "snpb/replica.proto";
+import "varlogpb/metadata.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
 
@@ -26,6 +28,8 @@ message ReplicationRequest {
         (gogoproto.customname) = "LLSN"
     ];
     bytes payload = 3;
+    google.protobuf.Timestamp created_time = 4
+        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 // ReplicationResponse indicates that a log entry at given LLSN is replicated.
@@ -45,6 +49,8 @@ message ReplicationResponse {
             "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
         (gogoproto.customname) = "LLSN"
     ];
+    google.protobuf.Timestamp created_time = 4
+        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 enum SyncState {

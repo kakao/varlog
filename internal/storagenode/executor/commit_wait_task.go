@@ -1,7 +1,9 @@
 package executor
 
 import (
+	"context"
 	"sync"
+	"time"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
@@ -18,6 +20,10 @@ var commitWaitTaskPool = sync.Pool{
 type commitWaitTask struct {
 	llsn types.LLSN
 	twg  *taskWaitGroup
+
+	createdTime    time.Time
+	poppedTime     time.Time
+	processingTime time.Time
 }
 
 // newCommitWaitTask creates a new commitWaitTask. Parameter llsn should be valid. If parameter twg
@@ -31,11 +37,25 @@ func newCommitWaitTask(llsn types.LLSN, twg *taskWaitGroup) *commitWaitTask {
 	cwt := commitWaitTaskPool.Get().(*commitWaitTask)
 	cwt.llsn = llsn
 	cwt.twg = twg
+	cwt.createdTime = time.Now()
 	return cwt
 }
 
 func (cwt *commitWaitTask) release() {
 	cwt.llsn = types.InvalidLLSN
 	cwt.twg = nil
+	cwt.createdTime = time.Time{}
+	cwt.poppedTime = time.Time{}
+	cwt.processingTime = time.Time{}
 	commitWaitTaskPool.Put(cwt)
+}
+
+func (cwt *commitWaitTask) annotate(ctx context.Context, m MeasurableExecutor) {
+	if cwt.createdTime.IsZero() || cwt.poppedTime.IsZero() || !cwt.poppedTime.After(cwt.createdTime) {
+		return
+	}
+
+	// queue latency
+	ms := float64(cwt.poppedTime.Sub(cwt.createdTime).Microseconds()) / 1000.0
+	m.Stub().Metrics().ExecutorCommitWaitQueueTime.Record(ctx, ms)
 }

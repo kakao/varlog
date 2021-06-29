@@ -24,18 +24,18 @@ type Server interface {
 }
 
 type server struct {
-	lsr    Reporter
-	tmStub *telemetry.TelemetryStub
-	logger *zap.Logger
+	lsr     Reporter
+	measure telemetry.Measurable
+	logger  *zap.Logger
 }
 
 var _ Server = (*server)(nil)
 
-func NewServer(lsr Reporter) *server {
+func NewServer(lsr Reporter, m telemetry.Measurable) *server {
 	return &server{
-		lsr:    lsr,
-		tmStub: telemetry.NewNopTelmetryStub(),
-		logger: zap.NewNop(),
+		lsr:     lsr,
+		measure: m,
+		logger:  zap.NewNop(),
 	}
 }
 
@@ -45,24 +45,14 @@ func (s *server) Register(server *grpc.Server) {
 }
 
 func (s *server) withTelemetry(ctx context.Context, spanName string, req interface{}, h rpcserver.Handler) (rsp interface{}, err error) {
-	ctx, span := s.tmStub.StartSpan(ctx, spanName,
+	ctx, span := s.measure.Stub().StartSpan(ctx, spanName,
 		oteltrace.WithAttributes(attribute.StorageNodeID(s.lsr.StorageNodeID())),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
-	/*
-		attributes := []label.KeyValue{
-			attribute.RPCName(spanName),
-			attribute.StorageNodeIDLabel(s.lsr.StorageNodeID()),
-		}
-			s.tmStub.mt.RecordBatch(ctx, attributes,
-				s.tmStub.metrics().totalRequests.Measurement(1),
-				s.tmStub.metrics().activeRequests.Measurement(1),
-			)
-	*/
 
 	rsp, err = h(ctx, req)
 	if err == nil {
-		s.logger.Info(spanName,
+		s.logger.Debug(spanName,
 			zap.Stringer("request", req.(fmt.Stringer)),
 			zap.Stringer("response", rsp.(fmt.Stringer)),
 		)
@@ -74,7 +64,7 @@ func (s *server) withTelemetry(ctx context.Context, spanName string, req interfa
 		)
 	}
 
-	//s.tmStub.metrics().activeRequests.Add(ctx, -1, attributes...)
+	// s.measure.Stub().Metrics().ActiveRequests.Add(ctx, -1, attributes...)
 	span.End()
 	return rsp, err
 }

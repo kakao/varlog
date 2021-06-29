@@ -71,6 +71,8 @@ type logStreamCommitter struct {
 	runner *runner.Runner
 	cancel context.CancelFunc
 	logger *zap.Logger
+
+	tmStub *telemetryStub
 }
 
 type reportContext struct {
@@ -101,6 +103,8 @@ type reportCollectExecutor struct {
 	runner *runner.Runner
 	cancel context.CancelFunc
 	logger *zap.Logger
+
+	tmStub *telemetryStub
 }
 
 type reportCollector struct {
@@ -112,15 +116,17 @@ type reportCollector struct {
 	rpcTimeout time.Duration
 	closed     bool
 
+	tmStub *telemetryStub
 	logger *zap.Logger
 }
 
-func NewReportCollector(helper ReportCollectorHelper, rpcTimeout time.Duration, logger *zap.Logger) *reportCollector {
+func NewReportCollector(helper ReportCollectorHelper, rpcTimeout time.Duration, tmStub *telemetryStub, logger *zap.Logger) *reportCollector {
 	return &reportCollector{
 		logger:     logger,
 		helper:     helper,
 		rpcTimeout: rpcTimeout,
 		executors:  make(map[types.StorageNodeID]*reportCollectExecutor),
+		tmStub:     tmStub,
 	}
 }
 
@@ -217,6 +223,7 @@ func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		rpcTimeout:    rc.rpcTimeout,
 		runner:        runner.New("excutor", logger),
 		logger:        logger,
+		tmStub:        rc.tmStub,
 	}
 
 	if err := executor.run(); err != nil {
@@ -384,7 +391,7 @@ func (rce *reportCollectExecutor) registerLogStream(lsID types.LogStreamID, high
 		return verrors.ErrExist
 	}
 
-	c := newLogStreamCommitter(lsID, rce, highWatermark, status, rce.logger)
+	c := newLogStreamCommitter(lsID, rce, highWatermark, status, rce.tmStub, rce.logger)
 	err := c.run()
 	if err != nil {
 		return err
@@ -619,7 +626,7 @@ func (rce *reportCollectExecutor) lookupNextCommitResults(glsn types.GLSN) (*mrp
 	return rce.helper.LookupNextCommitResults(glsn)
 }
 
-func newLogStreamCommitter(lsID types.LogStreamID, helper commitHelper, highWatermark types.GLSN, status varlogpb.LogStreamStatus, logger *zap.Logger) *logStreamCommitter {
+func newLogStreamCommitter(lsID types.LogStreamID, helper commitHelper, highWatermark types.GLSN, status varlogpb.LogStreamStatus, tmStub *telemetryStub, logger *zap.Logger) *logStreamCommitter {
 	triggerC := make(chan struct{}, 1)
 
 	c := &logStreamCommitter{
@@ -628,6 +635,7 @@ func newLogStreamCommitter(lsID types.LogStreamID, helper commitHelper, highWate
 		triggerC: triggerC,
 		runner:   runner.New("lscommitter", logger),
 		logger:   logger,
+		tmStub:   tmStub,
 	}
 
 	c.commitStatus.status = status
@@ -658,6 +666,7 @@ func (lc *logStreamCommitter) addCommitC() {
 	select {
 	case lc.triggerC <- struct{}{}:
 	default:
+		lc.tmStub.mb.Counts("mr.log_stream_committer.trigger.miss").Add(context.Background(), 1)
 	}
 }
 
@@ -699,6 +708,15 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 		return
 	}
 
+	catchupStart := time.Now()
+	numCatchups := 0
+
+	defer func() {
+		dur := float64(time.Since(catchupStart).Nanoseconds()) / float64(time.Millisecond)
+		lc.tmStub.mb.Records("mr.log_stream_committer.catchup.duration").Record(ctx, dur)
+		lc.tmStub.mb.Records("mr.log_stream_committer.catchup.counts").Record(ctx, float64(numCatchups))
+	}()
+
 	for ctx.Err() == nil {
 		results, err := lc.helper.lookupNextCommitResults(highWatermark)
 		if err != nil {
@@ -732,6 +750,8 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 		}
 
 		highWatermark = results.HighWatermark
+
+		numCatchups++
 	}
 }
 

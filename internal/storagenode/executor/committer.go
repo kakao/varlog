@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -27,6 +28,7 @@ type committerConfig struct {
 	lsc     *logStreamContext
 	decider *decidableCondition
 	state   stateProvider
+	me      MeasurableExecutor
 }
 
 func (c committerConfig) validate() error {
@@ -51,6 +53,9 @@ func (c committerConfig) validate() error {
 	if c.state == nil {
 		return errors.Wrap(verrors.ErrInvalid, "committer: no state provider")
 	}
+	if c.me == nil {
+		return errors.Wrap(verrors.ErrInvalid, "committer: no measurable")
+	}
 	return nil
 }
 
@@ -60,7 +65,7 @@ type committer interface {
 	drainCommitWaitQ(err error)
 	stop()
 	waitForDrainageOfCommitTasks(ctx context.Context) error
-	commitDirectly(cc storage.CommitContext, requireCommitWaitTasks bool) error
+	commitDirectly(cc storage.CommitContext, requireCommitWaitTasks bool) (processed bool, err error)
 }
 
 type committerImpl struct {
@@ -197,6 +202,7 @@ func (c *committerImpl) commitLoop(ctx context.Context) {
 func (c *committerImpl) commitLoopInternal(ctx context.Context) error {
 	numPoppedCTs, err := c.ready(ctx)
 	defer func() {
+		c.me.Stub().Metrics().ExecutorCommitQueueTasks.Record(ctx, numPoppedCTs)
 		atomic.AddInt64(&c.inflightCommitTasks.cnt, -numPoppedCTs)
 	}()
 	if err != nil {
@@ -229,9 +235,11 @@ func (c *committerImpl) ready(ctx context.Context) (int64, error) {
 		return numPopped, err
 	}
 	numPopped++
+	ct.poppedTime = time.Now()
 
 	globalHighWatermark, _ := c.lsc.reportCommitBase()
 	if ct.stale(globalHighWatermark) {
+		ct.annotate(ctx, c.me, true)
 		ct.release()
 	} else {
 		c.commitTaskBatch = append(c.commitTaskBatch, ct)
@@ -241,8 +249,10 @@ func (c *committerImpl) ready(ctx context.Context) (int64, error) {
 	for i := 0; i < popSize; i++ {
 		ct := c.commitTaskQ.pop()
 		numPopped++
+		ct.poppedTime = time.Now()
 
 		if ct.stale(globalHighWatermark) {
+			ct.annotate(ctx, c.me, true)
 			ct.release()
 			continue
 		}
@@ -266,6 +276,7 @@ func (c *committerImpl) commit(ctx context.Context) error {
 	for _, ct := range c.commitTaskBatch {
 		globalHighWatermark, _ := c.lsc.reportCommitBase()
 		if ct.stale(globalHighWatermark) {
+			ct.annotate(ctx, c.me, true)
 			continue
 		}
 
@@ -283,11 +294,12 @@ func (c *committerImpl) commit(ctx context.Context) error {
 	return nil
 }
 
-func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error {
+func (c *committerImpl) commitInternal(ctx context.Context, ct *commitTask) error {
 	_, uncommittedLLSNBegin := c.lsc.reportCommitBase()
 	if uncommittedLLSNBegin != ct.committedLLSNBegin {
 		// skip this commit
 		// See #VARLOG-453 (https://jira.daumkakao.com/browse/VARLOG-453).
+		ct.annotate(ctx, c.me, true)
 		return nil
 	}
 
@@ -302,6 +314,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 		// skip this commit
 		// NB: recovering phase?
 		// MR just sends past commit messages to recovered SN that has no written logs
+		ct.annotate(ctx, c.me, true)
 		return nil
 	}
 
@@ -315,6 +328,7 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 	// storage, however, it is failed to push them into the commitWaitQueue.
 	// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
 	if c.commitWaitQ.size() < numCommits {
+		ct.annotate(ctx, c.me, true)
 		return nil
 	}
 
@@ -326,7 +340,12 @@ func (c *committerImpl) commitInternal(_ context.Context, ct *commitTask) error 
 		CommittedLLSNBegin: uncommittedLLSNBegin,
 	}
 
-	return c.commitDirectly(commitContext, true)
+	processed, err := c.commitDirectly(commitContext, true)
+	if processed {
+		ct.processingTime = time.Now()
+	}
+	ct.annotate(ctx, c.me, !processed)
+	return err
 
 	/*
 		batch, err := c.strg.NewCommitBatch(commitContext)
@@ -422,9 +441,9 @@ func (c *committerImpl) drainCommitWaitQ(err error) {
 func (c *committerImpl) drainCommitTaskQ() {
 	numPopped := int64(0)
 	for c.commitTaskQ.size() > 0 {
-		ctb := c.commitTaskQ.pop()
+		ct := c.commitTaskQ.pop()
 		numPopped++
-		ctb.release()
+		ct.release()
 	}
 	atomic.AddInt64(&c.inflightCommitTasks.cnt, -numPopped)
 }
@@ -462,13 +481,14 @@ func (c *committerImpl) waitForDrainageOfCommitTasks(ctx context.Context) error 
 }
 
 func (c *committerImpl) resetBatch() {
-	for _, ctb := range c.commitTaskBatch {
-		ctb.release()
+	for _, ct := range c.commitTaskBatch {
+		ct.release()
 	}
 	c.commitTaskBatch = c.commitTaskBatch[0:0]
 }
 
-func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requireCommitWaitTasks bool) error {
+// NOTE: (bool, error) = (processed, err)
+func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requireCommitWaitTasks bool) (bool, error) {
 	_, uncommittedLLSNBegin := c.lsc.reportCommitBase()
 	numCommits := int(commitContext.CommittedGLSNEnd - commitContext.CommittedGLSNBegin)
 
@@ -482,12 +502,12 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 	// storage, however, it is failed to push them into the commitWaitQueue.
 	// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
 	if requireCommitWaitTasks && c.commitWaitQ.size() < numCommits {
-		return nil
+		return false, nil
 	}
 
 	batch, err := c.strg.NewCommitBatch(commitContext)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() {
 		_ = batch.Close()
@@ -499,7 +519,7 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 		glsn := commitContext.CommittedGLSNBegin + types.GLSN(i)
 
 		if uncommittedLLSNBegin+types.LLSN(i) != llsn {
-			return errors.New("llsn mismatch")
+			return false, errors.New("llsn mismatch")
 		}
 
 		// If requireCommitWaitTasks is true, since the number of tasks in commitWaitQ is
@@ -509,15 +529,16 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 		cwt := iter.task()
 		if cwt != nil && cwt.twg != nil {
 			cwt.twg.glsn = glsn
+			cwt.poppedTime = time.Now()
 		}
 
 		if err := batch.Put(llsn, glsn); err != nil {
-			return err
+			return false, err
 		}
 		iter.next()
 	}
 	if err := batch.Apply(); err != nil {
-		return err
+		return false, err
 	}
 
 	// NOTE: Popping committed tasks should be happened before assigning a new
@@ -554,11 +575,20 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 	// immediately. If updating localHighWatermark occurs later, the client can receive
 	// ErrUndecidable if ErrUndecidable is allowed.
 	for _, cwt := range committedTasks {
+		now := time.Now()
+		if cwt.twg != nil {
+			cwt.twg.committedTime = now
+		}
 		cwt.twg.done(nil)
+		cwt.processingTime = now
+		cwt.annotate(context.Background(), c.me)
 		cwt.release()
 	}
 
-	atomic.AddInt64(&c.inflightCommitWaitTasks, -int64(popSize))
+	if popSize > 0 {
+		c.me.Stub().Metrics().ExecutorCommitWaitQueueTasks.Record(context.Background(), int64(popSize))
+		atomic.AddInt64(&c.inflightCommitWaitTasks, -int64(popSize))
+	}
 
-	return nil
+	return true, nil
 }

@@ -19,7 +19,9 @@ type telemetryStub struct {
 }
 
 func newTelemetryStub(ctx context.Context, name string, nodeID types.NodeID, endpoint string) (*telemetryStub, error) {
-	tm, err := telemetry.New(ctx, name, serviceName, nodeID.String(), telemetry.WithEndpoint(endpoint))
+	tm, err := telemetry.New(ctx, serviceName, nodeID.String(),
+		telemetry.WithExporterType(name),
+		telemetry.WithEndpoint(endpoint))
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +49,7 @@ func (ts *telemetryStub) close(ctx context.Context) {
 	ts.tm.Close(ctx)
 }
 
-func (ts *telemetryStub) startSpan(ctx context.Context, name string, opts ...trace.SpanOption) (context.Context, trace.Span) {
+func (ts *telemetryStub) startSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	return ts.tr.Start(ctx, name, opts...)
 }
 

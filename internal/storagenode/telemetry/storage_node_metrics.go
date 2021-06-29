@@ -2,31 +2,114 @@ package telemetry
 
 import (
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/unit"
+	"go.opentelemetry.io/otel/metric/unit"
 )
 
 type MetricsBag struct {
-	ActiveRequests      metric.Int64UpDownCounter
-	TotalRequests       metric.Int64Counter
-	StorageResponseTime metric.Float64ValueRecorder
+	RpcServerAppendDuration    metric.Float64ValueRecorder
+	RpcServerReplicateDuration metric.Float64ValueRecorder
+
+	ExecutorWriteQueueTime  metric.Float64ValueRecorder
+	ExecutorWriteQueueTasks metric.Int64ValueRecorder
+	ExecutorWriteTime       metric.Float64ValueRecorder
+
+	ExecutorCommitQueueTime  metric.Float64ValueRecorder
+	ExecutorCommitQueueTasks metric.Int64ValueRecorder
+	ExecutorCommitTime       metric.Float64ValueRecorder
+
+	ExecutorCommitWaitQueueTime  metric.Float64ValueRecorder
+	ExecutorCommitWaitQueueTasks metric.Int64ValueRecorder
+
+	ExecutorReplicateQueueTime metric.Float64ValueRecorder
+	ExecutorReplicateTime      metric.Float64ValueRecorder
+	// ExecutorReplicateRequestPropagationTime  metric.Float64ValueRecorder
+	// ExecutorReplicateResponsePropagationTime metric.Float64ValueRecorder
+
+	ExecutorReplicateConnectionGetTime      metric.Float64ValueRecorder
+	ExecutorReplicateRequestPrepareTime     metric.Float64ValueRecorder
+	ExecutorReplicateClientRequestQueueTime metric.Float64ValueRecorder
+	ExecutorReplicateFanoutTime             metric.Float64ValueRecorder
 }
 
 func newMetricsBag(ts *TelemetryStub) *MetricsBag {
 	meter := metric.Must(ts.mt)
 	return &MetricsBag{
-		ActiveRequests: meter.NewInt64UpDownCounter(
-			"sn.active_requests",
-			metric.WithDescription("number of active requests"),
+		RpcServerAppendDuration: meter.NewFloat64ValueRecorder(
+			"rpc.server.append.duration",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		RpcServerReplicateDuration: meter.NewFloat64ValueRecorder(
+			"rpc.server.replicate.duration",
+			metric.WithUnit(unit.Milliseconds),
+		),
+
+		ExecutorWriteQueueTime: meter.NewFloat64ValueRecorder(
+			"executor.write_queue.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		ExecutorWriteQueueTasks: meter.NewInt64ValueRecorder(
+			"executor.write_queue.tasks",
 			metric.WithUnit(unit.Dimensionless),
 		),
-		TotalRequests: meter.NewInt64Counter(
-			"sn.total_requests",
-			metric.WithDescription("number of active requests"),
+		ExecutorWriteTime: meter.NewFloat64ValueRecorder(
+			"executor.write.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+
+		ExecutorCommitQueueTime: meter.NewFloat64ValueRecorder(
+			"executor.commit_queue.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		ExecutorCommitQueueTasks: meter.NewInt64ValueRecorder(
+			"executor.commit_queue.tasks",
 			metric.WithUnit(unit.Dimensionless),
 		),
-		StorageResponseTime: meter.NewFloat64ValueRecorder(
-			"sn.storage_engine.response_time",
-			metric.WithDescription("response time of storage read/write operation in milliseconds"),
+		ExecutorCommitTime: meter.NewFloat64ValueRecorder(
+			"executor.commit.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+
+		ExecutorCommitWaitQueueTime: meter.NewFloat64ValueRecorder(
+			"executor.commit_wait_queue.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		ExecutorCommitWaitQueueTasks: meter.NewInt64ValueRecorder(
+			"executor.commit_wait_queue.tasks",
+			metric.WithUnit(unit.Dimensionless),
+		),
+
+		ExecutorReplicateQueueTime: meter.NewFloat64ValueRecorder(
+			"executor.replicate_queue.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		ExecutorReplicateTime: meter.NewFloat64ValueRecorder(
+			"executor.replicate.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		/*
+			ExecutorReplicateRequestPropagationTime: meter.NewFloat64ValueRecorder(
+				"sn.executor.replicate.request.propagation.time",
+				metric.WithUnit(unit.Milliseconds),
+			),
+			ExecutorReplicateResponsePropagationTime: meter.NewFloat64ValueRecorder(
+				"sn.executor.replicate.response.propagation.time",
+				metric.WithUnit(unit.Milliseconds),
+			),
+		*/
+		ExecutorReplicateConnectionGetTime: meter.NewFloat64ValueRecorder(
+			"sn.executor.replicate.connection.get.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		ExecutorReplicateRequestPrepareTime: meter.NewFloat64ValueRecorder(
+			"sn.executor.replicate.request.prepare.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		ExecutorReplicateClientRequestQueueTime: meter.NewFloat64ValueRecorder(
+			"sn.executor.replicate.client.request_queue.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		ExecutorReplicateFanoutTime: meter.NewFloat64ValueRecorder(
+			"sn.executor.replicate.fanout.time",
 			metric.WithUnit(unit.Milliseconds),
 		),
 	}

@@ -29,7 +29,9 @@ func (e *executor) Append(ctx context.Context, data []byte, backups ...snpb.Repl
 	twg := newTaskWaitGroup()
 	wt := newPrimaryWriteTask(twg, data, backups)
 	defer func() {
+		wt.annotate(ctx, e)
 		wt.release()
+
 		twg.release()
 	}()
 

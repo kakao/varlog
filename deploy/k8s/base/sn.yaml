@@ -48,9 +48,7 @@ spec:
           value: "$(VARLOG_VMS_RPC_SERVICE_HOST):$(VARLOG_VMS_RPC_SERVICE_PORT)"
         - name: VOLUMES
           value: /varlog/data
-        - name: COLLECTOR_NAME
-          value: "otel"
-        - name: COLLECTOR_ENDPOINT
+        - name: TELEMETRY
           value: "localhost:4317"
         - name: HOST_IP
           valueFrom:

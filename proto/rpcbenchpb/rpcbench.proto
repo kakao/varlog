@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package varlog.rpcbenchpb;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option go_package = "github.daumkakao.com/varlog/varlog/proto/rpcbenchpb";
+
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+message Request {
+    bytes data = 1;
+}
+
+message Response {
+    uint64 seq = 1;
+}
+
+service RPCBench {
+    rpc Call(Request) returns (Response) {}
+}

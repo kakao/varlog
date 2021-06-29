@@ -18,6 +18,7 @@ const (
 type clientConfig struct {
 	replica          snpb.Replica
 	requestQueueSize int
+	measure          telemetry.Measurable
 	logger           *zap.Logger
 }
 
@@ -43,6 +44,12 @@ func (c clientConfig) validate() error {
 	if c.requestQueueSize <= 0 {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
+	if c.measure == nil {
+		return errors.WithStack(verrors.ErrInvalid)
+	}
+	if c.logger == nil {
+		return errors.WithStack(verrors.ErrInvalid)
+	}
 	return nil
 }
 
@@ -50,14 +57,13 @@ type serverConfig struct {
 	storageNodeIDGetter id.StorageNodeIDGetter
 	pipelineQueueSize   int
 	logReplicatorGetter Getter
-	tmStub              *telemetry.TelemetryStub
+	measure             telemetry.Measurable
 	logger              *zap.Logger
 }
 
 func newServerConfig(opts []ServerOption) serverConfig {
 	cfg := serverConfig{
 		pipelineQueueSize: DefaultPipelineSize,
-		tmStub:            telemetry.NewNopTelmetryStub(),
 		logger:            zap.NewNop(),
 	}
 	for _, opt := range opts {
@@ -79,7 +85,7 @@ func (s serverConfig) validate() error {
 	if s.logReplicatorGetter == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
-	if s.tmStub == nil {
+	if s.measure == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
 	if s.logger == nil {
@@ -143,6 +149,7 @@ type LoggerOption interface {
 	ClientOption
 	ConnectorOption
 }
+
 type loggerOption struct {
 	logger *zap.Logger
 }
@@ -185,18 +192,6 @@ func WithLogReplicatorGetter(getter Getter) ServerOption {
 	return logReplicatorGetterOption{getter}
 }
 
-type telemetryOption struct {
-	t *telemetry.TelemetryStub
-}
-
-func (o telemetryOption) applyServer(c *serverConfig) {
-	c.tmStub = o.t
-}
-
-func WithTelemetry(t *telemetry.TelemetryStub) ServerOption {
-	return telemetryOption{t: t}
-}
-
 type defaultClientOptions struct {
 	opts []ClientOption
 }
@@ -219,4 +214,25 @@ func (o snidGetterOption) applyServer(c *serverConfig) {
 
 func WithStorageNodeIDGetter(snidGetter id.StorageNodeIDGetter) ServerOption {
 	return snidGetterOption{snidGetter}
+}
+
+type MeasurableOption interface {
+	ServerOption
+	ClientOption
+}
+
+type measurableOption struct {
+	m telemetry.Measurable
+}
+
+func (o measurableOption) applyServer(c *serverConfig) {
+	c.measure = o.m
+}
+
+func (o measurableOption) applyClient(c *clientConfig) {
+	c.measure = o.m
+}
+
+func WithMeasurable(measurable telemetry.Measurable) MeasurableOption {
+	return measurableOption{measurable}
 }

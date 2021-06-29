@@ -5,15 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/goleak"
-
-	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
-	"github.daumkakao.com/varlog/varlog/pkg/verrors"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 )
 
 func TestCommitterConfig(t *testing.T) {
@@ -36,6 +34,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
+		me:                  NewMockMeasurableExecutor(ctrl),
 	}
 	require.NoError(t, cfg.validate())
 
@@ -48,6 +47,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
+		me:                  NewMockMeasurableExecutor(ctrl),
 	}
 	require.Error(t, cfg.validate())
 
@@ -60,6 +60,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
+		me:                  NewMockMeasurableExecutor(ctrl),
 	}
 	require.Error(t, cfg.validate())
 
@@ -72,6 +73,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
+		me:                  NewMockMeasurableExecutor(ctrl),
 	}
 	require.Error(t, cfg.validate())
 
@@ -84,6 +86,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
+		me:                  NewMockMeasurableExecutor(ctrl),
 	}
 	require.Error(t, cfg.validate())
 
@@ -96,6 +99,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 nil,
 		decider:             decider,
 		state:               state,
+		me:                  NewMockMeasurableExecutor(ctrl),
 	}
 	require.Error(t, cfg.validate())
 
@@ -108,6 +112,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             nil,
 		state:               state,
+		me:                  NewMockMeasurableExecutor(ctrl),
 	}
 	require.Error(t, cfg.validate())
 
@@ -120,6 +125,19 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               nil,
+		me:                  NewMockMeasurableExecutor(ctrl),
+	}
+	require.Error(t, cfg.validate())
+
+	// no measurable
+	cfg = committerConfig{
+		commitTaskQueueSize: 1,
+		commitTaskBatchSize: 1,
+		commitQueueSize:     1,
+		strg:                strg,
+		lsc:                 lsc,
+		decider:             decider,
+		state:               state,
 	}
 	require.Error(t, cfg.validate())
 }
@@ -153,6 +171,7 @@ func TestCommitterStop(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
+		me:                  NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.NoError(t, err)
 
@@ -225,6 +244,7 @@ func TestCommitter(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
+		me:                  NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.NoError(t, err)
 
@@ -323,6 +343,7 @@ func TestCommitterCatchupCommitVarlog459(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
+		me:                  NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.NoError(t, err)
 	defer committer.stop()
@@ -384,6 +405,7 @@ func TestCommitterState(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
+		me:                  NewTestMeasurableExecutor(ctrl, 1, 1),
 	})
 	require.NoError(t, err)
 	defer committer.stop()

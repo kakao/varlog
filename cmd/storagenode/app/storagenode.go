@@ -76,6 +76,7 @@ func Main(c *cli.Context) error {
 			executor.WithReplicateQueueSize(c.Int(flagReplicateQueueSize.Name)),
 		),
 		storagenode.WithStorageOptions(storageOpts...),
+		storagenode.WithTelemetry(c.String(flagTelemetry.Name)),
 		storagenode.WithLogger(logger),
 	)
 	if err != nil {

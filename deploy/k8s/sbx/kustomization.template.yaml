@@ -19,13 +19,13 @@ images:
   newTag: IMAGE_TAG
 - name: otel/opentelemetry-collector
   newName: mdock.daumkakao.io/otel/opentelemetry-collector
-  newTag: 0.23.0
+  newTag: 0.29.0
 - name: jaegertracing/all-in-one
   newName: mdock.daumkakao.io/jaegertracing/all-in-one
-  newTag: 1.22.0
+  newTag: 1.23.0
 - name: prom/prometheus
   newName: mdock.daumkakao.io/prom/prometheus
-  newTag: v2.26.0
+  newTag: v2.28.0
 - name: busybox
   newName: mdock.daumkakao.io/busybox
   newTag: stable

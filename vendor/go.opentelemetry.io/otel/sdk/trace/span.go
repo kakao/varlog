@@ -19,47 +19,65 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
 
-	export "go.opentelemetry.io/otel/sdk/export/trace"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	"go.opentelemetry.io/otel/sdk/internal"
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
-const (
-	errorTypeKey    = attribute.Key("error.type")
-	errorMessageKey = attribute.Key("error.message")
-	errorEventName  = "error"
-)
-
 // ReadOnlySpan allows reading information from the data structure underlying a
 // trace.Span. It is used in places where reading information from a span is
 // necessary but changing the span isn't necessary or allowed.
-// TODO: Should we make the methods unexported? The purpose of this interface
-// is controlling access to `span` fields, not having multiple implementations.
+//
+// Warning: methods may be added to this interface in minor releases.
 type ReadOnlySpan interface {
+	// Name returns the name of the span.
 	Name() string
+	// SpanContext returns the unique SpanContext that identifies the span.
 	SpanContext() trace.SpanContext
+	// Parent returns the unique SpanContext that identifies the parent of the
+	// span if one exists. If the span has no parent the returned SpanContext
+	// will be invalid.
 	Parent() trace.SpanContext
+	// SpanKind returns the role the span plays in a Trace.
 	SpanKind() trace.SpanKind
+	// StartTime returns the time the span started recording.
 	StartTime() time.Time
+	// EndTime returns the time the span stopped recording. It will be zero if
+	// the span has not ended.
 	EndTime() time.Time
+	// Attributes returns the defining attributes of the span.
 	Attributes() []attribute.KeyValue
+	// Links returns all the links the span has to other spans.
 	Links() []trace.Link
-	Events() []trace.Event
-	StatusCode() codes.Code
-	StatusMessage() string
-	Tracer() trace.Tracer
-	IsRecording() bool
+	// Events returns all the events that occurred within in the spans
+	// lifetime.
+	Events() []Event
+	// Status returns the spans status.
+	Status() Status
+	// InstrumentationLibrary returns information about the instrumentation
+	// library that created the span.
 	InstrumentationLibrary() instrumentation.Library
+	// Resource returns information about the entity that produced the span.
 	Resource() *resource.Resource
-	Snapshot() *export.SpanSnapshot
+	// DroppedAttributes returns the number of attributes dropped by the span
+	// due to limits being reached.
+	DroppedAttributes() int
+	// DroppedLinks returns the number of links dropped by the span due to
+	// limits being reached.
+	DroppedLinks() int
+	// DroppedEvents returns the number of events dropped by the span due to
+	// limits being reached.
+	DroppedEvents() int
+	// ChildSpanCount returns the count of spans that consider the span a
+	// direct parent.
+	ChildSpanCount() int
 
 	// A private method to prevent users implementing the
 	// interface and so future additions to it will not
@@ -72,19 +90,16 @@ type ReadOnlySpan interface {
 // This interface exposes the union of the methods of trace.Span (which is a
 // "write-only" span) and ReadOnlySpan. New methods for writing or reading span
 // information should be added under trace.Span or ReadOnlySpan, respectively.
+//
+// Warning: methods may be added to this interface in minor releases.
 type ReadWriteSpan interface {
 	trace.Span
 	ReadOnlySpan
 }
 
-var emptySpanContext = trace.SpanContext{}
-
 // span is an implementation of the OpenTelemetry Span API representing the
 // individual component of a trace.
 type span struct {
-	// droppedAttributeCount contains dropped attributes for the events and links.
-	droppedAttributeCount int64
-
 	// mu protects the contents of this span.
 	mu sync.Mutex
 
@@ -104,14 +119,8 @@ type span struct {
 	// value of time.Time until the span is ended.
 	endTime time.Time
 
-	// statusCode represents the status of this span as a codes.Code value.
-	statusCode codes.Code
-
-	// statusMessage represents the status of this span as a string.
-	statusMessage string
-
-	// hasRemoteParent is true when this span has a remote parent span.
-	hasRemoteParent bool
+	// status is the status of this span.
+	status Status
 
 	// childSpanCount holds the number of child spans created for this span.
 	childSpanCount int
@@ -131,8 +140,8 @@ type span struct {
 	// an oldest entry is removed to create room for a new entry.
 	attributes *attributesMap
 
-	// messageEvents are stored in FIFO queue capped by configured limit.
-	messageEvents *evictedQueue
+	// events are stored in FIFO queue capped by configured limit.
+	events *evictedQueue
 
 	// links are stored in FIFO queue capped by configured limit.
 	links *evictedQueue
@@ -165,22 +174,26 @@ func (s *span) IsRecording() bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.endTime.IsZero()
+
+	return !s.startTime.IsZero() && s.endTime.IsZero()
 }
 
-// SetStatus sets the status of this span in the form of a code and a
-// message. This overrides the existing value of this span's status if one
-// exists. Message will be set only if status is error. If this span is not being
-// recorded than this method does nothing.
-func (s *span) SetStatus(code codes.Code, msg string) {
+// SetStatus sets the status of the Span in the form of a code and a
+// description, overriding previous values set. The description is only
+// included in the set status when the code is for an error. If this span is
+// not being recorded than this method does nothing.
+func (s *span) SetStatus(code codes.Code, description string) {
 	if !s.IsRecording() {
 		return
 	}
-	s.mu.Lock()
-	s.statusCode = code
+
+	status := Status{Code: code}
 	if code == codes.Error {
-		s.statusMessage = msg
+		status.Description = description
 	}
+
+	s.mu.Lock()
+	s.status = status
 	s.mu.Unlock()
 }
 
@@ -205,7 +218,7 @@ func (s *span) SetAttributes(attributes ...attribute.KeyValue) {
 //
 // If this method is called while panicking an error event is added to the
 // Span before ending it and the panic is continued.
-func (s *span) End(options ...trace.SpanOption) {
+func (s *span) End(options ...trace.SpanEndOption) {
 	// Do not start by checking if the span is being recorded which requires
 	// acquiring a lock. Make a minimal check that the span is not nil.
 	if s == nil {
@@ -226,10 +239,10 @@ func (s *span) End(options ...trace.SpanOption) {
 		// Record but don't stop the panic.
 		defer panic(recovered)
 		s.addEvent(
-			errorEventName,
+			semconv.ExceptionEventName,
 			trace.WithAttributes(
-				errorTypeKey.String(typeStr(recovered)),
-				errorMessageKey.String(fmt.Sprint(recovered)),
+				semconv.ExceptionTypeKey.String(typeStr(recovered)),
+				semconv.ExceptionMessageKey.String(fmt.Sprint(recovered)),
 			),
 		)
 	}
@@ -238,14 +251,14 @@ func (s *span) End(options ...trace.SpanOption) {
 		s.executionTracerTaskEnd()
 	}
 
-	config := trace.NewSpanConfig(options...)
+	config := trace.NewSpanEndConfig(options...)
 
 	s.mu.Lock()
 	// Setting endTime to non-zero marks the span as ended and not recording.
-	if config.Timestamp.IsZero() {
+	if config.Timestamp().IsZero() {
 		s.endTime = et
 	} else {
-		s.endTime = config.Timestamp
+		s.endTime = config.Timestamp()
 	}
 	s.mu.Unlock()
 
@@ -253,7 +266,7 @@ func (s *span) End(options ...trace.SpanOption) {
 	mustExportOrProcess := ok && len(sps) > 0
 	if mustExportOrProcess {
 		for _, sp := range sps {
-			sp.sp.OnEnd(s)
+			sp.sp.OnEnd(s.snapshot())
 		}
 	}
 }
@@ -268,10 +281,10 @@ func (s *span) RecordError(err error, opts ...trace.EventOption) {
 	}
 
 	opts = append(opts, trace.WithAttributes(
-		errorTypeKey.String(typeStr(err)),
-		errorMessageKey.String(err.Error()),
+		semconv.ExceptionTypeKey.String(typeStr(err)),
+		semconv.ExceptionMessageKey.String(err.Error()),
 	))
-	s.addEvent(errorEventName, opts...)
+	s.addEvent(semconv.ExceptionEventName, opts...)
 }
 
 func typeStr(i interface{}) string {
@@ -281,11 +294,6 @@ func typeStr(i interface{}) string {
 		return t.String()
 	}
 	return fmt.Sprintf("%s.%s", t.PkgPath(), t.Name())
-}
-
-// Tracer returns the Tracer that created this span.
-func (s *span) Tracer() trace.Tracer {
-	return s.tracer
 }
 
 // AddEvent adds an event with the provided name and options. If this span is
@@ -301,17 +309,19 @@ func (s *span) addEvent(name string, o ...trace.EventOption) {
 	c := trace.NewEventConfig(o...)
 
 	// Discard over limited attributes
-	if len(c.Attributes) > s.spanLimits.AttributePerEventCountLimit {
-		s.addDroppedAttributeCount(len(c.Attributes) - s.spanLimits.AttributePerEventCountLimit)
-		c.Attributes = c.Attributes[:s.spanLimits.AttributePerEventCountLimit]
+	attributes := c.Attributes()
+	var discarded int
+	if len(attributes) > s.spanLimits.AttributePerEventCountLimit {
+		discarded = len(attributes) - s.spanLimits.AttributePerEventCountLimit
+		attributes = attributes[:s.spanLimits.AttributePerEventCountLimit]
 	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.messageEvents.add(trace.Event{
-		Name:       name,
-		Attributes: c.Attributes,
-		Time:       c.Timestamp,
+	s.events.add(Event{
+		Name:                  name,
+		Attributes:            attributes,
+		DroppedAttributeCount: discarded,
+		Time:                  c.Timestamp(),
 	})
 }
 
@@ -373,7 +383,7 @@ func (s *span) Attributes() []attribute.KeyValue {
 	return s.attributes.toKeyValue()
 }
 
-// Events returns the links of this span.
+// Links returns the links of this span.
 func (s *span) Links() []trace.Link {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -384,27 +394,20 @@ func (s *span) Links() []trace.Link {
 }
 
 // Events returns the events of this span.
-func (s *span) Events() []trace.Event {
+func (s *span) Events() []Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.messageEvents.queue) == 0 {
-		return []trace.Event{}
+	if len(s.events.queue) == 0 {
+		return []Event{}
 	}
-	return s.interfaceArrayToMessageEventArray()
+	return s.interfaceArrayToEventArray()
 }
 
-// StatusCode returns the status code of this span.
-func (s *span) StatusCode() codes.Code {
+// Status returns the status of this span.
+func (s *span) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.statusCode
-}
-
-// StatusMessage returns the status message of this span.
-func (s *span) StatusMessage() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.statusMessage
+	return s.status
 }
 
 // InstrumentationLibrary returns the instrumentation.Library associated with
@@ -432,45 +435,79 @@ func (s *span) addLink(link trace.Link) {
 
 	// Discard over limited attributes
 	if len(link.Attributes) > s.spanLimits.AttributePerLinkCountLimit {
-		s.addDroppedAttributeCount(len(link.Attributes) - s.spanLimits.AttributePerLinkCountLimit)
+		link.DroppedAttributeCount = len(link.Attributes) - s.spanLimits.AttributePerLinkCountLimit
 		link.Attributes = link.Attributes[:s.spanLimits.AttributePerLinkCountLimit]
 	}
 
 	s.links.add(link)
 }
 
-// Snapshot creates a snapshot representing the current state of the span as an
-// export.SpanSnapshot and returns a pointer to it.
-func (s *span) Snapshot() *export.SpanSnapshot {
-	var sd export.SpanSnapshot
+// DroppedAttributes returns the number of attributes dropped by the span
+// due to limits being reached.
+func (s *span) DroppedAttributes() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.attributes.droppedCount
+}
+
+// DroppedLinks returns the number of links dropped by the span due to limits
+// being reached.
+func (s *span) DroppedLinks() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.links.droppedCount
+}
+
+// DroppedEvents returns the number of events dropped by the span due to
+// limits being reached.
+func (s *span) DroppedEvents() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.events.droppedCount
+}
+
+// ChildSpanCount returns the count of spans that consider the span a
+// direct parent.
+func (s *span) ChildSpanCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.childSpanCount
+}
+
+// TracerProvider returns a trace.TracerProvider that can be used to generate
+// additional Spans on the same telemetry pipeline as the current Span.
+func (s *span) TracerProvider() trace.TracerProvider {
+	return s.tracer.provider
+}
+
+// snapshot creates a read-only copy of the current state of the span.
+func (s *span) snapshot() ReadOnlySpan {
+	var sd snapshot
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sd.ChildSpanCount = s.childSpanCount
-	sd.EndTime = s.endTime
-	sd.HasRemoteParent = s.hasRemoteParent
-	sd.InstrumentationLibrary = s.instrumentationLibrary
-	sd.Name = s.name
-	sd.ParentSpanID = s.parent.SpanID()
-	sd.Resource = s.resource
-	sd.SpanContext = s.spanContext
-	sd.SpanKind = s.spanKind
-	sd.StartTime = s.startTime
-	sd.StatusCode = s.statusCode
-	sd.StatusMessage = s.statusMessage
+	sd.endTime = s.endTime
+	sd.instrumentationLibrary = s.instrumentationLibrary
+	sd.name = s.name
+	sd.parent = s.parent
+	sd.resource = s.resource
+	sd.spanContext = s.spanContext
+	sd.spanKind = s.spanKind
+	sd.startTime = s.startTime
+	sd.status = s.status
+	sd.childSpanCount = s.childSpanCount
 
-	sd.DroppedAttributeCount = int(s.droppedAttributeCount)
 	if s.attributes.evictList.Len() > 0 {
-		sd.Attributes = s.attributes.toKeyValue()
-		sd.DroppedAttributeCount += s.attributes.droppedCount
+		sd.attributes = s.attributes.toKeyValue()
+		sd.droppedAttributeCount = s.attributes.droppedCount
 	}
-	if len(s.messageEvents.queue) > 0 {
-		sd.MessageEvents = s.interfaceArrayToMessageEventArray()
-		sd.DroppedMessageEventCount = s.messageEvents.droppedCount
+	if len(s.events.queue) > 0 {
+		sd.events = s.interfaceArrayToEventArray()
+		sd.droppedEventCount = s.events.droppedCount
 	}
 	if len(s.links.queue) > 0 {
-		sd.Links = s.interfaceArrayToLinksArray()
-		sd.DroppedLinkCount = s.links.droppedCount
+		sd.links = s.interfaceArrayToLinksArray()
+		sd.droppedLinkCount = s.links.droppedCount
 	}
 	return &sd
 }
@@ -483,12 +520,12 @@ func (s *span) interfaceArrayToLinksArray() []trace.Link {
 	return linkArr
 }
 
-func (s *span) interfaceArrayToMessageEventArray() []trace.Event {
-	messageEventArr := make([]trace.Event, 0)
-	for _, value := range s.messageEvents.queue {
-		messageEventArr = append(messageEventArr, value.(trace.Event))
+func (s *span) interfaceArrayToEventArray() []Event {
+	eventArr := make([]Event, 0)
+	for _, value := range s.events.queue {
+		eventArr = append(eventArr, value.(Event))
 	}
-	return messageEventArr
+	return eventArr
 }
 
 func (s *span) copyToCappedAttributes(attributes ...attribute.KeyValue) {
@@ -512,110 +549,78 @@ func (s *span) addChild() {
 	s.mu.Unlock()
 }
 
-func (s *span) addDroppedAttributeCount(delta int) {
-	atomic.AddInt64(&s.droppedAttributeCount, int64(delta))
-}
-
 func (*span) private() {}
 
-func startSpanInternal(ctx context.Context, tr *tracer, name string, parent trace.SpanContext, remoteParent bool, o *trace.SpanConfig) *span {
+func startSpanInternal(ctx context.Context, tr *tracer, name string, o *trace.SpanConfig) *span {
 	span := &span{}
 
 	provider := tr.provider
 
+	// If told explicitly to make this a new root use a zero value SpanContext
+	// as a parent which contains an invalid trace ID and is not remote.
+	var psc trace.SpanContext
+	if !o.NewRoot() {
+		psc = trace.SpanContextFromContext(ctx)
+	}
+
+	// If there is a valid parent trace ID, use it to ensure the continuity of
+	// the trace. Always generate a new span ID so other components can rely
+	// on a unique span ID, even if the Span is non-recording.
 	var tid trace.TraceID
 	var sid trace.SpanID
-
-	if hasEmptySpanContext(parent) {
-		// Generate both TraceID and SpanID
+	if !psc.TraceID().IsValid() {
 		tid, sid = provider.idGenerator.NewIDs(ctx)
 	} else {
-		// TraceID already exists, just generate a SpanID
-		tid = parent.TraceID()
+		tid = psc.TraceID()
 		sid = provider.idGenerator.NewSpanID(ctx, tid)
 	}
 
-	span.spanContext = trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID:    tid,
-		SpanID:     sid,
-		TraceFlags: parent.TraceFlags(),
-		TraceState: parent.TraceState(),
-	})
-
 	spanLimits := provider.spanLimits
 	span.attributes = newAttributesMap(spanLimits.AttributeCountLimit)
-	span.messageEvents = newEvictedQueue(spanLimits.EventCountLimit)
+	span.events = newEvictedQueue(spanLimits.EventCountLimit)
 	span.links = newEvictedQueue(spanLimits.LinkCountLimit)
 	span.spanLimits = spanLimits
 
-	data := samplingData{
-		noParent:     hasEmptySpanContext(parent),
-		remoteParent: remoteParent,
-		parent:       parent,
-		name:         name,
-		sampler:      provider.sampler,
-		span:         span,
-		attributes:   o.Attributes,
-		links:        o.Links,
-		kind:         o.SpanKind,
+	samplingResult := provider.sampler.ShouldSample(SamplingParameters{
+		ParentContext: ctx,
+		TraceID:       tid,
+		Name:          name,
+		Kind:          o.SpanKind(),
+		Attributes:    o.Attributes(),
+		Links:         o.Links(),
+	})
+
+	scc := trace.SpanContextConfig{
+		TraceID:    tid,
+		SpanID:     sid,
+		TraceState: samplingResult.Tracestate,
 	}
-	samplingResult := makeSamplingDecision(data)
 	if isSampled(samplingResult) {
-		span.spanContext = span.spanContext.WithTraceFlags(span.spanContext.TraceFlags() | trace.FlagsSampled)
+		scc.TraceFlags = psc.TraceFlags() | trace.FlagsSampled
 	} else {
-		span.spanContext = span.spanContext.WithTraceFlags(span.spanContext.TraceFlags() &^ trace.FlagsSampled)
+		scc.TraceFlags = psc.TraceFlags() &^ trace.FlagsSampled
 	}
-	span.spanContext = span.spanContext.WithTraceState(samplingResult.Tracestate)
+	span.spanContext = trace.NewSpanContext(scc)
 
 	if !isRecording(samplingResult) {
 		return span
 	}
 
-	startTime := o.Timestamp
+	startTime := o.Timestamp()
 	if startTime.IsZero() {
 		startTime = time.Now()
 	}
 	span.startTime = startTime
 
-	span.spanKind = trace.ValidateSpanKind(o.SpanKind)
+	span.spanKind = trace.ValidateSpanKind(o.SpanKind())
 	span.name = name
-	span.hasRemoteParent = remoteParent
+	span.parent = psc
 	span.resource = provider.resource
 	span.instrumentationLibrary = tr.instrumentationLibrary
 
 	span.SetAttributes(samplingResult.Attributes...)
 
-	span.parent = parent
-
 	return span
-}
-
-func hasEmptySpanContext(parent trace.SpanContext) bool {
-	return parent.Equal(emptySpanContext)
-}
-
-type samplingData struct {
-	noParent     bool
-	remoteParent bool
-	parent       trace.SpanContext
-	name         string
-	sampler      Sampler
-	span         *span
-	attributes   []attribute.KeyValue
-	links        []trace.Link
-	kind         trace.SpanKind
-}
-
-func makeSamplingDecision(data samplingData) SamplingResult {
-	return data.sampler.ShouldSample(SamplingParameters{
-		ParentContext:   data.parent,
-		TraceID:         data.span.spanContext.TraceID(),
-		Name:            data.name,
-		HasRemoteParent: data.remoteParent,
-		Kind:            data.kind,
-		Attributes:      data.attributes,
-		Links:           data.links,
-	})
 }
 
 func isRecording(s SamplingResult) bool {
@@ -624,4 +629,13 @@ func isRecording(s SamplingResult) bool {
 
 func isSampled(s SamplingResult) bool {
 	return s.Decision == RecordAndSample
+}
+
+// Status is the classified state of a Span.
+type Status struct {
+	// Code is an identifier of a Spans state classification.
+	Code codes.Code
+	// Message is a user hint about why that status was set. It is only
+	// applicable when Code is Error.
+	Description string
 }

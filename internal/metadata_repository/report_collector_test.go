@@ -106,7 +106,7 @@ func TestRegisterStorageNode(t *testing.T) {
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -119,7 +119,7 @@ func TestRegisterStorageNode(t *testing.T) {
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -147,7 +147,7 @@ func TestRegisterLogStream(t *testing.T) {
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -186,7 +186,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -239,7 +239,7 @@ func TestUnregisterLogStream(t *testing.T) {
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -278,7 +278,7 @@ func TestRecoverStorageNode(t *testing.T) {
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -415,7 +415,7 @@ func TestReport(t *testing.T) {
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -474,7 +474,7 @@ func TestReportDedup(t *testing.T) {
 		mr := NewDummyMetadataRepository(a)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		defer reportCollector.Close()
 
@@ -537,7 +537,7 @@ func TestReportCollectorSeal(t *testing.T) {
 		cc := newDummyCommitContext()
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()
@@ -713,7 +713,7 @@ func TestCommit(t *testing.T) {
 		cc := newDummyCommitContext()
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()
@@ -845,7 +845,7 @@ func TestCommitWithDelay(t *testing.T) {
 		cc := newDummyCommitContext()
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, time.Second, logger)
+		reportCollector := NewReportCollector(mr, time.Second, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()
@@ -956,7 +956,7 @@ func TestRPCFail(t *testing.T) {
 		mr := NewDummyMetadataRepository(clientFac)
 
 		logger, _ := zap.NewDevelopment()
-		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, logger)
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run()
 		Reset(func() {
 			reportCollector.Close()

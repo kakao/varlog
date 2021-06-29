@@ -6,6 +6,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -21,6 +22,7 @@ type replicatorConfig struct {
 	queueSize     int
 	state         stateProvider
 	connectorOpts []replication.ConnectorOption
+	me            MeasurableExecutor
 }
 
 func (c replicatorConfig) validate() error {
@@ -29,6 +31,9 @@ func (c replicatorConfig) validate() error {
 	}
 	if c.state == nil {
 		return errors.WithStack(verrors.ErrInvalid)
+	}
+	if c.me == nil {
+		return errors.Wrap(verrors.ErrInvalid, "no measurable")
 	}
 	return nil
 }
@@ -158,6 +163,7 @@ func (r *replicatorImpl) replicateLoopInternal(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	rt.poppedTime = time.Now()
 
 	if err := r.replicate(ctx, rt); err != nil {
 		return err
@@ -165,27 +171,58 @@ func (r *replicatorImpl) replicateLoopInternal(ctx context.Context) error {
 	return nil
 }
 
-func (r *replicatorImpl) replicate(ctx context.Context, t *replicateTask) error {
-	defer t.release()
+func (r *replicatorImpl) replicate(ctx context.Context, rt *replicateTask) error {
+	startTime := time.Now()
 
-	replicas := t.replicas
-	llsn := t.llsn
-	data := t.data
+	defer func() {
+		r.me.Stub().Metrics().ExecutorReplicateFanoutTime.Record(
+			ctx,
+			float64(time.Since(startTime).Microseconds())/1000.0,
+		)
+
+		rt.annotate(ctx, r.me)
+		rt.release()
+	}()
+
+	replicas := rt.replicas
+	llsn := rt.llsn
+	data := rt.data
 
 	grp, ctx := errgroup.WithContext(ctx)
 	for i := range replicas {
 		replica := replicas[i]
 		grp.Go(func() error {
+			ts := time.Now()
 			cl, err := r.connector.Get(ctx, replica)
 			if err != nil {
 				return err
 			}
+			r.me.Stub().Metrics().ExecutorReplicateConnectionGetTime.Record(
+				ctx,
+				float64(time.Since(ts).Microseconds())/1000.0,
+			)
 			// FIXME: return some error?
-			cl.Replicate(ctx, llsn, data, r.replicateCallback)
+			cb := r.generateReplicateCallback(ctx, rt.poppedTime)
+			cl.Replicate(ctx, llsn, data, cb)
 			return nil
 		})
 	}
 	return grp.Wait()
+}
+
+func (r *replicatorImpl) generateReplicateCallback(ctx context.Context, startTime time.Time) func(error) {
+	return func(err error) {
+		dur := float64(time.Since(startTime).Microseconds()) / 1000.0
+		r.me.Stub().Metrics().ExecutorReplicateTime.Record(ctx, dur)
+
+		if err != nil {
+			r.state.setSealing()
+		}
+
+		// NOTE: `inflight` should be decreased when the callback is called since all
+		// responses either success and failure should be come before unsealing.
+		atomic.AddInt64(&r.inflight, -1)
+	}
 }
 
 func (r *replicatorImpl) replicateCallback(err error) {

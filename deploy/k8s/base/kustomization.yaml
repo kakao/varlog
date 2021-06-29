@@ -11,9 +11,11 @@ resources:
 - otel-collector.yaml
 - jaeger.yaml
 - prometheus.yaml
+- grafana.yaml
 - ingress-nginx-configmap.yaml
 - jaeger-vip-service.yaml
 - prometheus-vip-service.yaml
 - mr-vip-service.yaml
 - vms-vip-service.yaml
+- grafana-vip-service.yaml
 - rpc-test-server.yaml

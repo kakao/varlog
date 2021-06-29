@@ -1,3 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-conf
+  labels:
+    app: opentelemetry
+    component: otel-collector-conf
+data:
+  otel-collector-config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+    processors:
+      batch:
+      memory_limiter:
+        ballast_size_mib: 3000
+        check_interval: 5s
+        limit_mib: 6000
+        spike_limit_mib: 1500
+    extensions:
+      health_check:
+      pprof:
+        endpoint: 0.0.0.0:1777
+      zpages:
+        endpoint: 0.0.0.0:55679
+    exporters:
+      logging:
+        loglevel: debug
+      jaeger:
+        endpoint: "jaeger-collector.default:14250"
+        insecure: true
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        namespace: "varlog"
+        send_timestamps: true
+        resource_to_telemetry_conversion:
+          enabled: true
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch, memory_limiter]
+          exporters: [jaeger]
+        metrics:
+          receivers: [otlp]
+          processors: [batch, memory_limiter]
+          exporters: [prometheus]
+      extensions: [health_check, pprof, zpages]
+---
 kind: Deployment
 apiVersion: apps/v1
 metadata:

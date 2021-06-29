@@ -72,7 +72,7 @@ func (rs *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Replic
 	}
 
 	if uint(len(allowlist)) < rs.count {
-		return nil, errors.New("replicaselector: not enough replicas")
+		return nil, errors.Errorf("replicaselector: not enough replicas (%d, %d)", len(allowlist), rs.count)
 	}
 
 	sort.Slice(allowlist, func(i, j int) bool {

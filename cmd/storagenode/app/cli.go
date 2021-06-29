@@ -53,8 +53,8 @@ func initStartCommand() *cli.Command {
 		flagDisableDeleteCommittedSync.BoolFlag(),
 		flagDisableDeleteUncommittedSync.BoolFlag(),
 
-		// flags for collector
-		flagCollectorName.StringFlagV(vflag.DefaultTelemetryCollector),
+		// flags for telemetry
+		flagTelemetry.StringFlag(),
 	}
 	return startCmd
 }

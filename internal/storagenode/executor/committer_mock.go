@@ -37,11 +37,12 @@ func (m *MockCommitter) EXPECT() *MockCommitterMockRecorder {
 }
 
 // commitDirectly mocks base method.
-func (m *MockCommitter) commitDirectly(cc storage.CommitContext, requireCommitWaitTasks bool) error {
+func (m *MockCommitter) commitDirectly(cc storage.CommitContext, requireCommitWaitTasks bool) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "commitDirectly", cc, requireCommitWaitTasks)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // commitDirectly indicates an expected call of commitDirectly.

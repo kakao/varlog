@@ -162,7 +162,7 @@ func (e *executor) SyncReplicate(ctx context.Context, payload snpb.SyncPayload) 
 		}
 		e.lsc.uncommittedLLSNEnd.Add(numCommits)
 
-		err = e.committer.commitDirectly(storage.CommitContext{
+		_, err = e.committer.commitDirectly(storage.CommitContext{
 			HighWatermark:      e.srs.cc.HighWatermark,
 			PrevHighWatermark:  e.srs.cc.PrevHighWatermark,
 			CommittedGLSNBegin: e.srs.cc.CommittedGLSNBegin,

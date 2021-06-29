@@ -19,18 +19,20 @@ import (
 
 func TestK8sVarlogAppendLongTime(t *testing.T) {
 	const (
-		testTimeout = 5 * time.Minute
-		numMRs      = 3
-		numSNs      = 5
-		numLSs      = 10
-		numClients  = 10
-		clusterID   = types.ClusterID(1)
+		testTimeout  = 15 * time.Minute
+		numRepFactor = 2
+		numMRs       = 3
+		numSNs       = 2
+		numLSs       = 1
+		numClients   = 50
+		clusterID    = types.ClusterID(1)
 	)
 
 	opts := getK8sVarlogClusterOpts()
 	opts.NrMR = numMRs
 	opts.NrSN = numSNs
 	opts.NrLS = numLSs
+	opts.RepFactor = numRepFactor
 
 	Convey("Append long time", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
 		vmsAddr, err := k8s.VMSAddress()

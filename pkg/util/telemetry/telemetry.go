@@ -9,13 +9,17 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/propagation"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/semconv"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/multierr"
-	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/metric"
 	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/trace"
@@ -23,97 +27,85 @@ import (
 
 const ServiceNamespace = "varlog"
 
-type config struct {
-	spanProcessorQueueSize    int
-	spanProcessorBatchTimeout time.Duration
-	spanProcessorMaxBatchSize int
-	endpoint                  string
-	logger                    *zap.Logger
-
-	metricCollectPeriod  time.Duration
-	metricCollectTimeout time.Duration
-	metricPushTimeout    time.Duration
+func Tracer(name string) trace.Tracer {
+	return otel.Tracer(name)
 }
 
-type Option func(c *config)
+func Meter(name string) metric.Meter {
+	return global.Meter(name)
+}
 
 type Telemetry interface {
 	Close(ctx context.Context) error
 }
 
-type basicTelemetry struct {
-	traceProvider    *sdktrace.TracerProvider
-	metricController *metric.Controller
-	exp              exporter
+type telemetryImpl struct {
+	config
+	traceProvider    *tracesdk.TracerProvider
+	metricController *controller.Controller
+	exp              *exporter
 }
 
-func New(ctx context.Context, telemetryType, serviceName, serviceInstanceID string, opts ...Option) (Telemetry, error) {
-	if telemetryType == "nop" || telemetryType == "" {
-		return NewNopTelemetry(), nil
+var _ Telemetry = (*telemetryImpl)(nil)
+
+func New(ctx context.Context, serviceName, serviceInstanceID string, opts ...Option) (Telemetry, error) {
+	cfg, err := newConfig(opts)
+	if err != nil {
+		return nil, err
 	}
 
-	cfg := &config{
-		spanProcessorQueueSize:    trace.DefaultMaxQueueSize,
-		spanProcessorBatchTimeout: trace.DefaultBatchTimeout,
-		spanProcessorMaxBatchSize: trace.DefaultBatchSize,
-		metricCollectPeriod:       metric.DefaultCollectPeriod,
-		metricCollectTimeout:      metric.DefaultCollectTimeout,
-		metricPushTimeout:         metric.DefaultPushTimeout,
-	}
-	for _, opt := range opts {
-		opt(cfg)
+	if cfg.exporterType == "nop" || cfg.exporterType == "" {
+		return NewNopTelemetry(), nil
 	}
 
 	// resources
 	res, err := resource.New(ctx,
+		resource.WithFromEnv(),
+		resource.WithHost(),
+		resource.WithProcessExecutableName(),
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceNamespaceKey.String(ServiceNamespace),
 			semconv.ServiceInstanceIDKey.String(serviceInstanceID),
-		),
-	)
+		))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
 	// exporter
-	expCfg := exporterConfig{}
-	expCfg.otlpEndpoint = cfg.endpoint
-	expCfg.stdoutLogger = cfg.logger
-	exp, err := newExporter(ctx, telemetryType, expCfg)
+	exp, err := newExporter(ctx, cfg.exporterType, exporterConfig{
+		otlpEndpoint: cfg.endpoint,
+		stdoutLogger: cfg.logger,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	// span processor
-	sp := trace.NewSpanProcessor(
-		exp,
-		cfg.spanProcessorQueueSize,
-		cfg.spanProcessorBatchTimeout,
-		cfg.spanProcessorMaxBatchSize,
-	)
+	sp := tracesdk.NewBatchSpanProcessor(exp.traceExporter, cfg.bspOpts...)
 
 	// trace provider
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithSpanProcessor(sp),
-		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(0.3))),
-		sdktrace.WithResource(res),
-	)
-
-	// metric processor
-	mp := metric.NewMetricProcessor(exp)
+	tp := tracesdk.NewTracerProvider(append(
+		cfg.tpOpts,
+		tracesdk.WithSpanProcessor(sp),
+		tracesdk.WithSampler(tracesdk.ParentBased(tracesdk.TraceIDRatioBased(0.3))),
+		tracesdk.WithResource(res),
+	)...)
 
 	// metric controller
-	mcCfg := metric.NewDefaultControllerConfig()
-	mcCfg.Resource = res
-	mcCfg.CollectPeriod = cfg.metricCollectPeriod
-	mcCfg.CollectTimeout = cfg.metricCollectTimeout
-	mcCfg.PushTimeout = cfg.metricPushTimeout
-	mc := metric.NewController(mp, exp, mcCfg)
+	mc := controller.New(
+		processor.New(
+			simple.NewWithHistogramDistribution(),
+			exp.metricExporter,
+		),
+		controller.WithResource(res),
+		controller.WithExporter(exp.metricExporter),
+	)
 
-	otel.SetTextMapPropagator(propagation.TraceContext{})
 	otel.SetTracerProvider(tp)
 	global.SetMeterProvider(mc.MeterProvider())
+	propagator := propagation.NewCompositeTextMapPropagator(propagation.Baggage{}, propagation.TraceContext{})
+	otel.SetTextMapPropagator(propagator)
 
 	// host
 	if err := host.Start(host.WithMeterProvider(mc.MeterProvider())); err != nil {
@@ -132,14 +124,14 @@ func New(ctx context.Context, telemetryType, serviceName, serviceInstanceID stri
 		return nil, errors.WithStack(err)
 	}
 
-	return &basicTelemetry{
+	return &telemetryImpl{
 		traceProvider:    tp,
 		metricController: mc,
 		exp:              exp,
 	}, nil
 }
 
-func (t *basicTelemetry) Close(ctx context.Context) (err error) {
+func (t *telemetryImpl) Close(ctx context.Context) (err error) {
 	errc := make(chan error, 2)
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -159,58 +151,16 @@ func (t *basicTelemetry) Close(ctx context.Context) (err error) {
 	return err
 }
 
-func WithSpanProcessorQueueSize(size int) Option {
-	return func(c *config) {
-		c.spanProcessorQueueSize = size
-	}
+type nopTelemetry struct{}
+
+var _ Telemetry = (*nopTelemetry)(nil)
+
+func NewNopTelemetry() *nopTelemetry {
+	otel.SetTracerProvider(oteltrace.NewNoopTracerProvider())
+	global.SetMeterProvider(otelmetric.NoopMeterProvider{})
+	return &nopTelemetry{}
 }
 
-func WithSpanProcessorBatchTimeout(timeout time.Duration) Option {
-	return func(c *config) {
-		c.spanProcessorBatchTimeout = timeout
-	}
-}
-
-func WithSpanProcessorMaxBatchSize(size int) Option {
-	return func(c *config) {
-		c.spanProcessorMaxBatchSize = size
-	}
-}
-
-func WithEndpoint(ep string) Option {
-	return func(c *config) {
-		c.endpoint = ep
-	}
-}
-
-func WithLogger(logger *zap.Logger) Option {
-	return func(c *config) {
-		c.logger = logger
-	}
-}
-
-func WithMetricCollectPeriod(period time.Duration) Option {
-	return func(c *config) {
-		c.metricCollectPeriod = period
-	}
-}
-
-func WithMetricCollectTimeout(timeout time.Duration) Option {
-	return func(c *config) {
-		c.metricCollectTimeout = timeout
-	}
-}
-
-func WithMetricPushTimeout(timeout time.Duration) Option {
-	return func(c *config) {
-		c.metricPushTimeout = timeout
-	}
-}
-
-func Tracer(name string) trace.Tracer {
-	return otel.Tracer(name)
-}
-
-func Meter(name string) metric.Meter {
-	return global.Meter(name)
+func (_ nopTelemetry) Close(_ context.Context) error {
+	return nil
 }

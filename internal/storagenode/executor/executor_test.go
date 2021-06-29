@@ -20,6 +20,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/replication"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/stopchannel"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -35,7 +36,10 @@ func TestExecutorClose(t *testing.T) {
 
 	strg := newTestStorage(ctrl, newTestStorageConfig())
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	err = lse.Close()
@@ -123,10 +127,16 @@ func TestExecutorAppend(t *testing.T) {
 
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	defer func() {
@@ -187,10 +197,16 @@ func TestExecutorRead(t *testing.T) {
 
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	defer func() {
@@ -280,10 +296,16 @@ func TestExecutorTrim(t *testing.T) {
 	const numAppends = 10
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	defer func() {
@@ -386,10 +408,16 @@ func TestExecutorSubscribe(t *testing.T) {
 	const numAppends = 10
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	defer func() {
@@ -559,12 +587,18 @@ func TestExecutorReplicate(t *testing.T) {
 
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg),
+	lse, err := New(
+		WithStorage(strg),
 		WithStorageNodeID(backupSNID),
-		WithLogStreamID(logStreamID))
+		WithLogStreamID(logStreamID),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	defer func() {
@@ -622,6 +656,9 @@ func TestExecutorReplicate(t *testing.T) {
 func TestExecutorSealSuddenly(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	const (
 		numWriters = 10
 	)
@@ -629,7 +666,10 @@ func TestExecutorSealSuddenly(t *testing.T) {
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	defer func() {
@@ -742,10 +782,16 @@ func TestExecutorSealSuddenly(t *testing.T) {
 func TestExecutorSeal(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	defer func() {
@@ -901,10 +947,16 @@ func TestExecutorSeal(t *testing.T) {
 func TestExecutorWithRecover(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	defer func() {
@@ -945,6 +997,8 @@ func TestExecutorWithRecover(t *testing.T) {
 
 func TestExecutorCloseSuddenly(t *testing.T) {
 	//defer goleak.VerifyNone(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
 	const (
 		numWriter = 100
@@ -958,7 +1012,10 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	status, sealedGLSN, err := lse.Seal(context.TODO(), types.InvalidGLSN)
@@ -1068,11 +1125,17 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 func TestExecutorNew(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	path := t.TempDir()
 
 	strg, err := storage.NewStorage(storage.WithPath(path))
 	require.NoError(t, err)
-	lse, err := New(WithStorage(strg))
+	lse, err := New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
@@ -1136,7 +1199,10 @@ func TestExecutorNew(t *testing.T) {
 	// Restart executor
 	strg, err = storage.NewStorage(storage.WithPath(path))
 	require.NoError(t, err)
-	lse, err = New(WithStorage(strg))
+	lse, err = New(
+		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+	)
 	require.NoError(t, err)
 
 	report, err = lse.GetReport(context.TODO())
@@ -1186,6 +1252,9 @@ func TestExecutorNew(t *testing.T) {
 func TestExecutorGetPrevCommitInfo(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	const logStreamID = types.LogStreamID(1)
 
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
@@ -1193,6 +1262,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 	lse, err := New(
 		WithLogStreamID(logStreamID),
 		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1341,6 +1411,9 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	const logStreamID = types.LogStreamID(1)
 
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
@@ -1348,6 +1421,7 @@ func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 	lse, err := New(
 		WithLogStreamID(logStreamID),
 		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1397,11 +1471,15 @@ func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 func TestExecutorUnsealWithInvalidReplicas(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 	lse, err := New(
 		WithLogStreamID(1),
 		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1427,12 +1505,16 @@ func TestExecutorUnsealWithInvalidReplicas(t *testing.T) {
 func TestExecutorPrimaryBackup(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 	lse, err := New(
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1473,12 +1555,16 @@ func TestExecutorPrimaryBackup(t *testing.T) {
 func TestExecutorSyncInitNewReplica(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 	lse, err := New(
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1498,12 +1584,16 @@ func TestExecutorSyncInitNewReplica(t *testing.T) {
 func TestExecutorSyncInitInvalidState(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 	lse, err := New(
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1536,12 +1626,16 @@ func TestExecutorSyncInitInvalidState(t *testing.T) {
 func TestExecutorSyncBackupReplica(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 	lse, err := New(
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1649,12 +1743,16 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 func TestExecutorSyncPrimaryReplica(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	strg, err := storage.NewStorage(storage.WithPath(t.TempDir()))
 	require.NoError(t, err)
 	lse, err := New(
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1785,6 +1883,7 @@ func TestExecutorSync(t *testing.T) {
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
+		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() {

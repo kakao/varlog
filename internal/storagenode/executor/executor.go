@@ -8,10 +8,12 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/id"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/logio"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/replication"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/timestamper"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -25,6 +27,8 @@ type Executor interface {
 	SealUnsealer
 	replication.Replicator
 	MetadataProvider
+	id.StorageNodeIDGetter
+	id.LogStreamIDGetter
 }
 
 type executor struct {
@@ -141,6 +145,12 @@ func (e *executor) initLogPipeline() error {
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: e.replicateQueueSize,
 		state:     e,
+		me:        e,
+		connectorOpts: []replication.ConnectorOption{
+			replication.WithClientOptions(
+				replication.WithMeasurable(e),
+			),
+		},
 	})
 	if err != nil {
 		return err
@@ -155,6 +165,7 @@ func (e *executor) initLogPipeline() error {
 		lsc:                 e.lsc,
 		decider:             e.decider,
 		state:               e,
+		me:                  e,
 	})
 	if err != nil {
 		return err
@@ -169,6 +180,7 @@ func (e *executor) initLogPipeline() error {
 		committer:  e.committer,
 		replicator: e.rp,
 		state:      e,
+		me:         e,
 	})
 	if err != nil {
 		rp.stop()
@@ -285,4 +297,16 @@ func (e *executor) isPrimay() bool {
 	return len(e.primaryBackups) > 0 &&
 		e.primaryBackups[0].StorageNodeID == e.storageNodeID &&
 		e.primaryBackups[0].LogStreamID == e.logStreamID
+}
+
+func (e *executor) StorageNodeID() types.StorageNodeID {
+	return e.storageNodeID
+}
+
+func (e *executor) LogStreamID() types.LogStreamID {
+	return e.logStreamID
+}
+
+func (e *executor) Stub() *telemetry.TelemetryStub {
+	return e.measure.Stub()
 }

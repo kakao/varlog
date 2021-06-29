@@ -2,6 +2,7 @@ package executor
 
 import (
 	"sync"
+	"time"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
@@ -17,17 +18,25 @@ type taskWaitGroup struct {
 	glsn types.GLSN
 	wg   sync.WaitGroup
 	err  error
+
+	createdTime   time.Time
+	writtenTime   time.Time
+	committedTime time.Time
 }
 
 func newTaskWaitGroup() *taskWaitGroup {
 	t := taskWaitGroupPool.Get().(*taskWaitGroup)
 	t.wg.Add(1)
+	t.createdTime = time.Now()
 	return t
 }
 
 func (twg *taskWaitGroup) release() {
 	twg.glsn = types.InvalidGLSN
 	twg.err = nil
+	twg.createdTime = time.Time{}
+	twg.writtenTime = time.Time{}
+	twg.committedTime = time.Time{}
 	taskWaitGroupPool.Put(twg)
 }
 

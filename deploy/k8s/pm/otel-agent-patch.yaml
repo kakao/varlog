@@ -1,3 +1,48 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: otel-agent-conf
+  labels:
+    app: opentelemetry
+    component: otel-agent-conf
+
+data:
+  otel-agent-config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+
+    exporters:
+      logging:
+        loglevel: debug
+      otlp:
+        endpoint: "otel-collector.default:4317"
+        insecure: true
+
+    processors:
+      batch:
+
+    extensions:
+      health_check:
+      pprof:
+        endpoint: 0.0.0.0:1777
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp]
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp]
+      extensions: [health_check, pprof, zpages]
+---
 kind: DaemonSet
 apiVersion: apps/v1
 metadata:

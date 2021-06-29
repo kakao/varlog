@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -96,6 +97,8 @@ func (c *client) PeerStorageNodeID() types.StorageNodeID {
 }
 
 func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, callback func(error)) {
+	startTime := time.Now()
+
 	var err error
 
 	c.closed.mu.RLock()
@@ -122,11 +125,17 @@ func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, ca
 		LogStreamID: c.replica.GetLogStreamID(),
 		LLSN:        llsn,
 		Payload:     data,
+		CreatedTime: time.Now(),
 	}
 	err = c.requestQ.PushWithContext(ctx, req)
 	if err != nil {
 		return
 	}
+
+	c.measure.Stub().Metrics().ExecutorReplicateRequestPrepareTime.Record(
+		ctx,
+		float64(time.Since(startTime).Microseconds())/1000.0,
+	)
 }
 
 func (c *client) sendLoop(stream snpb.Replicator_ReplicateClient) {
@@ -147,6 +156,12 @@ Loop:
 			break Loop
 		}
 		req := reqI.(*snpb.ReplicationRequest)
+		now := time.Now()
+		c.measure.Stub().Metrics().ExecutorReplicateClientRequestQueueTime.Record(
+			context.Background(),
+			float64(now.Sub(req.CreatedTime).Microseconds())/1000.0,
+		)
+		req.CreatedTime = now
 		if err := stream.Send(req); err != nil {
 			break Loop
 		}
@@ -175,6 +190,12 @@ Loop:
 		if err != nil {
 			break Loop
 		}
+		/*
+			c.measure.Stub().Metrics().ExecutorReplicateResponsePropagationTime.Record(
+				context.Background(),
+				float64(time.Since(rsp.GetCreatedTime()).Microseconds())/1000.0,
+			)
+		*/
 
 		// TODO: Check if this is safe.
 		cb := c.callbackQ.Pop().(*callbackBlock)

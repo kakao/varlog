@@ -2,10 +2,10 @@ package storagenode
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -13,6 +13,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/rpcserver"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/attribute"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
@@ -38,19 +39,9 @@ func (s *server) Register(server *grpc.Server) {
 func (s *server) withTelemetry(ctx context.Context, spanName string, req interface{}, h rpcserver.Handler) (rsp interface{}, err error) {
 	// TODO: use resource to tag storage node id
 	ctx, span := s.tmStub.StartSpan(ctx, spanName,
-		// oteltrace.WithAttributes(label.StorageNodeIDLabel(s.m.StorageNodeID())),
+		oteltrace.WithAttributes(attribute.StorageNodeID(s.storageNode.StorageNodeID())),
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
-	/*
-		labels := []label.KeyValue{
-			label.RPCName(spanName),
-			label.StorageNodeIDLabel(s.m.StorageNodeID()),
-		}
-		s.tmStub.mt.RecordBatch(ctx, labels,
-			s.tmStub.metrics().totalRequests.Measurement(1),
-			s.tmStub.metrics().activeRequests.Measurement(1),
-		)
-	*/
 
 	if cidGetter, ok := req.(interface{ GetClusterID() types.ClusterID }); ok {
 		if cidGetter.GetClusterID() != s.storageNode.ClusterID() {
@@ -69,35 +60,28 @@ out:
 	if err == nil {
 		span.SetStatus(codes.Ok, "")
 		s.logger.Info(spanName,
-			zap.Stringer("request", req.(fmt.Stringer)),
-			zap.Stringer("response", rsp.(fmt.Stringer)),
+			zap.Stringer("req", req.(fmt.Stringer)),
+			zap.Stringer("rsp", rsp.(fmt.Stringer)),
 		)
 	} else {
 		span.RecordError(err)
 		s.logger.Error(spanName,
 			zap.Error(err),
-			zap.Stringer("request", req.(fmt.Stringer)),
+			zap.Stringer("req", req.(fmt.Stringer)),
 		)
 	}
 
-	//s.tmStub.metrics().activeRequests.Add(ctx, -1, labels...)
 	span.End()
 	return rsp, err
 }
 
 // GetMetadata implements the ManagementServer GetMetadata method.
 func (s *server) GetMetadata(ctx context.Context, req *snpb.GetMetadataRequest) (*snpb.GetMetadataResponse, error) {
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/GetMetadata", req,
-		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			metadata, err := s.storageNode.GetMetadata(ctx)
-			rsp := &snpb.GetMetadataResponse{StorageNodeMetadata: metadata}
-			return rsp, err
-		},
-	)
-	if err != nil {
-		return nil, verrors.ToStatusError(err)
-	}
-	return rspI.(*snpb.GetMetadataResponse), nil
+	// NOTE: GetMetadata RPC is called very frequently since it plays the role of heartbeats as
+	// well as metadata. So its telemetry and logging are suppressed.
+	metadata, err := s.storageNode.GetMetadata(ctx)
+	rsp := &snpb.GetMetadataResponse{StorageNodeMetadata: metadata}
+	return rsp, verrors.ToStatusError(err)
 }
 
 // AddLogStream implements the ManagementServer AddLogStream method.

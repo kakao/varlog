@@ -28,6 +28,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/rpcserver"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/timestamper"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/container/set"
@@ -73,8 +74,9 @@ type StorageNode struct {
 
 	storageNodePaths set.Set
 
-	// options *Options
 	tsp timestamper.Timestamper
+
+	tmStub *telemetry.TelemetryStub
 }
 
 var _ id.StorageNodeIDGetter = (*StorageNode)(nil)
@@ -83,6 +85,7 @@ var _ replication.Getter = (*StorageNode)(nil)
 var _ reportcommitter.Getter = (*StorageNode)(nil)
 var _ logio.Getter = (*StorageNode)(nil)
 var _ fmt.Stringer = (*StorageNode)(nil)
+var _ telemetry.Measurable = (*StorageNode)(nil)
 
 func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 	cfg, err := newConfig(opts)
@@ -97,24 +100,15 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 	sn.executors.es = make(map[types.LogStreamID]executor.Executor)
 	sn.pprofServer = pprof.New(sn.pprofOpts...)
 
-	/*
-		tmStub, err := newTelemetryStub(ctx, options.TelemetryOptions.CollectorName, options.StorageNodeID, options.TelemetryOptions.CollectorEndpoint)
+	if len(sn.telemetryEndpoint) == 0 {
+		sn.tmStub = telemetry.NewNopTelmetryStub()
+	} else {
+		sn.tmStub, err = telemetry.NewTelemetryStub(ctx, "otel", sn.snid, sn.telemetryEndpoint)
 		if err != nil {
 			return nil, err
 		}
-		sn := &StorageNode{
-			clusterID:        options.ClusterID,
-			storageNodeID:    options.StorageNodeID,
-			lseMap:           make(map[types.LogStreamID]Executor),
-			tst:              NewTimestamper(),
-			storageNodePaths: set.New(len(options.Volumes)),
-			options:          options,
-			logger:           options.Logger,
-			sw:               stopwaiter.New(),
-			tmStub:           tmStub,
-			pprofServer:      newPprofServer(options.PProfServerConfig),
-		}
-	*/
+	}
+
 	sn.logger = sn.logger.Named("storagenode").With(
 		zap.Uint32("cid", uint32(sn.cid)),
 		zap.Uint32("snid", uint32(sn.snid)),
@@ -186,15 +180,18 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 	// services
 	grpc_health_v1.RegisterHealthServer(sn.rpcServer, sn.healthServer)
 	rpcserver.RegisterRPCServer(sn.rpcServer,
-		reportcommitter.NewServer(sn.lsr),
+		reportcommitter.NewServer(sn.lsr, sn),
 		logio.NewServer(
 			logio.WithStorageNodeIDGetter(sn),
 			logio.WithReadWriterGetter(sn),
+			logio.WithMeasurable(sn),
+			logio.WithLogger(sn.logger),
 		),
 		replication.NewServer(
 			replication.WithStorageNodeIDGetter(sn),
 			replication.WithLogReplicatorGetter(sn),
 			replication.WithPipelineQueueSize(1),
+			replication.WithMeasurable(sn),
 			replication.WithLogger(sn.logger),
 		),
 		NewServer(WithStorageNode(sn)),
@@ -396,6 +393,7 @@ func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.Log
 		executor.WithStorage(storage),
 		executor.WithStorageNodeID(sn.snid),
 		executor.WithLogStreamID(logStreamID),
+		executor.WithMeasurable(sn),
 		executor.WithLogger(sn.logger),
 	)
 	lse, err := executor.New(opts...)
@@ -555,4 +553,8 @@ func (sn *StorageNode) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "storagenode (cid=%d, snid=%d)", sn.ClusterID(), sn.StorageNodeID())
 	return sb.String()
+}
+
+func (sn *StorageNode) Stub() *telemetry.TelemetryStub {
+	return sn.tmStub
 }

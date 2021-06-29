@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -24,6 +25,7 @@ type writerConfig struct {
 	committer  committer
 	replicator replicator
 	state      stateProvider
+	me         MeasurableExecutor
 }
 
 func (c writerConfig) validate() error {
@@ -47,6 +49,9 @@ func (c writerConfig) validate() error {
 	}
 	if c.state == nil {
 		return errors.Wrap(verrors.ErrInvalid, "writer: no state provider")
+	}
+	if c.me == nil {
+		return errors.Wrap(verrors.ErrInvalid, "writer: no measurable")
 	}
 	return nil
 }
@@ -195,6 +200,7 @@ func (w *writerImpl) writeLoop(ctx context.Context) {
 func (w *writerImpl) writeLoopInternal(ctx context.Context) error {
 	oldLLSN, newLLSN, numPopped, err := w.ready(ctx)
 	defer func() {
+		w.me.Stub().Metrics().ExecutorWriteQueueTasks.Record(ctx, numPopped)
 		atomic.AddInt64(&w.inflight, -numPopped)
 	}()
 	if err != nil {
@@ -212,21 +218,22 @@ func (w *writerImpl) writeLoopInternal(ctx context.Context) error {
 func (w *writerImpl) ready(ctx context.Context) (types.LLSN, types.LLSN, int64, error) {
 	numPopped := int64(0)
 
-	t, err := w.q.popWithContext(ctx)
+	wt, err := w.q.popWithContext(ctx)
 	if err != nil {
 		return types.InvalidLLSN, types.InvalidLLSN, numPopped, err
 	}
 	numPopped++
+	wt.poppedTime = time.Now()
 
 	oldLLSN := w.lsc.uncommittedLLSNEnd.Load()
 	newLLSN := oldLLSN
 
 	// NOTE: These variables check whether tasks in writeQ are mixed by Append RPC and Replicate
 	// RPC. They will be removed after stabilizing codebases.
-	primary := t.primary
-	backup := !t.primary
+	primary := wt.primary
+	backup := !wt.primary
 
-	if err := w.fillBatch(t, newLLSN); err != nil {
+	if err := w.fillBatch(wt, newLLSN); err != nil {
 		return types.InvalidLLSN, types.InvalidLLSN, numPopped, err
 	}
 	newLLSN++
@@ -235,6 +242,7 @@ func (w *writerImpl) ready(ctx context.Context) (types.LLSN, types.LLSN, int64, 
 	for i := 0; i < popSize; i++ {
 		t := w.q.pop()
 		numPopped++
+		t.poppedTime = time.Now()
 
 		if err := w.fillBatch(t, newLLSN); err != nil {
 			return types.InvalidLLSN, types.InvalidLLSN, numPopped, err
@@ -315,6 +323,7 @@ func (w *writerImpl) sendToReplicator(ctx context.Context) (err error) {
 	idx := 0
 	for idx < len(w.replicateTaskBatch) {
 		rt := w.replicateTaskBatch[idx]
+		rt.createdTime = time.Now()
 		err = w.replicator.send(ctx, rt)
 		if err != nil {
 			break
@@ -335,6 +344,9 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 
 		// After successful writing, commitWatiTaskBatch should be made.
 		for _, wt := range w.writeTaskBatch {
+			now := time.Now()
+			wt.processingTime = now
+			wt.twg.writtenTime = now
 			var cwt *commitWaitTask
 			if wt.primary { // primary
 				cwt = newCommitWaitTask(wt.llsn, wt.twg)
