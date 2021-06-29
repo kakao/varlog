@@ -1,46 +1,36 @@
 package varlog
 
 import (
-	"container/list"
+	"container/heap"
 	"context"
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/logc"
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/verrors"
 )
 
-type SubscribeOption struct{}
-
 type SubscribeCloser func()
 
-func (v *varlog) subscribe(ctx context.Context, begin, end types.GLSN, onNext OnNext, opts SubscribeOption) (closer SubscribeCloser, err error) {
+func (v *varlog) subscribe(ctx context.Context, begin, end types.GLSN, onNext OnNext, opts ...SubscribeOption) (closer SubscribeCloser, err error) {
 	if begin >= end {
 		return nil, verrors.ErrInvalid
 	}
-	replicasMap := v.replicasRetriever.All()
 
-	subscribers := make(map[types.LogStreamID]*subscriber, len(replicasMap))
-	transmitCV := make(chan transmitSignal, end-begin)
-
-	for logStreamID, replicas := range replicasMap {
-		primarySNID := replicas[0].GetStorageNodeID()
-		primaryAddr := replicas[0].GetAddress()
-		primaryLogCL, err := v.logCLManager.GetOrConnect(ctx, primarySNID, primaryAddr)
-		if err != nil {
-			return nil, err
-		}
-		subscriber, err := newSubscriber(ctx, logStreamID, primaryLogCL, begin, end, transmitCV, v.logger)
-		if err != nil {
-			return nil, err
-		}
-		subscribers[logStreamID] = subscriber
+	subscribeOpts := defaultSubscribeOptions()
+	for _, opt := range opts {
+		opt.apply(&subscribeOpts)
 	}
+
+	transmitCV := make(chan struct{}, 1)
 
 	mctx, cancel := v.runner.WithManagedCancel(context.Background())
 	closer = func() {
@@ -49,13 +39,20 @@ func (v *varlog) subscribe(ctx context.Context, begin, end types.GLSN, onNext On
 
 	sleq := newSubscribedLogEntiresQueue(begin, end, closer, v.logger)
 
+	tlogger := v.logger.Named("transmitter")
 	tsm := &transmitter{
-		subscribers: subscribers,
-		sleq:        sleq,
-		wanted:      begin,
-		end:         end,
-		transmitCV:  transmitCV,
-		logger:      v.logger.Named("transmitter"),
+		subscribers:       make(map[types.LogStreamID]*subscriber),
+		refresher:         v.refresher,
+		replicasRetriever: v.replicasRetriever,
+		logCLManager:      v.logCLManager,
+		sleq:              sleq,
+		wanted:            begin,
+		end:               end,
+		transmitQ:         &transmitQueue{pq: &PriorityQueue{}},
+		transmitCV:        transmitCV,
+		timeout:           subscribeOpts.timeout,
+		runner:            runner.New("transmitter", tlogger),
+		logger:            tlogger,
 	}
 
 	dis := &dispatcher{
@@ -70,12 +67,6 @@ func (v *varlog) subscribe(ctx context.Context, begin, end types.GLSN, onNext On
 		goto errOut
 	}
 
-	for _, subscriber := range subscribers {
-		subscriber.transmitCV = transmitCV
-		if err = v.runner.RunC(mctx, subscriber.subscribe); err != nil {
-			goto errOut
-		}
-	}
 	return closer, nil
 
 errOut:
@@ -83,96 +74,202 @@ errOut:
 	return nil, err
 }
 
-type transmitSignal struct {
-	glsn   types.GLSN
-	closed bool
+type PriorityQueueItem interface {
+	Priority() uint64
+}
+
+type PriorityQueue []PriorityQueueItem
+
+func (pq PriorityQueue) Len() int { return len(pq) }
+
+func (pq PriorityQueue) Less(i, j int) bool {
+	return pq[i].Priority() < pq[j].Priority()
+}
+
+func (pq PriorityQueue) Swap(i, j int) {
+	pq[i], pq[j] = pq[j], pq[i]
+}
+
+func (pq *PriorityQueue) Push(x interface{}) {
+	item := x.(PriorityQueueItem)
+	*pq = append(*pq, item)
+}
+
+func (pq *PriorityQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	*pq = old[0 : n-1]
+	return item
+}
+
+type transmitResult struct {
+	logStreamID   types.LogStreamID
+	storageNodeID types.StorageNodeID
+	result        logc.SubscribeResult
+}
+
+func (t transmitResult) Priority() uint64 {
+	return uint64(t.result.GLSN)
+}
+
+type transmitQueue struct {
+	pq *PriorityQueue
+	mu sync.Mutex
+}
+
+func (tq *transmitQueue) Push(r transmitResult) {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+
+	heap.Push(tq.pq, r)
+}
+
+func (tq *transmitQueue) Pop() (transmitResult, bool) {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+
+	if tq.pq.Len() == 0 {
+		return transmitResult{
+			result: logc.InvalidSubscribeResult,
+		}, false
+	}
+
+	return heap.Pop(tq.pq).(transmitResult), true
+}
+
+func (tq *transmitQueue) Front() (transmitResult, bool) {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+
+	if tq.pq.Len() == 0 {
+		return transmitResult{
+			result: logc.InvalidSubscribeResult,
+		}, false
+	}
+
+	return (*tq.pq)[0].(transmitResult), true
 }
 
 type subscriber struct {
-	logStreamID types.LogStreamID
-	logCL       logc.LogIOClient
-	resultC     <-chan logc.SubscribeResult
+	logStreamID   types.LogStreamID
+	storageNodeID types.StorageNodeID
+	logCL         logc.LogIOClient
+	resultC       <-chan logc.SubscribeResult
 
-	queue   *list.List
-	muQueue sync.RWMutex
+	transmitQ  *transmitQueue
+	transmitCV chan struct{}
 
-	transmitCV chan<- transmitSignal
-	closed     atomicutil.AtomicBool
-	logger     *zap.Logger
+	done     chan struct{}
+	closed   atomicutil.AtomicBool
+	complete atomicutil.AtomicBool
+
+	lastSubscribeAt atomic.Value
+
+	logger *zap.Logger
 }
 
-func newSubscriber(ctx context.Context, logStreamID types.LogStreamID, logCL logc.LogIOClient, begin, end types.GLSN, transmitCV chan<- transmitSignal, logger *zap.Logger) (*subscriber, error) {
+func newSubscriber(ctx context.Context, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, logCL logc.LogIOClient, begin, end types.GLSN, transmitQ *transmitQueue, transmitCV chan struct{}, logger *zap.Logger) (*subscriber, error) {
 	resultC, err := logCL.Subscribe(ctx, logStreamID, begin, end)
 	if err != nil {
 		return nil, err
 	}
 	s := &subscriber{
-		logStreamID: logStreamID,
-		logCL:       logCL,
-		resultC:     resultC,
-		queue:       list.New(),
-		transmitCV:  transmitCV,
-		logger:      logger.Named("subscriber").With(zap.Uint32("lsid", uint32(logStreamID))),
+		logStreamID:   logStreamID,
+		storageNodeID: storageNodeID,
+		logCL:         logCL,
+		resultC:       resultC,
+		transmitQ:     transmitQ,
+		transmitCV:    transmitCV,
+		done:          make(chan struct{}),
+		logger:        logger.Named("subscriber").With(zap.Uint32("lsid", uint32(logStreamID))),
 	}
+	s.lastSubscribeAt.Store(time.Now())
 	s.closed.Store(false)
+	s.complete.Store(false)
 	return s, nil
+}
+
+func (s *subscriber) stop() {
+	close(s.done)
+	s.closed.Store(true)
 }
 
 func (s *subscriber) subscribe(ctx context.Context) {
 	defer func() {
+		s.logCL.Close()
 		s.closed.Store(true)
-		s.transmitCV <- transmitSignal{glsn: types.InvalidGLSN, closed: true}
 	}()
 	for {
 		select {
+		case <-s.done:
+			return
 		case <-ctx.Done():
 			return
 		case res, ok := <-s.resultC:
-			// NOTE: ErrUndecidable is ignored since it is neither sign of connection
-			// failure nor a miss of logs.
-			if !ok || res.Error == io.EOF || errors.Is(res.Error, verrors.ErrUndecidable) {
+			r := transmitResult{
+				storageNodeID: s.storageNodeID,
+				logStreamID:   s.logStreamID,
+			}
+
+			if ok {
+				r.result = res
+			} else {
+				r.result = logc.InvalidSubscribeResult
+			}
+
+			needExit := r.result.Error != nil
+
+			if res.GLSN != types.InvalidGLSN {
+				s.lastSubscribeAt.Store(time.Now())
+			} else if res.Error == io.EOF || errors.Is(res.Error, verrors.ErrTrimmed) {
+				s.complete.Store(true)
+			}
+
+			s.transmitQ.Push(r)
+			select {
+			case s.transmitCV <- struct{}{}:
+			default:
+			}
+
+			if needExit {
 				return
 			}
-			glsn := res.GLSN
-			s.muQueue.Lock()
-			s.queue.PushBack(res)
-			s.muQueue.Unlock()
-			s.transmitCV <- transmitSignal{glsn: glsn, closed: false}
 		}
 	}
 }
 
-func (s *subscriber) front() (logc.SubscribeResult, bool) {
-	s.muQueue.RLock()
-	defer s.muQueue.RUnlock()
-	front := s.queue.Front()
-	if front == nil {
-		return logc.InvalidSubscribeResult, false
-	}
-	return front.Value.(logc.SubscribeResult), true
-}
-
-func (s *subscriber) popFront() logc.SubscribeResult {
-	s.muQueue.Lock()
-	defer s.muQueue.Unlock()
-	front := s.queue.Front()
-	if front == nil {
-		s.logger.Panic("empty queue")
-	}
-	return s.queue.Remove(front).(logc.SubscribeResult)
+func (s *subscriber) getLastSubscribeAt() time.Time {
+	return s.lastSubscribeAt.Load().(time.Time)
 }
 
 type transmitter struct {
-	subscribers map[types.LogStreamID]*subscriber
-	sleq        *subscribedLogEntriesQueue
-	wanted      types.GLSN
-	end         types.GLSN
-	transmitCV  <-chan transmitSignal
-	logger      *zap.Logger
+	subscribers       map[types.LogStreamID]*subscriber
+	refresher         MetadataRefresher
+	replicasRetriever ReplicasRetriever
+	sleq              *subscribedLogEntriesQueue
+	wanted            types.GLSN
+	end               types.GLSN
+
+	transmitQ  *transmitQueue
+	transmitCV chan struct{}
+
+	timeout time.Duration
+	timer   *time.Timer
+
+	logCLManager logc.LogClientManager
+	runner       *runner.Runner
+	logger       *zap.Logger
 }
 
 func (p *transmitter) transmit(ctx context.Context) {
-	defer p.sleq.close()
+	defer func() {
+		p.sleq.close()
+		p.runner.Stop()
+	}()
+
+	p.timer = time.NewTimer(p.timeout)
+	defer p.timer.Stop()
 
 	for {
 		select {
@@ -182,65 +279,149 @@ func (p *transmitter) transmit(ctx context.Context) {
 			p.logger.Debug("transmit error result", zap.Reflect("res", res))
 			p.sleq.pushBack(res)
 			return
-		case signal := <-p.transmitCV:
-			if !signal.closed && signal.glsn != p.wanted {
-				continue
-			}
-			if repeat := p.transmitLoop(); !repeat {
+		case <-p.transmitCV:
+			if repeat := p.transmitLoop(ctx); !repeat {
 				return
 			}
+		case <-p.timer.C:
+			p.handleTimeout(ctx)
+			p.timer.Reset(p.timeout)
 		}
 	}
 }
 
-func (p *transmitter) transmitLoop() bool {
+func (p *transmitter) refreshSubscriber(ctx context.Context) error {
+	p.refresher.Refresh(ctx)
+	replicasMap := p.replicasRetriever.All()
+
+	for logStreamID, replicas := range replicasMap {
+		idx := 0
+		if s, ok := p.subscribers[logStreamID]; ok {
+			if !s.closed.Load() || s.complete.Load() {
+				continue
+			}
+		SELECT_REPLICA:
+			for i, r := range replicas {
+				if r.StorageNodeID == s.storageNodeID {
+					idx = (i + 1) % len(replicas)
+					break SELECT_REPLICA
+				}
+			}
+		}
+
+		var s *subscriber
+		var err error
+	CONNECT:
+		for i := 0; i < len(replicas); i++ {
+			idx = (idx + i) % len(replicas)
+			snid := replicas[idx].GetStorageNodeID()
+			addr := replicas[idx].GetAddress()
+
+			logCL, err := p.logCLManager.GetOrConnect(ctx, snid, addr)
+			if err != nil {
+				continue CONNECT
+			}
+
+			s, err = newSubscriber(ctx, logStreamID, snid, logCL, p.wanted, p.end, p.transmitQ, p.transmitCV, p.logger)
+			if err != nil {
+				logCL.Close()
+				continue CONNECT
+			}
+
+			break CONNECT
+		}
+
+		if s != nil {
+			p.subscribers[logStreamID] = s
+
+			if err = p.runner.RunC(ctx, s.subscribe); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *transmitter) handleTimeout(ctx context.Context) {
+	l := make([]*subscriber, 0, len(p.subscribers))
+	for _, s := range p.subscribers {
+		if !s.complete.Load() && !s.closed.Load() &&
+			time.Since(s.getLastSubscribeAt()) >= p.timeout {
+			l = append(l, s)
+		}
+	}
+
+	if len(l) != len(p.subscribers) {
+		for _, s := range l {
+			s.stop()
+		}
+	}
+
+	p.refreshSubscriber(ctx)
+}
+
+func (p *transmitter) handleError(r transmitResult) error {
+	s, ok := p.subscribers[r.logStreamID]
+	if !ok {
+		return nil
+	}
+
+	if s.storageNodeID == r.storageNodeID && !s.closed.Load() {
+		s.stop()
+	}
+
+	return r.result.Error
+}
+
+func (p *transmitter) handleResult(r transmitResult) error {
+	var err error
+
+	/* NOTE Ignore transmitResult with GLSN less than p.wanted.
+	They can be delivered by subscribers that have not yet closed.
+	*/
+	if r.result.GLSN == types.InvalidGLSN {
+		err = p.handleError(r)
+		if errors.Is(err, verrors.ErrTrimmed) {
+			p.sleq.pushBack(r.result)
+		}
+	} else if p.wanted == r.result.GLSN {
+		p.sleq.pushBack(r.result)
+		p.wanted++
+		p.timer.Reset(p.timeout)
+	}
+
+	return err
+}
+
+func (p *transmitter) transmitLoop(ctx context.Context) bool {
+	needRefresh := false
+
 	for {
-		exist, res, closedAll := p.checkTransmittable()
-		if !exist {
-			if closedAll {
-				p.logger.Debug("transmit completed: all subscribers are closed")
+		res, ok := p.transmitQ.Front()
+		if !ok {
+			break
+		}
+
+		if res.result.GLSN <= p.wanted {
+			res, _ := p.transmitQ.Pop()
+			err := p.handleResult(res)
+			if p.wanted == p.end ||
+				errors.Is(err, verrors.ErrTrimmed) {
 				return false
 			}
-			p.logger.Debug("there is no transmittable")
-			return true
-		}
 
-		ok := res.Error == nil
-		p.sleq.pushBack(res)
-		if ok {
-			p.wanted++
-		}
-		if !ok || p.wanted == p.end || closedAll {
-			p.logger.Debug("transmit completed", zap.Bool("ok", ok), zap.Any("wanted", p.wanted), zap.Any("end", p.end), zap.Bool("closedAll", closedAll))
-			return false
+			needRefresh = needRefresh || (err != nil && err != io.EOF)
+		} else {
+			break
 		}
 	}
-}
 
-func (p *transmitter) checkTransmittable() (pushable bool, result logc.SubscribeResult, closedAll bool) {
-	maybeHole := true
-	closedAll = true
-	for logStreamID, subscriber := range p.subscribers {
-		closedAll = closedAll && subscriber.closed.Load()
-		res, exist := subscriber.front()
-		if !exist {
-			p.logger.Debug("check subscriber: empty", zap.Uint32("lsid", uint32(logStreamID)))
-			maybeHole = false
-			continue
-		}
-		if p.sleq.pushable(res) {
-			p.logger.Debug("check subscriber: transmittable", zap.Uint32("lsid", uint32(logStreamID)), zap.Any("res", res))
-			res = subscriber.popFront()
-			return true, res, false
-		}
+	if needRefresh {
+		p.refreshSubscriber(ctx)
 	}
-	if maybeHole {
-		res := logc.InvalidSubscribeResult
-		res.Error = errors.New("missing log entry")
-		p.logger.Debug("check subscriber: transmittable (hole)", zap.Any("res", res))
-		return true, res, closedAll
-	}
-	return false, logc.InvalidSubscribeResult, closedAll
+
+	return true
 }
 
 type subscribedLogEntriesQueue struct {

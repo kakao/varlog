@@ -11,7 +11,6 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
-	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 // Varlog is a log interface with thread-safety. Many goroutines can share the same varlog object.
@@ -24,7 +23,7 @@ type Varlog interface {
 
 	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
 
-	Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts SubscribeOption) (SubscribeCloser, error)
+	Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error)
 
 	Trim(ctx context.Context, until types.GLSN, opts TrimOption) error
 }
@@ -33,7 +32,7 @@ type OnNext func(logEntry types.LogEntry, err error)
 
 type varlog struct {
 	clusterID         types.ClusterID
-	refresher         *metadataRefresher
+	refresher         MetadataRefresher
 	lsSelector        LogStreamSelector
 	replicasRetriever ReplicasRetriever
 	allowlist         Allowlist
@@ -110,7 +109,7 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 
 	// logcl manager
 	// TODO (jun): metadataRefresher should implement ClusterMetadataView
-	metadata := refresher.metadata.Load().(*varlogpb.MetadataDescriptor)
+	metadata := refresher.Metadata()
 
 	logCLManager, err := logc.NewLogClientManager(ctx, metadata, v.logger)
 	if err != nil {
@@ -138,8 +137,8 @@ func (v *varlog) Read(ctx context.Context, logStreamID types.LogStreamID, glsn t
 	return logEntry.Data, nil
 }
 
-func (v *varlog) Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts SubscribeOption) (SubscribeCloser, error) {
-	return v.subscribe(ctx, begin, end, onNextFunc, opts)
+func (v *varlog) Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error) {
+	return v.subscribe(ctx, begin, end, onNextFunc, opts...)
 }
 
 func (v *varlog) Trim(ctx context.Context, until types.GLSN, opts TrimOption) error {

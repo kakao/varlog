@@ -1,5 +1,7 @@
 package varlog
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/varlog -package varlog -destination metadata_refresher_mock.go . MetadataRefresher
+
 import (
 	"context"
 	"sync/atomic"
@@ -8,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
 	"github.com/kakao/varlog/pkg/util/runner"
@@ -16,6 +19,12 @@ import (
 
 type Renewable interface {
 	Renew(metadata *varlogpb.MetadataDescriptor)
+}
+
+type MetadataRefresher interface {
+	Refresh(context.Context)
+	Metadata() *varlogpb.MetadataDescriptor
+	Close() error
 }
 
 // metadataRefresher fetches metadata from the metadata repository nodes via mrconnector. It also
@@ -27,6 +36,7 @@ type metadataRefresher struct {
 	allowlist         RenewableAllowlist
 	replicasRetriever RenewableReplicasRetriever
 	refreshInterval   time.Duration
+	group             singleflight.Group
 	runner            *runner.Runner
 	cancel            context.CancelFunc
 	logger            *zap.Logger
@@ -91,36 +101,59 @@ func (mr *metadataRefresher) refresher(ctx context.Context) {
 }
 
 func (mr *metadataRefresher) refresh(ctx context.Context) error {
-	// TODO
-	// 1) Get MetadataDescriptor
-	// 2) Compare underlying metadata
-	// 3) Update allowlist, denylist, lsreplicas if the metadata is updated
+	_, err, _ := mr.group.Do("refresh", func() (interface{}, error) {
+		// TODO
+		// 1) Get MetadataDescriptor
+		// 2) Compare underlying metadata
+		// 3) Update allowlist, denylist, lsreplicas if the metadata is updated
 
-	// TODO (jun): Use ClusterMetadataView
-	client, err := mr.connector.Client()
-	if err != nil {
-		// TODO (jun): check if this is safe fix
-		return err
-	}
-	// TODO (jun): check if it needs retry? am I torching mr?
-	clusmeta, err := client.GetMetadata(ctx)
-	if err != nil {
-		return multierr.Append(err, client.Close())
-	}
-
-	/*
-		if clusmeta.Equal(mr.metadata.Load()) {
-			return nil
+		// TODO (jun): Use ClusterMetadataView
+		client, err := mr.connector.Client()
+		if err != nil {
+			// TODO (jun): check if this is safe fix
+			return nil, err
 		}
-	*/
+		// TODO (jun): check if it needs retry? am I torching mr?
+		clusmeta, err := client.GetMetadata(ctx)
+		if err != nil {
+			return nil, multierr.Append(err, client.Close())
+		}
 
-	// update metadata
-	mr.metadata.Store(clusmeta)
+		if clusmeta.GetAppliedIndex() == mr.getAppliedIndex() {
+			return nil, nil
+		}
 
-	// update allowlist
-	mr.allowlist.Renew(clusmeta)
+		// update metadata
+		mr.metadata.Store(clusmeta)
 
-	// update replicasRetriever
-	mr.replicasRetriever.Renew(clusmeta)
-	return nil
+		// update allowlist
+		mr.allowlist.Renew(clusmeta)
+
+		// update replicasRetriever
+		mr.replicasRetriever.Renew(clusmeta)
+		return nil, nil
+	})
+	return err
+}
+
+func (mr *metadataRefresher) getAppliedIndex() uint64 {
+	f := mr.metadata.Load()
+	if f == nil {
+		return 0
+	}
+	return f.(*varlogpb.MetadataDescriptor).GetAppliedIndex()
+}
+
+// TODO:: compare appliedIndex of metadata
+func (mr *metadataRefresher) Refresh(ctx context.Context) {
+	mr.refresh(ctx)
+}
+
+func (mr *metadataRefresher) Metadata() *varlogpb.MetadataDescriptor {
+	f := mr.metadata.Load()
+	if f == nil {
+		return nil
+	}
+
+	return f.(*varlogpb.MetadataDescriptor)
 }
