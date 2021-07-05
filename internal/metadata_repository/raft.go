@@ -915,7 +915,7 @@ func (rc *raftNode) recoverMembership(snapshot raftpb.Snapshot) {
 	rc.transport.RemoveAllPeers()
 	rc.membership.removeAllMembers()
 
-	for nodeID, peer := range stateMachine.Peers {
+	for nodeID, peer := range stateMachine.PeersMap.Peers {
 		if peer == nil {
 			continue
 		}

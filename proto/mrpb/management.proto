@@ -77,6 +77,11 @@ message ClusterInfo {
     map<uint64, Member> members = 5
         [(gogoproto.castkey) =
              "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
+
+    // applied_index is the AppliedIndex of RAFT that is updated by changing
+    // configuration of members. For example, AddPeer and RemovePeer result in
+    // increasing applied_index.
+    uint64 applied_index = 6;
 }
 
 message GetClusterInfoResponse {

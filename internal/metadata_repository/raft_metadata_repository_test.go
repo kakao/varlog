@@ -264,7 +264,7 @@ func (clus *metadataRepoCluster) getMembersFromSnapshot(idx int) map[types.NodeI
 	}
 
 	members := make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
-	for nodeID, peer := range stateMachine.Peers {
+	for nodeID, peer := range stateMachine.PeersMap.Peers {
 		if !peer.IsLearner {
 			members[nodeID] = peer
 		}
@@ -1495,6 +1495,10 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			So(clus.appendMetadataRepo(), ShouldBeNil)
 			So(clus.start(newNode), ShouldBeNil)
 
+			info, err := clus.nodes[0].GetClusterInfo(context.Background(), types.ClusterID(0))
+			So(err, ShouldBeNil)
+			appliedIdx := info.AppliedIndex
+
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
 			defer cancel()
 
@@ -1502,6 +1506,10 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 				types.ClusterID(0),
 				clus.nodes[newNode].nodeID,
 				clus.peers[newNode]), ShouldBeNil)
+
+			info, err = clus.nodes[0].GetClusterInfo(context.Background(), types.ClusterID(0))
+			So(err, ShouldBeNil)
+			So(info.AppliedIndex, ShouldBeGreaterThan, appliedIdx)
 
 			Convey("Then new node should be member", func(ctx C) {
 				So(testutil.CompareWaitN(200, func() bool {
@@ -1548,6 +1556,10 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 				So(len(cinfo.Members), ShouldBeLessThan, nrNode)
 
 				Convey("After join, it should have member info", func(ctx C) {
+					info, err := clus.nodes[0].GetClusterInfo(context.Background(), types.ClusterID(0))
+					So(err, ShouldBeNil)
+					appliedIdx := info.AppliedIndex
+
 					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
 					defer cancel()
 
@@ -1555,6 +1567,10 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 						types.ClusterID(0),
 						clus.nodes[newNode].nodeID,
 						clus.peers[newNode]), ShouldBeNil)
+
+					info, err = clus.nodes[0].GetClusterInfo(context.Background(), types.ClusterID(0))
+					So(err, ShouldBeNil)
+					So(info.AppliedIndex, ShouldBeGreaterThan, appliedIdx)
 
 					So(testutil.CompareWaitN(200, func() bool {
 						return clus.nodes[newNode].IsMember()
@@ -1610,6 +1626,10 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 
 			clus.stop(leaveNode)
 
+			info, err := clus.nodes[checkNode].GetClusterInfo(context.Background(), types.ClusterID(0))
+			So(err, ShouldBeNil)
+			appliedIdx := info.AppliedIndex
+
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
@@ -1621,6 +1641,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 				cinfo, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 				So(err, ShouldBeNil)
 				So(len(cinfo.Members), ShouldEqual, nrNode-1)
+				So(cinfo.AppliedIndex, ShouldBeGreaterThan, appliedIdx)
 			})
 		})
 
@@ -1635,6 +1656,10 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 
 			clus.stop(leaveNode)
 
+			info, err := clus.nodes[checkNode].GetClusterInfo(context.Background(), types.ClusterID(0))
+			So(err, ShouldBeNil)
+			appliedIdx := info.AppliedIndex
+
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
@@ -1646,6 +1671,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 				cinfo, err := clus.nodes[checkNode].GetClusterInfo(context.TODO(), 0)
 				So(err, ShouldBeNil)
 				So(len(cinfo.Members), ShouldEqual, nrNode-1)
+				So(cinfo.AppliedIndex, ShouldBeGreaterThan, appliedIdx)
 			})
 		})
 	})
@@ -2224,6 +2250,13 @@ func TestMRScaleOutJoin(t *testing.T) {
 
 		Convey("When new node join", func(ctx C) {
 			for i := 0; i < 5; i++ {
+				info, err := clus.nodes[0].GetClusterInfo(
+					context.Background(),
+					types.ClusterID(0),
+				)
+				So(err, ShouldBeNil)
+				prevAppliedIndex := info.AppliedIndex
+
 				newNode := nrNode
 				So(clus.appendMetadataRepo(), ShouldBeNil)
 				So(clus.start(newNode), ShouldBeNil)
@@ -2236,6 +2269,13 @@ func TestMRScaleOutJoin(t *testing.T) {
 					clus.nodes[newNode].nodeID,
 					clus.peers[newNode]), ShouldBeNil)
 				nrNode += 1
+
+				info, err = clus.nodes[0].GetClusterInfo(
+					context.Background(),
+					types.ClusterID(0),
+				)
+				So(err, ShouldBeNil)
+				So(info.AppliedIndex, ShouldBeGreaterThan, prevAppliedIndex)
 
 				So(testutil.CompareWaitN(100, func() bool {
 					return clus.nodes[newNode].IsMember()
@@ -2360,7 +2400,8 @@ func TestMRFailoverRecoverFromStateMachineLog(t *testing.T) {
 			sm.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 			sm.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
 
-			sm.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+			sm.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
+			sm.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 			sm.Endpoints = make(map[types.NodeID]string)
 
 			snIDs := make([]types.StorageNodeID, 2)

@@ -15,6 +15,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/container/set"
+	"github.daumkakao.com/varlog/varlog/pkg/util/mathutil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -53,11 +54,11 @@ type Membership interface {
 
 	Leader() types.NodeID
 
-	AddPeer(types.NodeID, string, bool, *raftpb.ConfState) error
+	AddPeer(types.NodeID, string, bool, *raftpb.ConfState, uint64) error
 
-	RemovePeer(types.NodeID, *raftpb.ConfState) error
+	RemovePeer(types.NodeID, *raftpb.ConfState, uint64) error
 
-	GetPeers() map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor
+	GetPeers() *mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap
 
 	IsMember(types.NodeID) bool
 
@@ -145,8 +146,11 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger
 	ms.diffStateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 	ms.diffStateMachine.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
 
-	ms.origStateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
-	ms.diffStateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+	ms.origStateMachine.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
+	ms.diffStateMachine.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
+
+	ms.origStateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+	ms.diffStateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 
 	ms.origStateMachine.Endpoints = make(map[types.NodeID]string)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
@@ -677,7 +681,7 @@ func (ms *MetadataStorage) Clear() {
 	atomic.StoreUint64(&ms.leader, raft.None)
 }
 
-func (ms *MetadataStorage) AddPeer(nodeID types.NodeID, url string, isLearner bool, cs *raftpb.ConfState) error {
+func (ms *MetadataStorage) AddPeer(nodeID types.NodeID, url string, isLearner bool, cs *raftpb.ConfState, appliedIndex uint64) error {
 	ms.prMu.Lock()
 	defer ms.prMu.Unlock()
 
@@ -689,17 +693,18 @@ func (ms *MetadataStorage) AddPeer(nodeID types.NodeID, url string, isLearner bo
 		IsLearner: isLearner,
 	}
 
-	if exist, ok := cur.Peers[nodeID]; ok {
+	if exist, ok := cur.PeersMap.Peers[nodeID]; ok {
 		if exist != nil && !exist.IsLearner {
 			return nil
 		}
 	}
-	cur.Peers[nodeID] = peer
+	cur.PeersMap.Peers[nodeID] = peer
+	cur.PeersMap.AppliedIndex = appliedIndex
 
 	return nil
 }
 
-func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID, cs *raftpb.ConfState) error {
+func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID, cs *raftpb.ConfState, appliedIndex uint64) error {
 	ms.prMu.Lock()
 	defer ms.prMu.Unlock()
 
@@ -707,35 +712,40 @@ func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID, cs *raftpb.ConfState)
 	_, cur := ms.getStateMachine()
 
 	if cur == ms.origStateMachine {
-		delete(cur.Peers, nodeID)
+		delete(cur.PeersMap.Peers, nodeID)
 		delete(cur.Endpoints, nodeID)
+		cur.PeersMap.AppliedIndex = appliedIndex
 	} else {
-		cur.Peers[nodeID] = nil
+		cur.PeersMap.Peers[nodeID] = nil
 		cur.Endpoints[nodeID] = ""
+		cur.PeersMap.AppliedIndex = appliedIndex
 	}
 
 	return nil
 }
 
-func (ms *MetadataStorage) GetPeers() map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor {
-	peers := make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+func (ms *MetadataStorage) GetPeers() *mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap {
+	peerMap := &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{
+		Peers: make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor),
+	}
 
 	ms.prMu.RLock()
 	defer ms.prMu.RUnlock()
 
-	for nodeID, peer := range ms.origStateMachine.Peers {
-		peers[nodeID] = peer
+	for nodeID, peer := range ms.origStateMachine.PeersMap.Peers {
+		peerMap.Peers[nodeID] = peer
 	}
 
-	for nodeID, peer := range ms.diffStateMachine.Peers {
+	for nodeID, peer := range ms.diffStateMachine.PeersMap.Peers {
 		if peer != nil {
-			peers[nodeID] = peer
+			peerMap.Peers[nodeID] = peer
 		} else {
-			delete(peers, nodeID)
+			delete(peerMap.Peers, nodeID)
 		}
 	}
+	peerMap.AppliedIndex = mathutil.MaxUint64(ms.origStateMachine.PeersMap.AppliedIndex, ms.diffStateMachine.PeersMap.AppliedIndex)
 
-	return peers
+	return peerMap
 }
 
 func (ms *MetadataStorage) IsMember(nodeID types.NodeID) bool {
@@ -744,7 +754,7 @@ func (ms *MetadataStorage) IsMember(nodeID types.NodeID) bool {
 
 	pre, cur := ms.getStateMachine()
 
-	if peer, ok := cur.Peers[nodeID]; ok {
+	if peer, ok := cur.PeersMap.Peers[nodeID]; ok {
 		if peer == nil {
 			return false
 		}
@@ -752,7 +762,7 @@ func (ms *MetadataStorage) IsMember(nodeID types.NodeID) bool {
 	}
 
 	if pre != cur {
-		if peer, ok := pre.Peers[nodeID]; ok {
+		if peer, ok := pre.PeersMap.Peers[nodeID]; ok {
 			return !peer.IsLearner
 		}
 	}
@@ -766,7 +776,7 @@ func (ms *MetadataStorage) IsLearner(nodeID types.NodeID) bool {
 
 	pre, cur := ms.getStateMachine()
 
-	if peer, ok := cur.Peers[nodeID]; ok {
+	if peer, ok := cur.PeersMap.Peers[nodeID]; ok {
 		if peer == nil {
 			return false
 		}
@@ -774,7 +784,7 @@ func (ms *MetadataStorage) IsLearner(nodeID types.NodeID) bool {
 	}
 
 	if pre != cur {
-		if peer, ok := pre.Peers[nodeID]; ok {
+		if peer, ok := pre.PeersMap.Peers[nodeID]; ok {
 			return peer.IsLearner
 		}
 	}
@@ -1163,8 +1173,11 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 		stateMachine.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
 	}
 
-	if stateMachine.Peers == nil {
-		stateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+	if stateMachine.PeersMap == nil {
+		stateMachine.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
+	}
+	if stateMachine.PeersMap.Peers == nil {
+		stateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	}
 
 	if stateMachine.Endpoints == nil {
@@ -1214,7 +1227,7 @@ func (ms *MetadataStorage) RecoverStateMachine(stateMachine *mrpb.MetadataReposi
 	ms.mergePeers()
 
 	stateMachine.Endpoints = ms.origStateMachine.Endpoints
-	stateMachine.Peers = ms.origStateMachine.Peers
+	stateMachine.PeersMap = ms.origStateMachine.PeersMap
 
 	ms.recoverLogStreams(stateMachine)
 	ms.recoverCache(stateMachine, appliedIndex)
@@ -1282,7 +1295,8 @@ func (ms *MetadataStorage) recoverStateMachine(stateMachine *mrpb.MetadataReposi
 	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
 	ms.diffStateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 	ms.diffStateMachine.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
-	ms.diffStateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+	ms.diffStateMachine.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
+	ms.diffStateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
 
 	ms.metaAppliedIndex = appliedIndex
@@ -1513,11 +1527,11 @@ func (ms *MetadataStorage) mergePeers() {
 	ms.prMu.Lock()
 	defer ms.prMu.Unlock()
 
-	for nodeID, peer := range ms.diffStateMachine.Peers {
+	for nodeID, peer := range ms.diffStateMachine.PeersMap.Peers {
 		if peer == nil {
-			delete(ms.origStateMachine.Peers, nodeID)
+			delete(ms.origStateMachine.PeersMap.Peers, nodeID)
 		} else {
-			ms.origStateMachine.Peers[nodeID] = peer
+			ms.origStateMachine.PeersMap.Peers[nodeID] = peer
 		}
 	}
 
@@ -1529,7 +1543,8 @@ func (ms *MetadataStorage) mergePeers() {
 		}
 	}
 
-	ms.diffStateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+	ms.diffStateMachine.PeersMap.AppliedIndex = 0
+	ms.diffStateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
 }
 
