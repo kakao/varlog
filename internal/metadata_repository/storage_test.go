@@ -1650,8 +1650,10 @@ func TestStorageRecoverStateMachine(t *testing.T) {
 			ms.UpdateAppliedIndex(appliedIndex)
 		}
 
-		err := ms.AddPeer(types.NodeID(0), "test", false, &raftpb.ConfState{})
+		appliedIndex++
+		err := ms.AddPeer(types.NodeID(0), "test", false, &raftpb.ConfState{}, appliedIndex)
 		So(err, ShouldBeNil)
+		ms.UpdateAppliedIndex(appliedIndex)
 
 		err = ms.RegisterEndpoint(types.NodeID(0), "test", 0, 0)
 		So(err, ShouldBeNil)
@@ -1670,7 +1672,8 @@ func TestStorageRecoverStateMachine(t *testing.T) {
 			stateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 			stateMachine.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
 
-			stateMachine.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
+			stateMachine.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
+			stateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 			stateMachine.Endpoints = make(map[types.NodeID]string)
 
 			newAppliedIndex := uint64(1)

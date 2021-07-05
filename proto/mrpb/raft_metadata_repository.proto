@@ -62,11 +62,19 @@ message MetadataRepositoryDescriptor {
         bool is_learner = 2;
     }
 
+    message PeerDescriptorMap {
+        map<uint64, PeerDescriptor> peers = 1
+            [(gogoproto.castkey) =
+                 "github.com/kakao/varlog/pkg/types.NodeID"];
+        // applied_index is the AppliedIndex of RAFT that is updated by changing
+        // configuration of members. For example, AddPeer and RemovePeer result
+        // in increasing applied_index.
+        uint64 applied_index = 2;
+    }
+
     varlogpb.MetadataDescriptor metadata = 1 [(gogoproto.nullable) = true];
     LogStreamDescriptor log_stream = 2 [(gogoproto.nullable) = true];
-    map<uint64, PeerDescriptor> peers = 3
-        [(gogoproto.castkey) =
-             "github.com/kakao/varlog/pkg/types.NodeID"];
+    PeerDescriptorMap peers_map = 3;
     map<uint64, string> endpoints = 4
         [(gogoproto.castkey) =
              "github.com/kakao/varlog/pkg/types.NodeID"];

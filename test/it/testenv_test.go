@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/kakao/varlog/pkg/mrc"
 )
 
 func TestVarlogRegisterStorageNode(t *testing.T) {
@@ -19,6 +20,20 @@ func TestVarlogRegisterStorageNode(t *testing.T) {
 	mr := env.GetMR(t)
 	meta, err := mr.GetMetadata(context.TODO())
 	require.NoError(t, err)
+
+	info, err := mr.GetClusterInfo(context.TODO(), env.ClusterID())
+	require.NoError(t, err)
+	require.Contains(t, info.GetMembers(), env.MetadataRepositoryIDAtIndex(t, 0))
+
+	mcl, err := mrc.NewMetadataRepositoryManagementClient(context.Background(), env.MRRPCEndpointAtIndex(t, 0))
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, mcl.Close())
+	}()
+	rsp, err := mcl.GetClusterInfo(context.Background(), env.ClusterID())
+	require.NoError(t, err)
+	require.Equal(t, rsp.GetClusterInfo().GetLeader(), env.MetadataRepositoryIDAtIndex(t, 0))
+	require.Contains(t, rsp.GetClusterInfo().GetMembers(), env.MetadataRepositoryIDAtIndex(t, 0))
 
 	require.Len(t, meta.GetStorageNodes(), 1)
 	require.Len(t, meta.GetLogStreams(), 1)

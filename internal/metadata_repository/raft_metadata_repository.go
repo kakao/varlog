@@ -597,9 +597,9 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 		case *mrpb.Unseal:
 			mr.applyUnseal(r, e.NodeIndex, e.RequestIndex)
 		case *mrpb.AddPeer:
-			mr.applyAddPeer(r, c.confState)
+			mr.applyAddPeer(r, c.confState, e.AppliedIndex)
 		case *mrpb.RemovePeer:
-			mr.applyRemovePeer(r, c.confState)
+			mr.applyRemovePeer(r, c.confState, e.AppliedIndex)
 		case *mrpb.Endpoint:
 			mr.applyEndpoint(r, e.NodeIndex, e.RequestIndex)
 		case *mrpb.RecoverStateMachine:
@@ -901,8 +901,8 @@ func (mr *RaftMetadataRepository) applyUnseal(r *mrpb.Unseal, nodeIndex, request
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyAddPeer(r *mrpb.AddPeer, cs *raftpb.ConfState) error {
-	err := mr.storage.AddPeer(r.NodeID, r.Url, r.IsLearner, cs)
+func (mr *RaftMetadataRepository) applyAddPeer(r *mrpb.AddPeer, cs *raftpb.ConfState, appliedIndex uint64) error {
+	err := mr.storage.AddPeer(r.NodeID, r.Url, r.IsLearner, cs, appliedIndex)
 	if err != nil {
 		return err
 	}
@@ -910,8 +910,8 @@ func (mr *RaftMetadataRepository) applyAddPeer(r *mrpb.AddPeer, cs *raftpb.ConfS
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyRemovePeer(r *mrpb.RemovePeer, cs *raftpb.ConfState) error {
-	err := mr.storage.RemovePeer(r.NodeID, cs)
+func (mr *RaftMetadataRepository) applyRemovePeer(r *mrpb.RemovePeer, cs *raftpb.ConfState, appliedIndex uint64) error {
+	err := mr.storage.RemovePeer(r.NodeID, cs, appliedIndex)
 	if err != nil {
 		return err
 	}
@@ -1305,19 +1305,20 @@ func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID 
 		return nil, verrors.ErrNotMember
 	}
 
-	member := mr.membership.GetPeers()
+	peerMap := mr.membership.GetPeers()
 
 	clusterInfo := &mrpb.ClusterInfo{
 		ClusterID:         mr.options.ClusterID,
 		NodeID:            mr.nodeID,
 		Leader:            mr.membership.Leader(),
 		ReplicationFactor: int32(mr.nrReplica),
+		AppliedIndex:      peerMap.AppliedIndex,
 	}
 
-	if len(member) > 0 {
+	if len(peerMap.Peers) > 0 {
 		clusterInfo.Members = make(map[types.NodeID]*mrpb.ClusterInfo_Member)
 
-		for nodeID, peer := range member {
+		for nodeID, peer := range peerMap.Peers {
 			member := &mrpb.ClusterInfo_Member{
 				Peer:     peer.URL,
 				Endpoint: mr.storage.LookupEndpoint(nodeID),
