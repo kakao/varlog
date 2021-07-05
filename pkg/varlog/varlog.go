@@ -67,11 +67,12 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	defer cancel()
 
 	// mr connector
-	connector, err := mrconnector.New(ctx, mrAddrs,
+	connector, err := mrconnector.New(ctx,
 		mrconnector.WithClusterID(clusterID),
 		mrconnector.WithLogger(v.opts.logger),
 		mrconnector.WithConnectTimeout(v.opts.mrConnectorConnTimeout),
 		mrconnector.WithRPCTimeout(v.opts.mrConnectorCallTimeout),
+		mrconnector.WithSeed(mrAddrs),
 	)
 	if err != nil {
 		return nil, err
