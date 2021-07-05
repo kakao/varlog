@@ -163,6 +163,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 }
 
 func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
+	t.Skip()
 	Convey("Given MR cluster", t, func(ctx C) {
 		vmsOpts := it.NewTestVMSOptions()
 		env := it.NewVarlogCluster(t,

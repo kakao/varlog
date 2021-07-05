@@ -109,9 +109,10 @@ func TestMRConnector(t *testing.T) {
 		}
 
 		Convey("When Connector is created", func() {
-			mrConn, err := mrconnector.New(context.TODO(), env.MRRPCEndpoints(),
+			mrConn, err := mrconnector.New(context.TODO(),
+				mrconnector.WithSeed(env.MRRPCEndpoints()),
 				mrconnector.WithClusterID(env.ClusterID()),
-				mrconnector.WithRPCAddrsFetchInterval(clusterInfoFetchInterval),
+				mrconnector.WithUpdateInterval(clusterInfoFetchInterval),
 				mrconnector.WithLogger(zap.L()),
 			)
 			So(err, ShouldBeNil)

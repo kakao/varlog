@@ -18,7 +18,7 @@ type mrProxy struct {
 	mcl          mrc.MetadataRepositoryManagementClient
 	nodeID       types.NodeID
 	disconnected atomicutil.AtomicBool
-	c            *connector
+	c            *connectorImpl
 	once         sync.Once
 	// TODO: Use singleflight in case of getter rpc
 }

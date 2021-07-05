@@ -110,9 +110,10 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrOpts MRManag
 
 	opts := []mrconnector.Option{
 		mrconnector.WithClusterID(clusterID),
-		mrconnector.WithRPCAddrsInitialFetchRetryInterval(RPCAddrsFetchRetryInterval),
+		mrconnector.WithInitRetryInterval(RPCAddrsFetchRetryInterval),
 		mrconnector.WithConnectTimeout(mrOpts.ConnTimeout),
 		mrconnector.WithRPCTimeout(mrOpts.CallTimeout),
+		mrconnector.WithSeed(mrOpts.MetadataRepositoryAddresses),
 		mrconnector.WithLogger(logger),
 	}
 	tryCnt := mrOpts.InitialMRConnRetryCount + 1
@@ -125,7 +126,7 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrOpts MRManag
 		connector mrconnector.Connector
 	)
 	for i := 0; i < tryCnt; i++ {
-		connector, err = mrconnector.New(ctx, mrOpts.MetadataRepositoryAddresses, opts...)
+		connector, err = mrconnector.New(ctx, opts...)
 		if err != nil {
 			time.Sleep(mrOpts.InitialMRConnRetryBackoff)
 			continue
@@ -309,7 +310,7 @@ func (mrm *mrManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, er
 	defer mrm.mu.Unlock()
 
 	cli, err := mrm.mc()
-	if cli == nil {
+	if err != nil {
 		return nil, errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
