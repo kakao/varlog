@@ -146,9 +146,6 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger
 	ms.diffStateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 	ms.diffStateMachine.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
 
-	ms.origStateMachine.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
-	ms.diffStateMachine.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
-
 	ms.origStateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	ms.diffStateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 
@@ -714,12 +711,11 @@ func (ms *MetadataStorage) RemovePeer(nodeID types.NodeID, cs *raftpb.ConfState,
 	if cur == ms.origStateMachine {
 		delete(cur.PeersMap.Peers, nodeID)
 		delete(cur.Endpoints, nodeID)
-		cur.PeersMap.AppliedIndex = appliedIndex
 	} else {
 		cur.PeersMap.Peers[nodeID] = nil
 		cur.Endpoints[nodeID] = ""
-		cur.PeersMap.AppliedIndex = appliedIndex
 	}
+	cur.PeersMap.AppliedIndex = appliedIndex
 
 	return nil
 }
@@ -743,7 +739,10 @@ func (ms *MetadataStorage) GetPeers() *mrpb.MetadataRepositoryDescriptor_PeerDes
 			delete(peerMap.Peers, nodeID)
 		}
 	}
-	peerMap.AppliedIndex = mathutil.MaxUint64(ms.origStateMachine.PeersMap.AppliedIndex, ms.diffStateMachine.PeersMap.AppliedIndex)
+	peerMap.AppliedIndex = mathutil.MaxUint64(
+		ms.origStateMachine.PeersMap.AppliedIndex,
+		ms.diffStateMachine.PeersMap.AppliedIndex,
+	)
 
 	return peerMap
 }
@@ -1173,9 +1172,6 @@ func (ms *MetadataStorage) ApplySnapshot(snap []byte, snapConfState *raftpb.Conf
 		stateMachine.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
 	}
 
-	if stateMachine.PeersMap == nil {
-		stateMachine.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
-	}
 	if stateMachine.PeersMap.Peers == nil {
 		stateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	}
@@ -1295,7 +1291,6 @@ func (ms *MetadataStorage) recoverStateMachine(stateMachine *mrpb.MetadataReposi
 	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
 	ms.diffStateMachine.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 	ms.diffStateMachine.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
-	ms.diffStateMachine.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
 	ms.diffStateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 	ms.diffStateMachine.Endpoints = make(map[types.NodeID]string)
 
@@ -1542,6 +1537,11 @@ func (ms *MetadataStorage) mergePeers() {
 			ms.origStateMachine.Endpoints[nodeID] = url
 		}
 	}
+
+	ms.origStateMachine.PeersMap.AppliedIndex = mathutil.MaxUint64(
+		ms.origStateMachine.PeersMap.AppliedIndex,
+		ms.diffStateMachine.PeersMap.AppliedIndex,
+	)
 
 	ms.diffStateMachine.PeersMap.AppliedIndex = 0
 	ms.diffStateMachine.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)

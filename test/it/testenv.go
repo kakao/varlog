@@ -256,6 +256,16 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal, re
 	t.Logf("MetadataRepository was created: idx=%d, nid=%v", idx, nodeID)
 }
 
+func (clus *VarlogCluster) NewMRClient(t *testing.T, idx int) {
+	clus.muMR.Lock()
+	defer clus.muMR.Unlock()
+
+	require.NotContains(t, clus.mrCLs, idx)
+	require.NotContains(t, clus.mrMCLs, idx)
+
+	clus.newMRClient(t, idx)
+}
+
 func (clus *VarlogCluster) AppendMR(t *testing.T) {
 	clus.muMR.Lock()
 	defer clus.muMR.Unlock()
@@ -983,15 +993,18 @@ func (clus *VarlogCluster) MetadataRepositoryIDs() []types.NodeID {
 	return ret
 }
 
-func (clus *VarlogCluster) MetadataRepositoryIDAtIndex(t *testing.T, idx int) types.NodeID {
+func (clus *VarlogCluster) MetadataRepositoryIDAt(t *testing.T, idx int) types.NodeID {
 	clus.muMR.Lock()
 	defer clus.muMR.Unlock()
+	return clus.metadataRepositoryIDAt(t, idx)
+}
 
+func (clus *VarlogCluster) metadataRepositoryIDAt(t *testing.T, idx int) types.NodeID {
 	require.Greater(t, len(clus.mrIDs), idx)
 	return clus.mrIDs[idx]
 }
 
-func (clus *VarlogCluster) MRClient(t *testing.T, idx int) mrc.MetadataRepositoryClient {
+func (clus *VarlogCluster) MRClientAt(t *testing.T, idx int) mrc.MetadataRepositoryClient {
 	clus.muMR.Lock()
 	defer clus.muMR.Unlock()
 
@@ -999,6 +1012,16 @@ func (clus *VarlogCluster) MRClient(t *testing.T, idx int) mrc.MetadataRepositor
 	id := clus.mrIDs[idx]
 	require.Contains(t, clus.mrCLs, id)
 	return clus.mrCLs[id]
+}
+
+func (clus *VarlogCluster) MRManagementClientAt(t *testing.T, idx int) mrc.MetadataRepositoryManagementClient {
+	clus.muMR.Lock()
+	defer clus.muMR.Unlock()
+
+	require.Greater(t, len(clus.mrIDs), idx)
+	id := clus.mrIDs[idx]
+	require.Contains(t, clus.mrMCLs, id)
+	return clus.mrMCLs[id]
 }
 
 func (clus *VarlogCluster) LookupMR(nodeID types.NodeID) (*metadata_repository.RaftMetadataRepository, bool) {
@@ -1149,6 +1172,22 @@ func (clus *VarlogCluster) LogStreamID(t *testing.T, idx int) types.LogStreamID 
 
 	require.Greater(t, len(clus.logStreamIDs), idx)
 	return clus.logStreamIDs[idx]
+}
+
+func (clus *VarlogCluster) CloseMRClientAt(t *testing.T, idx int) {
+	clus.muMR.Lock()
+	defer clus.muMR.Unlock()
+	clus.closeMRClientAt(t, idx)
+}
+
+func (clus *VarlogCluster) closeMRClientAt(t *testing.T, idx int) {
+	nodeID := clus.metadataRepositoryIDAt(t, idx)
+
+	require.Contains(t, clus.mrCLs, nodeID)
+	require.NoError(t, clus.mrCLs[nodeID].Close())
+
+	require.Contains(t, clus.mrMCLs, nodeID)
+	require.NoError(t, clus.mrMCLs[nodeID].Close())
 }
 
 func (clus *VarlogCluster) closeMRClients(t *testing.T) {
@@ -1456,12 +1495,11 @@ func (clus *VarlogCluster) WaitCommit(t *testing.T, lsID types.LogStreamID, high
 }
 
 func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
+	// FIXME: do not use vms.RELOAD_INTERVAL
 	require.Eventually(t, func() bool {
 		vmsMeta, err := clus.vmsServer.Metadata(context.Background())
-		require.NoError(t, err)
-
-		return vmsMeta.GetLogStream(lsID) != nil
-	}, vms.RELOAD_INTERVAL*2, 100*time.Millisecond)
+		return err == nil && vmsMeta.GetLogStream(lsID) != nil
+	}, vms.RELOAD_INTERVAL*10, 100*time.Millisecond)
 
 	require.Eventually(t, func() bool {
 		snMCLs := clus.StorageNodesManagementClients()

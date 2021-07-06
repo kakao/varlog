@@ -46,7 +46,7 @@ func TestClientAppendTo(t *testing.T) {
 	clus := it.NewVarlogCluster(t,
 		it.WithReplicationFactor(3),
 		it.WithNumberOfStorageNodes(3),
-		it.WithNumberOfLogStreams(3),
+		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
 		it.WithVMSOptions(it.NewTestVMSOptions()),
 	)
@@ -57,8 +57,7 @@ func TestClientAppendTo(t *testing.T) {
 	}()
 
 	// FIXME: remove this ugly code
-	lsIDs := clus.LogStreamIDs()
-	lsID := lsIDs[len(lsIDs)-1]
+	lsID := clus.LogStreamID(t, 0)
 	client := clus.ClientAtIndex(t, 0)
 
 	_, err := client.AppendTo(context.TODO(), lsID+1, []byte("foo"))

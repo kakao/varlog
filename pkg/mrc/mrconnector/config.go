@@ -57,6 +57,9 @@ func (c *config) validate() error {
 	if len(c.seed) < 1 {
 		return errors.Wrap(verrors.ErrInvalid, "mrconnector: no seed")
 	}
+	if c.logger == nil {
+		return errors.Wrap(verrors.ErrInvalid, "mrconnector: no logger")
+	}
 	return nil
 }
 

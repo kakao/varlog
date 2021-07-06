@@ -213,7 +213,7 @@ func TestSyncLogStream(t *testing.T) {
 
 				// test if victimSNID exists in the logstream and newSNID does not exist
 				// in the log stream
-				meta, err := env.MRClient(t, 0).GetMetadata(context.Background())
+				meta, err := env.MRClientAt(t, 0).GetMetadata(context.Background())
 				So(err, ShouldBeNil)
 				snidmap := make(map[types.StorageNodeID]bool)
 				for _, replica := range meta.GetLogStream(lsID).GetReplicas() {
@@ -227,7 +227,7 @@ func TestSyncLogStream(t *testing.T) {
 
 				// test if victimSNID does not exist in the logstream and newSNID exists
 				// in the log stream
-				meta, err = env.MRClient(t, 0).GetMetadata(context.Background())
+				meta, err = env.MRClientAt(t, 0).GetMetadata(context.Background())
 				So(err, ShouldBeNil)
 				snidmap = make(map[types.StorageNodeID]bool)
 				for _, replica := range meta.GetLogStream(lsID).GetReplicas() {
