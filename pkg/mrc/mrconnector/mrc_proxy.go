@@ -2,46 +2,37 @@ package mrconnector
 
 import (
 	"context"
-	"sync"
 
 	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type mrProxy struct {
-	cl           mrc.MetadataRepositoryClient
-	mcl          mrc.MetadataRepositoryManagementClient
-	nodeID       types.NodeID
-	disconnected atomicutil.AtomicBool
-	c            *connectorImpl
-	once         sync.Once
-	// TODO: Use singleflight in case of getter rpc
+	conn   *connectorImpl
+	nodeID types.NodeID
+	cl     mrc.MetadataRepositoryClient
+	mcl    mrc.MetadataRepositoryManagementClient
 }
 
 var _ mrc.MetadataRepositoryClient = (*mrProxy)(nil)
 var _ mrc.MetadataRepositoryManagementClient = (*mrProxy)(nil)
 
-func (m *mrProxy) Close() (err error) {
-	if m == nil {
-		// TODO (jun): It should return an error after stabilization.
-		panic("mrProxy is nil")
+func newMRProxy(connector *connectorImpl, nodeID types.NodeID, cl mrc.MetadataRepositoryClient, mcl mrc.MetadataRepositoryManagementClient) *mrProxy {
+	return &mrProxy{
+		conn:   connector,
+		nodeID: nodeID,
+		cl:     cl,
+		mcl:    mcl,
 	}
-	m.once.Do(func() {
-		m.disconnected.Store(true)
-		m.c.releaseMRProxy(m.nodeID)
-		if m.cl != nil {
-			err = multierr.Append(err, m.cl.Close())
-		}
-		if m.mcl != nil {
-			err = multierr.Append(err, m.mcl.Close())
-		}
-	})
-	return err
+}
+
+func (m *mrProxy) Close() (err error) {
+	_ = m.conn.casProxy(m, nil)
+	return multierr.Append(m.cl.Close(), m.mcl.Close())
 }
 
 func (m *mrProxy) RegisterStorageNode(ctx context.Context, descriptor *varlogpb.StorageNodeDescriptor) error {

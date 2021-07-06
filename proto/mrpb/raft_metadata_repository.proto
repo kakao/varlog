@@ -74,7 +74,7 @@ message MetadataRepositoryDescriptor {
 
     varlogpb.MetadataDescriptor metadata = 1 [(gogoproto.nullable) = true];
     LogStreamDescriptor log_stream = 2 [(gogoproto.nullable) = true];
-    PeerDescriptorMap peers_map = 3;
+    PeerDescriptorMap peers_map = 3 [(gogoproto.nullable) = false];
     map<uint64, string> endpoints = 4
         [(gogoproto.castkey) =
              "github.com/kakao/varlog/pkg/types.NodeID"];

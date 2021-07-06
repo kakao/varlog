@@ -108,7 +108,8 @@ func (mr *metadataRefresher) refresh(ctx context.Context) error {
 		// 3) Update allowlist, denylist, lsreplicas if the metadata is updated
 
 		// TODO (jun): Use ClusterMetadataView
-		client, err := mr.connector.Client()
+		// TODO: check whether ctx is usable or not
+		client, err := mr.connector.Client(ctx)
 		if err != nil {
 			// TODO (jun): check if this is safe fix
 			return nil, err

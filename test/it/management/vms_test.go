@@ -194,7 +194,7 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
-			err = mrm.AddPeer(rctx, env.MetadataRepositoryIDAtIndex(t, 1), env.MRPeerAtIndex(t, 1), env.MRRPCEndpointAtIndex(t, 1))
+			err = mrm.AddPeer(rctx, env.MetadataRepositoryIDAt(t, 1), env.MRPeerAtIndex(t, 1), env.MRRPCEndpointAtIndex(t, 1))
 			So(err, ShouldBeNil)
 
 			So(testutil.CompareWaitN(50, func() bool {
@@ -204,7 +204,7 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 			rctx, cancel = context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
 
-			err = mrm.RemovePeer(rctx, env.MetadataRepositoryIDAtIndex(t, 0))
+			err = mrm.RemovePeer(rctx, env.MetadataRepositoryIDAt(t, 0))
 			So(err, ShouldBeNil)
 
 			So(testutil.CompareWaitN(50, func() bool {

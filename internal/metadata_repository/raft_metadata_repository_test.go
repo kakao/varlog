@@ -2400,7 +2400,6 @@ func TestMRFailoverRecoverFromStateMachineLog(t *testing.T) {
 			sm.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
 			sm.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
 
-			sm.PeersMap = &mrpb.MetadataRepositoryDescriptor_PeerDescriptorMap{}
 			sm.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
 			sm.Endpoints = make(map[types.NodeID]string)
 

@@ -143,11 +143,13 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrOpts MRManag
 }
 
 func (mrm *mrManager) c() (mrc.MetadataRepositoryClient, error) {
-	return mrm.connector.Client()
+	// FIXME: use context
+	return mrm.connector.Client(context.TODO())
 }
 
 func (mrm *mrManager) mc() (mrc.MetadataRepositoryManagementClient, error) {
-	return mrm.connector.ManagementClient()
+	// FIXME: use context
+	return mrm.connector.ManagementClient(context.TODO())
 }
 
 func (mrm *mrManager) Close() error {
