@@ -49,19 +49,19 @@ spec:
             port: 14250
       dnsPolicy: ClusterFirst
       affinity:
-        podAffinity:
+        podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:
                 - key: app
-                  operator: NotIn
+                  operator: In
                   values:
                   - "varlog-mr"
                   - "varlog-sn"
                   - "varlog-vms"
                   - "prometheus"
                 - key: "component"
-                  operator: NotIn
+                  operator: In
                   values:
                   - "otel-collector"
             topologyKey: "kubernetes.io/hostname"

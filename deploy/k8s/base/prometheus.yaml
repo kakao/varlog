@@ -76,18 +76,19 @@ spec:
       - name: prometheus-storage-volume
         emptyDir: {}
       affinity:
-        podAffinity:
+        podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:
               - key: app
-                operator: NotIn
+                operator: In
                 values:
                 - "varlog-mr"
                 - "varlog-sn"
                 - "varlog-vms"
+                - "jaeger"
               - key: "component"
-                operator: NotIn
+                operator: In
                 values:
                 - "otel-collector"
             topologyKey: "kubernetes.io/hostname"

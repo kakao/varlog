@@ -158,12 +158,12 @@ spec:
             path: otel-collector-config.yaml
       dnsPolicy: ClusterFirst
       affinity:
-        podAffinity:
+        podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:
               - key: app
-                operator: NotIn
+                operator: In
                 values:
                 - "varlog-mr"
                 - "varlog-sn"

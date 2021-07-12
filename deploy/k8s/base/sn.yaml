@@ -85,6 +85,11 @@ spec:
                 operator: In
                 values:
                 - varlog-sn
+              - key: varlog-type
+                operator: NotIn
+                values:
+                - "telemetry"
+        # The podAntiAffinity in this is not effective. See https://github.com/kubernetes/kubernetes/issues/29276.
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:

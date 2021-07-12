@@ -20,11 +20,11 @@ import (
 func TestK8sVarlogAppendLongTime(t *testing.T) {
 	const (
 		testTimeout  = 15 * time.Minute
-		numRepFactor = 2
+		numRepFactor = 3
 		numMRs       = 3
-		numSNs       = 2
-		numLSs       = 1
-		numClients   = 50
+		numSNs       = 9
+		numLSs       = 3
+		numClients   = 10
 		clusterID    = types.ClusterID(1)
 	)
 
