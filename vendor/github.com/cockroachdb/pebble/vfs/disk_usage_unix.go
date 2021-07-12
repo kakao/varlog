@@ -2,16 +2,24 @@
 // of this source code is governed by a BSD-style license that can be found in
 // the LICENSE file.
 
-// +build darwin linux openbsd dragonfly freebsd
+// +build darwin openbsd dragonfly freebsd
 
 package vfs
 
 import "golang.org/x/sys/unix"
 
-func (defaultFS) GetFreeSpace(path string) (uint64, error) {
+func (defaultFS) GetDiskUsage(path string) (DiskUsage, error) {
 	stat := unix.Statfs_t{}
 	if err := unix.Statfs(path, &stat); err != nil {
-		return 0, err
+		return DiskUsage{}, err
 	}
-	return uint64(stat.Bsize) * stat.Bfree, nil
+
+	freeBytes := uint64(stat.Bsize) * uint64(stat.Bfree)
+	availBytes := uint64(stat.Bsize) * uint64(stat.Bavail)
+	totalBytes := uint64(stat.Bsize) * uint64(stat.Blocks)
+	return DiskUsage{
+		AvailBytes: availBytes,
+		TotalBytes: totalBytes,
+		UsedBytes:  totalBytes - freeBytes,
+	}, nil
 }

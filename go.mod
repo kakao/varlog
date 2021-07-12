@@ -3,12 +3,11 @@ module github.com/kakao/varlog
 go 1.16
 
 require (
-	github.com/cockroachdb/pebble v0.0.0-20210222213630-560af6e14c3c
+	github.com/cockroachdb/pebble v0.0.0-20210622171231-4fcf40933159
 	github.com/docker/go-units v0.4.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.5.0
-	github.com/golang/protobuf v1.5.2
 	github.com/google/gofuzz v1.2.0
 	github.com/jstemmer/go-junit-report v0.9.1
 	github.com/pkg/errors v0.9.1
@@ -38,6 +37,7 @@ require (
 	golang.org/x/text v0.3.5 // indirect
 	google.golang.org/grpc v1.38.0
 	google.golang.org/grpc/examples v0.0.0-20210521225445-359fdbb7b310 // indirect
+	google.golang.org/protobuf v1.26.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.19.0
 	k8s.io/apimachinery v0.19.0

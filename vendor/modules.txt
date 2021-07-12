@@ -29,7 +29,7 @@ github.com/cockroachdb/errors/telemetrykeys
 github.com/cockroachdb/errors/withstack
 # github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
 github.com/cockroachdb/logtags
-# github.com/cockroachdb/pebble v0.0.0-20210222213630-560af6e14c3c
+# github.com/cockroachdb/pebble v0.0.0-20210622171231-4fcf40933159
 ## explicit
 github.com/cockroachdb/pebble
 github.com/cockroachdb/pebble/internal/arenaskl
@@ -95,7 +95,6 @@ github.com/gogo/status
 github.com/golang/mock/gomock
 github.com/golang/mock/mockgen/model
 # github.com/golang/protobuf v1.5.2
-## explicit
 github.com/golang/protobuf/descriptor
 github.com/golang/protobuf/jsonpb
 github.com/golang/protobuf/proto
@@ -105,7 +104,7 @@ github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 github.com/golang/protobuf/ptypes/wrappers
-# github.com/golang/snappy v0.0.2-0.20190904063534-ff6b7dc882cf
+# github.com/golang/snappy v0.0.3
 github.com/golang/snappy
 # github.com/google/gofuzz v1.2.0
 ## explicit
@@ -430,6 +429,7 @@ google.golang.org/grpc/tap
 # google.golang.org/grpc/examples v0.0.0-20210521225445-359fdbb7b310
 ## explicit
 # google.golang.org/protobuf v1.26.0
+## explicit
 google.golang.org/protobuf/encoding/protojson
 google.golang.org/protobuf/encoding/prototext
 google.golang.org/protobuf/encoding/protowire

@@ -74,18 +74,18 @@ func (i CompactionInfo) String() string {
 // SafeFormat implements redact.SafeFormatter.
 func (i CompactionInfo) SafeFormat(w redact.SafePrinter, _ rune) {
 	if i.Err != nil {
-		w.Printf("[JOB %d] compaction to L%d error: %s",
-			redact.Safe(i.JobID), redact.Safe(i.Output.Level), i.Err)
+		w.Printf("[JOB %d] compaction(%s) to L%d error: %s",
+			redact.Safe(i.JobID), redact.SafeString(i.Reason), redact.Safe(i.Output.Level), i.Err)
 		return
 	}
 
 	if !i.Done {
-		w.Printf("[JOB %d] compacting ", redact.Safe(i.JobID))
+		w.Printf("[JOB %d] compacting(%s) ", redact.Safe(i.JobID), redact.SafeString(i.Reason))
 		w.Print(levelInfos(i.Input))
 		return
 	}
 	outputSize := tablesTotalSize(i.Output.Tables)
-	w.Printf("[JOB %d] compacted ", redact.Safe(i.JobID))
+	w.Printf("[JOB %d] compacted(%s) ", redact.Safe(i.JobID), redact.SafeString(i.Reason))
 	w.Print(levelInfos(i.Input))
 	w.Printf(" -> L%d [%s] (%s), in %.1fs, output rate %s/s",
 		redact.Safe(i.Output.Level),
@@ -556,6 +556,70 @@ func MakeLoggingEventListener(logger Logger) EventListener {
 		},
 		WriteStallEnd: func() {
 			logger.Infof("write stall ending")
+		},
+	}
+}
+
+// TeeEventListener wraps two EventListeners, forwarding all events to both.
+func TeeEventListener(a, b EventListener) EventListener {
+	a.EnsureDefaults(nil)
+	b.EnsureDefaults(nil)
+	return EventListener{
+		BackgroundError: func(err error) {
+			a.BackgroundError(err)
+			b.BackgroundError(err)
+		},
+		CompactionBegin: func(info CompactionInfo) {
+			a.CompactionBegin(info)
+			b.CompactionBegin(info)
+		},
+		CompactionEnd: func(info CompactionInfo) {
+			a.CompactionEnd(info)
+			b.CompactionEnd(info)
+		},
+		FlushBegin: func(info FlushInfo) {
+			a.FlushBegin(info)
+			b.FlushBegin(info)
+		},
+		FlushEnd: func(info FlushInfo) {
+			a.FlushEnd(info)
+			b.FlushEnd(info)
+		},
+		ManifestCreated: func(info ManifestCreateInfo) {
+			a.ManifestCreated(info)
+			b.ManifestCreated(info)
+		},
+		ManifestDeleted: func(info ManifestDeleteInfo) {
+			a.ManifestDeleted(info)
+			b.ManifestDeleted(info)
+		},
+		TableCreated: func(info TableCreateInfo) {
+			a.TableCreated(info)
+			b.TableCreated(info)
+		},
+		TableDeleted: func(info TableDeleteInfo) {
+			a.TableDeleted(info)
+			b.TableDeleted(info)
+		},
+		TableIngested: func(info TableIngestInfo) {
+			a.TableIngested(info)
+			b.TableIngested(info)
+		},
+		WALCreated: func(info WALCreateInfo) {
+			a.WALCreated(info)
+			b.WALCreated(info)
+		},
+		WALDeleted: func(info WALDeleteInfo) {
+			a.WALDeleted(info)
+			b.WALDeleted(info)
+		},
+		WriteStallBegin: func(info WriteStallBeginInfo) {
+			a.WriteStallBegin(info)
+			b.WriteStallBegin(info)
+		},
+		WriteStallEnd: func() {
+			a.WriteStallEnd()
+			b.WriteStallEnd()
 		},
 	}
 }
