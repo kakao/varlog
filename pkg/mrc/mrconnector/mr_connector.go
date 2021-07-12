@@ -12,6 +12,7 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
@@ -260,6 +261,14 @@ func (c *connectorImpl) connectToMR(ctx context.Context, addr string) (cl mrc.Me
 		return nil, nil, err
 	}
 
+	// health check
+	// FIXME: Which timeout should it use?
+	rsp, err := grpc_health_v1.NewHealthClient(conn.Conn).Check(connCtx, &grpc_health_v1.HealthCheckRequest{})
+	if err != nil || rsp.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
+		err = multierr.Append(conn.Close(), errors.Errorf("not ready, addr=%s status=%s", addr, rsp.GetStatus().String()))
+		return nil, nil, err
+	}
+
 	// It always returns nil as error value.
 	cl, _ = mrc.NewMetadataRepositoryClientFromRpcConn(conn)
 	mcl, _ = mrc.NewMetadataRepositoryManagementClientFromRpcConn(conn)
@@ -275,6 +284,12 @@ func (c *connectorImpl) getClusterInfo(ctx context.Context, mcl mrc.MetadataRepo
 	}
 
 	info := rsp.GetClusterInfo()
+
+	nodeID := info.GetNodeID()
+	if nodeID == types.InvalidNodeID {
+		return nil, errors.New("invalid node id")
+	}
+
 	// NOTE: This guarantees that the connected node is not split-brained.
 	if info.GetLeader() == types.InvalidNodeID {
 		return nil, errors.New("maybe split-brained node")
@@ -282,12 +297,20 @@ func (c *connectorImpl) getClusterInfo(ctx context.Context, mcl mrc.MetadataRepo
 
 	found := false
 	for _, member := range info.GetMembers() {
-		if len(member.GetEndpoint()) > 0 {
-			found = true
+		if member.Learner {
+			continue
 		}
+		if len(member.GetPeer()) == 0 {
+			continue
+		}
+		if len(member.GetEndpoint()) == 0 {
+			continue
+		}
+		found = true
+		break
 	}
 	if !found {
-		return nil, errors.New("no accessible MRs")
+		return nil, errors.New("not member")
 	}
 
 	return info, err

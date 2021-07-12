@@ -180,7 +180,7 @@ func TestConnectorUnreachableMR(t *testing.T) {
 	}, fetchInterval*100, fetchInterval)
 }
 
-func TestConnectorDelAddr(t *testing.T) {
+func TestConnectorRemovePeer(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"))
 
 	const (
@@ -209,8 +209,8 @@ func TestConnectorDelAddr(t *testing.T) {
 
 	connector, err := New(
 		context.Background(),
-		WithSeed([]string{seed[0]}),
-		WithInitCount(30),
+		WithSeed(seed),
+		WithInitCount(100),
 		WithInitRetryInterval(fetchInterval),
 		WithUpdateInterval(fetchInterval),
 	)
@@ -221,6 +221,10 @@ func TestConnectorDelAddr(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		for _, mr := range mrs {
+			if !mr.mr.IsMember() {
+				return false
+			}
+
 			info, err := mr.mr.GetClusterInfo(context.Background(), clusterID)
 			if err != nil {
 				return false
@@ -234,13 +238,19 @@ func TestConnectorDelAddr(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		connectedNodeID := connector.ConnectedNodeID()
-		return len(connector.ActiveMRs()) == numMRs &&
-			(connectedNodeID == mrs[0].nodeID || connectedNodeID == mrs[1].nodeID)
-	}, 1*time.Minute, time.Second)
+		return len(connector.ActiveMRs()) == numMRs && connectedNodeID != types.InvalidNodeID
+	}, time.Minute, time.Second)
 
-	require.NoError(t, mrs[0].mr.RemovePeer(context.Background(), clusterID, mrs[0].nodeID))
+	require.Eventually(t, func() bool {
+		mcl, err := connector.ManagementClient(context.Background())
+		if err != nil {
+			_ = mcl.Close()
+			return false
+		}
+		return mcl.RemovePeer(context.Background(), clusterID, mrs[0].nodeID) == nil
+	}, time.Minute, time.Second)
 
 	require.Eventually(t, func() bool {
 		return len(connector.ActiveMRs()) == 1
-	}, 1*time.Minute, time.Second)
+	}, time.Minute, time.Second)
 }
