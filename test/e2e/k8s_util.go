@@ -49,6 +49,9 @@ const (
 	IngressNginxNamespace = "ingress-nginx"
 
 	ENV_REP_FACTOR = "REP_FACTOR"
+
+	// telemetry
+	TelemetryLabelValue = "telemetry"
 )
 
 type K8sVarlogPodGetter interface {
@@ -444,7 +447,10 @@ func (k8s *K8sVarlogCluster) RemoveLabelAll() (err error) {
 	}
 
 	for _, node := range nodes.Items {
-		if _, ok := node.Labels[TypeLabelKey]; ok {
+		if labelValue, ok := node.Labels[TypeLabelKey]; ok {
+			if labelValue == TelemetryLabelValue {
+				continue
+			}
 			if erri := k8s.RemoveLabel(node.GetName(), TypeLabelKey); erri != nil {
 				err = multierr.Append(err, erri)
 			}
@@ -582,6 +588,14 @@ func (k8s *K8sVarlogCluster) clearMRDatas() error {
 		return err
 	}
 
+	targetNodes := 0
+	for _, node := range nodes.Items {
+		if _, ok := node.Labels[TypeLabelKey]; ok {
+			continue
+		}
+		targetNodes++
+	}
+
 	for _, node := range nodes.Items {
 		if _, ok := node.Labels[TypeLabelKey]; ok {
 			continue
@@ -595,7 +609,7 @@ func (k8s *K8sVarlogCluster) clearMRDatas() error {
 
 	if err := testutil.CompareWaitErrorWithRetryIntervalN(1000, 10*time.Second, func() (bool, error) {
 		numPods, err := k8s.numPodsReady(VarlogNamespace, podSelector)
-		return numPods == len(nodes.Items), errors.Wrap(err, "k8s")
+		return numPods == targetNodes, errors.Wrap(err, "k8s")
 	}); err != nil {
 		return err
 	}
