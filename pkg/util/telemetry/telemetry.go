@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/contrib/instrumentation/host"
-	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
@@ -21,6 +19,8 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/multierr"
 
+	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/instrumentation/host"
+	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/instrumentation/runtime"
 	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/metric"
 	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/trace"
 )
@@ -62,7 +62,7 @@ func New(ctx context.Context, serviceName, serviceInstanceID string, opts ...Opt
 	res, err := resource.New(ctx,
 		resource.WithFromEnv(),
 		resource.WithHost(),
-		resource.WithProcessExecutableName(),
+		// resource.WithProcessExecutableName(),
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceNamespaceKey.String(ServiceNamespace),
@@ -114,7 +114,8 @@ func New(ctx context.Context, serviceName, serviceInstanceID string, opts ...Opt
 
 	// runtime metric
 	if err := runtime.Start(
-		runtime.WithMinimumReadMemStatsInterval(time.Second),
+		// FIXME: make it configurable
+		runtime.WithMinimumReadMemStatsInterval(10*time.Second),
 		runtime.WithMeterProvider(mc.MeterProvider()),
 	); err != nil {
 		return nil, errors.WithStack(err)
