@@ -1,5 +1,7 @@
 package mrc
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/pkg/mrc -package mrc -destination metadata_repository_management_client_mock.go . MetadataRepositoryManagementClient
+
 import (
 	"context"
 
