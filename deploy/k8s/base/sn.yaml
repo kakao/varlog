@@ -19,7 +19,7 @@ spec:
       volumes:
       - name: varlog-sn-data
         hostPath:
-          path: /varlog/data
+          path: /varlog/sn
           type: DirectoryOrCreate
       initContainers:
       - name: volume-perm
@@ -27,10 +27,10 @@ spec:
         command:
         - "sh"
         - "-c"
-        - "chmod -R 777 /varlog/data"
+        - "chmod -R 777 /varlog/sn"
         volumeMounts:
         - name: varlog-sn-data
-          mountPath: /varlog/data
+          mountPath: /varlog/sn
         imagePullPolicy: IfNotPresent
       containers:
       - name: varlog-sn
@@ -47,7 +47,7 @@ spec:
         - name: VMS_ADDRESS
           value: "$(VARLOG_VMS_RPC_SERVICE_HOST):$(VARLOG_VMS_RPC_SERVICE_PORT)"
         - name: VOLUMES
-          value: /varlog/data
+          value: /varlog/sn
         - name: TELEMETRY
           value: "localhost:4317"
         - name: HOST_IP
@@ -56,7 +56,7 @@ spec:
               fieldPath: status.hostIP
         volumeMounts:
         - name: varlog-sn-data
-          mountPath: /varlog/data
+          mountPath: /varlog/sn
         readinessProbe:
           exec:
             command:
