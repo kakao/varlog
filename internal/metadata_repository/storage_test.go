@@ -312,7 +312,8 @@ func TestStorageRegisterLS(t *testing.T) {
 
 			Convey("registered LS should be lookuped", func(ctx C) {
 				for i := 0; i < rep; i++ {
-					So(ms.LookupUncommitReport(lsID, snIDs[i]), ShouldNotBeNil)
+					_, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+					So(ok, ShouldBeTrue)
 				}
 			})
 		})
@@ -421,8 +422,11 @@ func TestStorageUpdateLS(t *testing.T) {
 			So(err, ShouldBeNil)
 			Convey("updated LS should be lookuped", func(ctx C) {
 				for i := 0; i < rep; i++ {
-					So(ms.LookupUncommitReport(lsID, snIDs[i]), ShouldBeNil)
-					So(ms.LookupUncommitReport(lsID, updateSnIDs[i]), ShouldNotBeNil)
+					_, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+					So(ok, ShouldBeFalse)
+
+					_, ok = ms.LookupUncommitReport(lsID, updateSnIDs[i])
+					So(ok, ShouldBeTrue)
 				}
 
 				So(testutil.CompareWaitN(10, func() bool {
@@ -583,15 +587,15 @@ func TestStorageSealLS(t *testing.T) {
 			}), ShouldBeTrue)
 
 			for i := 0; i < rep; i++ {
-				r := &snpb.LogStreamUncommitReport{
+				r := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN,
 					UncommittedLLSNLength: uint64(i),
 					HighWatermark:         types.InvalidGLSN,
 				}
 
 				ms.UpdateUncommitReport(lsID, snIDs[i], r)
-				rr := ms.LookupUncommitReport(lsID, snIDs[i])
-				So(rr, ShouldNotBeNil)
+				_, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+				So(ok, ShouldBeTrue)
 				So(r.UncommittedLLSNEnd(), ShouldEqual, r.UncommittedLLSNEnd())
 			}
 
@@ -599,21 +603,22 @@ func TestStorageSealLS(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			for i := 0; i < rep; i++ {
-				r := ms.LookupUncommitReport(lsID, snIDs[i])
+				r, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+				So(ok, ShouldBeTrue)
 				So(r.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN)
 			}
 
 			Convey("Sealed UncommitReportReplica should ignore report", func(ctx C) {
 				for i := 0; i < rep; i++ {
-					r := &snpb.LogStreamUncommitReport{
+					r := snpb.LogStreamUncommitReport{
 						UncommittedLLSNOffset: types.MinLLSN,
 						UncommittedLLSNLength: uint64(i + 1),
 						HighWatermark:         types.InvalidGLSN,
 					}
 
 					ms.UpdateUncommitReport(lsID, snIDs[i], r)
-					rr := ms.LookupUncommitReport(lsID, snIDs[i])
-					So(rr, ShouldNotBeNil)
+					rr, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+					So(ok, ShouldBeTrue)
 					So(rr.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN)
 				}
 			})
@@ -745,15 +750,15 @@ func TestStorageUnsealLS(t *testing.T) {
 
 				Convey("Unsealed LS should update report", func(ctx C) {
 					for i := 0; i < rep; i++ {
-						r := &snpb.LogStreamUncommitReport{
+						r := snpb.LogStreamUncommitReport{
 							UncommittedLLSNOffset: types.MinLLSN,
 							UncommittedLLSNLength: uint64(i),
 							HighWatermark:         types.InvalidGLSN,
 						}
 
 						ms.UpdateUncommitReport(lsID, snIDs[i], r)
-						rr := ms.LookupUncommitReport(lsID, snIDs[i])
-						So(rr, ShouldNotBeNil)
+						rr, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+						So(ok, ShouldBeTrue)
 						So(rr.UncommittedLLSNEnd(), ShouldEqual, r.UncommittedLLSNEnd())
 					}
 				})
@@ -812,7 +817,7 @@ func TestStorageReport(t *testing.T) {
 		}
 		notExistSnID := tmp + types.StorageNodeID(rep)
 
-		r := &snpb.LogStreamUncommitReport{
+		r := snpb.LogStreamUncommitReport{
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 5,
 			HighWatermark:         types.InvalidGLSN,
@@ -820,24 +825,26 @@ func TestStorageReport(t *testing.T) {
 
 		for i := 0; i < rep; i++ {
 			ms.UpdateUncommitReport(lsID, snIDs[i], r)
-			So(ms.LookupUncommitReport(lsID, snIDs[i]), ShouldBeNil)
+			_, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+			So(ok, ShouldBeFalse)
 		}
 
 		Convey("storage should not apply report if snID is not exist in LS", func(ctx C) {
 			ls := makeLogStream(lsID, snIDs)
 			ms.registerLogStream(ls)
 
-			r := &snpb.LogStreamUncommitReport{
+			r := snpb.LogStreamUncommitReport{
 				UncommittedLLSNOffset: types.MinLLSN,
 				UncommittedLLSNLength: 5,
 				HighWatermark:         types.InvalidGLSN,
 			}
 
 			ms.UpdateUncommitReport(lsID, notExistSnID, r)
-			So(ms.LookupUncommitReport(lsID, notExistSnID), ShouldBeNil)
+			_, ok := ms.LookupUncommitReport(lsID, notExistSnID)
+			So(ok, ShouldBeFalse)
 
 			Convey("storage should apply report if snID is exist in LS", func(ctx C) {
-				r := &snpb.LogStreamUncommitReport{
+				r := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN,
 					UncommittedLLSNLength: 5,
 					HighWatermark:         types.InvalidGLSN,
@@ -845,7 +852,8 @@ func TestStorageReport(t *testing.T) {
 
 				for i := 0; i < rep; i++ {
 					ms.UpdateUncommitReport(lsID, snIDs[i], r)
-					So(ms.LookupUncommitReport(lsID, snIDs[i]), ShouldNotBeNil)
+					_, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+					So(ok, ShouldBeTrue)
 				}
 			})
 		})
@@ -987,7 +995,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		ls := makeLogStream(lsID, snIDs)
 		ms.registerLogStream(ls)
 
-		r := &snpb.LogStreamUncommitReport{
+		r := snpb.LogStreamUncommitReport{
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 5,
 			HighWatermark:         types.GLSN(10),
@@ -996,13 +1004,14 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		So(ms.isCopyOnWrite(), ShouldBeFalse)
 
 		for i := 0; i < rep; i++ {
-			So(ms.LookupUncommitReport(lsID, snIDs[i]), ShouldNotBeNil)
+			_, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+			So(ok, ShouldBeTrue)
 		}
 
 		Convey("lookup UncommitReport with copyOnWrite should give merged response", func(ctx C) {
 			ms.setCopyOnWrite()
 
-			r := &snpb.LogStreamUncommitReport{
+			r := snpb.LogStreamUncommitReport{
 				UncommittedLLSNOffset: types.MinLLSN,
 				UncommittedLLSNLength: 5,
 				HighWatermark:         types.GLSN(10),
@@ -1010,7 +1019,8 @@ func TestStorageCopyOnWrite(t *testing.T) {
 			ms.UpdateUncommitReport(lsID, snIDs[1], r)
 
 			for i := 0; i < rep; i++ {
-				So(ms.LookupUncommitReport(lsID, snIDs[i]), ShouldNotBeNil)
+				_, ok := ms.LookupUncommitReport(lsID, snIDs[i])
+				So(ok, ShouldBeTrue)
 			}
 		})
 	})
@@ -1246,7 +1256,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			for j := 0; j < 3; j++ {
 				snID := types.StorageNodeID(j)
 
-				s := &snpb.LogStreamUncommitReport{
+				s := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*3),
 					UncommittedLLSNLength: 1,
 					HighWatermark:         types.InvalidGLSN,
@@ -1264,7 +1274,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			for j := 0; j < 3; j++ {
 				snID := types.StorageNodeID(j)
 
-				s := &snpb.LogStreamUncommitReport{
+				s := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(1+i*3),
 					UncommittedLLSNLength: 1,
 					HighWatermark:         types.GLSN(1024),
@@ -1492,7 +1502,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 				for k := 0; k < numRep; k++ {
 					snID := types.StorageNodeID(j*numRep + k)
 
-					r := &snpb.LogStreamUncommitReport{
+					r := snpb.LogStreamUncommitReport{
 						UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i),
 						UncommittedLLSNLength: 1,
 						HighWatermark:         preGLSN,
@@ -1600,7 +1610,7 @@ func TestStorageVerifyReport(t *testing.T) {
 
 		Convey("When update report with valid hwm, then it should be succeed", func(ctx C) {
 			for i := 0; i < 4; i++ {
-				r := &snpb.LogStreamUncommitReport{
+				r := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*5),
 					UncommittedLLSNLength: 5,
 					HighWatermark:         types.GLSN(i*5 + 5),
@@ -1611,7 +1621,7 @@ func TestStorageVerifyReport(t *testing.T) {
 
 		Convey("When update report with invalid hwm, then it should be succeed", func(ctx C) {
 			for i := 0; i < 5; i++ {
-				r := &snpb.LogStreamUncommitReport{
+				r := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*5),
 					UncommittedLLSNLength: 5,
 					HighWatermark:         types.GLSN(i*5 + 5 - 1),

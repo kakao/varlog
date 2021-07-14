@@ -614,8 +614,8 @@ func (rce *reportCollectExecutor) getReportedHighWatermark(lsID types.LogStreamI
 		return types.InvalidGLSN, false
 	}
 
-	r := report.LookupReport(lsID)
-	if r == nil {
+	r, ok := report.LookupReport(lsID)
+	if !ok {
 		return types.InvalidGLSN, false
 	}
 

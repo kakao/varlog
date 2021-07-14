@@ -107,7 +107,7 @@ func TestLogStreamReporter(t *testing.T) {
 	require.NoError(t, err)
 
 	var (
-		reports []*snpb.LogStreamUncommitReport
+		reports []snpb.LogStreamUncommitReport
 		wg      sync.WaitGroup
 	)
 

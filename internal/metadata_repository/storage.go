@@ -382,7 +382,7 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 	}
 
 	lm := &mrpb.LogStreamUncommitReports{
-		Replicas: make(map[types.StorageNodeID]*snpb.LogStreamUncommitReport),
+		Replicas: make(map[types.StorageNodeID]snpb.LogStreamUncommitReport, len(ls.Replicas)),
 		Status:   varlogpb.LogStreamStatusRunning,
 	}
 
@@ -391,7 +391,8 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 	}
 
 	for _, r := range ls.Replicas {
-		lm.Replicas[r.StorageNodeID] = &snpb.LogStreamUncommitReport{
+		lm.Replicas[r.StorageNodeID] = snpb.LogStreamUncommitReport{
+			LogStreamID:           ls.LogStreamID,
 			HighWatermark:         ms.getHighWatermarkNoLock(),
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 0,
@@ -502,7 +503,7 @@ func (ms *MetadataStorage) updateUncommitReport(ls *varlogpb.LogStreamDescriptor
 	pre, cur := ms.getStateMachine()
 
 	newReports := &mrpb.LogStreamUncommitReports{
-		Replicas: make(map[types.StorageNodeID]*snpb.LogStreamUncommitReport),
+		Replicas: make(map[types.StorageNodeID]snpb.LogStreamUncommitReport, len(ls.Replicas)),
 	}
 
 	oldReports, ok := cur.LogStream.UncommitReports[ls.LogStreamID]
@@ -519,7 +520,7 @@ func (ms *MetadataStorage) updateUncommitReport(ls *varlogpb.LogStreamDescriptor
 		if o, ok := oldReports.Replicas[r.StorageNodeID]; ok {
 			newReports.Replicas[r.StorageNodeID] = o
 		} else {
-			newReports.Replicas[r.StorageNodeID] = &snpb.LogStreamUncommitReport{
+			newReports.Replicas[r.StorageNodeID] = snpb.LogStreamUncommitReport{
 				UncommittedLLSNOffset: types.MinLLSN,
 				UncommittedLLSNLength: 0,
 			}
@@ -614,15 +615,17 @@ func (ms *MetadataStorage) updateUncommitReportStatus(lsID types.LogStreamID, st
 			}
 		}
 
-		for _, r := range lls.Replicas {
+		for storageNodeID, r := range lls.Replicas {
 			if r.Seal(min) == types.InvalidLLSN {
 				return verrors.ErrInternal
 			}
+			lls.Replicas[storageNodeID] = r
 		}
 	} else {
 		highWatermark := ms.getHighWatermarkNoLock()
-		for _, r := range lls.Replicas {
+		for storageNodeID, r := range lls.Replicas {
 			r.HighWatermark = highWatermark
+			lls.Replicas[storageNodeID] = r
 		}
 	}
 
@@ -880,33 +883,33 @@ func (ms *MetadataStorage) LookupUncommitReports(lsID types.LogStreamID) *mrpb.L
 	return p
 }
 
-func (ms *MetadataStorage) LookupUncommitReport(lsID types.LogStreamID, snID types.StorageNodeID) *snpb.LogStreamUncommitReport {
+func (ms *MetadataStorage) LookupUncommitReport(lsID types.LogStreamID, snID types.StorageNodeID) (snpb.LogStreamUncommitReport, bool) {
 	pre, cur := ms.getStateMachine()
 
 	if lm, ok := cur.LogStream.UncommitReports[lsID]; ok {
 		if lm.Status.Deleted() {
-			return nil
+			return snpb.InvalidLogStreamUncommitReport, false
 		}
 
 		if s, ok := lm.Replicas[snID]; ok {
-			return s
+			return s, true
 		}
 	}
 
 	if pre == cur {
-		return nil
+		return snpb.InvalidLogStreamUncommitReport, false
 	}
 
 	if lm, ok := pre.LogStream.UncommitReports[lsID]; ok {
 		if s, ok := lm.Replicas[snID]; ok {
-			return s
+			return s, true
 		}
 	}
 
-	return nil
+	return snpb.InvalidLogStreamUncommitReport, false
 }
 
-func (ms *MetadataStorage) verifyUncommitReport(s *snpb.LogStreamUncommitReport) bool {
+func (ms *MetadataStorage) verifyUncommitReport(s snpb.LogStreamUncommitReport) bool {
 	fgls := ms.getFirstCommitResultsNoLock()
 	lgls := ms.getLastCommitResultsNoLock()
 
@@ -923,7 +926,7 @@ func (ms *MetadataStorage) verifyUncommitReport(s *snpb.LogStreamUncommitReport)
 		ms.lookupCommitResultsNoLock(s.HighWatermark) != nil
 }
 
-func (ms *MetadataStorage) UpdateUncommitReport(lsID types.LogStreamID, snID types.StorageNodeID, s *snpb.LogStreamUncommitReport) {
+func (ms *MetadataStorage) UpdateUncommitReport(lsID types.LogStreamID, snID types.StorageNodeID, s snpb.LogStreamUncommitReport) {
 	pre, cur := ms.getStateMachine()
 
 	lm, ok := cur.LogStream.UncommitReports[lsID]
@@ -1263,10 +1266,11 @@ func (ms *MetadataStorage) recoverLogStreams(stateMachine *mrpb.MetadataReposito
 			uncommittedLLSNLength = uint64(cr.CommittedLLSNOffset) + cr.CommittedGLSNLength - 1
 		}
 
-		for _, r := range lm.Replicas {
+		for storageNodeID, r := range lm.Replicas {
 			r.HighWatermark = types.InvalidGLSN
 			r.UncommittedLLSNOffset = types.MinLLSN
 			r.UncommittedLLSNLength = uncommittedLLSNLength
+			lm.Replicas[storageNodeID] = r
 		}
 	}
 }

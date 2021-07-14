@@ -40,7 +40,7 @@ func (mr *dummyMetadataRepository) GetReporterClient(ctx context.Context, sn *va
 	return mr.reporterCliFac.GetReporterClient(ctx, sn)
 }
 
-func (mr *dummyMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []*snpb.LogStreamUncommitReport) error {
+func (mr *dummyMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []snpb.LogStreamUncommitReport) error {
 	r := &mrpb.StorageNodeUncommitReport{
 		StorageNodeID:   snID,
 		UncommitReports: ur,

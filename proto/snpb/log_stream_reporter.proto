@@ -39,7 +39,8 @@ message GetReportResponse {
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    repeated LogStreamUncommitReport uncommit_reports = 2;
+    repeated LogStreamUncommitReport uncommit_reports = 2
+        [(gogoproto.nullable) = false];
 }
 
 // GlobalLogStreamDescriptor is a committing result against with
