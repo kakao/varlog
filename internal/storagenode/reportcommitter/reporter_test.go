@@ -21,6 +21,8 @@ func TestLogStreamReporterEmptyStorageNode(t *testing.T) {
 	rcg := NewMockGetter(ctrl)
 	rcg.EXPECT().ReportCommitter(gomock.Any()).Return(nil, false).AnyTimes()
 	rcg.EXPECT().ReportCommitters().Return(nil).AnyTimes()
+	rcg.EXPECT().NumberOfReportCommitters().Return(0).AnyTimes()
+	rcg.EXPECT().ForEachReportCommitter(gomock.Any()).Return().AnyTimes()
 
 	getter := id.NewMockStorageNodeIDGetter(ctrl)
 	getter.EXPECT().StorageNodeID().Return(types.StorageNodeID(1)).AnyTimes()

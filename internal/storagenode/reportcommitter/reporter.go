@@ -71,20 +71,15 @@ func (r *reporter) GetReport(ctx context.Context) ([]snpb.LogStreamUncommitRepor
 }
 
 func (r *reporter) report(ctx context.Context) (reports []snpb.LogStreamUncommitReport) {
-	reporters := r.reportCommitterGetter.ReportCommitters()
-	if len(reporters) == 0 {
-		return reports
-	}
-
-	reports = make([]snpb.LogStreamUncommitReport, 0, len(reporters))
-	for _, reporter := range reporters {
+	reports = make([]snpb.LogStreamUncommitReport, 0, r.reportCommitterGetter.NumberOfReportCommitters())
+	r.reportCommitterGetter.ForEachReportCommitter(func(reporter ReportCommitter) {
 		report, err := reporter.GetReport(ctx)
 		if err != nil {
 			// TODO: is ignoring error safe?
-			continue
+			return
 		}
 		reports = append(reports, report)
-	}
+	})
 	return reports
 }
 
