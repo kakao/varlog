@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
@@ -49,7 +48,7 @@ type ReportCollector interface {
 }
 
 type commitHelper interface {
-	commit(context.Context, *snpb.LogStreamCommitResult) error
+	commit(context.Context, snpb.LogStreamCommitResult) error
 
 	getReportedHighWatermark(types.LogStreamID) (types.GLSN, bool)
 
@@ -585,7 +584,7 @@ func (rce *reportCollectExecutor) getClient(ctx context.Context) (reportcommitte
 	return rce.snConnector.cli, err
 }
 
-func (rce *reportCollectExecutor) commit(ctx context.Context, cr *snpb.LogStreamCommitResult) error {
+func (rce *reportCollectExecutor) commit(ctx context.Context, cr snpb.LogStreamCommitResult) error {
 	cli, err := rce.getClient(ctx)
 	if err != nil {
 		return err
@@ -593,7 +592,7 @@ func (rce *reportCollectExecutor) commit(ctx context.Context, cr *snpb.LogStream
 
 	r := snpb.CommitRequest{
 		StorageNodeID: rce.storageNodeID,
-		CommitResults: []snpb.LogStreamCommitResult{*cr},
+		CommitResults: []snpb.LogStreamCommitResult{cr},
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, rce.rpcTimeout)
@@ -737,9 +736,8 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 			return
 		}
 
-		cr := results.LookupCommitResult(lc.lsID)
-		if cr != nil {
-			cr = proto.Clone(cr).(*snpb.LogStreamCommitResult)
+		cr, ok := results.LookupCommitResult(lc.lsID)
+		if ok {
 			cr.HighWatermark = results.HighWatermark
 			cr.PrevHighWatermark = results.PrevHighWatermark
 

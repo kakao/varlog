@@ -523,8 +523,8 @@ func TestVarlogFailoverRecoverFromIncompleteSMLWithEmptyCommit(t *testing.T) {
 				So(crs, ShouldNotBeNil)
 
 				for _, lsID := range env.LogStreamIDs() {
-					cr := crs.LookupCommitResult(lsID)
-					So(cr, ShouldNotBeNil)
+					cr, ok := crs.LookupCommitResult(lsID)
+					So(ok, ShouldBeTrue)
 
 					llsn := env.GetUncommittedLLSNOffset(t, lsID)
 

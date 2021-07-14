@@ -22,7 +22,8 @@ message LogStreamCommitResults {
     uint64 prev_high_watermark = 2
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
-    repeated snpb.LogStreamCommitResult commit_results = 3;
+    repeated snpb.LogStreamCommitResult commit_results = 3
+        [(gogoproto.nullable) = false];
 }
 
 message StorageNodeUncommitReport {

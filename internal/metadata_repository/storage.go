@@ -1261,8 +1261,8 @@ func (ms *MetadataStorage) recoverLogStreams(stateMachine *mrpb.MetadataReposito
 		lm.Status = varlogpb.LogStreamStatusSealing
 
 		uncommittedLLSNLength := uint64(0)
-		cr := commitResults.LookupCommitResult(ls.LogStreamID)
-		if cr != nil {
+		cr, ok := commitResults.LookupCommitResult(ls.LogStreamID)
+		if ok {
 			uncommittedLLSNLength = uint64(cr.CommittedLLSNOffset) + cr.CommittedGLSNLength - 1
 		}
 
