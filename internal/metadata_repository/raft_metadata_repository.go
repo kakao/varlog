@@ -777,6 +777,8 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 			sort.Slice(lsIDs, func(i, j int) bool { return lsIDs[i] < lsIDs[j] })
 
+			crs.CommitResults = make([]snpb.LogStreamCommitResult, 0, len(lsIDs))
+
 			for _, lsID := range lsIDs {
 				reports := mr.storage.LookupUncommitReports(lsID)
 				knownHWM, minHWM, nrUncommit := mr.calculateCommit(reports)
@@ -818,12 +820,12 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 				}
 
 				committedLLSNOffset := types.MinLLSN
-				prevCommitResult := prevCommitResults.LookupCommitResult(lsID)
-				if prevCommitResult != nil {
+				prevCommitResult, ok := prevCommitResults.LookupCommitResult(lsID)
+				if ok {
 					committedLLSNOffset = prevCommitResult.CommittedLLSNOffset + types.LLSN(prevCommitResult.CommittedGLSNLength)
 				}
 
-				commit := &snpb.LogStreamCommitResult{
+				commit := snpb.LogStreamCommitResult{
 					LogStreamID:         lsID,
 					CommittedLLSNOffset: committedLLSNOffset,
 					CommittedGLSNOffset: committedOffset,
@@ -959,8 +961,8 @@ func (mr *RaftMetadataRepository) numCommitSince(lsID types.LogStreamID, glsn ty
 			)
 		}
 
-		r := crs.LookupCommitResult(lsID)
-		if r == nil {
+		r, ok := crs.LookupCommitResult(lsID)
+		if !ok {
 			mr.logger.Panic("ls should be exist",
 				zap.Uint64("lsID", uint64(lsID)),
 				zap.Uint64("highest", uint64(highest)),
@@ -1026,8 +1028,8 @@ func (mr *RaftMetadataRepository) getLastCommitted(lsID types.LogStreamID) types
 		return types.InvalidGLSN
 	}
 
-	r := crs.LookupCommitResult(lsID)
-	if r == nil {
+	r, ok := crs.LookupCommitResult(lsID)
+	if !ok {
 		// newbie
 		return types.InvalidGLSN
 	}
@@ -1045,7 +1047,12 @@ func (mr *RaftMetadataRepository) getLastCommittedLength(lsID types.LogStreamID)
 		return 0
 	}
 
-	return crs.LookupCommitResult(lsID).GetCommittedGLSNLength()
+	r, ok := crs.LookupCommitResult(lsID)
+	if !ok {
+		return 0
+	}
+
+	return r.GetCommittedGLSNLength()
 }
 
 func (mr *RaftMetadataRepository) proposeCommit() {

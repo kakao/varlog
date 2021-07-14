@@ -50,9 +50,9 @@ func (s *MetadataRepositoryDescriptor) GetFirstCommitResults() *LogStreamCommitR
 	return s.LogStream.CommitHistory[0]
 }
 
-func (crs *LogStreamCommitResults) LookupCommitResult(lsID types.LogStreamID) *snpb.LogStreamCommitResult {
+func (crs *LogStreamCommitResults) LookupCommitResult(lsID types.LogStreamID) (snpb.LogStreamCommitResult, bool) {
 	if crs == nil {
-		return nil
+		return snpb.InvalidLogStreamCommitResult, false
 	}
 
 	i := sort.Search(len(crs.CommitResults), func(i int) bool {
@@ -60,10 +60,10 @@ func (crs *LogStreamCommitResults) LookupCommitResult(lsID types.LogStreamID) *s
 	})
 
 	if i < len(crs.CommitResults) && crs.CommitResults[i].LogStreamID == lsID {
-		return crs.CommitResults[i]
+		return crs.CommitResults[i], true
 	}
 
-	return nil
+	return snpb.InvalidLogStreamCommitResult, false
 }
 
 func (l *LogStreamUncommitReports) Deleted() bool {

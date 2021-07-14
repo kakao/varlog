@@ -6,6 +6,7 @@ import (
 
 // InvalidLogStreamUncommitReport is empty report. Do **NOT** modify this.
 var InvalidLogStreamUncommitReport = LogStreamUncommitReport{}
+var InvalidLogStreamCommitResult = LogStreamCommitResult{}
 
 func (m *LogStreamUncommitReport) UncommittedLLSNEnd() types.LLSN {
 	if m == nil {

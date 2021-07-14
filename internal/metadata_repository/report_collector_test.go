@@ -687,7 +687,7 @@ func (cc *dummyCommitContext) newDummyCommitResults(prev types.GLSN, nrLogStream
 			numUncommitLen = 1
 		}
 
-		r := &snpb.LogStreamCommitResult{
+		r := snpb.LogStreamCommitResult{
 			LogStreamID:         types.LogStreamID(i),
 			CommittedGLSNOffset: glsn,
 			CommittedLLSNOffset: cc.committedLLSNBeginOffset[i],

@@ -20,7 +20,7 @@ func TestSnapshotMarshal(t *testing.T) {
 		gls.PrevHighWatermark = types.GLSN(i * 16)
 
 		for j := 0; j < 1024; j++ {
-			lls := &snpb.LogStreamCommitResult{}
+			lls := snpb.LogStreamCommitResult{}
 			lls.LogStreamID = types.LogStreamID(j)
 			lls.CommittedGLSNOffset = gls.PrevHighWatermark + types.GLSN(j*2)
 			lls.CommittedGLSNLength = uint64(lls.CommittedGLSNOffset) + 1
@@ -44,7 +44,7 @@ func TestGlobalLogStreamMarshal(t *testing.T) {
 	gls.PrevHighWatermark = types.GLSN(16)
 
 	for i := 0; i < 128*1024; i++ {
-		lls := &snpb.LogStreamCommitResult{}
+		lls := snpb.LogStreamCommitResult{}
 		lls.LogStreamID = types.LogStreamID(i)
 		lls.CommittedGLSNOffset = gls.PrevHighWatermark + types.GLSN(i*2)
 		lls.CommittedGLSNLength = uint64(lls.CommittedGLSNOffset) + 1

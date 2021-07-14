@@ -777,7 +777,7 @@ func TestStorageTrim(t *testing.T) {
 				PrevHighWatermark: hwm - types.GLSN(1),
 			}
 
-			gls.CommitResults = append(gls.CommitResults, &snpb.LogStreamCommitResult{
+			gls.CommitResults = append(gls.CommitResults, snpb.LogStreamCommitResult{
 				CommittedGLSNOffset: hwm,
 				CommittedGLSNLength: 1,
 			})
@@ -1034,7 +1034,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		}
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
-		commit := &snpb.LogStreamCommitResult{
+		commit := snpb.LogStreamCommitResult{
 			LogStreamID:         lsID,
 			CommittedGLSNOffset: types.GLSN(6),
 			CommittedGLSNLength: 5,
@@ -1055,7 +1055,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 				HighWatermark:     types.GLSN(15),
 			}
 
-			commit := &snpb.LogStreamCommitResult{
+			commit := snpb.LogStreamCommitResult{
 				LogStreamID:         lsID,
 				CommittedGLSNOffset: types.GLSN(11),
 				CommittedGLSNLength: 5,
@@ -1514,7 +1514,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 					ms.UpdateAppliedIndex(appliedIndex)
 				}
 
-				commit := &snpb.LogStreamCommitResult{
+				commit := snpb.LogStreamCommitResult{
 					LogStreamID:         lsID,
 					CommittedGLSNOffset: preGLSN + types.GLSN(1),
 					CommittedGLSNLength: uint64(numLS),
@@ -1598,7 +1598,7 @@ func TestStorageVerifyReport(t *testing.T) {
 				HighWatermark:     types.GLSN(i*5 + 10),
 			}
 
-			commit := &snpb.LogStreamCommitResult{
+			commit := snpb.LogStreamCommitResult{
 				LogStreamID:         lsID,
 				CommittedGLSNOffset: types.GLSN(6 + i*5),
 				CommittedGLSNLength: 5,

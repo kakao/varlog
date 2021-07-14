@@ -268,7 +268,7 @@ func (s *StateMachineSyncer) initCommitResultContext(ctx context.Context, prevCo
 
 	if !cc.commitResults.HighWatermark.Invalid() {
 		sort.Slice(cc.sortedLSIDs, func(i, j int) bool { return cc.sortedLSIDs[i] < cc.sortedLSIDs[j] })
-		cc.commitResults.CommitResults = make([]*snpb.LogStreamCommitResult, 0, len(cc.sortedLSIDs))
+		cc.commitResults.CommitResults = make([]snpb.LogStreamCommitResult, 0, len(cc.sortedLSIDs))
 		cc.expectedCommit = uint64(cc.commitResults.HighWatermark - cc.commitResults.PrevHighWatermark)
 	}
 
@@ -277,7 +277,7 @@ func (s *StateMachineSyncer) initCommitResultContext(ctx context.Context, prevCo
 
 func (cc *commitResultContext) buildCommitResults() error {
 	for _, lsID := range cc.sortedLSIDs {
-		c := &snpb.LogStreamCommitResult{
+		c := snpb.LogStreamCommitResult{
 			LogStreamID:         lsID,
 			CommittedLLSNOffset: types.InvalidLLSN,
 			CommittedGLSNOffset: types.InvalidGLSN,
@@ -381,8 +381,8 @@ func (cc *commitResultContext) fillCommitResult() error {
 		lastCommittedLLSN := types.InvalidLLSN
 		highestLLSN, _ := cc.highestLLSNs[commitResult.LogStreamID]
 
-		prevCommitResult := cc.prevCommitResults.LookupCommitResult(commitResult.LogStreamID)
-		if prevCommitResult != nil {
+		prevCommitResult, ok := cc.prevCommitResults.LookupCommitResult(commitResult.LogStreamID)
+		if ok {
 			lastCommittedLLSN = prevCommitResult.CommittedLLSNOffset + types.LLSN(prevCommitResult.CommittedGLSNLength) - 1
 		}
 
@@ -399,6 +399,8 @@ func (cc *commitResultContext) fillCommitResult() error {
 		commitResult.CommittedLLSNOffset = lastCommittedLLSN + 1
 		commitResult.CommittedGLSNOffset = committedGLSNOffset
 
+		cc.commitResults.CommitResults[i] = commitResult
+
 		cc.numCommit += commitResult.CommittedGLSNLength
 		committedGLSNOffset += types.GLSN(commitResult.CommittedGLSNLength)
 	}
@@ -406,7 +408,7 @@ func (cc *commitResultContext) fillCommitResult() error {
 	return nil
 }
 
-func boundaryCommittedGLSNOffset(commitResults []*snpb.LogStreamCommitResult) types.GLSN {
+func boundaryCommittedGLSNOffset(commitResults []snpb.LogStreamCommitResult) types.GLSN {
 	for _, commitResult := range commitResults {
 		if !commitResult.CommittedGLSNOffset.Invalid() {
 			return commitResult.CommittedGLSNOffset
