@@ -221,7 +221,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	//    2 |    3 |   13 |  20 |       0
 	//    2 |    4 |   14 |  20 |       0
 	//    2 |    5 |   15 |  20 |       0
-	sn.lsr.Commit(context.TODO(), []*snpb.LogStreamCommitResult{
+	sn.lsr.Commit(context.TODO(), []snpb.LogStreamCommitResult{
 		{
 			LogStreamID:         logStreamID1,
 			CommittedLLSNOffset: 1,

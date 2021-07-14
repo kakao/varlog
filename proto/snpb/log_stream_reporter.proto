@@ -82,7 +82,8 @@ message CommitRequest {
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    repeated LogStreamCommitResult commit_results = 2;
+    repeated LogStreamCommitResult commit_results = 2
+        [(gogoproto.nullable) = false];
 }
 
 message CommitResponse {

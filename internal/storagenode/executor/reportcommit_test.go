@@ -110,7 +110,7 @@ func TestLogStreamReporter(t *testing.T) {
 		reportcommitter.WithReportCommitterGetter(rcg),
 	)
 
-	err = lsr.Commit(context.TODO(), []*snpb.LogStreamCommitResult{})
+	err = lsr.Commit(context.TODO(), []snpb.LogStreamCommitResult{})
 	require.NoError(t, err)
 
 	var (
@@ -162,7 +162,7 @@ func TestLogStreamReporter(t *testing.T) {
 			return reports[0].UncommittedLLSNLength > 0 && reports[1].UncommittedLLSNLength > 0
 		}, time.Second, time.Millisecond)
 
-		err := lsr.Commit(context.TODO(), []*snpb.LogStreamCommitResult{
+		err := lsr.Commit(context.TODO(), []snpb.LogStreamCommitResult{
 			{
 				LogStreamID:         lsid1,
 				HighWatermark:       2,
@@ -196,7 +196,7 @@ func TestLogStreamReporter(t *testing.T) {
 	_, err = lsr.GetReport(context.TODO())
 	require.Error(t, err)
 
-	err = lsr.Commit(context.TODO(), []*snpb.LogStreamCommitResult{
+	err = lsr.Commit(context.TODO(), []snpb.LogStreamCommitResult{
 		{
 			LogStreamID:         lsid1,
 			HighWatermark:       4,

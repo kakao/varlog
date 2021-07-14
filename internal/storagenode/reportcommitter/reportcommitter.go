@@ -11,7 +11,7 @@ import (
 
 type ReportCommitter interface {
 	GetReport(ctx context.Context) (snpb.LogStreamUncommitReport, error)
-	Commit(ctx context.Context, commitResult *snpb.LogStreamCommitResult) error
+	Commit(ctx context.Context, commitResult snpb.LogStreamCommitResult) error
 }
 
 type Getter interface {

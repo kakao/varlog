@@ -26,7 +26,7 @@ func (e *executor) GetReport(_ context.Context) (snpb.LogStreamUncommitReport, e
 	}, nil
 }
 
-func (e *executor) Commit(ctx context.Context, commitResult *snpb.LogStreamCommitResult) error {
+func (e *executor) Commit(ctx context.Context, commitResult snpb.LogStreamCommitResult) error {
 	if err := e.guard(); err != nil {
 		return err
 	}
