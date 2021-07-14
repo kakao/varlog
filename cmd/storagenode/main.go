@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 
+	_ "go.uber.org/automaxprocs"
+
 	"github.com/kakao/varlog/cmd/storagenode/app"
 )
 
