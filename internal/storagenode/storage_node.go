@@ -492,6 +492,20 @@ func (sn *StorageNode) logStreamExecutor(logStreamID types.LogStreamID) (executo
 	return lse, ok
 }
 
+func (sn *StorageNode) forEachExecutors(f func(executor.Executor)) {
+	sn.executors.mu.RLock()
+	defer sn.executors.mu.RUnlock()
+	for _, lse := range sn.executors.es {
+		f(lse)
+	}
+}
+
+func (sn *StorageNode) numExecutors() int {
+	sn.executors.mu.RLock()
+	defer sn.executors.mu.RUnlock()
+	return len(sn.executors.es)
+}
+
 func (sn *StorageNode) logStreamExecutors() []executor.Executor {
 	sn.executors.mu.RLock()
 	defer sn.executors.mu.RUnlock()
@@ -521,6 +535,16 @@ func (sn *StorageNode) ReportCommitters() []reportcommitter.ReportCommitter {
 		ret = append(ret, e)
 	}
 	return ret
+}
+
+func (sn *StorageNode) NumberOfReportCommitters() int {
+	return sn.numExecutors()
+}
+
+func (sn *StorageNode) ForEachReportCommitter(f func(reportcommitter.ReportCommitter)) {
+	sn.forEachExecutors(func(lse executor.Executor) {
+		f(lse)
+	})
 }
 
 func (sn *StorageNode) Replicator(logStreamID types.LogStreamID) (replication.Replicator, bool) {

@@ -89,6 +89,32 @@ func (m *MockGetter) EXPECT() *MockGetterMockRecorder {
 	return m.recorder
 }
 
+// ForEachReportCommitter mocks base method.
+func (m *MockGetter) ForEachReportCommitter(arg0 func(ReportCommitter)) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ForEachReportCommitter", arg0)
+}
+
+// ForEachReportCommitter indicates an expected call of ForEachReportCommitter.
+func (mr *MockGetterMockRecorder) ForEachReportCommitter(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForEachReportCommitter", reflect.TypeOf((*MockGetter)(nil).ForEachReportCommitter), arg0)
+}
+
+// NumberOfReportCommitters mocks base method.
+func (m *MockGetter) NumberOfReportCommitters() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumberOfReportCommitters")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumberOfReportCommitters indicates an expected call of NumberOfReportCommitters.
+func (mr *MockGetterMockRecorder) NumberOfReportCommitters() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumberOfReportCommitters", reflect.TypeOf((*MockGetter)(nil).NumberOfReportCommitters))
+}
+
 // ReportCommitter mocks base method.
 func (m *MockGetter) ReportCommitter(arg0 types.LogStreamID) (ReportCommitter, bool) {
 	m.ctrl.T.Helper()

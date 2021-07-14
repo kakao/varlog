@@ -17,4 +17,6 @@ type ReportCommitter interface {
 type Getter interface {
 	ReportCommitter(logStreamID types.LogStreamID) (ReportCommitter, bool)
 	ReportCommitters() []ReportCommitter
+	ForEachReportCommitter(func(ReportCommitter))
+	NumberOfReportCommitters() int
 }
