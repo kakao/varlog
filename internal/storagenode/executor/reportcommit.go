@@ -2,12 +2,13 @@ package executor
 
 import (
 	"context"
-
-	"github.com/pkg/errors"
+	stderrors "errors"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
+
+var errOldCommit = stderrors.New("too old commit result")
 
 func (e *executor) GetReport(_ context.Context) (snpb.LogStreamUncommitReport, error) {
 	if err := e.guard(); err != nil {
@@ -35,7 +36,8 @@ func (e *executor) Commit(ctx context.Context, commitResult *snpb.LogStreamCommi
 	globalHighWatermark, _ := e.lsc.reportCommitBase()
 	if commitResult.HighWatermark <= globalHighWatermark {
 		// too old
-		return errors.New("too old commit result")
+		// return errors.New("too old commit result")
+		return errOldCommit
 	}
 
 	ct := newCommitTask()
