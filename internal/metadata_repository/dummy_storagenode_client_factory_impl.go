@@ -246,7 +246,7 @@ func (r *DummyStorageNodeClient) GetReport(ctx context.Context) (*snpb.GetReport
 	}
 
 	for i, lsID := range r.logStreamIDs {
-		u := &snpb.LogStreamUncommitReport{
+		u := snpb.LogStreamUncommitReport{
 			LogStreamID:           lsID,
 			HighWatermark:         r.knownHighWatermark[i],
 			UncommittedLLSNOffset: r.uncommittedLLSNOffset[i],

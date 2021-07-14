@@ -448,7 +448,7 @@ func makeUncommitReport(snID types.StorageNodeID, knownHighWatermark types.GLSN,
 	report := &mrpb.Report{
 		StorageNodeID: snID,
 	}
-	u := &snpb.LogStreamUncommitReport{
+	u := snpb.LogStreamUncommitReport{
 		LogStreamID:           lsID,
 		HighWatermark:         knownHighWatermark,
 		UncommittedLLSNOffset: offset,
@@ -460,7 +460,7 @@ func makeUncommitReport(snID types.StorageNodeID, knownHighWatermark types.GLSN,
 }
 
 func appendUncommitReport(report *mrpb.Report, knownHighWatermark types.GLSN, lsID types.LogStreamID, offset types.LLSN, length uint64) *mrpb.Report {
-	u := &snpb.LogStreamUncommitReport{
+	u := snpb.LogStreamUncommitReport{
 		LogStreamID:           lsID,
 		HighWatermark:         knownHighWatermark,
 		UncommittedLLSNOffset: offset,
@@ -539,8 +539,8 @@ func TestMRApplyReport(t *testing.T) {
 		mr.applyReport(report)
 
 		for _, snId := range snIDs {
-			r := mr.storage.LookupUncommitReport(lsId, snId)
-			So(r, ShouldBeNil)
+			_, ok := mr.storage.LookupUncommitReport(lsId, snId)
+			So(ok, ShouldBeFalse)
 		}
 
 		Convey("UncommitReport should register when register LogStream", func(ctx C) {
@@ -549,16 +549,16 @@ func TestMRApplyReport(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			for _, snId := range snIDs {
-				r := mr.storage.LookupUncommitReport(lsId, snId)
-				So(r, ShouldNotBeNil)
+				_, ok := mr.storage.LookupUncommitReport(lsId, snId)
+				So(ok, ShouldBeTrue)
 			}
 
 			Convey("Report should not apply if snID is not exist in UncommitReport", func(ctx C) {
 				report := makeUncommitReport(notExistSnID, types.InvalidGLSN, lsId, types.MinLLSN, 2)
 				mr.applyReport(report)
 
-				r := mr.storage.LookupUncommitReport(lsId, notExistSnID)
-				So(r, ShouldBeNil)
+				_, ok := mr.storage.LookupUncommitReport(lsId, notExistSnID)
+				So(ok, ShouldBeFalse)
 			})
 
 			Convey("Report should apply if snID is exist in UncommitReport", func(ctx C) {
@@ -566,16 +566,16 @@ func TestMRApplyReport(t *testing.T) {
 				report := makeUncommitReport(snId, types.InvalidGLSN, lsId, types.MinLLSN, 2)
 				mr.applyReport(report)
 
-				r := mr.storage.LookupUncommitReport(lsId, snId)
-				So(r, ShouldNotBeNil)
+				r, ok := mr.storage.LookupUncommitReport(lsId, snId)
+				So(ok, ShouldBeTrue)
 				So(r.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN+types.LLSN(2))
 
 				Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
 					report := makeUncommitReport(snId, types.InvalidGLSN, lsId, types.MinLLSN, 3)
 					mr.applyReport(report)
 
-					r := mr.storage.LookupUncommitReport(lsId, snId)
-					So(r, ShouldNotBeNil)
+					r, ok := mr.storage.LookupUncommitReport(lsId, snId)
+					So(ok, ShouldBeTrue)
 					So(r.UncommittedLLSNEnd(), ShouldEqual, types.MinLLSN+types.LLSN(3))
 				})
 
@@ -583,8 +583,8 @@ func TestMRApplyReport(t *testing.T) {
 					report := makeUncommitReport(snId, types.InvalidGLSN, lsId, types.MinLLSN, 1)
 					mr.applyReport(report)
 
-					r := mr.storage.LookupUncommitReport(lsId, snId)
-					So(r, ShouldNotBeNil)
+					r, ok := mr.storage.LookupUncommitReport(lsId, snId)
+					So(ok, ShouldBeTrue)
 					So(r.UncommittedLLSNEnd(), ShouldNotEqual, types.MinLLSN+types.LLSN(1))
 				})
 			})

@@ -39,7 +39,7 @@ const (
 )
 
 type ReportCollectorHelper interface {
-	ProposeReport(types.StorageNodeID, []*snpb.LogStreamUncommitReport) error
+	ProposeReport(types.StorageNodeID, []snpb.LogStreamUncommitReport) error
 
 	GetReporterClient(context.Context, *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error)
 
@@ -735,8 +735,8 @@ func (mr *RaftMetadataRepository) applyReport(r *mrpb.Report) error {
 
 	snID := r.StorageNodeID
 	for _, u := range r.UncommitReport {
-		s := mr.storage.LookupUncommitReport(u.LogStreamID, snID)
-		if s == nil {
+		s, ok := mr.storage.LookupUncommitReport(u.LogStreamID, snID)
+		if !ok {
 			continue
 		}
 
@@ -1060,7 +1060,7 @@ func (mr *RaftMetadataRepository) proposeCommit() {
 	mr.propose(context.TODO(), r, false)
 }
 
-func (mr *RaftMetadataRepository) proposeReport(snID types.StorageNodeID, ur []*snpb.LogStreamUncommitReport) error {
+func (mr *RaftMetadataRepository) proposeReport(snID types.StorageNodeID, ur []snpb.LogStreamUncommitReport) error {
 	r := &mrpb.Report{
 		StorageNodeID:  snID,
 		UncommitReport: ur,
@@ -1368,7 +1368,7 @@ func (mr *RaftMetadataRepository) IsLearner() bool {
 	return mr.hasLeader() && mr.storage.IsLearner(mr.nodeID)
 }
 
-func (mr *RaftMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []*snpb.LogStreamUncommitReport) error {
+func (mr *RaftMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []snpb.LogStreamUncommitReport) error {
 	return mr.proposeReport(snID, ur)
 }
 

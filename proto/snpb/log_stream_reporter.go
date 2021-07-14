@@ -4,28 +4,31 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 )
 
-func (u *LogStreamUncommitReport) UncommittedLLSNEnd() types.LLSN {
-	if u == nil {
+// InvalidLogStreamUncommitReport is empty report. Do **NOT** modify this.
+var InvalidLogStreamUncommitReport = LogStreamUncommitReport{}
+
+func (m *LogStreamUncommitReport) UncommittedLLSNEnd() types.LLSN {
+	if m == nil {
 		return types.InvalidLLSN
 	}
 
-	return u.UncommittedLLSNOffset + types.LLSN(u.UncommittedLLSNLength)
+	return m.UncommittedLLSNOffset + types.LLSN(m.UncommittedLLSNLength)
 }
 
-func (r *LogStreamUncommitReport) Seal(end types.LLSN) types.LLSN {
-	if r == nil {
+func (m *LogStreamUncommitReport) Seal(end types.LLSN) types.LLSN {
+	if m == nil {
 		return types.InvalidLLSN
 	}
 
-	if end < r.UncommittedLLSNOffset {
+	if end < m.UncommittedLLSNOffset {
 		return types.InvalidLLSN
 	}
 
-	if end > r.UncommittedLLSNEnd() {
+	if end > m.UncommittedLLSNEnd() {
 		return types.InvalidLLSN
 	}
 
-	r.UncommittedLLSNLength = uint64(end - r.UncommittedLLSNOffset)
+	m.UncommittedLLSNLength = uint64(end - m.UncommittedLLSNOffset)
 
-	return r.UncommittedLLSNEnd()
+	return m.UncommittedLLSNEnd()
 }

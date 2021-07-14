@@ -31,15 +31,18 @@ message StorageNodeUncommitReport {
             "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    repeated snpb.LogStreamUncommitReport uncommit_reports = 2;
+    repeated snpb.LogStreamUncommitReport uncommit_reports = 2
+        [(gogoproto.nullable) = false];
 }
 
 message LogStreamUncommitReports {
     option (gogoproto.equal) = true;
 
-    map<uint32, snpb.LogStreamUncommitReport> replicas = 1
-        [(gogoproto.castkey) =
-             "github.com/kakao/varlog/pkg/types.StorageNodeID"];
+    map<uint32, snpb.LogStreamUncommitReport> replicas = 1 [
+        (gogoproto.castkey) =
+            "github.com/kakao/varlog/pkg/types.StorageNodeID",
+        (gogoproto.nullable) = false
+    ];
     varlogpb.LogStreamStatus status = 2;
 }
 

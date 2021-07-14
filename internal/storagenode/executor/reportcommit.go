@@ -9,15 +9,15 @@ import (
 	"github.com/kakao/varlog/proto/snpb"
 )
 
-func (e *executor) GetReport(_ context.Context) (*snpb.LogStreamUncommitReport, error) {
+func (e *executor) GetReport(_ context.Context) (snpb.LogStreamUncommitReport, error) {
 	if err := e.guard(); err != nil {
-		return nil, err
+		return snpb.InvalidLogStreamUncommitReport, err
 	}
 	defer e.unguard()
 
 	globalHighWatermark, uncommittedLLSNBegin := e.lsc.reportCommitBase()
 	uncommittedLLSNEnd := e.lsc.uncommittedLLSNEnd.Load()
-	return &snpb.LogStreamUncommitReport{
+	return snpb.LogStreamUncommitReport{
 		LogStreamID:           e.logStreamID,
 		HighWatermark:         globalHighWatermark,
 		UncommittedLLSNOffset: uncommittedLLSNBegin,

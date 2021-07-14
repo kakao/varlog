@@ -86,14 +86,14 @@ func (l *StorageNodeUncommitReport) Sort() {
 	sort.Sort(l)
 }
 
-func (l *StorageNodeUncommitReport) LookupReport(lsID types.LogStreamID) *snpb.LogStreamUncommitReport {
+func (l *StorageNodeUncommitReport) LookupReport(lsID types.LogStreamID) (snpb.LogStreamUncommitReport, bool) {
 	if l == nil {
-		return nil
+		return snpb.InvalidLogStreamUncommitReport, false
 	}
 
 	i := sort.Search(l.Len(), func(i int) bool { return l.UncommitReports[i].LogStreamID >= lsID })
 	if i < l.Len() && l.UncommitReports[i].LogStreamID == lsID {
-		return l.UncommitReports[i]
+		return l.UncommitReports[i], true
 	}
-	return nil
+	return snpb.InvalidLogStreamUncommitReport, false
 }

@@ -50,7 +50,8 @@ message Report {
             "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    repeated snpb.LogStreamUncommitReport uncommit_report = 2;
+    repeated snpb.LogStreamUncommitReport uncommit_report = 2
+        [(gogoproto.nullable) = false];
 }
 
 message Commit {
