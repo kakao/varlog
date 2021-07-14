@@ -593,7 +593,7 @@ func (rce *reportCollectExecutor) commit(ctx context.Context, cr *snpb.LogStream
 
 	r := snpb.CommitRequest{
 		StorageNodeID: rce.storageNodeID,
-		CommitResults: []*snpb.LogStreamCommitResult{cr},
+		CommitResults: []snpb.LogStreamCommitResult{*cr},
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, rce.rpcTimeout)

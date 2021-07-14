@@ -173,7 +173,7 @@ func TestExecutorAppend(t *testing.T) {
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength > 0
 			}, time.Second, time.Millisecond)
-			err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+			err := lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 				HighWatermark:       hwm,
 				PrevHighWatermark:   hwm - 1,
 				CommittedGLSNOffset: hwm,
@@ -272,7 +272,7 @@ func TestExecutorRead(t *testing.T) {
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength > 0
 			}, time.Second, time.Millisecond)
-			err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+			err := lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 				HighWatermark:       expectedHWM,
 				PrevHighWatermark:   expectedHWM - 3,
 				CommittedGLSNOffset: expectedGLSN,
@@ -350,7 +350,7 @@ func TestExecutorTrim(t *testing.T) {
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength > 0
 			}, time.Second, time.Millisecond)
-			err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+			err := lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 				HighWatermark:       expectedHWM,
 				PrevHighWatermark:   expectedHWM - 5,
 				CommittedGLSNOffset: expectedGLSN,
@@ -462,7 +462,7 @@ func TestExecutorSubscribe(t *testing.T) {
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength > 0
 			}, time.Second, time.Millisecond)
-			err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+			err := lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 				HighWatermark:       expectedHWM,
 				PrevHighWatermark:   expectedHWM - 5,
 				CommittedGLSNOffset: expectedGLSN,
@@ -550,7 +550,7 @@ func TestExecutorSubscribe(t *testing.T) {
 			require.NoError(t, err)
 			return report.UncommittedLLSNLength > 0
 		}, time.Second, time.Millisecond)
-		err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+		err := lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 			HighWatermark:       55,
 			PrevHighWatermark:   50,
 			CommittedGLSNOffset: 53,
@@ -636,7 +636,7 @@ func TestExecutorReplicate(t *testing.T) {
 			return report.UncommittedLLSNLength == 1
 		}, time.Second, 10*time.Millisecond)
 
-		require.NoError(t, lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+		require.NoError(t, lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 			HighWatermark:       expectedHWM,
 			PrevHighWatermark:   expectedHWM - 5,
 			CommittedGLSNOffset: expectedGLSN,
@@ -709,7 +709,7 @@ func TestExecutorSealSuddenly(t *testing.T) {
 		}(i)
 	}
 
-	var commitResults []*snpb.LogStreamCommitResult
+	var commitResults []snpb.LogStreamCommitResult
 	var lastCommittedGLSN types.GLSN
 	var sealed bool
 	var muSealed sync.Mutex
@@ -731,7 +731,7 @@ func TestExecutorSealSuddenly(t *testing.T) {
 				continue
 			}
 
-			var cr *snpb.LogStreamCommitResult
+			var cr snpb.LogStreamCommitResult
 			i := sort.Search(len(commitResults), func(i int) bool {
 				return report.GetHighWatermark() <= commitResults[i].GetPrevHighWatermark()
 			})
@@ -750,7 +750,7 @@ func TestExecutorSealSuddenly(t *testing.T) {
 				continue
 			}
 
-			cr = &snpb.LogStreamCommitResult{
+			cr = snpb.LogStreamCommitResult{
 				HighWatermark:       report.GetHighWatermark() + types.GLSN(report.GetUncommittedLLSNLength()),
 				PrevHighWatermark:   report.GetHighWatermark(),
 				CommittedGLSNOffset: types.GLSN(report.GetUncommittedLLSNOffset()),
@@ -830,7 +830,7 @@ func TestExecutorSeal(t *testing.T) {
 		return report.UncommittedLLSNLength == 10
 	}, time.Second, time.Millisecond)
 
-	err = lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+	err = lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 		HighWatermark:       2,
 		PrevHighWatermark:   0,
 		CommittedGLSNOffset: 1,
@@ -851,7 +851,7 @@ func TestExecutorSeal(t *testing.T) {
 	assert.Equal(t, types.GLSN(2), glsn)
 	assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
 
-	err = lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+	err = lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 		HighWatermark:       3,
 		PrevHighWatermark:   2,
 		CommittedGLSNOffset: 3,
@@ -914,7 +914,7 @@ func TestExecutorSeal(t *testing.T) {
 		return report.UncommittedLLSNLength == 10
 	}, time.Second, time.Millisecond)
 
-	err = lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+	err = lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 		HighWatermark:       13,
 		PrevHighWatermark:   3,
 		CommittedGLSNOffset: 4,
@@ -1069,7 +1069,7 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 				runtime.Gosched()
 				continue
 			}
-			if err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+			if err := lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 				HighWatermark:       report.GetHighWatermark() + types.GLSN(report.GetUncommittedLLSNLength()),
 				PrevHighWatermark:   report.GetHighWatermark(),
 				CommittedGLSNOffset: types.GLSN(report.GetUncommittedLLSNOffset()),
@@ -1170,7 +1170,7 @@ func TestExecutorNew(t *testing.T) {
 			require.NoError(t, err)
 			return report.UncommittedLLSNLength == 10
 		}, time.Second, time.Millisecond)
-		err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+		err := lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 			HighWatermark:       5,
 			PrevHighWatermark:   0,
 			CommittedGLSNOffset: 1,
@@ -1211,7 +1211,7 @@ func TestExecutorNew(t *testing.T) {
 	require.Equal(t, types.LLSN(6), report.UncommittedLLSNOffset)
 	require.EqualValues(t, 5, report.UncommittedLLSNLength)
 
-	err = lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+	err = lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 		HighWatermark:       8,
 		PrevHighWatermark:   5,
 		CommittedGLSNOffset: 6,
@@ -1298,7 +1298,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 			return report.UncommittedLLSNLength == 10
 		}, time.Second, time.Millisecond)
 
-		err := lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+		err := lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 			HighWatermark:       5,
 			PrevHighWatermark:   0,
 			CommittedGLSNOffset: 1,
@@ -1313,7 +1313,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 			return report.HighWatermark == 5
 		}, time.Second, time.Millisecond)
 
-		err = lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+		err = lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 			HighWatermark:       20,
 			PrevHighWatermark:   5,
 			CommittedGLSNOffset: 11,
@@ -1439,7 +1439,7 @@ func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 		},
 	}))
 
-	require.NoError(t, lse.Commit(context.TODO(), &snpb.LogStreamCommitResult{
+	require.NoError(t, lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 		HighWatermark:       5,
 		PrevHighWatermark:   0,
 		CommittedGLSNOffset: 1,
@@ -1664,7 +1664,7 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 			return report.UncommittedLLSNLength == 1
 		}, time.Second, 10*time.Millisecond)
 
-		assert.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+		assert.NoError(t, lse.Commit(context.Background(), snpb.LogStreamCommitResult{
 			HighWatermark:       glsn,
 			PrevHighWatermark:   glsn - 1,
 			CommittedGLSNOffset: glsn,
@@ -1708,7 +1708,7 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 	require.Equal(t, executorLearning, lse.stateBarrier.state.load())
 
 	// Replica in learning state should not accept commit request.
-	assert.Error(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+	assert.Error(t, lse.Commit(context.Background(), snpb.LogStreamCommitResult{
 		HighWatermark:       4,
 		PrevHighWatermark:   2,
 		CommittedGLSNOffset: 3,
@@ -1789,7 +1789,7 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 				return report.UncommittedLLSNLength == 1
 			}, time.Second, 10*time.Millisecond)
 
-			assert.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+			assert.NoError(t, lse.Commit(context.Background(), snpb.LogStreamCommitResult{
 				HighWatermark:       glsn,
 				PrevHighWatermark:   glsn - 1,
 				CommittedGLSNOffset: glsn,
@@ -1839,7 +1839,7 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 	require.Equal(t, executorLearning, lse.stateBarrier.state.load())
 
 	// Replica in learning state should not accept commit request.
-	assert.Error(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+	assert.Error(t, lse.Commit(context.Background(), snpb.LogStreamCommitResult{
 		HighWatermark:       4,
 		PrevHighWatermark:   2,
 		CommittedGLSNOffset: 3,
@@ -1916,7 +1916,7 @@ func TestExecutorSync(t *testing.T) {
 	require.True(t, lse.isPrimay())
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
-	require.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+	require.NoError(t, lse.Commit(context.Background(), snpb.LogStreamCommitResult{
 		HighWatermark:       5,
 		PrevHighWatermark:   0,
 		CommittedGLSNOffset: 1,
@@ -1930,7 +1930,7 @@ func TestExecutorSync(t *testing.T) {
 		return report.HighWatermark == 5
 	}, time.Second, 10*time.Millisecond)
 
-	require.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+	require.NoError(t, lse.Commit(context.Background(), snpb.LogStreamCommitResult{
 		HighWatermark:       10,
 		PrevHighWatermark:   5,
 		CommittedGLSNOffset: 1,
@@ -1965,7 +1965,7 @@ func TestExecutorSync(t *testing.T) {
 				return report.UncommittedLLSNLength == 1
 			}, time.Second, 10*time.Millisecond)
 
-			assert.NoError(t, lse.Commit(context.Background(), &snpb.LogStreamCommitResult{
+			assert.NoError(t, lse.Commit(context.Background(), snpb.LogStreamCommitResult{
 				HighWatermark:       glsn,
 				PrevHighWatermark:   glsn - 1,
 				CommittedGLSNOffset: glsn,

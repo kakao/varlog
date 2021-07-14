@@ -18,7 +18,7 @@ type Reporter interface {
 	io.Closer
 	StorageNodeID() types.StorageNodeID
 	GetReport(ctx context.Context) ([]snpb.LogStreamUncommitReport, error)
-	Commit(ctx context.Context, commitResults []*snpb.LogStreamCommitResult) error
+	Commit(ctx context.Context, commitResults []snpb.LogStreamCommitResult) error
 }
 
 type reporter struct {
@@ -83,7 +83,7 @@ func (r *reporter) report(ctx context.Context) (reports []snpb.LogStreamUncommit
 	return reports
 }
 
-func (r *reporter) Commit(_ context.Context, commitResults []*snpb.LogStreamCommitResult) error {
+func (r *reporter) Commit(_ context.Context, commitResults []snpb.LogStreamCommitResult) error {
 	r.running.mu.RLock()
 	defer r.running.mu.RUnlock()
 	if !r.running.r {

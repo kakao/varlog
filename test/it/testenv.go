@@ -1430,7 +1430,7 @@ func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
 	committedLLSNOffset types.LLSN, committedGLSNOffset types.GLSN, committedGLSNLen uint64,
 	prevHighWatermark, highWatermark types.GLSN) {
 
-	cr := &snpb.LogStreamCommitResult{
+	cr := snpb.LogStreamCommitResult{
 		LogStreamID:         lsID,
 		CommittedLLSNOffset: committedLLSNOffset,
 		CommittedGLSNOffset: committedGLSNOffset,
@@ -1449,7 +1449,7 @@ func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
 	for _, r := range rds {
 		cr := &snpb.CommitRequest{
 			StorageNodeID: r.StorageNodeID,
-			CommitResults: []*snpb.LogStreamCommitResult{cr},
+			CommitResults: []snpb.LogStreamCommitResult{cr},
 		}
 
 		reportCommitter := clus.reportCommitters[r.StorageNodeID]

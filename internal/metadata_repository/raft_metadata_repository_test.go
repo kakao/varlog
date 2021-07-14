@@ -489,9 +489,9 @@ func makeLogStream(lsID types.LogStreamID, snIDs []types.StorageNodeID) *varlogp
 }
 
 func makeCommitResult(snID types.StorageNodeID, lsIDs []types.LogStreamID, llsn []types.LLSN, prevHighwatermark, highWatermark, offset types.GLSN) *snpb.CommitRequest {
-	var commitResults []*snpb.LogStreamCommitResult
+	var commitResults []snpb.LogStreamCommitResult
 	for i, lsID := range lsIDs {
-		commitResult := &snpb.LogStreamCommitResult{
+		commitResult := snpb.LogStreamCommitResult{
 			LogStreamID:         lsID,
 			PrevHighWatermark:   prevHighwatermark,
 			HighWatermark:       highWatermark,
