@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 
+	_ "go.uber.org/automaxprocs"
+
 	"github.daumkakao.com/varlog/varlog/cmd/vms/app"
 	"github.daumkakao.com/varlog/varlog/internal/vms"
 )

@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 
+	_ "go.uber.org/automaxprocs"
+
 	"github.daumkakao.com/varlog/varlog/cmd/metadata_repository/app"
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 )
