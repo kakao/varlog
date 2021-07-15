@@ -536,7 +536,7 @@ func TestMRApplyReport(t *testing.T) {
 		notExistSnID := types.StorageNodeID(rep)
 
 		report := makeUncommitReport(snIDs[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
-		mr.applyReport(report)
+		mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 		for _, snId := range snIDs {
 			_, ok := mr.storage.LookupUncommitReport(lsId, snId)
@@ -555,7 +555,7 @@ func TestMRApplyReport(t *testing.T) {
 
 			Convey("Report should not apply if snID is not exist in UncommitReport", func(ctx C) {
 				report := makeUncommitReport(notExistSnID, types.InvalidGLSN, lsId, types.MinLLSN, 2)
-				mr.applyReport(report)
+				mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 				_, ok := mr.storage.LookupUncommitReport(lsId, notExistSnID)
 				So(ok, ShouldBeFalse)
@@ -564,7 +564,7 @@ func TestMRApplyReport(t *testing.T) {
 			Convey("Report should apply if snID is exist in UncommitReport", func(ctx C) {
 				snId := snIDs[0]
 				report := makeUncommitReport(snId, types.InvalidGLSN, lsId, types.MinLLSN, 2)
-				mr.applyReport(report)
+				mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 				r, ok := mr.storage.LookupUncommitReport(lsId, snId)
 				So(ok, ShouldBeTrue)
@@ -572,7 +572,7 @@ func TestMRApplyReport(t *testing.T) {
 
 				Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
 					report := makeUncommitReport(snId, types.InvalidGLSN, lsId, types.MinLLSN, 3)
-					mr.applyReport(report)
+					mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 					r, ok := mr.storage.LookupUncommitReport(lsId, snId)
 					So(ok, ShouldBeTrue)
@@ -581,7 +581,7 @@ func TestMRApplyReport(t *testing.T) {
 
 				Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
 					report := makeUncommitReport(snId, types.InvalidGLSN, lsId, types.MinLLSN, 1)
-					mr.applyReport(report)
+					mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 					r, ok := mr.storage.LookupUncommitReport(lsId, snId)
 					So(ok, ShouldBeTrue)
@@ -617,7 +617,7 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream which all reports have not arrived cannot be commit", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.InvalidGLSN, lsId, types.MinLLSN, 2)
-			mr.applyReport(report)
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 			replicas := mr.storage.LookupUncommitReports(lsId)
 			_, minHWM, nrCommit := mr.calculateCommit(replicas)
@@ -627,10 +627,10 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream which all reports are disjoint cannot be commit", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(5), 1)
-			mr.applyReport(report)
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 			report = makeUncommitReport(snIDs[1], types.GLSN(7), lsId, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(report)
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 			replicas := mr.storage.LookupUncommitReports(lsId)
 			knownHWM, minHWM, nrCommit := mr.calculateCommit(replicas)
@@ -641,10 +641,10 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream Should be commit where replication is completed", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.GLSN(10), lsId, types.MinLLSN+types.LLSN(3), 3)
-			mr.applyReport(report)
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 			report = makeUncommitReport(snIDs[1], types.GLSN(9), lsId, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(report)
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
 
 			replicas := mr.storage.LookupUncommitReports(lsId)
 			knownHWM, minHWM, nrCommit := mr.calculateCommit(replicas)
@@ -1291,6 +1291,10 @@ func TestMRUnseal(t *testing.T) {
 		So(testutil.CompareWaitN(10, func() bool {
 			report := makeUncommitReport(snIDs[1][1], types.InvalidGLSN, lsIds[1], types.MinLLSN, 3)
 			return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
+		}), ShouldBeTrue)
+
+		So(testutil.CompareWaitN(10, func() bool {
+			return mr.getLastCommitted(lsIds[1]) == 5
 		}), ShouldBeTrue)
 
 		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
