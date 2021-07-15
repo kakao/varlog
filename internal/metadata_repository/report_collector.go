@@ -17,7 +17,8 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
-const DEFAULT_REPORT_ALL_DUR = time.Second
+const DefaultReportRefreshTime = time.Second
+const DefaultCatchupRefreshTime = 3 * time.Millisecond
 
 type ReportCollector interface {
 	Run()
@@ -48,11 +49,15 @@ type ReportCollector interface {
 }
 
 type commitHelper interface {
-	commit(context.Context, snpb.LogStreamCommitResult) error
+	getClient(ctx context.Context) (reportcommitter.Client, error)
 
 	getReportedHighWatermark(types.LogStreamID) (types.GLSN, bool)
 
+	getLastCommitResults() *mrpb.LogStreamCommitResults
+
 	lookupNextCommitResults(types.GLSN) (*mrpb.LogStreamCommitResults, error)
+
+	commit(context.Context, snpb.LogStreamCommitResult) error
 }
 
 type logStreamCommitter struct {
@@ -63,6 +68,13 @@ type logStreamCommitter struct {
 		mu                 sync.RWMutex
 		status             varlogpb.LogStreamStatus
 		beginHighWatermark types.GLSN
+	}
+
+	catchupHelper struct {
+		cli               reportcommitter.Client
+		sentHighWatermark types.GLSN
+		sentAt            time.Time
+		expectedPos       int
 	}
 
 	triggerC chan struct{}
@@ -621,6 +633,10 @@ func (rce *reportCollectExecutor) getReportedHighWatermark(lsID types.LogStreamI
 	return r.HighWatermark, true
 }
 
+func (rce *reportCollectExecutor) getLastCommitResults() *mrpb.LogStreamCommitResults {
+	return rce.helper.GetLastCommitResults()
+}
+
 func (rce *reportCollectExecutor) lookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
 	return rce.helper.LookupNextCommitResults(glsn)
 }
@@ -683,10 +699,19 @@ Loop:
 	close(lc.triggerC)
 }
 
-func (lc *logStreamCommitter) getCatchupHighWatermark() (types.GLSN, bool) {
+func (lc *logStreamCommitter) getCatchupHighWatermark(resetCatchupHelper bool) (types.GLSN, bool) {
+	if resetCatchupHelper {
+		lc.setSentHighWatermark(types.InvalidGLSN)
+	}
+
 	status, beginHighWatermark := lc.getCommitStatus()
 	if status.Sealed() {
 		return types.InvalidGLSN, false
+	}
+
+	sent := lc.getSentHighWatermark()
+	if sent != types.InvalidGLSN {
+		return sent, true
 	}
 
 	highWatermark, ok := lc.helper.getReportedHighWatermark(lc.lsID)
@@ -702,8 +727,24 @@ func (lc *logStreamCommitter) getCatchupHighWatermark() (types.GLSN, bool) {
 }
 
 func (lc *logStreamCommitter) catchup(ctx context.Context) {
-	highWatermark, ok := lc.getCatchupHighWatermark()
-	if !ok {
+	cli, err := lc.helper.getClient(ctx)
+	if err != nil {
+		return
+	}
+
+	resetCatchupHelper := false
+	if lc.getKnownClient() != cli {
+		lc.setKnownClient(cli)
+		resetCatchupHelper = true
+	}
+
+	crs := lc.helper.getLastCommitResults()
+	if crs == nil {
+		return
+	}
+
+	highWatermark, ok := lc.getCatchupHighWatermark(resetCatchupHelper)
+	if !ok || highWatermark >= crs.HighWatermark {
 		return
 	}
 
@@ -717,29 +758,33 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 	}()
 
 	for ctx.Err() == nil {
-		results, err := lc.helper.lookupNextCommitResults(highWatermark)
-		if err != nil {
-			latestHighWatermark, ok := lc.getCatchupHighWatermark()
-			if !ok {
-				return
-			}
+		if highWatermark != crs.PrevHighWatermark {
+			crs, err = lc.helper.lookupNextCommitResults(highWatermark)
+			if err != nil {
+				latestHighWatermark, ok := lc.getCatchupHighWatermark(false)
+				if !ok {
+					return
+				}
 
-			if latestHighWatermark > highWatermark {
-				highWatermark = latestHighWatermark
-				continue
-			}
+				if latestHighWatermark > highWatermark {
+					highWatermark = latestHighWatermark
+					continue
+				}
 
-			lc.logger.Panic(fmt.Sprintf("lsid:%v latest:%v err:%v", lc.lsID, latestHighWatermark, err.Error()))
+				lc.logger.Panic(fmt.Sprintf("lsid:%v latest:%v err:%v", lc.lsID, latestHighWatermark, err.Error()))
+			}
 		}
 
-		if results == nil {
+		if crs == nil {
 			return
 		}
 
-		cr, ok := results.LookupCommitResult(lc.lsID)
+		cr, expectedPos, ok := crs.LookupCommitResult(lc.lsID, lc.catchupHelper.expectedPos)
 		if ok {
-			cr.HighWatermark = results.HighWatermark
-			cr.PrevHighWatermark = results.PrevHighWatermark
+			lc.catchupHelper.expectedPos = expectedPos
+
+			cr.HighWatermark = crs.HighWatermark
+			cr.PrevHighWatermark = crs.PrevHighWatermark
 
 			err := lc.helper.commit(ctx, cr)
 			if err != nil {
@@ -747,7 +792,8 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 			}
 		}
 
-		highWatermark = results.HighWatermark
+		lc.setSentHighWatermark(crs.HighWatermark)
+		highWatermark = crs.HighWatermark
 
 		numCatchups++
 	}
@@ -775,6 +821,26 @@ func (lc *logStreamCommitter) getCommitStatus() (varlogpb.LogStreamStatus, types
 	return lc.commitStatus.status, lc.commitStatus.beginHighWatermark
 }
 
+func (lc *logStreamCommitter) getSentHighWatermark() types.GLSN {
+	if time.Since(lc.catchupHelper.sentAt) > DefaultCatchupRefreshTime {
+		return types.InvalidGLSN
+	}
+	return lc.catchupHelper.sentHighWatermark
+}
+
+func (lc *logStreamCommitter) setSentHighWatermark(highWatermark types.GLSN) {
+	lc.catchupHelper.sentHighWatermark = highWatermark
+	lc.catchupHelper.sentAt = time.Now()
+}
+
+func (lc *logStreamCommitter) getKnownClient() reportcommitter.Client {
+	return lc.catchupHelper.cli
+}
+
+func (lc *logStreamCommitter) setKnownClient(cli reportcommitter.Client) {
+	lc.catchupHelper.cli = cli
+}
+
 func (rc *reportContext) saveReport(report *mrpb.StorageNodeUncommitReport) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
@@ -794,5 +860,5 @@ func (rc *reportContext) reload() {
 }
 
 func (rc *reportContext) isExpire() bool {
-	return time.Since(rc.reloadAt) > DEFAULT_REPORT_ALL_DUR
+	return time.Since(rc.reloadAt) > DefaultReportRefreshTime
 }

@@ -1075,8 +1075,11 @@ func TestMRGetLastCommitted(t *testing.T) {
 				return mr.storage.GetHighWatermark() == types.GLSN(5)
 			}), ShouldBeTrue)
 
-			So(mr.numCommitSince(lsIds[0], preHighWatermark), ShouldEqual, 2)
-			So(mr.numCommitSince(lsIds[1], preHighWatermark), ShouldEqual, 3)
+			latest := mr.storage.getLastCommitResultsNoLock()
+			base := mr.storage.lookupNextCommitResultsNoLock(preHighWatermark)
+
+			So(mr.numCommitSince(lsIds[0], base, latest, -1), ShouldEqual, 2)
+			So(mr.numCommitSince(lsIds[1], base, latest, -1), ShouldEqual, 3)
 
 			Convey("getLastCommitted should return same if not committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
@@ -1096,8 +1099,11 @@ func TestMRGetLastCommitted(t *testing.T) {
 						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 					}), ShouldBeTrue)
 
-					So(mr.numCommitSince(lsIds[0], preHighWatermark), ShouldEqual, 0)
-					So(mr.numCommitSince(lsIds[1], preHighWatermark), ShouldEqual, 1)
+					latest := mr.storage.getLastCommitResultsNoLock()
+					base := mr.storage.lookupNextCommitResultsNoLock(preHighWatermark)
+
+					So(mr.numCommitSince(lsIds[0], base, latest, -1), ShouldEqual, 0)
+					So(mr.numCommitSince(lsIds[1], base, latest, -1), ShouldEqual, 1)
 				}
 			})
 
@@ -1134,8 +1140,11 @@ func TestMRGetLastCommitted(t *testing.T) {
 						return mr.storage.GetHighWatermark() == types.GLSN(6+i)
 					}), ShouldBeTrue)
 
-					So(mr.numCommitSince(lsIds[0], preHighWatermark), ShouldEqual, 1)
-					So(mr.numCommitSince(lsIds[1], preHighWatermark), ShouldEqual, 0)
+					latest := mr.storage.getLastCommitResultsNoLock()
+					base := mr.storage.lookupNextCommitResultsNoLock(preHighWatermark)
+
+					So(mr.numCommitSince(lsIds[0], base, latest, -1), ShouldEqual, 1)
+					So(mr.numCommitSince(lsIds[1], base, latest, -1), ShouldEqual, 0)
 				}
 			})
 		})
@@ -1287,8 +1296,26 @@ func TestMRUnseal(t *testing.T) {
 		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		defer cancel()
 		sealedHWM, err := mr.Seal(rctx, lsIds[1])
+
 		So(err, ShouldBeNil)
 		So(sealedHWM, ShouldEqual, mr.getLastCommitted(lsIds[1]))
+
+		So(testutil.CompareWaitN(10, func() bool {
+			for _, snID := range snIDs[1] {
+				report := makeUncommitReport(snID, sealedHWM, lsIds[1], types.LLSN(4), 0)
+				if err := mr.proposeReport(report.StorageNodeID, report.UncommitReport); err != nil {
+					return false
+				}
+			}
+
+			meta, err := mr.GetMetadata(context.TODO())
+			if err != nil {
+				return false
+			}
+
+			ls := meta.GetLogStream(lsIds[1])
+			return ls.Status == varlogpb.LogStreamStatusSealed
+		}), ShouldBeTrue)
 
 		Convey("Unealed LS should update report", func(ctx C) {
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
@@ -1313,7 +1340,10 @@ func TestMRUnseal(t *testing.T) {
 					return mr.storage.GetHighWatermark() == types.GLSN(5+i)
 				}), ShouldBeTrue)
 
-				So(mr.numCommitSince(lsIds[1], preHighWatermark), ShouldEqual, 1)
+				latest := mr.storage.getLastCommitResultsNoLock()
+				base := mr.storage.lookupNextCommitResultsNoLock(preHighWatermark)
+
+				So(mr.numCommitSince(lsIds[1], base, latest, -1), ShouldEqual, 1)
 			}
 		})
 	})

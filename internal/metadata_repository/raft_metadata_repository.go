@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -42,6 +41,8 @@ type ReportCollectorHelper interface {
 	ProposeReport(types.StorageNodeID, []snpb.LogStreamUncommitReport) error
 
 	GetReporterClient(context.Context, *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error)
+
+	GetLastCommitResults() *mrpb.LogStreamCommitResults
 
 	LookupNextCommitResults(types.GLSN) (*mrpb.LogStreamCommitResults, error)
 }
@@ -86,7 +87,8 @@ type RaftMetadataRepository struct {
 	// membership
 	membership Membership
 
-	nrReport uint64
+	nrReport            uint64
+	nrReportSinceCommit uint64
 
 	tmStub *telemetryStub
 }
@@ -732,6 +734,7 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, 
 
 func (mr *RaftMetadataRepository) applyReport(r *mrpb.Report) error {
 	atomic.AddUint64(&mr.nrReport, 1)
+	mr.nrReportSinceCommit++
 
 	snID := r.StorageNodeID
 	for _, u := range r.UncommitReport {
@@ -761,8 +764,10 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 	}
 
 	startTime := time.Now()
-	_, err := mr.withTelemetry(context.TODO(), "commit", func(ctx context.Context) (interface{}, error) {
-		prevCommitResults := mr.storage.GetLastCommitResults()
+	_, err := mr.withTelemetry(context.TODO(), "mr.build_commit_results.duration", func(ctx context.Context) (interface{}, error) {
+		defer mr.storage.ResetUpdateSinceCommit()
+
+		prevCommitResults := mr.storage.getLastCommitResultsNoLock()
 		curHWM := prevCommitResults.GetHighWatermark()
 		trimHWM := types.MaxGLSN
 		committedOffset := curHWM + types.GLSN(1)
@@ -772,14 +777,30 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 			PrevHighWatermark: curHWM,
 		}
 
+		mr.tmStub.mb.Records("mr.reports_log.count").Record(context.Background(),
+			float64(mr.nrReportSinceCommit),
+			attribute.KeyValue{
+				Key:   "nodeid",
+				Value: attribute.StringValue(mr.nodeID.String()),
+			})
+
+		mr.tmStub.mb.Records("mr.update_reports.count").Record(context.Background(),
+			float64(mr.storage.NumUpdateSinceCommit()),
+			attribute.KeyValue{
+				Key:   "nodeid",
+				Value: attribute.StringValue(mr.nodeID.String()),
+			})
+
+		mr.nrReportSinceCommit = 0
+
 		if mr.storage.NumUpdateSinceCommit() > 0 {
-			lsIDs := mr.storage.GetUncommitReportIDs()
+			st := time.Now()
 
-			sort.Slice(lsIDs, func(i, j int) bool { return lsIDs[i] < lsIDs[j] })
-
+			lsIDs := mr.storage.GetSortedLogStreamIDs()
+			commitResultsMap := make(map[types.GLSN]*mrpb.LogStreamCommitResults)
 			crs.CommitResults = make([]snpb.LogStreamCommitResult, 0, len(lsIDs))
 
-			for _, lsID := range lsIDs {
+			for idx, lsID := range lsIDs {
 				reports := mr.storage.LookupUncommitReports(lsID)
 				knownHWM, minHWM, nrUncommit := mr.calculateCommit(reports)
 				if reports.Status.Sealed() {
@@ -803,7 +824,21 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 				if nrUncommit > 0 {
 					if knownHWM != curHWM {
-						nrCommitted := mr.numCommitSince(lsID, knownHWM)
+						baseCommitResults, ok := commitResultsMap[knownHWM]
+						if !ok {
+							baseCommitResults = mr.storage.lookupNextCommitResultsNoLock(knownHWM)
+							if baseCommitResults == nil {
+								mr.logger.Panic("commit history should be exist",
+									zap.Uint64("hwm", uint64(knownHWM)),
+									zap.Uint64("first", uint64(mr.storage.getFirstCommitResultsNoLock().GetHighWatermark())),
+									zap.Uint64("last", uint64(mr.storage.getLastCommitResultsNoLock().GetHighWatermark())),
+								)
+							}
+
+							commitResultsMap[knownHWM] = baseCommitResults
+						}
+
+						nrCommitted := mr.numCommitSince(lsID, baseCommitResults, prevCommitResults, idx)
 						if nrCommitted > nrUncommit {
 							msg := fmt.Sprintf("# of uncommit should be bigger than # of commit:: lsID[%v] cur[%v] first[%v] last[%v] reports[%+v] nrCommitted[%v] nrUncommit[%v]",
 								lsID, curHWM,
@@ -820,7 +855,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 				}
 
 				committedLLSNOffset := types.MinLLSN
-				prevCommitResult, ok := prevCommitResults.LookupCommitResult(lsID)
+				prevCommitResult, _, ok := prevCommitResults.LookupCommitResult(lsID, idx)
 				if ok {
 					committedLLSNOffset = prevCommitResult.CommittedLLSNOffset + types.LLSN(prevCommitResult.CommittedGLSNLength)
 				}
@@ -842,6 +877,13 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 				crs.CommitResults = append(crs.CommitResults, commit)
 				totalCommitted += nrUncommit
 			}
+
+			mr.tmStub.mb.Records("mr.build_commit_results.pure.duration").Record(context.TODO(),
+				float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
+				attribute.KeyValue{
+					Key:   "nodeid",
+					Value: attribute.StringValue(mr.nodeID.String()),
+				})
 		}
 		crs.HighWatermark = curHWM + types.GLSN(totalCommitted)
 
@@ -945,36 +987,26 @@ func (mr *RaftMetadataRepository) applyRecoverStateMachine(r *mrpb.RecoverStateM
 	)
 }
 
-func (mr *RaftMetadataRepository) numCommitSince(lsID types.LogStreamID, glsn types.GLSN) uint64 {
-	var num uint64
-
-	highest := mr.storage.getHighWatermarkNoLock()
-
-	for glsn < highest {
-		crs := mr.storage.lookupNextCommitResultsNoLock(glsn)
-		if crs == nil {
-			mr.logger.Panic("gls should be exist",
-				zap.Uint64("highest", uint64(highest)),
-				zap.Uint64("cur", uint64(glsn)),
-				zap.Uint64("first", uint64(mr.storage.getFirstCommitResultsNoLock().GetHighWatermark())),
-				zap.Uint64("last", uint64(mr.storage.getLastCommitResultsNoLock().GetHighWatermark())),
-			)
-		}
-
-		r, ok := crs.LookupCommitResult(lsID)
-		if !ok {
-			mr.logger.Panic("ls should be exist",
-				zap.Uint64("lsID", uint64(lsID)),
-				zap.Uint64("highest", uint64(highest)),
-				zap.Uint64("cur", uint64(glsn)),
-			)
-		}
-
-		num += r.CommittedGLSNLength
-		glsn = crs.HighWatermark
+func (mr *RaftMetadataRepository) numCommitSince(lsID types.LogStreamID, base, latest *mrpb.LogStreamCommitResults, hintPos int) uint64 {
+	if latest == nil {
+		return 0
 	}
 
-	return num
+	start, _, ok := base.LookupCommitResult(lsID, hintPos)
+	if !ok {
+		mr.logger.Panic("ls should be exist",
+			zap.Uint64("lsID", uint64(lsID)),
+		)
+	}
+
+	end, _, ok := latest.LookupCommitResult(lsID, hintPos)
+	if !ok {
+		mr.logger.Panic("ls should be exist at latest",
+			zap.Uint64("lsID", uint64(lsID)),
+		)
+	}
+
+	return uint64(end.CommittedLLSNOffset-start.CommittedLLSNOffset) + uint64(end.CommittedGLSNLength)
 }
 
 func (mr *RaftMetadataRepository) calculateCommit(reports *mrpb.LogStreamUncommitReports) (types.GLSN, types.GLSN, uint64) {
@@ -1028,7 +1060,7 @@ func (mr *RaftMetadataRepository) getLastCommitted(lsID types.LogStreamID) types
 		return types.InvalidGLSN
 	}
 
-	r, ok := crs.LookupCommitResult(lsID)
+	r, _, ok := crs.LookupCommitResult(lsID, -1)
 	if !ok {
 		// newbie
 		return types.InvalidGLSN
@@ -1047,7 +1079,7 @@ func (mr *RaftMetadataRepository) getLastCommittedLength(lsID types.LogStreamID)
 		return 0
 	}
 
-	r, ok := crs.LookupCommitResult(lsID)
+	r, _, ok := crs.LookupCommitResult(lsID, -1)
 	if !ok {
 		return 0
 	}
@@ -1385,6 +1417,10 @@ func (mr *RaftMetadataRepository) GetReporterClient(ctx context.Context, sn *var
 
 func (mr *RaftMetadataRepository) GetSNManagementClient(ctx context.Context, address string) (snc.StorageNodeManagementClient, error) {
 	return mr.snManagementClientFac.GetManagementClient(ctx, mr.clusterID, address, mr.logger)
+}
+
+func (mr *RaftMetadataRepository) GetLastCommitResults() *mrpb.LogStreamCommitResults {
+	return mr.storage.GetLastCommitResults()
 }
 
 func (mr *RaftMetadataRepository) LookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
