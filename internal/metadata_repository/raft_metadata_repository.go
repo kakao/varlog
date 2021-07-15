@@ -70,6 +70,10 @@ type RaftMetadataRepository struct {
 	rnProposeC    chan string
 	rnCommitC     chan *raftCommittedEntry
 
+	// for report
+	reportQueue   []*mrpb.Report
+	muReportQueue sync.Mutex
+
 	listenNotifyC chan struct{}
 
 	options *MetadataRepositoryOptions
@@ -156,6 +160,8 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	mr.rnConfChangeC = make(chan raftpb.ConfChange, 1)
 	mr.rnProposeC = make(chan string)
 
+	mr.reportQueue = make([]*mrpb.Report, 0, 1024)
+
 	options.SnapCount = 1
 	mr.raftNode = newRaftNode(
 		options.RaftOptions,
@@ -192,6 +198,9 @@ func (mr *RaftMetadataRepository) Run() {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 	if err := mr.runner.RunC(mctx, mr.processCommit); err != nil {
+		mr.logger.Panic("could not run", zap.Error(err))
+	}
+	if err := mr.runner.RunC(mctx, mr.processReport); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 	if err := mr.runner.RunC(mctx, mr.processRNCommit); err != nil {
@@ -366,6 +375,33 @@ Loop:
 	}
 
 	ticker.Stop()
+}
+
+func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
+	ticker := time.NewTicker(mr.options.CommitTick)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			var reports *mrpb.Reports
+
+			mr.muReportQueue.Lock()
+			num := len(mr.reportQueue)
+			if num > 0 {
+				reports = &mrpb.Reports{}
+				reports.Reports = mr.reportQueue
+				mr.reportQueue = make([]*mrpb.Report, 0, 1024)
+			}
+			mr.muReportQueue.Unlock()
+
+			if reports != nil {
+				mr.propose(context.TODO(), reports, false)
+			}
+		}
+	}
 }
 
 func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
@@ -590,7 +626,7 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 			mr.applyUnregisterLogStream(r, e.NodeIndex, e.RequestIndex)
 		case *mrpb.UpdateLogStream:
 			mr.applyUpdateLogStream(r, e.NodeIndex, e.RequestIndex)
-		case *mrpb.Report:
+		case *mrpb.Reports:
 			mr.applyReport(r)
 		case *mrpb.Commit:
 			mr.applyCommit(r, e.AppliedIndex)
@@ -732,21 +768,24 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, 
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyReport(r *mrpb.Report) error {
+func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
 	atomic.AddUint64(&mr.nrReport, 1)
 	mr.nrReportSinceCommit++
 
-	snID := r.StorageNodeID
-	for _, u := range r.UncommitReport {
-		s, ok := mr.storage.LookupUncommitReport(u.LogStreamID, snID)
-		if !ok {
-			continue
-		}
+	for _, r := range reports.Reports {
+		snID := r.StorageNodeID
+	LS:
+		for _, u := range r.UncommitReport {
+			s, ok := mr.storage.LookupUncommitReport(u.LogStreamID, snID)
+			if !ok {
+				continue LS
+			}
 
-		if (s.HighWatermark == u.HighWatermark &&
-			s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd()) ||
-			s.HighWatermark < u.HighWatermark {
-			mr.storage.UpdateUncommitReport(u.LogStreamID, snID, u)
+			if (s.HighWatermark == u.HighWatermark &&
+				s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd()) ||
+				s.HighWatermark < u.HighWatermark {
+				mr.storage.UpdateUncommitReport(u.LogStreamID, snID, u)
+			}
 		}
 	}
 
@@ -1105,7 +1144,12 @@ func (mr *RaftMetadataRepository) proposeReport(snID types.StorageNodeID, ur []s
 		UncommitReport: ur,
 	}
 
-	return mr.propose(context.TODO(), r, false)
+	mr.muReportQueue.Lock()
+	defer mr.muReportQueue.Unlock()
+
+	mr.reportQueue = append(mr.reportQueue, r)
+
+	return nil
 }
 
 func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, guarantee bool) error {

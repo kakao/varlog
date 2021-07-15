@@ -53,18 +53,17 @@ func (mr *MockServerMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // GetReport mocks base method.
-func (m *MockServer) GetReport(arg0 context.Context, arg1 *snpb.GetReportRequest) (*snpb.GetReportResponse, error) {
+func (m *MockServer) GetReport(arg0 snpb.LogStreamReporter_GetReportServer) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReport", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.GetReportResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "GetReport", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // GetReport indicates an expected call of GetReport.
-func (mr *MockServerMockRecorder) GetReport(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockServerMockRecorder) GetReport(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockServer)(nil).GetReport), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockServer)(nil).GetReport), arg0)
 }
 
 // Register mocks base method.

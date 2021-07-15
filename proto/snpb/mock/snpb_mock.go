@@ -908,22 +908,22 @@ func (mr *MockLogStreamReporterClientMockRecorder) Commit(arg0, arg1 interface{}
 }
 
 // GetReport mocks base method.
-func (m *MockLogStreamReporterClient) GetReport(arg0 context.Context, arg1 *snpb.GetReportRequest, arg2 ...grpc.CallOption) (*snpb.GetReportResponse, error) {
+func (m *MockLogStreamReporterClient) GetReport(arg0 context.Context, arg1 ...grpc.CallOption) (snpb.LogStreamReporter_GetReportClient, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetReport", varargs...)
-	ret0, _ := ret[0].(*snpb.GetReportResponse)
+	ret0, _ := ret[0].(snpb.LogStreamReporter_GetReportClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReport indicates an expected call of GetReport.
-func (mr *MockLogStreamReporterClientMockRecorder) GetReport(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockLogStreamReporterClientMockRecorder) GetReport(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockLogStreamReporterClient)(nil).GetReport), varargs...)
 }
 
@@ -966,18 +966,17 @@ func (mr *MockLogStreamReporterServerMockRecorder) Commit(arg0, arg1 interface{}
 }
 
 // GetReport mocks base method.
-func (m *MockLogStreamReporterServer) GetReport(arg0 context.Context, arg1 *snpb.GetReportRequest) (*snpb.GetReportResponse, error) {
+func (m *MockLogStreamReporterServer) GetReport(arg0 snpb.LogStreamReporter_GetReportServer) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReport", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.GetReportResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "GetReport", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // GetReport indicates an expected call of GetReport.
-func (mr *MockLogStreamReporterServerMockRecorder) GetReport(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockLogStreamReporterServerMockRecorder) GetReport(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockLogStreamReporterServer)(nil).GetReport), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockLogStreamReporterServer)(nil).GetReport), arg0)
 }
 
 // MockManagementClient is a mock of ManagementClient interface.

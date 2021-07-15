@@ -54,6 +54,10 @@ message Report {
         [(gogoproto.nullable) = false];
 }
 
+message Reports {
+    repeated Report reports = 1;
+}
+
 message Commit {
     uint64 node_id = 1 [
         (gogoproto.casttype) =
@@ -120,7 +124,7 @@ message RaftEntry {
         RegisterLogStream register_log_stream = 3;
         UnregisterLogStream unregister_log_stream = 4;
         UpdateLogStream update_log_stream = 5;
-        Report report = 6;
+        Reports report = 6;
         Commit commit = 7;
         Seal seal = 8;
         Unseal unseal = 9;
