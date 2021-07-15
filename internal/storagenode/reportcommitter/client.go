@@ -4,8 +4,11 @@ package reportcommitter
 
 import (
 	"context"
+	"io"
+	"sync"
 
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -23,23 +26,64 @@ type Client interface {
 type client struct {
 	rpcConn   *rpc.Conn
 	rpcClient snpb.LogStreamReporterClient
+
+	reportStream   snpb.LogStreamReporter_GetReportClient
+	muReportStream sync.Mutex
+	getReportReq   snpb.GetReportRequest
 }
 
-func NewClient(ctx context.Context, address string) (Client, error) {
+func NewClient(ctx context.Context, address string) (cl Client, err error) {
 	rpcConn, err := rpc.NewConn(ctx, address)
 	if err != nil {
 		return nil, err
 	}
-	return &client{
-		rpcConn:   rpcConn,
-		rpcClient: snpb.NewLogStreamReporterClient(rpcConn.Conn),
-	}, nil
+
+	defer func() {
+		if err != nil {
+			err = multierr.Append(err, rpcConn.Close())
+		}
+	}()
+
+	cl, err = NewClientWithConn(context.Background(), rpcConn)
+	return cl, err
 }
 
-func (c *client) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
-	rsp, err := c.rpcClient.GetReport(ctx, &snpb.GetReportRequest{})
-	return rsp, errors.WithStack(verrors.FromStatusError(err))
+// Clients connecting the same SN can use this method to multiplex streams. By doing that, it can
+// decrease the use of channel buffer.
+func NewClientWithConn(ctx context.Context, rpcConn *rpc.Conn) (Client, error) {
+	rpcClient := snpb.NewLogStreamReporterClient(rpcConn.Conn)
 
+	reportStream, err := rpcClient.GetReport(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cl := &client{
+		rpcConn:      rpcConn,
+		rpcClient:    rpcClient,
+		reportStream: reportStream,
+	}
+
+	return cl, nil
+}
+
+// FIXME(jun): add response parameter to return the response without creating a new object.
+func (c *client) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
+	c.muReportStream.Lock()
+	defer c.muReportStream.Unlock()
+
+	if err := c.reportStream.Send(&c.getReportReq); err != nil {
+		return nil, err
+	}
+	rsp, err := c.reportStream.Recv()
+	if err != nil {
+		if err == io.EOF {
+			// NOTE(jun,pharrell): Zero value of GetReportResponse should be handled.
+			return &snpb.GetReportResponse{}, nil
+		}
+		return nil, err
+	}
+	return rsp, nil
 }
 
 func (c *client) Commit(ctx context.Context, cr *snpb.CommitRequest) error {

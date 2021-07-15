@@ -5,6 +5,7 @@ package reportcommitter
 import (
 	"context"
 	"fmt"
+	"io"
 
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -69,22 +70,31 @@ func (s *server) withTelemetry(ctx context.Context, spanName string, req interfa
 	return rsp, err
 }
 
-func (s *server) GetReport(ctx context.Context, req *snpb.GetReportRequest) (*snpb.GetReportResponse, error) {
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Reporter/GetReport", req,
-		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			var rsp *snpb.GetReportResponse
-			reports, err := s.lsr.GetReport(ctx)
-			if err != nil {
-				return rsp, err
-			}
-			rsp = &snpb.GetReportResponse{
-				StorageNodeID:   s.lsr.StorageNodeID(),
-				UncommitReports: reports,
-			}
-			return rsp, nil
-		},
+func (s *server) GetReport(stream snpb.LogStreamReporter_GetReportServer) (err error) {
+	var (
+		req snpb.GetReportRequest
+		rsp snpb.GetReportResponse
 	)
-	return rspI.(*snpb.GetReportResponse), verrors.ToStatusErrorWithCode(err, codes.Internal)
+	rsp.StorageNodeID = s.lsr.StorageNodeID()
+	for {
+		err = stream.RecvMsg(&req)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		rsp.UncommitReports, err = s.lsr.GetReport(stream.Context())
+		if err != nil {
+			return err
+		}
+
+		err = stream.SendMsg(&rsp)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (s *server) Commit(ctx context.Context, req *snpb.CommitRequest) (*snpb.CommitResponse, error) {
