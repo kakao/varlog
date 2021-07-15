@@ -2,7 +2,9 @@ package metadata_repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -21,7 +23,7 @@ const DefaultReportRefreshTime = time.Second
 const DefaultCatchupRefreshTime = 3 * time.Millisecond
 
 type ReportCollector interface {
-	Run()
+	Run() error
 
 	Reset()
 
@@ -106,7 +108,7 @@ type reportCollectExecutor struct {
 
 	reportCtx *reportContext
 
-	committers map[types.LogStreamID]*logStreamCommitter
+	committers []*logStreamCommitter
 	cmmu       sync.RWMutex
 
 	rpcTimeout time.Duration
@@ -119,13 +121,17 @@ type reportCollectExecutor struct {
 }
 
 type reportCollector struct {
-	executors map[types.StorageNodeID]*reportCollectExecutor
+	executors []*reportCollectExecutor
 	mu        sync.RWMutex
 
 	helper ReportCollectorHelper
 
 	rpcTimeout time.Duration
 	closed     bool
+
+	commitC chan struct{}
+	runner  *runner.Runner
+	rnmu    sync.RWMutex
 
 	tmStub *telemetryStub
 	logger *zap.Logger
@@ -136,8 +142,9 @@ func NewReportCollector(helper ReportCollectorHelper, rpcTimeout time.Duration, 
 		logger:     logger,
 		helper:     helper,
 		rpcTimeout: rpcTimeout,
-		executors:  make(map[types.StorageNodeID]*reportCollectExecutor),
 		tmStub:     tmStub,
+		commitC:    make(chan struct{}, 1),
+		runner:     runner.New("reportCollector", logger),
 	}
 }
 
@@ -145,31 +152,66 @@ func (rc *reportCollector) running() bool {
 	return !rc.closed
 }
 
-func (rc *reportCollector) Run() {
+func (rc *reportCollector) runPropagateCommit(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-rc.commitC:
+			rc.commitInternal()
+		}
+	}
 }
 
-func (rc *reportCollector) reset() {
+func (rc *reportCollector) Run() error {
+	rc.rnmu.Lock()
+	defer rc.rnmu.Unlock()
+
+	ctx, _ := rc.runner.WithManagedCancel(context.Background())
+	if err := rc.runner.RunC(ctx, rc.runPropagateCommit); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (rc *reportCollector) Reset() {
+	rc.runner.Stop()
+
+	rc.rnmu.Lock()
+	rc.runner = runner.New("reportCollector", rc.logger)
+	rc.rnmu.Unlock()
+
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
 	if rc.running() {
 		for _, e := range rc.executors {
 			e.stop()
 		}
 
-		rc.executors = make(map[types.StorageNodeID]*reportCollectExecutor)
+		rc.executors = nil
 	}
 }
 
-func (rc *reportCollector) Reset() {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-
-	rc.reset()
-}
-
 func (rc *reportCollector) Close() {
+	rc.rnmu.Lock()
+	runner := rc.runner
+	rc.rnmu.Unlock()
+
+	runner.Stop()
+
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	rc.reset()
+	if rc.running() {
+		for _, e := range rc.executors {
+			e.stop()
+		}
+
+		rc.executors = nil
+	}
+
 	rc.closed = true
 }
 
@@ -208,6 +250,53 @@ func (rc *reportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, lss []
 	return nil
 }
 
+func (rc *reportCollector) searchExecutor(id types.StorageNodeID) (int, bool) {
+	i := sort.Search(len(rc.executors), func(i int) bool {
+		return rc.executors[i].storageNodeID >= id
+	})
+
+	if i < len(rc.executors) && rc.executors[i].storageNodeID == id {
+		return i, true
+	}
+
+	return i, false
+}
+
+func (rc *reportCollector) lookupExecutor(id types.StorageNodeID) *reportCollectExecutor {
+	i, match := rc.searchExecutor(id)
+	if !match {
+		return nil
+	}
+
+	return rc.executors[i]
+}
+
+func (rc *reportCollector) deleteExecutor(snID types.StorageNodeID) error {
+	i, match := rc.searchExecutor(snID)
+	if !match {
+		return errors.New("not exist")
+	}
+
+	copy(rc.executors[i:], rc.executors[i+1:])
+	rc.executors = rc.executors[:len(rc.executors)-1]
+
+	return nil
+}
+
+func (rc *reportCollector) insertExecutor(e *reportCollectExecutor) error {
+	i, match := rc.searchExecutor(e.storageNodeID)
+	if match {
+		return errors.New("already exist")
+	}
+
+	rc.executors = append(rc.executors, &reportCollectExecutor{})
+	copy(rc.executors[i+1:], rc.executors[i:])
+
+	rc.executors[i] = e
+
+	return nil
+}
+
 func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
 	if sn == nil {
 		return verrors.ErrInvalid
@@ -220,7 +309,7 @@ func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		return verrors.ErrStopped
 	}
 
-	if _, ok := rc.executors[sn.StorageNodeID]; ok {
+	if e := rc.lookupExecutor(sn.StorageNodeID); e != nil {
 		return verrors.ErrExist
 	}
 
@@ -230,7 +319,6 @@ func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		helper:        rc.helper,
 		snConnector:   storageNodeConnector{sn: sn},
 		reportCtx:     &reportContext{},
-		committers:    make(map[types.LogStreamID]*logStreamCommitter),
 		rpcTimeout:    rc.rpcTimeout,
 		runner:        runner.New("excutor", logger),
 		logger:        logger,
@@ -241,8 +329,7 @@ func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		return err
 	}
 
-	rc.executors[sn.StorageNodeID] = executor
-
+	rc.insertExecutor(executor)
 	return nil
 }
 
@@ -254,8 +341,8 @@ func (rc *reportCollector) UnregisterStorageNode(snID types.StorageNodeID) error
 		return verrors.ErrStopped
 	}
 
-	executor, ok := rc.executors[snID]
-	if !ok {
+	executor := rc.lookupExecutor(snID)
+	if executor == nil {
 		return verrors.ErrNotExist
 	}
 
@@ -263,7 +350,7 @@ func (rc *reportCollector) UnregisterStorageNode(snID types.StorageNodeID) error
 		return verrors.ErrNotEmpty
 	}
 
-	delete(rc.executors, snID)
+	rc.deleteExecutor(snID)
 	executor.stopNoWait()
 
 	return nil
@@ -277,8 +364,8 @@ func (rc *reportCollector) RegisterLogStream(snID types.StorageNodeID, lsID type
 		return verrors.ErrStopped
 	}
 
-	executor, ok := rc.executors[snID]
-	if !ok {
+	executor := rc.lookupExecutor(snID)
+	if executor == nil {
 		return verrors.ErrNotExist
 	}
 
@@ -293,8 +380,8 @@ func (rc *reportCollector) UnregisterLogStream(snID types.StorageNodeID, lsID ty
 		return verrors.ErrStopped
 	}
 
-	executor, ok := rc.executors[snID]
-	if !ok {
+	executor := rc.lookupExecutor(snID)
+	if executor == nil {
 		return verrors.ErrNotExist
 	}
 
@@ -302,6 +389,13 @@ func (rc *reportCollector) UnregisterLogStream(snID types.StorageNodeID, lsID ty
 }
 
 func (rc *reportCollector) Commit() {
+	select {
+	case rc.commitC <- struct{}{}:
+	default:
+	}
+}
+
+func (rc *reportCollector) commitInternal() {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
@@ -394,11 +488,58 @@ func (rce *reportCollectExecutor) stopNoWait() {
 	go rce.stop()
 }
 
+func (rce *reportCollectExecutor) searchCommitter(id types.LogStreamID) (int, bool) {
+	i := sort.Search(len(rce.committers), func(i int) bool {
+		return rce.committers[i].lsID >= id
+	})
+
+	if i < len(rce.committers) && rce.committers[i].lsID == id {
+		return i, true
+	}
+
+	return i, false
+}
+
+func (rce *reportCollectExecutor) lookupCommitter(id types.LogStreamID) *logStreamCommitter {
+	i, match := rce.searchCommitter(id)
+	if !match {
+		return nil
+	}
+
+	return rce.committers[i]
+}
+
+func (rce *reportCollectExecutor) deleteCommitter(id types.LogStreamID) error {
+	i, match := rce.searchCommitter(id)
+	if !match {
+		return errors.New("not exist")
+	}
+
+	copy(rce.committers[i:], rce.committers[i+1:])
+	rce.committers = rce.committers[:len(rce.committers)-1]
+
+	return nil
+}
+
+func (rce *reportCollectExecutor) insertCommitter(c *logStreamCommitter) error {
+	i, match := rce.searchCommitter(c.lsID)
+	if match {
+		return errors.New("already exist")
+	}
+
+	rce.committers = append(rce.committers, &logStreamCommitter{})
+	copy(rce.committers[i+1:], rce.committers[i:])
+
+	rce.committers[i] = c
+
+	return nil
+}
+
 func (rce *reportCollectExecutor) registerLogStream(lsID types.LogStreamID, highWatermark types.GLSN, status varlogpb.LogStreamStatus) error {
 	rce.cmmu.Lock()
 	defer rce.cmmu.Unlock()
 
-	if _, ok := rce.committers[lsID]; ok {
+	if c := rce.lookupCommitter(lsID); c != nil {
 		return verrors.ErrExist
 	}
 
@@ -408,7 +549,7 @@ func (rce *reportCollectExecutor) registerLogStream(lsID types.LogStreamID, high
 		return err
 	}
 
-	rce.committers[lsID] = c
+	rce.insertCommitter(c)
 	return nil
 }
 
@@ -416,12 +557,12 @@ func (rce *reportCollectExecutor) unregisterLogStream(lsID types.LogStreamID) er
 	rce.cmmu.Lock()
 	defer rce.cmmu.Unlock()
 
-	c, ok := rce.committers[lsID]
-	if !ok {
+	c := rce.lookupCommitter(lsID)
+	if c == nil {
 		return verrors.ErrNotExist
 	}
 
-	delete(rce.committers, lsID)
+	rce.deleteCommitter(lsID)
 	c.stopNoWait()
 
 	return nil
@@ -447,7 +588,7 @@ func (rce *reportCollectExecutor) seal(lsID types.LogStreamID) {
 	rce.cmmu.RLock()
 	defer rce.cmmu.RUnlock()
 
-	if c, ok := rce.committers[lsID]; ok {
+	if c := rce.lookupCommitter(lsID); c != nil {
 		c.seal()
 	}
 }
@@ -456,7 +597,7 @@ func (rce *reportCollectExecutor) unseal(lsID types.LogStreamID, highWatermark t
 	rce.cmmu.RLock()
 	defer rce.cmmu.RUnlock()
 
-	if c, ok := rce.committers[lsID]; ok {
+	if c := rce.lookupCommitter(lsID); c != nil {
 		c.unseal(highWatermark)
 	}
 }
@@ -479,6 +620,12 @@ Loop:
 }
 
 func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
+	getReportStart := time.Now()
+	defer func() {
+		dur := float64(time.Since(getReportStart).Nanoseconds()) / float64(time.Millisecond)
+		rce.tmStub.mb.Records("mr.log_stream_committer.get_report.duration").Record(ctx, dur)
+	}()
+
 	cli, err := rce.getClient(ctx)
 	if err != nil {
 		return err
@@ -494,7 +641,9 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 
 	report := rce.processReport(response)
 	if report.Len() > 0 {
-		rce.helper.ProposeReport(rce.storageNodeID, report.UncommitReports)
+		if err := rce.helper.ProposeReport(rce.storageNodeID, report.UncommitReports); err != nil {
+			rce.reportCtx.setExpire()
+		}
 	}
 
 	return nil
@@ -513,8 +662,8 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 	report.Sort()
 
 	prevReport := rce.reportCtx.getReport()
-	if prevReport == nil {
-		rce.reportCtx.saveReport(report)
+	rce.reportCtx.saveReport(report)
+	if prevReport == nil || rce.reportCtx.isExpire() {
 		rce.reportCtx.reload()
 		return report
 	}
@@ -554,13 +703,6 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 
 	if i < report.Len() {
 		diff.UncommitReports = append(diff.UncommitReports, report.UncommitReports[i:]...)
-	}
-
-	rce.reportCtx.saveReport(report)
-
-	if rce.reportCtx.isExpire() {
-		rce.reportCtx.reload()
-		return report
 	}
 
 	return diff
@@ -681,7 +823,6 @@ func (lc *logStreamCommitter) addCommitC() {
 	select {
 	case lc.triggerC <- struct{}{}:
 	default:
-		lc.tmStub.mb.Counts("mr.log_stream_committer.trigger.miss").Add(context.Background(), 1)
 	}
 }
 
@@ -861,4 +1002,8 @@ func (rc *reportContext) reload() {
 
 func (rc *reportContext) isExpire() bool {
 	return time.Since(rc.reloadAt) > DefaultReportRefreshTime
+}
+
+func (rc *reportContext) setExpire() {
+	rc.reloadAt = time.Time{}
 }
