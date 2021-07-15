@@ -142,7 +142,7 @@ func TestRegisterStorageNode(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		reportCollector.mu.RLock()
-		_, ok := reportCollector.executors[sn.StorageNodeID]
+		ok := reportCollector.lookupExecutor(sn.StorageNodeID) != nil
 		reportCollector.mu.RUnlock()
 
 		So(ok, ShouldBeTrue)
@@ -332,8 +332,9 @@ func TestRecoverStorageNode(t *testing.T) {
 
 		for i := 0; i < nrSN; i++ {
 			reportCollector.mu.RLock()
-			executor, ok := reportCollector.executors[SNs[i].StorageNodeID]
-			nrCommitter := len(executor.committers)
+			e := reportCollector.lookupExecutor(SNs[i].StorageNodeID)
+			ok := e != nil
+			nrCommitter := len(e.committers)
 			reportCollector.mu.RUnlock()
 
 			So(ok, ShouldBeTrue)
@@ -346,7 +347,7 @@ func TestRecoverStorageNode(t *testing.T) {
 			Convey("Then there should be no ReportCollectExecutor", func(ctx C) {
 				for i := 0; i < nrSN; i++ {
 					reportCollector.mu.RLock()
-					_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+					ok := reportCollector.lookupExecutor(SNs[i].StorageNodeID) != nil
 					reportCollector.mu.RUnlock()
 
 					So(ok, ShouldBeFalse)
@@ -360,23 +361,23 @@ func TestRecoverStorageNode(t *testing.T) {
 						sealed := false
 						for i := 0; i < nrSN; i++ {
 							reportCollector.mu.RLock()
-							executor, ok := reportCollector.executors[SNs[i].StorageNodeID]
+							executor := reportCollector.lookupExecutor(SNs[i].StorageNodeID)
+							ok := executor != nil
 							nrCommitter := len(executor.committers)
 
 							executor.cmmu.RLock()
 
-							if cm, ok := executor.committers[sealingLSID]; ok {
+							if cm := executor.lookupCommitter(sealingLSID); cm != nil {
 								status, _ := cm.getCommitStatus()
 								sealing = status == varlogpb.LogStreamStatusRunning
 							}
 
-							if cm, ok := executor.committers[sealedLSID]; ok {
+							if cm := executor.lookupCommitter(sealedLSID); cm != nil {
 								status, _ := cm.getCommitStatus()
 								sealed = status == varlogpb.LogStreamStatusSealed
 							}
 
 							executor.cmmu.RUnlock()
-
 							reportCollector.mu.RUnlock()
 
 							So(ok, ShouldBeTrue)
@@ -396,7 +397,7 @@ func TestRecoverStorageNode(t *testing.T) {
 			Convey("Then there should be no ReportCollectExecutor", func(ctx C) {
 				for i := 0; i < nrSN; i++ {
 					reportCollector.mu.RLock()
-					_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+					ok := reportCollector.lookupExecutor(SNs[i].StorageNodeID) != nil
 					reportCollector.mu.RUnlock()
 
 					So(ok, ShouldBeFalse)
@@ -407,7 +408,7 @@ func TestRecoverStorageNode(t *testing.T) {
 					Convey("Then there should be no ReportCollectExecutor", func(ctx C) {
 						for i := 0; i < nrSN; i++ {
 							reportCollector.mu.RLock()
-							_, ok := reportCollector.executors[SNs[i].StorageNodeID]
+							ok := reportCollector.lookupExecutor(SNs[i].StorageNodeID) != nil
 							reportCollector.mu.RUnlock()
 
 							So(ok, ShouldBeFalse)
@@ -881,7 +882,8 @@ func TestCommitWithDelay(t *testing.T) {
 		}
 
 		reportCollector.mu.RLock()
-		executor, ok := reportCollector.executors[sn.StorageNodeID]
+		executor := reportCollector.lookupExecutor(sn.StorageNodeID)
+		ok := executor != nil
 		reportCollector.mu.RUnlock()
 
 		So(ok, ShouldBeTrue)
@@ -1043,7 +1045,6 @@ func TestReporterClientReconnect(t *testing.T) {
 			helper:        mr,
 			snConnector:   storageNodeConnector{sn: sn},
 			reportCtx:     &reportContext{},
-			committers:    make(map[types.LogStreamID]*logStreamCommitter),
 			runner:        runner.New("excutor", logger),
 			logger:        logger,
 		}
