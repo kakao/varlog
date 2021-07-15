@@ -381,7 +381,7 @@ func (cc *commitResultContext) fillCommitResult() error {
 		lastCommittedLLSN := types.InvalidLLSN
 		highestLLSN, _ := cc.highestLLSNs[commitResult.LogStreamID]
 
-		prevCommitResult, ok := cc.prevCommitResults.LookupCommitResult(commitResult.LogStreamID)
+		prevCommitResult, _, ok := cc.prevCommitResults.LookupCommitResult(commitResult.LogStreamID, i)
 		if ok {
 			lastCommittedLLSN = prevCommitResult.CommittedLLSNOffset + types.LLSN(prevCommitResult.CommittedGLSNLength) - 1
 		}

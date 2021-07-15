@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/util/mathutil"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
@@ -75,6 +74,8 @@ type MetadataStorage struct {
 	origStateMachine *mrpb.MetadataRepositoryDescriptor
 	diffStateMachine *mrpb.MetadataRepositoryDescriptor
 	copyOnWrite      atomicutil.AtomicBool
+
+	sortedLSIDs []types.LogStreamID
 
 	// snapshot orig for raft
 	snap      []byte
@@ -337,6 +338,31 @@ func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error
 	return nil
 }
 
+func (ms *MetadataStorage) insertSortedLSIDs(lsID types.LogStreamID) {
+	i := sort.Search(len(ms.sortedLSIDs), func(i int) bool {
+		return ms.sortedLSIDs[i] >= lsID
+	})
+
+	if i < len(ms.sortedLSIDs) && ms.sortedLSIDs[i] == lsID {
+		return
+	}
+
+	ms.sortedLSIDs = append(ms.sortedLSIDs, 0)
+	copy(ms.sortedLSIDs[i+1:], ms.sortedLSIDs[i:])
+	ms.sortedLSIDs[i] = lsID
+}
+
+func (ms *MetadataStorage) deleteSortedLSIDs(lsID types.LogStreamID) {
+	i := sort.Search(len(ms.sortedLSIDs), func(i int) bool {
+		return ms.sortedLSIDs[i] >= lsID
+	})
+
+	if i < len(ms.sortedLSIDs) && ms.sortedLSIDs[i] == lsID {
+		copy(ms.sortedLSIDs[i:], ms.sortedLSIDs[i+1:])
+		ms.sortedLSIDs = ms.sortedLSIDs[:len(ms.sortedLSIDs)-1]
+	}
+}
+
 func (ms *MetadataStorage) UnregisterStorageNode(snID types.StorageNodeID, nodeIndex, requestIndex uint64) error {
 	err := ms.unregisterStorageNode(snID)
 	if err != nil {
@@ -400,6 +426,8 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 	}
 
 	cur.LogStream.UncommitReports[ls.LogStreamID] = lm
+	ms.insertSortedLSIDs(ls.LogStreamID)
+
 	ms.metaAppliedIndex++
 
 	return nil
@@ -446,6 +474,7 @@ func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
 		cur.LogStream.UncommitReports[lsID] = lm
 	}
 
+	ms.deleteSortedLSIDs(lsID)
 	ms.metaAppliedIndex++
 
 	return nil
@@ -652,6 +681,7 @@ func (ms *MetadataStorage) updateLogStreamStatus(lsID types.LogStreamID, status 
 	}
 
 	ms.triggerMetadataCache(nodeIndex, requestIndex)
+	ms.nrUpdateSinceCommit++
 
 	return nil
 }
@@ -973,38 +1003,8 @@ func (ms *MetadataStorage) UpdateUncommitReport(lsID types.LogStreamID, snID typ
 	ms.nrUpdateSinceCommit++
 }
 
-func (ms *MetadataStorage) GetUncommitReportIDs() []types.LogStreamID {
-	pre, cur := ms.getStateMachine()
-
-	idset := set.New(len(pre.LogStream.UncommitReports))
-	deleted := set.New(4)
-	for lsID, lls := range pre.LogStream.UncommitReports {
-		if lls.Status.Deleted() {
-			deleted.Add(lsID)
-		} else {
-			idset.Add(lsID)
-		}
-	}
-
-	if pre != cur {
-		for lsID, lls := range cur.LogStream.UncommitReports {
-			if lls.Status.Deleted() {
-				deleted.Add(lsID)
-			} else {
-				idset.Add(lsID)
-			}
-		}
-	}
-
-	idset = idset.Diff(deleted)
-	ids := make([]types.LogStreamID, 0, idset.Size())
-
-	idset.Foreach(func(k interface{}) bool {
-		ids = append(ids, k.(types.LogStreamID))
-		return true
-	})
-
-	return ids
+func (ms *MetadataStorage) GetSortedLogStreamIDs() []types.LogStreamID {
+	return ms.sortedLSIDs
 }
 
 func (ms *MetadataStorage) AppendLogStreamCommitHistory(cr *mrpb.LogStreamCommitResults) {
@@ -1072,6 +1072,10 @@ func (ms *MetadataStorage) GetMinHighWatermark() types.GLSN {
 
 func (ms *MetadataStorage) NumUpdateSinceCommit() uint64 {
 	return ms.nrUpdateSinceCommit
+}
+
+func (ms *MetadataStorage) ResetUpdateSinceCommit() {
+	ms.nrUpdateSinceCommit = 0
 }
 
 func (ms *MetadataStorage) LookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
@@ -1261,7 +1265,7 @@ func (ms *MetadataStorage) recoverLogStreams(stateMachine *mrpb.MetadataReposito
 		lm.Status = varlogpb.LogStreamStatusSealing
 
 		uncommittedLLSNLength := uint64(0)
-		cr, ok := commitResults.LookupCommitResult(ls.LogStreamID)
+		cr, _, ok := commitResults.LookupCommitResult(ls.LogStreamID, -1)
 		if ok {
 			uncommittedLLSNLength = uint64(cr.CommittedLLSNOffset) + cr.CommittedGLSNLength - 1
 		}
@@ -1300,6 +1304,16 @@ func (ms *MetadataStorage) recoverStateMachine(stateMachine *mrpb.MetadataReposi
 
 	ms.metaAppliedIndex = appliedIndex
 	ms.appliedIndex = appliedIndex
+
+	ms.sortedLSIDs = nil
+
+	for _, ls := range stateMachine.Metadata.LogStreams {
+		if !ls.Status.Deleted() {
+			ms.sortedLSIDs = append(ms.sortedLSIDs, ls.LogStreamID)
+		}
+	}
+
+	sort.Slice(ms.sortedLSIDs, func(i, j int) bool { return ms.sortedLSIDs[i] < ms.sortedLSIDs[j] })
 
 	ms.prMu.Unlock()
 	ms.lsMu.Unlock()

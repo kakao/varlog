@@ -54,6 +54,17 @@ func (mr *dummyMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []
 	return nil
 }
 
+func (mr *dummyMetadataRepository) GetLastCommitResults() *mrpb.LogStreamCommitResults {
+	mr.mt.Lock()
+	defer mr.mt.Unlock()
+
+	if len(mr.m) == 0 {
+		return nil
+	}
+
+	return mr.m[len(mr.m)-1]
+}
+
 func (mr *dummyMetadataRepository) LookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
 	mr.mt.Lock()
 	defer mr.mt.Unlock()
