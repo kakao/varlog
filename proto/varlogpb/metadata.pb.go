@@ -1973,10 +1973,7 @@ func (m *StorageDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2131,10 +2128,7 @@ func (m *StorageNodeDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2236,10 +2230,7 @@ func (m *ReplicaDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2362,10 +2353,7 @@ func (m *LogStreamDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2503,10 +2491,7 @@ func (m *MetadataDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2712,10 +2697,7 @@ func (m *StorageNodeMetadataDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -2940,10 +2922,7 @@ func (m *LogStreamMetadataDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -3064,10 +3043,7 @@ func (m *LogStreamReplicaDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -3190,10 +3166,7 @@ func (m *LogEntry) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
@@ -3339,10 +3312,7 @@ func (m *CommitContext) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if (iNdEx + skippy) > l {
