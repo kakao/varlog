@@ -4,6 +4,7 @@ package reportcommitter
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
@@ -90,20 +91,20 @@ func (r *reporter) Commit(_ context.Context, commitResults []snpb.LogStreamCommi
 		return errors.WithStack(verrors.ErrClosed)
 	}
 
-	for i := range commitResults {
-		commitResult := commitResults[i]
-		r.commitWG.Add(1)
-		go func() {
+	cnt := len(commitResults)
+	r.commitWG.Add(cnt)
+	for i := 0; i < cnt; i++ {
+		go func(idx int) {
 			defer r.commitWG.Done()
-			logStreamID := commitResult.GetLogStreamID()
-			committer, ok := r.reportCommitterGetter.ReportCommitter(logStreamID)
+			committer, ok := r.reportCommitterGetter.ReportCommitter(commitResults[idx].LogStreamID)
 			if !ok {
 				// dpanic
+				panic(fmt.Sprintf("no such committer: %d", commitResults[idx].LogStreamID))
 			}
-			if err := committer.Commit(context.Background(), commitResult); err != nil {
+			if err := committer.Commit(context.Background(), commitResults[idx]); err != nil {
 				// logging
 			}
-		}()
+		}(i)
 	}
 	return nil
 }

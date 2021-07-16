@@ -888,22 +888,22 @@ func (m *MockLogStreamReporterClient) EXPECT() *MockLogStreamReporterClientMockR
 }
 
 // Commit mocks base method.
-func (m *MockLogStreamReporterClient) Commit(arg0 context.Context, arg1 *snpb.CommitRequest, arg2 ...grpc.CallOption) (*snpb.CommitResponse, error) {
+func (m *MockLogStreamReporterClient) Commit(arg0 context.Context, arg1 ...grpc.CallOption) (snpb.LogStreamReporter_CommitClient, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Commit", varargs...)
-	ret0, _ := ret[0].(*snpb.CommitResponse)
+	ret0, _ := ret[0].(snpb.LogStreamReporter_CommitClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Commit indicates an expected call of Commit.
-func (mr *MockLogStreamReporterClientMockRecorder) Commit(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+func (mr *MockLogStreamReporterClientMockRecorder) Commit(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporterClient)(nil).Commit), varargs...)
 }
 
@@ -951,18 +951,17 @@ func (m *MockLogStreamReporterServer) EXPECT() *MockLogStreamReporterServerMockR
 }
 
 // Commit mocks base method.
-func (m *MockLogStreamReporterServer) Commit(arg0 context.Context, arg1 *snpb.CommitRequest) (*snpb.CommitResponse, error) {
+func (m *MockLogStreamReporterServer) Commit(arg0 snpb.LogStreamReporter_CommitServer) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Commit", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.CommitResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "Commit", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Commit indicates an expected call of Commit.
-func (mr *MockLogStreamReporterServerMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockLogStreamReporterServerMockRecorder) Commit(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporterServer)(nil).Commit), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporterServer)(nil).Commit), arg0)
 }
 
 // GetReport mocks base method.
