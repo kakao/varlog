@@ -1284,7 +1284,10 @@ func (m *GetMetadataRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadataRepository
 			}
 			if (iNdEx + skippy) > l {
@@ -1371,7 +1374,10 @@ func (m *GetMetadataResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadataRepository
 			}
 			if (iNdEx + skippy) > l {
@@ -1458,7 +1464,10 @@ func (m *StorageNodeRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadataRepository
 			}
 			if (iNdEx + skippy) > l {
@@ -1545,7 +1554,10 @@ func (m *LogStreamRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadataRepository
 			}
 			if (iNdEx + skippy) > l {
@@ -1634,7 +1646,10 @@ func (m *SealRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadataRepository
 			}
 			if (iNdEx + skippy) > l {
@@ -1723,7 +1738,10 @@ func (m *SealResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadataRepository
 			}
 			if (iNdEx + skippy) > l {
@@ -1812,7 +1830,10 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadataRepository
 			}
 			if (iNdEx + skippy) > l {
@@ -1882,7 +1903,10 @@ func (m *UnsealResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthMetadataRepository
 			}
 			if (iNdEx + skippy) > l {

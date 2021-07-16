@@ -850,14 +850,14 @@ func (lc *logStreamCommitter) getCatchupHighWatermark(resetCatchupHelper bool) (
 		return types.InvalidGLSN, false
 	}
 
-	sent := lc.getSentHighWatermark()
-	if sent != types.InvalidGLSN {
-		return sent, true
-	}
-
 	highWatermark, ok := lc.helper.getReportedHighWatermark(lc.lsID)
 	if !ok {
 		return types.InvalidGLSN, false
+	}
+
+	sent := lc.getSentHighWatermark()
+	if sent > highWatermark {
+		highWatermark = sent
 	}
 
 	if beginHighWatermark > highWatermark {
@@ -912,7 +912,8 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 					continue
 				}
 
-				lc.logger.Panic(fmt.Sprintf("lsid:%v latest:%v err:%v", lc.lsID, latestHighWatermark, err.Error()))
+				lc.logger.Warn(fmt.Sprintf("lsid:%v latest:%v err:%v", lc.lsID, latestHighWatermark, err.Error()))
+				return
 			}
 		}
 
