@@ -835,7 +835,10 @@ func (m *StateMachineLogCommitResult) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthStateMachineLog
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthStateMachineLog
 			}
 			if (iNdEx + skippy) > l {
@@ -938,7 +941,10 @@ func (m *StateMachineLogEntry) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthStateMachineLog
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthStateMachineLog
 			}
 			if (iNdEx + skippy) > l {
@@ -1205,7 +1211,10 @@ func (m *StateMachineLogEntry_Payload) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthStateMachineLog
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthStateMachineLog
 			}
 			if (iNdEx + skippy) > l {
@@ -1328,7 +1337,10 @@ func (m *StateMachineLogRecord) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
+			if skippy < 0 {
+				return ErrInvalidLengthStateMachineLog
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthStateMachineLog
 			}
 			if (iNdEx + skippy) > l {
