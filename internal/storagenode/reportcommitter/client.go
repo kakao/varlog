@@ -7,11 +7,9 @@ import (
 	"io"
 	"sync"
 
-	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/pkg/rpc"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
 
@@ -27,9 +25,15 @@ type client struct {
 	rpcConn   *rpc.Conn
 	rpcClient snpb.LogStreamReporterClient
 
+	// TODO(jun): If each reportCollectorExecutor that belongs to the same storage node
+	// instantiates the client by using NewClientWithConn with the same rpc.Conn, mutex
+	// muCommitStream can be removed.
 	reportStream   snpb.LogStreamReporter_GetReportClient
 	muReportStream sync.Mutex
 	getReportReq   snpb.GetReportRequest
+
+	commitStream   snpb.LogStreamReporter_CommitClient
+	muCommitStream sync.Mutex
 }
 
 func NewClient(ctx context.Context, address string) (cl Client, err error) {
@@ -58,10 +62,16 @@ func NewClientWithConn(ctx context.Context, rpcConn *rpc.Conn) (Client, error) {
 		return nil, err
 	}
 
+	commitStream, err := rpcClient.Commit(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	cl := &client{
 		rpcConn:      rpcConn,
 		rpcClient:    rpcClient,
 		reportStream: reportStream,
+		commitStream: commitStream,
 	}
 
 	return cl, nil
@@ -86,9 +96,16 @@ func (c *client) GetReport(ctx context.Context) (*snpb.GetReportResponse, error)
 	return rsp, nil
 }
 
-func (c *client) Commit(ctx context.Context, cr *snpb.CommitRequest) error {
-	_, err := c.rpcClient.Commit(ctx, cr)
-	return errors.WithStack(verrors.FromStatusError(err))
+func (c *client) Commit(ctx context.Context, cr *snpb.CommitRequest) (err error) {
+	c.muCommitStream.Lock()
+	defer c.muCommitStream.Unlock()
+
+	// Do not handle io.EOF
+	err = c.commitStream.Send(cr)
+	if err != nil {
+		return c.commitStream.CloseSend()
+	}
+	return nil
 }
 
 func (c *client) Close() error {

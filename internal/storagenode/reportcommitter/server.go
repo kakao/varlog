@@ -10,12 +10,10 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/internal/storagenode/rpcserver"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/util/telemetry/attribute"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
 
@@ -97,14 +95,22 @@ func (s *server) GetReport(stream snpb.LogStreamReporter_GetReportServer) (err e
 	}
 }
 
-func (s *server) Commit(ctx context.Context, req *snpb.CommitRequest) (*snpb.CommitResponse, error) {
-	code := codes.Internal
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Reporter/Commit", req,
-		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.CommitRequest)
-			rsp := &snpb.CommitResponse{}
-			return rsp, s.lsr.Commit(ctx, req.GetCommitResults())
-		},
-	)
-	return rspI.(*snpb.CommitResponse), verrors.ToStatusErrorWithCode(err, code)
+func (s *server) Commit(stream snpb.LogStreamReporter_CommitServer) (err error) {
+	// NOTE: Is it necessary to trace Commit RPCs?
+	var req snpb.CommitRequest
+	for {
+		req.CommitResults = nil
+		err = stream.RecvMsg(&req)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		err = s.lsr.Commit(stream.Context(), req.CommitResults)
+		if err != nil {
+			return err
+		}
+	}
 }

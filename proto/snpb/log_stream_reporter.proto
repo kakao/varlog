@@ -92,5 +92,5 @@ message CommitResponse {
 
 service LogStreamReporter {
     rpc GetReport(stream GetReportRequest) returns (stream GetReportResponse) {}
-    rpc Commit(CommitRequest) returns (CommitResponse) {}
+    rpc Commit(stream CommitRequest) returns (CommitResponse) {}
 }
