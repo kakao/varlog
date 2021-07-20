@@ -17,6 +17,8 @@ import (
 	"github.com/kakao/varlog/proto/snpb"
 )
 
+const defaultReportsCapacity = 32
+
 type Server interface {
 	snpb.LogStreamReporterServer
 	rpcserver.Registrable
@@ -69,11 +71,12 @@ func (s *server) withTelemetry(ctx context.Context, spanName string, req interfa
 }
 
 func (s *server) GetReport(stream snpb.LogStreamReporter_GetReportServer) (err error) {
-	var (
-		req snpb.GetReportRequest
-		rsp snpb.GetReportResponse
-	)
-	rsp.StorageNodeID = s.lsr.StorageNodeID()
+	req := snpb.GetReportRequest{}
+	rsp := snpb.GetReportResponse{
+		StorageNodeID:   s.lsr.StorageNodeID(),
+		UncommitReports: make([]snpb.LogStreamUncommitReport, 0, defaultReportsCapacity),
+	}
+
 	for {
 		err = stream.RecvMsg(&req)
 		if err == io.EOF {
@@ -83,7 +86,7 @@ func (s *server) GetReport(stream snpb.LogStreamReporter_GetReportServer) (err e
 			return err
 		}
 
-		rsp.UncommitReports, err = s.lsr.GetReport(stream.Context())
+		err = s.lsr.GetReport(stream.Context(), &rsp)
 		if err != nil {
 			return err
 		}

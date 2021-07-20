@@ -204,8 +204,11 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		reports, err := sn.lsr.GetReport(context.TODO())
+		rsp := snpb.GetReportResponse{}
+		err := sn.lsr.GetReport(context.TODO(), &rsp)
 		require.NoError(t, err)
+
+		reports := rsp.UncommitReports
 		require.Len(t, reports, 2)
 		return reports[0].GetUncommittedLLSNLength() == 5 && reports[1].GetUncommittedLLSNLength() == 5
 	}, time.Second, 10*time.Millisecond)
@@ -241,8 +244,11 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	})
 
 	require.Eventually(t, func() bool {
-		reports, err := sn.lsr.GetReport(context.TODO())
+		rsp := snpb.GetReportResponse{}
+		err := sn.lsr.GetReport(context.TODO(), &rsp)
 		require.NoError(t, err)
+
+		reports := rsp.UncommitReports
 		require.Len(t, reports, 2)
 		return reports[0].GetHighWatermark() == 20 && reports[1].GetHighWatermark() == 20
 	}, time.Second, 10*time.Millisecond)

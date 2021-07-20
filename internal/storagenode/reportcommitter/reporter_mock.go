@@ -66,18 +66,17 @@ func (mr *MockReporterMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call 
 }
 
 // GetReport mocks base method.
-func (m *MockReporter) GetReport(arg0 context.Context) ([]snpb.LogStreamUncommitReport, error) {
+func (m *MockReporter) GetReport(arg0 context.Context, arg1 *snpb.GetReportResponse) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReport", arg0)
-	ret0, _ := ret[0].([]snpb.LogStreamUncommitReport)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "GetReport", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // GetReport indicates an expected call of GetReport.
-func (mr *MockReporterMockRecorder) GetReport(arg0 interface{}) *gomock.Call {
+func (mr *MockReporterMockRecorder) GetReport(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockReporter)(nil).GetReport), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockReporter)(nil).GetReport), arg0, arg1)
 }
 
 // StorageNodeID mocks base method.
