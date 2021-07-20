@@ -9,27 +9,19 @@ import (
 	"github.com/kakao/varlog/pkg/verrors"
 )
 
-type commitWaitQueueIterator interface {
-	task() *commitWaitTask
-	next() bool
-	valid() bool
-}
-
-type commitWaitQueueIteratorImpl struct {
+type commitWaitQueueIterator struct {
 	curr  *list.Element
 	queue *commitWaitQueueImpl
 }
 
-var _ commitWaitQueueIterator = (*commitWaitQueueIteratorImpl)(nil)
-
-func (iter *commitWaitQueueIteratorImpl) task() *commitWaitTask {
+func (iter commitWaitQueueIterator) task() *commitWaitTask {
 	if !iter.valid() {
 		return nil
 	}
 	return iter.curr.Value.(*commitWaitTask)
 }
 
-func (iter *commitWaitQueueIteratorImpl) next() bool {
+func (iter *commitWaitQueueIterator) next() bool {
 	iter.queue.mu.RLock()
 	defer iter.queue.mu.RUnlock()
 	if iter.curr != nil {
@@ -38,7 +30,7 @@ func (iter *commitWaitQueueIteratorImpl) next() bool {
 	return iter.valid()
 }
 
-func (iter *commitWaitQueueIteratorImpl) valid() bool {
+func (iter commitWaitQueueIterator) valid() bool {
 	return iter.curr != nil
 }
 
@@ -75,7 +67,7 @@ func (cwq *commitWaitQueueImpl) push(cwt *commitWaitTask) error {
 
 func (cwq *commitWaitQueueImpl) peekIterator() commitWaitQueueIterator {
 	cwq.mu.RLock()
-	iter := &commitWaitQueueIteratorImpl{
+	iter := commitWaitQueueIterator{
 		curr:  cwq.queue.Back(),
 		queue: cwq,
 	}
