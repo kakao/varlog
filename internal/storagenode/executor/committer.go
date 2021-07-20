@@ -4,7 +4,6 @@ package executor
 
 import (
 	"context"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -269,9 +268,15 @@ func (c *committerImpl) commit(ctx context.Context) error {
 	// - What is the proper batch size?
 	// - Maybe incoming commit messages are already sorted or partially sorted, is it helpful
 	// sorting again here?
-	sort.Slice(c.commitTaskBatch, func(i, j int) bool {
-		return c.commitTaskBatch[i].highWatermark < c.commitTaskBatch[j].highWatermark
-	})
+
+	// Sort is skipped.
+	// - There are a few commit tasks in a batch.
+	// - Escape problem: https://github.com/golang/go/issues/17332
+	/*
+		sort.Slice(c.commitTaskBatch, func(i, j int) bool {
+			return c.commitTaskBatch[i].highWatermark < c.commitTaskBatch[j].highWatermark
+		})
+	*/
 
 	for _, ct := range c.commitTaskBatch {
 		globalHighWatermark, _ := c.lsc.reportCommitBase()
