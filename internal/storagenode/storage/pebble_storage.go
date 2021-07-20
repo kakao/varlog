@@ -406,7 +406,8 @@ func (ps *pebbleStorage) NewCommitBatch(commitContext CommitContext) (CommitBatc
 	}
 
 	batch := ps.db.NewBatch()
-	cck := encodeCommitContextKey(commitContext)
+	var cckBuf [commitContextKeyLength]byte
+	cck := encodeCommitContextKeyInternal(commitContext, cckBuf[:])
 	if err := batch.Set(cck, nil, ps.commitContextOption); err != nil {
 		return nil, multierr.Append(errors.WithStack(err), batch.Close())
 	}

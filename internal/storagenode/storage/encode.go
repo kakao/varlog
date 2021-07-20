@@ -92,6 +92,10 @@ func (k commitContextKey) decode() CommitContext {
 
 func encodeCommitContextKey(cc CommitContext) commitContextKey {
 	key := make([]byte, commitContextKeyLength)
+	return encodeCommitContextKeyInternal(cc, key)
+}
+
+func encodeCommitContextKeyInternal(cc CommitContext, key []byte) commitContextKey {
 	key[0] = commitContextKeyPrefix
 
 	offset := 1
