@@ -3,7 +3,6 @@ package executor
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pkg/errors"
 
@@ -12,13 +11,18 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 )
 
+// NOTE: When reportCommitBase is operated by atomic, it escapes to the heap. See
+// https://github.com/golang/go/issues/16241.
+// It is not difficult to be used with sync.Pool, since putting the object into the pool is guarded
+// against to the atomic.Load. For these reasons, the shared mutex is used.
 type reportCommitBase struct {
+	mu                   sync.RWMutex
 	globalHighWatermark  types.GLSN
 	uncommittedLLSNBegin types.LLSN
 }
 
 type logStreamContext struct {
-	base atomic.Value
+	base reportCommitBase
 
 	uncommittedLLSNEnd types.AtomicLLSN
 
@@ -36,10 +40,7 @@ type logStreamContext struct {
 func newLogStreamContext() *logStreamContext {
 	lsc := &logStreamContext{}
 
-	lsc.base.Store(reportCommitBase{
-		globalHighWatermark:  types.InvalidGLSN,
-		uncommittedLLSNBegin: types.MinLLSN,
-	})
+	lsc.storeReportCommitBase(types.InvalidGLSN, types.MinLLSN)
 
 	lsc.uncommittedLLSNEnd.Store(types.MinLLSN)
 
@@ -53,19 +54,19 @@ func newLogStreamContext() *logStreamContext {
 	return lsc
 }
 
-func (lsc *logStreamContext) reportCommitBase() (types.GLSN, types.LLSN) {
-	if baseI := lsc.base.Load(); baseI != nil {
-		base := baseI.(reportCommitBase)
-		return base.globalHighWatermark, base.uncommittedLLSNBegin
-	}
-	panic("reportCommitBase not stored")
+func (lsc *logStreamContext) reportCommitBase() (globalHighWatermark types.GLSN, uncommittedLLSNBegin types.LLSN) {
+	lsc.base.mu.RLock()
+	globalHighWatermark = lsc.base.globalHighWatermark
+	uncommittedLLSNBegin = lsc.base.uncommittedLLSNBegin
+	lsc.base.mu.RUnlock()
+	return
 }
 
 func (lsc *logStreamContext) storeReportCommitBase(globalHighWatermark types.GLSN, uncommittedLLSNBegin types.LLSN) {
-	lsc.base.Store(reportCommitBase{
-		globalHighWatermark:  globalHighWatermark,
-		uncommittedLLSNBegin: uncommittedLLSNBegin,
-	})
+	lsc.base.mu.Lock()
+	lsc.base.globalHighWatermark = globalHighWatermark
+	lsc.base.uncommittedLLSNBegin = uncommittedLLSNBegin
+	lsc.base.mu.Unlock()
 }
 
 type decidableCondition struct {
