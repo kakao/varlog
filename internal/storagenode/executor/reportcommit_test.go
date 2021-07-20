@@ -119,8 +119,11 @@ func TestLogStreamReporter(t *testing.T) {
 	)
 
 	// Reports
-	reports, err = lsr.GetReport(context.TODO())
+	rsp := snpb.GetReportResponse{}
+	err = lsr.GetReport(context.TODO(), &rsp)
 	require.NoError(t, err)
+
+	reports = rsp.UncommitReports
 	require.Len(t, reports, 2)
 	for _, report := range reports {
 		switch report.GetLogStreamID() {
@@ -157,8 +160,10 @@ func TestLogStreamReporter(t *testing.T) {
 		defer wg.Done()
 
 		require.Eventually(t, func() bool {
-			reports, err := lsr.GetReport(context.TODO())
+			err := lsr.GetReport(context.TODO(), &rsp)
 			require.NoError(t, err)
+
+			reports := rsp.UncommitReports
 			return reports[0].UncommittedLLSNLength > 0 && reports[1].UncommittedLLSNLength > 0
 		}, time.Second, time.Millisecond)
 
@@ -185,15 +190,17 @@ func TestLogStreamReporter(t *testing.T) {
 	wg.Wait()
 
 	require.Eventually(t, func() bool {
-		reports, err := lsr.GetReport(context.TODO())
+		err := lsr.GetReport(context.TODO(), &rsp)
 		require.NoError(t, err)
+
+		reports := rsp.UncommitReports
 		return reports[0].UncommittedLLSNLength == 0 && reports[1].UncommittedLLSNLength == 0
 	}, time.Second, time.Millisecond)
 
 	require.NoError(t, lsr.Close())
 	require.NoError(t, lsr.Close())
 
-	_, err = lsr.GetReport(context.TODO())
+	err = lsr.GetReport(context.TODO(), &rsp)
 	require.Error(t, err)
 
 	err = lsr.Commit(context.TODO(), []snpb.LogStreamCommitResult{

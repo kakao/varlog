@@ -10,6 +10,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/id"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 )
 
 func TestLogStreamReporterEmptyStorageNode(t *testing.T) {
@@ -28,7 +29,10 @@ func TestLogStreamReporterEmptyStorageNode(t *testing.T) {
 	getter.EXPECT().StorageNodeID().Return(types.StorageNodeID(1)).AnyTimes()
 	lsr := New(WithStorageNodeIDGetter(getter), WithReportCommitterGetter(rcg))
 
-	reports, err := lsr.GetReport(context.TODO())
+	rsp := snpb.GetReportResponse{}
+	err := lsr.GetReport(context.TODO(), &rsp)
 	require.NoError(t, err)
+
+	reports := rsp.UncommitReports
 	require.Len(t, reports, 0)
 }

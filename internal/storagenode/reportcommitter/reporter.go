@@ -18,7 +18,7 @@ import (
 type Reporter interface {
 	io.Closer
 	StorageNodeID() types.StorageNodeID
-	GetReport(ctx context.Context) ([]snpb.LogStreamUncommitReport, error)
+	GetReport(ctx context.Context, rsp *snpb.GetReportResponse) error
 	Commit(ctx context.Context, commitResults []snpb.LogStreamCommitResult) error
 }
 
@@ -60,28 +60,27 @@ func (r *reporter) Close() error {
 // GetReport collects statuses about uncommitted log entries from log streams in the storage node.
 // KnownNextGLSNs from all LogStreamExecutors must be equal to the corresponding in
 // Reporter.
-func (r *reporter) GetReport(ctx context.Context) ([]snpb.LogStreamUncommitReport, error) {
+func (r *reporter) GetReport(ctx context.Context, rsp *snpb.GetReportResponse) error {
 	r.running.mu.RLock()
 	defer r.running.mu.RUnlock()
 	if !r.running.r {
-		return nil, errors.WithStack(verrors.ErrClosed)
+		return errors.WithStack(verrors.ErrClosed)
 	}
 
-	reports := r.report(ctx)
-	return reports, nil
+	r.report(ctx, rsp)
+	return nil
 }
 
-func (r *reporter) report(ctx context.Context) (reports []snpb.LogStreamUncommitReport) {
-	reports = make([]snpb.LogStreamUncommitReport, 0, r.reportCommitterGetter.NumberOfReportCommitters())
+func (r *reporter) report(ctx context.Context, rsp *snpb.GetReportResponse) {
+	rsp.UncommitReports = rsp.UncommitReports[0:0]
 	r.reportCommitterGetter.ForEachReportCommitter(func(reporter ReportCommitter) {
 		report, err := reporter.GetReport(ctx)
 		if err != nil {
 			// TODO: is ignoring error safe?
 			return
 		}
-		reports = append(reports, report)
+		rsp.UncommitReports = append(rsp.UncommitReports, report)
 	})
-	return reports
 }
 
 func (r *reporter) Commit(_ context.Context, commitResults []snpb.LogStreamCommitResult) error {
