@@ -4,6 +4,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/executor"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 	"github.daumkakao.com/varlog/varlog/pkg/vflag"
 )
 
@@ -52,6 +53,9 @@ func initStartCommand() *cli.Command {
 		flagDisableCommitSync.BoolFlag(),
 		flagDisableDeleteCommittedSync.BoolFlag(),
 		flagDisableDeleteUncommittedSync.BoolFlag(),
+		flagMemTableSizeBytes.IntFlagV(storage.DefaultMemTableSize),
+		flagMemTableStopWritesThreshold.IntFlagV(storage.DefaultMemTableStopWritesThreshold),
+		flagStorageDebugLog.BoolFlag(),
 
 		// flags for telemetry
 		flagTelemetry.StringFlag(),

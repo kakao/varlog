@@ -41,8 +41,9 @@ func newPebbleStorage(cfg *config) (Storage, error) {
 	// TODO: make configurable
 	// So far, belows is experimental settings.
 	pebbleOpts := &pebble.Options{
-		ErrorIfExists: false,
-
+		ErrorIfExists:               false,
+		MemTableSize:                cfg.memTableSizeBytes,
+		MemTableStopWritesThreshold: cfg.memTableStopWritesThreshold,
 		// quite performance gain, but not durable
 		// DisableWAL:                  true,
 		// L0CompactionThreshold:       2,
@@ -50,8 +51,10 @@ func newPebbleStorage(cfg *config) (Storage, error) {
 		// LBaseMaxBytes:               64 << 20,
 		// Levels:                      make([]pebble.LevelOptions, 7),
 		// MaxConcurrentCompactions:    3,
-		//  MemTableSize:                64 << 20,
-		// MemTableStopWritesThreshold: 4,
+	}
+
+	if cfg.debugLog {
+		pebbleOpts.EventListener = pebble.MakeLoggingEventListener(cfg.logger.Sugar())
 	}
 	/*
 		for i := 0; i < len(pebbleOpts.Levels); i++ {
