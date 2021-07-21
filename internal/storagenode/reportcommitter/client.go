@@ -16,8 +16,8 @@ import (
 // Client contains the functionality of bi-directional communication about local
 // log stream and global log stream.
 type Client interface {
-	GetReport(context.Context) (*snpb.GetReportResponse, error)
-	Commit(context.Context, *snpb.CommitRequest) error
+	GetReport() (*snpb.GetReportResponse, error)
+	Commit(snpb.CommitRequest) error
 	Close() error
 }
 
@@ -78,7 +78,7 @@ func NewClientWithConn(ctx context.Context, rpcConn *rpc.Conn) (Client, error) {
 }
 
 // FIXME(jun): add response parameter to return the response without creating a new object.
-func (c *client) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
+func (c *client) GetReport() (*snpb.GetReportResponse, error) {
 	c.muReportStream.Lock()
 	defer c.muReportStream.Unlock()
 
@@ -96,12 +96,12 @@ func (c *client) GetReport(ctx context.Context) (*snpb.GetReportResponse, error)
 	return rsp, nil
 }
 
-func (c *client) Commit(ctx context.Context, cr *snpb.CommitRequest) (err error) {
+func (c *client) Commit(cr snpb.CommitRequest) (err error) {
 	c.muCommitStream.Lock()
 	defer c.muCommitStream.Unlock()
 
 	// Do not handle io.EOF
-	err = c.commitStream.Send(cr)
+	err = c.commitStream.Send(&cr)
 	if err != nil {
 		return c.commitStream.CloseSend()
 	}

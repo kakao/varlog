@@ -22,11 +22,11 @@ import (
 type EmptyStorageNodeClient struct {
 }
 
-func (rc *EmptyStorageNodeClient) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
+func (rc *EmptyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 	return &snpb.GetReportResponse{}, nil
 }
 
-func (rc *EmptyStorageNodeClient) Commit(ctx context.Context, gls *snpb.CommitRequest) error {
+func (rc *EmptyStorageNodeClient) Commit(gls snpb.CommitRequest) error {
 	return nil
 }
 
@@ -217,7 +217,7 @@ func (r *DummyStorageNodeClient) SetCommitDelay(d time.Duration) {
 	r.commitDelay.Store(d)
 }
 
-func (r *DummyStorageNodeClient) GetReport(ctx context.Context) (*snpb.GetReportResponse, error) {
+func (r *DummyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 	if r.disableReport.Load() {
 		return &snpb.GetReportResponse{
 			StorageNodeID: r.storageNodeID,
@@ -258,7 +258,7 @@ func (r *DummyStorageNodeClient) GetReport(ctx context.Context) (*snpb.GetReport
 	return lls, nil
 }
 
-func (r *DummyStorageNodeClient) Commit(ctx context.Context, cr *snpb.CommitRequest) error {
+func (r *DummyStorageNodeClient) Commit(cr snpb.CommitRequest) error {
 	time.Sleep(r.commitDelay.Load())
 
 	r.mu.Lock()
@@ -270,34 +270,33 @@ func (r *DummyStorageNodeClient) Commit(ctx context.Context, cr *snpb.CommitRequ
 		return errors.New("closed")
 	}
 
-	for _, result := range cr.CommitResults {
-
-		idx := int(result.LogStreamID - types.LogStreamID(r.storageNodeID))
-		if idx < 0 || idx >= len(r.logStreamIDs) {
-			return errors.New("invalid log stream ID")
-		}
-
-		if r.uncommittedLLSNOffset[idx] != result.CommittedLLSNOffset {
-			continue
-		}
-
-		if r.knownHighWatermark[idx] >= result.HighWatermark {
-			continue
-		}
-
-		r.knownHighWatermark[idx] = result.HighWatermark
-		r.commitResultHistory[idx] = append(r.commitResultHistory[idx], snpb.LogStreamCommitInfo{
-			LogStreamID:         result.LogStreamID,
-			CommittedLLSNOffset: r.uncommittedLLSNOffset[idx],
-			CommittedGLSNOffset: result.CommittedGLSNOffset,
-			CommittedGLSNLength: result.CommittedGLSNLength,
-			HighWatermark:       result.HighWatermark,
-			PrevHighWatermark:   result.PrevHighWatermark,
-		})
-
-		r.uncommittedLLSNOffset[idx] += types.LLSN(result.CommittedGLSNLength)
-		r.uncommittedLLSNLength[idx] -= result.CommittedGLSNLength
+	idx := int(cr.CommitResult.LogStreamID - types.LogStreamID(r.storageNodeID))
+	if idx < 0 || idx >= len(r.logStreamIDs) {
+		return errors.New("invalid log stream ID")
 	}
+
+	if r.uncommittedLLSNOffset[idx] != cr.CommitResult.CommittedLLSNOffset {
+		// continue
+		return nil
+	}
+
+	if r.knownHighWatermark[idx] >= cr.CommitResult.HighWatermark {
+		//continue
+		return nil
+	}
+
+	r.knownHighWatermark[idx] = cr.CommitResult.HighWatermark
+	r.commitResultHistory[idx] = append(r.commitResultHistory[idx], snpb.LogStreamCommitInfo{
+		LogStreamID:         cr.CommitResult.LogStreamID,
+		CommittedLLSNOffset: r.uncommittedLLSNOffset[idx],
+		CommittedGLSNOffset: cr.CommitResult.CommittedGLSNOffset,
+		CommittedGLSNLength: cr.CommitResult.CommittedGLSNLength,
+		HighWatermark:       cr.CommitResult.HighWatermark,
+		PrevHighWatermark:   cr.CommitResult.PrevHighWatermark,
+	})
+
+	r.uncommittedLLSNOffset[idx] += types.LLSN(cr.CommitResult.CommittedGLSNLength)
+	r.uncommittedLLSNLength[idx] -= cr.CommitResult.CommittedGLSNLength
 
 	return nil
 }

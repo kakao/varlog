@@ -247,7 +247,7 @@ func TestSyncLogStream(t *testing.T) {
 							return false
 						}
 
-						rsp, err := env.ReportCommitterClientOf(t, newSNID).GetReport(context.Background())
+						rsp, err := env.ReportCommitterClientOf(t, newSNID).GetReport()
 						if err != nil {
 							return false
 						}

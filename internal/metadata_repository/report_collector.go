@@ -631,9 +631,7 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, rce.rpcTimeout)
-	defer cancel()
-	response, err := cli.GetReport(ctx)
+	response, err := cli.GetReport()
 	if err != nil {
 		rce.closeClient(cli)
 		return err
@@ -746,13 +744,10 @@ func (rce *reportCollectExecutor) commit(ctx context.Context, cr snpb.LogStreamC
 
 	r := snpb.CommitRequest{
 		StorageNodeID: rce.storageNodeID,
-		CommitResults: []snpb.LogStreamCommitResult{cr},
+		CommitResult:  cr,
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, rce.rpcTimeout)
-	defer cancel()
-
-	err = cli.Commit(ctx, &r)
+	err = cli.Commit(r)
 	if err != nil {
 		rce.closeClient(cli)
 		return err

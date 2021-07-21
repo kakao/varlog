@@ -1377,7 +1377,7 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, lsID types.LogStre
 
 			lastWrittenLLSN := types.InvalidLLSN
 			reportCommitter := clus.reportCommitters[snID]
-			rsp, err := reportCommitter.GetReport(context.Background())
+			rsp, err := reportCommitter.GetReport()
 			require.NoError(t, err)
 			found := false
 			for _, report := range rsp.GetUncommitReports() {
@@ -1411,7 +1411,7 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, lsID types.LogStre
 			}()
 
 			require.Eventually(t, func() bool {
-				rsp, err := reportCommitter.GetReport(ctx)
+				rsp, err := reportCommitter.GetReport()
 				if !assert.NoError(t, err) {
 					return false
 				}
@@ -1429,16 +1429,6 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, lsID types.LogStre
 func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
 	committedLLSNOffset types.LLSN, committedGLSNOffset types.GLSN, committedGLSNLen uint64,
 	prevHighWatermark, highWatermark types.GLSN) {
-
-	cr := snpb.LogStreamCommitResult{
-		LogStreamID:         lsID,
-		CommittedLLSNOffset: committedLLSNOffset,
-		CommittedGLSNOffset: committedGLSNOffset,
-		CommittedGLSNLength: committedGLSNLen,
-		PrevHighWatermark:   prevHighWatermark,
-		HighWatermark:       highWatermark,
-	}
-
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -1447,13 +1437,20 @@ func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
 
 	rds := clus.replicasOf(t, lsID)
 	for _, r := range rds {
-		cr := &snpb.CommitRequest{
+		req := snpb.CommitRequest{
 			StorageNodeID: r.StorageNodeID,
-			CommitResults: []snpb.LogStreamCommitResult{cr},
+			CommitResult: snpb.LogStreamCommitResult{
+				LogStreamID:         lsID,
+				CommittedLLSNOffset: committedLLSNOffset,
+				CommittedGLSNOffset: committedGLSNOffset,
+				CommittedGLSNLength: committedGLSNLen,
+				PrevHighWatermark:   prevHighWatermark,
+				HighWatermark:       highWatermark,
+			},
 		}
 
 		reportCommitter := clus.reportCommitters[r.StorageNodeID]
-		err := reportCommitter.Commit(context.TODO(), cr)
+		err := reportCommitter.Commit(req)
 		require.NoError(t, err)
 	}
 }
@@ -1476,7 +1473,7 @@ func (clus *VarlogCluster) WaitCommit(t *testing.T, lsID types.LogStreamID, high
 		committed := 0
 
 		for _, reporter := range reportCommitters {
-			rsp, err := reporter.GetReport(context.Background())
+			rsp, err := reporter.GetReport()
 			if !assert.NoError(t, err) {
 				return false
 			}
@@ -1543,7 +1540,7 @@ func (clus *VarlogCluster) GetUncommittedLLSNOffset(t *testing.T, lsID types.Log
 	}
 
 	for _, reporter := range reportCommitters {
-		rsp, err := reporter.GetReport(context.Background())
+		rsp, err := reporter.GetReport()
 		require.NoError(t, err)
 
 		reports := rsp.GetUncommitReports()

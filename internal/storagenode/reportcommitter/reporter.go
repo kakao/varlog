@@ -4,7 +4,6 @@ package reportcommitter
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
 
@@ -19,7 +18,7 @@ type Reporter interface {
 	io.Closer
 	StorageNodeID() types.StorageNodeID
 	GetReport(ctx context.Context, rsp *snpb.GetReportResponse) error
-	Commit(ctx context.Context, commitResults []snpb.LogStreamCommitResult) error
+	Commit(ctx context.Context, commitResult snpb.LogStreamCommitResult) error
 }
 
 type reporter struct {
@@ -81,27 +80,17 @@ func report(reporter ReportCommitter, rsp *snpb.GetReportResponse) {
 	rsp.UncommitReports = append(rsp.UncommitReports, rpt)
 }
 
-func (r *reporter) Commit(_ context.Context, commitResults []snpb.LogStreamCommitResult) error {
+func (r *reporter) Commit(ctx context.Context, commitResult snpb.LogStreamCommitResult) error {
 	r.running.mu.RLock()
 	defer r.running.mu.RUnlock()
 	if !r.running.r {
 		return errors.WithStack(verrors.ErrClosed)
 	}
 
-	cnt := len(commitResults)
-	r.commitWG.Add(cnt)
-	for i := 0; i < cnt; i++ {
-		go func(idx int) {
-			defer r.commitWG.Done()
-			committer, ok := r.reportCommitterGetter.ReportCommitter(commitResults[idx].LogStreamID)
-			if !ok {
-				// dpanic
-				panic(fmt.Sprintf("no such committer: %d", commitResults[idx].LogStreamID))
-			}
-			if err := committer.Commit(context.Background(), commitResults[idx]); err != nil {
-				// logging
-			}
-		}(i)
+	committer, ok := r.reportCommitterGetter.ReportCommitter(commitResult.LogStreamID)
+	if !ok {
+		return errors.Errorf("no such committer: %d", commitResult.LogStreamID)
 	}
+	_ = committer.Commit(ctx, commitResult)
 	return nil
 }

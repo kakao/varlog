@@ -5,7 +5,6 @@
 package reportcommitter
 
 import (
-	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -51,30 +50,30 @@ func (mr *MockClientMockRecorder) Close() *gomock.Call {
 }
 
 // Commit mocks base method.
-func (m *MockClient) Commit(arg0 context.Context, arg1 *snpb.CommitRequest) error {
+func (m *MockClient) Commit(arg0 snpb.CommitRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Commit", arg0, arg1)
+	ret := m.ctrl.Call(m, "Commit", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Commit indicates an expected call of Commit.
-func (mr *MockClientMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) Commit(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockClient)(nil).Commit), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockClient)(nil).Commit), arg0)
 }
 
 // GetReport mocks base method.
-func (m *MockClient) GetReport(arg0 context.Context) (*snpb.GetReportResponse, error) {
+func (m *MockClient) GetReport() (*snpb.GetReportResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReport", arg0)
+	ret := m.ctrl.Call(m, "GetReport")
 	ret0, _ := ret[0].(*snpb.GetReportResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReport indicates an expected call of GetReport.
-func (mr *MockClientMockRecorder) GetReport(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) GetReport() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockClient)(nil).GetReport), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockClient)(nil).GetReport))
 }

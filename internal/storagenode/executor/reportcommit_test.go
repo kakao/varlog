@@ -108,8 +108,8 @@ func TestLogStreamReporter(t *testing.T) {
 		reportcommitter.WithReportCommitterGetter(rcg),
 	)
 
-	err = lsr.Commit(context.TODO(), []snpb.LogStreamCommitResult{})
-	require.NoError(t, err)
+	err = lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{})
+	require.Error(t, err)
 
 	var (
 		reports []snpb.LogStreamUncommitReport
@@ -165,25 +165,23 @@ func TestLogStreamReporter(t *testing.T) {
 			return reports[0].UncommittedLLSNLength > 0 && reports[1].UncommittedLLSNLength > 0
 		}, time.Second, time.Millisecond)
 
-		err := lsr.Commit(context.TODO(), []snpb.LogStreamCommitResult{
-			{
-				LogStreamID:         lsid1,
-				HighWatermark:       2,
-				PrevHighWatermark:   0,
-				CommittedGLSNOffset: 1,
-				CommittedGLSNLength: 1,
-				CommittedLLSNOffset: 1,
-			},
-			{
-				LogStreamID:         lsid2,
-				HighWatermark:       2,
-				PrevHighWatermark:   0,
-				CommittedGLSNOffset: 2,
-				CommittedGLSNLength: 1,
-				CommittedLLSNOffset: 1,
-			},
-		})
-		require.NoError(t, err)
+		require.NoError(t, lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
+			LogStreamID:         lsid1,
+			HighWatermark:       2,
+			PrevHighWatermark:   0,
+			CommittedGLSNOffset: 1,
+			CommittedGLSNLength: 1,
+			CommittedLLSNOffset: 1,
+		}))
+
+		require.NoError(t, lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
+			LogStreamID:         lsid2,
+			HighWatermark:       2,
+			PrevHighWatermark:   0,
+			CommittedGLSNOffset: 2,
+			CommittedGLSNLength: 1,
+			CommittedLLSNOffset: 1,
+		}))
 	}()
 	wg.Wait()
 
@@ -201,23 +199,22 @@ func TestLogStreamReporter(t *testing.T) {
 	err = lsr.GetReport(context.TODO(), &rsp)
 	require.Error(t, err)
 
-	err = lsr.Commit(context.TODO(), []snpb.LogStreamCommitResult{
-		{
-			LogStreamID:         lsid1,
-			HighWatermark:       4,
-			PrevHighWatermark:   2,
-			CommittedGLSNOffset: 3,
-			CommittedGLSNLength: 1,
-			CommittedLLSNOffset: 2,
-		},
-		{
-			LogStreamID:         lsid2,
-			HighWatermark:       4,
-			PrevHighWatermark:   2,
-			CommittedGLSNOffset: 4,
-			CommittedGLSNLength: 1,
-			CommittedLLSNOffset: 2,
-		},
-	})
-	require.Error(t, err)
+	require.Error(t, lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
+		LogStreamID:         lsid1,
+		HighWatermark:       4,
+		PrevHighWatermark:   2,
+		CommittedGLSNOffset: 3,
+		CommittedGLSNLength: 1,
+		CommittedLLSNOffset: 2,
+	},
+	))
+
+	require.Error(t, lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
+		LogStreamID:         lsid2,
+		HighWatermark:       4,
+		PrevHighWatermark:   2,
+		CommittedGLSNOffset: 4,
+		CommittedGLSNLength: 1,
+		CommittedLLSNOffset: 2,
+	}))
 }
