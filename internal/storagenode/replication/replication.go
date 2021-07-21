@@ -29,5 +29,4 @@ type Replicator interface {
 
 type Getter interface {
 	Replicator(logStreamID types.LogStreamID) (Replicator, bool)
-	Replicators() []Replicator
 }

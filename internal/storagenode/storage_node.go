@@ -9,11 +9,11 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 	"github.com/soheilhy/cmux"
-	"go.opentelemetry.io/otel/attribute"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -39,7 +39,8 @@ import (
 )
 
 var (
-	errNoLogStream = stderrors.New("storagenode: no such log stream")
+	errNoLogStream       = stderrors.New("storagenode: no such log stream")
+	errNotReadyLogStream = stderrors.New("storagenode: not ready log stream")
 )
 
 type storageNodeState int
@@ -67,10 +68,8 @@ type StorageNode struct {
 
 	lsr reportcommitter.Reporter
 
-	executors struct {
-		es map[types.LogStreamID]executor.Executor
-		mu sync.RWMutex
-	}
+	executors             *sync.Map // map[types.LogStreamID]executor.Executor
+	estimatedNumExecutors int64
 
 	storageNodePaths set.Set
 
@@ -97,7 +96,7 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 		storageNodePaths: set.New(len(cfg.volumes)),
 		tsp:              timestamper.New(),
 	}
-	sn.executors.es = make(map[types.LogStreamID]executor.Executor)
+	sn.executors = new(sync.Map)
 	sn.pprofServer = pprof.New(sn.pprofOpts...)
 
 	if len(sn.telemetryEndpoint) == 0 {
@@ -258,9 +257,9 @@ func (sn *StorageNode) Close() {
 	sn.lsr.Close()
 
 	// LogStreamExecutors
-	for _, lse := range sn.logStreamExecutors() {
-		lse.Close()
-	}
+	sn.forEachExecutors(func(_ types.LogStreamID, extor executor.Executor) {
+		extor.Close()
+	})
 
 	// RPC Server
 	// FIXME (jun): Use GracefulStop
@@ -315,20 +314,10 @@ func (sn *StorageNode) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMe
 }
 
 func (sn *StorageNode) logStreamMetadataDescriptors(ctx context.Context) []varlogpb.LogStreamMetadataDescriptor {
-	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode.logStreamMetadataDescriptors")
-	defer span.End()
-
-	tick := time.Now()
-	lseList := sn.logStreamExecutors()
-	span.SetAttributes(attribute.Int64("get_log_stream_executors_ms", time.Since(tick).Milliseconds()))
-
-	if len(lseList) == 0 {
-		return nil
-	}
-	lsmetas := make([]varlogpb.LogStreamMetadataDescriptor, 0, len(lseList))
-	for _, lse := range lseList {
-		lsmetas = append(lsmetas, lse.Metadata())
-	}
+	lsmetas := make([]varlogpb.LogStreamMetadataDescriptor, 0, sn.estimatedNumberOfExecutors())
+	sn.forEachExecutors(func(_ types.LogStreamID, extor executor.Executor) {
+		lsmetas = append(lsmetas, extor.Metadata())
+	})
 	return lsmetas
 }
 
@@ -339,56 +328,48 @@ func (sn *StorageNode) AddLogStream(ctx context.Context, logStreamID types.LogSt
 		return "", err
 	}
 
+	atomic.AddInt64(&sn.estimatedNumExecutors, 1)
 	return logStreamPath, nil
 }
 
-func (sn *StorageNode) addLogStream(ctx context.Context, logStreamID types.LogStreamID, storageNodePath string) (string, error) {
+func (sn *StorageNode) addLogStream(ctx context.Context, logStreamID types.LogStreamID, storageNodePath string) (lsPath string, err error) {
 	if !sn.storageNodePaths.Contains(storageNodePath) {
 		return "", errors.New("storagenode: no such storage path")
 	}
 
-	lsPath, err := CreateLogStreamPath(storageNodePath, logStreamID)
+	lsPath, err = CreateLogStreamPath(storageNodePath, logStreamID)
 	if err != nil {
 		return "", err
 	}
 
-	sn.executors.mu.Lock()
-	defer sn.executors.mu.Unlock()
-
-	if _, ok := sn.executors.es[logStreamID]; ok {
+	_, loaded := sn.executors.LoadOrStore(logStreamID, executor.Executor(nil))
+	if loaded {
 		return "", errors.New("storagenode: log stream already exists")
 	}
+
+	defer func() {
+		if err != nil {
+			sn.executors.Delete(logStreamID)
+		}
+	}()
 
 	strg, err := sn.createStorage(ctx, lsPath)
 	if err != nil {
 		return "", err
 	}
-
-	if err := sn.startLogStream(ctx, logStreamID, strg); err != nil {
+	err = sn.startLogStream(ctx, logStreamID, strg)
+	if err != nil {
 		return "", err
 	}
 	return lsPath, nil
 }
 
 func (sn *StorageNode) createStorage(ctx context.Context, logStreamPath string) (storage.Storage, error) {
-	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode/StorageNode.createStorage")
-	defer span.End()
-
 	opts := append(sn.storageOpts, storage.WithPath(logStreamPath), storage.WithLogger(sn.logger))
-	strg, err := storage.NewStorage(opts...)
-	if err != nil {
-		span.RecordError(err)
-	}
-	return strg, err
+	return storage.NewStorage(opts...)
 }
 
 func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.LogStreamID, storage storage.Storage) (err error) {
-	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode/StorageNode.startLogStream")
-	defer func() {
-		span.RecordError(err)
-		span.End()
-	}()
-
 	opts := append(sn.executorOpts,
 		executor.WithStorage(storage),
 		executor.WithStorageNodeID(sn.snid),
@@ -401,47 +382,49 @@ func (sn *StorageNode) startLogStream(ctx context.Context, logStreamID types.Log
 		return err
 	}
 	sn.tsp.Touch()
-	sn.executors.es[logStreamID] = lse
+	sn.executors.Store(logStreamID, lse)
 	return nil
 }
 
 // RemoveLogStream implements the Server RemoveLogStream method.
 func (sn *StorageNode) RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
-	ctx, span := sn.tmStub.StartSpan(ctx, "storagenode/StorageNode.RemoveLogStream")
-	defer span.End()
-
-	sn.executors.mu.Lock()
-	defer sn.executors.mu.Unlock()
-
-	lse, ok := sn.executors.es[logStreamID]
-	if !ok {
+	ifaceExecutor, loaded := sn.executors.LoadAndDelete(logStreamID)
+	if !loaded {
 		return verrors.ErrNotExist
 	}
-	delete(sn.executors.es, logStreamID)
 
-	tick := time.Now()
+	lse := ifaceExecutor.(executor.Executor)
+
 	lse.Close()
-	closeDuration := time.Since(tick)
 
-	tick = time.Now()
 	// TODO (jun): Is removing data path optional or default behavior?
 	if err := os.RemoveAll(lse.Path()); err != nil {
 		sn.logger.Warn("error while removing log stream path")
 	}
-	removeDuration := time.Since(tick)
 	sn.tsp.Touch()
 
-	span.SetAttributes(attribute.Int64("close_duration_ms", closeDuration.Milliseconds()),
-		attribute.Int64("remove_duration_ms", removeDuration.Milliseconds()))
+	atomic.AddInt64(&sn.estimatedNumExecutors, -1)
 	return nil
+}
+
+func (sn *StorageNode) lookupExecutor(logStreamID types.LogStreamID) (executor.Executor, error) {
+	ifaceExecutor, ok := sn.executors.Load(logStreamID)
+	if !ok {
+		return nil, errors.WithStack(errNoLogStream)
+	}
+	if ifaceExecutor == nil {
+		return nil, errors.WithStack(errNotReadyLogStream)
+	}
+	return ifaceExecutor.(executor.Executor), nil
 }
 
 // Seal implements the Server Seal method.
 func (sn *StorageNode) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
-	lse, ok := sn.logStreamExecutor(logStreamID)
-	if !ok {
-		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, errors.WithStack(errNoLogStream)
+	lse, err := sn.lookupExecutor(logStreamID)
+	if err != nil {
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, err
 	}
+
 	// TODO: check err
 	status, hwm, _ := lse.Seal(ctx, lastCommittedGLSN)
 
@@ -451,69 +434,51 @@ func (sn *StorageNode) Seal(ctx context.Context, logStreamID types.LogStreamID, 
 
 // Unseal implements the Server Unseal method.
 func (sn *StorageNode) Unseal(ctx context.Context, logStreamID types.LogStreamID, replicas []snpb.Replica) error {
-	lse, ok := sn.logStreamExecutor(logStreamID)
-	if !ok {
-		return errors.WithStack(errNoLogStream)
+	lse, err := sn.lookupExecutor(logStreamID)
+	if err != nil {
+		return err
 	}
+
 	sn.tsp.Touch()
 	return lse.Unseal(ctx, replicas)
 }
 
 func (sn *StorageNode) Sync(ctx context.Context, logStreamID types.LogStreamID, replica snpb.Replica) (*snpb.SyncStatus, error) {
-	lse, ok := sn.logStreamExecutor(logStreamID)
-	if !ok {
-		return nil, errors.WithStack(errNoLogStream)
+	lse, err := sn.lookupExecutor(logStreamID)
+	if err != nil {
+		return nil, err
 	}
+
 	sts, err := lse.Sync(ctx, replica)
 	return sts, err
 }
 
-func (sn *StorageNode) GetPrevCommitInfo(ctx context.Context, hwm types.GLSN) ([]*snpb.LogStreamCommitInfo, error) {
-	es := sn.logStreamExecutors()
-	infos := make([]*snpb.LogStreamCommitInfo, len(es))
-	grp, ctx := errgroup.WithContext(ctx)
-	for i := range es {
-		idx := i
-		grp.Go(func() (err error) {
-			infos[idx], err = es[idx].GetPrevCommitInfo(hwm)
-			return err
-		})
-	}
-	if err := grp.Wait(); err != nil {
+func (sn *StorageNode) GetPrevCommitInfo(ctx context.Context, hwm types.GLSN) (infos []*snpb.LogStreamCommitInfo, err error) {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	infos = make([]*snpb.LogStreamCommitInfo, 0, sn.estimatedNumberOfExecutors())
+
+	sn.forEachExecutors(func(_ types.LogStreamID, extor executor.Executor) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			info, cerr := extor.GetPrevCommitInfo(hwm)
+			mu.Lock()
+			infos = append(infos, info)
+			err = multierr.Append(err, cerr)
+			defer mu.Unlock()
+		}()
+	})
+	wg.Wait()
+
+	if err != nil {
 		return nil, err
 	}
 	return infos, nil
 }
 
-func (sn *StorageNode) logStreamExecutor(logStreamID types.LogStreamID) (executor.Executor, bool) {
-	sn.executors.mu.RLock()
-	defer sn.executors.mu.RUnlock()
-	lse, ok := sn.executors.es[logStreamID]
-	return lse, ok
-}
-
-func (sn *StorageNode) forEachExecutors(f func(executor.Executor)) {
-	sn.executors.mu.RLock()
-	defer sn.executors.mu.RUnlock()
-	for _, lse := range sn.executors.es {
-		f(lse)
-	}
-}
-
-func (sn *StorageNode) numExecutors() int {
-	sn.executors.mu.RLock()
-	defer sn.executors.mu.RUnlock()
-	return len(sn.executors.es)
-}
-
-func (sn *StorageNode) logStreamExecutors() []executor.Executor {
-	sn.executors.mu.RLock()
-	defer sn.executors.mu.RUnlock()
-	ret := make([]executor.Executor, 0, len(sn.executors.es))
-	for _, lse := range sn.executors.es {
-		ret = append(ret, lse)
-	}
-	return ret
+func (sn *StorageNode) Executors() *sync.Map {
+	return sn.executors
 }
 
 func (sn *StorageNode) verifyClusterID(cid types.ClusterID) bool {
@@ -525,52 +490,55 @@ func (sn *StorageNode) verifyStorageNodeID(snid types.StorageNodeID) bool {
 }
 
 func (sn *StorageNode) ReportCommitter(logStreamID types.LogStreamID) (reportcommitter.ReportCommitter, bool) {
-	return sn.logStreamExecutor(logStreamID)
-}
-
-func (sn *StorageNode) ReportCommitters() []reportcommitter.ReportCommitter {
-	es := sn.logStreamExecutors()
-	ret := make([]reportcommitter.ReportCommitter, 0, len(es))
-	for _, e := range es {
-		ret = append(ret, e)
+	extor, err := sn.lookupExecutor(logStreamID)
+	if err != nil {
+		return nil, false
 	}
-	return ret
+	return extor, true
 }
 
-func (sn *StorageNode) NumberOfReportCommitters() int {
-	return sn.numExecutors()
+func (sn *StorageNode) forEachExecutors(f func(types.LogStreamID, executor.Executor)) {
+	sn.executors.Range(func(k, v interface{}) bool {
+		// NOTE: if value interface is nil, the executor is not ready.
+		if v == nil {
+			return true
+		}
+		extor := v.(executor.Executor)
+		f(k.(types.LogStreamID), extor)
+		return true
+	})
 }
 
-func (sn *StorageNode) ForEachReportCommitter(f func(reportcommitter.ReportCommitter)) {
-	sn.forEachExecutors(func(lse executor.Executor) {
-		f(lse)
+func (sn *StorageNode) estimatedNumberOfExecutors() int {
+	return int(atomic.LoadInt64(&sn.estimatedNumExecutors))
+}
+
+func (sn *StorageNode) GetReports(rsp *snpb.GetReportResponse, f func(reportcommitter.ReportCommitter, *snpb.GetReportResponse)) {
+	sn.forEachExecutors(func(_ types.LogStreamID, lse executor.Executor) {
+		f(lse, rsp)
 	})
 }
 
 func (sn *StorageNode) Replicator(logStreamID types.LogStreamID) (replication.Replicator, bool) {
-	return sn.logStreamExecutor(logStreamID)
-}
-
-func (sn *StorageNode) Replicators() []replication.Replicator {
-	es := sn.logStreamExecutors()
-	ret := make([]replication.Replicator, 0, len(es))
-	for _, e := range es {
-		ret = append(ret, e)
+	extor, err := sn.lookupExecutor(logStreamID)
+	if err != nil {
+		return nil, false
 	}
-	return ret
+	return extor, true
 }
 
 func (sn *StorageNode) ReadWriter(logStreamID types.LogStreamID) (logio.ReadWriter, bool) {
-	return sn.logStreamExecutor(logStreamID)
+	extor, err := sn.lookupExecutor(logStreamID)
+	if err != nil {
+		return nil, false
+	}
+	return extor, true
 }
 
-func (sn *StorageNode) ReadWriters() []logio.ReadWriter {
-	es := sn.logStreamExecutors()
-	ret := make([]logio.ReadWriter, 0, len(es))
-	for _, e := range es {
-		ret = append(ret, e)
-	}
-	return ret
+func (sn *StorageNode) ForEachReadWriters(f func(logio.ReadWriter)) {
+	sn.forEachExecutors(func(_ types.LogStreamID, extor executor.Executor) {
+		f(extor)
+	})
 }
 
 func (sn *StorageNode) String() string {

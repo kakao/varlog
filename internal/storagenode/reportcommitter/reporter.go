@@ -67,20 +67,18 @@ func (r *reporter) GetReport(ctx context.Context, rsp *snpb.GetReportResponse) e
 		return errors.WithStack(verrors.ErrClosed)
 	}
 
-	r.report(ctx, rsp)
+	rsp.UncommitReports = rsp.UncommitReports[0:0]
+	r.reportCommitterGetter.GetReports(rsp, report)
 	return nil
 }
 
-func (r *reporter) report(ctx context.Context, rsp *snpb.GetReportResponse) {
-	rsp.UncommitReports = rsp.UncommitReports[0:0]
-	r.reportCommitterGetter.ForEachReportCommitter(func(reporter ReportCommitter) {
-		report, err := reporter.GetReport(ctx)
-		if err != nil {
-			// TODO: is ignoring error safe?
-			return
-		}
-		rsp.UncommitReports = append(rsp.UncommitReports, report)
-	})
+func report(reporter ReportCommitter, rsp *snpb.GetReportResponse) {
+	rpt, err := reporter.GetReport()
+	if err != nil {
+		// TODO: is ignoring error safe?
+		return
+	}
+	rsp.UncommitReports = append(rsp.UncommitReports, rpt)
 }
 
 func (r *reporter) Commit(_ context.Context, commitResults []snpb.LogStreamCommitResult) error {

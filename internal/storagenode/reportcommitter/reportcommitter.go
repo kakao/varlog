@@ -10,13 +10,15 @@ import (
 )
 
 type ReportCommitter interface {
-	GetReport(ctx context.Context) (snpb.LogStreamUncommitReport, error)
+	GetReport() (snpb.LogStreamUncommitReport, error)
 	Commit(ctx context.Context, commitResult snpb.LogStreamCommitResult) error
 }
 
 type Getter interface {
-	ReportCommitter(logStreamID types.LogStreamID) (ReportCommitter, bool)
-	ReportCommitters() []ReportCommitter
-	ForEachReportCommitter(func(ReportCommitter))
-	NumberOfReportCommitters() int
+	// ReportCommitter returns reportCommitter corresponded with given logStreamID. If the
+	// reportCommitter does not exist, the result ok is false.
+	ReportCommitter(logStreamID types.LogStreamID) (reportCommitter ReportCommitter, ok bool)
+
+	// GetReports stores reports of all reportCommitters to given the rsp.
+	GetReports(rsp *snpb.GetReportResponse, f func(ReportCommitter, *snpb.GetReportResponse))
 }

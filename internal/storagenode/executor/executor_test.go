@@ -169,7 +169,7 @@ func TestExecutorAppend(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			require.Eventually(t, func() bool {
-				report, err := lse.GetReport(context.TODO())
+				report, err := lse.GetReport()
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength > 0
 			}, time.Second, time.Millisecond)
@@ -184,7 +184,7 @@ func TestExecutorAppend(t *testing.T) {
 		}()
 		wg.Wait()
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.HighWatermark == hwm && report.UncommittedLLSNOffset == types.LLSN(hwm)+1 &&
 				report.UncommittedLLSNLength == 0
@@ -268,7 +268,7 @@ func TestExecutorRead(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			require.Eventually(t, func() bool {
-				report, err := lse.GetReport(context.TODO())
+				report, err := lse.GetReport()
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength > 0
 			}, time.Second, time.Millisecond)
@@ -283,7 +283,7 @@ func TestExecutorRead(t *testing.T) {
 		}()
 		wg.Wait()
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.HighWatermark == expectedHWM &&
 				report.UncommittedLLSNOffset == expectedLLSN+1 &&
@@ -346,7 +346,7 @@ func TestExecutorTrim(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			require.Eventually(t, func() bool {
-				report, err := lse.GetReport(context.TODO())
+				report, err := lse.GetReport()
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength > 0
 			}, time.Second, time.Millisecond)
@@ -361,7 +361,7 @@ func TestExecutorTrim(t *testing.T) {
 		}()
 		wg.Wait()
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.HighWatermark == expectedHWM && report.UncommittedLLSNOffset == expectedLLSN+1 &&
 				report.UncommittedLLSNLength == 0
@@ -458,7 +458,7 @@ func TestExecutorSubscribe(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			require.Eventually(t, func() bool {
-				report, err := lse.GetReport(context.TODO())
+				report, err := lse.GetReport()
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength > 0
 			}, time.Second, time.Millisecond)
@@ -473,7 +473,7 @@ func TestExecutorSubscribe(t *testing.T) {
 		}()
 		wg.Wait()
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.HighWatermark == expectedHWM && report.UncommittedLLSNOffset == expectedLLSN+1 &&
 				report.UncommittedLLSNLength == 0
@@ -546,7 +546,7 @@ func TestExecutorSubscribe(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.UncommittedLLSNLength > 0
 		}, time.Second, time.Millisecond)
@@ -631,7 +631,7 @@ func TestExecutorReplicate(t *testing.T) {
 		assert.NoError(t, lse.Replicate(context.TODO(), expectedLLSN, []byte("foo")))
 
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.UncommittedLLSNLength == 1
 		}, time.Second, 10*time.Millisecond)
@@ -645,7 +645,7 @@ func TestExecutorReplicate(t *testing.T) {
 		}))
 
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.HighWatermark == expectedHWM && report.UncommittedLLSNOffset == expectedLLSN+1 &&
 				report.UncommittedLLSNLength == 0
@@ -724,7 +724,7 @@ func TestExecutorSealSuddenly(t *testing.T) {
 			default:
 			}
 
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			assert.NoError(t, err)
 
 			if report.UncommittedLLSNLength == 0 {
@@ -825,7 +825,7 @@ func TestExecutorSeal(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.TODO())
+		report, err := lse.GetReport()
 		require.NoError(t, err)
 		return report.UncommittedLLSNLength == 10
 	}, time.Second, time.Millisecond)
@@ -840,7 +840,7 @@ func TestExecutorSeal(t *testing.T) {
 	assert.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.TODO())
+		report, err := lse.GetReport()
 		require.NoError(t, err)
 		return report.HighWatermark == 2 && report.UncommittedLLSNOffset == 3 && report.UncommittedLLSNLength == 8
 	}, time.Second, time.Millisecond)
@@ -861,7 +861,7 @@ func TestExecutorSeal(t *testing.T) {
 	assert.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.TODO())
+		report, err := lse.GetReport()
 		require.NoError(t, err)
 		return report.HighWatermark == 3 && report.UncommittedLLSNOffset == 4 && report.UncommittedLLSNLength == 7
 	}, time.Second, time.Millisecond)
@@ -892,7 +892,7 @@ func TestExecutorSeal(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	report, err := lse.GetReport(context.TODO())
+	report, err := lse.GetReport()
 	require.NoError(t, err)
 	assert.Equal(t, types.GLSN(3), report.HighWatermark)
 	assert.Equal(t, types.LLSN(4), report.UncommittedLLSNOffset)
@@ -909,7 +909,7 @@ func TestExecutorSeal(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.TODO())
+		report, err := lse.GetReport()
 		require.NoError(t, err)
 		return report.UncommittedLLSNLength == 10
 	}, time.Second, time.Millisecond)
@@ -926,7 +926,7 @@ func TestExecutorSeal(t *testing.T) {
 	wg.Wait()
 
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.TODO())
+		report, err := lse.GetReport()
 		require.NoError(t, err)
 		return report.HighWatermark == 13 && report.UncommittedLLSNOffset == 14 && report.UncommittedLLSNLength == 0
 	}, time.Second, time.Millisecond)
@@ -1061,7 +1061,7 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 				return
 			default:
 			}
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			if err != nil {
 				return
 			}
@@ -1166,7 +1166,7 @@ func TestExecutorNew(t *testing.T) {
 	go func() {
 		defer commitWg.Done()
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.UncommittedLLSNLength == 10
 		}, time.Second, time.Millisecond)
@@ -1179,7 +1179,7 @@ func TestExecutorNew(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.HighWatermark == 5
 		}, time.Second, time.Millisecond)
@@ -1187,7 +1187,7 @@ func TestExecutorNew(t *testing.T) {
 
 	commitWg.Wait()
 
-	report, err := lse.GetReport(context.TODO())
+	report, err := lse.GetReport()
 	require.NoError(t, err)
 	require.Equal(t, types.GLSN(5), report.HighWatermark)
 	require.Equal(t, types.LLSN(6), report.UncommittedLLSNOffset)
@@ -1205,7 +1205,7 @@ func TestExecutorNew(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	report, err = lse.GetReport(context.TODO())
+	report, err = lse.GetReport()
 	require.NoError(t, err)
 	require.Equal(t, types.GLSN(5), report.HighWatermark)
 	require.Equal(t, types.LLSN(6), report.UncommittedLLSNOffset)
@@ -1220,7 +1220,7 @@ func TestExecutorNew(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.TODO())
+		report, err := lse.GetReport()
 		require.NoError(t, err)
 		return report.HighWatermark == 8
 	}, time.Second, time.Millisecond)
@@ -1231,7 +1231,7 @@ func TestExecutorNew(t *testing.T) {
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
 	// Check if uncommitted logs are deleted
-	report, err = lse.GetReport(context.TODO())
+	report, err = lse.GetReport()
 	require.NoError(t, err)
 	require.Equal(t, types.GLSN(8), report.HighWatermark)
 	require.Equal(t, types.LLSN(9), report.UncommittedLLSNOffset)
@@ -1293,7 +1293,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.UncommittedLLSNLength == 10
 		}, time.Second, time.Millisecond)
@@ -1308,7 +1308,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.HighWatermark == 5
 		}, time.Second, time.Millisecond)
@@ -1323,7 +1323,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.HighWatermark == 20
 		}, time.Second, time.Millisecond)
@@ -1448,7 +1448,7 @@ func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 	}))
 
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.TODO())
+		report, err := lse.GetReport()
 		require.NoError(t, err)
 		return report.HighWatermark == 5
 	}, time.Second, time.Millisecond)
@@ -1659,7 +1659,7 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 		assert.NoError(t, lse.Replicate(context.Background(), llsn, []byte("foo")))
 
 		assert.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.UncommittedLLSNLength == 1
 		}, time.Second, 10*time.Millisecond)
@@ -1673,7 +1673,7 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 		}))
 
 		require.Eventually(t, func() bool {
-			report, err := lse.GetReport(context.TODO())
+			report, err := lse.GetReport()
 			require.NoError(t, err)
 			return report.HighWatermark == glsn && report.UncommittedLLSNOffset == llsn+1 &&
 				report.UncommittedLLSNLength == 0
@@ -1686,7 +1686,7 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		rpt, err := lse.GetReport(context.Background())
+		rpt, err := lse.GetReport()
 		assert.NoError(t, err)
 		return 3 == rpt.GetUncommittedLLSNOffset() && 2 == rpt.GetUncommittedLLSNLength()
 	}, time.Second, 10*time.Millisecond)
@@ -1716,7 +1716,7 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 		CommittedLLSNOffset: 3,
 	}))
 
-	rpt, err := lse.GetReport(context.Background())
+	rpt, err := lse.GetReport()
 	assert.NoError(t, err)
 	assert.EqualValues(t, 3, rpt.GetUncommittedLLSNOffset())
 	assert.EqualValues(t, 0, rpt.GetUncommittedLLSNLength())
@@ -1784,7 +1784,7 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			assert.Eventually(t, func() bool {
-				report, err := lse.GetReport(context.TODO())
+				report, err := lse.GetReport()
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength == 1
 			}, time.Second, 10*time.Millisecond)
@@ -1797,7 +1797,7 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 				CommittedLLSNOffset: llsn,
 			}))
 			assert.Eventually(t, func() bool {
-				report, err := lse.GetReport(context.TODO())
+				report, err := lse.GetReport()
 				assert.NoError(t, err)
 				return report.HighWatermark == glsn && report.UncommittedLLSNOffset == llsn+1 &&
 					report.UncommittedLLSNLength == 0
@@ -1817,7 +1817,7 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.TODO())
+		report, err := lse.GetReport()
 		assert.NoError(t, err)
 		return report.UncommittedLLSNOffset == 3 && report.UncommittedLLSNLength == 2
 	}, time.Second, 10*time.Millisecond)
@@ -1847,7 +1847,7 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 		CommittedLLSNOffset: 3,
 	}))
 
-	rpt, err := lse.GetReport(context.Background())
+	rpt, err := lse.GetReport()
 	assert.NoError(t, err)
 	assert.EqualValues(t, 3, rpt.GetUncommittedLLSNOffset())
 	assert.EqualValues(t, 0, rpt.GetUncommittedLLSNLength())
@@ -1925,7 +1925,7 @@ func TestExecutorSync(t *testing.T) {
 	}))
 
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.Background())
+		report, err := lse.GetReport()
 		assert.NoError(t, err)
 		return report.HighWatermark == 5
 	}, time.Second, 10*time.Millisecond)
@@ -1939,7 +1939,7 @@ func TestExecutorSync(t *testing.T) {
 	}))
 
 	require.Eventually(t, func() bool {
-		report, err := lse.GetReport(context.Background())
+		report, err := lse.GetReport()
 		assert.NoError(t, err)
 		return report.HighWatermark == 10
 	}, time.Second, 10*time.Millisecond)
@@ -1960,7 +1960,7 @@ func TestExecutorSync(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			assert.Eventually(t, func() bool {
-				report, err := lse.GetReport(context.TODO())
+				report, err := lse.GetReport()
 				require.NoError(t, err)
 				return report.UncommittedLLSNLength == 1
 			}, time.Second, 10*time.Millisecond)
@@ -1973,7 +1973,7 @@ func TestExecutorSync(t *testing.T) {
 				CommittedLLSNOffset: llsn,
 			}))
 			assert.Eventually(t, func() bool {
-				report, err := lse.GetReport(context.TODO())
+				report, err := lse.GetReport()
 				assert.NoError(t, err)
 				return report.HighWatermark == glsn && report.UncommittedLLSNOffset == llsn+1 &&
 					report.UncommittedLLSNLength == 0

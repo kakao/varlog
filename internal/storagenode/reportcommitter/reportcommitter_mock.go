@@ -52,18 +52,18 @@ func (mr *MockReportCommitterMockRecorder) Commit(arg0, arg1 interface{}) *gomoc
 }
 
 // GetReport mocks base method.
-func (m *MockReportCommitter) GetReport(arg0 context.Context) (snpb.LogStreamUncommitReport, error) {
+func (m *MockReportCommitter) GetReport() (snpb.LogStreamUncommitReport, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReport", arg0)
+	ret := m.ctrl.Call(m, "GetReport")
 	ret0, _ := ret[0].(snpb.LogStreamUncommitReport)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReport indicates an expected call of GetReport.
-func (mr *MockReportCommitterMockRecorder) GetReport(arg0 interface{}) *gomock.Call {
+func (mr *MockReportCommitterMockRecorder) GetReport() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockReportCommitter)(nil).GetReport), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReport", reflect.TypeOf((*MockReportCommitter)(nil).GetReport))
 }
 
 // MockGetter is a mock of Getter interface.
@@ -89,30 +89,16 @@ func (m *MockGetter) EXPECT() *MockGetterMockRecorder {
 	return m.recorder
 }
 
-// ForEachReportCommitter mocks base method.
-func (m *MockGetter) ForEachReportCommitter(arg0 func(ReportCommitter)) {
+// GetReports mocks base method.
+func (m *MockGetter) GetReports(arg0 *snpb.GetReportResponse, arg1 func(ReportCommitter, *snpb.GetReportResponse)) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ForEachReportCommitter", arg0)
+	m.ctrl.Call(m, "GetReports", arg0, arg1)
 }
 
-// ForEachReportCommitter indicates an expected call of ForEachReportCommitter.
-func (mr *MockGetterMockRecorder) ForEachReportCommitter(arg0 interface{}) *gomock.Call {
+// GetReports indicates an expected call of GetReports.
+func (mr *MockGetterMockRecorder) GetReports(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForEachReportCommitter", reflect.TypeOf((*MockGetter)(nil).ForEachReportCommitter), arg0)
-}
-
-// NumberOfReportCommitters mocks base method.
-func (m *MockGetter) NumberOfReportCommitters() int {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NumberOfReportCommitters")
-	ret0, _ := ret[0].(int)
-	return ret0
-}
-
-// NumberOfReportCommitters indicates an expected call of NumberOfReportCommitters.
-func (mr *MockGetterMockRecorder) NumberOfReportCommitters() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumberOfReportCommitters", reflect.TypeOf((*MockGetter)(nil).NumberOfReportCommitters))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReports", reflect.TypeOf((*MockGetter)(nil).GetReports), arg0, arg1)
 }
 
 // ReportCommitter mocks base method.
@@ -128,18 +114,4 @@ func (m *MockGetter) ReportCommitter(arg0 types.LogStreamID) (ReportCommitter, b
 func (mr *MockGetterMockRecorder) ReportCommitter(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportCommitter", reflect.TypeOf((*MockGetter)(nil).ReportCommitter), arg0)
-}
-
-// ReportCommitters mocks base method.
-func (m *MockGetter) ReportCommitters() []ReportCommitter {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReportCommitters")
-	ret0, _ := ret[0].([]ReportCommitter)
-	return ret0
-}
-
-// ReportCommitters indicates an expected call of ReportCommitters.
-func (mr *MockGetterMockRecorder) ReportCommitters() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportCommitters", reflect.TypeOf((*MockGetter)(nil).ReportCommitters))
 }
