@@ -48,16 +48,7 @@ func (s *server) withTelemetry(ctx context.Context, spanName string, req interfa
 		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
 	)
 	rsp, err = h(ctx, req)
-	if err == nil {
-		var rspMsg fmt.Stringer
-		if rsp != nil {
-			rspMsg = rsp.(fmt.Stringer)
-		}
-		s.logger.Info(spanName,
-			zap.Stringer("request", req.(fmt.Stringer)),
-			zap.Stringer("response", rspMsg),
-		)
-	} else {
+	if err != nil {
 		span.RecordError(err)
 		s.logger.Error(spanName,
 			zap.Error(err),
