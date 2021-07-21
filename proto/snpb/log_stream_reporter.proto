@@ -82,8 +82,7 @@ message CommitRequest {
             "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    repeated LogStreamCommitResult commit_results = 2
-        [(gogoproto.nullable) = false];
+    LogStreamCommitResult commit_result = 2 [(gogoproto.nullable) = false];
 }
 
 message CommitResponse {

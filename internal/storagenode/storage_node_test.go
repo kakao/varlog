@@ -224,23 +224,22 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	//    2 |    3 |   13 |  20 |       0
 	//    2 |    4 |   14 |  20 |       0
 	//    2 |    5 |   15 |  20 |       0
-	sn.lsr.Commit(context.TODO(), []snpb.LogStreamCommitResult{
-		{
-			LogStreamID:         logStreamID1,
-			CommittedLLSNOffset: 1,
-			CommittedGLSNOffset: 5,
-			CommittedGLSNLength: 5,
-			HighWatermark:       20,
-			PrevHighWatermark:   0,
-		},
-		{
-			LogStreamID:         logStreamID2,
-			CommittedLLSNOffset: 1,
-			CommittedGLSNOffset: 11,
-			CommittedGLSNLength: 5,
-			HighWatermark:       20,
-			PrevHighWatermark:   0,
-		},
+	sn.lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
+		LogStreamID:         logStreamID1,
+		CommittedLLSNOffset: 1,
+		CommittedGLSNOffset: 5,
+		CommittedGLSNLength: 5,
+		HighWatermark:       20,
+		PrevHighWatermark:   0,
+	})
+
+	sn.lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
+		LogStreamID:         logStreamID2,
+		CommittedLLSNOffset: 1,
+		CommittedGLSNOffset: 11,
+		CommittedGLSNLength: 5,
+		HighWatermark:       20,
+		PrevHighWatermark:   0,
 	})
 
 	require.Eventually(t, func() bool {

@@ -52,7 +52,7 @@ func (mr *MockReporterMockRecorder) Close() *gomock.Call {
 }
 
 // Commit mocks base method.
-func (m *MockReporter) Commit(arg0 context.Context, arg1 []snpb.LogStreamCommitResult) error {
+func (m *MockReporter) Commit(arg0 context.Context, arg1 snpb.LogStreamCommitResult) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Commit", arg0, arg1)
 	ret0, _ := ret[0].(error)

@@ -102,7 +102,6 @@ func (s *server) Commit(stream snpb.LogStreamReporter_CommitServer) (err error) 
 	// NOTE: Is it necessary to trace Commit RPCs?
 	var req snpb.CommitRequest
 	for {
-		req.CommitResults = nil
 		err = stream.RecvMsg(&req)
 		if err == io.EOF {
 			return nil
@@ -111,7 +110,7 @@ func (s *server) Commit(stream snpb.LogStreamReporter_CommitServer) (err error) 
 			return err
 		}
 
-		err = s.lsr.Commit(stream.Context(), req.CommitResults)
+		err = s.lsr.Commit(stream.Context(), req.CommitResult)
 		if err != nil {
 			return err
 		}

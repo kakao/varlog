@@ -1067,23 +1067,23 @@ func TestReporterClientReconnect(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(cli[0], ShouldNotEqual, cli[1])
 
-			_, err = cli[0].GetReport(context.TODO())
+			_, err = cli[0].GetReport()
 			So(err, ShouldBeNil)
 
-			_, err = cli[1].GetReport(context.TODO())
+			_, err = cli[1].GetReport()
 			So(err, ShouldNotBeNil)
 
 			Convey("Then closeClient(cli[1]) should not closed the client", func(ctx C) {
 				executor.closeClient(cli[1])
 
-				_, err = cli[0].GetReport(context.TODO())
+				_, err = cli[0].GetReport()
 				So(err, ShouldBeNil)
 
 				cli[1], err = executor.getClient(context.TODO())
 				So(err, ShouldBeNil)
 				So(cli[0], ShouldEqual, cli[1])
 
-				_, err = cli[0].GetReport(context.TODO())
+				_, err = cli[0].GetReport()
 				So(err, ShouldBeNil)
 			})
 		})
