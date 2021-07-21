@@ -45,7 +45,7 @@ func Main(c *cli.Context) error {
 	}
 	defer logger.Sync()
 
-	var storageOpts []storage.Option
+	storageOpts := []storage.Option{}
 	if c.Bool(flagDisableWriteSync.Name) {
 		storageOpts = append(storageOpts, storage.WithoutWriteSync())
 	}
@@ -57,6 +57,15 @@ func Main(c *cli.Context) error {
 	}
 	if c.Bool(flagDisableDeleteUncommittedSync.Name) {
 		storageOpts = append(storageOpts, storage.WithoutDeleteUncommittedSync())
+	}
+	if c.IsSet(flagMemTableSizeBytes.Name) {
+		storageOpts = append(storageOpts, storage.WithMemTableSizeBytes(c.Int(flagMemTableSizeBytes.Name)))
+	}
+	if c.IsSet(flagMemTableStopWritesThreshold.Name) {
+		storageOpts = append(storageOpts, storage.WithMemTableStopWritesThreshold(c.Int(flagMemTableStopWritesThreshold.Name)))
+	}
+	if c.Bool(flagStorageDebugLog.Name) {
+		storageOpts = append(storageOpts, storage.WithDebugLog())
 	}
 
 	// TODO: add initTimeout option

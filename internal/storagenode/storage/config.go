@@ -14,6 +14,10 @@ const (
 	DefaultCommitSync            = true
 	DefaultDeleteCommittedSync   = true
 	DefaultDeleteUncommittedSync = true
+
+	// private configs (`github.com/cockroachdb/pebble/options.go`)
+	DefaultMemTableSize                = 4 << 20
+	DefaultMemTableStopWritesThreshold = 2
 )
 
 type config struct {
@@ -24,6 +28,11 @@ type config struct {
 	deleteCommittedSync   bool
 	deleteUncommittedSync bool
 	logger                *zap.Logger
+
+	// private configs
+	memTableSizeBytes           int
+	memTableStopWritesThreshold int
+	debugLog                    bool
 }
 
 func newConfig(opts []Option) (*config, error) {
@@ -34,6 +43,9 @@ func newConfig(opts []Option) (*config, error) {
 		deleteCommittedSync:   DefaultDeleteCommittedSync,
 		deleteUncommittedSync: DefaultDeleteUncommittedSync,
 		logger:                zap.NewNop(),
+		// private configs
+		memTableSizeBytes:           DefaultMemTableSize,
+		memTableStopWritesThreshold: DefaultMemTableStopWritesThreshold,
 	}
 	for _, opt := range opts {
 		opt.apply(cfg)
@@ -138,4 +150,34 @@ func (o loggerOption) apply(c *config) {
 
 func WithLogger(logger *zap.Logger) Option {
 	return loggerOption{logger}
+}
+
+type memTableSizeOpt int
+
+func (o memTableSizeOpt) apply(c *config) {
+	c.memTableSizeBytes = int(o)
+}
+
+func WithMemTableSizeBytes(size int) Option {
+	return memTableSizeOpt(size)
+}
+
+type memTableStopWritesThreshold int
+
+func (o memTableStopWritesThreshold) apply(c *config) {
+	c.memTableStopWritesThreshold = int(o)
+}
+
+func WithMemTableStopWritesThreshold(threshold int) Option {
+	return memTableStopWritesThreshold(threshold)
+}
+
+type debugLogOpt bool
+
+func (o debugLogOpt) apply(c *config) {
+	c.debugLog = true
+}
+
+func WithDebugLog() Option {
+	return debugLogOpt(true)
 }

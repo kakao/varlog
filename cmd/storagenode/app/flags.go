@@ -92,6 +92,18 @@ var (
 		Aliases: []string{"without-delete-uncommited-sync", "no-delete-uncommitted-sync"},
 		EnvVars: []string{"DISABLE_DELETE_UNCOMMITTED_SYNC"},
 	}
+	flagMemTableSizeBytes = vflag.FlagDescriptor{
+		Name:    "memtable-size-bytes",
+		EnvVars: []string{"MEMTABLE_SIZE_BYTES"},
+	}
+	flagMemTableStopWritesThreshold = vflag.FlagDescriptor{
+		Name:    "memtable-stop-writes-threshold",
+		EnvVars: []string{"MEMTABLE_STOP_WRITES_THRESHOLD"},
+	}
+	flagStorageDebugLog = vflag.FlagDescriptor{
+		Name:    "storage-debug-log",
+		EnvVars: []string{"STORAGE_DEBUG_LOG"},
+	}
 
 	// flags for telemetry
 	flagTelemetry = vflag.FlagDescriptor{
