@@ -10,7 +10,7 @@ import (
 
 var errOldCommit = stderrors.New("too old commit result")
 
-func (e *executor) GetReport(_ context.Context) (snpb.LogStreamUncommitReport, error) {
+func (e *executor) GetReport() (snpb.LogStreamUncommitReport, error) {
 	if err := e.guard(); err != nil {
 		return snpb.InvalidLogStreamUncommitReport, err
 	}

@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
@@ -198,23 +199,24 @@ func (s *server) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtypes.Empt
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/Trim", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			req := reqI.(*snpb.TrimRequest)
+			trimGLSN := req.GetGLSN()
 
-			lses := s.readWriterGetter.ReadWriters()
-			errs := make([]error, len(lses))
-			g, ctx := errgroup.WithContext(ctx)
-			for i := range lses {
-				idx := i
-				g.Go(func() error {
-					errs[idx] = lses[idx].Trim(ctx, req.GetGLSN())
-					return nil
-				})
-			}
-			g.Wait()
-			for i := range errs {
-				if errs[i] != nil {
-					return &pbtypes.Empty{}, errs[i]
-				}
-			}
+			// TODO
+			var wg sync.WaitGroup
+			var err error
+			var mu sync.Mutex
+			s.readWriterGetter.ForEachReadWriters(func(rw ReadWriter) {
+				readWriter := rw
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					cerr := readWriter.Trim(ctx, trimGLSN)
+					mu.Lock()
+					err = multierr.Append(err, cerr)
+					mu.Unlock()
+				}()
+			})
+			wg.Wait()
 			return &pbtypes.Empty{}, nil
 		},
 	)

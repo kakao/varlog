@@ -90,12 +90,10 @@ func TestLogStreamReporter(t *testing.T) {
 			}
 		},
 	).AnyTimes()
-	rcg.EXPECT().ReportCommitters().Return([]reportcommitter.ReportCommitter{lse1, lse2}).AnyTimes()
-	rcg.EXPECT().NumberOfReportCommitters().Return(2).AnyTimes()
-	rcg.EXPECT().ForEachReportCommitter(gomock.Any()).DoAndReturn(
-		func(f func(reportcommitter.ReportCommitter)) {
-			f(lse1)
-			f(lse2)
+	rcg.EXPECT().GetReports(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(rsp *snpb.GetReportResponse, f func(reportcommitter.ReportCommitter, *snpb.GetReportResponse)) {
+			f(lse1, rsp)
+			f(lse2, rsp)
 		},
 	).AnyTimes()
 

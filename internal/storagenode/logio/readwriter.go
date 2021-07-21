@@ -23,5 +23,5 @@ type SubscribeEnv interface {
 
 type Getter interface {
 	ReadWriter(logStreamID types.LogStreamID) (ReadWriter, bool)
-	ReadWriters() []ReadWriter
+	ForEachReadWriters(f func(ReadWriter))
 }

@@ -132,17 +132,3 @@ func (mr *MockGetterMockRecorder) Replicator(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicator", reflect.TypeOf((*MockGetter)(nil).Replicator), arg0)
 }
-
-// Replicators mocks base method.
-func (m *MockGetter) Replicators() []Replicator {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Replicators")
-	ret0, _ := ret[0].([]Replicator)
-	return ret0
-}
-
-// Replicators indicates an expected call of Replicators.
-func (mr *MockGetterMockRecorder) Replicators() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicators", reflect.TypeOf((*MockGetter)(nil).Replicators))
-}

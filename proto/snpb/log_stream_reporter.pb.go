@@ -1200,10 +1200,7 @@ func (m *LogStreamUncommitReport) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1254,10 +1251,7 @@ func (m *GetReportRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1361,10 +1355,7 @@ func (m *GetReportResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1529,10 +1520,7 @@ func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1636,10 +1624,7 @@ func (m *CommitRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
@@ -1690,10 +1675,7 @@ func (m *CommitResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthLogStreamReporter
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthLogStreamReporter
 			}
 			if (iNdEx + skippy) > l {
