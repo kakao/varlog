@@ -1,5 +1,7 @@
 package executor
 
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/storagenode/executor -package executor -destination executor_mock.go . Executor
+
 import (
 	"context"
 	"io"

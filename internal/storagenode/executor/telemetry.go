@@ -5,7 +5,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 )
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/storagenode/executor -package executor -destination executor_mock.go . MeasurableExecutor
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/storagenode/executor -package executor -destination telemetry_mock.go . MeasurableExecutor
 
 type MeasurableExecutor interface {
 	telemetry.Measurable

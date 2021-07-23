@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/executor"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/executorsmap"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/id"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/logio"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/pprof"
@@ -68,7 +69,8 @@ type StorageNode struct {
 
 	lsr reportcommitter.Reporter
 
-	executors             *sync.Map // map[types.LogStreamID]executor.Executor
+	executors *executorsmap.ExecutorsMap // map[types.LogStreamID]executor.Executor
+	// executors             *sync.Map // map[types.LogStreamID]executor.Executor
 	estimatedNumExecutors int64
 
 	storageNodePaths set.Set
@@ -95,8 +97,8 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 		config:           *cfg,
 		storageNodePaths: set.New(len(cfg.volumes)),
 		tsp:              timestamper.New(),
+		executors:        executorsmap.New(32),
 	}
-	sn.executors = new(sync.Map)
 	sn.pprofServer = pprof.New(sn.pprofOpts...)
 
 	if len(sn.telemetryEndpoint) == 0 {
@@ -349,7 +351,7 @@ func (sn *StorageNode) addLogStream(ctx context.Context, logStreamID types.LogSt
 
 	defer func() {
 		if err != nil {
-			sn.executors.Delete(logStreamID)
+			_, _ = sn.executors.LoadAndDelete(logStreamID)
 		}
 	}()
 
@@ -477,10 +479,6 @@ func (sn *StorageNode) GetPrevCommitInfo(ctx context.Context, hwm types.GLSN) (i
 	return infos, nil
 }
 
-func (sn *StorageNode) Executors() *sync.Map {
-	return sn.executors
-}
-
 func (sn *StorageNode) verifyClusterID(cid types.ClusterID) bool {
 	return sn.cid == cid
 }
@@ -498,13 +496,11 @@ func (sn *StorageNode) ReportCommitter(logStreamID types.LogStreamID) (reportcom
 }
 
 func (sn *StorageNode) forEachExecutors(f func(types.LogStreamID, executor.Executor)) {
-	sn.executors.Range(func(k, v interface{}) bool {
+	sn.executors.Range(func(lsid types.LogStreamID, extor executor.Executor) bool {
 		// NOTE: if value interface is nil, the executor is not ready.
-		if v == nil {
-			return true
+		if extor != nil {
+			f(lsid, extor)
 		}
-		extor := v.(executor.Executor)
-		f(k.(types.LogStreamID), extor)
 		return true
 	})
 }
