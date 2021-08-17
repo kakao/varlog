@@ -9,6 +9,19 @@ metadata:
 data:
   otel-agent-config: |
     receivers:
+      hostmetrics:
+        collection_interval: 30s
+        scrapers:
+          cpu:
+          disk:
+          load:
+          filesystem:
+          memory:
+          network:
+          process:
+            include:
+              names: [vmr, vsn]
+              match_type: strict
       otlp:
         protocols:
           grpc:
@@ -38,7 +51,7 @@ data:
           processors: [batch]
           exporters: [otlp]
         metrics:
-          receivers: [otlp]
+          receivers: [hostmetrics, otlp]
           processors: [batch]
           exporters: [otlp]
       extensions: [health_check, pprof, zpages]
