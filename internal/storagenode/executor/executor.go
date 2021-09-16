@@ -19,7 +19,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/timestamper"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type Executor interface {
@@ -80,7 +80,7 @@ type executor struct {
 
 	// The primaryBackups is a slice of replicas of a log stream. It is updated by Unseal
 	// and is read by many codes.
-	primaryBackups []snpb.Replica
+	primaryBackups []varlogpb.Replica
 }
 
 var _ Executor = (*executor)(nil)
@@ -111,12 +111,9 @@ func New(opts ...Option) (*executor, error) {
 
 	// restore LogStreamContext
 	// NOTE: LogStreamContext should be restored before initLogPipeline is called.
-	lsc, err := lse.restoreLogStreamContext(ri)
-	if err != nil {
-		return nil, err
-	}
-	lse.lsc = lsc
-	lse.decider = newDecidableCondition(lsc)
+	lse.lsc = lse.restoreLogStreamContext(ri)
+
+	lse.decider = newDecidableCondition(lse.lsc)
 
 	// init log pipeline
 	if err := lse.initLogPipeline(); err != nil {
@@ -207,9 +204,9 @@ func (e *executor) Close() (err error) {
 	return multierr.Append(err, e.storage.Close())
 }
 
-func (e *executor) restoreLogStreamContext(ri storage.RecoveryInfo) (*logStreamContext, error) {
+func (e *executor) restoreLogStreamContext(ri storage.RecoveryInfo) *logStreamContext {
 	lsc := newLogStreamContext()
-	globalHighWatermark, uncommittedLLSNBegin := lsc.reportCommitBase()
+	commitVersion, highWatermark, uncommittedLLSNBegin := lsc.reportCommitBase()
 	uncommittedLLSNEnd := lsc.uncommittedLLSNEnd.Load()
 	lsc.commitProgress.mu.RLock()
 	committedLLSNEnd := lsc.commitProgress.committedLLSNEnd
@@ -218,7 +215,8 @@ func (e *executor) restoreLogStreamContext(ri storage.RecoveryInfo) (*logStreamC
 	localLowWatermark := lsc.localGLSN.localLowWatermark.Load()
 
 	if ri.LastCommitContext.Found {
-		globalHighWatermark = ri.LastCommitContext.CC.HighWatermark
+		commitVersion = ri.LastCommitContext.CC.Version
+		highWatermark = ri.LastCommitContext.CC.HighWatermark
 	}
 	if ri.LogEntryBoundary.Found {
 		lastLLSN := ri.LogEntryBoundary.Last.LLSN
@@ -230,14 +228,14 @@ func (e *executor) restoreLogStreamContext(ri storage.RecoveryInfo) (*logStreamC
 		localLowWatermark = ri.LogEntryBoundary.First.GLSN
 	}
 
-	lsc.storeReportCommitBase(globalHighWatermark, uncommittedLLSNBegin)
+	lsc.storeReportCommitBase(commitVersion, highWatermark, uncommittedLLSNBegin)
 	lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
 	lsc.commitProgress.mu.Lock()
 	lsc.commitProgress.committedLLSNEnd = committedLLSNEnd
 	lsc.commitProgress.mu.Unlock()
 	lsc.localGLSN.localHighWatermark.Store(localHighWatermark)
 	lsc.localGLSN.localLowWatermark.Store(localLowWatermark)
-	return lsc, nil
+	return lsc
 }
 
 func (e *executor) regenerateCommitWaitTasks(ri storage.RecoveryInfo) error {
@@ -297,12 +295,16 @@ func (e *executor) isPrimay() bool {
 	// NOTE: A new log stream replica that has not received Unseal request is not primary
 	// replica.
 	return len(e.primaryBackups) > 0 &&
-		e.primaryBackups[0].StorageNodeID == e.storageNodeID &&
+		e.primaryBackups[0].StorageNode.StorageNodeID == e.storageNodeID &&
 		e.primaryBackups[0].LogStreamID == e.logStreamID
 }
 
 func (e *executor) StorageNodeID() types.StorageNodeID {
 	return e.storageNodeID
+}
+
+func (e *executor) TopicID() types.TopicID {
+	return e.topicID
 }
 
 func (e *executor) LogStreamID() types.LogStreamID {

@@ -21,7 +21,9 @@ func TestRandomSelector(t *testing.T) {
 			&varlogpb.MetadataDescriptor{
 				StorageNodes: []*varlogpb.StorageNodeDescriptor{
 					{
-						StorageNodeID: types.StorageNodeID(1),
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: types.StorageNodeID(1),
+						},
 						Storages: []*varlogpb.StorageDescriptor{
 							{
 								Path: "/tmp",
@@ -29,7 +31,9 @@ func TestRandomSelector(t *testing.T) {
 						},
 					},
 					{
-						StorageNodeID: types.StorageNodeID(2),
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: types.StorageNodeID(2),
+						},
 						Storages: []*varlogpb.StorageDescriptor{
 							{
 								Path: "/tmp",
@@ -87,7 +91,6 @@ func TestRandomSelector(t *testing.T) {
 				So(replicas[0].GetStorageNodeID(), ShouldEqual, types.StorageNodeID(2))
 			})
 		})
-
 	})
 }
 
@@ -115,7 +118,9 @@ func TestVictimSelector(t *testing.T) {
 				func(_ context.Context, snid types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 					return &varlogpb.StorageNodeMetadataDescriptor{
 						StorageNode: &varlogpb.StorageNodeDescriptor{
-							StorageNodeID: snid,
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+							},
 						},
 						LogStreams: []varlogpb.LogStreamMetadataDescriptor{
 							{
@@ -125,7 +130,6 @@ func TestVictimSelector(t *testing.T) {
 							},
 						},
 					}, nil
-
 				},
 			).AnyTimes()
 
@@ -135,7 +139,6 @@ func TestVictimSelector(t *testing.T) {
 				So(err, ShouldNotBeNil)
 				So(err.Error(), ShouldEqual, "victimselector: no victim")
 			})
-
 		})
 
 		Convey("When all replicas are not LogStreamStatusSealed, thus all are victims", func() {
@@ -143,7 +146,9 @@ func TestVictimSelector(t *testing.T) {
 				func(_ context.Context, snid types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 					return &varlogpb.StorageNodeMetadataDescriptor{
 						StorageNode: &varlogpb.StorageNodeDescriptor{
-							StorageNodeID: snid,
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+							},
 						},
 						LogStreams: []varlogpb.LogStreamMetadataDescriptor{
 							{
@@ -177,7 +182,9 @@ func TestVictimSelector(t *testing.T) {
 					}
 					return &varlogpb.StorageNodeMetadataDescriptor{
 						StorageNode: &varlogpb.StorageNodeDescriptor{
-							StorageNodeID: snid,
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+							},
 						},
 						LogStreams: []varlogpb.LogStreamMetadataDescriptor{
 							{

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type logClientProxy struct {
@@ -20,20 +21,20 @@ func newLogIOProxy(client LogIOClient, closer func() error) *logClientProxy {
 	}
 }
 
-func (l *logClientProxy) Append(ctx context.Context, logStreamID types.LogStreamID, data []byte, backups ...StorageNode) (types.GLSN, error) {
-	return l.client.Append(ctx, logStreamID, data, backups...)
+func (l *logClientProxy) Append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, backups ...varlogpb.StorageNode) (types.GLSN, error) {
+	return l.client.Append(ctx, topicID, logStreamID, data, backups...)
 }
 
-func (l *logClientProxy) Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) (*types.LogEntry, error) {
-	return l.client.Read(ctx, logStreamID, glsn)
+func (l *logClientProxy) Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) (*varlogpb.LogEntry, error) {
+	return l.client.Read(ctx, topicID, logStreamID, glsn)
 }
 
-func (l *logClientProxy) Subscribe(ctx context.Context, logStreamID types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error) {
-	return l.client.Subscribe(ctx, logStreamID, begin, end)
+func (l *logClientProxy) Subscribe(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error) {
+	return l.client.Subscribe(ctx, topicID, logStreamID, begin, end)
 }
 
-func (l *logClientProxy) Trim(ctx context.Context, glsn types.GLSN) error {
-	return l.client.Trim(ctx, glsn)
+func (l *logClientProxy) Trim(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error {
+	return l.client.Trim(ctx, topicID, glsn)
 }
 
 func (l *logClientProxy) Close() error {

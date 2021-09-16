@@ -14,6 +14,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type Action interface {
@@ -155,7 +156,7 @@ func (act *action) subscribe(ctx context.Context) error {
 	}
 	defer vcli.Close()
 
-	limit, err := vcli.Append(ctx, []byte("foo"), varlog.WithRetryCount(5))
+	limit, err := vcli.Append(ctx, act.topicID, []byte("foo"), varlog.WithRetryCount(5))
 	if err != nil {
 		return errors.Wrap(err, "append")
 	}
@@ -163,7 +164,7 @@ func (act *action) subscribe(ctx context.Context) error {
 	var received atomic.Value
 	received.Store(types.InvalidGLSN)
 	serrC := make(chan error)
-	nopOnNext := func(le types.LogEntry, err error) {
+	nopOnNext := func(le varlogpb.LogEntry, err error) {
 		if err != nil {
 			serrC <- err
 			close(serrC)
@@ -175,7 +176,7 @@ func (act *action) subscribe(ctx context.Context) error {
 	fmt.Printf("[%v] Sub ~%v\n", time.Now(), limit)
 	defer fmt.Printf("[%v] Sub ~%v Close\n", time.Now(), limit)
 
-	closer, err := vcli.Subscribe(ctx, types.MinGLSN, limit+types.GLSN(1), nopOnNext)
+	closer, err := vcli.Subscribe(ctx, act.topicID, types.MinGLSN, limit+types.GLSN(1), nopOnNext)
 	if err != nil {
 		return err
 	}
@@ -228,7 +229,7 @@ func (act *action) append(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		default:
-			glsn, err := vcli.Append(ctx, []byte("foo"), varlog.WithRetryCount(5))
+			glsn, err := vcli.Append(ctx, act.topicID, []byte("foo"), varlog.WithRetryCount(5))
 			if err != nil {
 				return err
 			}

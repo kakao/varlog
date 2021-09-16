@@ -16,13 +16,12 @@ func TestSnapshotMarshal(t *testing.T) {
 
 	for i := 0; i < 128; i++ {
 		gls := &mrpb.LogStreamCommitResults{}
-		gls.HighWatermark = types.GLSN((i + 1) * 16)
-		gls.PrevHighWatermark = types.GLSN(i * 16)
+		gls.Version = types.Version(i + 1)
 
 		for j := 0; j < 1024; j++ {
 			lls := snpb.LogStreamCommitResult{}
 			lls.LogStreamID = types.LogStreamID(j)
-			lls.CommittedGLSNOffset = gls.PrevHighWatermark + types.GLSN(j*2)
+			lls.CommittedGLSNOffset = types.GLSN(1024*i + j*2)
 			lls.CommittedGLSNLength = uint64(lls.CommittedGLSNOffset) + 1
 
 			gls.CommitResults = append(gls.CommitResults, lls)
@@ -35,18 +34,17 @@ func TestSnapshotMarshal(t *testing.T) {
 
 	smr.Marshal()
 
-	log.Println(time.Now().Sub(st))
+	log.Println(time.Since(st))
 }
 
 func TestGlobalLogStreamMarshal(t *testing.T) {
 	gls := &mrpb.LogStreamCommitResults{}
-	gls.HighWatermark = types.GLSN(1000)
-	gls.PrevHighWatermark = types.GLSN(16)
+	gls.Version = types.Version(1000)
 
 	for i := 0; i < 128*1024; i++ {
 		lls := snpb.LogStreamCommitResult{}
 		lls.LogStreamID = types.LogStreamID(i)
-		lls.CommittedGLSNOffset = gls.PrevHighWatermark + types.GLSN(i*2)
+		lls.CommittedGLSNOffset = types.GLSN(i)
 		lls.CommittedGLSNLength = uint64(lls.CommittedGLSNOffset) + 1
 
 		gls.CommitResults = append(gls.CommitResults, lls)
@@ -55,5 +53,5 @@ func TestGlobalLogStreamMarshal(t *testing.T) {
 
 	gls.Marshal()
 
-	log.Println(time.Now().Sub(st))
+	log.Println(time.Since(st))
 }

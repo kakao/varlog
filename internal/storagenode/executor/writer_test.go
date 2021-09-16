@@ -555,5 +555,4 @@ func TestWriterVarlog444(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return lsc.uncommittedLLSNEnd.Load() == types.LLSN(4)
 	}, time.Second, 10*time.Millisecond)
-
 }

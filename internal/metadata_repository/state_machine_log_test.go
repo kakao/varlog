@@ -153,8 +153,10 @@ func TestStateMachineLogCut(t *testing.T) {
 			for i := 0; int64(total) < segmentSizeBytes; i++ {
 				l := &mrpb.RegisterStorageNode{
 					StorageNode: &varlogpb.StorageNodeDescriptor{
-						StorageNodeID: types.StorageNodeID(1),
-						Address:       "127.0.0.1:50000",
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: types.StorageNodeID(1),
+							Address:       "127.0.0.1:50000",
+						},
 					},
 				}
 
@@ -243,8 +245,10 @@ func TestStateMachineLogReadFrom(t *testing.T) {
 			for {
 				l := &mrpb.RegisterStorageNode{
 					StorageNode: &varlogpb.StorageNodeDescriptor{
-						StorageNodeID: types.StorageNodeID(1),
-						Address:       "127.0.0.1:50000",
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: types.StorageNodeID(1),
+							Address:       "127.0.0.1:50000",
+						},
 					},
 				}
 
@@ -301,8 +305,10 @@ func TestStateMachineLogReadFromHole(t *testing.T) {
 		for {
 			l := &mrpb.RegisterStorageNode{
 				StorageNode: &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: types.StorageNodeID(1),
-					Address:       "127.0.0.1:50000",
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(1),
+						Address:       "127.0.0.1:50000",
+					},
 				},
 			}
 
@@ -360,8 +366,10 @@ func TestStateMachineLogReadFromWithDirty(t *testing.T) {
 		for ; appliedIndex < uint64(5); appliedIndex++ {
 			l := &mrpb.RegisterStorageNode{
 				StorageNode: &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: types.StorageNodeID(1),
-					Address:       "127.0.0.1:50000",
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(1),
+						Address:       "127.0.0.1:50000",
+					},
 				},
 			}
 

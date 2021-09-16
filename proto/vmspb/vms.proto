@@ -12,6 +12,9 @@ option go_package = "github.daumkakao.com/varlog/varlog/proto/vmspb";
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 message AddStorageNodeRequest {
     // address is IP of a node to be added to the cluster.
@@ -23,7 +26,7 @@ message AddStorageNodeResponse {
 }
 
 message UnregisterStorageNodeRequest {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
@@ -32,9 +35,36 @@ message UnregisterStorageNodeRequest {
 
 message UnregisterStorageNodeResponse {}
 
+message AddTopicRequest {
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+}
+
+message AddTopicResponse {
+    varlogpb.TopicDescriptor topic = 1;
+}
+
+message UnregisterTopicRequest {
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+}
+
+message UnregisterTopicResponse {}
+
 message AddLogStreamRequest {
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
     // TODO: nullable = false
-    repeated varlogpb.ReplicaDescriptor replicas = 1
+    repeated varlogpb.ReplicaDescriptor replicas = 2
         [(gogoproto.nullable) = true];
 }
 
@@ -43,7 +73,12 @@ message AddLogStreamResponse {
 }
 
 message UnregisterLogStreamRequest {
-    uint32 log_stream_id = 1 [
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -53,12 +88,17 @@ message UnregisterLogStreamRequest {
 message UnregisterLogStreamResponse {}
 
 message RemoveLogStreamReplicaRequest {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    uint32 log_stream_id = 2 [
+    int32 topic_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -68,7 +108,12 @@ message RemoveLogStreamReplicaRequest {
 message RemoveLogStreamReplicaResponse {}
 
 message UpdateLogStreamRequest {
-    uint32 log_stream_id = 1 [
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -82,8 +127,8 @@ message UpdateLogStreamRequest {
         (gogoproto.customname) = "PoppedStorageNodeID"
     ];
     */
-    varlogpb.ReplicaDescriptor popped_replica = 2;
-    varlogpb.ReplicaDescriptor pushed_replica = 3;
+    varlogpb.ReplicaDescriptor popped_replica = 3;
+    varlogpb.ReplicaDescriptor pushed_replica = 4;
 }
 
 message UpdateLogStreamResponse {
@@ -91,7 +136,12 @@ message UpdateLogStreamResponse {
 }
 
 message SealRequest {
-    uint32 log_stream_id = 1 [
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -109,17 +159,22 @@ message SealResponse {
 }
 
 message SyncRequest {
-    uint32 log_stream_id = 1 [
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    uint32 src_storage_node_id = 2 [
+    int32 src_storage_node_id = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "SrcStorageNodeID"
     ];
-    uint32 dst_storage_node_id = 3 [
+    int32 dst_storage_node_id = 4 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "DstStorageNodeID"
@@ -131,7 +186,12 @@ message SyncResponse {
 }
 
 message UnsealRequest {
-    uint32 log_stream_id = 1 [
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -155,7 +215,7 @@ message GetMRMembersResponse {
 }
 
 message GetStorageNodesResponse {
-    map<uint32, string> storagenodes = 1
+    map<int32, string> storagenodes = 1
         [(gogoproto.castkey) =
              "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID"];
 }
@@ -185,6 +245,11 @@ service ClusterManager {
 
     rpc UnregisterStorageNode(UnregisterStorageNodeRequest)
         returns (UnregisterStorageNodeResponse) {}
+
+    rpc AddTopic(AddTopicRequest) returns (AddTopicResponse) {}
+
+    rpc UnregisterTopic(UnregisterTopicRequest)
+        returns (UnregisterTopicResponse) {}
 
     rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
 

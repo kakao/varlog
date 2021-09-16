@@ -9,6 +9,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 const PebbleStorageName = "pebble"
@@ -108,12 +109,11 @@ func (ps *pebbleStorage) readLastCommitContext(onlyNonEmpty bool) (CommitContext
 			continue
 		}
 		return cc, true
-
 	}
 	return InvalidCommitContext, false
 }
 
-func (ps *pebbleStorage) readLogEntryBoundary() (types.LogEntry, types.LogEntry, bool, error) {
+func (ps *pebbleStorage) readLogEntryBoundary() (varlogpb.LogEntry, varlogpb.LogEntry, bool, error) {
 	iter := ps.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
@@ -123,12 +123,12 @@ func (ps *pebbleStorage) readLogEntryBoundary() (types.LogEntry, types.LogEntry,
 	}()
 
 	if !iter.First() {
-		return types.InvalidLogEntry, types.InvalidLogEntry, false, nil
+		return varlogpb.InvalidLogEntry(), varlogpb.InvalidLogEntry(), false, nil
 	}
 	firstGLSN := decodeCommitKey(iter.Key())
 	firstLE, err := ps.Read(firstGLSN)
 	if err != nil {
-		return types.InvalidLogEntry, types.InvalidLogEntry, true, err
+		return varlogpb.InvalidLogEntry(), varlogpb.InvalidLogEntry(), true, err
 	}
 
 	iter.Last()
@@ -137,7 +137,7 @@ func (ps *pebbleStorage) readLogEntryBoundary() (types.LogEntry, types.LogEntry,
 	return firstLE, lastLE, true, err
 }
 
-func (ps *pebbleStorage) readUncommittedLogEntryBoundary(lastCommittedLogEntry types.LogEntry) (types.LLSN, types.LLSN) {
+func (ps *pebbleStorage) readUncommittedLogEntryBoundary(lastCommittedLogEntry varlogpb.LogEntry) (types.LLSN, types.LLSN) {
 	dk := encodeDataKey(lastCommittedLogEntry.LLSN + 1)
 	iter := ps.db.NewIter(&pebble.IterOptions{
 		LowerBound: dk,
@@ -270,7 +270,7 @@ func (ps *pebbleStorage) Name() string {
 	return PebbleStorageName
 }
 
-func (ps *pebbleStorage) Read(glsn types.GLSN) (types.LogEntry, error) {
+func (ps *pebbleStorage) Read(glsn types.GLSN) (varlogpb.LogEntry, error) {
 	rkb := newCommitKeyBuffer()
 	defer rkb.release()
 
@@ -280,7 +280,7 @@ func (ps *pebbleStorage) Read(glsn types.GLSN) (types.LogEntry, error) {
 		if err == pebble.ErrNotFound {
 			err = verrors.ErrNoEntry
 		}
-		return types.InvalidLogEntry, errors.WithStack(err)
+		return varlogpb.InvalidLogEntry(), errors.WithStack(err)
 	}
 
 	data, dcloser, err := ps.db.Get(dk)
@@ -288,10 +288,10 @@ func (ps *pebbleStorage) Read(glsn types.GLSN) (types.LogEntry, error) {
 		if err == pebble.ErrNotFound {
 			err = verrors.ErrNoEntry
 		}
-		return types.InvalidLogEntry, errors.WithStack(err)
+		return varlogpb.InvalidLogEntry(), errors.WithStack(err)
 	}
 
-	logEntry := types.LogEntry{
+	logEntry := varlogpb.LogEntry{
 		GLSN: glsn,
 		LLSN: decodeDataKey(dk),
 	}
@@ -300,12 +300,12 @@ func (ps *pebbleStorage) Read(glsn types.GLSN) (types.LogEntry, error) {
 		copy(logEntry.Data, data)
 	}
 	if err := multierr.Append(errors.WithStack(ccloser.Close()), errors.WithStack(dcloser.Close())); err != nil {
-		return types.InvalidLogEntry, err
+		return varlogpb.InvalidLogEntry(), err
 	}
 	return logEntry, nil
 }
 
-func (ps *pebbleStorage) ReadAt(llsn types.LLSN) (types.LogEntry, error) {
+func (ps *pebbleStorage) ReadAt(llsn types.LLSN) (varlogpb.LogEntry, error) {
 	// NOTE: Scanning by commit context can be better.
 	iter := ps.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
@@ -323,7 +323,7 @@ func (ps *pebbleStorage) ReadAt(llsn types.LLSN) (types.LogEntry, error) {
 		}
 		iter.Next()
 	}
-	return types.InvalidLogEntry, errors.WithStack(verrors.ErrNoEntry)
+	return varlogpb.InvalidLogEntry(), errors.WithStack(verrors.ErrNoEntry)
 }
 
 func (ps *pebbleStorage) Scan(begin, end types.GLSN) Scanner {
@@ -462,7 +462,7 @@ func (ps *pebbleStorage) StoreCommitContext(cc CommitContext) error {
 	return ps.db.Set(cck, nil, ps.commitContextOption)
 }
 
-func (ps *pebbleStorage) ReadFloorCommitContext(prevHighWatermark types.GLSN) (CommitContext, error) {
+func (ps *pebbleStorage) ReadFloorCommitContext(ver types.Version) (CommitContext, error) {
 	iter := ps.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitContextKeyPrefix},
 		UpperBound: []byte{commitContextKeySentinelPrefix},
@@ -475,19 +475,20 @@ func (ps *pebbleStorage) ReadFloorCommitContext(prevHighWatermark types.GLSN) (C
 		return InvalidCommitContext, ErrNotFoundCommitContext
 	}
 
-	last := decodeCommitContextKey(iter.Key())
-	if last.HighWatermark <= prevHighWatermark {
-		return InvalidCommitContext, ErrNotFoundCommitContext
-	}
-
-	// NotFound
-	if !iter.SeekLT(encodeCommitContextKey(CommitContext{
-		PrevHighWatermark: prevHighWatermark + 1,
-	})) {
-		return InvalidCommitContext, ErrNotFoundCommitContext
-	}
-
 	cc := decodeCommitContextKey(iter.Key())
+	if cc.Version <= ver {
+		return InvalidCommitContext, ErrNotFoundCommitContext
+	}
+
+	for iter.Prev() {
+		prev := decodeCommitContextKey(iter.Key())
+		if prev.Version <= ver {
+			return cc, nil
+		}
+
+		cc = prev
+	}
+
 	return cc, nil
 }
 
@@ -495,20 +496,21 @@ func (ps *pebbleStorage) CommitContextOf(glsn types.GLSN) (CommitContext, error)
 	if glsn.Invalid() {
 		return InvalidCommitContext, ErrNotFoundCommitContext
 	}
-	upperKey := encodeCommitContextKey(CommitContext{
-		PrevHighWatermark: glsn,
+	lowerKey := encodeCommitContextKey(CommitContext{
+		HighWatermark: glsn,
 	})
 	iter := ps.db.NewIter(&pebble.IterOptions{
-		LowerBound: []byte{commitContextKeyPrefix},
-		UpperBound: upperKey,
+		LowerBound: lowerKey,
+		UpperBound: []byte{commitContextKeySentinelPrefix},
 	})
 	defer func() {
 		_ = iter.Close()
 	}()
 
-	if !iter.Last() {
+	if !iter.First() {
 		return InvalidCommitContext, ErrNotFoundCommitContext
 	}
+
 	if cc := decodeCommitContextKey(iter.Key()); cc.CommittedGLSNBegin <= glsn && glsn < cc.CommittedGLSNEnd {
 		return cc, nil
 	}

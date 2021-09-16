@@ -29,13 +29,13 @@ type ReportCollector interface {
 
 	Close()
 
-	Recover([]*varlogpb.StorageNodeDescriptor, []*varlogpb.LogStreamDescriptor, types.GLSN) error
+	Recover([]*varlogpb.StorageNodeDescriptor, []*varlogpb.LogStreamDescriptor, types.Version) error
 
 	RegisterStorageNode(*varlogpb.StorageNodeDescriptor) error
 
 	UnregisterStorageNode(types.StorageNodeID) error
 
-	RegisterLogStream(types.StorageNodeID, types.LogStreamID, types.GLSN, varlogpb.LogStreamStatus) error
+	RegisterLogStream(types.TopicID, types.StorageNodeID, types.LogStreamID, types.Version, varlogpb.LogStreamStatus) error
 
 	UnregisterLogStream(types.StorageNodeID, types.LogStreamID) error
 
@@ -43,7 +43,7 @@ type ReportCollector interface {
 
 	Seal(types.LogStreamID)
 
-	Unseal(types.LogStreamID, types.GLSN)
+	Unseal(types.LogStreamID, types.Version)
 
 	NumExecutors() int
 
@@ -53,30 +53,32 @@ type ReportCollector interface {
 type commitHelper interface {
 	getClient(ctx context.Context) (reportcommitter.Client, error)
 
-	getReportedHighWatermark(types.LogStreamID) (types.GLSN, bool)
+	getReportedVersion(types.LogStreamID) (types.Version, bool)
 
 	getLastCommitResults() *mrpb.LogStreamCommitResults
 
-	lookupNextCommitResults(types.GLSN) (*mrpb.LogStreamCommitResults, error)
+	lookupNextCommitResults(types.Version) (*mrpb.LogStreamCommitResults, error)
 
 	commit(context.Context, snpb.LogStreamCommitResult) error
 }
 
 type logStreamCommitter struct {
-	lsID   types.LogStreamID
-	helper commitHelper
+	topicID types.TopicID
+	lsID    types.LogStreamID
+	helper  commitHelper
 
 	commitStatus struct {
-		mu                 sync.RWMutex
-		status             varlogpb.LogStreamStatus
-		beginHighWatermark types.GLSN
+		mu           sync.RWMutex
+		status       varlogpb.LogStreamStatus
+		beginVersion types.Version
 	}
 
 	catchupHelper struct {
-		cli               reportcommitter.Client
-		sentHighWatermark types.GLSN
-		sentAt            time.Time
-		expectedPos       int
+		cli            reportcommitter.Client
+		sentVersion    types.Version
+		sentAt         time.Time
+		expectedPos    int
+		expectedEndPos int
 	}
 
 	triggerC chan struct{}
@@ -215,7 +217,7 @@ func (rc *reportCollector) Close() {
 	rc.closed = true
 }
 
-func (rc *reportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, lss []*varlogpb.LogStreamDescriptor, highWatermark types.GLSN) error {
+func (rc *reportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, lss []*varlogpb.LogStreamDescriptor, ver types.Version) error {
 	rc.Run()
 
 	for _, sn := range sns {
@@ -240,7 +242,7 @@ func (rc *reportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, lss []
 		}
 
 		for _, r := range ls.Replicas {
-			err := rc.RegisterLogStream(r.StorageNodeID, ls.LogStreamID, highWatermark, status)
+			err := rc.RegisterLogStream(ls.TopicID, r.StorageNodeID, ls.LogStreamID, ver, status)
 			if err != nil {
 				return err
 			}
@@ -313,7 +315,7 @@ func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		return verrors.ErrExist
 	}
 
-	logger := rc.logger.Named("executor").With(zap.Uint32("snid", uint32(sn.StorageNodeID)))
+	logger := rc.logger.Named("executor").With(zap.Int32("snid", int32(sn.StorageNodeID)))
 	executor := &reportCollectExecutor{
 		storageNodeID: sn.StorageNodeID,
 		helper:        rc.helper,
@@ -356,7 +358,7 @@ func (rc *reportCollector) UnregisterStorageNode(snID types.StorageNodeID) error
 	return nil
 }
 
-func (rc *reportCollector) RegisterLogStream(snID types.StorageNodeID, lsID types.LogStreamID, highWatermark types.GLSN, status varlogpb.LogStreamStatus) error {
+func (rc *reportCollector) RegisterLogStream(topicID types.TopicID, snID types.StorageNodeID, lsID types.LogStreamID, ver types.Version, status varlogpb.LogStreamStatus) error {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
@@ -369,7 +371,7 @@ func (rc *reportCollector) RegisterLogStream(snID types.StorageNodeID, lsID type
 		return verrors.ErrNotExist
 	}
 
-	return executor.registerLogStream(lsID, highWatermark, status)
+	return executor.registerLogStream(topicID, lsID, ver, status)
 }
 
 func (rc *reportCollector) UnregisterLogStream(snID types.StorageNodeID, lsID types.LogStreamID) error {
@@ -422,7 +424,7 @@ func (rc *reportCollector) Seal(lsID types.LogStreamID) {
 	}
 }
 
-func (rc *reportCollector) Unseal(lsID types.LogStreamID, highWatermark types.GLSN) {
+func (rc *reportCollector) Unseal(lsID types.LogStreamID, ver types.Version) {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
@@ -431,7 +433,7 @@ func (rc *reportCollector) Unseal(lsID types.LogStreamID, highWatermark types.GL
 	}
 
 	for _, executor := range rc.executors {
-		executor.unseal(lsID, highWatermark)
+		executor.unseal(lsID, ver)
 	}
 }
 
@@ -535,7 +537,7 @@ func (rce *reportCollectExecutor) insertCommitter(c *logStreamCommitter) error {
 	return nil
 }
 
-func (rce *reportCollectExecutor) registerLogStream(lsID types.LogStreamID, highWatermark types.GLSN, status varlogpb.LogStreamStatus) error {
+func (rce *reportCollectExecutor) registerLogStream(topicID types.TopicID, lsID types.LogStreamID, ver types.Version, status varlogpb.LogStreamStatus) error {
 	rce.cmmu.Lock()
 	defer rce.cmmu.Unlock()
 
@@ -543,7 +545,7 @@ func (rce *reportCollectExecutor) registerLogStream(lsID types.LogStreamID, high
 		return verrors.ErrExist
 	}
 
-	c := newLogStreamCommitter(lsID, rce, highWatermark, status, rce.tmStub, rce.logger)
+	c := newLogStreamCommitter(topicID, lsID, rce, ver, status, rce.tmStub, rce.logger)
 	err := c.run()
 	if err != nil {
 		return err
@@ -593,12 +595,12 @@ func (rce *reportCollectExecutor) seal(lsID types.LogStreamID) {
 	}
 }
 
-func (rce *reportCollectExecutor) unseal(lsID types.LogStreamID, highWatermark types.GLSN) {
+func (rce *reportCollectExecutor) unseal(lsID types.LogStreamID, ver types.Version) {
 	rce.cmmu.RLock()
 	defer rce.cmmu.RUnlock()
 
 	if c := rce.lookupCommitter(lsID); c != nil {
-		c.unseal(highWatermark)
+		c.unseal(ver)
 	}
 }
 
@@ -682,12 +684,12 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 		} else if prev.LogStreamID < cur.LogStreamID {
 			j++
 		} else {
-			if cur.HighWatermark < prev.HighWatermark {
+			if cur.Version < prev.Version {
 				fmt.Printf("invalid report prev:%v, cur:%v\n",
-					prev.HighWatermark, cur.HighWatermark)
+					prev.Version, cur.Version)
 				rce.logger.Panic("invalid report",
-					zap.Any("prev", prev.HighWatermark),
-					zap.Any("cur", cur.HighWatermark))
+					zap.Any("prev", prev.Version),
+					zap.Any("cur", cur.Version))
 			}
 
 			if cur.UncommittedLLSNOffset > prev.UncommittedLLSNOffset ||
@@ -756,32 +758,33 @@ func (rce *reportCollectExecutor) commit(ctx context.Context, cr snpb.LogStreamC
 	return nil
 }
 
-func (rce *reportCollectExecutor) getReportedHighWatermark(lsID types.LogStreamID) (types.GLSN, bool) {
+func (rce *reportCollectExecutor) getReportedVersion(lsID types.LogStreamID) (types.Version, bool) {
 	report := rce.reportCtx.getReport()
 	if report == nil {
-		return types.InvalidGLSN, false
+		return types.InvalidVersion, false
 	}
 
 	r, ok := report.LookupReport(lsID)
 	if !ok {
-		return types.InvalidGLSN, false
+		return types.InvalidVersion, false
 	}
 
-	return r.HighWatermark, true
+	return r.Version, true
 }
 
 func (rce *reportCollectExecutor) getLastCommitResults() *mrpb.LogStreamCommitResults {
 	return rce.helper.GetLastCommitResults()
 }
 
-func (rce *reportCollectExecutor) lookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
-	return rce.helper.LookupNextCommitResults(glsn)
+func (rce *reportCollectExecutor) lookupNextCommitResults(ver types.Version) (*mrpb.LogStreamCommitResults, error) {
+	return rce.helper.LookupNextCommitResults(ver)
 }
 
-func newLogStreamCommitter(lsID types.LogStreamID, helper commitHelper, highWatermark types.GLSN, status varlogpb.LogStreamStatus, tmStub *telemetryStub, logger *zap.Logger) *logStreamCommitter {
+func newLogStreamCommitter(topicID types.TopicID, lsID types.LogStreamID, helper commitHelper, ver types.Version, status varlogpb.LogStreamStatus, tmStub *telemetryStub, logger *zap.Logger) *logStreamCommitter {
 	triggerC := make(chan struct{}, 1)
 
 	c := &logStreamCommitter{
+		topicID:  topicID,
 		lsID:     lsID,
 		helper:   helper,
 		triggerC: triggerC,
@@ -791,7 +794,7 @@ func newLogStreamCommitter(lsID types.LogStreamID, helper commitHelper, highWate
 	}
 
 	c.commitStatus.status = status
-	c.commitStatus.beginHighWatermark = highWatermark
+	c.commitStatus.beginVersion = ver
 
 	return c
 }
@@ -835,31 +838,31 @@ Loop:
 	close(lc.triggerC)
 }
 
-func (lc *logStreamCommitter) getCatchupHighWatermark(resetCatchupHelper bool) (types.GLSN, bool) {
+func (lc *logStreamCommitter) getCatchupVersion(resetCatchupHelper bool) (types.Version, bool) {
 	if resetCatchupHelper {
-		lc.setSentHighWatermark(types.InvalidGLSN)
+		lc.setSentVersion(types.InvalidVersion)
 	}
 
-	status, beginHighWatermark := lc.getCommitStatus()
+	status, beginVer := lc.getCommitStatus()
 	if status.Sealed() {
-		return types.InvalidGLSN, false
+		return types.InvalidVersion, false
 	}
 
-	highWatermark, ok := lc.helper.getReportedHighWatermark(lc.lsID)
+	ver, ok := lc.helper.getReportedVersion(lc.lsID)
 	if !ok {
-		return types.InvalidGLSN, false
+		return types.InvalidVersion, false
 	}
 
-	sent := lc.getSentHighWatermark()
-	if sent > highWatermark {
-		highWatermark = sent
+	sent := lc.getSentVersion()
+	if sent > ver {
+		ver = sent
 	}
 
-	if beginHighWatermark > highWatermark {
-		return beginHighWatermark, true
+	if beginVer > ver {
+		return beginVer, true
 	}
 
-	return highWatermark, true
+	return ver, true
 }
 
 func (lc *logStreamCommitter) catchup(ctx context.Context) {
@@ -879,8 +882,8 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 		return
 	}
 
-	highWatermark, ok := lc.getCatchupHighWatermark(resetCatchupHelper)
-	if !ok || highWatermark >= crs.HighWatermark {
+	ver, ok := lc.getCatchupVersion(resetCatchupHelper)
+	if !ok || ver >= crs.Version {
 		return
 	}
 
@@ -894,20 +897,20 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 	}()
 
 	for ctx.Err() == nil {
-		if highWatermark != crs.PrevHighWatermark {
-			crs, err = lc.helper.lookupNextCommitResults(highWatermark)
+		if ver+1 != crs.Version {
+			crs, err = lc.helper.lookupNextCommitResults(ver)
 			if err != nil {
-				latestHighWatermark, ok := lc.getCatchupHighWatermark(false)
+				latestVersion, ok := lc.getCatchupVersion(false)
 				if !ok {
 					return
 				}
 
-				if latestHighWatermark > highWatermark {
-					highWatermark = latestHighWatermark
+				if latestVersion > ver {
+					ver = latestVersion
 					continue
 				}
 
-				lc.logger.Warn(fmt.Sprintf("lsid:%v latest:%v err:%v", lc.lsID, latestHighWatermark, err.Error()))
+				lc.logger.Warn(fmt.Sprintf("lsid:%v latest:%v err:%v", lc.lsID, latestVersion, err.Error()))
 				return
 			}
 		}
@@ -916,12 +919,12 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 			return
 		}
 
-		cr, expectedPos, ok := crs.LookupCommitResult(lc.lsID, lc.catchupHelper.expectedPos)
+		cr, expectedPos, ok := crs.LookupCommitResult(lc.topicID, lc.lsID, lc.catchupHelper.expectedPos)
 		if ok {
 			lc.catchupHelper.expectedPos = expectedPos
 
-			cr.HighWatermark = crs.HighWatermark
-			cr.PrevHighWatermark = crs.PrevHighWatermark
+			cr.Version = crs.Version
+			cr.HighWatermark, lc.catchupHelper.expectedEndPos = crs.LastHighWatermark(lc.topicID, lc.catchupHelper.expectedEndPos)
 
 			err := lc.helper.commit(ctx, cr)
 			if err != nil {
@@ -929,8 +932,8 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 			}
 		}
 
-		lc.setSentHighWatermark(crs.HighWatermark)
-		highWatermark = crs.HighWatermark
+		lc.setSentVersion(crs.Version)
+		ver = crs.Version
 
 		numCatchups++
 	}
@@ -943,30 +946,30 @@ func (lc *logStreamCommitter) seal() {
 	lc.commitStatus.status = varlogpb.LogStreamStatusSealed
 }
 
-func (lc *logStreamCommitter) unseal(highWatermark types.GLSN) {
+func (lc *logStreamCommitter) unseal(ver types.Version) {
 	lc.commitStatus.mu.Lock()
 	defer lc.commitStatus.mu.Unlock()
 
 	lc.commitStatus.status = varlogpb.LogStreamStatusRunning
-	lc.commitStatus.beginHighWatermark = highWatermark
+	lc.commitStatus.beginVersion = ver
 }
 
-func (lc *logStreamCommitter) getCommitStatus() (varlogpb.LogStreamStatus, types.GLSN) {
+func (lc *logStreamCommitter) getCommitStatus() (varlogpb.LogStreamStatus, types.Version) {
 	lc.commitStatus.mu.RLock()
 	defer lc.commitStatus.mu.RUnlock()
 
-	return lc.commitStatus.status, lc.commitStatus.beginHighWatermark
+	return lc.commitStatus.status, lc.commitStatus.beginVersion
 }
 
-func (lc *logStreamCommitter) getSentHighWatermark() types.GLSN {
+func (lc *logStreamCommitter) getSentVersion() types.Version {
 	if time.Since(lc.catchupHelper.sentAt) > DefaultCatchupRefreshTime {
-		return types.InvalidGLSN
+		return types.InvalidVersion
 	}
-	return lc.catchupHelper.sentHighWatermark
+	return lc.catchupHelper.sentVersion
 }
 
-func (lc *logStreamCommitter) setSentHighWatermark(highWatermark types.GLSN) {
-	lc.catchupHelper.sentHighWatermark = highWatermark
+func (lc *logStreamCommitter) setSentVersion(ver types.Version) {
+	lc.catchupHelper.sentVersion = ver
 	lc.catchupHelper.sentAt = time.Now()
 }
 

@@ -6,49 +6,41 @@ pipeline {
 
     stage("build") {
       steps {
-        sh "make all"
+        sh "make build"
       }
     }
 
     stage("test") {
-      environment { 
-        TEST_USE_LOGGER = "0"
-      }
-
       steps {
-        sh "make test TEST_FAILFAST=1 TEST_TIMEOUT=30m TEST_COUNT=2 TEST_COVERAGE=1"
+        sh "make test_ci TEST_FLAGS='-v -race -failfast -count=2 -timeout=30m'"
       }
 
       post {
         always {
           sh "make test_report"
-          junit "build/reports/*.xml"
+          junit "reports/*.xml"
 
           sh "make coverage_report"
-          cobertura coberturaReportFile: "build/reports/coverage.xml"
+          cobertura coberturaReportFile: "reports/coverage.xml"
         }
       }
     }
 
     /*
     stage("benchmark") {
-      environment {
-        TEST_USE_LOGGER = "0"
-      }
-
       steps {
         sh "make bench"
 
         lock("varlog-sandbox-01") {
-          sh "./scripts/benchmark.sh > build/reports/load.xml"
+          sh "./scripts/benchmark.sh > reports/load.xml"
         }
       }
 
       post {
         always {
           sh "make bench_report"
-          perfReport "build/reports/bench.xml"
-          perfReport "build/reports/load.xml"
+          perfReport "reports/bench.xml"
+          perfReport "reports/load.xml"
         }
       }
     }

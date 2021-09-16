@@ -28,6 +28,7 @@ func TestClientNoLogStream(t *testing.T) {
 		it.WithReplicationFactor(3),
 		it.WithNumberOfStorageNodes(3),
 		it.WithNumberOfClients(1),
+		it.WithNumberOfTopics(1),
 		it.WithVMSOptions(it.NewTestVMSOptions()),
 	)
 
@@ -36,8 +37,9 @@ func TestClientNoLogStream(t *testing.T) {
 		testutil.GC()
 	}()
 
+	topicID := clus.TopicIDs()[0]
 	client := clus.ClientAtIndex(t, 0)
-	_, err := client.Append(context.TODO(), []byte("foo"))
+	_, err := client.Append(context.TODO(), topicID, []byte("foo"))
 	require.Error(t, err)
 }
 
@@ -49,6 +51,7 @@ func TestClientAppendTo(t *testing.T) {
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
 		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithNumberOfTopics(1),
 	)
 
 	defer func() {
@@ -57,16 +60,17 @@ func TestClientAppendTo(t *testing.T) {
 	}()
 
 	// FIXME: remove this ugly code
-	lsID := clus.LogStreamID(t, 0)
+	topicID := clus.TopicIDs()[0]
+	lsID := clus.LogStreamID(t, topicID, 0)
 	client := clus.ClientAtIndex(t, 0)
 
-	_, err := client.AppendTo(context.TODO(), lsID+1, []byte("foo"))
+	_, err := client.AppendTo(context.TODO(), topicID, lsID+1, []byte("foo"))
 	require.Error(t, err)
 
-	glsn, err := client.AppendTo(context.TODO(), lsID, []byte("foo"))
+	glsn, err := client.AppendTo(context.TODO(), topicID, lsID, []byte("foo"))
 	require.NoError(t, err)
 
-	data, err := client.Read(context.Background(), lsID, glsn)
+	data, err := client.Read(context.Background(), topicID, lsID, glsn)
 	require.NoError(t, err)
 	require.EqualValues(t, []byte("foo"), data)
 }
@@ -79,6 +83,7 @@ func TestClientAppend(t *testing.T) {
 		it.WithNumberOfLogStreams(3),
 		it.WithNumberOfClients(1),
 		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithNumberOfTopics(1),
 	)
 
 	defer func() {
@@ -86,19 +91,20 @@ func TestClientAppend(t *testing.T) {
 		testutil.GC()
 	}()
 
+	topicID := clus.TopicIDs()[0]
 	client := clus.ClientAtIndex(t, 0)
 
 	expectedGLSN := types.MinGLSN
 	for i := 0; i < 10; i++ {
-		glsn, err := client.Append(context.TODO(), []byte("foo"))
+		glsn, err := client.Append(context.TODO(), topicID, []byte("foo"))
 		require.NoError(t, err)
 		require.Equal(t, expectedGLSN, glsn)
 		expectedGLSN++
 	}
 
 	require.Condition(t, func() bool {
-		for _, lsid := range clus.LogStreamIDs() {
-			if _, errRead := client.Read(context.TODO(), lsid, 1); errRead == nil {
+		for _, lsid := range clus.LogStreamIDs(topicID) {
+			if _, errRead := client.Read(context.TODO(), topicID, lsid, 1); errRead == nil {
 				return true
 			}
 		}
@@ -114,6 +120,7 @@ func TestClientAppendCancel(t *testing.T) {
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
 		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithNumberOfTopics(1),
 	)
 
 	defer func() {
@@ -121,6 +128,7 @@ func TestClientAppendCancel(t *testing.T) {
 		testutil.GC()
 	}()
 
+	topicID := clus.TopicIDs()[0]
 	client := clus.ClientAtIndex(t, 0)
 
 	var (
@@ -133,7 +141,7 @@ func TestClientAppendCancel(t *testing.T) {
 		defer wg.Done()
 		expectedGLSN := types.MinGLSN
 		for {
-			glsn, err := client.Append(ctx, []byte("foo"))
+			glsn, err := client.Append(ctx, topicID, []byte("foo"))
 			if err == nil {
 				require.Equal(t, expectedGLSN, glsn)
 				expectedGLSN++
@@ -161,6 +169,7 @@ func TestClientSubscribe(t *testing.T) {
 		it.WithNumberOfLogStreams(3),
 		it.WithNumberOfClients(1),
 		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithNumberOfTopics(1),
 	)
 
 	defer func() {
@@ -168,15 +177,16 @@ func TestClientSubscribe(t *testing.T) {
 		testutil.GC()
 	}()
 
+	topicID := clus.TopicIDs()[0]
 	client := clus.ClientAtIndex(t, 0)
 	for i := 0; i < nrLogs; i++ {
-		_, err := client.Append(context.TODO(), []byte("foo"))
+		_, err := client.Append(context.TODO(), topicID, []byte("foo"))
 		require.NoError(t, err)
 	}
 
 	errc := make(chan error, nrLogs)
 	expectedGLSN := types.GLSN(1)
-	subscribeCloser, err := client.Subscribe(context.TODO(), types.GLSN(1), types.GLSN(nrLogs+1), func(le types.LogEntry, err error) {
+	subscribeCloser, err := client.Subscribe(context.TODO(), topicID, types.GLSN(1), types.GLSN(nrLogs+1), func(le varlogpb.LogEntry, err error) {
 		if err != nil {
 			require.ErrorIs(t, io.EOF, err)
 			defer close(errc)
@@ -208,6 +218,7 @@ func TestClientTrim(t *testing.T) {
 		it.WithNumberOfLogStreams(3),
 		it.WithNumberOfClients(1),
 		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithNumberOfTopics(1),
 	)
 
 	defer func() {
@@ -215,29 +226,30 @@ func TestClientTrim(t *testing.T) {
 		testutil.GC()
 	}()
 
+	topicID := clus.TopicIDs()[0]
 	client := clus.ClientAtIndex(t, 0)
 	expectedGLSN := types.GLSN(1)
 	for i := 0; i < nrLogs; i++ {
-		glsn, err := client.Append(context.TODO(), []byte("foo"))
+		glsn, err := client.Append(context.TODO(), topicID, []byte("foo"))
 		require.NoError(t, err)
 		require.Equal(t, expectedGLSN, glsn)
 		expectedGLSN++
 	}
 
-	err := client.Trim(context.Background(), trimPos, varlog.TrimOption{})
+	err := client.Trim(context.Background(), topicID, trimPos, varlog.TrimOption{})
 	require.NoError(t, err)
 
 	// actual deletion in SN is asynchronous.
 	require.Eventually(t, func() bool {
 		errC := make(chan error)
-		nopOnNext := func(le types.LogEntry, err error) {
+		nopOnNext := func(le varlogpb.LogEntry, err error) {
 			isErr := err != nil
 			errC <- err
 			if isErr {
 				close(errC)
 			}
 		}
-		closer, err := client.Subscribe(context.TODO(), types.MinGLSN, trimPos, nopOnNext)
+		closer, err := client.Subscribe(context.TODO(), topicID, types.MinGLSN, trimPos, nopOnNext)
 		require.NoError(t, err)
 		defer closer()
 
@@ -249,15 +261,15 @@ func TestClientTrim(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	// subscribe remains
-	ch := make(chan types.LogEntry)
-	onNext := func(logEntry types.LogEntry, err error) {
+	ch := make(chan varlogpb.LogEntry)
+	onNext := func(logEntry varlogpb.LogEntry, err error) {
 		if err != nil {
 			close(ch)
 			return
 		}
 		ch <- logEntry
 	}
-	closer, err := client.Subscribe(context.TODO(), trimPos+1, types.GLSN(nrLogs), onNext)
+	closer, err := client.Subscribe(context.TODO(), topicID, trimPos+1, types.GLSN(nrLogs), onNext)
 	require.NoError(t, err)
 	defer closer()
 	expectedGLSN = trimPos + 1
@@ -275,14 +287,16 @@ func TestVarlogSubscribeWithSNFail(t *testing.T) {
 		it.WithNumberOfStorageNodes(3),
 		it.WithNumberOfLogStreams(3),
 		it.WithNumberOfClients(5),
+		it.WithNumberOfTopics(1),
 	}
 
 	Convey("Given Varlog cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		topicID := env.TopicIDs()[0]
 		client := env.ClientAtIndex(t, 0)
 
 		nrLogs := 64
 		for i := 0; i < nrLogs; i++ {
-			_, err := client.Append(context.Background(), []byte("foo"))
+			_, err := client.Append(context.Background(), topicID, []byte("foo"))
 			So(err, ShouldBeNil)
 		}
 
@@ -295,7 +309,7 @@ func TestVarlogSubscribeWithSNFail(t *testing.T) {
 			Convey("Then it should be able to subscribe", func(ctx C) {
 				errc := make(chan error, nrLogs)
 				expectedGLSN := types.GLSN(1)
-				subscribeCloser, err := client.Subscribe(context.TODO(), types.GLSN(1), types.GLSN(nrLogs+1), func(le types.LogEntry, err error) {
+				subscribeCloser, err := client.Subscribe(context.TODO(), topicID, types.GLSN(1), types.GLSN(nrLogs+1), func(le varlogpb.LogEntry, err error) {
 					if err != nil {
 						require.ErrorIs(t, io.EOF, err)
 						defer close(errc)
@@ -320,22 +334,23 @@ func TestVarlogSubscribeWithSNFail(t *testing.T) {
 
 func TestVarlogSubscribeWithAddLS(t *testing.T) {
 	//defer goleak.VerifyNone(t)
-
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(5),
 		it.WithNumberOfLogStreams(3),
-		it.WithNumberOfClients(5),
+		it.WithNumberOfClients(2),
+		it.WithNumberOfTopics(1),
 	}
 
 	Convey("Given Varlog cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
-		nrLogs := 128
+		nrLogs := 10
 
 		Convey("When add LogStream during subscribe", func(ctx C) {
+			topicID := env.TopicIDs()[0]
 			client := env.ClientAtIndex(t, 0)
 			errc := make(chan error, nrLogs)
 			expectedGLSN := types.GLSN(1)
-			subscribeCloser, err := client.Subscribe(context.TODO(), types.GLSN(1), types.GLSN(nrLogs+1), func(le types.LogEntry, err error) {
+			subscribeCloser, err := client.Subscribe(context.TODO(), topicID, types.GLSN(1), types.GLSN(nrLogs+1), func(le varlogpb.LogEntry, err error) {
 				if err != nil {
 					require.ErrorIs(t, io.EOF, err)
 					defer close(errc)
@@ -348,25 +363,26 @@ func TestVarlogSubscribeWithAddLS(t *testing.T) {
 			require.NoError(t, err)
 			defer subscribeCloser()
 
+			var wg sync.WaitGroup
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				client := env.ClientAtIndex(t, 1)
 
 				for i := 0; i < nrLogs/2; i++ {
-					_, err := client.Append(context.Background(), []byte("foo"))
+					_, err := client.Append(context.Background(), topicID, []byte("foo"))
 					require.NoError(t, err)
 				}
 
-				snID := env.StorageNodeIDAtIndex(t, 0)
-				env.CloseSN(t, snID)
-				env.CloseSNClientOf(t, snID)
-
-				env.AddLS(t)
+				topicID := env.TopicIDs()[0]
+				env.AddLS(t, topicID)
 
 				for i := 0; i < nrLogs/2; i++ {
-					_, err := client.Append(context.Background(), []byte("foo"))
+					_, err := client.Append(context.Background(), topicID, []byte("foo"))
 					require.NoError(t, err)
 				}
 			}()
+			wg.Wait()
 
 			Convey("Then it should be able to subscribe", func(ctx C) {
 				for e := range errc {
@@ -381,22 +397,23 @@ func TestVarlogSubscribeWithAddLS(t *testing.T) {
 
 func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 	//defer goleak.VerifyNone(t)
-
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(5),
 		it.WithNumberOfLogStreams(3),
 		it.WithNumberOfClients(5),
+		it.WithNumberOfTopics(1),
 	}
 
 	Convey("Given Varlog cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
 		nrLogs := 128
 
 		Convey("When update LogStream during subscribe", func(ctx C) {
+			topicID := env.TopicIDs()[0]
 			client := env.ClientAtIndex(t, 0)
 			errc := make(chan error, nrLogs)
 			expectedGLSN := types.GLSN(1)
-			subscribeCloser, err := client.Subscribe(context.TODO(), types.GLSN(1), types.GLSN(nrLogs+1), func(le types.LogEntry, err error) {
+			subscribeCloser, err := client.Subscribe(context.TODO(), topicID, types.GLSN(1), types.GLSN(nrLogs+1), func(le varlogpb.LogEntry, err error) {
 				if err != nil {
 					require.ErrorIs(t, io.EOF, err)
 					defer close(errc)
@@ -413,13 +430,14 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 				client := env.ClientAtIndex(t, 1)
 
 				for i := 0; i < nrLogs/2; i++ {
-					_, err := client.Append(context.Background(), []byte("foo"))
+					_, err := client.Append(context.Background(), topicID, []byte("foo"))
 					require.NoError(t, err)
 				}
 
 				addedSN := env.AddSN(t)
 
-				lsID := env.LogStreamID(t, 0)
+				topicID := env.TopicIDs()[0]
+				lsID := env.LogStreamID(t, topicID, 0)
 				snID := env.PrimaryStorageNodeIDOf(t, lsID)
 
 				env.CloseSN(t, snID)
@@ -431,10 +449,10 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 					return lsdesc.Status == varlogpb.LogStreamStatusSealed
 				}, 5*time.Second, 10*time.Millisecond)
 
-				env.UpdateLS(t, lsID, snID, addedSN)
+				env.UpdateLS(t, topicID, lsID, snID, addedSN)
 
 				for i := 0; i < nrLogs/2; i++ {
-					_, err := client.Append(context.Background(), []byte("foo"))
+					_, err := client.Append(context.Background(), topicID, []byte("foo"))
 					require.NoError(t, err)
 				}
 			}()

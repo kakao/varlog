@@ -19,6 +19,8 @@ import (
 type MetadataRepositoryClient interface {
 	RegisterStorageNode(context.Context, *varlogpb.StorageNodeDescriptor) error
 	UnregisterStorageNode(context.Context, types.StorageNodeID) error
+	RegisterTopic(context.Context, types.TopicID) error
+	UnregisterTopic(context.Context, types.TopicID) error
 	RegisterLogStream(context.Context, *varlogpb.LogStreamDescriptor) error
 	UnregisterLogStream(context.Context, types.LogStreamID) error
 	UpdateLogStream(context.Context, *varlogpb.LogStreamDescriptor) error
@@ -51,10 +53,10 @@ func NewMetadataRepositoryClient(ctx context.Context, address string) (MetadataR
 		err := errors.Errorf("mrmcl: not ready (%+v)", status)
 		return nil, multierr.Append(err, rpcConn.Close())
 	}
-	return NewMetadataRepositoryClientFromRpcConn(rpcConn)
+	return NewMetadataRepositoryClientFromRPCConn(rpcConn)
 }
 
-func NewMetadataRepositoryClientFromRpcConn(rpcConn *rpc.Conn) (MetadataRepositoryClient, error) {
+func NewMetadataRepositoryClientFromRPCConn(rpcConn *rpc.Conn) (MetadataRepositoryClient, error) {
 	client := &metadataRepositoryClient{
 		rpcConn: rpcConn,
 		client:  mrpb.NewMetadataRepositoryServiceClient(rpcConn.Conn),
@@ -82,11 +84,31 @@ func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *
 func (c *metadataRepositoryClient) UnregisterStorageNode(ctx context.Context, snID types.StorageNodeID) error {
 	req := &mrpb.StorageNodeRequest{
 		StorageNode: &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		},
 	}
 
 	_, err := c.client.UnregisterStorageNode(ctx, req)
+	return verrors.FromStatusError(errors.WithStack(err))
+}
+
+func (c *metadataRepositoryClient) RegisterTopic(ctx context.Context, topicID types.TopicID) error {
+	req := &mrpb.TopicRequest{
+		TopicID: topicID,
+	}
+
+	_, err := c.client.RegisterTopic(ctx, req)
+	return verrors.FromStatusError(errors.WithStack(err))
+}
+
+func (c *metadataRepositoryClient) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {
+	req := &mrpb.TopicRequest{
+		TopicID: topicID,
+	}
+
+	_, err := c.client.UnregisterTopic(ctx, req)
 	return verrors.FromStatusError(errors.WithStack(err))
 }
 

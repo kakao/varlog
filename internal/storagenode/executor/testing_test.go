@@ -14,3 +14,10 @@ func NewTestMeasurableExecutor(ctrl *gomock.Controller, snid types.StorageNodeID
 	ret.EXPECT().Stub().Return(telemetry.NewNopTelmetryStub()).AnyTimes()
 	return ret
 }
+
+func NewTestMeasurable(ctrl *gomock.Controller) *telemetry.MockMeasurable {
+	m := telemetry.NewMockMeasurable(ctrl)
+	nop := telemetry.NewNopTelmetryStub()
+	m.EXPECT().Stub().Return(nop).AnyTimes()
+	return m
+}

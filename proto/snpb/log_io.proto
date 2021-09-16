@@ -5,30 +5,32 @@ package varlog.snpb;
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
 
+import "varlogpb/metadata.proto";
+
 option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
 
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 // AppendRequest is a message to send a payload to a storage node. It contains
 // a vector of storage nodes to replicate the payload.
 message AppendRequest {
-    message BackupNode {
-        uint32 storage_node_id = 1 [
-            (gogoproto.casttype) =
-                "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-            (gogoproto.customname) = "StorageNodeID"
-        ];
-        string address = 2;
-    }
     bytes payload = 1;
-    uint32 log_stream_id = 2 [
+    int32 topic_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    repeated BackupNode backups = 3 [(gogoproto.nullable) = false];
+    repeated varlogpb.StorageNode backups = 4 [(gogoproto.nullable) = false];
 }
 
 // AppendResponse contains GLSN (Global Log Sequence Number) that indicates log
@@ -39,7 +41,12 @@ message AppendResponse {
             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
-    uint32 log_stream_id = 2 [
+    int32 topic_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -53,7 +60,12 @@ message ReadRequest {
             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
-    uint32 log_stream_id = 2 [
+    int32 topic_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -89,7 +101,12 @@ message SubscribeRequest {
             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSNEnd"
     ];
-    uint32 log_stream_id = 3 [
+    int32 topic_id = 3 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 4 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -115,7 +132,12 @@ message SubscribeResponse {
 // If async field is true, the trim operation returns immediately and the
 // storage node removes its log entry in the background.
 message TrimRequest {
-    uint64 glsn = 1 [
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    uint64 glsn = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"

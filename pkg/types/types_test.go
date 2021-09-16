@@ -29,25 +29,12 @@ func TestClusterID(t *testing.T) {
 
 func TestStorageNodeID(t *testing.T) {
 	Convey("StorageNodeID", t, func() {
-		Convey("Too large number", func() { // 64bit processor
-			var number uint = math.MaxUint32 + 1
-			_, err := NewStorageNodeIDFromUint(number)
-			So(err, ShouldNotBeNil)
-		})
-
-		Convey("Valid number", func() {
-			for i := 0; i < 10000; i++ {
-				_, err := NewStorageNodeIDFromUint(uint(rand.Uint32()))
-				So(err, ShouldBeNil)
-			}
-		})
-
 		Convey("Random generator (non-deterministic test)", func() {
 			idset := make(map[StorageNodeID]bool)
 			for i := 0; i < 10000; i++ {
 				var id StorageNodeID
 				testutil.CompareWait1(func() bool {
-					id = NewStorageNodeID()
+					id = RandomStorageNodeID()
 					return !idset[id]
 				})
 				So(idset[id], ShouldBeFalse)

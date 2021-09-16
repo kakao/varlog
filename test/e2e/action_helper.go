@@ -226,7 +226,7 @@ func RecoverMRCheck(k8s *K8sVarlogCluster) func() error {
 	}
 }
 
-func InitLogStream(k8s *K8sVarlogCluster) func() error {
+func InitLogStream(k8s *K8sVarlogCluster, topicID types.TopicID) func() error {
 	return func() error {
 		vmsaddr, err := k8s.VMSAddress()
 		if err != nil {
@@ -243,7 +243,7 @@ func InitLogStream(k8s *K8sVarlogCluster) func() error {
 
 		for i := 0; i < k8s.NrLS; i++ {
 			ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
-			_, err = mcli.AddLogStream(ctx, nil)
+			_, err = mcli.AddLogStream(ctx, topicID, nil)
 			cancel()
 			if err != nil {
 				return err
@@ -254,7 +254,7 @@ func InitLogStream(k8s *K8sVarlogCluster) func() error {
 	}
 }
 
-func AddLogStream(k8s *K8sVarlogCluster) func() error {
+func AddLogStream(k8s *K8sVarlogCluster, topicID types.TopicID) func() error {
 	return func() error {
 		vmsaddr, err := k8s.VMSAddress()
 		if err != nil {
@@ -270,7 +270,7 @@ func AddLogStream(k8s *K8sVarlogCluster) func() error {
 		defer mcli.Close()
 
 		ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
-		_, err = mcli.AddLogStream(ctx, nil)
+		_, err = mcli.AddLogStream(ctx, topicID, nil)
 		defer cancel()
 
 		return err
@@ -331,7 +331,7 @@ func SealAnyLogStream(k8s *K8sVarlogCluster) func() error {
 
 		mctx, mcancel := context.WithTimeout(context.Background(), k8s.timeout)
 		defer mcancel()
-		_, err = mcli.Seal(mctx, lsdescs[idx].LogStreamID)
+		_, err = mcli.Seal(mctx, lsdescs[idx].TopicID, lsdescs[idx].LogStreamID)
 		if err != nil {
 			return err
 		}
@@ -385,6 +385,7 @@ func updateSealedLogStream(k8s *K8sVarlogCluster, meta *varlogpb.MetadataDescrip
 		return err
 	}
 
+	tpID := lsdesc.TopicID
 	lsID := lsdesc.LogStreamID
 	pushReplica, popReplica := getPushPopReplicas(k8s, meta, lsdesc.LogStreamID)
 
@@ -402,7 +403,7 @@ func updateSealedLogStream(k8s *K8sVarlogCluster, meta *varlogpb.MetadataDescrip
 
 	mctx, mcancel := context.WithTimeout(context.Background(), k8s.timeout)
 	defer mcancel()
-	_, err = mcli.UpdateLogStream(mctx, lsID, popReplica, pushReplica)
+	_, err = mcli.UpdateLogStream(mctx, tpID, lsID, popReplica, pushReplica)
 	if err != nil {
 		return err
 	}

@@ -70,10 +70,30 @@ func (s *clusterManagerService) UnregisterStorageNode(ctx context.Context, req *
 	return rspI.(*vmspb.UnregisterStorageNodeResponse), verrors.ToStatusError(err)
 }
 
+func (s *clusterManagerService) AddTopic(ctx context.Context, req *vmspb.AddTopicRequest) (*vmspb.AddTopicResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/AddTopic", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			topicDesc, err := s.clusManager.AddTopic(ctx)
+			return &vmspb.AddTopicResponse{Topic: topicDesc}, err
+		},
+	)
+	return rspI.(*vmspb.AddTopicResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
+}
+
+func (s *clusterManagerService) UnregisterTopic(ctx context.Context, req *vmspb.UnregisterTopicRequest) (*vmspb.UnregisterTopicResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/UnregisterTopic", req,
+		func(ctx context.Context, reqI interface{}) (interface{}, error) {
+			err := s.clusManager.UnregisterTopic(ctx, req.GetTopicID())
+			return &vmspb.UnregisterTopicResponse{}, err
+		},
+	)
+	return rspI.(*vmspb.UnregisterTopicResponse), verrors.ToStatusError(err)
+}
+
 func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/AddLogStream", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			logStreamDesc, err := s.clusManager.AddLogStream(ctx, req.GetReplicas())
+			logStreamDesc, err := s.clusManager.AddLogStream(ctx, req.GetTopicID(), req.GetReplicas())
 			return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, err
 		},
 	)
@@ -83,7 +103,7 @@ func (s *clusterManagerService) AddLogStream(ctx context.Context, req *vmspb.Add
 func (s *clusterManagerService) UnregisterLogStream(ctx context.Context, req *vmspb.UnregisterLogStreamRequest) (*vmspb.UnregisterLogStreamResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/UnregisterLogStream", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			err := s.clusManager.UnregisterLogStream(ctx, req.GetLogStreamID())
+			err := s.clusManager.UnregisterLogStream(ctx, req.GetTopicID(), req.GetLogStreamID())
 			return &vmspb.UnregisterLogStreamResponse{}, err
 		},
 	)
@@ -93,7 +113,7 @@ func (s *clusterManagerService) UnregisterLogStream(ctx context.Context, req *vm
 func (s *clusterManagerService) RemoveLogStreamReplica(ctx context.Context, req *vmspb.RemoveLogStreamReplicaRequest) (*vmspb.RemoveLogStreamReplicaResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/RemoveLogStreamReplica", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			err := s.clusManager.RemoveLogStreamReplica(ctx, req.GetStorageNodeID(), req.GetLogStreamID())
+			err := s.clusManager.RemoveLogStreamReplica(ctx, req.GetStorageNodeID(), req.GetTopicID(), req.GetLogStreamID())
 			return &vmspb.RemoveLogStreamReplicaResponse{}, err
 		},
 	)
@@ -113,7 +133,7 @@ func (s *clusterManagerService) UpdateLogStream(ctx context.Context, req *vmspb.
 func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/Seal", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			lsmetas, sealedGLSN, err := s.clusManager.Seal(ctx, req.GetLogStreamID())
+			lsmetas, sealedGLSN, err := s.clusManager.Seal(ctx, req.GetTopicID(), req.GetLogStreamID())
 			return &vmspb.SealResponse{
 				LogStreams: lsmetas,
 				SealedGLSN: sealedGLSN,
@@ -126,7 +146,7 @@ func (s *clusterManagerService) Seal(ctx context.Context, req *vmspb.SealRequest
 func (s *clusterManagerService) Sync(ctx context.Context, req *vmspb.SyncRequest) (*vmspb.SyncResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/Sync", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			status, err := s.clusManager.Sync(ctx, req.GetLogStreamID(), req.GetSrcStorageNodeID(), req.GetDstStorageNodeID())
+			status, err := s.clusManager.Sync(ctx, req.GetTopicID(), req.GetLogStreamID(), req.GetSrcStorageNodeID(), req.GetDstStorageNodeID())
 			return &vmspb.SyncResponse{Status: status}, err
 		},
 	)
@@ -136,7 +156,7 @@ func (s *clusterManagerService) Sync(ctx context.Context, req *vmspb.SyncRequest
 func (s *clusterManagerService) Unseal(ctx context.Context, req *vmspb.UnsealRequest) (*vmspb.UnsealResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/Unseal", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			lsdesc, err := s.clusManager.Unseal(ctx, req.GetLogStreamID())
+			lsdesc, err := s.clusManager.Unseal(ctx, req.GetTopicID(), req.GetLogStreamID())
 			return &vmspb.UnsealResponse{LogStream: lsdesc}, err
 		},
 	)

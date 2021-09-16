@@ -6,7 +6,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type pebbleScanner struct {
@@ -35,7 +35,7 @@ func (scanner *pebbleScanner) Next() ScanResult {
 			scanner.logger.Warn("error while closing scanner", zap.Error(err))
 		}
 	}()
-	logEntry := types.LogEntry{
+	logEntry := varlogpb.LogEntry{
 		GLSN: decodeCommitKey(ck),
 		LLSN: decodeDataKey(dk),
 	}

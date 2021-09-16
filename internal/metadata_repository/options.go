@@ -14,23 +14,23 @@ import (
 )
 
 const (
-	DefaultRPCBindAddress                          = "0.0.0.0:9092"
-	DefaultDebugAddress                            = "0.0.0.0:9099"
-	DefaultRaftPort                                = 10000
-	DefaultSnapshotCount             uint64        = 10000
-	DefaultSnapshotCatchUpCount      uint64        = 10000
-	DefaultSnapshotPurgeCount        uint          = 10
-	DefaultWalPurgeCount             uint          = 10
-	DefaultLogReplicationFactor      int           = 1
-	DefaultProposeTimeout            time.Duration = 100 * time.Millisecond
-	DefaultRaftTick                  time.Duration = 100 * time.Millisecond
-	DefaultRPCTimeout                time.Duration = 100 * time.Millisecond
-	DefaultCommitTick                time.Duration = 1 * time.Millisecond
-	DefaultPromoteTick               time.Duration = 100 * time.Millisecond
-	DefaultRaftDir                   string        = "raftdata"
-	DefaultLogDir                    string        = "log"
-	DefaultTelemetryCollectorName    string        = "nop"
-	DefaultTelmetryCollectorEndpoint string        = "localhost:55680"
+	DefaultRPCBindAddress                   = "0.0.0.0:9092"
+	DefaultDebugAddress                     = "0.0.0.0:9099"
+	DefaultRaftPort                         = 10000
+	DefaultSnapshotCount             uint64 = 10000
+	DefaultSnapshotCatchUpCount      uint64 = 10000
+	DefaultSnapshotPurgeCount        uint   = 10
+	DefaultWalPurgeCount             uint   = 10
+	DefaultLogReplicationFactor      int    = 1
+	DefaultProposeTimeout                   = 100 * time.Millisecond
+	DefaultRaftTick                         = 100 * time.Millisecond
+	DefaultRPCTimeout                       = 100 * time.Millisecond
+	DefaultCommitTick                       = 1 * time.Millisecond
+	DefaultPromoteTick                      = 100 * time.Millisecond
+	DefaultRaftDir                   string = "raftdata"
+	DefaultLogDir                    string = "log"
+	DefaultTelemetryCollectorName    string = "nop"
+	DefaultTelmetryCollectorEndpoint string = "localhost:55680"
 
 	UnusedRequestIndex uint64 = 0
 )
@@ -169,7 +169,7 @@ func (options *MetadataRepositoryOptions) validate() error {
 
 	if (options.UnsafeNoWal && !options.EnableSML) ||
 		(!options.UnsafeNoWal && options.EnableSML) {
-		return errors.New("only one of wal and sml must be enabled.")
+		return errors.New("only one of wal and sml must be enabled")
 	}
 
 	return nil

@@ -17,7 +17,8 @@ import (
 // against to the atomic.Load. For these reasons, the shared mutex is used.
 type reportCommitBase struct {
 	mu                   sync.RWMutex
-	globalHighWatermark  types.GLSN
+	commitVersion        types.Version
+	highWatermark        types.GLSN
 	uncommittedLLSNBegin types.LLSN
 }
 
@@ -40,7 +41,7 @@ type logStreamContext struct {
 func newLogStreamContext() *logStreamContext {
 	lsc := &logStreamContext{}
 
-	lsc.storeReportCommitBase(types.InvalidGLSN, types.MinLLSN)
+	lsc.storeReportCommitBase(types.InvalidVersion, types.MinGLSN, types.MinLLSN)
 
 	lsc.uncommittedLLSNEnd.Store(types.MinLLSN)
 
@@ -54,17 +55,19 @@ func newLogStreamContext() *logStreamContext {
 	return lsc
 }
 
-func (lsc *logStreamContext) reportCommitBase() (globalHighWatermark types.GLSN, uncommittedLLSNBegin types.LLSN) {
+func (lsc *logStreamContext) reportCommitBase() (commitVersion types.Version, highWatermark types.GLSN, uncommittedLLSNBegin types.LLSN) {
 	lsc.base.mu.RLock()
-	globalHighWatermark = lsc.base.globalHighWatermark
+	commitVersion = lsc.base.commitVersion
+	highWatermark = lsc.base.highWatermark
 	uncommittedLLSNBegin = lsc.base.uncommittedLLSNBegin
 	lsc.base.mu.RUnlock()
 	return
 }
 
-func (lsc *logStreamContext) storeReportCommitBase(globalHighWatermark types.GLSN, uncommittedLLSNBegin types.LLSN) {
+func (lsc *logStreamContext) storeReportCommitBase(commitVersion types.Version, highWatermark types.GLSN, uncommittedLLSNBegin types.LLSN) {
 	lsc.base.mu.Lock()
-	lsc.base.globalHighWatermark = globalHighWatermark
+	lsc.base.commitVersion = commitVersion
+	lsc.base.highWatermark = highWatermark
 	lsc.base.uncommittedLLSNBegin = uncommittedLLSNBegin
 	lsc.base.mu.Unlock()
 }
@@ -90,8 +93,8 @@ func newDecidableCondition(lsc *logStreamContext) *decidableCondition {
 // If true, the LSE must know the log entry is in this LSE or not.
 // If false, the LSE can't guarantee whether the log entry is in this LSE or not.
 func (dc *decidableCondition) decidable(glsn types.GLSN) bool {
-	globalHighWatermark, _ := dc.lsc.reportCommitBase()
-	return glsn <= globalHighWatermark
+	_, highWatermark, _ := dc.lsc.reportCommitBase()
+	return glsn <= highWatermark
 }
 
 // NOTE: Canceling ctx is not a guarantee that this waitC is wakeup immediately.

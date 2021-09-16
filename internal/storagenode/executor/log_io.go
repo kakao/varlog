@@ -11,10 +11,10 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
-func (e *executor) Append(ctx context.Context, data []byte, backups ...snpb.Replica) (types.GLSN, error) {
+func (e *executor) Append(ctx context.Context, data []byte, backups ...varlogpb.Replica) (types.GLSN, error) {
 	// FIXME: e.guard() can be removed, but doing ops to storage after closing should be
 	// handled. Mostly, trim and read can be occurred after clsoing storage.
 	if err := e.guard(); err != nil {
@@ -40,7 +40,7 @@ func (e *executor) Append(ctx context.Context, data []byte, backups ...snpb.Repl
 		if !e.isPrimay() {
 			return errors.Wrapf(verrors.ErrInvalid, "backup replica")
 		}
-		if !snpb.EqualReplicas(e.primaryBackups[1:], wt.backups) {
+		if !varlogpb.EqualReplicas(e.primaryBackups[1:], wt.backups) {
 			return errors.Wrapf(verrors.ErrInvalid, "replicas mismatch: expected=%+v, actual=%+v", e.primaryBackups[1:], wt.backups)
 		}
 		return nil
@@ -58,19 +58,19 @@ func (e *executor) Append(ctx context.Context, data []byte, backups ...snpb.Repl
 	return glsn, err
 }
 
-func (e *executor) Read(ctx context.Context, glsn types.GLSN) (logEntry types.LogEntry, err error) {
+func (e *executor) Read(ctx context.Context, glsn types.GLSN) (logEntry varlogpb.LogEntry, err error) {
 	if glsn.Invalid() {
-		return types.InvalidLogEntry, errors.WithStack(verrors.ErrInvalid)
+		return varlogpb.InvalidLogEntry(), errors.WithStack(verrors.ErrInvalid)
 	}
 
 	if err := e.guard(); err != nil {
-		return types.InvalidLogEntry, err
+		return varlogpb.InvalidLogEntry(), err
 	}
 	defer e.unguard()
 
 	// TODO: consider context to cancel waiting
 	if err := e.decider.waitC(ctx, glsn); err != nil {
-		return types.InvalidLogEntry, err
+		return varlogpb.InvalidLogEntry(), err
 	}
 
 	// TODO: check trimmed
@@ -79,7 +79,7 @@ func (e *executor) Read(ctx context.Context, glsn types.GLSN) (logEntry types.Lo
 	trimGLSN := e.deferredTrim.glsn
 	e.deferredTrim.mu.RUnlock()
 	if glsn <= trimGLSN {
-		return types.InvalidLogEntry, errors.WithStack(verrors.ErrTrimmed)
+		return varlogpb.InvalidLogEntry(), errors.WithStack(verrors.ErrTrimmed)
 	}
 
 	// TODO: trivial optimization, is it needed?
@@ -269,8 +269,8 @@ func (e *executor) Trim(_ context.Context, glsn types.GLSN) error {
 		return trimGLSN
 	}
 
-	globalHighWatermark, _ := e.lsc.reportCommitBase()
-	if glsn >= globalHighWatermark-e.deferredTrim.safetyGap {
+	_, highWatermark, _ := e.lsc.reportCommitBase()
+	if glsn >= highWatermark-e.deferredTrim.safetyGap {
 		return errors.New("too high prefix")
 	}
 

@@ -10,6 +10,39 @@ option go_package = "github.daumkakao.com/varlog/varlog/proto/varlogpb";
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+// StorageNode is a structure to represent identifier and address of storage
+// node.
+message StorageNode {
+    option (gogoproto.equal) = true;
+
+    int32 storage_node_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
+        (gogoproto.customname) = "StorageNodeID"
+    ];
+    string address = 2;
+}
+
+message Replica {
+    option (gogoproto.equal) = true;
+
+    StorageNode storage_node = 1
+        [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+    int32 topic_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 3 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+}
 
 enum StorageNodeStatus {
     option (gogoproto.goproto_enum_prefix) = false;
@@ -35,6 +68,15 @@ enum LogStreamStatus {
         [(gogoproto.enumvalue_customname) = "LogStreamStatusUnsealing"];
 }
 
+enum TopicStatus {
+    option (gogoproto.goproto_enum_prefix) = false;
+
+    TOPIC_STATUS_RUNNING = 0
+        [(gogoproto.enumvalue_customname) = "TopicStatusRunning"];
+    TOPIC_STATUS_DELETED = 1
+        [(gogoproto.enumvalue_customname) = "TopicStatusDeleted"];
+}
+
 message StorageDescriptor {
     option (gogoproto.equal) = true;
 
@@ -46,20 +88,16 @@ message StorageDescriptor {
 message StorageNodeDescriptor {
     option (gogoproto.equal) = true;
 
-    uint32 storage_node_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
-    ];
-    string address = 2;
-    StorageNodeStatus status = 3;
-    repeated StorageDescriptor storages = 4 [(gogoproto.nullable) = true];
+    StorageNode storage_node = 1
+        [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+    StorageNodeStatus status = 2;
+    repeated StorageDescriptor storages = 3 [(gogoproto.nullable) = true];
 }
 
 message ReplicaDescriptor {
     option (gogoproto.equal) = true;
 
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
@@ -70,14 +108,37 @@ message ReplicaDescriptor {
 message LogStreamDescriptor {
     option (gogoproto.equal) = true;
 
-    uint32 log_stream_id = 1 [
+    int32 log_stream_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    LogStreamStatus status = 2;
+    int32 topic_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    LogStreamStatus status = 3;
 
-    repeated ReplicaDescriptor replicas = 3 [(gogoproto.nullable) = true];
+    repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = true];
+}
+
+message TopicDescriptor {
+    option (gogoproto.equal) = true;
+
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+
+    TopicStatus status = 2;
+
+    repeated int32 log_streams = 3 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+        (gogoproto.nullable) = true
+    ];
 }
 
 message MetadataDescriptor {
@@ -87,6 +148,7 @@ message MetadataDescriptor {
     repeated StorageNodeDescriptor storage_nodes = 2
         [(gogoproto.nullable) = true];
     repeated LogStreamDescriptor log_streams = 3 [(gogoproto.nullable) = true];
+    repeated TopicDescriptor topics = 4 [(gogoproto.nullable) = true];
 }
 
 // StorageNodeMetadataDescriptor represents metadata of stroage node.
@@ -109,41 +171,52 @@ message StorageNodeMetadataDescriptor {
 }
 
 message LogStreamMetadataDescriptor {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    uint32 log_stream_id = 2 [
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    LogStreamStatus status = 3;
-    uint64 high_watermark = 4 [
+    int32 topic_id = 3 [
         (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "HighWatermark"
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
     ];
-    string path = 5;
-    google.protobuf.Timestamp created_time = 6
+    LogStreamStatus status = 4;
+    uint64 version = 5
+        [(gogoproto.casttype) =
+             "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
+    uint64 high_watermark = 6
+        [(gogoproto.casttype) =
+             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
+    string path = 7;
+    google.protobuf.Timestamp created_time = 8
         [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-    google.protobuf.Timestamp updated_time = 7
+    google.protobuf.Timestamp updated_time = 9
         [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 message LogStreamReplicaDescriptor {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    uint32 log_stream_id = 2 [
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    string address = 3;
+    int32 topic_id = 3 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    string address = 4;
 }
 
 message LogEntry {
@@ -161,12 +234,14 @@ message LogEntry {
 }
 
 message CommitContext {
-    uint64 high_watermark = 1
+    uint64 version = 1
         [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
-    uint64 prev_high_watermark = 2
-        [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
+             "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
+    uint64 high_watermark = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
+        (gogoproto.customname) = "HighWatermark"
+    ];
     uint64 committed_glsn_begin = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",

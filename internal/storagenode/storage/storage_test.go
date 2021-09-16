@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type testStorage struct {
@@ -198,7 +199,7 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 
 			var (
 				err error
-				le  types.LogEntry
+				le  varlogpb.LogEntry
 				wb  WriteBatch
 				cb  CommitBatch
 				cc  CommitContext
@@ -227,8 +228,8 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 			// Commit
 			// Invalid commit context
 			cc = CommitContext{
+				Version:            1,
 				HighWatermark:      1,
-				PrevHighWatermark:  0,
 				CommittedGLSNBegin: 2,
 				CommittedGLSNEnd:   1,
 			}
@@ -237,8 +238,8 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 
 			// Invalid commit: good CC, but no entries
 			cb, err = strg.NewCommitBatch(CommitContext{
+				Version:            1,
 				HighWatermark:      3,
-				PrevHighWatermark:  0,
 				CommittedGLSNBegin: 2,
 				CommittedGLSNEnd:   4,
 			})
@@ -248,8 +249,8 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 
 			// (LLSN,GLSN): (1,2), (2,3)
 			cc = CommitContext{
+				Version:            1,
 				HighWatermark:      3,
-				PrevHighWatermark:  0,
 				CommittedGLSNBegin: 2,
 				CommittedGLSNEnd:   4,
 			}
@@ -283,8 +284,8 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 			// Commit
 			// (LLSN,GLSN): (3,6), (4,7)
 			cc = CommitContext{
+				Version:            2,
 				HighWatermark:      8,
-				PrevHighWatermark:  3,
 				CommittedGLSNBegin: 6,
 				CommittedGLSNEnd:   8,
 			}
@@ -302,8 +303,8 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 
 			// Commit (invalid commit context) overlapped with previous committed range
 			cc = CommitContext{
+				Version:            3,
 				HighWatermark:      9,
-				PrevHighWatermark:  8,
 				CommittedGLSNBegin: 7,
 				CommittedGLSNEnd:   8,
 			}
@@ -312,8 +313,8 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 
 			// Commit (not written log)
 			cc = CommitContext{
+				Version:            3,
 				HighWatermark:      9,
-				PrevHighWatermark:  8,
 				CommittedGLSNBegin: 9,
 				CommittedGLSNEnd:   10,
 			}
@@ -340,7 +341,7 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 			sc = strg.Scan(2, 8)
 			sr = sc.Next()
 			require.True(t, sr.Valid())
-			require.Equal(t, types.LogEntry{
+			require.Equal(t, varlogpb.LogEntry{
 				GLSN: 2,
 				LLSN: 1,
 				Data: nil,
@@ -348,7 +349,7 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 
 			sr = sc.Next()
 			require.True(t, sr.Valid())
-			require.Equal(t, types.LogEntry{
+			require.Equal(t, varlogpb.LogEntry{
 				GLSN: 3,
 				LLSN: 2,
 				Data: []byte("foo"),
@@ -356,7 +357,7 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 
 			sr = sc.Next()
 			require.True(t, sr.Valid())
-			require.Equal(t, types.LogEntry{
+			require.Equal(t, varlogpb.LogEntry{
 				GLSN: 6,
 				LLSN: 3,
 				Data: []byte("bar"),
@@ -364,7 +365,7 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 
 			sr = sc.Next()
 			require.True(t, sr.Valid())
-			require.Equal(t, types.LogEntry{
+			require.Equal(t, varlogpb.LogEntry{
 				GLSN: 7,
 				LLSN: 4,
 				Data: nil,
@@ -402,7 +403,7 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 			sc = strg.Scan(0, 7)
 			sr = sc.Next()
 			require.True(t, sr.Valid())
-			require.Equal(t, types.LogEntry{
+			require.Equal(t, varlogpb.LogEntry{
 				GLSN: 6,
 				LLSN: 3,
 				Data: []byte("bar"),
@@ -453,7 +454,7 @@ func TestStorageInterleavedCommit(t *testing.T) {
 			require.NoError(t, wb.Close())
 
 			cc1 := CommitContext{
-				PrevHighWatermark:  0,
+				Version:            1,
 				HighWatermark:      4,
 				CommittedGLSNBegin: 1,
 				CommittedGLSNEnd:   5,
@@ -464,7 +465,7 @@ func TestStorageInterleavedCommit(t *testing.T) {
 			require.NoError(t, cb1.Put(2, 2))
 
 			cc2 := CommitContext{
-				PrevHighWatermark:  0,
+				Version:            1,
 				HighWatermark:      5,
 				CommittedGLSNBegin: 3,
 				CommittedGLSNEnd:   6,
@@ -503,8 +504,8 @@ func TestStorageReadRecoveryInfoOnlyEmptyCommitContext(t *testing.T) {
 	testEachStorage(t, func(t *testing.T, strg Storage) {
 		// empty cc, hwm=1
 		cb, err := strg.NewCommitBatch(CommitContext{
+			Version:            1,
 			HighWatermark:      1,
-			PrevHighWatermark:  0,
 			CommittedGLSNBegin: 1,
 			CommittedGLSNEnd:   1,
 		})
@@ -524,8 +525,8 @@ func TestStorageReadRecoveryInfoOnlyEmptyCommitContext(t *testing.T) {
 
 		// empty cc, hwm=2
 		cb, err = strg.NewCommitBatch(CommitContext{
+			Version:            2,
 			HighWatermark:      2,
-			PrevHighWatermark:  1,
 			CommittedGLSNBegin: 1,
 			CommittedGLSNEnd:   1,
 		})
@@ -556,8 +557,8 @@ func TestStorageReadRecoveryInfoNonEmptyCommitContext(t *testing.T) {
 		require.NoError(t, wb.Apply())
 		require.NoError(t, wb.Close())
 		cb, err := strg.NewCommitBatch(CommitContext{
+			Version:            1,
 			HighWatermark:      5,
-			PrevHighWatermark:  0,
 			CommittedGLSNBegin: 3,
 			CommittedGLSNEnd:   5,
 		})
@@ -591,8 +592,8 @@ func TestStorageReadRecoveryInfoMixed(t *testing.T) {
 		require.NoError(t, wb.Apply())
 		require.NoError(t, wb.Close())
 		cb, err := strg.NewCommitBatch(CommitContext{
+			Version:            1,
 			HighWatermark:      5,
-			PrevHighWatermark:  0,
 			CommittedGLSNBegin: 3,
 			CommittedGLSNEnd:   5,
 		})
@@ -604,8 +605,8 @@ func TestStorageReadRecoveryInfoMixed(t *testing.T) {
 
 		// empty cc, hwm=6
 		cb, err = strg.NewCommitBatch(CommitContext{
+			Version:            2,
 			HighWatermark:      6,
-			PrevHighWatermark:  5,
 			CommittedGLSNBegin: 5,
 			CommittedGLSNEnd:   5,
 		})
@@ -615,8 +616,8 @@ func TestStorageReadRecoveryInfoMixed(t *testing.T) {
 
 		// empty cc, hwm=7
 		cb, err = strg.NewCommitBatch(CommitContext{
+			Version:            3,
 			HighWatermark:      7,
-			PrevHighWatermark:  6,
 			CommittedGLSNBegin: 6, // or 5? TODO: clarify it
 			CommittedGLSNEnd:   6, // or 5? TODO: clarify it
 		})
@@ -651,8 +652,8 @@ func TestStorageRecoveryInfoUncommitted(t *testing.T) {
 		require.NoError(t, wb.Close())
 
 		cb, err := strg.NewCommitBatch(CommitContext{
+			Version:            1,
 			HighWatermark:      5,
-			PrevHighWatermark:  0,
 			CommittedGLSNBegin: 1,
 			CommittedGLSNEnd:   3,
 		})
@@ -696,8 +697,8 @@ func TestStorageReadFloorCommitContext(t *testing.T) {
 		require.NoError(t, wb.Close())
 
 		cb, err := strg.NewCommitBatch(CommitContext{
+			Version:            1,
 			HighWatermark:      6,
-			PrevHighWatermark:  0,
 			CommittedGLSNBegin: 5,
 			CommittedGLSNEnd:   7,
 		})
@@ -708,8 +709,8 @@ func TestStorageReadFloorCommitContext(t *testing.T) {
 		require.NoError(t, cb.Close())
 
 		cb, err = strg.NewCommitBatch(CommitContext{
+			Version:            2,
 			HighWatermark:      10,
-			PrevHighWatermark:  6,
 			CommittedGLSNBegin: 9,
 			CommittedGLSNEnd:   11,
 		})
@@ -724,26 +725,14 @@ func TestStorageReadFloorCommitContext(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, cc.HighWatermark, types.GLSN(6))
 
-		cc, err = strg.ReadFloorCommitContext(4)
-		require.NoError(t, err)
-		require.Equal(t, cc.HighWatermark, types.GLSN(6))
-
-		cc, err = strg.ReadFloorCommitContext(5)
-		require.NoError(t, err)
-		require.Equal(t, cc.HighWatermark, types.GLSN(6))
-
-		cc, err = strg.ReadFloorCommitContext(6)
+		cc, err = strg.ReadFloorCommitContext(1)
 		require.NoError(t, err)
 		require.Equal(t, cc.HighWatermark, types.GLSN(10))
 
-		cc, err = strg.ReadFloorCommitContext(7)
-		require.NoError(t, err)
-		require.Equal(t, cc.HighWatermark, types.GLSN(10))
-
-		_, err = strg.ReadFloorCommitContext(10)
+		_, err = strg.ReadFloorCommitContext(2)
 		require.ErrorIs(t, ErrNotFoundCommitContext, err)
 
-		_, err = strg.ReadFloorCommitContext(11)
+		_, err = strg.ReadFloorCommitContext(3)
 		require.ErrorIs(t, ErrNotFoundCommitContext, err)
 
 		require.NoError(t, strg.Close())
@@ -775,7 +764,7 @@ func TestStorageCommitContextOf(t *testing.T) {
 		require.NoError(t, wb.Close())
 
 		cb, err := strg.NewCommitBatch(CommitContext{
-			PrevHighWatermark:  0,
+			Version:            1,
 			HighWatermark:      5,
 			CommittedGLSNBegin: 1,
 			CommittedGLSNEnd:   1,
@@ -786,7 +775,7 @@ func TestStorageCommitContextOf(t *testing.T) {
 		require.NoError(t, cb.Close())
 
 		cc1 := CommitContext{
-			PrevHighWatermark:  5,
+			Version:            2,
 			HighWatermark:      10,
 			CommittedGLSNBegin: 9,
 			CommittedGLSNEnd:   11,
@@ -800,7 +789,7 @@ func TestStorageCommitContextOf(t *testing.T) {
 		require.NoError(t, cb.Close())
 
 		cb, err = strg.NewCommitBatch(CommitContext{
-			PrevHighWatermark:  10,
+			Version:            3,
 			HighWatermark:      15,
 			CommittedGLSNBegin: 11,
 			CommittedGLSNEnd:   11,
@@ -811,7 +800,7 @@ func TestStorageCommitContextOf(t *testing.T) {
 		require.NoError(t, cb.Close())
 
 		cb, err = strg.NewCommitBatch(CommitContext{
-			PrevHighWatermark:  15,
+			Version:            4,
 			HighWatermark:      20,
 			CommittedGLSNBegin: 11,
 			CommittedGLSNEnd:   11,
@@ -822,7 +811,7 @@ func TestStorageCommitContextOf(t *testing.T) {
 		require.NoError(t, cb.Close())
 
 		cc2 := CommitContext{
-			PrevHighWatermark:  20,
+			Version:            5,
 			HighWatermark:      25,
 			CommittedGLSNBegin: 21,
 			CommittedGLSNEnd:   23,

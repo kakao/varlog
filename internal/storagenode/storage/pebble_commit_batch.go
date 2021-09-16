@@ -41,16 +41,16 @@ func newPebbleCommitBatch() *pebbleCommitBatch {
 	return pebbleCommitBatchPool.Get().(*pebbleCommitBatch)
 }
 
-func (cb *pebbleCommitBatch) release() {
-	cb.b = nil
-	cb.ps = nil
-	cb.cc = InvalidCommitContext
-	cb.snapshot.prevWrittenLLSN = types.InvalidLLSN
-	cb.snapshot.prevCommittedLLSN = types.InvalidLLSN
-	cb.snapshot.prevCommittedGLSN = types.InvalidGLSN
-	cb.progress.prevCommittedLLSN = types.InvalidLLSN
-	cb.progress.prevCommittedGLSN = types.InvalidGLSN
-	pebbleCommitBatchPool.Put(cb)
+func (pcb *pebbleCommitBatch) release() {
+	pcb.b = nil
+	pcb.ps = nil
+	pcb.cc = InvalidCommitContext
+	pcb.snapshot.prevWrittenLLSN = types.InvalidLLSN
+	pcb.snapshot.prevCommittedLLSN = types.InvalidLLSN
+	pcb.snapshot.prevCommittedGLSN = types.InvalidGLSN
+	pcb.progress.prevCommittedLLSN = types.InvalidLLSN
+	pcb.progress.prevCommittedGLSN = types.InvalidGLSN
+	pebbleCommitBatchPool.Put(pcb)
 }
 
 func (pcb *pebbleCommitBatch) Put(llsn types.LLSN, glsn types.GLSN) error {

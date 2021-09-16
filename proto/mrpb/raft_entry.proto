@@ -14,6 +14,9 @@ option go_package = "github.daumkakao.com/varlog/varlog/proto/mrpb";
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 message RegisterStorageNode {
     varlogpb.StorageNodeDescriptor storage_node = 1
@@ -21,10 +24,26 @@ message RegisterStorageNode {
 }
 
 message UnregisterStorageNode {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
+    ];
+}
+
+message RegisterTopic {
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+}
+
+message UnregisterTopic {
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
     ];
 }
 
@@ -33,7 +52,7 @@ message RegisterLogStream {
 }
 
 message UnregisterLogStream {
-    uint32 log_stream_id = 1 [
+    int32 log_stream_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -45,7 +64,7 @@ message UpdateLogStream {
 }
 
 message Report {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
@@ -69,7 +88,7 @@ message Commit {
 }
 
 message Seal {
-    uint32 log_stream_id = 1 [
+    int32 log_stream_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -77,7 +96,7 @@ message Seal {
 }
 
 message Unseal {
-    uint32 log_stream_id = 1 [
+    int32 log_stream_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -132,6 +151,8 @@ message RaftEntry {
         RemovePeer remove_peer = 11;
         Endpoint endpoint = 12;
         RecoverStateMachine recover_state_machine = 13;
+        RegisterTopic register_topic = 14;
+        UnregisterTopic unregister_topic = 15;
     }
     uint64 node_index = 1;
     uint64 request_index = 2;

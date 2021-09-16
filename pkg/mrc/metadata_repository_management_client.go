@@ -45,10 +45,10 @@ func NewMetadataRepositoryManagementClient(ctx context.Context, address string) 
 		return nil, multierr.Append(err, rpcConn.Close())
 	}
 
-	return NewMetadataRepositoryManagementClientFromRpcConn(rpcConn)
+	return NewMetadataRepositoryManagementClientFromRPCConn(rpcConn)
 }
 
-func NewMetadataRepositoryManagementClientFromRpcConn(rpcConn *rpc.Conn) (MetadataRepositoryManagementClient, error) {
+func NewMetadataRepositoryManagementClientFromRPCConn(rpcConn *rpc.Conn) (MetadataRepositoryManagementClient, error) {
 	c := &metadataRepositoryManagementClient{
 		rpcConn: rpcConn,
 		client:  mrpb.NewManagementClient(rpcConn.Conn),

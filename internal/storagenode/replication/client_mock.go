@@ -12,6 +12,7 @@ import (
 
 	types "github.daumkakao.com/varlog/varlog/pkg/types"
 	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // MockClient is a mock of Client interface.
@@ -93,7 +94,7 @@ func (mr *MockClientMockRecorder) SyncInit(arg0, arg1 interface{}) *gomock.Call 
 }
 
 // SyncReplicate mocks base method.
-func (m *MockClient) SyncReplicate(arg0 context.Context, arg1 snpb.Replica, arg2 snpb.SyncPayload) error {
+func (m *MockClient) SyncReplicate(arg0 context.Context, arg1 varlogpb.Replica, arg2 snpb.SyncPayload) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncReplicate", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)

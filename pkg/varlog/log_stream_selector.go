@@ -14,7 +14,7 @@ var (
 //
 // Select selects a log stream, but if there is no log stream to choose it returns false.
 type LogStreamSelector interface {
-	Select() (types.LogStreamID, bool)
+	Select(topicID types.TopicID) (types.LogStreamID, bool)
 }
 
 // alsSelector implements LogStreamSelector. It uses allowlist to select an appendable log stream.
@@ -29,6 +29,6 @@ func newAppendableLogStreamSelector(allowlist Allowlist) *alsSelector {
 }
 
 // Select implements (LogStreamSelector).Select method.
-func (als *alsSelector) Select() (types.LogStreamID, bool) {
-	return als.allowlist.Pick()
+func (als *alsSelector) Select(topicID types.TopicID) (types.LogStreamID, bool) {
+	return als.allowlist.Pick(topicID)
 }

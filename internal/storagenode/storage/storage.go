@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 var (
@@ -23,8 +24,8 @@ type RecoveryInfo struct {
 		Found bool
 	}
 	LogEntryBoundary struct {
-		First types.LogEntry
-		Last  types.LogEntry
+		First varlogpb.LogEntry
+		Last  varlogpb.LogEntry
 		Found bool
 	}
 	UncommittedLogEntryBoundary struct {
@@ -35,13 +36,13 @@ type RecoveryInfo struct {
 
 // ScanResult represents a result of Scanner.Next() method. It should be immutable.
 type ScanResult struct {
-	LogEntry types.LogEntry
+	LogEntry varlogpb.LogEntry
 	Err      error
 }
 
 func NewInvalidScanResult(err error) ScanResult {
 	return ScanResult{
-		LogEntry: types.InvalidLogEntry,
+		LogEntry: varlogpb.InvalidLogEntry(),
 		Err:      err,
 	}
 }
@@ -72,31 +73,28 @@ type CommitBatch interface {
 }
 
 var InvalidCommitContext = CommitContext{
-	HighWatermark:      types.InvalidGLSN,
-	PrevHighWatermark:  types.InvalidGLSN,
+	Version:            types.InvalidVersion,
 	CommittedGLSNBegin: types.InvalidGLSN,
 	CommittedGLSNEnd:   types.InvalidGLSN,
 }
 
 type CommitContext struct {
+	Version            types.Version
 	HighWatermark      types.GLSN
-	PrevHighWatermark  types.GLSN
 	CommittedGLSNBegin types.GLSN
 	CommittedGLSNEnd   types.GLSN
 	CommittedLLSNBegin types.LLSN
 }
 
 func (cc CommitContext) Empty() bool {
-	numCommits := cc.CommittedGLSNEnd - cc.CommittedGLSNBegin
-	if numCommits < 0 {
+	if cc.CommittedGLSNEnd < cc.CommittedGLSNBegin {
 		panic("invalid commit context")
 	}
-	return numCommits == 0
+	return cc.CommittedGLSNEnd-cc.CommittedGLSNBegin == 0
 }
 
 func (cc CommitContext) Equal(other CommitContext) bool {
-	return cc.HighWatermark == other.HighWatermark &&
-		cc.PrevHighWatermark == other.PrevHighWatermark &&
+	return cc.Version == other.Version &&
 		cc.CommittedGLSNBegin == other.CommittedGLSNBegin &&
 		cc.CommittedGLSNEnd == other.CommittedGLSNEnd &&
 		cc.CommittedLLSNBegin == other.CommittedLLSNBegin
@@ -111,10 +109,10 @@ type Storage interface {
 
 	// Read reads the log entry at the glsn.
 	// If there is no entry at the given position, it returns varlog.ErrNoEntry.
-	Read(glsn types.GLSN) (types.LogEntry, error)
+	Read(glsn types.GLSN) (varlogpb.LogEntry, error)
 
 	// ReadAt reads the log entry at the llsn.
-	ReadAt(llsn types.LLSN) (types.LogEntry, error)
+	ReadAt(llsn types.LLSN) (varlogpb.LogEntry, error)
 
 	// Scan returns Scanner that reads log entries from the glsn.
 	Scan(begin, end types.GLSN) Scanner
@@ -134,7 +132,7 @@ type Storage interface {
 
 	// ReadFloorCommitContext returns a commit context whose member prevHighWatermark is the
 	// greatest commit context less than or equal to the given parameter prevHighWatermark.
-	ReadFloorCommitContext(prevHighWatermark types.GLSN) (CommitContext, error)
+	ReadFloorCommitContext(ver types.Version) (CommitContext, error)
 
 	// CommitContextOf looks up a commit context that contains the log entry positioned at the
 	// given glsn.

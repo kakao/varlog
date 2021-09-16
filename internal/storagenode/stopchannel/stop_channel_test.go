@@ -28,13 +28,8 @@ func TestStopChannelGoroutines(t *testing.T) {
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
 		go func() {
-			for {
-				select {
-				case <-sc.StopC():
-					wg.Done()
-					return
-				}
-			}
+			<-sc.StopC()
+			wg.Done()
 		}()
 	}
 	go func() {

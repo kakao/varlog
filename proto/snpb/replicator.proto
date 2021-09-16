@@ -5,7 +5,6 @@ package varlog.snpb;
 import "google/protobuf/timestamp.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-import "snpb/replica.proto";
 import "varlogpb/metadata.proto";
 
 option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
@@ -13,33 +12,41 @@ option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 // ReplicationRequest contains LLSN (Local Log Sequence Number) that indicates
 // a log position in the local log stream of the primary storage node.
 message ReplicationRequest {
-    uint32 log_stream_id = 1 [
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    uint64 llsn = 2 [
+    uint64 llsn = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
         (gogoproto.customname) = "LLSN"
     ];
-    bytes payload = 3;
-    google.protobuf.Timestamp created_time = 4
+    bytes payload = 4;
+    google.protobuf.Timestamp created_time = 5
         [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 // ReplicationResponse indicates that a log entry at given LLSN is replicated.
 message ReplicationResponse {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
     ];
-    uint32 log_stream_id = 2 [
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -109,8 +116,8 @@ message SyncInitRequest {
             "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
-    Replica source = 2 [(gogoproto.nullable) = false];
-    Replica destination = 3 [(gogoproto.nullable) = false];
+    varlogpb.Replica source = 2 [(gogoproto.nullable) = false];
+    varlogpb.Replica destination = 3 [(gogoproto.nullable) = false];
     SyncRange range = 4 [(gogoproto.nullable) = false];
 }
 
@@ -124,8 +131,8 @@ message SyncReplicateRequest {
             "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
-    Replica source = 2 [(gogoproto.nullable) = false];
-    Replica destination = 3 [(gogoproto.nullable) = false];
+    varlogpb.Replica source = 2 [(gogoproto.nullable) = false];
+    varlogpb.Replica destination = 3 [(gogoproto.nullable) = false];
     SyncPayload payload = 4 [(gogoproto.nullable) = false];
 }
 

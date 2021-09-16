@@ -11,6 +11,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	types "github.daumkakao.com/varlog/varlog/pkg/types"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // MockLogIOClient is a mock of LogIOClient interface.
@@ -37,10 +38,10 @@ func (m *MockLogIOClient) EXPECT() *MockLogIOClientMockRecorder {
 }
 
 // Append mocks base method.
-func (m *MockLogIOClient) Append(arg0 context.Context, arg1 types.LogStreamID, arg2 []byte, arg3 ...StorageNode) (types.GLSN, error) {
+func (m *MockLogIOClient) Append(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 []byte, arg4 ...varlogpb.StorageNode) (types.GLSN, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1, arg2}
-	for _, a := range arg3 {
+	varargs := []interface{}{arg0, arg1, arg2, arg3}
+	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Append", varargs...)
@@ -50,9 +51,9 @@ func (m *MockLogIOClient) Append(arg0 context.Context, arg1 types.LogStreamID, a
 }
 
 // Append indicates an expected call of Append.
-func (mr *MockLogIOClientMockRecorder) Append(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
+func (mr *MockLogIOClientMockRecorder) Append(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Append", reflect.TypeOf((*MockLogIOClient)(nil).Append), varargs...)
 }
 
@@ -71,45 +72,45 @@ func (mr *MockLogIOClientMockRecorder) Close() *gomock.Call {
 }
 
 // Read mocks base method.
-func (m *MockLogIOClient) Read(arg0 context.Context, arg1 types.LogStreamID, arg2 types.GLSN) (*types.LogEntry, error) {
+func (m *MockLogIOClient) Read(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 types.GLSN) (*varlogpb.LogEntry, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Read", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*types.LogEntry)
+	ret := m.ctrl.Call(m, "Read", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(*varlogpb.LogEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Read indicates an expected call of Read.
-func (mr *MockLogIOClientMockRecorder) Read(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockLogIOClientMockRecorder) Read(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockLogIOClient)(nil).Read), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockLogIOClient)(nil).Read), arg0, arg1, arg2, arg3)
 }
 
 // Subscribe mocks base method.
-func (m *MockLogIOClient) Subscribe(arg0 context.Context, arg1 types.LogStreamID, arg2, arg3 types.GLSN) (<-chan SubscribeResult, error) {
+func (m *MockLogIOClient) Subscribe(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 types.GLSN) (<-chan SubscribeResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Subscribe", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Subscribe", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(<-chan SubscribeResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Subscribe indicates an expected call of Subscribe.
-func (mr *MockLogIOClientMockRecorder) Subscribe(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockLogIOClientMockRecorder) Subscribe(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLogIOClient)(nil).Subscribe), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLogIOClient)(nil).Subscribe), arg0, arg1, arg2, arg3, arg4)
 }
 
 // Trim mocks base method.
-func (m *MockLogIOClient) Trim(arg0 context.Context, arg1 types.GLSN) error {
+func (m *MockLogIOClient) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Trim", arg0, arg1)
+	ret := m.ctrl.Call(m, "Trim", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Trim indicates an expected call of Trim.
-func (mr *MockLogIOClientMockRecorder) Trim(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockLogIOClientMockRecorder) Trim(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockLogIOClient)(nil).Trim), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockLogIOClient)(nil).Trim), arg0, arg1, arg2)
 }

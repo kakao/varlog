@@ -27,6 +27,7 @@ func TestSubscribe(t *testing.T) {
 			numLogStreams  = 10
 			numLogs        = 100
 			minLogStreamID = types.LogStreamID(1)
+			topicID        = types.TopicID(1)
 		)
 		var (
 			begin = types.InvalidGLSN
@@ -51,14 +52,14 @@ func TestSubscribe(t *testing.T) {
 				},
 			}
 		}
-		replicasRetriever.EXPECT().All().Return(replicasMap).MaxTimes(1)
+		replicasRetriever.EXPECT().All(topicID).Return(replicasMap).MaxTimes(1)
 
 		createMockLogClientManager := func(results map[types.LogStreamID][]logc.SubscribeResult) *logc.MockLogClientManager {
 			logCLManager := logc.NewMockLogClientManager(ctrl)
 			logCLManager.EXPECT().GetOrConnect(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ context.Context, storageNodeID types.StorageNodeID, addr string) (logc.LogIOClient, error) {
 					logCL := logc.NewMockLogIOClient(ctrl)
-					logCL.EXPECT().Subscribe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, logStreamID types.LogStreamID, _ types.GLSN, _ types.GLSN) (<-chan logc.SubscribeResult, error) {
+					logCL.EXPECT().Subscribe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ types.TopicID, logStreamID types.LogStreamID, _ types.GLSN, _ types.GLSN) (<-chan logc.SubscribeResult, error) {
 						result := results[logStreamID]
 						c := make(chan logc.SubscribeResult, len(result))
 						for _, res := range result {
@@ -84,7 +85,7 @@ func TestSubscribe(t *testing.T) {
 			end = types.GLSN(1)
 
 			Convey("Then subscribe should return an error", func() {
-				_, err := vlg.subscribe(context.TODO(), begin, end, func(_ types.LogEntry, _ error) {})
+				_, err := vlg.subscribe(context.TODO(), topicID, begin, end, func(_ varlogpb.LogEntry, _ error) {})
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -102,14 +103,14 @@ func TestSubscribe(t *testing.T) {
 			Convey("Then subscribe should work well", func() {
 				var wg sync.WaitGroup
 				wg.Add(1)
-				onNext := func(logEntry types.LogEntry, err error) {
+				onNext := func(logEntry varlogpb.LogEntry, err error) {
 					if err == io.EOF {
 						wg.Done()
 						return
 					}
 					t.Error("no log entries are expected")
 				}
-				closer, err := vlg.subscribe(context.TODO(), begin, end, onNext)
+				closer, err := vlg.subscribe(context.TODO(), topicID, begin, end, onNext)
 				So(err, ShouldBeNil)
 				wg.Wait()
 				closer()
@@ -127,7 +128,7 @@ func TestSubscribe(t *testing.T) {
 				lastLLSN := lastLLSNs[logStreamID]
 				lastLLSN++
 				results[logStreamID] = append(results[logStreamID], logc.SubscribeResult{
-					LogEntry: types.LogEntry{
+					LogEntry: varlogpb.LogEntry{
 						GLSN: glsn,
 						LLSN: lastLLSN,
 						Data: []byte("foo"),
@@ -142,7 +143,7 @@ func TestSubscribe(t *testing.T) {
 				var wg sync.WaitGroup
 				wg.Add(1)
 				expectedGLSN := begin
-				onNext := func(logEntry types.LogEntry, err error) {
+				onNext := func(logEntry varlogpb.LogEntry, err error) {
 					if err == io.EOF {
 						wg.Done()
 						return
@@ -157,7 +158,7 @@ func TestSubscribe(t *testing.T) {
 						expectedGLSN++
 					}
 				}
-				closer, err := vlg.subscribe(context.TODO(), begin, end, onNext)
+				closer, err := vlg.subscribe(context.TODO(), topicID, begin, end, onNext)
 				So(err, ShouldBeNil)
 				wg.Wait()
 				closer()
@@ -168,7 +169,7 @@ func TestSubscribe(t *testing.T) {
 				var wg sync.WaitGroup
 				wg.Add(1)
 				expectedGLSN := begin
-				onNext := func(logEntry types.LogEntry, err error) {
+				onNext := func(logEntry varlogpb.LogEntry, err error) {
 					if err == io.EOF {
 						wg.Done()
 						return
@@ -183,7 +184,7 @@ func TestSubscribe(t *testing.T) {
 						expectedGLSN++
 					}
 				}
-				closer, err := vlg.subscribe(context.TODO(), begin, end+numMoreLogs, onNext)
+				closer, err := vlg.subscribe(context.TODO(), topicID, begin, end+numMoreLogs, onNext)
 				So(err, ShouldBeNil)
 				wg.Wait()
 				closer()
@@ -195,7 +196,7 @@ func TestSubscribe(t *testing.T) {
 				wg.Add(1)
 				expectedGLSN := begin
 				glsnC := make(chan types.GLSN)
-				onNext := func(logEntry types.LogEntry, err error) {
+				onNext := func(logEntry varlogpb.LogEntry, err error) {
 					if err != nil {
 						// NOTE: Regardless of context error or EOF, an
 						// error should be raised only once.
@@ -211,15 +212,12 @@ func TestSubscribe(t *testing.T) {
 						expectedGLSN++
 					}
 				}
-				closer, err := vlg.subscribe(context.TODO(), begin, end, onNext)
+				closer, err := vlg.subscribe(context.TODO(), topicID, begin, end, onNext)
 				So(err, ShouldBeNil)
 				go func() {
-					for {
-						select {
-						case glsn := <-glsnC:
-							if glsn == closePoint {
-								closer()
-							}
+					for glsn := range glsnC {
+						if glsn == closePoint {
+							closer()
 						}
 					}
 				}()

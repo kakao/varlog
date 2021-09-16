@@ -4,6 +4,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/volume"
+
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/executor"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/pprof"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
@@ -140,7 +142,7 @@ func (o volumesOption) apply(c *config) {
 func WithVolumes(dirs ...string) Option {
 	volumes := set.New(len(dirs))
 	for _, dir := range dirs {
-		vol, err := NewVolume(dir)
+		vol, err := volume.New(dir)
 		if err != nil {
 			panic(err)
 		}

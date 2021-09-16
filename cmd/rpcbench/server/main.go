@@ -109,10 +109,8 @@ func main() {
 	sigC := make(chan os.Signal, 1)
 	signal.Notify(sigC, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		select {
-		case <-sigC:
-			svr.Stop()
-		}
+		<-sigC
+		svr.Stop()
 	}()
 
 	var grp errgroup.Group

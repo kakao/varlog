@@ -59,7 +59,7 @@ func (e *executor) SyncInit(ctx context.Context, srcRange snpb.SyncRange) (syncR
 
 	// TODO: check range of sync
 	// if the executor already has last position committed, this RPC should be rejected.
-	_, uncommittedLLSNBegin := e.lsc.reportCommitBase()
+	_, _, uncommittedLLSNBegin := e.lsc.reportCommitBase()
 	lastCommittedLLSN := uncommittedLLSNBegin - 1
 	if lastCommittedLLSN > srcRange.LastLLSN {
 		panic("oops")
@@ -163,8 +163,8 @@ func (e *executor) SyncReplicate(ctx context.Context, payload snpb.SyncPayload) 
 		e.lsc.uncommittedLLSNEnd.Add(numCommits)
 
 		_, err = e.committer.commitDirectly(storage.CommitContext{
+			Version:            e.srs.cc.Version,
 			HighWatermark:      e.srs.cc.HighWatermark,
-			PrevHighWatermark:  e.srs.cc.PrevHighWatermark,
 			CommittedGLSNBegin: e.srs.cc.CommittedGLSNBegin,
 			CommittedGLSNEnd:   e.srs.cc.CommittedGLSNEnd,
 			CommittedLLSNBegin: e.srs.cc.CommittedLLSNBegin,
@@ -194,7 +194,7 @@ func (e *executor) SyncReplicate(ctx context.Context, payload snpb.SyncPayload) 
 // TODO: Add unit tests for various situations.
 // NOTE:
 // - What if it has no entries to sync because they are trimmed?
-func (e *executor) Sync(ctx context.Context, replica snpb.Replica) (*snpb.SyncStatus, error) {
+func (e *executor) Sync(ctx context.Context, replica varlogpb.Replica) (*snpb.SyncStatus, error) {
 	if err := e.guard(); err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (e *executor) Sync(ctx context.Context, replica snpb.Replica) (*snpb.SyncSt
 	e.syncTrackers.mu.Lock()
 	defer e.syncTrackers.mu.Unlock()
 
-	if state, ok := e.syncTrackers.trk.get(replica.GetStorageNodeID()); ok {
+	if state, ok := e.syncTrackers.trk.get(replica.StorageNode.StorageNodeID); ok {
 		return state.ToSyncStatus(), nil
 	}
 
@@ -280,8 +280,8 @@ func (e *executor) sync(ctx context.Context, state *syncState) (err error) {
 		// send cc
 		err = client.SyncReplicate(ctx, state.dst, snpb.SyncPayload{
 			CommitContext: &varlogpb.CommitContext{
+				Version:            cc.Version,
 				HighWatermark:      cc.HighWatermark,
-				PrevHighWatermark:  cc.PrevHighWatermark,
 				CommittedGLSNBegin: cc.CommittedGLSNBegin,
 				CommittedGLSNEnd:   cc.CommittedGLSNEnd,
 				CommittedLLSNBegin: cc.CommittedLLSNBegin,

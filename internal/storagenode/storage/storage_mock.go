@@ -10,6 +10,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	types "github.daumkakao.com/varlog/varlog/pkg/types"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // MockScanner is a mock of Scanner interface.
@@ -346,10 +347,10 @@ func (mr *MockStorageMockRecorder) Path() *gomock.Call {
 }
 
 // Read mocks base method.
-func (m *MockStorage) Read(arg0 types.GLSN) (types.LogEntry, error) {
+func (m *MockStorage) Read(arg0 types.GLSN) (varlogpb.LogEntry, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", arg0)
-	ret0, _ := ret[0].(types.LogEntry)
+	ret0, _ := ret[0].(varlogpb.LogEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -361,10 +362,10 @@ func (mr *MockStorageMockRecorder) Read(arg0 interface{}) *gomock.Call {
 }
 
 // ReadAt mocks base method.
-func (m *MockStorage) ReadAt(arg0 types.LLSN) (types.LogEntry, error) {
+func (m *MockStorage) ReadAt(arg0 types.LLSN) (varlogpb.LogEntry, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadAt", arg0)
-	ret0, _ := ret[0].(types.LogEntry)
+	ret0, _ := ret[0].(varlogpb.LogEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -376,7 +377,7 @@ func (mr *MockStorageMockRecorder) ReadAt(arg0 interface{}) *gomock.Call {
 }
 
 // ReadFloorCommitContext mocks base method.
-func (m *MockStorage) ReadFloorCommitContext(arg0 types.GLSN) (CommitContext, error) {
+func (m *MockStorage) ReadFloorCommitContext(arg0 types.Version) (CommitContext, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadFloorCommitContext", arg0)
 	ret0, _ := ret[0].(CommitContext)

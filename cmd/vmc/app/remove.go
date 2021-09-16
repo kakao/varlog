@@ -18,10 +18,10 @@ func (app *VMCApp) removeStorageNode(storageNodeID types.StorageNodeID) {
 	)
 }
 
-func (app *VMCApp) removeLogStream(logStreamID types.LogStreamID) {
+func (app *VMCApp) removeLogStream(topicID types.TopicID, logStreamID types.LogStreamID) {
 	app.withExecutionContext(
 		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
-			return cli.UnregisterLogStream(ctx, logStreamID)
+			return cli.UnregisterLogStream(ctx, topicID, logStreamID)
 			// TODO (jun): according to options, it can remove log stream replicas of
 			// the log stream.
 		},

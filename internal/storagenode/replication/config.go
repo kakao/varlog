@@ -7,7 +7,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/id"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 const (
@@ -16,7 +16,7 @@ const (
 )
 
 type clientConfig struct {
-	replica          snpb.Replica
+	replica          varlogpb.Replica
 	requestQueueSize int
 	measure          telemetry.Measurable
 	logger           *zap.Logger
@@ -124,13 +124,13 @@ type ConnectorOption interface {
 	applyConnector(*connectorConfig)
 }
 
-type replicaOption snpb.Replica
+type replicaOption varlogpb.Replica
 
 func (o replicaOption) applyClient(c *clientConfig) {
-	c.replica = snpb.Replica(o)
+	c.replica = varlogpb.Replica(o)
 }
 
-func WithReplica(replica snpb.Replica) ClientOption {
+func WithReplica(replica varlogpb.Replica) ClientOption {
 	return replicaOption(replica)
 }
 

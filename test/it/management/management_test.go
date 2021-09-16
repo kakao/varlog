@@ -2,15 +2,18 @@ package management
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/test/it"
 )
@@ -29,7 +32,7 @@ func TestUnregisterInactiveStorageNode(t *testing.T) {
 }
 
 func TestUnregisterActiveStorageNode(t *testing.T) {
-	clus := it.NewVarlogCluster(t, it.WithNumberOfStorageNodes(1), it.WithNumberOfLogStreams(1))
+	clus := it.NewVarlogCluster(t, it.WithNumberOfStorageNodes(1), it.WithNumberOfLogStreams(1), it.WithNumberOfTopics(1))
 	defer clus.Close(t)
 
 	snID := clus.StorageNodeIDAtIndex(t, 0)
@@ -48,22 +51,23 @@ func TestAddAlreadyExistedStorageNode(t *testing.T) {
 }
 
 func TestUnregisterLogStream(t *testing.T) {
-	clus := it.NewVarlogCluster(t, it.WithNumberOfStorageNodes(1), it.WithNumberOfLogStreams(1))
+	clus := it.NewVarlogCluster(t, it.WithNumberOfStorageNodes(1), it.WithNumberOfLogStreams(1), it.WithNumberOfTopics(1))
 	defer clus.Close(t)
 
-	lsID := clus.LogStreamIDs()[0]
-	_, err := clus.GetVMSClient(t).UnregisterLogStream(context.Background(), lsID)
+	topicID := clus.TopicIDs()[0]
+	lsID := clus.LogStreamIDs(topicID)[0]
+	_, err := clus.GetVMSClient(t).UnregisterLogStream(context.Background(), topicID, lsID)
 	require.Error(t, err)
 
-	_, err = clus.GetVMSClient(t).Seal(context.Background(), lsID)
+	_, err = clus.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
 	require.NoError(t, err)
 
-	_, err = clus.GetVMSClient(t).UnregisterLogStream(context.Background(), lsID)
+	_, err = clus.GetVMSClient(t).UnregisterLogStream(context.Background(), topicID, lsID)
 	require.NoError(t, err)
 }
 
 func TestAddLogStreamWithNotExistedNode(t *testing.T) {
-	clus := it.NewVarlogCluster(t)
+	clus := it.NewVarlogCluster(t, it.WithNumberOfTopics(1))
 	defer clus.Close(t)
 
 	replicas := []*varlogpb.ReplicaDescriptor{
@@ -72,7 +76,8 @@ func TestAddLogStreamWithNotExistedNode(t *testing.T) {
 			Path:          "/fake",
 		},
 	}
-	_, err := clus.GetVMSClient(t).AddLogStream(context.Background(), replicas)
+	topicID := clus.TopicIDs()[0]
+	_, err := clus.GetVMSClient(t).AddLogStream(context.Background(), topicID, replicas)
 	require.Error(t, err)
 }
 
@@ -80,6 +85,7 @@ func TestAddLogStreamManually(t *testing.T) {
 	clus := it.NewVarlogCluster(t,
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfTopics(1),
 	)
 	defer clus.Close(t)
 
@@ -94,7 +100,8 @@ func TestAddLogStreamManually(t *testing.T) {
 		})
 	}
 
-	_, err := clus.GetVMSClient(t).AddLogStream(context.Background(), replicas)
+	topicID := clus.TopicIDs()[0]
+	_, err := clus.GetVMSClient(t).AddLogStream(context.Background(), topicID, replicas)
 	require.NoError(t, err)
 }
 
@@ -104,6 +111,7 @@ func TestAddLogStreamPartiallyRegistered(t *testing.T) {
 	clus := it.NewVarlogCluster(t,
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfTopics(1),
 	)
 	defer clus.Close(t)
 
@@ -114,7 +122,9 @@ func TestAddLogStreamPartiallyRegistered(t *testing.T) {
 	sn1 := clus.SNClientOf(t, snid1)
 	snmd1, err := sn1.GetMetadata(context.Background())
 	require.NoError(t, err)
-	err = sn1.AddLogStream(context.Background(), lsID, snmd1.GetStorageNode().GetStorages()[0].GetPath())
+
+	topicID := clus.TopicIDs()[0]
+	err = sn1.AddLogStreamReplica(context.Background(), topicID, lsID, snmd1.GetStorageNode().GetStorages()[0].GetPath())
 	require.NoError(t, err)
 
 	snid2 := clus.StorageNodeIDAtIndex(t, 1)
@@ -134,11 +144,11 @@ func TestAddLogStreamPartiallyRegistered(t *testing.T) {
 			Path:          snmd2.GetStorageNode().GetStorages()[0].GetPath(),
 		},
 	}
-	_, err = clus.GetVMSClient(t).AddLogStream(context.Background(), replicas)
+	_, err = clus.GetVMSClient(t).AddLogStream(context.Background(), topicID, replicas)
 	require.Error(t, err)
 
 	// Retring add new log stream will be succeed, since VMS refreshes its ID pool.
-	_, err = clus.GetVMSClient(t).AddLogStream(context.Background(), replicas)
+	_, err = clus.GetVMSClient(t).AddLogStream(context.Background(), topicID, replicas)
 	require.NoError(t, err)
 }
 
@@ -148,6 +158,7 @@ func TestRemoveLogStreamReplica(t *testing.T) {
 	clus := it.NewVarlogCluster(t,
 		it.WithReplicationFactor(1),
 		it.WithNumberOfStorageNodes(1),
+		it.WithNumberOfTopics(1),
 	)
 	defer clus.Close(t)
 
@@ -156,10 +167,11 @@ func TestRemoveLogStreamReplica(t *testing.T) {
 	sn := clus.SNClientOf(t, snid)
 	snmd, err := sn.GetMetadata(context.Background())
 	require.NoError(t, err)
-	err = sn.AddLogStream(context.Background(), lsID, snmd.GetStorageNode().GetStorages()[0].GetPath())
+	topicID := clus.TopicIDs()[0]
+	err = sn.AddLogStreamReplica(context.Background(), topicID, lsID, snmd.GetStorageNode().GetStorages()[0].GetPath())
 	require.NoError(t, err)
 
-	_, err = clus.GetVMSClient(t).RemoveLogStreamReplica(context.TODO(), snid, lsID)
+	_, err = clus.GetVMSClient(t).RemoveLogStreamReplica(context.TODO(), snid, topicID, lsID)
 	require.NoError(t, err)
 }
 
@@ -169,15 +181,17 @@ func TestSealUnseal(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
+		it.WithNumberOfTopics(1),
 	)
 	defer clus.Close(t)
 
-	lsID := clus.LogStreamIDs()[0]
+	topicID := clus.TopicIDs()[0]
+	lsID := clus.LogStreamIDs(topicID)[0]
 
-	_, err := clus.GetVMSClient(t).Seal(context.Background(), lsID)
+	_, err := clus.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
 	require.NoError(t, err)
 
-	_, err = clus.GetVMSClient(t).Unseal(context.Background(), lsID)
+	_, err = clus.GetVMSClient(t).Unseal(context.Background(), topicID, lsID)
 	require.NoError(t, err)
 }
 
@@ -191,18 +205,20 @@ func TestSyncLogStream(t *testing.T) {
 		it.WithNumberOfClients(1),
 		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
 		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithNumberOfTopics(1),
 	}
 
 	Convey("Given LogStream", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		topicID := env.TopicIDs()[0]
 		client := env.ClientAtIndex(t, 0)
 		for i := 0; i < numLogs; i++ {
-			_, err := client.Append(context.Background(), []byte("foo"))
+			_, err := client.Append(context.Background(), topicID, []byte("foo"))
 			So(err, ShouldBeNil)
 		}
 
 		Convey("Seal", func(ctx C) {
-			lsID := env.LogStreamID(t, 0)
-			rsp, err := env.GetVMSClient(t).Seal(context.Background(), lsID)
+			lsID := env.LogStreamID(t, topicID, 0)
+			rsp, err := env.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
 			So(err, ShouldBeNil)
 			So(rsp.GetSealedGLSN(), ShouldEqual, types.GLSN(numLogs))
 
@@ -223,7 +239,7 @@ func TestSyncLogStream(t *testing.T) {
 				So(snidmap, ShouldContainKey, victimSNID)
 
 				// update LS
-				env.UpdateLS(t, lsID, victimSNID, newSNID)
+				env.UpdateLS(t, topicID, lsID, victimSNID, newSNID)
 
 				// test if victimSNID does not exist in the logstream and newSNID exists
 				// in the log stream
@@ -252,13 +268,13 @@ func TestSyncLogStream(t *testing.T) {
 							return false
 						}
 						rpt := rsp.GetUncommitReports()[0]
-						return rpt.GetHighWatermark() == types.GLSN(numLogs) &&
+						return rpt.GetVersion() == types.Version(numLogs) &&
 							rpt.GetUncommittedLLSNOffset() == types.LLSN(numLogs+1) &&
 							rpt.GetUncommittedLLSNLength() == 0 &&
 							lsmd.Status == varlogpb.LogStreamStatusSealed
 					}), ShouldBeTrue)
 
-					_, err := env.GetVMSClient(t).Unseal(context.Background(), lsID)
+					_, err := env.GetVMSClient(t).Unseal(context.Background(), topicID, lsID)
 					So(err, ShouldBeNil)
 				})
 			})
@@ -273,6 +289,7 @@ func TestSealLogStreamSealedIncompletely(t *testing.T) {
 		it.WithNumberOfLogStreams(1),
 		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
 		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithNumberOfTopics(1),
 	}
 
 	Convey("Given cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
@@ -285,13 +302,14 @@ func TestSealLogStreamSealedIncompletely(t *testing.T) {
 			}
 			failedSN := env.SNClientOf(t, failedSNID)
 
-			// remove replica to make Seal LS imcomplete
-			lsID := env.LogStreamIDs()[0]
-			err := failedSN.RemoveLogStream(context.TODO(), lsID)
+			// remove replica to make Seal LS incomplete
+			topicID := env.TopicIDs()[0]
+			lsID := env.LogStreamIDs(topicID)[0]
+			err := failedSN.RemoveLogStream(context.TODO(), topicID, lsID)
 			So(err, ShouldBeNil)
 
 			vmsCL := env.GetVMSClient(t)
-			rsp, err := vmsCL.Seal(context.TODO(), lsID)
+			rsp, err := vmsCL.Seal(context.TODO(), topicID, lsID)
 			// So(err, ShouldNotBeNil)
 			So(err, ShouldBeNil)
 			So(len(rsp.GetLogStreams()), ShouldBeLessThan, env.ReplicationFactor())
@@ -303,7 +321,7 @@ func TestSealLogStreamSealedIncompletely(t *testing.T) {
 				path := snmeta.GetStorageNode().GetStorages()[0].GetPath()
 				So(len(path), ShouldBeGreaterThan, 0)
 
-				err = failedSN.AddLogStream(context.TODO(), lsID, path)
+				err = failedSN.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(100, func() bool {
@@ -330,13 +348,15 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 		it.WithNumberOfLogStreams(1),
 		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
 		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithNumberOfTopics(1),
 	}
 
 	Convey("Given Sealed LogStream", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
-		lsID := env.LogStreamIDs()[0]
+		topicID := env.TopicIDs()[0]
+		lsID := env.LogStreamIDs(topicID)[0]
 
 		vmsCL := env.GetVMSClient(t)
-		_, err := vmsCL.Seal(context.TODO(), lsID)
+		_, err := vmsCL.Seal(context.TODO(), topicID, lsID)
 		So(err, ShouldBeNil)
 
 		Convey("When Unseal is incomplete", func(ctx C) {
@@ -348,11 +368,11 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 			}
 			failedSN := env.SNClientOf(t, failedSNID)
 
-			// remove replica to make Unseal LS imcomplete
-			err := failedSN.RemoveLogStream(context.TODO(), lsID)
+			// remove replica to make Unseal LS incomplete
+			err := failedSN.RemoveLogStream(context.TODO(), topicID, lsID)
 			So(err, ShouldBeNil)
 
-			_, err = vmsCL.Unseal(context.TODO(), lsID)
+			_, err = vmsCL.Unseal(context.TODO(), topicID, lsID)
 			So(err, ShouldNotBeNil)
 
 			Convey("Then SN Watcher make LS sealed", func(ctx C) {
@@ -362,7 +382,7 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 				path := snmeta.GetStorageNode().GetStorages()[0].GetPath()
 				So(len(path), ShouldBeGreaterThan, 0)
 
-				err = failedSN.AddLogStream(context.TODO(), lsID, path)
+				err = failedSN.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(100, func() bool {
@@ -390,11 +410,13 @@ func TestGCZombieLogStream(t *testing.T) {
 		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
 		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
 		it.WithVMSOptions(vmsOpts),
+		it.WithNumberOfTopics(1),
 	}
 
 	Convey("Given Varlog cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
 		snID := env.StorageNodeIDAtIndex(t, 0)
 		lsID := types.LogStreamID(1)
+		topicID := env.TopicIDs()[0]
 
 		Convey("When AddLogStream to SN but do not register MR", func(ctx C) {
 			snMCL := env.SNClientOf(t, snID)
@@ -403,7 +425,7 @@ func TestGCZombieLogStream(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			path := meta.GetStorageNode().GetStorages()[0].GetPath()
-			err = snMCL.AddLogStream(context.TODO(), lsID, path)
+			err = snMCL.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
 			So(err, ShouldBeNil)
 
 			meta, err = snMCL.GetMetadata(context.TODO())
@@ -428,6 +450,182 @@ func TestGCZombieLogStream(t *testing.T) {
 					_, exist := meta.FindLogStream(lsID)
 					return !exist
 				}, vmsOpts.GCTimeout), ShouldBeTrue)
+			})
+		})
+	}))
+}
+
+func TestAddLogStreamTopic(t *testing.T) {
+	opts := []it.Option{
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfLogStreams(1),
+		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithNumberOfTopics(10),
+		it.WithNumberOfClients(1),
+	}
+
+	Convey("Given Topic", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		numLogs := 16
+
+		client := env.ClientAtIndex(t, 0)
+		for _, topicID := range env.TopicIDs() {
+			for i := 0; i < numLogs; i++ {
+				_, err := client.Append(context.Background(), topicID, []byte("foo"))
+				So(err, ShouldBeNil)
+			}
+		}
+
+		env.ClientRefresh(t)
+		client = env.ClientAtIndex(t, 0)
+
+		Convey("When AddLogStream", func(ctx C) {
+			vmsCL := env.GetVMSClient(t)
+			for _, topicID := range env.TopicIDs() {
+				_, err := vmsCL.AddLogStream(context.TODO(), topicID, nil)
+				So(err, ShouldBeNil)
+			}
+
+			Convey("Then it should Appendable", func(ctx C) {
+				for _, topicID := range env.TopicIDs() {
+					for i := 0; i < numLogs; i++ {
+						_, err := client.Append(context.Background(), topicID, []byte("foo"))
+						So(err, ShouldBeNil)
+					}
+				}
+			})
+		})
+	}))
+}
+
+func TestRemoveTopic(t *testing.T) {
+	opts := []it.Option{
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfLogStreams(2),
+		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithNumberOfTopics(10),
+		it.WithNumberOfClients(1),
+	}
+
+	Convey("Given Topic", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		numLogs := 8
+
+		client := env.ClientAtIndex(t, 0)
+		for _, topicID := range env.TopicIDs() {
+			for i := 0; i < numLogs; i++ {
+				_, err := client.Append(context.Background(), topicID, []byte("foo"))
+				So(err, ShouldBeNil)
+			}
+		}
+
+		Convey("When RemoveTopic", func(ctx C) {
+			vmsCL := env.GetVMSClient(t)
+			rmTopicID := env.TopicIDs()[0]
+			_, err := vmsCL.UnregisterTopic(context.TODO(), rmTopicID)
+			So(err, ShouldBeNil)
+
+			meta := env.GetMetadata(t)
+			So(meta.GetTopic(rmTopicID), ShouldBeNil)
+
+			Convey("Then unregistered topic should be Unappendable", func(ctx C) {
+				actx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				_, err := client.Append(actx, rmTopicID, []byte("foo"))
+				So(err, ShouldNotBeNil)
+
+				Convey("And other topics should Appendable", func(ctx C) {
+					for _, topicID := range env.TopicIDs() {
+						if topicID == rmTopicID {
+							continue
+						}
+
+						for i := 0; i < numLogs; i++ {
+							_, err := client.Append(context.Background(), topicID, []byte("foo"))
+							So(err, ShouldBeNil)
+						}
+					}
+				})
+			})
+		})
+	}))
+}
+
+func TestAddTopic(t *testing.T) {
+	opts := []it.Option{
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfLogStreams(2),
+		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithNumberOfTopics(3),
+	}
+
+	Convey("Given Topic", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
+		testTimeout := 5 * time.Second
+
+		tctx, tcancel := context.WithTimeout(context.TODO(), testTimeout)
+		defer tcancel()
+
+		grp, gctx := errgroup.WithContext(tctx)
+		for _, topicID := range env.TopicIDs() {
+			tid := topicID
+			grp.Go(func() (err error) {
+				cl, err := varlog.Open(context.Background(), env.ClusterID(), env.MRRPCEndpoints())
+				if err != nil {
+					return err
+				}
+				defer cl.Close()
+
+				var glsn types.GLSN
+				for gctx.Err() == nil {
+					glsn, err = cl.Append(context.Background(), tid, []byte("foo"))
+					if err != nil {
+						err = fmt.Errorf("topic=%v,err=%v", tid, err)
+						break
+					}
+				}
+
+				t.Logf("topic=%v, glsn:%v\n", tid, glsn)
+				return
+			})
+		}
+
+		Convey("When AddTopic", func(ctx C) {
+			vmsCL := env.GetVMSClient(t)
+			topicDesc, err := vmsCL.AddTopic(context.TODO())
+			So(err, ShouldBeNil)
+
+			addTopicID := topicDesc.Topic.TopicID
+
+			_, err = vmsCL.AddLogStream(context.TODO(), addTopicID, nil)
+			So(err, ShouldBeNil)
+
+			grp.Go(func() (err error) {
+				cl, err := varlog.Open(context.Background(), env.ClusterID(), env.MRRPCEndpoints())
+				if err != nil {
+					return err
+				}
+				defer cl.Close()
+
+				var glsn types.GLSN
+				for gctx.Err() == nil {
+					glsn, err = cl.Append(context.Background(), addTopicID, []byte("foo"))
+					if err != nil {
+						err = fmt.Errorf("topic=%v,err=%v", addTopicID, err)
+						break
+					}
+				}
+
+				t.Logf("topic=%v, glsn:%v\n", addTopicID, glsn)
+				return
+			})
+
+			Convey("Then it should appendable", func(ctx C) {
+				err = grp.Wait()
+				So(err, ShouldBeNil)
 			})
 		})
 	}))

@@ -19,6 +19,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/attribute"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type Server interface {
@@ -67,26 +68,28 @@ func (s *server) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.App
 			startTime := time.Now()
 			defer func() {
 				dur := time.Since(startTime)
-				s.measurable.Stub().Metrics().RpcServerAppendDuration.Record(
+				s.measurable.Stub().Metrics().RPCServerAppendDuration.Record(
 					ctx,
 					float64(dur.Microseconds())/1000.0,
 				)
 			}()
 
-			req := reqI.(*snpb.AppendRequest)
 			var rsp *snpb.AppendResponse
-			lse, ok := s.readWriterGetter.ReadWriter(req.GetLogStreamID())
+			lse, ok := s.readWriterGetter.ReadWriter(req.GetTopicID(), req.GetLogStreamID())
 			if !ok {
 				code = codes.NotFound
 				return rsp, errors.WithStack(verrors.ErrInvalid)
 			}
 
-			backups := make([]snpb.Replica, 0, len(req.Backups))
+			backups := make([]varlogpb.Replica, 0, len(req.Backups))
 			for i := range req.Backups {
-				backups = append(backups, snpb.Replica{
-					StorageNodeID: req.Backups[i].GetStorageNodeID(),
-					Address:       req.Backups[i].GetAddress(),
-					LogStreamID:   req.GetLogStreamID(),
+				backups = append(backups, varlogpb.Replica{
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: req.Backups[i].GetStorageNodeID(),
+						Address:       req.Backups[i].GetAddress(),
+					},
+					TopicID:     req.GetTopicID(),
+					LogStreamID: req.GetLogStreamID(),
 				})
 			}
 
@@ -105,9 +108,8 @@ func (s *server) Read(ctx context.Context, req *snpb.ReadRequest) (*snpb.ReadRes
 	code := codes.Internal
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/Read", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.ReadRequest)
 			var rsp *snpb.ReadResponse
-			lse, ok := s.readWriterGetter.ReadWriter(req.GetLogStreamID())
+			lse, ok := s.readWriterGetter.ReadWriter(req.GetTopicID(), req.GetLogStreamID())
 			if !ok {
 				code = codes.NotFound
 				return rsp, errors.WithStack(verrors.ErrInvalid)
@@ -154,13 +156,11 @@ func (s *server) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_Subscri
 	code := codes.Internal
 	_, err := s.withTelemetry(stream.Context(), "varlog.snpb.LogIO/Subscribe", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.SubscribeRequest)
-
 			if req.GetGLSNBegin() >= req.GetGLSNEnd() {
 				code = codes.InvalidArgument
 				return nil, errors.New("storagenode: invalid subscription range")
 			}
-			reader, ok := s.readWriterGetter.ReadWriter(req.GetLogStreamID())
+			reader, ok := s.readWriterGetter.ReadWriter(req.GetTopicID(), req.GetLogStreamID())
 			if !ok {
 				code = codes.NotFound
 				return nil, errors.WithStack(verrors.ErrInvalid)
@@ -198,7 +198,6 @@ func (s *server) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtypes.Empt
 	code := codes.Internal
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/Trim", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.TrimRequest)
 			trimGLSN := req.GetGLSN()
 
 			// TODO

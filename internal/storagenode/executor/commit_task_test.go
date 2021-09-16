@@ -15,12 +15,10 @@ import (
 func TestCommitTaskBlockPool(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		ctb := newCommitTask()
-		require.Equal(t, types.InvalidGLSN, ctb.highWatermark)
-		require.Equal(t, types.InvalidGLSN, ctb.prevHighWatermark)
+		require.Equal(t, types.InvalidVersion, ctb.version)
 		require.Equal(t, types.InvalidGLSN, ctb.committedGLSNBegin)
 		require.Equal(t, types.InvalidGLSN, ctb.committedGLSNEnd)
-		ctb.highWatermark = 1
-		ctb.prevHighWatermark = 1
+		ctb.version = 1
 		ctb.committedGLSNBegin = 1
 		ctb.committedGLSNEnd = 1
 		ctb.release()
@@ -31,7 +29,7 @@ type testCommitTaskHeap []*commitTask
 
 func (b testCommitTaskHeap) Len() int { return len(b) }
 
-func (b testCommitTaskHeap) Less(i, j int) bool { return b[i].highWatermark < b[j].highWatermark }
+func (b testCommitTaskHeap) Less(i, j int) bool { return b[i].version < b[j].version }
 
 func (b testCommitTaskHeap) Swap(i, j int) { b[i], b[j] = b[j], b[i] }
 
@@ -68,7 +66,7 @@ func BenchmarkCommitTaskBlockBatch(b *testing.B) {
 			commitTasks := make([]*commitTask, 0, b.N)
 			for i := 0; i < b.N; i++ {
 				ct := &commitTask{}
-				ct.highWatermark = types.GLSN(rand.Uint64())
+				ct.version = types.Version(rand.Uint64())
 				commitTasks = append(commitTasks, ct)
 			}
 			benchFunc.f(b, commitTasks)

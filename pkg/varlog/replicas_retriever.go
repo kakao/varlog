@@ -4,7 +4,6 @@ package varlog
 
 import (
 	"errors"
-	"sync"
 	"sync/atomic"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -19,8 +18,8 @@ var (
 //
 // Retrieve searches replicas belongs to the log stream.
 type ReplicasRetriever interface {
-	Retrieve(logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool)
-	All() map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor
+	Retrieve(topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool)
+	All(topicID types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor
 }
 
 type RenewableReplicasRetriever interface {
@@ -29,57 +28,72 @@ type RenewableReplicasRetriever interface {
 }
 
 type renewableReplicasRetriever struct {
-	lsreplicas atomic.Value // *sync.Map // map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor
+	topic atomic.Value // map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor
 }
 
-func (r *renewableReplicasRetriever) Retrieve(logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool) {
-	lsReplicasMapIf := r.lsreplicas.Load()
-	if lsReplicasMapIf == nil {
+func (r *renewableReplicasRetriever) Retrieve(topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool) {
+	topicMapIf := r.topic.Load()
+	if topicMapIf == nil {
 		return nil, false
 	}
-	lsReplicasMap := lsReplicasMapIf.(*sync.Map)
-	if lsreplicas, ok := lsReplicasMap.Load(logStreamID); ok {
-		return lsreplicas.([]varlogpb.LogStreamReplicaDescriptor), true
+	topicMap := topicMapIf.(map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+	if lsReplicasMap, ok := topicMap[topicID]; ok {
+		if lsreplicas, ok := lsReplicasMap[logStreamID]; ok {
+			return lsreplicas, true
+		}
 	}
 	return nil, false
 }
 
-func (r *renewableReplicasRetriever) All() map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor {
-	lsReplicasMapIf := r.lsreplicas.Load()
-	if lsReplicasMapIf == nil {
+func (r *renewableReplicasRetriever) All(topicID types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor {
+	topicMapIf := r.topic.Load()
+	if topicMapIf == nil {
 		return nil
 	}
-	lsReplicasMap := lsReplicasMapIf.(*sync.Map)
+	topicMap := topicMapIf.(map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+
+	lsReplicasMap, ok := topicMap[topicID]
+	if !ok {
+		return nil
+	}
+
 	ret := make(map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
-	lsReplicasMap.Range(func(logStreamID interface{}, replicas interface{}) bool {
-		ret[logStreamID.(types.LogStreamID)] = replicas.([]varlogpb.LogStreamReplicaDescriptor)
-		return true
-	})
+	for lsID, replicas := range lsReplicasMap {
+		ret[lsID] = replicas
+	}
 	return ret
 }
 
 func (r *renewableReplicasRetriever) Renew(metadata *varlogpb.MetadataDescriptor) {
-	newLSReplicasMap := new(sync.Map)
-
 	storageNodes := metadata.GetStorageNodes()
 	snMap := make(map[types.StorageNodeID]string, len(storageNodes))
 	for _, storageNode := range storageNodes {
 		snMap[storageNode.GetStorageNodeID()] = storageNode.GetAddress()
 	}
 
-	lsdescs := metadata.GetLogStreams()
-	for _, lsdesc := range lsdescs {
-		logStreamID := lsdesc.GetLogStreamID()
-		replicas := lsdesc.GetReplicas()
-		lsreplicas := make([]varlogpb.LogStreamReplicaDescriptor, len(replicas))
-		for i, replica := range replicas {
-			storageNodeID := replica.GetStorageNodeID()
-			lsreplicas[i].StorageNodeID = storageNodeID
-			lsreplicas[i].LogStreamID = logStreamID
-			lsreplicas[i].Address = snMap[storageNodeID]
+	newTopicMap := make(map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+	topicdescs := metadata.GetTopics()
+	for _, topicdesc := range topicdescs {
+		topicID := topicdesc.TopicID
+
+		newLSReplicasMap := make(map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+		for _, lsid := range topicdesc.LogStreams {
+			lsdesc := metadata.GetLogStream(lsid)
+
+			logStreamID := lsdesc.GetLogStreamID()
+			replicas := lsdesc.GetReplicas()
+			lsreplicas := make([]varlogpb.LogStreamReplicaDescriptor, len(replicas))
+			for i, replica := range replicas {
+				storageNodeID := replica.GetStorageNodeID()
+				lsreplicas[i].StorageNodeID = storageNodeID
+				lsreplicas[i].LogStreamID = logStreamID
+				lsreplicas[i].Address = snMap[storageNodeID]
+			}
+			newLSReplicasMap[logStreamID] = lsreplicas
 		}
-		newLSReplicasMap.Store(logStreamID, lsreplicas)
+
+		newTopicMap[topicID] = newLSReplicasMap
 	}
 
-	r.lsreplicas.Store(newLSReplicasMap)
+	r.topic.Store(newTopicMap)
 }

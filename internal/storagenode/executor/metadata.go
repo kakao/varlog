@@ -10,7 +10,7 @@ import (
 type MetadataProvider interface {
 	Metadata() varlogpb.LogStreamMetadataDescriptor
 	Path() string
-	GetPrevCommitInfo(hwm types.GLSN) (*snpb.LogStreamCommitInfo, error)
+	GetPrevCommitInfo(ver types.Version) (*snpb.LogStreamCommitInfo, error)
 }
 
 func (e *executor) Path() string {
@@ -27,9 +27,12 @@ func (e *executor) Metadata() varlogpb.LogStreamMetadataDescriptor {
 	case executorSealed:
 		status = varlogpb.LogStreamStatusSealed
 	}
+	version, _, _ := e.lsc.reportCommitBase()
 	return varlogpb.LogStreamMetadataDescriptor{
 		StorageNodeID: e.storageNodeID,
 		LogStreamID:   e.logStreamID,
+		TopicID:       e.topicID,
+		Version:       version,
 		HighWatermark: e.lsc.localGLSN.localHighWatermark.Load(),
 		Status:        status,
 		Path:          e.storage.Path(),
@@ -38,13 +41,13 @@ func (e *executor) Metadata() varlogpb.LogStreamMetadataDescriptor {
 	}
 }
 
-func (e *executor) GetPrevCommitInfo(prevHWM types.GLSN) (*snpb.LogStreamCommitInfo, error) {
+func (e *executor) GetPrevCommitInfo(ver types.Version) (*snpb.LogStreamCommitInfo, error) {
 	info := &snpb.LogStreamCommitInfo{
 		LogStreamID:        e.logStreamID,
 		HighestWrittenLLSN: e.lsc.uncommittedLLSNEnd.Load() - 1,
 	}
 
-	cc, err := e.storage.ReadFloorCommitContext(prevHWM)
+	cc, err := e.storage.ReadFloorCommitContext(ver)
 	switch err {
 	case storage.ErrNotFoundCommitContext:
 		info.Status = snpb.GetPrevCommitStatusNotFound
@@ -59,7 +62,6 @@ func (e *executor) GetPrevCommitInfo(prevHWM types.GLSN) (*snpb.LogStreamCommitI
 	info.CommittedLLSNOffset = cc.CommittedLLSNBegin
 	info.CommittedGLSNOffset = cc.CommittedGLSNBegin
 	info.CommittedGLSNLength = uint64(cc.CommittedGLSNEnd - cc.CommittedGLSNBegin)
-	info.HighWatermark = cc.HighWatermark
-	info.PrevHighWatermark = cc.PrevHighWatermark
+	info.Version = cc.Version
 	return info, nil
 }

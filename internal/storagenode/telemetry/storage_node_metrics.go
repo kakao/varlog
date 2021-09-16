@@ -6,8 +6,8 @@ import (
 )
 
 type MetricsBag struct {
-	RpcServerAppendDuration    metric.Float64ValueRecorder
-	RpcServerReplicateDuration metric.Float64ValueRecorder
+	RPCServerAppendDuration    metric.Float64ValueRecorder
+	RPCServerReplicateDuration metric.Float64ValueRecorder
 
 	ExecutorWriteQueueTime  metric.Float64ValueRecorder
 	ExecutorWriteQueueTasks metric.Int64ValueRecorder
@@ -34,11 +34,11 @@ type MetricsBag struct {
 func newMetricsBag(ts *TelemetryStub) *MetricsBag {
 	meter := metric.Must(ts.mt)
 	return &MetricsBag{
-		RpcServerAppendDuration: meter.NewFloat64ValueRecorder(
+		RPCServerAppendDuration: meter.NewFloat64ValueRecorder(
 			"rpc.server.append.duration",
 			metric.WithUnit(unit.Milliseconds),
 		),
-		RpcServerReplicateDuration: meter.NewFloat64ValueRecorder(
+		RPCServerReplicateDuration: meter.NewFloat64ValueRecorder(
 			"rpc.server.replicate.duration",
 			metric.WithUnit(unit.Milliseconds),
 		),

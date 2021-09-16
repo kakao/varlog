@@ -17,6 +17,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type Client interface {
@@ -24,7 +25,7 @@ type Client interface {
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte, cb func(error))
 	PeerStorageNodeID() types.StorageNodeID
 	SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.SyncRange, error)
-	SyncReplicate(ctx context.Context, replica snpb.Replica, payload snpb.SyncPayload) error
+	SyncReplicate(ctx context.Context, replica varlogpb.Replica, payload snpb.SyncPayload) error
 }
 
 type client struct {
@@ -93,7 +94,7 @@ func (c *client) run(ctx context.Context) (err error) {
 }
 
 func (c *client) PeerStorageNodeID() types.StorageNodeID {
-	return c.replica.GetStorageNodeID()
+	return c.replica.StorageNode.StorageNodeID
 }
 
 func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, callback func(error)) {
@@ -122,6 +123,7 @@ func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, ca
 	}
 
 	req := &snpb.ReplicationRequest{
+		TopicID:     c.replica.GetTopicID(),
 		LogStreamID: c.replica.GetLogStreamID(),
 		LLSN:        llsn,
 		Payload:     data,
@@ -228,7 +230,7 @@ func (c *client) SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.Sy
 	return rsp.GetRange(), errors.WithStack(verrors.FromStatusError(err))
 }
 
-func (c *client) SyncReplicate(ctx context.Context, replica snpb.Replica, payload snpb.SyncPayload) error {
+func (c *client) SyncReplicate(ctx context.Context, replica varlogpb.Replica, payload snpb.SyncPayload) error {
 	c.closed.mu.RLock()
 	if c.closed.val {
 		c.closed.mu.RUnlock()

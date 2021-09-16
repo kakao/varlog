@@ -43,16 +43,20 @@ type ClusterManager interface {
 
 	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error
 
-	AddLogStream(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
+	AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error)
 
-	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error
+	UnregisterTopic(ctx context.Context, topicID types.TopicID) error
 
-	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error
+	AddLogStream(ctx context.Context, topicID types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
+
+	UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error
+
+	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) error
 
 	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
-	Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, types.GLSN, error)
+	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, types.GLSN, error)
 
 	// Sync copies the log entries of the src to the dst. Sync may be long-running, thus it
 	// returns immediately without waiting for the completion of sync. Callers of Sync
@@ -64,10 +68,10 @@ type ClusterManager interface {
 	// To start sync, the log stream status of the src must be LogStreamStatusSealed and the log
 	// stream status of the dst must be LogStreamStatusSealing. If either of the statuses is not
 	// correct, Sync returns ErrSyncInvalidStatus.
-	Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error)
+	Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error)
 
 	// Unseal unseals the log stream replicas corresponded with the given logStreamID.
-	Unseal(ctx context.Context, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error)
+	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error)
 
 	Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error)
 
@@ -112,6 +116,7 @@ type clusterManager struct {
 	snWatcher      StorageNodeWatcher
 	statRepository StatRepository
 	logStreamIDGen LogStreamIDGenerator
+	topicIDGen     TopicIDGenerator
 
 	logger  *zap.Logger
 	options *Options
@@ -140,6 +145,11 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		return nil, err
 	}
 
+	topicIDGen, err := NewSequentialTopicIDGenerator(ctx, cmView, snMgr)
+	if err != nil {
+		return nil, err
+	}
+
 	snSelector, err := newRandomReplicaSelector(cmView, opts.ReplicationFactor)
 	if err != nil {
 		return nil, err
@@ -154,6 +164,7 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		snSelector:     snSelector,
 		statRepository: NewStatRepository(ctx, cmView),
 		logStreamIDGen: logStreamIDGen,
+		topicIDGen:     topicIDGen,
 		logger:         opts.Logger,
 		options:        opts,
 	}
@@ -367,8 +378,49 @@ func (cm *clusterManager) UnregisterStorageNode(ctx context.Context, storageNode
 	return nil
 }
 
-func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
-	lsdesc, err := cm.addLogStreamInternal(ctx, replicas)
+func (cm *clusterManager) AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	var err error
+
+	topicID := cm.topicIDGen.Generate()
+	if err = cm.mrMgr.RegisterTopic(ctx, topicID); err != nil {
+		goto errOut
+	}
+
+	return &varlogpb.TopicDescriptor{TopicID: topicID}, nil
+
+errOut:
+	return nil, err
+}
+
+func (cm *clusterManager) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	clusmeta, err := cm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	topicdesc, err := clusmeta.MustHaveTopic(topicID)
+	if err != nil {
+		return err
+	}
+
+	status := topicdesc.GetStatus()
+	if status.Deleted() {
+		return errors.Errorf("invalid topic status: %s", status)
+	}
+
+	//TODO:: seal logStreams and refresh metadata
+
+	return cm.mrMgr.UnregisterTopic(ctx, topicID)
+}
+
+func (cm *clusterManager) AddLogStream(ctx context.Context, topicID types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+	lsdesc, err := cm.addLogStreamInternal(ctx, topicID, replicas)
 	if err != nil {
 		return lsdesc, err
 	}
@@ -378,10 +430,10 @@ func (cm *clusterManager) AddLogStream(ctx context.Context, replicas []*varlogpb
 		return lsdesc, err
 	}
 
-	return cm.Unseal(ctx, lsdesc.LogStreamID)
+	return cm.Unseal(ctx, topicID, lsdesc.LogStreamID)
 }
 
-func (cm *clusterManager) addLogStreamInternal(ctx context.Context, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (cm *clusterManager) addLogStreamInternal(ctx context.Context, topicID types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -410,6 +462,7 @@ func (cm *clusterManager) addLogStreamInternal(ctx context.Context, replicas []*
 	}
 
 	logStreamDesc := &varlogpb.LogStreamDescriptor{
+		TopicID:     topicID,
 		LogStreamID: logStreamID,
 		Status:      varlogpb.LogStreamStatusSealing,
 		Replicas:    replicas,
@@ -440,7 +493,7 @@ func (cm *clusterManager) waitSealed(ctx context.Context, logStreamID types.LogS
 	}
 }
 
-func (cm *clusterManager) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
+func (cm *clusterManager) UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -491,7 +544,7 @@ func (cm *clusterManager) addLogStream(ctx context.Context, lsdesc *varlogpb.Log
 	return lsdesc, cm.mrMgr.RegisterLogStream(ctx, lsdesc)
 }
 
-func (cm *clusterManager) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) error {
+func (cm *clusterManager) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -504,7 +557,7 @@ func (cm *clusterManager) RemoveLogStreamReplica(ctx context.Context, storageNod
 		return err
 	}
 
-	return cm.snMgr.RemoveLogStream(ctx, storageNodeID, logStreamID)
+	return cm.snMgr.RemoveLogStream(ctx, storageNodeID, topicID, logStreamID)
 }
 
 func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
@@ -570,7 +623,7 @@ func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types
 		cm.logger.Panic("logstream push/pop error")
 	}
 
-	if err := cm.snMgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), logStreamID, pushedReplica.GetPath()); err != nil {
+	if err := cm.snMgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, logStreamID, pushedReplica.GetPath()); err != nil {
 		return nil, err
 	}
 
@@ -602,7 +655,7 @@ func (cm *clusterManager) removableLogStreamReplica(clusmeta *varlogpb.MetadataD
 	return nil
 }
 
-func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, types.GLSN, error) {
+func (cm *clusterManager) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, types.GLSN, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -614,7 +667,7 @@ func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamI
 		return nil, types.InvalidGLSN, err
 	}
 
-	result, err := cm.snMgr.Seal(ctx, logStreamID, lastGLSN)
+	result, err := cm.snMgr.Seal(ctx, topicID, logStreamID, lastGLSN)
 	if err != nil {
 		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusRunning)
 	}
@@ -622,7 +675,7 @@ func (cm *clusterManager) Seal(ctx context.Context, logStreamID types.LogStreamI
 	return result, lastGLSN, err
 }
 
-func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
+func (cm *clusterManager) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -630,10 +683,10 @@ func (cm *clusterManager) Sync(ctx context.Context, logStreamID types.LogStreamI
 	if err != nil {
 		return nil, err
 	}
-	return cm.snMgr.Sync(ctx, logStreamID, srcID, dstID, lastGLSN)
+	return cm.snMgr.Sync(ctx, topicID, logStreamID, srcID, dstID, lastGLSN)
 }
 
-func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+func (cm *clusterManager) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -641,7 +694,7 @@ func (cm *clusterManager) Unseal(ctx context.Context, logStreamID types.LogStrea
 	var clusmeta *varlogpb.MetadataDescriptor
 	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusUnsealing)
 
-	if err = cm.snMgr.Unseal(ctx, logStreamID); err != nil {
+	if err = cm.snMgr.Unseal(ctx, topicID, logStreamID); err != nil {
 		goto errOut
 	}
 
@@ -671,30 +724,38 @@ func (cm *clusterManager) HandleHeartbeatTimeout(ctx context.Context, snID types
 	for _, ls := range meta.GetLogStreams() {
 		if ls.IsReplica(snID) {
 			cm.logger.Debug("seal due to heartbeat timeout", zap.Any("snid", snID), zap.Any("lsid", ls.LogStreamID))
-			cm.Seal(ctx, ls.LogStreamID)
+			cm.Seal(ctx, ls.TopicID, ls.LogStreamID)
 		}
 	}
 }
 
-func (cm *clusterManager) checkLogStreamStatus(ctx context.Context, logStreamID types.LogStreamID, mrStatus, replicaStatus varlogpb.LogStreamStatus) {
+func (cm *clusterManager) checkLogStreamStatus(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, mrStatus, replicaStatus varlogpb.LogStreamStatus) {
 	lsStat := cm.statRepository.GetLogStream(logStreamID).Copy()
 
 	switch lsStat.Status() {
 	case varlogpb.LogStreamStatusRunning:
 		if mrStatus.Sealed() || replicaStatus.Sealed() {
 			cm.logger.Info("seal due to status mismatch", zap.Any("lsid", logStreamID))
-			cm.Seal(ctx, logStreamID)
+			cm.Seal(ctx, topicID, logStreamID)
 		}
 
 	case varlogpb.LogStreamStatusSealing:
 		for _, r := range lsStat.Replicas() {
 			if r.Status != varlogpb.LogStreamStatusSealed {
 				cm.logger.Info("seal due to status", zap.Any("lsid", logStreamID))
-				cm.Seal(ctx, logStreamID)
+				cm.Seal(ctx, topicID, logStreamID)
 				return
 			}
 		}
 		cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusSealed)
+
+	case varlogpb.LogStreamStatusSealed:
+		for _, r := range lsStat.Replicas() {
+			if r.Status != varlogpb.LogStreamStatusSealed {
+				cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusSealing)
+				return
+			}
+		}
 
 	case varlogpb.LogStreamStatusUnsealing:
 		for _, r := range lsStat.Replicas() {
@@ -704,7 +765,7 @@ func (cm *clusterManager) checkLogStreamStatus(ctx context.Context, logStreamID 
 				return
 			} else if r.Status == varlogpb.LogStreamStatusSealing {
 				cm.logger.Info("seal due to unexpected status", zap.Any("lsid", logStreamID))
-				cm.Seal(ctx, logStreamID)
+				cm.Seal(ctx, topicID, logStreamID)
 				return
 			}
 		}
@@ -712,8 +773,8 @@ func (cm *clusterManager) checkLogStreamStatus(ctx context.Context, logStreamID 
 	}
 }
 
-func (cm *clusterManager) syncLogStream(ctx context.Context, logStreamID types.LogStreamID) {
-	min, max := types.MaxGLSN, types.InvalidGLSN
+func (cm *clusterManager) syncLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) {
+	min, max := types.MaxVersion, types.InvalidVersion
 	var src, tgt types.StorageNodeID
 
 	lsStat := cm.statRepository.GetLogStream(logStreamID).Copy()
@@ -737,19 +798,19 @@ func (cm *clusterManager) syncLogStream(ctx context.Context, logStreamID types.L
 			return
 		}
 
-		if i == 0 || r.HighWatermark < min {
-			min = r.HighWatermark
+		if i == 0 || r.Version < min {
+			min = r.Version
 			tgt = snID
 		}
 
-		if i == 0 || r.HighWatermark > max {
-			max = r.HighWatermark
+		if i == 0 || r.Version > max {
+			max = r.Version
 			src = snID
 		}
 	}
 
 	if src != tgt {
-		status, err := cm.Sync(ctx, logStreamID, src, tgt)
+		status, err := cm.Sync(ctx, topicID, logStreamID, src, tgt)
 		cm.logger.Debug("sync", zap.Any("lsid", logStreamID), zap.Any("src", src), zap.Any("dst", tgt), zap.String("status", status.String()), zap.Error(err))
 
 		//TODO: Unseal
@@ -772,18 +833,18 @@ func (cm *clusterManager) HandleReport(ctx context.Context, snm *varlogpb.Storag
 	for _, ls := range snm.GetLogStreams() {
 		mls := meta.GetLogStream(ls.LogStreamID)
 		if mls != nil {
-			cm.checkLogStreamStatus(ctx, ls.LogStreamID, mls.Status, ls.Status)
+			cm.checkLogStreamStatus(ctx, ls.TopicID, ls.LogStreamID, mls.Status, ls.Status)
 			continue
 		}
 		if time.Since(ls.CreatedTime) > cm.options.WatcherOptions.GCTimeout {
-			cm.RemoveLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.LogStreamID)
+			cm.RemoveLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.TopicID, ls.LogStreamID)
 		}
 	}
 
 	// Sync LogStream
 	for _, ls := range snm.GetLogStreams() {
 		if ls.Status.Sealed() {
-			cm.syncLogStream(ctx, ls.LogStreamID)
+			cm.syncLogStream(ctx, ls.TopicID, ls.LogStreamID)
 		}
 	}
 }

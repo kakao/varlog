@@ -18,12 +18,11 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/id"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/replication"
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 func TestReplicationProcessorFailure(t *testing.T) {
@@ -94,11 +93,13 @@ func TestReplicationProcessorNoClient(t *testing.T) {
 
 	rtb := newReplicateTask()
 	rtb.llsn = types.LLSN(1)
-	rtb.replicas = []snpb.Replica{
+	rtb.replicas = []varlogpb.Replica{
 		{
-			StorageNodeID: 1,
-			LogStreamID:   1,
-			Address:       "localhost:12345",
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: 1,
+				Address:       "localhost:12345",
+			},
+			LogStreamID: 1,
 		},
 	}
 
@@ -187,11 +188,13 @@ func TestReplicationProcessor(t *testing.T) {
 			for i := 1; i <= numLogs; i++ {
 				rt := newReplicateTask()
 				rt.llsn = types.LLSN(i)
-				rt.replicas = []snpb.Replica{
+				rt.replicas = []varlogpb.Replica{
 					{
-						StorageNodeID: 1,
-						LogStreamID:   1,
-						Address:       "localhost:12345",
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: 1,
+							Address:       "localhost:12345",
+						},
+						LogStreamID: 1,
 					},
 				}
 				if err := tc.rp.send(context.TODO(), rt); err != nil {
@@ -235,8 +238,8 @@ func TestReplicatorResetConnector(t *testing.T) {
 	// mock replicator: backup's executor
 	replicator := replication.NewMockReplicator(ctrl)
 	replicatorGetter := replication.NewMockGetter(ctrl)
-	replicatorGetter.EXPECT().Replicator(gomock.Any()).DoAndReturn(
-		func(lsid types.LogStreamID) (replication.Replicator, bool) {
+	replicatorGetter.EXPECT().Replicator(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(types.TopicID, types.LogStreamID) (replication.Replicator, bool) {
 			return replicator, true
 		},
 	).AnyTimes()
@@ -257,10 +260,8 @@ func TestReplicatorResetConnector(t *testing.T) {
 			}
 			blockedLogs = append(blockedLogs, llsn)
 			mu.Unlock()
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			<-ctx.Done()
+			return ctx.Err()
 		},
 	).AnyTimes()
 
@@ -269,7 +270,7 @@ func TestReplicatorResetConnector(t *testing.T) {
 	server := replication.NewServer(
 		replication.WithStorageNodeIDGetter(snidGetter),
 		replication.WithLogReplicatorGetter(replicatorGetter),
-		replication.WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+		replication.WithMeasurable(NewTestMeasurable(ctrl)),
 	)
 
 	grpcServer := grpc.NewServer()
@@ -304,10 +305,12 @@ func TestReplicatorResetConnector(t *testing.T) {
 	for llsn := types.MinLLSN; llsn <= maxReplicatedLLSN+1; llsn++ {
 		rt := newReplicateTask()
 		rt.llsn = llsn
-		rt.replicas = []snpb.Replica{{
-			StorageNodeID: backupSNID,
-			LogStreamID:   logStreamID,
-			Address:       addrs[0],
+		rt.replicas = []varlogpb.Replica{{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: backupSNID,
+				Address:       addrs[0],
+			},
+			LogStreamID: logStreamID,
 		}}
 		require.NoError(t, rp.send(context.Background(), rt))
 	}
@@ -324,7 +327,7 @@ func TestReplicatorResetConnector(t *testing.T) {
 	// (replicatedLogs) logs were replicated, but (maxTestLLSN-maxReplicatedLLSN) logs are still
 	// waiting for replicated completely.
 	require.Eventually(t, func() bool {
-		return 1 == atomic.LoadInt64(&rp.inflight)
+		return atomic.LoadInt64(&rp.inflight) == 1
 	}, time.Second, 10*time.Millisecond)
 
 	// Resetting connector cancels inflight replications.
@@ -336,5 +339,4 @@ func TestReplicatorResetConnector(t *testing.T) {
 	require.NoError(t, server.Close())
 	grpcServer.GracefulStop()
 	wg.Wait()
-
 }

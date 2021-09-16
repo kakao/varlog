@@ -21,10 +21,6 @@ const (
 	defaultUnsafeNoWAL       = false
 	defaultPortBase          = 10000
 
-	defaultNumSN = 0
-	defaultNumLS = 0
-	defaultNumCL = 0
-
 	defaultVMSPortOffset = ports.ReservationSize - 1
 	defaultStartVMS      = true
 )
@@ -47,9 +43,10 @@ type config struct {
 	reporterClientFac     metadata_repository.ReporterClientFactory
 	snManagementClientFac metadata_repository.StorageNodeManagementClientFactory
 
-	numSN int
-	numLS int
-	numCL int
+	numSN    int
+	numLS    int
+	numCL    int
+	numTopic int
 
 	VMSOpts *vms.Options
 	logger  *zap.Logger
@@ -173,6 +170,12 @@ func WithNumberOfStorageNodes(numSN int) Option {
 func WithNumberOfLogStreams(numLS int) Option {
 	return func(c *config) {
 		c.numLS = numLS
+	}
+}
+
+func WithNumberOfTopics(numTopic int) Option {
+	return func(c *config) {
+		c.numTopic = numTopic
 	}
 }
 

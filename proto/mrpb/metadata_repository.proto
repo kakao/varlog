@@ -11,6 +11,9 @@ option go_package = "github.daumkakao.com/varlog/varlog/proto/mrpb";
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 message GetMetadataRequest {}
 
@@ -33,7 +36,7 @@ message SealRequest {
             "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
-    uint32 log_stream_id = 2 [
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -55,7 +58,7 @@ message UnsealRequest {
             "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
         (gogoproto.customname) = "ClusterID"
     ];
-    uint32 log_stream_id = 2 [
+    int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -66,11 +69,21 @@ message UnsealResponse {
     varlogpb.LogStreamStatus status = 1;
 }
 
+message TopicRequest {
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+}
+
 service MetadataRepositoryService {
     rpc RegisterStorageNode(StorageNodeRequest)
         returns (google.protobuf.Empty) {}
     rpc UnregisterStorageNode(StorageNodeRequest)
         returns (google.protobuf.Empty) {}
+    rpc RegisterTopic(TopicRequest) returns (google.protobuf.Empty) {}
+    rpc UnregisterTopic(TopicRequest) returns (google.protobuf.Empty) {}
     rpc RegisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
     rpc UnregisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
     rpc UpdateLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}

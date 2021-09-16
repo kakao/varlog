@@ -48,8 +48,6 @@ type raftNode struct {
 	snapdir     string          // path to snapshot directory
 	lastIndex   uint64          // index of log at start
 
-	raftState raft.StateType
-
 	snapshotIndex uint64
 	appliedIndex  uint64
 
@@ -109,7 +107,6 @@ func newRaftNode(options RaftOptions,
 	confChangeC chan raftpb.ConfChange,
 	tmStub *telemetryStub,
 	logger *zap.Logger) *raftNode {
-
 	commitC := make(chan *raftCommittedEntry)
 	snapshotC := make(chan struct{})
 
@@ -274,7 +271,7 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 		// after commit, update appliedIndex
 		rc.appliedIndex = ents[i].Index
 
-		//TODO:: check neccessary whether send signal replay WAL complete
+		//TODO:: check necessary whether send signal replay WAL complete
 		/*
 			// special nil commit to signal replay has finished
 			if ents[i].Index == rc.lastIndex {
@@ -391,7 +388,7 @@ func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 		zap.Uint64("lastIndex", rc.lastIndex),
 	)
 
-	//TODO:: check neccessary whether send signal replay WAL complete
+	//TODO:: check necessary whether send signal replay WAL complete
 	return w
 }
 
@@ -545,12 +542,12 @@ func (rc *raftNode) transferLeadership(wait bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*rc.raftTick)
 	defer cancel()
 
-	rc.node.TransferLeadership(ctx, uint64(rc.membership.getLeader()), uint64(transferee))
+	rc.node.TransferLeadership(ctx, rc.membership.getLeader(), uint64(transferee))
 
 	timer := time.NewTimer(rc.raftTick)
 	defer timer.Stop()
 
-	for wait && uint64(rc.membership.getLeader()) != uint64(transferee) {
+	for wait && rc.membership.getLeader() != uint64(transferee) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -813,7 +810,7 @@ Loop:
 	for {
 		select {
 		case <-ticker.C:
-			rc.promoteMember(ctx)
+			rc.promoteMember()
 		case <-ctx.Done():
 			break Loop
 		}
@@ -822,7 +819,7 @@ Loop:
 	ticker.Stop()
 }
 
-func (rc *raftNode) promoteMember(ctx context.Context) {
+func (rc *raftNode) promoteMember() {
 	if !rc.membership.isLeader() {
 		return
 	}
@@ -831,7 +828,7 @@ func (rc *raftNode) promoteMember(ctx context.Context) {
 	leaderMatch := status.Progress[uint64(rc.id)].Match
 
 	for nodeID, pr := range status.Progress {
-		if pr.IsLearner && float64(pr.Match) > float64(leaderMatch)*PROMOTE_RATE {
+		if pr.IsLearner && float64(pr.Match) > float64(leaderMatch)*PromoteRate {
 			r := raftpb.ConfChange{
 				Type:   raftpb.ConfChangeAddNode,
 				NodeID: nodeID,
@@ -932,8 +929,6 @@ func (rc *raftNode) recoverMembership(snapshot raftpb.Snapshot) {
 			rc.membership.addMember(nodeID, peer.URL)
 		}
 	}
-
-	return
 }
 
 func (rm *raftMembership) addMember(nodeID vtypes.NodeID, url string) {
@@ -944,9 +939,7 @@ func (rm *raftMembership) addMember(nodeID vtypes.NodeID, url string) {
 		return
 	}
 
-	if _, ok := rm.learners[nodeID]; ok {
-		delete(rm.learners, nodeID)
-	}
+	delete(rm.learners, nodeID)
 
 	rm.peers[nodeID] = url
 	rm.members[nodeID] = url
@@ -1035,7 +1028,7 @@ func (rm *raftMembership) updateState(state *raft.SoftState) {
 	}
 
 	if state.Lead != raft.None {
-		atomic.StoreUint64(&rm.leader, uint64(state.Lead))
+		atomic.StoreUint64(&rm.leader, state.Lead)
 	}
 
 	atomic.StoreUint64((*uint64)(&rm.state), uint64(state.RaftState))

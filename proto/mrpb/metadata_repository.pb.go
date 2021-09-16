@@ -33,9 +33,6 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type GetMetadataRequest struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *GetMetadataRequest) Reset()         { *m = GetMetadataRequest{} }
@@ -72,10 +69,7 @@ func (m *GetMetadataRequest) XXX_DiscardUnknown() {
 var xxx_messageInfo_GetMetadataRequest proto.InternalMessageInfo
 
 type GetMetadataResponse struct {
-	Metadata             *varlogpb.MetadataDescriptor `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                     `json:"-"`
-	XXX_unrecognized     []byte                       `json:"-"`
-	XXX_sizecache        int32                        `json:"-"`
+	Metadata *varlogpb.MetadataDescriptor `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
 }
 
 func (m *GetMetadataResponse) Reset()         { *m = GetMetadataResponse{} }
@@ -119,10 +113,7 @@ func (m *GetMetadataResponse) GetMetadata() *varlogpb.MetadataDescriptor {
 }
 
 type StorageNodeRequest struct {
-	StorageNode          *varlogpb.StorageNodeDescriptor `protobuf:"bytes,1,opt,name=storage_node,json=storageNode,proto3" json:"storage_node,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                        `json:"-"`
-	XXX_unrecognized     []byte                          `json:"-"`
-	XXX_sizecache        int32                           `json:"-"`
+	StorageNode *varlogpb.StorageNodeDescriptor `protobuf:"bytes,1,opt,name=storage_node,json=storageNode,proto3" json:"storage_node,omitempty"`
 }
 
 func (m *StorageNodeRequest) Reset()         { *m = StorageNodeRequest{} }
@@ -166,10 +157,7 @@ func (m *StorageNodeRequest) GetStorageNode() *varlogpb.StorageNodeDescriptor {
 }
 
 type LogStreamRequest struct {
-	LogStream            *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
-	XXX_unrecognized     []byte                        `json:"-"`
-	XXX_sizecache        int32                         `json:"-"`
+	LogStream *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
 }
 
 func (m *LogStreamRequest) Reset()         { *m = LogStreamRequest{} }
@@ -213,11 +201,8 @@ func (m *LogStreamRequest) GetLogStream() *varlogpb.LogStreamDescriptor {
 }
 
 type SealRequest struct {
-	ClusterID            github_daumkakao_com_varlog_varlog_pkg_types.ClusterID   `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
-	LogStreamID          github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	ClusterID   github_daumkakao_com_varlog_varlog_pkg_types.ClusterID   `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 }
 
 func (m *SealRequest) Reset()         { *m = SealRequest{} }
@@ -268,11 +253,8 @@ func (m *SealRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_ty
 }
 
 type SealResponse struct {
-	Status               varlogpb.LogStreamStatus                          `protobuf:"varint,1,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
-	LastCommittedGLSN    github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,2,opt,name=last_committed_glsn,json=lastCommittedGlsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"last_committed_glsn,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
-	XXX_unrecognized     []byte                                            `json:"-"`
-	XXX_sizecache        int32                                             `json:"-"`
+	Status            varlogpb.LogStreamStatus                          `protobuf:"varint,1,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
+	LastCommittedGLSN github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,2,opt,name=last_committed_glsn,json=lastCommittedGlsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"last_committed_glsn,omitempty"`
 }
 
 func (m *SealResponse) Reset()         { *m = SealResponse{} }
@@ -323,11 +305,8 @@ func (m *SealResponse) GetLastCommittedGLSN() github_daumkakao_com_varlog_varlog
 }
 
 type UnsealRequest struct {
-	ClusterID            github_daumkakao_com_varlog_varlog_pkg_types.ClusterID   `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
-	LogStreamID          github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	ClusterID   github_daumkakao_com_varlog_varlog_pkg_types.ClusterID   `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 }
 
 func (m *UnsealRequest) Reset()         { *m = UnsealRequest{} }
@@ -378,10 +357,7 @@ func (m *UnsealRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_
 }
 
 type UnsealResponse struct {
-	Status               varlogpb.LogStreamStatus `protobuf:"varint,1,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
-	XXX_unrecognized     []byte                   `json:"-"`
-	XXX_sizecache        int32                    `json:"-"`
+	Status varlogpb.LogStreamStatus `protobuf:"varint,1,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
 }
 
 func (m *UnsealResponse) Reset()         { *m = UnsealResponse{} }
@@ -424,6 +400,50 @@ func (m *UnsealResponse) GetStatus() varlogpb.LogStreamStatus {
 	return varlogpb.LogStreamStatusRunning
 }
 
+type TopicRequest struct {
+	TopicID github_daumkakao_com_varlog_varlog_pkg_types.TopicID `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+}
+
+func (m *TopicRequest) Reset()         { *m = TopicRequest{} }
+func (m *TopicRequest) String() string { return proto.CompactTextString(m) }
+func (*TopicRequest) ProtoMessage()    {}
+func (*TopicRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_0ffe516e0fdff161, []int{8}
+}
+func (m *TopicRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TopicRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_TopicRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *TopicRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TopicRequest.Merge(m, src)
+}
+func (m *TopicRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *TopicRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_TopicRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TopicRequest proto.InternalMessageInfo
+
+func (m *TopicRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func init() {
 	proto.RegisterType((*GetMetadataRequest)(nil), "varlog.mrpb.GetMetadataRequest")
 	proto.RegisterType((*GetMetadataResponse)(nil), "varlog.mrpb.GetMetadataResponse")
@@ -433,6 +453,7 @@ func init() {
 	proto.RegisterType((*SealResponse)(nil), "varlog.mrpb.SealResponse")
 	proto.RegisterType((*UnsealRequest)(nil), "varlog.mrpb.UnsealRequest")
 	proto.RegisterType((*UnsealResponse)(nil), "varlog.mrpb.UnsealResponse")
+	proto.RegisterType((*TopicRequest)(nil), "varlog.mrpb.TopicRequest")
 }
 
 func init() {
@@ -440,48 +461,53 @@ func init() {
 }
 
 var fileDescriptor_0ffe516e0fdff161 = []byte{
-	// 650 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe4, 0x55, 0xdd, 0x4e, 0xd4, 0x40,
-	0x14, 0xa6, 0x06, 0x89, 0x9c, 0x02, 0xca, 0xac, 0x3f, 0x50, 0x22, 0x25, 0x95, 0x18, 0x6f, 0xe8,
-	0x46, 0x4c, 0x0c, 0x89, 0x31, 0x26, 0x0b, 0x86, 0x2c, 0xae, 0x68, 0xba, 0xc1, 0x0b, 0x13, 0xb3,
-	0x99, 0xdd, 0x0e, 0x63, 0x43, 0xbb, 0x53, 0x67, 0x66, 0x49, 0xf0, 0xd6, 0x17, 0xf1, 0x61, 0xbc,
-	0xe0, 0xd2, 0x27, 0xd8, 0x8b, 0x35, 0x31, 0x3e, 0x03, 0x57, 0xa6, 0xd3, 0x4e, 0x7f, 0x58, 0x30,
-	0x12, 0xf7, 0xce, 0xab, 0xed, 0x9e, 0x73, 0xbe, 0xef, 0x9b, 0xd3, 0x33, 0xe7, 0x2b, 0xac, 0xc7,
-	0x9c, 0x49, 0x56, 0x8f, 0x78, 0xdc, 0xad, 0x47, 0x44, 0x62, 0x1f, 0x4b, 0xdc, 0xe1, 0x24, 0x66,
-	0x22, 0x90, 0x8c, 0x9f, 0xb8, 0x2a, 0x8d, 0xcc, 0x63, 0xcc, 0x43, 0x46, 0xdd, 0xa4, 0xcc, 0xda,
-	0xa0, 0x81, 0xfc, 0x38, 0xe8, 0xba, 0x3d, 0x16, 0xd5, 0x29, 0xa3, 0xac, 0xae, 0x6a, 0xba, 0x83,
-	0x43, 0xf5, 0x2f, 0xe5, 0x4b, 0x9e, 0x52, 0xac, 0xb5, 0x42, 0x19, 0xa3, 0x21, 0x29, 0xaa, 0x48,
-	0x14, 0xcb, 0x8c, 0xd8, 0xba, 0x97, 0x12, 0x97, 0xc4, 0xd3, 0x84, 0x73, 0x1b, 0xd0, 0x2e, 0x91,
-	0xaf, 0xb3, 0xa0, 0x47, 0x3e, 0x0d, 0x88, 0x90, 0xce, 0x3b, 0xa8, 0x55, 0xa2, 0x22, 0x66, 0x7d,
-	0x41, 0xd0, 0x0b, 0xb8, 0xa1, 0xe1, 0x4b, 0xc6, 0x9a, 0xf1, 0xc8, 0xdc, 0x7c, 0xe0, 0x66, 0x27,
-	0xd6, 0xfc, 0xae, 0x06, 0xed, 0x10, 0xd1, 0xe3, 0x41, 0x2c, 0x19, 0xf7, 0x72, 0x90, 0x43, 0x00,
-	0xb5, 0x25, 0xe3, 0x98, 0x92, 0x7d, 0xe6, 0x93, 0x4c, 0x0d, 0xbd, 0x81, 0x39, 0x91, 0x46, 0x3b,
-	0x7d, 0xe6, 0x93, 0x8c, 0xfa, 0xe1, 0x18, 0x75, 0x09, 0x5a, 0xb0, 0x37, 0xa6, 0x4f, 0x87, 0xb6,
-	0xe1, 0x99, 0xa2, 0x48, 0x3a, 0x1f, 0xe0, 0x56, 0x8b, 0xd1, 0xb6, 0xe4, 0x04, 0x47, 0x5a, 0xa4,
-	0x09, 0x10, 0x32, 0xda, 0x11, 0x2a, 0x98, 0x49, 0xac, 0x8f, 0x49, 0xe4, 0xb0, 0x31, 0x81, 0xd9,
-	0x50, 0xa7, 0x9c, 0x9f, 0x06, 0x98, 0x6d, 0x82, 0x43, 0x4d, 0x7d, 0x08, 0xd0, 0x0b, 0x07, 0x42,
-	0x12, 0xde, 0x09, 0x7c, 0x45, 0x3d, 0xdf, 0xd8, 0x1d, 0x0d, 0xed, 0xd9, 0xed, 0x34, 0xda, 0xdc,
-	0x39, 0x1b, 0xda, 0x4f, 0xb3, 0x69, 0xfa, 0x78, 0x10, 0x1d, 0xe1, 0x23, 0xcc, 0xd4, 0x5c, 0x53,
-	0x61, 0xfd, 0x13, 0x1f, 0xd1, 0xba, 0x3c, 0x89, 0x89, 0x70, 0x73, 0xa4, 0x37, 0x9b, 0x51, 0x37,
-	0x7d, 0xc4, 0x60, 0xbe, 0x68, 0x21, 0x91, 0xba, 0xa6, 0xa4, 0x5e, 0x8d, 0x86, 0xb6, 0x99, 0x1f,
-	0x5c, 0x89, 0x6d, 0x5d, 0x49, 0xac, 0x84, 0xf5, 0xcc, 0xbc, 0xcd, 0xa6, 0xef, 0x7c, 0x33, 0x60,
-	0x2e, 0x6d, 0x34, 0xbb, 0x00, 0x5b, 0x30, 0x23, 0x24, 0x96, 0x03, 0xa1, 0xba, 0x5c, 0xd8, 0x5c,
-	0xbb, 0xfc, 0x05, 0xb6, 0x55, 0x9d, 0x97, 0xd5, 0xa3, 0xcf, 0x50, 0x0b, 0xb1, 0x90, 0x9d, 0x1e,
-	0x8b, 0xa2, 0x40, 0x4a, 0xe2, 0x77, 0x68, 0x28, 0xfa, 0xaa, 0x83, 0xe9, 0xc6, 0xde, 0x68, 0x68,
-	0x2f, 0xb6, 0xb0, 0x90, 0xdb, 0x3a, 0xbb, 0xdb, 0x6a, 0xef, 0x9f, 0x0d, 0xed, 0xc7, 0x57, 0xea,
-	0x23, 0x01, 0x79, 0x8b, 0x61, 0x85, 0x27, 0x14, 0x7d, 0xe7, 0x97, 0x01, 0xf3, 0x07, 0x7d, 0xf1,
-	0x3f, 0x4c, 0x6c, 0x0f, 0x16, 0x74, 0xa7, 0xff, 0x3a, 0xb2, 0xcd, 0x2f, 0xd7, 0x61, 0xb9, 0xb0,
-	0x00, 0xed, 0x54, 0x6d, 0xc2, 0x8f, 0x83, 0x1e, 0x41, 0x6f, 0xa1, 0xe6, 0x11, 0x1a, 0x24, 0x8d,
-	0x96, 0xf6, 0x12, 0xd9, 0x6e, 0xc9, 0xc2, 0xdc, 0xf1, 0x65, 0xb7, 0xee, 0xba, 0xa9, 0x4f, 0xb9,
-	0xda, 0xa7, 0xdc, 0x97, 0x89, 0x4f, 0x39, 0x53, 0xc8, 0x83, 0x3b, 0x07, 0x7d, 0x3e, 0x59, 0xce,
-	0x16, 0x2c, 0xea, 0x53, 0xe6, 0x6d, 0xa2, 0xfb, 0x15, 0xbe, 0xf3, 0x4e, 0xf1, 0x07, 0xb6, 0x7d,
-	0xa8, 0x15, 0x27, 0x9c, 0x00, 0xdf, 0x1e, 0xdc, 0x3c, 0x88, 0x7d, 0x2c, 0xc9, 0x04, 0xb8, 0x3c,
-	0x30, 0x4b, 0x96, 0x7d, 0xee, 0x9d, 0x8d, 0x5b, 0xbc, 0xb5, 0x76, 0x79, 0x41, 0x7a, 0x73, 0x9c,
-	0x29, 0xf4, 0x1c, 0xa6, 0x93, 0xf5, 0x47, 0x4b, 0xd5, 0x01, 0x14, 0x8b, 0x64, 0x2d, 0x5f, 0x90,
-	0xc9, 0xe1, 0xdb, 0x30, 0x93, 0x5e, 0x46, 0x64, 0x55, 0xca, 0x2a, 0xbb, 0x68, 0xad, 0x5c, 0x98,
-	0xd3, 0x24, 0x8d, 0x67, 0xa7, 0xa3, 0x55, 0xe3, 0xfb, 0x68, 0xd5, 0xf8, 0xfa, 0x63, 0xd5, 0x78,
-	0xbf, 0xf1, 0x37, 0x6b, 0x92, 0x7f, 0x69, 0xbb, 0x33, 0xea, 0xf9, 0xc9, 0xef, 0x00, 0x00, 0x00,
-	0xff, 0xff, 0x64, 0xe9, 0xdd, 0x6d, 0x7e, 0x07, 0x00, 0x00,
+	// 729 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe4, 0x96, 0xcf, 0x4e, 0xdb, 0x4e,
+	0x10, 0xc7, 0xe3, 0x9f, 0x20, 0xc0, 0x84, 0xc0, 0x8f, 0x4d, 0xff, 0x80, 0x51, 0xe3, 0xc8, 0x45,
+	0x15, 0x17, 0x1c, 0x95, 0x56, 0x15, 0x97, 0xaa, 0x52, 0x42, 0x1b, 0x85, 0xa6, 0xb4, 0x72, 0x4a,
+	0x0f, 0x95, 0xda, 0x68, 0x13, 0x2f, 0xae, 0x85, 0x9d, 0x75, 0xbd, 0x1b, 0x24, 0xfa, 0x14, 0xed,
+	0x1b, 0xf4, 0x61, 0x7a, 0xe0, 0xc8, 0xb1, 0xa7, 0x1c, 0x12, 0xa9, 0xea, 0x33, 0x70, 0xaa, 0xbc,
+	0xf6, 0xda, 0x09, 0x01, 0x54, 0x04, 0xb7, 0x9e, 0x62, 0xef, 0xcc, 0xf7, 0x33, 0x3b, 0x3b, 0xf6,
+	0xd7, 0x81, 0x35, 0x3f, 0xa0, 0x9c, 0x96, 0xbd, 0xc0, 0x6f, 0x97, 0x3d, 0xc2, 0xb1, 0x85, 0x39,
+	0x6e, 0x05, 0xc4, 0xa7, 0xcc, 0xe1, 0x34, 0x38, 0x32, 0x44, 0x18, 0xe5, 0x0e, 0x71, 0xe0, 0x52,
+	0xdb, 0x08, 0xd3, 0xd4, 0x0d, 0xdb, 0xe1, 0x9f, 0x7a, 0x6d, 0xa3, 0x43, 0xbd, 0xb2, 0x4d, 0x6d,
+	0x5a, 0x16, 0x39, 0xed, 0xde, 0xbe, 0xb8, 0x8b, 0x78, 0xe1, 0x55, 0xa4, 0x55, 0x57, 0x6d, 0x4a,
+	0x6d, 0x97, 0xa4, 0x59, 0xc4, 0xf3, 0x79, 0x0c, 0x56, 0xef, 0x46, 0xe0, 0x91, 0xe2, 0x51, 0x40,
+	0xbf, 0x05, 0xa8, 0x46, 0xf8, 0xab, 0x78, 0xd1, 0x24, 0x9f, 0x7b, 0x84, 0x71, 0xfd, 0x1d, 0x14,
+	0xc6, 0x56, 0x99, 0x4f, 0xbb, 0x8c, 0xa0, 0x67, 0x30, 0x2b, 0xe5, 0xcb, 0x4a, 0x49, 0x59, 0xcf,
+	0x6d, 0xde, 0x37, 0xe2, 0x1d, 0x4b, 0xbe, 0x21, 0x45, 0xdb, 0x84, 0x75, 0x02, 0xc7, 0xe7, 0x34,
+	0x30, 0x13, 0x91, 0x4e, 0x00, 0x35, 0x39, 0x0d, 0xb0, 0x4d, 0x76, 0xa9, 0x45, 0xe2, 0x6a, 0xe8,
+	0x35, 0xcc, 0xb3, 0x68, 0xb5, 0xd5, 0xa5, 0x16, 0x89, 0xd1, 0x0f, 0x26, 0xd0, 0x23, 0xd2, 0x94,
+	0x5e, 0x99, 0x3a, 0xee, 0x6b, 0x8a, 0x99, 0x63, 0x69, 0x50, 0xff, 0x00, 0xff, 0x37, 0xa8, 0xdd,
+	0xe4, 0x01, 0xc1, 0x9e, 0x2c, 0x52, 0x07, 0x70, 0xa9, 0xdd, 0x62, 0x62, 0x31, 0x2e, 0xb1, 0x36,
+	0x51, 0x22, 0x91, 0x4d, 0x14, 0x98, 0x73, 0x65, 0x48, 0xff, 0xa5, 0x40, 0xae, 0x49, 0xb0, 0x2b,
+	0xd1, 0xfb, 0x00, 0x1d, 0xb7, 0xc7, 0x38, 0x09, 0x5a, 0x8e, 0x25, 0xd0, 0xf9, 0x4a, 0x6d, 0xd0,
+	0xd7, 0xe6, 0xaa, 0xd1, 0x6a, 0x7d, 0xfb, 0xb4, 0xaf, 0x3d, 0x89, 0xa7, 0x69, 0xe1, 0x9e, 0x77,
+	0x80, 0x0f, 0x30, 0x15, 0x73, 0x8d, 0x0a, 0xcb, 0x1f, 0xff, 0xc0, 0x2e, 0xf3, 0x23, 0x9f, 0x30,
+	0x23, 0x51, 0x9a, 0x73, 0x31, 0xba, 0x6e, 0x21, 0x0a, 0xf9, 0xb4, 0x85, 0xb0, 0xd4, 0x7f, 0x25,
+	0x65, 0x7d, 0xba, 0xf2, 0x72, 0xd0, 0xd7, 0x72, 0xc9, 0xc6, 0x45, 0xb1, 0xad, 0x2b, 0x15, 0x1b,
+	0xd1, 0x9a, 0xb9, 0xa4, 0xcd, 0xba, 0xa5, 0xff, 0x50, 0x60, 0x3e, 0x6a, 0x34, 0x7e, 0x00, 0xb6,
+	0x20, 0xcb, 0x38, 0xe6, 0x3d, 0x26, 0xba, 0x5c, 0xd8, 0x2c, 0x5d, 0x7c, 0x80, 0x4d, 0x91, 0x67,
+	0xc6, 0xf9, 0xe8, 0x0b, 0x14, 0x5c, 0xcc, 0x78, 0xab, 0x43, 0x3d, 0xcf, 0xe1, 0x9c, 0x58, 0x2d,
+	0xdb, 0x65, 0x5d, 0xd1, 0xc1, 0x54, 0x65, 0x67, 0xd0, 0xd7, 0x96, 0x1a, 0x98, 0xf1, 0xaa, 0x8c,
+	0xd6, 0x1a, 0xcd, 0xdd, 0xd3, 0xbe, 0xf6, 0xf0, 0x4a, 0x7d, 0x84, 0x22, 0x73, 0xc9, 0x1d, 0xe3,
+	0xb8, 0xac, 0xab, 0xff, 0x56, 0x20, 0xbf, 0xd7, 0x65, 0xff, 0xc2, 0xc4, 0x76, 0x60, 0x41, 0x76,
+	0x7a, 0xdd, 0x91, 0xe9, 0x5d, 0x98, 0x7f, 0x4b, 0x7d, 0xa7, 0x23, 0x0f, 0xed, 0x23, 0xcc, 0xf2,
+	0xf0, 0x5e, 0x1e, 0xd9, 0x74, 0xa5, 0x3a, 0xe8, 0x6b, 0x33, 0x22, 0x47, 0xf4, 0xf0, 0xf8, 0x4a,
+	0x3d, 0xc4, 0x3a, 0x73, 0x46, 0x40, 0xeb, 0xd6, 0xe6, 0xb7, 0x2c, 0xac, 0xa4, 0x96, 0x23, 0x9d,
+	0xb1, 0x49, 0x82, 0x43, 0xa7, 0x43, 0xd0, 0x1b, 0x28, 0x98, 0xc4, 0x76, 0xc2, 0x83, 0x1d, 0xf1,
+	0x01, 0xa4, 0x19, 0x23, 0x96, 0x69, 0x4c, 0x9a, 0x8b, 0x7a, 0xc7, 0x88, 0x7c, 0xd1, 0x90, 0xbe,
+	0x68, 0x3c, 0x0f, 0x7d, 0x51, 0xcf, 0x20, 0x13, 0x6e, 0xef, 0x75, 0x83, 0x9b, 0x65, 0x6e, 0x43,
+	0x5e, 0xee, 0x52, 0xf4, 0x87, 0x56, 0xc6, 0x58, 0xa3, 0xe7, 0x79, 0x09, 0xe5, 0x05, 0x2c, 0xa6,
+	0x3b, 0xbb, 0x06, 0xa7, 0x01, 0x4b, 0x72, 0x37, 0xc9, 0x90, 0xd1, 0xbd, 0x31, 0xd2, 0x59, 0x9f,
+	0xbc, 0x84, 0xb6, 0x0b, 0x85, 0x74, 0x57, 0x37, 0xc0, 0xdb, 0x81, 0xc5, 0x3d, 0xdf, 0xc2, 0x9c,
+	0xdc, 0x00, 0xcb, 0x84, 0xdc, 0xc8, 0x07, 0xeb, 0xcc, 0x04, 0x27, 0x3f, 0x70, 0x6a, 0xe9, 0xe2,
+	0x84, 0xe8, 0xbd, 0xd1, 0x33, 0xe8, 0x29, 0x4c, 0x85, 0xe6, 0x87, 0x96, 0xc7, 0x1f, 0x87, 0xd4,
+	0x46, 0xd4, 0x95, 0x73, 0x22, 0x89, 0xbc, 0x0a, 0xd9, 0xe8, 0x55, 0x44, 0xea, 0x58, 0xda, 0x98,
+	0x13, 0xa9, 0xab, 0xe7, 0xc6, 0x24, 0xa4, 0x52, 0x3b, 0x1e, 0x14, 0x95, 0x93, 0x41, 0x51, 0xf9,
+	0x3a, 0x2c, 0x66, 0xbe, 0x0f, 0x8b, 0xca, 0xc9, 0xb0, 0x98, 0xf9, 0x39, 0x2c, 0x66, 0xde, 0x6f,
+	0xfc, 0xcd, 0xcb, 0x96, 0xfc, 0xe7, 0x68, 0x67, 0xc5, 0xf5, 0xa3, 0x3f, 0x01, 0x00, 0x00, 0xff,
+	0xff, 0x97, 0xbe, 0xc8, 0x4a, 0x88, 0x08, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -498,6 +524,8 @@ const _ = grpc.SupportPackageIsVersion4
 type MetadataRepositoryServiceClient interface {
 	RegisterStorageNode(ctx context.Context, in *StorageNodeRequest, opts ...grpc.CallOption) (*types.Empty, error)
 	UnregisterStorageNode(ctx context.Context, in *StorageNodeRequest, opts ...grpc.CallOption) (*types.Empty, error)
+	RegisterTopic(ctx context.Context, in *TopicRequest, opts ...grpc.CallOption) (*types.Empty, error)
+	UnregisterTopic(ctx context.Context, in *TopicRequest, opts ...grpc.CallOption) (*types.Empty, error)
 	RegisterLogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (*types.Empty, error)
 	UnregisterLogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (*types.Empty, error)
 	UpdateLogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (*types.Empty, error)
@@ -526,6 +554,24 @@ func (c *metadataRepositoryServiceClient) RegisterStorageNode(ctx context.Contex
 func (c *metadataRepositoryServiceClient) UnregisterStorageNode(ctx context.Context, in *StorageNodeRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	out := new(types.Empty)
 	err := c.cc.Invoke(ctx, "/varlog.mrpb.MetadataRepositoryService/UnregisterStorageNode", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metadataRepositoryServiceClient) RegisterTopic(ctx context.Context, in *TopicRequest, opts ...grpc.CallOption) (*types.Empty, error) {
+	out := new(types.Empty)
+	err := c.cc.Invoke(ctx, "/varlog.mrpb.MetadataRepositoryService/RegisterTopic", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metadataRepositoryServiceClient) UnregisterTopic(ctx context.Context, in *TopicRequest, opts ...grpc.CallOption) (*types.Empty, error) {
+	out := new(types.Empty)
+	err := c.cc.Invoke(ctx, "/varlog.mrpb.MetadataRepositoryService/UnregisterTopic", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -590,6 +636,8 @@ func (c *metadataRepositoryServiceClient) Unseal(ctx context.Context, in *Unseal
 type MetadataRepositoryServiceServer interface {
 	RegisterStorageNode(context.Context, *StorageNodeRequest) (*types.Empty, error)
 	UnregisterStorageNode(context.Context, *StorageNodeRequest) (*types.Empty, error)
+	RegisterTopic(context.Context, *TopicRequest) (*types.Empty, error)
+	UnregisterTopic(context.Context, *TopicRequest) (*types.Empty, error)
 	RegisterLogStream(context.Context, *LogStreamRequest) (*types.Empty, error)
 	UnregisterLogStream(context.Context, *LogStreamRequest) (*types.Empty, error)
 	UpdateLogStream(context.Context, *LogStreamRequest) (*types.Empty, error)
@@ -607,6 +655,12 @@ func (*UnimplementedMetadataRepositoryServiceServer) RegisterStorageNode(ctx con
 }
 func (*UnimplementedMetadataRepositoryServiceServer) UnregisterStorageNode(ctx context.Context, req *StorageNodeRequest) (*types.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterStorageNode not implemented")
+}
+func (*UnimplementedMetadataRepositoryServiceServer) RegisterTopic(ctx context.Context, req *TopicRequest) (*types.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterTopic not implemented")
+}
+func (*UnimplementedMetadataRepositoryServiceServer) UnregisterTopic(ctx context.Context, req *TopicRequest) (*types.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnregisterTopic not implemented")
 }
 func (*UnimplementedMetadataRepositoryServiceServer) RegisterLogStream(ctx context.Context, req *LogStreamRequest) (*types.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterLogStream not implemented")
@@ -663,6 +717,42 @@ func _MetadataRepositoryService_UnregisterStorageNode_Handler(srv interface{}, c
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MetadataRepositoryServiceServer).UnregisterStorageNode(ctx, req.(*StorageNodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetadataRepositoryService_RegisterTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetadataRepositoryServiceServer).RegisterTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.mrpb.MetadataRepositoryService/RegisterTopic",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetadataRepositoryServiceServer).RegisterTopic(ctx, req.(*TopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetadataRepositoryService_UnregisterTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetadataRepositoryServiceServer).UnregisterTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.mrpb.MetadataRepositoryService/UnregisterTopic",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetadataRepositoryServiceServer).UnregisterTopic(ctx, req.(*TopicRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -788,6 +878,14 @@ var _MetadataRepositoryService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _MetadataRepositoryService_UnregisterStorageNode_Handler,
 		},
 		{
+			MethodName: "RegisterTopic",
+			Handler:    _MetadataRepositoryService_RegisterTopic_Handler,
+		},
+		{
+			MethodName: "UnregisterTopic",
+			Handler:    _MetadataRepositoryService_UnregisterTopic_Handler,
+		},
+		{
 			MethodName: "RegisterLogStream",
 			Handler:    _MetadataRepositoryService_RegisterLogStream_Handler,
 		},
@@ -836,10 +934,6 @@ func (m *GetMetadataRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	return len(dAtA) - i, nil
 }
 
@@ -863,10 +957,6 @@ func (m *GetMetadataResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Metadata != nil {
 		{
 			size, err := m.Metadata.MarshalToSizedBuffer(dAtA[:i])
@@ -902,10 +992,6 @@ func (m *StorageNodeRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.StorageNode != nil {
 		{
 			size, err := m.StorageNode.MarshalToSizedBuffer(dAtA[:i])
@@ -941,10 +1027,6 @@ func (m *LogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStream != nil {
 		{
 			size, err := m.LogStream.MarshalToSizedBuffer(dAtA[:i])
@@ -980,10 +1062,6 @@ func (m *SealRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintMetadataRepository(dAtA, i, uint64(m.LogStreamID))
 		i--
@@ -1017,10 +1095,6 @@ func (m *SealResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LastCommittedGLSN != 0 {
 		i = encodeVarintMetadataRepository(dAtA, i, uint64(m.LastCommittedGLSN))
 		i--
@@ -1054,10 +1128,6 @@ func (m *UnsealRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintMetadataRepository(dAtA, i, uint64(m.LogStreamID))
 		i--
@@ -1091,12 +1161,36 @@ func (m *UnsealResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Status != 0 {
 		i = encodeVarintMetadataRepository(dAtA, i, uint64(m.Status))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *TopicRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TopicRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TopicRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		i = encodeVarintMetadataRepository(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -1120,9 +1214,6 @@ func (m *GetMetadataRequest) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1135,9 +1226,6 @@ func (m *GetMetadataResponse) ProtoSize() (n int) {
 	if m.Metadata != nil {
 		l = m.Metadata.ProtoSize()
 		n += 1 + l + sovMetadataRepository(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1152,9 +1240,6 @@ func (m *StorageNodeRequest) ProtoSize() (n int) {
 		l = m.StorageNode.ProtoSize()
 		n += 1 + l + sovMetadataRepository(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1167,9 +1252,6 @@ func (m *LogStreamRequest) ProtoSize() (n int) {
 	if m.LogStream != nil {
 		l = m.LogStream.ProtoSize()
 		n += 1 + l + sovMetadataRepository(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1186,9 +1268,6 @@ func (m *SealRequest) ProtoSize() (n int) {
 	if m.LogStreamID != 0 {
 		n += 1 + sovMetadataRepository(uint64(m.LogStreamID))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1203,9 +1282,6 @@ func (m *SealResponse) ProtoSize() (n int) {
 	}
 	if m.LastCommittedGLSN != 0 {
 		n += 1 + sovMetadataRepository(uint64(m.LastCommittedGLSN))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1222,9 +1298,6 @@ func (m *UnsealRequest) ProtoSize() (n int) {
 	if m.LogStreamID != 0 {
 		n += 1 + sovMetadataRepository(uint64(m.LogStreamID))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1237,8 +1310,17 @@ func (m *UnsealResponse) ProtoSize() (n int) {
 	if m.Status != 0 {
 		n += 1 + sovMetadataRepository(uint64(m.Status))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
+	return n
+}
+
+func (m *TopicRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovMetadataRepository(uint64(m.TopicID))
 	}
 	return n
 }
@@ -1290,7 +1372,6 @@ func (m *GetMetadataRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1377,7 +1458,6 @@ func (m *GetMetadataResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1464,7 +1544,6 @@ func (m *StorageNodeRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1551,7 +1630,6 @@ func (m *LogStreamRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1640,7 +1718,6 @@ func (m *SealRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1729,7 +1806,6 @@ func (m *SealResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1818,7 +1894,6 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1888,7 +1963,75 @@ func (m *UnsealResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TopicRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMetadataRepository
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TopicRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TopicRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMetadataRepository(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
 			iNdEx += skippy
 		}
 	}

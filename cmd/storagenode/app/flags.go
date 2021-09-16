@@ -89,7 +89,7 @@ var (
 	}
 	flagDisableDeleteUncommittedSync = vflag.FlagDescriptor{
 		Name:    "disable-delete-uncommitted-sync",
-		Aliases: []string{"without-delete-uncommited-sync", "no-delete-uncommitted-sync"},
+		Aliases: []string{"without-delete-uncommitted-sync", "no-delete-uncommitted-sync"},
 		EnvVars: []string{"DISABLE_DELETE_UNCOMMITTED_SYNC"},
 	}
 	flagMemTableSizeBytes = vflag.FlagDescriptor{

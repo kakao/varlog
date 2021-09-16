@@ -35,10 +35,7 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type AddStorageNodeRequest struct {
 	// address is IP of a node to be added to the cluster.
-	Address              string   `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Address string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
 }
 
 func (m *AddStorageNodeRequest) Reset()         { *m = AddStorageNodeRequest{} }
@@ -82,10 +79,7 @@ func (m *AddStorageNodeRequest) GetAddress() string {
 }
 
 type AddStorageNodeResponse struct {
-	StorageNode          *varlogpb.StorageNodeMetadataDescriptor `protobuf:"bytes,1,opt,name=storage_node,json=storageNode,proto3" json:"storage_node,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                `json:"-"`
-	XXX_unrecognized     []byte                                  `json:"-"`
-	XXX_sizecache        int32                                   `json:"-"`
+	StorageNode *varlogpb.StorageNodeMetadataDescriptor `protobuf:"bytes,1,opt,name=storage_node,json=storageNode,proto3" json:"storage_node,omitempty"`
 }
 
 func (m *AddStorageNodeResponse) Reset()         { *m = AddStorageNodeResponse{} }
@@ -129,10 +123,7 @@ func (m *AddStorageNodeResponse) GetStorageNode() *varlogpb.StorageNodeMetadataD
 }
 
 type UnregisterStorageNodeRequest struct {
-	StorageNodeID        github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	StorageNodeID github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
 }
 
 func (m *UnregisterStorageNodeRequest) Reset()         { *m = UnregisterStorageNodeRequest{} }
@@ -176,9 +167,6 @@ func (m *UnregisterStorageNodeRequest) GetStorageNodeID() github_daumkakao_com_v
 }
 
 type UnregisterStorageNodeResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *UnregisterStorageNodeResponse) Reset()         { *m = UnregisterStorageNodeResponse{} }
@@ -214,19 +202,185 @@ func (m *UnregisterStorageNodeResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_UnregisterStorageNodeResponse proto.InternalMessageInfo
 
+type AddTopicRequest struct {
+	TopicID github_daumkakao_com_varlog_varlog_pkg_types.TopicID `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+}
+
+func (m *AddTopicRequest) Reset()         { *m = AddTopicRequest{} }
+func (m *AddTopicRequest) String() string { return proto.CompactTextString(m) }
+func (*AddTopicRequest) ProtoMessage()    {}
+func (*AddTopicRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_682aff4a3f93d15c, []int{4}
+}
+func (m *AddTopicRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AddTopicRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AddTopicRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AddTopicRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AddTopicRequest.Merge(m, src)
+}
+func (m *AddTopicRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *AddTopicRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AddTopicRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AddTopicRequest proto.InternalMessageInfo
+
+func (m *AddTopicRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
+type AddTopicResponse struct {
+	Topic *varlogpb.TopicDescriptor `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+}
+
+func (m *AddTopicResponse) Reset()         { *m = AddTopicResponse{} }
+func (m *AddTopicResponse) String() string { return proto.CompactTextString(m) }
+func (*AddTopicResponse) ProtoMessage()    {}
+func (*AddTopicResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_682aff4a3f93d15c, []int{5}
+}
+func (m *AddTopicResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AddTopicResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AddTopicResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *AddTopicResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AddTopicResponse.Merge(m, src)
+}
+func (m *AddTopicResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *AddTopicResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_AddTopicResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AddTopicResponse proto.InternalMessageInfo
+
+func (m *AddTopicResponse) GetTopic() *varlogpb.TopicDescriptor {
+	if m != nil {
+		return m.Topic
+	}
+	return nil
+}
+
+type UnregisterTopicRequest struct {
+	TopicID github_daumkakao_com_varlog_varlog_pkg_types.TopicID `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+}
+
+func (m *UnregisterTopicRequest) Reset()         { *m = UnregisterTopicRequest{} }
+func (m *UnregisterTopicRequest) String() string { return proto.CompactTextString(m) }
+func (*UnregisterTopicRequest) ProtoMessage()    {}
+func (*UnregisterTopicRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_682aff4a3f93d15c, []int{6}
+}
+func (m *UnregisterTopicRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UnregisterTopicRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_UnregisterTopicRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *UnregisterTopicRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UnregisterTopicRequest.Merge(m, src)
+}
+func (m *UnregisterTopicRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *UnregisterTopicRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_UnregisterTopicRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UnregisterTopicRequest proto.InternalMessageInfo
+
+func (m *UnregisterTopicRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
+type UnregisterTopicResponse struct {
+}
+
+func (m *UnregisterTopicResponse) Reset()         { *m = UnregisterTopicResponse{} }
+func (m *UnregisterTopicResponse) String() string { return proto.CompactTextString(m) }
+func (*UnregisterTopicResponse) ProtoMessage()    {}
+func (*UnregisterTopicResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_682aff4a3f93d15c, []int{7}
+}
+func (m *UnregisterTopicResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UnregisterTopicResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_UnregisterTopicResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *UnregisterTopicResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UnregisterTopicResponse.Merge(m, src)
+}
+func (m *UnregisterTopicResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *UnregisterTopicResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_UnregisterTopicResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UnregisterTopicResponse proto.InternalMessageInfo
+
 type AddLogStreamRequest struct {
+	TopicID github_daumkakao_com_varlog_varlog_pkg_types.TopicID `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
 	// TODO: nullable = false
-	Replicas             []*varlogpb.ReplicaDescriptor `protobuf:"bytes,1,rep,name=replicas,proto3" json:"replicas,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
-	XXX_unrecognized     []byte                        `json:"-"`
-	XXX_sizecache        int32                         `json:"-"`
+	Replicas []*varlogpb.ReplicaDescriptor `protobuf:"bytes,2,rep,name=replicas,proto3" json:"replicas,omitempty"`
 }
 
 func (m *AddLogStreamRequest) Reset()         { *m = AddLogStreamRequest{} }
 func (m *AddLogStreamRequest) String() string { return proto.CompactTextString(m) }
 func (*AddLogStreamRequest) ProtoMessage()    {}
 func (*AddLogStreamRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{4}
+	return fileDescriptor_682aff4a3f93d15c, []int{8}
 }
 func (m *AddLogStreamRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -255,6 +409,13 @@ func (m *AddLogStreamRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_AddLogStreamRequest proto.InternalMessageInfo
 
+func (m *AddLogStreamRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *AddLogStreamRequest) GetReplicas() []*varlogpb.ReplicaDescriptor {
 	if m != nil {
 		return m.Replicas
@@ -263,17 +424,14 @@ func (m *AddLogStreamRequest) GetReplicas() []*varlogpb.ReplicaDescriptor {
 }
 
 type AddLogStreamResponse struct {
-	LogStream            *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
-	XXX_unrecognized     []byte                        `json:"-"`
-	XXX_sizecache        int32                         `json:"-"`
+	LogStream *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
 }
 
 func (m *AddLogStreamResponse) Reset()         { *m = AddLogStreamResponse{} }
 func (m *AddLogStreamResponse) String() string { return proto.CompactTextString(m) }
 func (*AddLogStreamResponse) ProtoMessage()    {}
 func (*AddLogStreamResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{5}
+	return fileDescriptor_682aff4a3f93d15c, []int{9}
 }
 func (m *AddLogStreamResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -310,17 +468,15 @@ func (m *AddLogStreamResponse) GetLogStream() *varlogpb.LogStreamDescriptor {
 }
 
 type UnregisterLogStreamRequest struct {
-	LogStreamID          github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	TopicID     github_daumkakao_com_varlog_varlog_pkg_types.TopicID     `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 }
 
 func (m *UnregisterLogStreamRequest) Reset()         { *m = UnregisterLogStreamRequest{} }
 func (m *UnregisterLogStreamRequest) String() string { return proto.CompactTextString(m) }
 func (*UnregisterLogStreamRequest) ProtoMessage()    {}
 func (*UnregisterLogStreamRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{6}
+	return fileDescriptor_682aff4a3f93d15c, []int{10}
 }
 func (m *UnregisterLogStreamRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -349,6 +505,13 @@ func (m *UnregisterLogStreamRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_UnregisterLogStreamRequest proto.InternalMessageInfo
 
+func (m *UnregisterLogStreamRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *UnregisterLogStreamRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -357,16 +520,13 @@ func (m *UnregisterLogStreamRequest) GetLogStreamID() github_daumkakao_com_varlo
 }
 
 type UnregisterLogStreamResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *UnregisterLogStreamResponse) Reset()         { *m = UnregisterLogStreamResponse{} }
 func (m *UnregisterLogStreamResponse) String() string { return proto.CompactTextString(m) }
 func (*UnregisterLogStreamResponse) ProtoMessage()    {}
 func (*UnregisterLogStreamResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{7}
+	return fileDescriptor_682aff4a3f93d15c, []int{11}
 }
 func (m *UnregisterLogStreamResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -396,18 +556,16 @@ func (m *UnregisterLogStreamResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_UnregisterLogStreamResponse proto.InternalMessageInfo
 
 type RemoveLogStreamReplicaRequest struct {
-	StorageNodeID        github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	LogStreamID          github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID   `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	StorageNodeID github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	TopicID       github_daumkakao_com_varlog_varlog_pkg_types.TopicID       `protobuf:"varint,2,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID   github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID   `protobuf:"varint,3,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 }
 
 func (m *RemoveLogStreamReplicaRequest) Reset()         { *m = RemoveLogStreamReplicaRequest{} }
 func (m *RemoveLogStreamReplicaRequest) String() string { return proto.CompactTextString(m) }
 func (*RemoveLogStreamReplicaRequest) ProtoMessage()    {}
 func (*RemoveLogStreamReplicaRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{8}
+	return fileDescriptor_682aff4a3f93d15c, []int{12}
 }
 func (m *RemoveLogStreamReplicaRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -443,6 +601,13 @@ func (m *RemoveLogStreamReplicaRequest) GetStorageNodeID() github_daumkakao_com_
 	return 0
 }
 
+func (m *RemoveLogStreamReplicaRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *RemoveLogStreamReplicaRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -451,16 +616,13 @@ func (m *RemoveLogStreamReplicaRequest) GetLogStreamID() github_daumkakao_com_va
 }
 
 type RemoveLogStreamReplicaResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *RemoveLogStreamReplicaResponse) Reset()         { *m = RemoveLogStreamReplicaResponse{} }
 func (m *RemoveLogStreamReplicaResponse) String() string { return proto.CompactTextString(m) }
 func (*RemoveLogStreamReplicaResponse) ProtoMessage()    {}
 func (*RemoveLogStreamReplicaResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{9}
+	return fileDescriptor_682aff4a3f93d15c, []int{13}
 }
 func (m *RemoveLogStreamReplicaResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -490,7 +652,8 @@ func (m *RemoveLogStreamReplicaResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_RemoveLogStreamReplicaResponse proto.InternalMessageInfo
 
 type UpdateLogStreamRequest struct {
-	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	TopicID     github_daumkakao_com_varlog_varlog_pkg_types.TopicID     `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 	//
 	//// NOTE: popped_replica need not be varlog.ReplicaDescriptor, but it is
 	//// natural. Though it is awkward, popped_storage_node_id is used here.
@@ -499,18 +662,15 @@ type UpdateLogStreamRequest struct {
 	//"github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
 	//(gogoproto.customname) = "PoppedStorageNodeID"
 	//];
-	PoppedReplica        *varlogpb.ReplicaDescriptor `protobuf:"bytes,2,opt,name=popped_replica,json=poppedReplica,proto3" json:"popped_replica,omitempty"`
-	PushedReplica        *varlogpb.ReplicaDescriptor `protobuf:"bytes,3,opt,name=pushed_replica,json=pushedReplica,proto3" json:"pushed_replica,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                    `json:"-"`
-	XXX_unrecognized     []byte                      `json:"-"`
-	XXX_sizecache        int32                       `json:"-"`
+	PoppedReplica *varlogpb.ReplicaDescriptor `protobuf:"bytes,3,opt,name=popped_replica,json=poppedReplica,proto3" json:"popped_replica,omitempty"`
+	PushedReplica *varlogpb.ReplicaDescriptor `protobuf:"bytes,4,opt,name=pushed_replica,json=pushedReplica,proto3" json:"pushed_replica,omitempty"`
 }
 
 func (m *UpdateLogStreamRequest) Reset()         { *m = UpdateLogStreamRequest{} }
 func (m *UpdateLogStreamRequest) String() string { return proto.CompactTextString(m) }
 func (*UpdateLogStreamRequest) ProtoMessage()    {}
 func (*UpdateLogStreamRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{10}
+	return fileDescriptor_682aff4a3f93d15c, []int{14}
 }
 func (m *UpdateLogStreamRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -539,6 +699,13 @@ func (m *UpdateLogStreamRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_UpdateLogStreamRequest proto.InternalMessageInfo
 
+func (m *UpdateLogStreamRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *UpdateLogStreamRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -561,17 +728,14 @@ func (m *UpdateLogStreamRequest) GetPushedReplica() *varlogpb.ReplicaDescriptor 
 }
 
 type UpdateLogStreamResponse struct {
-	LogStream            *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
-	XXX_unrecognized     []byte                        `json:"-"`
-	XXX_sizecache        int32                         `json:"-"`
+	LogStream *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
 }
 
 func (m *UpdateLogStreamResponse) Reset()         { *m = UpdateLogStreamResponse{} }
 func (m *UpdateLogStreamResponse) String() string { return proto.CompactTextString(m) }
 func (*UpdateLogStreamResponse) ProtoMessage()    {}
 func (*UpdateLogStreamResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{11}
+	return fileDescriptor_682aff4a3f93d15c, []int{15}
 }
 func (m *UpdateLogStreamResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -608,17 +772,15 @@ func (m *UpdateLogStreamResponse) GetLogStream() *varlogpb.LogStreamDescriptor {
 }
 
 type SealRequest struct {
-	LogStreamID          github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	TopicID     github_daumkakao_com_varlog_varlog_pkg_types.TopicID     `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 }
 
 func (m *SealRequest) Reset()         { *m = SealRequest{} }
 func (m *SealRequest) String() string { return proto.CompactTextString(m) }
 func (*SealRequest) ProtoMessage()    {}
 func (*SealRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{12}
+	return fileDescriptor_682aff4a3f93d15c, []int{16}
 }
 func (m *SealRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -647,6 +809,13 @@ func (m *SealRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SealRequest proto.InternalMessageInfo
 
+func (m *SealRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *SealRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -655,18 +824,15 @@ func (m *SealRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_ty
 }
 
 type SealResponse struct {
-	LogStreams           []varlogpb.LogStreamMetadataDescriptor            `protobuf:"bytes,1,rep,name=log_streams,json=logStreams,proto3" json:"log_streams"`
-	SealedGLSN           github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,2,opt,name=sealed_glsn,json=sealedGlsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"sealed_glsn,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
-	XXX_unrecognized     []byte                                            `json:"-"`
-	XXX_sizecache        int32                                             `json:"-"`
+	LogStreams []varlogpb.LogStreamMetadataDescriptor            `protobuf:"bytes,1,rep,name=log_streams,json=logStreams,proto3" json:"log_streams"`
+	SealedGLSN github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,2,opt,name=sealed_glsn,json=sealedGlsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"sealed_glsn,omitempty"`
 }
 
 func (m *SealResponse) Reset()         { *m = SealResponse{} }
 func (m *SealResponse) String() string { return proto.CompactTextString(m) }
 func (*SealResponse) ProtoMessage()    {}
 func (*SealResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{13}
+	return fileDescriptor_682aff4a3f93d15c, []int{17}
 }
 func (m *SealResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -710,19 +876,17 @@ func (m *SealResponse) GetSealedGLSN() github_daumkakao_com_varlog_varlog_pkg_ty
 }
 
 type SyncRequest struct {
-	LogStreamID          github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID   `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	SrcStorageNodeID     github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=src_storage_node_id,json=srcStorageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"src_storage_node_id,omitempty"`
-	DstStorageNodeID     github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,3,opt,name=dst_storage_node_id,json=dstStorageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"dst_storage_node_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	TopicID          github_daumkakao_com_varlog_varlog_pkg_types.TopicID       `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID      github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID   `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	SrcStorageNodeID github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,3,opt,name=src_storage_node_id,json=srcStorageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"src_storage_node_id,omitempty"`
+	DstStorageNodeID github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,4,opt,name=dst_storage_node_id,json=dstStorageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"dst_storage_node_id,omitempty"`
 }
 
 func (m *SyncRequest) Reset()         { *m = SyncRequest{} }
 func (m *SyncRequest) String() string { return proto.CompactTextString(m) }
 func (*SyncRequest) ProtoMessage()    {}
 func (*SyncRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{14}
+	return fileDescriptor_682aff4a3f93d15c, []int{18}
 }
 func (m *SyncRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -751,6 +915,13 @@ func (m *SyncRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SyncRequest proto.InternalMessageInfo
 
+func (m *SyncRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *SyncRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -773,17 +944,14 @@ func (m *SyncRequest) GetDstStorageNodeID() github_daumkakao_com_varlog_varlog_p
 }
 
 type SyncResponse struct {
-	Status               *snpb.SyncStatus `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
-	XXX_unrecognized     []byte           `json:"-"`
-	XXX_sizecache        int32            `json:"-"`
+	Status *snpb.SyncStatus `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 }
 
 func (m *SyncResponse) Reset()         { *m = SyncResponse{} }
 func (m *SyncResponse) String() string { return proto.CompactTextString(m) }
 func (*SyncResponse) ProtoMessage()    {}
 func (*SyncResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{15}
+	return fileDescriptor_682aff4a3f93d15c, []int{19}
 }
 func (m *SyncResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -820,17 +988,15 @@ func (m *SyncResponse) GetStatus() *snpb.SyncStatus {
 }
 
 type UnsealRequest struct {
-	LogStreamID          github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	TopicID     github_daumkakao_com_varlog_varlog_pkg_types.TopicID     `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 }
 
 func (m *UnsealRequest) Reset()         { *m = UnsealRequest{} }
 func (m *UnsealRequest) String() string { return proto.CompactTextString(m) }
 func (*UnsealRequest) ProtoMessage()    {}
 func (*UnsealRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{16}
+	return fileDescriptor_682aff4a3f93d15c, []int{20}
 }
 func (m *UnsealRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -859,6 +1025,13 @@ func (m *UnsealRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_UnsealRequest proto.InternalMessageInfo
 
+func (m *UnsealRequest) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *UnsealRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -867,17 +1040,14 @@ func (m *UnsealRequest) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_
 }
 
 type UnsealResponse struct {
-	LogStream            *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
-	XXX_unrecognized     []byte                        `json:"-"`
-	XXX_sizecache        int32                         `json:"-"`
+	LogStream *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
 }
 
 func (m *UnsealResponse) Reset()         { *m = UnsealResponse{} }
 func (m *UnsealResponse) String() string { return proto.CompactTextString(m) }
 func (*UnsealResponse) ProtoMessage()    {}
 func (*UnsealResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{17}
+	return fileDescriptor_682aff4a3f93d15c, []int{21}
 }
 func (m *UnsealResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -914,19 +1084,16 @@ func (m *UnsealResponse) GetLogStream() *varlogpb.LogStreamDescriptor {
 }
 
 type GetMRMembersResponse struct {
-	Leader               github_daumkakao_com_varlog_varlog_pkg_types.NodeID            `protobuf:"varint,1,opt,name=leader,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.NodeID" json:"leader,omitempty"`
-	ReplicationFactor    int32                                                          `protobuf:"varint,2,opt,name=replication_factor,json=replicationFactor,proto3" json:"replication_factor,omitempty"`
-	Members              map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string `protobuf:"bytes,3,rep,name=members,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.NodeID" json:"members,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}                                                       `json:"-"`
-	XXX_unrecognized     []byte                                                         `json:"-"`
-	XXX_sizecache        int32                                                          `json:"-"`
+	Leader            github_daumkakao_com_varlog_varlog_pkg_types.NodeID            `protobuf:"varint,1,opt,name=leader,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.NodeID" json:"leader,omitempty"`
+	ReplicationFactor int32                                                          `protobuf:"varint,2,opt,name=replication_factor,json=replicationFactor,proto3" json:"replication_factor,omitempty"`
+	Members           map[github_daumkakao_com_varlog_varlog_pkg_types.NodeID]string `protobuf:"bytes,3,rep,name=members,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.NodeID" json:"members,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *GetMRMembersResponse) Reset()         { *m = GetMRMembersResponse{} }
 func (m *GetMRMembersResponse) String() string { return proto.CompactTextString(m) }
 func (*GetMRMembersResponse) ProtoMessage()    {}
 func (*GetMRMembersResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{18}
+	return fileDescriptor_682aff4a3f93d15c, []int{22}
 }
 func (m *GetMRMembersResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -977,17 +1144,14 @@ func (m *GetMRMembersResponse) GetMembers() map[github_daumkakao_com_varlog_varl
 }
 
 type GetStorageNodesResponse struct {
-	Storagenodes         map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]string `protobuf:"bytes,1,rep,name=storagenodes,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storagenodes,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}                                                              `json:"-"`
-	XXX_unrecognized     []byte                                                                `json:"-"`
-	XXX_sizecache        int32                                                                 `json:"-"`
+	Storagenodes map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]string `protobuf:"bytes,1,rep,name=storagenodes,proto3,castkey=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storagenodes,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *GetStorageNodesResponse) Reset()         { *m = GetStorageNodesResponse{} }
 func (m *GetStorageNodesResponse) String() string { return proto.CompactTextString(m) }
 func (*GetStorageNodesResponse) ProtoMessage()    {}
 func (*GetStorageNodesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{19}
+	return fileDescriptor_682aff4a3f93d15c, []int{23}
 }
 func (m *GetStorageNodesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1024,18 +1188,15 @@ func (m *GetStorageNodesResponse) GetStoragenodes() map[github_daumkakao_com_var
 }
 
 type AddMRPeerRequest struct {
-	RaftURL              string   `protobuf:"bytes,1,opt,name=raft_url,json=raftUrl,proto3" json:"raft_url,omitempty"`
-	RPCAddr              string   `protobuf:"bytes,2,opt,name=rpc_addr,json=rpcAddr,proto3" json:"rpc_addr,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	RaftURL string `protobuf:"bytes,1,opt,name=raft_url,json=raftUrl,proto3" json:"raft_url,omitempty"`
+	RPCAddr string `protobuf:"bytes,2,opt,name=rpc_addr,json=rpcAddr,proto3" json:"rpc_addr,omitempty"`
 }
 
 func (m *AddMRPeerRequest) Reset()         { *m = AddMRPeerRequest{} }
 func (m *AddMRPeerRequest) String() string { return proto.CompactTextString(m) }
 func (*AddMRPeerRequest) ProtoMessage()    {}
 func (*AddMRPeerRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{20}
+	return fileDescriptor_682aff4a3f93d15c, []int{24}
 }
 func (m *AddMRPeerRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1079,17 +1240,14 @@ func (m *AddMRPeerRequest) GetRPCAddr() string {
 }
 
 type AddMRPeerResponse struct {
-	NodeID               github_daumkakao_com_varlog_varlog_pkg_types.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.NodeID" json:"node_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
-	XXX_unrecognized     []byte                                              `json:"-"`
-	XXX_sizecache        int32                                               `json:"-"`
+	NodeID github_daumkakao_com_varlog_varlog_pkg_types.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.NodeID" json:"node_id,omitempty"`
 }
 
 func (m *AddMRPeerResponse) Reset()         { *m = AddMRPeerResponse{} }
 func (m *AddMRPeerResponse) String() string { return proto.CompactTextString(m) }
 func (*AddMRPeerResponse) ProtoMessage()    {}
 func (*AddMRPeerResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{21}
+	return fileDescriptor_682aff4a3f93d15c, []int{25}
 }
 func (m *AddMRPeerResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1126,17 +1284,14 @@ func (m *AddMRPeerResponse) GetNodeID() github_daumkakao_com_varlog_varlog_pkg_t
 }
 
 type RemoveMRPeerRequest struct {
-	RaftURL              string   `protobuf:"bytes,1,opt,name=raft_url,json=raftUrl,proto3" json:"raft_url,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	RaftURL string `protobuf:"bytes,1,opt,name=raft_url,json=raftUrl,proto3" json:"raft_url,omitempty"`
 }
 
 func (m *RemoveMRPeerRequest) Reset()         { *m = RemoveMRPeerRequest{} }
 func (m *RemoveMRPeerRequest) String() string { return proto.CompactTextString(m) }
 func (*RemoveMRPeerRequest) ProtoMessage()    {}
 func (*RemoveMRPeerRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{22}
+	return fileDescriptor_682aff4a3f93d15c, []int{26}
 }
 func (m *RemoveMRPeerRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1173,16 +1328,13 @@ func (m *RemoveMRPeerRequest) GetRaftURL() string {
 }
 
 type RemoveMRPeerResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *RemoveMRPeerResponse) Reset()         { *m = RemoveMRPeerResponse{} }
 func (m *RemoveMRPeerResponse) String() string { return proto.CompactTextString(m) }
 func (*RemoveMRPeerResponse) ProtoMessage()    {}
 func (*RemoveMRPeerResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_682aff4a3f93d15c, []int{23}
+	return fileDescriptor_682aff4a3f93d15c, []int{27}
 }
 func (m *RemoveMRPeerResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1216,6 +1368,10 @@ func init() {
 	proto.RegisterType((*AddStorageNodeResponse)(nil), "varlog.vmspb.AddStorageNodeResponse")
 	proto.RegisterType((*UnregisterStorageNodeRequest)(nil), "varlog.vmspb.UnregisterStorageNodeRequest")
 	proto.RegisterType((*UnregisterStorageNodeResponse)(nil), "varlog.vmspb.UnregisterStorageNodeResponse")
+	proto.RegisterType((*AddTopicRequest)(nil), "varlog.vmspb.AddTopicRequest")
+	proto.RegisterType((*AddTopicResponse)(nil), "varlog.vmspb.AddTopicResponse")
+	proto.RegisterType((*UnregisterTopicRequest)(nil), "varlog.vmspb.UnregisterTopicRequest")
+	proto.RegisterType((*UnregisterTopicResponse)(nil), "varlog.vmspb.UnregisterTopicResponse")
 	proto.RegisterType((*AddLogStreamRequest)(nil), "varlog.vmspb.AddLogStreamRequest")
 	proto.RegisterType((*AddLogStreamResponse)(nil), "varlog.vmspb.AddLogStreamResponse")
 	proto.RegisterType((*UnregisterLogStreamRequest)(nil), "varlog.vmspb.UnregisterLogStreamRequest")
@@ -1243,87 +1399,95 @@ func init() {
 func init() { proto.RegisterFile("proto/vmspb/vms.proto", fileDescriptor_682aff4a3f93d15c) }
 
 var fileDescriptor_682aff4a3f93d15c = []byte{
-	// 1273 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x58, 0x4f, 0x73, 0xdb, 0x44,
-	0x14, 0xb7, 0xe2, 0x34, 0x6e, 0x9e, 0xed, 0x34, 0xdd, 0xfc, 0x2b, 0x6a, 0x1b, 0x15, 0xd1, 0x32,
-	0x05, 0x5a, 0x79, 0xda, 0x1e, 0xda, 0xe9, 0x00, 0x9d, 0x38, 0x29, 0x99, 0x0c, 0x49, 0x5b, 0xe4,
-	0xf1, 0x30, 0xd3, 0x0e, 0x18, 0xd9, 0xbb, 0x51, 0x3d, 0x91, 0x25, 0xb1, 0x2b, 0x87, 0xf1, 0x85,
-	0x81, 0x1c, 0x98, 0xe1, 0xc0, 0xb9, 0x07, 0x0e, 0xf0, 0x71, 0xca, 0x8d, 0x1b, 0x37, 0x77, 0xc6,
-	0x7c, 0x09, 0x26, 0x27, 0x46, 0xbb, 0x92, 0x2c, 0x59, 0x72, 0xea, 0x84, 0x30, 0xb9, 0x24, 0xde,
-	0x7d, 0xff, 0x7e, 0xef, 0xed, 0x7b, 0x6f, 0xdf, 0x0a, 0x96, 0x5c, 0xea, 0x78, 0x4e, 0x65, 0xbf,
-	0xc3, 0xdc, 0xa6, 0xff, 0x57, 0xe3, 0x6b, 0x54, 0xda, 0x37, 0xa8, 0xe5, 0x98, 0x1a, 0xdf, 0x97,
-	0x6f, 0x9b, 0x6d, 0xef, 0x65, 0xb7, 0xa9, 0xb5, 0x9c, 0x4e, 0xc5, 0x74, 0x4c, 0xa7, 0xc2, 0x99,
-	0x9a, 0xdd, 0x5d, 0xbe, 0x12, 0x1a, 0xfc, 0x5f, 0x42, 0x58, 0xbe, 0x6c, 0x3a, 0x8e, 0x69, 0x91,
-	0x21, 0x17, 0xe9, 0xb8, 0x5e, 0x2f, 0x20, 0xae, 0x08, 0xcd, 0x6e, 0xb3, 0xd2, 0x21, 0x9e, 0x81,
-	0x0d, 0xcf, 0x08, 0x08, 0x4b, 0xcc, 0x76, 0x9b, 0x15, 0x4a, 0x5c, 0xab, 0xdd, 0x32, 0x3c, 0x87,
-	0x8a, 0x6d, 0xf5, 0x0e, 0x2c, 0xad, 0x61, 0x5c, 0xf3, 0x1c, 0x6a, 0x98, 0xe4, 0x89, 0x83, 0x89,
-	0x4e, 0xbe, 0xed, 0x12, 0xe6, 0xa1, 0x4b, 0x50, 0x30, 0x30, 0xa6, 0x84, 0xb1, 0x4b, 0xd2, 0x35,
-	0xe9, 0xe6, 0xac, 0x1e, 0x2e, 0xd5, 0x3d, 0x58, 0x1e, 0x15, 0x61, 0xae, 0x63, 0x33, 0x82, 0xbe,
-	0x80, 0x12, 0x13, 0xdb, 0x0d, 0xdb, 0xc1, 0x84, 0x0b, 0x16, 0xef, 0x6a, 0x5a, 0xe8, 0x6d, 0x00,
-	0x4d, 0x8b, 0xc9, 0xee, 0x04, 0x28, 0x37, 0x08, 0x6b, 0xd1, 0xb6, 0xeb, 0x39, 0x54, 0x2f, 0xb2,
-	0x21, 0x59, 0x7d, 0x25, 0xc1, 0x95, 0xba, 0x4d, 0x89, 0xd9, 0x66, 0x1e, 0xa1, 0x19, 0x38, 0xbf,
-	0x83, 0x0b, 0x71, 0x9b, 0x8d, 0x36, 0xe6, 0x66, 0xcb, 0xd5, 0xa7, 0x83, 0xbe, 0x52, 0x8e, 0x09,
-	0x6c, 0x6d, 0x1c, 0xf6, 0x95, 0x87, 0x41, 0xa8, 0xb1, 0xd1, 0xed, 0xec, 0x19, 0x7b, 0x86, 0xc3,
-	0x83, 0x2e, 0x80, 0x85, 0xff, 0xdc, 0x3d, 0xb3, 0xe2, 0xf5, 0x5c, 0xc2, 0xb4, 0x84, 0xb4, 0x5e,
-	0x8e, 0xe1, 0xda, 0xc2, 0xaa, 0x02, 0x57, 0xc7, 0x00, 0x13, 0xd1, 0x50, 0x5f, 0xc0, 0xc2, 0x1a,
-	0xc6, 0xdb, 0x8e, 0x59, 0xf3, 0x28, 0x31, 0x3a, 0x21, 0xe0, 0x0d, 0x38, 0x1f, 0x9c, 0x82, 0x1f,
-	0xd9, 0xfc, 0xcd, 0xe2, 0x5d, 0x35, 0x15, 0x20, 0x5d, 0x30, 0x0c, 0x83, 0x52, 0x9d, 0x7e, 0xdd,
-	0x57, 0x24, 0x3d, 0x92, 0x54, 0x5f, 0xc0, 0x62, 0x52, 0x79, 0x70, 0x04, 0xeb, 0x00, 0x96, 0x63,
-	0x36, 0x18, 0xdf, 0x0d, 0x0e, 0xe0, 0x7a, 0x4a, 0x7f, 0x24, 0x17, 0x0b, 0xfb, 0xac, 0x15, 0x6e,
-	0xaa, 0xbf, 0x48, 0x20, 0x0f, 0x7d, 0x4b, 0x79, 0xe0, 0x40, 0x79, 0x68, 0x63, 0x18, 0xf0, 0xcf,
-	0x07, 0x7d, 0xa5, 0x18, 0x31, 0xf3, 0x70, 0x3f, 0x38, 0x56, 0xb8, 0x63, 0xb2, 0x7a, 0x31, 0x42,
-	0xb3, 0x85, 0xd5, 0xab, 0x70, 0x39, 0x13, 0x4e, 0x10, 0xe8, 0x9f, 0xa7, 0xe0, 0xaa, 0x4e, 0x3a,
-	0xce, 0x3e, 0x89, 0xd1, 0x78, 0x9c, 0xce, 0x3a, 0x49, 0xd2, 0xa1, 0x9a, 0xfa, 0x9f, 0x43, 0x75,
-	0x0d, 0x56, 0xc7, 0x85, 0x22, 0x88, 0xd6, 0x6f, 0x53, 0xb0, 0x5c, 0x77, 0xb1, 0xe1, 0x91, 0x33,
-	0x3f, 0x58, 0xb4, 0x05, 0x73, 0xae, 0xe3, 0xba, 0x04, 0x37, 0x82, 0xc4, 0xe6, 0xf1, 0x99, 0xa8,
-	0x22, 0xf4, 0xb2, 0x90, 0x0c, 0x08, 0x5c, 0x55, 0x97, 0xbd, 0x8c, 0xa9, 0xca, 0x1f, 0x43, 0x15,
-	0x97, 0x0c, 0x08, 0xea, 0xd7, 0xb0, 0x92, 0x0a, 0xd0, 0x69, 0x96, 0xd7, 0xf7, 0x50, 0xac, 0x11,
-	0xc3, 0x3a, 0xb3, 0x72, 0xfa, 0x43, 0x82, 0x92, 0x00, 0x10, 0x78, 0x55, 0x83, 0xe2, 0x10, 0x41,
-	0xd8, 0x95, 0x6e, 0x8d, 0x77, 0x2b, 0xdd, 0xb4, 0x79, 0x7f, 0xca, 0xe9, 0x10, 0x99, 0x61, 0x08,
-	0x43, 0x91, 0x11, 0xc3, 0x22, 0xb8, 0x61, 0x5a, 0xcc, 0xe6, 0x07, 0x3b, 0x5d, 0x5d, 0x1f, 0xf4,
-	0x15, 0xa8, 0xf1, 0xed, 0xcd, 0xed, 0xda, 0x93, 0xc3, 0xbe, 0x72, 0xe7, 0x58, 0x3e, 0xf9, 0x42,
-	0x3a, 0x08, 0xbd, 0x9b, 0x16, 0xb3, 0xd5, 0x9f, 0xf2, 0x50, 0xac, 0xf5, 0xec, 0xd6, 0x99, 0xa5,
-	0xf0, 0x8f, 0x12, 0x2c, 0x30, 0xda, 0x6a, 0x8c, 0xf6, 0x17, 0x51, 0xe8, 0xfa, 0xa0, 0xaf, 0xcc,
-	0xd7, 0x68, 0xeb, 0x34, 0x5b, 0xcc, 0x3c, 0x4b, 0xea, 0x13, 0x18, 0x30, 0xf3, 0x52, 0x18, 0xf2,
-	0x43, 0x0c, 0x1b, 0xcc, 0x3b, 0x55, 0x0c, 0x38, 0xa9, 0x0f, 0xab, 0x8f, 0xa0, 0x24, 0xce, 0x21,
-	0xc8, 0xa9, 0x0a, 0xcc, 0x30, 0xcf, 0xf0, 0xba, 0x2c, 0xa8, 0x92, 0x95, 0x30, 0x9d, 0xfc, 0x39,
-	0x44, 0xf3, 0x59, 0x6b, 0x9c, 0xac, 0x07, 0x6c, 0xea, 0x0f, 0x12, 0x94, 0xeb, 0x36, 0x3b, 0xcb,
-	0xc2, 0xa8, 0xc3, 0x5c, 0x88, 0xe0, 0x34, 0xeb, 0xfd, 0xaf, 0x29, 0x58, 0xdc, 0x24, 0xde, 0x8e,
-	0xbe, 0x43, 0x3a, 0x4d, 0x42, 0x59, 0xa4, 0xfd, 0x29, 0xcc, 0x58, 0xc4, 0xc0, 0x84, 0x72, 0xcd,
-	0xd3, 0xd5, 0xfb, 0x87, 0x7d, 0xe5, 0xde, 0xb1, 0x5c, 0x09, 0x8e, 0x23, 0x50, 0x83, 0x6e, 0x03,
-	0x0a, 0x27, 0xbc, 0xb6, 0x63, 0x37, 0x76, 0x8d, 0x96, 0xe7, 0x50, 0x9e, 0x8a, 0xe7, 0xf4, 0x8b,
-	0x31, 0xca, 0x67, 0x9c, 0x80, 0x0e, 0x24, 0x28, 0x74, 0x04, 0xa6, 0x4b, 0x79, 0x5e, 0xf4, 0x15,
-	0x2d, 0x3e, 0x99, 0x6a, 0x59, 0xa8, 0xb5, 0x60, 0xfd, 0xd8, 0xf6, 0x68, 0xaf, 0x7a, 0xff, 0xe0,
-	0xcd, 0xc9, 0x20, 0x87, 0x86, 0xe5, 0x87, 0x50, 0x8a, 0x6b, 0x44, 0xf3, 0x90, 0xdf, 0x23, 0x3d,
-	0x11, 0x11, 0xdd, 0xff, 0x89, 0x16, 0xe1, 0xdc, 0xbe, 0x61, 0x75, 0x09, 0x77, 0x64, 0x56, 0x17,
-	0x8b, 0x87, 0x53, 0x0f, 0x24, 0xf5, 0x1f, 0x09, 0x56, 0x36, 0x49, 0x3c, 0x13, 0x87, 0xc1, 0xfd,
-	0x55, 0x8a, 0xa6, 0x51, 0xbf, 0x1e, 0xc2, 0xb6, 0x76, 0x3f, 0xe5, 0x61, 0x96, 0x74, 0x98, 0xee,
-	0x5c, 0x52, 0x78, 0xfa, 0xe9, 0xc1, 0x9b, 0xff, 0x54, 0x32, 0x09, 0x30, 0xf2, 0x23, 0xb8, 0x98,
-	0x32, 0x11, 0x77, 0xbd, 0xfc, 0x36, 0xd7, 0x9b, 0x30, 0xbf, 0x86, 0xf1, 0x8e, 0xfe, 0x8c, 0x10,
-	0x1a, 0x16, 0xcc, 0xfb, 0x70, 0x9e, 0x1a, 0xbb, 0x5e, 0xa3, 0x4b, 0x2d, 0x31, 0xb4, 0x57, 0x8b,
-	0x83, 0xbe, 0x52, 0xd0, 0x8d, 0x5d, 0xaf, 0xae, 0x6f, 0xeb, 0x05, 0x9f, 0x58, 0xa7, 0x16, 0xe7,
-	0x73, 0x5b, 0x0d, 0x7f, 0xa0, 0x17, 0x8a, 0x03, 0xbe, 0x67, 0xeb, 0x6b, 0x18, 0x53, 0xbd, 0x40,
-	0xdd, 0x96, 0xff, 0x43, 0x75, 0xe0, 0x62, 0xcc, 0x46, 0x10, 0xd7, 0xe7, 0x50, 0x88, 0xcf, 0x50,
-	0xd3, 0xd5, 0xb5, 0x41, 0x5f, 0x99, 0x89, 0xba, 0xca, 0xc9, 0xf2, 0xd7, 0x16, 0x4d, 0xe4, 0x13,
-	0x58, 0x10, 0xd3, 0xcb, 0x89, 0xfc, 0x52, 0x97, 0x61, 0x31, 0x29, 0x2e, 0x20, 0xdf, 0x7d, 0x35,
-	0x0b, 0x73, 0xeb, 0x56, 0xd7, 0x9f, 0x1e, 0x77, 0x0c, 0xdb, 0x30, 0x09, 0x45, 0x5f, 0xc1, 0x5c,
-	0xf2, 0x11, 0x83, 0xde, 0x4b, 0x26, 0x46, 0xe6, 0xab, 0x48, 0xbe, 0x7e, 0x34, 0x53, 0x30, 0x62,
-	0xe5, 0x10, 0x85, 0xa5, 0xcc, 0xc7, 0x01, 0xfa, 0x30, 0xa9, 0xe0, 0xa8, 0xa7, 0x8d, 0xfc, 0xd1,
-	0x44, 0xbc, 0x91, 0xcd, 0x2f, 0xa1, 0x14, 0x7f, 0x12, 0xa0, 0x77, 0x53, 0x58, 0x47, 0x07, 0x3e,
-	0x59, 0x3d, 0x8a, 0x25, 0x52, 0x6c, 0xc1, 0x42, 0xc6, 0xf8, 0x8d, 0x6e, 0x8e, 0x83, 0x97, 0x32,
-	0xf3, 0xc1, 0x04, 0x9c, 0x91, 0xb5, 0x2e, 0x2c, 0x67, 0x4f, 0xb0, 0x68, 0x24, 0x1e, 0x47, 0x8e,
-	0xfc, 0xf2, 0xad, 0xc9, 0x98, 0x23, 0xb3, 0xdf, 0xc0, 0x85, 0x91, 0xa1, 0x0f, 0x8d, 0x1c, 0x76,
-	0xf6, 0xd0, 0x2c, 0xdf, 0x78, 0x0b, 0x57, 0x64, 0xe1, 0x11, 0x4c, 0xfb, 0x93, 0x0f, 0x7a, 0x27,
-	0x29, 0x10, 0x1b, 0x05, 0x65, 0x39, 0x8b, 0x94, 0x50, 0xd0, 0xb3, 0x5b, 0x29, 0x05, 0xc3, 0xf1,
-	0x27, 0xa5, 0x20, 0x76, 0x23, 0xab, 0x39, 0xf4, 0x18, 0x66, 0xc4, 0xfd, 0x86, 0x2e, 0x8f, 0x9e,
-	0x48, 0xec, 0xde, 0x95, 0xaf, 0x64, 0x13, 0x23, 0x35, 0xdb, 0x50, 0x8a, 0x5f, 0x0c, 0x68, 0x59,
-	0x13, 0x5f, 0x24, 0xb4, 0xf0, 0x8b, 0x84, 0xf6, 0xb8, 0xe3, 0x7a, 0xbd, 0xd1, 0xec, 0xca, 0xba,
-	0x4c, 0xd4, 0x1c, 0x7a, 0x02, 0xb3, 0x51, 0x93, 0x41, 0xab, 0xa9, 0x84, 0x4c, 0x74, 0x02, 0x59,
-	0x19, 0x4b, 0x8f, 0x97, 0x41, 0xbc, 0x09, 0x8c, 0x96, 0x41, 0x46, 0x7f, 0x19, 0x05, 0x9a, 0xd5,
-	0x43, 0xd4, 0x1c, 0xd2, 0xe1, 0xc2, 0xc8, 0x6d, 0x31, 0xd6, 0xf3, 0x1b, 0x13, 0x5d, 0x32, 0x6a,
-	0xae, 0xfa, 0xf1, 0xeb, 0xc1, 0xaa, 0xf4, 0xe7, 0x60, 0x55, 0xfa, 0xfd, 0xef, 0x55, 0xe9, 0xb9,
-	0x36, 0x49, 0xef, 0x1c, 0x7e, 0x50, 0x6a, 0xce, 0xf0, 0xc5, 0xbd, 0x7f, 0x03, 0x00, 0x00, 0xff,
-	0xff, 0x43, 0x1b, 0x64, 0x41, 0x66, 0x12, 0x00, 0x00,
+	// 1408 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x58, 0xcf, 0x6f, 0x1b, 0xc5,
+	0x17, 0xf7, 0x26, 0x4e, 0x9c, 0x3c, 0x3b, 0x3f, 0x3a, 0xf9, 0xd9, 0x6d, 0x63, 0xe7, 0xbb, 0xdf,
+	0x16, 0x15, 0x68, 0xd7, 0x6a, 0x8b, 0x68, 0x55, 0x09, 0xaa, 0x38, 0x29, 0x21, 0x34, 0x69, 0xcb,
+	0x9a, 0x08, 0xa9, 0x88, 0x9a, 0xb5, 0x67, 0xe2, 0x5a, 0x59, 0x7b, 0xb7, 0x3b, 0xeb, 0x80, 0x8f,
+	0xf4, 0x2f, 0xe0, 0xc6, 0x81, 0x0b, 0xff, 0x07, 0x77, 0x54, 0x6e, 0xbd, 0xc1, 0xc9, 0x45, 0x8e,
+	0x84, 0xc4, 0x81, 0x3b, 0xea, 0x05, 0xb4, 0x33, 0xb3, 0xbf, 0xbc, 0xeb, 0x34, 0x29, 0x21, 0x48,
+	0xb9, 0x24, 0x9e, 0x7d, 0xbf, 0x3e, 0xef, 0xbd, 0x79, 0x6f, 0xe6, 0x0d, 0xcc, 0x59, 0xb6, 0xe9,
+	0x98, 0xc5, 0xbd, 0x26, 0xb5, 0xaa, 0xee, 0x5f, 0x95, 0xad, 0x51, 0x6e, 0x4f, 0xb7, 0x0d, 0xb3,
+	0xae, 0xb2, 0xef, 0xf2, 0x95, 0x7a, 0xc3, 0x79, 0xdc, 0xae, 0xaa, 0x35, 0xb3, 0x59, 0xac, 0x9b,
+	0x75, 0xb3, 0xc8, 0x98, 0xaa, 0xed, 0x1d, 0xb6, 0xe2, 0x1a, 0xdc, 0x5f, 0x5c, 0x58, 0x3e, 0x57,
+	0x37, 0xcd, 0xba, 0x41, 0x02, 0x2e, 0xd2, 0xb4, 0x9c, 0x8e, 0x20, 0x2e, 0x70, 0xcd, 0x56, 0xb5,
+	0xd8, 0x24, 0x8e, 0x8e, 0x75, 0x47, 0x17, 0x84, 0x39, 0xda, 0xb2, 0xaa, 0x45, 0x9b, 0x58, 0x46,
+	0xa3, 0xa6, 0x3b, 0xa6, 0xcd, 0x3f, 0x2b, 0x57, 0x61, 0x6e, 0x05, 0xe3, 0xb2, 0x63, 0xda, 0x7a,
+	0x9d, 0xdc, 0x33, 0x31, 0xd1, 0xc8, 0x93, 0x36, 0xa1, 0x0e, 0x5a, 0x84, 0x8c, 0x8e, 0xb1, 0x4d,
+	0x28, 0x5d, 0x94, 0x96, 0xa5, 0x4b, 0xe3, 0x9a, 0xb7, 0x54, 0x76, 0x61, 0xbe, 0x5f, 0x84, 0x5a,
+	0x66, 0x8b, 0x12, 0xf4, 0x31, 0xe4, 0x28, 0xff, 0x5c, 0x69, 0x99, 0x98, 0x30, 0xc1, 0xec, 0x35,
+	0x55, 0xf5, 0xbc, 0x15, 0xd0, 0xd4, 0x90, 0xec, 0x96, 0x40, 0xb9, 0x46, 0x68, 0xcd, 0x6e, 0x58,
+	0x8e, 0x69, 0x6b, 0x59, 0x1a, 0x90, 0x95, 0x6f, 0x25, 0x38, 0xbf, 0xdd, 0xb2, 0x49, 0xbd, 0x41,
+	0x1d, 0x62, 0x27, 0xe0, 0xfc, 0x12, 0xa6, 0xc2, 0x36, 0x2b, 0x0d, 0xcc, 0xcc, 0x8e, 0x94, 0xee,
+	0xf7, 0xba, 0x85, 0x89, 0x90, 0xc0, 0xc6, 0xda, 0xcb, 0x6e, 0xe1, 0x96, 0x08, 0x35, 0xd6, 0xdb,
+	0xcd, 0x5d, 0x7d, 0x57, 0x37, 0x59, 0xd0, 0x39, 0x30, 0xef, 0x9f, 0xb5, 0x5b, 0x2f, 0x3a, 0x1d,
+	0x8b, 0x50, 0x35, 0x22, 0xad, 0x4d, 0x84, 0x70, 0x6d, 0x60, 0xa5, 0x00, 0x4b, 0x03, 0x80, 0xf1,
+	0x68, 0x28, 0x4f, 0x60, 0x6a, 0x05, 0xe3, 0x4f, 0x4c, 0xab, 0x51, 0xf3, 0xc0, 0x3e, 0x82, 0x31,
+	0xc7, 0x5d, 0x07, 0x28, 0x57, 0x7b, 0xdd, 0x42, 0x86, 0xf1, 0x30, 0x7c, 0xef, 0x1c, 0x09, 0x9f,
+	0x90, 0xd3, 0x32, 0x4c, 0xe9, 0x06, 0x56, 0x3e, 0x82, 0xe9, 0xc0, 0xa4, 0x48, 0xca, 0xbb, 0x30,
+	0xc2, 0xc8, 0x22, 0x1b, 0xcb, 0xb1, 0x6c, 0x30, 0xf6, 0x50, 0xfc, 0x39, 0xbb, 0xf2, 0x15, 0xcc,
+	0x07, 0xfe, 0x9d, 0xa8, 0x17, 0x67, 0x61, 0x21, 0x66, 0x59, 0xc4, 0xf4, 0x07, 0x09, 0x66, 0x56,
+	0x30, 0xde, 0x34, 0xeb, 0x65, 0xc7, 0x26, 0x7a, 0xf3, 0x84, 0x20, 0xa1, 0x35, 0x18, 0x13, 0xa5,
+	0x43, 0x17, 0x87, 0x96, 0x87, 0x2f, 0x65, 0xaf, 0x29, 0xb1, 0x38, 0x6a, 0x9c, 0x21, 0x88, 0x64,
+	0x29, 0xfd, 0xac, 0x5b, 0x90, 0x34, 0x5f, 0x52, 0xf9, 0x0c, 0x66, 0xa3, 0xe0, 0x45, 0x8a, 0x56,
+	0x01, 0x0c, 0xb3, 0x5e, 0xa1, 0xec, 0xab, 0xc8, 0xd3, 0x85, 0x98, 0x7e, 0x5f, 0x2e, 0x94, 0xab,
+	0x71, 0xc3, 0xfb, 0xa8, 0xfc, 0x21, 0x81, 0x1c, 0x84, 0xed, 0xc4, 0x23, 0x64, 0xc2, 0x44, 0xe0,
+	0x83, 0x6b, 0x64, 0x88, 0x19, 0xb9, 0xdb, 0xeb, 0x16, 0xb2, 0x3e, 0x18, 0x66, 0xe8, 0xe6, 0x91,
+	0x0c, 0x85, 0x64, 0xb5, 0xac, 0xef, 0xed, 0x06, 0x56, 0x96, 0xe0, 0x5c, 0xa2, 0xbb, 0x62, 0xa7,
+	0xfc, 0x3e, 0x04, 0x4b, 0x1a, 0x69, 0x9a, 0x7b, 0x24, 0x44, 0x63, 0x79, 0xf8, 0xaf, 0x3b, 0x47,
+	0x24, 0x15, 0x43, 0x27, 0x91, 0x8a, 0xe1, 0x7f, 0x39, 0x15, 0xcb, 0x90, 0x1f, 0x14, 0x6a, 0x91,
+	0x8d, 0xbf, 0x86, 0x60, 0x7e, 0xdb, 0xc2, 0xba, 0x43, 0x4e, 0xfd, 0xc6, 0x44, 0x1b, 0x30, 0x69,
+	0x99, 0x96, 0x45, 0x70, 0x45, 0x14, 0x3e, 0x8b, 0xff, 0xa1, 0x3a, 0x86, 0x36, 0xc1, 0x25, 0x05,
+	0x81, 0xa9, 0x6a, 0xd3, 0xc7, 0x21, 0x55, 0xe9, 0x23, 0xa8, 0x62, 0x92, 0x82, 0xa0, 0x3c, 0x82,
+	0x85, 0x58, 0x02, 0x8e, 0xb3, 0xfd, 0x74, 0x25, 0xc8, 0x96, 0x89, 0x6e, 0x9c, 0xda, 0x7e, 0xf3,
+	0x93, 0x04, 0x39, 0xee, 0xa0, 0x08, 0x5b, 0x19, 0xb2, 0x01, 0x02, 0xf7, 0x96, 0xe4, 0x1e, 0x0b,
+	0x97, 0x07, 0xc7, 0x2d, 0x7e, 0xd5, 0x61, 0x07, 0x44, 0x4a, 0x03, 0xdf, 0x0c, 0x45, 0x18, 0xb2,
+	0x94, 0xe8, 0x06, 0xc1, 0x95, 0xba, 0x41, 0x5b, 0xcc, 0xa9, 0x34, 0x8b, 0x1c, 0x94, 0xd9, 0xe7,
+	0xf5, 0xcd, 0xf2, 0xbd, 0x97, 0xdd, 0xc2, 0xd5, 0x23, 0xf9, 0xe4, 0x0a, 0x69, 0xc0, 0xf5, 0xae,
+	0x1b, 0xb4, 0xa5, 0xfc, 0x36, 0x0c, 0xd9, 0x72, 0xa7, 0x55, 0x3b, 0xb5, 0x35, 0xf8, 0xb5, 0x04,
+	0x33, 0xd4, 0xae, 0x55, 0xfa, 0x1b, 0x3c, 0xef, 0x84, 0x5a, 0xaf, 0x5b, 0x98, 0x2e, 0xdb, 0xb5,
+	0xe3, 0xec, 0xf1, 0xd3, 0x34, 0xaa, 0x8f, 0x63, 0xc0, 0xd4, 0x89, 0x61, 0x48, 0x07, 0x18, 0xd6,
+	0xa8, 0x73, 0xac, 0x18, 0x70, 0x54, 0x1f, 0x56, 0x6e, 0x43, 0x8e, 0xe7, 0x59, 0xec, 0xd9, 0x22,
+	0x8c, 0x52, 0x47, 0x77, 0xda, 0x54, 0x94, 0xf9, 0x82, 0xb7, 0x5d, 0xdd, 0xe9, 0x40, 0x75, 0x59,
+	0xcb, 0x8c, 0xac, 0x09, 0x36, 0xe5, 0x57, 0x09, 0x26, 0xb6, 0x5b, 0xf4, 0x34, 0x17, 0xf6, 0x36,
+	0x4c, 0x7a, 0x1e, 0x1e, 0x67, 0x43, 0xfc, 0x79, 0x08, 0x66, 0xd7, 0x89, 0xb3, 0xa5, 0x6d, 0x91,
+	0x66, 0x95, 0xd8, 0xd4, 0xd7, 0x7e, 0x1f, 0x46, 0x0d, 0xa2, 0x63, 0x62, 0x33, 0xcd, 0xe9, 0xd2,
+	0x8d, 0x97, 0xdd, 0xc2, 0xf5, 0x23, 0xb9, 0x22, 0xd2, 0x2d, 0xd4, 0xa0, 0x2b, 0x80, 0xbc, 0xb9,
+	0xae, 0x61, 0xb6, 0x2a, 0x3b, 0x7a, 0xcd, 0x31, 0x6d, 0x1e, 0x36, 0xed, 0x4c, 0x88, 0xf2, 0x01,
+	0x23, 0xa0, 0xa7, 0x12, 0x64, 0x9a, 0x1c, 0xd3, 0xe2, 0x30, 0x6b, 0x5a, 0x45, 0x35, 0x3c, 0x8f,
+	0xaa, 0x49, 0xa8, 0x55, 0xb1, 0xbe, 0xd3, 0x72, 0xec, 0x4e, 0xe9, 0xc6, 0xd3, 0x17, 0xaf, 0x07,
+	0xd9, 0x33, 0x2c, 0xdf, 0x82, 0x5c, 0x58, 0x23, 0x9a, 0x86, 0xe1, 0x5d, 0xd2, 0xe1, 0x11, 0xd1,
+	0xdc, 0x9f, 0x68, 0x16, 0x46, 0xf6, 0x74, 0xa3, 0x4d, 0x98, 0x23, 0xe3, 0x1a, 0x5f, 0xdc, 0x1a,
+	0xba, 0x29, 0x29, 0x7f, 0x4a, 0xb0, 0xb0, 0x4e, 0xc2, 0x3b, 0x3d, 0x08, 0xee, 0x77, 0x92, 0x3f,
+	0x83, 0xba, 0xf5, 0xe6, 0xb5, 0xe5, 0x1b, 0x31, 0x0f, 0x93, 0xa4, 0xbd, 0x72, 0x62, 0x92, 0xdc,
+	0xd3, 0xf7, 0x9f, 0xbe, 0xf8, 0x47, 0x25, 0x19, 0x01, 0x23, 0xdf, 0x86, 0x33, 0x31, 0x13, 0x61,
+	0xd7, 0x47, 0x5e, 0xe5, 0x7a, 0x95, 0x0d, 0x78, 0x5b, 0xda, 0x03, 0x42, 0x6c, 0xaf, 0x20, 0xdf,
+	0x80, 0x31, 0x5b, 0xdf, 0x71, 0x2a, 0x6d, 0xdb, 0xe0, 0xa3, 0x7a, 0x29, 0xeb, 0x16, 0xa4, 0xa6,
+	0xef, 0x38, 0xdb, 0xda, 0xa6, 0x96, 0x71, 0x89, 0xdb, 0xb6, 0xc1, 0xf8, 0xac, 0x5a, 0xc5, 0x1d,
+	0xe3, 0xb9, 0x62, 0xc1, 0xf7, 0x60, 0x75, 0x05, 0x63, 0x5b, 0xcb, 0xd8, 0x56, 0xcd, 0xfd, 0xa1,
+	0x98, 0x70, 0x26, 0x64, 0x43, 0xc4, 0xf5, 0x21, 0x64, 0xc2, 0x97, 0xe4, 0x74, 0x69, 0xa5, 0xd7,
+	0x2d, 0x8c, 0xfa, 0x5d, 0xeb, 0xf5, 0xf6, 0x6f, 0x8b, 0x37, 0xa9, 0xf7, 0x60, 0x86, 0x5f, 0x1f,
+	0x5f, 0xcb, 0x2f, 0x65, 0x1e, 0x66, 0xa3, 0xe2, 0x1c, 0xf2, 0xb5, 0x1f, 0x01, 0x26, 0x57, 0x8d,
+	0xb6, 0x3b, 0x1e, 0x6c, 0xe9, 0x2d, 0xbd, 0x4e, 0x6c, 0xf4, 0x39, 0x4c, 0x46, 0x9f, 0x2e, 0xd0,
+	0xff, 0xa3, 0x1b, 0x23, 0xf1, 0x2d, 0x44, 0xbe, 0x70, 0x30, 0x93, 0xb8, 0xe3, 0xa6, 0x90, 0x0d,
+	0x73, 0x89, 0x4f, 0x02, 0xe8, 0xad, 0xa8, 0x82, 0x83, 0x1e, 0x34, 0xe4, 0xb7, 0x0f, 0xc5, 0xeb,
+	0xdb, 0xbc, 0x0b, 0x63, 0xde, 0xc8, 0x8f, 0x96, 0x62, 0x38, 0xc3, 0x73, 0xbb, 0x9c, 0x1f, 0x44,
+	0xf6, 0x95, 0x7d, 0x01, 0x53, 0x7d, 0x93, 0x37, 0xba, 0x30, 0x08, 0x4e, 0x44, 0xf5, 0xc5, 0x57,
+	0x70, 0xf9, 0x16, 0x3e, 0x85, 0x5c, 0x78, 0x04, 0x46, 0xff, 0x8b, 0x61, 0xea, 0x1f, 0x10, 0x64,
+	0xe5, 0x20, 0x16, 0x5f, 0xb1, 0x01, 0x33, 0x09, 0xe3, 0x20, 0xba, 0x34, 0x08, 0x58, 0xcc, 0xcc,
+	0x9b, 0x87, 0xe0, 0xf4, 0xad, 0xb5, 0x61, 0x3e, 0x79, 0xe2, 0x41, 0x7d, 0xe9, 0x3b, 0x70, 0x04,
+	0x95, 0x2f, 0x1f, 0x8e, 0x39, 0x92, 0x9f, 0xe8, 0x25, 0x3e, 0x96, 0x9f, 0xc4, 0x21, 0x2b, 0x96,
+	0x9f, 0xe4, 0x49, 0x40, 0x49, 0xa1, 0xdb, 0x90, 0x76, 0x2f, 0x9a, 0xe8, 0x6c, 0x54, 0x20, 0x74,
+	0xb3, 0x97, 0xe5, 0x24, 0x52, 0x44, 0x41, 0xa7, 0x55, 0x8b, 0x29, 0x08, 0x6e, 0x9b, 0x31, 0x05,
+	0xa1, 0x0b, 0x8a, 0x92, 0x42, 0x77, 0x60, 0x94, 0x1f, 0xc7, 0xe8, 0x5c, 0x7f, 0x46, 0x42, 0xd7,
+	0x10, 0xf9, 0x7c, 0x32, 0xd1, 0x57, 0xb3, 0x09, 0xb9, 0xf0, 0x39, 0x86, 0xe6, 0x55, 0xfe, 0x6c,
+	0xaa, 0x7a, 0xcf, 0xa6, 0xea, 0x9d, 0xa6, 0xe5, 0x74, 0xfa, 0x77, 0x57, 0xd2, 0xd9, 0xa7, 0xa4,
+	0xd0, 0x3d, 0x18, 0xf7, 0x7b, 0x22, 0x8a, 0xd7, 0x51, 0xa4, 0x71, 0xc9, 0x85, 0x81, 0xf4, 0x70,
+	0x19, 0x84, 0x7b, 0x56, 0x7f, 0x19, 0x24, 0xb4, 0xc3, 0x7e, 0xa0, 0x49, 0x2d, 0x4f, 0x49, 0x21,
+	0x0d, 0xa6, 0xfa, 0x0e, 0xb7, 0x81, 0x9e, 0x5f, 0x3c, 0xd4, 0x99, 0xa8, 0xa4, 0x4a, 0x1f, 0x3e,
+	0xeb, 0xe5, 0xa5, 0xe7, 0xbd, 0xbc, 0xf4, 0xcd, 0x7e, 0x3e, 0xf5, 0xfd, 0x7e, 0x5e, 0x7a, 0xbe,
+	0x9f, 0x4f, 0xfd, 0xb2, 0x9f, 0x4f, 0x3d, 0x54, 0x0f, 0xd3, 0xf6, 0x83, 0x17, 0xf0, 0xea, 0x28,
+	0x5b, 0x5c, 0xff, 0x3b, 0x00, 0x00, 0xff, 0xff, 0xa5, 0x49, 0xbf, 0xe5, 0x17, 0x17, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1340,6 +1504,8 @@ const _ = grpc.SupportPackageIsVersion4
 type ClusterManagerClient interface {
 	AddStorageNode(ctx context.Context, in *AddStorageNodeRequest, opts ...grpc.CallOption) (*AddStorageNodeResponse, error)
 	UnregisterStorageNode(ctx context.Context, in *UnregisterStorageNodeRequest, opts ...grpc.CallOption) (*UnregisterStorageNodeResponse, error)
+	AddTopic(ctx context.Context, in *AddTopicRequest, opts ...grpc.CallOption) (*AddTopicResponse, error)
+	UnregisterTopic(ctx context.Context, in *UnregisterTopicRequest, opts ...grpc.CallOption) (*UnregisterTopicResponse, error)
 	AddLogStream(ctx context.Context, in *AddLogStreamRequest, opts ...grpc.CallOption) (*AddLogStreamResponse, error)
 	UnregisterLogStream(ctx context.Context, in *UnregisterLogStreamRequest, opts ...grpc.CallOption) (*UnregisterLogStreamResponse, error)
 	RemoveLogStreamReplica(ctx context.Context, in *RemoveLogStreamReplicaRequest, opts ...grpc.CallOption) (*RemoveLogStreamReplicaResponse, error)
@@ -1373,6 +1539,24 @@ func (c *clusterManagerClient) AddStorageNode(ctx context.Context, in *AddStorag
 func (c *clusterManagerClient) UnregisterStorageNode(ctx context.Context, in *UnregisterStorageNodeRequest, opts ...grpc.CallOption) (*UnregisterStorageNodeResponse, error) {
 	out := new(UnregisterStorageNodeResponse)
 	err := c.cc.Invoke(ctx, "/varlog.vmspb.ClusterManager/UnregisterStorageNode", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *clusterManagerClient) AddTopic(ctx context.Context, in *AddTopicRequest, opts ...grpc.CallOption) (*AddTopicResponse, error) {
+	out := new(AddTopicResponse)
+	err := c.cc.Invoke(ctx, "/varlog.vmspb.ClusterManager/AddTopic", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *clusterManagerClient) UnregisterTopic(ctx context.Context, in *UnregisterTopicRequest, opts ...grpc.CallOption) (*UnregisterTopicResponse, error) {
+	out := new(UnregisterTopicResponse)
+	err := c.cc.Invoke(ctx, "/varlog.vmspb.ClusterManager/UnregisterTopic", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1482,6 +1666,8 @@ func (c *clusterManagerClient) GetStorageNodes(ctx context.Context, in *types.Em
 type ClusterManagerServer interface {
 	AddStorageNode(context.Context, *AddStorageNodeRequest) (*AddStorageNodeResponse, error)
 	UnregisterStorageNode(context.Context, *UnregisterStorageNodeRequest) (*UnregisterStorageNodeResponse, error)
+	AddTopic(context.Context, *AddTopicRequest) (*AddTopicResponse, error)
+	UnregisterTopic(context.Context, *UnregisterTopicRequest) (*UnregisterTopicResponse, error)
 	AddLogStream(context.Context, *AddLogStreamRequest) (*AddLogStreamResponse, error)
 	UnregisterLogStream(context.Context, *UnregisterLogStreamRequest) (*UnregisterLogStreamResponse, error)
 	RemoveLogStreamReplica(context.Context, *RemoveLogStreamReplicaRequest) (*RemoveLogStreamReplicaResponse, error)
@@ -1504,6 +1690,12 @@ func (*UnimplementedClusterManagerServer) AddStorageNode(ctx context.Context, re
 }
 func (*UnimplementedClusterManagerServer) UnregisterStorageNode(ctx context.Context, req *UnregisterStorageNodeRequest) (*UnregisterStorageNodeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterStorageNode not implemented")
+}
+func (*UnimplementedClusterManagerServer) AddTopic(ctx context.Context, req *AddTopicRequest) (*AddTopicResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddTopic not implemented")
+}
+func (*UnimplementedClusterManagerServer) UnregisterTopic(ctx context.Context, req *UnregisterTopicRequest) (*UnregisterTopicResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnregisterTopic not implemented")
 }
 func (*UnimplementedClusterManagerServer) AddLogStream(ctx context.Context, req *AddLogStreamRequest) (*AddLogStreamResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddLogStream not implemented")
@@ -1575,6 +1767,42 @@ func _ClusterManager_UnregisterStorageNode_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ClusterManagerServer).UnregisterStorageNode(ctx, req.(*UnregisterStorageNodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ClusterManager_AddTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddTopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClusterManagerServer).AddTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.vmspb.ClusterManager/AddTopic",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClusterManagerServer).AddTopic(ctx, req.(*AddTopicRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ClusterManager_UnregisterTopic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnregisterTopicRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ClusterManagerServer).UnregisterTopic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.vmspb.ClusterManager/UnregisterTopic",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ClusterManagerServer).UnregisterTopic(ctx, req.(*UnregisterTopicRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1790,6 +2018,14 @@ var _ClusterManager_serviceDesc = grpc.ServiceDesc{
 			Handler:    _ClusterManager_UnregisterStorageNode_Handler,
 		},
 		{
+			MethodName: "AddTopic",
+			Handler:    _ClusterManager_AddTopic_Handler,
+		},
+		{
+			MethodName: "UnregisterTopic",
+			Handler:    _ClusterManager_UnregisterTopic_Handler,
+		},
+		{
 			MethodName: "AddLogStream",
 			Handler:    _ClusterManager_AddLogStream_Handler,
 		},
@@ -1858,10 +2094,6 @@ func (m *AddStorageNodeRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Address) > 0 {
 		i -= len(m.Address)
 		copy(dAtA[i:], m.Address)
@@ -1892,10 +2124,6 @@ func (m *AddStorageNodeResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.StorageNode != nil {
 		{
 			size, err := m.StorageNode.MarshalToSizedBuffer(dAtA[:i])
@@ -1931,10 +2159,6 @@ func (m *UnregisterStorageNodeRequest) MarshalToSizedBuffer(dAtA []byte) (int, e
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.StorageNodeID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.StorageNodeID))
 		i--
@@ -1963,10 +2187,120 @@ func (m *UnregisterStorageNodeResponse) MarshalToSizedBuffer(dAtA []byte) (int, 
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
+	return len(dAtA) - i, nil
+}
+
+func (m *AddTopicRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
 	}
+	return dAtA[:n], nil
+}
+
+func (m *AddTopicRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AddTopicRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		i = encodeVarintVms(dAtA, i, uint64(m.TopicID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *AddTopicResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AddTopicResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AddTopicResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Topic != nil {
+		{
+			size, err := m.Topic.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintVms(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *UnregisterTopicRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *UnregisterTopicRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *UnregisterTopicRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		i = encodeVarintVms(dAtA, i, uint64(m.TopicID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *UnregisterTopicResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *UnregisterTopicResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *UnregisterTopicResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
 	return len(dAtA) - i, nil
 }
 
@@ -1990,10 +2324,6 @@ func (m *AddLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Replicas) > 0 {
 		for iNdEx := len(m.Replicas) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -2005,8 +2335,13 @@ func (m *AddLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				i = encodeVarintVms(dAtA, i, uint64(size))
 			}
 			i--
-			dAtA[i] = 0xa
+			dAtA[i] = 0x12
 		}
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintVms(dAtA, i, uint64(m.TopicID))
+		i--
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -2031,10 +2366,6 @@ func (m *AddLogStreamResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStream != nil {
 		{
 			size, err := m.LogStream.MarshalToSizedBuffer(dAtA[:i])
@@ -2070,12 +2401,13 @@ func (m *UnregisterLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, err
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintVms(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -2102,10 +2434,6 @@ func (m *UnregisterLogStreamResponse) MarshalToSizedBuffer(dAtA []byte) (int, er
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	return len(dAtA) - i, nil
 }
 
@@ -2129,12 +2457,13 @@ func (m *RemoveLogStreamReplicaRequest) MarshalToSizedBuffer(dAtA []byte) (int, 
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintVms(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x10
 	}
@@ -2166,10 +2495,6 @@ func (m *RemoveLogStreamReplicaResponse) MarshalToSizedBuffer(dAtA []byte) (int,
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	return len(dAtA) - i, nil
 }
 
@@ -2193,10 +2518,6 @@ func (m *UpdateLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.PushedReplica != nil {
 		{
 			size, err := m.PushedReplica.MarshalToSizedBuffer(dAtA[:i])
@@ -2207,7 +2528,7 @@ func (m *UpdateLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 			i = encodeVarintVms(dAtA, i, uint64(size))
 		}
 		i--
-		dAtA[i] = 0x1a
+		dAtA[i] = 0x22
 	}
 	if m.PoppedReplica != nil {
 		{
@@ -2219,10 +2540,15 @@ func (m *UpdateLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 			i = encodeVarintVms(dAtA, i, uint64(size))
 		}
 		i--
-		dAtA[i] = 0x12
+		dAtA[i] = 0x1a
 	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintVms(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -2249,10 +2575,6 @@ func (m *UpdateLogStreamResponse) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStream != nil {
 		{
 			size, err := m.LogStream.MarshalToSizedBuffer(dAtA[:i])
@@ -2288,12 +2610,13 @@ func (m *SealRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintVms(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -2320,10 +2643,6 @@ func (m *SealResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.SealedGLSN != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.SealedGLSN))
 		i--
@@ -2366,22 +2685,23 @@ func (m *SyncRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.DstStorageNodeID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.DstStorageNodeID))
 		i--
-		dAtA[i] = 0x18
+		dAtA[i] = 0x20
 	}
 	if m.SrcStorageNodeID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.SrcStorageNodeID))
 		i--
-		dAtA[i] = 0x10
+		dAtA[i] = 0x18
 	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintVms(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -2408,10 +2728,6 @@ func (m *SyncResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Status != nil {
 		{
 			size, err := m.Status.MarshalToSizedBuffer(dAtA[:i])
@@ -2447,12 +2763,13 @@ func (m *UnsealRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintVms(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -2479,10 +2796,6 @@ func (m *UnsealResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStream != nil {
 		{
 			size, err := m.LogStream.MarshalToSizedBuffer(dAtA[:i])
@@ -2518,10 +2831,6 @@ func (m *GetMRMembersResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Members) > 0 {
 		for k := range m.Members {
 			v := m.Members[k]
@@ -2572,10 +2881,6 @@ func (m *GetStorageNodesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Storagenodes) > 0 {
 		for k := range m.Storagenodes {
 			v := m.Storagenodes[k]
@@ -2616,10 +2921,6 @@ func (m *AddMRPeerRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.RPCAddr) > 0 {
 		i -= len(m.RPCAddr)
 		copy(dAtA[i:], m.RPCAddr)
@@ -2657,10 +2958,6 @@ func (m *AddMRPeerResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.NodeID != 0 {
 		i = encodeVarintVms(dAtA, i, uint64(m.NodeID))
 		i--
@@ -2689,10 +2986,6 @@ func (m *RemoveMRPeerRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.RaftURL) > 0 {
 		i -= len(m.RaftURL)
 		copy(dAtA[i:], m.RaftURL)
@@ -2723,10 +3016,6 @@ func (m *RemoveMRPeerResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	return len(dAtA) - i, nil
 }
 
@@ -2751,9 +3040,6 @@ func (m *AddStorageNodeRequest) ProtoSize() (n int) {
 	if l > 0 {
 		n += 1 + l + sovVms(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2767,9 +3053,6 @@ func (m *AddStorageNodeResponse) ProtoSize() (n int) {
 		l = m.StorageNode.ProtoSize()
 		n += 1 + l + sovVms(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2782,9 +3065,6 @@ func (m *UnregisterStorageNodeRequest) ProtoSize() (n int) {
 	if m.StorageNodeID != 0 {
 		n += 1 + sovVms(uint64(m.StorageNodeID))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2794,9 +3074,52 @@ func (m *UnregisterStorageNodeResponse) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
+	return n
+}
+
+func (m *AddTopicRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
 	}
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovVms(uint64(m.TopicID))
+	}
+	return n
+}
+
+func (m *AddTopicResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Topic != nil {
+		l = m.Topic.ProtoSize()
+		n += 1 + l + sovVms(uint64(l))
+	}
+	return n
+}
+
+func (m *UnregisterTopicRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovVms(uint64(m.TopicID))
+	}
+	return n
+}
+
+func (m *UnregisterTopicResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
 	return n
 }
 
@@ -2806,14 +3129,14 @@ func (m *AddLogStreamRequest) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovVms(uint64(m.TopicID))
+	}
 	if len(m.Replicas) > 0 {
 		for _, e := range m.Replicas {
 			l = e.ProtoSize()
 			n += 1 + l + sovVms(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2828,9 +3151,6 @@ func (m *AddLogStreamResponse) ProtoSize() (n int) {
 		l = m.LogStream.ProtoSize()
 		n += 1 + l + sovVms(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2840,11 +3160,11 @@ func (m *UnregisterLogStreamRequest) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovVms(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovVms(uint64(m.LogStreamID))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2855,9 +3175,6 @@ func (m *UnregisterLogStreamResponse) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2870,11 +3187,11 @@ func (m *RemoveLogStreamReplicaRequest) ProtoSize() (n int) {
 	if m.StorageNodeID != 0 {
 		n += 1 + sovVms(uint64(m.StorageNodeID))
 	}
+	if m.TopicID != 0 {
+		n += 1 + sovVms(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovVms(uint64(m.LogStreamID))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2885,9 +3202,6 @@ func (m *RemoveLogStreamReplicaResponse) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2897,6 +3211,9 @@ func (m *UpdateLogStreamRequest) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovVms(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovVms(uint64(m.LogStreamID))
 	}
@@ -2907,9 +3224,6 @@ func (m *UpdateLogStreamRequest) ProtoSize() (n int) {
 	if m.PushedReplica != nil {
 		l = m.PushedReplica.ProtoSize()
 		n += 1 + l + sovVms(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2924,9 +3238,6 @@ func (m *UpdateLogStreamResponse) ProtoSize() (n int) {
 		l = m.LogStream.ProtoSize()
 		n += 1 + l + sovVms(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2936,11 +3247,11 @@ func (m *SealRequest) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovVms(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovVms(uint64(m.LogStreamID))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2960,9 +3271,6 @@ func (m *SealResponse) ProtoSize() (n int) {
 	if m.SealedGLSN != 0 {
 		n += 1 + sovVms(uint64(m.SealedGLSN))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2972,6 +3280,9 @@ func (m *SyncRequest) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovVms(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovVms(uint64(m.LogStreamID))
 	}
@@ -2980,9 +3291,6 @@ func (m *SyncRequest) ProtoSize() (n int) {
 	}
 	if m.DstStorageNodeID != 0 {
 		n += 1 + sovVms(uint64(m.DstStorageNodeID))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2997,9 +3305,6 @@ func (m *SyncResponse) ProtoSize() (n int) {
 		l = m.Status.ProtoSize()
 		n += 1 + l + sovVms(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3009,11 +3314,11 @@ func (m *UnsealRequest) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovVms(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovVms(uint64(m.LogStreamID))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3027,9 +3332,6 @@ func (m *UnsealResponse) ProtoSize() (n int) {
 	if m.LogStream != nil {
 		l = m.LogStream.ProtoSize()
 		n += 1 + l + sovVms(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3054,9 +3356,6 @@ func (m *GetMRMembersResponse) ProtoSize() (n int) {
 			n += mapEntrySize + 1 + sovVms(uint64(mapEntrySize))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3073,9 +3372,6 @@ func (m *GetStorageNodesResponse) ProtoSize() (n int) {
 			mapEntrySize := 1 + sovVms(uint64(k)) + 1 + len(v) + sovVms(uint64(len(v)))
 			n += mapEntrySize + 1 + sovVms(uint64(mapEntrySize))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3094,9 +3390,6 @@ func (m *AddMRPeerRequest) ProtoSize() (n int) {
 	if l > 0 {
 		n += 1 + l + sovVms(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3108,9 +3401,6 @@ func (m *AddMRPeerResponse) ProtoSize() (n int) {
 	_ = l
 	if m.NodeID != 0 {
 		n += 1 + sovVms(uint64(m.NodeID))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -3125,9 +3415,6 @@ func (m *RemoveMRPeerRequest) ProtoSize() (n int) {
 	if l > 0 {
 		n += 1 + l + sovVms(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3137,9 +3424,6 @@ func (m *RemoveMRPeerResponse) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -3222,7 +3506,6 @@ func (m *AddStorageNodeRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3309,7 +3592,6 @@ func (m *AddStorageNodeResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3379,7 +3661,6 @@ func (m *UnregisterStorageNodeRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3430,7 +3711,280 @@ func (m *UnregisterStorageNodeResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AddTopicRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowVms
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AddTopicRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AddTopicRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipVms(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AddTopicResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowVms
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AddTopicResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AddTopicResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Topic", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthVms
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthVms
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Topic == nil {
+				m.Topic = &varlogpb.TopicDescriptor{}
+			}
+			if err := m.Topic.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipVms(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *UnregisterTopicRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowVms
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UnregisterTopicRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UnregisterTopicRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipVms(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *UnregisterTopicResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowVms
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UnregisterTopicResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UnregisterTopicResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipVms(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthVms
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
 			iNdEx += skippy
 		}
 	}
@@ -3470,6 +4024,25 @@ func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Replicas", wireType)
 			}
@@ -3515,7 +4088,6 @@ func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3602,7 +4174,6 @@ func (m *AddLogStreamResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3643,6 +4214,25 @@ func (m *UnregisterLogStreamRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -3672,7 +4262,6 @@ func (m *UnregisterLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3723,7 +4312,6 @@ func (m *UnregisterLogStreamResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3783,6 +4371,25 @@ func (m *RemoveLogStreamReplicaRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 2:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -3812,7 +4419,6 @@ func (m *RemoveLogStreamReplicaRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3863,7 +4469,6 @@ func (m *RemoveLogStreamReplicaResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3904,6 +4509,25 @@ func (m *UpdateLogStreamRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -3921,7 +4545,7 @@ func (m *UpdateLogStreamRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 2:
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PoppedReplica", wireType)
 			}
@@ -3957,7 +4581,7 @@ func (m *UpdateLogStreamRequest) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 3:
+		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PushedReplica", wireType)
 			}
@@ -4005,7 +4629,6 @@ func (m *UpdateLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4092,7 +4715,6 @@ func (m *UpdateLogStreamResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4133,6 +4755,25 @@ func (m *SealRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -4162,7 +4803,6 @@ func (m *SealRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4266,7 +4906,6 @@ func (m *SealResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4307,6 +4946,25 @@ func (m *SyncRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -4324,7 +4982,7 @@ func (m *SyncRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 2:
+		case 3:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SrcStorageNodeID", wireType)
 			}
@@ -4343,7 +5001,7 @@ func (m *SyncRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 3:
+		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field DstStorageNodeID", wireType)
 			}
@@ -4374,7 +5032,6 @@ func (m *SyncRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4461,7 +5118,6 @@ func (m *SyncResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4502,6 +5158,25 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowVms
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -4531,7 +5206,6 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4618,7 +5292,6 @@ func (m *UnsealResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4820,7 +5493,6 @@ func (m *GetMRMembersResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -4891,7 +5563,7 @@ func (m *GetStorageNodesResponse) Unmarshal(dAtA []byte) error {
 			if m.Storagenodes == nil {
 				m.Storagenodes = make(map[github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID]string)
 			}
-			var mapkey uint32
+			var mapkey int32
 			var mapvalue string
 			for iNdEx < postIndex {
 				entryPreIndex := iNdEx
@@ -4921,7 +5593,7 @@ func (m *GetStorageNodesResponse) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						mapkey |= uint32(b&0x7F) << shift
+						mapkey |= int32(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -4984,7 +5656,6 @@ func (m *GetStorageNodesResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5099,7 +5770,6 @@ func (m *AddMRPeerRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5169,7 +5839,6 @@ func (m *AddMRPeerResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5252,7 +5921,6 @@ func (m *RemoveMRPeerRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -5303,7 +5971,6 @@ func (m *RemoveMRPeerResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

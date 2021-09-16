@@ -3,6 +3,7 @@ package metadata_repository
 import (
 	"bytes"
 	"math/rand"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,8 +25,10 @@ func TestStorageRegisterSN(t *testing.T) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
-			Address:       "mt_addr",
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+				Address:       "mt_addr",
+			},
 		}
 
 		err := ms.registerStorageNode(sn)
@@ -35,12 +38,14 @@ func TestStorageRegisterSN(t *testing.T) {
 			err := ms.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 
-			dup_sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snID,
-				Address:       "diff_addr",
+			dupSN := &varlogpb.StorageNodeDescriptor{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snID,
+					Address:       "diff_addr",
+				},
 			}
 
-			err = ms.registerStorageNode(dup_sn)
+			err = ms.registerStorageNode(dupSN)
 			So(err, ShouldResemble, verrors.ErrAlreadyExists)
 		})
 	})
@@ -60,7 +65,9 @@ func TestStoragUnregisterSN(t *testing.T) {
 
 		Convey("Wnen SN is exist", func(ctx C) {
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snID,
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snID,
+				},
 			}
 
 			err := ms.RegisterStorageNode(sn, 0, 0)
@@ -92,14 +99,18 @@ func TestStoragUnregisterSN(t *testing.T) {
 
 			Convey("And LS which have the SN as replica is exist", func(ctx C) {
 				rep := 1
+
+				err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+				So(err, ShouldBeNil)
+
 				lsID := types.LogStreamID(time.Now().UnixNano())
 				snIDs := make([]types.StorageNodeID, rep)
 				for i := 0; i < rep; i++ {
 					snIDs[i] = snID + types.StorageNodeID(i)
 				}
-				ls := makeLogStream(lsID, snIDs)
+				ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
-				err := ms.registerLogStream(ls)
+				err = ms.registerLogStream(ls)
 				So(err, ShouldBeNil)
 
 				Convey("Then SN should not be unregistered", func(ctx C) {
@@ -124,7 +135,9 @@ func TestStoragGetAllSN(t *testing.T) {
 		Convey("Wnen SN register", func(ctx C) {
 			snID := types.StorageNodeID(time.Now().UnixNano())
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snID,
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snID,
+				},
 			}
 
 			err := ms.RegisterStorageNode(sn, 0, 0)
@@ -139,7 +152,9 @@ func TestStoragGetAllSN(t *testing.T) {
 				Convey("Wnen one more SN register to diff", func(ctx C) {
 					snID2 := types.StorageNodeID(time.Now().UnixNano())
 					sn := &varlogpb.StorageNodeDescriptor{
-						StorageNodeID: snID2,
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snID2,
+						},
 					}
 
 					err := ms.RegisterStorageNode(sn, 0, 0)
@@ -192,13 +207,19 @@ func TestStoragGetAllLS(t *testing.T) {
 			snID := types.StorageNodeID(time.Now().UnixNano())
 			lsID := types.LogStreamID(time.Now().UnixNano())
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snID,
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snID,
+				},
 			}
 
 			err := ms.RegisterStorageNode(sn, 0, 0)
 			So(err, ShouldBeNil)
 
+			err = ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+			So(err, ShouldBeNil)
+
 			ls := &varlogpb.LogStreamDescriptor{
+				TopicID:     types.TopicID(1),
 				LogStreamID: lsID,
 			}
 
@@ -216,7 +237,9 @@ func TestStoragGetAllLS(t *testing.T) {
 				Convey("Wnen update LS to diff", func(ctx C) {
 					snID2 := snID + 1
 					sn := &varlogpb.StorageNodeDescriptor{
-						StorageNodeID: snID2,
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snID2,
+						},
 					}
 
 					err := ms.RegisterStorageNode(sn, 0, 0)
@@ -264,33 +287,42 @@ func TestStoragGetAllLS(t *testing.T) {
 }
 
 func TestStorageRegisterLS(t *testing.T) {
-	Convey("LS which has no SN should not be registerd", t, func(ctx C) {
+	Convey("LS which has no SN should not be registered", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
-		lsID := types.LogStreamID(time.Now().UnixNano())
-		ls := makeLogStream(lsID, nil)
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
 
-		err := ms.registerLogStream(ls)
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		ls := makeLogStream(types.TopicID(1), lsID, nil)
+
+		err = ms.registerLogStream(ls)
 		So(err, ShouldResemble, verrors.ErrInvalidArgument)
 	})
 
-	Convey("LS should not be registerd if not exist proper SN", t, func(ctx C) {
+	Convey("LS should not be registered if not exist proper SN", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
 		rep := 2
+
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		tmp := types.StorageNodeID(time.Now().UnixNano())
 		snIDs := make([]types.StorageNodeID, rep)
 		for i := 0; i < rep; i++ {
 			snIDs[i] = tmp + types.StorageNodeID(i)
 		}
-		ls := makeLogStream(lsID, snIDs)
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
-		err := ms.registerLogStream(ls)
+		err = ms.registerLogStream(ls)
 		So(err, ShouldResemble, verrors.ErrInvalidArgument)
 
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snIDs[0],
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snIDs[0],
+			},
 		}
 
 		err = ms.registerStorageNode(sn)
@@ -299,9 +331,11 @@ func TestStorageRegisterLS(t *testing.T) {
 		err = ms.registerLogStream(ls)
 		So(err, ShouldResemble, verrors.ErrInvalidArgument)
 
-		Convey("LS should be registerd if exist all SN", func(ctx C) {
+		Convey("LS should be registered if exist all SN", func(ctx C) {
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[1],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[1],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
@@ -331,33 +365,39 @@ func TestStoragUnregisterLS(t *testing.T) {
 
 		Convey("LS which is exist should be unregistered", func(ctx C) {
 			rep := 1
+
+			err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+			So(err, ShouldBeNil)
+
 			snIDs := make([]types.StorageNodeID, rep)
 			tmp := types.StorageNodeID(time.Now().UnixNano())
 			for i := 0; i < rep; i++ {
 				snIDs[i] = tmp + types.StorageNodeID(i)
 
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: snIDs[i],
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: snIDs[i],
+					},
 				}
 
 				err := ms.registerStorageNode(sn)
 				So(err, ShouldBeNil)
 			}
-			ls := makeLogStream(lsID, snIDs)
+			ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
-			err := ms.RegisterLogStream(ls, 0, 0)
+			err = ms.RegisterLogStream(ls, 0, 0)
 			So(err, ShouldBeNil)
 
 			ms.setCopyOnWrite()
 
-			So(len(ms.GetSortedLogStreamIDs()), ShouldEqual, 1)
+			So(len(ms.GetSortedTopicLogStreamIDs()), ShouldEqual, 1)
 
 			err = ms.unregisterLogStream(lsID)
 			So(err, ShouldBeNil)
 
 			So(ms.lookupLogStream(lsID), ShouldBeNil)
 			So(ms.LookupUncommitReports(lsID), ShouldBeNil)
-			So(len(ms.GetSortedLogStreamIDs()), ShouldEqual, 0)
+			So(len(ms.GetSortedTopicLogStreamIDs()), ShouldEqual, 0)
 
 			Convey("unregistered SN should not be found after merge", func(ctx C) {
 				ms.mergeMetadata()
@@ -367,7 +407,7 @@ func TestStoragUnregisterLS(t *testing.T) {
 
 				So(ms.lookupLogStream(lsID), ShouldBeNil)
 				So(ms.LookupUncommitReports(lsID), ShouldBeNil)
-				So(len(ms.GetSortedLogStreamIDs()), ShouldEqual, 0)
+				So(len(ms.GetSortedTopicLogStreamIDs()), ShouldEqual, 0)
 			})
 		})
 	})
@@ -388,22 +428,28 @@ func TestStorageUpdateLS(t *testing.T) {
 		for i := 0; i < rep; i++ {
 			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
-		ls := makeLogStream(lsID, snIDs)
 
-		err := ms.registerLogStream(ls)
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+
+		err = ms.registerLogStream(ls)
 		So(err, ShouldBeNil)
 
 		updateSnIDs := make([]types.StorageNodeID, rep)
 		for i := 0; i < rep; i++ {
 			updateSnIDs[i] = snIDs[i] + types.StorageNodeID(rep)
 		}
-		updateLS := makeLogStream(lsID, updateSnIDs)
+		updateLS := makeLogStream(types.TopicID(1), lsID, updateSnIDs)
 
 		err = ms.UpdateLogStream(updateLS, 0, 0)
 		So(err, ShouldResemble, verrors.ErrInvalidArgument)
@@ -411,7 +457,9 @@ func TestStorageUpdateLS(t *testing.T) {
 		Convey("LS should be updated if exist all SN", func(ctx C) {
 			for i := 0; i < rep; i++ {
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: updateSnIDs[i],
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: updateSnIDs[i],
+					},
 				}
 
 				err := ms.registerStorageNode(sn)
@@ -466,15 +514,21 @@ func TestStorageUpdateLSUnderCOW(t *testing.T) {
 		for i := 0; i < rep; i++ {
 			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
-		ls := makeLogStream(lsID, snIDs)
 
-		err := ms.registerLogStream(ls)
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+
+		err = ms.registerLogStream(ls)
 		So(err, ShouldBeNil)
 
 		// set COW
@@ -486,14 +540,16 @@ func TestStorageUpdateLSUnderCOW(t *testing.T) {
 			updateSnIDs[i] = snIDs[i] + types.StorageNodeID(rep)
 
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: updateSnIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: updateSnIDs[i],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
 
-		updateLS := makeLogStream(lsID, updateSnIDs)
+		updateLS := makeLogStream(types.TopicID(1), lsID, updateSnIDs)
 
 		err = ms.UpdateLogStream(updateLS, 0, 0)
 		So(err, ShouldBeNil)
@@ -501,10 +557,10 @@ func TestStorageUpdateLSUnderCOW(t *testing.T) {
 
 		// compare
 		diffls := ms.diffStateMachine.Metadata.GetLogStream(lsID)
-		difflls, _ := ms.diffStateMachine.LogStream.UncommitReports[lsID]
+		difflls := ms.diffStateMachine.LogStream.UncommitReports[lsID]
 
 		origls := ms.origStateMachine.Metadata.GetLogStream(lsID)
-		origlls, _ := ms.origStateMachine.LogStream.UncommitReports[lsID]
+		origlls := ms.origStateMachine.LogStream.UncommitReports[lsID]
 
 		So(diffls.Equal(origls), ShouldBeFalse)
 		So(difflls.Equal(origlls), ShouldBeFalse)
@@ -517,7 +573,7 @@ func TestStorageUpdateLSUnderCOW(t *testing.T) {
 
 		// compare
 		mergedls := ms.origStateMachine.Metadata.GetLogStream(lsID)
-		mergedlls, _ := ms.origStateMachine.LogStream.UncommitReports[lsID]
+		mergedlls := ms.origStateMachine.LogStream.UncommitReports[lsID]
 
 		So(diffls.Equal(mergedls), ShouldBeTrue)
 		So(difflls.Equal(mergedlls), ShouldBeTrue)
@@ -547,15 +603,21 @@ func TestStorageSealLS(t *testing.T) {
 		for i := 0; i < rep; i++ {
 			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
-		ls := makeLogStream(lsID, snIDs)
 
-		err := ms.registerLogStream(ls)
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+
+		err = ms.registerLogStream(ls)
 		So(err, ShouldBeNil)
 
 		Convey("Seal should be success", func(ctx C) {
@@ -590,7 +652,7 @@ func TestStorageSealLS(t *testing.T) {
 				r := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN,
 					UncommittedLLSNLength: uint64(i),
-					HighWatermark:         types.InvalidGLSN,
+					Version:               types.InvalidVersion,
 				}
 
 				ms.UpdateUncommitReport(lsID, snIDs[i], r)
@@ -613,7 +675,7 @@ func TestStorageSealLS(t *testing.T) {
 					r := snpb.LogStreamUncommitReport{
 						UncommittedLLSNOffset: types.MinLLSN,
 						UncommittedLLSNLength: uint64(i + 1),
-						HighWatermark:         types.InvalidGLSN,
+						Version:               types.InvalidVersion,
 					}
 
 					ms.UpdateUncommitReport(lsID, snIDs[i], r)
@@ -638,15 +700,21 @@ func TestStorageSealLSUnderCOW(t *testing.T) {
 		for i := 0; i < rep; i++ {
 			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
-		ls := makeLogStream(lsID, snIDs)
 
-		err := ms.registerLogStream(ls)
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+
+		err = ms.registerLogStream(ls)
 		So(err, ShouldBeNil)
 
 		// set COW
@@ -658,7 +726,7 @@ func TestStorageSealLSUnderCOW(t *testing.T) {
 
 		// compare
 		diffls := ms.diffStateMachine.Metadata.GetLogStream(lsID)
-		difflls, _ := ms.diffStateMachine.LogStream.UncommitReports[lsID]
+		difflls := ms.diffStateMachine.LogStream.UncommitReports[lsID]
 
 		origls := ms.origStateMachine.Metadata.GetLogStream(lsID)
 		origlls, _ := ms.origStateMachine.LogStream.UncommitReports[lsID]
@@ -707,15 +775,21 @@ func TestStorageUnsealLS(t *testing.T) {
 		for i := 0; i < rep; i++ {
 			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
-		ls := makeLogStream(lsID, snIDs)
 
-		err := ms.registerLogStream(ls)
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+
+		err = ms.registerLogStream(ls)
 		So(err, ShouldBeNil)
 
 		Convey("Unseal to LS which is already Unsealed should return nil", func(ctx C) {
@@ -753,7 +827,7 @@ func TestStorageUnsealLS(t *testing.T) {
 						r := snpb.LogStreamUncommitReport{
 							UncommittedLLSNOffset: types.MinLLSN,
 							UncommittedLLSNLength: uint64(i),
-							HighWatermark:         types.InvalidGLSN,
+							Version:               types.InvalidVersion,
 						}
 
 						ms.UpdateUncommitReport(lsID, snIDs[i], r)
@@ -771,14 +845,13 @@ func TestStorageTrim(t *testing.T) {
 	Convey("Given a GlobalLogStreams", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
-		for hwm := types.MinGLSN; hwm < types.GLSN(1024); hwm++ {
+		for ver := types.MinVersion; ver < types.Version(1024); ver++ {
 			gls := &mrpb.LogStreamCommitResults{
-				HighWatermark:     hwm,
-				PrevHighWatermark: hwm - types.GLSN(1),
+				Version: ver,
 			}
 
 			gls.CommitResults = append(gls.CommitResults, snpb.LogStreamCommitResult{
-				CommittedGLSNOffset: hwm,
+				CommittedGLSNOffset: types.GLSN(ver),
 				CommittedGLSNLength: 1,
 			})
 
@@ -786,12 +859,12 @@ func TestStorageTrim(t *testing.T) {
 		}
 
 		Convey("When operate trim, trimmed gls should not be found", func(ctx C) {
-			for trim := types.InvalidGLSN; trim < types.GLSN(1024); trim++ {
+			for trim := types.InvalidVersion; trim < types.Version(1024); trim++ {
 				ms.TrimLogStreamCommitHistory(trim)
 				ms.trimLogStreamCommitHistory()
 
-				if trim > types.MinGLSN {
-					So(ms.getFirstCommitResultsNoLock().GetHighWatermark(), ShouldEqual, trim-types.GLSN(1))
+				if trim > types.MinVersion {
+					So(ms.getFirstCommitResultsNoLock().GetVersion(), ShouldEqual, trim-types.MinVersion)
 				}
 			}
 		})
@@ -809,7 +882,9 @@ func TestStorageReport(t *testing.T) {
 		for i := 0; i < rep; i++ {
 			snIDs[i] = tmp + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
@@ -820,7 +895,7 @@ func TestStorageReport(t *testing.T) {
 		r := snpb.LogStreamUncommitReport{
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 5,
-			HighWatermark:         types.InvalidGLSN,
+			Version:               types.InvalidVersion,
 		}
 
 		for i := 0; i < rep; i++ {
@@ -830,13 +905,16 @@ func TestStorageReport(t *testing.T) {
 		}
 
 		Convey("storage should not apply report if snID is not exist in LS", func(ctx C) {
-			ls := makeLogStream(lsID, snIDs)
+			err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+			So(err, ShouldBeNil)
+
+			ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 			ms.registerLogStream(ls)
 
 			r := snpb.LogStreamUncommitReport{
 				UncommittedLLSNOffset: types.MinLLSN,
 				UncommittedLLSNLength: 5,
-				HighWatermark:         types.InvalidGLSN,
+				Version:               types.InvalidVersion,
 			}
 
 			ms.UpdateUncommitReport(lsID, notExistSnID, r)
@@ -847,7 +925,7 @@ func TestStorageReport(t *testing.T) {
 				r := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN,
 					UncommittedLLSNLength: 5,
-					HighWatermark:         types.InvalidGLSN,
+					Version:               types.InvalidVersion,
 				}
 
 				for i := 0; i < rep; i++ {
@@ -883,7 +961,9 @@ func TestStorageCopyOnWrite(t *testing.T) {
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		}
 
 		err := ms.RegisterStorageNode(sn, 0, 0)
@@ -901,8 +981,10 @@ func TestStorageCopyOnWrite(t *testing.T) {
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
-			Address:       "my_addr",
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+				Address:       "my_addr",
+			},
 		}
 
 		err := ms.RegisterStorageNode(sn, 0, 0)
@@ -914,15 +996,19 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		So(cur.Metadata.GetStorageNode(snID), ShouldBeNil)
 
 		sn = &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
-			Address:       "diff_addr",
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+				Address:       "diff_addr",
+			},
 		}
 		err = ms.RegisterStorageNode(sn, 0, 0)
 		So(err, ShouldResemble, verrors.ErrAlreadyExists)
 
 		snID2 := snID + types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID2,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID2,
+			},
 		}
 
 		err = ms.RegisterStorageNode(sn, 0, 0)
@@ -943,16 +1029,22 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		for i := 0; i < rep; i++ {
 			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
-		ls := makeLogStream(lsID, snIDs)
-		ls2 := makeLogStream(lsID2, snIDs)
 
-		err := ms.RegisterLogStream(ls, 0, 0)
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+		ls2 := makeLogStream(types.TopicID(1), lsID2, snIDs)
+
+		err = ms.RegisterLogStream(ls, 0, 0)
 		So(err, ShouldBeNil)
 		ms.setCopyOnWrite()
 
@@ -960,7 +1052,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		So(pre.Metadata.GetLogStream(lsID), ShouldNotBeNil)
 		So(cur.Metadata.GetLogStream(lsID), ShouldBeNil)
 
-		conflict := makeLogStream(lsID, snIDs)
+		conflict := makeLogStream(types.TopicID(1), lsID, snIDs)
 		ls.Replicas[0].StorageNodeID = ls.Replicas[0].StorageNodeID + 100
 		err = ms.RegisterLogStream(conflict, 0, 0)
 		So(err, ShouldResemble, verrors.ErrAlreadyExists)
@@ -986,19 +1078,25 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		for i := 0; i < rep; i++ {
 			snIDs[i] = types.StorageNodeID(lsID) + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
 			}
 
 			err := ms.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
-		ls := makeLogStream(lsID, snIDs)
+
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 		ms.registerLogStream(ls)
 
 		r := snpb.LogStreamUncommitReport{
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 5,
-			HighWatermark:         types.GLSN(10),
+			Version:               types.MinVersion,
 		}
 		ms.UpdateUncommitReport(lsID, snIDs[0], r)
 		So(ms.isCopyOnWrite(), ShouldBeFalse)
@@ -1014,7 +1112,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 			r := snpb.LogStreamUncommitReport{
 				UncommittedLLSNOffset: types.MinLLSN,
 				UncommittedLLSNLength: 5,
-				HighWatermark:         types.GLSN(10),
+				Version:               types.MinVersion,
 			}
 			ms.UpdateUncommitReport(lsID, snIDs[1], r)
 
@@ -1029,8 +1127,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
 		gls := &mrpb.LogStreamCommitResults{
-			PrevHighWatermark: types.GLSN(5),
-			HighWatermark:     types.GLSN(10),
+			Version: types.Version(2),
 		}
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
@@ -1043,16 +1140,15 @@ func TestStorageCopyOnWrite(t *testing.T) {
 
 		ms.AppendLogStreamCommitHistory(gls)
 		So(ms.isCopyOnWrite(), ShouldBeFalse)
-		cr, _ := ms.LookupNextCommitResults(types.GLSN(5))
+		cr, _ := ms.LookupNextCommitResults(types.MinVersion)
 		So(cr, ShouldNotBeNil)
-		So(ms.GetHighWatermark(), ShouldEqual, types.GLSN(10))
+		So(ms.GetLastCommitVersion(), ShouldEqual, types.Version(2))
 
 		Convey("lookup GlobalLogStream with copyOnWrite should give merged response", func(ctx C) {
 			ms.setCopyOnWrite()
 
 			gls := &mrpb.LogStreamCommitResults{
-				PrevHighWatermark: types.GLSN(10),
-				HighWatermark:     types.GLSN(15),
+				Version: types.Version(3),
 			}
 
 			commit := snpb.LogStreamCommitResult{
@@ -1063,11 +1159,11 @@ func TestStorageCopyOnWrite(t *testing.T) {
 			gls.CommitResults = append(gls.CommitResults, commit)
 
 			ms.AppendLogStreamCommitHistory(gls)
-			cr, _ := ms.LookupNextCommitResults(types.GLSN(5))
+			cr, _ := ms.LookupNextCommitResults(types.MinVersion)
 			So(cr, ShouldNotBeNil)
-			cr, _ = ms.LookupNextCommitResults(types.GLSN(10))
+			cr, _ = ms.LookupNextCommitResults(types.Version(2))
 			So(cr, ShouldNotBeNil)
-			So(ms.GetHighWatermark(), ShouldEqual, types.GLSN(15))
+			So(ms.GetLastCommitVersion(), ShouldEqual, types.Version(3))
 		})
 	})
 }
@@ -1104,7 +1200,9 @@ func TestStorageMetadataCache(t *testing.T) {
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		}
 
 		err := ms.RegisterStorageNode(sn, 0, 0)
@@ -1140,7 +1238,9 @@ func TestStorageMetadataCache(t *testing.T) {
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		}
 
 		err := ms.RegisterStorageNode(sn, 0, 0)
@@ -1152,7 +1252,9 @@ func TestStorageMetadataCache(t *testing.T) {
 
 		snID2 := snID + types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID2,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID2,
+			},
 		}
 
 		err = ms.RegisterStorageNode(sn, 0, 0)
@@ -1198,7 +1300,9 @@ func TestStorageStateMachineMerge(t *testing.T) {
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		}
 
 		err := ms.RegisterStorageNode(sn, 0, 0)
@@ -1220,7 +1324,9 @@ func TestStorageStateMachineMerge(t *testing.T) {
 
 			snID = snID + types.StorageNodeID(1)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snID,
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snID,
+				},
 			}
 
 			err := ms.RegisterStorageNode(sn, 0, 0)
@@ -1259,7 +1365,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 				s := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*3),
 					UncommittedLLSNLength: 1,
-					HighWatermark:         types.InvalidGLSN,
+					Version:               types.InvalidVersion,
 				}
 
 				ms.UpdateUncommitReport(lsID, snID, s)
@@ -1277,7 +1383,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 				s := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(1+i*3),
 					UncommittedLLSNLength: 1,
-					HighWatermark:         types.GLSN(1024),
+					Version:               types.Version(1),
 				}
 
 				ms.UpdateUncommitReport(lsID, snID, s)
@@ -1288,13 +1394,13 @@ func TestStorageStateMachineMerge(t *testing.T) {
 
 		st := time.Now()
 		ms.mergeStateMachine()
-		t.Log(time.Now().Sub(st))
+		t.Log(time.Since(st))
 	})
 }
 
 func TestStorageSnapshot(t *testing.T) {
 	Convey("create snapshot should not operate while job running", t, func(ctx C) {
-		ch := make(chan struct{}, 0)
+		ch := make(chan struct{})
 		cb := func(uint64, uint64, error) {
 			ch <- struct{}{}
 		}
@@ -1308,7 +1414,9 @@ func TestStorageSnapshot(t *testing.T) {
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		}
 
 		appliedIndex := uint64(0)
@@ -1324,7 +1432,9 @@ func TestStorageSnapshot(t *testing.T) {
 
 		snID = snID + types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		}
 
 		err = ms.RegisterStorageNode(sn, 0, 0)
@@ -1349,7 +1459,9 @@ func TestStorageSnapshot(t *testing.T) {
 
 			snID2 := snID + types.StorageNodeID(1)
 			sn = &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snID2,
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snID2,
+				},
 			}
 
 			err = ms.RegisterStorageNode(sn, 0, 0)
@@ -1389,7 +1501,9 @@ func TestStorageApplySnapshot(t *testing.T) {
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		}
 
 		err := ms.RegisterStorageNode(sn, 0, 0)
@@ -1402,7 +1516,9 @@ func TestStorageApplySnapshot(t *testing.T) {
 
 		snID = snID + types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		}
 
 		err = ms.RegisterStorageNode(sn, 0, 0)
@@ -1463,6 +1579,9 @@ func TestStorageSnapshotRace(t *testing.T) {
 		numLS := 128
 		numRep := 3
 
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
 		lsIDs := make([]types.LogStreamID, numLS)
 		snIDs := make([][]types.StorageNodeID, numLS)
 		for i := 0; i < numLS; i++ {
@@ -1472,14 +1591,16 @@ func TestStorageSnapshotRace(t *testing.T) {
 				snIDs[i][j] = types.StorageNodeID(i*numRep + j)
 
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: snIDs[i][j],
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: snIDs[i][j],
+					},
 				}
 
 				err := ms.registerStorageNode(sn)
 				So(err, ShouldBeNil)
 			}
 
-			ls := makeLogStream(lsIDs[i], snIDs[i])
+			ls := makeLogStream(types.TopicID(1), lsIDs[i], snIDs[i])
 			err := ms.RegisterLogStream(ls, 0, 0)
 			So(err, ShouldBeNil)
 		}
@@ -1489,11 +1610,10 @@ func TestStorageSnapshotRace(t *testing.T) {
 		checkLS := 0
 
 		for i := 0; i < n; i++ {
-			preGLSN := types.GLSN(i * numLS)
-			newGLSN := types.GLSN((i + 1) * numLS)
+			preVersion := types.Version(i)
+			newVersion := types.Version(i + 1)
 			gls := &mrpb.LogStreamCommitResults{
-				PrevHighWatermark: preGLSN,
-				HighWatermark:     newGLSN,
+				Version: newVersion,
 			}
 
 			for j := 0; j < numLS; j++ {
@@ -1505,7 +1625,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 					r := snpb.LogStreamUncommitReport{
 						UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i),
 						UncommittedLLSNLength: 1,
-						HighWatermark:         preGLSN,
+						Version:               preVersion,
 					}
 
 					ms.UpdateUncommitReport(lsID, snID, r)
@@ -1516,7 +1636,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 
 				commit := snpb.LogStreamCommitResult{
 					LogStreamID:         lsID,
-					CommittedGLSNOffset: preGLSN + types.GLSN(1),
+					CommittedGLSNOffset: types.GLSN(preVersion + 1),
 					CommittedGLSNLength: uint64(numLS),
 				}
 				gls.CommitResults = append(gls.CommitResults, commit)
@@ -1527,10 +1647,10 @@ func TestStorageSnapshotRace(t *testing.T) {
 			appliedIndex++
 			ms.UpdateAppliedIndex(appliedIndex)
 
-			gls, _ = ms.LookupNextCommitResults(preGLSN)
+			gls, _ = ms.LookupNextCommitResults(preVersion)
 			if gls != nil &&
-				gls.HighWatermark == newGLSN &&
-				ms.GetHighWatermark() == newGLSN {
+				gls.Version == newVersion &&
+				ms.GetLastCommitVersion() == newVersion {
 				checkGLS++
 			}
 
@@ -1547,7 +1667,7 @@ func TestStorageSnapshotRace(t *testing.T) {
 
 					r, ok := ls.Replicas[snID]
 					if ok &&
-						r.HighWatermark == preGLSN {
+						r.Version == preVersion {
 						checkLS++
 					}
 				}
@@ -1581,21 +1701,25 @@ func TestStorageVerifyReport(t *testing.T) {
 
 		snID := types.StorageNodeID(lsID)
 		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
 		}
 
 		err := ms.registerStorageNode(sn)
 		So(err, ShouldBeNil)
 
-		ls := makeLogStream(lsID, []types.StorageNodeID{snID})
+		err = ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, []types.StorageNodeID{snID})
 
 		err = ms.RegisterLogStream(ls, 0, 0)
 		So(err, ShouldBeNil)
 
-		for i := 0; i < 3; i++ {
+		for i := 1; i < 4; i++ {
 			gls := &mrpb.LogStreamCommitResults{
-				PrevHighWatermark: types.GLSN(i*5 + 5),
-				HighWatermark:     types.GLSN(i*5 + 10),
+				Version: types.Version(i + 1),
 			}
 
 			commit := snpb.LogStreamCommitResult{
@@ -1608,26 +1732,31 @@ func TestStorageVerifyReport(t *testing.T) {
 			ms.AppendLogStreamCommitHistory(gls)
 		}
 
-		Convey("When update report with valid hwm, then it should be succeed", func(ctx C) {
-			for i := 0; i < 4; i++ {
+		Convey("When update report with valid version, then it should be succeed", func(ctx C) {
+			for i := 1; i < 5; i++ {
 				r := snpb.LogStreamUncommitReport{
 					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*5),
 					UncommittedLLSNLength: 5,
-					HighWatermark:         types.GLSN(i*5 + 5),
+					Version:               types.Version(i),
 				}
 				So(ms.verifyUncommitReport(r), ShouldBeTrue)
 			}
 		})
 
-		Convey("When update report with invalid hwm, then it should be succeed", func(ctx C) {
-			for i := 0; i < 5; i++ {
-				r := snpb.LogStreamUncommitReport{
-					UncommittedLLSNOffset: types.MinLLSN + types.LLSN(i*5),
-					UncommittedLLSNLength: 5,
-					HighWatermark:         types.GLSN(i*5 + 5 - 1),
-				}
-				So(ms.verifyUncommitReport(r), ShouldBeFalse)
+		Convey("When update report with invalid version, then it should not be succeed", func(ctx C) {
+			r := snpb.LogStreamUncommitReport{
+				UncommittedLLSNOffset: types.MinLLSN + types.LLSN(5),
+				UncommittedLLSNLength: 5,
+				Version:               types.Version(0),
 			}
+			So(ms.verifyUncommitReport(r), ShouldBeFalse)
+
+			r = snpb.LogStreamUncommitReport{
+				UncommittedLLSNOffset: types.MinLLSN + types.LLSN(5),
+				UncommittedLLSNLength: 5,
+				Version:               types.Version(5),
+			}
+			So(ms.verifyUncommitReport(r), ShouldBeFalse)
 		})
 	})
 }
@@ -1649,7 +1778,9 @@ func TestStorageRecoverStateMachine(t *testing.T) {
 		for i := 0; i < nrSN; i++ {
 			snIDs[i] = base + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNodeID: snIDs[i],
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
 			}
 
 			err := ms.RegisterStorageNode(sn, 0, 0)
@@ -1702,5 +1833,137 @@ func TestStorageRecoverStateMachine(t *testing.T) {
 				So(ms.running.Load(), ShouldBeTrue)
 			})
 		})
+	})
+}
+
+func TestStorageRegisterTopic(t *testing.T) {
+	Convey("Topic should be registered if not existed", t, func(ctx C) {
+		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
+
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		Convey("Topic should be registered even though it already exist", func(ctx C) {
+			err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+			So(err, ShouldBeNil)
+		})
+	})
+
+	Convey("LS should not be registered if not exist topic", t, func(ctx C) {
+		rep := 2
+		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
+
+		lsID := types.LogStreamID(time.Now().UnixNano())
+		tmp := types.StorageNodeID(time.Now().UnixNano())
+
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := 0; i < rep; i++ {
+			snIDs[i] = tmp + types.StorageNodeID(i)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
+			}
+
+			err := ms.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+
+		err := ms.registerLogStream(ls)
+		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+
+		Convey("LS should be registered if exist topic", func(ctx C) {
+			err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+			So(err, ShouldBeNil)
+
+			err = ms.registerLogStream(ls)
+			So(err, ShouldBeNil)
+
+			for i := 1; i < 10; i++ {
+				lsID += types.LogStreamID(1)
+				ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+
+				err := ms.registerLogStream(ls)
+				So(err, ShouldBeNil)
+			}
+
+			topic := ms.lookupTopic(types.TopicID(1))
+			So(topic, ShouldNotBeNil)
+
+			So(len(topic.LogStreams), ShouldEqual, 10)
+		})
+	})
+}
+
+func TestStoragUnregisterTopic(t *testing.T) {
+	Convey("unregister non-exist topic should return ErrNotExist", t, func(ctx C) {
+		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
+
+		err := ms.unregisterTopic(types.TopicID(1))
+		So(err, ShouldResemble, verrors.ErrNotExist)
+	})
+
+	Convey("unregister exist topic", t, func(ctx C) {
+		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
+
+		err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
+		So(err, ShouldBeNil)
+
+		err = ms.unregisterTopic(types.TopicID(1))
+		So(err, ShouldBeNil)
+
+		topic := ms.lookupTopic(types.TopicID(1))
+		So(topic, ShouldBeNil)
+	})
+}
+
+func TestStorageSortedTopicLogStreamIDs(t *testing.T) {
+	Convey("UncommitReport should be committed", t, func(ctx C) {
+		/*
+			Topic-1 : LS-1, LS-3
+			Topic-2 : LS-2, LS-4
+		*/
+
+		nrLS := 4
+		nrTopic := 2
+
+		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
+
+		snID := types.StorageNodeID(0)
+		snIDs := make([]types.StorageNodeID, 1)
+		snIDs = append(snIDs, snID)
+
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
+		}
+
+		err := ms.registerStorageNode(sn)
+		So(err, ShouldBeNil)
+
+		for i := 0; i < nrTopic; i++ {
+			err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(i + 1)})
+			So(err, ShouldBeNil)
+		}
+
+		for i := 0; i < nrLS; i++ {
+			lsID := types.LogStreamID(i + 1)
+			ls := makeLogStream(types.TopicID(i%2+1), lsID, snIDs)
+			err = ms.registerLogStream(ls)
+			So(err, ShouldBeNil)
+		}
+
+		ids := ms.GetSortedTopicLogStreamIDs()
+		So(sort.SliceIsSorted(ids, func(i, j int) bool {
+			if ids[i].TopicID == ids[j].TopicID {
+				return ids[i].LogStreamID < ids[j].LogStreamID
+			}
+
+			return ids[i].TopicID < ids[j].TopicID
+		}), ShouldBeTrue)
 	})
 }

@@ -14,6 +14,7 @@ func TestVarlogRegisterStorageNode(t *testing.T) {
 	env := NewVarlogCluster(t,
 		WithNumberOfStorageNodes(1),
 		WithNumberOfLogStreams(1),
+		WithNumberOfTopics(1),
 	)
 	defer env.Close(t)
 

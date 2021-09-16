@@ -11,8 +11,7 @@ import (
 func TestCommitWaitQueue(t *testing.T) {
 	const n = 10
 
-	cwq, err := newCommitWaitQueue()
-	require.NoError(t, err)
+	cwq := newCommitWaitQueue()
 	require.Zero(t, cwq.size())
 	iter := cwq.peekIterator()
 	require.False(t, iter.valid())

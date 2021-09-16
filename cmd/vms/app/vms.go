@@ -46,10 +46,8 @@ func Main(opts *vms.Options) error {
 	sigC := make(chan os.Signal, 1)
 	signal.Notify(sigC, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		select {
-		case <-sigC:
-			cm.Close()
-		}
+		<-sigC
+		cm.Close()
 	}()
 
 	cm.Wait()

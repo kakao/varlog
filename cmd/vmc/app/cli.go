@@ -72,15 +72,32 @@ func (app *VMCApp) initAddCmd() *cli.Command {
 		return nil
 	}
 
-	// vmc add logstream
-	lsCmd := newLSCmd()
-	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{})
-	lsCmd.Action = func(c *cli.Context) error {
-		app.addLogStream()
+	// vmc add topic
+	tpCmd := newTopicCmd()
+	tpCmd.Flags = append(tpCmd.Flags, &cli.StringFlag{})
+	tpCmd.Action = func(c *cli.Context) error {
+		app.addTopic()
 		return nil
 	}
 
-	cmd.Subcommands = append(cmd.Subcommands, snCmd, lsCmd)
+	// vmc add logstream
+	lsCmd := newLSCmd()
+	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{
+		Name:     "topic-id",
+		Usage:    "topic identifier",
+		EnvVars:  []string{"TOPIC_ID"},
+		Required: true,
+	})
+	lsCmd.Action = func(c *cli.Context) error {
+		topicID, err := types.ParseTopicID(c.String("topic-id"))
+		if err != nil {
+			return err
+		}
+		app.addLogStream(topicID)
+		return nil
+	}
+
+	cmd.Subcommands = append(cmd.Subcommands, snCmd, tpCmd, lsCmd)
 	return cmd
 }
 
@@ -110,18 +127,30 @@ func (app *VMCApp) initRmCmd() *cli.Command {
 
 	// vmc remove logstream
 	lsCmd := newLSCmd()
-	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{
-		Name:     "log-stream-id",
-		Usage:    "log stream identifier",
-		EnvVars:  []string{"LOG_STREAM_ID"},
-		Required: true,
-	})
+	lsCmd.Flags = append(lsCmd.Flags,
+		&cli.StringFlag{
+			Name:     "topic-id",
+			Usage:    "topic identifier",
+			EnvVars:  []string{"TOPIC_ID"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "log-stream-id",
+			Usage:    "log stream identifier",
+			EnvVars:  []string{"LOG_STREAM_ID"},
+			Required: true,
+		},
+	)
 	lsCmd.Action = func(c *cli.Context) error {
+		topicID, err := types.ParseTopicID(c.String("topic-id"))
+		if err != nil {
+			return err
+		}
 		lsID, err := types.ParseLogStreamID(c.String("log-stream-id"))
 		if err != nil {
 			return err
 		}
-		app.removeLogStream(lsID)
+		app.removeLogStream(topicID, lsID)
 		return nil
 	}
 
@@ -191,7 +220,6 @@ func (app *VMCApp) initUpdateCmd() *cli.Command {
 				StorageNodeID: pushSNID,
 				Path:          pushPath,
 			}
-
 		}
 		app.updateLogStream(lsID, popReplica, pushReplica)
 		return nil
@@ -209,17 +237,27 @@ func (app *VMCApp) initSealCmd() *cli.Command {
 
 	lsCmd := newLSCmd()
 	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{
+		Name:     "topic-id",
+		Usage:    "topic identifier",
+		EnvVars:  []string{"TOPIC_ID"},
+		Required: true,
+	})
+	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{
 		Name:     "log-stream-id",
 		Usage:    "log stream identifier",
 		EnvVars:  []string{"LOG_STREAM_ID"},
 		Required: true,
 	})
 	lsCmd.Action = func(c *cli.Context) error {
+		tpID, err := types.ParseTopicID(c.String("topic-id"))
+		if err != nil {
+			return err
+		}
 		lsID, err := types.ParseLogStreamID(c.String("log-stream-id"))
 		if err != nil {
 			return err
 		}
-		app.sealLogStream(lsID)
+		app.sealLogStream(tpID, lsID)
 		return nil
 	}
 
@@ -235,17 +273,27 @@ func (app *VMCApp) initUnsealCmd() *cli.Command {
 
 	lsCmd := newLSCmd()
 	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{
+		Name:     "topic-id",
+		Usage:    "topic identifier",
+		EnvVars:  []string{"TOPIC_ID"},
+		Required: true,
+	})
+	lsCmd.Flags = append(lsCmd.Flags, &cli.StringFlag{
 		Name:     "log-stream-id",
 		Usage:    "log stream identifier",
 		EnvVars:  []string{"LOG_STREAM_ID"},
 		Required: true,
 	})
 	lsCmd.Action = func(c *cli.Context) error {
+		tpID, err := types.ParseTopicID(c.String("topic-id"))
+		if err != nil {
+			return err
+		}
 		lsID, err := types.ParseLogStreamID(c.String("log-stream-id"))
 		if err != nil {
 			return err
 		}
-		app.unsealLogStream(lsID)
+		app.unsealLogStream(tpID, lsID)
 		return nil
 	}
 
@@ -262,6 +310,12 @@ func (app *VMCApp) initSyncCmd() *cli.Command {
 
 	lsCmd := newLSCmd()
 	lsCmd.Flags = append(lsCmd.Flags,
+		&cli.StringFlag{
+			Name:     "topic-id",
+			Usage:    "topic identifier",
+			EnvVars:  []string{"TOPIC_ID"},
+			Required: true,
+		},
 		&cli.StringFlag{
 			Name:     "log-stream-id",
 			Usage:    "log stream identifier",
@@ -282,6 +336,10 @@ func (app *VMCApp) initSyncCmd() *cli.Command {
 		},
 	)
 	lsCmd.Action = func(c *cli.Context) error {
+		tpID, err := types.ParseTopicID(c.String("topic-id"))
+		if err != nil {
+			return err
+		}
 		lsID, err := types.ParseLogStreamID(c.String("log-stream-id"))
 		if err != nil {
 			return err
@@ -294,7 +352,7 @@ func (app *VMCApp) initSyncCmd() *cli.Command {
 		if err != nil {
 			return err
 		}
-		app.syncLogStream(lsID, srcSNID, dstSNID)
+		app.syncLogStream(tpID, lsID, srcSNID, dstSNID)
 		return nil
 	}
 
@@ -417,6 +475,13 @@ func newSNCmd() *cli.Command {
 	return &cli.Command{
 		Name:    "storagenode",
 		Aliases: []string{"sn"},
+	}
+}
+
+func newTopicCmd() *cli.Command {
+	return &cli.Command{
+		Name:    "topic",
+		Aliases: []string{"t"},
 	}
 }
 

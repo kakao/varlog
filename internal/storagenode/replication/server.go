@@ -136,14 +136,15 @@ func (s *serverImpl) replicate(ctx context.Context, repCtxC <-chan *replicateTas
 			err = repCtx.err
 			if repCtx.err == nil {
 				startTime := time.Now()
+				tpid := repCtx.req.GetTopicID()
 				lsid := repCtx.req.GetLogStreamID()
-				if logReplicator, ok := s.logReplicatorGetter.Replicator(lsid); ok {
+				if logReplicator, ok := s.logReplicatorGetter.Replicator(tpid, lsid); ok {
 					err = logReplicator.Replicate(ctx, repCtx.req.GetLLSN(), repCtx.req.GetPayload())
 				} else {
 					err = fmt.Errorf("no executor: %v", lsid)
 				}
 				repCtx.err = err
-				s.measure.Stub().Metrics().RpcServerReplicateDuration.Record(
+				s.measure.Stub().Metrics().RPCServerReplicateDuration.Record(
 					ctx,
 					float64(time.Since(startTime).Microseconds())/1000.0,
 				)
@@ -220,8 +221,9 @@ func (s *serverImpl) SyncInit(ctx context.Context, req *snpb.SyncInitRequest) (r
 		span.End()
 	}()
 
+	tpID := req.GetDestination().TopicID
 	lsID := req.GetDestination().LogStreamID
-	logReplicator, ok := s.logReplicatorGetter.Replicator(lsID)
+	logReplicator, ok := s.logReplicatorGetter.Replicator(tpID, lsID)
 	if !ok {
 		err = errors.Errorf("no executor: %v", lsID)
 		return rsp, err
@@ -258,8 +260,9 @@ func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateR
 		span.End()
 	}()
 
+	tpID := req.GetDestination().TopicID
 	lsID := req.GetDestination().LogStreamID
-	logReplicator, ok := s.logReplicatorGetter.Replicator(lsID)
+	logReplicator, ok := s.logReplicatorGetter.Replicator(tpID, lsID)
 	if !ok {
 		err = errors.Errorf("no executor: %v", lsID)
 		return rsp, err

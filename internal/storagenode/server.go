@@ -85,13 +85,13 @@ func (s *server) GetMetadata(ctx context.Context, req *snpb.GetMetadataRequest) 
 }
 
 // AddLogStream implements the ManagementServer AddLogStream method.
-func (s *server) AddLogStream(ctx context.Context, req *snpb.AddLogStreamRequest) (*snpb.AddLogStreamResponse, error) {
+func (s *server) AddLogStreamReplica(ctx context.Context, req *snpb.AddLogStreamReplicaRequest) (*snpb.AddLogStreamReplicaResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/AddLogStream", req,
-		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.AddLogStreamRequest)
-			path, err := s.storageNode.AddLogStream(ctx, req.GetLogStreamID(), req.GetStorage().GetPath())
-			return &snpb.AddLogStreamResponse{
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			path, err := s.storageNode.AddLogStream(ctx, req.GetTopicID(), req.GetLogStreamID(), req.GetStorage().GetPath())
+			return &snpb.AddLogStreamReplicaResponse{
 				LogStream: &varlogpb.LogStreamDescriptor{
+					TopicID:     req.GetTopicID(),
 					LogStreamID: req.GetLogStreamID(),
 					Status:      varlogpb.LogStreamStatusRunning,
 					Replicas: []*varlogpb.ReplicaDescriptor{{
@@ -105,15 +105,14 @@ func (s *server) AddLogStream(ctx context.Context, req *snpb.AddLogStreamRequest
 	if err != nil {
 		return nil, verrors.ToStatusError(err)
 	}
-	return rspI.(*snpb.AddLogStreamResponse), nil
+	return rspI.(*snpb.AddLogStreamReplicaResponse), nil
 }
 
 // RemoveLogStream implements the ManagementServer RemoveLogStream method.
 func (s *server) RemoveLogStream(ctx context.Context, req *snpb.RemoveLogStreamRequest) (*pbtypes.Empty, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/RemoveLogStream", req,
-		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.RemoveLogStreamRequest)
-			err := s.storageNode.RemoveLogStream(ctx, req.GetLogStreamID())
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			err := s.storageNode.RemoveLogStream(ctx, req.GetTopicID(), req.GetLogStreamID())
 			return &pbtypes.Empty{}, err
 		},
 	)
@@ -126,9 +125,8 @@ func (s *server) RemoveLogStream(ctx context.Context, req *snpb.RemoveLogStreamR
 // Seal implements the ManagementServer Seal method.
 func (s *server) Seal(ctx context.Context, req *snpb.SealRequest) (*snpb.SealResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/Seal", req,
-		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.SealRequest)
-			status, maxGLSN, err := s.storageNode.Seal(ctx, req.GetLogStreamID(), req.GetLastCommittedGLSN())
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			status, maxGLSN, err := s.storageNode.Seal(ctx, req.GetTopicID(), req.GetLogStreamID(), req.GetLastCommittedGLSN())
 			return &snpb.SealResponse{
 				Status:            status,
 				LastCommittedGLSN: maxGLSN,
@@ -144,9 +142,8 @@ func (s *server) Seal(ctx context.Context, req *snpb.SealRequest) (*snpb.SealRes
 // Unseal implements the ManagementServer Unseal method.
 func (s *server) Unseal(ctx context.Context, req *snpb.UnsealRequest) (*pbtypes.Empty, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/Unseal", req,
-		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.UnsealRequest)
-			err := s.storageNode.Unseal(ctx, req.GetLogStreamID(), req.GetReplicas())
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			err := s.storageNode.Unseal(ctx, req.GetTopicID(), req.GetLogStreamID(), req.GetReplicas())
 			return &pbtypes.Empty{}, err
 		},
 	)
@@ -159,14 +156,16 @@ func (s *server) Unseal(ctx context.Context, req *snpb.UnsealRequest) (*pbtypes.
 // Sync implements the ManagementServer Sync method.
 func (s *server) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/Sync", req,
-		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.SyncRequest)
-			replica := snpb.Replica{
-				StorageNodeID: req.GetBackup().GetStorageNodeID(),
-				LogStreamID:   req.GetLogStreamID(),
-				Address:       req.GetBackup().GetAddress(),
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			replica := varlogpb.Replica{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: req.GetBackup().GetStorageNodeID(),
+					Address:       req.GetBackup().GetAddress(),
+				},
+				TopicID:     req.GetTopicID(),
+				LogStreamID: req.GetLogStreamID(),
 			}
-			status, err := s.storageNode.Sync(ctx, req.GetLogStreamID(), replica)
+			status, err := s.storageNode.Sync(ctx, req.GetTopicID(), req.GetLogStreamID(), replica)
 			return &snpb.SyncResponse{Status: status}, err
 		},
 	)
@@ -178,9 +177,8 @@ func (s *server) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncRes
 
 func (s *server) GetPrevCommitInfo(ctx context.Context, req *snpb.GetPrevCommitInfoRequest) (*snpb.GetPrevCommitInfoResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/GetPrevCommitInfo", req,
-		func(ctx context.Context, reqI interface{}) (interface{}, error) {
-			req := reqI.(*snpb.GetPrevCommitInfoRequest)
-			info, err := s.storageNode.GetPrevCommitInfo(ctx, req.GetPrevHighWatermark())
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			info, err := s.storageNode.GetPrevCommitInfo(ctx, req.GetPrevVersion())
 			rsp := &snpb.GetPrevCommitInfoResponse{
 				StorageNodeID: s.storageNode.StorageNodeID(),
 				CommitInfos:   info,

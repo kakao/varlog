@@ -15,8 +15,8 @@ var commitTaskPool = sync.Pool{
 }
 
 type commitTask struct {
+	version            types.Version
 	highWatermark      types.GLSN
-	prevHighWatermark  types.GLSN
 	committedGLSNBegin types.GLSN
 	committedGLSNEnd   types.GLSN
 	committedLLSNBegin types.LLSN
@@ -33,8 +33,7 @@ func newCommitTask() *commitTask {
 }
 
 func (t *commitTask) release() {
-	t.highWatermark = types.InvalidGLSN
-	t.prevHighWatermark = types.InvalidGLSN
+	t.version = types.InvalidVersion
 	t.committedGLSNBegin = types.InvalidGLSN
 	t.committedGLSNEnd = types.InvalidGLSN
 	t.committedLLSNBegin = types.InvalidLLSN
@@ -44,8 +43,8 @@ func (t *commitTask) release() {
 	commitTaskPool.Put(t)
 }
 
-func (t *commitTask) stale(globalHWM types.GLSN) bool {
-	return t.highWatermark <= globalHWM
+func (t *commitTask) stale(ver types.Version) bool {
+	return t.version <= ver
 }
 
 func (t *commitTask) annotate(ctx context.Context, m MeasurableExecutor, discarded bool) {

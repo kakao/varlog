@@ -18,7 +18,6 @@ import (
 
 var (
 	errNotSupportedNetwork     = errors.New("not supported network")
-	errNotLocalAdddress        = errors.New("not local address")
 	errNotGlobalUnicastAddress = errors.New("not global unicast address")
 )
 

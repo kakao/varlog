@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 var writeTaskPool = sync.Pool{
@@ -24,7 +24,7 @@ type writeTask struct {
 
 	// backups is a list of backups of the log stream. The first element is the primary
 	// replica, and the others are backup backups.
-	backups []snpb.Replica
+	backups []varlogpb.Replica
 
 	// NOTE: primary can be removed by using isPrimary method of executor.
 	primary bool
@@ -50,13 +50,13 @@ func newWriteTaskInternal(twg *taskWaitGroup, data []byte) *writeTask {
 	return wt
 }
 
-func newPrimaryWriteTask(twg *taskWaitGroup, data []byte, backups []snpb.Replica) *writeTask {
+func newPrimaryWriteTask(twg *taskWaitGroup, data []byte, backups []varlogpb.Replica) *writeTask {
 	wt := newWriteTaskInternal(twg, data)
 	wt.primary = true
 	wt.backups = backups
 	return wt
-
 }
+
 func newBackupWriteTask(twg *taskWaitGroup, data []byte, llsn types.LLSN) *writeTask {
 	if llsn.Invalid() {
 		panic("invalid LLSN")

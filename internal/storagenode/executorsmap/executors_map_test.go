@@ -18,12 +18,12 @@ func TestExecutorsMapEmpty(t *testing.T) {
 	emap := New(10)
 	require.Zero(t, emap.Size())
 
-	extor, ok := emap.Load(1)
+	extor, ok := emap.Load(1, 1)
 	require.Nil(t, extor)
 	require.False(t, ok)
 
 	numCalled := 0
-	emap.Range(func(_ types.LogStreamID, _ executor.Executor) bool {
+	emap.Range(func(types.LogStreamID, executor.Executor) bool {
 		numCalled++
 		return true
 	})
@@ -36,17 +36,17 @@ func TestExecutorsMapStore(t *testing.T) {
 
 	emap := New(10)
 
-	require.NoError(t, emap.Store(1, nil))
+	require.NoError(t, emap.Store(1, 1, nil))
 	require.Equal(t, 1, emap.Size())
-	loadedExtor, loaded := emap.Load(1)
+	loadedExtor, loaded := emap.Load(1, 1)
 	require.True(t, loaded)
 	require.Nil(t, loadedExtor)
 
 	extor := executor.NewMockExecutor(ctrl)
-	require.NoError(t, emap.Store(1, extor))
+	require.NoError(t, emap.Store(1, 1, extor))
 	require.Equal(t, 1, emap.Size())
 
-	loadedExtor, loaded = emap.Load(1)
+	loadedExtor, loaded = emap.Load(1, 1)
 	require.True(t, loaded)
 	require.Equal(t, extor, loadedExtor)
 }
@@ -57,28 +57,28 @@ func TestExecutorsMapLoadOrStore(t *testing.T) {
 
 	emap := New(10)
 
-	extor, loaded := emap.LoadOrStore(1, nil)
+	extor, loaded := emap.LoadOrStore(1, 1, nil)
 	require.False(t, loaded)
 	require.Nil(t, extor)
 
 	require.Equal(t, 1, emap.Size())
-	loadedExtor, loaded := emap.Load(1)
+	loadedExtor, loaded := emap.Load(1, 1)
 	require.True(t, loaded)
 	require.Nil(t, loadedExtor)
 
-	actualExtor, loaded := emap.LoadOrStore(1, executor.NewMockExecutor(ctrl))
+	actualExtor, loaded := emap.LoadOrStore(1, 1, executor.NewMockExecutor(ctrl))
 	require.True(t, loaded)
 	require.Equal(t, loadedExtor, actualExtor)
 
 	extor = executor.NewMockExecutor(ctrl)
-	require.NoError(t, emap.Store(1, extor))
+	require.NoError(t, emap.Store(1, 1, extor))
 	require.Equal(t, 1, emap.Size())
 
-	loadedExtor, loaded = emap.Load(1)
+	loadedExtor, loaded = emap.Load(1, 1)
 	require.True(t, loaded)
 	require.Equal(t, extor, loadedExtor)
 
-	extor, loaded = emap.LoadAndDelete(1)
+	extor, loaded = emap.LoadAndDelete(1, 1)
 	require.True(t, loaded)
 	require.Equal(t, extor, loadedExtor)
 }
@@ -89,7 +89,7 @@ func TestExecutorsMapLoadAndDelete(t *testing.T) {
 
 	emap := New(10)
 
-	extor, loaded := emap.LoadAndDelete(1)
+	extor, loaded := emap.LoadAndDelete(1, 1)
 	require.Nil(t, extor)
 	require.False(t, loaded)
 }
@@ -101,11 +101,11 @@ func TestExecutorsMapOverwrite(t *testing.T) {
 	emap := New(10)
 
 	extor := executor.NewMockExecutor(ctrl)
-	require.NoError(t, emap.Store(1, extor))
+	require.NoError(t, emap.Store(1, 1, extor))
 	require.Equal(t, 1, emap.Size())
 
-	require.Error(t, emap.Store(1, extor))
-	require.Error(t, emap.Store(1, executor.NewMockExecutor(ctrl)))
+	require.Error(t, emap.Store(1, 1, extor))
+	require.Error(t, emap.Store(1, 1, executor.NewMockExecutor(ctrl)))
 }
 
 func TestExecutorsMapMultipleExecutors(t *testing.T) {
@@ -114,8 +114,11 @@ func TestExecutorsMapMultipleExecutors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	emap := New(10)
 	extors := make([]executor.Executor, numExtors)
+	lstpMap := make(map[types.LogStreamID]types.TopicID, numExtors)
 
 	for i := 0; i < numExtors; i++ {
 		require.Equal(t, i, emap.Size())
@@ -124,19 +127,25 @@ func TestExecutorsMapMultipleExecutors(t *testing.T) {
 			extor = nil
 		}
 		extors[i] = extor
-		emap.Store(types.LogStreamID(i), extor)
+		tpid := types.TopicID(rng.Int31())
+		lsid := types.LogStreamID(i)
+		lstpMap[lsid] = tpid
+		require.NoError(t, emap.Store(tpid, lsid, extor))
 		require.Equal(t, i+1, emap.Size())
 	}
 
 	require.Equal(t, numExtors, emap.Size())
 
 	for i := 0; i < numExtors; i++ {
-		actual, loaded := emap.LoadOrStore(types.LogStreamID(i), executor.NewMockExecutor(ctrl))
+		lsid := types.LogStreamID(i)
+		require.Contains(t, lstpMap, lsid)
+		tpid := lstpMap[lsid]
+		actual, loaded := emap.LoadOrStore(tpid, lsid, executor.NewMockExecutor(ctrl))
 		require.True(t, loaded)
 		require.Equal(t, extors[i], actual)
 
 		if i%2 != 0 {
-			require.Error(t, emap.Store(types.LogStreamID(1), executor.NewMockExecutor(ctrl)))
+			require.Error(t, emap.Store(tpid, lsid, executor.NewMockExecutor(ctrl)))
 		}
 	}
 
@@ -170,21 +179,29 @@ func TestExecutorsMapOrdred(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 
 	emap := New(numExtors)
+	lstpMap := make(map[types.LogStreamID]types.TopicID)
 
 	var stored [numExtors]bool
 	for i := 0; i < numExtors*10; i++ {
-		lsid := rand.Intn(numExtors)
+		pos := rand.Intn(numExtors)
+		lsid := types.LogStreamID(pos)
+		tpid := types.TopicID(rand.Int31())
+		if _, ok := lstpMap[lsid]; ok {
+			tpid = lstpMap[lsid]
+		} else {
+			lstpMap[lsid] = tpid
+		}
 		ok := !stored[lsid]
 		if ok {
-			require.NoError(t, emap.Store(types.LogStreamID(lsid), executor.NewMockExecutor(ctrl)))
+			require.NoError(t, emap.Store(tpid, lsid, executor.NewMockExecutor(ctrl)))
 			stored[lsid] = true
 		} else {
-			require.Error(t, emap.Store(types.LogStreamID(lsid), executor.NewMockExecutor(ctrl)))
+			require.Error(t, emap.Store(tpid, lsid, executor.NewMockExecutor(ctrl)))
 		}
 	}
 
 	iteratedLSIDs := make([]types.LogStreamID, 0, numExtors)
-	emap.Range(func(lsid types.LogStreamID, extor executor.Executor) bool {
+	emap.Range(func(lsid types.LogStreamID, _ executor.Executor) bool {
 		iteratedLSIDs = append(iteratedLSIDs, lsid)
 		return true
 	})
@@ -195,8 +212,8 @@ func TestExecutorsMapOrdred(t *testing.T) {
 
 func BenchmarkExecutorsMap(b *testing.B) {
 	const (
+		topicID   = types.TopicID(1)
 		numExtors = 1e5
-		initSize  = 128
 	)
 
 	ctrl := gomock.NewController(b)
@@ -208,7 +225,7 @@ func BenchmarkExecutorsMap(b *testing.B) {
 	for i := 0; i < numExtors; i++ {
 		lsid := types.LogStreamID(i)
 		extor := executor.NewMockExecutor(ctrl)
-		require.NoError(b, ordmap.Store(lsid, extor))
+		require.NoError(b, ordmap.Store(topicID, lsid, extor))
 		stdmap[lsid] = extor
 	}
 
@@ -249,7 +266,7 @@ func BenchmarkExecutorsMap(b *testing.B) {
 
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					ordmap.Store(types.LogStreamID(i), mockExecutor)
+					_ = ordmap.Store(topicID, types.LogStreamID(i), mockExecutor)
 				}
 			},
 		},
@@ -272,7 +289,7 @@ func BenchmarkExecutorsMap(b *testing.B) {
 			benchfunc: func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					lsid := loadIDs[i%len(loadIDs)]
-					extor, ok := ordmap.Load(lsid)
+					extor, ok := ordmap.Load(topicID, lsid)
 					if ok {
 						callback(lsid, extor)
 					}

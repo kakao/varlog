@@ -12,6 +12,7 @@ import (
 
 	types "github.daumkakao.com/varlog/varlog/pkg/types"
 	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
+	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // MockReplicator is a mock of Replicator interface.
@@ -52,7 +53,7 @@ func (mr *MockReplicatorMockRecorder) Replicate(arg0, arg1, arg2 interface{}) *g
 }
 
 // Sync mocks base method.
-func (m *MockReplicator) Sync(arg0 context.Context, arg1 snpb.Replica) (*snpb.SyncStatus, error) {
+func (m *MockReplicator) Sync(arg0 context.Context, arg1 varlogpb.Replica) (*snpb.SyncStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", arg0, arg1)
 	ret0, _ := ret[0].(*snpb.SyncStatus)
@@ -119,16 +120,16 @@ func (m *MockGetter) EXPECT() *MockGetterMockRecorder {
 }
 
 // Replicator mocks base method.
-func (m *MockGetter) Replicator(arg0 types.LogStreamID) (Replicator, bool) {
+func (m *MockGetter) Replicator(arg0 types.TopicID, arg1 types.LogStreamID) (Replicator, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Replicator", arg0)
+	ret := m.ctrl.Call(m, "Replicator", arg0, arg1)
 	ret0, _ := ret[0].(Replicator)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // Replicator indicates an expected call of Replicator.
-func (mr *MockGetterMockRecorder) Replicator(arg0 interface{}) *gomock.Call {
+func (mr *MockGetterMockRecorder) Replicator(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicator", reflect.TypeOf((*MockGetter)(nil).Replicator), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicator", reflect.TypeOf((*MockGetter)(nil).Replicator), arg0, arg1)
 }

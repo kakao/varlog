@@ -33,6 +33,9 @@ bin/vmr
 bin/vms
 bin/vsn
 bin/rpc_test_server
+bin/rpcbench_client
+bin/rpcbench_server
+bin/benchmark
 
 # Python
 *.pyc

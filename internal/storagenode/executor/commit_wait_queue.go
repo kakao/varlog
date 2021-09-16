@@ -48,11 +48,10 @@ type commitWaitQueueImpl struct {
 
 var _ commitWaitQueue = (*commitWaitQueueImpl)(nil)
 
-func newCommitWaitQueue() (commitWaitQueue, error) {
-	cwq := &commitWaitQueueImpl{
+func newCommitWaitQueue() commitWaitQueue {
+	return &commitWaitQueueImpl{
 		queue: list.New(),
 	}
-	return cwq, nil
 }
 
 func (cwq *commitWaitQueueImpl) push(cwt *commitWaitTask) error {

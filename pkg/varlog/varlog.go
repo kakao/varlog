@@ -11,24 +11,25 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // Varlog is a log interface with thread-safety. Many goroutines can share the same varlog object.
 type Varlog interface {
 	io.Closer
 
-	Append(ctx context.Context, data []byte, opts ...AppendOption) (types.GLSN, error)
+	Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...AppendOption) (types.GLSN, error)
 
-	AppendTo(ctx context.Context, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error)
+	AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error)
 
-	Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
+	Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
 
-	Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error)
+	Subscribe(ctx context.Context, topicID types.TopicID, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error)
 
-	Trim(ctx context.Context, until types.GLSN, opts TrimOption) error
+	Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error
 }
 
-type OnNext func(logEntry types.LogEntry, err error)
+type OnNext func(logEntry varlogpb.LogEntry, err error)
 
 type varlog struct {
 	clusterID         types.ClusterID
@@ -121,29 +122,29 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	return v, nil
 }
 
-func (v *varlog) Append(ctx context.Context, data []byte, opts ...AppendOption) (types.GLSN, error) {
-	return v.append(ctx, 0, data, opts...)
+func (v *varlog) Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...AppendOption) (types.GLSN, error) {
+	return v.append(ctx, topicID, 0, data, opts...)
 }
 
-func (v *varlog) AppendTo(ctx context.Context, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error) {
+func (v *varlog) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error) {
 	opts = append(opts, withoutSelectLogStream())
-	return v.append(ctx, logStreamID, data, opts...)
+	return v.append(ctx, topicID, logStreamID, data, opts...)
 }
 
-func (v *varlog) Read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
-	logEntry, err := v.read(ctx, logStreamID, glsn)
+func (v *varlog) Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
+	logEntry, err := v.read(ctx, topicID, logStreamID, glsn)
 	if err != nil {
 		return nil, err
 	}
 	return logEntry.Data, nil
 }
 
-func (v *varlog) Subscribe(ctx context.Context, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error) {
-	return v.subscribe(ctx, begin, end, onNextFunc, opts...)
+func (v *varlog) Subscribe(ctx context.Context, topicID types.TopicID, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error) {
+	return v.subscribe(ctx, topicID, begin, end, onNextFunc, opts...)
 }
 
-func (v *varlog) Trim(ctx context.Context, until types.GLSN, opts TrimOption) error {
-	return v.trim(ctx, until, opts)
+func (v *varlog) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
+	return v.trim(ctx, topicID, until, opts)
 }
 
 func (v *varlog) Close() (err error) {

@@ -48,7 +48,7 @@ const (
 	VarlogNamespace       = "default"
 	IngressNginxNamespace = "ingress-nginx"
 
-	ENV_REP_FACTOR = "REP_FACTOR"
+	EnvRepFactor = "REP_FACTOR"
 
 	// telemetry
 	TelemetryLabelValue = "telemetry"
@@ -175,11 +175,11 @@ func (k8s *K8sVarlogCluster) Reset() error {
 	}
 
 	rep := fmt.Sprintf("%d", k8s.RepFactor)
-	if err := k8s.ReplaceEnvToDeployment(VMSRSName, ENV_REP_FACTOR, rep); err != nil {
+	if err := k8s.ReplaceEnvToDeployment(VMSRSName, EnvRepFactor, rep); err != nil {
 		return err
 	}
 
-	if err := k8s.ReplaceEnvToDaemonset(MRLabel, ENV_REP_FACTOR, rep); err != nil {
+	if err := k8s.ReplaceEnvToDaemonset(MRLabel, EnvRepFactor, rep); err != nil {
 		return err
 	}
 
@@ -804,7 +804,7 @@ func (view *k8sVarlogView) GetMRNodeName(mrID vtypes.NodeID) (string, error) {
 		if err := view.Renew(); err != nil {
 			return "", err
 		}
-		nodeID, _ = view.mrs[mrID]
+		nodeID = view.mrs[mrID]
 	}
 
 	return nodeID, nil
@@ -819,7 +819,7 @@ func (view *k8sVarlogView) GetSNNodeName(snID vtypes.StorageNodeID) (string, err
 		if err := view.Renew(); err != nil {
 			return "", err
 		}
-		nodeID, _ = view.sns[snID]
+		nodeID = view.sns[snID]
 	}
 
 	return nodeID, nil
