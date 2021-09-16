@@ -87,7 +87,7 @@ func (r *reporter) Commit(ctx context.Context, commitResult snpb.LogStreamCommit
 		return errors.WithStack(verrors.ErrClosed)
 	}
 
-	committer, ok := r.reportCommitterGetter.ReportCommitter(commitResult.LogStreamID)
+	committer, ok := r.reportCommitterGetter.ReportCommitter(commitResult.TopicID, commitResult.LogStreamID)
 	if !ok {
 		return errors.Errorf("no such committer: %d", commitResult.LogStreamID)
 	}

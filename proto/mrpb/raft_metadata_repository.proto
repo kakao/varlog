@@ -12,22 +12,22 @@ option go_package = "github.com/kakao/varlog/proto/mrpb";
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 message LogStreamCommitResults {
     option (gogoproto.equal) = true;
 
-    uint64 high_watermark = 1
+    uint64 version = 1
         [(gogoproto.casttype) =
-             "github.com/kakao/varlog/pkg/types.GLSN"];
-    uint64 prev_high_watermark = 2
-        [(gogoproto.casttype) =
-             "github.com/kakao/varlog/pkg/types.GLSN"];
+             "github.com/kakao/varlog/pkg/types.Version"];
     repeated snpb.LogStreamCommitResult commit_results = 3
         [(gogoproto.nullable) = false];
 }
 
 message StorageNodeUncommitReport {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
@@ -39,7 +39,7 @@ message StorageNodeUncommitReport {
 message LogStreamUncommitReports {
     option (gogoproto.equal) = true;
 
-    map<uint32, snpb.LogStreamUncommitReport> replicas = 1 [
+    map<int32, snpb.LogStreamUncommitReport> replicas = 1 [
         (gogoproto.castkey) =
             "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.nullable) = false
@@ -49,14 +49,12 @@ message LogStreamUncommitReports {
 
 message MetadataRepositoryDescriptor {
     message LogStreamDescriptor {
-        uint64 trim_glsn = 1 [
-            (gogoproto.casttype) =
-                "github.com/kakao/varlog/pkg/types.GLSN",
-            (gogoproto.customname) = "TrimGLSN"
-        ];
+        uint64 trim_version = 1
+            [(gogoproto.casttype) =
+                 "github.com/kakao/varlog/pkg/types.Version"];
         repeated LogStreamCommitResults commit_history = 2
             [(gogoproto.nullable) = true];
-        map<uint32, LogStreamUncommitReports> uncommit_reports = 3
+        map<int32, LogStreamUncommitReports> uncommit_reports = 3
             [(gogoproto.castkey) =
                  "github.com/kakao/varlog/pkg/types.LogStreamID"];
     }

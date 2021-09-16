@@ -27,11 +27,11 @@ func newPebbleWriteBatch() *pebbleWriteBatch {
 	return pebbleWriteBatchPool.Get().(*pebbleWriteBatch)
 }
 
-func (wb *pebbleWriteBatch) release() {
-	wb.b = nil
-	wb.ps = nil
-	wb.prevWrittenLLSN = types.InvalidLLSN
-	pebbleWriteBatchPool.Put(wb)
+func (pwb *pebbleWriteBatch) release() {
+	pwb.b = nil
+	pwb.ps = nil
+	pwb.prevWrittenLLSN = types.InvalidLLSN
+	pebbleWriteBatchPool.Put(pwb)
 }
 
 func (pwb *pebbleWriteBatch) Put(llsn types.LLSN, data []byte) error {

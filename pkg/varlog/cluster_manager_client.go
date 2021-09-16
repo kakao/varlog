@@ -15,13 +15,15 @@ import (
 type ClusterManagerClient interface {
 	AddStorageNode(ctx context.Context, addr string) (*vmspb.AddStorageNodeResponse, error)
 	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vmspb.UnregisterStorageNodeResponse, error)
-	AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*vmspb.AddLogStreamResponse, error)
-	UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnregisterLogStreamResponse, error)
-	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) (*vmspb.RemoveLogStreamReplicaResponse, error)
-	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*vmspb.UpdateLogStreamResponse, error)
-	Seal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.SealResponse, error)
-	Unseal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error)
-	Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*vmspb.SyncResponse, error)
+	AddTopic(ctx context.Context) (*vmspb.AddTopicResponse, error)
+	UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error)
+	AddLogStream(ctx context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*vmspb.AddLogStreamResponse, error)
+	UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.UnregisterLogStreamResponse, error)
+	RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.RemoveLogStreamReplicaResponse, error)
+	UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*vmspb.UpdateLogStreamResponse, error)
+	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.SealResponse, error)
+	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error)
+	Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID) (*vmspb.SyncResponse, error)
 	GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error)
 	AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (*vmspb.AddMRPeerResponse, error)
 	RemoveMRPeer(ctx context.Context, raftURL string) (*vmspb.RemoveMRPeerResponse, error)
@@ -62,26 +64,44 @@ func (c *clusterManagerClient) UnregisterStorageNode(ctx context.Context, storag
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) AddLogStream(ctx context.Context, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*vmspb.AddLogStreamResponse, error) {
-	rsp, err := c.rpcClient.AddLogStream(ctx, &vmspb.AddLogStreamRequest{Replicas: logStreamReplicas})
+func (c *clusterManagerClient) AddTopic(ctx context.Context) (*vmspb.AddTopicResponse, error) {
+	rsp, err := c.rpcClient.AddTopic(ctx, &vmspb.AddTopicRequest{})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnregisterLogStreamResponse, error) {
-	rsp, err := c.rpcClient.UnregisterLogStream(ctx, &vmspb.UnregisterLogStreamRequest{LogStreamID: logStreamID})
+func (c *clusterManagerClient) UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error) {
+	rsp, err := c.rpcClient.UnregisterTopic(ctx, &vmspb.UnregisterTopicRequest{TopicID: topicID})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, logStreamID types.LogStreamID) (*vmspb.RemoveLogStreamReplicaResponse, error) {
+func (c *clusterManagerClient) AddLogStream(ctx context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*vmspb.AddLogStreamResponse, error) {
+	rsp, err := c.rpcClient.AddLogStream(ctx, &vmspb.AddLogStreamRequest{
+		TopicID:  topicID,
+		Replicas: logStreamReplicas,
+	})
+	return rsp, verrors.FromStatusError(err)
+}
+
+func (c *clusterManagerClient) UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.UnregisterLogStreamResponse, error) {
+	rsp, err := c.rpcClient.UnregisterLogStream(ctx, &vmspb.UnregisterLogStreamRequest{
+		TopicID:     topicID,
+		LogStreamID: logStreamID,
+	})
+	return rsp, verrors.FromStatusError(err)
+}
+
+func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.RemoveLogStreamReplicaResponse, error) {
 	rsp, err := c.rpcClient.RemoveLogStreamReplica(ctx, &vmspb.RemoveLogStreamReplicaRequest{
 		StorageNodeID: storageNodeID,
+		TopicID:       topicID,
 		LogStreamID:   logStreamID,
 	})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*vmspb.UpdateLogStreamResponse, error) {
+func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*vmspb.UpdateLogStreamResponse, error) {
 	rsp, err := c.rpcClient.UpdateLogStream(ctx, &vmspb.UpdateLogStreamRequest{
+		TopicID:       topicID,
 		LogStreamID:   logStreamID,
 		PoppedReplica: poppedReplica,
 		PushedReplica: pushedReplica,
@@ -89,21 +109,28 @@ func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, logStreamID 
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) Seal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
-	rsp, err := c.rpcClient.Seal(ctx, &vmspb.SealRequest{LogStreamID: logStreamID})
+func (c *clusterManagerClient) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
+	rsp, err := c.rpcClient.Seal(ctx, &vmspb.SealRequest{
+		TopicID:     topicID,
+		LogStreamID: logStreamID,
+	})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) Unseal(ctx context.Context, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error) {
-	rsp, err := c.rpcClient.Unseal(ctx, &vmspb.UnsealRequest{LogStreamID: logStreamID})
+func (c *clusterManagerClient) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error) {
+	rsp, err := c.rpcClient.Unseal(ctx, &vmspb.UnsealRequest{
+		TopicID:     topicID,
+		LogStreamID: logStreamID,
+	})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) Sync(ctx context.Context, logStreamID types.LogStreamID, srcStorageNodeId, dstStorageNodeId types.StorageNodeID) (*vmspb.SyncResponse, error) {
+func (c *clusterManagerClient) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID) (*vmspb.SyncResponse, error) {
 	rsp, err := c.rpcClient.Sync(ctx, &vmspb.SyncRequest{
+		TopicID:          topicID,
 		LogStreamID:      logStreamID,
-		SrcStorageNodeID: srcStorageNodeId,
-		DstStorageNodeID: dstStorageNodeId,
+		SrcStorageNodeID: srcStorageNodeID,
+		DstStorageNodeID: dstStorageNodeID,
 	})
 	return rsp, verrors.FromStatusError(err)
 }

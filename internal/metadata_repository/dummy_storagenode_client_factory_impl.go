@@ -26,7 +26,7 @@ func (rc *EmptyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 	return &snpb.GetReportResponse{}, nil
 }
 
-func (rc *EmptyStorageNodeClient) Commit(gls snpb.CommitRequest) error {
+func (rc *EmptyStorageNodeClient) Commit(snpb.CommitRequest) error {
 	return nil
 }
 
@@ -34,38 +34,38 @@ func (rc *EmptyStorageNodeClient) Close() error {
 	return nil
 }
 
-func (r *EmptyStorageNodeClient) PeerAddress() string {
+func (rc *EmptyStorageNodeClient) PeerAddress() string {
 	panic("not implemented")
 }
-func (r *EmptyStorageNodeClient) PeerStorageNodeID() types.StorageNodeID {
-	panic("not implemented")
-}
-
-func (r *EmptyStorageNodeClient) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (rc *EmptyStorageNodeClient) PeerStorageNodeID() types.StorageNodeID {
 	panic("not implemented")
 }
 
-func (r *EmptyStorageNodeClient) AddLogStream(ctx context.Context, logStreamID types.LogStreamID, path string) error {
+func (rc *EmptyStorageNodeClient) GetMetadata(context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	panic("not implemented")
 }
 
-func (r *EmptyStorageNodeClient) RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
+func (rc *EmptyStorageNodeClient) AddLogStreamReplica(context.Context, types.TopicID, types.LogStreamID, string) error {
 	panic("not implemented")
 }
 
-func (r *EmptyStorageNodeClient) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
+func (rc *EmptyStorageNodeClient) RemoveLogStream(context.Context, types.TopicID, types.LogStreamID) error {
 	panic("not implemented")
 }
 
-func (r *EmptyStorageNodeClient) Unseal(ctx context.Context, logStreamID types.LogStreamID, replicas []snpb.Replica) error {
+func (rc *EmptyStorageNodeClient) Seal(context.Context, types.TopicID, types.LogStreamID, types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	panic("not implemented")
 }
 
-func (r *EmptyStorageNodeClient) Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
+func (rc *EmptyStorageNodeClient) Unseal(context.Context, types.TopicID, types.LogStreamID, []varlogpb.Replica) error {
 	panic("not implemented")
 }
 
-func (r *EmptyStorageNodeClient) GetPrevCommitInfo(ctx context.Context, hwm types.GLSN) (*snpb.GetPrevCommitInfoResponse, error) {
+func (rc *EmptyStorageNodeClient) Sync(context.Context, types.TopicID, types.LogStreamID, types.StorageNodeID, string, types.GLSN) (*snpb.SyncStatus, error) {
+	panic("not implemented")
+}
+
+func (rc *EmptyStorageNodeClient) GetPrevCommitInfo(context.Context, types.Version) (*snpb.GetPrevCommitInfoResponse, error) {
 	panic("not implemented")
 }
 
@@ -86,19 +86,19 @@ func (rcf *EmptyStorageNodeClientFactory) GetManagementClient(context.Context, t
 
 type DummyStorageNodeClientStatus int32
 
-const DefaultDelay time.Duration = 500 * time.Microsecond
+const DefaultDelay = 500 * time.Microsecond
 
 const (
-	DUMMY_STORAGENODE_CLIENT_STATUS_RUNNING DummyStorageNodeClientStatus = iota
-	DUMMY_STORAGENODE_CLIENT_STATUS_CLOSED
-	DUMMY_STORAGENODE_CLIENT_STATUS_CRASH
+	DummyStorageNodeClientStatusRunning DummyStorageNodeClientStatus = iota
+	DummyStorageNodeClientStatusClosed
+	DummyStorageNodeClientStatusCrash
 )
 
 type DummyStorageNodeClient struct {
 	storageNodeID types.StorageNodeID
 
 	logStreamIDs          []types.LogStreamID
-	knownHighWatermark    []types.GLSN
+	knownVersion          []types.Version
 	uncommittedLLSNOffset []types.LLSN
 	uncommittedLLSNLength []uint64
 	commitResultHistory   [][]snpb.LogStreamCommitInfo
@@ -147,15 +147,15 @@ func NewDummyStorageNodeClientFactory(nrLogStreams int, manual bool) *DummyStora
 	return fac
 }
 
-func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(ctx context.Context, snID types.StorageNodeID) (*DummyStorageNodeClient, error) {
-	status := DUMMY_STORAGENODE_CLIENT_STATUS_RUNNING
+func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(_ context.Context, snID types.StorageNodeID) (*DummyStorageNodeClient, error) {
+	status := DummyStorageNodeClientStatusRunning
 
 	LSIDs := make([]types.LogStreamID, fac.nrLogStreams)
 	for i := 0; i < fac.nrLogStreams; i++ {
 		LSIDs[i] = types.LogStreamID(snID) + types.LogStreamID(i)
 	}
 
-	knownHighWatermark := make([]types.GLSN, fac.nrLogStreams)
+	knownVersion := make([]types.Version, fac.nrLogStreams)
 
 	uncommittedLLSNOffset := make([]types.LLSN, fac.nrLogStreams)
 	for i := 0; i < fac.nrLogStreams; i++ {
@@ -169,7 +169,7 @@ func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(ctx context.Conte
 		manual:                fac.manual,
 		storageNodeID:         snID,
 		logStreamIDs:          LSIDs,
-		knownHighWatermark:    knownHighWatermark,
+		knownVersion:          knownVersion,
 		uncommittedLLSNOffset: uncommittedLLSNOffset,
 		uncommittedLLSNLength: uncommittedLLSNLength,
 		commitResultHistory:   commitResultHistory,
@@ -191,7 +191,7 @@ func (fac *DummyStorageNodeClientFactory) GetReporterClient(ctx context.Context,
 	return fac.getStorageNodeClient(ctx, sn.StorageNodeID)
 }
 
-func (fac *DummyStorageNodeClientFactory) GetManagementClient(ctx context.Context, clusterID types.ClusterID, address string, logger *zap.Logger) (snc.StorageNodeManagementClient, error) {
+func (fac *DummyStorageNodeClientFactory) GetManagementClient(ctx context.Context, _ types.ClusterID, address string, _ *zap.Logger) (snc.StorageNodeManagementClient, error) {
 	// cheating for test
 	snID, err := strconv.Atoi(address)
 	if err != nil {
@@ -229,9 +229,9 @@ func (r *DummyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.status == DUMMY_STORAGENODE_CLIENT_STATUS_CRASH {
+	if r.status == DummyStorageNodeClientStatusCrash {
 		return nil, errors.New("crash")
-	} else if r.status == DUMMY_STORAGENODE_CLIENT_STATUS_CLOSED {
+	} else if r.status == DummyStorageNodeClientStatusClosed {
 		return nil, errors.New("closed")
 	}
 
@@ -248,7 +248,7 @@ func (r *DummyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 	for i, lsID := range r.logStreamIDs {
 		u := snpb.LogStreamUncommitReport{
 			LogStreamID:           lsID,
-			HighWatermark:         r.knownHighWatermark[i],
+			Version:               r.knownVersion[i],
 			UncommittedLLSNOffset: r.uncommittedLLSNOffset[i],
 			UncommittedLLSNLength: r.uncommittedLLSNLength[i],
 		}
@@ -264,9 +264,9 @@ func (r *DummyStorageNodeClient) Commit(cr snpb.CommitRequest) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.status == DUMMY_STORAGENODE_CLIENT_STATUS_CRASH {
+	if r.status == DummyStorageNodeClientStatusCrash {
 		return errors.New("crash")
-	} else if r.status == DUMMY_STORAGENODE_CLIENT_STATUS_CLOSED {
+	} else if r.status == DummyStorageNodeClientStatusClosed {
 		return errors.New("closed")
 	}
 
@@ -280,19 +280,18 @@ func (r *DummyStorageNodeClient) Commit(cr snpb.CommitRequest) error {
 		return nil
 	}
 
-	if r.knownHighWatermark[idx] >= cr.CommitResult.HighWatermark {
+	if r.knownVersion[idx] >= cr.CommitResult.Version {
 		//continue
 		return nil
 	}
 
-	r.knownHighWatermark[idx] = cr.CommitResult.HighWatermark
+	r.knownVersion[idx] = cr.CommitResult.Version
 	r.commitResultHistory[idx] = append(r.commitResultHistory[idx], snpb.LogStreamCommitInfo{
 		LogStreamID:         cr.CommitResult.LogStreamID,
 		CommittedLLSNOffset: r.uncommittedLLSNOffset[idx],
 		CommittedGLSNOffset: cr.CommitResult.CommittedGLSNOffset,
 		CommittedGLSNLength: cr.CommitResult.CommittedGLSNLength,
-		HighWatermark:       cr.CommitResult.HighWatermark,
-		PrevHighWatermark:   cr.CommitResult.PrevHighWatermark,
+		Version:             cr.CommitResult.Version,
 	})
 
 	r.uncommittedLLSNOffset[idx] += types.LLSN(cr.CommitResult.CommittedGLSNLength)
@@ -307,17 +306,17 @@ func (r *DummyStorageNodeClient) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.status != DUMMY_STORAGENODE_CLIENT_STATUS_CRASH &&
+	if r.status != DummyStorageNodeClientStatusCrash &&
 		r.ref == 0 {
 		r.factory.m.Delete(r.storageNodeID)
-		r.status = DUMMY_STORAGENODE_CLIENT_STATUS_CLOSED
+		r.status = DummyStorageNodeClientStatusClosed
 	}
 
 	return nil
 }
 
-func (a *DummyStorageNodeClientFactory) lookupClient(snID types.StorageNodeID) *DummyStorageNodeClient {
-	f, ok := a.m.Load(snID)
+func (fac *DummyStorageNodeClientFactory) lookupClient(snID types.StorageNodeID) *DummyStorageNodeClient {
+	f, ok := fac.m.Load(snID)
 	if !ok {
 		return nil
 	}
@@ -325,9 +324,9 @@ func (a *DummyStorageNodeClientFactory) lookupClient(snID types.StorageNodeID) *
 	return f.(*DummyStorageNodeClient)
 }
 
-func (a *DummyStorageNodeClientFactory) getClientIDs() []types.StorageNodeID {
+func (fac *DummyStorageNodeClientFactory) getClientIDs() []types.StorageNodeID {
 	var ids []types.StorageNodeID
-	a.m.Range(func(key, _ interface{}) bool {
+	fac.m.Range(func(key, _ interface{}) bool {
 		ids = append(ids, key.(types.StorageNodeID))
 		return true
 	})
@@ -359,15 +358,15 @@ func (r *DummyStorageNodeClient) numUncommitted(idx int) uint64 {
 	return r.uncommittedLLSNLength[idx]
 }
 
-func (r *DummyStorageNodeClient) getKnownHighWatermark(idx int) types.GLSN {
+func (r *DummyStorageNodeClient) getKnownVersion(idx int) types.Version {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return r.knownHighWatermark[idx]
+	return r.knownVersion[idx]
 }
 
-func (a *DummyStorageNodeClientFactory) crashRPC(snID types.StorageNodeID) {
-	f, ok := a.m.Load(snID)
+func (fac *DummyStorageNodeClientFactory) crashRPC(snID types.StorageNodeID) {
+	f, ok := fac.m.Load(snID)
 	if !ok {
 		fmt.Printf("notfound\n")
 		return
@@ -378,7 +377,7 @@ func (a *DummyStorageNodeClientFactory) crashRPC(snID types.StorageNodeID) {
 	cli.mu.Lock()
 	defer cli.mu.Unlock()
 
-	cli.status = DUMMY_STORAGENODE_CLIENT_STATUS_CRASH
+	cli.status = DummyStorageNodeClientStatusCrash
 }
 
 func (r *DummyStorageNodeClient) numLogStreams() int {
@@ -395,8 +394,8 @@ func (r *DummyStorageNodeClient) logStreamID(idx int) types.LogStreamID {
 	return r.logStreamIDs[idx]
 }
 
-func (a *DummyStorageNodeClientFactory) recoverRPC(snID types.StorageNodeID) {
-	f, ok := a.m.Load(snID)
+func (fac *DummyStorageNodeClientFactory) recoverRPC(snID types.StorageNodeID) {
+	f, ok := fac.m.Load(snID)
 	if !ok {
 		return
 	}
@@ -410,14 +409,14 @@ func (a *DummyStorageNodeClientFactory) recoverRPC(snID types.StorageNodeID) {
 		manual:                old.manual,
 		storageNodeID:         old.storageNodeID,
 		logStreamIDs:          old.logStreamIDs,
-		knownHighWatermark:    old.knownHighWatermark,
+		knownVersion:          old.knownVersion,
 		uncommittedLLSNOffset: old.uncommittedLLSNOffset,
 		uncommittedLLSNLength: old.uncommittedLLSNLength,
-		status:                DUMMY_STORAGENODE_CLIENT_STATUS_RUNNING,
+		status:                DummyStorageNodeClientStatusRunning,
 		factory:               old.factory,
 	}
 
-	a.m.Store(snID, cli)
+	fac.m.Store(snID, cli)
 }
 
 func (r *DummyStorageNodeClient) PeerAddress() string {
@@ -427,12 +426,12 @@ func (r *DummyStorageNodeClient) PeerStorageNodeID() types.StorageNodeID {
 	return r.storageNodeID
 }
 
-func (r *DummyStorageNodeClient) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	status := varlogpb.StorageNodeStatusRunning
-	if r.status != DUMMY_STORAGENODE_CLIENT_STATUS_RUNNING {
+	if r.status != DummyStorageNodeClientStatusRunning {
 		status = varlogpb.StorageNodeStatusDeleted
 	}
 
@@ -441,15 +440,17 @@ func (r *DummyStorageNodeClient) GetMetadata(ctx context.Context) (*varlogpb.Sto
 		logStreams = append(logStreams, varlogpb.LogStreamMetadataDescriptor{
 			StorageNodeID: r.storageNodeID,
 			LogStreamID:   lsID,
-			HighWatermark: r.knownHighWatermark[i],
+			Version:       r.knownVersion[i],
 		})
 	}
 
 	meta := &varlogpb.StorageNodeMetadataDescriptor{
 		StorageNode: &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: r.storageNodeID,
-			Address:       r.PeerAddress(),
-			Status:        status,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: r.storageNodeID,
+				Address:       r.PeerAddress(),
+			},
+			Status: status,
 		},
 		LogStreams: logStreams,
 	}
@@ -457,33 +458,33 @@ func (r *DummyStorageNodeClient) GetMetadata(ctx context.Context) (*varlogpb.Sto
 	return meta, nil
 }
 
-func (r *DummyStorageNodeClient) AddLogStream(ctx context.Context, logStreamID types.LogStreamID, path string) error {
+func (r *DummyStorageNodeClient) AddLogStreamReplica(context.Context, types.TopicID, types.LogStreamID, string) error {
 	panic("not implemented")
 }
 
-func (r *DummyStorageNodeClient) RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
+func (r *DummyStorageNodeClient) RemoveLogStream(context.Context, types.TopicID, types.LogStreamID) error {
 	panic("not implemented")
 }
 
-func (r *DummyStorageNodeClient) Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
+func (r *DummyStorageNodeClient) Seal(context.Context, types.TopicID, types.LogStreamID, types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	panic("not implemented")
 }
 
-func (r *DummyStorageNodeClient) Unseal(ctx context.Context, logStreamID types.LogStreamID, replicas []snpb.Replica) error {
+func (r *DummyStorageNodeClient) Unseal(context.Context, types.TopicID, types.LogStreamID, []varlogpb.Replica) error {
 	panic("not implemented")
 }
 
-func (r *DummyStorageNodeClient) Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
+func (r *DummyStorageNodeClient) Sync(context.Context, types.TopicID, types.LogStreamID, types.StorageNodeID, string, types.GLSN) (*snpb.SyncStatus, error) {
 	panic("not implemented")
 }
 
-func (r *DummyStorageNodeClient) lookupPrevCommitInfo(idx int, hwm types.GLSN) (snpb.LogStreamCommitInfo, bool) {
+func (r *DummyStorageNodeClient) lookupCommitInfo(idx int, ver types.Version) (snpb.LogStreamCommitInfo, bool) {
 	i := sort.Search(len(r.commitResultHistory[idx]), func(i int) bool {
-		return r.commitResultHistory[idx][i].PrevHighWatermark >= hwm
+		return r.commitResultHistory[idx][i].Version >= ver
 	})
 
 	if i < len(r.commitResultHistory[idx]) &&
-		r.commitResultHistory[idx][i].PrevHighWatermark == hwm {
+		r.commitResultHistory[idx][i].Version == ver {
 		return r.commitResultHistory[idx][i], true
 	}
 
@@ -494,7 +495,7 @@ func (r *DummyStorageNodeClient) lookupPrevCommitInfo(idx int, hwm types.GLSN) (
 	return snpb.LogStreamCommitInfo{}, false
 }
 
-func (r *DummyStorageNodeClient) GetPrevCommitInfo(ctx context.Context, hwm types.GLSN) (*snpb.GetPrevCommitInfoResponse, error) {
+func (r *DummyStorageNodeClient) GetPrevCommitInfo(_ context.Context, ver types.Version) (*snpb.GetPrevCommitInfoResponse, error) {
 	ci := &snpb.GetPrevCommitInfoResponse{
 		StorageNodeID: r.storageNodeID,
 	}
@@ -510,15 +511,14 @@ func (r *DummyStorageNodeClient) GetPrevCommitInfo(ctx context.Context, hwm type
 			HighestWrittenLLSN: r.uncommittedLLSNOffset[i] + types.LLSN(r.uncommittedLLSNLength[i]) - types.MinLLSN,
 		}
 
-		if r.knownHighWatermark[i] <= hwm {
+		if r.knownVersion[i] <= ver {
 			lsci.Status = snpb.GetPrevCommitStatusNotFound
-		} else if cr, ok := r.lookupPrevCommitInfo(i, hwm); ok {
+		} else if cr, ok := r.lookupCommitInfo(i, ver+1); ok {
 			lsci.Status = snpb.GetPrevCommitStatusOK
 			lsci.CommittedLLSNOffset = cr.CommittedLLSNOffset
 			lsci.CommittedGLSNOffset = cr.CommittedGLSNOffset
 			lsci.CommittedGLSNLength = cr.CommittedGLSNLength
-			lsci.HighWatermark = cr.HighWatermark
-			lsci.PrevHighWatermark = cr.PrevHighWatermark
+			lsci.Version = cr.Version
 		} else {
 			lsci.Status = snpb.GetPrevCommitStatusNotFound
 		}

@@ -3,6 +3,7 @@ package metadata_repository
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -34,7 +35,7 @@ import (
 )
 
 const (
-	PROMOTE_RATE = 0.9
+	PromoteRate = 0.9
 )
 
 type ReportCollectorHelper interface {
@@ -44,7 +45,7 @@ type ReportCollectorHelper interface {
 
 	GetLastCommitResults() *mrpb.LogStreamCommitResults
 
-	LookupNextCommitResults(types.GLSN) (*mrpb.LogStreamCommitResults, error)
+	LookupNextCommitResults(types.Version) (*mrpb.LogStreamCommitResults, error)
 }
 
 type RaftMetadataRepository struct {
@@ -94,6 +95,9 @@ type RaftMetadataRepository struct {
 	nrReport            uint64
 	nrReportSinceCommit uint64
 
+	// commit helper
+	topicEndPos map[types.TopicID]int
+
 	tmStub *telemetryStub
 }
 
@@ -137,6 +141,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		runner:                runner.New("mr", options.Logger),
 		sw:                    stopwaiter.New(),
 		tmStub:                tmStub,
+		topicEndPos:           make(map[types.TopicID]int),
 	}
 
 	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
@@ -404,7 +409,7 @@ func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
 	}
 }
 
-func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
+func (mr *RaftMetadataRepository) processCommit(context.Context) {
 	listenNoti := false
 
 	for c := range mr.commitC {
@@ -421,7 +426,7 @@ func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
 				err = mr.reportCollector.Recover(
 					mr.storage.GetStorageNodes(),
 					mr.storage.GetLogStreams(),
-					mr.storage.GetFirstCommitResults().GetHighWatermark(),
+					mr.storage.GetFirstCommitResults().GetVersion(),
 				)
 				if err != nil &&
 					err != verrors.ErrStopped {
@@ -441,7 +446,7 @@ func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
 	}
 }
 
-func (mr *RaftMetadataRepository) processRNCommit(ctx context.Context) {
+func (mr *RaftMetadataRepository) processRNCommit(context.Context) {
 	for d := range mr.rnCommitC {
 		var c *committedEntry
 		var e *mrpb.RaftEntry
@@ -620,6 +625,10 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 			mr.applyRegisterStorageNode(r, e.NodeIndex, e.RequestIndex)
 		case *mrpb.UnregisterStorageNode:
 			mr.applyUnregisterStorageNode(r, e.NodeIndex, e.RequestIndex)
+		case *mrpb.RegisterTopic:
+			mr.applyRegisterTopic(r, e.NodeIndex, e.RequestIndex)
+		case *mrpb.UnregisterTopic:
+			mr.applyUnregisterTopic(r, e.NodeIndex, e.RequestIndex)
 		case *mrpb.RegisterLogStream:
 			mr.applyRegisterLogStream(r, e.NodeIndex, e.RequestIndex)
 		case *mrpb.UnregisterLogStream:
@@ -679,6 +688,56 @@ func (mr *RaftMetadataRepository) applyUnregisterStorageNode(r *mrpb.UnregisterS
 	return nil
 }
 
+func (mr *RaftMetadataRepository) applyRegisterTopic(r *mrpb.RegisterTopic, nodeIndex, requestIndex uint64) error {
+	topicDesc := &varlogpb.TopicDescriptor{
+		TopicID: r.TopicID,
+	}
+	err := mr.storage.RegisterTopic(topicDesc, nodeIndex, requestIndex)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applyUnregisterTopic(r *mrpb.UnregisterTopic, nodeIndex, requestIndex uint64) error {
+	topic := mr.storage.lookupTopic(r.TopicID)
+	if topic == nil {
+		return verrors.ErrNotExist
+	}
+
+UnregisterLS:
+	for _, lsID := range topic.LogStreams {
+		ls := mr.storage.lookupLogStream(lsID)
+		if ls == nil {
+			continue UnregisterLS
+		}
+
+		err := mr.storage.unregisterLogStream(lsID)
+		if err != nil {
+			continue UnregisterLS
+		}
+
+		for _, replica := range ls.Replicas {
+			err := mr.reportCollector.UnregisterLogStream(replica.StorageNodeID, lsID)
+			if err != nil &&
+				err != verrors.ErrNotExist &&
+				err != verrors.ErrStopped {
+				mr.logger.Panic("could not unregister reporter", zap.String("err", err.Error()))
+			}
+		}
+
+		return nil
+	}
+
+	err := mr.storage.UnregisterTopic(r.TopicID, nodeIndex, requestIndex)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (mr *RaftMetadataRepository) applyRegisterLogStream(r *mrpb.RegisterLogStream, nodeIndex, requestIndex uint64) error {
 	err := mr.storage.RegisterLogStream(r.LogStream, nodeIndex, requestIndex)
 	if err != nil {
@@ -686,7 +745,7 @@ func (mr *RaftMetadataRepository) applyRegisterLogStream(r *mrpb.RegisterLogStre
 	}
 
 	for _, replica := range r.LogStream.Replicas {
-		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetHighWatermark(), varlogpb.LogStreamStatusRunning)
+		err := mr.reportCollector.RegisterLogStream(r.GetLogStream().GetTopicID(), replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetLastCommitVersion(), varlogpb.LogStreamStatusRunning)
 		if err != nil &&
 			err != verrors.ErrExist &&
 			err != verrors.ErrStopped {
@@ -698,7 +757,7 @@ func (mr *RaftMetadataRepository) applyRegisterLogStream(r *mrpb.RegisterLogStre
 }
 
 func (mr *RaftMetadataRepository) applyUnregisterLogStream(r *mrpb.UnregisterLogStream, nodeIndex, requestIndex uint64) error {
-	ls := mr.storage.LookupLogStream(r.LogStreamID)
+	ls := mr.storage.lookupLogStream(r.LogStreamID)
 	if ls == nil {
 		return verrors.ErrNotExist
 	}
@@ -721,7 +780,7 @@ func (mr *RaftMetadataRepository) applyUnregisterLogStream(r *mrpb.UnregisterLog
 }
 
 func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, nodeIndex, requestIndex uint64) error {
-	ls := mr.storage.LookupLogStream(r.LogStream.LogStreamID)
+	ls := mr.storage.lookupLogStream(r.LogStream.LogStreamID)
 	if ls == nil {
 		return verrors.ErrNotExist
 	}
@@ -757,7 +816,7 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, 
 	}
 
 	for _, replica := range r.LogStream.Replicas {
-		err := mr.reportCollector.RegisterLogStream(replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetHighWatermark(), rcstatus)
+		err := mr.reportCollector.RegisterLogStream(ls.GetTopicID(), replica.StorageNodeID, r.LogStream.LogStreamID, mr.GetLastCommitVersion(), rcstatus)
 		if err != nil &&
 			err != verrors.ErrExist &&
 			err != verrors.ErrStopped {
@@ -781,15 +840,31 @@ func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
 				continue LS
 			}
 
-			if (s.HighWatermark == u.HighWatermark &&
+			if (s.Version == u.Version &&
 				s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd()) ||
-				s.HighWatermark < u.HighWatermark {
+				s.Version < u.Version {
 				mr.storage.UpdateUncommitReport(u.LogStreamID, snID, u)
 			}
 		}
 	}
 
 	return nil
+}
+
+func topicBoundary(topicLSIDs []TopicLSID, idx int) (begin bool, end bool) {
+	if idx == 0 {
+		begin = true
+	} else {
+		begin = topicLSIDs[idx].TopicID != topicLSIDs[idx-1].TopicID
+	}
+
+	if idx == len(topicLSIDs)-1 {
+		end = true
+	} else {
+		end = topicLSIDs[idx].TopicID != topicLSIDs[idx+1].TopicID
+	}
+
+	return
 }
 
 func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint64) error {
@@ -807,14 +882,12 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 		defer mr.storage.ResetUpdateSinceCommit()
 
 		prevCommitResults := mr.storage.getLastCommitResultsNoLock()
-		curHWM := prevCommitResults.GetHighWatermark()
-		trimHWM := types.MaxGLSN
-		committedOffset := curHWM + types.GLSN(1)
+		curVer := prevCommitResults.GetVersion()
+		trimVer := types.MaxVersion
+
 		totalCommitted := uint64(0)
 
-		crs := &mrpb.LogStreamCommitResults{
-			PrevHighWatermark: curHWM,
-		}
+		crs := &mrpb.LogStreamCommitResults{}
 
 		mr.tmStub.mb.Records("mr.reports_log.count").Record(context.Background(),
 			float64(mr.nrReportSinceCommit),
@@ -835,54 +908,69 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 		if mr.storage.NumUpdateSinceCommit() > 0 {
 			st := time.Now()
 
-			lsIDs := mr.storage.GetSortedLogStreamIDs()
-			commitResultsMap := make(map[types.GLSN]*mrpb.LogStreamCommitResults)
-			crs.CommitResults = make([]snpb.LogStreamCommitResult, 0, len(lsIDs))
+			topicLSIDs := mr.storage.GetSortedTopicLogStreamIDs()
+			crs.CommitResults = make([]snpb.LogStreamCommitResult, 0, len(topicLSIDs))
 
-			for idx, lsID := range lsIDs {
-				reports := mr.storage.LookupUncommitReports(lsID)
-				knownHWM, minHWM, nrUncommit := mr.calculateCommit(reports)
+			commitResultsMap := make(map[types.Version]*mrpb.LogStreamCommitResults)
+
+			committedOffset := types.InvalidGLSN
+
+			//TODO:: apply topic
+			for idx, topicLSID := range topicLSIDs {
+				beginTopic, endTopic := topicBoundary(topicLSIDs, idx)
+
+				if beginTopic {
+					hpos := mr.topicEndPos[topicLSID.TopicID]
+
+					committedOffset, hpos = prevCommitResults.LastHighWatermark(topicLSID.TopicID, hpos)
+					committedOffset += types.GLSN(1)
+
+					mr.topicEndPos[topicLSID.TopicID] = hpos
+				}
+
+				reports := mr.storage.LookupUncommitReports(topicLSID.LogStreamID)
+				knownVer, minVer, knownHWM, nrUncommit := mr.calculateCommit(reports)
 				if reports.Status.Sealed() {
 					nrUncommit = 0
 				}
 
 				if reports.Status == varlogpb.LogStreamStatusSealed {
-					minHWM = curHWM
+					minVer = curVer
 				}
 
 				if reports.Status == varlogpb.LogStreamStatusSealing &&
-					mr.getLastCommitted(lsID) <= knownHWM {
-					if err := mr.storage.SealLogStream(lsID, 0, 0); err == nil {
-						mr.reportCollector.Seal(lsID)
+					mr.getLastCommitted(topicLSID.TopicID, topicLSID.LogStreamID, idx) <= knownHWM {
+					if err := mr.storage.SealLogStream(topicLSID.LogStreamID, 0, 0); err == nil {
+						mr.reportCollector.Seal(topicLSID.LogStreamID)
 					}
 				}
 
-				if minHWM < trimHWM {
-					trimHWM = minHWM
+				if minVer < trimVer {
+					trimVer = minVer
 				}
 
 				if nrUncommit > 0 {
-					if knownHWM != curHWM {
-						baseCommitResults, ok := commitResultsMap[knownHWM]
+					if knownVer != curVer {
+						baseCommitResults, ok := commitResultsMap[knownVer]
 						if !ok {
-							baseCommitResults = mr.storage.lookupNextCommitResultsNoLock(knownHWM)
+							baseCommitResults = mr.storage.lookupNextCommitResultsNoLock(knownVer)
 							if baseCommitResults == nil {
 								mr.logger.Panic("commit history should be exist",
-									zap.Uint64("hwm", uint64(knownHWM)),
-									zap.Uint64("first", uint64(mr.storage.getFirstCommitResultsNoLock().GetHighWatermark())),
-									zap.Uint64("last", uint64(mr.storage.getLastCommitResultsNoLock().GetHighWatermark())),
+									zap.Any("ver", knownVer),
+									zap.Any("first", mr.storage.getFirstCommitResultsNoLock().GetVersion()),
+									zap.Any("last", mr.storage.getLastCommitResultsNoLock().GetVersion()),
 								)
 							}
 
-							commitResultsMap[knownHWM] = baseCommitResults
+							commitResultsMap[knownVer] = baseCommitResults
 						}
 
-						nrCommitted := mr.numCommitSince(lsID, baseCommitResults, prevCommitResults, idx)
+						nrCommitted := mr.numCommitSince(topicLSID.TopicID, topicLSID.LogStreamID, baseCommitResults, prevCommitResults, idx)
 						if nrCommitted > nrUncommit {
 							msg := fmt.Sprintf("# of uncommit should be bigger than # of commit:: lsID[%v] cur[%v] first[%v] last[%v] reports[%+v] nrCommitted[%v] nrUncommit[%v]",
-								lsID, curHWM,
-								mr.storage.getFirstCommitResultsNoLock().GetHighWatermark(),
-								mr.storage.getLastCommitResultsNoLock().GetHighWatermark(),
+								topicLSID.LogStreamID, curVer,
+								mr.storage.getFirstCommitResultsNoLock().GetVersion(),
+								mr.storage.getLastCommitResultsNoLock().GetVersion(),
 								reports,
 								nrCommitted, nrUncommit,
 							)
@@ -894,23 +982,29 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 				}
 
 				committedLLSNOffset := types.MinLLSN
-				prevCommitResult, _, ok := prevCommitResults.LookupCommitResult(lsID, idx)
+				prevCommitResult, _, ok := prevCommitResults.LookupCommitResult(topicLSID.TopicID, topicLSID.LogStreamID, idx)
 				if ok {
 					committedLLSNOffset = prevCommitResult.CommittedLLSNOffset + types.LLSN(prevCommitResult.CommittedGLSNLength)
 				}
 
 				commit := snpb.LogStreamCommitResult{
-					LogStreamID:         lsID,
+					TopicID:             topicLSID.TopicID,
+					LogStreamID:         topicLSID.LogStreamID,
 					CommittedLLSNOffset: committedLLSNOffset,
 					CommittedGLSNOffset: committedOffset,
 					CommittedGLSNLength: nrUncommit,
 				}
 
 				if nrUncommit > 0 {
-					committedOffset = commit.CommittedGLSNOffset + types.GLSN(commit.CommittedGLSNLength)
+					committedOffset += types.GLSN(commit.CommittedGLSNLength)
 				} else {
-					commit.CommittedGLSNOffset = mr.getLastCommitted(lsID) + types.GLSN(1)
+					commit.CommittedGLSNOffset = mr.getLastCommitted(topicLSID.TopicID, topicLSID.LogStreamID, idx) + types.GLSN(1)
 					commit.CommittedGLSNLength = 0
+				}
+
+				// set highWatermark of topic
+				if endTopic {
+					commit.HighWatermark = committedOffset - types.MinGLSN
 				}
 
 				crs.CommitResults = append(crs.CommitResults, commit)
@@ -924,7 +1018,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 					Value: attribute.StringValue(mr.nodeID.String()),
 				})
 		}
-		crs.HighWatermark = curHWM + types.GLSN(totalCommitted)
+		crs.Version = curVer + 1
 
 		if totalCommitted > 0 {
 			if mr.options.EnableSML {
@@ -933,7 +1027,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 				}
 
 				lentry.Payload.SetValue(&mrpb.StateMachineLogCommitResult{
-					TrimGlsn:     trimHWM,
+					TrimVersion:  trimVer,
 					CommitResult: crs,
 				})
 				mr.saveSML(lentry)
@@ -941,8 +1035,8 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 			mr.storage.AppendLogStreamCommitHistory(crs)
 		}
 
-		if !trimHWM.Invalid() && trimHWM != types.MaxGLSN {
-			mr.storage.TrimLogStreamCommitHistory(trimHWM)
+		if trimVer != 0 && trimVer != math.MaxUint64 {
+			mr.storage.TrimLogStreamCommitHistory(trimVer)
 		}
 
 		mr.reportCollector.Commit()
@@ -979,7 +1073,7 @@ func (mr *RaftMetadataRepository) applyUnseal(r *mrpb.Unseal, nodeIndex, request
 		return err
 	}
 
-	mr.reportCollector.Unseal(r.LogStreamID, mr.GetHighWatermark())
+	mr.reportCollector.Unseal(r.LogStreamID, mr.GetLastCommitVersion())
 
 	return nil
 }
@@ -1022,44 +1116,45 @@ func (mr *RaftMetadataRepository) applyRecoverStateMachine(r *mrpb.RecoverStateM
 	return mr.reportCollector.Recover(
 		mr.storage.GetStorageNodes(),
 		mr.storage.GetLogStreams(),
-		mr.storage.GetFirstCommitResults().GetHighWatermark(),
+		mr.storage.GetFirstCommitResults().GetVersion(),
 	)
 }
 
-func (mr *RaftMetadataRepository) numCommitSince(lsID types.LogStreamID, base, latest *mrpb.LogStreamCommitResults, hintPos int) uint64 {
+func (mr *RaftMetadataRepository) numCommitSince(topicID types.TopicID, lsID types.LogStreamID, base, latest *mrpb.LogStreamCommitResults, hintPos int) uint64 {
 	if latest == nil {
 		return 0
 	}
 
-	start, _, ok := base.LookupCommitResult(lsID, hintPos)
+	start, _, ok := base.LookupCommitResult(topicID, lsID, hintPos)
 	if !ok {
 		mr.logger.Panic("ls should be exist",
 			zap.Uint64("lsID", uint64(lsID)),
 		)
 	}
 
-	end, _, ok := latest.LookupCommitResult(lsID, hintPos)
+	end, _, ok := latest.LookupCommitResult(topicID, lsID, hintPos)
 	if !ok {
 		mr.logger.Panic("ls should be exist at latest",
 			zap.Uint64("lsID", uint64(lsID)),
 		)
 	}
 
-	return uint64(end.CommittedLLSNOffset-start.CommittedLLSNOffset) + uint64(end.CommittedGLSNLength)
+	return uint64(end.CommittedLLSNOffset-start.CommittedLLSNOffset) + end.CommittedGLSNLength
 }
 
-func (mr *RaftMetadataRepository) calculateCommit(reports *mrpb.LogStreamUncommitReports) (types.GLSN, types.GLSN, uint64) {
-	var trimHWM types.GLSN = types.MaxGLSN
-	var knownHWM types.GLSN = types.InvalidGLSN
-	var beginLLSN types.LLSN = types.InvalidLLSN
-	var endLLSN types.LLSN = types.InvalidLLSN
+func (mr *RaftMetadataRepository) calculateCommit(reports *mrpb.LogStreamUncommitReports) (types.Version, types.Version, types.GLSN, uint64) {
+	var trimVer = types.MaxVersion
+	var knownVer = types.InvalidVersion
+	var beginLLSN = types.InvalidLLSN
+	var endLLSN = types.InvalidLLSN
+	var highWatermark = types.InvalidGLSN
 
 	if reports == nil {
-		return types.InvalidGLSN, types.InvalidGLSN, 0
+		return types.InvalidVersion, types.InvalidVersion, types.InvalidGLSN, 0
 	}
 
 	if len(reports.Replicas) < mr.nrReplica {
-		return types.InvalidGLSN, types.InvalidGLSN, 0
+		return types.InvalidVersion, types.InvalidVersion, types.InvalidGLSN, 0
 	}
 
 	for _, r := range reports.Replicas {
@@ -1071,35 +1166,36 @@ func (mr *RaftMetadataRepository) calculateCommit(reports *mrpb.LogStreamUncommi
 			endLLSN = r.UncommittedLLSNEnd()
 		}
 
-		if knownHWM.Invalid() || r.HighWatermark > knownHWM {
-			// knownHighWatermark 이 다르다면,
+		if knownVer.Invalid() || r.Version > knownVer {
+			// knownVersion 이 다르다면,
 			// 일부 SN 이 commitResult 를 받지 못했을 뿐이다.
-			knownHWM = r.HighWatermark
+			knownVer = r.Version
+			highWatermark = r.HighWatermark
 		}
 
-		if r.HighWatermark < trimHWM {
-			trimHWM = r.HighWatermark
+		if r.Version < trimVer {
+			trimVer = r.Version
 		}
 	}
 
-	if trimHWM == types.MaxGLSN {
-		trimHWM = types.InvalidGLSN
+	if trimVer == types.MaxVersion {
+		trimVer = 0
 	}
 
 	if beginLLSN > endLLSN {
-		return knownHWM, trimHWM, 0
+		return knownVer, trimVer, highWatermark, 0
 	}
 
-	return knownHWM, trimHWM, uint64(endLLSN - beginLLSN)
+	return knownVer, trimVer, highWatermark, uint64(endLLSN - beginLLSN)
 }
 
-func (mr *RaftMetadataRepository) getLastCommitted(lsID types.LogStreamID) types.GLSN {
+func (mr *RaftMetadataRepository) getLastCommitted(topicID types.TopicID, lsID types.LogStreamID, hintPos int) types.GLSN {
 	crs := mr.storage.GetLastCommitResults()
 	if crs == nil {
 		return types.InvalidGLSN
 	}
 
-	r, _, ok := crs.LookupCommitResult(lsID, -1)
+	r, _, ok := crs.LookupCommitResult(topicID, lsID, hintPos)
 	if !ok {
 		// newbie
 		return types.InvalidGLSN
@@ -1109,16 +1205,31 @@ func (mr *RaftMetadataRepository) getLastCommitted(lsID types.LogStreamID) types
 		return types.InvalidGLSN
 	}
 
-	return r.CommittedGLSNOffset + types.GLSN(r.CommittedGLSNLength) - types.GLSN(1)
+	return r.CommittedGLSNOffset + types.GLSN(r.CommittedGLSNLength) - types.MinGLSN
 }
 
-func (mr *RaftMetadataRepository) getLastCommittedLength(lsID types.LogStreamID) uint64 {
+func (mr *RaftMetadataRepository) getLastCommitVersion(topicID types.TopicID, lsID types.LogStreamID) types.Version {
+	crs := mr.storage.GetLastCommitResults()
+	if crs == nil {
+		return types.InvalidVersion
+	}
+
+	_, _, ok := crs.LookupCommitResult(topicID, lsID, -1)
+	if !ok {
+		// newbie
+		return types.InvalidVersion
+	}
+
+	return crs.Version
+}
+
+func (mr *RaftMetadataRepository) getLastCommittedLength(topicID types.TopicID, lsID types.LogStreamID) uint64 {
 	crs := mr.storage.GetLastCommitResults()
 	if crs == nil {
 		return 0
 	}
 
-	r, _, ok := crs.LookupCommitResult(lsID, -1)
+	r, _, ok := crs.LookupCommitResult(topicID, lsID, -1)
 	if !ok {
 		return 0
 	}
@@ -1232,6 +1343,27 @@ func (mr *RaftMetadataRepository) UnregisterStorageNode(ctx context.Context, snI
 	return nil
 }
 
+func (mr *RaftMetadataRepository) RegisterTopic(ctx context.Context, topicID types.TopicID) error {
+	r := &mrpb.RegisterTopic{
+		TopicID: topicID,
+	}
+
+	return mr.propose(ctx, r, true)
+}
+
+func (mr *RaftMetadataRepository) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {
+	r := &mrpb.UnregisterTopic{
+		TopicID: topicID,
+	}
+
+	err := mr.propose(ctx, r, true)
+	if err != verrors.ErrNotExist {
+		return err
+	}
+
+	return nil
+}
+
 func (mr *RaftMetadataRepository) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
 	r := &mrpb.RegisterLogStream{
 		LogStream: ls,
@@ -1266,7 +1398,7 @@ func (mr *RaftMetadataRepository) UpdateLogStream(ctx context.Context, ls *varlo
 	return nil
 }
 
-func (mr *RaftMetadataRepository) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
+func (mr *RaftMetadataRepository) GetMetadata(context.Context) (*varlogpb.MetadataDescriptor, error) {
 	if !mr.IsMember() {
 		return nil, verrors.ErrNotMember
 	}
@@ -1289,9 +1421,14 @@ func (mr *RaftMetadataRepository) Seal(ctx context.Context, lsID types.LogStream
 		return types.InvalidGLSN, err
 	}
 
-	lastCommitted := mr.getLastCommitted(lsID)
+	ls := mr.storage.LookupLogStream(lsID)
+	if ls == nil {
+		mr.logger.Panic("can't find logStream")
+	}
+
+	lastCommitted := mr.getLastCommitted(ls.TopicID, lsID, -1)
 	mr.logger.Info("seal",
-		zap.Uint32("lsid", uint32(lsID)),
+		zap.Int32("lsid", int32(lsID)),
 		zap.Uint64("last", uint64(lastCommitted)))
 
 	return lastCommitted, nil
@@ -1310,7 +1447,7 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 	return nil
 }
 
-func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {
+func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, _ types.ClusterID, nodeID types.NodeID, url string) error {
 	if mr.membership.IsMember(nodeID) ||
 		mr.membership.IsLearner(nodeID) {
 		return verrors.ErrAlreadyExists
@@ -1342,7 +1479,7 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, clusterID types.C
 	return nil
 }
 
-func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
+func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, _ types.ClusterID, nodeID types.NodeID) error {
 	if !mr.membership.IsMember(nodeID) &&
 		!mr.membership.IsLearner(nodeID) {
 		return verrors.ErrNotExist
@@ -1383,7 +1520,7 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 	mr.propose(ctx, r, true)
 }
 
-func (mr *RaftMetadataRepository) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.ClusterInfo, error) {
+func (mr *RaftMetadataRepository) GetClusterInfo(context.Context, types.ClusterID) (*mrpb.ClusterInfo, error) {
 	if !mr.IsMember() {
 		return nil, verrors.ErrNotMember
 	}
@@ -1427,20 +1564,12 @@ func (mr *RaftMetadataRepository) GetReportCount() uint64 {
 	return atomic.LoadUint64(&mr.nrReport)
 }
 
-func (mr *RaftMetadataRepository) GetHighWatermark() types.GLSN {
-	return mr.storage.GetHighWatermark()
+func (mr *RaftMetadataRepository) GetLastCommitVersion() types.Version {
+	return mr.storage.GetLastCommitResults().GetVersion()
 }
 
-func (mr *RaftMetadataRepository) GetPrevHighWatermark() types.GLSN {
-	r := mr.storage.GetLastCommitResults()
-	if r == nil {
-		return types.InvalidGLSN
-	}
-	return r.PrevHighWatermark
-}
-
-func (mr *RaftMetadataRepository) GetMinHighWatermark() types.GLSN {
-	return mr.storage.GetMinHighWatermark()
+func (mr *RaftMetadataRepository) GetOldestCommitVersion() types.Version {
+	return mr.storage.GetFirstCommitResults().GetVersion()
 }
 
 func (mr *RaftMetadataRepository) IsMember() bool {
@@ -1467,8 +1596,8 @@ func (mr *RaftMetadataRepository) GetLastCommitResults() *mrpb.LogStreamCommitRe
 	return mr.storage.GetLastCommitResults()
 }
 
-func (mr *RaftMetadataRepository) LookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
-	return mr.storage.LookupNextCommitResults(glsn)
+func (mr *RaftMetadataRepository) LookupNextCommitResults(ver types.Version) (*mrpb.LogStreamCommitResults, error) {
+	return mr.storage.LookupNextCommitResults(ver)
 }
 
 type handler func(ctx context.Context) (interface{}, error)
@@ -1488,7 +1617,7 @@ func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string
 func (mr *RaftMetadataRepository) recoverStateMachine(ctx context.Context) error {
 	storage := NewMetadataStorage(nil, 0, mr.logger.Named("storage"))
 
-	err := mr.restoreStateMachineFromStateMachineLog(ctx, storage)
+	err := mr.restoreStateMachineFromStateMachineLog(storage)
 	if err != nil {
 		return err
 	}
@@ -1508,7 +1637,7 @@ func (mr *RaftMetadataRepository) recoverStateMachine(ctx context.Context) error
 	return nil
 }
 
-func (mr *RaftMetadataRepository) restoreStateMachineFromStateMachineLog(ctx context.Context, storage *MetadataStorage) error {
+func (mr *RaftMetadataRepository) restoreStateMachineFromStateMachineLog(storage *MetadataStorage) error {
 	logIndex := uint64(0)
 
 	snap := mr.raftNode.loadSnapshot()
@@ -1541,8 +1670,8 @@ func (mr *RaftMetadataRepository) restoreStateMachineFromStateMachineLog(ctx con
 			storage.UpdateLogStream(r.LogStream, 0, 0)
 		case *mrpb.StateMachineLogCommitResult:
 			storage.AppendLogStreamCommitHistory(r.CommitResult)
-			if !r.TrimGlsn.Invalid() {
-				storage.TrimLogStreamCommitHistory(r.TrimGlsn)
+			if !r.TrimVersion.Invalid() {
+				storage.TrimLogStreamCommitHistory(r.TrimVersion)
 			}
 		}
 	}

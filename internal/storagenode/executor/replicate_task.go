@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 var replicateTaskPool = sync.Pool{
@@ -18,7 +18,7 @@ var replicateTaskPool = sync.Pool{
 type replicateTask struct {
 	llsn     types.LLSN
 	data     []byte
-	replicas []snpb.Replica
+	replicas []varlogpb.Replica
 
 	createdTime time.Time
 	poppedTime  time.Time
@@ -30,13 +30,13 @@ func newReplicateTask() *replicateTask {
 	return rt
 }
 
-func (t *replicateTask) release() {
-	t.llsn = types.InvalidLLSN
-	t.data = nil
-	t.replicas = nil
-	t.createdTime = time.Time{}
-	t.poppedTime = time.Time{}
-	replicateTaskPool.Put(t)
+func (rt *replicateTask) release() {
+	rt.llsn = types.InvalidLLSN
+	rt.data = nil
+	rt.replicas = nil
+	rt.createdTime = time.Time{}
+	rt.poppedTime = time.Time{}
+	replicateTaskPool.Put(rt)
 }
 
 func (rt *replicateTask) annotate(ctx context.Context, m MeasurableExecutor) {

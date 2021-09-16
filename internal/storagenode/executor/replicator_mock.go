@@ -11,7 +11,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	replication "github.com/kakao/varlog/internal/storagenode/replication"
-	snpb "github.com/kakao/varlog/proto/snpb"
+	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 )
 
 // MockReplicator is a mock of replicator interface.
@@ -38,7 +38,7 @@ func (m *MockReplicator) EXPECT() *MockReplicatorMockRecorder {
 }
 
 // clientOf mocks base method.
-func (m *MockReplicator) clientOf(ctx context.Context, replica snpb.Replica) (replication.Client, error) {
+func (m *MockReplicator) clientOf(ctx context.Context, replica varlogpb.Replica) (replication.Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "clientOf", ctx, replica)
 	ret0, _ := ret[0].(replication.Client)

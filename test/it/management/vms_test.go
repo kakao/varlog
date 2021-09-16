@@ -24,7 +24,7 @@ import (
 	"github.com/kakao/varlog/vtesting"
 )
 
-// FIXME: This test checks MRManager, move unit test or something similiar.
+// FIXME: This test checks MRManager, move unit test or something similar.
 func TestVarlogNewMRManager(t *testing.T) {
 	Convey("Given that MRManager runs without any running MR", t, func(c C) {
 		const (
@@ -278,8 +278,8 @@ func TestVarlogSNWatcher(t *testing.T) {
 			mrAddr := mr.GetServerAddr()
 
 			snID := env.AddSN(t)
-
-			lsID := env.AddLS(t)
+			topicID := env.AddTopic(t)
+			lsID := env.AddLS(t, topicID)
 
 			vmsOpts := it.NewTestVMSOptions()
 			vmsOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
@@ -304,7 +304,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 
 			Convey("When seal LS", func(ctx C) {
 				snID := env.PrimaryStorageNodeIDOf(t, lsID)
-				_, _, err := env.SNClientOf(t, snID).Seal(context.TODO(), lsID, types.InvalidGLSN)
+				_, _, err := env.SNClientOf(t, snID).Seal(context.TODO(), topicID, lsID, types.InvalidGLSN)
 				So(err, ShouldBeNil)
 
 				Convey("Then it should be reported by watcher", func(ctx C) {
@@ -390,8 +390,8 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 			mrAddr := mr.GetServerAddr()
 
 			snID := env.AddSN(t)
-
-			lsID := env.AddLS(t)
+			topicID := env.AddTopic(t)
+			lsID := env.AddLS(t, topicID)
 
 			cmView := &dummyCMView{
 				clusterID: env.ClusterID(),
@@ -457,7 +457,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 			})
 
 			Convey("When AddLS", func(ctx C) {
-				lsID2 := env.AddLS(t)
+				lsID2 := env.AddLS(t, topicID)
 
 				Convey("Then refresh the statRepository and it should be updated", func(ctx C) {
 					statRepository.Refresh(context.TODO())
@@ -521,8 +521,8 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 			mrAddr := mr.GetServerAddr()
 
 			snID := env.AddSN(t)
-
-			lsID := env.AddLS(t)
+			topicID := env.AddTopic(t)
+			lsID := env.AddLS(t, topicID)
 
 			cmView := &dummyCMView{
 				clusterID: env.ClusterID(),
@@ -537,7 +537,7 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 			Convey("When Report", func(ctx C) {
 				sn := env.LookupSN(t, snID)
 
-				_, _, err := sn.Seal(context.TODO(), lsID, types.InvalidGLSN)
+				_, _, err := sn.Seal(context.TODO(), topicID, lsID, types.InvalidGLSN)
 				So(err, ShouldBeNil)
 
 				snm, err := sn.GetMetadata(context.TODO())

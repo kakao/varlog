@@ -94,6 +94,20 @@ func (mr *MockMetadataRepositoryClientMockRecorder) RegisterStorageNode(arg0, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryClient)(nil).RegisterStorageNode), arg0, arg1)
 }
 
+// RegisterTopic mocks base method.
+func (m *MockMetadataRepositoryClient) RegisterTopic(arg0 context.Context, arg1 types.TopicID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterTopic", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegisterTopic indicates an expected call of RegisterTopic.
+func (mr *MockMetadataRepositoryClientMockRecorder) RegisterTopic(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterTopic", reflect.TypeOf((*MockMetadataRepositoryClient)(nil).RegisterTopic), arg0, arg1)
+}
+
 // Seal mocks base method.
 func (m *MockMetadataRepositoryClient) Seal(arg0 context.Context, arg1 types.LogStreamID) (types.GLSN, error) {
 	m.ctrl.T.Helper()
@@ -135,6 +149,20 @@ func (m *MockMetadataRepositoryClient) UnregisterStorageNode(arg0 context.Contex
 func (mr *MockMetadataRepositoryClientMockRecorder) UnregisterStorageNode(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryClient)(nil).UnregisterStorageNode), arg0, arg1)
+}
+
+// UnregisterTopic mocks base method.
+func (m *MockMetadataRepositoryClient) UnregisterTopic(arg0 context.Context, arg1 types.TopicID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnregisterTopic", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UnregisterTopic indicates an expected call of UnregisterTopic.
+func (mr *MockMetadataRepositoryClientMockRecorder) UnregisterTopic(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterTopic", reflect.TypeOf((*MockMetadataRepositoryClient)(nil).UnregisterTopic), arg0, arg1)
 }
 
 // Unseal mocks base method.

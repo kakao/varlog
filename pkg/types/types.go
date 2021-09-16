@@ -3,7 +3,6 @@ package types
 import (
 	"encoding/binary"
 	"fmt"
-	"hash/fnv"
 	"math"
 	"math/rand"
 	"net"
@@ -33,46 +32,83 @@ func (cid ClusterID) String() string {
 	return strconv.FormatUint(uint64(cid), 10)
 }
 
-type StorageNodeID uint32
+type StorageNodeID int32
 
 var _ fmt.Stringer = (*StorageNodeID)(nil)
 
-func NewStorageNodeIDFromUint(u uint) (StorageNodeID, error) {
-	if u > math.MaxUint32 {
-		return 0, fmt.Errorf("storage node id overflow %v", u)
-	}
-	return StorageNodeID(u), nil
-}
-
-func NewStorageNodeID() StorageNodeID {
+func RandomStorageNodeID() StorageNodeID {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	buf := make([]byte, 4)
-	r.Read(buf)       // (*Rand).Read always returns a nil error.
-	h := fnv.New32a() // (*Hash).Write always returns a nil error.
-	h.Write(buf)
-	return StorageNodeID(h.Sum32())
+	return StorageNodeID(r.Int31())
 }
 
 func ParseStorageNodeID(s string) (StorageNodeID, error) {
-	id, err := strconv.ParseUint(s, 10, 32)
+	id, err := strconv.ParseInt(s, 10, 32)
 	return StorageNodeID(id), err
 }
 
 func (snid StorageNodeID) String() string {
-	return strconv.FormatUint(uint64(snid), 10)
+	return strconv.FormatInt(int64(snid), 10)
 }
 
-type LogStreamID uint32
+type LogStreamID int32
+
+const MaxLogStreamID = math.MaxInt32
 
 var _ fmt.Stringer = (*LogStreamID)(nil)
 
 func ParseLogStreamID(s string) (LogStreamID, error) {
-	id, err := strconv.ParseUint(s, 10, 32)
+	id, err := strconv.ParseInt(s, 10, 32)
 	return LogStreamID(id), err
 }
 
 func (lsid LogStreamID) String() string {
-	return strconv.FormatUint(uint64(lsid), 10)
+	return strconv.FormatInt(int64(lsid), 10)
+}
+
+type TopicID int32
+
+var _ fmt.Stringer = (*TopicID)(nil)
+
+func ParseTopicID(s string) (TopicID, error) {
+	id, err := strconv.ParseInt(s, 10, 32)
+	return TopicID(id), err
+}
+
+func (tpid TopicID) String() string {
+	return strconv.FormatInt(int64(tpid), 10)
+}
+
+type Version uint64
+
+const (
+	InvalidVersion = Version(0)
+	MinVersion     = Version(1)
+	MaxVersion     = Version(math.MaxUint64)
+)
+
+var VersionLen = binary.Size(InvalidVersion)
+
+func (ver Version) Invalid() bool {
+	return ver == InvalidVersion
+}
+
+type AtomicVersion uint64
+
+func (ver *AtomicVersion) Add(delta uint64) Version {
+	return Version(atomic.AddUint64((*uint64)(ver), delta))
+}
+
+func (ver *AtomicVersion) Load() Version {
+	return Version(atomic.LoadUint64((*uint64)(ver)))
+}
+
+func (ver *AtomicVersion) Store(val Version) {
+	atomic.StoreUint64((*uint64)(ver), uint64(val))
+}
+
+func (ver *AtomicVersion) CompareAndSwap(old, new Version) (swapped bool) {
+	swapped = atomic.CompareAndSwapUint64((*uint64)(ver), uint64(old), uint64(new))
+	return swapped
 }
 
 type GLSN uint64

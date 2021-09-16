@@ -95,10 +95,8 @@ func Main(c *cli.Context) error {
 	sigC := make(chan os.Signal, 1)
 	signal.Notify(sigC, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		select {
-		case <-sigC:
-			sn.Close()
-		}
+		<-sigC
+		sn.Close()
 	}()
 
 	return sn.Run()

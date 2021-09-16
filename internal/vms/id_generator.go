@@ -18,6 +18,15 @@ type LogStreamIDGenerator interface {
 	Refresh(ctx context.Context) error
 }
 
+type TopicIDGenerator interface {
+	// Generate returns conflict-free TopicID. If the returned identifier is duplicated, it
+	// means that the varlog cluster consistency is broken.
+	Generate() types.TopicID
+
+	// Refresh renews TopicIDGenerator to update the latest cluster metadata.
+	Refresh(ctx context.Context) error
+}
+
 // TODO: seqLSIDGen does not consider the restart of VMS.
 type seqLSIDGen struct {
 	seq types.LogStreamID
@@ -105,5 +114,62 @@ func getLocalMaxLogStreamID(ctx context.Context, storageNodeID types.StorageNode
 			maxID = logStreamID
 		}
 	}
+	return maxID, nil
+}
+
+// TODO: seqTopicIDGen does not consider the restart of VMS.
+type seqTopicIDGen struct {
+	seq types.TopicID
+	mu  sync.Mutex
+
+	cmView ClusterMetadataView
+	snMgr  StorageNodeManager
+}
+
+func NewSequentialTopicIDGenerator(ctx context.Context, cmView ClusterMetadataView, snMgr StorageNodeManager) (TopicIDGenerator, error) {
+	gen := &seqTopicIDGen{
+		cmView: cmView,
+		snMgr:  snMgr,
+	}
+	if err := gen.Refresh(ctx); err != nil {
+		return nil, err
+	}
+	return gen, nil
+}
+
+func (gen *seqTopicIDGen) Generate() types.TopicID {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	gen.seq++
+	return gen.seq
+}
+
+func (gen *seqTopicIDGen) Refresh(ctx context.Context) error {
+	maxID, err := gen.getMaxTopicID(ctx)
+	if err != nil {
+		return err
+	}
+
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.seq < maxID {
+		gen.seq = maxID
+	}
+	return nil
+}
+
+func (gen *seqTopicIDGen) getMaxTopicID(ctx context.Context) (maxID types.TopicID, err error) {
+	clusmeta, err := gen.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return maxID, err
+	}
+
+	topicDescs := clusmeta.GetTopics()
+	for _, topicDesc := range topicDescs {
+		if maxID < topicDesc.TopicID {
+			maxID = topicDesc.TopicID
+		}
+	}
+
 	return maxID, nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/snpb/mock"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type byGLSN []types.GLSN
@@ -139,32 +140,33 @@ func TestBasicOperations(t *testing.T) {
 	mockClient := newMockStorageNodeServiceClient(ctrl, &sn)
 
 	const logStreamID = types.LogStreamID(0)
+	const topicID = types.TopicID(1)
 	client := &logIOClient{rpcClient: mockClient}
 	Convey("Simple Append/Read/Subscribe/Trim operations should work", t, func() {
 		var prevGLSN types.GLSN
 		var currGLSN types.GLSN
-		var currLogEntry *types.LogEntry
+		var currLogEntry *varlogpb.LogEntry
 		var err error
 		var msg string
 
 		msg = "msg-1"
-		currGLSN, err = client.Append(context.TODO(), logStreamID, []byte(msg))
+		currGLSN, err = client.Append(context.TODO(), topicID, logStreamID, []byte(msg))
 		So(err, ShouldBeNil)
-		currLogEntry, err = client.Read(context.TODO(), logStreamID, currGLSN)
+		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, currGLSN)
 		So(err, ShouldBeNil)
 		So(string(currLogEntry.Data), ShouldEqual, msg)
 		prevGLSN = currGLSN
 
 		msg = "msg-2"
-		currGLSN, err = client.Append(context.TODO(), logStreamID, []byte(msg))
+		currGLSN, err = client.Append(context.TODO(), topicID, logStreamID, []byte(msg))
 		So(err, ShouldBeNil)
 		So(currGLSN, ShouldBeGreaterThan, prevGLSN)
-		currLogEntry, err = client.Read(context.TODO(), logStreamID, currGLSN)
+		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, currGLSN)
 		So(err, ShouldBeNil)
 		So(string(currLogEntry.Data), ShouldEqual, msg)
 		prevGLSN = currGLSN
 
-		ch, err := client.Subscribe(context.TODO(), logStreamID, types.GLSN(0), types.GLSN(10))
+		ch, err := client.Subscribe(context.TODO(), topicID, logStreamID, types.GLSN(0), types.GLSN(10))
 		So(err, ShouldBeNil)
 		subRes := <-ch
 		So(subRes.Error, ShouldBeNil)
@@ -178,10 +180,10 @@ func TestBasicOperations(t *testing.T) {
 		So(subRes.LLSN, ShouldEqual, types.LLSN(1))
 		So(string(subRes.Data), ShouldEqual, "msg-2")
 
-		err = client.Trim(context.TODO(), types.GLSN(0))
+		err = client.Trim(context.TODO(), topicID, types.GLSN(0))
 		So(subRes.Error, ShouldBeNil)
 
-		currLogEntry, err = client.Read(context.TODO(), logStreamID, types.GLSN(0))
+		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, types.GLSN(0))
 		So(err, ShouldNotBeNil)
 	})
 }

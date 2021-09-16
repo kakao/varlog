@@ -5,7 +5,6 @@ import (
 	"io"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -19,9 +18,9 @@ import (
 
 // Allowlist represents selectable log streams.
 type Allowlist interface {
-	Pick() (types.LogStreamID, bool)
-	Deny(logStreamID types.LogStreamID)
-	Contains(logStreamID types.LogStreamID) bool
+	Pick(topicID types.TopicID) (types.LogStreamID, bool)
+	Deny(topicID types.TopicID, logStreamID types.LogStreamID)
+	Contains(topicID types.TopicID, logStreamID types.LogStreamID) bool
 }
 
 // RenewableAllowlist expands Allowlist and it provides Renew method to update allowlist.
@@ -31,8 +30,6 @@ type RenewableAllowlist interface {
 	io.Closer
 }
 
-const initialCacheSize = 32
-
 type allowlistItem struct {
 	denied bool
 	ts     time.Time
@@ -41,8 +38,8 @@ type allowlistItem struct {
 // transientAllowlist provides allowlist and denylist of log streams. It can provide stale
 // information.
 type transientAllowlist struct {
-	allowlist      sync.Map     // map[types.LogStreamID]allowlistItem
-	cache          atomic.Value // []types.LogStreamID
+	allowlist      sync.Map // map[types.TopicID]map[types.LogStreamID]allowlistItem
+	cache          sync.Map // map[types.TopicID][]types.LogStreamID
 	group          singleflight.Group
 	denyTTL        time.Duration
 	expireInterval time.Duration
@@ -65,7 +62,7 @@ func newTransientAllowlist(denyTTL time.Duration, expireInterval time.Duration, 
 		runner:         runner.New("denylist", logger),
 		logger:         logger,
 	}
-	adl.cache.Store(make([]types.LogStreamID, 0, initialCacheSize))
+
 	cancel, err := adl.runner.Run(adl.expireDenyTTL)
 	if err != nil {
 		adl.runner.Stop()
@@ -92,18 +89,23 @@ func (adl *transientAllowlist) expireDenyTTL(ctx context.Context) {
 		case <-tick.C:
 			changed := false
 			adl.allowlist.Range(func(k, v interface{}) bool {
-				logStreamID := k.(types.LogStreamID)
-				item := v.(allowlistItem)
+				lsMap := v.(*sync.Map)
 
-				if !item.denied {
+				lsMap.Range(func(k, v interface{}) bool {
+					logStreamID := k.(types.LogStreamID)
+					item := v.(allowlistItem)
+
+					if !item.denied {
+						return true
+					}
+
+					if time.Since(item.ts) >= adl.denyTTL {
+						item.denied = false
+						lsMap.Store(logStreamID, item)
+						changed = true
+					}
 					return true
-				}
-
-				if time.Since(item.ts) >= adl.denyTTL {
-					item.denied = false
-					adl.allowlist.Store(logStreamID, item)
-					changed = true
-				}
+				})
 				return true
 			})
 			if changed {
@@ -116,23 +118,42 @@ func (adl *transientAllowlist) expireDenyTTL(ctx context.Context) {
 
 func (adl *transientAllowlist) warmup() {
 	adl.group.Do("warmup", func() (interface{}, error) {
-		oldCache := adl.cache.Load().([]types.LogStreamID)
-		newCache := make([]types.LogStreamID, 0, cap(oldCache))
 		adl.allowlist.Range(func(k, v interface{}) bool {
-			logStreamID := k.(types.LogStreamID)
-			item := v.(allowlistItem)
-			if !item.denied {
-				newCache = append(newCache, logStreamID)
+			topicID := k.(types.TopicID)
+			lsMap := v.(*sync.Map)
+
+			cacheCap := 0
+			oldCache, ok := adl.cache.Load(topicID)
+			if ok {
+				cacheCap = cap(oldCache.([]types.LogStreamID))
 			}
+			newCache := make([]types.LogStreamID, 0, cacheCap)
+
+			lsMap.Range(func(lsidIf, itemIf interface{}) bool {
+				logStreamID := lsidIf.(types.LogStreamID)
+				item := itemIf.(allowlistItem)
+
+				if !item.denied {
+					newCache = append(newCache, logStreamID)
+				}
+
+				return true
+			})
+
+			adl.cache.Store(topicID, newCache)
 			return true
 		})
-		adl.cache.Store(newCache)
 		return nil, nil
 	})
 }
 
-func (adl *transientAllowlist) Pick() (types.LogStreamID, bool) {
-	cache := adl.cache.Load().([]types.LogStreamID)
+func (adl *transientAllowlist) Pick(topicID types.TopicID) (types.LogStreamID, bool) {
+	cacheIf, ok := adl.cache.Load(topicID)
+	if !ok {
+		return 0, false
+	}
+
+	cache := cacheIf.([]types.LogStreamID)
 	cacheLen := len(cache)
 	if cacheLen == 0 {
 		return 0, false
@@ -141,42 +162,86 @@ func (adl *transientAllowlist) Pick() (types.LogStreamID, bool) {
 	return cache[idx], true
 }
 
-func (adl *transientAllowlist) Deny(logStreamID types.LogStreamID) {
+func (adl *transientAllowlist) Deny(topicID types.TopicID, logStreamID types.LogStreamID) {
 	item := allowlistItem{denied: true, ts: time.Now()}
 	// NB: Storing denied LogStreamID without any checking may result in saving unknown
 	// LogStreamID. But it can be deleted by Renew.
-	adl.allowlist.Store(logStreamID, item)
+	lsMapIf, ok := adl.allowlist.Load(topicID)
+	if !ok {
+		lsMap := new(sync.Map)
+		lsMap.Store(logStreamID, item)
+		adl.allowlist.Store(topicID, lsMap)
+	} else {
+		lsMap := lsMapIf.(*sync.Map)
+		lsMap.Store(logStreamID, item)
+	}
+
 	adl.warmup()
 }
 
-func (adl *transientAllowlist) Contains(logStreamID types.LogStreamID) bool {
-	item, ok := adl.allowlist.Load(logStreamID)
+func (adl *transientAllowlist) Contains(topicID types.TopicID, logStreamID types.LogStreamID) bool {
+	lsMapIf, ok := adl.allowlist.Load(topicID)
+	if !ok {
+		return false
+	}
+
+	lsMap := lsMapIf.(*sync.Map)
+	item, ok := lsMap.Load(logStreamID)
 	return ok && !item.(allowlistItem).denied
 }
 
 func (adl *transientAllowlist) Renew(metadata *varlogpb.MetadataDescriptor) {
 	lsdescs := metadata.GetLogStreams()
+	topicdescs := metadata.GetTopics()
 	recentLSIDs := set.New(len(lsdescs))
-	for _, lsdesc := range lsdescs {
-		recentLSIDs.Add(lsdesc.GetLogStreamID())
+	recentTopicIDs := set.New(len(topicdescs))
+
+	for _, topicdesc := range topicdescs {
+		recentTopicIDs.Add(topicdesc.GetTopicID())
+		for _, lsid := range topicdesc.GetLogStreams() {
+			recentLSIDs.Add(lsid)
+		}
 	}
 
 	changed := false
 	adl.allowlist.Range(func(k, v interface{}) bool {
-		logStreamID := k.(types.LogStreamID)
-		item := v.(allowlistItem)
-		if !recentLSIDs.Contains(logStreamID) {
-			adl.allowlist.Delete(logStreamID)
-			changed = changed || !item.denied
+		topicID := k.(types.TopicID)
+		lsMap := v.(*sync.Map)
+
+		if !recentTopicIDs.Contains(topicID) {
+			adl.allowlist.Delete(topicID)
+			changed = true
+			return true
 		}
+
+		lsMap.Range(func(k, v interface{}) bool {
+			logStreamID := k.(types.LogStreamID)
+			item := v.(allowlistItem)
+			if !recentLSIDs.Contains(logStreamID) {
+				lsMap.Delete(logStreamID)
+				changed = changed || !item.denied
+			}
+			return true
+		})
+
 		return true
 	})
 
 	now := time.Now()
-	for logStreamID := range recentLSIDs {
-		aitem := allowlistItem{denied: false, ts: now}
-		_, loaded := adl.allowlist.LoadOrStore(logStreamID, aitem)
+	for _, topicdesc := range topicdescs {
+		lsMap := new(sync.Map)
+		lsMapIf, loaded := adl.allowlist.LoadOrStore(topicdesc.TopicID, lsMap)
 		changed = changed || !loaded
+
+		if loaded {
+			lsMap = lsMapIf.(*sync.Map)
+		}
+
+		for _, logStreamID := range topicdesc.GetLogStreams() {
+			aitem := allowlistItem{denied: false, ts: now}
+			_, loaded := lsMap.LoadOrStore(logStreamID, aitem)
+			changed = changed || !loaded
+		}
 	}
 
 	if changed {

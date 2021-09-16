@@ -18,8 +18,7 @@ type Conn struct {
 }
 
 func NewConn(ctx context.Context, address string, opts ...grpc.DialOption) (*Conn, error) {
-	dialOpts := append(defaultDialOption, opts...)
-	conn, err := grpc.DialContext(ctx, address, dialOpts...)
+	conn, err := grpc.DialContext(ctx, address, append(defaultDialOption, opts...)...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "rpc: %s", address)
 	}

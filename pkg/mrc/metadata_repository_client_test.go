@@ -61,7 +61,9 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 		Convey("When passed Address in StorageNodeDescriptor is empty", func() {
 			Convey("Then the MRClient should return an ErrInvalid", func() {
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: types.StorageNodeID(0),
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(0),
+					},
 					Storages: []*varlogpb.StorageDescriptor{
 						{
 							Path:  "path",
@@ -78,8 +80,10 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 		Convey("When passed Storages in StorageNodeDescriptor is empty", func() {
 			Convey("Then the MRClient should return an ErrInvalid", func() {
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: types.StorageNodeID(0),
-					Address:       "address",
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(0),
+						Address:       "address",
+					},
 				}
 				err := mc.RegisterStorageNode(context.TODO(), sn)
 				So(err, assert.ShouldWrap, verrors.ErrInvalid)
@@ -89,8 +93,10 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 		Convey("When passed Path in StorageDescriptor is empty", func() {
 			Convey("Then the MRClient should return an ErrInvalid", func() {
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: types.StorageNodeID(0),
-					Address:       "address",
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(0),
+						Address:       "address",
+					},
 					Storages: []*varlogpb.StorageDescriptor{
 						{
 							Used:  0,
@@ -106,8 +112,10 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 		Convey("When passed Used > Total in StorageDescriptor", func() {
 			Convey("Then the MRClient should return an ErrInvalid", func() {
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: types.StorageNodeID(0),
-					Address:       "address",
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(0),
+						Address:       "address",
+					},
 					Storages: []*varlogpb.StorageDescriptor{
 						{
 							Path:  "path",
@@ -125,8 +133,10 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 			mockClient.EXPECT().RegisterStorageNode(gomock.Any(), gomock.Any()).Return(nil, verrors.ErrInternal)
 			Convey("Then the MRClient should return the error", func() {
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: types.StorageNodeID(0),
-					Address:       "address",
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(0),
+						Address:       "address",
+					},
 					Storages: []*varlogpb.StorageDescriptor{
 						{
 							Path:  "path",
@@ -146,8 +156,10 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 			mockClient.EXPECT().RegisterStorageNode(gomock.Any(), gomock.Any()).Return(&pbtypes.Empty{}, nil)
 			Convey("Then the MRClient should return success", func() {
 				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNodeID: types.StorageNodeID(0),
-					Address:       "address",
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(0),
+						Address:       "address",
+					},
 					Storages: []*varlogpb.StorageDescriptor{
 						{
 							Path:  "path",

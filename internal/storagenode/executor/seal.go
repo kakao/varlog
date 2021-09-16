@@ -7,13 +7,12 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
-	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type SealUnsealer interface {
 	Seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
-	Unseal(ctx context.Context, replicas []snpb.Replica) error
+	Unseal(ctx context.Context, replicas []varlogpb.Replica) error
 }
 
 func (e *executor) Seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
@@ -81,10 +80,9 @@ func (e *executor) sealInternal(lastCommittedGLSN types.GLSN) (varlogpb.LogStrea
 	return varlogpb.LogStreamStatusSealed, lastCommittedGLSN, nil
 }
 
-func (e *executor) Unseal(_ context.Context, replicas []snpb.Replica) error {
-	if err := snpb.ValidReplicas(replicas); err != nil {
+func (e *executor) Unseal(_ context.Context, replicas []varlogpb.Replica) error {
+	if err := varlogpb.ValidReplicas(replicas); err != nil {
 		return err
-
 	}
 
 	if err := e.guard(); err != nil {
@@ -97,7 +95,7 @@ func (e *executor) Unseal(_ context.Context, replicas []snpb.Replica) error {
 
 	found := false
 	for _, replica := range replicas {
-		if replica.StorageNodeID == e.storageNodeID && replica.LogStreamID == e.logStreamID {
+		if replica.StorageNode.StorageNodeID == e.storageNodeID && replica.LogStreamID == e.logStreamID {
 			found = true
 			break
 		}

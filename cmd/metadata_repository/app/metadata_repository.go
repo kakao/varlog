@@ -39,10 +39,8 @@ func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
 	sigC := make(chan os.Signal, 1)
 	signal.Notify(sigC, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		select {
-		case <-sigC:
-			mr.Close()
-		}
+		<-sigC
+		mr.Close()
 	}()
 
 	mr.Wait()

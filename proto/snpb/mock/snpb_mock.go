@@ -1001,24 +1001,24 @@ func (m *MockManagementClient) EXPECT() *MockManagementClientMockRecorder {
 	return m.recorder
 }
 
-// AddLogStream mocks base method.
-func (m *MockManagementClient) AddLogStream(arg0 context.Context, arg1 *snpb.AddLogStreamRequest, arg2 ...grpc.CallOption) (*snpb.AddLogStreamResponse, error) {
+// AddLogStreamReplica mocks base method.
+func (m *MockManagementClient) AddLogStreamReplica(arg0 context.Context, arg1 *snpb.AddLogStreamReplicaRequest, arg2 ...grpc.CallOption) (*snpb.AddLogStreamReplicaResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "AddLogStream", varargs...)
-	ret0, _ := ret[0].(*snpb.AddLogStreamResponse)
+	ret := m.ctrl.Call(m, "AddLogStreamReplica", varargs...)
+	ret0, _ := ret[0].(*snpb.AddLogStreamReplicaResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AddLogStream indicates an expected call of AddLogStream.
-func (mr *MockManagementClientMockRecorder) AddLogStream(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+// AddLogStreamReplica indicates an expected call of AddLogStreamReplica.
+func (mr *MockManagementClientMockRecorder) AddLogStreamReplica(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockManagementClient)(nil).AddLogStream), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStreamReplica", reflect.TypeOf((*MockManagementClient)(nil).AddLogStreamReplica), varargs...)
 }
 
 // GetMetadata mocks base method.
@@ -1164,19 +1164,19 @@ func (m *MockManagementServer) EXPECT() *MockManagementServerMockRecorder {
 	return m.recorder
 }
 
-// AddLogStream mocks base method.
-func (m *MockManagementServer) AddLogStream(arg0 context.Context, arg1 *snpb.AddLogStreamRequest) (*snpb.AddLogStreamResponse, error) {
+// AddLogStreamReplica mocks base method.
+func (m *MockManagementServer) AddLogStreamReplica(arg0 context.Context, arg1 *snpb.AddLogStreamReplicaRequest) (*snpb.AddLogStreamReplicaResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddLogStream", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.AddLogStreamResponse)
+	ret := m.ctrl.Call(m, "AddLogStreamReplica", arg0, arg1)
+	ret0, _ := ret[0].(*snpb.AddLogStreamReplicaResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AddLogStream indicates an expected call of AddLogStream.
-func (mr *MockManagementServerMockRecorder) AddLogStream(arg0, arg1 interface{}) *gomock.Call {
+// AddLogStreamReplica indicates an expected call of AddLogStreamReplica.
+func (mr *MockManagementServerMockRecorder) AddLogStreamReplica(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockManagementServer)(nil).AddLogStream), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStreamReplica", reflect.TypeOf((*MockManagementServer)(nil).AddLogStreamReplica), arg0, arg1)
 }
 
 // GetMetadata mocks base method.

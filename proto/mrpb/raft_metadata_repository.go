@@ -8,24 +8,12 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-func (s *MetadataRepositoryDescriptor) LookupCommitResultsByPrev(glsn types.GLSN) *LogStreamCommitResults {
+func (s *MetadataRepositoryDescriptor) LookupCommitResults(ver types.Version) *LogStreamCommitResults {
 	i := sort.Search(len(s.LogStream.CommitHistory), func(i int) bool {
-		return s.LogStream.CommitHistory[i].PrevHighWatermark >= glsn
+		return s.LogStream.CommitHistory[i].Version >= ver
 	})
 
-	if i < len(s.LogStream.CommitHistory) && s.LogStream.CommitHistory[i].PrevHighWatermark == glsn {
-		return s.LogStream.CommitHistory[i]
-	}
-
-	return nil
-}
-
-func (s *MetadataRepositoryDescriptor) LookupCommitResults(glsn types.GLSN) *LogStreamCommitResults {
-	i := sort.Search(len(s.LogStream.CommitHistory), func(i int) bool {
-		return s.LogStream.CommitHistory[i].HighWatermark >= glsn
-	})
-
-	if i < len(s.LogStream.CommitHistory) && s.LogStream.CommitHistory[i].HighWatermark == glsn {
+	if i < len(s.LogStream.CommitHistory) && s.LogStream.CommitHistory[i].Version == ver {
 		return s.LogStream.CommitHistory[i]
 	}
 
@@ -50,7 +38,7 @@ func (s *MetadataRepositoryDescriptor) GetFirstCommitResults() *LogStreamCommitR
 	return s.LogStream.CommitHistory[0]
 }
 
-func (crs *LogStreamCommitResults) LookupCommitResult(lsID types.LogStreamID, hintPos int) (snpb.LogStreamCommitResult, int, bool) {
+func (crs *LogStreamCommitResults) LookupCommitResult(topicID types.TopicID, lsID types.LogStreamID, hintPos int) (snpb.LogStreamCommitResult, int, bool) {
 	if crs == nil {
 		return snpb.InvalidLogStreamCommitResult, -1, false
 	}
@@ -61,7 +49,11 @@ func (crs *LogStreamCommitResults) LookupCommitResult(lsID types.LogStreamID, hi
 	}
 
 	i := sort.Search(len(crs.CommitResults), func(i int) bool {
-		return crs.CommitResults[i].LogStreamID >= lsID
+		if crs.CommitResults[i].TopicID == topicID {
+			return crs.CommitResults[i].LogStreamID >= lsID
+		}
+
+		return crs.CommitResults[i].TopicID >= topicID
 	})
 
 	if i < len(crs.CommitResults) && crs.CommitResults[i].LogStreamID == lsID {
@@ -109,4 +101,35 @@ func (l *StorageNodeUncommitReport) LookupReport(lsID types.LogStreamID) (snpb.L
 		return l.UncommitReports[i], true
 	}
 	return snpb.InvalidLogStreamUncommitReport, false
+}
+
+// return HighWatermark of the topic
+// TODO:: lookup last logStream of the topic
+func (crs *LogStreamCommitResults) LastHighWatermark(topicID types.TopicID, hintPos int) (types.GLSN, int) {
+	if crs == nil {
+		return types.InvalidGLSN, -1
+	}
+
+	n := len(crs.GetCommitResults())
+	if n == 0 {
+		return types.InvalidGLSN, -1
+	}
+
+	cr, ok := crs.getCommitResultByIdx(hintPos)
+	if ok && cr.TopicID == topicID {
+		nxt, ok := crs.getCommitResultByIdx(hintPos + 1)
+		if !ok || nxt.TopicID != topicID {
+			return cr.GetHighWatermark(), hintPos
+		}
+	}
+
+	i := sort.Search(len(crs.CommitResults), func(i int) bool {
+		return crs.CommitResults[i].TopicID >= topicID+1
+	})
+
+	if i > 0 {
+		return crs.GetCommitResults()[i-1].GetHighWatermark(), i - 1
+	}
+
+	return types.InvalidGLSN, -1
 }

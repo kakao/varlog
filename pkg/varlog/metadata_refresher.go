@@ -50,7 +50,6 @@ func newMetadataRefresher(
 	refreshInterval,
 	refreshTimeout time.Duration,
 	logger *zap.Logger) (*metadataRefresher, error) {
-
 	if logger == nil {
 		logger = zap.NewNop()
 	}

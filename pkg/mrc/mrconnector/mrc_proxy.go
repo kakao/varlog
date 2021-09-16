@@ -76,6 +76,30 @@ func (m *mrProxy) UnregisterStorageNode(ctx context.Context, id types.StorageNod
 	return m.cl.UnregisterStorageNode(ctx, id)
 }
 
+func (m *mrProxy) RegisterTopic(ctx context.Context, id types.TopicID) error {
+	m.mu.RLock()
+	defer func() {
+		atomic.AddInt64(&m.inflight, -1)
+		m.mu.RUnlock()
+		m.cond.Signal()
+	}()
+	atomic.AddInt64(&m.inflight, 1)
+
+	return m.cl.RegisterTopic(ctx, id)
+}
+
+func (m *mrProxy) UnregisterTopic(ctx context.Context, id types.TopicID) error {
+	m.mu.RLock()
+	defer func() {
+		atomic.AddInt64(&m.inflight, -1)
+		m.mu.RUnlock()
+		m.cond.Signal()
+	}()
+	atomic.AddInt64(&m.inflight, 1)
+
+	return m.cl.UnregisterTopic(ctx, id)
+}
+
 func (m *mrProxy) RegisterLogStream(ctx context.Context, descriptor *varlogpb.LogStreamDescriptor) error {
 	m.mu.RLock()
 	defer func() {

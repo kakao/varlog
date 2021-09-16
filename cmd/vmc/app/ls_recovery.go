@@ -19,26 +19,26 @@ func (app *VMCApp) updateLogStream(logStreamID types.LogStreamID, popReplica, pu
 	)
 }
 
-func (app *VMCApp) sealLogStream(logStreamID types.LogStreamID) {
+func (app *VMCApp) sealLogStream(topicID types.TopicID, logStreamID types.LogStreamID) {
 	app.withExecutionContext(
 		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
-			return cli.Seal(ctx, logStreamID)
+			return cli.Seal(ctx, topicID, logStreamID)
 		},
 	)
 }
 
-func (app *VMCApp) unsealLogStream(logStreamID types.LogStreamID) {
+func (app *VMCApp) unsealLogStream(topicID types.TopicID, logStreamID types.LogStreamID) {
 	app.withExecutionContext(
 		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
-			return cli.Unseal(ctx, logStreamID)
+			return cli.Unseal(ctx, topicID, logStreamID)
 		},
 	)
 }
 
-func (app *VMCApp) syncLogStream(logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID) {
+func (app *VMCApp) syncLogStream(topicID types.TopicID, logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID) {
 	app.withExecutionContext(
 		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
-			return cli.Sync(ctx, logStreamID, srcStorageNodeID, dstStorageNodeID)
+			return cli.Sync(ctx, topicID, logStreamID, srcStorageNodeID, dstStorageNodeID)
 		},
 	)
 }

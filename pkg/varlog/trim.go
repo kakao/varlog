@@ -21,8 +21,8 @@ type trimArgument struct {
 	err           error
 }
 
-func (v *varlog) trim(ctx context.Context, until types.GLSN, opts TrimOption) error {
-	trimArgs := createTrimArguments(v.replicasRetriever.All())
+func (v *varlog) trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
+	trimArgs := createTrimArguments(v.replicasRetriever.All(topicID))
 	if len(trimArgs) == 0 {
 		return errors.New("no storage node")
 	}
@@ -33,7 +33,7 @@ func (v *varlog) trim(ctx context.Context, until types.GLSN, opts TrimOption) er
 	wg := new(sync.WaitGroup)
 	wg.Add(len(trimArgs))
 	for _, trimArg := range trimArgs {
-		trimmer := v.makeTrimmer(trimArg, until, wg)
+		trimmer := v.makeTrimmer(trimArg, topicID, until, wg)
 		v.runner.RunC(mctx, trimmer)
 	}
 	wg.Wait()
@@ -47,7 +47,7 @@ func (v *varlog) trim(ctx context.Context, until types.GLSN, opts TrimOption) er
 	return trimArgs[0].err
 }
 
-func (v *varlog) makeTrimmer(trimArg *trimArgument, until types.GLSN, wg *sync.WaitGroup) func(context.Context) {
+func (v *varlog) makeTrimmer(trimArg *trimArgument, topicID types.TopicID, until types.GLSN, wg *sync.WaitGroup) func(context.Context) {
 	return func(ctx context.Context) {
 		defer wg.Done()
 		logCL, err := v.logCLManager.GetOrConnect(ctx, trimArg.storageNodeID, trimArg.address)
@@ -55,7 +55,7 @@ func (v *varlog) makeTrimmer(trimArg *trimArgument, until types.GLSN, wg *sync.W
 			trimArg.err = err
 			return
 		}
-		trimArg.err = logCL.Trim(ctx, until)
+		trimArg.err = logCL.Trim(ctx, topicID, until)
 		// TODO (jun): Like subscribe, `ErrUndecidable` is ignored since the local
 		// highwatermark of some log streams are less than the `until` of trim.
 		// It is a sign of the need to clarify undecidable error in the log stream executor.

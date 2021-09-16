@@ -60,21 +60,6 @@ type WriterOption interface {
 	applyWriter(*writerConfig)
 }
 
-/*
-type writerState int32
-
-const (
-	writerStateInit writerState = iota
-	writerStateRun
-	writerStateClosed
-)
-*/
-const (
-	writerStateInit   = 0
-	writerStateRun    = 1
-	writerStateClosed = 2
-)
-
 type writer interface {
 	send(ctx context.Context, tb *writeTask) error
 	stop()
@@ -361,7 +346,7 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 		// Assumes that the below expression is executed after commitWaitTask is passed to
 		// committer and committer calls the Done of twg very quickly. Since the Done of twg
 		// is called, the Append RPC tries to release the writeTask. At that times, if the
-		// conditions are executed, the race condition will happend.
+		// conditions are executed, the race condition will happened.
 		for _, wt := range w.writeTaskBatch {
 			// Replication tasks succeed after writing the logs into the
 			// storage. Thus here notifies the Replicate RPC handler to return
@@ -385,7 +370,6 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 					w.lsc.uncommittedLLSNEnd.Load(), oldLLSN, newLLSN,
 				))
 			}
-
 		}()
 		return w.sendToCommitter(ctx)
 	})

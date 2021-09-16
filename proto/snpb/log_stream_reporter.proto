@@ -9,13 +9,16 @@ option go_package = "github.com/kakao/varlog/proto/snpb";
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 // LogStreamUncommitReport is manifest that log stream reports to metadata
 // repository about log entries those are waiting to commit.
 message LogStreamUncommitReport {
     option (gogoproto.equal) = true;
 
-    uint32 log_stream_id = 1 [
+    int32 log_stream_id = 1 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
@@ -27,14 +30,17 @@ message LogStreamUncommitReport {
     ];
     uint64 uncommitted_llsn_length = 3
         [(gogoproto.customname) = "UncommittedLLSNLength"];
-    uint64 high_watermark = 4
+    uint64 version = 4
+        [(gogoproto.casttype) =
+             "github.com/kakao/varlog/pkg/types.Version"];
+    uint64 high_watermark = 5
         [(gogoproto.casttype) =
              "github.com/kakao/varlog/pkg/types.GLSN"];
 }
 
 message GetReportRequest {}
 message GetReportResponse {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"
@@ -51,33 +57,40 @@ message GetReportResponse {
 message LogStreamCommitResult {
     option (gogoproto.equal) = true;
 
-    uint32 log_stream_id = 1 [
+    int32 log_stream_id = 1 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.LogStreamID",
         (gogoproto.customname) = "LogStreamID"
     ];
-    uint64 committed_llsn_offset = 2 [
+    int32 topic_id = 2 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    uint64 committed_llsn_offset = 3 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.LLSN",
         (gogoproto.customname) = "CommittedLLSNOffset"
     ];
-    uint64 committed_glsn_offset = 3 [
+    uint64 committed_glsn_offset = 4 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "CommittedGLSNOffset"
     ];
-    uint64 committed_glsn_length = 4
+    uint64 committed_glsn_length = 5
         [(gogoproto.customname) = "CommittedGLSNLength"];
-    uint64 high_watermark = 5
+    uint64 version = 6
         [(gogoproto.casttype) =
-             "github.com/kakao/varlog/pkg/types.GLSN"];
-    uint64 prev_high_watermark = 6
-        [(gogoproto.casttype) =
-             "github.com/kakao/varlog/pkg/types.GLSN"];
+             "github.com/kakao/varlog/pkg/types.Version"];
+    uint64 high_watermark = 7 [
+        (gogoproto.casttype) =
+            "github.com/kakao/varlog/pkg/types.GLSN",
+        (gogoproto.customname) = "HighWatermark"
+    ];
 }
 
 message CommitRequest {
-    uint32 storage_node_id = 1 [
+    int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.com/kakao/varlog/pkg/types.StorageNodeID",
         (gogoproto.customname) = "StorageNodeID"

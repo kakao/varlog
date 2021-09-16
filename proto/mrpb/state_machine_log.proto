@@ -12,11 +12,14 @@ option go_package = "github.com/kakao/varlog/proto/mrpb";
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 message StateMachineLogCommitResult {
-    uint64 trim_glsn = 1
+    uint64 trim_version = 1
         [(gogoproto.casttype) =
-             "github.com/kakao/varlog/pkg/types.GLSN"];
+             "github.com/kakao/varlog/pkg/types.Version"];
     LogStreamCommitResults commit_result = 2;
 }
 

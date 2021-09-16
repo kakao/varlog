@@ -29,6 +29,10 @@ func (s StorageNodeStatus) Deleted() bool {
 	return s == StorageNodeStatusDeleted
 }
 
+func (s TopicStatus) Deleted() bool {
+	return s == TopicStatusDeleted
+}
+
 func (s *StorageNodeDescriptor) Valid() bool {
 	if s == nil ||
 		len(s.Address) == 0 ||
@@ -81,9 +85,7 @@ func DiffReplicaDescriptorSet(xs []*ReplicaDescriptor, ys []*ReplicaDescriptor) 
 	xss := makeReplicaDescriptorDiffSet(xs)
 	yss := makeReplicaDescriptorDiffSet(ys)
 	for s := range yss {
-		if _, ok := xss[s]; ok {
-			delete(xss, s)
-		}
+		delete(xss, s)
 	}
 	if len(xss) == 0 {
 		return nil
@@ -374,4 +376,167 @@ func (snmd *StorageNodeMetadataDescriptor) GetLogStream(logStreamID types.LogStr
 		}
 	}
 	return LogStreamMetadataDescriptor{}, false
+}
+
+func (m *MetadataDescriptor) searchTopic(id types.TopicID) (int, bool) {
+	i := sort.Search(len(m.Topics), func(i int) bool {
+		return m.Topics[i].TopicID >= id
+	})
+
+	if i < len(m.Topics) && m.Topics[i].TopicID == id {
+		return i, true
+	}
+
+	return i, false
+}
+
+func (m *MetadataDescriptor) insertTopicAt(idx int, topic *TopicDescriptor) {
+	l := m.Topics
+	l = append(l, &TopicDescriptor{})
+	copy(l[idx+1:], l[idx:])
+
+	l[idx] = topic
+	m.Topics = l
+}
+
+func (m *MetadataDescriptor) updateTopicAt(idx int, topic *TopicDescriptor) {
+	m.Topics[idx] = topic
+}
+
+func (m *MetadataDescriptor) GetTopic(id types.TopicID) *TopicDescriptor {
+	if m == nil {
+		return nil
+	}
+
+	idx, match := m.searchTopic(id)
+	if match {
+		return m.Topics[idx]
+	}
+
+	return nil
+}
+
+func (m *MetadataDescriptor) InsertTopic(topic *TopicDescriptor) error {
+	if m == nil || topic == nil {
+		return nil
+	}
+
+	idx, match := m.searchTopic(topic.TopicID)
+	if match {
+		return errors.New("already exist")
+	}
+
+	m.insertTopicAt(idx, topic)
+	return nil
+}
+
+func (m *MetadataDescriptor) DeleteTopic(id types.TopicID) error {
+	if m == nil {
+		return nil
+	}
+
+	idx, match := m.searchTopic(id)
+	if !match {
+		return errors.New("not exists")
+	}
+
+	l := m.Topics
+
+	copy(l[idx:], l[idx+1:])
+	m.Topics = l[:len(l)-1]
+
+	return nil
+}
+
+func (m *MetadataDescriptor) UpdateTopic(topic *TopicDescriptor) error {
+	if m == nil || topic == nil {
+		return errors.New("not exist")
+	}
+
+	idx, match := m.searchTopic(topic.TopicID)
+	if !match {
+		return errors.New("not exist")
+	}
+
+	m.updateTopicAt(idx, topic)
+	return nil
+}
+
+func (m *MetadataDescriptor) UpsertTopic(topic *TopicDescriptor) error {
+	if err := m.InsertTopic(topic); err != nil {
+		return m.UpdateTopic(topic)
+	}
+
+	return nil
+}
+
+func (m *MetadataDescriptor) HaveTopic(id types.TopicID) (*TopicDescriptor, error) {
+	if m == nil {
+		return nil, errors.New("MetadataDescriptor is nil")
+	}
+	if tnd := m.GetTopic(id); tnd != nil {
+		return tnd, nil
+	}
+	return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
+}
+
+func (m *MetadataDescriptor) MustHaveTopic(id types.TopicID) (*TopicDescriptor, error) {
+	return m.Must().HaveTopic(id)
+}
+
+func (m *MetadataDescriptor) NotHaveTopic(id types.TopicID) error {
+	if m == nil {
+		return errors.New("MetadataDescriptor is nil")
+	}
+	if tnd := m.GetTopic(id); tnd == nil {
+		return nil
+	}
+	return errors.Wrap(verrors.ErrExist, "storage node")
+}
+
+func (m *MetadataDescriptor) MustNotHaveTopic(id types.TopicID) error {
+	return m.Must().NotHaveTopic(id)
+}
+
+func (t *TopicDescriptor) searchLogStream(id types.LogStreamID) (int, bool) {
+	i := sort.Search(len(t.LogStreams), func(i int) bool {
+		return t.LogStreams[i] >= id
+	})
+
+	if i < len(t.LogStreams) && t.LogStreams[i] == id {
+		return i, true
+	}
+
+	return i, false
+}
+
+func (t *TopicDescriptor) insertLogStreamAt(idx int, lsID types.LogStreamID) {
+	l := t.LogStreams
+	l = append(l, types.LogStreamID(0))
+	copy(l[idx+1:], l[idx:])
+
+	l[idx] = lsID
+	t.LogStreams = l
+}
+
+func (t *TopicDescriptor) InsertLogStream(lsID types.LogStreamID) {
+	if t == nil {
+		return
+	}
+
+	idx, match := t.searchLogStream(lsID)
+	if match {
+		return
+	}
+
+	t.insertLogStreamAt(idx, lsID)
+}
+
+func (t *TopicDescriptor) HasLogStream(lsID types.LogStreamID) bool {
+	if t == nil {
+		return false
+	}
+
+	_, match := t.searchLogStream(lsID)
+	return match
 }

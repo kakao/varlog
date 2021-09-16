@@ -162,6 +162,6 @@ func NewNopTelemetry() *nopTelemetry {
 	return &nopTelemetry{}
 }
 
-func (_ nopTelemetry) Close(_ context.Context) error {
+func (nopTelemetry) Close(context.Context) error {
 	return nil
 }

@@ -11,7 +11,8 @@ import (
 func TestLogStreamContext(t *testing.T) {
 	lsc := newLogStreamContext()
 
-	globalHighWatermark, uncommittedLLSNBegin := lsc.reportCommitBase()
-	require.Equal(t, types.InvalidGLSN, globalHighWatermark)
+	version, highWatermark, uncommittedLLSNBegin := lsc.reportCommitBase()
+	require.Equal(t, types.InvalidVersion, version)
+	require.Equal(t, types.MinGLSN, highWatermark)
 	require.Equal(t, types.MinLLSN, uncommittedLLSNBegin)
 }

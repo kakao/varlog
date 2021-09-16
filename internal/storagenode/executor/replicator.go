@@ -15,7 +15,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/replication"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/verrors"
-	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type replicatorConfig struct {
@@ -48,7 +48,7 @@ type replicator interface {
 	// connector has no clients.
 	resetConnector() error
 
-	clientOf(ctx context.Context, replica snpb.Replica) (replication.Client, error)
+	clientOf(ctx context.Context, replica varlogpb.Replica) (replication.Client, error)
 }
 
 type replicatorImpl struct {
@@ -225,17 +225,6 @@ func (r *replicatorImpl) generateReplicateCallback(ctx context.Context, startTim
 	}
 }
 
-func (r *replicatorImpl) replicateCallback(err error) {
-	// NOTE: `inflight` should be decreased when the callback is called since all responses
-	// // either success and failure should be come before unsealing.
-	defer func() {
-		atomic.AddInt64(&r.inflight, -1)
-	}()
-	if err != nil {
-		r.state.setSealing()
-	}
-}
-
 func (r *replicatorImpl) stop() {
 	r.running.mu.Lock()
 	r.running.val = false
@@ -294,6 +283,6 @@ func (r *replicatorImpl) resetConnector() error {
 }
 
 // TODO (jun): Is this good method? If not, replicator can have interface for sync.
-func (r *replicatorImpl) clientOf(ctx context.Context, replica snpb.Replica) (replication.Client, error) {
+func (r *replicatorImpl) clientOf(ctx context.Context, replica varlogpb.Replica) (replication.Client, error) {
 	return r.connector.Get(ctx, replica)
 }

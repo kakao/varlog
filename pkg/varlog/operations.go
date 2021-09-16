@@ -13,7 +13,7 @@ import (
 )
 
 // TODO: use ops-accumulator?
-func (v *varlog) append(ctx context.Context, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (glsn types.GLSN, err error) {
+func (v *varlog) append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (glsn types.GLSN, err error) {
 	appendOpts := defaultAppendOptions()
 	for _, opt := range opts {
 		opt.apply(&appendOpts)
@@ -28,12 +28,12 @@ func (v *varlog) append(ctx context.Context, logStreamID types.LogStreamID, data
 		var ok bool
 		var currErr error
 		if appendOpts.selectLogStream {
-			if logStreamID, ok = v.lsSelector.Select(); !ok {
+			if logStreamID, ok = v.lsSelector.Select(topicID); !ok {
 				err = multierr.Append(err, errors.New("no usable log stream"))
 				continue
 			}
 		}
-		replicas, ok = v.replicasRetriever.Retrieve(logStreamID)
+		replicas, ok = v.replicasRetriever.Retrieve(topicID, logStreamID)
 		if !ok {
 			err = multierr.Append(err, errors.New("no such log stream replicas"))
 			continue
@@ -42,15 +42,15 @@ func (v *varlog) append(ctx context.Context, logStreamID types.LogStreamID, data
 		primaryLogCL, currErr = v.logCLManager.GetOrConnect(ctx, primarySNID, replicas[0].GetAddress())
 		if currErr != nil {
 			err = multierr.Append(err, currErr)
-			v.allowlist.Deny(logStreamID)
+			v.allowlist.Deny(topicID, logStreamID)
 			continue
 		}
-		snList := make([]logc.StorageNode, len(replicas)-1)
+		snList := make([]varlogpb.StorageNode, len(replicas)-1)
 		for i := range replicas[1:] {
-			snList[i].Addr = replicas[i+1].GetAddress()
-			snList[i].ID = replicas[i+1].GetStorageNodeID()
+			snList[i].Address = replicas[i+1].GetAddress()
+			snList[i].StorageNodeID = replicas[i+1].GetStorageNodeID()
 		}
-		glsn, currErr = primaryLogCL.Append(ctx, logStreamID, data, snList...)
+		glsn, currErr = primaryLogCL.Append(ctx, topicID, logStreamID, data, snList...)
 		if currErr != nil {
 			replicasInfo := make([]string, 0, len(replicas))
 			for _, replica := range replicas {
@@ -60,7 +60,7 @@ func (v *varlog) append(ctx context.Context, logStreamID types.LogStreamID, data
 			// FIXME (jun): It affects other goroutines that are doing I/O.
 			// Close a client only when err is related to the connection.
 			primaryLogCL.Close()
-			v.allowlist.Deny(logStreamID)
+			v.allowlist.Deny(topicID, logStreamID)
 			continue
 		}
 		return glsn, nil
@@ -68,22 +68,22 @@ func (v *varlog) append(ctx context.Context, logStreamID types.LogStreamID, data
 	return glsn, err
 }
 
-func (v *varlog) read(ctx context.Context, logStreamID types.LogStreamID, glsn types.GLSN) (types.LogEntry, error) {
-	replicas, ok := v.replicasRetriever.Retrieve(logStreamID)
+func (v *varlog) read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) (varlogpb.LogEntry, error) {
+	replicas, ok := v.replicasRetriever.Retrieve(topicID, logStreamID)
 	if !ok {
-		return types.InvalidLogEntry, errNoLogStream
+		return varlogpb.InvalidLogEntry(), errNoLogStream
 	}
 	primarySNID := replicas[0].GetStorageNodeID()
 	primaryLogCL, err := v.logCLManager.GetOrConnect(ctx, primarySNID, replicas[0].GetAddress())
 	if err != nil {
-		return types.InvalidLogEntry, errNoLogIOClient
+		return varlogpb.InvalidLogEntry(), errNoLogIOClient
 	}
 	// FIXME (jun
 	// 1) LogEntry -> non-nullable field
 	// 2) deepcopy LogEntry
-	logEntry, err := primaryLogCL.Read(ctx, logStreamID, glsn)
+	logEntry, err := primaryLogCL.Read(ctx, topicID, logStreamID, glsn)
 	if err != nil {
-		return types.InvalidLogEntry, err
+		return varlogpb.InvalidLogEntry(), err
 	}
 	return *logEntry, nil
 }

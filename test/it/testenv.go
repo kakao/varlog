@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math"
 	"math/rand"
 	"os"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
+
+	"github.com/kakao/varlog/internal/storagenode/volume"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/internal/storagenode"
@@ -51,7 +53,7 @@ type VarlogCluster struct {
 	storageNodes     map[types.StorageNodeID]*storagenode.StorageNode
 	snMCLs           map[types.StorageNodeID]snc.StorageNodeManagementClient
 	reportCommitters map[types.StorageNodeID]reportcommitter.Client
-	volumes          map[types.StorageNodeID]storagenode.Volume
+	volumes          map[types.StorageNodeID]volume.Volume
 	snAddrs          map[types.StorageNodeID]string
 	storageNodeIDs   []types.StorageNodeID
 	nextSNID         types.StorageNodeID
@@ -59,8 +61,8 @@ type VarlogCluster struct {
 	snWGs            map[types.StorageNodeID]*sync.WaitGroup
 
 	// log streams
-	muLS         sync.Mutex
-	logStreamIDs []types.LogStreamID
+	muLS              sync.Mutex
+	topicLogStreamIDs map[types.TopicID][]types.LogStreamID
 	// FIXME: type of value
 	replicas map[types.LogStreamID][]*varlogpb.ReplicaDescriptor
 
@@ -89,13 +91,14 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 		mrMCLs:               make(map[types.NodeID]mrc.MetadataRepositoryManagementClient),
 		storageNodes:         make(map[types.StorageNodeID]*storagenode.StorageNode),
 		snMCLs:               make(map[types.StorageNodeID]snc.StorageNodeManagementClient),
-		volumes:              make(map[types.StorageNodeID]storagenode.Volume),
+		volumes:              make(map[types.StorageNodeID]volume.Volume),
 		snAddrs:              make(map[types.StorageNodeID]string),
 		reportCommitters:     make(map[types.StorageNodeID]reportcommitter.Client),
 		replicas:             make(map[types.LogStreamID][]*varlogpb.ReplicaDescriptor),
 		snWGs:                make(map[types.StorageNodeID]*sync.WaitGroup),
+		topicLogStreamIDs:    make(map[types.TopicID][]types.LogStreamID),
 		nextSNID:             types.StorageNodeID(1),
-		manualNextLSID:       types.LogStreamID(math.MaxUint32),
+		manualNextLSID:       types.MaxLogStreamID,
 		rng:                  rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
@@ -116,6 +119,9 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 
 	// sn
 	clus.initSN(t)
+
+	// topic
+	clus.initTopic(t)
 
 	// ls
 	clus.initLS(t)
@@ -160,9 +166,17 @@ func (clus *VarlogCluster) initSN(t *testing.T) {
 	}
 }
 
+func (clus *VarlogCluster) initTopic(t *testing.T) {
+	for i := 0; i < clus.numTopic; i++ {
+		clus.AddTopic(t)
+	}
+}
+
 func (clus *VarlogCluster) initLS(t *testing.T) {
-	for i := 0; i < clus.numLS; i++ {
-		clus.AddLS(t)
+	for _, topicID := range clus.TopicIDs() {
+		for i := 0; i < clus.numLS; i++ {
+			clus.AddLS(t, topicID)
+		}
 	}
 }
 
@@ -398,7 +412,7 @@ func (clus *VarlogCluster) Close(t *testing.T) {
 	for _, wg := range clus.snWGs {
 		wg.Wait()
 	}
-	clus.logStreamIDs = nil
+	clus.topicLogStreamIDs = nil
 
 	require.NoError(t, clus.portLease.Release())
 }
@@ -470,7 +484,7 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 	clus.nextSNID++
 
 	volumeDir := t.TempDir()
-	volume, err := storagenode.NewVolume(volumeDir)
+	volume, err := volume.New(volumeDir)
 	require.NoError(t, err)
 
 	sn, err := storagenode.New(context.TODO(),
@@ -600,18 +614,38 @@ func (clus *VarlogCluster) RecoverSN(t *testing.T, snID types.StorageNodeID) *st
 	return sn
 }
 
-func (clus *VarlogCluster) AddLS(t *testing.T) types.LogStreamID {
+func (clus *VarlogCluster) AddTopic(t *testing.T) types.TopicID {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
 
-	log.Println("AddLS")
+	log.Println("AddTopic")
+
+	rsp, err := clus.vmsCL.AddTopic(context.Background())
+	require.NoError(t, err)
+	log.Printf("AddTopic: %+v", rsp)
+
+	topicDesc := rsp.GetTopic()
+	topicID := topicDesc.GetTopicID()
+
+	clus.topicLogStreamIDs[topicID] = nil
+	return topicID
+}
+
+func (clus *VarlogCluster) AddLS(t *testing.T, topicID types.TopicID) types.LogStreamID {
+	clus.muSN.Lock()
+	defer clus.muSN.Unlock()
+
+	clus.muLS.Lock()
+	defer clus.muLS.Unlock()
+
+	log.Printf("AddLS[topidID:%v]\n", topicID)
 
 	require.GreaterOrEqual(t, len(clus.storageNodes), clus.nrRep)
 
-	rsp, err := clus.vmsCL.AddLogStream(context.Background(), nil)
+	rsp, err := clus.vmsCL.AddLogStream(context.Background(), topicID, nil)
 	require.NoError(t, err)
 	log.Printf("AddLS: AddLogStream: %+v", rsp)
 
@@ -619,12 +653,14 @@ func (clus *VarlogCluster) AddLS(t *testing.T) types.LogStreamID {
 	logStreamID := logStreamDesc.GetLogStreamID()
 
 	// FIXME: use map to store logstream and its replicas
-	clus.logStreamIDs = append(clus.logStreamIDs, logStreamID)
+	logStreamIDs, _ := clus.topicLogStreamIDs[topicID]
+	clus.topicLogStreamIDs[topicID] = append(logStreamIDs, logStreamID)
 	clus.replicas[logStreamID] = logStreamDesc.GetReplicas()
+
 	return logStreamID
 }
 
-func (clus *VarlogCluster) UpdateLS(t *testing.T, lsID types.LogStreamID, oldsn, newsn types.StorageNodeID) {
+func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types.LogStreamID, oldsn, newsn types.StorageNodeID) {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -656,7 +692,7 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, lsID types.LogStreamID, oldsn,
 		StorageNodeID: oldsn,
 	}
 
-	_, err = clus.vmsCL.UpdateLogStream(context.Background(), lsID, oldReplica, newReplica)
+	_, err = clus.vmsCL.UpdateLogStream(context.Background(), tpID, lsID, oldReplica, newReplica)
 	require.NoError(t, err)
 
 	// update replicas
@@ -667,7 +703,7 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, lsID types.LogStreamID, oldsn,
 	}
 }
 
-func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T) types.LogStreamID {
+func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T, topicID types.TopicID) types.LogStreamID {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -680,13 +716,15 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T) types.LogStreamID {
 	clus.manualNextLSID--
 
 	rds := make([]*varlogpb.ReplicaDescriptor, 0, clus.nrRep)
-	replicas := make([]snpb.Replica, 0, clus.nrRep)
+	replicas := make([]varlogpb.Replica, 0, clus.nrRep)
 	for idx := range clus.rng.Perm(len(clus.storageNodeIDs))[:clus.nrRep] {
 		snID := clus.storageNodeIDs[idx]
-		replicas = append(replicas, snpb.Replica{
-			StorageNodeID: snID,
-			LogStreamID:   lsID,
-			Address:       clus.snAddrs[snID],
+		replicas = append(replicas, varlogpb.Replica{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+				Address:       clus.snAddrs[snID],
+			},
+			LogStreamID: lsID,
 		})
 
 		snmd, err := clus.storageNodeManagementClientOf(t, snID).GetMetadata(context.Background())
@@ -701,27 +739,29 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T) types.LogStreamID {
 	for _, rd := range rds {
 		snID := rd.StorageNodeID
 		path := rd.Path
-		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStream(
+		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStreamReplica(
 			context.Background(),
+			topicID,
 			lsID,
 			path,
 		))
 
-		status, _, err := clus.storageNodeManagementClientOf(t, snID).Seal(context.Background(), lsID, types.InvalidGLSN)
+		status, _, err := clus.storageNodeManagementClientOf(t, snID).Seal(context.Background(), topicID, lsID, types.InvalidGLSN)
 		require.NoError(t, err)
 		require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).Unseal(context.Background(), lsID, replicas))
+		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).Unseal(context.Background(), topicID, lsID, replicas))
 	}
 
 	// FIXME: use map to store logstream and its replicas
-	clus.logStreamIDs = append(clus.logStreamIDs, lsID)
+	logStreamIDs, _ := clus.topicLogStreamIDs[topicID]
+	clus.topicLogStreamIDs[topicID] = append(logStreamIDs, lsID)
 	clus.replicas[lsID] = rds
 	t.Logf("AddLS without MR: lsid=%d, replicas=%+v", lsID, replicas)
 	return lsID
 }
 
-func (clus *VarlogCluster) AddLSIncomplete(t *testing.T) types.LogStreamID {
+func (clus *VarlogCluster) AddLSIncomplete(t *testing.T, topicID types.TopicID) types.LogStreamID {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -735,24 +775,27 @@ func (clus *VarlogCluster) AddLSIncomplete(t *testing.T) types.LogStreamID {
 	lsID := clus.manualNextLSID
 	clus.manualNextLSID--
 
-	replicas := make([]snpb.Replica, 0, clus.nrRep-1)
+	replicas := make([]varlogpb.Replica, 0, clus.nrRep-1)
 	for idx := range clus.rng.Perm(len(clus.storageNodeIDs))[:clus.nrRep-1] {
 		snID := clus.storageNodeIDs[idx]
-		replicas = append(replicas, snpb.Replica{
-			StorageNodeID: snID,
-			LogStreamID:   lsID,
-			Address:       clus.snAddrs[snID],
+		replicas = append(replicas, varlogpb.Replica{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+				Address:       clus.snAddrs[snID],
+			},
+			LogStreamID: lsID,
 		})
 	}
 
 	for _, replica := range replicas {
-		snID := replica.StorageNodeID
+		snID := replica.StorageNode.StorageNodeID
 		snmd, err := clus.storageNodeManagementClientOf(t, snID).GetMetadata(context.Background())
 		require.NoError(t, err)
 		path := snmd.GetStorageNode().GetStorages()[0].GetPath()
 
-		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStream(
+		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStreamReplica(
 			context.Background(),
+			topicID,
 			lsID,
 			path,
 		))
@@ -761,7 +804,7 @@ func (clus *VarlogCluster) AddLSIncomplete(t *testing.T) types.LogStreamID {
 	return lsID
 }
 
-func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, clear bool) {
+func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, topicID types.TopicID, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, clear bool) {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -792,7 +835,7 @@ func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, logStreamID types.Log
 				return false
 			}
 
-			_, _, err = clus.snMCLs[snid].Seal(context.Background(), logStreamID, lsmd.HighWatermark)
+			_, _, err = clus.snMCLs[snid].Seal(context.Background(), topicID, logStreamID, lsmd.HighWatermark)
 			require.NoError(t, err)
 		}
 		return true
@@ -805,7 +848,7 @@ func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, logStreamID types.Log
 
 	path := meta.GetStorageNode().GetStorages()[0].GetPath()
 
-	require.NoError(t, clus.snMCLs[storageNodeID].AddLogStream(context.Background(), logStreamID, path))
+	require.NoError(t, clus.snMCLs[storageNodeID].AddLogStreamReplica(context.Background(), topicID, logStreamID, path))
 
 	replicas[0] = &varlogpb.ReplicaDescriptor{
 		StorageNodeID: storageNodeID,
@@ -815,11 +858,11 @@ func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, logStreamID types.Log
 	clus.replicas[logStreamID] = replicas
 
 	if clear {
-		require.NoError(t, clus.snMCLs[victim.StorageNodeID].RemoveLogStream(context.Background(), logStreamID))
+		require.NoError(t, clus.snMCLs[victim.StorageNodeID].RemoveLogStream(context.Background(), topicID, logStreamID))
 	}
 }
 
-func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, logStreamID types.LogStreamID, expectedHighWatermark types.GLSN) {
+func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, topicID types.TopicID, logStreamID types.LogStreamID, expectedHighWatermark types.GLSN) {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -831,7 +874,7 @@ func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, logStreamID types.LogSt
 	rds, ok := clus.replicas[logStreamID]
 	require.Equal(t, ok, true)
 
-	replicas := make([]snpb.Replica, 0, len(rds))
+	replicas := make([]varlogpb.Replica, 0, len(rds))
 	for _, rd := range rds {
 		snid := rd.GetStorageNodeID()
 		require.Contains(t, clus.snMCLs, snid)
@@ -845,9 +888,11 @@ func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, logStreamID types.LogSt
 
 		require.Equal(t, expectedHighWatermark, lsmd.GetHighWatermark())
 
-		replicas = append(replicas, snpb.Replica{
-			StorageNodeID: snid,
-			LogStreamID:   logStreamID,
+		replicas = append(replicas, varlogpb.Replica{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snid,
+			},
+			LogStreamID: logStreamID,
 		})
 	}
 
@@ -861,11 +906,11 @@ func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, logStreamID types.LogSt
 		require.True(t, ok)
 
 		if lsmd.GetStatus() == varlogpb.LogStreamStatusSealing {
-			_, _, err = clus.snMCLs[snid].Seal(context.Background(), logStreamID, types.InvalidGLSN)
+			_, _, err = clus.snMCLs[snid].Seal(context.Background(), topicID, logStreamID, types.InvalidGLSN)
 			require.NoError(t, err)
 		}
 
-		err = clus.snMCLs[snid].Unseal(context.Background(), logStreamID, replicas)
+		err = clus.snMCLs[snid].Unseal(context.Background(), topicID, logStreamID, replicas)
 		require.NoError(t, err)
 	}
 }
@@ -917,10 +962,10 @@ func (clus *VarlogCluster) newMRClient(t *testing.T, idx int) {
 	rpcConn, err := rpc.NewConn(context.Background(), addr)
 	require.NoError(t, err)
 
-	cl, err := mrc.NewMetadataRepositoryClientFromRpcConn(rpcConn)
+	cl, err := mrc.NewMetadataRepositoryClientFromRPCConn(rpcConn)
 	require.NoError(t, err)
 
-	mcl, err := mrc.NewMetadataRepositoryManagementClientFromRpcConn(rpcConn)
+	mcl, err := mrc.NewMetadataRepositoryManagementClientFromRPCConn(rpcConn)
 	require.NoError(t, err)
 
 	clus.mrCLs[id] = cl
@@ -1157,21 +1202,41 @@ func (clus *VarlogCluster) Logger() *zap.Logger {
 	return clus.logger
 }
 
-func (clus *VarlogCluster) LogStreamIDs() []types.LogStreamID {
+func (clus *VarlogCluster) TopicIDs() []types.TopicID {
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
 
-	ret := make([]types.LogStreamID, len(clus.logStreamIDs))
-	copy(ret, clus.logStreamIDs)
+	var ret []types.TopicID
+	for topicID := range clus.topicLogStreamIDs {
+		ret = append(ret, topicID)
+	}
+
+	sort.Slice(ret, func(i, j int) bool { return ret[i] < ret[j] })
+
 	return ret
 }
 
-func (clus *VarlogCluster) LogStreamID(t *testing.T, idx int) types.LogStreamID {
+func (clus *VarlogCluster) LogStreamIDs(topicID types.TopicID) []types.LogStreamID {
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
 
-	require.Greater(t, len(clus.logStreamIDs), idx)
-	return clus.logStreamIDs[idx]
+	logStreamIDs, ok := clus.topicLogStreamIDs[topicID]
+	if !ok {
+		return nil
+	}
+	ret := make([]types.LogStreamID, len(logStreamIDs))
+	copy(ret, logStreamIDs)
+	return ret
+}
+
+func (clus *VarlogCluster) LogStreamID(t *testing.T, topicID types.TopicID, idx int) types.LogStreamID {
+	clus.muLS.Lock()
+	defer clus.muLS.Unlock()
+
+	logStreamIDs, _ := clus.topicLogStreamIDs[topicID]
+	require.Greater(t, len(logStreamIDs), idx)
+
+	return logStreamIDs[idx]
 }
 
 func (clus *VarlogCluster) CloseMRClientAt(t *testing.T, idx int) {
@@ -1283,8 +1348,9 @@ func (clus *VarlogCluster) NumberOfStorageNodes() int {
 	return len(clus.storageNodes)
 }
 
-func (clus *VarlogCluster) NumberOfLogStreams() int {
-	return len(clus.logStreamIDs)
+func (clus *VarlogCluster) NumberOfLogStreams(topicID types.TopicID) int {
+	logStreamIDs, _ := clus.topicLogStreamIDs[topicID]
+	return len(logStreamIDs)
 }
 
 func (clus *VarlogCluster) NumberOfClients() int {
@@ -1360,7 +1426,7 @@ func (clus *VarlogCluster) getCachedMetadata() *varlogpb.MetadataDescriptor {
 	return clus.cachedMetadata
 }
 
-func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, lsID types.LogStreamID, data []byte) {
+func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, topicID types.TopicID, lsID types.LogStreamID, data []byte) {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -1406,7 +1472,7 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, lsID types.LogStre
 				}
 				defer cli.Close()
 
-				_, err = cli.Append(ctx, lsID, data)
+				_, err = cli.Append(ctx, topicID, lsID, data)
 				assert.Error(t, err)
 			}()
 
@@ -1428,7 +1494,7 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, lsID types.LogStre
 
 func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
 	committedLLSNOffset types.LLSN, committedGLSNOffset types.GLSN, committedGLSNLen uint64,
-	prevHighWatermark, highWatermark types.GLSN) {
+	version types.Version, highWatermark types.GLSN) {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -1441,10 +1507,10 @@ func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
 			StorageNodeID: r.StorageNodeID,
 			CommitResult: snpb.LogStreamCommitResult{
 				LogStreamID:         lsID,
+				Version:             version,
 				CommittedLLSNOffset: committedLLSNOffset,
 				CommittedGLSNOffset: committedGLSNOffset,
 				CommittedGLSNLength: committedGLSNLen,
-				PrevHighWatermark:   prevHighWatermark,
 				HighWatermark:       highWatermark,
 			},
 		}
@@ -1455,7 +1521,7 @@ func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
 	}
 }
 
-func (clus *VarlogCluster) WaitCommit(t *testing.T, lsID types.LogStreamID, highWatermark types.GLSN) {
+func (clus *VarlogCluster) WaitCommit(t *testing.T, lsID types.LogStreamID, version types.Version) {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -1480,7 +1546,7 @@ func (clus *VarlogCluster) WaitCommit(t *testing.T, lsID types.LogStreamID, high
 
 			reports := rsp.GetUncommitReports()
 			for _, report := range reports {
-				if report.GetLogStreamID() == lsID && report.GetHighWatermark() == highWatermark {
+				if report.GetLogStreamID() == lsID && report.GetVersion() == version {
 					committed++
 					break
 				}
@@ -1496,7 +1562,7 @@ func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
 	require.Eventually(t, func() bool {
 		vmsMeta, err := clus.vmsServer.Metadata(context.Background())
 		return err == nil && vmsMeta.GetLogStream(lsID) != nil
-	}, vms.RELOAD_INTERVAL*10, 100*time.Millisecond)
+	}, vms.ReloadInterval*10, 100*time.Millisecond)
 
 	require.Eventually(t, func() bool {
 		snMCLs := clus.StorageNodesManagementClients()

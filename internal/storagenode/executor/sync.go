@@ -15,22 +15,22 @@ import (
 // progressing.
 type syncState struct {
 	cancel context.CancelFunc
-	dst    snpb.Replica
-	first  types.LogEntry
-	last   types.LogEntry
+	dst    varlogpb.Replica
+	first  varlogpb.LogEntry
+	last   varlogpb.LogEntry
 
 	mu   sync.Mutex
-	curr types.LogEntry
+	curr varlogpb.LogEntry
 	err  error
 }
 
-func newSyncState(cancel context.CancelFunc, dstReplica snpb.Replica, first, last types.LogEntry) *syncState {
+func newSyncState(cancel context.CancelFunc, dstReplica varlogpb.Replica, first, last varlogpb.LogEntry) *syncState {
 	return &syncState{
 		cancel: cancel,
 		dst:    dstReplica,
 		first:  first,
 		last:   last,
-		curr:   types.InvalidLogEntry,
+		curr:   varlogpb.InvalidLogEntry(),
 	}
 }
 
@@ -74,7 +74,7 @@ func (st *syncTracker) get(snID types.StorageNodeID) (*syncState, bool) {
 // not multi goroutine-safe, thus it must be called within mutex.
 func (st *syncTracker) run(ctx context.Context, state *syncState, locker sync.Locker) {
 	state.mu.Lock()
-	replicaSNID := state.dst.GetStorageNodeID()
+	replicaSNID := state.dst.StorageNode.StorageNodeID
 	state.mu.Unlock()
 
 	st.tracker[replicaSNID] = state

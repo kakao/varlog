@@ -126,11 +126,7 @@ func (c *committerImpl) init() error {
 
 	c.inflightCommitTasks.cv = sync.NewCond(&c.inflightCommitTasks.mu)
 
-	commitWaitQ, err := newCommitWaitQueue()
-	if err != nil {
-		return err
-	}
-	c.commitWaitQ = commitWaitQ
+	c.commitWaitQ = newCommitWaitQueue()
 
 	r := runner.New("committer", nil)
 	cancel, err := r.Run(c.commitLoop)
@@ -236,8 +232,8 @@ func (c *committerImpl) ready(ctx context.Context) (int64, error) {
 	numPopped++
 	ct.poppedTime = time.Now()
 
-	globalHighWatermark, _ := c.lsc.reportCommitBase()
-	if ct.stale(globalHighWatermark) {
+	commitVersion, _, _ := c.lsc.reportCommitBase()
+	if ct.stale(commitVersion) {
 		ct.annotate(ctx, c.me, true)
 		ct.release()
 	} else {
@@ -250,7 +246,7 @@ func (c *committerImpl) ready(ctx context.Context) (int64, error) {
 		numPopped++
 		ct.poppedTime = time.Now()
 
-		if ct.stale(globalHighWatermark) {
+		if ct.stale(commitVersion) {
 			ct.annotate(ctx, c.me, true)
 			ct.release()
 			continue
@@ -279,8 +275,8 @@ func (c *committerImpl) commit(ctx context.Context) error {
 	*/
 
 	for _, ct := range c.commitTaskBatch {
-		globalHighWatermark, _ := c.lsc.reportCommitBase()
-		if ct.stale(globalHighWatermark) {
+		commitVersion, _, _ := c.lsc.reportCommitBase()
+		if ct.stale(commitVersion) {
 			ct.annotate(ctx, c.me, true)
 			continue
 		}
@@ -300,7 +296,7 @@ func (c *committerImpl) commit(ctx context.Context) error {
 }
 
 func (c *committerImpl) commitInternal(ctx context.Context, ct *commitTask) error {
-	_, uncommittedLLSNBegin := c.lsc.reportCommitBase()
+	_, _, uncommittedLLSNBegin := c.lsc.reportCommitBase()
 	if uncommittedLLSNBegin != ct.committedLLSNBegin {
 		// skip this commit
 		// See #VARLOG-453 (VARLOG-453).
@@ -338,8 +334,8 @@ func (c *committerImpl) commitInternal(ctx context.Context, ct *commitTask) erro
 	}
 
 	commitContext := storage.CommitContext{
+		Version:            ct.version,
 		HighWatermark:      ct.highWatermark,
-		PrevHighWatermark:  ct.prevHighWatermark,
 		CommittedGLSNBegin: ct.committedGLSNBegin,
 		CommittedGLSNEnd:   ct.committedGLSNEnd,
 		CommittedLLSNBegin: uncommittedLLSNBegin,
@@ -494,7 +490,7 @@ func (c *committerImpl) resetBatch() {
 
 // NOTE: (bool, error) = (processed, err)
 func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requireCommitWaitTasks bool) (bool, error) {
-	_, uncommittedLLSNBegin := c.lsc.reportCommitBase()
+	_, _, uncommittedLLSNBegin := c.lsc.reportCommitBase()
 	numCommits := int(commitContext.CommittedGLSNEnd - commitContext.CommittedGLSNBegin)
 
 	// NOTE: It seems to be similar to the above condition. The actual purpose of this
@@ -569,8 +565,9 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 		c.lsc.localGLSN.localHighWatermark.Store(commitContext.CommittedGLSNEnd - 1)
 	}
 	uncommittedLLSNBegin += types.LLSN(numCommits)
+
 	c.decider.change(func() {
-		c.lsc.storeReportCommitBase(commitContext.HighWatermark, uncommittedLLSNBegin)
+		c.lsc.storeReportCommitBase(commitContext.Version, commitContext.HighWatermark, uncommittedLLSNBegin)
 	})
 
 	// NOTE: Notifying the completion of append should be happened after assigning a new

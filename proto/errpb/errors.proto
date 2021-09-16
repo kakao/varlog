@@ -2,7 +2,13 @@ syntax = "proto3";
 
 package varlog.errpb;
 
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
 option go_package = "github.com/kakao/varlog/proto/errpb";
+
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
 
 message ErrorDetail {
     string error_string = 1;

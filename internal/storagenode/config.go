@@ -4,6 +4,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/internal/storagenode/volume"
+
 	"github.com/kakao/varlog/internal/storagenode/executor"
 	"github.com/kakao/varlog/internal/storagenode/pprof"
 	"github.com/kakao/varlog/internal/storagenode/storage"
@@ -140,7 +142,7 @@ func (o volumesOption) apply(c *config) {
 func WithVolumes(dirs ...string) Option {
 	volumes := set.New(len(dirs))
 	for _, dir := range dirs {
-		vol, err := NewVolume(dir)
+		vol, err := volume.New(dir)
 		if err != nil {
 			panic(err)
 		}

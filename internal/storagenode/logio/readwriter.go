@@ -5,13 +5,21 @@ import (
 
 	"github.com/kakao/varlog/internal/storagenode/storage"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
+// ReadWriter represents methods to read or write logs in a log stream.
 type ReadWriter interface {
-	Append(ctx context.Context, data []byte, backups ...snpb.Replica) (types.GLSN, error)
-	Read(ctx context.Context, glsn types.GLSN) (types.LogEntry, error)
+	// Append writes a log to the log stream.
+	Append(ctx context.Context, data []byte, backups ...varlogpb.Replica) (types.GLSN, error)
+
+	// Read reads a log with the given glsn.
+	Read(ctx context.Context, glsn types.GLSN) (varlogpb.LogEntry, error)
+
+	// Subscribe scans logs from the inclusive begin to the exclusive end.
 	Subscribe(ctx context.Context, begin, end types.GLSN) (SubscribeEnv, error)
+
+	// Trim removes logs until glsn.
 	Trim(ctx context.Context, glsn types.GLSN) error
 }
 
@@ -21,7 +29,8 @@ type SubscribeEnv interface {
 	Err() error
 }
 
+// Getter is the interface that wraps basic methods to access ReadWriter.
 type Getter interface {
-	ReadWriter(logStreamID types.LogStreamID) (ReadWriter, bool)
+	ReadWriter(topicID types.TopicID, logStreamID types.LogStreamID) (ReadWriter, bool)
 	ForEachReadWriters(f func(ReadWriter))
 }

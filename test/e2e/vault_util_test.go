@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 package e2e
@@ -11,9 +12,9 @@ import (
 func TestGetVarlogK8sConnInfo(t *testing.T) {
 	data, err := getVarlogK8sConnInfo()
 	require.NoError(t, err)
-	require.Contains(t, data, E2E_MASTERURL)
-	require.Contains(t, data, E2E_CLUSTER)
-	require.Contains(t, data, E2E_CONTEXT)
-	require.Contains(t, data, E2E_USER)
-	require.Contains(t, data, E2E_TOKEN)
+	require.Contains(t, data, MasterURL)
+	require.Contains(t, data, Cluster)
+	require.Contains(t, data, Context)
+	require.Contains(t, data, User)
+	require.Contains(t, data, Token)
 }

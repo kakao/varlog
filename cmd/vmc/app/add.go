@@ -6,6 +6,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 )
 
@@ -18,10 +19,18 @@ func (app *VMCApp) addStorageNode(snAddr string) {
 	)
 }
 
-func (app *VMCApp) addLogStream() {
+func (app *VMCApp) addTopic() {
 	app.withExecutionContext(
 		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
-			return cli.AddLogStream(ctx, nil)
+			return cli.AddTopic(ctx)
+		},
+	)
+}
+
+func (app *VMCApp) addLogStream(topicID types.TopicID) {
+	app.withExecutionContext(
+		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
+			return cli.AddLogStream(ctx, topicID, nil)
 		},
 	)
 }

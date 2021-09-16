@@ -35,6 +35,16 @@ func (s *MetadataRepositoryService) UnregisterStorageNode(ctx context.Context, r
 	return &types.Empty{}, err
 }
 
+func (s *MetadataRepositoryService) RegisterTopic(ctx context.Context, req *mrpb.TopicRequest) (*types.Empty, error) {
+	err := s.metaRepos.RegisterTopic(ctx, req.TopicID)
+	return &types.Empty{}, err
+}
+
+func (s *MetadataRepositoryService) UnregisterTopic(ctx context.Context, req *mrpb.TopicRequest) (*types.Empty, error) {
+	err := s.metaRepos.UnregisterTopic(ctx, req.TopicID)
+	return &types.Empty{}, err
+}
+
 func (s *MetadataRepositoryService) RegisterLogStream(ctx context.Context, req *mrpb.LogStreamRequest) (*types.Empty, error) {
 	err := s.metaRepos.RegisterLogStream(ctx, req.LogStream)
 	return &types.Empty{}, err

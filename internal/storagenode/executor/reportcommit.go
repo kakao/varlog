@@ -16,11 +16,12 @@ func (e *executor) GetReport() (snpb.LogStreamUncommitReport, error) {
 	}
 	defer e.unguard()
 
-	globalHighWatermark, uncommittedLLSNBegin := e.lsc.reportCommitBase()
+	version, highWatermark, uncommittedLLSNBegin := e.lsc.reportCommitBase()
 	uncommittedLLSNEnd := e.lsc.uncommittedLLSNEnd.Load()
 	return snpb.LogStreamUncommitReport{
 		LogStreamID:           e.logStreamID,
-		HighWatermark:         globalHighWatermark,
+		Version:               version,
+		HighWatermark:         highWatermark,
 		UncommittedLLSNOffset: uncommittedLLSNBegin,
 		UncommittedLLSNLength: uint64(uncommittedLLSNEnd - uncommittedLLSNBegin),
 	}, nil
@@ -33,16 +34,16 @@ func (e *executor) Commit(ctx context.Context, commitResult snpb.LogStreamCommit
 	defer e.unguard()
 
 	// TODO: check validate logic again
-	globalHighWatermark, _ := e.lsc.reportCommitBase()
-	if commitResult.HighWatermark <= globalHighWatermark {
+	version, _, _ := e.lsc.reportCommitBase()
+	if commitResult.Version <= version {
 		// too old
 		// return errors.New("too old commit result")
 		return errOldCommit
 	}
 
 	ct := newCommitTask()
+	ct.version = commitResult.Version
 	ct.highWatermark = commitResult.HighWatermark
-	ct.prevHighWatermark = commitResult.PrevHighWatermark
 	ct.committedGLSNBegin = commitResult.CommittedGLSNOffset
 	ct.committedGLSNEnd = commitResult.CommittedGLSNOffset + types.GLSN(commitResult.CommittedGLSNLength)
 	ct.committedLLSNBegin = commitResult.CommittedLLSNOffset

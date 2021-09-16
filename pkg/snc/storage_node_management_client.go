@@ -21,12 +21,12 @@ type StorageNodeManagementClient interface {
 	PeerAddress() string
 	PeerStorageNodeID() types.StorageNodeID
 	GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error)
-	AddLogStream(ctx context.Context, logStreamID types.LogStreamID, path string) error
-	RemoveLogStream(ctx context.Context, logStreamID types.LogStreamID) error
-	Seal(ctx context.Context, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
-	Unseal(ctx context.Context, logStreamID types.LogStreamID, replicas []snpb.Replica) error
-	Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
-	GetPrevCommitInfo(ctx context.Context, prevHWM types.GLSN) (*snpb.GetPrevCommitInfoResponse, error)
+	AddLogStreamReplica(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, path string) error
+	RemoveLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error
+	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
+	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.Replica) error
+	Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
+	GetPrevCommitInfo(ctx context.Context, ver types.Version) (*snpb.GetPrevCommitInfoResponse, error)
 	Close() error
 }
 
@@ -86,14 +86,15 @@ func (c *snManagementClient) GetMetadata(ctx context.Context) (*varlogpb.Storage
 	return rsp.GetStorageNodeMetadata(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
-func (c *snManagementClient) AddLogStream(ctx context.Context, lsid types.LogStreamID, path string) error {
+func (c *snManagementClient) AddLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, path string) error {
 	if stringsutil.Empty(path) {
 		return errors.New("snmcl: invalid argument")
 	}
 	// FIXME(jun): Does the return value of AddLogStream need?
-	_, err := c.rpcClient.AddLogStream(ctx, &snpb.AddLogStreamRequest{
+	_, err := c.rpcClient.AddLogStreamReplica(ctx, &snpb.AddLogStreamReplicaRequest{
 		ClusterID:     c.clusterID,
 		StorageNodeID: c.storageNodeID,
+		TopicID:       tpid,
 		LogStreamID:   lsid,
 		Storage: &varlogpb.StorageDescriptor{
 			Path: path,
@@ -102,40 +103,44 @@ func (c *snManagementClient) AddLogStream(ctx context.Context, lsid types.LogStr
 	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
-func (c *snManagementClient) RemoveLogStream(ctx context.Context, lsid types.LogStreamID) error {
+func (c *snManagementClient) RemoveLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
 	_, err := c.rpcClient.RemoveLogStream(ctx, &snpb.RemoveLogStreamRequest{
 		ClusterID:     c.clusterID,
 		StorageNodeID: c.storageNodeID,
+		TopicID:       tpid,
 		LogStreamID:   lsid,
 	})
 	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
-func (c *snManagementClient) Seal(ctx context.Context, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
+func (c *snManagementClient) Seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	rsp, err := c.rpcClient.Seal(ctx, &snpb.SealRequest{
 		ClusterID:         c.clusterID,
 		StorageNodeID:     c.storageNodeID,
+		TopicID:           tpid,
 		LogStreamID:       lsid,
 		LastCommittedGLSN: lastCommittedGLSN,
 	})
 	return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
-func (c *snManagementClient) Unseal(ctx context.Context, lsid types.LogStreamID, replicas []snpb.Replica) error {
+func (c *snManagementClient) Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.Replica) error {
 	// TODO(jun): Check ranges CID, SNID and LSID
 	_, err := c.rpcClient.Unseal(ctx, &snpb.UnsealRequest{
 		ClusterID:     c.clusterID,
 		StorageNodeID: c.storageNodeID,
+		TopicID:       tpid,
 		LogStreamID:   lsid,
 		Replicas:      replicas,
 	})
 	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
-func (c *snManagementClient) Sync(ctx context.Context, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
+func (c *snManagementClient) Sync(ctx context.Context, tpid types.TopicID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
 	rsp, err := c.rpcClient.Sync(ctx, &snpb.SyncRequest{
 		ClusterID:     c.clusterID,
 		StorageNodeID: c.storageNodeID,
+		TopicID:       tpid,
 		LogStreamID:   logStreamID,
 		Backup: &snpb.SyncRequest_BackupNode{
 			StorageNodeID: backupStorageNodeID,
@@ -145,9 +150,9 @@ func (c *snManagementClient) Sync(ctx context.Context, logStreamID types.LogStre
 	return rsp.GetStatus(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
-func (c *snManagementClient) GetPrevCommitInfo(ctx context.Context, prevHWM types.GLSN) (*snpb.GetPrevCommitInfoResponse, error) {
+func (c *snManagementClient) GetPrevCommitInfo(ctx context.Context, prevVer types.Version) (*snpb.GetPrevCommitInfoResponse, error) {
 	rsp, err := c.rpcClient.GetPrevCommitInfo(ctx, &snpb.GetPrevCommitInfoRequest{
-		PrevHighWatermark: prevHWM,
+		PrevVersion: prevVer,
 	})
 	return rsp, errors.WithStack(verrors.FromStatusError(err))
 }

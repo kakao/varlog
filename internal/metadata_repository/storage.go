@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -66,6 +67,11 @@ type Membership interface {
 	Clear()
 }
 
+type TopicLSID struct {
+	TopicID     types.TopicID
+	LogStreamID types.LogStreamID
+}
+
 // TODO:: refactoring
 type MetadataStorage struct {
 	// make orig immutable
@@ -75,7 +81,7 @@ type MetadataStorage struct {
 	diffStateMachine *mrpb.MetadataRepositoryDescriptor
 	copyOnWrite      atomicutil.AtomicBool
 
-	sortedLSIDs []types.LogStreamID
+	sortedTopicLSIDs []TopicLSID
 
 	// snapshot orig for raft
 	snap      []byte
@@ -215,9 +221,8 @@ func (ms *MetadataStorage) lookupStorageNode(snID types.StorageNodeID) *varlogpb
 	if sn != nil {
 		if sn.Status.Deleted() {
 			return nil
-		} else {
-			return sn
 		}
+		return sn
 	}
 
 	if pre == cur {
@@ -240,9 +245,8 @@ func (ms *MetadataStorage) lookupLogStream(lsID types.LogStreamID) *varlogpb.Log
 	if ls != nil {
 		if ls.Status.Deleted() {
 			return nil
-		} else {
-			return ls
 		}
+		return ls
 	}
 
 	if pre == cur {
@@ -257,6 +261,23 @@ func (ms *MetadataStorage) LookupLogStream(lsID types.LogStreamID) *varlogpb.Log
 	defer ms.mtMu.RUnlock()
 
 	return ms.lookupLogStream(lsID)
+}
+
+func (ms *MetadataStorage) lookupTopic(topicID types.TopicID) *varlogpb.TopicDescriptor {
+	pre, cur := ms.getStateMachine()
+	topic := cur.Metadata.GetTopic(topicID)
+	if topic != nil {
+		if topic.Status.Deleted() {
+			return nil
+		}
+		return topic
+	}
+
+	if pre == cur {
+		return nil
+	}
+
+	return pre.Metadata.GetTopic(topicID)
 }
 
 func (ms *MetadataStorage) registerStorageNode(sn *varlogpb.StorageNodeDescriptor) error {
@@ -327,8 +348,10 @@ func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error
 	cur.Metadata.DeleteStorageNode(snID)
 	if pre != cur {
 		deleted := &varlogpb.StorageNodeDescriptor{
-			StorageNodeID: snID,
-			Status:        varlogpb.StorageNodeStatusDeleted,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
+			Status: varlogpb.StorageNodeStatusDeleted,
 		}
 
 		cur.Metadata.InsertStorageNode(deleted)
@@ -338,28 +361,39 @@ func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error
 	return nil
 }
 
-func (ms *MetadataStorage) insertSortedLSIDs(lsID types.LogStreamID) {
-	i := sort.Search(len(ms.sortedLSIDs), func(i int) bool {
-		return ms.sortedLSIDs[i] >= lsID
+func (ms *MetadataStorage) insertSortedLSIDs(topicID types.TopicID, lsID types.LogStreamID) {
+	i := sort.Search(len(ms.sortedTopicLSIDs), func(i int) bool {
+		if ms.sortedTopicLSIDs[i].TopicID == topicID {
+			return ms.sortedTopicLSIDs[i].LogStreamID >= lsID
+		}
+
+		return ms.sortedTopicLSIDs[i].TopicID > topicID
 	})
 
-	if i < len(ms.sortedLSIDs) && ms.sortedLSIDs[i] == lsID {
+	if i < len(ms.sortedTopicLSIDs) && ms.sortedTopicLSIDs[i].LogStreamID == lsID {
 		return
 	}
 
-	ms.sortedLSIDs = append(ms.sortedLSIDs, 0)
-	copy(ms.sortedLSIDs[i+1:], ms.sortedLSIDs[i:])
-	ms.sortedLSIDs[i] = lsID
+	ms.sortedTopicLSIDs = append(ms.sortedTopicLSIDs, TopicLSID{})
+	copy(ms.sortedTopicLSIDs[i+1:], ms.sortedTopicLSIDs[i:])
+	ms.sortedTopicLSIDs[i] = TopicLSID{
+		TopicID:     topicID,
+		LogStreamID: lsID,
+	}
 }
 
-func (ms *MetadataStorage) deleteSortedLSIDs(lsID types.LogStreamID) {
-	i := sort.Search(len(ms.sortedLSIDs), func(i int) bool {
-		return ms.sortedLSIDs[i] >= lsID
+func (ms *MetadataStorage) deleteSortedLSIDs(topicID types.TopicID, lsID types.LogStreamID) {
+	i := sort.Search(len(ms.sortedTopicLSIDs), func(i int) bool {
+		if ms.sortedTopicLSIDs[i].TopicID == topicID {
+			return ms.sortedTopicLSIDs[i].LogStreamID >= lsID
+		}
+
+		return ms.sortedTopicLSIDs[i].TopicID > topicID
 	})
 
-	if i < len(ms.sortedLSIDs) && ms.sortedLSIDs[i] == lsID {
-		copy(ms.sortedLSIDs[i:], ms.sortedLSIDs[i+1:])
-		ms.sortedLSIDs = ms.sortedLSIDs[:len(ms.sortedLSIDs)-1]
+	if i < len(ms.sortedTopicLSIDs) && ms.sortedTopicLSIDs[i].LogStreamID == lsID {
+		copy(ms.sortedTopicLSIDs[i:], ms.sortedTopicLSIDs[i+1:])
+		ms.sortedTopicLSIDs = ms.sortedTopicLSIDs[:len(ms.sortedTopicLSIDs)-1]
 	}
 }
 
@@ -381,6 +415,11 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 		return verrors.ErrInvalidArgument
 	}
 
+	topic := ms.lookupTopic(ls.TopicID)
+	if topic == nil {
+		return verrors.ErrInvalidArgument
+	}
+
 	for _, r := range ls.Replicas {
 		if ms.lookupStorageNode(r.StorageNodeID) == nil {
 			return verrors.ErrInvalidArgument
@@ -391,11 +430,6 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 	equal := old.Equal(ls)
 	if old != nil && !equal {
 		return verrors.ErrAlreadyExists
-	}
-
-	if equal {
-		// To ensure that it is applied to the meta cache
-		return nil
 	}
 
 	_, cur := ms.getStateMachine()
@@ -419,14 +453,20 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 	for _, r := range ls.Replicas {
 		lm.Replicas[r.StorageNodeID] = snpb.LogStreamUncommitReport{
 			LogStreamID:           ls.LogStreamID,
-			HighWatermark:         ms.getHighWatermarkNoLock(),
+			Version:               ms.getLastCommitVersionNoLock(),
 			UncommittedLLSNOffset: types.MinLLSN,
 			UncommittedLLSNLength: 0,
 		}
 	}
 
 	cur.LogStream.UncommitReports[ls.LogStreamID] = lm
-	ms.insertSortedLSIDs(ls.LogStreamID)
+	ms.insertSortedLSIDs(ls.TopicID, ls.LogStreamID)
+
+	topic = proto.Clone(topic).(*varlogpb.TopicDescriptor)
+	topic.InsertLogStream(ls.LogStreamID)
+	if err := cur.Metadata.UpsertTopic(topic); err != nil {
+		return err
+	}
 
 	ms.metaAppliedIndex++
 
@@ -447,7 +487,8 @@ func (ms *MetadataStorage) RegisterLogStream(ls *varlogpb.LogStreamDescriptor, n
 }
 
 func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
-	if ms.lookupLogStream(lsID) == nil {
+	ls := ms.lookupLogStream(lsID)
+	if ls == nil {
 		return verrors.ErrNotExist
 	}
 
@@ -474,7 +515,7 @@ func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
 		cur.LogStream.UncommitReports[lsID] = lm
 	}
 
-	ms.deleteSortedLSIDs(lsID)
+	ms.deleteSortedLSIDs(ls.TopicID, lsID)
 	ms.metaAppliedIndex++
 
 	return nil
@@ -526,6 +567,83 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 
 	ms.metaAppliedIndex++
 	return err
+}
+
+func (ms *MetadataStorage) RegisterTopic(topic *varlogpb.TopicDescriptor, nodeIndex, requestIndex uint64) error {
+	err := ms.registerTopic(topic)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
+		}
+		return err
+	}
+
+	ms.triggerMetadataCache(nodeIndex, requestIndex)
+	return nil
+}
+
+func (ms *MetadataStorage) registerTopic(topic *varlogpb.TopicDescriptor) error {
+	old := ms.lookupTopic(topic.TopicID)
+	equal := old.Equal(topic)
+	if old != nil && !equal {
+		return verrors.ErrAlreadyExists
+	}
+
+	if equal {
+		// To ensure that it is applied to the meta cache
+		return nil
+	}
+
+	_, cur := ms.getStateMachine()
+
+	ms.mtMu.Lock()
+	defer ms.mtMu.Unlock()
+
+	if err := cur.Metadata.UpsertTopic(topic); err != nil {
+		return err
+	}
+
+	ms.metaAppliedIndex++
+	return nil
+}
+
+func (ms *MetadataStorage) UnregisterTopic(topicID types.TopicID, nodeIndex, requestIndex uint64) error {
+	err := ms.unregisterTopic(topicID)
+	if err != nil {
+		if ms.cacheCompleteCB != nil {
+			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
+		}
+		return err
+	}
+
+	ms.triggerMetadataCache(nodeIndex, requestIndex)
+	return nil
+}
+
+func (ms *MetadataStorage) unregisterTopic(topicID types.TopicID) error {
+	if ms.lookupTopic(topicID) == nil {
+		return verrors.ErrNotExist
+	}
+
+	pre, cur := ms.getStateMachine()
+
+	ms.mtMu.Lock()
+	defer ms.mtMu.Unlock()
+
+	cur.Metadata.DeleteTopic(topicID)
+
+	if pre != cur {
+		deleted := &varlogpb.TopicDescriptor{
+			TopicID: topicID,
+			Status:  varlogpb.TopicStatusDeleted,
+		}
+
+		cur.Metadata.InsertTopic(deleted)
+	}
+
+	ms.metaAppliedIndex++
+
+	return nil
 }
 
 func (ms *MetadataStorage) updateUncommitReport(ls *varlogpb.LogStreamDescriptor) error {
@@ -651,9 +769,9 @@ func (ms *MetadataStorage) updateUncommitReportStatus(lsID types.LogStreamID, st
 			lls.Replicas[storageNodeID] = r
 		}
 	} else {
-		highWatermark := ms.getHighWatermarkNoLock()
+		version := ms.getLastCommitVersionNoLock()
 		for storageNodeID, r := range lls.Replicas {
-			r.HighWatermark = highWatermark
+			r.Version = version
 			lls.Replicas[storageNodeID] = r
 		}
 	}
@@ -855,28 +973,28 @@ func (ms *MetadataStorage) LookupEndpoint(nodeID types.NodeID) string {
 	return ""
 }
 
-func (ms *MetadataStorage) lookupNextCommitResultsNoLock(glsn types.GLSN) *mrpb.LogStreamCommitResults {
+func (ms *MetadataStorage) lookupNextCommitResultsNoLock(ver types.Version) *mrpb.LogStreamCommitResults {
 	pre, cur := ms.getStateMachine()
 	if pre != cur {
-		r := cur.LookupCommitResultsByPrev(glsn)
+		r := cur.LookupCommitResults(ver + 1)
 		if r != nil {
 			return r
 		}
 	}
 
-	return pre.LookupCommitResultsByPrev(glsn)
+	return pre.LookupCommitResults(ver + 1)
 }
 
-func (ms *MetadataStorage) lookupCommitResultsNoLock(glsn types.GLSN) *mrpb.LogStreamCommitResults {
+func (ms *MetadataStorage) lookupCommitResultsNoLock(ver types.Version) *mrpb.LogStreamCommitResults {
 	pre, cur := ms.getStateMachine()
 	if pre != cur {
-		r := cur.LookupCommitResults(glsn)
+		r := cur.LookupCommitResults(ver)
 		if r != nil {
 			return r
 		}
 	}
 
-	return pre.LookupCommitResults(glsn)
+	return pre.LookupCommitResults(ver)
 }
 
 func (ms *MetadataStorage) getLastCommitResultsNoLock() *mrpb.LogStreamCommitResults {
@@ -947,13 +1065,13 @@ func (ms *MetadataStorage) verifyUncommitReport(s snpb.LogStreamUncommitReport) 
 		return true
 	}
 
-	if fgls.PrevHighWatermark > s.HighWatermark ||
-		lgls.HighWatermark < s.HighWatermark {
+	if fgls.Version > s.Version+1 ||
+		lgls.Version < s.Version {
 		return false
 	}
 
-	return s.HighWatermark == fgls.PrevHighWatermark ||
-		ms.lookupCommitResultsNoLock(s.HighWatermark) != nil
+	return s.Version+1 == fgls.Version ||
+		ms.lookupCommitResultsNoLock(s.Version) != nil
 }
 
 func (ms *MetadataStorage) UpdateUncommitReport(lsID types.LogStreamID, snID types.StorageNodeID, s snpb.LogStreamUncommitReport) {
@@ -980,18 +1098,18 @@ func (ms *MetadataStorage) UpdateUncommitReport(lsID types.LogStreamID, snID typ
 	}
 
 	if !ms.verifyUncommitReport(s) {
-		ms.logger.Warn("could not apply report: invalid hwm",
-			zap.Uint32("lsid", uint32(lsID)),
-			zap.Uint32("snid", uint32(snID)),
-			zap.Uint64("knownHWM", uint64(s.HighWatermark)),
-			zap.Uint64("first", uint64(ms.getFirstCommitResultsNoLock().GetHighWatermark())),
-			zap.Uint64("last", uint64(ms.getLastCommitResultsNoLock().GetHighWatermark())),
+		ms.logger.Warn("could not apply report: invalid ver",
+			zap.Int32("lsid", int32(lsID)),
+			zap.Int32("snid", int32(snID)),
+			zap.Uint64("ver", uint64(s.Version)),
+			zap.Uint64("first", uint64(ms.getFirstCommitResultsNoLock().GetVersion())),
+			zap.Uint64("last", uint64(ms.getLastCommitResultsNoLock().GetVersion())),
 		)
 		return
 	}
 
 	if lm.Status.Sealed() {
-		if r.HighWatermark >= s.HighWatermark ||
+		if r.Version >= s.Version ||
 			s.UncommittedLLSNOffset > r.UncommittedLLSNEnd() {
 			return
 		}
@@ -1003,8 +1121,8 @@ func (ms *MetadataStorage) UpdateUncommitReport(lsID types.LogStreamID, snID typ
 	ms.nrUpdateSinceCommit++
 }
 
-func (ms *MetadataStorage) GetSortedLogStreamIDs() []types.LogStreamID {
-	return ms.sortedLSIDs
+func (ms *MetadataStorage) GetSortedTopicLogStreamIDs() []TopicLSID {
+	return ms.sortedTopicLSIDs
 }
 
 func (ms *MetadataStorage) AppendLogStreamCommitHistory(cr *mrpb.LogStreamCommitResults) {
@@ -1024,10 +1142,10 @@ func (ms *MetadataStorage) AppendLogStreamCommitHistory(cr *mrpb.LogStreamCommit
 	cur.LogStream.CommitHistory = append(cur.LogStream.CommitHistory, cr)
 }
 
-func (ms *MetadataStorage) TrimLogStreamCommitHistory(trimGLSN types.GLSN) error {
+func (ms *MetadataStorage) TrimLogStreamCommitHistory(ver types.Version) error {
 	_, cur := ms.getStateMachine()
-	if trimGLSN != types.MaxGLSN && cur.LogStream.TrimGLSN < trimGLSN {
-		cur.LogStream.TrimGLSN = trimGLSN
+	if ver != math.MaxUint64 && cur.LogStream.TrimVersion < ver {
+		cur.LogStream.TrimVersion = ver
 	}
 	return nil
 }
@@ -1042,32 +1160,24 @@ func (ms *MetadataStorage) UpdateAppliedIndex(appliedIndex uint64) {
 	ms.triggerSnapshot(appliedIndex)
 }
 
-func (ms *MetadataStorage) getHighWatermarkNoLock() types.GLSN {
+func (ms *MetadataStorage) getLastCommitVersionNoLock() types.Version {
 	gls := ms.getLastCommitResultsNoLock()
-	if gls == nil {
-		return types.InvalidGLSN
-	}
-
-	return gls.HighWatermark
+	return gls.GetVersion()
 }
 
-func (ms *MetadataStorage) GetHighWatermark() types.GLSN {
+func (ms *MetadataStorage) GetLastCommitVersion() types.Version {
 	ms.lsMu.RLock()
 	defer ms.lsMu.RUnlock()
 
-	return ms.getHighWatermarkNoLock()
+	return ms.getLastCommitVersionNoLock()
 }
 
-func (ms *MetadataStorage) GetMinHighWatermark() types.GLSN {
+func (ms *MetadataStorage) GetMinCommitVersion() types.Version {
 	ms.lsMu.RLock()
 	defer ms.lsMu.RUnlock()
 
 	gls := ms.getFirstCommitResultsNoLock()
-	if gls == nil {
-		return types.InvalidGLSN
-	}
-
-	return gls.HighWatermark
+	return gls.GetVersion()
 }
 
 func (ms *MetadataStorage) NumUpdateSinceCommit() uint64 {
@@ -1078,16 +1188,15 @@ func (ms *MetadataStorage) ResetUpdateSinceCommit() {
 	ms.nrUpdateSinceCommit = 0
 }
 
-func (ms *MetadataStorage) LookupNextCommitResults(glsn types.GLSN) (*mrpb.LogStreamCommitResults, error) {
+func (ms *MetadataStorage) LookupNextCommitResults(ver types.Version) (*mrpb.LogStreamCommitResults, error) {
 	ms.lsMu.RLock()
 	defer ms.lsMu.RUnlock()
 
-	var err error
-	if oldest := ms.getFirstCommitResultsNoLock(); oldest != nil && oldest.PrevHighWatermark > glsn {
-		err = fmt.Errorf("already trimmed glsn:%v, oldest:%v", glsn, oldest.PrevHighWatermark)
+	if oldest := ms.getFirstCommitResultsNoLock(); oldest != nil && oldest.Version > ver+1 {
+		return nil, fmt.Errorf("already trimmed ver:%v, oldest:%v", ver, oldest.Version)
 	}
 
-	return ms.lookupNextCommitResultsNoLock(glsn), err
+	return ms.lookupNextCommitResultsNoLock(ver), nil
 }
 
 func (ms *MetadataStorage) GetFirstCommitResults() *mrpb.LogStreamCommitResults {
@@ -1112,20 +1221,20 @@ func (ms *MetadataStorage) GetMetadata() *varlogpb.MetadataDescriptor {
 }
 
 func (ms *MetadataStorage) GetLogStreamCommitResults() []*mrpb.LogStreamCommitResults {
-	trimGLSN := ms.origStateMachine.LogStream.TrimGLSN
-	if ms.origStateMachine.LogStream.TrimGLSN < ms.diffStateMachine.LogStream.TrimGLSN {
-		trimGLSN = ms.diffStateMachine.LogStream.TrimGLSN
+	ver := ms.origStateMachine.LogStream.TrimVersion
+	if ms.origStateMachine.LogStream.TrimVersion < ms.diffStateMachine.LogStream.TrimVersion {
+		ver = ms.diffStateMachine.LogStream.TrimVersion
 	}
 
 	crs := append(ms.origStateMachine.LogStream.CommitHistory, ms.diffStateMachine.LogStream.CommitHistory...)
 
 	i := sort.Search(len(crs), func(i int) bool {
-		return crs[i].HighWatermark >= trimGLSN
+		return crs[i].Version >= ver
 	})
 
 	if 0 < i &&
 		i < len(crs) &&
-		crs[i].HighWatermark == trimGLSN {
+		crs[i].Version == ver {
 		crs = crs[i-1:]
 	}
 
@@ -1238,9 +1347,8 @@ func (ms *MetadataStorage) RecoverStateMachine(stateMachine *mrpb.MetadataReposi
 
 	ms.trimLogStreamCommitHistory()
 
-	fmt.Printf("recover commit result from [hwm:%v, prev:%v]\n",
-		ms.GetFirstCommitResults().GetHighWatermark(),
-		ms.GetFirstCommitResults().GetPrevHighWatermark(),
+	fmt.Printf("recover commit result from [ver:%v]\n",
+		ms.GetFirstCommitResults().GetVersion(),
 	)
 
 	ms.jobC = make(chan *storageAsyncJob, 4096)
@@ -1265,13 +1373,13 @@ func (ms *MetadataStorage) recoverLogStreams(stateMachine *mrpb.MetadataReposito
 		lm.Status = varlogpb.LogStreamStatusSealing
 
 		uncommittedLLSNLength := uint64(0)
-		cr, _, ok := commitResults.LookupCommitResult(ls.LogStreamID, -1)
+		cr, _, ok := commitResults.LookupCommitResult(ls.TopicID, ls.LogStreamID, -1)
 		if ok {
 			uncommittedLLSNLength = uint64(cr.CommittedLLSNOffset) + cr.CommittedGLSNLength - 1
 		}
 
 		for storageNodeID, r := range lm.Replicas {
-			r.HighWatermark = types.InvalidGLSN
+			r.Version = types.InvalidVersion
 			r.UncommittedLLSNOffset = types.MinLLSN
 			r.UncommittedLLSNLength = uncommittedLLSNLength
 			lm.Replicas[storageNodeID] = r
@@ -1305,15 +1413,20 @@ func (ms *MetadataStorage) recoverStateMachine(stateMachine *mrpb.MetadataReposi
 	ms.metaAppliedIndex = appliedIndex
 	ms.appliedIndex = appliedIndex
 
-	ms.sortedLSIDs = nil
+	ms.sortedTopicLSIDs = nil
 
 	for _, ls := range stateMachine.Metadata.LogStreams {
 		if !ls.Status.Deleted() {
-			ms.sortedLSIDs = append(ms.sortedLSIDs, ls.LogStreamID)
+			ms.sortedTopicLSIDs = append(ms.sortedTopicLSIDs, TopicLSID{TopicID: ls.TopicID, LogStreamID: ls.LogStreamID})
 		}
 	}
 
-	sort.Slice(ms.sortedLSIDs, func(i, j int) bool { return ms.sortedLSIDs[i] < ms.sortedLSIDs[j] })
+	sort.Slice(ms.sortedTopicLSIDs, func(i, j int) bool {
+		if ms.sortedTopicLSIDs[i].TopicID == ms.sortedTopicLSIDs[j].TopicID {
+			return ms.sortedTopicLSIDs[i].LogStreamID < ms.sortedTopicLSIDs[j].LogStreamID
+		}
+		return ms.sortedTopicLSIDs[i].TopicID < ms.sortedTopicLSIDs[j].TopicID
+	})
 
 	ms.prMu.Unlock()
 	ms.lsMu.Unlock()
@@ -1466,6 +1579,14 @@ func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 		}
 	}
 
+	for _, topic := range ms.diffStateMachine.Metadata.Topics {
+		if topic.Status.Deleted() {
+			cache.DeleteTopic(topic.TopicID)
+		} else if cache.InsertTopic(topic) != nil {
+			cache.UpdateTopic(topic)
+		}
+	}
+
 	for _, ls := range ms.diffStateMachine.Metadata.LogStreams {
 		if ls.Status.Deleted() {
 			cache.DeleteLogStream(ls.LogStreamID)
@@ -1483,7 +1604,8 @@ func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 
 func (ms *MetadataStorage) mergeMetadata() {
 	if len(ms.diffStateMachine.Metadata.StorageNodes) == 0 &&
-		len(ms.diffStateMachine.Metadata.LogStreams) == 0 {
+		len(ms.diffStateMachine.Metadata.LogStreams) == 0 &&
+		len(ms.diffStateMachine.Metadata.Topics) == 0 {
 		return
 	}
 
@@ -1496,6 +1618,14 @@ func (ms *MetadataStorage) mergeMetadata() {
 			ms.origStateMachine.Metadata.DeleteStorageNode(sn.StorageNodeID)
 		} else {
 			ms.origStateMachine.Metadata.InsertStorageNode(sn)
+		}
+	}
+
+	for _, topic := range ms.diffStateMachine.Metadata.Topics {
+		if topic.Status.Deleted() {
+			ms.origStateMachine.Metadata.DeleteTopic(topic.TopicID)
+		} else if ms.origStateMachine.Metadata.InsertTopic(topic) != nil {
+			ms.origStateMachine.Metadata.UpdateTopic(topic)
 		}
 	}
 
@@ -1526,8 +1656,8 @@ func (ms *MetadataStorage) mergeLogStream() {
 	ms.lsMu.Lock()
 	defer ms.lsMu.Unlock()
 
-	if ms.origStateMachine.LogStream.TrimGLSN < ms.diffStateMachine.LogStream.TrimGLSN {
-		ms.origStateMachine.LogStream.TrimGLSN = ms.diffStateMachine.LogStream.TrimGLSN
+	if ms.origStateMachine.LogStream.TrimVersion < ms.diffStateMachine.LogStream.TrimVersion {
+		ms.origStateMachine.LogStream.TrimVersion = ms.diffStateMachine.LogStream.TrimVersion
 	}
 
 	ms.origStateMachine.LogStream.CommitHistory = append(ms.origStateMachine.LogStream.CommitHistory, ms.diffStateMachine.LogStream.CommitHistory...)
@@ -1584,13 +1714,13 @@ func (ms *MetadataStorage) setConfState(cs *raftpb.ConfState) {
 func (ms *MetadataStorage) trimLogStreamCommitHistory() {
 	s := ms.origStateMachine
 	i := sort.Search(len(s.LogStream.CommitHistory), func(i int) bool {
-		return s.LogStream.CommitHistory[i].HighWatermark >= s.LogStream.TrimGLSN
+		return s.LogStream.CommitHistory[i].Version >= s.LogStream.TrimVersion
 	})
 
 	if 1 < i &&
 		i < len(s.LogStream.CommitHistory) &&
-		s.LogStream.CommitHistory[i].HighWatermark == s.LogStream.TrimGLSN {
-		ms.logger.Info("trim", zap.Any("glsn", s.LogStream.TrimGLSN))
+		s.LogStream.CommitHistory[i].Version == s.LogStream.TrimVersion {
+		ms.logger.Info("trim", zap.Any("ver", s.LogStream.TrimVersion))
 		s.LogStream.CommitHistory = s.LogStream.CommitHistory[i-1:]
 	}
 }
@@ -1610,7 +1740,6 @@ func (ms *MetadataStorage) mergeStateMachine() {
 	ms.mergeConfState()
 
 	ms.releaseCopyOnWrite()
-	return
 }
 
 func (ms *MetadataStorage) needSnapshot() bool {

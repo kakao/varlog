@@ -188,8 +188,7 @@ func TestCommitterStop(t *testing.T) {
 	lsc.uncommittedLLSNEnd.Add(1)
 
 	err = committer.sendCommitTask(context.TODO(), &commitTask{
-		highWatermark:      1,
-		prevHighWatermark:  0,
+		version:            1,
 		committedGLSNBegin: 1,
 		committedGLSNEnd:   2,
 		committedLLSNBegin: 1,
@@ -261,8 +260,7 @@ func TestCommitter(t *testing.T) {
 
 	// commit,
 	err = committer.sendCommitTask(context.TODO(), &commitTask{
-		highWatermark:      2,
-		prevHighWatermark:  0,
+		version:            1,
 		committedGLSNBegin: 1,
 		committedGLSNEnd:   3,
 		committedLLSNBegin: 1,
@@ -296,8 +294,7 @@ func TestCommitter(t *testing.T) {
 
 	// commit,
 	err = committer.sendCommitTask(context.TODO(), &commitTask{
-		highWatermark:      4,
-		prevHighWatermark:  2,
+		version:            2,
 		committedGLSNBegin: 3,
 		committedGLSNEnd:   5,
 		committedLLSNBegin: 3,
@@ -352,16 +349,14 @@ func TestCommitterCatchupCommitVarlog459(t *testing.T) {
 
 	for i := 0; i < goal; i++ {
 		committer.sendCommitTask(context.Background(), &commitTask{
-			highWatermark:      types.GLSN(i + 1),
-			prevHighWatermark:  types.GLSN(i),
+			version:            types.Version(i + 1),
 			committedGLSNBegin: types.MinGLSN,
 			committedGLSNEnd:   types.MinGLSN,
 			committedLLSNBegin: types.MinLLSN,
 		})
 		if i > 0 {
 			committer.sendCommitTask(context.Background(), &commitTask{
-				highWatermark:      types.GLSN(i),
-				prevHighWatermark:  types.GLSN(i - 1),
+				version:            types.Version(i),
 				committedGLSNBegin: types.MinGLSN,
 				committedGLSNEnd:   types.MinGLSN,
 				committedLLSNBegin: types.MinLLSN,
@@ -374,8 +369,8 @@ func TestCommitterCatchupCommitVarlog459(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		hwm, _ := lsc.reportCommitBase()
-		return hwm == goal
+		ver, _, _ := lsc.reportCommitBase()
+		return ver == goal
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -445,8 +440,7 @@ func TestCommitterState(t *testing.T) {
 
 	// push commitTask
 	require.NoError(t, committer.sendCommitTask(context.Background(), &commitTask{
-		highWatermark:      1,
-		prevHighWatermark:  0,
+		version:            1,
 		committedGLSNBegin: 1,
 		committedGLSNEnd:   2,
 		committedLLSNBegin: 1,
@@ -454,8 +448,8 @@ func TestCommitterState(t *testing.T) {
 
 	// committed
 	require.Eventually(t, func() bool {
-		hwm, _ := lsc.reportCommitBase()
-		return committer.commitWaitQ.size() == 1 && hwm == 1
+		ver, _, _ := lsc.reportCommitBase()
+		return committer.commitWaitQ.size() == 1 && ver == 1
 	}, time.Second, 10*time.Millisecond)
 
 	// state == sealing
@@ -469,8 +463,7 @@ func TestCommitterState(t *testing.T) {
 	require.Error(t, committer.sendCommitWaitTask(context.Background(), cwt))
 
 	require.NoError(t, committer.sendCommitTask(context.Background(), &commitTask{
-		highWatermark:      2,
-		prevHighWatermark:  1,
+		version:            2,
 		committedGLSNBegin: 2,
 		committedGLSNEnd:   3,
 		committedLLSNBegin: 2,
@@ -478,8 +471,8 @@ func TestCommitterState(t *testing.T) {
 
 	// committed
 	require.Eventually(t, func() bool {
-		hwm, _ := lsc.reportCommitBase()
-		return committer.commitWaitQ.size() == 0 && hwm == 2
+		ver, _, _ := lsc.reportCommitBase()
+		return committer.commitWaitQ.size() == 0 && ver == 2
 	}, time.Second, 10*time.Millisecond)
 
 	// state == learning | sealed
@@ -492,8 +485,7 @@ func TestCommitterState(t *testing.T) {
 	require.Error(t, committer.sendCommitWaitTask(context.Background(), cwt))
 
 	require.Error(t, committer.sendCommitTask(context.Background(), &commitTask{
-		highWatermark:      3,
-		prevHighWatermark:  2,
+		version:            3,
 		committedGLSNBegin: 3,
 		committedGLSNEnd:   3,
 		committedLLSNBegin: 3,

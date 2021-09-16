@@ -1,32 +1,28 @@
 MAKEFLAGS += --warn-undefined-variables
 SHELL := /bin/bash
 
-MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
-MAKEFILE_DIR := $(dir $(MAKEFILE_PATH))
-BUILD_DIR := $(MAKEFILE_DIR)/build
-BIN_DIR := $(MAKEFILE_DIR)/bin
-
 GO := go
-GOPATH := $(shell $(GO) env GOPATH)
-LDFLAGS :=
-GOFLAGS := -race
 GCFLAGS := -gcflags=all='-N -l'
+GOPATH := $(shell $(GO) env GOPATH)
+PKGS := $(shell $(GO) list ./... | \
+	egrep -v "github.com/kakao/varlog/vendor" | \
+	egrep -v "github.com/kakao/varlog/tools" | \
+	sed -e "s;github.com/kakao/varlog/;;")
 
-PROTOC := protoc
-GRPC_GO_PLUGIN := protoc-gen-gogo
-PROTO_INCS := -I ${GOPATH}/src -I ${MAKEFILE_DIR}/proto -I ${MAKEFILE_DIR}/vendor -I .
-PROTO_SRCS := $(shell find . -name "*.proto" -not -path "./vendor/*")
-PROTO_PBS := $(PROTO_SRCS:.proto=.pb.go)
-HAS_PROTOC := $(shell which $(PROTOC) > /dev/null && echo true || echo false)
-HAS_VALID_PROTOC := false
-ifeq ($(HAS_PROTOC),true)
-HAS_VALID_PROTOC := $(shell $(PROTOC) --version | grep -q "libprotoc 3" > /dev/null && echo true || echo false)
-endif
-HAS_GRPC_PLUGIN := $(shell which $(GRPC_GO_PLUGIN) > /dev/null && echo true || echo false)
 
+.DEFAULT_GOAL := all
 .PHONY: all
-all: generate fmt build
+all: generate precommit build
 
+
+# precommit
+.PHONY: precommit precommit_lint
+precommit: fmt tidy vet test
+precommit_lint: fmt tidy vet lint test
+
+
+# build
+BIN_DIR := $(CURDIR)/bin
 VMS := $(BIN_DIR)/vms
 VMC := $(BIN_DIR)/vmc
 VSN := $(BIN_DIR)/vsn
@@ -37,119 +33,90 @@ BENCHMARK := $(BIN_DIR)/benchmark
 RPCBENCH_SERVER := $(BIN_DIR)/rpcbench_server 
 RPCBENCH_CLIENT := $(BIN_DIR)/rpcbench_client
 
-BUILD_OUTPUT := $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH)
-
-.PHONY: build vms vmc vsn vmr sntool rpc_test_server benchmark
+.PHONY: build vms vmc vsn vmr sntool rpc_test_server benchmark rpcbench
 build: vms vmc vsn vmr sntool rpc_test_server benchmark rpcbench
-
-vms: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMS) cmd/vms/main.go
-
-vmc: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMC) cmd/vmc/main.go
-
-vsn: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VSN) cmd/storagenode/main.go
-
-vmr: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(VMR) cmd/metadata_repository/main.go
-
-sntool: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(SNTOOL) cmd/sntool/sntool.go
-
-rpc_test_server: proto
-	$(GO) build -tags rpc_e2e $(GOFLAGS) $(GCFLAGS) -o $(RPC_TEST_SERVER) cmd/rpc_test_server/main.go
-
-benchmark: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(BENCHMARK) cmd/benchmark/main.go
-
-rpcbench: proto
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(RPCBENCH_SERVER) cmd/rpcbench/server/main.go
-	$(GO) build $(GOFLAGS) $(GCFLAGS) -o $(RPCBENCH_CLIENT) cmd/rpcbench/client/main.go
+vms:
+	$(GO) build $(GCFLAGS) -o $(VMS) cmd/vms/main.go
+vmc:
+	$(GO) build $(GCFLAGS) -o $(VMC) cmd/vmc/main.go
+vsn:
+	$(GO) build $(GCFLAGS) -o $(VSN) cmd/storagenode/main.go
+vmr:
+	$(GO) build $(GCFLAGS) -o $(VMR) cmd/metadata_repository/main.go
+sntool:
+	$(GO) build $(GCFLAGS) -o $(SNTOOL) cmd/sntool/sntool.go
+rpc_test_server:
+	$(GO) build -tags rpc_e2e $(GCFLAGS) -o $(RPC_TEST_SERVER) cmd/rpc_test_server/main.go
+benchmark:
+	$(GO) build $(GCFLAGS) -o $(BENCHMARK) cmd/benchmark/main.go
+rpcbench:
+	$(GO) build $(GCFLAGS) -o $(RPCBENCH_SERVER) cmd/rpcbench/server/main.go
+	$(GO) build $(GCFLAGS) -o $(RPCBENCH_CLIENT) cmd/rpcbench/client/main.go
 
 
-.PHONY: proto
-proto: $(PROTO_PBS)
-$(PROTO_PBS): $(PROTO_SRCS)
-	for src in $^ ; do \
-		$(PROTOC) $(PROTO_INCS) \
-		--gogo_out=plugins=grpc,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,paths=source_relative:. $$src ; \
-	done
+# testing
+REPORTS_DIR := $(CURDIR)/reports
+TEST_OUTPUT := $(REPORTS_DIR)/test.out
+TEST_REPORT := $(REPORTS_DIR)/test.xml
+COVERAGE_OUTPUT_TMP := $(REPORTS_DIR)/coverage.out.tmp
+COVERAGE_OUTPUT := $(REPORTS_DIR)/coverage.out
+COVERAGE_REPORT := $(REPORTS_DIR)/coverage.xml
+BENCH_OUTPUT := $(REPORTS_DIR)/bench.out
+BENCH_REPORT := $(REPORTS_DIR)/bench.xml
 
-TEST_COUNT := 1
-TEST_FLAGS := -count $(TEST_COUNT)
+TEST_FLAGS := -v -race -failfast -count=1
 
-ifneq ($(TEST_CPU),)
-	TEST_FLAGS := $(TEST_FLAGS) -cpu $(TEST_CPU)
-endif
-
-ifneq ($(TEST_TIMEOUT),)
-	TEST_FLAGS := $(TEST_FLAGS) -timeout $(TEST_TIMEOUT)
-endif
-
-ifneq ($(TEST_PARALLEL),)
-	TEST_FLAGS := $(TEST_FLAGS) -parallel $(TEST_PARALLEL)
-endif
-
-TEST_COVERAGE := 0
-ifeq ($(TEST_COVERAGE),1)
-	TEST_FLAGS := $(TEST_FLAGS) -coverprofile=$(BUILD_DIR)/reports/coverage.out
-endif
-
-TEST_FAILFAST := 1
-ifeq ($(TEST_FAILFAST),1)
-	TEST_FLAGS := $(TEST_FLAGS) -failfast
-endif
-
-TEST_VERBOSE := 1
-ifeq ($(TEST_VERBOSE),1)
-	TEST_FLAGS := $(TEST_FLAGS) -v
-endif
-
-TEST_E2E := 0
-ifeq ($(TEST_E2E),1)
-	TEST_FLAGS := $(TEST_FLAGS) -tags=e2e
-endif
-
-.PHONY: test test_report coverage_report
-test: build
+.PHONY: test test_ci test_report coverage_report
+test:
 	tmpfile=$$(mktemp); \
-	(TERM=sh $(GO) test $(GOFLAGS) $(GCFLAGS) $(TEST_FLAGS) ./... 2>&1; echo $$? > $$tmpfile) | \
-	tee $(BUILD_DIR)/reports/test_output.txt; \
+	(TERM=xterm $(GO) test $(TEST_FLAGS) ./... 2>&1; echo $$? > $$tmpfile) | \
+	tee $(TEST_OUTPUT); \
+	ret=$$(cat $$tmpfile); \
+	rm -f $$tmpfile; \
+	exit $$ret
+
+test_ci:
+	tmpfile=$$(mktemp); \
+	(TERM=xterm $(GO) test $(TEST_FLAGS) -coverprofile=$(COVERAGE_OUTPUT_TMP) ./... 2>&1; echo $$? > $$tmpfile) | \
+	tee $(TEST_OUTPUT); \
 	ret=$$(cat $$tmpfile); \
 	rm -f $$tmpfile; \
 	exit $$ret
 
 test_report:
-	cat $(BUILD_DIR)/reports/test_output.txt | \
-		go-junit-report > $(BUILD_DIR)/reports/report.xml
-	rm $(BUILD_DIR)/reports/test_output.txt
+	cat $(TEST_OUTPUT) | go-junit-report > $(TEST_REPORT)
 
 coverage_report:
-	gocov convert $(BUILD_DIR)/reports/coverage.out | gocov-xml > $(BUILD_DIR)/reports/coverage.xml
+	cat $(COVERAGE_OUTPUT_TMP) | grep -v ".pb.go" | grep -v "_mock.go" > $(COVERAGE_OUTPUT)
+	gocov convert $(COVERAGE_OUTPUT) | gocov-xml > $(COVERAGE_REPORT)
 
 bench: build
 	tmpfile=$$(mktemp); \
-	(TERM=sh $(GO) test -v -run=^$$ -count 1 -bench=. -benchmem ./... 2>&1; echo $$? > $$tmpfile) | \
-	tee $(BUILD_DIR)/reports/bench_output.txt; \
+	(TERM=xterm $(GO) test -v -run=^$$ -count 1 -bench=. -benchmem ./... 2>&1; echo $$? > $$tmpfile) | \
+	tee $(BENCH_OUTPUT); \
 	ret=$$(cat $$tmpfile); \
 	rm -f $$tmpfile; \
 	exit $$ret
 
 bench_report:
-	cat $(BUILD_DIR)/reports/bench_output.txt | \
-		go-junit-report > $(BUILD_DIR)/reports/bench.xml
-	rm $(BUILD_DIR)/reports/bench_output.txt
+	cat $(BENCH_OUTPUT) | go-junit-report > $(BENCH_REPORT)
 
+
+# testing on k8s
 TEST_DOCKER_CPUS := 8
 TEST_DOCKER_MEMORY := 4GB
-
+TEST_POD_NAME := test-e2e
 .PHONY: test_docker test_e2e_docker test_e2e_docker_long
+
 test_docker: image_builder_dev
-	docker run --rm -it --cpus $(TEST_DOCKER_CPUS) --memory $(TEST_DOCKER_MEMORY) ***REMOVED***/varlog/builder-dev:$(DOCKER_TAG) make test
+	docker run --rm -it \
+		--cpus $(TEST_DOCKER_CPUS) \
+		--memory $(TEST_DOCKER_MEMORY) \
+		***REMOVED***/varlog/builder-dev:$(DOCKER_TAG) \
+		make test
 
 test_e2e_docker: image_builder_dev push_builder_dev
-	kubectl run --rm -it test-e2e \
+	kubectl run --rm -it $(TEST_POD_NAME) \
 		--image=***REMOVED***/varlog/builder-dev:$(DOCKER_TAG) \
 		--image-pull-policy=Always \
 		--restart=Never \
@@ -159,125 +126,56 @@ test_e2e_docker: image_builder_dev push_builder_dev
 		--command -- $(GO) test ./test/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1
 
 test_e2e_docker_long: image_builder_dev push_builder_dev
-	kubectl run --rm -it test-e2e \
+	kubectl run --rm -it $(TEST_POD_NAME) \
 		--image=***REMOVED***/varlog/builder-dev:$(DOCKER_TAG) \
 		--image-pull-policy=Always \
 		--restart=Never \
 		--env="VAULT_ADDR=$(VAULT_ADDR)" \
 		--env="VAULT_TOKEN=$(VAULT_TOKEN)" \
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
-		--command -- $(GO) test ./test/e2e -tags=long_e2e -v -timeout 12h -failfast -count 1 -race -p 1
-	
-.PHONY: generate
-generate:
-	$(GO) generate ./...
 
-.PHONY: fmt
-fmt:
-	scripts/fmt.sh
 
-.PHONY: lint
-lint:
-	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.com/kakao/varlog/##),golint $(path);)
-
-.PHONY: vet
-vet:
-	@$(GO) vet ./...
-
-.PHONY: clean
-clean:
-	$(GO) clean
-	$(RM) $(BUILD_OUTPUT)
-
-.PHONY: clean_mock
-clean_mock:
-	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.com/kakao/varlog/##),$(RM) -f $(path)/*_mock.go;)
-
-.PHONY: deps
-deps:
-	GO111MODULE=off $(GO) get golang.org/x/tools/cmd/goimports
-	GO111MODULE=off $(GO) get golang.org/x/lint/golint
-	GO111MODULE=off $(GO) get golang.org/x/tools/cmd/stringer
-	GO111MODULE=off $(GO) get github.com/gogo/protobuf/protoc-gen-gogo
-	GO111MODULE=off $(GO) get github.com/golang/mock/mockgen
-
-.PHONY: check
-check: check_proto
-
-.PHONY: check_proto
-check_proto:
-ifneq ($(HAS_PROTOC),true)
-	@echo "error: $(PROTOC) not installed"
-	@false
-endif
-	@echo "ok: $(PROTOC)"
-ifneq ($(HAS_VALID_PROTOC),true)
-	@echo "error: $(shell $(PROTOC) --version) invalid version"
-	@false
-endif
-	@echo "ok: $(shell $(PROTOC) --version)"
-ifneq ($(HAS_GRPC_PLUGIN),true)
-	@echo "error: $(GRPC_GO_PLUGIN) not installed"
-	@false
-endif
-	@echo "ok: $(GRPC_GO_PLUGIN)"
-
-.PHONY: docker image push \
-	image_vms image_mr image_sn \
-	push_vms push_mr push_sn 
-
-VERSION := $(shell cat $(MAKEFILE_DIR)/VERSION)
+# docker
+DOCKERFILE := $(CURDIR)/docker/alpine/Dockerfile
+DOCKER_REPOS := ***REMOVED***
+VERSION := $(shell cat $(CURDIR)/VERSION)
 GIT_HASH := $(shell git describe --always --broken)
 BUILD_DATE := $(shell date -u '+%FT%T%z')
 DOCKER_TAG := v$(VERSION)-$(GIT_HASH)
-# IMAGE_BUILD_DATE := $(shell date -u '+%Y%m%d%H%M')
-# DOCKER_TAG := v$(VERSION)-$(GIT_HASH)-$(IMAGE_BUILD_DATE)
 
+.PHONY: docker image push image_vms image_mr image_sn push_vms push_mr push_sn 
 docker: image push
 
 image: image_vms image_mr image_sn 
-
 image_vms:
-	docker build --target varlog-vms -f $(MAKEFILE_DIR)/docker/alpine/Dockerfile -t ***REMOVED***/varlog/varlog-vms:$(DOCKER_TAG) .
-
+	docker build --target varlog-vms -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/varlog-vms:$(DOCKER_TAG) .
 image_mr:
-	docker build --target varlog-mr -f $(MAKEFILE_DIR)/docker/alpine/Dockerfile -t ***REMOVED***/varlog/varlog-mr:$(DOCKER_TAG) .
-
+	docker build --target varlog-mr -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/varlog-mr:$(DOCKER_TAG) .
 image_sn:
-	docker build --target varlog-sn -f $(MAKEFILE_DIR)/docker/alpine/Dockerfile -t ***REMOVED***/varlog/varlog-sn:$(DOCKER_TAG) .
+	docker build --target varlog-sn -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/varlog-sn:$(DOCKER_TAG) .
 
 push: push_vms push_mr push_sn 
-
 push_vms:
-	docker push ***REMOVED***/varlog/varlog-vms:$(DOCKER_TAG)
-
+	docker push $(DOCKER_REPOS)/varlog/varlog-vms:$(DOCKER_TAG)
 push_mr:
-	docker push ***REMOVED***/varlog/varlog-mr:$(DOCKER_TAG)
-
+	docker push $(DOCKER_REPOS)/varlog/varlog-mr:$(DOCKER_TAG)
 push_sn:
-	docker push ***REMOVED***/varlog/varlog-sn:$(DOCKER_TAG)
+	docker push $(DOCKER_REPOS)/varlog/varlog-sn:$(DOCKER_TAG)
 
-.PHONY: docker_dev image_dev push_dev \
-	image_builder_dev image_rpc_test_server \
-	push_builder_dev push_rpc_test_server
-
+.PHONY: docker_dev image_dev push_dev image_builder_dev image_rpc_test_server push_builder_dev push_rpc_test_server
 docker_dev: image_dev push_dev
 
 image_dev: image_builder_dev image_rpc_test_server
-
 image_builder_dev:
-	docker build --target builder-dev -f $(MAKEFILE_DIR)/docker/alpine/Dockerfile -t ***REMOVED***/varlog/builder-dev:$(DOCKER_TAG) .
-
+	docker build --target builder-dev -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/builder-dev:$(DOCKER_TAG) .
 image_rpc_test_server:
-	docker build --target rpc-test-server -f $(MAKEFILE_DIR)/docker/alpine/Dockerfile -t ***REMOVED***/varlog/rpc-test-server:$(DOCKER_TAG) .
+	docker build --target rpc-test-server -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/rpc-test-server:$(DOCKER_TAG) .
 
 push_dev: push_builder_dev push_rpc_test_server
-
 push_builder_dev:
-	docker push ***REMOVED***/varlog/builder-dev:$(DOCKER_TAG)
-
+	docker push $(DOCKER_REPOS)/varlog/builder-dev:$(DOCKER_TAG)
 push_rpc_test_server:
-	docker push ***REMOVED***/varlog/rpc-test-server:$(DOCKER_TAG)
+	docker push $(DOCKER_REPOS)/varlog/rpc-test-server:$(DOCKER_TAG)
 
 .PHONY: kustomize sandbox
 KUSTOMIZE_ENV := dev
@@ -292,6 +190,68 @@ ifeq ($(BUILD_ENV),pm)
 	KUSTOMIZE_ENV := pm
 endif
 kustomize:
-	@sed "s/IMAGE_TAG/$(DOCKER_TAG)/" $(MAKEFILE_DIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.template.yaml > \
-		$(MAKEFILE_DIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.yaml
-	@echo "Run this command to apply: kubectl apply -k $(MAKEFILE_DIR)/deploy/k8s/$(KUSTOMIZE_ENV)/"
+	@sed "s/IMAGE_TAG/$(DOCKER_TAG)/" $(CURDIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.template.yaml > \
+		$(CURDIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.yaml
+	@echo "Run this command to apply: kubectl apply -k $(CURDIR)/deploy/k8s/$(KUSTOMIZE_ENV)/"
+
+
+# proto
+DOCKER_PROTOBUF = $(DOCKER_REPOS)/varlog/protobuf:0.0.3
+PROTOC := docker run --rm -u $(shell id -u) -v$(PWD):$(PWD) -w$(PWD) $(DOCKER_PROTOBUF) --proto_path=$(PWD)
+PROTO_SRCS := $(shell find . -name "*.proto" -not -path "./vendor/*")
+PROTO_PBS := $(PROTO_SRCS:.proto=.pb.go)
+PROTO_INCS := -I$(GOPATH)/src -I$(CURDIR)/proto -I$(CURDIR)/vendor
+
+.PHONY: proto
+proto: $(PROTO_PBS)
+$(PROTO_PBS): $(PROTO_SRCS)
+	@echo $(PROTOC)
+	for src in $^ ; do \
+		$(PROTOC) $(PROTO_INCS) \
+		--gogo_out=plugins=grpc,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,paths=source_relative:. $$src ; \
+	done
+
+
+# go:generate
+.PHONY: generate
+generate:
+	$(GO) generate ./...
+
+
+# tools: lint, fmt, vet
+.PHONY: tools fmt lint vet
+tools:
+	$(GO) install golang.org/x/tools/cmd/goimports
+	$(GO) install golang.org/x/lint/golint
+	$(GO) install github.com/golang/mock/mockgen
+	$(GO) get golang.org/x/tools/cmd/stringer
+
+fmt:
+	@echo goimports
+	@$(foreach path,$(PKGS),goimports -w -local $(shell $(GO) list -m) ./$(path);)
+	@echo gofmt
+	@$(foreach path,$(PKGS),gofmt -w -s ./$(path);)
+
+lint:
+	@echo golint
+	@$(foreach path,$(PKGS),golint -set_exit_status ./$(path);)
+
+vet:
+	@echo govet
+	@$(foreach path,$(PKGS),$(GO) vet ./$(path);)
+
+tidy:
+	$(GO) mod tidy
+
+
+# cleanup
+.PHONY: clean clean_mock
+clean:
+	$(GO) clean
+	$(RM) $(TEST_OUTPUT) $(TEST_REPORT)
+	$(RM) $(COVERAGE_OUTPUT_TMP) $(COVERAGE_OUTPUT) $(COVERAGE_REPORT)
+	$(RM) $(BENCH_OUTPUT) $(BENCH_REPORT)
+	$(RM) $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH_SERVER) $(RPCBENCH_CLIENT)
+
+clean_mock:
+	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.com/kakao/varlog/##),$(RM) -f $(path)/*_mock.go;)

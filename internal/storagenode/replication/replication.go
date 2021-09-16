@@ -8,10 +8,11 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type SyncTaskStatus struct {
-	Replica snpb.Replica
+	Replica varlogpb.Replica
 	State   snpb.SyncState
 	Span    snpb.SyncRange
 	Curr    types.LLSN
@@ -24,9 +25,9 @@ type Replicator interface {
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
 	SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.SyncRange, error)
 	SyncReplicate(ctx context.Context, payload snpb.SyncPayload) error
-	Sync(ctx context.Context, replica snpb.Replica) (*snpb.SyncStatus, error)
+	Sync(ctx context.Context, replica varlogpb.Replica) (*snpb.SyncStatus, error)
 }
 
 type Getter interface {
-	Replicator(logStreamID types.LogStreamID) (Replicator, bool)
+	Replicator(topicID types.TopicID, logStreamID types.LogStreamID) (Replicator, bool)
 }

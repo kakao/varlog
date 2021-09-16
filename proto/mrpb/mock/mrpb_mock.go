@@ -249,6 +249,26 @@ func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterStorageNode(a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).RegisterStorageNode), varargs...)
 }
 
+// RegisterTopic mocks base method.
+func (m *MockMetadataRepositoryServiceClient) RegisterTopic(arg0 context.Context, arg1 *mrpb.TopicRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RegisterTopic", varargs...)
+	ret0, _ := ret[0].(*types.Empty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RegisterTopic indicates an expected call of RegisterTopic.
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterTopic(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterTopic", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).RegisterTopic), varargs...)
+}
+
 // Seal mocks base method.
 func (m *MockMetadataRepositoryServiceClient) Seal(arg0 context.Context, arg1 *mrpb.SealRequest, arg2 ...grpc.CallOption) (*mrpb.SealResponse, error) {
 	m.ctrl.T.Helper()
@@ -307,6 +327,26 @@ func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterStorageNode
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).UnregisterStorageNode), varargs...)
+}
+
+// UnregisterTopic mocks base method.
+func (m *MockMetadataRepositoryServiceClient) UnregisterTopic(arg0 context.Context, arg1 *mrpb.TopicRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnregisterTopic", varargs...)
+	ret0, _ := ret[0].(*types.Empty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnregisterTopic indicates an expected call of UnregisterTopic.
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterTopic(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterTopic", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).UnregisterTopic), varargs...)
 }
 
 // Unseal mocks base method.
@@ -417,6 +457,21 @@ func (mr *MockMetadataRepositoryServiceServerMockRecorder) RegisterStorageNode(a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).RegisterStorageNode), arg0, arg1)
 }
 
+// RegisterTopic mocks base method.
+func (m *MockMetadataRepositoryServiceServer) RegisterTopic(arg0 context.Context, arg1 *mrpb.TopicRequest) (*types.Empty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterTopic", arg0, arg1)
+	ret0, _ := ret[0].(*types.Empty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RegisterTopic indicates an expected call of RegisterTopic.
+func (mr *MockMetadataRepositoryServiceServerMockRecorder) RegisterTopic(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterTopic", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).RegisterTopic), arg0, arg1)
+}
+
 // Seal mocks base method.
 func (m *MockMetadataRepositoryServiceServer) Seal(arg0 context.Context, arg1 *mrpb.SealRequest) (*mrpb.SealResponse, error) {
 	m.ctrl.T.Helper()
@@ -460,6 +515,21 @@ func (m *MockMetadataRepositoryServiceServer) UnregisterStorageNode(arg0 context
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) UnregisterStorageNode(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).UnregisterStorageNode), arg0, arg1)
+}
+
+// UnregisterTopic mocks base method.
+func (m *MockMetadataRepositoryServiceServer) UnregisterTopic(arg0 context.Context, arg1 *mrpb.TopicRequest) (*types.Empty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnregisterTopic", arg0, arg1)
+	ret0, _ := ret[0].(*types.Empty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnregisterTopic indicates an expected call of UnregisterTopic.
+func (mr *MockMetadataRepositoryServiceServerMockRecorder) UnregisterTopic(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterTopic", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).UnregisterTopic), arg0, arg1)
 }
 
 // Unseal mocks base method.

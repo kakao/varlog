@@ -15,6 +15,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/test/it"
 )
 
@@ -26,6 +27,7 @@ func TestAppendLogs(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(10),
 		it.WithNumberOfClients(10),
+		it.WithNumberOfTopics(1),
 	)
 	defer clus.Close(t)
 
@@ -38,9 +40,10 @@ func TestAppendLogs(t *testing.T) {
 		idx := i
 		grp.Go(func() error {
 			max := types.InvalidGLSN
+			topicID := clus.TopicIDs()[0]
 			client := clus.ClientAtIndex(t, idx)
 			for i := 0; i < numAppend; i++ {
-				glsn, err := client.Append(ctx, []byte("foo"))
+				glsn, err := client.Append(ctx, topicID, []byte("foo"))
 				if err != nil {
 					return err
 				}
@@ -59,7 +62,7 @@ func TestAppendLogs(t *testing.T) {
 	require.Equal(t, types.GLSN(numAppend*clus.NumberOfClients()), maxGLSN)
 
 	subC := make(chan types.GLSN, maxGLSN)
-	onNext := func(logEntry types.LogEntry, err error) {
+	onNext := func(logEntry varlogpb.LogEntry, err error) {
 		if err != nil {
 			close(subC)
 			return
@@ -67,8 +70,9 @@ func TestAppendLogs(t *testing.T) {
 		subC <- logEntry.GLSN
 	}
 
+	topicID := clus.TopicIDs()[0]
 	client := clus.ClientAtIndex(t, rand.Intn(clus.NumberOfClients()))
-	closer, err := client.Subscribe(context.Background(), types.MinGLSN, maxGLSN+1, onNext)
+	closer, err := client.Subscribe(context.Background(), topicID, types.MinGLSN, maxGLSN+1, onNext)
 	require.NoError(t, err)
 	defer closer()
 
@@ -87,6 +91,7 @@ func TestReadSealedLogStream(t *testing.T) {
 		it.WithNumberOfStorageNodes(1),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(5),
+		it.WithNumberOfTopics(1),
 	)
 	defer clus.Close(t)
 
@@ -99,9 +104,10 @@ func TestReadSealedLogStream(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
+			topicID := clus.TopicIDs()[0]
 			client := clus.ClientAtIndex(t, idx)
 			for {
-				glsn, err := client.Append(context.Background(), []byte("foo"))
+				glsn, err := client.Append(context.Background(), topicID, []byte("foo"))
 				if err != nil {
 					assert.ErrorIs(t, err, verrors.ErrSealed)
 					errC <- err
@@ -115,13 +121,14 @@ func TestReadSealedLogStream(t *testing.T) {
 	// seal
 	numSealedErr := 0
 	sealedGLSN := types.InvalidGLSN
-	lsID := clus.LogStreamIDs()[0]
+	topicID := clus.TopicIDs()[0]
+	lsID := clus.LogStreamIDs(topicID)[0]
 
 	for numSealedErr < clus.NumberOfClients() {
 		select {
 		case glsn := <-glsnC:
 			if sealedGLSN.Invalid() && glsn > boundary {
-				rsp, err := clus.GetVMSClient(t).Seal(context.Background(), lsID)
+				rsp, err := clus.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
 				require.NoError(t, err)
 				sealedGLSN = rsp.GetSealedGLSN()
 				t.Logf("SealedGLSN: %v", sealedGLSN)
@@ -142,7 +149,7 @@ func TestReadSealedLogStream(t *testing.T) {
 	for glsn := types.MinGLSN; glsn <= sealedGLSN; glsn++ {
 		idx := rand.Intn(clus.NumberOfClients())
 		client := clus.ClientAtIndex(t, idx)
-		_, err := client.Read(context.TODO(), lsID, glsn)
+		_, err := client.Read(context.TODO(), topicID, lsID, glsn)
 		require.NoError(t, err)
 	}
 }
@@ -155,10 +162,12 @@ func TestTrimGLS(t *testing.T) {
 		it.WithNumberOfClients(1),
 		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
 		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithNumberOfTopics(1),
 	}
 
 	Convey("Given cluster, when a client appends logs", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
-		lsIDs := env.LogStreamIDs()
+		topicID := env.TopicIDs()[0]
+		lsIDs := env.LogStreamIDs(topicID)
 		client := env.ClientAtIndex(t, 0)
 
 		var (
@@ -166,24 +175,24 @@ func TestTrimGLS(t *testing.T) {
 			glsn types.GLSN
 		)
 		for i := 0; i < 10; i++ {
-			glsn, err = client.AppendTo(context.Background(), lsIDs[0], []byte("foo"))
+			glsn, err = client.AppendTo(context.Background(), topicID, lsIDs[0], []byte("foo"))
 			So(err, ShouldBeNil)
 			So(glsn, ShouldNotEqual, types.InvalidGLSN)
 		}
 		for i := 0; i < 10; i++ {
-			glsn, err = client.AppendTo(context.Background(), lsIDs[1], []byte("foo"))
+			glsn, err = client.AppendTo(context.Background(), topicID, lsIDs[1], []byte("foo"))
 			So(err, ShouldBeNil)
 			So(glsn, ShouldNotEqual, types.InvalidGLSN)
 		}
 
 		// TODO: Use RPC
 		mr := env.GetMR(t)
-		hwm := mr.GetHighWatermark()
-		So(hwm, ShouldEqual, glsn)
+		ver := mr.GetLastCommitVersion()
+		So(ver, ShouldEqual, types.Version(glsn))
 
 		Convey("Then GLS history of MR should be trimmed", func(ctx C) {
 			So(testutil.CompareWaitN(50, func() bool {
-				return mr.GetMinHighWatermark() == mr.GetPrevHighWatermark()
+				return mr.GetOldestCommitVersion() == mr.GetLastCommitVersion()-1
 			}), ShouldBeTrue)
 		})
 	}))
@@ -198,17 +207,19 @@ func TestTrimGLSWithSealedLS(t *testing.T) {
 			it.WithNumberOfClients(1),
 			it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
 			it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+			it.WithNumberOfTopics(1),
 		}
 
 		Convey("When a client appends logs", it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
-			lsIDs := env.LogStreamIDs()
+			topicID := env.TopicIDs()[0]
+			lsIDs := env.LogStreamIDs(topicID)
 			client := env.ClientAtIndex(t, 0)
 
 			var err error
 			glsn := types.InvalidGLSN
 			for i := 0; i < 32; i++ {
-				lsid := lsIDs[i%env.NumberOfLogStreams()]
-				glsn, err = client.AppendTo(context.Background(), lsid, []byte("foo"))
+				lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
+				glsn, err = client.AppendTo(context.Background(), topicID, lsid, []byte("foo"))
 				So(err, ShouldBeNil)
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
@@ -216,23 +227,23 @@ func TestTrimGLSWithSealedLS(t *testing.T) {
 			sealedLSID := lsIDs[0]
 			runningLSID := lsIDs[1]
 
-			_, err = env.GetVMSClient(t).Seal(context.Background(), sealedLSID)
+			_, err = env.GetVMSClient(t).Seal(context.Background(), topicID, sealedLSID)
 			So(err, ShouldBeNil)
 
 			for i := 0; i < 10; i++ {
-				glsn, err = client.AppendTo(context.Background(), runningLSID, []byte("foo"))
+				glsn, err = client.AppendTo(context.Background(), topicID, runningLSID, []byte("foo"))
 				So(err, ShouldBeNil)
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
 
 			// TODO: Use RPC
 			mr := env.GetMR(t)
-			hwm := mr.GetHighWatermark()
-			So(hwm, ShouldEqual, glsn)
+			ver := mr.GetLastCommitVersion()
+			So(ver, ShouldEqual, types.Version(glsn))
 
 			Convey("Then GLS history of MR should be trimmed", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
-					return mr.GetMinHighWatermark() == mr.GetPrevHighWatermark()
+					return mr.GetOldestCommitVersion() == ver-1
 				}), ShouldBeTrue)
 			})
 		}))
@@ -247,34 +258,37 @@ func TestNewbieLogStream(t *testing.T) {
 		it.WithNumberOfClients(1),
 		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
 		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithNumberOfTopics(1),
 	}
 
 	Convey("Given LogStream", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
-		lsIDs := env.LogStreamIDs()
+		topicID := env.TopicIDs()[0]
+		lsIDs := env.LogStreamIDs(topicID)
 		client := env.ClientAtIndex(t, 0)
 
 		var err error
 		glsn := types.InvalidGLSN
 		for i := 0; i < 32; i++ {
-			lsid := lsIDs[i%env.NumberOfLogStreams()]
-			glsn, err = client.AppendTo(context.Background(), lsid, []byte("foo"))
+			lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
+			glsn, err = client.AppendTo(context.Background(), topicID, lsid, []byte("foo"))
 			So(err, ShouldBeNil)
 			So(glsn, ShouldNotEqual, types.InvalidGLSN)
 		}
 
 		Convey("When add new logStream", func(ctx C) {
-			env.AddLS(t)
+			env.AddLS(t, topicID)
 			env.ClientRefresh(t)
 
 			Convey("Then it should be appendable", func(ctx C) {
-				lsIDs := env.LogStreamIDs()
+				topicID := env.TopicIDs()[0]
+				lsIDs := env.LogStreamIDs(topicID)
 				client := env.ClientAtIndex(t, 0)
 
 				var err error
 				glsn := types.InvalidGLSN
 				for i := 0; i < 32; i++ {
-					lsid := lsIDs[i%env.NumberOfLogStreams()]
-					glsn, err = client.AppendTo(context.Background(), lsid, []byte("foo"))
+					lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
+					glsn, err = client.AppendTo(context.Background(), topicID, lsid, []byte("foo"))
 					So(err, ShouldBeNil)
 					So(glsn, ShouldNotEqual, types.InvalidGLSN)
 				}

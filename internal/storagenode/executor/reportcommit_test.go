@@ -13,7 +13,6 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/id"
 	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode/storage"
-	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -21,9 +20,10 @@ import (
 
 func TestLogStreamReporter(t *testing.T) {
 	const (
-		snid  = types.StorageNodeID(1)
-		lsid1 = types.LogStreamID(1)
-		lsid2 = types.LogStreamID(2)
+		snid    = types.StorageNodeID(1)
+		lsid1   = types.LogStreamID(1)
+		lsid2   = types.LogStreamID(2)
+		topicID = 1
 	)
 
 	defer goleak.VerifyNone(t)
@@ -37,7 +37,7 @@ func TestLogStreamReporter(t *testing.T) {
 		WithStorageNodeID(snid),
 		WithLogStreamID(lsid1),
 		WithStorage(strg1),
-		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+		WithMeasurable(NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, lse1.Close()) }()
@@ -46,10 +46,12 @@ func TestLogStreamReporter(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
-	require.NoError(t, lse1.Unseal(context.TODO(), []snpb.Replica{
+	require.NoError(t, lse1.Unseal(context.TODO(), []varlogpb.Replica{
 		{
-			StorageNodeID: lse1.storageNodeID,
-			LogStreamID:   lse1.logStreamID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: lse1.storageNodeID,
+			},
+			LogStreamID: lse1.logStreamID,
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse1.Metadata().Status)
@@ -60,7 +62,7 @@ func TestLogStreamReporter(t *testing.T) {
 		WithStorageNodeID(snid),
 		WithLogStreamID(lsid2),
 		WithStorage(strg2),
-		WithMeasurable(telemetry.NewTestMeasurable(ctrl)),
+		WithMeasurable(NewTestMeasurable(ctrl)),
 	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, lse2.Close()) }()
@@ -69,17 +71,19 @@ func TestLogStreamReporter(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
-	require.NoError(t, lse2.Unseal(context.TODO(), []snpb.Replica{
+	require.NoError(t, lse2.Unseal(context.TODO(), []varlogpb.Replica{
 		{
-			StorageNodeID: lse2.storageNodeID,
-			LogStreamID:   lse2.logStreamID,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: lse2.storageNodeID,
+			},
+			LogStreamID: lse2.logStreamID,
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse2.Metadata().Status)
 
 	rcg := reportcommitter.NewMockGetter(ctrl)
-	rcg.EXPECT().ReportCommitter(gomock.Any()).DoAndReturn(
-		func(lsid types.LogStreamID) (reportcommitter.ReportCommitter, bool) {
+	rcg.EXPECT().ReportCommitter(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ types.TopicID, lsid types.LogStreamID) (reportcommitter.ReportCommitter, bool) {
 			switch lsid {
 			case lsid1:
 				return lse1, true
@@ -126,11 +130,11 @@ func TestLogStreamReporter(t *testing.T) {
 	for _, report := range reports {
 		switch report.GetLogStreamID() {
 		case lsid1:
-			require.Equal(t, types.GLSN(0), report.GetHighWatermark())
+			require.Equal(t, types.Version(0), report.GetVersion())
 			require.Equal(t, types.LLSN(1), report.GetUncommittedLLSNOffset())
 			require.EqualValues(t, 0, report.GetUncommittedLLSNLength())
 		case lsid2:
-			require.Equal(t, types.GLSN(0), report.GetHighWatermark())
+			require.Equal(t, types.Version(0), report.GetVersion())
 			require.Equal(t, types.LLSN(1), report.GetUncommittedLLSNOffset())
 			require.EqualValues(t, 0, report.GetUncommittedLLSNLength())
 		}
@@ -167,8 +171,7 @@ func TestLogStreamReporter(t *testing.T) {
 
 		require.NoError(t, lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
 			LogStreamID:         lsid1,
-			HighWatermark:       2,
-			PrevHighWatermark:   0,
+			Version:             1,
 			CommittedGLSNOffset: 1,
 			CommittedGLSNLength: 1,
 			CommittedLLSNOffset: 1,
@@ -176,8 +179,7 @@ func TestLogStreamReporter(t *testing.T) {
 
 		require.NoError(t, lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
 			LogStreamID:         lsid2,
-			HighWatermark:       2,
-			PrevHighWatermark:   0,
+			Version:             1,
 			CommittedGLSNOffset: 2,
 			CommittedGLSNLength: 1,
 			CommittedLLSNOffset: 1,
@@ -201,8 +203,7 @@ func TestLogStreamReporter(t *testing.T) {
 
 	require.Error(t, lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
 		LogStreamID:         lsid1,
-		HighWatermark:       4,
-		PrevHighWatermark:   2,
+		Version:             2,
 		CommittedGLSNOffset: 3,
 		CommittedGLSNLength: 1,
 		CommittedLLSNOffset: 2,
@@ -211,8 +212,7 @@ func TestLogStreamReporter(t *testing.T) {
 
 	require.Error(t, lsr.Commit(context.TODO(), snpb.LogStreamCommitResult{
 		LogStreamID:         lsid2,
-		HighWatermark:       4,
-		PrevHighWatermark:   2,
+		Version:             2,
 		CommittedGLSNOffset: 4,
 		CommittedGLSNLength: 1,
 		CommittedLLSNOffset: 2,

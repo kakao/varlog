@@ -4,7 +4,6 @@
 package snpb
 
 import (
-	bytes "bytes"
 	context "context"
 	fmt "fmt"
 	io "io"
@@ -62,10 +61,7 @@ func (LogStreamCommitInfo_Status) EnumDescriptor() ([]byte, []int) {
 }
 
 type GetMetadataRequest struct {
-	ClusterID            github_com_kakao_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                               `json:"-"`
-	XXX_unrecognized     []byte                                                 `json:"-"`
-	XXX_sizecache        int32                                                  `json:"-"`
+	ClusterID github_com_kakao_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
 }
 
 func (m *GetMetadataRequest) Reset()         { *m = GetMetadataRequest{} }
@@ -109,10 +105,7 @@ func (m *GetMetadataRequest) GetClusterID() github_com_kakao_varlog_pkg_types.Cl
 }
 
 type GetMetadataResponse struct {
-	StorageNodeMetadata  *varlogpb.StorageNodeMetadataDescriptor `protobuf:"bytes,1,opt,name=storage_node_metadata,json=storageNodeMetadata,proto3" json:"storage_node_metadata,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                `json:"-"`
-	XXX_unrecognized     []byte                                  `json:"-"`
-	XXX_sizecache        int32                                   `json:"-"`
+	StorageNodeMetadata *varlogpb.StorageNodeMetadataDescriptor `protobuf:"bytes,1,opt,name=storage_node_metadata,json=storageNodeMetadata,proto3" json:"storage_node_metadata,omitempty"`
 }
 
 func (m *GetMetadataResponse) Reset()         { *m = GetMetadataResponse{} }
@@ -155,28 +148,26 @@ func (m *GetMetadataResponse) GetStorageNodeMetadata() *varlogpb.StorageNodeMeta
 	return nil
 }
 
-type AddLogStreamRequest struct {
-	ClusterID            github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,3,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	Storage              *varlogpb.StorageDescriptor                                `protobuf:"bytes,4,opt,name=storage,proto3" json:"storage,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+type AddLogStreamReplicaRequest struct {
+	ClusterID     github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	StorageNodeID github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	TopicID       github_com_kakao_varlog_pkg_types.TopicID       `protobuf:"varint,3,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID   github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,4,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	Storage       *varlogpb.StorageDescriptor                                `protobuf:"bytes,5,opt,name=storage,proto3" json:"storage,omitempty"`
 }
 
-func (m *AddLogStreamRequest) Reset()         { *m = AddLogStreamRequest{} }
-func (m *AddLogStreamRequest) String() string { return proto.CompactTextString(m) }
-func (*AddLogStreamRequest) ProtoMessage()    {}
-func (*AddLogStreamRequest) Descriptor() ([]byte, []int) {
+func (m *AddLogStreamReplicaRequest) Reset()         { *m = AddLogStreamReplicaRequest{} }
+func (m *AddLogStreamReplicaRequest) String() string { return proto.CompactTextString(m) }
+func (*AddLogStreamReplicaRequest) ProtoMessage()    {}
+func (*AddLogStreamReplicaRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_b2a108895042472a, []int{2}
 }
-func (m *AddLogStreamRequest) XXX_Unmarshal(b []byte) error {
+func (m *AddLogStreamReplicaRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AddLogStreamRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AddLogStreamReplicaRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_AddLogStreamRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_AddLogStreamReplicaRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -186,66 +177,70 @@ func (m *AddLogStreamRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte,
 		return b[:n], nil
 	}
 }
-func (m *AddLogStreamRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AddLogStreamRequest.Merge(m, src)
+func (m *AddLogStreamReplicaRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AddLogStreamReplicaRequest.Merge(m, src)
 }
-func (m *AddLogStreamRequest) XXX_Size() int {
+func (m *AddLogStreamReplicaRequest) XXX_Size() int {
 	return m.ProtoSize()
 }
-func (m *AddLogStreamRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_AddLogStreamRequest.DiscardUnknown(m)
+func (m *AddLogStreamReplicaRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AddLogStreamReplicaRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_AddLogStreamRequest proto.InternalMessageInfo
+var xxx_messageInfo_AddLogStreamReplicaRequest proto.InternalMessageInfo
 
-func (m *AddLogStreamRequest) GetClusterID() github_com_kakao_varlog_pkg_types.ClusterID {
+func (m *AddLogStreamReplicaRequest) GetClusterID() github_com_kakao_varlog_pkg_types.ClusterID {
 	if m != nil {
 		return m.ClusterID
 	}
 	return 0
 }
 
-func (m *AddLogStreamRequest) GetStorageNodeID() github_com_kakao_varlog_pkg_types.StorageNodeID {
+func (m *AddLogStreamReplicaRequest) GetStorageNodeID() github_com_kakao_varlog_pkg_types.StorageNodeID {
 	if m != nil {
 		return m.StorageNodeID
 	}
 	return 0
 }
 
-func (m *AddLogStreamRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
+func (m *AddLogStreamReplicaRequest) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
+func (m *AddLogStreamReplicaRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
 	}
 	return 0
 }
 
-func (m *AddLogStreamRequest) GetStorage() *varlogpb.StorageDescriptor {
+func (m *AddLogStreamReplicaRequest) GetStorage() *varlogpb.StorageDescriptor {
 	if m != nil {
 		return m.Storage
 	}
 	return nil
 }
 
-type AddLogStreamResponse struct {
+type AddLogStreamReplicaResponse struct {
 	// TODO (jun): Use LogStreamMetadataDescriptor
-	LogStream            *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
-	XXX_unrecognized     []byte                        `json:"-"`
-	XXX_sizecache        int32                         `json:"-"`
+	LogStream *varlogpb.LogStreamDescriptor `protobuf:"bytes,1,opt,name=log_stream,json=logStream,proto3" json:"log_stream,omitempty"`
 }
 
-func (m *AddLogStreamResponse) Reset()         { *m = AddLogStreamResponse{} }
-func (m *AddLogStreamResponse) String() string { return proto.CompactTextString(m) }
-func (*AddLogStreamResponse) ProtoMessage()    {}
-func (*AddLogStreamResponse) Descriptor() ([]byte, []int) {
+func (m *AddLogStreamReplicaResponse) Reset()         { *m = AddLogStreamReplicaResponse{} }
+func (m *AddLogStreamReplicaResponse) String() string { return proto.CompactTextString(m) }
+func (*AddLogStreamReplicaResponse) ProtoMessage()    {}
+func (*AddLogStreamReplicaResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_b2a108895042472a, []int{3}
 }
-func (m *AddLogStreamResponse) XXX_Unmarshal(b []byte) error {
+func (m *AddLogStreamReplicaResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AddLogStreamResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AddLogStreamReplicaResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_AddLogStreamResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_AddLogStreamReplicaResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -255,19 +250,19 @@ func (m *AddLogStreamResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte
 		return b[:n], nil
 	}
 }
-func (m *AddLogStreamResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AddLogStreamResponse.Merge(m, src)
+func (m *AddLogStreamReplicaResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AddLogStreamReplicaResponse.Merge(m, src)
 }
-func (m *AddLogStreamResponse) XXX_Size() int {
+func (m *AddLogStreamReplicaResponse) XXX_Size() int {
 	return m.ProtoSize()
 }
-func (m *AddLogStreamResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_AddLogStreamResponse.DiscardUnknown(m)
+func (m *AddLogStreamReplicaResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_AddLogStreamReplicaResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_AddLogStreamResponse proto.InternalMessageInfo
+var xxx_messageInfo_AddLogStreamReplicaResponse proto.InternalMessageInfo
 
-func (m *AddLogStreamResponse) GetLogStream() *varlogpb.LogStreamDescriptor {
+func (m *AddLogStreamReplicaResponse) GetLogStream() *varlogpb.LogStreamDescriptor {
 	if m != nil {
 		return m.LogStream
 	}
@@ -275,12 +270,10 @@ func (m *AddLogStreamResponse) GetLogStream() *varlogpb.LogStreamDescriptor {
 }
 
 type RemoveLogStreamRequest struct {
-	ClusterID            github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,3,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	ClusterID     github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	StorageNodeID github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	TopicID       github_com_kakao_varlog_pkg_types.TopicID       `protobuf:"varint,3,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID   github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,4,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 }
 
 func (m *RemoveLogStreamRequest) Reset()         { *m = RemoveLogStreamRequest{} }
@@ -330,6 +323,13 @@ func (m *RemoveLogStreamRequest) GetStorageNodeID() github_com_kakao_varlog_pkg_
 	return 0
 }
 
+func (m *RemoveLogStreamRequest) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *RemoveLogStreamRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -338,13 +338,11 @@ func (m *RemoveLogStreamRequest) GetLogStreamID() github_com_kakao_varlog_pkg_ty
 }
 
 type SealRequest struct {
-	ClusterID            github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,3,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	LastCommittedGLSN    github_com_kakao_varlog_pkg_types.GLSN          `protobuf:"varint,4,opt,name=last_committed_glsn,json=lastCommittedGlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"last_committed_glsn,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	ClusterID         github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	StorageNodeID     github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	TopicID           github_com_kakao_varlog_pkg_types.TopicID       `protobuf:"varint,3,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID       github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,4,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	LastCommittedGLSN github_com_kakao_varlog_pkg_types.GLSN          `protobuf:"varint,5,opt,name=last_committed_glsn,json=lastCommittedGlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"last_committed_glsn,omitempty"`
 }
 
 func (m *SealRequest) Reset()         { *m = SealRequest{} }
@@ -394,6 +392,13 @@ func (m *SealRequest) GetStorageNodeID() github_com_kakao_varlog_pkg_types.Stora
 	return 0
 }
 
+func (m *SealRequest) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *SealRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -409,11 +414,8 @@ func (m *SealRequest) GetLastCommittedGLSN() github_com_kakao_varlog_pkg_types.G
 }
 
 type SealResponse struct {
-	Status               varlogpb.LogStreamStatus                          `protobuf:"varint,1,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
-	LastCommittedGLSN    github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,2,opt,name=last_committed_glsn,json=lastCommittedGlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"last_committed_glsn,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
-	XXX_unrecognized     []byte                                            `json:"-"`
-	XXX_sizecache        int32                                             `json:"-"`
+	Status            varlogpb.LogStreamStatus                          `protobuf:"varint,1,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
+	LastCommittedGLSN github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,2,opt,name=last_committed_glsn,json=lastCommittedGlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"last_committed_glsn,omitempty"`
 }
 
 func (m *SealResponse) Reset()         { *m = SealResponse{} }
@@ -464,13 +466,11 @@ func (m *SealResponse) GetLastCommittedGLSN() github_com_kakao_varlog_pkg_types.
 }
 
 type UnsealRequest struct {
-	ClusterID            github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,3,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	Replicas             []Replica                                                  `protobuf:"bytes,4,rep,name=replicas,proto3" json:"replicas"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	ClusterID     github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	StorageNodeID github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	TopicID       github_com_kakao_varlog_pkg_types.TopicID       `protobuf:"varint,3,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID   github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,4,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	Replicas      []varlogpb.Replica                                         `protobuf:"bytes,5,rep,name=replicas,proto3" json:"replicas"`
 }
 
 func (m *UnsealRequest) Reset()         { *m = UnsealRequest{} }
@@ -520,6 +520,13 @@ func (m *UnsealRequest) GetStorageNodeID() github_com_kakao_varlog_pkg_types.Sto
 	return 0
 }
 
+func (m *UnsealRequest) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *UnsealRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -527,7 +534,7 @@ func (m *UnsealRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogSt
 	return 0
 }
 
-func (m *UnsealRequest) GetReplicas() []Replica {
+func (m *UnsealRequest) GetReplicas() []varlogpb.Replica {
 	if m != nil {
 		return m.Replicas
 	}
@@ -535,13 +542,11 @@ func (m *UnsealRequest) GetReplicas() []Replica {
 }
 
 type SyncRequest struct {
-	ClusterID            github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,3,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	Backup               *SyncRequest_BackupNode                                    `protobuf:"bytes,4,opt,name=backup,proto3" json:"backup,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	ClusterID     github_com_kakao_varlog_pkg_types.ClusterID     `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	StorageNodeID github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,2,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	TopicID       github_com_kakao_varlog_pkg_types.TopicID       `protobuf:"varint,3,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID   github_com_kakao_varlog_pkg_types.LogStreamID   `protobuf:"varint,4,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	Backup        *SyncRequest_BackupNode                                    `protobuf:"bytes,5,opt,name=backup,proto3" json:"backup,omitempty"`
 }
 
 func (m *SyncRequest) Reset()         { *m = SyncRequest{} }
@@ -591,6 +596,13 @@ func (m *SyncRequest) GetStorageNodeID() github_com_kakao_varlog_pkg_types.Stora
 	return 0
 }
 
+func (m *SyncRequest) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *SyncRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
 	if m != nil {
 		return m.LogStreamID
@@ -607,11 +619,8 @@ func (m *SyncRequest) GetBackup() *SyncRequest_BackupNode {
 
 // FIXME: Use Replica instead of BackupNode
 type SyncRequest_BackupNode struct {
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	Address              string                                                     `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	StorageNodeID github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	Address       string                                                     `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
 }
 
 func (m *SyncRequest_BackupNode) Reset()         { *m = SyncRequest_BackupNode{} }
@@ -662,10 +671,7 @@ func (m *SyncRequest_BackupNode) GetAddress() string {
 }
 
 type SyncResponse struct {
-	Status               *SyncStatus `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
-	XXX_unrecognized     []byte      `json:"-"`
-	XXX_sizecache        int32       `json:"-"`
+	Status *SyncStatus `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 }
 
 func (m *SyncResponse) Reset()         { *m = SyncResponse{} }
@@ -709,10 +715,7 @@ func (m *SyncResponse) GetStatus() *SyncStatus {
 }
 
 type GetPrevCommitInfoRequest struct {
-	PrevHighWatermark    github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,1,opt,name=prev_high_watermark,json=prevHighWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"prev_high_watermark,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                          `json:"-"`
-	XXX_unrecognized     []byte                                            `json:"-"`
-	XXX_sizecache        int32                                             `json:"-"`
+	PrevVersion github_com_kakao_varlog_pkg_types.Version `protobuf:"varint,1,opt,name=prev_version,json=prevVersion,proto3,casttype=github.com/kakao/varlog/pkg/types.Version" json:"prev_version,omitempty"`
 }
 
 func (m *GetPrevCommitInfoRequest) Reset()         { *m = GetPrevCommitInfoRequest{} }
@@ -748,25 +751,21 @@ func (m *GetPrevCommitInfoRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_GetPrevCommitInfoRequest proto.InternalMessageInfo
 
-func (m *GetPrevCommitInfoRequest) GetPrevHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
+func (m *GetPrevCommitInfoRequest) GetPrevVersion() github_com_kakao_varlog_pkg_types.Version {
 	if m != nil {
-		return m.PrevHighWatermark
+		return m.PrevVersion
 	}
 	return 0
 }
 
 type LogStreamCommitInfo struct {
-	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	Status               LogStreamCommitInfo_Status                               `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.snpb.LogStreamCommitInfo_Status" json:"status,omitempty"`
-	CommittedLLSNOffset  github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,3,opt,name=committed_llsn_offset,json=committedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"committed_llsn_offset,omitempty"`
-	CommittedGLSNOffset  github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,4,opt,name=committed_glsn_offset,json=committedGlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_offset,omitempty"`
-	CommittedGLSNLength  uint64                                                   `protobuf:"varint,5,opt,name=committed_glsn_length,json=committedGlsnLength,proto3" json:"committed_glsn_length,omitempty"`
-	HighestWrittenLLSN   github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,6,opt,name=highest_written_llsn,json=highestWrittenLlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"highest_written_llsn,omitempty"`
-	HighWatermark        github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,7,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
-	PrevHighWatermark    github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,8,opt,name=prev_high_watermark,json=prevHighWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"prev_high_watermark,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	LogStreamID         github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	Status              LogStreamCommitInfo_Status                               `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.snpb.LogStreamCommitInfo_Status" json:"status,omitempty"`
+	CommittedLLSNOffset github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,3,opt,name=committed_llsn_offset,json=committedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"committed_llsn_offset,omitempty"`
+	CommittedGLSNOffset github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,4,opt,name=committed_glsn_offset,json=committedGlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_offset,omitempty"`
+	CommittedGLSNLength uint64                                                   `protobuf:"varint,5,opt,name=committed_glsn_length,json=committedGlsnLength,proto3" json:"committed_glsn_length,omitempty"`
+	HighestWrittenLLSN  github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,6,opt,name=highest_written_llsn,json=highestWrittenLlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"highest_written_llsn,omitempty"`
+	Version             github_com_kakao_varlog_pkg_types.Version     `protobuf:"varint,7,opt,name=version,proto3,casttype=github.com/kakao/varlog/pkg/types.Version" json:"version,omitempty"`
 }
 
 func (m *LogStreamCommitInfo) Reset()         { *m = LogStreamCommitInfo{} }
@@ -844,26 +843,16 @@ func (m *LogStreamCommitInfo) GetHighestWrittenLLSN() github_com_kakao_varlog_pk
 	return 0
 }
 
-func (m *LogStreamCommitInfo) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
+func (m *LogStreamCommitInfo) GetVersion() github_com_kakao_varlog_pkg_types.Version {
 	if m != nil {
-		return m.HighWatermark
-	}
-	return 0
-}
-
-func (m *LogStreamCommitInfo) GetPrevHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
-	if m != nil {
-		return m.PrevHighWatermark
+		return m.Version
 	}
 	return 0
 }
 
 type GetPrevCommitInfoResponse struct {
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	CommitInfos          []*LogStreamCommitInfo                                     `protobuf:"bytes,2,rep,name=commit_infos,json=commitInfos,proto3" json:"commit_infos,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	StorageNodeID github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	CommitInfos   []*LogStreamCommitInfo                                     `protobuf:"bytes,2,rep,name=commit_infos,json=commitInfos,proto3" json:"commit_infos,omitempty"`
 }
 
 func (m *GetPrevCommitInfoResponse) Reset()         { *m = GetPrevCommitInfoResponse{} }
@@ -917,8 +906,8 @@ func init() {
 	proto.RegisterEnum("varlog.snpb.LogStreamCommitInfo_Status", LogStreamCommitInfo_Status_name, LogStreamCommitInfo_Status_value)
 	proto.RegisterType((*GetMetadataRequest)(nil), "varlog.snpb.GetMetadataRequest")
 	proto.RegisterType((*GetMetadataResponse)(nil), "varlog.snpb.GetMetadataResponse")
-	proto.RegisterType((*AddLogStreamRequest)(nil), "varlog.snpb.AddLogStreamRequest")
-	proto.RegisterType((*AddLogStreamResponse)(nil), "varlog.snpb.AddLogStreamResponse")
+	proto.RegisterType((*AddLogStreamReplicaRequest)(nil), "varlog.snpb.AddLogStreamReplicaRequest")
+	proto.RegisterType((*AddLogStreamReplicaResponse)(nil), "varlog.snpb.AddLogStreamReplicaResponse")
 	proto.RegisterType((*RemoveLogStreamRequest)(nil), "varlog.snpb.RemoveLogStreamRequest")
 	proto.RegisterType((*SealRequest)(nil), "varlog.snpb.SealRequest")
 	proto.RegisterType((*SealResponse)(nil), "varlog.snpb.SealResponse")
@@ -934,83 +923,85 @@ func init() {
 func init() { proto.RegisterFile("proto/snpb/management.proto", fileDescriptor_b2a108895042472a) }
 
 var fileDescriptor_b2a108895042472a = []byte{
-	// 1215 bytes of a gzipped FileDescriptorProto
+	// 1248 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x58, 0xcf, 0x6f, 0x1b, 0xc5,
-	0x17, 0xf7, 0x3a, 0xfb, 0x75, 0x9a, 0xe7, 0xb8, 0x3f, 0xc6, 0x4d, 0xeb, 0x6e, 0xa5, 0xac, 0xbb,
-	0xfd, 0x02, 0xbd, 0x74, 0x2d, 0x82, 0x5a, 0x55, 0xe5, 0x47, 0x55, 0xa7, 0xad, 0x6b, 0xe2, 0xda,
-	0xd5, 0xba, 0x51, 0x25, 0x40, 0x5a, 0xad, 0xbd, 0xe3, 0xb5, 0x95, 0xf5, 0x8e, 0xd9, 0x19, 0x27,
-	0x32, 0x02, 0x09, 0x6e, 0x28, 0x7f, 0x01, 0x1c, 0x22, 0x2a, 0x21, 0x8e, 0xfc, 0x17, 0x3d, 0xf4,
-	0xc8, 0x15, 0x21, 0xf9, 0x60, 0x2e, 0x88, 0x3f, 0xa1, 0x17, 0xd0, 0xce, 0xae, 0xd7, 0xbb, 0xb6,
-	0x43, 0x48, 0x20, 0xe1, 0x92, 0x93, 0xed, 0x79, 0xbf, 0x3e, 0xef, 0xbd, 0xcf, 0xbc, 0x19, 0x0f,
-	0x5c, 0xed, 0xb9, 0x84, 0x91, 0x02, 0x75, 0x7a, 0x8d, 0x42, 0xd7, 0x70, 0x0c, 0x0b, 0x77, 0xb1,
-	0xc3, 0x54, 0xbe, 0x8a, 0xd2, 0xdb, 0x86, 0x6b, 0x13, 0x4b, 0xf5, 0xa4, 0xd2, 0x4d, 0xab, 0xc3,
-	0xda, 0xfd, 0x86, 0xda, 0x24, 0xdd, 0x82, 0x45, 0x2c, 0x52, 0xe0, 0x3a, 0x8d, 0x7e, 0x8b, 0xff,
-	0xf2, 0xdd, 0x78, 0xdf, 0x7c, 0x5b, 0xe9, 0xaa, 0x45, 0x88, 0x65, 0xe3, 0x89, 0x16, 0xee, 0xf6,
-	0xd8, 0x20, 0x10, 0x5e, 0xf6, 0x1d, 0x7b, 0x31, 0x31, 0x33, 0x4c, 0x83, 0x19, 0x81, 0x60, 0x85,
-	0x03, 0x71, 0x71, 0xcf, 0xee, 0x34, 0x0d, 0x46, 0xdc, 0x60, 0x19, 0x45, 0x97, 0xfd, 0x35, 0xe5,
-	0x73, 0x40, 0x25, 0xcc, 0x9e, 0x04, 0xf6, 0x1a, 0xfe, 0xb4, 0x8f, 0x29, 0x43, 0x2d, 0x80, 0xa6,
-	0xdd, 0xa7, 0x0c, 0xbb, 0x7a, 0xc7, 0xcc, 0x09, 0x79, 0xe1, 0x46, 0xa6, 0x58, 0x1a, 0x0d, 0xe5,
-	0xa5, 0x75, 0x7f, 0xb5, 0xfc, 0xe0, 0xf5, 0x50, 0xbe, 0x1d, 0xa4, 0x62, 0x1a, 0xfd, 0xee, 0x96,
-	0xb1, 0x65, 0x10, 0x9e, 0x94, 0x8f, 0x69, 0xfc, 0xd1, 0xdb, 0xb2, 0x0a, 0x6c, 0xd0, 0xc3, 0x54,
-	0x0d, 0x2d, 0xb5, 0xa5, 0xc0, 0x75, 0xd9, 0x54, 0x06, 0x90, 0x8d, 0x45, 0xa7, 0x3d, 0xe2, 0x50,
-	0x8c, 0x1a, 0xb0, 0x42, 0x19, 0x71, 0x0d, 0x0b, 0xeb, 0x0e, 0x31, 0xb1, 0x3e, 0x4e, 0x8f, 0x23,
-	0x49, 0xaf, 0xa9, 0x6a, 0x50, 0xd1, 0x71, 0xfe, 0x6a, 0xdd, 0xd7, 0xae, 0x12, 0x13, 0x8f, 0x9d,
-	0x3d, 0xc0, 0xb4, 0xe9, 0x76, 0x7a, 0x8c, 0xb8, 0x5a, 0x96, 0xce, 0x8a, 0x95, 0x1f, 0x16, 0x20,
-	0x7b, 0xdf, 0x34, 0x2b, 0xc4, 0xaa, 0x33, 0x17, 0x1b, 0xdd, 0x13, 0x4e, 0x1d, 0xed, 0xc0, 0xb9,
-	0x58, 0x8e, 0x1d, 0x33, 0x97, 0xe4, 0xc1, 0x6a, 0xa3, 0xa1, 0x9c, 0x89, 0x24, 0xc4, 0x03, 0xde,
-	0x3d, 0x54, 0xc0, 0x98, 0xb5, 0x96, 0x89, 0xa4, 0x5f, 0x36, 0x11, 0x81, 0x8c, 0x4d, 0x2c, 0x9d,
-	0xf2, 0xac, 0xbd, 0xb0, 0x0b, 0x3c, 0xec, 0xc6, 0x68, 0x28, 0xa7, 0xc3, 0x6a, 0xf0, 0xa0, 0x77,
-	0x0e, 0x15, 0x34, 0x62, 0xab, 0xa5, 0xed, 0xf0, 0x87, 0x89, 0xde, 0x83, 0xc5, 0x00, 0x41, 0x4e,
-	0xe4, 0xfd, 0x53, 0xf6, 0xeb, 0x5f, 0xa4, 0x67, 0x63, 0x13, 0xe5, 0x63, 0xb8, 0x18, 0x6f, 0x53,
-	0xc0, 0x91, 0x75, 0x80, 0x49, 0x1a, 0x01, 0x31, 0xfe, 0x3f, 0xe3, 0x38, 0xb4, 0x8b, 0xb8, 0x5e,
-	0x0a, 0xc1, 0x29, 0xbf, 0x27, 0xe1, 0x92, 0x86, 0xbb, 0x64, 0x1b, 0x9f, 0xf2, 0xe0, 0xb8, 0x79,
-	0xa0, 0xfc, 0xb2, 0x00, 0xe9, 0x3a, 0x36, 0xec, 0xd3, 0x0a, 0x1f, 0xd7, 0x4e, 0xfb, 0x0c, 0xb2,
-	0xb6, 0x41, 0x99, 0xde, 0x24, 0xdd, 0x6e, 0x87, 0x31, 0x6c, 0xea, 0x96, 0x4d, 0x1d, 0xbe, 0xeb,
-	0xc4, 0xe2, 0x87, 0xa3, 0xa1, 0x7c, 0xa1, 0x62, 0x50, 0xb6, 0x3e, 0x96, 0x96, 0x2a, 0xf5, 0xea,
-	0xeb, 0xa1, 0xfc, 0xf6, 0xa1, 0x82, 0x7b, 0x46, 0xda, 0x05, 0x3b, 0xe6, 0xc7, 0xa6, 0x8e, 0xf2,
-	0x52, 0x80, 0x65, 0xbf, 0xbb, 0xc1, 0x06, 0xbd, 0x03, 0x29, 0xca, 0x0c, 0xd6, 0xa7, 0xbc, 0xb5,
-	0x67, 0xd7, 0xf2, 0xfb, 0x6f, 0xce, 0x3a, 0xd7, 0xd3, 0x02, 0xfd, 0xfd, 0xd2, 0x48, 0x9e, 0x44,
-	0x1a, 0xdf, 0x2e, 0x40, 0x66, 0xd3, 0xa1, 0xa7, 0x34, 0x3d, 0x46, 0x9a, 0xde, 0x86, 0x33, 0xc1,
-	0x25, 0x84, 0xe6, 0xc4, 0xfc, 0xc2, 0x8d, 0xf4, 0xda, 0x45, 0x35, 0x72, 0x47, 0x52, 0x35, 0x5f,
-	0x58, 0x14, 0x5f, 0x0d, 0xe5, 0x84, 0x16, 0xea, 0x2a, 0x2f, 0x45, 0x48, 0xd7, 0x07, 0x4e, 0xf3,
-	0xb4, 0x33, 0xc7, 0xd5, 0x99, 0xfb, 0x90, 0x6a, 0x18, 0xcd, 0xad, 0x7e, 0x2f, 0x38, 0xa9, 0xaf,
-	0xc7, 0xfa, 0x12, 0xa9, 0xbd, 0x5a, 0xe4, 0x6a, 0x1e, 0x4e, 0xde, 0x26, 0x41, 0x0b, 0x0c, 0xa5,
-	0xef, 0x04, 0x80, 0x89, 0x70, 0x5e, 0xed, 0x84, 0x13, 0xa9, 0x5d, 0x0e, 0x16, 0x0d, 0xd3, 0x74,
-	0x31, 0xa5, 0xbc, 0x59, 0x4b, 0xda, 0xf8, 0xa7, 0x72, 0x0f, 0x96, 0xfd, 0x4c, 0x82, 0x41, 0x55,
-	0x88, 0x0d, 0xaa, 0xf4, 0xda, 0xe5, 0x99, 0xa4, 0xe3, 0xf3, 0x49, 0xf9, 0x4a, 0x80, 0x5c, 0x09,
-	0xb3, 0xa7, 0x2e, 0xde, 0xf6, 0x87, 0x47, 0xd9, 0x69, 0x91, 0x31, 0x29, 0x31, 0x64, 0x7b, 0x2e,
-	0xde, 0xd6, 0xdb, 0x1d, 0xab, 0xad, 0xef, 0x18, 0x0c, 0xbb, 0x5d, 0xc3, 0xdd, 0xe2, 0xae, 0xc5,
-	0xe2, 0xad, 0x23, 0xce, 0x29, 0xcf, 0xe3, 0xe3, 0x8e, 0xd5, 0x7e, 0x3e, 0xf6, 0xa7, 0xfc, 0xb1,
-	0x08, 0xd9, 0xb0, 0x8d, 0x13, 0x14, 0xb3, 0x94, 0x11, 0x8e, 0x99, 0x32, 0xf7, 0xc2, 0xea, 0x25,
-	0xf9, 0x98, 0x7f, 0x2b, 0x56, 0xbd, 0x39, 0x10, 0xd5, 0xa9, 0x69, 0xff, 0xa5, 0x00, 0x2b, 0x93,
-	0x49, 0x6f, 0xdb, 0xd4, 0xd1, 0x49, 0xab, 0x45, 0x31, 0xe3, 0x6c, 0x17, 0x8b, 0x95, 0xd1, 0x50,
-	0xce, 0x86, 0x43, 0xba, 0x52, 0xa9, 0x57, 0x6b, 0x5c, 0x7c, 0xe8, 0x52, 0x7a, 0xa6, 0x5a, 0x36,
-	0x0c, 0x55, 0xb1, 0xa9, 0xe3, 0x7b, 0x9a, 0x82, 0x60, 0x45, 0x20, 0x88, 0x73, 0x20, 0x94, 0x8e,
-	0x0e, 0xa1, 0x14, 0x87, 0x50, 0x9a, 0x40, 0xd8, 0x98, 0x41, 0x60, 0x63, 0xc7, 0x62, 0xed, 0xdc,
-	0xff, 0x38, 0x82, 0xcb, 0x33, 0x08, 0x2a, 0x5c, 0x3c, 0xe5, 0xcc, 0x5f, 0x44, 0x5f, 0xc0, 0x45,
-	0x8f, 0x7e, 0x98, 0x32, 0x7d, 0xc7, 0xf5, 0x84, 0x0e, 0xaf, 0x6b, 0x2e, 0xc5, 0x7d, 0x79, 0x5c,
-	0x40, 0x8f, 0x7d, 0xf9, 0x73, 0x5f, 0x5c, 0x39, 0xca, 0x11, 0xca, 0xeb, 0x89, 0xda, 0x71, 0x47,
-	0x36, 0x75, 0xd0, 0x27, 0x70, 0x76, 0x8a, 0xfd, 0x8b, 0xff, 0x84, 0xfd, 0x99, 0x76, 0x94, 0xf9,
-	0xfb, 0x6d, 0xb0, 0x33, 0xff, 0xf2, 0x06, 0xfb, 0x46, 0x80, 0x94, 0xcf, 0x54, 0x74, 0x0d, 0x92,
-	0xb5, 0x8d, 0xf3, 0x09, 0xe9, 0xca, 0xee, 0x5e, 0x7e, 0x25, 0xb6, 0xf1, 0x7d, 0x85, 0xda, 0x06,
-	0x52, 0x61, 0xa9, 0x5a, 0x7b, 0xa6, 0x3f, 0xaa, 0x6d, 0x56, 0x1f, 0x9c, 0x17, 0x24, 0x79, 0x77,
-	0x2f, 0x7f, 0x75, 0x8e, 0x66, 0x95, 0xb0, 0x47, 0xa4, 0xef, 0x98, 0xe8, 0x16, 0x2c, 0x97, 0xab,
-	0xeb, 0xb5, 0x6a, 0xbd, 0x5c, 0x7f, 0xf6, 0xb0, 0xfa, 0xec, 0x7c, 0x52, 0xba, 0xbe, 0xbb, 0x97,
-	0x97, 0xe7, 0x98, 0x94, 0x9d, 0x26, 0x71, 0x68, 0x87, 0x32, 0xec, 0x30, 0x49, 0xfc, 0xfa, 0xfb,
-	0xd5, 0xc4, 0x5d, 0xf1, 0xb7, 0x17, 0xb2, 0xa0, 0xfc, 0x2c, 0xc0, 0x95, 0x39, 0x53, 0x28, 0x18,
-	0x6a, 0xff, 0xd9, 0xdc, 0x5d, 0x87, 0x65, 0x9f, 0x92, 0x7a, 0xc7, 0x69, 0x11, 0x6f, 0x2a, 0x78,
-	0x07, 0x7c, 0xfe, 0xa0, 0xa9, 0xa0, 0xa5, 0x9b, 0xe1, 0x77, 0xba, 0xf6, 0xa3, 0x08, 0xf0, 0x24,
-	0x7c, 0x47, 0x41, 0x1a, 0xa4, 0x23, 0xcf, 0x04, 0x48, 0x8e, 0x39, 0x9b, 0x7d, 0xbe, 0x90, 0xf2,
-	0xfb, 0x2b, 0xf8, 0xe5, 0x51, 0x12, 0x68, 0x13, 0x96, 0xa3, 0xff, 0x2b, 0x51, 0xdc, 0x66, 0xce,
-	0xcb, 0x80, 0x74, 0xed, 0x2f, 0x34, 0x42, 0xb7, 0x4f, 0xe1, 0xdc, 0xd4, 0x1f, 0x4a, 0x74, 0x7d,
-	0xea, 0x72, 0x33, 0xef, 0xef, 0xa6, 0x74, 0x49, 0xf5, 0x5f, 0x7a, 0xd4, 0xf1, 0x4b, 0x8f, 0xfa,
-	0xb0, 0xdb, 0x63, 0x03, 0x25, 0x81, 0xde, 0x07, 0xd1, 0xbb, 0x57, 0xa3, 0x5c, 0xfc, 0x58, 0x9a,
-	0xdc, 0x50, 0xa5, 0x2b, 0x73, 0x24, 0x21, 0xa0, 0x0f, 0x20, 0xe5, 0xdf, 0x67, 0x91, 0x14, 0x53,
-	0x8b, 0x5d, 0x72, 0x0f, 0x08, 0x3f, 0x70, 0x9a, 0xd3, 0xe1, 0x27, 0x57, 0x81, 0xe9, 0xf0, 0x91,
-	0xa3, 0x55, 0x49, 0x20, 0x13, 0x2e, 0xcc, 0x90, 0x14, 0xbd, 0x31, 0xdd, 0x9f, 0xb9, 0x47, 0xa9,
-	0xf4, 0xe6, 0x41, 0x6a, 0xe3, 0x28, 0xc5, 0x77, 0x5f, 0x8d, 0x56, 0x85, 0x9f, 0x46, 0xab, 0xc2,
-	0x8b, 0x5f, 0x57, 0x85, 0x8f, 0x6e, 0xfe, 0x1d, 0x36, 0x87, 0x0f, 0x76, 0x8d, 0x14, 0xff, 0xfe,
-	0xce, 0x9f, 0x01, 0x00, 0x00, 0xff, 0xff, 0x3e, 0xac, 0x2f, 0xbc, 0xc5, 0x13, 0x00, 0x00,
+	0x17, 0xf7, 0x26, 0x1b, 0xbb, 0x79, 0x4e, 0xbe, 0x6d, 0xc7, 0xdf, 0xb4, 0xee, 0x46, 0xf2, 0x9a,
+	0x2d, 0x3f, 0x72, 0xe9, 0x5a, 0x84, 0x1f, 0xaa, 0x2a, 0xa0, 0xaa, 0xdd, 0xd6, 0x98, 0xb8, 0x76,
+	0xb5, 0x4e, 0x41, 0x02, 0x09, 0x6b, 0xed, 0x1d, 0x6f, 0x4c, 0xd6, 0x3b, 0xcb, 0xce, 0x38, 0x95,
+	0x11, 0x48, 0x1c, 0x51, 0x85, 0x10, 0x47, 0x2e, 0x15, 0x95, 0xe0, 0xbf, 0xe0, 0x86, 0x38, 0x54,
+	0x9c, 0x7a, 0x84, 0x8b, 0x0f, 0xce, 0x85, 0xbf, 0xa1, 0x12, 0x12, 0xda, 0xd9, 0x1f, 0xf6, 0xda,
+	0x8e, 0x82, 0x8b, 0x28, 0x8a, 0x94, 0x93, 0xbd, 0xfb, 0x7e, 0x7c, 0xde, 0x7b, 0xf3, 0x99, 0xf7,
+	0x66, 0x07, 0x36, 0x1d, 0x97, 0x30, 0x52, 0xa0, 0xb6, 0xd3, 0x2a, 0xf4, 0x74, 0x5b, 0x37, 0x71,
+	0x0f, 0xdb, 0x4c, 0xe5, 0x6f, 0x51, 0xfa, 0x40, 0x77, 0x2d, 0x62, 0xaa, 0x9e, 0x54, 0xba, 0x62,
+	0x76, 0xd9, 0x5e, 0xbf, 0xa5, 0xb6, 0x49, 0xaf, 0x60, 0x12, 0x93, 0x14, 0xb8, 0x4e, 0xab, 0xdf,
+	0xe1, 0x4f, 0xbe, 0x1b, 0xef, 0x9f, 0x6f, 0x2b, 0x6d, 0x9a, 0x84, 0x98, 0x16, 0x1e, 0x6b, 0xe1,
+	0x9e, 0xc3, 0x06, 0x81, 0xf0, 0xa2, 0xef, 0xd8, 0xc3, 0xc4, 0x4c, 0x37, 0x74, 0xa6, 0x07, 0x82,
+	0x0d, 0x1e, 0x88, 0x8b, 0x1d, 0xab, 0xdb, 0xd6, 0x19, 0x71, 0xfd, 0xd7, 0xca, 0xe7, 0x80, 0xca,
+	0x98, 0xdd, 0x09, 0x74, 0x35, 0xfc, 0x69, 0x1f, 0x53, 0x86, 0x3a, 0x00, 0x6d, 0xab, 0x4f, 0x19,
+	0x76, 0x9b, 0x5d, 0x23, 0x2b, 0xe4, 0x85, 0xad, 0xf5, 0x62, 0x79, 0x34, 0x94, 0x57, 0x4b, 0xfe,
+	0xdb, 0xca, 0xcd, 0xa7, 0x43, 0xf9, 0xcd, 0x20, 0x6c, 0x43, 0xef, 0xf7, 0xf6, 0xf5, 0x7d, 0x9d,
+	0xf0, 0x04, 0x7c, 0xfc, 0xf0, 0xc7, 0xd9, 0x37, 0x0b, 0x6c, 0xe0, 0x60, 0xaa, 0x46, 0x96, 0xda,
+	0x6a, 0xe0, 0xba, 0x62, 0x28, 0x03, 0xc8, 0xc4, 0xd0, 0xa9, 0x43, 0x6c, 0x8a, 0x51, 0x0b, 0x36,
+	0x28, 0x23, 0xae, 0x6e, 0xe2, 0xa6, 0x4d, 0x0c, 0xdc, 0x0c, 0x53, 0xe1, 0x91, 0xa4, 0xb7, 0x55,
+	0x35, 0xa8, 0x5e, 0x98, 0xab, 0xda, 0xf0, 0xb5, 0x6b, 0xc4, 0xc0, 0xa1, 0xb3, 0x9b, 0x98, 0xb6,
+	0xdd, 0xae, 0xc3, 0x88, 0xab, 0x65, 0xe8, 0xac, 0x58, 0xf9, 0x5a, 0x04, 0xe9, 0x86, 0x61, 0x54,
+	0x89, 0xd9, 0x60, 0x2e, 0xd6, 0x7b, 0x9a, 0x5f, 0x99, 0xe7, 0x5c, 0x01, 0x74, 0x1f, 0xce, 0xc6,
+	0x52, 0xed, 0x1a, 0xd9, 0xa5, 0xbc, 0xb0, 0xb5, 0x52, 0xac, 0x8f, 0x86, 0xf2, 0xfa, 0x44, 0x5e,
+	0x1c, 0xf0, 0xda, 0x42, 0x80, 0x31, 0x6b, 0x6d, 0x7d, 0xa2, 0x0a, 0x15, 0x03, 0x7d, 0x0c, 0x67,
+	0x18, 0x71, 0xba, 0x6d, 0x0f, 0x71, 0x99, 0x23, 0x96, 0x46, 0x43, 0x39, 0xb5, 0xeb, 0xbd, 0xe3,
+	0x58, 0xaf, 0x2f, 0x84, 0x15, 0xd8, 0x69, 0x29, 0xee, 0xb4, 0x62, 0x20, 0x02, 0xeb, 0x16, 0x31,
+	0x9b, 0x94, 0x17, 0xd7, 0x03, 0x11, 0x39, 0xc8, 0xce, 0x68, 0x28, 0xa7, 0xa3, 0xa2, 0x73, 0xa0,
+	0xab, 0x0b, 0x01, 0x4d, 0xd8, 0x6a, 0x69, 0x2b, 0x7a, 0x30, 0xd0, 0x5b, 0x90, 0x0a, 0x32, 0xcc,
+	0xae, 0x70, 0x9a, 0x28, 0x47, 0xd1, 0x64, 0x82, 0x1a, 0xa1, 0x89, 0xd2, 0x82, 0xcd, 0xb9, 0x6c,
+	0x08, 0x18, 0x59, 0x02, 0x18, 0x67, 0x13, 0xd0, 0xf0, 0xc5, 0x19, 0xff, 0x91, 0xf9, 0x04, 0xc2,
+	0x6a, 0x14, 0xa3, 0xf2, 0xeb, 0x32, 0x5c, 0xd0, 0x70, 0x8f, 0x1c, 0xe0, 0x09, 0x9c, 0x53, 0xba,
+	0x9d, 0x48, 0xba, 0x29, 0x3f, 0x89, 0x90, 0x6e, 0x60, 0xdd, 0x3a, 0x5d, 0xc1, 0x93, 0xda, 0x30,
+	0x3e, 0x83, 0x8c, 0xa5, 0x53, 0xd6, 0x6c, 0x93, 0x5e, 0xaf, 0xcb, 0x18, 0x36, 0x9a, 0xa6, 0x45,
+	0x6d, 0xde, 0x3c, 0xc4, 0xe2, 0x7b, 0xa3, 0xa1, 0x7c, 0xbe, 0xaa, 0x53, 0x56, 0x0a, 0xa5, 0xe5,
+	0x6a, 0xa3, 0xf6, 0x74, 0x28, 0xbf, 0xba, 0x10, 0xb8, 0x67, 0xa4, 0x9d, 0xb7, 0x62, 0x7e, 0x2c,
+	0x6a, 0x2b, 0xbf, 0x08, 0xb0, 0xe6, 0xb3, 0x27, 0x68, 0x30, 0x57, 0x21, 0x49, 0x99, 0xce, 0xfa,
+	0x94, 0x53, 0xe7, 0x7f, 0xdb, 0xf9, 0xa3, 0x9b, 0x4b, 0x83, 0xeb, 0x69, 0x81, 0xfe, 0x51, 0x69,
+	0x2c, 0x3d, 0x8f, 0x34, 0xfe, 0x5c, 0x86, 0xf5, 0x7b, 0x36, 0x3d, 0xdd, 0x06, 0x27, 0x78, 0x1b,
+	0x5c, 0x83, 0x33, 0xc1, 0xa9, 0x90, 0x66, 0x57, 0xf2, 0xcb, 0x5b, 0xe9, 0xed, 0xec, 0x0c, 0xf7,
+	0x82, 0x71, 0x58, 0x14, 0x1f, 0x0f, 0xe5, 0x84, 0x16, 0xe9, 0x2b, 0x3f, 0xae, 0x40, 0xba, 0x31,
+	0xb0, 0xdb, 0xa7, 0xab, 0x7f, 0x52, 0x57, 0xff, 0x06, 0x24, 0x5b, 0x7a, 0x7b, 0xbf, 0xef, 0x04,
+	0x87, 0xa6, 0xcb, 0xea, 0xc4, 0x97, 0x89, 0x3a, 0xb1, 0xb6, 0x6a, 0x91, 0xab, 0x79, 0x75, 0xe0,
+	0x34, 0x10, 0xb4, 0xc0, 0x50, 0xfa, 0x5e, 0x00, 0x18, 0x0b, 0xe7, 0xad, 0x8d, 0xf0, 0x5c, 0xd6,
+	0x26, 0x0b, 0x29, 0xdd, 0x30, 0x5c, 0x4c, 0x29, 0x27, 0xc3, 0xaa, 0x16, 0x3e, 0x2a, 0xd7, 0x61,
+	0xcd, 0xcf, 0x24, 0x68, 0xb6, 0x85, 0x58, 0xb3, 0x4d, 0x6f, 0x5f, 0x9c, 0x49, 0x3a, 0xde, 0x63,
+	0x95, 0xfb, 0x90, 0x2d, 0x63, 0x76, 0xd7, 0xc5, 0x07, 0x7e, 0xff, 0xab, 0xd8, 0x1d, 0x12, 0x72,
+	0xfe, 0x23, 0x58, 0x73, 0x5c, 0x7c, 0xd0, 0x3c, 0xc0, 0x2e, 0xed, 0x12, 0x9b, 0xbb, 0x14, 0x8b,
+	0x57, 0x17, 0xe6, 0xc2, 0xfb, 0xbe, 0xbd, 0x96, 0xf6, 0xbc, 0x05, 0x0f, 0xca, 0x37, 0x29, 0xc8,
+	0x44, 0x6b, 0x37, 0xc6, 0x9e, 0xe5, 0x89, 0xf0, 0x2f, 0xf3, 0xe4, 0x7a, 0x54, 0xb2, 0x25, 0x3e,
+	0x9f, 0x5e, 0x89, 0x95, 0x6c, 0x4e, 0x88, 0xea, 0xd4, 0x98, 0xfa, 0x52, 0x80, 0x8d, 0xf1, 0x88,
+	0xb2, 0x2c, 0x6a, 0x37, 0x49, 0xa7, 0x43, 0x31, 0xe3, 0xfb, 0x48, 0x2c, 0x56, 0x47, 0x43, 0x39,
+	0x13, 0x4d, 0x97, 0x6a, 0xb5, 0x51, 0xab, 0x73, 0xf1, 0xc2, 0xb3, 0xca, 0x33, 0xd5, 0x32, 0x11,
+	0x54, 0xd5, 0xa2, 0xb6, 0xef, 0x69, 0x2a, 0x04, 0x73, 0x22, 0x04, 0x71, 0x4e, 0x08, 0xe5, 0x67,
+	0x0f, 0xa1, 0x1c, 0x0f, 0xa1, 0x3c, 0x0e, 0x61, 0x67, 0x26, 0x02, 0x0b, 0xdb, 0x26, 0xdb, 0x0b,
+	0x4e, 0x1d, 0x17, 0x67, 0x22, 0xa8, 0x72, 0xf1, 0x94, 0x33, 0xff, 0x25, 0xfa, 0x02, 0xfe, 0xbf,
+	0xd7, 0x35, 0xf7, 0x30, 0x65, 0xcd, 0xfb, 0xae, 0x27, 0xb4, 0x79, 0x5d, 0xb3, 0x49, 0xee, 0xcb,
+	0xe3, 0x02, 0x7a, 0xd7, 0x97, 0x7f, 0xe0, 0x8b, 0xab, 0xcf, 0x32, 0xfb, 0x79, 0x3d, 0xd1, 0x5e,
+	0xdc, 0x91, 0x45, 0x6d, 0xa4, 0x41, 0x2a, 0xe4, 0x7c, 0xea, 0x1f, 0x72, 0x3e, 0x74, 0xa4, 0x7c,
+	0x27, 0x40, 0xd2, 0x27, 0x0e, 0x7a, 0x01, 0x96, 0xea, 0x3b, 0xe7, 0x12, 0xd2, 0xa5, 0x07, 0x0f,
+	0xf3, 0x1b, 0xb1, 0xdd, 0xe7, 0x2b, 0xd4, 0x77, 0x90, 0x0a, 0xab, 0xb5, 0xfa, 0x6e, 0xf3, 0x76,
+	0xfd, 0x5e, 0xed, 0xe6, 0x39, 0x41, 0x92, 0x1f, 0x3c, 0xcc, 0x6f, 0xce, 0xd1, 0xac, 0x11, 0x76,
+	0x9b, 0xf4, 0x6d, 0x03, 0xbd, 0x01, 0x6b, 0x95, 0x5a, 0xa9, 0x5e, 0x6b, 0x54, 0x1a, 0xbb, 0xb7,
+	0x6a, 0xbb, 0xe7, 0x96, 0xa4, 0xcb, 0x0f, 0x1e, 0xe6, 0xe5, 0x39, 0x26, 0x15, 0xbb, 0x4d, 0x6c,
+	0xda, 0xa5, 0x0c, 0xdb, 0x4c, 0x12, 0xbf, 0xfa, 0x21, 0x97, 0xb8, 0x26, 0xfe, 0xf1, 0x48, 0x16,
+	0x94, 0xdf, 0x05, 0xb8, 0x34, 0xa7, 0x15, 0x04, 0x8d, 0xe5, 0x3f, 0xeb, 0x7d, 0x25, 0x58, 0xf3,
+	0x19, 0xd2, 0xec, 0xda, 0x1d, 0xe2, 0x6d, 0x52, 0x6f, 0x90, 0xe7, 0x8f, 0xdb, 0xa4, 0x5a, 0xba,
+	0x1d, 0xfd, 0xa7, 0xdb, 0x3f, 0x8b, 0x00, 0x77, 0xa2, 0x9b, 0x2a, 0xa4, 0x41, 0x7a, 0xe2, 0x72,
+	0x06, 0xc9, 0x31, 0x67, 0xb3, 0x97, 0x46, 0x52, 0xfe, 0x68, 0x05, 0xbf, 0x3c, 0x4a, 0x02, 0x7d,
+	0x02, 0x99, 0x39, 0x9f, 0xd9, 0x28, 0xde, 0x4d, 0x8e, 0xbe, 0x96, 0x91, 0xb6, 0x8e, 0x57, 0x8c,
+	0xb0, 0xee, 0xc2, 0xd9, 0xa9, 0xaf, 0x6d, 0x14, 0x9f, 0x6e, 0xf3, 0xbf, 0xc5, 0xa5, 0x0b, 0xaa,
+	0x7f, 0xc1, 0xa6, 0x86, 0x17, 0x6c, 0xea, 0xad, 0x9e, 0xc3, 0x06, 0x4a, 0x02, 0xbd, 0x0d, 0xa2,
+	0x77, 0x68, 0x47, 0xd9, 0xf8, 0xbc, 0x18, 0x1f, 0x7f, 0xa5, 0x4b, 0x73, 0x24, 0x51, 0x40, 0xef,
+	0x40, 0xd2, 0x3f, 0x2c, 0x23, 0x29, 0xa6, 0x16, 0x3b, 0x41, 0x1f, 0x03, 0x3f, 0xb0, 0xdb, 0xd3,
+	0xf0, 0xe3, 0x19, 0x3d, 0x0d, 0x3f, 0x31, 0xf3, 0x94, 0x04, 0x32, 0xe0, 0xfc, 0x0c, 0x73, 0xd1,
+	0x4b, 0xd3, 0x8b, 0x36, 0x77, 0xc8, 0x49, 0x2f, 0x1f, 0xa7, 0x16, 0xa2, 0x14, 0xcb, 0x8f, 0x47,
+	0x39, 0xe1, 0xc9, 0x28, 0x27, 0x7c, 0x7b, 0x98, 0x4b, 0x3c, 0x3a, 0xcc, 0x09, 0x4f, 0x0e, 0x73,
+	0x89, 0xdf, 0x0e, 0x73, 0x89, 0x0f, 0xaf, 0xfc, 0x1d, 0xba, 0x47, 0x77, 0xa6, 0xad, 0x24, 0xff,
+	0xff, 0xda, 0x5f, 0x01, 0x00, 0x00, 0xff, 0xff, 0x62, 0xb7, 0x11, 0x43, 0x48, 0x15, 0x00, 0x00,
 }
 
 func (this *LogStreamCommitInfo) Equal(that interface{}) bool {
@@ -1050,13 +1041,7 @@ func (this *LogStreamCommitInfo) Equal(that interface{}) bool {
 	if this.HighestWrittenLLSN != that1.HighestWrittenLLSN {
 		return false
 	}
-	if this.HighWatermark != that1.HighWatermark {
-		return false
-	}
-	if this.PrevHighWatermark != that1.PrevHighWatermark {
-		return false
-	}
-	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+	if this.Version != that1.Version {
 		return false
 	}
 	return true
@@ -1077,7 +1062,7 @@ type ManagementClient interface {
 	// GetMetadata returns metadata of StorageNode.
 	GetMetadata(ctx context.Context, in *GetMetadataRequest, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// AddLogStream adds a new LogStream to StorageNode.
-	AddLogStream(ctx context.Context, in *AddLogStreamRequest, opts ...grpc.CallOption) (*AddLogStreamResponse, error)
+	AddLogStreamReplica(ctx context.Context, in *AddLogStreamReplicaRequest, opts ...grpc.CallOption) (*AddLogStreamReplicaResponse, error)
 	// RemoveLogStream removes a LogStream from StorageNode.
 	RemoveLogStream(ctx context.Context, in *RemoveLogStreamRequest, opts ...grpc.CallOption) (*types.Empty, error)
 	// Seal changes the status of LogStreamExecutor to LogStreamStatusSealing or
@@ -1107,9 +1092,9 @@ func (c *managementClient) GetMetadata(ctx context.Context, in *GetMetadataReque
 	return out, nil
 }
 
-func (c *managementClient) AddLogStream(ctx context.Context, in *AddLogStreamRequest, opts ...grpc.CallOption) (*AddLogStreamResponse, error) {
-	out := new(AddLogStreamResponse)
-	err := c.cc.Invoke(ctx, "/varlog.snpb.Management/AddLogStream", in, out, opts...)
+func (c *managementClient) AddLogStreamReplica(ctx context.Context, in *AddLogStreamReplicaRequest, opts ...grpc.CallOption) (*AddLogStreamReplicaResponse, error) {
+	out := new(AddLogStreamReplicaResponse)
+	err := c.cc.Invoke(ctx, "/varlog.snpb.Management/AddLogStreamReplica", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1166,7 +1151,7 @@ type ManagementServer interface {
 	// GetMetadata returns metadata of StorageNode.
 	GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error)
 	// AddLogStream adds a new LogStream to StorageNode.
-	AddLogStream(context.Context, *AddLogStreamRequest) (*AddLogStreamResponse, error)
+	AddLogStreamReplica(context.Context, *AddLogStreamReplicaRequest) (*AddLogStreamReplicaResponse, error)
 	// RemoveLogStream removes a LogStream from StorageNode.
 	RemoveLogStream(context.Context, *RemoveLogStreamRequest) (*types.Empty, error)
 	// Seal changes the status of LogStreamExecutor to LogStreamStatusSealing or
@@ -1186,8 +1171,8 @@ type UnimplementedManagementServer struct {
 func (*UnimplementedManagementServer) GetMetadata(ctx context.Context, req *GetMetadataRequest) (*GetMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
 }
-func (*UnimplementedManagementServer) AddLogStream(ctx context.Context, req *AddLogStreamRequest) (*AddLogStreamResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddLogStream not implemented")
+func (*UnimplementedManagementServer) AddLogStreamReplica(ctx context.Context, req *AddLogStreamReplicaRequest) (*AddLogStreamReplicaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddLogStreamReplica not implemented")
 }
 func (*UnimplementedManagementServer) RemoveLogStream(ctx context.Context, req *RemoveLogStreamRequest) (*types.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveLogStream not implemented")
@@ -1227,20 +1212,20 @@ func _Management_GetMetadata_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Management_AddLogStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AddLogStreamRequest)
+func _Management_AddLogStreamReplica_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddLogStreamReplicaRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ManagementServer).AddLogStream(ctx, in)
+		return srv.(ManagementServer).AddLogStreamReplica(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/varlog.snpb.Management/AddLogStream",
+		FullMethod: "/varlog.snpb.Management/AddLogStreamReplica",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagementServer).AddLogStream(ctx, req.(*AddLogStreamRequest))
+		return srv.(ManagementServer).AddLogStreamReplica(ctx, req.(*AddLogStreamReplicaRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1344,8 +1329,8 @@ var _Management_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Management_GetMetadata_Handler,
 		},
 		{
-			MethodName: "AddLogStream",
-			Handler:    _Management_AddLogStream_Handler,
+			MethodName: "AddLogStreamReplica",
+			Handler:    _Management_AddLogStreamReplica_Handler,
 		},
 		{
 			MethodName: "RemoveLogStream",
@@ -1392,10 +1377,6 @@ func (m *GetMetadataRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.ClusterID != 0 {
 		i = encodeVarintManagement(dAtA, i, uint64(m.ClusterID))
 		i--
@@ -1424,10 +1405,6 @@ func (m *GetMetadataResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.StorageNodeMetadata != nil {
 		{
 			size, err := m.StorageNodeMetadata.MarshalToSizedBuffer(dAtA[:i])
@@ -1443,7 +1420,7 @@ func (m *GetMetadataResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *AddLogStreamRequest) Marshal() (dAtA []byte, err error) {
+func (m *AddLogStreamReplicaRequest) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1453,20 +1430,16 @@ func (m *AddLogStreamRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AddLogStreamRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *AddLogStreamReplicaRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.ProtoSize()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *AddLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *AddLogStreamReplicaRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Storage != nil {
 		{
 			size, err := m.Storage.MarshalToSizedBuffer(dAtA[:i])
@@ -1477,10 +1450,15 @@ func (m *AddLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			i = encodeVarintManagement(dAtA, i, uint64(size))
 		}
 		i--
-		dAtA[i] = 0x22
+		dAtA[i] = 0x2a
 	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintManagement(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x18
 	}
@@ -1497,7 +1475,7 @@ func (m *AddLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *AddLogStreamResponse) Marshal() (dAtA []byte, err error) {
+func (m *AddLogStreamReplicaResponse) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1507,20 +1485,16 @@ func (m *AddLogStreamResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AddLogStreamResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *AddLogStreamReplicaResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.ProtoSize()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *AddLogStreamResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *AddLogStreamReplicaResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStream != nil {
 		{
 			size, err := m.LogStream.MarshalToSizedBuffer(dAtA[:i])
@@ -1556,12 +1530,13 @@ func (m *RemoveLogStreamRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintManagement(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x18
 	}
@@ -1598,17 +1573,18 @@ func (m *SealRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LastCommittedGLSN != 0 {
 		i = encodeVarintManagement(dAtA, i, uint64(m.LastCommittedGLSN))
 		i--
-		dAtA[i] = 0x20
+		dAtA[i] = 0x28
 	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintManagement(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x18
 	}
@@ -1645,10 +1621,6 @@ func (m *SealResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.LastCommittedGLSN != 0 {
 		i = encodeVarintManagement(dAtA, i, uint64(m.LastCommittedGLSN))
 		i--
@@ -1682,10 +1654,6 @@ func (m *UnsealRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Replicas) > 0 {
 		for iNdEx := len(m.Replicas) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -1697,11 +1665,16 @@ func (m *UnsealRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				i = encodeVarintManagement(dAtA, i, uint64(size))
 			}
 			i--
-			dAtA[i] = 0x22
+			dAtA[i] = 0x2a
 		}
 	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintManagement(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x18
 	}
@@ -1738,10 +1711,6 @@ func (m *SyncRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Backup != nil {
 		{
 			size, err := m.Backup.MarshalToSizedBuffer(dAtA[:i])
@@ -1752,10 +1721,15 @@ func (m *SyncRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			i = encodeVarintManagement(dAtA, i, uint64(size))
 		}
 		i--
-		dAtA[i] = 0x22
+		dAtA[i] = 0x2a
 	}
 	if m.LogStreamID != 0 {
 		i = encodeVarintManagement(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x18
 	}
@@ -1792,10 +1766,6 @@ func (m *SyncRequest_BackupNode) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Address) > 0 {
 		i -= len(m.Address)
 		copy(dAtA[i:], m.Address)
@@ -1831,10 +1801,6 @@ func (m *SyncResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Status != nil {
 		{
 			size, err := m.Status.MarshalToSizedBuffer(dAtA[:i])
@@ -1870,12 +1836,8 @@ func (m *GetPrevCommitInfoRequest) MarshalToSizedBuffer(dAtA []byte) (int, error
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.PrevHighWatermark != 0 {
-		i = encodeVarintManagement(dAtA, i, uint64(m.PrevHighWatermark))
+	if m.PrevVersion != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.PrevVersion))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -1902,17 +1864,8 @@ func (m *LogStreamCommitInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.PrevHighWatermark != 0 {
-		i = encodeVarintManagement(dAtA, i, uint64(m.PrevHighWatermark))
-		i--
-		dAtA[i] = 0x40
-	}
-	if m.HighWatermark != 0 {
-		i = encodeVarintManagement(dAtA, i, uint64(m.HighWatermark))
+	if m.Version != 0 {
+		i = encodeVarintManagement(dAtA, i, uint64(m.Version))
 		i--
 		dAtA[i] = 0x38
 	}
@@ -1969,10 +1922,6 @@ func (m *GetPrevCommitInfoResponse) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.CommitInfos) > 0 {
 		for iNdEx := len(m.CommitInfos) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -2015,9 +1964,6 @@ func (m *GetMetadataRequest) ProtoSize() (n int) {
 	if m.ClusterID != 0 {
 		n += 1 + sovManagement(uint64(m.ClusterID))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2031,13 +1977,10 @@ func (m *GetMetadataResponse) ProtoSize() (n int) {
 		l = m.StorageNodeMetadata.ProtoSize()
 		n += 1 + l + sovManagement(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
-func (m *AddLogStreamRequest) ProtoSize() (n int) {
+func (m *AddLogStreamReplicaRequest) ProtoSize() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2049,6 +1992,9 @@ func (m *AddLogStreamRequest) ProtoSize() (n int) {
 	if m.StorageNodeID != 0 {
 		n += 1 + sovManagement(uint64(m.StorageNodeID))
 	}
+	if m.TopicID != 0 {
+		n += 1 + sovManagement(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovManagement(uint64(m.LogStreamID))
 	}
@@ -2056,13 +2002,10 @@ func (m *AddLogStreamRequest) ProtoSize() (n int) {
 		l = m.Storage.ProtoSize()
 		n += 1 + l + sovManagement(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
-func (m *AddLogStreamResponse) ProtoSize() (n int) {
+func (m *AddLogStreamReplicaResponse) ProtoSize() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2071,9 +2014,6 @@ func (m *AddLogStreamResponse) ProtoSize() (n int) {
 	if m.LogStream != nil {
 		l = m.LogStream.ProtoSize()
 		n += 1 + l + sovManagement(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2090,11 +2030,11 @@ func (m *RemoveLogStreamRequest) ProtoSize() (n int) {
 	if m.StorageNodeID != 0 {
 		n += 1 + sovManagement(uint64(m.StorageNodeID))
 	}
+	if m.TopicID != 0 {
+		n += 1 + sovManagement(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovManagement(uint64(m.LogStreamID))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2111,14 +2051,14 @@ func (m *SealRequest) ProtoSize() (n int) {
 	if m.StorageNodeID != 0 {
 		n += 1 + sovManagement(uint64(m.StorageNodeID))
 	}
+	if m.TopicID != 0 {
+		n += 1 + sovManagement(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovManagement(uint64(m.LogStreamID))
 	}
 	if m.LastCommittedGLSN != 0 {
 		n += 1 + sovManagement(uint64(m.LastCommittedGLSN))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2135,9 +2075,6 @@ func (m *SealResponse) ProtoSize() (n int) {
 	if m.LastCommittedGLSN != 0 {
 		n += 1 + sovManagement(uint64(m.LastCommittedGLSN))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2153,6 +2090,9 @@ func (m *UnsealRequest) ProtoSize() (n int) {
 	if m.StorageNodeID != 0 {
 		n += 1 + sovManagement(uint64(m.StorageNodeID))
 	}
+	if m.TopicID != 0 {
+		n += 1 + sovManagement(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovManagement(uint64(m.LogStreamID))
 	}
@@ -2161,9 +2101,6 @@ func (m *UnsealRequest) ProtoSize() (n int) {
 			l = e.ProtoSize()
 			n += 1 + l + sovManagement(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2180,15 +2117,15 @@ func (m *SyncRequest) ProtoSize() (n int) {
 	if m.StorageNodeID != 0 {
 		n += 1 + sovManagement(uint64(m.StorageNodeID))
 	}
+	if m.TopicID != 0 {
+		n += 1 + sovManagement(uint64(m.TopicID))
+	}
 	if m.LogStreamID != 0 {
 		n += 1 + sovManagement(uint64(m.LogStreamID))
 	}
 	if m.Backup != nil {
 		l = m.Backup.ProtoSize()
 		n += 1 + l + sovManagement(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2206,9 +2143,6 @@ func (m *SyncRequest_BackupNode) ProtoSize() (n int) {
 	if l > 0 {
 		n += 1 + l + sovManagement(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2222,9 +2156,6 @@ func (m *SyncResponse) ProtoSize() (n int) {
 		l = m.Status.ProtoSize()
 		n += 1 + l + sovManagement(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -2234,11 +2165,8 @@ func (m *GetPrevCommitInfoRequest) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
-	if m.PrevHighWatermark != 0 {
-		n += 1 + sovManagement(uint64(m.PrevHighWatermark))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
+	if m.PrevVersion != 0 {
+		n += 1 + sovManagement(uint64(m.PrevVersion))
 	}
 	return n
 }
@@ -2267,14 +2195,8 @@ func (m *LogStreamCommitInfo) ProtoSize() (n int) {
 	if m.HighestWrittenLLSN != 0 {
 		n += 1 + sovManagement(uint64(m.HighestWrittenLLSN))
 	}
-	if m.HighWatermark != 0 {
-		n += 1 + sovManagement(uint64(m.HighWatermark))
-	}
-	if m.PrevHighWatermark != 0 {
-		n += 1 + sovManagement(uint64(m.PrevHighWatermark))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
+	if m.Version != 0 {
+		n += 1 + sovManagement(uint64(m.Version))
 	}
 	return n
 }
@@ -2293,9 +2215,6 @@ func (m *GetPrevCommitInfoResponse) ProtoSize() (n int) {
 			l = e.ProtoSize()
 			n += 1 + l + sovManagement(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -2366,7 +2285,6 @@ func (m *GetMetadataRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2453,7 +2371,6 @@ func (m *GetMetadataResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2463,7 +2380,7 @@ func (m *GetMetadataResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
+func (m *AddLogStreamReplicaRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -2486,10 +2403,10 @@ func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: AddLogStreamRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: AddLogStreamReplicaRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: AddLogStreamRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: AddLogStreamReplicaRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -2532,6 +2449,25 @@ func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 3:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_com_kakao_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -2549,7 +2485,7 @@ func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 4:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Storage", wireType)
 			}
@@ -2597,7 +2533,6 @@ func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2607,7 +2542,7 @@ func (m *AddLogStreamRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AddLogStreamResponse) Unmarshal(dAtA []byte) error {
+func (m *AddLogStreamReplicaResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -2630,10 +2565,10 @@ func (m *AddLogStreamResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: AddLogStreamResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: AddLogStreamReplicaResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: AddLogStreamResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: AddLogStreamReplicaResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -2684,7 +2619,6 @@ func (m *AddLogStreamResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2763,6 +2697,25 @@ func (m *RemoveLogStreamRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 3:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_com_kakao_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -2792,7 +2745,6 @@ func (m *RemoveLogStreamRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2871,6 +2823,25 @@ func (m *SealRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 3:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_com_kakao_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -2888,7 +2859,7 @@ func (m *SealRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 4:
+		case 5:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LastCommittedGLSN", wireType)
 			}
@@ -2919,7 +2890,6 @@ func (m *SealRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3008,7 +2978,6 @@ func (m *SealResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3087,6 +3056,25 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 3:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_com_kakao_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -3104,7 +3092,7 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 4:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Replicas", wireType)
 			}
@@ -3133,7 +3121,7 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Replicas = append(m.Replicas, Replica{})
+			m.Replicas = append(m.Replicas, varlogpb.Replica{})
 			if err := m.Replicas[len(m.Replicas)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -3150,7 +3138,6 @@ func (m *UnsealRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3229,6 +3216,25 @@ func (m *SyncRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 3:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowManagement
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_com_kakao_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
 			}
 			m.LogStreamID = 0
@@ -3246,7 +3252,7 @@ func (m *SyncRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 4:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Backup", wireType)
 			}
@@ -3294,7 +3300,6 @@ func (m *SyncRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3396,7 +3401,6 @@ func (m *SyncRequest_BackupNode) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3483,7 +3487,6 @@ func (m *SyncResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3524,9 +3527,9 @@ func (m *GetPrevCommitInfoRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field PrevHighWatermark", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PrevVersion", wireType)
 			}
-			m.PrevHighWatermark = 0
+			m.PrevVersion = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowManagement
@@ -3536,7 +3539,7 @@ func (m *GetPrevCommitInfoRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.PrevHighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				m.PrevVersion |= github_com_kakao_varlog_pkg_types.Version(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3553,7 +3556,6 @@ func (m *GetPrevCommitInfoRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3708,9 +3710,9 @@ func (m *LogStreamCommitInfo) Unmarshal(dAtA []byte) error {
 			}
 		case 7:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
 			}
-			m.HighWatermark = 0
+			m.Version = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowManagement
@@ -3720,26 +3722,7 @@ func (m *LogStreamCommitInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.HighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 8:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field PrevHighWatermark", wireType)
-			}
-			m.PrevHighWatermark = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowManagement
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.PrevHighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				m.Version |= github_com_kakao_varlog_pkg_types.Version(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -3756,7 +3739,6 @@ func (m *LogStreamCommitInfo) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -3860,7 +3842,6 @@ func (m *GetPrevCommitInfoResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

@@ -242,11 +242,9 @@ func (c *connectorImpl) connect(ctx context.Context) (*mrProxy, error) {
 		}
 		if err != nil {
 			_ = c.updateClusterInfoFromSeed(ctx)
-		} else {
-			if !c.casProxy(nil, proxy) {
-				_ = proxy.Close()
-				proxy, err = c.loadProxy()
-			}
+		} else if !c.casProxy(nil, proxy) {
+			_ = proxy.Close()
+			proxy, err = c.loadProxy()
 		}
 		return proxy, err
 	})
@@ -270,8 +268,8 @@ func (c *connectorImpl) connectToMR(ctx context.Context, addr string) (cl mrc.Me
 	}
 
 	// It always returns nil as error value.
-	cl, _ = mrc.NewMetadataRepositoryClientFromRpcConn(conn)
-	mcl, _ = mrc.NewMetadataRepositoryManagementClientFromRpcConn(conn)
+	cl, _ = mrc.NewMetadataRepositoryClientFromRPCConn(conn)
+	mcl, _ = mrc.NewMetadataRepositoryManagementClientFromRPCConn(conn)
 	return cl, mcl, nil
 }
 

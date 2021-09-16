@@ -40,7 +40,7 @@ type ClusterMetadataViewGetter interface {
 }
 
 const (
-	RELOAD_INTERVAL = time.Second
+	ReloadInterval = time.Second
 )
 
 type MetadataRepositoryManager interface {
@@ -50,6 +50,10 @@ type MetadataRepositoryManager interface {
 	RegisterStorageNode(ctx context.Context, storageNodeMeta *varlogpb.StorageNodeDescriptor) error
 
 	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error
+
+	RegisterTopic(ctx context.Context, topicID types.TopicID) error
+
+	UnregisterTopic(ctx context.Context, topicID types.TopicID) error
 
 	RegisterLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error
 
@@ -93,8 +97,6 @@ type mrManager struct {
 }
 
 const (
-	// TODO (jun): Fix code styles (See https://golang.org/doc/effective_go.html#mixed-caps)
-	MRMANAGER_INIT_TIMEOUT     = 5 * time.Second
 	RPCAddrsFetchRetryInterval = 100 * time.Millisecond
 )
 
@@ -209,6 +211,44 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 	}
 
 	if err := cli.UnregisterStorageNode(ctx, storageNodeID); err != nil {
+		return multierr.Append(err, cli.Close())
+	}
+
+	return err
+}
+
+func (mrm *mrManager) RegisterTopic(ctx context.Context, topicID types.TopicID) error {
+	mrm.mu.Lock()
+	defer func() {
+		mrm.dirty = true
+		mrm.mu.Unlock()
+	}()
+
+	cli, err := mrm.c()
+	if err != nil {
+		return errors.WithMessage(err, "mrmanager: not accessible")
+	}
+
+	if err := cli.RegisterTopic(ctx, topicID); err != nil {
+		return multierr.Append(err, cli.Close())
+	}
+
+	return err
+}
+
+func (mrm *mrManager) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {
+	mrm.mu.Lock()
+	defer func() {
+		mrm.dirty = true
+		mrm.mu.Unlock()
+	}()
+
+	cli, err := mrm.c()
+	if err != nil {
+		return errors.WithMessage(err, "mrmanager: not accessible")
+	}
+
+	if err := cli.UnregisterTopic(ctx, topicID); err != nil {
 		return multierr.Append(err, cli.Close())
 	}
 
@@ -364,7 +404,7 @@ func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 	mrm.mu.Lock()
 	defer mrm.mu.Unlock()
 
-	if mrm.dirty || time.Since(mrm.updated) > RELOAD_INTERVAL {
+	if mrm.dirty || time.Since(mrm.updated) > ReloadInterval {
 		meta, err := mrm.clusterMetadata(ctx)
 		if err != nil {
 			return nil, err

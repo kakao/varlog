@@ -22,6 +22,7 @@ func TestTrim(t *testing.T) {
 		const (
 			numStorageNodes  = 10
 			minStorageNodeID = 0
+			topicID          = types.TopicID(1)
 		)
 
 		ctrl := gomock.NewController(t)
@@ -38,7 +39,7 @@ func TestTrim(t *testing.T) {
 				},
 			}
 		}
-		replicasRetriever.EXPECT().All().Return(replicasMap).MaxTimes(1)
+		replicasRetriever.EXPECT().All(topicID).Return(replicasMap).MaxTimes(1)
 
 		createMockLogClientManager := func(expectedTrimResults []error) *logc.MockLogClientManager {
 			logCLManager := logc.NewMockLogClientManager(ctrl)
@@ -46,7 +47,7 @@ func TestTrim(t *testing.T) {
 				func(_ context.Context, storageNodeID types.StorageNodeID, storagNodeAddr string) (logc.LogIOClient, error) {
 					logCL := logc.NewMockLogIOClient(ctrl)
 					expectedTrimResult := expectedTrimResults[int(storageNodeID)]
-					logCL.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(expectedTrimResult)
+					logCL.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(expectedTrimResult)
 					return logCL, nil
 				},
 			).Times(numStorageNodes)
@@ -66,7 +67,7 @@ func TestTrim(t *testing.T) {
 			vlg.logCLManager = createMockLogClientManager(errs)
 
 			Convey("Then the trim should fail", func() {
-				err := vlg.Trim(context.TODO(), types.GLSN(1), TrimOption{})
+				err := vlg.Trim(context.TODO(), topicID, types.GLSN(1), TrimOption{})
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -80,7 +81,7 @@ func TestTrim(t *testing.T) {
 			vlg.logCLManager = createMockLogClientManager(errs)
 
 			Convey("Then the trim should succeed", func() {
-				err := vlg.Trim(context.TODO(), types.GLSN(1), TrimOption{})
+				err := vlg.Trim(context.TODO(), topicID, types.GLSN(1), TrimOption{})
 				So(err, ShouldBeNil)
 			})
 		})
@@ -94,7 +95,7 @@ func TestTrim(t *testing.T) {
 			vlg.logCLManager = createMockLogClientManager(errs)
 
 			Convey("Then the trim should succeed", func() {
-				err := vlg.Trim(context.TODO(), types.GLSN(1), TrimOption{})
+				err := vlg.Trim(context.TODO(), topicID, types.GLSN(1), TrimOption{})
 				So(err, ShouldBeNil)
 			})
 		})
@@ -108,7 +109,7 @@ func TestTrim(t *testing.T) {
 			vlg.logCLManager = createMockLogClientManager(errs)
 
 			Convey("Then the trim should succeed", func() {
-				err := vlg.Trim(context.TODO(), types.GLSN(1), TrimOption{})
+				err := vlg.Trim(context.TODO(), topicID, types.GLSN(1), TrimOption{})
 				So(err, ShouldBeNil)
 			})
 		})

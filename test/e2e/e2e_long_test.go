@@ -1,3 +1,4 @@
+//go:build long_e2e
 // +build long_e2e
 
 package e2e

@@ -9,16 +9,15 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
-	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
-	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type Connector interface {
 	io.Closer
-	Get(ctx context.Context, replica snpb.Replica) (Client, error)
+	Get(ctx context.Context, replica varlogpb.Replica) (Client, error)
 }
 
 type connector struct {
@@ -26,7 +25,6 @@ type connector struct {
 	clients map[types.StorageNodeID]*client
 	closed  bool
 	mu      sync.Mutex
-	logger  *zap.Logger
 }
 
 func NewConnector(opts ...ConnectorOption) (Connector, error) {
@@ -41,7 +39,7 @@ func NewConnector(opts ...ConnectorOption) (Connector, error) {
 	return c, nil
 }
 
-func (c *connector) Get(ctx context.Context, replica snpb.Replica) (Client, error) {
+func (c *connector) Get(ctx context.Context, replica varlogpb.Replica) (Client, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -49,7 +47,7 @@ func (c *connector) Get(ctx context.Context, replica snpb.Replica) (Client, erro
 		return nil, errors.WithStack(verrors.ErrClosed)
 	}
 
-	cl, ok := c.clients[replica.StorageNodeID]
+	cl, ok := c.clients[replica.StorageNode.StorageNodeID]
 	if ok {
 		return cl, nil
 	}
@@ -57,7 +55,7 @@ func (c *connector) Get(ctx context.Context, replica snpb.Replica) (Client, erro
 	if err != nil {
 		return nil, err
 	}
-	c.clients[replica.StorageNodeID] = cl
+	c.clients[replica.StorageNode.StorageNodeID] = cl
 	return cl, nil
 }
 
@@ -80,9 +78,8 @@ func (c *connector) Close() (err error) {
 	return err
 }
 
-func (c *connector) newClient(ctx context.Context, replica snpb.Replica) (*client, error) {
-	opts := append(c.clientOptions, WithReplica(replica))
-	cl, err := newClient(ctx, opts...)
+func (c *connector) newClient(ctx context.Context, replica varlogpb.Replica) (*client, error) {
+	cl, err := newClient(ctx, append(c.clientOptions, WithReplica(replica))...)
 	if err != nil {
 		return nil, err
 	}
@@ -93,5 +90,5 @@ func (c *connector) newClient(ctx context.Context, replica snpb.Replica) (*clien
 func (c *connector) delClient(client *client) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.clients, client.replica.GetStorageNodeID())
+	delete(c.clients, client.replica.StorageNode.StorageNodeID)
 }

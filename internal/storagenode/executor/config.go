@@ -23,6 +23,7 @@ const (
 type config struct {
 	storageNodeID types.StorageNodeID
 	logStreamID   types.LogStreamID
+	topicID       types.TopicID
 	storage       storage.Storage
 
 	writeQueueSize int
@@ -110,6 +111,16 @@ func (o logStreamIDOption) apply(c *config) {
 
 func WithLogStreamID(lsid types.LogStreamID) Option {
 	return logStreamIDOption(lsid)
+}
+
+type topicIDOption types.TopicID
+
+func (o topicIDOption) apply(c *config) {
+	c.topicID = types.TopicID(o)
+}
+
+func WithTopicID(topicID types.TopicID) Option {
+	return topicIDOption(topicID)
 }
 
 /*

@@ -16,11 +16,12 @@ import (
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type SubscribeCloser func()
 
-func (v *varlog) subscribe(ctx context.Context, begin, end types.GLSN, onNext OnNext, opts ...SubscribeOption) (closer SubscribeCloser, err error) {
+func (v *varlog) subscribe(ctx context.Context, topicID types.TopicID, begin, end types.GLSN, onNext OnNext, opts ...SubscribeOption) (closer SubscribeCloser, err error) {
 	if begin >= end {
 		return nil, verrors.ErrInvalid
 	}
@@ -41,6 +42,7 @@ func (v *varlog) subscribe(ctx context.Context, begin, end types.GLSN, onNext On
 
 	tlogger := v.logger.Named("transmitter")
 	tsm := &transmitter{
+		topicID:           topicID,
 		subscribers:       make(map[types.LogStreamID]*subscriber),
 		refresher:         v.refresher,
 		replicasRetriever: v.replicasRetriever,
@@ -152,6 +154,7 @@ func (tq *transmitQueue) Front() (transmitResult, bool) {
 }
 
 type subscriber struct {
+	topicID       types.TopicID
 	logStreamID   types.LogStreamID
 	storageNodeID types.StorageNodeID
 	logCL         logc.LogIOClient
@@ -169,12 +172,13 @@ type subscriber struct {
 	logger *zap.Logger
 }
 
-func newSubscriber(ctx context.Context, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, logCL logc.LogIOClient, begin, end types.GLSN, transmitQ *transmitQueue, transmitCV chan struct{}, logger *zap.Logger) (*subscriber, error) {
-	resultC, err := logCL.Subscribe(ctx, logStreamID, begin, end)
+func newSubscriber(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, logCL logc.LogIOClient, begin, end types.GLSN, transmitQ *transmitQueue, transmitCV chan struct{}, logger *zap.Logger) (*subscriber, error) {
+	resultC, err := logCL.Subscribe(ctx, topicID, logStreamID, begin, end)
 	if err != nil {
 		return nil, err
 	}
 	s := &subscriber{
+		topicID:       topicID,
 		logStreamID:   logStreamID,
 		storageNodeID: storageNodeID,
 		logCL:         logCL,
@@ -182,7 +186,7 @@ func newSubscriber(ctx context.Context, logStreamID types.LogStreamID, storageNo
 		transmitQ:     transmitQ,
 		transmitCV:    transmitCV,
 		done:          make(chan struct{}),
-		logger:        logger.Named("subscriber").With(zap.Uint32("lsid", uint32(logStreamID))),
+		logger:        logger.Named("subscriber").With(zap.Int32("lsid", int32(logStreamID))),
 	}
 	s.lastSubscribeAt.Store(time.Now())
 	s.closed.Store(false)
@@ -244,6 +248,7 @@ func (s *subscriber) getLastSubscribeAt() time.Time {
 }
 
 type transmitter struct {
+	topicID           types.TopicID
 	subscribers       map[types.LogStreamID]*subscriber
 	refresher         MetadataRefresher
 	replicasRetriever ReplicasRetriever
@@ -292,8 +297,8 @@ func (p *transmitter) transmit(ctx context.Context) {
 
 func (p *transmitter) refreshSubscriber(ctx context.Context) error {
 	p.refresher.Refresh(ctx)
-	replicasMap := p.replicasRetriever.All()
 
+	replicasMap := p.replicasRetriever.All(p.topicID)
 	for logStreamID, replicas := range replicasMap {
 		idx := 0
 		if s, ok := p.subscribers[logStreamID]; ok {
@@ -322,7 +327,7 @@ func (p *transmitter) refreshSubscriber(ctx context.Context) error {
 				continue CONNECT
 			}
 
-			s, err = newSubscriber(ctx, logStreamID, snid, logCL, p.wanted, p.end, p.transmitQ, p.transmitCV, p.logger)
+			s, err = newSubscriber(ctx, p.topicID, logStreamID, snid, logCL, p.wanted, p.end, p.transmitQ, p.transmitCV, p.logger)
 			if err != nil {
 				logCL.Close()
 				continue CONNECT
@@ -488,6 +493,6 @@ func (p *dispatcher) dispatch(_ context.Context) {
 		sentErr = sentErr || res.Error != nil
 	}
 	if !sentErr {
-		p.onNextFunc(types.InvalidLogEntry, io.EOF)
+		p.onNextFunc(varlogpb.InvalidLogEntry(), io.EOF)
 	}
 }

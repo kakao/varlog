@@ -154,11 +154,8 @@ func TestProposeOnFollower(t *testing.T) {
 		go func(pC chan<- string, cC <-chan *raftCommittedEntry) {
 
 		Loop:
-			for {
-				select {
-				case <-cC:
-					break Loop
-				}
+			for range cC {
+				break Loop
 			}
 			donec <- struct{}{}
 			for range cC {

@@ -158,7 +158,7 @@ func TestMRConnector(t *testing.T) {
 				}
 
 				// NOTE (jun): Does not HealthCheck imply this?
-				mcl, err := mrc.NewMetadataRepositoryManagementClientFromRpcConn(conn)
+				mcl, err := mrc.NewMetadataRepositoryManagementClientFromRPCConn(conn)
 				if err != nil {
 					return false
 				}
@@ -229,11 +229,9 @@ func TestMRConnector(t *testing.T) {
 
 						if cl, err := mrConn.Client(context.TODO()); err != nil {
 							return err
-						} else {
-							if _, err := cl.GetMetadata(ctx); err != nil {
-								cl.Close()
-								return err
-							}
+						} else if _, err := cl.GetMetadata(ctx); err != nil {
+							cl.Close()
+							return err
 						}
 
 						return nil

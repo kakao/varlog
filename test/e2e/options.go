@@ -10,16 +10,16 @@ import (
 )
 
 const (
-	E2E_MASTERURL = "master-url"
-	E2E_CLUSTER   = "cluster"
-	E2E_CONTEXT   = "context"
-	E2E_USER      = "user"
-	E2E_TOKEN     = "token"
+	MasterURL = "master-url"
+	Cluster   = "cluster"
+	Context   = "context"
+	User      = "user"
+	Token     = "token"
 
-	DEFAULT_MR_CNT     = 3
-	DEFAULT_SN_CNT     = 3
-	DEFAULT_LS_CNT     = 2
-	DEFAULT_REP_FACTOR = 3
+	DefaultMRCnt     = 3
+	DefaultSNCnt     = 3
+	DefaultLSCnt     = 2
+	DefaultRepFactor = 3
 
 	defaultClientCnt     = 10
 	defaultSubscriberCnt = 10
@@ -29,7 +29,7 @@ const (
 )
 
 type K8sVarlogClusterOptions struct {
-	MasterUrl string
+	MasterURL string
 	User      string
 	Token     string
 	Cluster   string
@@ -49,30 +49,30 @@ func getK8sVarlogClusterOpts() K8sVarlogClusterOptions {
 	}
 
 	opts := K8sVarlogClusterOptions{}
-	if f, ok := info[E2E_MASTERURL]; ok {
-		opts.MasterUrl = f.(string)
+	if f, ok := info[MasterURL]; ok {
+		opts.MasterURL = f.(string)
 	}
 
-	if f, ok := info[E2E_CLUSTER]; ok {
+	if f, ok := info[Cluster]; ok {
 		opts.Cluster = f.(string)
 	}
 
-	if f, ok := info[E2E_CONTEXT]; ok {
+	if f, ok := info[Context]; ok {
 		opts.Context = f.(string)
 	}
 
-	if f, ok := info[E2E_USER]; ok {
+	if f, ok := info[User]; ok {
 		opts.User = f.(string)
 	}
 
-	if f, ok := info[E2E_TOKEN]; ok {
+	if f, ok := info[Token]; ok {
 		opts.Token = f.(string)
 	}
 
-	opts.NrMR = DEFAULT_MR_CNT
-	opts.NrSN = DEFAULT_SN_CNT
-	opts.NrLS = DEFAULT_LS_CNT
-	opts.RepFactor = DEFAULT_REP_FACTOR
+	opts.NrMR = DefaultMRCnt
+	opts.NrSN = DefaultSNCnt
+	opts.NrLS = DefaultLSCnt
+	opts.RepFactor = DefaultRepFactor
 	opts.Reset = true
 	opts.timeout = defaultTimeout
 
@@ -98,7 +98,7 @@ func optsToConfigBytes(opts K8sVarlogClusterOptions) []byte {
 		"- name: %s\n"+
 		"  user:\n"+
 		"    token: %s",
-		opts.MasterUrl,
+		opts.MasterURL,
 		opts.Cluster,
 		opts.Cluster,
 		opts.User,
@@ -113,6 +113,7 @@ type actionOptions struct {
 	prevf       func() error
 	postf       func() error
 	clusterID   vtypes.ClusterID
+	topicID     vtypes.TopicID
 	mrAddr      string
 	nrCli       int
 	nrSub       int

@@ -31,7 +31,7 @@ func TestAllowlistPick(t *testing.T) {
 			allowlist.Renew(metadata)
 
 			Convey("Then any log stream should not be picked", func() {
-				_, picked := allowlist.Pick()
+				_, picked := allowlist.Pick(types.TopicID(1))
 				So(picked, ShouldBeFalse)
 			})
 		})
@@ -42,11 +42,20 @@ func TestAllowlistPick(t *testing.T) {
 					{LogStreamID: types.LogStreamID(1)},
 					{LogStreamID: types.LogStreamID(2)},
 				},
+				Topics: []*varlogpb.TopicDescriptor{
+					{
+						TopicID: types.TopicID(1),
+						LogStreams: []types.LogStreamID{
+							types.LogStreamID(1),
+							types.LogStreamID(2),
+						},
+					},
+				},
 			}
 			allowlist.Renew(metadata)
 
 			Convey("Then a log stream should be picked", func() {
-				_, picked := allowlist.Pick()
+				_, picked := allowlist.Pick(types.TopicID(1))
 				So(picked, ShouldBeTrue)
 			})
 		})
@@ -59,6 +68,7 @@ func TestAllowlistDeny(t *testing.T) {
 			denyTTL        = 10 * time.Second
 			expireInterval = 10 * time.Minute // not expire
 			logStreamID    = types.LogStreamID(1)
+			topicID        = types.TopicID(1)
 		)
 
 		allowlist, err := newTransientAllowlist(denyTTL, expireInterval, zap.L())
@@ -73,13 +83,21 @@ func TestAllowlistDeny(t *testing.T) {
 				LogStreams: []*varlogpb.LogStreamDescriptor{
 					{LogStreamID: logStreamID},
 				},
+				Topics: []*varlogpb.TopicDescriptor{
+					{
+						TopicID: topicID,
+						LogStreams: []types.LogStreamID{
+							logStreamID,
+						},
+					},
+				},
 			})
-			allowlist.Deny(logStreamID)
+			allowlist.Deny(topicID, logStreamID)
 
 			Convey("Then the log stream should not be picked", func() {
-				_, picked := allowlist.Pick()
+				_, picked := allowlist.Pick(topicID)
 				So(picked, ShouldBeFalse)
-				So(allowlist.Contains(logStreamID), ShouldBeFalse)
+				So(allowlist.Contains(topicID, logStreamID), ShouldBeFalse)
 			})
 		})
 
@@ -89,15 +107,24 @@ func TestAllowlistDeny(t *testing.T) {
 					{LogStreamID: logStreamID},
 					{LogStreamID: logStreamID + 1},
 				},
+				Topics: []*varlogpb.TopicDescriptor{
+					{
+						TopicID: topicID,
+						LogStreams: []types.LogStreamID{
+							logStreamID,
+							logStreamID + 1,
+						},
+					},
+				},
 			})
-			allowlist.Deny(logStreamID + 1)
-			So(allowlist.Contains(logStreamID+1), ShouldBeFalse)
+			allowlist.Deny(topicID, logStreamID+1)
+			So(allowlist.Contains(topicID, logStreamID+1), ShouldBeFalse)
 
 			Convey("Then the other should be picked", func() {
-				pickedLogStreamID, picked := allowlist.Pick()
+				pickedLogStreamID, picked := allowlist.Pick(topicID)
 				So(picked, ShouldBeTrue)
 				So(pickedLogStreamID, ShouldEqual, logStreamID)
-				So(allowlist.Contains(logStreamID), ShouldBeTrue)
+				So(allowlist.Contains(topicID, logStreamID), ShouldBeTrue)
 			})
 		})
 	})
@@ -109,11 +136,20 @@ func TestAllowlistExpire(t *testing.T) {
 			denyTTL        = 100 * time.Millisecond
 			expireInterval = 100 * time.Millisecond
 			logStreamID    = types.LogStreamID(1)
+			topicID        = types.TopicID(1)
 		)
 
 		metadata := &varlogpb.MetadataDescriptor{
 			LogStreams: []*varlogpb.LogStreamDescriptor{
 				{LogStreamID: logStreamID},
+			},
+			Topics: []*varlogpb.TopicDescriptor{
+				{
+					TopicID: topicID,
+					LogStreams: []types.LogStreamID{
+						logStreamID,
+					},
+				},
 			},
 		}
 
@@ -125,18 +161,18 @@ func TestAllowlistExpire(t *testing.T) {
 		})
 
 		allowlist.Renew(metadata)
-		_, picked := allowlist.Pick()
+		_, picked := allowlist.Pick(topicID)
 		So(picked, ShouldBeTrue)
 
-		allowlist.Deny(logStreamID)
-		_, picked = allowlist.Pick()
+		allowlist.Deny(topicID, logStreamID)
+		_, picked = allowlist.Pick(topicID)
 		So(picked, ShouldBeFalse)
 
 		// wait for some expiration loops
 		log.Println("after deny")
 		time.Sleep(3 * time.Second)
 
-		_, picked = allowlist.Pick()
+		_, picked = allowlist.Pick(topicID)
 		So(picked, ShouldBeTrue)
 	})
 }
@@ -145,7 +181,8 @@ func BenchmarkAllowlistPick(b *testing.B) {
 	const (
 		denyTTL        = 1 * time.Second
 		expireInterval = 1 * time.Second
-		numLogStreams  = 1000
+		numLogStreams  = 100
+		numTopics      = 100
 	)
 
 	allowlist, err := newTransientAllowlist(denyTTL, expireInterval, zap.L())
@@ -159,16 +196,25 @@ func BenchmarkAllowlistPick(b *testing.B) {
 	}()
 
 	metadata := &varlogpb.MetadataDescriptor{}
-	for i := 0; i < numLogStreams; i++ {
-		metadata.LogStreams = append(metadata.LogStreams,
-			&varlogpb.LogStreamDescriptor{LogStreamID: types.LogStreamID(i + 1)},
-		)
+	for i := 0; i < numTopics; i++ {
+		topicdesc := &varlogpb.TopicDescriptor{
+			TopicID: types.TopicID(i + 1),
+		}
+
+		for j := 0; j < numLogStreams; j++ {
+			metadata.LogStreams = append(metadata.LogStreams,
+				&varlogpb.LogStreamDescriptor{LogStreamID: types.LogStreamID(i*numLogStreams + j + 1)},
+			)
+			topicdesc.LogStreams = append(topicdesc.LogStreams, types.LogStreamID(i*numLogStreams+j+1))
+		}
+		metadata.Topics = append(metadata.Topics, topicdesc)
 	}
+
 	allowlist.Renew(metadata)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, picked := allowlist.Pick(); !picked {
+		if _, picked := allowlist.Pick(types.TopicID(i%numTopics + 1)); !picked {
 			b.Fatal("pick error")
 		}
 	}

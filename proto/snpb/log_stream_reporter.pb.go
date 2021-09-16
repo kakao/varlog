@@ -4,7 +4,6 @@
 package snpb
 
 import (
-	bytes "bytes"
 	context "context"
 	fmt "fmt"
 	io "io"
@@ -37,10 +36,8 @@ type LogStreamUncommitReport struct {
 	LogStreamID           github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
 	UncommittedLLSNOffset github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,2,opt,name=uncommitted_llsn_offset,json=uncommittedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"uncommitted_llsn_offset,omitempty"`
 	UncommittedLLSNLength uint64                                                   `protobuf:"varint,3,opt,name=uncommitted_llsn_length,json=uncommittedLlsnLength,proto3" json:"uncommitted_llsn_length,omitempty"`
-	HighWatermark         github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,4,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
-	XXX_NoUnkeyedLiteral  struct{}                                                 `json:"-"`
-	XXX_unrecognized      []byte                                                   `json:"-"`
-	XXX_sizecache         int32                                                    `json:"-"`
+	Version               github_com_kakao_varlog_pkg_types.Version     `protobuf:"varint,4,opt,name=version,proto3,casttype=github.com/kakao/varlog/pkg/types.Version" json:"version,omitempty"`
+	HighWatermark         github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,5,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
 }
 
 func (m *LogStreamUncommitReport) Reset()         { *m = LogStreamUncommitReport{} }
@@ -97,6 +94,13 @@ func (m *LogStreamUncommitReport) GetUncommittedLLSNLength() uint64 {
 	return 0
 }
 
+func (m *LogStreamUncommitReport) GetVersion() github_com_kakao_varlog_pkg_types.Version {
+	if m != nil {
+		return m.Version
+	}
+	return 0
+}
+
 func (m *LogStreamUncommitReport) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.HighWatermark
@@ -105,9 +109,6 @@ func (m *LogStreamUncommitReport) GetHighWatermark() github_com_kakao_varlog_pkg
 }
 
 type GetReportRequest struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *GetReportRequest) Reset()         { *m = GetReportRequest{} }
@@ -144,11 +145,8 @@ func (m *GetReportRequest) XXX_DiscardUnknown() {
 var xxx_messageInfo_GetReportRequest proto.InternalMessageInfo
 
 type GetReportResponse struct {
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	UncommitReports      []LogStreamUncommitReport                                  `protobuf:"bytes,2,rep,name=uncommit_reports,json=uncommitReports,proto3" json:"uncommit_reports"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	StorageNodeID   github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	UncommitReports []LogStreamUncommitReport                                  `protobuf:"bytes,2,rep,name=uncommit_reports,json=uncommitReports,proto3" json:"uncommit_reports"`
 }
 
 func (m *GetReportResponse) Reset()         { *m = GetReportResponse{} }
@@ -204,15 +202,13 @@ func (m *GetReportResponse) GetUncommitReports() []LogStreamUncommitReport {
 // Field commit_result contains positions of all log entries of log streams in
 // a storage node which is a receiver of this GlobalLogStreamDescriptor.
 type LogStreamCommitResult struct {
-	LogStreamID          github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	CommittedLLSNOffset  github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,2,opt,name=committed_llsn_offset,json=committedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"committed_llsn_offset,omitempty"`
-	CommittedGLSNOffset  github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,3,opt,name=committed_glsn_offset,json=committedGlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_offset,omitempty"`
-	CommittedGLSNLength  uint64                                                   `protobuf:"varint,4,opt,name=committed_glsn_length,json=committedGlsnLength,proto3" json:"committed_glsn_length,omitempty"`
-	HighWatermark        github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,5,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
-	PrevHighWatermark    github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,6,opt,name=prev_high_watermark,json=prevHighWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"prev_high_watermark,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                                 `json:"-"`
-	XXX_unrecognized     []byte                                                   `json:"-"`
-	XXX_sizecache        int32                                                    `json:"-"`
+	LogStreamID         github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	TopicID             github_com_kakao_varlog_pkg_types.TopicID     `protobuf:"varint,2,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	CommittedLLSNOffset github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,3,opt,name=committed_llsn_offset,json=committedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"committed_llsn_offset,omitempty"`
+	CommittedGLSNOffset github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,4,opt,name=committed_glsn_offset,json=committedGlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_offset,omitempty"`
+	CommittedGLSNLength uint64                                                   `protobuf:"varint,5,opt,name=committed_glsn_length,json=committedGlsnLength,proto3" json:"committed_glsn_length,omitempty"`
+	Version             github_com_kakao_varlog_pkg_types.Version     `protobuf:"varint,6,opt,name=version,proto3,casttype=github.com/kakao/varlog/pkg/types.Version" json:"version,omitempty"`
+	HighWatermark       github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,7,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
 }
 
 func (m *LogStreamCommitResult) Reset()         { *m = LogStreamCommitResult{} }
@@ -255,6 +251,13 @@ func (m *LogStreamCommitResult) GetLogStreamID() github_com_kakao_varlog_pkg_typ
 	return 0
 }
 
+func (m *LogStreamCommitResult) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
 func (m *LogStreamCommitResult) GetCommittedLLSNOffset() github_com_kakao_varlog_pkg_types.LLSN {
 	if m != nil {
 		return m.CommittedLLSNOffset
@@ -276,6 +279,13 @@ func (m *LogStreamCommitResult) GetCommittedGLSNLength() uint64 {
 	return 0
 }
 
+func (m *LogStreamCommitResult) GetVersion() github_com_kakao_varlog_pkg_types.Version {
+	if m != nil {
+		return m.Version
+	}
+	return 0
+}
+
 func (m *LogStreamCommitResult) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
 	if m != nil {
 		return m.HighWatermark
@@ -283,19 +293,9 @@ func (m *LogStreamCommitResult) GetHighWatermark() github_com_kakao_varlog_pkg_t
 	return 0
 }
 
-func (m *LogStreamCommitResult) GetPrevHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
-	if m != nil {
-		return m.PrevHighWatermark
-	}
-	return 0
-}
-
 type CommitRequest struct {
-	StorageNodeID        github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	CommitResult         LogStreamCommitResult                                      `protobuf:"bytes,2,opt,name=commit_result,json=commitResult,proto3" json:"commit_result"`
-	XXX_NoUnkeyedLiteral struct{}                                                   `json:"-"`
-	XXX_unrecognized     []byte                                                     `json:"-"`
-	XXX_sizecache        int32                                                      `json:"-"`
+	StorageNodeID github_com_kakao_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
+	CommitResult  LogStreamCommitResult                                      `protobuf:"bytes,2,opt,name=commit_result,json=commitResult,proto3" json:"commit_result"`
 }
 
 func (m *CommitRequest) Reset()         { *m = CommitRequest{} }
@@ -346,9 +346,6 @@ func (m *CommitRequest) GetCommitResult() LogStreamCommitResult {
 }
 
 type CommitResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *CommitResponse) Reset()         { *m = CommitResponse{} }
@@ -398,47 +395,52 @@ func init() {
 }
 
 var fileDescriptor_b6a839cf0bdc32d5 = []byte{
-	// 637 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x55, 0x3f, 0x6f, 0xd3, 0x40,
-	0x1c, 0xed, 0x35, 0x69, 0x25, 0x2e, 0xb8, 0x7f, 0xae, 0x8a, 0x1a, 0x82, 0x88, 0x2b, 0xab, 0x43,
-	0x96, 0x3a, 0x50, 0x84, 0x84, 0xca, 0x96, 0x82, 0x02, 0xaa, 0x49, 0xc1, 0x51, 0x85, 0x84, 0x90,
-	0x2c, 0xa7, 0xbe, 0x3a, 0x51, 0x6c, 0x9f, 0xf1, 0x9d, 0x5b, 0xb1, 0x31, 0xf1, 0x39, 0x3a, 0x31,
-	0xf1, 0x41, 0x2a, 0x26, 0x36, 0x36, 0x0f, 0xee, 0xc2, 0x67, 0xe8, 0x84, 0x7c, 0x76, 0x1c, 0xbb,
-	0x71, 0x10, 0x81, 0x4a, 0x9d, 0x92, 0xbb, 0xdf, 0xef, 0xf7, 0xde, 0xd3, 0xdd, 0x7b, 0x67, 0xb8,
-	0xed, 0x7a, 0x84, 0x91, 0x16, 0x75, 0xdc, 0x7e, 0xcb, 0x22, 0xa6, 0x46, 0x99, 0x87, 0x75, 0x5b,
-	0xf3, 0xb0, 0x4b, 0x3c, 0x86, 0x3d, 0x99, 0x97, 0x51, 0xe5, 0x54, 0xf7, 0x2c, 0x62, 0xca, 0x51,
-	0x5b, 0x7d, 0xc7, 0x1c, 0xb2, 0x81, 0xdf, 0x97, 0x8f, 0x89, 0xdd, 0x32, 0x89, 0x49, 0x5a, 0xbc,
-	0xa7, 0xef, 0x9f, 0xf0, 0x55, 0x8c, 0x17, 0xfd, 0x8b, 0x67, 0xa5, 0xef, 0x25, 0xb8, 0xa9, 0x10,
-	0xb3, 0xc7, 0x81, 0x8f, 0x9c, 0x63, 0x62, 0xdb, 0x43, 0xa6, 0x72, 0x7c, 0x44, 0xa0, 0x90, 0x21,
-	0x1d, 0x1a, 0x35, 0xb0, 0x05, 0x9a, 0x42, 0xfb, 0x20, 0x0c, 0xc4, 0x4a, 0x3a, 0xf3, 0xea, 0xf9,
-	0x55, 0x20, 0x3e, 0x4d, 0x48, 0x0d, 0xdd, 0xb7, 0x47, 0xfa, 0x48, 0x27, 0x9c, 0x3e, 0x96, 0x35,
-	0xfe, 0x71, 0x47, 0x66, 0x8b, 0x7d, 0x72, 0x31, 0x95, 0x33, 0xb3, 0x6a, 0xc5, 0x4a, 0x17, 0x06,
-	0xfa, 0x02, 0xe0, 0xa6, 0x9f, 0x68, 0x60, 0xd8, 0xd0, 0x2c, 0x8b, 0x3a, 0x1a, 0x39, 0x39, 0xa1,
-	0x98, 0xd5, 0x16, 0xb7, 0x40, 0xb3, 0xdc, 0xee, 0x86, 0x81, 0x58, 0x3d, 0x9a, 0xb4, 0x28, 0x4a,
-	0xaf, 0x7b, 0xc8, 0x1b, 0xae, 0x02, 0xf1, 0xd1, 0x7c, 0x2a, 0x94, 0x5e, 0x57, 0xad, 0x66, 0xe8,
-	0x14, 0x8b, 0x3a, 0x31, 0x16, 0x7a, 0x5b, 0xa0, 0xc3, 0xc2, 0x8e, 0xc9, 0x06, 0xb5, 0x12, 0xd7,
-	0x71, 0xaf, 0x40, 0x87, 0xc2, 0x1b, 0xa6, 0x20, 0xe3, 0x6d, 0xf4, 0x01, 0xae, 0x0c, 0x86, 0xe6,
-	0x40, 0x3b, 0xd3, 0x19, 0xf6, 0x6c, 0xdd, 0x1b, 0xd5, 0xca, 0x1c, 0xe9, 0xc9, 0xdc, 0xc2, 0x3b,
-	0x91, 0x70, 0x21, 0x02, 0x7b, 0x37, 0xc6, 0xda, 0x2b, 0xff, 0x3a, 0x17, 0x81, 0x84, 0xe0, 0x5a,
-	0x07, 0x27, 0xb7, 0xa7, 0xe2, 0x8f, 0x3e, 0xa6, 0x4c, 0xba, 0x04, 0x70, 0x3d, 0xb3, 0x49, 0x5d,
-	0xe2, 0x50, 0x8c, 0xce, 0xe0, 0x2a, 0x65, 0xc4, 0xd3, 0x4d, 0xac, 0x39, 0xc4, 0xc0, 0x93, 0xcb,
-	0x3d, 0x0c, 0x03, 0x51, 0xe8, 0xc5, 0xa5, 0x2e, 0x31, 0x30, 0xbf, 0xde, 0xbd, 0xb9, 0xf4, 0xe5,
-	0xa6, 0x55, 0x81, 0x66, 0x96, 0x06, 0x3a, 0x82, 0x6b, 0xe3, 0xf3, 0x49, 0x6c, 0x4c, 0x6b, 0x8b,
-	0x5b, 0xa5, 0x66, 0x65, 0x77, 0x5b, 0xce, 0xd8, 0x58, 0x9e, 0xe1, 0xc9, 0x76, 0xf9, 0x22, 0x10,
-	0x17, 0xd4, 0x55, 0x3f, 0xb7, 0x4b, 0xa5, 0xaf, 0x4b, 0xb0, 0x9a, 0x8e, 0xec, 0x27, 0x25, 0xea,
-	0x5b, 0xb7, 0x60, 0xe2, 0xcf, 0x00, 0x56, 0xff, 0x64, 0x61, 0x25, 0x0c, 0xc4, 0x8d, 0xfd, 0x9b,
-	0x32, 0xf0, 0x46, 0x91, 0x7d, 0xf3, 0x12, 0xcc, 0x8c, 0x84, 0x52, 0x81, 0x84, 0xce, 0xbf, 0x4b,
-	0xe8, 0xe4, 0x25, 0x74, 0x26, 0x12, 0x0e, 0xa6, 0x14, 0x24, 0xf9, 0x89, 0x5d, 0xbf, 0x39, 0xa5,
-	0x20, 0x49, 0x4f, 0x1e, 0x6c, 0x66, 0x76, 0x96, 0x6e, 0x2e, 0x3b, 0x08, 0xc3, 0x0d, 0xd7, 0xc3,
-	0xa7, 0xda, 0x35, 0x8a, 0xe5, 0xff, 0xa1, 0x58, 0x8f, 0x10, 0x5f, 0x16, 0x44, 0xf4, 0x27, 0x80,
-	0xc2, 0xd8, 0x9f, 0x3c, 0xa0, 0xb7, 0x17, 0xc5, 0xd7, 0x50, 0x48, 0x83, 0x18, 0x45, 0x85, 0xfb,
-	0xb3, 0xb2, 0x2b, 0x15, 0xe7, 0x30, 0x1b, 0xaa, 0x24, 0x85, 0x77, 0x8f, 0x33, 0x7b, 0xd2, 0x1a,
-	0x5c, 0x49, 0x7b, 0xf8, 0x23, 0xb3, 0xfb, 0x0d, 0xc0, 0xf5, 0x74, 0x5e, 0x4d, 0xbe, 0x59, 0xe8,
-	0x0d, 0xbc, 0x93, 0xbe, 0x47, 0xe8, 0x41, 0x8e, 0xec, 0xfa, 0xe3, 0x55, 0x6f, 0xcc, 0x2a, 0xc7,
-	0x0c, 0xd2, 0x42, 0x13, 0x3c, 0x04, 0xe8, 0x05, 0x5c, 0x8e, 0x99, 0x51, 0x3d, 0xd7, 0x9f, 0x3b,
-	0xe7, 0xfa, 0xfd, 0xc2, 0xda, 0x04, 0xa8, 0xfd, 0xec, 0x22, 0x6c, 0x80, 0x1f, 0x61, 0x03, 0x9c,
-	0x5f, 0x36, 0xc0, 0xfb, 0x9d, 0xbf, 0x39, 0xe8, 0xf4, 0xeb, 0xdc, 0x5f, 0xe6, 0xff, 0x1f, 0xff,
-	0x0e, 0x00, 0x00, 0xff, 0xff, 0x6b, 0x75, 0x43, 0xcc, 0xb2, 0x07, 0x00, 0x00,
+	// 705 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x96, 0xcf, 0x6e, 0xd3, 0x4c,
+	0x14, 0xc5, 0x33, 0x6d, 0x9a, 0x7c, 0xdf, 0x84, 0xf4, 0xcf, 0x54, 0x51, 0x43, 0x10, 0x76, 0x65,
+	0x75, 0x91, 0x4d, 0x13, 0x28, 0x20, 0x55, 0x5d, 0xa6, 0x40, 0xa8, 0x6a, 0x52, 0x70, 0x28, 0x48,
+	0x08, 0x11, 0x39, 0xf1, 0xd4, 0x89, 0x62, 0x7b, 0x8c, 0xc7, 0x6e, 0xc5, 0x8e, 0x05, 0x62, 0xcd,
+	0x13, 0xa0, 0x3e, 0x00, 0x0f, 0xd2, 0x65, 0x77, 0xb0, 0xf2, 0xc2, 0xd9, 0xf0, 0x0c, 0x5d, 0x21,
+	0x8f, 0x1d, 0xc7, 0x26, 0xae, 0x44, 0x50, 0xa4, 0xae, 0xea, 0x99, 0xb9, 0xf7, 0x9c, 0xa3, 0xd1,
+	0xfd, 0x4d, 0x03, 0xb7, 0x4c, 0x8b, 0xd8, 0xa4, 0x4e, 0x0d, 0xb3, 0x5b, 0xd7, 0x88, 0xda, 0xa1,
+	0xb6, 0x85, 0x65, 0xbd, 0x63, 0x61, 0x93, 0x58, 0x36, 0xb6, 0x6a, 0xec, 0x18, 0x15, 0x4e, 0x65,
+	0x4b, 0x23, 0x6a, 0xcd, 0x2f, 0xab, 0x6c, 0xab, 0x03, 0xbb, 0xef, 0x74, 0x6b, 0x3d, 0xa2, 0xd7,
+	0x55, 0xa2, 0x92, 0x3a, 0xab, 0xe9, 0x3a, 0x27, 0x6c, 0x15, 0xe8, 0xf9, 0x5f, 0x41, 0xaf, 0xf0,
+	0x2d, 0x0b, 0x37, 0x44, 0xa2, 0xb6, 0x99, 0xf0, 0xb1, 0xd1, 0x23, 0xba, 0x3e, 0xb0, 0x25, 0xa6,
+	0x8f, 0x08, 0x2c, 0xc6, 0x4c, 0x07, 0x4a, 0x19, 0x6c, 0x82, 0xea, 0x52, 0xe3, 0xd0, 0x73, 0xf9,
+	0x42, 0xd4, 0x73, 0xf0, 0xf8, 0xca, 0xe5, 0x77, 0x43, 0x53, 0x45, 0x76, 0xf4, 0xa1, 0x3c, 0x94,
+	0x09, 0xb3, 0x0f, 0x62, 0x8d, 0xff, 0x98, 0x43, 0xb5, 0x6e, 0x7f, 0x34, 0x31, 0xad, 0xc5, 0x7a,
+	0xa5, 0x82, 0x16, 0x2d, 0x14, 0xf4, 0x05, 0xc0, 0x0d, 0x27, 0xcc, 0x60, 0x63, 0xa5, 0xa3, 0x69,
+	0xd4, 0xe8, 0x90, 0x93, 0x13, 0x8a, 0xed, 0xf2, 0xc2, 0x26, 0xa8, 0x66, 0x1b, 0x2d, 0xcf, 0xe5,
+	0x4b, 0xc7, 0x93, 0x12, 0x51, 0x6c, 0xb7, 0x8e, 0x58, 0xc1, 0x95, 0xcb, 0xdf, 0x9f, 0x2d, 0x85,
+	0xd8, 0x6e, 0x49, 0xa5, 0x98, 0x9d, 0xa8, 0x51, 0x23, 0xd0, 0x42, 0x2f, 0x53, 0x72, 0x68, 0xd8,
+	0x50, 0xed, 0x7e, 0x79, 0x91, 0xe5, 0xb8, 0x9d, 0x92, 0x43, 0x64, 0x05, 0x53, 0x92, 0xc1, 0x36,
+	0x92, 0x60, 0xfe, 0x14, 0x5b, 0x74, 0x40, 0x8c, 0x72, 0x96, 0x49, 0xec, 0x5e, 0xb9, 0xfc, 0xc3,
+	0x99, 0x12, 0xbf, 0x0e, 0xfa, 0xa5, 0xb1, 0x10, 0x7a, 0x07, 0x97, 0xfb, 0x03, 0xb5, 0xdf, 0x39,
+	0x93, 0x6d, 0x6c, 0xe9, 0xb2, 0x35, 0x2c, 0x2f, 0x31, 0xe9, 0x47, 0x33, 0x5f, 0x46, 0xd3, 0xbf,
+	0x8c, 0xa2, 0x2f, 0xf6, 0x66, 0xac, 0xb5, 0x97, 0xfd, 0x75, 0xce, 0x03, 0x01, 0xc1, 0xd5, 0x26,
+	0x0e, 0x27, 0x42, 0xc2, 0x1f, 0x1c, 0x4c, 0x6d, 0x61, 0x04, 0xe0, 0x5a, 0x6c, 0x93, 0x9a, 0xc4,
+	0xa0, 0x18, 0x9d, 0xc1, 0x15, 0x6a, 0x13, 0x4b, 0x56, 0x71, 0xc7, 0x20, 0x0a, 0x9e, 0x0c, 0xcc,
+	0x91, 0xe7, 0xf2, 0xc5, 0x76, 0x70, 0xd4, 0x22, 0x0a, 0x66, 0x23, 0xb3, 0x37, 0x53, 0xbe, 0x44,
+	0xb7, 0x54, 0xa4, 0xb1, 0xa5, 0x82, 0x8e, 0xe1, 0xea, 0xf8, 0xce, 0x43, 0x34, 0x68, 0x79, 0x61,
+	0x73, 0xb1, 0x5a, 0xd8, 0xd9, 0xaa, 0xc5, 0xd0, 0xa8, 0x5d, 0x33, 0xe7, 0x8d, 0xec, 0x85, 0xcb,
+	0x67, 0xa4, 0x15, 0x27, 0xb1, 0x4b, 0x85, 0xcf, 0x39, 0x58, 0x8a, 0x5a, 0xf6, 0xc3, 0x23, 0xea,
+	0x68, 0x37, 0x00, 0xc6, 0x7b, 0xf8, 0x9f, 0x4d, 0xcc, 0x41, 0xcf, 0xf7, 0x5a, 0x60, 0x5e, 0xfb,
+	0x9e, 0xcb, 0xe7, 0x5f, 0xf9, 0x7b, 0xcc, 0x67, 0xb6, 0x41, 0x0a, 0xfb, 0xa4, 0x3c, 0x13, 0x3d,
+	0x50, 0xd0, 0x27, 0x00, 0x4b, 0xe9, 0xd8, 0x05, 0xe3, 0x2e, 0x7a, 0x2e, 0xbf, 0xbe, 0x3f, 0x2f,
+	0xe8, 0xd6, 0xd3, 0x90, 0x4b, 0x46, 0x50, 0x63, 0x11, 0xb2, 0x29, 0x11, 0x9a, 0xff, 0x1e, 0xa1,
+	0x99, 0x8c, 0xd0, 0x9c, 0x44, 0x38, 0x9c, 0x4a, 0x10, 0x32, 0x1f, 0x50, 0xb5, 0x31, 0x95, 0x20,
+	0x24, 0x3e, 0x29, 0x36, 0xcd, 0x7b, 0x6e, 0x5e, 0xbc, 0xeb, 0x53, 0xbc, 0xe7, 0x99, 0xf4, 0x53,
+	0x1f, 0xb0, 0x67, 0x71, 0x78, 0xe7, 0xf8, 0x00, 0xfc, 0x00, 0xb0, 0x38, 0x9e, 0x7e, 0x86, 0xff,
+	0xcd, 0x81, 0xfe, 0x1c, 0x16, 0x23, 0xcc, 0x7d, 0x10, 0x19, 0x0b, 0x85, 0x1d, 0x21, 0x9d, 0xf2,
+	0x38, 0xb2, 0x21, 0xe3, 0xb7, 0x7a, 0xb1, 0x3d, 0x61, 0x15, 0x2e, 0x47, 0x35, 0xec, 0x09, 0xdb,
+	0xf9, 0x0e, 0xe0, 0x5a, 0xd4, 0x2f, 0x85, 0xff, 0x65, 0xd1, 0x0b, 0xf8, 0x7f, 0xf4, 0xda, 0xa1,
+	0xbb, 0x09, 0xb3, 0x3f, 0x9f, 0xc6, 0x0a, 0x77, 0xdd, 0x71, 0xe0, 0x20, 0x64, 0xaa, 0xe0, 0x1e,
+	0x40, 0x4f, 0x60, 0x2e, 0x70, 0x46, 0x95, 0x44, 0x7d, 0xe2, 0x9e, 0x2b, 0x77, 0x52, 0xcf, 0x26,
+	0x42, 0x8d, 0xe6, 0x85, 0xc7, 0x81, 0x4b, 0x8f, 0x03, 0x5f, 0x47, 0x5c, 0xe6, 0x7c, 0xc4, 0x81,
+	0xcb, 0x11, 0x97, 0xf9, 0x39, 0xe2, 0x32, 0x6f, 0xb7, 0xff, 0xe6, 0xd2, 0xa3, 0xdf, 0x16, 0xdd,
+	0x1c, 0xfb, 0x7e, 0xf0, 0x3b, 0x00, 0x00, 0xff, 0xff, 0x66, 0x70, 0x5f, 0x25, 0x70, 0x08, 0x00,
+	0x00,
 }
 
 func (this *LogStreamUncommitReport) Equal(that interface{}) bool {
@@ -469,10 +471,10 @@ func (this *LogStreamUncommitReport) Equal(that interface{}) bool {
 	if this.UncommittedLLSNLength != that1.UncommittedLLSNLength {
 		return false
 	}
-	if this.HighWatermark != that1.HighWatermark {
+	if this.Version != that1.Version {
 		return false
 	}
-	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+	if this.HighWatermark != that1.HighWatermark {
 		return false
 	}
 	return true
@@ -499,6 +501,9 @@ func (this *LogStreamCommitResult) Equal(that interface{}) bool {
 	if this.LogStreamID != that1.LogStreamID {
 		return false
 	}
+	if this.TopicID != that1.TopicID {
+		return false
+	}
 	if this.CommittedLLSNOffset != that1.CommittedLLSNOffset {
 		return false
 	}
@@ -508,13 +513,10 @@ func (this *LogStreamCommitResult) Equal(that interface{}) bool {
 	if this.CommittedGLSNLength != that1.CommittedGLSNLength {
 		return false
 	}
+	if this.Version != that1.Version {
+		return false
+	}
 	if this.HighWatermark != that1.HighWatermark {
-		return false
-	}
-	if this.PrevHighWatermark != that1.PrevHighWatermark {
-		return false
-	}
-	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
 		return false
 	}
 	return true
@@ -722,12 +724,13 @@ func (m *LogStreamUncommitReport) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.HighWatermark != 0 {
 		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.HighWatermark))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.Version != 0 {
+		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.Version))
 		i--
 		dAtA[i] = 0x20
 	}
@@ -769,10 +772,6 @@ func (m *GetReportRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	return len(dAtA) - i, nil
 }
 
@@ -796,10 +795,6 @@ func (m *GetReportResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.UncommitReports) > 0 {
 		for iNdEx := len(m.UncommitReports) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -842,32 +837,33 @@ func (m *LogStreamCommitResult) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.PrevHighWatermark != 0 {
-		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.PrevHighWatermark))
-		i--
-		dAtA[i] = 0x30
-	}
 	if m.HighWatermark != 0 {
 		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.HighWatermark))
 		i--
-		dAtA[i] = 0x28
+		dAtA[i] = 0x38
+	}
+	if m.Version != 0 {
+		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.Version))
+		i--
+		dAtA[i] = 0x30
 	}
 	if m.CommittedGLSNLength != 0 {
 		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.CommittedGLSNLength))
 		i--
-		dAtA[i] = 0x20
+		dAtA[i] = 0x28
 	}
 	if m.CommittedGLSNOffset != 0 {
 		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.CommittedGLSNOffset))
 		i--
-		dAtA[i] = 0x18
+		dAtA[i] = 0x20
 	}
 	if m.CommittedLLSNOffset != 0 {
 		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.CommittedLLSNOffset))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintLogStreamReporter(dAtA, i, uint64(m.TopicID))
 		i--
 		dAtA[i] = 0x10
 	}
@@ -899,10 +895,6 @@ func (m *CommitRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	{
 		size, err := m.CommitResult.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
@@ -941,10 +933,6 @@ func (m *CommitResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	return len(dAtA) - i, nil
 }
 
@@ -974,11 +962,11 @@ func (m *LogStreamUncommitReport) ProtoSize() (n int) {
 	if m.UncommittedLLSNLength != 0 {
 		n += 1 + sovLogStreamReporter(uint64(m.UncommittedLLSNLength))
 	}
+	if m.Version != 0 {
+		n += 1 + sovLogStreamReporter(uint64(m.Version))
+	}
 	if m.HighWatermark != 0 {
 		n += 1 + sovLogStreamReporter(uint64(m.HighWatermark))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -989,9 +977,6 @@ func (m *GetReportRequest) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1010,9 +995,6 @@ func (m *GetReportResponse) ProtoSize() (n int) {
 			n += 1 + l + sovLogStreamReporter(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1025,6 +1007,9 @@ func (m *LogStreamCommitResult) ProtoSize() (n int) {
 	if m.LogStreamID != 0 {
 		n += 1 + sovLogStreamReporter(uint64(m.LogStreamID))
 	}
+	if m.TopicID != 0 {
+		n += 1 + sovLogStreamReporter(uint64(m.TopicID))
+	}
 	if m.CommittedLLSNOffset != 0 {
 		n += 1 + sovLogStreamReporter(uint64(m.CommittedLLSNOffset))
 	}
@@ -1034,14 +1019,11 @@ func (m *LogStreamCommitResult) ProtoSize() (n int) {
 	if m.CommittedGLSNLength != 0 {
 		n += 1 + sovLogStreamReporter(uint64(m.CommittedGLSNLength))
 	}
+	if m.Version != 0 {
+		n += 1 + sovLogStreamReporter(uint64(m.Version))
+	}
 	if m.HighWatermark != 0 {
 		n += 1 + sovLogStreamReporter(uint64(m.HighWatermark))
-	}
-	if m.PrevHighWatermark != 0 {
-		n += 1 + sovLogStreamReporter(uint64(m.PrevHighWatermark))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1057,9 +1039,6 @@ func (m *CommitRequest) ProtoSize() (n int) {
 	}
 	l = m.CommitResult.ProtoSize()
 	n += 1 + l + sovLogStreamReporter(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1069,9 +1048,6 @@ func (m *CommitResponse) ProtoSize() (n int) {
 	}
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1169,6 +1145,25 @@ func (m *LogStreamUncommitReport) Unmarshal(dAtA []byte) error {
 			}
 		case 4:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+			}
+			m.Version = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogStreamReporter
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Version |= github_com_kakao_varlog_pkg_types.Version(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
 			}
 			m.HighWatermark = 0
@@ -1198,7 +1193,6 @@ func (m *LogStreamUncommitReport) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1249,7 +1243,6 @@ func (m *GetReportRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1353,7 +1346,6 @@ func (m *GetReportResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1413,6 +1405,25 @@ func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 			}
 		case 2:
 			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogStreamReporter
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_com_kakao_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field CommittedLLSNOffset", wireType)
 			}
 			m.CommittedLLSNOffset = 0
@@ -1430,7 +1441,7 @@ func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 3:
+		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field CommittedGLSNOffset", wireType)
 			}
@@ -1449,7 +1460,7 @@ func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 4:
+		case 5:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field CommittedGLSNLength", wireType)
 			}
@@ -1468,7 +1479,26 @@ func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 5:
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+			}
+			m.Version = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogStreamReporter
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Version |= github_com_kakao_varlog_pkg_types.Version(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
 			}
@@ -1487,25 +1517,6 @@ func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field PrevHighWatermark", wireType)
-			}
-			m.PrevHighWatermark = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLogStreamReporter
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.PrevHighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipLogStreamReporter(dAtA[iNdEx:])
@@ -1518,7 +1529,6 @@ func (m *LogStreamCommitResult) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1621,7 +1631,6 @@ func (m *CommitRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1672,7 +1681,6 @@ func (m *CommitResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

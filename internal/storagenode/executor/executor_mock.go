@@ -40,7 +40,7 @@ func (m *MockExecutor) EXPECT() *MockExecutorMockRecorder {
 }
 
 // Append mocks base method.
-func (m *MockExecutor) Append(arg0 context.Context, arg1 []byte, arg2 ...snpb.Replica) (types.GLSN, error) {
+func (m *MockExecutor) Append(arg0 context.Context, arg1 []byte, arg2 ...varlogpb.Replica) (types.GLSN, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -88,7 +88,7 @@ func (mr *MockExecutorMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call 
 }
 
 // GetPrevCommitInfo mocks base method.
-func (m *MockExecutor) GetPrevCommitInfo(arg0 types.GLSN) (*snpb.LogStreamCommitInfo, error) {
+func (m *MockExecutor) GetPrevCommitInfo(arg0 types.Version) (*snpb.LogStreamCommitInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPrevCommitInfo", arg0)
 	ret0, _ := ret[0].(*snpb.LogStreamCommitInfo)
@@ -160,10 +160,10 @@ func (mr *MockExecutorMockRecorder) Path() *gomock.Call {
 }
 
 // Read mocks base method.
-func (m *MockExecutor) Read(arg0 context.Context, arg1 types.GLSN) (types.LogEntry, error) {
+func (m *MockExecutor) Read(arg0 context.Context, arg1 types.GLSN) (varlogpb.LogEntry, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", arg0, arg1)
-	ret0, _ := ret[0].(types.LogEntry)
+	ret0, _ := ret[0].(varlogpb.LogEntry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -234,7 +234,7 @@ func (mr *MockExecutorMockRecorder) Subscribe(arg0, arg1, arg2 interface{}) *gom
 }
 
 // Sync mocks base method.
-func (m *MockExecutor) Sync(arg0 context.Context, arg1 snpb.Replica) (*snpb.SyncStatus, error) {
+func (m *MockExecutor) Sync(arg0 context.Context, arg1 varlogpb.Replica) (*snpb.SyncStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", arg0, arg1)
 	ret0, _ := ret[0].(*snpb.SyncStatus)
@@ -292,7 +292,7 @@ func (mr *MockExecutorMockRecorder) Trim(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // Unseal mocks base method.
-func (m *MockExecutor) Unseal(arg0 context.Context, arg1 []snpb.Replica) error {
+func (m *MockExecutor) Unseal(arg0 context.Context, arg1 []varlogpb.Replica) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Unseal", arg0, arg1)
 	ret0, _ := ret[0].(error)
