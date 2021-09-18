@@ -65,10 +65,10 @@ func (mr *MockMeasurableExecutorMockRecorder) StorageNodeID() *gomock.Call {
 }
 
 // Stub mocks base method.
-func (m *MockMeasurableExecutor) Stub() *telemetry.TelemetryStub {
+func (m *MockMeasurableExecutor) Stub() *telemetry.Stub {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Stub")
-	ret0, _ := ret[0].(*telemetry.TelemetryStub)
+	ret0, _ := ret[0].(*telemetry.Stub)
 	return ret0
 }
 

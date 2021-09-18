@@ -27,7 +27,7 @@ type server struct {
 var _ snpb.ManagementServer = (*server)(nil)
 var _ rpcserver.Registrable = (*server)(nil)
 
-func NewServer(opts ...ServerOption) *server {
+func newServer(opts ...serverOption) *server {
 	return &server{serverConfig: newServerConfig(opts)}
 }
 
@@ -112,7 +112,7 @@ func (s *server) AddLogStreamReplica(ctx context.Context, req *snpb.AddLogStream
 func (s *server) RemoveLogStream(ctx context.Context, req *snpb.RemoveLogStreamRequest) (*pbtypes.Empty, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/RemoveLogStream", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			err := s.storageNode.RemoveLogStream(ctx, req.GetTopicID(), req.GetLogStreamID())
+			err := s.storageNode.removeLogStream(ctx, req.GetTopicID(), req.GetLogStreamID())
 			return &pbtypes.Empty{}, err
 		},
 	)
@@ -143,7 +143,7 @@ func (s *server) Seal(ctx context.Context, req *snpb.SealRequest) (*snpb.SealRes
 func (s *server) Unseal(ctx context.Context, req *snpb.UnsealRequest) (*pbtypes.Empty, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/Unseal", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			err := s.storageNode.Unseal(ctx, req.GetTopicID(), req.GetLogStreamID(), req.GetReplicas())
+			err := s.storageNode.unseal(ctx, req.GetTopicID(), req.GetLogStreamID(), req.GetReplicas())
 			return &pbtypes.Empty{}, err
 		},
 	)
@@ -165,7 +165,7 @@ func (s *server) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncRes
 				TopicID:     req.GetTopicID(),
 				LogStreamID: req.GetLogStreamID(),
 			}
-			status, err := s.storageNode.Sync(ctx, req.GetTopicID(), req.GetLogStreamID(), replica)
+			status, err := s.storageNode.sync(ctx, req.GetTopicID(), req.GetLogStreamID(), replica)
 			return &snpb.SyncResponse{Status: status}, err
 		},
 	)
@@ -178,7 +178,7 @@ func (s *server) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncRes
 func (s *server) GetPrevCommitInfo(ctx context.Context, req *snpb.GetPrevCommitInfoRequest) (*snpb.GetPrevCommitInfoResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/GetPrevCommitInfo", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			info, err := s.storageNode.GetPrevCommitInfo(ctx, req.GetPrevVersion())
+			info, err := s.storageNode.getPrevCommitInfo(ctx, req.GetPrevVersion())
 			rsp := &snpb.GetPrevCommitInfoResponse{
 				StorageNodeID: s.storageNode.StorageNodeID(),
 				CommitInfos:   info,

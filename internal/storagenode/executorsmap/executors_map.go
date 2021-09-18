@@ -17,12 +17,15 @@ type executorSlot struct {
 
 var nilSlot = executorSlot{}
 
+// ExecutorsMap is a sorted map that maps pairs of LogStreamID and TopicID to executors.
+// It is safe for concurrent use by multiple goroutines.
 type ExecutorsMap struct {
 	slots []executorSlot
 	hash  map[logStreamTopicID]executorSlot
 	mu    sync.RWMutex
 }
 
+// New returns a new ExecutorsMap with an initial size of initSize.
 func New(initSize int) *ExecutorsMap {
 	return &ExecutorsMap{
 		slots: make([]executorSlot, 0, initSize),
@@ -116,6 +119,7 @@ func (m *ExecutorsMap) Range(f func(types.LogStreamID, executor.Executor) bool) 
 	m.mu.RUnlock()
 }
 
+// Size returns the number of elements in the ExecutorsMap.
 func (m *ExecutorsMap) Size() int {
 	m.mu.RLock()
 	ret := len(m.slots)

@@ -4,41 +4,32 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/internal/storagenode/volume"
-
 	"github.com/kakao/varlog/internal/storagenode/executor"
 	"github.com/kakao/varlog/internal/storagenode/pprof"
 	"github.com/kakao/varlog/internal/storagenode/storage"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
+	"github.com/kakao/varlog/internal/storagenode/volume"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/verrors"
 )
 
 const (
+	// DefaultListenAddress is a default address to listen to incomming RPC connections.
 	DefaultListenAddress = "0.0.0.0:9091"
 )
 
 type config struct {
-	cid types.ClusterID
-
-	snid types.StorageNodeID
-
-	listenAddress string
-
-	advertiseAddress string
-
+	clusterID         types.ClusterID
+	storageNodeID     types.StorageNodeID
+	listenAddress     string
+	advertiseAddress  string
 	telemetryEndpoint string
-
-	volumes set.Set // set[Volume]
-
-	executorOpts []executor.Option
-
-	storageOpts []storage.Option
-
-	pprofOpts []pprof.Option
-
-	logger *zap.Logger
+	volumes           set.Set // set[Volume]
+	executorOpts      []executor.Option
+	storageOpts       []storage.Option
+	pprofOpts         []pprof.Option
+	logger            *zap.Logger
 }
 
 func newConfig(opts []Option) (*config, error) {
@@ -55,7 +46,6 @@ func newConfig(opts []Option) (*config, error) {
 	return cfg, nil
 }
 
-// TODO
 func (c config) validate() error {
 	if c.volumes.Size() == 0 {
 		return errors.Wrap(verrors.ErrInvalid, "no volumes")
@@ -63,6 +53,7 @@ func (c config) validate() error {
 	return nil
 }
 
+// Option is an interface for applying options for StorageNode.
 type Option interface {
 	apply(*config)
 }
@@ -70,9 +61,10 @@ type Option interface {
 type clusterIDOption types.ClusterID
 
 func (o clusterIDOption) apply(c *config) {
-	c.cid = types.ClusterID(o)
+	c.clusterID = types.ClusterID(o)
 }
 
+// WithClusterID sets the ClusterID.
 func WithClusterID(clusterID types.ClusterID) Option {
 	return clusterIDOption(clusterID)
 }
@@ -80,9 +72,10 @@ func WithClusterID(clusterID types.ClusterID) Option {
 type storageNodeIDOption types.StorageNodeID
 
 func (o storageNodeIDOption) apply(c *config) {
-	c.snid = types.StorageNodeID(o)
+	c.storageNodeID = types.StorageNodeID(o)
 }
 
+// WithStorageNodeID sets the StorageNodeID.
 func WithStorageNodeID(storageNodeID types.StorageNodeID) Option {
 	return storageNodeIDOption(storageNodeID)
 }
@@ -93,6 +86,7 @@ func (o listenAddressOption) apply(c *config) {
 	c.listenAddress = string(o)
 }
 
+// WithListenAddress sets the address to listen to incoming RPC connections.
 func WithListenAddress(address string) Option {
 	return listenAddressOption(address)
 }
@@ -103,6 +97,8 @@ func (o advertiseAddressOption) apply(c *config) {
 	c.advertiseAddress = string(o)
 }
 
+// WithAdvertiseAddress sets the advertising address.
+// If it is not set, the listen address will be used.
 func WithAdvertiseAddress(address string) Option {
 	return advertiseAddressOption(address)
 }
@@ -115,6 +111,7 @@ func (o lseOptions) apply(c *config) {
 	c.executorOpts = o.opts
 }
 
+// WithExecutorOptions sets options for executor.
 func WithExecutorOptions(opts ...executor.Option) Option {
 	return lseOptions{opts: opts}
 }
@@ -127,6 +124,7 @@ func (o storageOptions) apply(c *config) {
 	c.storageOpts = o.opts
 }
 
+// WithStorageOptions sets options for storage.
 func WithStorageOptions(opts ...storage.Option) Option {
 	return storageOptions{opts: opts}
 }
@@ -139,6 +137,9 @@ func (o volumesOption) apply(c *config) {
 	c.volumes = o.volumes
 }
 
+// WithVolumes sets root paths to store data of the StorageNode.
+// Note that it overwrites a new list of volumes rather than expanding an already defined list.
+// If one of the given volumes is invalid, it panics.
 func WithVolumes(dirs ...string) Option {
 	volumes := set.New(len(dirs))
 	for _, dir := range dirs {
@@ -159,6 +160,7 @@ func (o pprofOptions) apply(c *config) {
 	c.pprofOpts = o.opts
 }
 
+// WithPProfOptions sets options for pprof.
 func WithPProfOptions(opts ...pprof.Option) Option {
 	return pprofOptions{opts}
 }
@@ -169,17 +171,18 @@ func (o telemetryOption) apply(c *config) {
 	c.telemetryEndpoint = string(o)
 }
 
+// WithTelemetry sets an endpoint of opentelemetry agent.
 func WithTelemetry(endpoint string) Option {
 	return telemetryOption(endpoint)
 }
 
 type serverConfig struct {
 	storageNode *StorageNode
-	tmStub      *telemetry.TelemetryStub
+	tmStub      *telemetry.Stub
 	logger      *zap.Logger
 }
 
-func newServerConfig(opts []ServerOption) serverConfig {
+func newServerConfig(opts []serverOption) serverConfig {
 	cfg := serverConfig{
 		tmStub: telemetry.NewNopTelmetryStub(),
 		logger: zap.NewNop(),
@@ -194,11 +197,26 @@ func newServerConfig(opts []ServerOption) serverConfig {
 }
 
 func (c serverConfig) validate() error {
+	if c.storageNode == nil {
+		return errors.New("no storage node configured")
+	}
+	if c.tmStub == nil {
+		return errors.New("no telemetry stub configured")
+	}
+	if c.logger == nil {
+		return errors.New("no logger configured")
+	}
 	return nil
 }
 
-type ServerOption interface {
+type serverOption interface {
 	applyServer(*serverConfig)
+}
+
+// LoggerOption is an interface for applying options for logger.
+type LoggerOption interface {
+	Option
+	serverOption
 }
 
 type loggerOption struct {
@@ -209,7 +227,12 @@ func (o loggerOption) apply(c *config) {
 	c.logger = o.logger
 }
 
-func WithLogger(logger *zap.Logger) Option {
+func (o loggerOption) applyServer(c *serverConfig) {
+	c.logger = o.logger
+}
+
+// WithLogger sets logger.
+func WithLogger(logger *zap.Logger) LoggerOption {
 	return loggerOption{logger}
 }
 
@@ -221,6 +244,6 @@ func (o storageNodeOption) applyServer(c *serverConfig) {
 	c.storageNode = o.sn
 }
 
-func WithStorageNode(sn *StorageNode) ServerOption {
+func withStorageNode(sn *StorageNode) serverOption {
 	return storageNodeOption{sn}
 }

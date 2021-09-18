@@ -82,7 +82,7 @@ func TestStorageNodeAddLogStream(t *testing.T) {
 
 	// FIXME: RemoveLogStream doesn't care about liveness of log stream, so this results in
 	// resource leak.
-	err = sn.RemoveLogStream(context.TODO(), topicID, logStreamID)
+	err = sn.removeLogStream(context.TODO(), topicID, logStreamID)
 	assert.NoError(t, err)
 }
 
@@ -118,7 +118,7 @@ func TestStorageNodeIncorrectTopic(t *testing.T) {
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
 	// Unseal: ERROR (incorrect topicID)
-	assert.Error(t, sn.Unseal(context.Background(), tpID+1, lsID, []varlogpb.Replica{
+	assert.Error(t, sn.unseal(context.Background(), tpID+1, lsID, []varlogpb.Replica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snID,
@@ -129,7 +129,7 @@ func TestStorageNodeIncorrectTopic(t *testing.T) {
 	}))
 
 	// Unseal: OK
-	assert.NoError(t, sn.Unseal(context.Background(), tpID, lsID, []varlogpb.Replica{
+	assert.NoError(t, sn.unseal(context.Background(), tpID, lsID, []varlogpb.Replica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snID,
@@ -178,7 +178,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	assert.NoError(t, sn.Unseal(context.TODO(), topicID, logStreamID1, []varlogpb.Replica{
+	assert.NoError(t, sn.unseal(context.TODO(), topicID, logStreamID1, []varlogpb.Replica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: storageNodeID,
@@ -186,7 +186,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 			LogStreamID: logStreamID1,
 		},
 	}))
-	assert.NoError(t, sn.Unseal(context.TODO(), topicID, logStreamID2, []varlogpb.Replica{
+	assert.NoError(t, sn.unseal(context.TODO(), topicID, logStreamID2, []varlogpb.Replica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: storageNodeID,
@@ -275,7 +275,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 			reports[1].GetVersion() == 2
 	}, time.Second, 10*time.Millisecond)
 
-	infos, err := sn.GetPrevCommitInfo(context.TODO(), 0)
+	infos, err := sn.getPrevCommitInfo(context.TODO(), 0)
 	require.NoError(t, err)
 	require.Len(t, infos, 2)
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
@@ -297,7 +297,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 		Version:             2,
 	})
 
-	infos, err = sn.GetPrevCommitInfo(context.TODO(), 1)
+	infos, err = sn.getPrevCommitInfo(context.TODO(), 1)
 	require.NoError(t, err)
 	require.Len(t, infos, 2)
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
@@ -319,7 +319,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 		Version:             2,
 	})
 
-	infos, err = sn.GetPrevCommitInfo(context.TODO(), 2)
+	infos, err = sn.getPrevCommitInfo(context.TODO(), 2)
 	require.NoError(t, err)
 	require.Len(t, infos, 2)
 	require.Contains(t, infos, &snpb.LogStreamCommitInfo{
