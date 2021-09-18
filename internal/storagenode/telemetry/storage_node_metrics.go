@@ -31,7 +31,7 @@ type MetricsBag struct {
 	ExecutorReplicateFanoutTime             metric.Float64ValueRecorder
 }
 
-func newMetricsBag(ts *TelemetryStub) *MetricsBag {
+func newMetricsBag(ts *Stub) *MetricsBag {
 	meter := metric.Must(ts.mt)
 	return &MetricsBag{
 		RPCServerAppendDuration: meter.NewFloat64ValueRecorder(

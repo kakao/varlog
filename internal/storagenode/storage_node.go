@@ -20,8 +20,6 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/volume"
-
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/executor"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/executorsmap"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/id"
@@ -33,6 +31,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/timestamper"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/volume"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/container/set"
 	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
@@ -54,6 +53,7 @@ const (
 	storageNodeClosed
 )
 
+// StorageNode is a struct representing data and methods to run the storage node.
 type StorageNode struct {
 	config
 	muAddr sync.RWMutex
@@ -71,15 +71,14 @@ type StorageNode struct {
 
 	lsr reportcommitter.Reporter
 
-	executors *executorsmap.ExecutorsMap // map[types.LogStreamID]executor.Executor
-	// executors             *sync.Map // map[types.LogStreamID]executor.Executor
+	executors             *executorsmap.ExecutorsMap
 	estimatedNumExecutors int64
 
 	storageNodePaths set.Set
 
 	tsp timestamper.Timestamper
 
-	tmStub *telemetry.TelemetryStub
+	tmStub *telemetry.Stub
 }
 
 var _ id.StorageNodeIDGetter = (*StorageNode)(nil)
@@ -90,6 +89,8 @@ var _ logio.Getter = (*StorageNode)(nil)
 var _ fmt.Stringer = (*StorageNode)(nil)
 var _ telemetry.Measurable = (*StorageNode)(nil)
 
+// New creates a StorageNode configured by the opts.
+// TODO: The argument ctx can be removed.
 func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 	const hintNumExecutors = 32
 
@@ -108,15 +109,15 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 	if len(sn.telemetryEndpoint) == 0 {
 		sn.tmStub = telemetry.NewNopTelmetryStub()
 	} else {
-		sn.tmStub, err = telemetry.NewTelemetryStub(ctx, "otel", sn.snid, sn.telemetryEndpoint)
+		sn.tmStub, err = telemetry.NewTelemetryStub(ctx, "otel", sn.storageNodeID, sn.telemetryEndpoint)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	sn.logger = sn.logger.Named("storagenode").With(
-		zap.Uint32("cid", uint32(sn.cid)),
-		zap.Int32("snid", int32(sn.snid)),
+		zap.Uint32("cid", uint32(sn.clusterID)),
+		zap.Int32("snid", int32(sn.storageNodeID)),
 	)
 
 	for v := range sn.volumes {
@@ -124,7 +125,7 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 		if !ok {
 			continue
 		}
-		snPath, err := volume.CreateStorageNodePath(vol, sn.cid, sn.snid)
+		snPath, err := volume.CreateStorageNodePath(vol, sn.clusterID, sn.storageNodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +164,7 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 		if !ok {
 			continue
 		}
-		paths := vol.ReadLogStreamPaths(sn.cid, sn.snid)
+		paths := vol.ReadLogStreamPaths(sn.clusterID, sn.storageNodeID)
 		for _, path := range paths {
 			if logStreamPaths.Contains(path) {
 				return nil, errors.Errorf("storagenode: duplicated log stream path (%s)", path)
@@ -208,12 +209,14 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 			replication.WithMeasurable(sn),
 			replication.WithLogger(sn.logger),
 		),
-		NewServer(WithStorageNode(sn)),
+		newServer(withStorageNode(sn)),
 	)
 
 	return sn, nil
 }
 
+// Run starts storage node.
+// Run returns when the storage node fails with fatal errors.
 func (sn *StorageNode) Run() error {
 	sn.stopper.mu.Lock()
 	switch sn.stopper.state {
@@ -255,6 +258,7 @@ func (sn *StorageNode) Run() error {
 	return sn.servers.Wait()
 }
 
+// Close closes the storage node.
 func (sn *StorageNode) Close() {
 	sn.stopper.mu.Lock()
 	defer sn.stopper.mu.Unlock()
@@ -286,15 +290,17 @@ func (sn *StorageNode) Close() {
 	sn.logger.Info("stop")
 }
 
+// ClusterID returns the ClusterID of the storage node.
 func (sn *StorageNode) ClusterID() types.ClusterID {
-	return sn.cid
+	return sn.clusterID
 }
 
+// StorageNodeID returns the StorageNodeID of the storage node.
 func (sn *StorageNode) StorageNodeID() types.StorageNodeID {
-	return sn.snid
+	return sn.storageNodeID
 }
 
-// GetMetadata implements the Server GetMetadata method.
+// GetMetadata returns metadata of the storage node and the log stream replicas.
 func (sn *StorageNode) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
 	_, span := sn.tmStub.StartSpan(ctx, "storagenode.GetMetadata")
 	defer span.End()
@@ -304,10 +310,10 @@ func (sn *StorageNode) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMe
 	sn.muAddr.RUnlock()
 
 	snmeta := &varlogpb.StorageNodeMetadataDescriptor{
-		ClusterID: sn.cid,
+		ClusterID: sn.clusterID,
 		StorageNode: &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: sn.snid,
+				StorageNodeID: sn.storageNodeID,
 				Address:       addr,
 			},
 			Status: varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
@@ -393,7 +399,7 @@ func (sn *StorageNode) createStorage(logStreamPath string) (storage.Storage, err
 func (sn *StorageNode) startLogStream(topicID types.TopicID, logStreamID types.LogStreamID, storage storage.Storage) (err error) {
 	lse, err := executor.New(append(sn.executorOpts,
 		executor.WithStorage(storage),
-		executor.WithStorageNodeID(sn.snid),
+		executor.WithStorageNodeID(sn.storageNodeID),
 		executor.WithTopicID(topicID),
 		executor.WithLogStreamID(logStreamID),
 		executor.WithMeasurable(sn),
@@ -406,8 +412,7 @@ func (sn *StorageNode) startLogStream(topicID types.TopicID, logStreamID types.L
 	return sn.executors.Store(topicID, logStreamID, lse)
 }
 
-// RemoveLogStream implements the Server RemoveLogStream method.
-func (sn *StorageNode) RemoveLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {
+func (sn *StorageNode) removeLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {
 	lse, loaded := sn.executors.LoadAndDelete(topicID, logStreamID)
 	if !loaded {
 		return verrors.ErrNotExist
@@ -450,8 +455,7 @@ func (sn *StorageNode) Seal(ctx context.Context, topicID types.TopicID, logStrea
 	return status, hwm, nil
 }
 
-// Unseal implements the Server Unseal method.
-func (sn *StorageNode) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.Replica) error {
+func (sn *StorageNode) unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.Replica) error {
 	lse, err := sn.lookupExecutor(topicID, logStreamID)
 	if err != nil {
 		return err
@@ -461,7 +465,7 @@ func (sn *StorageNode) Unseal(ctx context.Context, topicID types.TopicID, logStr
 	return lse.Unseal(ctx, replicas)
 }
 
-func (sn *StorageNode) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replica varlogpb.Replica) (*snpb.SyncStatus, error) {
+func (sn *StorageNode) sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replica varlogpb.Replica) (*snpb.SyncStatus, error) {
 	lse, err := sn.lookupExecutor(topicID, logStreamID)
 	if err != nil {
 		return nil, err
@@ -471,7 +475,7 @@ func (sn *StorageNode) Sync(ctx context.Context, topicID types.TopicID, logStrea
 	return sts, err
 }
 
-func (sn *StorageNode) GetPrevCommitInfo(ctx context.Context, version types.Version) (infos []*snpb.LogStreamCommitInfo, err error) {
+func (sn *StorageNode) getPrevCommitInfo(ctx context.Context, version types.Version) (infos []*snpb.LogStreamCommitInfo, err error) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	infos = make([]*snpb.LogStreamCommitInfo, 0, sn.estimatedNumberOfExecutors())
@@ -551,6 +555,6 @@ func (sn *StorageNode) String() string {
 	return sb.String()
 }
 
-func (sn *StorageNode) Stub() *telemetry.TelemetryStub {
+func (sn *StorageNode) Stub() *telemetry.Stub {
 	return sn.tmStub
 }

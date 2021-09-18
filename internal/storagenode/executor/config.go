@@ -70,6 +70,7 @@ func (c config) validate() error {
 	return nil
 }
 
+// Option is an interface for applying options for executor.
 type Option interface {
 	apply(*config)
 }

@@ -311,6 +311,6 @@ func (e *executor) LogStreamID() types.LogStreamID {
 	return e.logStreamID
 }
 
-func (e *executor) Stub() *telemetry.TelemetryStub {
+func (e *executor) Stub() *telemetry.Stub {
 	return e.measure.Stub()
 }

@@ -34,10 +34,10 @@ func (m *MockMeasurable) EXPECT() *MockMeasurableMockRecorder {
 }
 
 // Stub mocks base method.
-func (m *MockMeasurable) Stub() *TelemetryStub {
+func (m *MockMeasurable) Stub() *Stub {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Stub")
-	ret0, _ := ret[0].(*TelemetryStub)
+	ret0, _ := ret[0].(*Stub)
 	return ret0
 }
 
