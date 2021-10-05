@@ -13,36 +13,36 @@ require (
 	github.com/google/gofuzz v1.2.0
 	github.com/jstemmer/go-junit-report v0.9.1
 	github.com/pkg/errors v0.9.1
-	github.com/shirou/gopsutil v2.20.9+incompatible
 	github.com/smartystreets/assertions v1.2.0
 	github.com/smartystreets/goconvey v1.6.4
 	github.com/soheilhy/cmux v0.1.4
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli/v2 v2.3.0
 	go.etcd.io/etcd v0.0.0-20201125193152-8a03d2e9614b
-	go.opentelemetry.io/contrib v0.21.0
-	go.opentelemetry.io/otel v1.0.0-RC1
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.21.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.0.0-RC1
-	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v0.21.0
-	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.0.0-RC1
-	go.opentelemetry.io/otel/metric v0.21.0
-	go.opentelemetry.io/otel/sdk v1.0.0-RC1
-	go.opentelemetry.io/otel/sdk/export/metric v0.21.0
-	go.opentelemetry.io/otel/sdk/metric v0.21.0
-	go.opentelemetry.io/otel/trace v1.0.0-RC1
+	go.opentelemetry.io/contrib/instrumentation/host v0.23.0
+	go.opentelemetry.io/contrib/instrumentation/runtime v0.23.0
+	go.opentelemetry.io/otel v1.0.0
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.23.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.0.0
+	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v0.23.0
+	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.0.0
+	go.opentelemetry.io/otel/metric v0.23.0
+	go.opentelemetry.io/otel/sdk v1.0.0
+	go.opentelemetry.io/otel/sdk/export/metric v0.23.0
+	go.opentelemetry.io/otel/sdk/metric v0.23.0
+	go.opentelemetry.io/otel/trace v1.0.0
 	go.uber.org/automaxprocs v1.4.0
 	go.uber.org/goleak v1.1.10
 	go.uber.org/multierr v1.7.0
 	go.uber.org/zap v1.16.0
 	golang.org/x/lint v0.0.0-20191125180803-fdd1cda4f05f
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
-	golang.org/x/sys v0.0.0-20210304124612-50617c2ba197
+	golang.org/x/sys v0.0.0-20210423185535-09eb48e85fd7
 	golang.org/x/text v0.3.5 // indirect
 	golang.org/x/tools v0.0.0-20210106214847-113979e3529a
-	google.golang.org/grpc v1.38.0
+	google.golang.org/grpc v1.40.0
 	google.golang.org/grpc/examples v0.0.0-20210521225445-359fdbb7b310 // indirect
-	google.golang.org/protobuf v1.26.0
+	google.golang.org/protobuf v1.27.1
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.19.0
 	k8s.io/apimachinery v0.19.0
@@ -86,12 +86,14 @@ require (
 	github.com/prometheus/common v0.4.1 // indirect
 	github.com/prometheus/procfs v0.0.2 // indirect
 	github.com/russross/blackfriday/v2 v2.0.1 // indirect
+	github.com/shirou/gopsutil v2.20.9+incompatible // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.21.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.0.0-RC1 // indirect
-	go.opentelemetry.io/otel/internal/metric v0.21.0 // indirect
+	go.opentelemetry.io/contrib v0.24.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.23.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.0.0 // indirect
+	go.opentelemetry.io/otel/internal/metric v0.23.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.9.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9 // indirect

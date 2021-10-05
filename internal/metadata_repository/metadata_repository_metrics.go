@@ -20,14 +20,14 @@ func newMetricsBag(ts *telemetryStub) *metricsBag {
 	}
 }
 
-func (mb *metricsBag) Records(name string) metric.Float64ValueRecorder {
+func (mb *metricsBag) Records(name string) metric.Float64Histogram {
 	f, ok := mb.records.Load(name)
 	if !ok {
-		r := metric.Must(mb.mt).NewFloat64ValueRecorder(name)
+		r := metric.Must(mb.mt).NewFloat64Histogram(name)
 		f, _ = mb.records.LoadOrStore(name, r)
 	}
 
-	return f.(metric.Float64ValueRecorder)
+	return f.(metric.Float64Histogram)
 }
 
 func (mb *metricsBag) Counts(name string) metric.Int64Counter {
