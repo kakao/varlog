@@ -28,6 +28,10 @@ type Replicator interface {
 	Sync(ctx context.Context, replica varlogpb.Replica) (*snpb.SyncStatus, error)
 }
 
+// Getter is an interface that gets Replicator.
+//
+// Replicator returns a Replicator corresponded with the argument topicID and the argument
+// logStreamID.
 type Getter interface {
 	Replicator(topicID types.TopicID, logStreamID types.LogStreamID) (Replicator, bool)
 }

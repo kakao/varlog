@@ -11,6 +11,7 @@ import (
 
 type Level = zapcore.Level
 
+// New creates a zap logger configured the arguments opts.
 func New(opts ...Option) (*zap.Logger, error) {
 	cfg, err := newConfig(opts)
 	if err != nil {

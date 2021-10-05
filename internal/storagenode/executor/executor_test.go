@@ -1042,7 +1042,7 @@ func TestExecutorWithRecover(t *testing.T) {
 }
 
 func TestExecutorCloseSuddenly(t *testing.T) {
-	//defer goleak.VerifyNone(t)
+	// defer goleak.VerifyNone(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

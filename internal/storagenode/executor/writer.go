@@ -248,7 +248,7 @@ func (w *writerImpl) ready(ctx context.Context) (types.LLSN, types.LLSN, int64, 
 func (w *writerImpl) fillBatch(wt *writeTask, llsn types.LLSN) error {
 	w.writeTaskBatch = append(w.writeTaskBatch, wt)
 
-	//priamry
+	// priamry
 	if wt.primary {
 		// assign llsn
 		wt.llsn = llsn
