@@ -31,7 +31,7 @@ type server struct {
 	config
 }
 
-func NewServer(opts ...Option) *server {
+func NewServer(opts ...Option) Server {
 	cfg := newConfig(opts)
 	return &server{config: cfg}
 }

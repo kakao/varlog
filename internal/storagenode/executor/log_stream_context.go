@@ -117,8 +117,6 @@ func (dc *decidableCondition) waitC(ctx context.Context, glsn types.GLSN) error 
 }
 
 func (dc *decidableCondition) change(f func()) {
-	//dc.lock.RLock()
-	//defer dc.lock.RUnlock()
 	dc.cv.L.Lock()
 	defer dc.cv.L.Unlock()
 	f()

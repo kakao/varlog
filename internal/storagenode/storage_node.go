@@ -499,6 +499,7 @@ func (sn *StorageNode) getPrevCommitInfo(ctx context.Context, version types.Vers
 	return infos, nil
 }
 
+// ReportCommitter implements `internal/storagenode/reportcommitter.Getter.ReportCommitter`.
 func (sn *StorageNode) ReportCommitter(topicID types.TopicID, logStreamID types.LogStreamID) (reportcommitter.ReportCommitter, bool) {
 	extor, err := sn.lookupExecutor(topicID, logStreamID)
 	if err != nil {
@@ -521,12 +522,14 @@ func (sn *StorageNode) estimatedNumberOfExecutors() int {
 	return int(atomic.LoadInt64(&sn.estimatedNumExecutors))
 }
 
+// GetReports implements `internal/storagenode/reportcommitter.Getter.GetReports`.
 func (sn *StorageNode) GetReports(rsp *snpb.GetReportResponse, f func(reportcommitter.ReportCommitter, *snpb.GetReportResponse)) {
 	sn.forEachExecutors(func(_ types.LogStreamID, lse executor.Executor) {
 		f(lse, rsp)
 	})
 }
 
+// Replicator implements `internal/storagenode/replication.Getter.Replicator`.
 func (sn *StorageNode) Replicator(topicID types.TopicID, logStreamID types.LogStreamID) (replication.Replicator, bool) {
 	extor, err := sn.lookupExecutor(topicID, logStreamID)
 	if err != nil {
@@ -535,6 +538,7 @@ func (sn *StorageNode) Replicator(topicID types.TopicID, logStreamID types.LogSt
 	return extor, true
 }
 
+// ReadWriter implements `internal/storagenode/logio.Getter.ReadWriter`.
 func (sn *StorageNode) ReadWriter(topicID types.TopicID, logStreamID types.LogStreamID) (logio.ReadWriter, bool) {
 	extor, err := sn.lookupExecutor(topicID, logStreamID)
 	if err != nil {
@@ -543,6 +547,7 @@ func (sn *StorageNode) ReadWriter(topicID types.TopicID, logStreamID types.LogSt
 	return extor, true
 }
 
+// ForEachReadWriters implements `internal/storagenode/logio.Getter.ForEachReadWriters`.
 func (sn *StorageNode) ForEachReadWriters(f func(logio.ReadWriter)) {
 	sn.forEachExecutors(func(_ types.LogStreamID, extor executor.Executor) {
 		f(extor)
@@ -555,6 +560,7 @@ func (sn *StorageNode) String() string {
 	return sb.String()
 }
 
+// Stub implements `internal/storagenode/telemetry.Measurable.Stub`.
 func (sn *StorageNode) Stub() *telemetry.Stub {
 	return sn.tmStub
 }

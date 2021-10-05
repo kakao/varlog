@@ -30,6 +30,11 @@ type SubscribeEnv interface {
 }
 
 // Getter is the interface that wraps basic methods to access ReadWriter.
+//
+// ReadWriter returns a ReadWriter corresponded with the argument topicID and the argument
+// logStreamID.
+//
+// ForEachReadWriters iterates all of ReadWriters and calls the argument f respectively.
 type Getter interface {
 	ReadWriter(topicID types.TopicID, logStreamID types.LogStreamID) (ReadWriter, bool)
 	ForEachReadWriters(f func(ReadWriter))

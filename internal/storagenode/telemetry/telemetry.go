@@ -15,10 +15,14 @@ const (
 	serviceName = "sn"
 )
 
+// Measurable indicates an object that can be measured.
+//
+// Stub returns a struct Stub.
 type Measurable interface {
 	Stub() *Stub
 }
 
+// Stub is a struct to measure metrics and to trace.
 type Stub struct {
 	tm telemetry.Telemetry
 	tr trace.Tracer

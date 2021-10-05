@@ -15,7 +15,7 @@ type chQueue struct {
 
 var _ JobQueue = (*chQueue)(nil)
 
-func NewChQueue(queueSize int) (*chQueue, error) {
+func NewChQueue(queueSize int) (JobQueue, error) {
 	if queueSize <= 0 {
 		return nil, errors.WithStack(verrors.ErrInvalid)
 	}
