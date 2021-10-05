@@ -28,7 +28,7 @@ type client struct {
 	benchCount    int
 	benchDuration time.Duration
 
-	callResponseTime metric.Float64ValueRecorder
+	callResponseTime metric.Float64Histogram
 }
 
 func newClient(addr, telemetryEndpoint string, dataSizeBytes, benchCount int, benchDuration time.Duration) (*client, error) {
@@ -66,7 +66,7 @@ func newClient(addr, telemetryEndpoint string, dataSizeBytes, benchCount int, be
 	}
 	c.tm = tm
 
-	c.callResponseTime, err = telemetry.Meter("rpcbench").NewFloat64ValueRecorder(
+	c.callResponseTime, err = telemetry.Meter("rpcbench").NewFloat64Histogram(
 		"rpcbench.call.response_time",
 		metric.WithUnit(unit.Milliseconds),
 	)

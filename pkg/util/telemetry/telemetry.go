@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/host"
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	otelmetric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
@@ -19,8 +21,6 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/multierr"
 
-	"github.com/kakao/varlog/pkg/util/telemetry/instrumentation/host"
-	"github.com/kakao/varlog/pkg/util/telemetry/instrumentation/runtime"
 	"github.com/kakao/varlog/pkg/util/telemetry/metric"
 	"github.com/kakao/varlog/pkg/util/telemetry/trace"
 )
