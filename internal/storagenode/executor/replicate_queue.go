@@ -5,7 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/kakao/varlog/internal/storagenode/jobqueue"
+	"github.com/kakao/varlog/pkg/util/jobqueue"
 	"github.com/kakao/varlog/pkg/verrors"
 )
 
