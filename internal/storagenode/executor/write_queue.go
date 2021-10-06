@@ -3,7 +3,7 @@ package executor
 import (
 	"context"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/jobqueue"
+	"github.daumkakao.com/varlog/varlog/pkg/util/jobqueue"
 )
 
 // writeQueue is type-safe wrapper of jobqueue.Queue.

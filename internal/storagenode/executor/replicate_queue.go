@@ -5,7 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/jobqueue"
+	"github.daumkakao.com/varlog/varlog/pkg/util/jobqueue"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 )
 

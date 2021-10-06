@@ -11,10 +11,10 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/jobqueue"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/stopchannel"
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/jobqueue"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
