@@ -39,6 +39,7 @@ type stateProvider interface {
 	committableWithBarrier() error
 	releaseBarrier()
 	setSealing()
+	setSealingWithReason(reason error)
 }
 
 func (e *executor) mutable() error {
@@ -46,7 +47,9 @@ func (e *executor) mutable() error {
 	if state == executorMutable {
 		return nil
 	}
-	return errors.WithStack(verrors.ErrSealed)
+	e.stateBarrier.muReasonToSeal.RLock()
+	defer e.stateBarrier.muReasonToSeal.RUnlock()
+	return errors.Wrapf(verrors.ErrSealed, "reason: %+v", e.stateBarrier.reasonToSeal)
 }
 
 func (e *executor) committable() error {
@@ -83,6 +86,19 @@ func (e *executor) setSealing() {
 	e.stateBarrier.lock.Lock()
 	defer e.stateBarrier.lock.Unlock()
 	e.stateBarrier.state.compareAndSwap(executorMutable, executorSealing)
+}
+
+func (e *executor) setSealingWithReason(reason error) {
+	e.stateBarrier.lock.Lock()
+	defer e.stateBarrier.lock.Unlock()
+	if e.stateBarrier.state.compareAndSwap(executorMutable, executorSealing) {
+		if reason == nil {
+			reason = errors.New("unknown")
+		}
+		e.stateBarrier.muReasonToSeal.Lock()
+		defer e.stateBarrier.muReasonToSeal.Unlock()
+		e.stateBarrier.reasonToSeal = reason
+	}
 }
 
 func (e *executor) setLearning() bool {

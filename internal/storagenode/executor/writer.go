@@ -173,7 +173,7 @@ func (w *writerImpl) writeLoop(ctx context.Context) {
 		w.resetBatch()
 
 		if err := w.writeLoopInternal(ctx); err != nil {
-			w.state.setSealing()
+			w.state.setSealingWithReason(err)
 		}
 
 		w.popCv.cv.L.Lock()

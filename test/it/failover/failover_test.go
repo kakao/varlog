@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"sync"
 	"testing"
 	"time"
@@ -278,10 +279,14 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 						// and connections in clients should be worked.
 						env.ClientRefresh(t)
 						client := env.ClientAtIndex(t, 0)
+						var err error
 						So(testutil.CompareWaitN(10, func() bool {
-							_, err := client.Append(context.Background(), topicID, []byte("foo"))
+							_, err = client.Append(context.Background(), topicID, []byte("foo"))
 							return err == nil
 						}), ShouldBeTrue)
+						if err != nil {
+							log.Printf("Error=%+v", err)
+						}
 					})
 				})
 			})

@@ -988,6 +988,60 @@ func TestExecutorSeal(t *testing.T) {
 	}
 }
 
+func TestExecutorSealReason(t *testing.T) {
+	const topicID = types.TopicID(1)
+
+	defer goleak.VerifyNone(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	path := t.TempDir()
+
+	strg, err := storage.NewStorage(storage.WithPath(path))
+	require.NoError(t, err)
+	lse, err := New(
+		WithStorage(strg),
+		WithTopicID(topicID),
+		WithMeasurable(NewTestMeasurable(ctrl)),
+	)
+	require.NoError(t, err)
+
+	defer func() {
+		err = lse.Close()
+		require.NoError(t, err)
+	}()
+
+	// SEALING (initial state)
+	_, err = lse.Append(context.Background(), nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "initial state")
+
+	// SEALED
+	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	// RUNNING
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+		{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: lse.storageNodeID,
+			},
+			LogStreamID: lse.logStreamID,
+		},
+	}))
+	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
+
+	status, _, err = lse.Seal(context.TODO(), types.InvalidGLSN)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+	_, err = lse.Append(context.Background(), nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "seal rpc")
+}
+
 func TestExecutorWithRecover(t *testing.T) {
 	defer goleak.VerifyNone(t)
 

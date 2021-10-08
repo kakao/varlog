@@ -98,3 +98,15 @@ func (mr *MockStateProviderMockRecorder) setSealing() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setSealing", reflect.TypeOf((*MockStateProvider)(nil).setSealing))
 }
+
+// setSealingWithReason mocks base method.
+func (m *MockStateProvider) setSealingWithReason(reason error) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "setSealingWithReason", reason)
+}
+
+// setSealingWithReason indicates an expected call of setSealingWithReason.
+func (mr *MockStateProviderMockRecorder) setSealingWithReason(reason interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setSealingWithReason", reflect.TypeOf((*MockStateProvider)(nil).setSealingWithReason), reason)
+}

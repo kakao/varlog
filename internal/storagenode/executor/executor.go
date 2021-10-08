@@ -53,6 +53,9 @@ type executor struct {
 	stateBarrier struct {
 		state atomicExecutorState
 		lock  sync.RWMutex
+
+		muReasonToSeal sync.RWMutex
+		reasonToSeal   error
 	}
 
 	// muState guards the state of executor from RPCs, for instance, Seal, Unseal, SyncInit, and
@@ -134,7 +137,7 @@ func New(opts ...Option) (*executor, error) {
 	lse.storage.RestoreStorage(lastWrittenLLSN, lastCommittedLLSN, lastCommittedGLSN)
 
 	// The executor should start in the sealing phase.
-	lse.stateBarrier.state.store(executorSealing)
+	lse.setSealingWithReason(errors.New("initial state"))
 
 	return lse, nil
 }

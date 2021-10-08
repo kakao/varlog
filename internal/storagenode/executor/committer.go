@@ -185,7 +185,7 @@ func (c *committerImpl) commitLoop(ctx context.Context) {
 		c.resetBatch()
 
 		if err := c.commitLoopInternal(ctx); err != nil {
-			c.state.setSealing()
+			c.state.setSealingWithReason(err)
 		}
 
 		c.inflightCommitTasks.cv.L.Lock()

@@ -74,9 +74,11 @@ func TestReplicationProcessorNoClient(t *testing.T) {
 	state := NewMockStateProvider(ctrl)
 	state.EXPECT().mutableWithBarrier().Return(nil)
 	state.EXPECT().releaseBarrier().Return()
-	state.EXPECT().setSealing().DoAndReturn(func() {
-		called.Store(true)
-	}).MaxTimes(2)
+	state.EXPECT().setSealingWithReason(gomock.Any()).DoAndReturn(
+		func(_ error) {
+			called.Store(true)
+		},
+	).MaxTimes(2)
 
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: queueSize,
@@ -150,7 +152,7 @@ func TestReplicationProcessor(t *testing.T) {
 			return nil
 		}).AnyTimes()
 		state.EXPECT().releaseBarrier().Return().AnyTimes()
-		state.EXPECT().setSealing().DoAndReturn(func() {
+		state.EXPECT().setSealingWithReason(gomock.Any()).DoAndReturn(func(_ error) {
 			tc.actualSealed.Store(true)
 			t.Logf("setSealing")
 		}).AnyTimes()
@@ -287,7 +289,7 @@ func TestReplicatorResetConnector(t *testing.T) {
 	state := NewMockStateProvider(ctrl)
 	state.EXPECT().mutableWithBarrier().Return(nil).AnyTimes()
 	state.EXPECT().releaseBarrier().Return().AnyTimes()
-	state.EXPECT().setSealing().Return().AnyTimes()
+	state.EXPECT().setSealingWithReason(gomock.Any()).Return().AnyTimes()
 
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: queueSize,
