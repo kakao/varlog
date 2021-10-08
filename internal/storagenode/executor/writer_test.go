@@ -214,7 +214,7 @@ func TestWriterStop(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	// stop
-	state.EXPECT().setSealing().Return().AnyTimes()
+	state.EXPECT().setSealingWithReason(gomock.Any()).Return().AnyTimes()
 	writer.stop()
 	require.Equal(t, 0, writer.q.size())
 
@@ -306,7 +306,7 @@ func TestWriter(t *testing.T) {
 			}
 			return nil
 		}).AnyTimes()
-		state.EXPECT().setSealing().DoAndReturn(func() {
+		state.EXPECT().setSealingWithReason(gomock.Any()).DoAndReturn(func(_ error) {
 			sealed.Store(true)
 		}).AnyTimes()
 
@@ -355,7 +355,7 @@ func TestWriter(t *testing.T) {
 			go func() {
 				defer sealWg.Done()
 				time.Sleep(100 * time.Millisecond)
-				state.setSealing()
+				state.setSealingWithReason(nil)
 			}()
 
 			sealWg.Wait()
@@ -394,7 +394,7 @@ func TestWriterCleanup(t *testing.T) {
 	state.EXPECT().mutableWithBarrier().Return(nil).AnyTimes()
 	state.EXPECT().releaseBarrier().Return().AnyTimes()
 	state.EXPECT().mutable().Return(nil).AnyTimes()
-	state.EXPECT().setSealing().Return().AnyTimes()
+	state.EXPECT().setSealingWithReason(gomock.Any()).Return().AnyTimes()
 
 	// create writer
 	writer, err := newWriter(writerConfig{
@@ -451,7 +451,7 @@ func TestWriterVarlog444(t *testing.T) {
 	state.EXPECT().mutableWithBarrier().Return(nil).AnyTimes()
 	state.EXPECT().releaseBarrier().Return().AnyTimes()
 	state.EXPECT().mutable().Return(nil).AnyTimes()
-	state.EXPECT().setSealing().Return().AnyTimes()
+	state.EXPECT().setSealingWithReason(gomock.Any()).Return().AnyTimes()
 
 	// create writer
 	writer, err := newWriter(writerConfig{

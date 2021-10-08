@@ -31,7 +31,7 @@ func (e *executor) seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varl
 	// TODO: need lock to run setSealed not to run concurrently
 	// use lock or singleflight in Seal API
 	//
-	e.setSealing()
+	e.setSealingWithReason(errors.New("seal rpc"))
 
 	if e.stateBarrier.state.load() == executorSealed {
 		// TODO: need check localHWM == lastCommittedGLSN ?

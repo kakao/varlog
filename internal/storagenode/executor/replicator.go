@@ -149,7 +149,7 @@ func (r *replicatorImpl) send(ctx context.Context, t *replicateTask) error {
 func (r *replicatorImpl) replicateLoop(ctx context.Context) {
 	for ctx.Err() == nil {
 		if err := r.replicateLoopInternal(ctx); err != nil {
-			r.state.setSealing()
+			r.state.setSealingWithReason(err)
 		}
 
 		r.popCv.cv.L.Lock()
@@ -216,7 +216,7 @@ func (r *replicatorImpl) generateReplicateCallback(ctx context.Context, startTim
 		r.me.Stub().Metrics().ExecutorReplicateTime.Record(ctx, dur)
 
 		if err != nil {
-			r.state.setSealing()
+			r.state.setSealingWithReason(err)
 		}
 
 		// NOTE: `inflight` should be decreased when the callback is called since all

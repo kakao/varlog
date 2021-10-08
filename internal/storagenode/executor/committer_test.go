@@ -159,7 +159,7 @@ func TestCommitterStop(t *testing.T) {
 
 	state.EXPECT().mutableWithBarrier().Return(nil)
 	state.EXPECT().releaseBarrier().Return().Times(2)
-	state.EXPECT().setSealing().Return()
+	state.EXPECT().setSealingWithReason(gomock.Any()).Return()
 	state.EXPECT().committableWithBarrier().Return(nil)
 
 	// create committer
@@ -229,9 +229,11 @@ func TestCommitter(t *testing.T) {
 		return nil
 	}).AnyTimes()
 	state.EXPECT().releaseBarrier().Return().AnyTimes()
-	state.EXPECT().setSealing().DoAndReturn(func() {
-		sealed.Store(true)
-	}).AnyTimes()
+	state.EXPECT().setSealingWithReason(gomock.Any()).DoAndReturn(
+		func(_ error) {
+			sealed.Store(true)
+		},
+	).AnyTimes()
 	state.EXPECT().committableWithBarrier().Return(nil).AnyTimes()
 
 	// create committer
@@ -272,7 +274,7 @@ func TestCommitter(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	// sealing
-	state.setSealing()
+	state.setSealingWithReason(nil)
 
 	// sending new task into commitQ should fail.
 	cwt := newCommitWaitTask(11, nil)
@@ -328,7 +330,7 @@ func TestCommitterCatchupCommitVarlog459(t *testing.T) {
 
 	state.EXPECT().mutableWithBarrier().Return(nil).AnyTimes()
 	state.EXPECT().releaseBarrier().Return().AnyTimes()
-	state.EXPECT().setSealing().Return().AnyTimes()
+	state.EXPECT().setSealingWithReason(gomock.Any()).Return().AnyTimes()
 	state.EXPECT().committableWithBarrier().Return(nil).AnyTimes()
 
 	// create committer
@@ -405,7 +407,7 @@ func TestCommitterState(t *testing.T) {
 	require.NoError(t, err)
 	defer committer.stop()
 
-	state.EXPECT().setSealing().Return().AnyTimes()
+	state.EXPECT().setSealingWithReason(gomock.Any()).Return().AnyTimes()
 
 	// check initial conditions
 	require.Zero(t, committer.commitTaskQ.size())
