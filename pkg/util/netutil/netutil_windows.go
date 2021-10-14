@@ -1,3 +1,5 @@
+// +build windows
+
 // Package netutil provides helper functions for network.
 //
 package netutil
@@ -12,8 +14,6 @@ import (
 	"time"
 
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
-
-	"golang.org/x/sys/unix"
 )
 
 var (
@@ -63,12 +63,12 @@ func Listen(network, address string) (net.Listener, error) {
 			var ret error
 			err := c.Control(func(fd uintptr) {
 				setSockOpt := func(opt int) error {
-					return unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, opt, 1)
+					return syscall.SetsockoptInt(syscall.Handle(fd), syscall.SOL_SOCKET, opt, 1)
 				}
-				if err := setSockOpt(unix.SO_REUSEPORT); err != nil {
-					ret = err
-				}
-				if err := setSockOpt(unix.SO_REUSEADDR); err != nil {
+				//if err := setSockOpt(syscall.SO_REUSEPORT); err != nil {	// Windows not support
+				//	ret = err
+				//}
+				if err := setSockOpt(syscall.SO_REUSEADDR); err != nil {
 					ret = err
 				}
 			})
@@ -147,7 +147,7 @@ func AdvertisableIPs() ([]net.IP, error) {
 	return ret, nil
 }
 
-//  IPs returns a slice of net.IP that is usable. Advertisable IP comes first in the returned slice.
+// IPs returns a slice of net.IP that is usable. Advertisable IP comes first in the returned slice.
 func IPs() ([]net.IP, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
