@@ -52,9 +52,21 @@ func TestGetListenerAddr(t *testing.T) {
 					t.Errorf("%s error: %v", tt.in, addrs)
 				}
 			} else {
-				if addrs[0] != tt.out {
-					t.Errorf("%s expected=%s actual=%s", tt.in, tt.out, addrs[0])
+				if tt.minOutLen <= len(addrs) {
+				    if len(addrs) == 0 {
+					t.Logf("%s expected_minoutlen=%d actual_outlen=%d",
+					    tt.in, tt.minOutLen, len(addrs))
+					return
+				    }
+
+				    for _, addr := range addrs {
+					if addr == tt.out {
+					    return
+					}
+				    }
 				}
+
+			    	t.Errorf("%s expected=%s actual=%s", tt.in, tt.out, addrs)
 			}
 		})
 	}

@@ -1,3 +1,5 @@
+// +build linux freebsd darwin
+
 // Package netutil provides helper functions for network.
 //
 package netutil
@@ -147,7 +149,7 @@ func AdvertisableIPs() ([]net.IP, error) {
 	return ret, nil
 }
 
-//  IPs returns a slice of net.IP that is usable. Advertisable IP comes first in the returned slice.
+// IPs returns a slice of net.IP that is usable. Advertisable IP comes first in the returned slice.
 func IPs() ([]net.IP, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
