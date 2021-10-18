@@ -1,5 +1,7 @@
 package admin
 
+//go:generate mockgen -package admin -destination client_mock.go . Client
+
 import (
 	"context"
 
