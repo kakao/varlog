@@ -11,11 +11,11 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.daumkakao.com/varlog/varlog/pkg/admin"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/snc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
@@ -132,7 +132,7 @@ func mrFail(k8s *K8sVarlogCluster, leader bool) error {
 
 	connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
 	defer connCancel()
-	mcli, err := varlog.NewClusterManagerClient(connCtx, vmsaddr)
+	mcli, err := admin.New(connCtx, vmsaddr)
 	if err != nil {
 		return err
 	}
@@ -235,7 +235,7 @@ func InitLogStream(k8s *K8sVarlogCluster, topicID types.TopicID) func() error {
 
 		connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
 		defer connCancel()
-		mcli, err := varlog.NewClusterManagerClient(connCtx, vmsaddr)
+		mcli, err := admin.New(connCtx, vmsaddr)
 		if err != nil {
 			return err
 		}
@@ -263,7 +263,7 @@ func AddLogStream(k8s *K8sVarlogCluster, topicID types.TopicID) func() error {
 
 		connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
 		defer connCancel()
-		mcli, err := varlog.NewClusterManagerClient(connCtx, vmsaddr)
+		mcli, err := admin.New(connCtx, vmsaddr)
 		if err != nil {
 			return err
 		}
@@ -323,7 +323,7 @@ func SealAnyLogStream(k8s *K8sVarlogCluster) func() error {
 
 		mconnCtx, mconnCancel := context.WithTimeout(context.Background(), k8s.timeout)
 		defer mconnCancel()
-		mcli, err := varlog.NewClusterManagerClient(mconnCtx, vmsaddr)
+		mcli, err := admin.New(mconnCtx, vmsaddr)
 		if err != nil {
 			return err
 		}
@@ -395,7 +395,7 @@ func updateSealedLogStream(k8s *K8sVarlogCluster, meta *varlogpb.MetadataDescrip
 
 	mconnCtx, mconnCancel := context.WithTimeout(context.Background(), k8s.timeout)
 	defer mconnCancel()
-	mcli, err := varlog.NewClusterManagerClient(mconnCtx, vmsaddr)
+	mcli, err := admin.New(mconnCtx, vmsaddr)
 	if err != nil {
 		return err
 	}
@@ -498,7 +498,7 @@ func unregisterSN(k8s *K8sVarlogCluster, snID types.StorageNodeID) error {
 
 	mconnCtx, mconnCancel := context.WithTimeout(context.Background(), k8s.timeout)
 	defer mconnCancel()
-	mcli, err := varlog.NewClusterManagerClient(mconnCtx, vmsaddr)
+	mcli, err := admin.New(mconnCtx, vmsaddr)
 	if err != nil {
 		return err
 	}

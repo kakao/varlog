@@ -16,12 +16,12 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/volume"
-
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/volume"
 	"github.daumkakao.com/varlog/varlog/internal/vms"
+	"github.daumkakao.com/varlog/varlog/pkg/admin"
 	"github.daumkakao.com/varlog/varlog/pkg/logc"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
@@ -72,7 +72,7 @@ type VarlogCluster struct {
 
 	muVMS     sync.Mutex
 	vmsServer vms.ClusterManager
-	vmsCL     varlog.ClusterManagerClient
+	vmsCL     admin.Client
 
 	portLease *ports.Lease
 
@@ -1174,7 +1174,7 @@ func (clus *VarlogCluster) initVMS(t *testing.T) {
 
 func (clus *VarlogCluster) initVMSClient(t *testing.T) {
 	addr := clus.vmsServer.Address()
-	cmcli, err := varlog.NewClusterManagerClient(context.TODO(), addr)
+	cmcli, err := admin.New(context.TODO(), addr)
 	require.NoError(t, err)
 	clus.vmsCL = cmcli
 }
@@ -1187,7 +1187,7 @@ func (clus *VarlogCluster) StartVMS(t *testing.T) {
 	clus.initVMS(t)
 }
 
-func (clus *VarlogCluster) GetVMSClient(t *testing.T) varlog.ClusterManagerClient {
+func (clus *VarlogCluster) GetVMSClient(t *testing.T) admin.Client {
 	clus.muVMS.Lock()
 	defer clus.muVMS.Unlock()
 

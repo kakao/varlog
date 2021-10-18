@@ -5,14 +5,14 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
+	"github.daumkakao.com/varlog/varlog/pkg/admin"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 func (app *VMCApp) updateLogStream(logStreamID types.LogStreamID, popReplica, pushReplica *varlogpb.ReplicaDescriptor) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
+		func(ctx context.Context, cli admin.Client) (proto.Message, error) {
 			// update
 			panic("not implemented")
 		},
@@ -21,7 +21,7 @@ func (app *VMCApp) updateLogStream(logStreamID types.LogStreamID, popReplica, pu
 
 func (app *VMCApp) sealLogStream(topicID types.TopicID, logStreamID types.LogStreamID) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
+		func(ctx context.Context, cli admin.Client) (proto.Message, error) {
 			return cli.Seal(ctx, topicID, logStreamID)
 		},
 	)
@@ -29,7 +29,7 @@ func (app *VMCApp) sealLogStream(topicID types.TopicID, logStreamID types.LogStr
 
 func (app *VMCApp) unsealLogStream(topicID types.TopicID, logStreamID types.LogStreamID) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
+		func(ctx context.Context, cli admin.Client) (proto.Message, error) {
 			return cli.Unseal(ctx, topicID, logStreamID)
 		},
 	)
@@ -37,7 +37,7 @@ func (app *VMCApp) unsealLogStream(topicID types.TopicID, logStreamID types.LogS
 
 func (app *VMCApp) syncLogStream(topicID types.TopicID, logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
+		func(ctx context.Context, cli admin.Client) (proto.Message, error) {
 			return cli.Sync(ctx, topicID, logStreamID, srcStorageNodeID, dstStorageNodeID)
 		},
 	)

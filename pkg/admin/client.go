@@ -1,4 +1,4 @@
-package varlog
+package admin
 
 import (
 	"context"
@@ -12,7 +12,8 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
-type ClusterManagerClient interface {
+// Client provides various methods to manage the varlog cluster.
+type Client interface {
 	AddStorageNode(ctx context.Context, addr string) (*vmspb.AddStorageNodeResponse, error)
 	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vmspb.UnregisterStorageNodeResponse, error)
 	AddTopic(ctx context.Context) (*vmspb.AddTopicResponse, error)
@@ -31,50 +32,50 @@ type ClusterManagerClient interface {
 	Close() error
 }
 
-var _ ClusterManagerClient = (*clusterManagerClient)(nil)
+var _ Client = (*clientImpl)(nil)
 
-type clusterManagerClient struct {
+type clientImpl struct {
 	rpcConn   *rpc.Conn
 	rpcClient vmspb.ClusterManagerClient
 }
 
-func NewClusterManagerClient(ctx context.Context, addr string) (ClusterManagerClient, error) {
+func New(ctx context.Context, addr string) (Client, error) {
 	rpcConn, err := rpc.NewConn(ctx, addr)
 	if err != nil {
 		return nil, err
 	}
-	cli := &clusterManagerClient{
+	cli := &clientImpl{
 		rpcConn:   rpcConn,
 		rpcClient: vmspb.NewClusterManagerClient(rpcConn.Conn),
 	}
 	return cli, nil
 }
 
-func (c *clusterManagerClient) Close() error {
+func (c *clientImpl) Close() error {
 	return c.rpcConn.Close()
 }
 
-func (c *clusterManagerClient) AddStorageNode(ctx context.Context, addr string) (*vmspb.AddStorageNodeResponse, error) {
+func (c *clientImpl) AddStorageNode(ctx context.Context, addr string) (*vmspb.AddStorageNodeResponse, error) {
 	rsp, err := c.rpcClient.AddStorageNode(ctx, &vmspb.AddStorageNodeRequest{Address: addr})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vmspb.UnregisterStorageNodeResponse, error) {
+func (c *clientImpl) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*vmspb.UnregisterStorageNodeResponse, error) {
 	rsp, err := c.rpcClient.UnregisterStorageNode(ctx, &vmspb.UnregisterStorageNodeRequest{StorageNodeID: storageNodeID})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) AddTopic(ctx context.Context) (*vmspb.AddTopicResponse, error) {
+func (c *clientImpl) AddTopic(ctx context.Context) (*vmspb.AddTopicResponse, error) {
 	rsp, err := c.rpcClient.AddTopic(ctx, &vmspb.AddTopicRequest{})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error) {
+func (c *clientImpl) UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error) {
 	rsp, err := c.rpcClient.UnregisterTopic(ctx, &vmspb.UnregisterTopicRequest{TopicID: topicID})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) AddLogStream(ctx context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*vmspb.AddLogStreamResponse, error) {
+func (c *clientImpl) AddLogStream(ctx context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*vmspb.AddLogStreamResponse, error) {
 	rsp, err := c.rpcClient.AddLogStream(ctx, &vmspb.AddLogStreamRequest{
 		TopicID:  topicID,
 		Replicas: logStreamReplicas,
@@ -82,7 +83,7 @@ func (c *clusterManagerClient) AddLogStream(ctx context.Context, topicID types.T
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.UnregisterLogStreamResponse, error) {
+func (c *clientImpl) UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.UnregisterLogStreamResponse, error) {
 	rsp, err := c.rpcClient.UnregisterLogStream(ctx, &vmspb.UnregisterLogStreamRequest{
 		TopicID:     topicID,
 		LogStreamID: logStreamID,
@@ -90,7 +91,7 @@ func (c *clusterManagerClient) UnregisterLogStream(ctx context.Context, topicID 
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.RemoveLogStreamReplicaResponse, error) {
+func (c *clientImpl) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.RemoveLogStreamReplicaResponse, error) {
 	rsp, err := c.rpcClient.RemoveLogStreamReplica(ctx, &vmspb.RemoveLogStreamReplicaRequest{
 		StorageNodeID: storageNodeID,
 		TopicID:       topicID,
@@ -99,7 +100,7 @@ func (c *clusterManagerClient) RemoveLogStreamReplica(ctx context.Context, stora
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*vmspb.UpdateLogStreamResponse, error) {
+func (c *clientImpl) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*vmspb.UpdateLogStreamResponse, error) {
 	rsp, err := c.rpcClient.UpdateLogStream(ctx, &vmspb.UpdateLogStreamRequest{
 		TopicID:       topicID,
 		LogStreamID:   logStreamID,
@@ -109,7 +110,7 @@ func (c *clusterManagerClient) UpdateLogStream(ctx context.Context, topicID type
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
+func (c *clientImpl) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
 	rsp, err := c.rpcClient.Seal(ctx, &vmspb.SealRequest{
 		TopicID:     topicID,
 		LogStreamID: logStreamID,
@@ -117,7 +118,7 @@ func (c *clusterManagerClient) Seal(ctx context.Context, topicID types.TopicID, 
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error) {
+func (c *clientImpl) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.UnsealResponse, error) {
 	rsp, err := c.rpcClient.Unseal(ctx, &vmspb.UnsealRequest{
 		TopicID:     topicID,
 		LogStreamID: logStreamID,
@@ -125,7 +126,7 @@ func (c *clusterManagerClient) Unseal(ctx context.Context, topicID types.TopicID
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID) (*vmspb.SyncResponse, error) {
+func (c *clientImpl) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID) (*vmspb.SyncResponse, error) {
 	rsp, err := c.rpcClient.Sync(ctx, &vmspb.SyncRequest{
 		TopicID:          topicID,
 		LogStreamID:      logStreamID,
@@ -135,22 +136,22 @@ func (c *clusterManagerClient) Sync(ctx context.Context, topicID types.TopicID, 
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error) {
+func (c *clientImpl) GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error) {
 	rsp, err := c.rpcClient.GetMRMembers(ctx, &pbtypes.Empty{})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (*vmspb.AddMRPeerResponse, error) {
+func (c *clientImpl) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (*vmspb.AddMRPeerResponse, error) {
 	rsp, err := c.rpcClient.AddMRPeer(ctx, &vmspb.AddMRPeerRequest{RaftURL: raftURL, RPCAddr: rpcAddr})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) RemoveMRPeer(ctx context.Context, raftURL string) (*vmspb.RemoveMRPeerResponse, error) {
+func (c *clientImpl) RemoveMRPeer(ctx context.Context, raftURL string) (*vmspb.RemoveMRPeerResponse, error) {
 	rsp, err := c.rpcClient.RemoveMRPeer(ctx, &vmspb.RemoveMRPeerRequest{RaftURL: raftURL})
 	return rsp, verrors.FromStatusError(err)
 }
 
-func (c *clusterManagerClient) GetStorageNodes(ctx context.Context) (*vmspb.GetStorageNodesResponse, error) {
+func (c *clientImpl) GetStorageNodes(ctx context.Context) (*vmspb.GetStorageNodesResponse, error) {
 	rsp, err := c.rpcClient.GetStorageNodes(ctx, &pbtypes.Empty{})
 	return rsp, verrors.FromStatusError(err)
 }
