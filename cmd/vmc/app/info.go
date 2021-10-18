@@ -5,12 +5,12 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/admin"
 )
 
 func (app *VMCApp) infoMRMembers() {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
+		func(ctx context.Context, cli admin.Client) (proto.Message, error) {
 			app.logger.Info("info MR Members")
 			return cli.GetMRMembers(ctx)
 		},
@@ -19,7 +19,7 @@ func (app *VMCApp) infoMRMembers() {
 
 func (app *VMCApp) infoStoragenodes() {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error) {
+		func(ctx context.Context, cli admin.Client) (proto.Message, error) {
 			app.logger.Info("info storagenode")
 			return cli.GetStorageNodes(ctx)
 		},

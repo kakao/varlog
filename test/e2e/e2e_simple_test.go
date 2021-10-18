@@ -11,6 +11,7 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 
+	"github.com/kakao/varlog/pkg/admin"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
@@ -27,7 +28,7 @@ func TestK8sVarlogSimple(t *testing.T) {
 
 		ctx, cancel := k8s.TimeoutContext()
 		defer cancel()
-		mcli, err := varlog.NewClusterManagerClient(ctx, vmsaddr)
+		mcli, err := admin.NewClusterManagerClient(ctx, vmsaddr)
 		So(err, ShouldBeNil)
 
 		Reset(func() {
@@ -125,7 +126,7 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 		connCtx, connCancel := k8s.TimeoutContext()
 		defer connCancel()
 
-		mcli, err := varlog.NewClusterManagerClient(connCtx, vmsaddr)
+		mcli, err := admin.NewClusterManagerClient(connCtx, vmsaddr)
 		So(err, ShouldBeNil)
 
 		Reset(func() {
@@ -208,7 +209,7 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 			lsID  types.LogStreamID
 		)
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			mcli, err = varlog.NewClusterManagerClient(ctx, vmsaddr)
+			mcli, err = admin.NewClusterManagerClient(ctx, vmsaddr)
 			So(err, ShouldBeNil)
 		})
 
@@ -354,7 +355,7 @@ func TestK8sVarlogAppend(t *testing.T) {
 		)
 
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			mcli, err = varlog.NewClusterManagerClient(ctx, vmsaddr)
+			mcli, err = admin.NewClusterManagerClient(ctx, vmsaddr)
 			So(err, ShouldBeNil)
 		})
 
@@ -494,7 +495,7 @@ func TestK8sCreateCluster(t *testing.T) {
 		ctx, cancel := k8s.TimeoutContext()
 		defer cancel()
 
-		vmsCL, err := varlog.NewClusterManagerClient(ctx, vmsAddr)
+		vmsCL, err := admin.NewClusterManagerClient(ctx, vmsAddr)
 		So(err, ShouldBeNil)
 
 		Reset(func() {
