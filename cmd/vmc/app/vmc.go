@@ -9,7 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/admin"
 )
 
 type VMCApp struct {
@@ -37,7 +37,7 @@ func (app *VMCApp) Execute() error {
 	return app.app.Run(os.Args)
 }
 
-type CommandExecutor func(ctx context.Context, cli varlog.ClusterManagerClient) (proto.Message, error)
+type CommandExecutor func(ctx context.Context, cli admin.Client) (proto.Message, error)
 
 func (app *VMCApp) withExecutionContext(f CommandExecutor) {
 	if !app.options.Verbose {
@@ -54,7 +54,7 @@ func (app *VMCApp) execute(f CommandExecutor) error {
 	ctx, cancel := context.WithTimeout(context.Background(), app.options.Timeout)
 	defer cancel()
 
-	cli, err := varlog.NewClusterManagerClient(ctx, app.options.VMSAddress)
+	cli, err := admin.New(ctx, app.options.VMSAddress)
 	if err != nil {
 		app.logger.Error("could not create client", zap.Error(err))
 		return err
