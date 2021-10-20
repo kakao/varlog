@@ -1,7 +1,8 @@
 package netutil
 
 import (
-	"strconv"
+    "github.com/stretchr/testify/require"
+    "strconv"
 	"testing"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -40,7 +41,9 @@ func TestGetListenerAddr(t *testing.T) {
 			if err != nil {
 				t.Skipf("skip listener error: %v", err)
 			}
-			defer lis.Close()
+			defer func() {
+			    require.NoError(t, lis.Close())
+			} ()
 
 			addrs, err := GetListenerAddrs(lis.Addr())
 			if err != nil {
