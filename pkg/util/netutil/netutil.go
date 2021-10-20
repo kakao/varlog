@@ -3,17 +3,14 @@
 package netutil
 
 import (
-	"context"
-	"errors"
-	"net"
-	"sort"
-	"strconv"
-	"syscall"
-	"time"
+    "context"
+    "errors"
+    "net"
+    "sort"
+    "strconv"
+    "time"
 
-	"github.daumkakao.com/varlog/varlog/pkg/verrors"
-
-	"golang.org/x/sys/unix"
+    "github.daumkakao.com/varlog/varlog/pkg/verrors"
 )
 
 var (
@@ -51,35 +48,19 @@ func (ln StoppableListener) Accept() (c net.Conn, err error) {
 	case err := <-errc:
 		return nil, err
 	case tc := <-connc:
-		tc.SetKeepAlive(true)
-		tc.SetKeepAlivePeriod(3 * time.Minute)
+		if err := tc.SetKeepAlive(true); err != nil {
+			return nil, err
+		}
+		if err := tc.SetKeepAlivePeriod(3 * time.Minute); err != nil {
+			return nil, err
+		}
 		return tc, nil
 	}
 }
 
 func Listen(network, address string) (net.Listener, error) {
 	lc := net.ListenConfig{
-		Control: func(network, address string, c syscall.RawConn) error {
-			var ret error
-			err := c.Control(func(fd uintptr) {
-				setSockOpt := func(opt int) error {
-					return unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, opt, 1)
-				}
-				if err := setSockOpt(unix.SO_REUSEPORT); err != nil {
-					ret = err
-				}
-				if err := setSockOpt(unix.SO_REUSEADDR); err != nil {
-					ret = err
-				}
-			})
-			if ret != nil {
-				return ret
-			}
-			if err != nil {
-				return err
-			}
-			return nil
-		},
+		Control: ControlRawNetworkConnection,
 	}
 	return lc.Listen(context.Background(), network, address)
 }
@@ -147,7 +128,7 @@ func AdvertisableIPs() ([]net.IP, error) {
 	return ret, nil
 }
 
-//  IPs returns a slice of net.IP that is usable. Advertisable IP comes first in the returned slice.
+// IPs returns a slice of net.IP that is usable. Advertisable IP comes first in the returned slice.
 func IPs() ([]net.IP, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
