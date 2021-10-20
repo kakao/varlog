@@ -14,6 +14,7 @@ import (
 	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 
+	"github.daumkakao.com/varlog/varlog/pkg/admin"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 )
@@ -41,7 +42,7 @@ func TestK8sVarlogAppendLongTime(t *testing.T) {
 
 		var mcl varlog.ClusterManagerClient
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			mcl, err = varlog.NewClusterManagerClient(ctx, vmsAddr)
+			mcl, err = admin.NewClusterManagerClient(ctx, vmsAddr)
 			So(err, ShouldBeNil)
 		})
 		Reset(func() {
