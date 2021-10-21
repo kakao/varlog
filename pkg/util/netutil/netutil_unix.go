@@ -1,11 +1,12 @@
+//go:build linux || freebsd || darwin
 // +build linux freebsd darwin
 
 package netutil
 
 import (
-    "syscall"
+	"syscall"
 
-    "golang.org/x/sys/unix"
+	"golang.org/x/sys/unix"
 )
 
 func ControlRawNetworkConnection(network, address string, c syscall.RawConn) error {

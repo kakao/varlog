@@ -1,9 +1,7 @@
-// +build windows
-
 package netutil
 
 import (
-    "syscall"
+	"syscall"
 )
 
 func ControlRawNetworkConnection(network, address string, c syscall.RawConn) error {

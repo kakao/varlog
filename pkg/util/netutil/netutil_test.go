@@ -1,9 +1,11 @@
 package netutil
 
 import (
-    "github.com/stretchr/testify/require"
-    "strconv"
+	"context"
+	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
@@ -37,13 +39,13 @@ func TestGetListenerAddr(t *testing.T) {
 	for i := range tests {
 		tt := tests[i]
 		t.Run(tt.in, func(t *testing.T) {
-			lis, err := Listen("tcp", tt.in)
+			lis, err := NewStoppableListener(context.Background(), tt.in)
 			if err != nil {
 				t.Skipf("skip listener error: %v", err)
 			}
 			defer func() {
-			    require.NoError(t, lis.Close())
-			} ()
+				require.NoError(t, lis.Close())
+			}()
 
 			addrs, err := GetListenerAddrs(lis.Addr())
 			if err != nil {
@@ -56,20 +58,20 @@ func TestGetListenerAddr(t *testing.T) {
 				}
 			} else {
 				if tt.minOutLen <= len(addrs) {
-				    if len(addrs) == 0 {
-					t.Logf("%s expected_minoutlen=%d actual_outlen=%d",
-					    tt.in, tt.minOutLen, len(addrs))
-					return
-				    }
-
-				    for _, addr := range addrs {
-					if addr == tt.out {
-					    return
+					if len(addrs) == 0 {
+						t.Logf("%s expected_minoutlen=%d actual_outlen=%d",
+							tt.in, tt.minOutLen, len(addrs))
+						return
 					}
-				    }
+
+					for _, addr := range addrs {
+						if addr == tt.out {
+							return
+						}
+					}
 				}
 
-			    	t.Errorf("%s expected=%s actual=%s", tt.in, tt.out, addrs)
+				t.Errorf("%s expected=%s actual=%s", tt.in, tt.out, addrs)
 			}
 		})
 	}
