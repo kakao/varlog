@@ -284,8 +284,7 @@ func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamI
 			sm.refresh(ctx)
 			return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 		}
-		//status, highWatermark, errSeal := cli.Seal(ctx, logStreamID, lastCommittedGLSN)
-		status, _, errSeal := cli.Seal(ctx, topicID, logStreamID, lastCommittedGLSN)
+		status, highWatermark, errSeal := cli.Seal(ctx, topicID, logStreamID, lastCommittedGLSN)
 		if errSeal != nil {
 			// NOTE: The sealing log stream ignores the failure of sealing its replica.
 			sm.logger.Warn("could not seal replica", zap.Int32("snid", int32(storageNodeID)), zap.Int32("lsid", int32(logStreamID)))
@@ -295,8 +294,8 @@ func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamI
 			StorageNodeID: storageNodeID,
 			LogStreamID:   logStreamID,
 			Status:        status,
-			//HighWatermark: highWatermark,
-			Path: replica.GetPath(),
+			HighWatermark: highWatermark,
+			Path:          replica.GetPath(),
 		})
 	}
 	sm.logger.Info("seal result", zap.Reflect("logstream_meta", lsmetaDesc))

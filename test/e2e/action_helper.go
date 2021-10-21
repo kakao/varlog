@@ -226,7 +226,7 @@ func RecoverMRCheck(k8s *K8sVarlogCluster) func() error {
 	}
 }
 
-func InitLogStream(k8s *K8sVarlogCluster, topicID types.TopicID) func() error {
+func InitLogStream(k8s *K8sVarlogCluster) func() error {
 	return func() error {
 		vmsaddr, err := k8s.VMSAddress()
 		if err != nil {
@@ -240,6 +240,14 @@ func InitLogStream(k8s *K8sVarlogCluster, topicID types.TopicID) func() error {
 			return err
 		}
 		defer mcli.Close()
+
+		addTopicCtx, addTopicCancel := context.WithTimeout(context.Background(), k8s.timeout)
+		defer addTopicCancel()
+		rsp, err := mcli.AddTopic(addTopicCtx)
+		if err != nil {
+			return err
+		}
+		topicID := rsp.Topic.TopicID
 
 		for i := 0; i < k8s.NrLS; i++ {
 			ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)

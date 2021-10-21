@@ -13,12 +13,11 @@ data:
           grpc:
             endpoint: "0.0.0.0:4317"
     processors:
-      batch:
       memory_limiter:
-        ballast_size_mib: 1000
-        check_interval: 5s
-        limit_mib: 2000
-        spike_limit_mib: 500
+        check_interval: 1s
+        limit_percentage: 50
+        spike_limit_percentage: 20
+      batch:
     extensions:
       health_check:
       pprof:
