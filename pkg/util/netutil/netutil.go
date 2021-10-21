@@ -3,14 +3,14 @@
 package netutil
 
 import (
-    "context"
-    "errors"
-    "net"
-    "sort"
-    "strconv"
-    "time"
+	"context"
+	"errors"
+	"net"
+	"sort"
+	"strconv"
+	"time"
 
-    "github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/pkg/verrors"
 )
 
 var (
