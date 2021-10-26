@@ -136,7 +136,8 @@ test_e2e_docker_long: image_builder_dev push_builder_dev
 
 
 # docker
-DOCKERFILE := $(CURDIR)/docker/alpine/Dockerfile
+BUILD_DIR := $(CURDIR)/build
+DOCKERFILE := $(CURDIR)/build/Dockerfile
 DOCKER_REPOS := idock.daumkakao.io
 VERSION := $(shell cat $(CURDIR)/VERSION)
 GIT_HASH := $(shell git describe --always --broken)
