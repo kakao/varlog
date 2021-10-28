@@ -1,6 +1,7 @@
 docs/
 log/
 raftdata/
+reports/
 
 .DS_Store
 .vscode
