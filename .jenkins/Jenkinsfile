@@ -26,6 +26,19 @@ pipeline {
       }
     }
 
+    stage("e2e-precondition") {
+      when {
+        // skip PR branch
+        branch pattern: "(?i)^varlog-\\d+", comparator: "REGEXP"
+      }
+      options {
+        timeout(unit: 'MINUTES', time: 10)
+      }
+      steps {
+        sh "build/d2hub-check-image.sh"
+      }
+    }
+
     /*
     stage("benchmark") {
       steps {
