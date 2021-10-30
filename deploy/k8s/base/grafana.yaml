@@ -4,6 +4,7 @@ metadata:
   labels:
     app: grafana
   name: grafana
+  namespace: default
 spec:
   selector:
     matchLabels:
@@ -52,6 +53,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: grafana
+  namespace: default
 spec:
   ports:
     - port: 3000

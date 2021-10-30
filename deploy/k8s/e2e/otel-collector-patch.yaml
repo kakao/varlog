@@ -1,0 +1,21 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: otel-collector
+  namespace: default
+  labels:
+    app: opentelemetry
+    component: otel-collector
+spec:
+  replicas: 0
+  template:
+    spec:
+      containers:
+      - name: otel-collector
+        resources:
+          limits:
+            cpu: 4000m
+            memory: 4Gi
+          requests:
+            cpu: 4000m
+            memory: 4Gi

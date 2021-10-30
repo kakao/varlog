@@ -33,7 +33,7 @@ spec:
           mountPath: /varlog/mr
       containers:
       - name: varlog-mr
-        image: idock.daumkakao.io/varlog/varlog-mr:latest
+        image: idock.daumkakao.io/varlog/all-in-one:latest
         command:
         - "python3"
         - "/varlog/bin/vmr.py"

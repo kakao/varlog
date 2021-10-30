@@ -5,14 +5,8 @@ bases:
 - ../base
 
 images:
-- name: idock.daumkakao.io/varlog/varlog-mr
-  newName: idock.daumkakao.io/varlog/varlog-mr
-  newTag: IMAGE_TAG
-- name: idock.daumkakao.io/varlog/varlog-sn
-  newName: idock.daumkakao.io/varlog/varlog-sn
-  newTag: IMAGE_TAG
-- name: idock.daumkakao.io/varlog/varlog-vms
-  newName: idock.daumkakao.io/varlog/varlog-vms
+- name: idock.daumkakao.io/varlog/all-in-one
+  newName: idock.daumkakao.io/varlog/all-in-one
   newTag: IMAGE_TAG
 - name: idock.daumkakao.io/varlog/rpc-test-server
   newName: idock.daumkakao.io/varlog/rpc-test-server

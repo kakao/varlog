@@ -101,6 +101,14 @@ bench: build
 bench_report:
 	cat $(BENCH_OUTPUT) | go-junit-report > $(BENCH_REPORT)
 
+test_e2e:
+	tmpfile=$$(mktemp); \
+	(TERM=xterm $(GO) test $(TEST_FLAGS) ./test/e2e -tags=e2e 2>&1; echo $$? > $$tmpfile) | \
+	tee $(TEST_OUTPUT); \
+	ret=$$(cat $$tmpfile); \
+	rm -f $$tmpfile; \
+	exit $$ret
+
 
 # testing on k8s
 TEST_DOCKER_CPUS := 8
@@ -137,59 +145,26 @@ test_e2e_docker_long: image_builder_dev push_builder_dev
 
 # docker
 BUILD_DIR := $(CURDIR)/build
-DOCKERFILE := $(CURDIR)/build/Dockerfile
-DOCKER_REPOS := idock.daumkakao.io
+DOCKERFILE := $(BUILD_DIR)/release/all-in-one/Dockerfile
+IMAGE_REGISTRY := idock.daumkakao.io
+IMAGE_NAMESPACE := varlog
+IMAGE_REPOS := all-in-one
+
 VERSION := $(shell cat $(CURDIR)/VERSION)
 GIT_HASH := $(shell git describe --always --broken)
 BUILD_DATE := $(shell date -u '+%FT%T%z')
 DOCKER_TAG := v$(VERSION)-$(GIT_HASH)
+# DOCKER_TAG := $(shell $(BUILD_DIR)/d2hub-image-tag.sh)
 
-.PHONY: docker image push image_vms image_mr image_sn push_vms push_mr push_sn 
-docker: image push
+.PHONY: docker kustomize
+docker: 
+	docker build \
+		--target varlog-all-in-one \
+		-f $(DOCKERFILE) \
+		-t $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG) . && \
+	docker push $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG)
 
-image: image_vms image_mr image_sn 
-image_vms:
-	docker build --target varlog-vms -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/varlog-vms:$(DOCKER_TAG) .
-image_mr:
-	docker build --target varlog-mr -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/varlog-mr:$(DOCKER_TAG) .
-image_sn:
-	docker build --target varlog-sn -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/varlog-sn:$(DOCKER_TAG) .
-
-push: push_vms push_mr push_sn 
-push_vms:
-	docker push $(DOCKER_REPOS)/varlog/varlog-vms:$(DOCKER_TAG)
-push_mr:
-	docker push $(DOCKER_REPOS)/varlog/varlog-mr:$(DOCKER_TAG)
-push_sn:
-	docker push $(DOCKER_REPOS)/varlog/varlog-sn:$(DOCKER_TAG)
-
-.PHONY: docker_dev image_dev push_dev image_builder_dev image_rpc_test_server push_builder_dev push_rpc_test_server
-docker_dev: image_dev push_dev
-
-image_dev: image_builder_dev image_rpc_test_server
-image_builder_dev:
-	docker build --target builder-dev -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/builder-dev:$(DOCKER_TAG) .
-image_rpc_test_server:
-	docker build --target rpc-test-server -f $(DOCKERFILE) -t $(DOCKER_REPOS)/varlog/rpc-test-server:$(DOCKER_TAG) .
-
-push_dev: push_builder_dev push_rpc_test_server
-push_builder_dev:
-	docker push $(DOCKER_REPOS)/varlog/builder-dev:$(DOCKER_TAG)
-push_rpc_test_server:
-	docker push $(DOCKER_REPOS)/varlog/rpc-test-server:$(DOCKER_TAG)
-
-.PHONY: kustomize sandbox
 KUSTOMIZE_ENV := dev
-BUILD_ENV := $(shell echo $(BUILD_ENV) | tr A-Z a-z)
-ifeq ($(BUILD_ENV),sandbox)
-	KUSTOMIZE_ENV := sbx
-endif
-ifeq ($(BUILD_ENV),sbx)
-	KUSTOMIZE_ENV := sbx
-endif
-ifeq ($(BUILD_ENV),pm)
-	KUSTOMIZE_ENV := pm
-endif
 kustomize:
 	@sed "s/IMAGE_TAG/$(DOCKER_TAG)/" $(CURDIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.template.yaml > \
 		$(CURDIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.yaml

@@ -34,7 +34,7 @@ spec:
         imagePullPolicy: IfNotPresent
       containers:
       - name: varlog-sn
-        image: idock.daumkakao.io/varlog/varlog-sn:latest
+        image: idock.daumkakao.io/varlog/all-in-one:latest
         command:
         - "python3"
         - "/varlog/bin/vsn.py"

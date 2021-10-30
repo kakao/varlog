@@ -1,20 +1,16 @@
 pipeline {
-
   agent any
-
   stages {
-
     stage("build") {
       steps {
         sh "make build"
       }
-    }
+    } // end of stage("build")
 
     stage("test") {
       steps {
-        sh "make test_ci TEST_FLAGS='-v -race -failfast -count=2 -timeout=30m'"
+        sh "make test_ci TEST_FLAGS='-v -race -failfast -count=1 -timeout=20m'"
       }
-
       post {
         always {
           sh "make test_report"
@@ -24,41 +20,47 @@ pipeline {
           cobertura coberturaReportFile: "reports/coverage.xml"
         }
       }
-    }
+    } // end of stage("test")
 
-    stage("e2e-precondition") {
+    stage("e2e") {
       when {
         // skip PR branch
         branch pattern: "(?i)^varlog-\\d+", comparator: "REGEXP"
       }
-      options {
-        timeout(unit: 'MINUTES', time: 10)
+      environment {
+        D2HUB = credentials("d2hub-account")
+        DEV_E2E = credentials("varlog-dev-e2e-account")
+        VAULT_ADDR = "https://vault.daumkakao.io"
+        VAULT_SECRET_PATH= "secret/varlog/dkosv3/dev-e2e"
       }
       steps {
-        sh "build/d2hub-check-image.sh"
+        timeout([time: 3, unit: "MINUTES"]) {
+          waitUntil([initialRecurrencePeriod: 5000, quiet: true]) {
+            echo "precondition: all-in-one image"
+            script {
+              def ret = sh([
+                script: 'D2HUB_ID=${D2HUB_USR} D2HUB_PW=${D2HUB_PSW} build/d2hub-check-image.sh',
+                returnStatus: true
+              ])
+              return (ret == 0)
+            }
+          }
+        } // end of timeout
+
+        withCredentials([string(credentialsId: 'VAULT_TOKEN', variable: 'VAULT_TOKEN')]) {
+          lock("varlog-dev-e2e") {
+            sh 'kubectl config set-credentials ${DEV_E2E_USR} --token=${DEV_E2E_PSW}'
+            sh 'kubectl config set-cluster varlog-dev-e2e-cluster --insecure-skip-tls-verify=true --server https://dkosv3-varlog-dev-e2e-master-1.ay1.krane.9rum.cc:6443'
+            sh 'kubectl config set-context varlog-dev-e2e-context --cluster=varlog-dev-e2e-cluster --user=${DEV_E2E_USR}'
+            sh 'kubectl config use-context varlog-dev-e2e-context'
+            sh 'kubectl config view'
+            sh 'make kustomize DOCKER_TAG=$(build/d2hub-image-tag.sh) KUSTOMIZE_ENV=e2e'
+            sh 'kubectl apply -k deploy/k8s/e2e/'
+            sh 'make test_e2e TEST_FLAGS="-v -race -failfast -count=1 -timeout=30m"'
+          } // end of lock
+        } // end of withCredentials
       }
-    }
+    } // end of stage("e2e")
 
-    /*
-    stage("benchmark") {
-      steps {
-        sh "make bench"
-
-        lock("varlog-sandbox-01") {
-          sh "./scripts/benchmark.sh > reports/load.xml"
-        }
-      }
-
-      post {
-        always {
-          sh "make bench_report"
-          perfReport "reports/bench.xml"
-          perfReport "reports/load.xml"
-        }
-      }
-    }
-    */
-
-  }
-
-}
+  } // end of stages
+} // end of pipeline

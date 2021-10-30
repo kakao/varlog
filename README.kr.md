@@ -1,4 +1,4 @@
-[![Build Status](http://10.202.36.21/buildStatus/icon?job=varlog%2Fmaster)](http://10.202.36.21/job/varlog/job/master/)
+[![Build Status](https://varlog-jenkins.devel.kakao.com/buildStatus/icon?job=varlog%2Fmain)](https://varlog-jenkins.devel.kakao.com/job/varlog/job/main/)
 
 # Varlog 
 
