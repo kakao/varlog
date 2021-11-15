@@ -29,15 +29,19 @@ func newStartCommand() *cli.Command {
 			Name:    "cluster-id",
 			Aliases: []string{"cid"},
 			EnvVars: []string{"CLUSTER_ID"},
+			Usage:   "cluster identifier",
 		},
 		&cli.StringSliceFlag{
 			Name:     "metadata-repository-address",
 			Aliases:  []string{"mraddr"},
 			EnvVars:  []string{"METADATA_REPOSITORY_ADDRESS"},
+			Usage:    "metadata repository adddress",
 			Required: true,
 		},
 		&cli.IntFlag{
-			Name: "clients",
+			Name:  "clients",
+			Usage: "the number of clients",
+			Value: benchmark.DefaultNumClients,
 		},
 		&cli.StringFlag{
 			Name:        "data-size",

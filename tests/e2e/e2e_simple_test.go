@@ -505,15 +505,12 @@ func TestK8sVarlogEnduranceFollowerMRFail(t *testing.T) {
 }
 
 func TestK8sCreateCluster(t *testing.T) {
-	t.Skip()
-
-	const topicID = types.TopicID(1)
-
 	opts := getK8sVarlogClusterOpts()
 	opts.NrMR = 3
-	opts.NrSN = 12
-	opts.NrLS = 4
+	opts.NrSN = 6
+	opts.NrLS = 2
 	opts.RepFactor = 3
+	opts.Reset = true
 
 	Convey("Given Varlog Cluster", t, withTestCluster(opts, func(k8s *K8sVarlogCluster) {
 		vmsAddr, err := k8s.VMSAddress()
@@ -527,6 +524,14 @@ func TestK8sCreateCluster(t *testing.T) {
 
 		Reset(func() {
 			So(vmsCL.Close(), ShouldBeNil)
+		})
+
+		var topicID types.TopicID
+
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			rsp, err := vmsCL.AddTopic(ctx)
+			So(err, ShouldBeNil)
+			topicID = rsp.TopicID
 		})
 
 		logStreamIDs := make([]types.LogStreamID, 0, opts.NrLS)
