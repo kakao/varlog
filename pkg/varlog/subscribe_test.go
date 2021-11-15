@@ -74,7 +74,7 @@ func TestSubscribe(t *testing.T) {
 			return logCLManager
 		}
 
-		vlg := &varlog{}
+		vlg := &logImpl{}
 		vlg.logger = zap.L()
 		vlg.runner = runner.New("varlog-test", zap.L())
 		vlg.replicasRetriever = replicasRetriever

@@ -16,7 +16,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
-	"github.daumkakao.com/varlog/varlog/test/it"
+	"github.daumkakao.com/varlog/varlog/tests/it"
 )
 
 func TestAppendLogs(t *testing.T) {

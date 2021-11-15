@@ -11,12 +11,11 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 
-	"github.daumkakao.com/varlog/varlog/pkg/admin"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-	"github.daumkakao.com/varlog/varlog/proto/vmspb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 func TestK8sVarlogSimple(t *testing.T) {
@@ -28,7 +27,7 @@ func TestK8sVarlogSimple(t *testing.T) {
 
 		ctx, cancel := k8s.TimeoutContext()
 		defer cancel()
-		mcli, err := admin.New(ctx, vmsaddr)
+		mcli, err := varlog.NewAdmin(ctx, vmsaddr)
 		So(err, ShouldBeNil)
 
 		Reset(func() {
@@ -38,22 +37,20 @@ func TestK8sVarlogSimple(t *testing.T) {
 		Convey("AddLogStream - Simple", func() {
 			var topicID types.TopicID
 			k8s.WithTimeoutContext(func(ctx context.Context) {
-				rsp, err := mcli.AddTopic(ctx)
+				topic, err := mcli.AddTopic(ctx)
 				So(err, ShouldBeNil)
-				topicID = rsp.Topic.TopicID
+				topicID = topic.TopicID
 			})
 
 			var lsID types.LogStreamID
 
 			testutil.CompareWaitN(100, func() bool {
-				var (
-					err error
-					rsp *vmspb.AddLogStreamResponse
-				)
+				var err error
 				k8s.WithTimeoutContext(func(ctx context.Context) {
-					rsp, err = mcli.AddLogStream(ctx, topicID, nil)
+					var logStreamDesc *varlogpb.LogStreamDescriptor
+					logStreamDesc, err = mcli.AddLogStream(ctx, topicID, nil)
 					So(err, ShouldBeNil)
-					lsID = rsp.GetLogStream().GetLogStreamID()
+					lsID = logStreamDesc.GetLogStreamID()
 				})
 				return err == nil
 			})
@@ -61,7 +58,7 @@ func TestK8sVarlogSimple(t *testing.T) {
 			mrseed, err := k8s.MRAddress()
 			So(err, ShouldBeNil)
 
-			var vlg varlog.Varlog
+			var vlg varlog.Log
 			k8s.WithTimeoutContext(func(ctx context.Context) {
 				vlg, err = varlog.Open(
 					ctx,
@@ -133,7 +130,7 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 		connCtx, connCancel := k8s.TimeoutContext()
 		defer connCancel()
 
-		mcli, err := admin.New(connCtx, vmsaddr)
+		mcli, err := varlog.NewAdmin(connCtx, vmsaddr)
 		So(err, ShouldBeNil)
 
 		Reset(func() {
@@ -142,9 +139,9 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 
 		var topicID types.TopicID
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			rsp, err := mcli.AddTopic(ctx)
+			topic, err := mcli.AddTopic(ctx)
 			So(err, ShouldBeNil)
-			topicID = rsp.Topic.TopicID
+			topicID = topic.TopicID
 		})
 
 		callCtx, callCancel := k8s.TimeoutContext()
@@ -157,16 +154,16 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 
 		openCtx, openCancel := k8s.TimeoutContext()
 		defer openCancel()
-		varlog, err := varlog.Open(openCtx, types.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
+		vlg, err := varlog.Open(openCtx, types.ClusterID(1), []string{mrseed}, varlog.WithDenyTTL(5*time.Second))
 		So(err, ShouldBeNil)
 
 		Reset(func() {
-			varlog.Close()
+			vlg.Close()
 		})
 
 		appendCtx, appendCancel := k8s.TimeoutContext()
 		defer appendCancel()
-		_, err = varlog.Append(appendCtx, topicID, []byte("foo"))
+		_, err = vlg.Append(appendCtx, topicID, []byte("foo"))
 		So(err, ShouldBeNil)
 
 		Convey("When MR follower fail", func() {
@@ -186,7 +183,7 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 
 			Convey("Then it should be abel to append", func() {
 				for i := 0; i < 1000; i++ {
-					_, err := varlog.Append(context.TODO(), topicID, []byte("foo"))
+					_, err := vlg.Append(context.TODO(), topicID, []byte("foo"))
 					So(err, ShouldBeNil)
 				}
 
@@ -196,7 +193,7 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 
 					Convey("Then if should be abel to append", func() {
 						for i := 0; i < 1000; i++ {
-							_, err := varlog.Append(context.TODO(), topicID, []byte("foo"))
+							_, err := vlg.Append(context.TODO(), topicID, []byte("foo"))
 							So(err, ShouldBeNil)
 						}
 					})
@@ -218,12 +215,12 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		var (
-			mcli  admin.Client
+			mcli  varlog.Admin
 			mrcli mrc.MetadataRepositoryClient
 			lsID  types.LogStreamID
 		)
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			mcli, err = admin.New(ctx, vmsaddr)
+			mcli, err = varlog.NewAdmin(ctx, vmsaddr)
 			So(err, ShouldBeNil)
 		})
 
@@ -239,15 +236,15 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 
 		var topicID types.TopicID
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			rsp, err := mcli.AddTopic(ctx)
+			topic, err := mcli.AddTopic(ctx)
 			So(err, ShouldBeNil)
-			topicID = rsp.Topic.TopicID
+			topicID = topic.TopicID
 		})
 
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			r, err := mcli.AddLogStream(ctx, topicID, nil)
+			logStreamDesc, err := mcli.AddLogStream(ctx, topicID, nil)
 			So(err, ShouldBeNil)
-			lsID = r.LogStream.LogStreamID
+			lsID = logStreamDesc.LogStreamID
 		})
 
 		So(testutil.CompareWaitN(100, func() bool {
@@ -371,13 +368,13 @@ func TestK8sVarlogAppend(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		var (
-			mcli  admin.Client
+			mcli  varlog.Admin
 			mrcli mrc.MetadataRepositoryClient
-			vlg   varlog.Varlog
+			vlg   varlog.Log
 		)
 
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			mcli, err = admin.New(ctx, vmsaddr)
+			mcli, err = varlog.NewAdmin(ctx, vmsaddr)
 			So(err, ShouldBeNil)
 		})
 
@@ -525,7 +522,7 @@ func TestK8sCreateCluster(t *testing.T) {
 		ctx, cancel := k8s.TimeoutContext()
 		defer cancel()
 
-		vmsCL, err := admin.New(ctx, vmsAddr)
+		vmsCL, err := varlog.NewAdmin(ctx, vmsAddr)
 		So(err, ShouldBeNil)
 
 		Reset(func() {
@@ -535,14 +532,12 @@ func TestK8sCreateCluster(t *testing.T) {
 		logStreamIDs := make([]types.LogStreamID, 0, opts.NrLS)
 		for i := 0; i < opts.NrLS; i++ {
 			testutil.CompareWaitN(100, func() bool {
-				var (
-					rsp *vmspb.AddLogStreamResponse
-					err error
-				)
+				var err error
 				k8s.WithTimeoutContext(func(ctx context.Context) {
-					rsp, err = vmsCL.AddLogStream(ctx, topicID, nil)
+					var logStreamDesc *varlogpb.LogStreamDescriptor
+					logStreamDesc, err = vmsCL.AddLogStream(ctx, topicID, nil)
 					So(err, ShouldBeNil)
-					logStreamID := rsp.GetLogStream().GetLogStreamID()
+					logStreamID := logStreamDesc.GetLogStreamID()
 					logStreamIDs = append(logStreamIDs, logStreamID)
 					log.Printf("AddLogStream (%d)", logStreamID)
 				})

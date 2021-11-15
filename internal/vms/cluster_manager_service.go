@@ -80,6 +80,16 @@ func (s *clusterManagerService) AddTopic(ctx context.Context, req *vmspb.AddTopi
 	return rspI.(*vmspb.AddTopicResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
 }
 
+func (s *clusterManagerService) Topics(ctx context.Context, req *vmspb.TopicsRequest) (*vmspb.TopicsResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/Topics", req,
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			tds, err := s.clusManager.Topics(ctx)
+			return &vmspb.TopicsResponse{Topics: tds}, err
+		},
+	)
+	return rspI.(*vmspb.TopicsResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
+}
+
 func (s *clusterManagerService) UnregisterTopic(ctx context.Context, req *vmspb.UnregisterTopicRequest) (*vmspb.UnregisterTopicResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/UnregisterTopic", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
@@ -215,9 +225,9 @@ func (s *clusterManagerService) GetStorageNodes(ctx context.Context, req *pbtype
 			}
 			rsp = &vmspb.GetStorageNodesResponse{}
 			if meta != nil && meta.StorageNodes != nil {
-				rsp.Storagenodes = make(map[types.StorageNodeID]string, len(meta.StorageNodes))
+				rsp.StorageNodes = make(map[types.StorageNodeID]string, len(meta.StorageNodes))
 				for _, sn := range meta.StorageNodes {
-					rsp.Storagenodes[sn.StorageNodeID] = sn.Address
+					rsp.StorageNodes[sn.StorageNodeID] = sn.Address
 				}
 			}
 			return rsp, nil

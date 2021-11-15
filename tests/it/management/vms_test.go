@@ -20,7 +20,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
-	"github.daumkakao.com/varlog/varlog/test/it"
+	"github.daumkakao.com/varlog/varlog/tests/it"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 )
 

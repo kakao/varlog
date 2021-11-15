@@ -13,7 +13,7 @@ import (
 )
 
 // TODO: use ops-accumulator?
-func (v *varlog) append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (glsn types.GLSN, err error) {
+func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (glsn types.GLSN, err error) {
 	appendOpts := defaultAppendOptions()
 	for _, opt := range opts {
 		opt.apply(&appendOpts)
@@ -68,7 +68,7 @@ func (v *varlog) append(ctx context.Context, topicID types.TopicID, logStreamID 
 	return glsn, err
 }
 
-func (v *varlog) read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) (varlogpb.LogEntry, error) {
+func (v *logImpl) read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) (varlogpb.LogEntry, error) {
 	replicas, ok := v.replicasRetriever.Retrieve(topicID, logStreamID)
 	if !ok {
 		return varlogpb.InvalidLogEntry(), errNoLogStream

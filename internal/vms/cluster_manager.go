@@ -43,7 +43,9 @@ type ClusterManager interface {
 
 	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error
 
-	AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error)
+	AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, error)
+
+	Topics(ctx context.Context) ([]varlogpb.TopicDescriptor, error)
 
 	UnregisterTopic(ctx context.Context, topicID types.TopicID) error
 
@@ -378,21 +380,32 @@ func (cm *clusterManager) UnregisterStorageNode(ctx context.Context, storageNode
 	return nil
 }
 
-func (cm *clusterManager) AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error) {
+func (cm *clusterManager) AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	var err error
-
 	topicID := cm.topicIDGen.Generate()
-	if err = cm.mrMgr.RegisterTopic(ctx, topicID); err != nil {
-		goto errOut
+	if err := cm.mrMgr.RegisterTopic(ctx, topicID); err != nil {
+		return varlogpb.TopicDescriptor{}, err
 	}
 
-	return &varlogpb.TopicDescriptor{TopicID: topicID}, nil
+	return varlogpb.TopicDescriptor{TopicID: topicID}, nil
+}
 
-errOut:
-	return nil, err
+func (cm *clusterManager) Topics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	md, err := cm.cmView.ClusterMetadata(ctx)
+	if err != nil || len(md.Topics) == 0 {
+		return nil, err
+	}
+
+	tds := make([]varlogpb.TopicDescriptor, len(md.Topics))
+	for idx := range md.Topics {
+		tds[idx] = *md.Topics[idx]
+	}
+	return tds, nil
 }
 
 func (cm *clusterManager) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {

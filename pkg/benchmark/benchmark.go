@@ -25,7 +25,7 @@ type benchmarkImpl struct {
 	once sync.Once
 
 	data    []byte
-	clients []varlog.Varlog
+	clients []varlog.Log
 	readyC  chan struct{}
 	startC  chan struct{}
 
