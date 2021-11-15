@@ -21,7 +21,6 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode/volume"
 	"github.com/kakao/varlog/internal/vms"
-	"github.com/kakao/varlog/pkg/admin"
 	"github.com/kakao/varlog/pkg/logc"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
@@ -67,12 +66,12 @@ type VarlogCluster struct {
 	replicas map[types.LogStreamID][]*varlogpb.ReplicaDescriptor
 
 	// clients
-	clients []varlog.Varlog
+	clients []varlog.Log
 	muCL    sync.Mutex
 
 	muVMS     sync.Mutex
 	vmsServer vms.ClusterManager
-	vmsCL     admin.Client
+	vmsCL     varlog.Admin
 
 	portLease *ports.Lease
 
@@ -623,11 +622,10 @@ func (clus *VarlogCluster) AddTopic(t *testing.T) types.TopicID {
 
 	log.Println("AddTopic")
 
-	rsp, err := clus.vmsCL.AddTopic(context.Background())
+	topicDesc, err := clus.vmsCL.AddTopic(context.Background())
 	require.NoError(t, err)
-	log.Printf("AddTopic: %+v", rsp)
+	log.Printf("AddTopic: %+v", topicDesc)
 
-	topicDesc := rsp.GetTopic()
 	topicID := topicDesc.GetTopicID()
 
 	clus.topicLogStreamIDs[topicID] = nil
@@ -645,11 +643,10 @@ func (clus *VarlogCluster) AddLS(t *testing.T, topicID types.TopicID) types.LogS
 
 	require.GreaterOrEqual(t, len(clus.storageNodes), clus.nrRep)
 
-	rsp, err := clus.vmsCL.AddLogStream(context.Background(), topicID, nil)
+	logStreamDesc, err := clus.vmsCL.AddLogStream(context.Background(), topicID, nil)
 	require.NoError(t, err)
-	log.Printf("AddLS: AddLogStream: %+v", rsp)
+	log.Printf("AddLS: AddLogStream: %+v", logStreamDesc)
 
-	logStreamDesc := rsp.GetLogStream()
 	logStreamID := logStreamDesc.GetLogStreamID()
 
 	// FIXME: use map to store logstream and its replicas
@@ -1115,7 +1112,7 @@ func (clus *VarlogCluster) getSN(t *testing.T, lsID types.LogStreamID, idx int) 
 	return clus.LookupSN(t, snid)
 }
 
-func (clus *VarlogCluster) newClient(t *testing.T) varlog.Varlog {
+func (clus *VarlogCluster) newClient(t *testing.T) varlog.Log {
 	cl, err := varlog.Open(context.Background(), clus.clusterID, clus.mrRPCEndpoints)
 	require.NoError(t, err)
 	return cl
@@ -1174,7 +1171,7 @@ func (clus *VarlogCluster) initVMS(t *testing.T) {
 
 func (clus *VarlogCluster) initVMSClient(t *testing.T) {
 	addr := clus.vmsServer.Address()
-	cmcli, err := admin.New(context.TODO(), addr)
+	cmcli, err := varlog.NewAdmin(context.TODO(), addr)
 	require.NoError(t, err)
 	clus.vmsCL = cmcli
 }
@@ -1187,7 +1184,7 @@ func (clus *VarlogCluster) StartVMS(t *testing.T) {
 	clus.initVMS(t)
 }
 
-func (clus *VarlogCluster) GetVMSClient(t *testing.T) admin.Client {
+func (clus *VarlogCluster) GetVMSClient(t *testing.T) varlog.Admin {
 	clus.muVMS.Lock()
 	defer clus.muVMS.Unlock()
 
@@ -1360,7 +1357,7 @@ func (clus *VarlogCluster) NumberOfClients() int {
 	return len(clus.clients)
 }
 
-func (clus *VarlogCluster) ClientAtIndex(t *testing.T, idx int) varlog.Varlog {
+func (clus *VarlogCluster) ClientAtIndex(t *testing.T, idx int) varlog.Log {
 	clus.muCL.Lock()
 	defer clus.muCL.Unlock()
 

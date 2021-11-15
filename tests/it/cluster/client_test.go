@@ -15,7 +15,7 @@ import (
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/test/it"
+	"github.com/kakao/varlog/tests/it"
 )
 
 func TestClientNoLogStream(t *testing.T) {

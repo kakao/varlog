@@ -15,7 +15,7 @@ import (
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/test/it"
+	"github.com/kakao/varlog/tests/it"
 )
 
 func TestUnregisterInactiveStorageNode(t *testing.T) {
@@ -23,12 +23,12 @@ func TestUnregisterInactiveStorageNode(t *testing.T) {
 	defer clus.Close(t)
 
 	snID := clus.StorageNodeIDAtIndex(t, 0)
-	_, err := clus.GetVMSClient(t).UnregisterStorageNode(context.Background(), snID)
+	err := clus.GetVMSClient(t).UnregisterStorageNode(context.Background(), snID)
 	require.NoError(t, err)
 
-	rsp, err := clus.GetVMSClient(t).GetStorageNodes(context.Background())
+	snMap, err := clus.GetVMSClient(t).GetStorageNodes(context.Background())
 	require.NoError(t, err)
-	require.Len(t, rsp.GetStoragenodes(), 0)
+	require.Len(t, snMap, 0)
 }
 
 func TestUnregisterActiveStorageNode(t *testing.T) {
@@ -36,7 +36,7 @@ func TestUnregisterActiveStorageNode(t *testing.T) {
 	defer clus.Close(t)
 
 	snID := clus.StorageNodeIDAtIndex(t, 0)
-	_, err := clus.GetVMSClient(t).UnregisterStorageNode(context.Background(), snID)
+	err := clus.GetVMSClient(t).UnregisterStorageNode(context.Background(), snID)
 	require.Error(t, err)
 }
 
@@ -56,13 +56,13 @@ func TestUnregisterLogStream(t *testing.T) {
 
 	topicID := clus.TopicIDs()[0]
 	lsID := clus.LogStreamIDs(topicID)[0]
-	_, err := clus.GetVMSClient(t).UnregisterLogStream(context.Background(), topicID, lsID)
+	err := clus.GetVMSClient(t).UnregisterLogStream(context.Background(), topicID, lsID)
 	require.Error(t, err)
 
 	_, err = clus.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
 	require.NoError(t, err)
 
-	_, err = clus.GetVMSClient(t).UnregisterLogStream(context.Background(), topicID, lsID)
+	err = clus.GetVMSClient(t).UnregisterLogStream(context.Background(), topicID, lsID)
 	require.NoError(t, err)
 }
 
@@ -171,7 +171,7 @@ func TestRemoveLogStreamReplica(t *testing.T) {
 	err = sn.AddLogStreamReplica(context.Background(), topicID, lsID, snmd.GetStorageNode().GetStorages()[0].GetPath())
 	require.NoError(t, err)
 
-	_, err = clus.GetVMSClient(t).RemoveLogStreamReplica(context.TODO(), snid, topicID, lsID)
+	err = clus.GetVMSClient(t).RemoveLogStreamReplica(context.TODO(), snid, topicID, lsID)
 	require.NoError(t, err)
 }
 
@@ -598,7 +598,11 @@ func TestAddTopic(t *testing.T) {
 			topicDesc, err := vmsCL.AddTopic(context.TODO())
 			So(err, ShouldBeNil)
 
-			addTopicID := topicDesc.Topic.TopicID
+			addTopicID := topicDesc.TopicID
+
+			tds, err := vmsCL.Topics(context.TODO())
+			So(err, ShouldBeNil)
+			So(tds, ShouldHaveLength, 4)
 
 			_, err = vmsCL.AddLogStream(context.TODO(), addTopicID, nil)
 			So(err, ShouldBeNil)

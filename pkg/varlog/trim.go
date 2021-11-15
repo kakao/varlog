@@ -21,7 +21,7 @@ type trimArgument struct {
 	err           error
 }
 
-func (v *varlog) trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
+func (v *logImpl) trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
 	trimArgs := createTrimArguments(v.replicasRetriever.All(topicID))
 	if len(trimArgs) == 0 {
 		return errors.New("no storage node")
@@ -47,7 +47,7 @@ func (v *varlog) trim(ctx context.Context, topicID types.TopicID, until types.GL
 	return trimArgs[0].err
 }
 
-func (v *varlog) makeTrimmer(trimArg *trimArgument, topicID types.TopicID, until types.GLSN, wg *sync.WaitGroup) func(context.Context) {
+func (v *logImpl) makeTrimmer(trimArg *trimArgument, topicID types.TopicID, until types.GLSN, wg *sync.WaitGroup) func(context.Context) {
 	return func(ctx context.Context) {
 		defer wg.Done()
 		logCL, err := v.logCLManager.GetOrConnect(ctx, trimArg.storageNodeID, trimArg.address)

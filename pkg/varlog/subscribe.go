@@ -21,7 +21,7 @@ import (
 
 type SubscribeCloser func()
 
-func (v *varlog) subscribe(ctx context.Context, topicID types.TopicID, begin, end types.GLSN, onNext OnNext, opts ...SubscribeOption) (closer SubscribeCloser, err error) {
+func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, end types.GLSN, onNext OnNext, opts ...SubscribeOption) (closer SubscribeCloser, err error) {
 	if begin >= end {
 		return nil, verrors.ErrInvalid
 	}

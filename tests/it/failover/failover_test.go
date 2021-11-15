@@ -14,7 +14,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/test/it"
+	"github.com/kakao/varlog/tests/it"
 	"github.com/kakao/varlog/vtesting"
 )
 

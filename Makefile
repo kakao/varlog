@@ -9,6 +9,8 @@ PKGS := $(shell $(GO) list ./... | \
 	egrep -v "github.com/kakao/varlog/tools" | \
 	sed -e "s;github.com/kakao/varlog/;;")
 
+DOCKER_REPOS := ***REMOVED***
+
 
 .DEFAULT_GOAL := all
 .PHONY: all
@@ -103,7 +105,7 @@ bench_report:
 
 test_e2e:
 	tmpfile=$$(mktemp); \
-	(TERM=xterm $(GO) test $(TEST_FLAGS) ./test/e2e -tags=e2e 2>&1; echo $$? > $$tmpfile) | \
+	(TERM=xterm $(GO) test $(TEST_FLAGS) ./tests/e2e -tags=e2e 2>&1; echo $$? > $$tmpfile) | \
 	tee $(TEST_OUTPUT); \
 	ret=$$(cat $$tmpfile); \
 	rm -f $$tmpfile; \
@@ -131,7 +133,7 @@ test_e2e_docker: image_builder_dev push_builder_dev
 		--env="VAULT_ADDR=$(VAULT_ADDR)" \
 		--env="VAULT_TOKEN=$(VAULT_TOKEN)" \
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
-		--command -- $(GO) test ./test/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1
+		--command -- $(GO) test ./tests/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1
 
 test_e2e_docker_long: image_builder_dev push_builder_dev
 	kubectl run --rm -it $(TEST_POD_NAME) \

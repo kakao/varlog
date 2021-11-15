@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	vtypes "github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/types"
 )
 
 const (
@@ -112,8 +112,8 @@ type actionOptions struct {
 	title       string
 	prevf       func() error
 	postf       func() error
-	clusterID   vtypes.ClusterID
-	topicID     vtypes.TopicID
+	clusterID   types.ClusterID
+	topicID     types.TopicID
 	mrAddr      string
 	nrCli       int
 	nrSub       int
@@ -192,7 +192,7 @@ func WithConfChange(cc ConfChanger) ActionOption {
 	}
 }
 
-func WithClusterID(cid vtypes.ClusterID) ActionOption {
+func WithClusterID(cid types.ClusterID) ActionOption {
 	return func(opts *actionOptions) {
 		opts.clusterID = cid
 	}

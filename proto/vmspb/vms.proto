@@ -35,16 +35,20 @@ message UnregisterStorageNodeRequest {
 
 message UnregisterStorageNodeResponse {}
 
-message AddTopicRequest {
-    int32 topic_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
+// AddTopicRequest represents a request to add a topic to the cluster.
+message AddTopicRequest {}
+
+// AddTopicResponse represents a response of AddTopicRequest.
+message AddTopicResponse {
+    varlogpb.TopicDescriptor topic = 1 [(gogoproto.nullable) = false];
 }
 
-message AddTopicResponse {
-    varlogpb.TopicDescriptor topic = 1;
+// TopicsRequest represents a request to get a list of topics in the cluster.
+message TopicsRequest {}
+
+// TopicsResponse represents a response of TopicsRequest.
+message TopicsResponse {
+    repeated varlogpb.TopicDescriptor topics = 1 [(gogoproto.nullable) = false];
 }
 
 message UnregisterTopicRequest {
@@ -215,7 +219,7 @@ message GetMRMembersResponse {
 }
 
 message GetStorageNodesResponse {
-    map<int32, string> storagenodes = 1
+    map<int32, string> storage_nodes = 1
         [(gogoproto.castkey) =
              "github.com/kakao/varlog/pkg/types.StorageNodeID"];
 }
@@ -247,6 +251,8 @@ service ClusterManager {
         returns (UnregisterStorageNodeResponse) {}
 
     rpc AddTopic(AddTopicRequest) returns (AddTopicResponse) {}
+
+    rpc Topics(TopicsRequest) returns (TopicsResponse) {}
 
     rpc UnregisterTopic(UnregisterTopicRequest)
         returns (UnregisterTopicResponse) {}

@@ -14,7 +14,6 @@ import (
 	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kakao/varlog/pkg/admin"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 )
@@ -79,7 +78,7 @@ func TestK8sVarlogAppendLongTime(t *testing.T) {
 			grp.Go(func() (err error) {
 				startTime := time.Now()
 				log.Printf("client-%d starts", clientIdx)
-				var vlg varlog.Varlog
+				var vlg varlog.Log
 				k8s.WithTimeoutContext(func(ctx context.Context) {
 					vlg, err = varlog.Open(ctx, clusterID, mrSeeds, vlgOpts...)
 				})

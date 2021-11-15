@@ -20,7 +20,7 @@ import (
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/test/it"
+	"github.com/kakao/varlog/tests/it"
 	"github.com/kakao/varlog/vtesting"
 )
 

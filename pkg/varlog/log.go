@@ -1,6 +1,6 @@
 package varlog
 
-//go:generate mockgen -package varlog -destination varlog_mock.go . Varlog
+//go:generate mockgen -package varlog -destination log_mock.go . Log
 
 import (
 	"context"
@@ -16,8 +16,8 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-// Varlog is a log interface with thread-safety. Many goroutines can share the same varlog object.
-type Varlog interface {
+// Log is a log interface with thread-safety. Many goroutines can share the same varlog object.
+type Log interface {
 	io.Closer
 
 	Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...AppendOption) (types.GLSN, error)
@@ -33,7 +33,7 @@ type Varlog interface {
 
 type OnNext func(logEntry varlogpb.LogEntry, err error)
 
-type varlog struct {
+type logImpl struct {
 	clusterID         types.ClusterID
 	refresher         MetadataRefresher
 	lsSelector        LogStreamSelector
@@ -49,17 +49,17 @@ type varlog struct {
 	closed atomicutil.AtomicBool
 }
 
-var _ Varlog = (*varlog)(nil)
+var _ Log = (*logImpl)(nil)
 
 // Open creates new logs or opens an already created logs.
-func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Varlog, error) {
+func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts ...Option) (Log, error) {
 	logOpts := defaultOptions()
 	for _, opt := range opts {
 		opt.apply(&logOpts)
 	}
 	logOpts.logger = logOpts.logger.Named("varlog").With(zap.Any("cid", clusterID))
 
-	v := &varlog{
+	v := &logImpl{
 		clusterID: clusterID,
 		logger:    logOpts.logger,
 		opts:      &logOpts,
@@ -124,16 +124,16 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	return v, nil
 }
 
-func (v *varlog) Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...AppendOption) (types.GLSN, error) {
+func (v *logImpl) Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...AppendOption) (types.GLSN, error) {
 	return v.append(ctx, topicID, 0, data, opts...)
 }
 
-func (v *varlog) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error) {
+func (v *logImpl) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error) {
 	opts = append(opts, withoutSelectLogStream())
 	return v.append(ctx, topicID, logStreamID, data, opts...)
 }
 
-func (v *varlog) Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
+func (v *logImpl) Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
 	logEntry, err := v.read(ctx, topicID, logStreamID, glsn)
 	if err != nil {
 		return nil, err
@@ -141,15 +141,15 @@ func (v *varlog) Read(ctx context.Context, topicID types.TopicID, logStreamID ty
 	return logEntry.Data, nil
 }
 
-func (v *varlog) Subscribe(ctx context.Context, topicID types.TopicID, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error) {
+func (v *logImpl) Subscribe(ctx context.Context, topicID types.TopicID, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error) {
 	return v.subscribe(ctx, topicID, begin, end, onNextFunc, opts...)
 }
 
-func (v *varlog) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
+func (v *logImpl) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
 	return v.trim(ctx, topicID, until, opts)
 }
 
-func (v *varlog) Close() (err error) {
+func (v *logImpl) Close() (err error) {
 	if v.closed.Load() {
 		return
 	}

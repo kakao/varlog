@@ -17,7 +17,7 @@ import (
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
-	"github.com/kakao/varlog/test/it"
+	"github.com/kakao/varlog/tests/it"
 )
 
 func TestMRConnectorWithoutRemoveMRPeer(t *testing.T) {
