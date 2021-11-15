@@ -32,3 +32,4 @@ patches:
 - otel-collector-patch.yaml
 - jaeger-patch.yaml
 - prometheus-patch.yaml
+- grafana-patch.yaml

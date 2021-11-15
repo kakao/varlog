@@ -1,0 +1,9 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  labels:
+    app: grafana
+  name: grafana
+  namespace: default
+spec:
+  replicas: 0
