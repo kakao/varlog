@@ -1,26 +1,21 @@
 ARG GO_VERSION=1.17.2
+ARG ALPINE_VERSION=3.14
 ARG GRPC_HEALTH_PROBE_VERSION=v0.4.5
-ARG DEBIAN_FRONTEND=noninteractive
 
-FROM mdock.daumkakao.io/golang:${GO_VERSION} AS builder
-RUN groupadd -r varlog && useradd -r -g varlog varlog --home-dir=/varlog
-ARG DEBIAN_FRONTEND
+FROM mdock.daumkakao.io/golang:${GO_VERSION}-alpine AS builder
+RUN addgroup -S -g 1000 varlog \
+    && adduser -H -S -D -h /varlog -G varlog -u 999 -s /bin/sh varlog \
+    && mkdir /varlog \
+    && chown -R varlog:varlog /varlog
 ARG GRPC_HEALTH_PROBE_VERSION
 USER root
-RUN set -eux \
-    && apt-get -y update \
-    && apt-get install -y --no-install-recommends \
-        unzip \
-        build-essential \
-        vim \
-    && rm -rf /var/lib/apt/lists/* \
+RUN apk add --update --no-cache alpine-sdk python3 bash \
+    && ln -sf python3 /usr/bin/python \
+    && python3 -m ensurepip \
+    && pip3 install --no-cache --upgrade pip setuptools \
     && wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 \
     && chmod +x /bin/grpc_health_probe \
-    && go get github.com/go-delve/delve/cmd/dlv
+    && go install github.com/go-delve/delve/cmd/dlv@latest
 
 WORKDIR /varlog
-COPY . .
-RUN chown -R varlog:varlog /varlog
 USER varlog
-RUN set -eux \
-    && CGO_ENABLED=0 make build GOFLAGS=""
