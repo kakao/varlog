@@ -11,6 +11,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	types "github.com/kakao/varlog/pkg/types"
+	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 )
 
 // MockLog is a mock of Log interface.
@@ -90,6 +91,21 @@ func (mr *MockLogMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockLog)(nil).Close))
 }
 
+// LogStreamMetadata mocks base method.
+func (m *MockLog) LogStreamMetadata(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LogStreamMetadata", arg0, arg1, arg2)
+	ret0, _ := ret[0].(varlogpb.LogStreamDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LogStreamMetadata indicates an expected call of LogStreamMetadata.
+func (mr *MockLogMockRecorder) LogStreamMetadata(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamMetadata", reflect.TypeOf((*MockLog)(nil).LogStreamMetadata), arg0, arg1, arg2)
+}
+
 // Read mocks base method.
 func (m *MockLog) Read(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 types.GLSN) ([]byte, error) {
 	m.ctrl.T.Helper()
@@ -123,6 +139,26 @@ func (mr *MockLogMockRecorder) Subscribe(arg0, arg1, arg2, arg3, arg4 interface{
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3, arg4}, arg5...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLog)(nil).Subscribe), varargs...)
+}
+
+// SubscribeTo mocks base method.
+func (m *MockLog) SubscribeTo(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 types.LLSN, arg5 OnNext, arg6 ...SubscribeOption) (SubscribeCloser, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1, arg2, arg3, arg4, arg5}
+	for _, a := range arg6 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SubscribeTo", varargs...)
+	ret0, _ := ret[0].(SubscribeCloser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SubscribeTo indicates an expected call of SubscribeTo.
+func (mr *MockLogMockRecorder) SubscribeTo(arg0, arg1, arg2, arg3, arg4, arg5 interface{}, arg6 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3, arg4, arg5}, arg6...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTo", reflect.TypeOf((*MockLog)(nil).SubscribeTo), varargs...)
 }
 
 // Trim mocks base method.

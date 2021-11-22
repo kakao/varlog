@@ -188,6 +188,14 @@ func (c *testLog) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 	}, nil
 }
 
+func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, onNextFunc varlog.OnNext, opts ...varlog.SubscribeOption) (varlog.SubscribeCloser, error) {
+	panic("not implemented")
+}
+
 func (c *testLog) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts varlog.TrimOption) error {
+	panic("not implemented")
+}
+
+func (c *testLog) LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
 	panic("not implemented")
 }

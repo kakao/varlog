@@ -28,7 +28,11 @@ type Log interface {
 
 	Subscribe(ctx context.Context, topicID types.TopicID, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error)
 
+	SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error)
+
 	Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error
+
+	LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error)
 }
 
 type OnNext func(logEntry varlogpb.LogEntry, err error)
@@ -145,8 +149,16 @@ func (v *logImpl) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 	return v.subscribe(ctx, topicID, begin, end, onNextFunc, opts...)
 }
 
+func (v *logImpl) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error) {
+	panic("not implemented")
+}
+
 func (v *logImpl) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
 	return v.trim(ctx, topicID, until, opts)
+}
+
+func (v *logImpl) LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
+	panic("not implemented")
 }
 
 func (v *logImpl) Close() (err error) {
