@@ -3,15 +3,14 @@ package app
 import (
 	"context"
 
-	"github.com/gogo/protobuf/proto"
-	pbtypes "github.com/gogo/protobuf/types"
-
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
 func (app *VMCApp) infoMRMembers() {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.Admin) (proto.Message, error) {
+		func(ctx context.Context, cli varlog.Admin) (interface{}, error) {
 			app.logger.Info("info MR Members")
 			return cli.GetMRMembers(ctx)
 		},
@@ -20,20 +19,15 @@ func (app *VMCApp) infoMRMembers() {
 
 func (app *VMCApp) infoStoragenodes() {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.Admin) (proto.Message, error) {
+		func(ctx context.Context, cli varlog.Admin) (interface{}, error) {
 			app.logger.Info("info storagenode")
+			rsp := &vmspb.GetStorageNodesResponse{}
 			snMap, err := cli.GetStorageNodes(ctx)
-			if err != nil {
-				return nil, err
+			rsp.StorageNodes = snMap
+			if len(rsp.StorageNodes) == 0 {
+				rsp.StorageNodes = make(map[types.StorageNodeID]string)
 			}
-			// FIXME: Fix awkward implementation.
-			ret := &pbtypes.Struct{}
-			for snID, addr := range snMap {
-				ret.Fields[snID.String()] = &pbtypes.Value{
-					Kind: &pbtypes.Value_StringValue{StringValue: addr},
-				}
-			}
-			return ret, nil
+			return rsp, err
 		},
 	)
 }

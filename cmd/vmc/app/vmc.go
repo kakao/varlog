@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 
@@ -37,7 +36,7 @@ func (app *VMCApp) Execute() error {
 	return app.app.Run(os.Args)
 }
 
-type CommandExecutor func(ctx context.Context, cli varlog.Admin) (proto.Message, error)
+type CommandExecutor func(ctx context.Context, cli varlog.Admin) (interface{}, error)
 
 func (app *VMCApp) withExecutionContext(f CommandExecutor) {
 	if !app.options.Verbose {

@@ -211,7 +211,8 @@ message GetMRMembersResponse {
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
 
-    int32 replication_factor = 2;
+    int32 replication_factor = 2
+        [(gogoproto.jsontag) = "replicationFactor,omitempty"];
 
     map<uint64, string> members = 3
         [(gogoproto.castkey) =
@@ -219,9 +220,11 @@ message GetMRMembersResponse {
 }
 
 message GetStorageNodesResponse {
-    map<int32, string> storage_nodes = 1
-        [(gogoproto.castkey) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID"];
+    map<int32, string> storage_nodes = 1 [
+        (gogoproto.castkey) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
+        (gogoproto.jsontag) = "storageNodes"
+    ];
 }
 
 message AddMRPeerRequest {
@@ -233,7 +236,8 @@ message AddMRPeerResponse {
     uint64 node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
-        (gogoproto.customname) = "NodeID"
+        (gogoproto.customname) = "NodeID",
+        (gogoproto.jsontag) = "nodeId,omitempty"
     ];
 }
 

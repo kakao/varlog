@@ -65,9 +65,7 @@ func TestK8sVarlogSimple(t *testing.T) {
 					types.ClusterID(1),
 					[]string{mrseed},
 					varlog.WithDenyTTL(5*time.Second),
-					varlog.WithMRConnectorCallTimeout(3*time.Second),
-					varlog.WithMetadataRefreshTimeout(3*time.Second),
-					varlog.WithOpenTimeout(10*time.Second),
+					varlog.WithMetadataRefreshInterval(time.Second),
 				)
 				So(err, ShouldBeNil)
 			})
@@ -76,10 +74,12 @@ func TestK8sVarlogSimple(t *testing.T) {
 				So(vlg.Close(), ShouldBeNil)
 			})
 
-			appendCtx, appendCancel := k8s.TimeoutContext()
-			defer appendCancel()
-			glsn, err := vlg.Append(appendCtx, topicID, []byte("foo"))
-			So(err, ShouldBeNil)
+			var glsn types.GLSN
+			k8s.WithTimeoutContext(func(ctx context.Context) {
+				var err error
+				glsn, err = vlg.Append(ctx, topicID, []byte("foo"))
+				So(err, ShouldBeNil)
+			})
 
 			readCtx, readCancel := k8s.TimeoutContext()
 			defer readCancel()

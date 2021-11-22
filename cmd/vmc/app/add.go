@@ -3,18 +3,16 @@ package app
 import (
 	"context"
 
-	"github.com/gogo/protobuf/proto"
-	pbtypes "github.com/gogo/protobuf/types"
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/pkg/varlog"
-
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog"
+	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
 func (app *VMCApp) addStorageNode(snAddr string) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.Admin) (proto.Message, error) {
+		func(ctx context.Context, cli varlog.Admin) (interface{}, error) {
 			app.logger.Info("add storagenode", zap.String("snaddr", snAddr))
 			return cli.AddStorageNode(ctx, snAddr)
 		},
@@ -23,7 +21,7 @@ func (app *VMCApp) addStorageNode(snAddr string) {
 
 func (app *VMCApp) addTopic() {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.Admin) (proto.Message, error) {
+		func(ctx context.Context, cli varlog.Admin) (interface{}, error) {
 			topic, err := cli.AddTopic(ctx)
 			if err != nil {
 				return nil, err
@@ -35,7 +33,7 @@ func (app *VMCApp) addTopic() {
 
 func (app *VMCApp) addLogStream(topicID types.TopicID) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.Admin) (proto.Message, error) {
+		func(ctx context.Context, cli varlog.Admin) (interface{}, error) {
 			return cli.AddLogStream(ctx, topicID, nil)
 		},
 	)
@@ -43,13 +41,15 @@ func (app *VMCApp) addLogStream(topicID types.TopicID) {
 
 func (app *VMCApp) addMRPeer(raftURL, rpcAddr string) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.Admin) (proto.Message, error) {
+		func(ctx context.Context, cli varlog.Admin) (interface{}, error) {
 			app.logger.Info("add MR Peer",
 				zap.String("raftURL", raftURL),
 				zap.String("rpcAddr", rpcAddr),
 			)
+			rsp := &vmspb.AddMRPeerResponse{}
 			nodeID, err := cli.AddMRPeer(ctx, raftURL, rpcAddr)
-			return &pbtypes.UInt64Value{Value: uint64(nodeID)}, err
+			rsp.NodeID = nodeID
+			return rsp, err
 		},
 	)
 }

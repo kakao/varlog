@@ -1,33 +1,26 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
-
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 )
 
 type Printer interface {
-	Print(w io.Writer, msg proto.Message) error
+	Print(w io.Writer, msg interface{}) error
 }
 
 type jsonPrinter struct {
 }
 
-func (p *jsonPrinter) Print(w io.Writer, msg proto.Message) error {
+func (p *jsonPrinter) Print(w io.Writer, msg interface{}) error {
 	if msg == nil {
 		return nil
 	}
-	marshaler := jsonpb.Marshaler{
-		EnumsAsInts:  false,
-		EmitDefaults: true,
-		Indent:       "  ",
-	}
-	str, err := marshaler.MarshalToString(msg)
+	buf, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(w, str)
+	fmt.Fprintln(w, string(buf))
 	return nil
 }

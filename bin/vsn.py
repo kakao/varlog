@@ -53,7 +53,7 @@ def get_storage_node_id():
             [f"{binpath}/vmc", "--vms-address=%s" % get_vms_addr(), "meta", "sn"])
         meta = json.loads(out)
         my_addr = get_advertise_addr()
-        for snid, addr in meta["storagenodes"].items():
+        for snid, addr in meta["storageNodes"].items():
             if addr == my_addr:
                 return snid, True
         return randint(1, (2 ^ 31) - 1), False

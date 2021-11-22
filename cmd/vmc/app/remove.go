@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 
-	"github.com/gogo/protobuf/proto"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -12,7 +11,7 @@ import (
 
 func (app *VMCApp) removeStorageNode(storageNodeID types.StorageNodeID) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.Admin) (proto.Message, error) {
+		func(ctx context.Context, cli varlog.Admin) (interface{}, error) {
 			return nil, cli.UnregisterStorageNode(ctx, storageNodeID)
 		},
 	)
@@ -20,7 +19,7 @@ func (app *VMCApp) removeStorageNode(storageNodeID types.StorageNodeID) {
 
 func (app *VMCApp) removeLogStream(topicID types.TopicID, logStreamID types.LogStreamID) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.Admin) (proto.Message, error) {
+		func(ctx context.Context, cli varlog.Admin) (interface{}, error) {
 			return nil, cli.UnregisterLogStream(ctx, topicID, logStreamID)
 			// TODO (jun): according to options, it can remove log stream replicas of
 			// the log stream.
@@ -30,7 +29,7 @@ func (app *VMCApp) removeLogStream(topicID types.TopicID, logStreamID types.LogS
 
 func (app *VMCApp) removeMRPeer(raftURL string) {
 	app.withExecutionContext(
-		func(ctx context.Context, cli varlog.Admin) (proto.Message, error) {
+		func(ctx context.Context, cli varlog.Admin) (interface{}, error) {
 			app.logger.Info("remove MR Peer",
 				zap.Any("raft-url", raftURL),
 			)
