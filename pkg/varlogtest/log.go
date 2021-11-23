@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -79,15 +80,15 @@ func (c *testLog) appendTo(topicID types.TopicID, logStreamID types.LogStreamID,
 		return types.InvalidGLSN, errors.New("no such log stream")
 	}
 
-	lastGIdx := len(c.vt.globalLogEntries[topicID]) - 1
-	lastGLSN := c.vt.globalLogEntries[topicID][lastGIdx].GLSN
-
-	lastLIdx := len(c.vt.localLogEntries[logStreamID]) - 1
-	lastLLSN := c.vt.localLogEntries[logStreamID][lastLIdx].LLSN
+	_, tail := c.peek(topicID, logStreamID)
 
 	logEntry := &varlogpb.LogEntry{
-		GLSN: lastGLSN + 1,
-		LLSN: lastLLSN,
+		LogEntryMeta: varlogpb.LogEntryMeta{
+			TopicID:     topicID,
+			LogStreamID: logStreamID,
+			GLSN:        tail.GLSN + 1,
+			LLSN:        tail.LLSN + 1,
+		},
 		Data: make([]byte, len(data)),
 	}
 	copy(logEntry.Data, data)
@@ -165,8 +166,12 @@ func (c *testLog) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 	copiedLogEntries := make([]varlogpb.LogEntry, 0, end-begin)
 	for glsn := begin; glsn < end; glsn++ {
 		logEntry := varlogpb.LogEntry{
-			GLSN: glsn,
-			LLSN: logEntries[glsn].LLSN,
+			LogEntryMeta: varlogpb.LogEntryMeta{
+				TopicID:     logEntries[glsn].TopicID,
+				LogStreamID: logEntries[glsn].LogStreamID,
+				GLSN:        glsn,
+				LLSN:        logEntries[glsn].LLSN,
+			},
 			Data: make([]byte, len(logEntries[glsn].Data)),
 		}
 		copy(logEntry.Data, logEntries[glsn].Data)
@@ -196,6 +201,45 @@ func (c *testLog) Trim(ctx context.Context, topicID types.TopicID, until types.G
 	panic("not implemented")
 }
 
-func (c *testLog) LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
-	panic("not implemented")
+func (c *testLog) LogStreamMetadata(_ context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
+	if err := c.lock(); err != nil {
+		return varlogpb.LogStreamDescriptor{}, err
+	}
+	defer c.unlock()
+
+	topicDesc, ok := c.vt.topics[topicID]
+	if !ok {
+		return varlogpb.LogStreamDescriptor{}, errors.New("no such topic")
+	}
+
+	if !topicDesc.HasLogStream(logStreamID) {
+		return varlogpb.LogStreamDescriptor{}, errors.New("no such log stream")
+	}
+
+	logStreamDesc, ok := c.vt.logStreams[logStreamID]
+	if !ok {
+		return varlogpb.LogStreamDescriptor{}, errors.New("no such log stream")
+	}
+
+	logStreamDesc = *proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor)
+	head, tail := c.peek(topicID, logStreamID)
+	logStreamDesc.Head = head
+	logStreamDesc.Tail = tail
+	return logStreamDesc, nil
+}
+
+func (c *testLog) peek(topicID types.TopicID, logStreamID types.LogStreamID) (head varlogpb.LogEntryMeta, tail varlogpb.LogEntryMeta) {
+	head.TopicID = topicID
+	head.LogStreamID = logStreamID
+	head.GLSN = c.vt.globalLogEntries[topicID][0].GLSN
+	head.LLSN = c.vt.localLogEntries[logStreamID][0].LLSN
+
+	tail.TopicID = topicID
+	tail.LogStreamID = logStreamID
+	lastGIdx := len(c.vt.globalLogEntries[topicID]) - 1
+	tail.GLSN = c.vt.globalLogEntries[topicID][lastGIdx].GLSN
+	lastLIdx := len(c.vt.localLogEntries[logStreamID]) - 1
+	tail.LLSN = c.vt.localLogEntries[logStreamID][lastLIdx].LLSN
+
+	return head, tail
 }

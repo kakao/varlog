@@ -1891,10 +1891,14 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 		},
 	}))
 	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
-		LogEntry: &varlogpb.LogEntry{LLSN: 3, GLSN: 3},
+		LogEntry: &varlogpb.LogEntry{
+			LogEntryMeta: varlogpb.LogEntryMeta{LLSN: 3, GLSN: 3},
+		},
 	}))
 	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
-		LogEntry: &varlogpb.LogEntry{LLSN: 4, GLSN: 4},
+		LogEntry: &varlogpb.LogEntry{
+			LogEntryMeta: varlogpb.LogEntryMeta{LLSN: 4, GLSN: 4},
+		},
 	}))
 
 	require.Equal(t, executorSealing, lse.stateBarrier.state.load())
@@ -2030,10 +2034,14 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 		},
 	}))
 	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
-		LogEntry: &varlogpb.LogEntry{LLSN: 3, GLSN: 3},
+		LogEntry: &varlogpb.LogEntry{
+			LogEntryMeta: varlogpb.LogEntryMeta{LLSN: 3, GLSN: 3},
+		},
 	}))
 	require.NoError(t, lse.SyncReplicate(context.Background(), snpb.SyncPayload{
-		LogEntry: &varlogpb.LogEntry{LLSN: 4, GLSN: 4},
+		LogEntry: &varlogpb.LogEntry{
+			LogEntryMeta: varlogpb.LogEntryMeta{LLSN: 4, GLSN: 4},
+		},
 	}))
 	require.Equal(t, executorSealing, lse.stateBarrier.state.load())
 	wg.Wait()

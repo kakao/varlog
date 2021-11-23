@@ -32,6 +32,7 @@ type Log interface {
 
 	Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error
 
+	// LogStreamMetadata returns a metadata of log stream identified with the topicID and logStreamID.
 	LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error)
 }
 

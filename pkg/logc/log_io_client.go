@@ -82,8 +82,10 @@ func (c *logIOClient) Read(ctx context.Context, topicID types.TopicID, logStream
 		return nil, errors.Wrap(verrors.FromStatusError(err), "logiocl")
 	}
 	return &varlogpb.LogEntry{
-		GLSN: rsp.GetGLSN(),
-		LLSN: rsp.GetLLSN(),
+		LogEntryMeta: varlogpb.LogEntryMeta{
+			GLSN: rsp.GetGLSN(),
+			LLSN: rsp.GetLLSN(),
+		},
 		Data: rsp.GetPayload(),
 	}, nil
 }
@@ -115,8 +117,10 @@ func (c *logIOClient) Subscribe(ctx context.Context, topicID types.TopicID, logS
 			result := SubscribeResult{Error: err}
 			if err == nil {
 				result.LogEntry = varlogpb.LogEntry{
-					GLSN: rsp.GetGLSN(),
-					LLSN: rsp.GetLLSN(),
+					LogEntryMeta: varlogpb.LogEntryMeta{
+						GLSN: rsp.GetGLSN(),
+						LLSN: rsp.GetLLSN(),
+					},
 					Data: rsp.GetPayload(),
 				}
 			}

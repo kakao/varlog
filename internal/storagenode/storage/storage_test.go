@@ -342,32 +342,40 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 			sr = sc.Next()
 			require.True(t, sr.Valid())
 			require.Equal(t, varlogpb.LogEntry{
-				GLSN: 2,
-				LLSN: 1,
+				LogEntryMeta: varlogpb.LogEntryMeta{
+					GLSN: 2,
+					LLSN: 1,
+				},
 				Data: nil,
 			}, sr.LogEntry)
 
 			sr = sc.Next()
 			require.True(t, sr.Valid())
 			require.Equal(t, varlogpb.LogEntry{
-				GLSN: 3,
-				LLSN: 2,
+				LogEntryMeta: varlogpb.LogEntryMeta{
+					GLSN: 3,
+					LLSN: 2,
+				},
 				Data: []byte("foo"),
 			}, sr.LogEntry)
 
 			sr = sc.Next()
 			require.True(t, sr.Valid())
 			require.Equal(t, varlogpb.LogEntry{
-				GLSN: 6,
-				LLSN: 3,
+				LogEntryMeta: varlogpb.LogEntryMeta{
+					GLSN: 6,
+					LLSN: 3,
+				},
 				Data: []byte("bar"),
 			}, sr.LogEntry)
 
 			sr = sc.Next()
 			require.True(t, sr.Valid())
 			require.Equal(t, varlogpb.LogEntry{
-				GLSN: 7,
-				LLSN: 4,
+				LogEntryMeta: varlogpb.LogEntryMeta{
+					GLSN: 7,
+					LLSN: 4,
+				},
 				Data: nil,
 			}, sr.LogEntry)
 
@@ -404,8 +412,10 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 			sr = sc.Next()
 			require.True(t, sr.Valid())
 			require.Equal(t, varlogpb.LogEntry{
-				GLSN: 6,
-				LLSN: 3,
+				LogEntryMeta: varlogpb.LogEntryMeta{
+					GLSN: 6,
+					LLSN: 3,
+				},
 				Data: []byte("bar"),
 			}, sr.LogEntry)
 			sr = sc.Next()

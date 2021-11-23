@@ -36,8 +36,10 @@ func (scanner *pebbleScanner) Next() ScanResult {
 		}
 	}()
 	logEntry := varlogpb.LogEntry{
-		GLSN: decodeCommitKey(ck),
-		LLSN: decodeDataKey(dk),
+		LogEntryMeta: varlogpb.LogEntryMeta{
+			GLSN: decodeCommitKey(ck),
+			LLSN: decodeDataKey(dk),
+		},
 	}
 	if len(data) > 0 {
 		logEntry.Data = make([]byte, len(data))
