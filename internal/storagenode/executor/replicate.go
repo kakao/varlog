@@ -301,8 +301,10 @@ func (e *executor) sync(ctx context.Context, state *syncState) (err error) {
 			for result := range subEnv.ScanResultC() {
 				payload := snpb.SyncPayload{
 					LogEntry: &varlogpb.LogEntry{
-						LLSN: result.LogEntry.LLSN,
-						GLSN: result.LogEntry.GLSN,
+						LogEntryMeta: varlogpb.LogEntryMeta{
+							LLSN: result.LogEntry.LLSN,
+							GLSN: result.LogEntry.GLSN,
+						},
 						Data: result.LogEntry.Data,
 					},
 				}

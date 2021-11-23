@@ -105,22 +105,28 @@ message ReplicaDescriptor {
     string path = 2;
 }
 
+// FIXME (jun): LogStreamDescriptor
+// - Similar types
+// - Ambiguous naming
+//
+// Information for log stream, not replica
 message LogStreamDescriptor {
     option (gogoproto.equal) = true;
 
-    int32 log_stream_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
-    int32 topic_id = 2 [
+    int32 topic_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
         (gogoproto.customname) = "TopicID"
     ];
+    int32 log_stream_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
     LogStreamStatus status = 3;
-
     repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = true];
+    LogEntryMeta head = 5 [(gogoproto.nullable) = false];
+    LogEntryMeta tail = 6 [(gogoproto.nullable) = false];
 }
 
 message TopicDescriptor {
@@ -170,6 +176,11 @@ message StorageNodeMetadataDescriptor {
         [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
+// FIXME (jun): LogStreamMetadataDescriptor
+// - Similar types
+// - Ambiguous naming
+//
+// maybe LogStreamReplica's information
 message LogStreamMetadataDescriptor {
     int32 storage_node_id = 1 [
         (gogoproto.casttype) =
@@ -200,6 +211,12 @@ message LogStreamMetadataDescriptor {
         [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
+// FIXME (jun): LogStreamReplicaDescriptor
+// - Similar types
+// - Ambiguous naming
+//
+// maybe LogStreamReplica's information
+// TODO: LogStreamMetadataDescriptor + LogStreamReplicaDescriptor
 message LogStreamReplicaDescriptor {
     int32 storage_node_id = 1 [
         (gogoproto.casttype) =
@@ -219,18 +236,37 @@ message LogStreamReplicaDescriptor {
     string address = 4;
 }
 
-message LogEntry {
-    uint64 glsn = 1 [
+message LogEntryMeta {
+    option (gogoproto.equal) = true;
+
+    int32 topic_id = 1 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+        (gogoproto.customname) = "TopicID"
+    ];
+    int32 log_stream_id = 2 [
+        (gogoproto.casttype) =
+            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+        (gogoproto.customname) = "LogStreamID"
+    ];
+    uint64 glsn = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
         (gogoproto.customname) = "GLSN"
     ];
-    uint64 llsn = 2 [
+    uint64 llsn = 4 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
         (gogoproto.customname) = "LLSN"
     ];
-    bytes data = 3;
+}
+
+message LogEntry {
+    option (gogoproto.equal) = true;
+
+    LogEntryMeta meta = 1
+        [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+    bytes data = 2;
 }
 
 message CommitContext {

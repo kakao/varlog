@@ -129,8 +129,10 @@ func TestSubscribe(t *testing.T) {
 				lastLLSN++
 				results[logStreamID] = append(results[logStreamID], logc.SubscribeResult{
 					LogEntry: varlogpb.LogEntry{
-						GLSN: glsn,
-						LLSN: lastLLSN,
+						LogEntryMeta: varlogpb.LogEntryMeta{
+							GLSN: glsn,
+							LLSN: lastLLSN,
+						},
 						Data: []byte("foo"),
 					},
 					Error: nil,

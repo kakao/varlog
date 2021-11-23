@@ -292,8 +292,10 @@ func (ps *pebbleStorage) Read(glsn types.GLSN) (varlogpb.LogEntry, error) {
 	}
 
 	logEntry := varlogpb.LogEntry{
-		GLSN: glsn,
-		LLSN: decodeDataKey(dk),
+		LogEntryMeta: varlogpb.LogEntryMeta{
+			GLSN: glsn,
+			LLSN: decodeDataKey(dk),
+		},
 	}
 	if len(data) > 0 {
 		logEntry.Data = make([]byte, len(data))

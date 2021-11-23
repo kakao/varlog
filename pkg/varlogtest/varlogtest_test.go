@@ -43,9 +43,10 @@ func TestVarlogTest(t *testing.T) {
 	}()
 
 	var (
-		topicIDs     = make([]types.TopicID, 0, numTopics)
-		logStreamIDs = make([]types.LogStreamID, 0, numLogStreams)
-		hwms         = make(map[types.TopicID]types.GLSN, numTopics)
+		topicIDs           = make([]types.TopicID, 0, numTopics)
+		topicLogStreamsMap = make(map[types.TopicID][]types.LogStreamID, numTopics)
+		logStreamIDs       = make([]types.LogStreamID, 0, numLogStreams)
+		hwms               = make(map[types.TopicID]types.GLSN, numTopics)
 	)
 
 	// Add topics
@@ -56,6 +57,7 @@ func TestVarlogTest(t *testing.T) {
 		require.Empty(t, topicDesc.LogStreams)
 		require.NotContains(t, topicIDs, topicDesc.TopicID)
 		topicIDs = append(topicIDs, topicDesc.TopicID)
+		topicLogStreamsMap[topicDesc.TopicID] = topicDesc.LogStreams
 	}
 
 	// Append logs, but no log stream
@@ -86,7 +88,7 @@ func TestVarlogTest(t *testing.T) {
 	}
 
 	// Add log streams
-	addLogStream := func(tpID types.TopicID) {
+	addLogStream := func(tpID types.TopicID) types.LogStreamID {
 		lsDesc, err := admin.AddLogStream(context.Background(), tpID, nil)
 		require.NoError(t, err)
 		require.Equal(t, tpID, lsDesc.TopicID)
@@ -102,9 +104,22 @@ func TestVarlogTest(t *testing.T) {
 		require.Len(t, snIDSet, replicationFactor)
 
 		logStreamIDs = append(logStreamIDs, lsDesc.LogStreamID)
+		topicLogStreamsMap[tpID] = append(topicLogStreamsMap[tpID], lsDesc.LogStreamID)
+		return lsDesc.LogStreamID
 	}
 	for i := 0; i < numTopics; i++ {
-		addLogStream(topicIDs[i])
+		topicID := topicIDs[i]
+		logStreamID := addLogStream(topicID)
+		logStreamDesc, err := varlog.LogStreamMetadata(context.Background(), topicID, logStreamID)
+		require.NoError(t, err)
+		require.Equal(t, varlogpb.LogEntryMeta{
+			TopicID:     topicID,
+			LogStreamID: logStreamID,
+		}, logStreamDesc.Head)
+		require.Equal(t, varlogpb.LogEntryMeta{
+			TopicID:     topicID,
+			LogStreamID: logStreamID,
+		}, logStreamDesc.Tail)
 	}
 	for i := 0; i < numLogStreams-numTopics; i++ {
 		tpID := topicIDs[rng.Intn(numTopics)]
@@ -130,6 +145,7 @@ func TestVarlogTest(t *testing.T) {
 	// Subscribe
 	subscribe := func(tpID types.TopicID, begin, end types.GLSN) {
 		expectedGLSN := begin
+		llsnMap := make(map[types.LogStreamID][]types.LLSN)
 		onNext := func(logEntry varlogpb.LogEntry, err error) {
 			if err != nil {
 				require.ErrorIs(t, err, io.EOF)
@@ -137,15 +153,32 @@ func TestVarlogTest(t *testing.T) {
 			}
 			require.Equal(t, expectedGLSN, logEntry.GLSN)
 			require.Equal(t, []byte(fmt.Sprintf("%d,%d", tpID, expectedGLSN)), logEntry.Data)
+			llsnMap[logEntry.LogStreamID] = append(llsnMap[logEntry.LogStreamID], logEntry.LLSN)
 			expectedGLSN++
 		}
 		closer, err := varlog.Subscribe(context.Background(), tpID, types.MinGLSN, hwms[tpID]+1, onNext)
 		require.NoError(t, err)
 		closer()
 		require.Equal(t, end, expectedGLSN)
+		for _, llsnList := range llsnMap {
+			prev := llsnList[0]
+			for _, llsn := range llsnList[1:] {
+				require.Equal(t, prev+1, llsn)
+				prev++
+			}
+		}
 	}
 	for i := 0; i < numTopics; i++ {
 		tpID := topicIDs[i]
 		subscribe(tpID, types.MinGLSN, hwms[tpID]+1)
+	}
+
+	// Metadata
+	for tpID, lsIDs := range topicLogStreamsMap {
+		for _, lsID := range lsIDs {
+			lsDesc, err := varlog.LogStreamMetadata(context.Background(), tpID, lsID)
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, lsDesc.Tail.LLSN, lsDesc.Head.LLSN)
+		}
 	}
 }

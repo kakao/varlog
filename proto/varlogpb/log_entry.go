@@ -1,15 +1,11 @@
 package varlogpb
 
-import "github.daumkakao.com/varlog/varlog/pkg/types"
-
-var invalidLogEntry = LogEntry{
-	GLSN: types.InvalidGLSN,
-	LLSN: types.InvalidLLSN,
-	Data: nil,
+func InvalidLogEntryMeta() LogEntryMeta {
+	return LogEntryMeta{}
 }
 
 func InvalidLogEntry() LogEntry {
-	return invalidLogEntry
+	return LogEntry{}
 }
 
 func (le LogEntry) Invalid() bool {
