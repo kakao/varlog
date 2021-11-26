@@ -53,11 +53,11 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 						default:
 						}
 
-						glsn, err := client.Append(context.Background(), topicID, []byte("foo"))
+						lem, err := client.Append(context.Background(), topicID, []byte("foo"))
 						if err != nil {
 							errC <- err
 						} else {
-							glsnC <- glsn
+							glsnC <- lem.GLSN
 						}
 					}
 				}(i)
@@ -199,12 +199,12 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 						return
 					default:
 					}
-					glsn, err := client.Append(context.Background(), topicID, []byte("foo"))
+					lem, err := client.Append(context.Background(), topicID, []byte("foo"))
 					if err != nil {
 						errC <- err
 						return
 					}
-					glsnC <- glsn
+					glsnC <- lem.GLSN
 				}
 			}(i)
 		}
@@ -313,13 +313,11 @@ func TestVarlogFailoverRecoverFromSML(t *testing.T) {
 		cli := env.NewLogIOClient(t, lsID)
 		defer cli.Close()
 
-		var (
-			err  error
-			glsn types.GLSN
-		)
+		var glsn types.GLSN
 		for i := 0; i < 5; i++ {
-			glsn, err = cli.Append(context.TODO(), topicID, lsID, []byte("foo"))
+			lem, err := cli.Append(context.TODO(), topicID, lsID, []byte("foo"))
 			So(err, ShouldBeNil)
+			glsn = lem.GLSN
 		}
 		ver := types.Version(glsn)
 
@@ -372,7 +370,8 @@ func TestVarlogFailoverRecoverFromSML(t *testing.T) {
 
 						rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 						defer cancel()
-						recoveredGLSN, err = cli.Append(rctx, topicID, lsID, []byte("foo"))
+						lem, err := cli.Append(rctx, topicID, lsID, []byte("foo"))
+						recoveredGLSN = lem.GLSN
 						return err == nil
 					}), ShouldBeTrue)
 
@@ -406,13 +405,13 @@ func TestVarlogFailoverRecoverFromIncompleteSML(t *testing.T) {
 		client := env.ClientAtIndex(t, 0)
 
 		var (
-			err  error
 			glsn types.GLSN
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			glsn, err = client.Append(context.TODO(), topicID, []byte("foo"))
+			lem, err := client.Append(context.TODO(), topicID, []byte("foo"))
 			So(err, ShouldBeNil)
+			glsn = lem.GLSN
 		}
 		ver = types.Version(glsn)
 
@@ -459,7 +458,9 @@ func TestVarlogFailoverRecoverFromIncompleteSML(t *testing.T) {
 						rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 						defer cancel()
 
-						recoveredGLSN, err = client.Append(rctx, topicID, []byte("foo"))
+						var meta varlogpb.LogEntryMeta
+						meta, err = client.Append(rctx, topicID, []byte("foo"))
+						recoveredGLSN = meta.GLSN
 						return err == nil
 					}), ShouldBeTrue)
 
@@ -498,7 +499,9 @@ func TestVarlogFailoverRecoverFromIncompleteSMLWithEmptyCommit(t *testing.T) {
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			glsn, err = client.Append(context.TODO(), topicID, []byte("foo"))
+			var meta varlogpb.LogEntryMeta
+			meta, err = client.Append(context.TODO(), topicID, []byte("foo"))
+			glsn = meta.GLSN
 			So(err, ShouldBeNil)
 		}
 		ver = types.Version(glsn)
@@ -592,7 +595,9 @@ func TestVarlogFailoverSyncLogStream(t *testing.T) {
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			glsn, err = client.Append(context.TODO(), topicID, []byte("foo"))
+			var lem varlogpb.LogEntryMeta
+			lem, err = client.Append(context.TODO(), topicID, []byte("foo"))
+			glsn = lem.GLSN
 			So(err, ShouldBeNil)
 		}
 		ver = types.Version(glsn)
@@ -651,7 +656,8 @@ func TestVarlogFailoverSyncLogStream(t *testing.T) {
 						env.ClientRefresh(t)
 						client := env.ClientAtIndex(t, 0)
 
-						recoveredGLSN, err = client.Append(rctx, topicID, []byte("foo"))
+						lem, err := client.Append(rctx, topicID, []byte("foo"))
+						recoveredGLSN = lem.GLSN
 						return err == nil
 					}), ShouldBeTrue)
 
@@ -711,12 +717,12 @@ func TestVarlogFailoverSyncLogStreamSelectReplica(t *testing.T) {
 			client := env.ClientAtIndex(t, 0)
 
 			var (
-				err  error
 				glsn types.GLSN
 				ver  types.Version
 			)
 			for i := 0; i < nrAppend; i++ {
-				glsn, err = client.Append(context.TODO(), topicID, []byte("foo"))
+				lem, err := client.Append(context.TODO(), topicID, []byte("foo"))
+				glsn = lem.GLSN
 				So(err, ShouldBeNil)
 			}
 			ver = types.Version(glsn)
@@ -801,12 +807,12 @@ func TestVarlogFailoverSyncLogStreamIgnore(t *testing.T) {
 		client := env.ClientAtIndex(t, 0)
 
 		var (
-			err  error
 			glsn types.GLSN
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			glsn, err = client.Append(context.TODO(), topicID, []byte("foo"))
+			lem, err := client.Append(context.TODO(), topicID, []byte("foo"))
+			glsn = lem.GLSN
 			So(err, ShouldBeNil)
 		}
 		ver = types.Version(glsn)
@@ -858,13 +864,13 @@ func TestVarlogFailoverSyncLogStreamError(t *testing.T) {
 		client := env.ClientAtIndex(t, 0)
 
 		var (
-			err  error
 			glsn types.GLSN
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			glsn, err = client.Append(context.TODO(), topicID, []byte("foo"))
+			lem, err := client.Append(context.TODO(), topicID, []byte("foo"))
 			So(err, ShouldBeNil)
+			glsn = lem.GLSN
 		}
 		ver = types.Version(glsn)
 

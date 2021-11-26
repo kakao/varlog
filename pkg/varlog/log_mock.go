@@ -38,14 +38,14 @@ func (m *MockLog) EXPECT() *MockLogMockRecorder {
 }
 
 // Append mocks base method.
-func (m *MockLog) Append(arg0 context.Context, arg1 types.TopicID, arg2 []byte, arg3 ...AppendOption) (types.GLSN, error) {
+func (m *MockLog) Append(arg0 context.Context, arg1 types.TopicID, arg2 []byte, arg3 ...AppendOption) (varlogpb.LogEntryMeta, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Append", varargs...)
-	ret0, _ := ret[0].(types.GLSN)
+	ret0, _ := ret[0].(varlogpb.LogEntryMeta)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -58,14 +58,14 @@ func (mr *MockLogMockRecorder) Append(arg0, arg1, arg2 interface{}, arg3 ...inte
 }
 
 // AppendTo mocks base method.
-func (m *MockLog) AppendTo(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 []byte, arg4 ...AppendOption) (types.GLSN, error) {
+func (m *MockLog) AppendTo(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 []byte, arg4 ...AppendOption) (varlogpb.LogEntryMeta, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AppendTo", varargs...)
-	ret0, _ := ret[0].(types.GLSN)
+	ret0, _ := ret[0].(varlogpb.LogEntryMeta)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

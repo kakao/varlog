@@ -21,7 +21,7 @@ func newLogIOProxy(client LogIOClient, closer func() error) *logClientProxy {
 	}
 }
 
-func (l *logClientProxy) Append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, backups ...varlogpb.StorageNode) (types.GLSN, error) {
+func (l *logClientProxy) Append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, backups ...varlogpb.StorageNode) (varlogpb.LogEntryMeta, error) {
 	return l.client.Append(ctx, topicID, logStreamID, data, backups...)
 }
 

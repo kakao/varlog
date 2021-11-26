@@ -11,7 +11,7 @@ import (
 // ReadWriter represents methods to read or write logs in a log stream.
 type ReadWriter interface {
 	// Append writes a log to the log stream.
-	Append(ctx context.Context, data []byte, backups ...varlogpb.Replica) (types.GLSN, error)
+	Append(ctx context.Context, data []byte, backups ...varlogpb.Replica) (varlogpb.LogEntryMeta, error)
 
 	// Read reads a log with the given glsn.
 	Read(ctx context.Context, glsn types.GLSN) (varlogpb.LogEntry, error)

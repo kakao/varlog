@@ -252,6 +252,7 @@ func (w *writerImpl) fillBatch(wt *writeTask, llsn types.LLSN) error {
 	if wt.primary {
 		// assign llsn
 		wt.llsn = llsn
+		wt.twg.llsn = llsn
 		// put into replicateTaskBatch
 		rt := newReplicateTask()
 		rt.llsn = wt.llsn

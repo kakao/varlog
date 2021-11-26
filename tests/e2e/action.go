@@ -156,10 +156,11 @@ func (act *action) subscribe(ctx context.Context) error {
 	}
 	defer vcli.Close()
 
-	limit, err := vcli.Append(ctx, act.topicID, []byte("foo"), varlog.WithRetryCount(5))
+	lem, err := vcli.Append(ctx, act.topicID, []byte("foo"), varlog.WithRetryCount(5))
 	if err != nil {
 		return errors.Wrap(err, "append")
 	}
+	limit := lem.GLSN
 
 	var received atomic.Value
 	received.Store(types.InvalidGLSN)
@@ -229,12 +230,12 @@ func (act *action) append(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		default:
-			glsn, err := vcli.Append(ctx, act.topicID, []byte("foo"), varlog.WithRetryCount(5))
+			lem, err := vcli.Append(ctx, act.topicID, []byte("foo"), varlog.WithRetryCount(5))
 			if err != nil {
 				return err
 			}
 
-			act.setAppendResult(glsn)
+			act.setAppendResult(lem.GLSN)
 		}
 	}
 }

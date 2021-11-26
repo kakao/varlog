@@ -167,9 +167,10 @@ func TestExecutorAppend(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			glsn, err := lse.Append(context.TODO(), []byte("foo"))
+			lem, err := lse.Append(context.TODO(), []byte("foo"))
 			require.NoError(t, err)
-			require.Equal(t, types.GLSN(ver), glsn)
+			require.Equal(t, types.GLSN(ver), lem.GLSN)
+			require.Equal(t, types.LLSN(ver), lem.LLSN)
 		}()
 		go func() {
 			defer wg.Done()
@@ -272,9 +273,10 @@ func TestExecutorRead(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			glsn, err := lse.Append(context.TODO(), []byte("foo"))
+			lem, err := lse.Append(context.TODO(), []byte("foo"))
 			require.NoError(t, err)
-			require.Equal(t, expectedGLSN, glsn)
+			require.Equal(t, expectedGLSN, lem.GLSN)
+			require.Equal(t, expectedLLSN, lem.LLSN)
 		}()
 		go func() {
 			defer wg.Done()
@@ -359,9 +361,10 @@ func TestExecutorTrim(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			glsn, err := lse.Append(context.TODO(), []byte("foo"))
+			lem, err := lse.Append(context.TODO(), []byte("foo"))
 			require.NoError(t, err)
-			require.Equal(t, expectedGLSN, glsn)
+			require.Equal(t, expectedGLSN, lem.GLSN)
+			require.Equal(t, expectedLLSN, lem.LLSN)
 		}()
 		go func() {
 			defer wg.Done()
@@ -479,9 +482,10 @@ func TestExecutorSubscribe(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			glsn, err := lse.Append(context.TODO(), []byte("foo"))
+			lem, err := lse.Append(context.TODO(), []byte("foo"))
 			require.NoError(t, err)
-			require.Equal(t, expectedGLSN, glsn)
+			require.Equal(t, expectedGLSN, lem.GLSN)
+			require.Equal(t, expectedLLSN, lem.LLSN)
 		}()
 		go func() {
 			defer wg.Done()
@@ -567,9 +571,9 @@ func TestExecutorSubscribe(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		glsn, err := lse.Append(context.TODO(), []byte("foo"))
+		lem, err := lse.Append(context.TODO(), []byte("foo"))
 		require.NoError(t, err)
-		require.Equal(t, types.GLSN(53), glsn)
+		require.Equal(t, types.GLSN(53), lem.GLSN)
 	}()
 	go func() {
 		defer wg.Done()
@@ -733,9 +737,9 @@ func TestExecutorSealSuddenly(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			for {
-				glsn, err := lse.Append(context.TODO(), []byte("foo"))
+				meta, err := lse.Append(context.TODO(), []byte("foo"))
 				if err == nil {
-					maxGLSNs[idx] = glsn
+					maxGLSNs[idx] = meta.GLSN
 				}
 				lastErrs[idx] = err
 				if err != nil {
@@ -1142,11 +1146,11 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for {
-				glsn, err := lse.Append(context.TODO(), []byte("foo"))
+				meta, err := lse.Append(context.TODO(), []byte("foo"))
 				if err != nil {
 					return
 				}
-				lastGLSNs[idx].Store(glsn)
+				lastGLSNs[idx].Store(meta.GLSN)
 			}
 		}()
 	}

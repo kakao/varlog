@@ -33,24 +33,9 @@ message AppendRequest {
     repeated varlogpb.StorageNode backups = 4 [(gogoproto.nullable) = false];
 }
 
-// AppendResponse contains GLSN (Global Log Sequence Number) that indicates log
-// position in global log space.
+// AppendResponse is a response message of Append RPC.
 message AppendResponse {
-    uint64 glsn = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "GLSN"
-    ];
-    int32 topic_id = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
-    int32 log_stream_id = 3 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
+    varlogpb.LogEntryMeta meta = 1 [(gogoproto.nullable) = false];
 }
 
 // ReadRequest asks a storage node to retrieve log entry at the GLSN.

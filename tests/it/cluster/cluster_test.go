@@ -43,11 +43,11 @@ func TestAppendLogs(t *testing.T) {
 			topicID := clus.TopicIDs()[0]
 			client := clus.ClientAtIndex(t, idx)
 			for i := 0; i < numAppend; i++ {
-				glsn, err := client.Append(ctx, topicID, []byte("foo"))
+				lem, err := client.Append(ctx, topicID, []byte("foo"))
 				if err != nil {
 					return err
 				}
-				max = glsn
+				max = lem.GLSN
 			}
 
 			muMaxGLSN.Lock()
@@ -107,13 +107,13 @@ func TestReadSealedLogStream(t *testing.T) {
 			topicID := clus.TopicIDs()[0]
 			client := clus.ClientAtIndex(t, idx)
 			for {
-				glsn, err := client.Append(context.Background(), topicID, []byte("foo"))
+				lem, err := client.Append(context.Background(), topicID, []byte("foo"))
 				if err != nil {
 					assert.ErrorIs(t, err, verrors.ErrSealed)
 					errC <- err
 					break
 				}
-				glsnC <- glsn
+				glsnC <- lem.GLSN
 			}
 		}(i)
 	}
@@ -170,18 +170,17 @@ func TestTrimGLS(t *testing.T) {
 		lsIDs := env.LogStreamIDs(topicID)
 		client := env.ClientAtIndex(t, 0)
 
-		var (
-			err  error
-			glsn types.GLSN
-		)
+		var glsn types.GLSN
 		for i := 0; i < 10; i++ {
-			glsn, err = client.AppendTo(context.Background(), topicID, lsIDs[0], []byte("foo"))
+			lem, err := client.AppendTo(context.Background(), topicID, lsIDs[0], []byte("foo"))
 			So(err, ShouldBeNil)
+			glsn = lem.GLSN
 			So(glsn, ShouldNotEqual, types.InvalidGLSN)
 		}
 		for i := 0; i < 10; i++ {
-			glsn, err = client.AppendTo(context.Background(), topicID, lsIDs[1], []byte("foo"))
+			lem, err := client.AppendTo(context.Background(), topicID, lsIDs[1], []byte("foo"))
 			So(err, ShouldBeNil)
+			glsn = lem.GLSN
 			So(glsn, ShouldNotEqual, types.InvalidGLSN)
 		}
 
@@ -219,8 +218,9 @@ func TestTrimGLSWithSealedLS(t *testing.T) {
 			glsn := types.InvalidGLSN
 			for i := 0; i < 32; i++ {
 				lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
-				glsn, err = client.AppendTo(context.Background(), topicID, lsid, []byte("foo"))
+				lem, err := client.AppendTo(context.Background(), topicID, lsid, []byte("foo"))
 				So(err, ShouldBeNil)
+				glsn = lem.GLSN
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
 
@@ -231,8 +231,9 @@ func TestTrimGLSWithSealedLS(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			for i := 0; i < 10; i++ {
-				glsn, err = client.AppendTo(context.Background(), topicID, runningLSID, []byte("foo"))
+				lem, err := client.AppendTo(context.Background(), topicID, runningLSID, []byte("foo"))
 				So(err, ShouldBeNil)
+				glsn = lem.GLSN
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
 
@@ -266,13 +267,11 @@ func TestNewbieLogStream(t *testing.T) {
 		lsIDs := env.LogStreamIDs(topicID)
 		client := env.ClientAtIndex(t, 0)
 
-		var err error
-		glsn := types.InvalidGLSN
 		for i := 0; i < 32; i++ {
 			lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
-			glsn, err = client.AppendTo(context.Background(), topicID, lsid, []byte("foo"))
+			lem, err := client.AppendTo(context.Background(), topicID, lsid, []byte("foo"))
 			So(err, ShouldBeNil)
-			So(glsn, ShouldNotEqual, types.InvalidGLSN)
+			So(lem.GLSN, ShouldNotEqual, types.InvalidGLSN)
 		}
 
 		Convey("When add new logStream", func(ctx C) {
@@ -284,13 +283,11 @@ func TestNewbieLogStream(t *testing.T) {
 				lsIDs := env.LogStreamIDs(topicID)
 				client := env.ClientAtIndex(t, 0)
 
-				var err error
-				glsn := types.InvalidGLSN
 				for i := 0; i < 32; i++ {
 					lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
-					glsn, err = client.AppendTo(context.Background(), topicID, lsid, []byte("foo"))
+					lem, err := client.AppendTo(context.Background(), topicID, lsid, []byte("foo"))
 					So(err, ShouldBeNil)
-					So(glsn, ShouldNotEqual, types.InvalidGLSN)
+					So(lem.GLSN, ShouldNotEqual, types.InvalidGLSN)
 				}
 			})
 		})

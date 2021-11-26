@@ -20,9 +20,9 @@ import (
 type Log interface {
 	io.Closer
 
-	Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...AppendOption) (types.GLSN, error)
+	Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...AppendOption) (varlogpb.LogEntryMeta, error)
 
-	AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error)
+	AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (varlogpb.LogEntryMeta, error)
 
 	Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
 
@@ -129,11 +129,11 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	return v, nil
 }
 
-func (v *logImpl) Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...AppendOption) (types.GLSN, error) {
+func (v *logImpl) Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...AppendOption) (varlogpb.LogEntryMeta, error) {
 	return v.append(ctx, topicID, 0, data, opts...)
 }
 
-func (v *logImpl) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (types.GLSN, error) {
+func (v *logImpl) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (varlogpb.LogEntryMeta, error) {
 	opts = append(opts, withoutSelectLogStream())
 	return v.append(ctx, topicID, logStreamID, data, opts...)
 }
