@@ -13,7 +13,7 @@ import (
 )
 
 // TODO: use ops-accumulator?
-func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (glsn types.GLSN, err error) {
+func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (meta varlogpb.LogEntryMeta, err error) {
 	appendOpts := defaultAppendOptions()
 	for _, opt := range opts {
 		opt.apply(&appendOpts)
@@ -50,7 +50,7 @@ func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID
 			snList[i].Address = replicas[i+1].GetAddress()
 			snList[i].StorageNodeID = replicas[i+1].GetStorageNodeID()
 		}
-		glsn, currErr = primaryLogCL.Append(ctx, topicID, logStreamID, data, snList...)
+		meta, currErr = primaryLogCL.Append(ctx, topicID, logStreamID, data, snList...)
 		if currErr != nil {
 			replicasInfo := make([]string, 0, len(replicas))
 			for _, replica := range replicas {
@@ -63,9 +63,9 @@ func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID
 			v.allowlist.Deny(topicID, logStreamID)
 			continue
 		}
-		return glsn, nil
+		return meta, nil
 	}
-	return glsn, err
+	return meta, err
 }
 
 func (v *logImpl) read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) (varlogpb.LogEntry, error) {

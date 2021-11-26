@@ -76,9 +76,9 @@ func TestK8sVarlogSimple(t *testing.T) {
 
 			var glsn types.GLSN
 			k8s.WithTimeoutContext(func(ctx context.Context) {
-				var err error
-				glsn, err = vlg.Append(ctx, topicID, []byte("foo"))
+				lem, err := vlg.Append(ctx, topicID, []byte("foo"))
 				So(err, ShouldBeNil)
+				glsn = lem.GLSN
 			})
 
 			readCtx, readCancel := k8s.TimeoutContext()
@@ -97,9 +97,9 @@ func TestK8sVarlogSimple(t *testing.T) {
 
 				appendCtx, appendCancel := k8s.TimeoutContext()
 				defer appendCancel()
-				glsn, err := vlg.Append(appendCtx, topicID, []byte("foo"))
+				lem, err := vlg.Append(appendCtx, topicID, []byte("foo"))
 				So(err, ShouldNotBeNil)
-				So(glsn, ShouldEqual, types.InvalidGLSN)
+				So(lem.GLSN, ShouldEqual, types.InvalidGLSN)
 
 				Convey("Unseal", func() {
 					unsealCtx, unsealCancel := k8s.TimeoutContext()
@@ -111,8 +111,8 @@ func TestK8sVarlogSimple(t *testing.T) {
 						ctx, cancel := k8s.TimeoutContext()
 						defer cancel()
 
-						glsn, err := vlg.Append(ctx, topicID, []byte("foo"))
-						return err == nil && glsn > lsmetaList[0].HighWatermark
+						lem, err := vlg.Append(ctx, topicID, []byte("foo"))
+						return err == nil && lem.GLSN > lsmetaList[0].HighWatermark
 					}), ShouldBeTrue)
 				})
 			})

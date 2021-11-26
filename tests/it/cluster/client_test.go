@@ -67,10 +67,10 @@ func TestClientAppendTo(t *testing.T) {
 	_, err := client.AppendTo(context.TODO(), topicID, lsID+1, []byte("foo"))
 	require.Error(t, err)
 
-	glsn, err := client.AppendTo(context.TODO(), topicID, lsID, []byte("foo"))
+	lem, err := client.AppendTo(context.TODO(), topicID, lsID, []byte("foo"))
 	require.NoError(t, err)
 
-	data, err := client.Read(context.Background(), topicID, lsID, glsn)
+	data, err := client.Read(context.Background(), topicID, lsID, lem.GLSN)
 	require.NoError(t, err)
 	require.EqualValues(t, []byte("foo"), data)
 }
@@ -94,12 +94,19 @@ func TestClientAppend(t *testing.T) {
 	topicID := clus.TopicIDs()[0]
 	client := clus.ClientAtIndex(t, 0)
 
+	expectedLLSNs := make(map[types.LogStreamID]types.LLSN, clus.NumberOfLogStreams(topicID))
+	for _, lsID := range clus.LogStreamIDs(topicID) {
+		expectedLLSNs[lsID] = types.MinLLSN
+	}
 	expectedGLSN := types.MinGLSN
 	for i := 0; i < 10; i++ {
-		glsn, err := client.Append(context.TODO(), topicID, []byte("foo"))
+		lem, err := client.Append(context.TODO(), topicID, []byte("foo"))
 		require.NoError(t, err)
-		require.Equal(t, expectedGLSN, glsn)
+		require.Equal(t, expectedGLSN, lem.GLSN)
 		expectedGLSN++
+		require.Equal(t, expectedLLSNs[lem.LogStreamID], lem.LLSN)
+		expectedLLSNs[lem.LogStreamID]++
+		require.Equal(t, topicID, lem.TopicID)
 	}
 
 	require.Condition(t, func() bool {
@@ -141,11 +148,11 @@ func TestClientAppendCancel(t *testing.T) {
 		defer wg.Done()
 		expectedGLSN := types.MinGLSN
 		for {
-			glsn, err := client.Append(ctx, topicID, []byte("foo"))
+			lem, err := client.Append(ctx, topicID, []byte("foo"))
 			if err == nil {
-				require.Equal(t, expectedGLSN, glsn)
+				require.Equal(t, expectedGLSN, lem.GLSN)
 				expectedGLSN++
-				atomicGLSN.Store(glsn)
+				atomicGLSN.Store(lem.GLSN)
 			} else {
 				t.Logf("canceled")
 				return
@@ -230,9 +237,9 @@ func TestClientTrim(t *testing.T) {
 	client := clus.ClientAtIndex(t, 0)
 	expectedGLSN := types.GLSN(1)
 	for i := 0; i < nrLogs; i++ {
-		glsn, err := client.Append(context.TODO(), topicID, []byte("foo"))
+		lem, err := client.Append(context.TODO(), topicID, []byte("foo"))
 		require.NoError(t, err)
-		require.Equal(t, expectedGLSN, glsn)
+		require.Equal(t, expectedGLSN, lem.GLSN)
 		expectedGLSN++
 	}
 

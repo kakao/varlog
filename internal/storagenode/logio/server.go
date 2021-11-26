@@ -93,12 +93,12 @@ func (s *server) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.App
 				})
 			}
 
-			glsn, err := lse.Append(ctx, req.GetPayload(), backups...)
+			meta, err := lse.Append(ctx, req.GetPayload(), backups...)
 			if err != nil {
 				code = codes.Internal
 				return rsp, err
 			}
-			return &snpb.AppendResponse{GLSN: glsn}, nil
+			return &snpb.AppendResponse{Meta: meta}, nil
 		},
 	)
 	return rspI.(*snpb.AppendResponse), verrors.ToStatusErrorWithCode(err, code)

@@ -14,16 +14,16 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-func (e *executor) Append(ctx context.Context, data []byte, backups ...varlogpb.Replica) (types.GLSN, error) {
+func (e *executor) Append(ctx context.Context, data []byte, backups ...varlogpb.Replica) (varlogpb.LogEntryMeta, error) {
 	// FIXME: e.guard() can be removed, but doing ops to storage after closing should be
 	// handled. Mostly, trim and read can be occurred after clsoing storage.
 	if err := e.guard(); err != nil {
-		return types.InvalidGLSN, err
+		return varlogpb.InvalidLogEntryMeta(), err
 	}
 	defer e.unguard()
 
 	if err := e.mutable(); err != nil {
-		return types.InvalidGLSN, err
+		return varlogpb.InvalidLogEntryMeta(), err
 	}
 
 	twg := newTaskWaitGroup()
@@ -49,13 +49,18 @@ func (e *executor) Append(ctx context.Context, data []byte, backups ...varlogpb.
 	if err := e.writer.send(ctx, wt); err != nil {
 		twg.wg.Done()
 		twg.wg.Wait()
-		return types.InvalidGLSN, err
+		return varlogpb.InvalidLogEntryMeta(), err
 	}
 
 	twg.wg.Wait()
-	glsn := twg.glsn
+	meta := varlogpb.LogEntryMeta{
+		TopicID:     e.topicID,
+		LogStreamID: e.logStreamID,
+		GLSN:        twg.glsn,
+		LLSN:        twg.llsn,
+	}
 	err := twg.err
-	return glsn, err
+	return meta, err
 }
 
 func (e *executor) Read(ctx context.Context, glsn types.GLSN) (logEntry varlogpb.LogEntry, err error) {

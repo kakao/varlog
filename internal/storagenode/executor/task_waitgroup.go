@@ -16,6 +16,7 @@ var taskWaitGroupPool = sync.Pool{
 
 type taskWaitGroup struct {
 	glsn types.GLSN
+	llsn types.LLSN
 	wg   sync.WaitGroup
 	err  error
 
@@ -33,6 +34,7 @@ func newTaskWaitGroup() *taskWaitGroup {
 
 func (twg *taskWaitGroup) release() {
 	twg.glsn = types.InvalidGLSN
+	twg.llsn = types.InvalidLLSN
 	twg.err = nil
 	twg.createdTime = time.Time{}
 	twg.writtenTime = time.Time{}

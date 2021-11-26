@@ -41,7 +41,7 @@ func newStorageNode() storageNode {
 	}
 }
 
-func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *mock.MockLogIOClient {
+func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, tpid types.TopicID, lsid types.LogStreamID) *mock.MockLogIOClient {
 	mockClient := mock.NewMockLogIOClient(ctrl)
 
 	// Append
@@ -57,7 +57,14 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 		}()
 		sn.logEntries[sn.glsn] = req.GetPayload()
 		sn.glsnToLLSN[sn.glsn] = sn.llsn
-		return &snpb.AppendResponse{GLSN: sn.glsn}, nil
+		return &snpb.AppendResponse{
+			Meta: varlogpb.LogEntryMeta{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+				GLSN:        sn.glsn,
+				LLSN:        sn.llsn,
+			},
+		}, nil
 	}).AnyTimes()
 
 	// Read
@@ -133,24 +140,27 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode) *
 }
 
 func TestBasicOperations(t *testing.T) {
+	const logStreamID = types.LogStreamID(0)
+	const topicID = types.TopicID(1)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	sn := newStorageNode()
-	mockClient := newMockStorageNodeServiceClient(ctrl, &sn)
+	mockClient := newMockStorageNodeServiceClient(ctrl, &sn, topicID, logStreamID)
 
-	const logStreamID = types.LogStreamID(0)
-	const topicID = types.TopicID(1)
 	client := &logIOClient{rpcClient: mockClient}
 	Convey("Simple Append/Read/Subscribe/Trim operations should work", t, func() {
 		var prevGLSN types.GLSN
 		var currGLSN types.GLSN
 		var currLogEntry *varlogpb.LogEntry
+		var meta varlogpb.LogEntryMeta
 		var err error
 		var msg string
 
 		msg = "msg-1"
-		currGLSN, err = client.Append(context.TODO(), topicID, logStreamID, []byte(msg))
+		meta, err = client.Append(context.TODO(), topicID, logStreamID, []byte(msg))
+		currGLSN = meta.GLSN
 		So(err, ShouldBeNil)
 		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, currGLSN)
 		So(err, ShouldBeNil)
@@ -158,7 +168,8 @@ func TestBasicOperations(t *testing.T) {
 		prevGLSN = currGLSN
 
 		msg = "msg-2"
-		currGLSN, err = client.Append(context.TODO(), topicID, logStreamID, []byte(msg))
+		meta, err = client.Append(context.TODO(), topicID, logStreamID, []byte(msg))
+		currGLSN = meta.GLSN
 		So(err, ShouldBeNil)
 		So(currGLSN, ShouldBeGreaterThan, prevGLSN)
 		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, currGLSN)

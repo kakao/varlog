@@ -581,11 +581,13 @@ func TestAddTopic(t *testing.T) {
 
 				var glsn types.GLSN
 				for gctx.Err() == nil {
-					glsn, err = cl.Append(context.Background(), tid, []byte("foo"))
+					var lem varlogpb.LogEntryMeta
+					lem, err = cl.Append(context.Background(), tid, []byte("foo"))
 					if err != nil {
 						err = fmt.Errorf("topic=%v,err=%v", tid, err)
 						break
 					}
+					glsn = lem.GLSN
 				}
 
 				t.Logf("topic=%v, glsn:%v\n", tid, glsn)
@@ -616,11 +618,13 @@ func TestAddTopic(t *testing.T) {
 
 				var glsn types.GLSN
 				for gctx.Err() == nil {
-					glsn, err = cl.Append(context.Background(), addTopicID, []byte("foo"))
+					var lem varlogpb.LogEntryMeta
+					lem, err = cl.Append(context.Background(), addTopicID, []byte("foo"))
 					if err != nil {
 						err = fmt.Errorf("topic=%v,err=%v", addTopicID, err)
 						break
 					}
+					glsn = lem.GLSN
 				}
 
 				t.Logf("topic=%v, glsn:%v\n", addTopicID, glsn)
