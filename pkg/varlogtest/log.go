@@ -80,14 +80,17 @@ func (c *testLog) appendTo(topicID types.TopicID, logStreamID types.LogStreamID,
 		return varlogpb.InvalidLogEntryMeta(), errors.New("no such log stream")
 	}
 
+	n := len(c.vt.globalLogEntries[topicID])
+	lastGLSN := c.vt.globalLogEntries[topicID][n-1].GLSN
 	_, tail := c.peek(topicID, logStreamID)
+	lastLLSN := tail.LLSN
 
 	logEntry := &varlogpb.LogEntry{
 		LogEntryMeta: varlogpb.LogEntryMeta{
 			TopicID:     topicID,
 			LogStreamID: logStreamID,
-			GLSN:        tail.GLSN + 1,
-			LLSN:        tail.LLSN + 1,
+			GLSN:        lastGLSN + 1,
+			LLSN:        lastLLSN + 1,
 		},
 		Data: make([]byte, len(data)),
 	}
@@ -194,7 +197,69 @@ func (c *testLog) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 }
 
 func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, onNextFunc varlog.OnNext, opts ...varlog.SubscribeOption) (varlog.SubscribeCloser, error) {
-	panic("not implemented")
+	if begin >= end {
+		return nil, errors.New("invalid range")
+	}
+
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	td, err := c.topicDescriptor(topicID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !td.HasLogStream(logStreamID) {
+		return nil, errors.New("no such log stream")
+	}
+
+	logEntries, ok := c.vt.localLogEntries[logStreamID]
+	if !ok {
+		return nil, errors.New("no such log stream")
+	}
+	n := len(logEntries)
+	if logEntries[n-1].LLSN < begin {
+		// NOTE: This differs from the real varlog.
+		return nil, errors.New("no such log entry")
+	}
+
+	if begin.Invalid() {
+		begin = types.MinLLSN
+	}
+	if end > logEntries[n-1].LLSN {
+		end = logEntries[n-1].LLSN + 1
+	}
+
+	copiedLogEntries := make([]varlogpb.LogEntry, 0, end-begin)
+	for llsn := begin; llsn < end; llsn++ {
+		logEntry := varlogpb.LogEntry{
+			LogEntryMeta: varlogpb.LogEntryMeta{
+				TopicID:     logEntries[llsn].TopicID,
+				LogStreamID: logEntries[llsn].LogStreamID,
+				GLSN:        logEntries[llsn].GLSN,
+				LLSN:        llsn,
+			},
+			Data: make([]byte, len(logEntries[llsn].Data)),
+		}
+		copy(logEntry.Data, logEntries[llsn].Data)
+		copiedLogEntries = append(copiedLogEntries, logEntry)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, logEntry := range copiedLogEntries {
+			onNextFunc(logEntry, nil)
+		}
+		onNextFunc(varlogpb.InvalidLogEntry(), io.EOF)
+	}()
+
+	return func() {
+		wg.Wait()
+	}, nil
 }
 
 func (c *testLog) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts varlog.TrimOption) error {
@@ -231,15 +296,17 @@ func (c *testLog) LogStreamMetadata(_ context.Context, topicID types.TopicID, lo
 func (c *testLog) peek(topicID types.TopicID, logStreamID types.LogStreamID) (head varlogpb.LogEntryMeta, tail varlogpb.LogEntryMeta) {
 	head.TopicID = topicID
 	head.LogStreamID = logStreamID
-	head.GLSN = c.vt.globalLogEntries[topicID][0].GLSN
-	head.LLSN = c.vt.localLogEntries[logStreamID][0].LLSN
-
 	tail.TopicID = topicID
 	tail.LogStreamID = logStreamID
-	lastGIdx := len(c.vt.globalLogEntries[topicID]) - 1
-	tail.GLSN = c.vt.globalLogEntries[topicID][lastGIdx].GLSN
-	lastLIdx := len(c.vt.localLogEntries[logStreamID]) - 1
-	tail.LLSN = c.vt.localLogEntries[logStreamID][lastLIdx].LLSN
 
+	if len(c.vt.localLogEntries[logStreamID]) < 2 {
+		return
+	}
+
+	head.GLSN = c.vt.localLogEntries[logStreamID][1].GLSN
+	head.LLSN = c.vt.localLogEntries[logStreamID][1].LLSN
+	lastIdx := len(c.vt.localLogEntries[logStreamID]) - 1
+	tail.GLSN = c.vt.localLogEntries[logStreamID][lastIdx].GLSN
+	tail.LLSN = c.vt.localLogEntries[logStreamID][lastIdx].LLSN
 	return head, tail
 }
