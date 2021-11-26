@@ -155,6 +155,7 @@ func TestVarlogTest(t *testing.T) {
 			appendToLog(tpID, lsID)
 		}
 	}
+
 	for i := 0; i < numLogs-numTopics; i++ {
 		tpID := topicIDs[rng.Intn(numTopics)]
 		appendLog(tpID)
@@ -186,6 +187,25 @@ func TestVarlogTest(t *testing.T) {
 			}
 		}
 	}
+	subscribeTo := func(tpID types.TopicID, lsID types.LogStreamID, begin, end types.LLSN) {
+		prevGLSN := types.InvalidGLSN
+		expectedLLSN := begin
+		onNext := func(logEntry varlogpb.LogEntry, err error) {
+			if err != nil {
+				require.ErrorIs(t, err, io.EOF)
+				return
+			}
+			require.Equal(t, expectedLLSN, logEntry.LLSN)
+			require.Greater(t, logEntry.GLSN, prevGLSN)
+			expectedLLSN++
+			prevGLSN = logEntry.GLSN
+		}
+		closer, err := varlog.SubscribeTo(context.Background(), tpID, lsID, begin, end, onNext)
+		require.NoError(t, err)
+		closer()
+		require.Equal(t, end, expectedLLSN)
+	}
+
 	for i := 0; i < numTopics; i++ {
 		tpID := topicIDs[i]
 		subscribe(tpID, types.MinGLSN, globalHWMs[tpID]+1)
@@ -197,6 +217,7 @@ func TestVarlogTest(t *testing.T) {
 			lsDesc, err := varlog.LogStreamMetadata(context.Background(), tpID, lsID)
 			require.NoError(t, err)
 			require.GreaterOrEqual(t, lsDesc.Tail.LLSN, lsDesc.Head.LLSN)
+			subscribeTo(tpID, lsID, lsDesc.Head.LLSN, lsDesc.Tail.LLSN+1)
 		}
 	}
 }
