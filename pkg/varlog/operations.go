@@ -50,7 +50,7 @@ func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID
 			snList[i].Address = replicas[i+1].GetAddress()
 			snList[i].StorageNodeID = replicas[i+1].GetStorageNodeID()
 		}
-		meta, currErr = primaryLogCL.Append(ctx, topicID, logStreamID, data, snList...)
+		res, currErr := primaryLogCL.Append(ctx, topicID, logStreamID, [][]byte{data}, snList...)
 		if currErr != nil {
 			replicasInfo := make([]string, 0, len(replicas))
 			for _, replica := range replicas {
@@ -63,6 +63,7 @@ func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID
 			v.allowlist.Deny(topicID, logStreamID)
 			continue
 		}
+		meta = res[0].Meta
 		return meta, nil
 	}
 	return meta, err

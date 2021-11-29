@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
@@ -21,7 +22,7 @@ func newLogIOProxy(client LogIOClient, closer func() error) *logClientProxy {
 	}
 }
 
-func (l *logClientProxy) Append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, backups ...varlogpb.StorageNode) (varlogpb.LogEntryMeta, error) {
+func (l *logClientProxy) Append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, backups ...varlogpb.StorageNode) ([]snpb.AppendResult, error) {
 	return l.client.Append(ctx, topicID, logStreamID, data, backups...)
 }
 

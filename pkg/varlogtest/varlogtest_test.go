@@ -13,6 +13,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/container/set"
+	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlogtest"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
@@ -30,15 +31,18 @@ func TestVarlogTest(t *testing.T) {
 		numLogStreams         = numTopics * avgLogStreamsPerTopic / replicationFactor
 		avgLogsPerTopic       = 100
 		numLogs               = numTopics * avgLogsPerTopic
+		maxBatchSize          = 5
 	)
+
+	var remainedLogs = numLogs
 
 	rng := rand.New(rand.NewSource(time.Now().UnixMilli()))
 
 	vt := varlogtest.New(clusterID, replicationFactor)
 	admin := vt.Admin()
-	varlog := vt.Log()
+	vlg := vt.Log()
 	defer func() {
-		require.NoError(t, varlog.Close())
+		require.NoError(t, vlg.Close())
 		require.NoError(t, admin.Close())
 	}()
 
@@ -62,9 +66,8 @@ func TestVarlogTest(t *testing.T) {
 	}
 
 	// Append logs, but no log stream
-	for i := 0; i < numLogs; i++ {
-		tpID := topicIDs[rng.Intn(numTopics)]
-		_, err := varlog.Append(context.Background(), tpID, nil)
+	for _, tpID := range topicIDs {
+		_, err := vlg.Append(context.Background(), tpID, nil)
 		require.Error(t, err)
 	}
 
@@ -112,7 +115,7 @@ func TestVarlogTest(t *testing.T) {
 	for i := 0; i < numTopics; i++ {
 		topicID := topicIDs[i]
 		logStreamID := addLogStream(topicID)
-		logStreamDesc, err := varlog.LogStreamMetadata(context.Background(), topicID, logStreamID)
+		logStreamDesc, err := vlg.LogStreamMetadata(context.Background(), topicID, logStreamID)
 		require.NoError(t, err)
 		require.Equal(t, varlogpb.LogEntryMeta{
 			TopicID:     topicID,
@@ -129,24 +132,40 @@ func TestVarlogTest(t *testing.T) {
 	}
 
 	// Append logs
-	testAppend := func(tpID types.TopicID, appendFunc func(data []byte) (varlogpb.LogEntryMeta, error)) {
-		globalHWMs[tpID]++
-		data := []byte(fmt.Sprintf("%d,%d", tpID, globalHWMs[tpID]))
-		lem, err := appendFunc(data)
+	testAppend := func(tpID types.TopicID, appendFunc func([][]byte) (varlog.AppendResult, error)) {
+		hwm := globalHWMs[tpID]
+
+		batchSize := rng.Intn(maxBatchSize) + 1
+		batchData := make([][]byte, batchSize)
+		for i := 0; i < batchSize; i++ {
+			hwm++
+			batchData[i] = []byte(fmt.Sprintf("%d,%d", tpID, hwm))
+		}
+
+		res, err := appendFunc(batchData)
 		require.NoError(t, err)
-		require.Equal(t, globalHWMs[tpID], lem.GLSN)
-		localHWMs[lem.LogStreamID]++
-		require.Equal(t, localHWMs[lem.LogStreamID], lem.LLSN)
-		require.Equal(t, tpID, lem.TopicID)
+		require.Len(t, res.Metadata, batchSize)
+		require.NoError(t, res.Err)
+
+		for _, lem := range res.Metadata {
+			require.Equal(t, tpID, lem.TopicID)
+
+			globalHWMs[tpID]++
+			require.Equal(t, globalHWMs[tpID], lem.GLSN)
+
+			localHWMs[lem.LogStreamID]++
+			require.Equal(t, localHWMs[lem.LogStreamID], lem.LLSN)
+		}
+		remainedLogs -= batchSize
 	}
 	appendToLog := func(tpID types.TopicID, lsID types.LogStreamID) {
-		testAppend(tpID, func(data []byte) (varlogpb.LogEntryMeta, error) {
-			return varlog.AppendTo(context.Background(), tpID, lsID, data)
+		testAppend(tpID, func(dataBatch [][]byte) (varlog.AppendResult, error) {
+			return vlg.AppendTo(context.Background(), tpID, lsID, dataBatch)
 		})
 	}
 	appendLog := func(tpID types.TopicID) {
-		testAppend(tpID, func(data []byte) (varlogpb.LogEntryMeta, error) {
-			return varlog.Append(context.Background(), tpID, data)
+		testAppend(tpID, func(dataBatch [][]byte) (varlog.AppendResult, error) {
+			return vlg.Append(context.Background(), tpID, dataBatch)
 		})
 	}
 	for i := 0; i < numTopics; i++ {
@@ -156,7 +175,7 @@ func TestVarlogTest(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < numLogs-numTopics; i++ {
+	for remainedLogs > 0 {
 		tpID := topicIDs[rng.Intn(numTopics)]
 		appendLog(tpID)
 	}
@@ -175,7 +194,7 @@ func TestVarlogTest(t *testing.T) {
 			llsnMap[logEntry.LogStreamID] = append(llsnMap[logEntry.LogStreamID], logEntry.LLSN)
 			expectedGLSN++
 		}
-		closer, err := varlog.Subscribe(context.Background(), tpID, types.MinGLSN, globalHWMs[tpID]+1, onNext)
+		closer, err := vlg.Subscribe(context.Background(), tpID, types.MinGLSN, globalHWMs[tpID]+1, onNext)
 		require.NoError(t, err)
 		closer()
 		require.Equal(t, end, expectedGLSN)
@@ -200,7 +219,7 @@ func TestVarlogTest(t *testing.T) {
 			expectedLLSN++
 			prevGLSN = logEntry.GLSN
 		}
-		closer, err := varlog.SubscribeTo(context.Background(), tpID, lsID, begin, end, onNext)
+		closer, err := vlg.SubscribeTo(context.Background(), tpID, lsID, begin, end, onNext)
 		require.NoError(t, err)
 		closer()
 		require.Equal(t, end, expectedLLSN)
@@ -214,7 +233,7 @@ func TestVarlogTest(t *testing.T) {
 	// Metadata
 	for tpID, lsIDs := range topicLogStreamsMap {
 		for _, lsID := range lsIDs {
-			lsDesc, err := varlog.LogStreamMetadata(context.Background(), tpID, lsID)
+			lsDesc, err := vlg.LogStreamMetadata(context.Background(), tpID, lsID)
 			require.NoError(t, err)
 			require.GreaterOrEqual(t, lsDesc.Tail.LLSN, lsDesc.Head.LLSN)
 			subscribeTo(tpID, lsID, lsDesc.Head.LLSN, lsDesc.Tail.LLSN+1)

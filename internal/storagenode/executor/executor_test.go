@@ -167,10 +167,10 @@ func TestExecutorAppend(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			lem, err := lse.Append(context.TODO(), []byte("foo"))
+			res, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 			require.NoError(t, err)
-			require.Equal(t, types.GLSN(ver), lem.GLSN)
-			require.Equal(t, types.LLSN(ver), lem.LLSN)
+			require.Equal(t, types.GLSN(ver), res[0].Meta.GLSN)
+			require.Equal(t, types.LLSN(ver), res[0].Meta.LLSN)
 		}()
 		go func() {
 			defer wg.Done()
@@ -273,10 +273,10 @@ func TestExecutorRead(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			lem, err := lse.Append(context.TODO(), []byte("foo"))
+			res, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 			require.NoError(t, err)
-			require.Equal(t, expectedGLSN, lem.GLSN)
-			require.Equal(t, expectedLLSN, lem.LLSN)
+			require.Equal(t, expectedGLSN, res[0].Meta.GLSN)
+			require.Equal(t, expectedLLSN, res[0].Meta.LLSN)
 		}()
 		go func() {
 			defer wg.Done()
@@ -361,10 +361,10 @@ func TestExecutorTrim(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			lem, err := lse.Append(context.TODO(), []byte("foo"))
+			res, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 			require.NoError(t, err)
-			require.Equal(t, expectedGLSN, lem.GLSN)
-			require.Equal(t, expectedLLSN, lem.LLSN)
+			require.Equal(t, expectedGLSN, res[0].Meta.GLSN)
+			require.Equal(t, expectedLLSN, res[0].Meta.LLSN)
 		}()
 		go func() {
 			defer wg.Done()
@@ -482,10 +482,10 @@ func TestExecutorSubscribe(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			lem, err := lse.Append(context.TODO(), []byte("foo"))
+			res, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 			require.NoError(t, err)
-			require.Equal(t, expectedGLSN, lem.GLSN)
-			require.Equal(t, expectedLLSN, lem.LLSN)
+			require.Equal(t, expectedGLSN, res[0].Meta.GLSN)
+			require.Equal(t, expectedLLSN, res[0].Meta.LLSN)
 		}()
 		go func() {
 			defer wg.Done()
@@ -571,9 +571,9 @@ func TestExecutorSubscribe(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		lem, err := lse.Append(context.TODO(), []byte("foo"))
+		res, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 		require.NoError(t, err)
-		require.Equal(t, types.GLSN(53), lem.GLSN)
+		require.Equal(t, types.GLSN(53), res[0].Meta.GLSN)
 	}()
 	go func() {
 		defer wg.Done()
@@ -737,9 +737,9 @@ func TestExecutorSealSuddenly(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			for {
-				meta, err := lse.Append(context.TODO(), []byte("foo"))
+				res, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 				if err == nil {
-					maxGLSNs[idx] = meta.GLSN
+					maxGLSNs[idx] = res[0].Meta.GLSN
 				}
 				lastErrs[idx] = err
 				if err != nil {
@@ -865,7 +865,7 @@ func TestExecutorSeal(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := lse.Append(context.TODO(), []byte("foo"))
+			_, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 			errC <- err
 		}()
 	}
@@ -951,7 +951,7 @@ func TestExecutorSeal(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := lse.Append(context.TODO(), []byte("foo"))
+			_, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 			errC <- err
 		}()
 	}
@@ -1146,11 +1146,11 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for {
-				meta, err := lse.Append(context.TODO(), []byte("foo"))
+				res, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 				if err != nil {
 					return
 				}
-				lastGLSNs[idx].Store(meta.GLSN)
+				lastGLSNs[idx].Store(res[0].Meta.GLSN)
 			}
 		}()
 	}
@@ -1270,7 +1270,7 @@ func TestExecutorNew(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			defer appendWg.Done()
-			_, _ = lse.Append(context.TODO(), []byte("foo"))
+			_, _ = lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 		}()
 	}
 
@@ -1406,7 +1406,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			wg.Done()
-			_, _ = lse.Append(context.TODO(), []byte("foo"))
+			_, _ = lse.Append(context.TODO(), [][]byte{[]byte("foo")})
 		}()
 	}
 	wg.Add(1)
@@ -1953,7 +1953,7 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := lse.Append(context.Background(), []byte("foo"))
+			_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")})
 			assert.NoError(t, err)
 		}()
 
@@ -1988,7 +1988,7 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := lse.Append(context.Background(), []byte("foo"))
+			_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")})
 			assert.NoError(t, err)
 		}()
 	}
@@ -2146,7 +2146,7 @@ func TestExecutorSync(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := lse.Append(context.Background(), []byte("foo"), varlogpb.Replica{
+			_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")}, varlogpb.Replica{
 				StorageNode: varlogpb.StorageNode{
 					StorageNodeID: 2,
 				},

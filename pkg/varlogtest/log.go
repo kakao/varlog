@@ -39,45 +39,45 @@ func (c *testLog) Close() error {
 	return nil
 }
 
-func (c *testLog) Append(ctx context.Context, topicID types.TopicID, data []byte, opts ...varlog.AppendOption) (varlogpb.LogEntryMeta, error) {
+func (c *testLog) Append(ctx context.Context, topicID types.TopicID, dataBatch [][]byte, opts ...varlog.AppendOption) (varlog.AppendResult, error) {
 	if err := c.lock(); err != nil {
-		return varlogpb.InvalidLogEntryMeta(), err
+		return varlog.AppendResult{}, err
 	}
 	defer c.unlock()
 
 	topicDesc, ok := c.vt.topics[topicID]
 	if !ok || topicDesc.Status.Deleted() {
-		return varlogpb.InvalidLogEntryMeta(), errors.New("no such topic")
+		return varlog.AppendResult{}, errors.New("no such topic")
 	}
 	if len(topicDesc.LogStreams) == 0 {
-		return varlogpb.InvalidLogEntryMeta(), errors.New("no log stream")
+		return varlog.AppendResult{}, errors.New("no log stream")
 	}
 
 	logStreamID := topicDesc.LogStreams[c.vt.rng.Intn(len(topicDesc.LogStreams))]
 
-	return c.appendTo(topicID, logStreamID, data)
+	return c.appendTo(topicID, logStreamID, dataBatch)
 }
 
-func (c *testLog) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...varlog.AppendOption) (varlogpb.LogEntryMeta, error) {
+func (c *testLog) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, dataBatch [][]byte, opts ...varlog.AppendOption) (varlog.AppendResult, error) {
 	if err := c.lock(); err != nil {
-		return varlogpb.InvalidLogEntryMeta(), err
+		return varlog.AppendResult{}, err
 	}
 	defer c.unlock()
 
-	return c.appendTo(topicID, logStreamID, data)
+	return c.appendTo(topicID, logStreamID, dataBatch)
 }
 
-func (c *testLog) appendTo(topicID types.TopicID, logStreamID types.LogStreamID, data []byte) (varlogpb.LogEntryMeta, error) {
+func (c *testLog) appendTo(topicID types.TopicID, logStreamID types.LogStreamID, dataBatch [][]byte) (varlog.AppendResult, error) {
 	topicDesc, err := c.topicDescriptor(topicID)
 	if err != nil {
-		return varlogpb.InvalidLogEntryMeta(), err
+		return varlog.AppendResult{}, err
 	}
 	if !topicDesc.HasLogStream(logStreamID) {
-		return varlogpb.InvalidLogEntryMeta(), errors.New("no such log stream in the topic")
+		return varlog.AppendResult{}, errors.New("no such log stream in the topic")
 	}
 
 	if _, ok := c.vt.localLogEntries[logStreamID]; !ok {
-		return varlogpb.InvalidLogEntryMeta(), errors.New("no such log stream")
+		return varlog.AppendResult{}, errors.New("no such log stream")
 	}
 
 	n := len(c.vt.globalLogEntries[topicID])
@@ -85,21 +85,26 @@ func (c *testLog) appendTo(topicID types.TopicID, logStreamID types.LogStreamID,
 	_, tail := c.peek(topicID, logStreamID)
 	lastLLSN := tail.LLSN
 
-	logEntry := &varlogpb.LogEntry{
-		LogEntryMeta: varlogpb.LogEntryMeta{
-			TopicID:     topicID,
-			LogStreamID: logStreamID,
-			GLSN:        lastGLSN + 1,
-			LLSN:        lastLLSN + 1,
-		},
-		Data: make([]byte, len(data)),
+	res := varlog.AppendResult{}
+	for _, data := range dataBatch {
+		lastGLSN++
+		lastLLSN++
+		logEntry := &varlogpb.LogEntry{
+			LogEntryMeta: varlogpb.LogEntryMeta{
+				TopicID:     topicID,
+				LogStreamID: logStreamID,
+				GLSN:        lastGLSN,
+				LLSN:        lastLLSN,
+			},
+			Data: make([]byte, len(data)),
+		}
+		copy(logEntry.Data, data)
+
+		c.vt.globalLogEntries[topicID] = append(c.vt.globalLogEntries[topicID], logEntry)
+		c.vt.localLogEntries[logStreamID] = append(c.vt.localLogEntries[logStreamID], logEntry)
+		res.Metadata = append(res.Metadata, logEntry.LogEntryMeta)
 	}
-	copy(logEntry.Data, data)
-
-	c.vt.globalLogEntries[topicID] = append(c.vt.globalLogEntries[topicID], logEntry)
-	c.vt.localLogEntries[logStreamID] = append(c.vt.localLogEntries[logStreamID], logEntry)
-
-	return logEntry.LogEntryMeta, nil
+	return res, nil
 }
 
 func (c *testLog) topicDescriptor(topicID types.TopicID) (varlogpb.TopicDescriptor, error) {

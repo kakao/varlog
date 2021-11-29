@@ -58,11 +58,15 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 		sn.logEntries[sn.glsn] = req.GetPayload()
 		sn.glsnToLLSN[sn.glsn] = sn.llsn
 		return &snpb.AppendResponse{
-			Meta: varlogpb.LogEntryMeta{
-				TopicID:     tpid,
-				LogStreamID: lsid,
-				GLSN:        sn.glsn,
-				LLSN:        sn.llsn,
+			Results: []snpb.AppendResult{
+				{
+					Meta: varlogpb.LogEntryMeta{
+						TopicID:     tpid,
+						LogStreamID: lsid,
+						GLSN:        sn.glsn,
+						LLSN:        sn.llsn,
+					},
+				},
 			},
 		}, nil
 	}).AnyTimes()
@@ -154,13 +158,13 @@ func TestBasicOperations(t *testing.T) {
 		var prevGLSN types.GLSN
 		var currGLSN types.GLSN
 		var currLogEntry *varlogpb.LogEntry
-		var meta varlogpb.LogEntryMeta
+		var res []snpb.AppendResult
 		var err error
 		var msg string
 
 		msg = "msg-1"
-		meta, err = client.Append(context.TODO(), topicID, logStreamID, []byte(msg))
-		currGLSN = meta.GLSN
+		res, err = client.Append(context.TODO(), topicID, logStreamID, [][]byte{[]byte(msg)})
+		currGLSN = res[0].Meta.GLSN
 		So(err, ShouldBeNil)
 		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, currGLSN)
 		So(err, ShouldBeNil)
@@ -168,8 +172,8 @@ func TestBasicOperations(t *testing.T) {
 		prevGLSN = currGLSN
 
 		msg = "msg-2"
-		meta, err = client.Append(context.TODO(), topicID, logStreamID, []byte(msg))
-		currGLSN = meta.GLSN
+		res, err = client.Append(context.TODO(), topicID, logStreamID, [][]byte{[]byte(msg)})
+		currGLSN = res[0].Meta.GLSN
 		So(err, ShouldBeNil)
 		So(currGLSN, ShouldBeGreaterThan, prevGLSN)
 		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, currGLSN)

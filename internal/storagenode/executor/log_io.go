@@ -11,23 +11,24 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
-func (e *executor) Append(ctx context.Context, data []byte, backups ...varlogpb.Replica) (varlogpb.LogEntryMeta, error) {
+func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogpb.Replica) ([]snpb.AppendResult, error) {
 	// FIXME: e.guard() can be removed, but doing ops to storage after closing should be
 	// handled. Mostly, trim and read can be occurred after clsoing storage.
 	if err := e.guard(); err != nil {
-		return varlogpb.InvalidLogEntryMeta(), err
+		return nil, err
 	}
 	defer e.unguard()
 
 	if err := e.mutable(); err != nil {
-		return varlogpb.InvalidLogEntryMeta(), err
+		return nil, err
 	}
 
 	twg := newTaskWaitGroup()
-	wt := newPrimaryWriteTask(twg, data, backups)
+	wt := newPrimaryWriteTask(twg, data[0], backups)
 	defer func() {
 		wt.annotate(ctx, e)
 		wt.release()
@@ -49,7 +50,7 @@ func (e *executor) Append(ctx context.Context, data []byte, backups ...varlogpb.
 	if err := e.writer.send(ctx, wt); err != nil {
 		twg.wg.Done()
 		twg.wg.Wait()
-		return varlogpb.InvalidLogEntryMeta(), err
+		return nil, err
 	}
 
 	twg.wg.Wait()
@@ -60,7 +61,11 @@ func (e *executor) Append(ctx context.Context, data []byte, backups ...varlogpb.
 		LLSN:        twg.llsn,
 	}
 	err := twg.err
-	return meta, err
+	return []snpb.AppendResult{
+		{
+			Meta: meta,
+		},
+	}, err
 }
 
 func (e *executor) Read(ctx context.Context, glsn types.GLSN) (logEntry varlogpb.LogEntry, err error) {

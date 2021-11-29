@@ -218,7 +218,7 @@ func TestStorageNodeGetPrevCommitInfo(t *testing.T) {
 			}
 			writer, ok := sn.ReadWriter(topicID, lsid)
 			require.True(t, ok)
-			_, err := writer.Append(context.TODO(), []byte("foo"))
+			_, err := writer.Append(context.TODO(), [][]byte{[]byte("foo")})
 			require.NoError(t, err)
 		}()
 	}

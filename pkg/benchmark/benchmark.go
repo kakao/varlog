@@ -150,7 +150,7 @@ func (b *benchmarkImpl) clientLoop(ctx context.Context, idx int) error {
 
 	for i := 1; i <= b.maxOpsPerClient; i++ {
 		begin := time.Now()
-		_, err := client.Append(ctx, 0, b.data)
+		_, err := client.Append(ctx, 0, [][]byte{b.data})
 		end := time.Now()
 		records = append(records, record{
 			err:          err,
