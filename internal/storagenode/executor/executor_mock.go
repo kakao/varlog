@@ -40,14 +40,14 @@ func (m *MockExecutor) EXPECT() *MockExecutorMockRecorder {
 }
 
 // Append mocks base method.
-func (m *MockExecutor) Append(arg0 context.Context, arg1 []byte, arg2 ...varlogpb.Replica) (varlogpb.LogEntryMeta, error) {
+func (m *MockExecutor) Append(arg0 context.Context, arg1 [][]byte, arg2 ...varlogpb.Replica) ([]snpb.AppendResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Append", varargs...)
-	ret0, _ := ret[0].(varlogpb.LogEntryMeta)
+	ret0, _ := ret[0].([]snpb.AppendResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

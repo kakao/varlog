@@ -96,7 +96,7 @@ func TestK8sVarlogAppendLongTime(t *testing.T) {
 				for ctx.Err() == nil {
 					data := fmt.Sprintf("client-%d-log-%d", clientIdx, n)
 					k8s.WithTimeoutContext(func(ctx context.Context) {
-						_, err = vlg.Append(ctx, []byte(data))
+						_, err = vlg.Append(ctx, [][]byte{[]byte(data)})
 						if err == nil {
 							n++
 						}

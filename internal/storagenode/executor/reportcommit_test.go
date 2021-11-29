@@ -147,16 +147,16 @@ func TestLogStreamReporter(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		lem, err := lse1.Append(context.TODO(), []byte("foo"))
+		res, err := lse1.Append(context.TODO(), [][]byte{[]byte("foo")})
 		require.NoError(t, err)
-		require.Equal(t, types.GLSN(1), lem.GLSN)
+		require.Equal(t, types.GLSN(1), res[0].Meta.GLSN)
 	}()
 	go func() {
 		defer wg.Done()
 
-		lem, err := lse2.Append(context.TODO(), []byte("foo"))
+		res, err := lse2.Append(context.TODO(), [][]byte{[]byte("foo")})
 		require.NoError(t, err)
-		require.Equal(t, types.GLSN(2), lem.GLSN)
+		require.Equal(t, types.GLSN(2), res[0].Meta.GLSN)
 	}()
 	go func() {
 		defer wg.Done()

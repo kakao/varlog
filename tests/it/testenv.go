@@ -1469,7 +1469,7 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, topicID types.Topi
 				}
 				defer cli.Close()
 
-				_, err = cli.Append(ctx, topicID, lsID, data)
+				_, err = cli.Append(ctx, topicID, lsID, [][]byte{data})
 				assert.Error(t, err)
 			}()
 

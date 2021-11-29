@@ -11,6 +11,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	types "github.com/kakao/varlog/pkg/types"
+	snpb "github.com/kakao/varlog/proto/snpb"
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -38,14 +39,14 @@ func (m *MockLogIOClient) EXPECT() *MockLogIOClientMockRecorder {
 }
 
 // Append mocks base method.
-func (m *MockLogIOClient) Append(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 []byte, arg4 ...varlogpb.StorageNode) (varlogpb.LogEntryMeta, error) {
+func (m *MockLogIOClient) Append(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 [][]byte, arg4 ...varlogpb.StorageNode) ([]snpb.AppendResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Append", varargs...)
-	ret0, _ := ret[0].(varlogpb.LogEntryMeta)
+	ret0, _ := ret[0].([]snpb.AppendResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
