@@ -9,6 +9,7 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/proto/vmspb"
@@ -21,16 +22,16 @@ type testAdmin struct {
 var _ varlog.Admin = (*testAdmin)(nil)
 
 func (c *testAdmin) lock() error {
-	c.vt.mu.Lock()
+	c.vt.cond.L.Lock()
 	if c.vt.adminClientClosed {
-		c.vt.mu.Unlock()
-		return errors.New("closed")
+		c.vt.cond.L.Unlock()
+		return verrors.ErrClosed
 	}
 	return nil
 }
 
-func (c *testAdmin) unlock() {
-	c.vt.mu.Unlock()
+func (c testAdmin) unlock() {
+	c.vt.cond.L.Unlock()
 }
 
 func (c *testAdmin) AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error) {
@@ -197,8 +198,8 @@ func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeI
 }
 
 func (c *testAdmin) Close() error {
-	c.vt.mu.Lock()
-	defer c.vt.mu.Unlock()
+	c.vt.cond.L.Lock()
+	defer c.vt.cond.L.Unlock()
 	c.vt.adminClientClosed = true
 	return nil
 }

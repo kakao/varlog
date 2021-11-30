@@ -20,6 +20,7 @@ type VarlogTest struct {
 	rng *rand.Rand
 
 	mu               sync.Mutex
+	cond             *sync.Cond
 	storageNodes     map[types.StorageNodeID]varlogpb.StorageNodeMetadataDescriptor
 	logStreams       map[types.LogStreamID]varlogpb.LogStreamDescriptor
 	topics           map[types.TopicID]varlogpb.TopicDescriptor
@@ -45,6 +46,7 @@ func New(clusterID types.ClusterID, replicationFactor int) *VarlogTest {
 		globalLogEntries:  make(map[types.TopicID][]*varlogpb.LogEntry),
 		localLogEntries:   make(map[types.LogStreamID][]*varlogpb.LogEntry),
 	}
+	vt.cond = sync.NewCond(&vt.mu)
 	vt.admin = &testAdmin{vt: vt}
 	vt.vlg = &testLog{vt: vt}
 	return vt

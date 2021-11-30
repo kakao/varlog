@@ -10,6 +10,7 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -20,22 +21,23 @@ type testLog struct {
 var _ varlog.Log = (*testLog)(nil)
 
 func (c *testLog) lock() error {
-	c.vt.mu.Lock()
-	if c.vt.adminClientClosed {
-		c.vt.mu.Unlock()
-		return errors.New("closed")
+	c.vt.cond.L.Lock()
+	if c.vt.varlogClientClosed {
+		c.vt.cond.L.Unlock()
+		return verrors.ErrClosed
 	}
 	return nil
 }
 
-func (c *testLog) unlock() {
-	c.vt.mu.Unlock()
+func (c testLog) unlock() {
+	c.vt.cond.L.Unlock()
 }
 
 func (c *testLog) Close() error {
-	c.vt.mu.Lock()
-	defer c.vt.mu.Unlock()
+	c.vt.cond.L.Lock()
+	defer c.vt.cond.L.Unlock()
 	c.vt.varlogClientClosed = true
+	c.vt.cond.Broadcast()
 	return nil
 }
 
@@ -104,6 +106,7 @@ func (c *testLog) appendTo(topicID types.TopicID, logStreamID types.LogStreamID,
 		c.vt.localLogEntries[logStreamID] = append(c.vt.localLogEntries[logStreamID], logEntry)
 		res.Metadata = append(res.Metadata, logEntry.LogEntryMeta)
 	}
+	c.vt.cond.Broadcast()
 	return res, nil
 }
 
@@ -201,70 +204,76 @@ func (c *testLog) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 	}, nil
 }
 
-func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, onNextFunc varlog.OnNext, opts ...varlog.SubscribeOption) (varlog.SubscribeCloser, error) {
+func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...varlog.SubscribeOption) varlog.Subscriber {
+	s := &subscriberImpl{}
+
 	if begin >= end {
-		return nil, errors.New("invalid range")
+		s.err = errors.New("invalid range: begin should be greater than end")
+		return s
+	}
+
+	if begin.Invalid() || end.Invalid() {
+		s.err = errors.New("invalid range: invalid LLSN")
+		return s
 	}
 
 	if err := c.lock(); err != nil {
-		return nil, err
+		s.err = verrors.ErrClosed
+		return s
 	}
 	defer c.unlock()
 
 	td, err := c.topicDescriptor(topicID)
 	if err != nil {
-		return nil, err
+		s.err = err
+		return s
 	}
 
 	if !td.HasLogStream(logStreamID) {
-		return nil, errors.New("no such log stream")
+		s.err = errors.New("no such log stream")
+		return s
 	}
 
-	logEntries, ok := c.vt.localLogEntries[logStreamID]
+	_, ok := c.vt.localLogEntries[logStreamID]
 	if !ok {
-		return nil, errors.New("no such log stream")
-	}
-	n := len(logEntries)
-	if logEntries[n-1].LLSN < begin {
-		// NOTE: This differs from the real varlog.
-		return nil, errors.New("no such log entry")
+		s.err = errors.New("no such log stream")
+		return s
 	}
 
-	if begin.Invalid() {
-		begin = types.MinLLSN
-	}
-	if end > logEntries[n-1].LLSN {
-		end = logEntries[n-1].LLSN + 1
+	contextError := func() error {
+		return ctx.Err()
 	}
 
-	copiedLogEntries := make([]varlogpb.LogEntry, 0, end-begin)
-	for llsn := begin; llsn < end; llsn++ {
-		logEntry := varlogpb.LogEntry{
-			LogEntryMeta: varlogpb.LogEntryMeta{
-				TopicID:     logEntries[llsn].TopicID,
-				LogStreamID: logEntries[llsn].LogStreamID,
-				GLSN:        logEntries[llsn].GLSN,
-				LLSN:        llsn,
-			},
-			Data: make([]byte, len(logEntries[llsn].Data)),
+	s.end = end
+	s.cursor = begin
+	s.quit = make(chan struct{})
+	s.contextError = contextError
+	s.vt.cond = c.vt.cond
+	s.vt.logEntries = func() []*varlogpb.LogEntry {
+		logEntries, ok := c.vt.localLogEntries[logStreamID]
+		if !ok {
+			panic("inconsistent status: no such log stream")
 		}
-		copy(logEntry.Data, logEntries[llsn].Data)
-		copiedLogEntries = append(copiedLogEntries, logEntry)
+		return logEntries
+	}
+	s.vt.closedClient = func() bool {
+		return c.vt.varlogClientClosed
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	s.wg.Add(1)
 	go func() {
-		defer wg.Done()
-		for _, logEntry := range copiedLogEntries {
-			onNextFunc(logEntry, nil)
+		defer s.wg.Done()
+		select {
+		case <-ctx.Done():
+			s.setErr(ctx.Err())
+		case <-s.quit:
 		}
-		onNextFunc(varlogpb.InvalidLogEntry(), io.EOF)
+		s.vt.cond.L.Lock()
+		s.vt.cond.Broadcast()
+		s.vt.cond.L.Unlock()
 	}()
 
-	return func() {
-		wg.Wait()
-	}, nil
+	return s
 }
 
 func (c *testLog) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts varlog.TrimOption) error {
@@ -314,4 +323,122 @@ func (c *testLog) peek(topicID types.TopicID, logStreamID types.LogStreamID) (he
 	tail.GLSN = c.vt.localLogEntries[logStreamID][lastIdx].GLSN
 	tail.LLSN = c.vt.localLogEntries[logStreamID][lastIdx].LLSN
 	return head, tail
+}
+
+type subscriberImpl struct {
+	end    types.LLSN
+	cursor types.LLSN
+
+	quit         chan struct{}
+	contextError func() error
+
+	mu     sync.Mutex
+	once   sync.Once
+	err    error
+	closed bool
+
+	// localLogEntries of VarlogTest
+	vt struct {
+		cond         *sync.Cond
+		logEntries   func() []*varlogpb.LogEntry
+		closedClient func() bool
+	}
+
+	wg sync.WaitGroup
+}
+
+func (s *subscriberImpl) Next() (varlogpb.LogEntry, error) {
+	logEntry, err := s.next()
+	if err != nil {
+		s.setErr(err)
+		return varlogpb.InvalidLogEntry(), err
+	}
+	if s.cursor == s.end {
+		s.setErr(io.EOF)
+	}
+	return logEntry, nil
+}
+
+func (s *subscriberImpl) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return errors.New("already closed")
+	}
+	s.closed = true
+	close(s.quit)
+	s.wg.Wait()
+
+	if s.err == io.EOF {
+		return nil
+	}
+	return s.err
+}
+
+func (s *subscriberImpl) next() (logEntry varlogpb.LogEntry, err error) {
+	s.vt.cond.L.Lock()
+	defer s.vt.cond.L.Unlock()
+
+	for !s.available() && s.contextError() == nil && !s.isClosed() && !s.hasErr() && !s.vt.closedClient() {
+		s.vt.cond.Wait()
+	}
+
+	if s.vt.closedClient() {
+		return logEntry, errors.New("client closed")
+	}
+
+	if err := s.contextError(); err != nil {
+		return logEntry, s.err
+	}
+
+	if s.isClosed() {
+		return logEntry, errors.New("closed")
+	}
+
+	if s.hasErr() {
+		return logEntry, s.err
+	}
+
+	logEntries := s.vt.logEntries()
+	logEntry = varlogpb.LogEntry{
+		LogEntryMeta: varlogpb.LogEntryMeta{
+			TopicID:     logEntries[s.cursor].TopicID,
+			LogStreamID: logEntries[s.cursor].LogStreamID,
+			GLSN:        logEntries[s.cursor].GLSN,
+			LLSN:        s.cursor,
+		},
+		Data: make([]byte, len(logEntries[s.cursor].Data)),
+	}
+	copy(logEntry.Data, logEntries[s.cursor].Data)
+	s.cursor++
+	return logEntry, nil
+}
+
+func (s *subscriberImpl) available() bool {
+	logEntries := s.vt.logEntries()
+	lastIdx := len(logEntries) - 1
+	return logEntries[lastIdx].LLSN >= s.cursor
+}
+
+func (s *subscriberImpl) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
+}
+
+func (s *subscriberImpl) hasErr() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.err != nil
+}
+
+func (s *subscriberImpl) setErr(err error) {
+	s.once.Do(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if !s.closed {
+			s.err = err
+		}
+	})
 }
