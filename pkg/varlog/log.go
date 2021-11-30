@@ -34,7 +34,7 @@ type Log interface {
 
 	Subscribe(ctx context.Context, topicID types.TopicID, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error)
 
-	SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error)
+	SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...SubscribeOption) Subscriber
 
 	Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error
 
@@ -177,7 +177,7 @@ func (v *logImpl) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 	return v.subscribe(ctx, topicID, begin, end, onNextFunc, opts...)
 }
 
-func (v *logImpl) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error) {
+func (v *logImpl) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...SubscribeOption) Subscriber {
 	panic("not implemented")
 }
 

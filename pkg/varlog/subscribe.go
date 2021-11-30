@@ -19,6 +19,11 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
+type Subscriber interface {
+	Next() (varlogpb.LogEntry, error)
+	io.Closer
+}
+
 type SubscribeCloser func()
 
 func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, end types.GLSN, onNext OnNext, opts ...SubscribeOption) (closer SubscribeCloser, err error) {
