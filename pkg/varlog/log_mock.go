@@ -142,22 +142,21 @@ func (mr *MockLogMockRecorder) Subscribe(arg0, arg1, arg2, arg3, arg4 interface{
 }
 
 // SubscribeTo mocks base method.
-func (m *MockLog) SubscribeTo(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 types.LLSN, arg5 OnNext, arg6 ...SubscribeOption) (SubscribeCloser, error) {
+func (m *MockLog) SubscribeTo(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 types.LLSN, arg5 ...SubscribeOption) Subscriber {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1, arg2, arg3, arg4, arg5}
-	for _, a := range arg6 {
+	varargs := []interface{}{arg0, arg1, arg2, arg3, arg4}
+	for _, a := range arg5 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "SubscribeTo", varargs...)
-	ret0, _ := ret[0].(SubscribeCloser)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(Subscriber)
+	return ret0
 }
 
 // SubscribeTo indicates an expected call of SubscribeTo.
-func (mr *MockLogMockRecorder) SubscribeTo(arg0, arg1, arg2, arg3, arg4, arg5 interface{}, arg6 ...interface{}) *gomock.Call {
+func (mr *MockLogMockRecorder) SubscribeTo(arg0, arg1, arg2, arg3, arg4 interface{}, arg5 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1, arg2, arg3, arg4, arg5}, arg6...)
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3, arg4}, arg5...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTo", reflect.TypeOf((*MockLog)(nil).SubscribeTo), varargs...)
 }
 
