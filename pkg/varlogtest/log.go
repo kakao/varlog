@@ -242,13 +242,12 @@ func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStr
 		return s
 	}
 
-	contextError := func() error {
-		return ctx.Err()
-	}
-
 	s.end = end
 	s.cursor = begin
-	s.contextError = contextError
+	s.quit = make(chan struct{})
+	s.contextError = func() error {
+		return ctx.Err()
+	}
 	s.vt.cond = c.vt.cond
 	s.vt.logEntries = func() []*varlogpb.LogEntry {
 		logEntries, ok := c.vt.localLogEntries[logStreamID]
@@ -266,7 +265,6 @@ func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStr
 		defer s.wg.Done()
 		select {
 		case <-ctx.Done():
-			s.setErr(ctx.Err())
 		case <-s.quit:
 		}
 		s.vt.cond.L.Lock()
@@ -381,7 +379,7 @@ func (s *subscriberImpl) next() (logEntry varlogpb.LogEntry, err error) {
 	s.vt.cond.L.Lock()
 	defer s.vt.cond.L.Unlock()
 
-	for !s.available() && s.contextError() == nil && !s.isClosed() && !s.hasErr() && !s.vt.closedClient() {
+	for !s.available() && s.contextError() == nil && !s.isClosed() && s.getErr() == nil && !s.vt.closedClient() {
 		s.vt.cond.Wait()
 	}
 
@@ -390,15 +388,16 @@ func (s *subscriberImpl) next() (logEntry varlogpb.LogEntry, err error) {
 	}
 
 	if err := s.contextError(); err != nil {
-		return logEntry, s.err
+		s.setErr(err)
+		return logEntry, err
 	}
 
 	if s.isClosed() {
 		return logEntry, errors.New("closed")
 	}
 
-	if s.hasErr() {
-		return logEntry, s.err
+	if err := s.getErr(); err != nil {
+		return logEntry, err
 	}
 
 	logEntries := s.vt.logEntries()
@@ -428,18 +427,16 @@ func (s *subscriberImpl) isClosed() bool {
 	return s.closed
 }
 
-func (s *subscriberImpl) hasErr() bool {
+func (s *subscriberImpl) getErr() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.err != nil
+	return s.err
 }
 
 func (s *subscriberImpl) setErr(err error) {
 	s.once.Do(func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if !s.closed {
-			s.err = err
-		}
+		s.err = err
 	})
 }
