@@ -205,7 +205,9 @@ func (c *testLog) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 }
 
 func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...varlog.SubscribeOption) varlog.Subscriber {
-	s := &subscriberImpl{}
+	s := &subscriberImpl{
+		quit: make(chan struct{}),
+	}
 
 	if begin >= end {
 		s.err = errors.New("invalid range: begin should be greater than end")
@@ -246,7 +248,6 @@ func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStr
 
 	s.end = end
 	s.cursor = begin
-	s.quit = make(chan struct{})
 	s.contextError = contextError
 	s.vt.cond = c.vt.cond
 	s.vt.logEntries = func() []*varlogpb.LogEntry {

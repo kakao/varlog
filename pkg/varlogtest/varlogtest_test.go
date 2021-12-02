@@ -233,6 +233,18 @@ func TestVarlogTest(t *testing.T) {
 		require.Equal(t, end, expectedLLSN)
 	}
 
+	// SubscribeTo: InvalidArgument
+	for tpID, lsIDs := range topicLogStreamsMap {
+		for _, lsID := range lsIDs {
+			var sub varlog.Subscriber
+			sub = vlg.SubscribeTo(context.Background(), tpID, lsID, types.MinLLSN+1, types.MinLLSN)
+			require.Error(t, sub.Close())
+
+			sub = vlg.SubscribeTo(context.Background(), tpID, lsID, types.InvalidLLSN, types.MinLLSN)
+			require.Error(t, sub.Close())
+		}
+	}
+
 	for i := 0; i < numTopics; i++ {
 		tpID := topicIDs[i]
 		subscribe(tpID, types.MinGLSN, globalHWMs[tpID]+1)
