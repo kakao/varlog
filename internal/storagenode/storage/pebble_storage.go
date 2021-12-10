@@ -317,13 +317,22 @@ func (ps *pebbleStorage) ReadAt(llsn types.LLSN) (varlogpb.LogEntry, error) {
 		_ = iter.Close()
 	}()
 
+	ck := make([]byte, commitKeyLength)
 	iter.First()
-	for iter.Valid() && decodeCommitValue(iter.Value()) <= llsn {
-		if decodeCommitValue(iter.Value()) == llsn {
-			glsn := decodeCommitKey(iter.Key())
-			return ps.Read(glsn)
+	for iter.Valid() {
+		currLLSN := decodeCommitValue(iter.Value())
+		if currLLSN > llsn {
+			break
 		}
-		iter.Next()
+
+		currGLSN := decodeCommitKey(iter.Key())
+		if currLLSN == llsn {
+			return ps.Read(currGLSN)
+		}
+
+		delta := llsn - currLLSN
+		glsnGuess := currGLSN + types.GLSN(delta)
+		iter.SeekGE(encodeCommitKeyInternal(glsnGuess, ck))
 	}
 	return varlogpb.InvalidLogEntry(), errors.WithStack(verrors.ErrNoEntry)
 }
