@@ -419,15 +419,19 @@ func (mr *MockStorageMockRecorder) RestoreStorage(arg0, arg1, arg2 interface{}) 
 }
 
 // Scan mocks base method.
-func (m *MockStorage) Scan(arg0, arg1 types.GLSN) Scanner {
+func (m *MockStorage) Scan(arg0 ...ScanOption) Scanner {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Scan", arg0, arg1)
+	varargs := []interface{}{}
+	for _, a := range arg0 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Scan", varargs...)
 	ret0, _ := ret[0].(Scanner)
 	return ret0
 }
 
 // Scan indicates an expected call of Scan.
-func (mr *MockStorageMockRecorder) Scan(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockStorageMockRecorder) Scan(arg0 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scan", reflect.TypeOf((*MockStorage)(nil).Scan), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scan", reflect.TypeOf((*MockStorage)(nil).Scan), arg0...)
 }

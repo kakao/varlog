@@ -334,11 +334,26 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 			require.Equal(t, types.LLSN(4), le.LLSN)
 			require.Nil(t, le.Data)
 
-			// Scan
-			sc = strg.Scan(0, 8)
-			sc.Close()
+			// Scan by GLSN (0, 8)
+			sc = strg.Scan(WithGLSN(0, 8))
+			for i := 0; i < 4; i++ {
+				sr := sc.Next()
+				require.Equal(t, types.LLSN(i+1), sr.LogEntry.LLSN)
+			}
+			require.False(t, sc.Next().Valid())
+			require.NoError(t, sc.Close())
 
-			sc = strg.Scan(2, 8)
+			// Scan by LLSN (0, 5)
+			sc = strg.Scan(WithLLSN(0, 5))
+			for i := 0; i < 4; i++ {
+				sr := sc.Next()
+				require.Equal(t, types.LLSN(i+1), sr.LogEntry.LLSN)
+			}
+			require.False(t, sc.Next().Valid())
+			require.NoError(t, sc.Close())
+
+			// Scan by GLSN (2, 8)
+			sc = strg.Scan(WithGLSN(2, 8))
 			sr = sc.Next()
 			require.True(t, sr.Valid())
 			require.Equal(t, varlogpb.LogEntry{
@@ -381,8 +396,30 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 
 			sr = sc.Next()
 			require.False(t, sr.Valid())
+			require.NoError(t, sc.Close())
 
-			sc.Close()
+			// Scan by LLSN (1, 5)
+			sc = strg.Scan(WithLLSN(1, 5))
+
+			sr = sc.Next()
+			require.True(t, sr.Valid())
+			require.Equal(t, varlogpb.LogEntry{LogEntryMeta: varlogpb.LogEntryMeta{LLSN: 1}}, sr.LogEntry)
+
+			sr = sc.Next()
+			require.True(t, sr.Valid())
+			require.Equal(t, varlogpb.LogEntry{LogEntryMeta: varlogpb.LogEntryMeta{LLSN: 2}, Data: []byte("foo")}, sr.LogEntry)
+
+			sr = sc.Next()
+			require.True(t, sr.Valid())
+			require.Equal(t, varlogpb.LogEntry{LogEntryMeta: varlogpb.LogEntryMeta{LLSN: 3}, Data: []byte("bar")}, sr.LogEntry)
+
+			sr = sc.Next()
+			require.True(t, sr.Valid())
+			require.Equal(t, varlogpb.LogEntry{LogEntryMeta: varlogpb.LogEntryMeta{LLSN: 4}}, sr.LogEntry)
+
+			sr = sc.Next()
+			require.False(t, sr.Valid())
+			require.NoError(t, sc.Close())
 
 			// Write
 			// LLSN: 5, 6
@@ -404,11 +441,15 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 			_, err = strg.Read(3)
 			require.Error(t, err)
 
-			sc = strg.Scan(0, 5)
+			sc = strg.Scan(WithGLSN(0, 5))
 			require.False(t, sc.Next().Valid())
 			require.NoError(t, sc.Close())
 
-			sc = strg.Scan(0, 7)
+			sc = strg.Scan(WithLLSN(1, 3))
+			require.False(t, sc.Next().Valid())
+			require.NoError(t, sc.Close())
+
+			sc = strg.Scan(WithGLSN(0, 7))
 			sr = sc.Next()
 			require.True(t, sr.Valid())
 			require.Equal(t, varlogpb.LogEntry{
@@ -417,6 +458,17 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 					LLSN: 3,
 				},
 				Data: []byte("bar"),
+			}, sr.LogEntry)
+			sr = sc.Next()
+			require.False(t, sr.Valid())
+			require.NoError(t, sc.Close())
+
+			sc = strg.Scan(WithLLSN(1, 4))
+			sr = sc.Next()
+			require.True(t, sr.Valid())
+			require.Equal(t, varlogpb.LogEntry{
+				LogEntryMeta: varlogpb.LogEntryMeta{LLSN: 3},
+				Data:         []byte("bar"),
 			}, sr.LogEntry)
 			sr = sc.Next()
 			require.False(t, sr.Valid())
