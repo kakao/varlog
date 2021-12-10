@@ -15,6 +15,7 @@ import (
 	"github.com/kakao/varlog/pkg/util/mathutil"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type committerConfig struct {
@@ -561,8 +562,17 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 	// NOTE: localGLSN should be increased only when numCommits is greater than zero.
 	if numCommits > 0 {
 		// only the first commit changes local low watermark
-		c.lsc.localGLSN.localLowWatermark.CompareAndSwap(types.InvalidGLSN, commitContext.CommittedGLSNBegin)
-		c.lsc.localGLSN.localHighWatermark.Store(commitContext.CommittedGLSNEnd - 1)
+		localLWM := varlogpb.LogEntryMeta{
+			LLSN: commitContext.CommittedLLSNBegin,
+			GLSN: commitContext.CommittedGLSNBegin,
+		}
+		c.lsc.localWatermarks.low.CompareAndSwap(varlogpb.InvalidLogEntryMeta(), localLWM)
+
+		localHWM := varlogpb.LogEntryMeta{
+			LLSN: commitContext.CommittedLLSNBegin + types.LLSN(numCommits) - 1,
+			GLSN: commitContext.CommittedGLSNBegin + types.GLSN(numCommits) - 1,
+		}
+		c.lsc.setLocalHighWatermark(localHWM)
 	}
 	uncommittedLLSNBegin += types.LLSN(numCommits)
 

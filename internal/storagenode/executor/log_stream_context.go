@@ -3,12 +3,14 @@ package executor
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/internal/storagenode/stopchannel"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 // NOTE: When reportCommitBase is operated by atomic, it escapes to the heap. See
@@ -32,9 +34,9 @@ type logStreamContext struct {
 		mu               sync.RWMutex
 	}
 
-	localGLSN struct {
-		localLowWatermark  types.AtomicGLSN
-		localHighWatermark types.AtomicGLSN
+	localWatermarks struct {
+		low  atomic.Value // types.AtomicGLSN -> varlogpb.LogEntryMeta
+		high atomic.Value // types.AtomicGLSN -> varlogpb.LogEntryMeta
 	}
 }
 
@@ -49,8 +51,14 @@ func newLogStreamContext() *logStreamContext {
 	lsc.commitProgress.committedLLSNEnd = types.MinLLSN
 	lsc.commitProgress.mu.Unlock()
 
-	lsc.localGLSN.localLowWatermark.Store(types.InvalidGLSN)
-	lsc.localGLSN.localHighWatermark.Store(types.InvalidGLSN)
+	lsc.localWatermarks.low.Store(varlogpb.LogEntryMeta{
+		LLSN: types.InvalidLLSN,
+		GLSN: types.InvalidGLSN,
+	})
+	lsc.localWatermarks.high.Store(varlogpb.LogEntryMeta{
+		LLSN: types.InvalidLLSN,
+		GLSN: types.InvalidGLSN,
+	})
 
 	return lsc
 }
@@ -70,6 +78,22 @@ func (lsc *logStreamContext) storeReportCommitBase(commitVersion types.Version, 
 	lsc.base.highWatermark = highWatermark
 	lsc.base.uncommittedLLSNBegin = uncommittedLLSNBegin
 	lsc.base.mu.Unlock()
+}
+
+func (lsc *logStreamContext) localLowWatermark() varlogpb.LogEntryMeta {
+	return lsc.localWatermarks.low.Load().(varlogpb.LogEntryMeta)
+}
+
+func (lsc *logStreamContext) localHighWatermark() varlogpb.LogEntryMeta {
+	return lsc.localWatermarks.high.Load().(varlogpb.LogEntryMeta)
+}
+
+func (lsc *logStreamContext) setLocalLowWatermark(localLWM varlogpb.LogEntryMeta) {
+	lsc.localWatermarks.low.Store(localLWM)
+}
+
+func (lsc *logStreamContext) setLocalHighWatermark(localHWM varlogpb.LogEntryMeta) {
+	lsc.localWatermarks.high.Store(localHWM)
 }
 
 type decidableCondition struct {

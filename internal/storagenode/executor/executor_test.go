@@ -194,6 +194,14 @@ func TestExecutorAppend(t *testing.T) {
 			return report.Version == ver && report.UncommittedLLSNOffset == types.LLSN(ver)+1 &&
 				report.UncommittedLLSNLength == 0
 		}, time.Second, time.Millisecond)
+
+		localLWM := lse.lsc.localLowWatermark()
+		require.Equal(t, types.MinLLSN, localLWM.LLSN)
+		require.Equal(t, types.MinGLSN, localLWM.GLSN)
+
+		localHWM := lse.lsc.localHighWatermark()
+		require.Equal(t, types.LLSN(ver), localHWM.LLSN)
+		require.Equal(t, types.GLSN(ver), localHWM.GLSN)
 	}
 }
 
@@ -400,6 +408,14 @@ func TestExecutorTrim(t *testing.T) {
 	_, err = lse.Read(context.TODO(), 50)
 	require.Error(t, err)
 
+	localLWM := lse.lsc.localLowWatermark()
+	require.Equal(t, types.MinLLSN, localLWM.LLSN)
+	require.Equal(t, types.GLSN(3), localLWM.GLSN)
+
+	localHWM := lse.lsc.localHighWatermark()
+	require.Equal(t, types.LLSN(numAppends), localHWM.LLSN)
+	require.Equal(t, types.GLSN(48), localHWM.GLSN)
+
 	// trim 50 (globalHWM), 51
 	require.Error(t, lse.Trim(context.TODO(), 50))
 	require.Error(t, lse.Trim(context.TODO(), 51))
@@ -421,7 +437,16 @@ func TestExecutorTrim(t *testing.T) {
 	// trim [1, 3]
 	require.NoError(t, lse.Trim(context.TODO(), 3))
 
+	localLWM = lse.lsc.localLowWatermark()
+	require.Equal(t, types.LLSN(3), localLWM.LLSN)
+	require.Equal(t, types.GLSN(13), localLWM.GLSN)
+
+	localHWM = lse.lsc.localHighWatermark()
+	require.Equal(t, types.LLSN(numAppends), localHWM.LLSN)
+	require.Equal(t, types.GLSN(48), localHWM.GLSN)
+
 	// trim 49 (localHWM=48)
+	t.Skip("SafetyGap should be considered in terms of local watermarks since there is no way to set local watermarks after trimming all of the local logs.")
 	require.NoError(t, lse.Trim(context.TODO(), 49))
 	_, err = lse.Read(context.TODO(), 48)
 	require.Error(t, err)

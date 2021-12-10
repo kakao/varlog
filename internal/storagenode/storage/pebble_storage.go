@@ -113,7 +113,7 @@ func (ps *pebbleStorage) readLastCommitContext(onlyNonEmpty bool) (CommitContext
 	return InvalidCommitContext, false
 }
 
-func (ps *pebbleStorage) readLogEntryBoundary() (varlogpb.LogEntry, varlogpb.LogEntry, bool, error) {
+func (ps *pebbleStorage) readLogEntryBoundary() (first varlogpb.LogEntryMeta, last varlogpb.LogEntryMeta, found bool, err error) {
 	iter := ps.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
@@ -123,22 +123,22 @@ func (ps *pebbleStorage) readLogEntryBoundary() (varlogpb.LogEntry, varlogpb.Log
 	}()
 
 	if !iter.First() {
-		return varlogpb.InvalidLogEntry(), varlogpb.InvalidLogEntry(), false, nil
+		return varlogpb.InvalidLogEntryMeta(), varlogpb.InvalidLogEntryMeta(), false, nil
 	}
 	firstGLSN := decodeCommitKey(iter.Key())
 	firstLE, err := ps.Read(firstGLSN)
 	if err != nil {
-		return varlogpb.InvalidLogEntry(), varlogpb.InvalidLogEntry(), true, err
+		return varlogpb.InvalidLogEntryMeta(), varlogpb.InvalidLogEntryMeta(), true, err
 	}
 
 	iter.Last()
 	lastGLSN := decodeCommitKey(iter.Key())
 	lastLE, err := ps.Read(lastGLSN)
-	return firstLE, lastLE, true, err
+	return firstLE.LogEntryMeta, lastLE.LogEntryMeta, true, err
 }
 
-func (ps *pebbleStorage) readUncommittedLogEntryBoundary(lastCommittedLogEntry varlogpb.LogEntry) (types.LLSN, types.LLSN) {
-	dk := encodeDataKey(lastCommittedLogEntry.LLSN + 1)
+func (ps *pebbleStorage) readUncommittedLogEntryBoundary(lastCommitted varlogpb.LogEntryMeta) (types.LLSN, types.LLSN) {
+	dk := encodeDataKey(lastCommitted.LLSN + 1)
 	iter := ps.db.NewIter(&pebble.IterOptions{
 		LowerBound: dk,
 		UpperBound: []byte{dataKeySentinelPrefix},
@@ -303,6 +303,49 @@ func (ps *pebbleStorage) Read(glsn types.GLSN) (varlogpb.LogEntry, error) {
 	}
 	if err := multierr.Append(errors.WithStack(ccloser.Close()), errors.WithStack(dcloser.Close())); err != nil {
 		return varlogpb.InvalidLogEntry(), err
+	}
+	return logEntry, nil
+}
+
+func (ps *pebbleStorage) ReadGE(glsn types.GLSN) (varlogpb.LogEntry, error) {
+	ckb := newCommitKeyBuffer()
+	defer ckb.release()
+
+	iter := ps.db.NewIter(&pebble.IterOptions{
+		LowerBound: encodeCommitKeyInternal(glsn, ckb.ck[:]),
+		UpperBound: []byte{commitKeySentinelPrefix},
+	})
+	defer func() {
+		_ = iter.Close()
+	}()
+
+	if !iter.First() {
+		return varlogpb.InvalidLogEntry(), errors.WithStack(verrors.ErrNoEntry)
+	}
+
+	ck := iter.Key()
+	dk := iter.Value()
+
+	data, closer, err := ps.db.Get(dk)
+	if err != nil {
+		if err == pebble.ErrNotFound {
+			err = verrors.ErrNoEntry
+		}
+		return varlogpb.InvalidLogEntry(), errors.WithStack(err)
+	}
+	defer func() {
+		_ = closer.Close()
+	}()
+
+	logEntry := varlogpb.LogEntry{
+		LogEntryMeta: varlogpb.LogEntryMeta{
+			GLSN: decodeCommitKey(ck),
+			LLSN: decodeDataKey(dk),
+		},
+	}
+	if len(data) > 0 {
+		logEntry.Data = make([]byte, len(data))
+		copy(logEntry.Data, data)
 	}
 	return logEntry, nil
 }

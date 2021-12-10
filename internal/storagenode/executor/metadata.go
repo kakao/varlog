@@ -33,7 +33,7 @@ func (e *executor) Metadata() varlogpb.LogStreamMetadataDescriptor {
 		LogStreamID:   e.logStreamID,
 		TopicID:       e.topicID,
 		Version:       version,
-		HighWatermark: e.lsc.localGLSN.localHighWatermark.Load(),
+		HighWatermark: e.lsc.localHighWatermark().GLSN,
 		Status:        status,
 		Path:          e.storage.Path(),
 		CreatedTime:   e.tsp.Created(),
