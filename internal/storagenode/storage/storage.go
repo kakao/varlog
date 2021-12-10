@@ -12,6 +12,7 @@ import (
 var (
 	ErrNotFoundCommitContext     = errors.New("storage: no commit context")
 	ErrInconsistentCommitContext = errors.New("storage: inconsistent commit context")
+	ErrInvalidScanRange          = errors.New("storage: invalid scan range")
 )
 
 type RecoveryInfo struct {
@@ -31,6 +32,62 @@ type RecoveryInfo struct {
 	UncommittedLogEntryBoundary struct {
 		First types.LLSN
 		Last  types.LLSN
+	}
+}
+
+type scanConfig struct {
+	withGLSN bool
+	begin    varlogpb.LogEntryMeta
+	end      varlogpb.LogEntryMeta
+}
+
+func newScanConfig(opts []ScanOption) (scanConfig, error) {
+	cfg := scanConfig{}
+	for _, opt := range opts {
+		opt.applyScan(&cfg)
+	}
+	return cfg, cfg.validate()
+}
+
+func (cfg scanConfig) validate() error {
+	if cfg.withGLSN && cfg.begin.GLSN >= cfg.end.GLSN {
+		return ErrInvalidScanRange
+	}
+	if !cfg.withGLSN && cfg.begin.LLSN >= cfg.end.LLSN {
+		return ErrInvalidScanRange
+	}
+	return nil
+}
+
+type ScanOption interface {
+	applyScan(*scanConfig)
+}
+
+type scanRangeOption struct {
+	withGLSN bool
+	begin    varlogpb.LogEntryMeta
+	end      varlogpb.LogEntryMeta
+}
+
+func (opt scanRangeOption) applyScan(cfg *scanConfig) {
+	cfg.withGLSN = opt.withGLSN
+	cfg.begin = opt.begin
+	cfg.end = opt.end
+}
+
+func WithGLSN(begin types.GLSN, end types.GLSN) ScanOption {
+	return scanRangeOption{
+		withGLSN: true,
+		begin:    varlogpb.LogEntryMeta{GLSN: begin},
+		end:      varlogpb.LogEntryMeta{GLSN: end},
+	}
+}
+
+func WithLLSN(begin types.LLSN, end types.LLSN) ScanOption {
+	return scanRangeOption{
+		withGLSN: false,
+		begin:    varlogpb.LogEntryMeta{LLSN: begin},
+		end:      varlogpb.LogEntryMeta{LLSN: end},
 	}
 }
 
@@ -115,7 +172,7 @@ type Storage interface {
 	ReadAt(llsn types.LLSN) (varlogpb.LogEntry, error)
 
 	// Scan returns Scanner that reads log entries from the glsn.
-	Scan(begin, end types.GLSN) Scanner
+	Scan(opts ...ScanOption) Scanner
 
 	// Write writes log entry at the llsn. The log entry contains data.
 	// Write(llsn types.LLSN, data []byte) error

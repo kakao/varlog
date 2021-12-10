@@ -337,25 +337,37 @@ func (ps *pebbleStorage) ReadAt(llsn types.LLSN) (varlogpb.LogEntry, error) {
 	return varlogpb.InvalidLogEntry(), errors.WithStack(verrors.ErrNoEntry)
 }
 
-func (ps *pebbleStorage) Scan(begin, end types.GLSN) Scanner {
-	lkBuf := newCommitKeyBuffer()
-	lower := encodeCommitKeyInternal(begin, lkBuf.ck[:])
+func (ps *pebbleStorage) Scan(scanOpts ...ScanOption) Scanner {
+	cfg, err := newScanConfig(scanOpts)
+	if err != nil {
+		return &invalidPebbleScanner{err: err}
+	}
 
-	ukBuf := newCommitKeyBuffer()
-	upper := encodeCommitKeyInternal(end, ukBuf.ck[:])
-	opts := &pebble.IterOptions{
-		LowerBound: lower,
-		UpperBound: upper,
+	scanner := &pebbleScanner{
+		scanConfig: cfg,
+		db:         ps.db,
+		logger:     ps.logger,
 	}
-	iter := ps.db.NewIter(opts)
-	iter.First()
-	return &pebbleScanner{
-		iter:        iter,
-		db:          ps.db,
-		logger:      ps.logger,
-		lowerKeyBuf: lkBuf,
-		upperKeyBuf: ukBuf,
+	iterOpts := &pebble.IterOptions{}
+	if scanner.withGLSN {
+		begin, end := scanner.begin.GLSN, scanner.end.GLSN
+		lkBuf := newCommitKeyBuffer()
+		ukBuf := newCommitKeyBuffer()
+		scanner.commitKeyBuffers.lower = lkBuf
+		scanner.commitKeyBuffers.upper = ukBuf
+		iterOpts.LowerBound = encodeCommitKeyInternal(begin, lkBuf.ck[:])
+		iterOpts.UpperBound = encodeCommitKeyInternal(end, ukBuf.ck[:])
+	} else {
+		begin, end := scanner.begin.LLSN, scanner.end.LLSN
+		scanner.dataKeyBuffers.lower = newDataKeyBuffer()
+		scanner.dataKeyBuffers.upper = newDataKeyBuffer()
+		iterOpts.LowerBound = encodeDataKeyInternal(begin, scanner.dataKeyBuffers.lower.dk)
+		iterOpts.UpperBound = encodeDataKeyInternal(end, scanner.dataKeyBuffers.upper.dk)
+
 	}
+	scanner.iter = ps.db.NewIter(iterOpts)
+	scanner.iter.First()
+	return scanner
 }
 
 //func (ps *pebbleStorage) Write(llsn types.LLSN, data []byte) error {

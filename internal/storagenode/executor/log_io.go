@@ -252,7 +252,7 @@ func (e *executor) scanLoop(ctx context.Context, subEnv *subscribeEnvImpl) error
 
 func (e *executor) scan(ctx context.Context, subEnv *subscribeEnvImpl, begin, end types.GLSN) error {
 	// TODO: wrap storage.Scan by stateBarrier
-	scanner := e.storage.Scan(begin, end)
+	scanner := e.storage.Scan(storage.WithGLSN(begin, end))
 	defer func() {
 		_ = scanner.Close()
 	}()
