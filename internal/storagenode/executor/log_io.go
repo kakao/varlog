@@ -10,6 +10,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/logio"
 	"github.com/kakao/varlog/internal/storagenode/storage"
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/mathutil"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -187,7 +188,14 @@ func (e *executor) Subscribe(ctx context.Context, begin, end types.GLSN) (logio.
 }
 
 func (e *executor) subscribe(ctx context.Context, begin, end types.GLSN) (*subscribeEnvImpl, error) {
-	subEnv, ctx := newSubscribeEnvWithContext(ctx, int(end-begin), begin, end, e.decider)
+	// TODO (jun): This magic numbers should be moved to configurations.
+	const maxSubscribeQueueSize = 128
+	const minSubscribeQueueSize = 1
+	queueSize := uint64(end - begin)
+	queueSize = mathutil.MinUint64(queueSize, maxSubscribeQueueSize)
+	queueSize = mathutil.MaxUint64(queueSize, minSubscribeQueueSize)
+
+	subEnv, ctx := newSubscribeEnvWithContext(ctx, int(queueSize), begin, end, e.decider)
 	subEnv.wg.Add(1)
 	go func() {
 		defer func() {
@@ -214,25 +222,31 @@ func (e *executor) scanLoop(ctx context.Context, subEnv *subscribeEnvImpl) error
 		default:
 		}
 
-		decidable := e.decider.decidable(endGLSN - 1)
+		_, hwm, _ := e.lsc.reportCommitBase()
+
 		err := e.scan(ctx, subEnv, beginGLSN, endGLSN)
 		if err != nil {
 			return err
 		}
 
-		if decidable {
+		if endGLSN-1 <= hwm {
 			// ok, end of subscribe!
 			return nil
 		}
 
+		// NOTE: If lastGLSN is invalid, it means that scan didn't read anything. Thus next
+		// scan position should be updated only when lastGLSN is valid.
+		if !subEnv.lastGLSN.Invalid() {
+			beginGLSN = subEnv.lastGLSN + 1
+		}
+
 		// wait & re-scan
 		// TODO: how can we stop this blocking if subscribe is canceled or e is closed
-		if err := e.decider.waitC(ctx, endGLSN-1); err != nil {
+		// Wait until a new log is appended.
+		if err := e.decider.waitC(ctx, hwm+1); err != nil {
 			// canceled subscribe or closed LSE
 			return err
 		}
-
-		beginGLSN = subEnv.lastGLSN + 1
 	}
 }
 
