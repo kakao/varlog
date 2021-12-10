@@ -82,7 +82,7 @@ func (e *executor) SyncInit(ctx context.Context, srcRange snpb.SyncRange) (syncR
 		}
 	}()
 
-	err = e.resetInternalState(ctx, uncommittedLLSNBegin-1, e.lsc.localGLSN.localHighWatermark.Load(), !e.isPrimay())
+	err = e.resetInternalState(ctx, uncommittedLLSNBegin-1, e.lsc.localHighWatermark().GLSN, !e.isPrimay())
 	if err != nil {
 		return syncRange, err
 	}
@@ -211,13 +211,13 @@ func (e *executor) Sync(ctx context.Context, replica varlogpb.Replica) (*snpb.Sy
 		return state.ToSyncStatus(), nil
 	}
 
-	firstGLSN := e.lsc.localGLSN.localLowWatermark.Load()
+	firstGLSN := e.lsc.localLowWatermark().GLSN
 	firstLE, err := e.storage.Read(firstGLSN)
 	if err != nil {
 		return nil, err
 	}
 
-	lastLE, err := e.storage.Read(e.lsc.localGLSN.localHighWatermark.Load())
+	lastLE, err := e.storage.Read(e.lsc.localHighWatermark().GLSN)
 	if err != nil {
 		return nil, err
 	}

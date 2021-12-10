@@ -391,6 +391,21 @@ func (mr *MockStorageMockRecorder) ReadFloorCommitContext(arg0 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadFloorCommitContext", reflect.TypeOf((*MockStorage)(nil).ReadFloorCommitContext), arg0)
 }
 
+// ReadGE mocks base method.
+func (m *MockStorage) ReadGE(arg0 types.GLSN) (varlogpb.LogEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadGE", arg0)
+	ret0, _ := ret[0].(varlogpb.LogEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadGE indicates an expected call of ReadGE.
+func (mr *MockStorageMockRecorder) ReadGE(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadGE", reflect.TypeOf((*MockStorage)(nil).ReadGE), arg0)
+}
+
 // ReadRecoveryInfo mocks base method.
 func (m *MockStorage) ReadRecoveryInfo() (RecoveryInfo, error) {
 	m.ctrl.T.Helper()

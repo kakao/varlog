@@ -25,8 +25,8 @@ type RecoveryInfo struct {
 		Found bool
 	}
 	LogEntryBoundary struct {
-		First varlogpb.LogEntry
-		Last  varlogpb.LogEntry
+		First varlogpb.LogEntryMeta
+		Last  varlogpb.LogEntryMeta
 		Found bool
 	}
 	UncommittedLogEntryBoundary struct {
@@ -167,6 +167,10 @@ type Storage interface {
 	// Read reads the log entry at the glsn.
 	// If there is no entry at the given position, it returns varlog.ErrNoEntry.
 	Read(glsn types.GLSN) (varlogpb.LogEntry, error)
+
+	// ReadGE reads the closest log entry located at greater than or equal to the argument glsn.
+	// If there is no log entry at the proper position, it returns varlog.ErrNoEntry.
+	ReadGE(glsn types.GLSN) (varlogpb.LogEntry, error)
 
 	// ReadAt reads the log entry at the llsn.
 	ReadAt(llsn types.LLSN) (varlogpb.LogEntry, error)

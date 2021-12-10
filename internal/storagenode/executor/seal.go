@@ -42,7 +42,7 @@ func (e *executor) seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varl
 	// immutable status. To prevent each queue from pushing tasks in an immutable executor, use
 	// `mutableWithBarrier` to check whether the executor is mutable before pushing.
 
-	localHighWatermark := e.lsc.localGLSN.localHighWatermark.Load()
+	localHighWatermark := e.lsc.localHighWatermark().GLSN
 	if localHighWatermark > lastCommittedGLSN {
 		// bad seal request
 		panic("MR may be behind of LSE")

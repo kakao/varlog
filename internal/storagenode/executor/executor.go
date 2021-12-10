@@ -133,7 +133,7 @@ func New(opts ...Option) (*executor, error) {
 	// stable, those states in the storage can be removed.
 	lastWrittenLLSN := lse.lsc.uncommittedLLSNEnd.Load() - 1
 	lastCommittedLLSN := lse.lsc.commitProgress.committedLLSNEnd - 1
-	lastCommittedGLSN := lse.lsc.localGLSN.localHighWatermark.Load()
+	lastCommittedGLSN := lse.lsc.localHighWatermark().GLSN
 	lse.storage.RestoreStorage(lastWrittenLLSN, lastCommittedLLSN, lastCommittedGLSN)
 
 	// The executor should start in the sealing phase.
@@ -214,8 +214,8 @@ func (e *executor) restoreLogStreamContext(ri storage.RecoveryInfo) *logStreamCo
 	lsc.commitProgress.mu.RLock()
 	committedLLSNEnd := lsc.commitProgress.committedLLSNEnd
 	lsc.commitProgress.mu.RUnlock()
-	localHighWatermark := lsc.localGLSN.localHighWatermark.Load()
-	localLowWatermark := lsc.localGLSN.localLowWatermark.Load()
+	localHighWatermark := lsc.localHighWatermark()
+	localLowWatermark := lsc.localLowWatermark()
 
 	if ri.LastCommitContext.Found {
 		commitVersion = ri.LastCommitContext.CC.Version
@@ -227,8 +227,8 @@ func (e *executor) restoreLogStreamContext(ri storage.RecoveryInfo) *logStreamCo
 		uncommittedLLSNEnd = lastLLSN + 1
 		committedLLSNEnd = lastLLSN + 1
 
-		localHighWatermark = ri.LogEntryBoundary.Last.GLSN
-		localLowWatermark = ri.LogEntryBoundary.First.GLSN
+		localHighWatermark = ri.LogEntryBoundary.Last
+		localLowWatermark = ri.LogEntryBoundary.First
 	}
 
 	lsc.storeReportCommitBase(commitVersion, highWatermark, uncommittedLLSNBegin)
@@ -236,8 +236,8 @@ func (e *executor) restoreLogStreamContext(ri storage.RecoveryInfo) *logStreamCo
 	lsc.commitProgress.mu.Lock()
 	lsc.commitProgress.committedLLSNEnd = committedLLSNEnd
 	lsc.commitProgress.mu.Unlock()
-	lsc.localGLSN.localHighWatermark.Store(localHighWatermark)
-	lsc.localGLSN.localLowWatermark.Store(localLowWatermark)
+	lsc.setLocalHighWatermark(localHighWatermark)
+	lsc.setLocalLowWatermark(localLowWatermark)
 	return lsc
 }
 

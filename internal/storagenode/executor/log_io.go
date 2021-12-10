@@ -94,7 +94,7 @@ func (e *executor) Read(ctx context.Context, glsn types.GLSN) (logEntry varlogpb
 	}
 
 	// TODO: trivial optimization, is it needed?
-	if glsn > e.lsc.localGLSN.localHighWatermark.Load() {
+	if glsn > e.lsc.localHighWatermark().GLSN {
 		// no entry
 	}
 
@@ -293,6 +293,8 @@ func (e *executor) Trim(_ context.Context, glsn types.GLSN) error {
 		return trimGLSN
 	}
 
+	// FIXME(jun): SafetyGap should be considered in terms of local watermarks since there is no
+	// way to set local watermarks after trimming all of the local logs.
 	_, highWatermark, _ := e.lsc.reportCommitBase()
 	if glsn >= highWatermark-e.deferredTrim.safetyGap {
 		return errors.New("too high prefix")
@@ -300,9 +302,20 @@ func (e *executor) Trim(_ context.Context, glsn types.GLSN) error {
 
 	// TODO: design trimming of commit context, then reconsider Trim API
 	trimGLSN := updateDeferredTrim()
+
+	// already trimmed
+	if e.lsc.localLowWatermark().GLSN >= trimGLSN {
+		return nil
+	}
+
+	logEntry, err := e.storage.ReadGE(trimGLSN)
+	if err != nil {
+		return err
+	}
+
 	// NB: In some cases, localLWM >= localHWM (need to reconsider?)
-	e.lsc.localGLSN.localLowWatermark.Store(trimGLSN)
-	if glsn >= e.lsc.localGLSN.localHighWatermark.Load() {
+	e.lsc.setLocalLowWatermark(logEntry.LogEntryMeta)
+	if glsn >= e.lsc.localHighWatermark().GLSN {
 		return nil
 	}
 
