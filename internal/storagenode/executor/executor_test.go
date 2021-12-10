@@ -551,10 +551,26 @@ func TestExecutorSubscribe(t *testing.T) {
 	require.ErrorIs(t, subEnv.Err(), io.EOF)
 	subEnv.Stop()
 
+	// subscribe [1,max)
+	subEnv, err = lse.Subscribe(context.TODO(), 1, types.MaxGLSN)
+	require.NoError(t, err)
+	for i := 1; i <= numAppends; i++ {
+		sr, ok := <-subEnv.ScanResultC()
+		require.True(t, ok)
+		expectedLLSN := types.LLSN(i)
+		expectedGLSN := types.GLSN(i*5 - 2)
+		require.True(t, sr.Valid())
+		require.Nil(t, sr.Err)
+		require.Equal(t, expectedLLSN, sr.LogEntry.LLSN)
+		require.Equal(t, expectedGLSN, sr.LogEntry.GLSN)
+	}
+	subEnv.Stop()
+
 	// subscribe [48,52)
+	// subscribe [48, max)
 	// append 53 (hwm=55)
 	wg := sync.WaitGroup{}
-	wg.Add(3)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		subEnv, err := lse.Subscribe(context.TODO(), 48, 52)
@@ -568,6 +584,20 @@ func TestExecutorSubscribe(t *testing.T) {
 		_, ok = <-subEnv.ScanResultC()
 		require.False(t, ok)
 		require.ErrorIs(t, subEnv.Err(), io.EOF)
+	}()
+	go func() {
+		defer wg.Done()
+		subEnv, err := lse.Subscribe(context.TODO(), 48, types.MaxGLSN)
+		require.NoError(t, err)
+		defer subEnv.Stop()
+
+		sr, ok := <-subEnv.ScanResultC()
+		require.True(t, ok)
+		require.Equal(t, types.GLSN(48), sr.LogEntry.GLSN)
+
+		sr, ok = <-subEnv.ScanResultC()
+		require.True(t, ok)
+		// require.ErrorIs(t, subEnv.Err(), io.EOF)
 	}()
 	go func() {
 		defer wg.Done()
@@ -594,18 +624,28 @@ func TestExecutorSubscribe(t *testing.T) {
 	wg.Wait()
 
 	// subscribe [56, 57)
-	wg.Add(1)
-	subEnv, err = lse.Subscribe(context.TODO(), 56, 57)
+	wg.Add(2)
+	subEnv1, err := lse.Subscribe(context.TODO(), 56, 57)
+	require.NoError(t, err)
+	subEnv2, err := lse.Subscribe(context.TODO(), 56, types.MaxGLSN)
+	require.NoError(t, err)
 	go func() {
 		defer wg.Done()
-		require.NoError(t, err)
-		_, ok := <-subEnv.ScanResultC()
+		_, ok := <-subEnv1.ScanResultC()
 		require.False(t, ok)
-		require.Error(t, subEnv.Err())
-		require.NotErrorIs(t, subEnv.Err(), io.EOF)
+		require.Error(t, subEnv1.Err())
+		require.NotErrorIs(t, subEnv1.Err(), io.EOF)
+	}()
+	go func() {
+		defer wg.Done()
+		_, ok := <-subEnv2.ScanResultC()
+		require.False(t, ok)
+		require.Error(t, subEnv2.Err())
+		require.NotErrorIs(t, subEnv2.Err(), io.EOF)
 	}()
 	time.Sleep(5 * time.Millisecond)
-	subEnv.Stop()
+	subEnv1.Stop()
+	subEnv2.Stop()
 	wg.Wait()
 }
 
