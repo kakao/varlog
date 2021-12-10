@@ -867,3 +867,52 @@ func TestStorageCommitContextOf(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+func TestStorageReadAt(t *testing.T) {
+	testEachStorage(t, func(t *testing.T, strg Storage) {
+		defer func() {
+			require.NoError(t, strg.Close())
+		}()
+
+		// LLSN:  5 |  6 |  7 |  8 |  9 | ... | 100
+		// GLSN: 15 | 18 | 21 | 24 | 27 | ... | 300
+		const numLogs = 100
+		for i := 0; i < numLogs; i++ {
+			llsn := types.LLSN(i + 1)
+			glsn := types.GLSN(llsn * 3)
+			wb := strg.NewWriteBatch()
+			require.NoError(t, wb.Put(llsn, nil))
+			require.NoError(t, wb.Apply())
+			require.NoError(t, wb.Close())
+
+			cb, err := strg.NewCommitBatch(CommitContext{
+				Version:            types.Version(i + 1),
+				HighWatermark:      glsn,
+				CommittedGLSNBegin: glsn,
+				CommittedGLSNEnd:   glsn + 1,
+				CommittedLLSNBegin: llsn,
+			})
+			require.NoError(t, err)
+			require.NoError(t, cb.Put(llsn, glsn))
+			require.NoError(t, cb.Apply())
+			require.NoError(t, cb.Close())
+		}
+		require.NoError(t, strg.DeleteCommitted(types.GLSN(15)))
+
+		for llsn := types.LLSN(5); llsn < types.LLSN(100); llsn++ {
+			le, err := strg.ReadAt(llsn)
+			require.NoError(t, err)
+			require.Equal(t, llsn, le.LLSN)
+			require.Equal(t, types.GLSN(llsn*3), le.GLSN)
+		}
+
+		for llsn := types.InvalidLLSN; llsn < types.LLSN(5); llsn++ {
+			_, err := strg.ReadAt(llsn)
+			require.Error(t, err)
+		}
+		for llsn := types.LLSN(101); llsn < types.LLSN(110); llsn++ {
+			_, err := strg.ReadAt(llsn)
+			require.Error(t, err)
+		}
+	})
+}
