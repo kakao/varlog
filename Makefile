@@ -26,7 +26,7 @@ precommit_lint: fmt tidy vet lint test
 # build
 BIN_DIR := $(CURDIR)/bin
 VMS := $(BIN_DIR)/vms
-VMC := $(BIN_DIR)/vmc
+VARLOGCTL := $(BIN_DIR)/varlogctl
 VSN := $(BIN_DIR)/vsn
 VMR := $(BIN_DIR)/vmr
 SNTOOL := $(BIN_DIR)/sntool
@@ -35,12 +35,12 @@ BENCHMARK := $(BIN_DIR)/benchmark
 RPCBENCH_SERVER := $(BIN_DIR)/rpcbench_server 
 RPCBENCH_CLIENT := $(BIN_DIR)/rpcbench_client
 
-.PHONY: build vms vmc vsn vmr sntool rpc_test_server benchmark rpcbench
-build: vms vmc vsn vmr sntool rpc_test_server benchmark rpcbench
+.PHONY: build vms varlogctl vsn vmr sntool rpc_test_server benchmark rpcbench
+build: vms varlogctl vsn vmr sntool rpc_test_server benchmark rpcbench
 vms:
 	$(GO) build $(GCFLAGS) -o $(VMS) cmd/vms/main.go
-vmc:
-	$(GO) build $(GCFLAGS) -o $(VMC) cmd/vmc/main.go
+varlogctl:
+	$(GO) build $(GCFLAGS) -o $(VARLOGCTL) $(CURDIR)/cmd/varlogctl
 vsn:
 	$(GO) build $(GCFLAGS) -o $(VSN) cmd/storagenode/main.go
 vmr:

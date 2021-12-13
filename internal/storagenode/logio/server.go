@@ -93,7 +93,7 @@ func (s *server) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.App
 				})
 			}
 
-			res, err := lse.Append(ctx, [][]byte{req.GetPayload()}, backups...)
+			res, err := lse.Append(ctx, req.GetPayload(), backups...)
 			if err != nil {
 				code = codes.Internal
 				return rsp, err
@@ -194,6 +194,55 @@ func (s *server) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_Subscri
 	return verrors.ToStatusErrorWithCode(err, code)
 }
 
+func (s *server) SubscribeTo(req *snpb.SubscribeToRequest, stream snpb.LogIO_SubscribeToServer) error {
+	code := codes.Internal
+	_, err := s.withTelemetry(stream.Context(), "varlog.snpb.LogIO/Subscribe", req,
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			if req.LLSNBegin >= req.LLSNEnd {
+				code = codes.InvalidArgument
+				return nil, errors.New("storagenode: invalid subscription range")
+			}
+
+			reader, ok := s.readWriterGetter.ReadWriter(req.TopicID, req.LogStreamID)
+			if !ok {
+				code = codes.NotFound
+				return nil, errors.WithStack(verrors.ErrInvalid)
+			}
+
+			subEnv, err := reader.SubscribeTo(ctx, req.LLSNBegin, req.LLSNEnd)
+			if err != nil {
+				return nil, err
+			}
+			// FIXME: monitor stream's context, and stop subEnv if the context is canceled.
+			defer subEnv.Stop()
+
+			for sr := range subEnv.ScanResultC() {
+				if err := stream.Send(&snpb.SubscribeToResponse{
+					LogEntry: varlogpb.LogEntry{
+						LogEntryMeta: varlogpb.LogEntryMeta{
+							TopicID:     req.TopicID,
+							LogStreamID: req.LogStreamID,
+							GLSN:        sr.LogEntry.GLSN,
+							LLSN:        sr.LogEntry.LLSN,
+						},
+						Data: sr.LogEntry.Data,
+					},
+				}); err != nil {
+					return nil, errors.WithStack(err)
+				}
+			}
+			// FIXME: if the subscribe is finished without critical error (i.e., other than io.EOF), Err()
+			// should return nil.
+			err = subEnv.Err()
+			if err == io.EOF {
+				err = nil
+			}
+			return nil, err
+		},
+	)
+	return verrors.ToStatusErrorWithCode(err, code)
+}
+
 func (s *server) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtypes.Empty, error) {
 	code := codes.Internal
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/Trim", req,
@@ -220,4 +269,26 @@ func (s *server) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtypes.Empt
 		},
 	)
 	return rspI.(*pbtypes.Empty), verrors.ToStatusErrorWithCode(err, code)
+}
+
+func (s *server) LogStreamMetadata(ctx context.Context, req *snpb.LogStreamMetadataRequest) (*snpb.LogStreamMetadataResponse, error) {
+	code := codes.Internal
+	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/LogStreamMetadata", req,
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			var rsp *snpb.LogStreamMetadataResponse
+			lse, exist := s.readWriterGetter.ReadWriter(req.TopicID, req.LogStreamID)
+			if !exist {
+				code = codes.NotFound
+				return rsp, errors.WithStack(verrors.ErrInvalid)
+			}
+
+			lsd, err := lse.LogStreamMetadata()
+			if err != nil {
+				return rsp, err
+			}
+
+			return &snpb.LogStreamMetadataResponse{LogStreamDescriptor: lsd}, nil
+		},
+	)
+	return rspI.(*snpb.LogStreamMetadataResponse), verrors.ToStatusErrorWithCode(err, code)
 }

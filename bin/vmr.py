@@ -38,6 +38,7 @@ def get_local_addr():
     host = os.getenv("HOST_IP", LOCAL_ADDRESS)
     return host
 
+
 def get_raft_url():
     local_addr = get_local_addr()
     raft_port = os.getenv("RAFT_PORT", DEFAULT_RAFT_PORT)
@@ -53,7 +54,7 @@ def get_rpc_addr():
 def get_vms_addr():
     addr = os.getenv("VMS_ADDRESS")
     if addr is None:
-        raise Exception("no vms address")
+        raise Exception("no admin address")
     return addr
 
 
@@ -69,17 +70,24 @@ def get_log_dir():
 
 def get_info():
     try:
-        out = subprocess.check_output([
-            f"{binpath}/vmc",
-            "mr",
-            "info"
-        ])
+        out = subprocess.check_output([f"{binpath}/varlogctl", "mr", "describe", f"--admin={get_vms_addr()}"])
         info = json.loads(out)
-        members = info["members"].values()
-        return info["replicationFactor"], members
+
+        members = None
+        rep_factor = get_replication_factor()
+        if "error" not in info:
+            data = info.get("data", dict())
+            items = data.get("items", list())
+            if len(items) > 0:
+                rep_factor = items[0].get("replicationFactor", rep_factor)
+            members = [item["raftURL"] for item in items if "raftURL" in item]
+        return rep_factor, members
     except Exception:
         logger.exception("could not get peers")
-        return int(os.getenv("REP_FACTOR", DEFAULT_REP_FACTOR)), None
+        return get_replication_factor(), None
+
+def get_replication_factor():
+    return int(os.getenv("REP_FACTOR", DEFAULT_REP_FACTOR))
 
 
 def add_raft_peer():
@@ -88,18 +96,20 @@ def add_raft_peer():
         rpc_addr = get_rpc_addr()
 
         out = subprocess.check_output([
-            f"{binpath}/vmc",
+            f"{binpath}/varlogctl",
             "mr",
             "add",
             f"--raft-url={raft_url}",
-            f"--rpc-addr={rpc_addr}"
+            f"--rpc-addr={rpc_addr}",
+            f"--admin={get_vms_addr()}"
         ])
         info = json.loads(out)
-        node_id = info["nodeId"]
+        node_id = info["data"]["items"][0]["nodeId"]
         return node_id != "0"
     except Exception:
         logger.exception("could not add peer")
         return False
+
 
 def remove_raft_peer():
     try:
@@ -112,10 +122,11 @@ def remove_raft_peer():
             return True
 
         out = subprocess.check_output([
-            f"{binpath}/vmc",
+            f"{binpath}/varlogctl",
             "mr",
             "remove",
-            f"--raft-url={raft_url}"
+            f"--raft-url={raft_url}",
+            f"--admin={get_vms_addr()}"
         ])
         logger.info("remove raft:" + str(out))
         json.loads(out)
@@ -125,13 +136,17 @@ def remove_raft_peer():
         logger.exception("")
         return False
 
+
 def prepare_vmr_home():
     home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
     os.makedirs(home, exist_ok=True)
 
+
 def check_standalone():
     home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
-    return os.path.exists(f"{home}/.standalone")
+    ret = os.path.exists(f"{home}/.standalone")
+    return ret
+
 
 def clear_standalone():
     logger.info("clear standalone")
@@ -139,13 +154,16 @@ def clear_standalone():
     if os.path.exists(f"{home}/.standalone"):
         os.remove(f"{home}/.standalone")
 
+
 def exists_wal(path):
     wal = glob.glob(os.path.join(f"{path}/wal", "*", "*.wal"))
     return len(wal) > 0
 
+
 def exists_cluster():
     _, peers = get_info()
     return peers is not None
+
 
 def get_metadata_repository_cmd(standalone):
     cluster_id = os.getenv("CLUSTER_ID", DEFAULT_CLUSTER_ID)
@@ -177,10 +195,12 @@ def get_metadata_repository_cmd(standalone):
 
     return command
 
+
 def print_mr_home():
     home = os.getenv("VMR_HOME", DEFAULT_VMR_HOME)
     arr = os.listdir(f"{home}")
     logger.info(arr)
+
 
 def main():
     logger.info("start")

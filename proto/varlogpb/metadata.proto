@@ -22,7 +22,8 @@ message StorageNode {
     int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
+        (gogoproto.customname) = "StorageNodeID",
+        (gogoproto.jsontag) = "storageNodeId"
     ];
     string address = 2;
 }
@@ -88,8 +89,12 @@ message StorageDescriptor {
 message StorageNodeDescriptor {
     option (gogoproto.equal) = true;
 
-    StorageNode storage_node = 1
-        [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+    StorageNode storage_node = 1 [
+        (gogoproto.nullable) = false,
+        (gogoproto.embed) = true,
+        (gogoproto.jsontag) = ""
+    ];
+
     StorageNodeStatus status = 2;
     repeated StorageDescriptor storages = 3 [(gogoproto.nullable) = true];
 }
@@ -100,7 +105,8 @@ message ReplicaDescriptor {
     int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
+        (gogoproto.customname) = "StorageNodeID",
+        (gogoproto.jsontag) = "storageNodeId"
     ];
     string path = 2;
 }
@@ -116,17 +122,21 @@ message LogStreamDescriptor {
     int32 topic_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
+        (gogoproto.customname) = "TopicID",
+        (gogoproto.jsontag) = "topicId"
     ];
     int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
+        (gogoproto.customname) = "LogStreamID",
+        (gogoproto.jsontag) = "logStreamId"
     ];
     LogStreamStatus status = 3;
     repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = true];
-    LogEntryMeta head = 5 [(gogoproto.nullable) = false];
-    LogEntryMeta tail = 6 [(gogoproto.nullable) = false];
+    LogEntryMeta head = 5
+        [(gogoproto.nullable) = false, (gogoproto.jsontag) = "head,omitempty"];
+    LogEntryMeta tail = 6
+        [(gogoproto.nullable) = false, (gogoproto.jsontag) = "tail,omitempty"];
 }
 
 message TopicDescriptor {
@@ -135,7 +145,8 @@ message TopicDescriptor {
     int32 topic_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
+        (gogoproto.customname) = "TopicID",
+        (gogoproto.jsontag) = "topicId"
     ];
 
     TopicStatus status = 2;
@@ -143,7 +154,8 @@ message TopicDescriptor {
     repeated int32 log_streams = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-        (gogoproto.nullable) = true
+        (gogoproto.nullable) = true,
+        (gogoproto.jsontag) = "logStreams,omitempty"
     ];
 }
 
@@ -164,16 +176,24 @@ message StorageNodeMetadataDescriptor {
     uint32 cluster_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
+        (gogoproto.customname) = "ClusterID",
+        (gogoproto.jsontag) = "clusterId"
     ];
     // StorageNode is detailed information about the storage node.
-    StorageNodeDescriptor storage_node = 2;
+    StorageNodeDescriptor storage_node = 2
+        [(gogoproto.jsontag) = "storageNode"];
     repeated LogStreamMetadataDescriptor log_streams = 3
-        [(gogoproto.nullable) = false];
-    google.protobuf.Timestamp created_time = 4
-        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-    google.protobuf.Timestamp updated_time = 5
-        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+        [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
+    google.protobuf.Timestamp created_time = 4 [
+        (gogoproto.stdtime) = true,
+        (gogoproto.nullable) = false,
+        (gogoproto.jsontag) = "createdTime"
+    ];
+    google.protobuf.Timestamp updated_time = 5 [
+        (gogoproto.stdtime) = true,
+        (gogoproto.nullable) = false,
+        (gogoproto.jsontag) = "updatedTime"
+    ];
 }
 
 // FIXME (jun): LogStreamMetadataDescriptor
@@ -185,17 +205,20 @@ message LogStreamMetadataDescriptor {
     int32 storage_node_id = 1 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
+        (gogoproto.customname) = "StorageNodeID",
+        (gogoproto.jsontag) = "storageNodeId"
     ];
     int32 log_stream_id = 2 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
+        (gogoproto.customname) = "LogStreamID",
+        (gogoproto.jsontag) = "logStreamId"
     ];
     int32 topic_id = 3 [
         (gogoproto.casttype) =
             "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
+        (gogoproto.customname) = "TopicID",
+        (gogoproto.jsontag) = "topicId"
     ];
     LogStreamStatus status = 4;
     uint64 version = 5
@@ -205,10 +228,16 @@ message LogStreamMetadataDescriptor {
         [(gogoproto.casttype) =
              "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
     string path = 7;
-    google.protobuf.Timestamp created_time = 8
-        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
-    google.protobuf.Timestamp updated_time = 9
-        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    google.protobuf.Timestamp created_time = 8 [
+        (gogoproto.stdtime) = true,
+        (gogoproto.nullable) = false,
+        (gogoproto.jsontag) = "createdTime"
+    ];
+    google.protobuf.Timestamp updated_time = 9 [
+        (gogoproto.stdtime) = true,
+        (gogoproto.nullable) = false,
+        (gogoproto.jsontag) = "updatedTime"
+    ];
 }
 
 // FIXME (jun): LogStreamReplicaDescriptor

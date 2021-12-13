@@ -540,6 +540,7 @@ func TestExecutorSubscribe(t *testing.T) {
 	var (
 		subEnv logio.SubscribeEnv
 		ok     bool
+		sr     storage.ScanResult
 	)
 
 	// subscribe [1,1)
@@ -553,6 +554,18 @@ func TestExecutorSubscribe(t *testing.T) {
 	// subscribe [1,2)
 	subEnv, err = lse.Subscribe(context.TODO(), 1, 2)
 	require.NoError(t, err)
+	_, ok = <-subEnv.ScanResultC()
+	require.False(t, ok)
+	require.ErrorIs(t, subEnv.Err(), io.EOF)
+	subEnv.Stop()
+
+	// subscribeTo [1, 2)
+	subEnv, err = lse.SubscribeTo(context.Background(), types.LLSN(1), types.LLSN(2))
+	require.NoError(t, err)
+	sr, ok = <-subEnv.ScanResultC()
+	require.True(t, ok)
+	require.Equal(t, types.LLSN(1), sr.LogEntry.LLSN)
+
 	_, ok = <-subEnv.ScanResultC()
 	require.False(t, ok)
 	require.ErrorIs(t, subEnv.Err(), io.EOF)
@@ -576,6 +589,22 @@ func TestExecutorSubscribe(t *testing.T) {
 	require.ErrorIs(t, subEnv.Err(), io.EOF)
 	subEnv.Stop()
 
+	// subscribeTo [1,11)
+	subEnv, err = lse.SubscribeTo(context.TODO(), types.LLSN(1), types.LLSN(numAppends+1))
+	require.NoError(t, err)
+	for i := 1; i <= numAppends; i++ {
+		sr, ok := <-subEnv.ScanResultC()
+		require.True(t, ok)
+		expectedLLSN := types.LLSN(i)
+		require.True(t, sr.Valid())
+		require.Nil(t, sr.Err)
+		require.Equal(t, expectedLLSN, sr.LogEntry.LLSN)
+	}
+	sr, ok = <-subEnv.ScanResultC()
+	require.False(t, ok)
+	require.ErrorIs(t, subEnv.Err(), io.EOF)
+	subEnv.Stop()
+
 	// subscribe [1,max)
 	subEnv, err = lse.Subscribe(context.TODO(), 1, types.MaxGLSN)
 	require.NoError(t, err)
@@ -591,11 +620,26 @@ func TestExecutorSubscribe(t *testing.T) {
 	}
 	subEnv.Stop()
 
+	// subscribeTo [1, max)
+	subEnv, err = lse.SubscribeTo(context.TODO(), types.MinLLSN, types.MaxLLSN)
+	require.NoError(t, err)
+	for i := 1; i <= numAppends; i++ {
+		sr, ok := <-subEnv.ScanResultC()
+		require.True(t, ok)
+		expectedLLSN := types.LLSN(i)
+		require.True(t, sr.Valid())
+		require.Nil(t, sr.Err)
+		require.Equal(t, expectedLLSN, sr.LogEntry.LLSN)
+	}
+	subEnv.Stop()
+
 	// subscribe [48,52)
 	// subscribe [48, max)
+	// subscribeTo [10, 12)
+	// subscribeTo [10, max)
 	// append 53 (hwm=55)
 	wg := sync.WaitGroup{}
-	wg.Add(4)
+	wg.Add(6)
 	go func() {
 		defer wg.Done()
 		subEnv, err := lse.Subscribe(context.TODO(), 48, 52)
@@ -622,7 +666,39 @@ func TestExecutorSubscribe(t *testing.T) {
 
 		sr, ok = <-subEnv.ScanResultC()
 		require.True(t, ok)
-		// require.ErrorIs(t, subEnv.Err(), io.EOF)
+		require.Equal(t, types.GLSN(53), sr.LogEntry.GLSN)
+	}()
+	go func() {
+		defer wg.Done()
+		subEnv, err := lse.SubscribeTo(context.TODO(), 10, 12)
+		require.NoError(t, err)
+		defer subEnv.Stop()
+
+		sr, ok := <-subEnv.ScanResultC()
+		require.True(t, ok)
+		require.Equal(t, types.LLSN(10), sr.LogEntry.LLSN)
+
+		sr, ok = <-subEnv.ScanResultC()
+		require.True(t, ok)
+		require.Equal(t, types.LLSN(11), sr.LogEntry.LLSN)
+
+		_, ok = <-subEnv.ScanResultC()
+		require.False(t, ok)
+		require.ErrorIs(t, subEnv.Err(), io.EOF)
+	}()
+	go func() {
+		defer wg.Done()
+		subEnv, err := lse.SubscribeTo(context.TODO(), 10, types.MaxLLSN)
+		require.NoError(t, err)
+		defer subEnv.Stop()
+
+		sr, ok := <-subEnv.ScanResultC()
+		require.True(t, ok)
+		require.Equal(t, types.LLSN(10), sr.LogEntry.LLSN)
+
+		sr, ok = <-subEnv.ScanResultC()
+		require.True(t, ok)
+		require.Equal(t, types.LLSN(11), sr.LogEntry.LLSN)
 	}()
 	go func() {
 		defer wg.Done()
@@ -649,10 +725,17 @@ func TestExecutorSubscribe(t *testing.T) {
 	wg.Wait()
 
 	// subscribe [56, 57)
-	wg.Add(2)
+	// subscribe [56, max)
+	// subscribeTo [12, 13)
+	// subscribeTo [12, max)
+	wg.Add(4)
 	subEnv1, err := lse.Subscribe(context.TODO(), 56, 57)
 	require.NoError(t, err)
 	subEnv2, err := lse.Subscribe(context.TODO(), 56, types.MaxGLSN)
+	require.NoError(t, err)
+	subEnv3, err := lse.SubscribeTo(context.TODO(), 12, 13)
+	require.NoError(t, err)
+	subEnv4, err := lse.SubscribeTo(context.TODO(), 12, types.MaxLLSN)
 	require.NoError(t, err)
 	go func() {
 		defer wg.Done()
@@ -668,9 +751,25 @@ func TestExecutorSubscribe(t *testing.T) {
 		require.Error(t, subEnv2.Err())
 		require.NotErrorIs(t, subEnv2.Err(), io.EOF)
 	}()
+	go func() {
+		defer wg.Done()
+		_, ok := <-subEnv3.ScanResultC()
+		require.False(t, ok)
+		require.Error(t, subEnv3.Err())
+		require.NotErrorIs(t, subEnv3.Err(), io.EOF)
+	}()
+	go func() {
+		defer wg.Done()
+		_, ok := <-subEnv4.ScanResultC()
+		require.False(t, ok)
+		require.Error(t, subEnv4.Err())
+		require.NotErrorIs(t, subEnv4.Err(), io.EOF)
+	}()
 	time.Sleep(5 * time.Millisecond)
 	subEnv1.Stop()
 	subEnv2.Stop()
+	subEnv3.Stop()
+	subEnv4.Stop()
 	wg.Wait()
 }
 
@@ -930,7 +1029,12 @@ func TestExecutorSeal(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
+			res, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
+			// FIXME(jun): Batch append can report the error by using either return
+			// value or field of AppendResult, which makes it hard to handle the error.
+			if err == nil && len(res[0].Error) > 0 {
+				err = errors.New(res[0].Error)
+			}
 			errC <- err
 		}()
 	}

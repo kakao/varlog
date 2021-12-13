@@ -480,6 +480,26 @@ func (mr *MockLogIOClientMockRecorder) Append(arg0, arg1 interface{}, arg2 ...in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Append", reflect.TypeOf((*MockLogIOClient)(nil).Append), varargs...)
 }
 
+// LogStreamMetadata mocks base method.
+func (m *MockLogIOClient) LogStreamMetadata(arg0 context.Context, arg1 *snpb.LogStreamMetadataRequest, arg2 ...grpc.CallOption) (*snpb.LogStreamMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "LogStreamMetadata", varargs...)
+	ret0, _ := ret[0].(*snpb.LogStreamMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LogStreamMetadata indicates an expected call of LogStreamMetadata.
+func (mr *MockLogIOClientMockRecorder) LogStreamMetadata(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamMetadata", reflect.TypeOf((*MockLogIOClient)(nil).LogStreamMetadata), varargs...)
+}
+
 // Read mocks base method.
 func (m *MockLogIOClient) Read(arg0 context.Context, arg1 *snpb.ReadRequest, arg2 ...grpc.CallOption) (*snpb.ReadResponse, error) {
 	m.ctrl.T.Helper()
@@ -518,6 +538,26 @@ func (mr *MockLogIOClientMockRecorder) Subscribe(arg0, arg1 interface{}, arg2 ..
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLogIOClient)(nil).Subscribe), varargs...)
+}
+
+// SubscribeTo mocks base method.
+func (m *MockLogIOClient) SubscribeTo(arg0 context.Context, arg1 *snpb.SubscribeToRequest, arg2 ...grpc.CallOption) (snpb.LogIO_SubscribeToClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SubscribeTo", varargs...)
+	ret0, _ := ret[0].(snpb.LogIO_SubscribeToClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SubscribeTo indicates an expected call of SubscribeTo.
+func (mr *MockLogIOClientMockRecorder) SubscribeTo(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTo", reflect.TypeOf((*MockLogIOClient)(nil).SubscribeTo), varargs...)
 }
 
 // Trim mocks base method.
@@ -578,6 +618,21 @@ func (mr *MockLogIOServerMockRecorder) Append(arg0, arg1 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Append", reflect.TypeOf((*MockLogIOServer)(nil).Append), arg0, arg1)
 }
 
+// LogStreamMetadata mocks base method.
+func (m *MockLogIOServer) LogStreamMetadata(arg0 context.Context, arg1 *snpb.LogStreamMetadataRequest) (*snpb.LogStreamMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LogStreamMetadata", arg0, arg1)
+	ret0, _ := ret[0].(*snpb.LogStreamMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LogStreamMetadata indicates an expected call of LogStreamMetadata.
+func (mr *MockLogIOServerMockRecorder) LogStreamMetadata(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamMetadata", reflect.TypeOf((*MockLogIOServer)(nil).LogStreamMetadata), arg0, arg1)
+}
+
 // Read mocks base method.
 func (m *MockLogIOServer) Read(arg0 context.Context, arg1 *snpb.ReadRequest) (*snpb.ReadResponse, error) {
 	m.ctrl.T.Helper()
@@ -605,6 +660,20 @@ func (m *MockLogIOServer) Subscribe(arg0 *snpb.SubscribeRequest, arg1 snpb.LogIO
 func (mr *MockLogIOServerMockRecorder) Subscribe(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLogIOServer)(nil).Subscribe), arg0, arg1)
+}
+
+// SubscribeTo mocks base method.
+func (m *MockLogIOServer) SubscribeTo(arg0 *snpb.SubscribeToRequest, arg1 snpb.LogIO_SubscribeToServer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeTo", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeTo indicates an expected call of SubscribeTo.
+func (mr *MockLogIOServerMockRecorder) SubscribeTo(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTo", reflect.TypeOf((*MockLogIOServer)(nil).SubscribeTo), arg0, arg1)
 }
 
 // Trim mocks base method.

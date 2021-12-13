@@ -20,8 +20,15 @@ type ReadWriter interface {
 	// Subscribe scans logs from the inclusive begin to the exclusive end.
 	Subscribe(ctx context.Context, begin, end types.GLSN) (SubscribeEnv, error)
 
+	// Subscribe scans logs from the inclusive begin to the exclusive end.
+	SubscribeTo(ctx context.Context, begin, end types.LLSN) (SubscribeEnv, error)
+
 	// Trim removes logs until glsn.
 	Trim(ctx context.Context, glsn types.GLSN) error
+
+	// LogStreamMetadata returns metadata of log stream.
+	// FIXME (jun): It is similar to MetadataProvider.
+	LogStreamMetadata() (varlogpb.LogStreamDescriptor, error)
 }
 
 type SubscribeEnv interface {

@@ -72,6 +72,21 @@ func (mr *MockLogIOClientMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockLogIOClient)(nil).Close))
 }
 
+// LogStreamMetadata mocks base method.
+func (m *MockLogIOClient) LogStreamMetadata(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LogStreamMetadata", arg0, arg1, arg2)
+	ret0, _ := ret[0].(varlogpb.LogStreamDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LogStreamMetadata indicates an expected call of LogStreamMetadata.
+func (mr *MockLogIOClientMockRecorder) LogStreamMetadata(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamMetadata", reflect.TypeOf((*MockLogIOClient)(nil).LogStreamMetadata), arg0, arg1, arg2)
+}
+
 // Read mocks base method.
 func (m *MockLogIOClient) Read(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 types.GLSN) (*varlogpb.LogEntry, error) {
 	m.ctrl.T.Helper()
@@ -100,6 +115,21 @@ func (m *MockLogIOClient) Subscribe(arg0 context.Context, arg1 types.TopicID, ar
 func (mr *MockLogIOClientMockRecorder) Subscribe(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLogIOClient)(nil).Subscribe), arg0, arg1, arg2, arg3, arg4)
+}
+
+// SubscribeTo mocks base method.
+func (m *MockLogIOClient) SubscribeTo(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 types.LLSN) (<-chan SubscribeResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeTo", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(<-chan SubscribeResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SubscribeTo indicates an expected call of SubscribeTo.
+func (mr *MockLogIOClientMockRecorder) SubscribeTo(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTo", reflect.TypeOf((*MockLogIOClient)(nil).SubscribeTo), arg0, arg1, arg2, arg3, arg4)
 }
 
 // Trim mocks base method.

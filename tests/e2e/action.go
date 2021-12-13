@@ -156,9 +156,9 @@ func (act *action) subscribe(ctx context.Context) error {
 	}
 	defer vcli.Close()
 
-	res, err := vcli.Append(ctx, act.topicID, [][]byte{[]byte("foo")}, varlog.WithRetryCount(5))
-	if err != nil {
-		return errors.Wrap(err, "append")
+	res := vcli.Append(ctx, act.topicID, [][]byte{[]byte("foo")}, varlog.WithRetryCount(5))
+	if res.Err != nil {
+		return errors.Wrap(res.Err, "append")
 	}
 	limit := res.Metadata[0].GLSN
 
@@ -230,9 +230,9 @@ func (act *action) append(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		default:
-			res, err := vcli.Append(ctx, act.topicID, [][]byte{[]byte("foo")}, varlog.WithRetryCount(5))
-			if err != nil {
-				return err
+			res := vcli.Append(ctx, act.topicID, [][]byte{[]byte("foo")}, varlog.WithRetryCount(5))
+			if res.Err != nil {
+				return res.Err
 			}
 
 			act.setAppendResult(res.Metadata[0].GLSN)

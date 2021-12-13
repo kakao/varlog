@@ -33,22 +33,6 @@ func (s TopicStatus) Deleted() bool {
 	return s == TopicStatusDeleted
 }
 
-func (s *StorageNodeDescriptor) Valid() bool {
-	if s == nil ||
-		len(s.Address) == 0 ||
-		len(s.Storages) == 0 {
-		return false
-	}
-
-	for _, storage := range s.Storages {
-		if !storage.valid() {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (s *StorageDescriptor) valid() bool {
 	return s != nil && len(s.Path) != 0 && s.Used <= s.Total
 }

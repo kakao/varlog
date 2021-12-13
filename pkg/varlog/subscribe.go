@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/logc"
@@ -18,11 +19,6 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
-
-type Subscriber interface {
-	Next() (varlogpb.LogEntry, error)
-	io.Closer
-}
 
 type SubscribeCloser func()
 
@@ -500,4 +496,143 @@ func (p *dispatcher) dispatch(_ context.Context) {
 	if !sentErr {
 		p.onNextFunc(varlogpb.InvalidLogEntry(), io.EOF)
 	}
+}
+
+type Subscriber interface {
+	Next() (varlogpb.LogEntry, error)
+	io.Closer
+}
+
+type invalidSubscriber struct {
+	err error
+}
+
+func (s invalidSubscriber) Next() (varlogpb.LogEntry, error) {
+	return varlogpb.InvalidLogEntry(), s.err
+}
+
+func (s invalidSubscriber) Close() error {
+	return nil
+}
+
+func (v *logImpl) subscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...SubscribeOption) Subscriber {
+	if begin >= end {
+		return invalidSubscriber{err: verrors.ErrInvalid}
+	}
+
+	subscribeOpts := defaultSubscribeOptions()
+	for _, opt := range opts {
+		opt.apply(&subscribeOpts)
+	}
+
+	logStreamReplicas, ok := v.replicasRetriever.Retrieve(topicID, logStreamID)
+	if !ok {
+		return invalidSubscriber{err: errors.New("no such log stream")}
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	var (
+		logCL   logc.LogIOClient
+		resultC <-chan logc.SubscribeResult
+		err     error
+	)
+	for _, logStreamReplica := range logStreamReplicas {
+		storageNodeID := logStreamReplica.StorageNodeID
+		storageNodeAddr := logStreamReplica.Address
+		var cerr error
+		logCL, cerr = v.logCLManager.GetOrConnect(ctx, storageNodeID, storageNodeAddr)
+		if cerr != nil {
+			err = multierr.Append(err, cerr)
+			_ = logCL.Close()
+			continue
+		}
+
+		resultC, cerr = logCL.SubscribeTo(ctx, topicID, logStreamID, begin, end)
+		if cerr != nil {
+			err = multierr.Append(err, cerr)
+			_ = logCL.Close()
+			continue
+		}
+
+		err = nil
+		break
+
+	}
+	if err != nil {
+		cancel()
+		return invalidSubscriber{err: err}
+	}
+
+	ch := make(chan struct{})
+	return &logStreamSubscriber{
+		ctx:     ctx,
+		cancel:  cancel,
+		closeC:  ch,
+		closer:  func() { close(ch) },
+		logCL:   logCL,
+		resultC: resultC,
+	}
+}
+
+type logStreamSubscriber struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	closeC  <-chan struct{}
+	logCL   logc.LogIOClient
+	resultC <-chan logc.SubscribeResult
+
+	mu      sync.Mutex
+	closer  func()
+	err     error
+	errOnce sync.Once
+}
+
+func (s *logStreamSubscriber) Next() (logEntry varlogpb.LogEntry, err error) {
+	s.mu.Lock()
+	err = s.err
+	s.mu.Unlock()
+	if err != nil {
+		return
+	}
+
+	select {
+	case <-s.ctx.Done():
+		err = s.ctx.Err()
+	case <-s.closeC:
+		err = verrors.ErrClosed
+	case sr, ok := <-s.resultC:
+		if ok {
+			logEntry, err = sr.LogEntry, sr.Error
+		} else {
+			err = errors.New("already stopped SubscribeTo RPC")
+		}
+	}
+	if err != nil {
+		s.mu.Lock()
+		s.setErr(err)
+		s.mu.Unlock()
+	}
+	return
+}
+
+func (s *logStreamSubscriber) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closer == nil {
+		return nil
+	}
+	s.setErr(verrors.ErrClosed)
+	s.closer()
+	s.closer = nil
+	s.cancel()
+
+	return nil
+}
+
+func (s *logStreamSubscriber) setErr(err error) {
+	s.errOnce.Do(func() {
+		s.err = err
+	})
 }

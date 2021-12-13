@@ -20,7 +20,7 @@ import (
 type Log interface {
 	io.Closer
 
-	Append(ctx context.Context, topicID types.TopicID, data [][]byte, opts ...AppendOption) (AppendResult, error)
+	Append(ctx context.Context, topicID types.TopicID, data [][]byte, opts ...AppendOption) AppendResult
 
 	// AppendTo writes a list of data to the log stream identified by the topicID and
 	// logStreamID arguments.
@@ -28,7 +28,7 @@ type Log interface {
 	// and an error if partial failures occur.
 	// The length of the metadata list can be less than or equal to the number of data since
 	// metadata for failed operations is not included in the metadata list.
-	AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, opts ...AppendOption) (AppendResult, error)
+	AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, opts ...AppendOption) AppendResult
 
 	Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
 
@@ -144,25 +144,13 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	return v, nil
 }
 
-func (v *logImpl) Append(ctx context.Context, topicID types.TopicID, data [][]byte, opts ...AppendOption) (AppendResult, error) {
-	meta, err := v.append(ctx, topicID, 0, data[0], opts...)
-	if err != nil {
-		return newAppendResultWithError(err), err
-	}
-	return AppendResult{
-		Metadata: []varlogpb.LogEntryMeta{meta},
-	}, nil
+func (v *logImpl) Append(ctx context.Context, topicID types.TopicID, data [][]byte, opts ...AppendOption) AppendResult {
+	return v.append(ctx, topicID, 0, data, opts...)
 }
 
-func (v *logImpl) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, opts ...AppendOption) (AppendResult, error) {
+func (v *logImpl) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, opts ...AppendOption) AppendResult {
 	opts = append(opts, withoutSelectLogStream())
-	meta, err := v.append(ctx, topicID, logStreamID, data[0], opts...)
-	if err != nil {
-		return newAppendResultWithError(err), err
-	}
-	return AppendResult{
-		Metadata: []varlogpb.LogEntryMeta{meta},
-	}, nil
+	return v.append(ctx, topicID, logStreamID, data, opts...)
 }
 
 func (v *logImpl) Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
@@ -178,7 +166,7 @@ func (v *logImpl) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 }
 
 func (v *logImpl) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...SubscribeOption) Subscriber {
-	panic("not implemented")
+	return v.subscribeTo(ctx, topicID, logStreamID, begin, end, opts...)
 }
 
 func (v *logImpl) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
@@ -186,7 +174,7 @@ func (v *logImpl) Trim(ctx context.Context, topicID types.TopicID, until types.G
 }
 
 func (v *logImpl) LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
-	panic("not implemented")
+	return v.logStreamMetadata(ctx, topicID, logStreamID)
 }
 
 func (v *logImpl) Close() (err error) {

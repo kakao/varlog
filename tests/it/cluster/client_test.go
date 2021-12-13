@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"testing"
@@ -39,8 +40,74 @@ func TestClientNoLogStream(t *testing.T) {
 
 	topicID := clus.TopicIDs()[0]
 	client := clus.ClientAtIndex(t, 0)
-	_, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+	res := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+	require.Error(t, res.Err)
+}
+
+func TestClientAppendToSubscribeTo(t *testing.T) {
+	const numLogs = 100
+
+	clus := it.NewVarlogCluster(t,
+		it.WithNumberOfStorageNodes(1),
+		it.WithNumberOfLogStreams(1),
+		it.WithNumberOfClients(1),
+		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithNumberOfTopics(1),
+	)
+
+	defer func() {
+		clus.Close(t)
+		testutil.GC()
+	}()
+
+	topicID := clus.TopicIDs()[0]
+	logStreamID := clus.LogStreamIDs(topicID)[0]
+	client := clus.ClientAtIndex(t, 0)
+
+	for i := 0; i < numLogs; i++ {
+		res := client.AppendTo(context.Background(), topicID, logStreamID, [][]byte{[]byte("foo")})
+		require.NoError(t, res.Err)
+	}
+
+	// SubscribeTo [2, 1)
+	subscriber := client.SubscribeTo(context.Background(), topicID, logStreamID, types.LLSN(2), types.LLSN(1))
+	_, err := subscriber.Next()
 	require.Error(t, err)
+	require.NoError(t, subscriber.Close())
+
+	// SubscribeTo [1, 101)
+	subscriber = client.SubscribeTo(context.Background(), topicID, logStreamID, types.MinLLSN, types.LLSN(numLogs+1))
+	for i := 0; i < numLogs; i++ {
+		logEntry, err := subscriber.Next()
+		require.NoError(t, err)
+		require.Equal(t, topicID, logEntry.TopicID)
+		require.Equal(t, logStreamID, logEntry.LogStreamID)
+		require.Equal(t, types.LLSN(i+1), logEntry.LLSN)
+	}
+	_, err = subscriber.Next()
+	require.ErrorIs(t, err, io.EOF)
+	require.NoError(t, subscriber.Close())
+
+	// SubscribeTo [1, max)
+	subscriber = client.SubscribeTo(context.Background(), topicID, logStreamID, types.MinLLSN, types.MaxLLSN)
+	for i := 0; i < numLogs; i++ {
+		logEntry, err := subscriber.Next()
+		require.NoError(t, err)
+		require.Equal(t, topicID, logEntry.TopicID)
+		require.Equal(t, logStreamID, logEntry.LogStreamID)
+		require.Equal(t, types.LLSN(i+1), logEntry.LLSN)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err := subscriber.Next()
+		require.Error(t, err)
+		require.NotErrorIs(t, err, io.EOF)
+	}()
+	time.Sleep(5 * time.Millisecond)
+	require.NoError(t, subscriber.Close())
 }
 
 func TestClientAppendTo(t *testing.T) {
@@ -64,11 +131,11 @@ func TestClientAppendTo(t *testing.T) {
 	lsID := clus.LogStreamID(t, topicID, 0)
 	client := clus.ClientAtIndex(t, 0)
 
-	_, err := client.AppendTo(context.TODO(), topicID, lsID+1, [][]byte{[]byte("foo")})
-	require.Error(t, err)
+	res := client.AppendTo(context.TODO(), topicID, lsID+1, [][]byte{[]byte("foo")})
+	require.Error(t, res.Err)
 
-	res, err := client.AppendTo(context.TODO(), topicID, lsID, [][]byte{[]byte("foo")})
-	require.NoError(t, err)
+	res = client.AppendTo(context.TODO(), topicID, lsID, [][]byte{[]byte("foo")})
+	require.NoError(t, res.Err)
 
 	data, err := client.Read(context.Background(), topicID, lsID, res.Metadata[0].GLSN)
 	require.NoError(t, err)
@@ -99,9 +166,22 @@ func TestClientAppend(t *testing.T) {
 		expectedLLSNs[lsID] = types.MinLLSN
 	}
 	expectedGLSN := types.MinGLSN
+
+	for _, logStreamID := range clus.LogStreamIDs(topicID) {
+		res := client.AppendTo(context.Background(), topicID, logStreamID, [][]byte{nil})
+		require.NoError(t, res.Err)
+		lem := res.Metadata[0]
+		require.Equal(t, expectedGLSN, lem.GLSN)
+		expectedGLSN++
+		require.Equal(t, expectedLLSNs[lem.LogStreamID], lem.LLSN)
+		expectedLLSNs[lem.LogStreamID]++
+		require.Equal(t, topicID, lem.TopicID)
+		require.Equal(t, logStreamID, lem.LogStreamID)
+	}
+
 	for i := 0; i < 10; i++ {
-		res, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-		require.NoError(t, err)
+		res := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+		require.NoError(t, res.Err)
 		lem := res.Metadata[0]
 		require.Equal(t, expectedGLSN, lem.GLSN)
 		expectedGLSN++
@@ -112,12 +192,29 @@ func TestClientAppend(t *testing.T) {
 
 	require.Condition(t, func() bool {
 		for _, lsid := range clus.LogStreamIDs(topicID) {
-			if _, errRead := client.Read(context.TODO(), topicID, lsid, 1); errRead == nil {
+			if _, errRead := client.Read(context.TODO(), topicID, lsid, types.MinGLSN); errRead == nil {
 				return true
 			}
 		}
 		return false
 	})
+
+	for _, logStreamID := range clus.LogStreamIDs(topicID) {
+		lsd, err := client.LogStreamMetadata(context.Background(), topicID, logStreamID)
+		require.NoError(t, err)
+		require.Equal(t, topicID, lsd.TopicID)
+		require.Equal(t, logStreamID, lsd.LogStreamID)
+
+		require.Equal(t, types.MinLLSN, lsd.Head.LLSN)
+		require.GreaterOrEqual(t, lsd.Head.GLSN, types.MinGLSN)
+		require.Equal(t, topicID, lsd.Head.TopicID)
+		require.Equal(t, logStreamID, lsd.Head.LogStreamID)
+
+		require.GreaterOrEqual(t, lsd.Tail.LLSN, types.MinLLSN)
+		require.GreaterOrEqual(t, lsd.Tail.GLSN, types.MinGLSN)
+		require.Equal(t, topicID, lsd.Tail.TopicID)
+		require.Equal(t, logStreamID, lsd.Tail.LogStreamID)
+	}
 }
 
 func TestClientAppendCancel(t *testing.T) {
@@ -149,8 +246,8 @@ func TestClientAppendCancel(t *testing.T) {
 		defer wg.Done()
 		expectedGLSN := types.MinGLSN
 		for {
-			res, err := client.Append(ctx, topicID, [][]byte{[]byte("foo")})
-			if err == nil {
+			res := client.Append(ctx, topicID, [][]byte{[]byte("foo")})
+			if res.Err == nil {
 				require.Equal(t, expectedGLSN, res.Metadata[0].GLSN)
 				expectedGLSN++
 				atomicGLSN.Store(res.Metadata[0].GLSN)
@@ -170,7 +267,11 @@ func TestClientAppendCancel(t *testing.T) {
 
 func TestClientSubscribe(t *testing.T) {
 	//defer goleak.VerifyNone(t)
-	const nrLogs = 10
+	const (
+		batchSize = 10
+		appendCnt = 10
+		nrLogs    = batchSize * appendCnt
+	)
 
 	clus := it.NewVarlogCluster(t,
 		it.WithNumberOfStorageNodes(3),
@@ -185,22 +286,38 @@ func TestClientSubscribe(t *testing.T) {
 		testutil.GC()
 	}()
 
+	newMsg := func(glsn types.GLSN) string {
+		return fmt.Sprintf("msg-%03d", glsn)
+	}
+
+	issuedGLSN := types.InvalidGLSN
 	topicID := clus.TopicIDs()[0]
 	client := clus.ClientAtIndex(t, 0)
-	for i := 0; i < nrLogs; i++ {
-		_, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-		require.NoError(t, err)
+	for i := 0; i < appendCnt; i++ {
+		batch := make([][]byte, batchSize)
+		for j := 0; j < batchSize; j++ {
+			issuedGLSN++
+			msg := newMsg(issuedGLSN)
+			batch[j] = []byte(msg)
+		}
+		res := client.Append(context.TODO(), topicID, batch)
+		require.NoError(t, res.Err)
+		require.Len(t, res.Metadata, batchSize)
+		require.Equal(t, issuedGLSN, res.Metadata[len(res.Metadata)-1].GLSN)
+		require.Equal(t, issuedGLSN-types.GLSN(batchSize)+1, res.Metadata[0].GLSN)
 	}
 
 	errc := make(chan error, nrLogs)
-	expectedGLSN := types.GLSN(1)
+	expectedGLSN := types.MinGLSN
 	subscribeCloser, err := client.Subscribe(context.TODO(), topicID, types.GLSN(1), types.GLSN(nrLogs+1), func(le varlogpb.LogEntry, err error) {
 		if err != nil {
 			require.ErrorIs(t, io.EOF, err)
-			defer close(errc)
+			close(errc)
 			return
 		}
 		assert.Equal(t, expectedGLSN, le.GLSN)
+		expectedMsg := newMsg(expectedGLSN)
+		require.Equal(t, expectedMsg, string(le.Data))
 		expectedGLSN++
 		errc <- err
 	})
@@ -238,8 +355,8 @@ func TestClientTrim(t *testing.T) {
 	client := clus.ClientAtIndex(t, 0)
 	expectedGLSN := types.GLSN(1)
 	for i := 0; i < nrLogs; i++ {
-		res, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-		require.NoError(t, err)
+		res := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+		require.NoError(t, res.Err)
 		require.Equal(t, expectedGLSN, res.Metadata[0].GLSN)
 		expectedGLSN++
 	}
@@ -304,8 +421,8 @@ func TestVarlogSubscribeWithSNFail(t *testing.T) {
 
 		nrLogs := 64
 		for i := 0; i < nrLogs; i++ {
-			_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 		}
 
 		Convey("When SN fail", func(ctx C) {
@@ -378,16 +495,16 @@ func TestVarlogSubscribeWithAddLS(t *testing.T) {
 				client := env.ClientAtIndex(t, 1)
 
 				for i := 0; i < nrLogs/2; i++ {
-					_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-					require.NoError(t, err)
+					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+					require.NoError(t, res.Err)
 				}
 
 				topicID := env.TopicIDs()[0]
 				env.AddLS(t, topicID)
 
 				for i := 0; i < nrLogs/2; i++ {
-					_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-					require.NoError(t, err)
+					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+					require.NoError(t, res.Err)
 				}
 			}()
 			wg.Wait()
@@ -424,7 +541,7 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 			subscribeCloser, err := client.Subscribe(context.TODO(), topicID, types.GLSN(1), types.GLSN(nrLogs+1), func(le varlogpb.LogEntry, err error) {
 				if err != nil {
 					require.ErrorIs(t, io.EOF, err)
-					defer close(errc)
+					close(errc)
 					return
 				}
 				assert.Equal(t, expectedGLSN, le.GLSN)
@@ -434,12 +551,15 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 			require.NoError(t, err)
 			defer subscribeCloser()
 
+			var wg sync.WaitGroup
+			wg.Add(1)
 			go func() {
-				client := env.ClientAtIndex(t, 1)
+				defer wg.Done()
 
+				client := env.ClientAtIndex(t, 1)
 				for i := 0; i < nrLogs/2; i++ {
-					_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-					require.NoError(t, err)
+					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+					require.NoError(t, res.Err)
 				}
 
 				addedSN := env.AddSN(t)
@@ -460,10 +580,11 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 				env.UpdateLS(t, topicID, lsID, snID, addedSN)
 
 				for i := 0; i < nrLogs/2; i++ {
-					_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-					require.NoError(t, err)
+					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+					require.NoError(t, res.Err)
 				}
 			}()
+			wg.Wait()
 
 			Convey("Then it should be able to subscribe", func(ctx C) {
 				for e := range errc {

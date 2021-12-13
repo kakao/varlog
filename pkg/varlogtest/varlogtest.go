@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
@@ -26,6 +28,7 @@ type VarlogTest struct {
 	topics           map[types.TopicID]varlogpb.TopicDescriptor
 	globalLogEntries map[types.TopicID][]*varlogpb.LogEntry
 	localLogEntries  map[types.LogStreamID][]*varlogpb.LogEntry
+	version          types.Version
 
 	nextTopicID       types.TopicID
 	nextStorageNodeID types.StorageNodeID
@@ -81,4 +84,54 @@ func (vt *VarlogTest) storageNodeIDs() []types.StorageNodeID {
 		snIDs = append(snIDs, snID)
 	}
 	return snIDs
+}
+
+func (vt *VarlogTest) topicDescriptor(topicID types.TopicID) (varlogpb.TopicDescriptor, error) {
+	topicDesc, ok := vt.topics[topicID]
+	if !ok || topicDesc.Status.Deleted() {
+		return varlogpb.TopicDescriptor{}, errors.New("no such topic")
+	}
+	if len(topicDesc.LogStreams) == 0 {
+		return varlogpb.TopicDescriptor{}, errors.New("no log stream")
+	}
+	return topicDesc, nil
+}
+
+func (vt *VarlogTest) logStreamDescriptor(topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
+	topicDesc, err := vt.topicDescriptor(topicID)
+	if err != nil {
+		return varlogpb.LogStreamDescriptor{}, err
+	}
+	if !topicDesc.HasLogStream(logStreamID) {
+		return varlogpb.LogStreamDescriptor{}, errors.New("no such log stream in the topic")
+	}
+
+	logStreamDesc, ok := vt.logStreams[logStreamID]
+	if !ok {
+		return varlogpb.LogStreamDescriptor{}, errors.New("no such log stream in the topic")
+	}
+	return logStreamDesc, nil
+}
+
+func (vt *VarlogTest) peek(topicID types.TopicID, logStreamID types.LogStreamID) (head varlogpb.LogEntryMeta, tail varlogpb.LogEntryMeta) {
+	head.TopicID = topicID
+	head.LogStreamID = logStreamID
+	tail.TopicID = topicID
+	tail.LogStreamID = logStreamID
+
+	if len(vt.localLogEntries[logStreamID]) < 2 {
+		return
+	}
+
+	head.GLSN = vt.localLogEntries[logStreamID][1].GLSN
+	head.LLSN = vt.localLogEntries[logStreamID][1].LLSN
+	lastIdx := len(vt.localLogEntries[logStreamID]) - 1
+	tail.GLSN = vt.localLogEntries[logStreamID][lastIdx].GLSN
+	tail.LLSN = vt.localLogEntries[logStreamID][lastIdx].LLSN
+	return head, tail
+}
+
+func (vt *VarlogTest) globalHighWatermark(topicID types.TopicID) types.GLSN {
+	lastIdx := len(vt.globalLogEntries[topicID]) - 1
+	return vt.globalLogEntries[topicID][lastIdx].GLSN
 }

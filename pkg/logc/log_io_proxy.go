@@ -34,8 +34,16 @@ func (l *logClientProxy) Subscribe(ctx context.Context, topicID types.TopicID, l
 	return l.client.Subscribe(ctx, topicID, logStreamID, begin, end)
 }
 
+func (l *logClientProxy) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN) (<-chan SubscribeResult, error) {
+	return l.client.SubscribeTo(ctx, topicID, logStreamID, begin, end)
+}
+
 func (l *logClientProxy) Trim(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error {
 	return l.client.Trim(ctx, topicID, glsn)
+}
+
+func (l *logClientProxy) LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
+	return l.client.LogStreamMetadata(ctx, topicID, logStreamID)
 }
 
 func (l *logClientProxy) Close() error {

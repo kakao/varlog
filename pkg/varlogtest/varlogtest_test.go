@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
@@ -16,6 +17,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/util/container/set"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
 	"github.daumkakao.com/varlog/varlog/pkg/varlogtest"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
@@ -69,8 +71,8 @@ func TestVarlogTest(t *testing.T) {
 
 	// Append logs, but no log stream
 	for _, tpID := range topicIDs {
-		_, err := vlg.Append(context.Background(), tpID, nil)
-		require.Error(t, err)
+		res := vlg.Append(context.Background(), tpID, nil)
+		require.Error(t, res.Err)
 	}
 
 	// Add log streams, but no storage node
@@ -134,7 +136,7 @@ func TestVarlogTest(t *testing.T) {
 	}
 
 	// Append logs
-	testAppend := func(tpID types.TopicID, batchSize int, appendFunc func([][]byte) (varlog.AppendResult, error)) {
+	testAppend := func(tpID types.TopicID, batchSize int, appendFunc func([][]byte) varlog.AppendResult) {
 		hwm := globalHWMs[tpID]
 
 		if batchSize < 1 {
@@ -146,8 +148,8 @@ func TestVarlogTest(t *testing.T) {
 			batchData[i] = []byte(fmt.Sprintf("%d,%d", tpID, hwm))
 		}
 
-		res, err := appendFunc(batchData)
-		require.NoError(t, err)
+		res := appendFunc(batchData)
+		require.NoError(t, res.Err)
 		require.Len(t, res.Metadata, batchSize)
 		require.NoError(t, res.Err)
 
@@ -163,15 +165,41 @@ func TestVarlogTest(t *testing.T) {
 		remainedLogs -= batchSize
 	}
 	appendToLog := func(tpID types.TopicID, lsID types.LogStreamID, batchSize int) {
-		testAppend(tpID, batchSize, func(dataBatch [][]byte) (varlog.AppendResult, error) {
+		testAppend(tpID, batchSize, func(dataBatch [][]byte) varlog.AppendResult {
 			return vlg.AppendTo(context.Background(), tpID, lsID, dataBatch)
 		})
 	}
 	appendLog := func(tpID types.TopicID, batchSize int) {
-		testAppend(tpID, batchSize, func(dataBatch [][]byte) (varlog.AppendResult, error) {
+		testAppend(tpID, batchSize, func(dataBatch [][]byte) varlog.AppendResult {
 			return vlg.Append(context.Background(), tpID, dataBatch)
 		})
 	}
+
+	// Test if log entries cannot be appended to sealed log streams.
+	for i := 0; i < numTopics; i++ {
+		tpID := topicIDs[i]
+		for _, lsID := range topicLogStreamsMap[tpID] {
+			rsp, err := adm.Seal(context.Background(), tpID, lsID)
+			require.NoError(t, err)
+			require.Equal(t, types.InvalidGLSN, rsp.SealedGLSN)
+			require.Condition(t, func() bool {
+				ret := len(rsp.LogStreams) > 0
+				for _, lsmd := range rsp.LogStreams {
+					ret = ret && assert.True(t, lsmd.Status.Sealed())
+				}
+				return ret
+			})
+
+			res := vlg.AppendTo(context.Background(), tpID, lsID, nil)
+			require.ErrorIs(t, res.Err, verrors.ErrSealed)
+
+			lsd, err := adm.Unseal(context.Background(), tpID, lsID)
+			require.NoError(t, err)
+			require.False(t, lsd.Status.Sealed())
+		}
+	}
+
+	// Append logs
 	for i := 0; i < numTopics; i++ {
 		tpID := topicIDs[i]
 		for _, lsID := range topicLogStreamsMap[tpID] {
@@ -242,6 +270,43 @@ func TestVarlogTest(t *testing.T) {
 
 			sub = vlg.SubscribeTo(context.Background(), tpID, lsID, types.InvalidLLSN, types.MinLLSN)
 			require.Error(t, sub.Close())
+		}
+	}
+
+	// Test if log entries cannot be appended to sealed log streams.
+	// Test if appended log streams are subscribed.
+	for i := 0; i < numTopics; i++ {
+		tpID := topicIDs[i]
+		for _, lsID := range topicLogStreamsMap[tpID] {
+			rsp, err := adm.Seal(context.Background(), tpID, lsID)
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, rsp.SealedGLSN, types.MinGLSN)
+			require.Condition(t, func() bool {
+				ret := len(rsp.LogStreams) > 0
+				for _, lsmd := range rsp.LogStreams {
+					ret = ret && assert.True(t, lsmd.Status.Sealed())
+				}
+				return ret
+			})
+
+			res := vlg.AppendTo(context.Background(), tpID, lsID, nil)
+			require.ErrorIs(t, res.Err, verrors.ErrSealed)
+		}
+
+		for i := 0; i < 100; i++ {
+			res := vlg.Append(context.Background(), tpID, nil)
+			require.ErrorIs(t, res.Err, verrors.ErrSealed)
+		}
+
+		for _, lsID := range topicLogStreamsMap[tpID] {
+			lsDesc, err := vlg.LogStreamMetadata(context.Background(), tpID, lsID)
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, lsDesc.Tail.LLSN, lsDesc.Head.LLSN)
+			subscribeTo(tpID, lsID, lsDesc.Head.LLSN, lsDesc.Tail.LLSN+1)
+
+			lsd, err := adm.Unseal(context.Background(), tpID, lsID)
+			require.NoError(t, err)
+			require.False(t, lsd.Status.Sealed())
 		}
 	}
 

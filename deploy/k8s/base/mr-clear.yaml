@@ -46,7 +46,7 @@ spec:
         command: 
         - "sh"
         - "-c"
-        - "echo The app is running! && sleep 3600"
+        - "ls -alh /varlog/mr; echo The app is running! && sleep 3600"
         volumeMounts:
         - name: varlog-mr-home
           mountPath: /varlog/mr

@@ -9,11 +9,12 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/pkg/logc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 // TODO: use ops-accumulator?
-func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data []byte, opts ...AppendOption) (meta varlogpb.LogEntryMeta, err error) {
+func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, opts ...AppendOption) (result AppendResult) {
 	appendOpts := defaultAppendOptions()
 	for _, opt := range opts {
 		opt.apply(&appendOpts)
@@ -26,22 +27,22 @@ func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID
 	)
 	for i := 0; i < appendOpts.retryCount+1; i++ {
 		var ok bool
-		var currErr error
+		var err error
 		if appendOpts.selectLogStream {
 			if logStreamID, ok = v.lsSelector.Select(topicID); !ok {
-				err = multierr.Append(err, errors.New("no usable log stream"))
+				result.Err = multierr.Append(result.Err, errors.New("no usable log stream"))
 				continue
 			}
 		}
 		replicas, ok = v.replicasRetriever.Retrieve(topicID, logStreamID)
 		if !ok {
-			err = multierr.Append(err, errors.New("no such log stream replicas"))
+			result.Err = multierr.Append(result.Err, errors.New("no such log stream replicas"))
 			continue
 		}
 		primarySNID = replicas[0].GetStorageNodeID()
-		primaryLogCL, currErr = v.logCLManager.GetOrConnect(ctx, primarySNID, replicas[0].GetAddress())
-		if currErr != nil {
-			err = multierr.Append(err, currErr)
+		primaryLogCL, err = v.logCLManager.GetOrConnect(ctx, primarySNID, replicas[0].GetAddress())
+		if err != nil {
+			result.Err = multierr.Append(result.Err, err)
 			v.allowlist.Deny(topicID, logStreamID)
 			continue
 		}
@@ -50,23 +51,38 @@ func (v *logImpl) append(ctx context.Context, topicID types.TopicID, logStreamID
 			snList[i].Address = replicas[i+1].GetAddress()
 			snList[i].StorageNodeID = replicas[i+1].GetStorageNodeID()
 		}
-		res, currErr := primaryLogCL.Append(ctx, topicID, logStreamID, [][]byte{data}, snList...)
-		if currErr != nil {
+		res, err := primaryLogCL.Append(ctx, topicID, logStreamID, data, snList...)
+		if err != nil {
+			if strings.Contains(err.Error(), "sealed") {
+				err = errors.Wrap(verrors.ErrSealed, err.Error())
+			}
+
 			replicasInfo := make([]string, 0, len(replicas))
 			for _, replica := range replicas {
 				replicasInfo = append(replicasInfo, replica.String())
 			}
-			err = multierr.Append(err, errors.Wrapf(currErr, "varlog: append (snid=%d, lsid=%d, replicas=%s)", primarySNID, logStreamID, strings.Join(replicasInfo, ", ")))
+			result.Err = multierr.Append(result.Err, errors.Wrapf(err, "varlog: append (snid=%d, lsid=%d, replicas=%s)", primarySNID, logStreamID, strings.Join(replicasInfo, ", ")))
 			// FIXME (jun): It affects other goroutines that are doing I/O.
 			// Close a client only when err is related to the connection.
 			primaryLogCL.Close()
 			v.allowlist.Deny(topicID, logStreamID)
 			continue
 		}
-		meta = res[0].Meta
-		return meta, nil
+		result.Err = nil
+		for idx := 0; idx < len(res); idx++ {
+			if len(res[idx].Error) > 0 {
+				if strings.Contains(res[idx].Error, "sealed") {
+					result.Err = errors.Wrap(verrors.ErrSealed, res[idx].Error)
+				} else {
+					result.Err = errors.New(res[idx].Error)
+				}
+				break
+			}
+			result.Metadata = append(result.Metadata, res[idx].Meta)
+		}
+		return result
 	}
-	return meta, err
+	return result
 }
 
 func (v *logImpl) read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) (varlogpb.LogEntry, error) {
@@ -87,4 +103,30 @@ func (v *logImpl) read(ctx context.Context, topicID types.TopicID, logStreamID t
 		return varlogpb.InvalidLogEntry(), err
 	}
 	return *logEntry, nil
+}
+
+func (v *logImpl) logStreamMetadata(ctx context.Context, tpID types.TopicID, lsID types.LogStreamID) (lsd varlogpb.LogStreamDescriptor, err error) {
+	replicas, ok := v.replicasRetriever.Retrieve(tpID, lsID)
+	if !ok {
+		return varlogpb.LogStreamDescriptor{}, errNoLogStream
+	}
+
+	for _, replica := range replicas {
+		cl, cerr := v.logCLManager.GetOrConnect(ctx, replica.StorageNodeID, replica.Address)
+		if cerr != nil {
+			err = multierr.Append(err, cerr)
+			continue
+		}
+		lsd, cerr = cl.LogStreamMetadata(ctx, tpID, lsID)
+		if cerr != nil {
+			err = multierr.Append(err, cerr)
+			continue
+		}
+		if !lsd.Status.Running() {
+			err = multierr.Append(err, errors.Errorf("invalid status: %s", lsd.Status.String()))
+			continue
+		}
+		return lsd, nil
+	}
+	return lsd, err
 }
