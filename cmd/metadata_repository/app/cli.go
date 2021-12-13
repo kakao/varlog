@@ -38,7 +38,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.UintFlag{
 			Name:    "cluster-id",
 			Aliases: []string{"cid"},
-			Value:   uint(0),
+			Value:   uint(1),
 			Usage:   "cluster id",
 			EnvVars: []string{"CLUSTER_ID"},
 		},
