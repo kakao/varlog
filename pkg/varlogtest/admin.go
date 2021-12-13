@@ -160,12 +160,57 @@ func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, 
 	panic("not implemented")
 }
 
-func (c *testAdmin) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
-	panic("not implemented")
+func (c *testAdmin) Seal(_ context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	logStreamDesc, err := c.vt.logStreamDescriptor(topicID, logStreamID)
+	if err != nil {
+		return nil, err
+	}
+
+	_, tail := c.vt.peek(topicID, logStreamID)
+	sealedGLSN := tail.GLSN
+
+	logStreamDesc.Status = varlogpb.LogStreamStatusSealed
+	c.vt.logStreams[logStreamID] = logStreamDesc
+
+	rsp := &vmspb.SealResponse{
+		LogStreams: make([]varlogpb.LogStreamMetadataDescriptor, len(logStreamDesc.Replicas)),
+		SealedGLSN: sealedGLSN,
+	}
+	for i, replica := range logStreamDesc.Replicas {
+		rsp.LogStreams[i] = varlogpb.LogStreamMetadataDescriptor{
+			StorageNodeID: replica.StorageNodeID,
+			LogStreamID:   logStreamID,
+			TopicID:       topicID,
+			Status:        logStreamDesc.Status,
+			Version:       c.vt.version,
+			HighWatermark: c.vt.globalHighWatermark(topicID),
+			Path:          replica.Path,
+		}
+	}
+
+	return rsp, nil
 }
 
 func (c *testAdmin) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
-	panic("not implemented")
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	logStreamDesc, err := c.vt.logStreamDescriptor(topicID, logStreamID)
+	if err != nil {
+		return nil, err
+	}
+
+	logStreamDesc.Status = varlogpb.LogStreamStatusRunning
+	c.vt.logStreams[logStreamID] = logStreamDesc
+
+	return proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor), nil
 }
 
 func (c *testAdmin) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID) (*snpb.SyncStatus, error) {

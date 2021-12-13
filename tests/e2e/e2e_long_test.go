@@ -39,21 +39,28 @@ func TestK8sVarlogAppendLongTime(t *testing.T) {
 		vmsAddr, err := k8s.VMSAddress()
 		So(err, ShouldBeNil)
 
-		var mcl varlog.ClusterManagerClient
+		var mcl varlog.Admin
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			mcl, err = admin.NewClusterManagerClient(ctx, vmsAddr)
+			mcl, err = varlog.NewAdmin(ctx, vmsAddr)
 			So(err, ShouldBeNil)
 		})
 		Reset(func() {
 			So(mcl.Close(), ShouldBeNil)
 		})
 
+		var topicID types.TopicID
+		k8s.WithTimeoutContext(func(ctx context.Context) {
+			topic, err := mcl.AddTopic(ctx)
+			So(err, ShouldBeNil)
+			topicID = topic.TopicID
+		})
+
 		for i := 0; i < numLSs; i++ {
 			k8s.WithTimeoutContext(func(ctx context.Context) {
-				rsp, err := mcl.AddLogStream(ctx, nil)
+				lsd, err := mcl.AddLogStream(ctx, topicID, nil)
 				So(err, ShouldBeNil)
 				if err == nil {
-					logStreamID := rsp.GetLogStream().GetLogStreamID()
+					logStreamID := lsd.GetLogStreamID()
 					log.Printf("AddLogStream: %v", logStreamID)
 				}
 			})
@@ -96,8 +103,8 @@ func TestK8sVarlogAppendLongTime(t *testing.T) {
 				for ctx.Err() == nil {
 					data := fmt.Sprintf("client-%d-log-%d", clientIdx, n)
 					k8s.WithTimeoutContext(func(ctx context.Context) {
-						_, err = vlg.Append(ctx, [][]byte{[]byte(data)})
-						if err == nil {
+						res := vlg.Append(ctx, topicID, [][]byte{[]byte(data)})
+						if res.Err == nil {
 							n++
 						}
 					})

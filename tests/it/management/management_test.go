@@ -212,8 +212,8 @@ func TestSyncLogStream(t *testing.T) {
 		topicID := env.TopicIDs()[0]
 		client := env.ClientAtIndex(t, 0)
 		for i := 0; i < numLogs; i++ {
-			_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 		}
 
 		Convey("Seal", func(ctx C) {
@@ -472,8 +472,8 @@ func TestAddLogStreamTopic(t *testing.T) {
 		client := env.ClientAtIndex(t, 0)
 		for _, topicID := range env.TopicIDs() {
 			for i := 0; i < numLogs; i++ {
-				_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-				So(err, ShouldBeNil)
+				res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+				So(res.Err, ShouldBeNil)
 			}
 		}
 
@@ -490,8 +490,8 @@ func TestAddLogStreamTopic(t *testing.T) {
 			Convey("Then it should Appendable", func(ctx C) {
 				for _, topicID := range env.TopicIDs() {
 					for i := 0; i < numLogs; i++ {
-						_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-						So(err, ShouldBeNil)
+						res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+						So(res.Err, ShouldBeNil)
 					}
 				}
 			})
@@ -516,8 +516,8 @@ func TestRemoveTopic(t *testing.T) {
 		client := env.ClientAtIndex(t, 0)
 		for _, topicID := range env.TopicIDs() {
 			for i := 0; i < numLogs; i++ {
-				_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-				So(err, ShouldBeNil)
+				res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+				So(res.Err, ShouldBeNil)
 			}
 		}
 
@@ -533,8 +533,8 @@ func TestRemoveTopic(t *testing.T) {
 			Convey("Then unregistered topic should be Unappendable", func(ctx C) {
 				actx, cancel := context.WithTimeout(context.Background(), time.Second)
 				defer cancel()
-				_, err := client.Append(actx, rmTopicID, [][]byte{[]byte("foo")})
-				So(err, ShouldNotBeNil)
+				res := client.Append(actx, rmTopicID, [][]byte{[]byte("foo")})
+				So(res.Err, ShouldNotBeNil)
 
 				Convey("And other topics should Appendable", func(ctx C) {
 					for _, topicID := range env.TopicIDs() {
@@ -543,8 +543,8 @@ func TestRemoveTopic(t *testing.T) {
 						}
 
 						for i := 0; i < numLogs; i++ {
-							_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-							So(err, ShouldBeNil)
+							res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+							So(res.Err, ShouldBeNil)
 						}
 					}
 				})
@@ -581,10 +581,9 @@ func TestAddTopic(t *testing.T) {
 
 				var glsn types.GLSN
 				for gctx.Err() == nil {
-					var res varlog.AppendResult
-					res, err = cl.Append(context.Background(), tid, [][]byte{[]byte("foo")})
-					if err != nil {
-						err = fmt.Errorf("topic=%v,err=%v", tid, err)
+					res := cl.Append(context.Background(), tid, [][]byte{[]byte("foo")})
+					if res.Err != nil {
+						err = fmt.Errorf("topic=%v,err=%v", tid, res.Err)
 						break
 					}
 					glsn = res.Metadata[0].GLSN
@@ -618,10 +617,9 @@ func TestAddTopic(t *testing.T) {
 
 				var glsn types.GLSN
 				for gctx.Err() == nil {
-					var res varlog.AppendResult
-					res, err = cl.Append(context.Background(), addTopicID, [][]byte{[]byte("foo")})
-					if err != nil {
-						err = fmt.Errorf("topic=%v,err=%v", addTopicID, err)
+					res := cl.Append(context.Background(), addTopicID, [][]byte{[]byte("foo")})
+					if res.Err != nil {
+						err = fmt.Errorf("topic=%v,err=%v", addTopicID, res.Err)
 						break
 					}
 					glsn = res.Metadata[0].GLSN

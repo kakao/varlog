@@ -32,7 +32,9 @@ type LogIOClient interface {
 	Append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, backups ...varlogpb.StorageNode) ([]snpb.AppendResult, error)
 	Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) (*varlogpb.LogEntry, error)
 	Subscribe(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error)
+	SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN) (<-chan SubscribeResult, error)
 	Trim(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error
+	LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error)
 	io.Closer
 }
 
@@ -61,9 +63,9 @@ func NewLogIOClientFromRPCConn(rpcConn *rpc.Conn) (LogIOClient, error) {
 // It returns valid GLSN if the append completes successfully.
 func (c *logIOClient) Append(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, backups ...varlogpb.StorageNode) ([]snpb.AppendResult, error) {
 	req := &snpb.AppendRequest{
-		Payload:     data[0],
 		TopicID:     topicID,
 		LogStreamID: logStreamID,
+		Payload:     data,
 		Backups:     backups,
 	}
 	rsp, err := c.rpcClient.Append(ctx, req)
@@ -140,6 +142,46 @@ func (c *logIOClient) Subscribe(ctx context.Context, topicID types.TopicID, logS
 	return out, nil
 }
 
+func (c *logIOClient) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN) (<-chan SubscribeResult, error) {
+	if begin >= end {
+		return nil, errors.New("logiocl: invalid argument")
+	}
+
+	req := &snpb.SubscribeToRequest{
+		TopicID:     topicID,
+		LogStreamID: logStreamID,
+		LLSNBegin:   begin,
+		LLSNEnd:     end,
+	}
+	stream, err := c.rpcClient.SubscribeTo(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(verrors.FromStatusError(err), "logiocl")
+	}
+
+	out := make(chan SubscribeResult)
+	// FIXME (jun): clean up goroutines in both Subscribe and SubscribeTo
+	go func(ctx context.Context) {
+		defer close(out)
+		for {
+			rsp, rpcErr := stream.Recv()
+			err := verrors.FromStatusError(rpcErr)
+			result := SubscribeResult{Error: err}
+			if err == nil {
+				result.LogEntry = rsp.LogEntry
+			}
+			select {
+			case out <- result:
+				if err != nil {
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}(ctx)
+	return out, nil
+}
+
 // Trim deletes log entries greater than or equal to given GLSN in the storage node. The number of
 // deleted log entries are returned.
 func (c *logIOClient) Trim(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error {
@@ -149,6 +191,14 @@ func (c *logIOClient) Trim(ctx context.Context, topicID types.TopicID, glsn type
 	}
 	_, err := c.rpcClient.Trim(ctx, req)
 	return errors.Wrap(verrors.FromStatusError(err), "logiocl")
+}
+
+func (c *logIOClient) LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
+	rsp, err := c.rpcClient.LogStreamMetadata(ctx, &snpb.LogStreamMetadataRequest{
+		TopicID:     topicID,
+		LogStreamID: logStreamID,
+	})
+	return rsp.GetLogStreamDescriptor(), errors.Wrap(verrors.FromStatusError(err), "logiocl")
 }
 
 // Close closes connection to the storage node.

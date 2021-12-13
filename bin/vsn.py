@@ -10,7 +10,7 @@ import socket
 import subprocess
 import sys
 import time
-from random import randint
+import random
 
 cwd = os.path.dirname(os.path.realpath(__file__))  # noqa
 binpath = os.path.join(cwd, "..", "bin")  # noqa
@@ -50,13 +50,13 @@ def get_vms_addr():
 def get_storage_node_id():
     try:
         out = subprocess.check_output(
-            [f"{binpath}/vmc", "--vms-address=%s" % get_vms_addr(), "meta", "sn"])
+            [f"{binpath}/varlogctl", "sn", "describe", "--admin=%s" % get_vms_addr()])
         meta = json.loads(out)
         my_addr = get_advertise_addr()
-        for snid, addr in meta["storageNodes"].items():
-            if addr == my_addr:
-                return snid, True
-        return randint(1, (2 ^ 31) - 1), False
+        for item in meta["data"]["items"]:
+            if item["address"] == my_addr:
+                return item["storageNodeId"], True
+        return random.randint(1, (2 ^ 31) - 1), False
     except Exception as e:
         logger.exception("could not get StorageNodeID")
         raise e
@@ -85,15 +85,18 @@ def get_volumes(truncate=False):
 
 def add_storage_node(addr):
     try:
-        subprocess.check_output(
-            [f"{binpath}/vmc", "--vms-address=%s" % get_vms_addr(),
-                "add", "sn", f"--storage-node-address={addr}"])
+        out = subprocess.check_output([
+            f"{binpath}/varlogctl", "sn", "add", f"--storage-node-address={addr}", "--admin=%s" % get_vms_addr()])
+        res = json.loads(out)
+        if "error" in res:
+            raise Exception("could not add storagenode")
     except subprocess.CalledProcessError as e:
         logger.exception("could not add storagenode")
         raise e
 
 
 def main():
+    random.seed()
     limits.set_limits()
     cluster_id = os.getenv("CLUSTER_ID", DEFAULT_CLUSTER_ID)
     listen_port = os.getenv("RPC_PORT", DEFAULT_RPC_PORT)

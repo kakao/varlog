@@ -16,7 +16,7 @@ __pycache__
 
 # executables
 bin/sntool
-bin/vmc
+bin/varlogctl
 bin/vmr
 bin/vms
 bin/vsn

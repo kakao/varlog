@@ -13,6 +13,7 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
+	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/tests/it"
 	"github.com/kakao/varlog/vtesting"
@@ -53,9 +54,9 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 						default:
 						}
 
-						res, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-						if err != nil {
-							errC <- err
+						res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+						if res.Err != nil {
+							errC <- res.Err
 						} else {
 							glsnC <- res.Metadata[0].GLSN
 						}
@@ -105,8 +106,8 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 				Convey("Then it should be able to keep appending log", func(ctx C) {
 					client := env.ClientAtIndex(t, 0)
 
-					_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("bar")})
-					So(err, ShouldBeNil)
+					res := client.Append(context.Background(), topicID, [][]byte{[]byte("bar")})
+					So(res.Err, ShouldBeNil)
 
 					for glsn := types.MinGLSN; glsn <= maxGLSN; glsn += types.GLSN(1) {
 						_, err := client.Read(context.TODO(), topicID, lsID, glsn)
@@ -134,8 +135,8 @@ func TestVarlogFailoverSNBackupInitialFault(t *testing.T) {
 	}()
 
 	topicID := clus.TopicIDs()[0]
-	_, err := clus.ClientAtIndex(t, 0).Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-	require.NoError(t, err)
+	res := clus.ClientAtIndex(t, 0).Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+	require.NoError(t, res.Err)
 
 	lsID := clus.LogStreamID(t, topicID, 0)
 	backupSNID := clus.BackupStorageNodeIDOf(t, lsID)
@@ -161,12 +162,12 @@ func TestVarlogFailoverSNBackupInitialFault(t *testing.T) {
 		return varlogpb.LogStreamStatusSealed == lsmd.GetStatus()
 	}, 10*time.Second, 100*time.Millisecond)
 
-	_, err = clus.GetVMSClient(t).Unseal(context.Background(), topicID, lsID)
+	_, err := clus.GetVMSClient(t).Unseal(context.Background(), topicID, lsID)
 	require.NoError(t, err)
 
 	clus.ClientRefresh(t)
-	_, err = clus.ClientAtIndex(t, 0).Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-	require.NoError(t, err)
+	res = clus.ClientAtIndex(t, 0).Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+	require.NoError(t, res.Err)
 }
 
 func TestVarlogFailoverSNBackupFail(t *testing.T) {
@@ -199,9 +200,9 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 						return
 					default:
 					}
-					res, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-					if err != nil {
-						errC <- err
+					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+					if res.Err != nil {
+						errC <- res.Err
 						return
 					}
 					glsnC <- res.Metadata[0].GLSN
@@ -279,13 +280,13 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 						// and connections in clients should be worked.
 						env.ClientRefresh(t)
 						client := env.ClientAtIndex(t, 0)
-						var err error
+						var res varlog.AppendResult
 						So(testutil.CompareWaitN(10, func() bool {
-							_, err = client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-							return err == nil
+							res = client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+							return res.Err == nil
 						}), ShouldBeTrue)
-						if err != nil {
-							log.Printf("Error=%+v", err)
+						if res.Err != nil {
+							log.Printf("Error=%+v", res.Err)
 						}
 					})
 				})
@@ -409,8 +410,8 @@ func TestVarlogFailoverRecoverFromIncompleteSML(t *testing.T) {
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			res, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 			glsn = res.Metadata[0].GLSN
 		}
 		ver = types.Version(glsn)
@@ -458,11 +459,11 @@ func TestVarlogFailoverRecoverFromIncompleteSML(t *testing.T) {
 						rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 						defer cancel()
 
-						res, err := client.Append(rctx, topicID, [][]byte{[]byte("foo")})
-						if err == nil {
+						res := client.Append(rctx, topicID, [][]byte{[]byte("foo")})
+						if res.Err == nil {
 							recoveredGLSN = res.Metadata[0].GLSN
 						}
-						return err == nil
+						return res.Err == nil
 					}), ShouldBeTrue)
 
 					So(recoveredGLSN, ShouldEqual, glsn+1)
@@ -499,8 +500,8 @@ func TestVarlogFailoverRecoverFromIncompleteSMLWithEmptyCommit(t *testing.T) {
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			res, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 			glsn = res.Metadata[0].GLSN
 		}
 		ver = types.Version(glsn)
@@ -593,8 +594,8 @@ func TestVarlogFailoverSyncLogStream(t *testing.T) {
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			res, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 			glsn = res.Metadata[0].GLSN
 		}
 		ver = types.Version(glsn)
@@ -653,11 +654,11 @@ func TestVarlogFailoverSyncLogStream(t *testing.T) {
 						env.ClientRefresh(t)
 						client := env.ClientAtIndex(t, 0)
 
-						res, err := client.Append(rctx, topicID, [][]byte{[]byte("foo")})
-						if err == nil {
+						res := client.Append(rctx, topicID, [][]byte{[]byte("foo")})
+						if res.Err == nil {
 							recoveredGLSN = res.Metadata[0].GLSN
 						}
-						return err == nil
+						return res.Err == nil
 					}), ShouldBeTrue)
 
 					So(recoveredGLSN, ShouldEqual, glsn+1)
@@ -720,8 +721,8 @@ func TestVarlogFailoverSyncLogStreamSelectReplica(t *testing.T) {
 				ver  types.Version
 			)
 			for i := 0; i < nrAppend; i++ {
-				res, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-				So(err, ShouldBeNil)
+				res := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+				So(res.Err, ShouldBeNil)
 				glsn = res.Metadata[0].GLSN
 			}
 			ver = types.Version(glsn)
@@ -810,8 +811,8 @@ func TestVarlogFailoverSyncLogStreamIgnore(t *testing.T) {
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			res, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 			glsn = res.Metadata[0].GLSN
 		}
 		ver = types.Version(glsn)
@@ -867,8 +868,8 @@ func TestVarlogFailoverSyncLogStreamError(t *testing.T) {
 			ver  types.Version
 		)
 		for i := 0; i < nrAppend; i++ {
-			res, err := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 			glsn = res.Metadata[0].GLSN
 		}
 		ver = types.Version(glsn)
@@ -938,8 +939,8 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 		client := env.ClientAtIndex(t, 0)
 
 		for i := 0; i < 32; i++ {
-			_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 		}
 
 		Convey("When SN fail", func(ctx C) {
@@ -971,8 +972,8 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 			env.CloseSNClientOf(t, victim)
 
 			for i := 0; i < 32; i++ {
-				_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-				So(err, ShouldBeNil)
+				res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+				So(res.Err, ShouldBeNil)
 			}
 
 			Convey("Then it should not be able to append", func(ctx C) {
@@ -985,8 +986,8 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 				env.UpdateLS(t, topicID, updateLS, victim, addedSN)
 
 				for i := 0; i < 32; i++ {
-					_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-					So(err, ShouldBeNil)
+					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+					So(res.Err, ShouldBeNil)
 				}
 
 				Convey("When backup SN recover", func(ctx C) {
@@ -1005,8 +1006,8 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 					}), ShouldBeTrue)
 
 					for i := 0; i < 32; i++ {
-						_, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-						So(err, ShouldBeNil)
+						res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+						So(res.Err, ShouldBeNil)
 					}
 				})
 			})

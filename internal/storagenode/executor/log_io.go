@@ -16,6 +16,8 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
+// FIXME(jun): Batch append can report the error by using either return value or field of
+// AppendResult, which makes it hard to handle the error.
 func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogpb.Replica) ([]snpb.AppendResult, error) {
 	// FIXME: e.guard() can be removed, but doing ops to storage after closing should be
 	// handled. Mostly, trim and read can be occurred after clsoing storage.
@@ -28,45 +30,78 @@ func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogp
 		return nil, err
 	}
 
-	twg := newTaskWaitGroup()
-	wt := newPrimaryWriteTask(twg, data[0], backups)
-	defer func() {
-		wt.annotate(ctx, e)
-		wt.release()
+	batchSize := len(data)
+	if batchSize == 0 {
+		return nil, errors.Wrap(verrors.ErrInvalid, "no data")
+	}
 
-		twg.release()
-	}()
+	wts := make([]*writeTask, batchSize)
+	for i := 0; i < batchSize; i++ {
+		twg := newTaskWaitGroup()
+		wt := newPrimaryWriteTask(twg, data[i], backups)
+		wts[i] = wt
 
-	// Note: It should be called within the scope of the mutex for stateBarrier.
-	wt.validate = func() error {
-		if !e.isPrimay() {
-			return errors.Wrapf(verrors.ErrInvalid, "backup replica")
+		wt.validate = func() error {
+			if !e.isPrimay() {
+				return errors.Wrapf(verrors.ErrInvalid, "backup replica")
+			}
+			if !varlogpb.EqualReplicas(e.primaryBackups[1:], wt.backups) {
+				return errors.Wrapf(verrors.ErrInvalid, "replicas mismatch: expected=%+v, actual=%+v", e.primaryBackups[1:], wt.backups)
+			}
+			return nil
 		}
-		if !varlogpb.EqualReplicas(e.primaryBackups[1:], wt.backups) {
-			return errors.Wrapf(verrors.ErrInvalid, "replicas mismatch: expected=%+v, actual=%+v", e.primaryBackups[1:], wt.backups)
+	}
+
+	result := make([]snpb.AppendResult, batchSize)
+	var sendErrIdx int
+	var sendErrReason string
+	var sendErr error
+	for sendErrIdx = 0; sendErrIdx < batchSize; sendErrIdx++ {
+		if err := e.writer.send(ctx, wts[sendErrIdx]); err != nil {
+			sendErr = err
+			sendErrReason = err.Error()
+			break
 		}
-		return nil
 	}
 
-	if err := e.writer.send(ctx, wt); err != nil {
-		twg.wg.Done()
-		twg.wg.Wait()
-		return nil, err
+	var firstErr error
+	for i := 0; i < batchSize; i++ {
+		// clear failed write tasks
+		if i >= sendErrIdx {
+			wts[i].twg.wg.Done()
+			wts[i].twg.wg.Wait()
+			result[i] = snpb.AppendResult{Error: sendErrReason}
+			if firstErr == nil {
+				firstErr = sendErr
+			}
+			continue
+		}
+
+		wts[i].twg.wg.Wait()
+		err := wts[i].twg.err
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			result[i] = snpb.AppendResult{Error: err.Error()}
+			continue
+		}
+
+		result[i] = snpb.AppendResult{
+			Meta: varlogpb.LogEntryMeta{
+				TopicID:     e.topicID,
+				LogStreamID: e.logStreamID,
+				GLSN:        wts[i].twg.glsn,
+				LLSN:        wts[i].twg.llsn,
+			},
+		}
 	}
 
-	twg.wg.Wait()
-	meta := varlogpb.LogEntryMeta{
-		TopicID:     e.topicID,
-		LogStreamID: e.logStreamID,
-		GLSN:        twg.glsn,
-		LLSN:        twg.llsn,
+	// FIXME: This is not partial failure.
+	if len(result) == 1 && firstErr != nil {
+		return nil, firstErr
 	}
-	err := twg.err
-	return []snpb.AppendResult{
-		{
-			Meta: meta,
-		},
-	}, err
+	return result, nil
 }
 
 func (e *executor) Read(ctx context.Context, glsn types.GLSN) (logEntry varlogpb.LogEntry, err error) {
@@ -107,7 +142,13 @@ func (e *executor) Read(ctx context.Context, glsn types.GLSN) (logEntry varlogpb
 		return
 	*/
 
-	return e.storage.Read(glsn)
+	logEntry, err = e.storage.Read(glsn)
+	if err != nil {
+		return logEntry, err
+	}
+	logEntry.TopicID = e.topicID
+	logEntry.LogStreamID = e.logStreamID
+	return logEntry, nil
 }
 
 type subscribeEnvImpl struct {
@@ -270,6 +311,159 @@ func (e *executor) scan(ctx context.Context, subEnv *subscribeEnvImpl, begin, en
 
 		select {
 		case subEnv.c <- result:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+type subscribeToEnvImpl struct {
+	c        chan storage.ScanResult
+	begin    types.LLSN
+	end      types.LLSN
+	lastLLSN types.LLSN
+	stopper  struct {
+		cancel  context.CancelFunc
+		decider *decidableCondition
+	}
+	err struct {
+		mu sync.Mutex
+		e  error
+	}
+	wg sync.WaitGroup
+}
+
+var _ logio.SubscribeEnv = (*subscribeToEnvImpl)(nil)
+
+func newSubscribeToEnvWithContext(ctx context.Context, queueSize int, begin, end types.LLSN, decider *decidableCondition) (*subscribeToEnvImpl, context.Context) {
+	se := &subscribeToEnvImpl{
+		c:     make(chan storage.ScanResult, queueSize),
+		begin: begin,
+		end:   end,
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	se.stopper.cancel = cancel
+	se.stopper.decider = decider
+	return se, ctx
+}
+
+func (sc *subscribeToEnvImpl) ScanResultC() <-chan storage.ScanResult {
+	return sc.c
+}
+
+func (sc *subscribeToEnvImpl) Stop() {
+	sc.stopper.decider.change(func() {
+		sc.stopper.cancel()
+	})
+	sc.wg.Wait()
+}
+
+func (sc *subscribeToEnvImpl) Err() error {
+	sc.err.mu.Lock()
+	defer sc.err.mu.Unlock()
+	return sc.err.e
+}
+
+func (sc *subscribeToEnvImpl) setErr(err error) {
+	sc.err.mu.Lock()
+	defer sc.err.mu.Unlock()
+	if sc.err.e != nil {
+		return
+	}
+	sc.err.e = err
+}
+
+func (e *executor) SubscribeTo(ctx context.Context, begin, end types.LLSN) (logio.SubscribeEnv, error) {
+	if begin >= end {
+		return nil, errors.WithStack(verrors.ErrInvalid)
+	}
+
+	if err := e.guard(); err != nil {
+		return nil, err
+	}
+	defer e.unguard()
+
+	if begin < e.lsc.localLowWatermark().LLSN {
+		// already trimmed
+		return nil, errors.WithStack(verrors.ErrTrimmed)
+	}
+
+	return e.subscribeTo(ctx, begin, end)
+}
+
+func (e *executor) subscribeTo(ctx context.Context, begin, end types.LLSN) (*subscribeToEnvImpl, error) {
+	// TODO (jun): This magic numbers should be moved to configurations.
+	const maxSubscribeQueueSize = 128
+	const minSubscribeQueueSize = 1
+	queueSize := uint64(end - begin)
+	queueSize = mathutil.MinUint64(queueSize, maxSubscribeQueueSize)
+	queueSize = mathutil.MaxUint64(queueSize, minSubscribeQueueSize)
+
+	subToEnv, ctx := newSubscribeToEnvWithContext(ctx, int(queueSize), begin, end, e.decider)
+	subToEnv.wg.Add(1)
+	go func() {
+		defer func() {
+			close(subToEnv.c)
+			subToEnv.wg.Done()
+		}()
+		lastErr := io.EOF
+		if err := e.scanDataLoop(ctx, subToEnv); err != nil {
+			lastErr = err
+		}
+		subToEnv.setErr(lastErr)
+	}()
+	return subToEnv, nil
+}
+
+func (e *executor) scanDataLoop(ctx context.Context, subToEnv *subscribeToEnvImpl) error {
+	beginLLSN, endLLSN := subToEnv.begin, subToEnv.end
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		_, hwm, _ := e.lsc.reportCommitBase()
+
+		err := e.scanTo(ctx, subToEnv, beginLLSN, endLLSN)
+		if err != nil {
+			return err
+		}
+
+		if !subToEnv.lastLLSN.Invalid() {
+			if subToEnv.lastLLSN == endLLSN-1 {
+				return nil
+			}
+			beginLLSN = subToEnv.lastLLSN + 1
+		}
+
+		if err := e.decider.waitC(ctx, hwm+1); err != nil {
+			return err
+		}
+	}
+}
+
+func (e *executor) scanTo(ctx context.Context, subToEnv *subscribeToEnvImpl, begin, end types.LLSN) error {
+	scanner := e.storage.Scan(storage.WithLLSN(begin, end))
+	defer func() {
+		_ = scanner.Close()
+	}()
+
+	for {
+		result := scanner.Next()
+		if !result.Valid() {
+			if errors.Is(result.Err, io.EOF) {
+				return nil
+			}
+			return result.Err
+		}
+
+		subToEnv.lastLLSN = result.LogEntry.LLSN
+
+		select {
+		case subToEnv.c <- result:
 		case <-ctx.Done():
 			return ctx.Err()
 		}

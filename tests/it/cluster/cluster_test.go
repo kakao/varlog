@@ -43,9 +43,9 @@ func TestAppendLogs(t *testing.T) {
 			topicID := clus.TopicIDs()[0]
 			client := clus.ClientAtIndex(t, idx)
 			for i := 0; i < numAppend; i++ {
-				res, err := client.Append(ctx, topicID, [][]byte{[]byte("foo")})
-				if err != nil {
-					return err
+				res := client.Append(ctx, topicID, [][]byte{[]byte("foo")})
+				if res.Err != nil {
+					return res.Err
 				}
 				max = res.Metadata[0].GLSN
 			}
@@ -107,10 +107,10 @@ func TestReadSealedLogStream(t *testing.T) {
 			topicID := clus.TopicIDs()[0]
 			client := clus.ClientAtIndex(t, idx)
 			for {
-				res, err := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-				if err != nil {
-					assert.ErrorIs(t, err, verrors.ErrSealed)
-					errC <- err
+				res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+				if res.Err != nil {
+					assert.ErrorIs(t, res.Err, verrors.ErrSealed)
+					errC <- res.Err
 					break
 				}
 				glsnC <- res.Metadata[0].GLSN
@@ -172,14 +172,14 @@ func TestTrimGLS(t *testing.T) {
 
 		var glsn types.GLSN
 		for i := 0; i < 10; i++ {
-			res, err := client.AppendTo(context.Background(), topicID, lsIDs[0], [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.AppendTo(context.Background(), topicID, lsIDs[0], [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 			glsn = res.Metadata[0].GLSN
 			So(glsn, ShouldNotEqual, types.InvalidGLSN)
 		}
 		for i := 0; i < 10; i++ {
-			res, err := client.AppendTo(context.Background(), topicID, lsIDs[1], [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.AppendTo(context.Background(), topicID, lsIDs[1], [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 			glsn = res.Metadata[0].GLSN
 			So(glsn, ShouldNotEqual, types.InvalidGLSN)
 		}
@@ -218,8 +218,8 @@ func TestTrimGLSWithSealedLS(t *testing.T) {
 			glsn := types.InvalidGLSN
 			for i := 0; i < 32; i++ {
 				lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
-				res, err := client.AppendTo(context.Background(), topicID, lsid, [][]byte{[]byte("foo")})
-				So(err, ShouldBeNil)
+				res := client.AppendTo(context.Background(), topicID, lsid, [][]byte{[]byte("foo")})
+				So(res.Err, ShouldBeNil)
 				glsn = res.Metadata[0].GLSN
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
@@ -231,8 +231,8 @@ func TestTrimGLSWithSealedLS(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			for i := 0; i < 10; i++ {
-				res, err := client.AppendTo(context.Background(), topicID, runningLSID, [][]byte{[]byte("foo")})
-				So(err, ShouldBeNil)
+				res := client.AppendTo(context.Background(), topicID, runningLSID, [][]byte{[]byte("foo")})
+				So(res.Err, ShouldBeNil)
 				glsn = res.Metadata[0].GLSN
 				So(glsn, ShouldNotEqual, types.InvalidGLSN)
 			}
@@ -269,8 +269,8 @@ func TestNewbieLogStream(t *testing.T) {
 
 		for i := 0; i < 32; i++ {
 			lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
-			res, err := client.AppendTo(context.Background(), topicID, lsid, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := client.AppendTo(context.Background(), topicID, lsid, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 			So(res.Metadata[0].GLSN, ShouldNotEqual, types.InvalidGLSN)
 		}
 
@@ -285,8 +285,8 @@ func TestNewbieLogStream(t *testing.T) {
 
 				for i := 0; i < 32; i++ {
 					lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
-					res, err := client.AppendTo(context.Background(), topicID, lsid, [][]byte{[]byte("foo")})
-					So(err, ShouldBeNil)
+					res := client.AppendTo(context.Background(), topicID, lsid, [][]byte{[]byte("foo")})
+					So(res.Err, ShouldBeNil)
 					So(res.Metadata[0].GLSN, ShouldNotEqual, types.InvalidGLSN)
 				}
 			})

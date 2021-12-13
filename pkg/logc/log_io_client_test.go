@@ -50,25 +50,24 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 		gomock.Any(),
 	).DoAndReturn(func(ctx context.Context, req *snpb.AppendRequest) (*snpb.AppendResponse, error) {
 		sn.mu.Lock()
-		defer func() {
+		defer sn.mu.Unlock()
+
+		rsp := &snpb.AppendResponse{}
+		for _, buf := range req.GetPayload() {
+			sn.logEntries[sn.glsn] = buf
+			sn.glsnToLLSN[sn.glsn] = sn.llsn
+			rsp.Results = append(rsp.Results, snpb.AppendResult{
+				Meta: varlogpb.LogEntryMeta{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					GLSN:        sn.glsn,
+					LLSN:        sn.llsn,
+				},
+			})
 			sn.glsn++
 			sn.llsn++
-			sn.mu.Unlock()
-		}()
-		sn.logEntries[sn.glsn] = req.GetPayload()
-		sn.glsnToLLSN[sn.glsn] = sn.llsn
-		return &snpb.AppendResponse{
-			Results: []snpb.AppendResult{
-				{
-					Meta: varlogpb.LogEntryMeta{
-						TopicID:     tpid,
-						LogStreamID: lsid,
-						GLSN:        sn.glsn,
-						LLSN:        sn.llsn,
-					},
-				},
-			},
-		}, nil
+		}
+		return rsp, nil
 	}).AnyTimes()
 
 	// Read

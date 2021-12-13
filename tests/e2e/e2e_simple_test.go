@@ -76,8 +76,8 @@ func TestK8sVarlogSimple(t *testing.T) {
 
 			var glsn types.GLSN
 			k8s.WithTimeoutContext(func(ctx context.Context) {
-				res, err := vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
-				So(err, ShouldBeNil)
+				res := vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
+				So(res.Err, ShouldBeNil)
 				glsn = res.Metadata[0].GLSN
 			})
 
@@ -97,8 +97,8 @@ func TestK8sVarlogSimple(t *testing.T) {
 
 				appendCtx, appendCancel := k8s.TimeoutContext()
 				defer appendCancel()
-				_, err = vlg.Append(appendCtx, topicID, [][]byte{[]byte("foo")})
-				So(err, ShouldNotBeNil)
+				res := vlg.Append(appendCtx, topicID, [][]byte{[]byte("foo")})
+				So(res.Err, ShouldNotBeNil)
 
 				Convey("Unseal", func() {
 					unsealCtx, unsealCancel := k8s.TimeoutContext()
@@ -110,8 +110,8 @@ func TestK8sVarlogSimple(t *testing.T) {
 						ctx, cancel := k8s.TimeoutContext()
 						defer cancel()
 
-						res, err := vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
-						return err == nil && res.Metadata[0].GLSN > lsmetaList[0].HighWatermark
+						res := vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
+						return res.Err == nil && res.Metadata[0].GLSN > lsmetaList[0].HighWatermark
 					}), ShouldBeTrue)
 				})
 			})
@@ -162,8 +162,8 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 
 		appendCtx, appendCancel := k8s.TimeoutContext()
 		defer appendCancel()
-		_, err = vlg.Append(appendCtx, topicID, [][]byte{[]byte("foo")})
-		So(err, ShouldBeNil)
+		res := vlg.Append(appendCtx, topicID, [][]byte{[]byte("foo")})
+		So(res.Err, ShouldBeNil)
 
 		Convey("When MR follower fail", func() {
 			k8s.WithTimeoutContext(func(ctx context.Context) {
@@ -182,8 +182,8 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 
 			Convey("Then it should be abel to append", func() {
 				for i := 0; i < 1000; i++ {
-					_, err := vlg.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-					So(err, ShouldBeNil)
+					res := vlg.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+					So(res.Err, ShouldBeNil)
 				}
 
 				Convey("When MR recover", func() {
@@ -192,8 +192,8 @@ func TestK8sVarlogFailoverMR(t *testing.T) {
 
 					Convey("Then if should be abel to append", func() {
 						for i := 0; i < 1000; i++ {
-							_, err := vlg.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
-							So(err, ShouldBeNil)
+							res := vlg.Append(context.TODO(), topicID, [][]byte{[]byte("foo")})
+							So(res.Err, ShouldBeNil)
 						}
 					})
 				})
@@ -269,8 +269,8 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 		})
 
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			_, err = vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 		})
 
 		Convey("When SN backup fail", func() {
@@ -319,7 +319,7 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 								if firstUnseal.IsZero() {
 									firstUnseal = time.Now()
 								}
-								if _, err = vlg.Append(ctx, topicID, [][]byte{[]byte("foo")}); err == nil {
+								if res := vlg.Append(ctx, topicID, [][]byte{[]byte("foo")}); res.Err == nil {
 									firstAppend = time.Now()
 									return true
 								}
@@ -342,8 +342,8 @@ func TestK8sVarlogFailoverSN(t *testing.T) {
 						So(ok, ShouldBeTrue)
 
 						k8s.WithTimeoutContext(func(ctx context.Context) {
-							_, err = vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
-							So(err, ShouldBeNil)
+							res := vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
+							So(res.Err, ShouldBeNil)
 						})
 					})
 				})
@@ -407,8 +407,8 @@ func TestK8sVarlogAppend(t *testing.T) {
 		}
 
 		k8s.WithTimeoutContext(func(ctx context.Context) {
-			_, err = vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
-			So(err, ShouldBeNil)
+			res := vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
+			So(res.Err, ShouldBeNil)
 		})
 	}))
 }
