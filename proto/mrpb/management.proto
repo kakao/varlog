@@ -15,85 +15,83 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message AddPeerRequest {
-    uint32 cluster_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
-    ];
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
 
-    uint64 node_id = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
-        (gogoproto.customname) = "NodeID"
-    ];
+  uint64 node_id = 2 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID"
+  ];
 
-    string url = 3;
+  string url = 3;
 }
 
 message RemovePeerRequest {
-    uint32 cluster_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
-    ];
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
 
-    uint64 node_id = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
-        (gogoproto.customname) = "NodeID"
-    ];
+  uint64 node_id = 2 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID"
+  ];
 }
 
 message GetClusterInfoRequest {
-    uint32 cluster_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
-    ];
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
 }
 
 message ClusterInfo {
-    message Member {
-        string peer = 1;
-        string endpoint = 2;
-        bool learner = 3;
-    }
+  message Member {
+    string peer = 1;
+    string endpoint = 2;
+    bool learner = 3;
+  }
 
-    uint32 cluster_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
-    ];
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
 
-    uint64 node_id = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
-        (gogoproto.customname) = "NodeID"
-    ];
+  uint64 node_id = 2 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID"
+  ];
 
-    uint64 leader = 3
-        [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
+  uint64 leader = 3 [(gogoproto.casttype) =
+                         "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
 
-    int32 replication_factor = 4;
+  int32 replication_factor = 4;
 
-    map<uint64, Member> members = 5
-        [(gogoproto.castkey) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
+  map<uint64, Member> members = 5
+      [(gogoproto.castkey) =
+           "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
 
-    // applied_index is the AppliedIndex of RAFT that is updated by changing
-    // configuration of members. For example, AddPeer and RemovePeer result in
-    // increasing applied_index.
-    uint64 applied_index = 6;
+  // applied_index is the AppliedIndex of RAFT that is updated by changing
+  // configuration of members. For example, AddPeer and RemovePeer result in
+  // increasing applied_index.
+  uint64 applied_index = 6;
 }
 
 message GetClusterInfoResponse {
-    ClusterInfo cluster_info = 1;
+  ClusterInfo cluster_info = 1;
 }
 
 service Management {
-    rpc AddPeer(AddPeerRequest) returns (google.protobuf.Empty) {}
-    rpc RemovePeer(RemovePeerRequest) returns (google.protobuf.Empty) {}
-    rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse) {
-    }
+  rpc AddPeer(AddPeerRequest) returns (google.protobuf.Empty) {}
+  rpc RemovePeer(RemovePeerRequest) returns (google.protobuf.Empty) {}
+  rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse) {}
 }

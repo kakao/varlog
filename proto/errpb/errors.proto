@@ -11,6 +11,6 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message ErrorDetail {
-    string error_string = 1;
+  string error_string = 1;
 }
 

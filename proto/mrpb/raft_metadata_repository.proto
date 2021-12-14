@@ -17,67 +17,67 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message LogStreamCommitResults {
-    option (gogoproto.equal) = true;
+  option (gogoproto.equal) = true;
 
-    uint64 version = 1
-        [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
-    repeated snpb.LogStreamCommitResult commit_results = 3
-        [(gogoproto.nullable) = false];
+  uint64 version = 1
+      [(gogoproto.casttype) =
+           "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
+  repeated snpb.LogStreamCommitResult commit_results = 3
+      [(gogoproto.nullable) = false];
 }
 
 message StorageNodeUncommitReport {
-    int32 storage_node_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
-    ];
-    repeated snpb.LogStreamUncommitReport uncommit_reports = 2
-        [(gogoproto.nullable) = false];
+  int32 storage_node_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
+    (gogoproto.customname) = "StorageNodeID"
+  ];
+  repeated snpb.LogStreamUncommitReport uncommit_reports = 2
+      [(gogoproto.nullable) = false];
 }
 
 message LogStreamUncommitReports {
-    option (gogoproto.equal) = true;
+  option (gogoproto.equal) = true;
 
-    map<int32, snpb.LogStreamUncommitReport> replicas = 1 [
-        (gogoproto.castkey) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-        (gogoproto.nullable) = false
-    ];
-    varlogpb.LogStreamStatus status = 2;
+  map<int32, snpb.LogStreamUncommitReport> replicas = 1 [
+    (gogoproto.castkey) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
+    (gogoproto.nullable) = false
+  ];
+  varlogpb.LogStreamStatus status = 2;
 }
 
 message MetadataRepositoryDescriptor {
-    message LogStreamDescriptor {
-        uint64 trim_version = 1
-            [(gogoproto.casttype) =
-                 "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
-        repeated LogStreamCommitResults commit_history = 2
-            [(gogoproto.nullable) = true];
-        map<int32, LogStreamUncommitReports> uncommit_reports = 3
-            [(gogoproto.castkey) =
-                 "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID"];
-    }
+  message LogStreamDescriptor {
+    uint64 trim_version = 1
+        [(gogoproto.casttype) =
+             "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
+    repeated LogStreamCommitResults commit_history = 2
+        [(gogoproto.nullable) = true];
+    map<int32, LogStreamUncommitReports> uncommit_reports = 3
+        [(gogoproto.castkey) =
+             "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID"];
+  }
 
-    message PeerDescriptor {
-        string url = 1 [(gogoproto.customname) = "URL"];
-        bool is_learner = 2;
-    }
+  message PeerDescriptor {
+    string url = 1 [(gogoproto.customname) = "URL"];
+    bool is_learner = 2;
+  }
 
-    message PeerDescriptorMap {
-        map<uint64, PeerDescriptor> peers = 1
-            [(gogoproto.castkey) =
-                 "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
-        // applied_index is the AppliedIndex of RAFT that is updated by changing
-        // configuration of members. For example, AddPeer and RemovePeer result
-        // in increasing applied_index.
-        uint64 applied_index = 2;
-    }
-
-    varlogpb.MetadataDescriptor metadata = 1 [(gogoproto.nullable) = true];
-    LogStreamDescriptor log_stream = 2 [(gogoproto.nullable) = true];
-    PeerDescriptorMap peers_map = 3 [(gogoproto.nullable) = false];
-    map<uint64, string> endpoints = 4
+  message PeerDescriptorMap {
+    map<uint64, PeerDescriptor> peers = 1
         [(gogoproto.castkey) =
              "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
+    // applied_index is the AppliedIndex of RAFT that is updated by changing
+    // configuration of members. For example, AddPeer and RemovePeer result
+    // in increasing applied_index.
+    uint64 applied_index = 2;
+  }
+
+  varlogpb.MetadataDescriptor metadata = 1 [(gogoproto.nullable) = true];
+  LogStreamDescriptor log_stream = 2 [(gogoproto.nullable) = true];
+  PeerDescriptorMap peers_map = 3 [(gogoproto.nullable) = false];
+  map<uint64, string> endpoints = 4
+      [(gogoproto.castkey) =
+           "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
 }

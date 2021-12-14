@@ -18,76 +18,73 @@ option (gogoproto.goproto_sizecache_all) = false;
 message GetMetadataRequest {}
 
 message GetMetadataResponse {
-    varlogpb.MetadataDescriptor metadata = 1;
+  varlogpb.MetadataDescriptor metadata = 1;
 }
 
 message StorageNodeRequest {
-    varlogpb.StorageNodeDescriptor storage_node = 1
-        [(gogoproto.nullable) = true];
+  varlogpb.StorageNodeDescriptor storage_node = 1 [(gogoproto.nullable) = true];
 }
 
 message LogStreamRequest {
-    varlogpb.LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
+  varlogpb.LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
 }
 
 message SealRequest {
-    uint32 cluster_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
-    ];
-    int32 log_stream_id = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
 }
 
 message SealResponse {
-    varlogpb.LogStreamStatus status = 1;
-    uint64 last_committed_glsn = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "LastCommittedGLSN"
-    ];
+  varlogpb.LogStreamStatus status = 1;
+  uint64 last_committed_glsn = 2 [
+    (gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "LastCommittedGLSN"
+  ];
 }
 
 message UnsealRequest {
-    uint32 cluster_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
-    ];
-    int32 log_stream_id = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
 }
 
 message UnsealResponse {
-    varlogpb.LogStreamStatus status = 1;
+  varlogpb.LogStreamStatus status = 1;
 }
 
 message TopicRequest {
-    int32 topic_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
 }
 
 service MetadataRepositoryService {
-    rpc RegisterStorageNode(StorageNodeRequest)
-        returns (google.protobuf.Empty) {}
-    rpc UnregisterStorageNode(StorageNodeRequest)
-        returns (google.protobuf.Empty) {}
-    rpc RegisterTopic(TopicRequest) returns (google.protobuf.Empty) {}
-    rpc UnregisterTopic(TopicRequest) returns (google.protobuf.Empty) {}
-    rpc RegisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
-    rpc UnregisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
-    rpc UpdateLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
-    rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
-    rpc Seal(SealRequest) returns (SealResponse) {}
-    rpc Unseal(UnsealRequest) returns (UnsealResponse) {}
+  rpc RegisterStorageNode(StorageNodeRequest) returns (google.protobuf.Empty) {}
+  rpc UnregisterStorageNode(StorageNodeRequest)
+      returns (google.protobuf.Empty) {}
+  rpc RegisterTopic(TopicRequest) returns (google.protobuf.Empty) {}
+  rpc UnregisterTopic(TopicRequest) returns (google.protobuf.Empty) {}
+  rpc RegisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
+  rpc UnregisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
+  rpc UpdateLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}
+  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
+  rpc Seal(SealRequest) returns (SealResponse) {}
+  rpc Unseal(UnsealRequest) returns (UnsealResponse) {}
 }

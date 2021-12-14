@@ -14,13 +14,13 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message Request {
-    bytes data = 1;
+  bytes data = 1;
 }
 
 message Response {
-    uint64 seq = 1;
+  uint64 seq = 1;
 }
 
 service RPCBench {
-    rpc Call(Request) returns (Response) {}
+  rpc Call(Request) returns (Response) {}
 }

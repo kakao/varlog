@@ -16,37 +16,36 @@ option (gogoproto.goproto_sizecache_all) = false;
 // LogStreamUncommitReport is manifest that log stream reports to metadata
 // repository about log entries those are waiting to commit.
 message LogStreamUncommitReport {
-    option (gogoproto.equal) = true;
+  option (gogoproto.equal) = true;
 
-    int32 log_stream_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
-    uint64 uncommitted_llsn_offset = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "UncommittedLLSNOffset"
-    ];
-    uint64 uncommitted_llsn_length = 3
-        [(gogoproto.customname) = "UncommittedLLSNLength"];
-    uint64 version = 4
-        [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
-    uint64 high_watermark = 5
-        [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
+  int32 log_stream_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+  uint64 uncommitted_llsn_offset = 2 [
+    (gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "UncommittedLLSNOffset"
+  ];
+  uint64 uncommitted_llsn_length = 3
+      [(gogoproto.customname) = "UncommittedLLSNLength"];
+  uint64 version = 4
+      [(gogoproto.casttype) =
+           "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
+  uint64 high_watermark = 5
+      [(gogoproto.casttype) =
+           "github.daumkakao.com/varlog/varlog/pkg/types.GLSN"];
 }
 
 message GetReportRequest {}
 message GetReportResponse {
-    int32 storage_node_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
-    ];
-    repeated LogStreamUncommitReport uncommit_reports = 2
-        [(gogoproto.nullable) = false];
+  int32 storage_node_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
+    (gogoproto.customname) = "StorageNodeID"
+  ];
+  repeated LogStreamUncommitReport uncommit_reports = 2
+      [(gogoproto.nullable) = false];
 }
 
 // GlobalLogStreamDescriptor is a committing result against with
@@ -55,54 +54,51 @@ message GetReportResponse {
 // Field commit_result contains positions of all log entries of log streams in
 // a storage node which is a receiver of this GlobalLogStreamDescriptor.
 message LogStreamCommitResult {
-    option (gogoproto.equal) = true;
+  option (gogoproto.equal) = true;
 
-    int32 log_stream_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
-    int32 topic_id = 2 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
-    uint64 committed_llsn_offset = 3 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "CommittedLLSNOffset"
-    ];
-    uint64 committed_glsn_offset = 4 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "CommittedGLSNOffset"
-    ];
-    uint64 committed_glsn_length = 5
-        [(gogoproto.customname) = "CommittedGLSNLength"];
-    uint64 version = 6
-        [(gogoproto.casttype) =
-             "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
-    uint64 high_watermark = 7 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "HighWatermark"
-    ];
+  int32 log_stream_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+  int32 topic_id = 2 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  uint64 committed_llsn_offset = 3 [
+    (gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "CommittedLLSNOffset"
+  ];
+  uint64 committed_glsn_offset = 4 [
+    (gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "CommittedGLSNOffset"
+  ];
+  uint64 committed_glsn_length = 5
+      [(gogoproto.customname) = "CommittedGLSNLength"];
+  uint64 version = 6
+      [(gogoproto.casttype) =
+           "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
+  uint64 high_watermark = 7 [
+    (gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "HighWatermark"
+  ];
 }
 
 message CommitRequest {
-    int32 storage_node_id = 1 [
-        (gogoproto.casttype) =
-            "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
-    ];
-    LogStreamCommitResult commit_result = 2 [(gogoproto.nullable) = false];
+  int32 storage_node_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
+    (gogoproto.customname) = "StorageNodeID"
+  ];
+  LogStreamCommitResult commit_result = 2 [(gogoproto.nullable) = false];
 }
 
 message CommitResponse {
-    // TODO:
+  // TODO:
 }
 
 service LogStreamReporter {
-    rpc GetReport(stream GetReportRequest) returns (stream GetReportResponse) {}
-    rpc Commit(stream CommitRequest) returns (CommitResponse) {}
+  rpc GetReport(stream GetReportRequest) returns (stream GetReportResponse) {}
+  rpc Commit(stream CommitRequest) returns (CommitResponse) {}
 }
