@@ -19,172 +19,162 @@ option (gogoproto.goproto_sizecache_all) = false;
 // AppendRequest is a message to send a payload to a storage node. It contains
 // a vector of storage nodes to replicate the payload.
 message AppendRequest {
-    int32 topic_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
-    int32 log_stream_id = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
-    repeated bytes payload = 3;
-    repeated varlogpb.StorageNode backups = 4 [(gogoproto.nullable) = false];
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+  repeated bytes payload = 3;
+  repeated varlogpb.StorageNode backups = 4 [(gogoproto.nullable) = false];
 }
 
 message AppendResult {
-    varlogpb.LogEntryMeta meta = 1 [(gogoproto.nullable) = false];
-    string error = 2;
+  varlogpb.LogEntryMeta meta = 1 [(gogoproto.nullable) = false];
+  string error = 2;
 }
 
 // AppendResponse is a response message of Append RPC.
 message AppendResponse {
-    repeated AppendResult results = 1 [(gogoproto.nullable) = false];
+  repeated AppendResult results = 1 [(gogoproto.nullable) = false];
 }
 
 // ReadRequest asks a storage node to retrieve log entry at the GLSN.
 message ReadRequest {
-    uint64 glsn = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "GLSN"
-    ];
-    int32 topic_id = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
-    int32 log_stream_id = 3 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
+  uint64 glsn = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "GLSN"
+  ];
+  int32 topic_id = 2 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 3 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
 }
 
 // ReadResponse contains the contents of the log entry which is retrieved by
 // the ReadRequest.
 message ReadResponse {
-    uint64 glsn = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "GLSN"
-    ];
-    uint64 llsn = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "LLSN"
-    ];
-    bytes payload = 3;
+  uint64 glsn = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "GLSN"
+  ];
+  uint64 llsn = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LLSN"
+  ];
+  bytes payload = 3;
 }
 
 // SubscribeRequest has GLSN which indicates an inclusive starting position
 // from which a client wants to receive.
 message SubscribeRequest {
-    uint64 glsn_begin = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "GLSNBegin"
-    ];
-    uint64 glsn_end = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "GLSNEnd"
-    ];
-    int32 topic_id = 3 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
-    int32 log_stream_id = 4 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
+  uint64 glsn_begin = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "GLSNBegin"
+  ];
+  uint64 glsn_end = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "GLSNEnd"
+  ];
+  int32 topic_id = 3 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 4 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
 }
 
 // SubscribeResponse comprises the contents of the log entry and its GLSN.
 message SubscribeResponse {
-    uint64 glsn = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "GLSN"
-    ];
-    uint64 llsn = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "LLSN"
-    ];
-    bytes payload = 3;
+  uint64 glsn = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "GLSN"
+  ];
+  uint64 llsn = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LLSN"
+  ];
+  bytes payload = 3;
 }
 
 message SubscribeToRequest {
-    int32 topic_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
-    int32 log_stream_id = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
-    uint64 llsn_begin = 3 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "LLSNBegin"
-    ];
-    uint64 llsn_end = 4 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "LLSNEnd"
-    ];
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+  uint64 llsn_begin = 3 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LLSNBegin"
+  ];
+  uint64 llsn_end = 4 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LLSNEnd"
+  ];
 }
 
 message SubscribeToResponse {
-    varlogpb.LogEntry log_entry = 1 [(gogoproto.nullable) = false];
+  varlogpb.LogEntry log_entry = 1 [(gogoproto.nullable) = false];
 }
 
 // TrimRequest contains inclusive GLSN until which a client wants to delete.
 // If async field is true, the trim operation returns immediately and the
 // storage node removes its log entry in the background.
 message TrimRequest {
-    int32 topic_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
-    uint64 glsn = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "GLSN"
-    ];
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  uint64 glsn = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "GLSN"
+  ];
 }
 
 message LogStreamMetadataRequest {
-    int32 topic_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
-    int32 log_stream_id = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
 }
 
 message LogStreamMetadataResponse {
-    varlogpb.LogStreamDescriptor log_stream_descriptor = 1
-        [(gogoproto.nullable) = false];
+  varlogpb.LogStreamDescriptor log_stream_descriptor = 1
+      [(gogoproto.nullable) = false];
 }
 
 service LogIO {
-    rpc Append(AppendRequest) returns (AppendResponse) {}
-    rpc Read(ReadRequest) returns (ReadResponse) {}
-    rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
-    rpc SubscribeTo(SubscribeToRequest) returns (stream SubscribeToResponse) {}
-    rpc Trim(TrimRequest) returns (google.protobuf.Empty) {}
-    rpc LogStreamMetadata(LogStreamMetadataRequest)
-        returns (LogStreamMetadataResponse) {}
+  rpc Append(AppendRequest) returns (AppendResponse) {}
+  rpc Read(ReadRequest) returns (ReadResponse) {}
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
+  rpc SubscribeTo(SubscribeToRequest) returns (stream SubscribeToResponse) {}
+  rpc Trim(TrimRequest) returns (google.protobuf.Empty) {}
+  rpc LogStreamMetadata(LogStreamMetadataRequest)
+      returns (LogStreamMetadataResponse) {}
 }

@@ -19,130 +19,124 @@ option (gogoproto.goproto_sizecache_all) = false;
 // ReplicationRequest contains LLSN (Local Log Sequence Number) that indicates
 // a log position in the local log stream of the primary storage node.
 message ReplicationRequest {
-    int32 topic_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
-    int32 log_stream_id = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
-    uint64 llsn = 3 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "LLSN"
-    ];
-    bytes payload = 4;
-    google.protobuf.Timestamp created_time = 5
-        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+  uint64 llsn = 3 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LLSN"
+  ];
+  bytes payload = 4;
+  google.protobuf.Timestamp created_time = 5
+      [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 // ReplicationResponse indicates that a log entry at given LLSN is replicated.
 message ReplicationResponse {
-    int32 storage_node_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
-    ];
-    int32 log_stream_id = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
-    uint64 llsn = 3 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "LLSN"
-    ];
-    google.protobuf.Timestamp created_time = 4
-        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+  int32 storage_node_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.customname) = "StorageNodeID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+  uint64 llsn = 3 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LLSN"
+  ];
+  google.protobuf.Timestamp created_time = 4
+      [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 enum SyncState {
-    option (gogoproto.goproto_enum_prefix) = false;
-    option (gogoproto.goproto_enum_stringer) = false;
-    option (gogoproto.enum_stringer) = true;
+  option (gogoproto.goproto_enum_prefix) = false;
+  option (gogoproto.goproto_enum_stringer) = false;
+  option (gogoproto.enum_stringer) = true;
 
-    ERROR = 0 [(gogoproto.enumvalue_customname) = "SyncStateError"];
-    IN_PROGRESS = 1 [(gogoproto.enumvalue_customname) = "SyncStateInProgress"];
-    COMPLETE = 2 [(gogoproto.enumvalue_customname) = "SyncStateComplete"];
+  ERROR = 0 [(gogoproto.enumvalue_customname) = "SyncStateError"];
+  IN_PROGRESS = 1 [(gogoproto.enumvalue_customname) = "SyncStateInProgress"];
+  COMPLETE = 2 [(gogoproto.enumvalue_customname) = "SyncStateComplete"];
 }
 
 message SyncPosition {
-    option (gogoproto.equal) = true;
-    uint64 llsn = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "LLSN"
-    ];
-    uint64 glsn = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.GLSN",
-        (gogoproto.customname) = "GLSN"
-    ];
+  option (gogoproto.equal) = true;
+  uint64 llsn = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LLSN"
+  ];
+  uint64 glsn = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "GLSN"
+  ];
 }
 
 message SyncRange {
-    uint64 first_llsn = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "FirstLLSN"
-    ];
-    uint64 last_llsn = 2 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LLSN",
-        (gogoproto.customname) = "LastLLSN"
-    ];
+  uint64 first_llsn = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "FirstLLSN"
+  ];
+  uint64 last_llsn = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LastLLSN"
+  ];
 }
 
 message SyncStatus {
-    SyncState state = 1;
-    SyncPosition first = 2 [(gogoproto.nullable) = false];
-    SyncPosition last = 3 [(gogoproto.nullable) = false];
-    SyncPosition current = 4 [(gogoproto.nullable) = false];
+  SyncState state = 1;
+  SyncPosition first = 2 [(gogoproto.nullable) = false];
+  SyncPosition last = 3 [(gogoproto.nullable) = false];
+  SyncPosition current = 4 [(gogoproto.nullable) = false];
 }
 
 message SyncPayload {
-    option (gogoproto.onlyone) = true;
-    varlogpb.CommitContext commit_context = 1;
-    varlogpb.LogEntry log_entry = 2;
+  option (gogoproto.onlyone) = true;
+  varlogpb.CommitContext commit_context = 1;
+  varlogpb.LogEntry log_entry = 2;
 }
 
 message SyncInitRequest {
-    uint32 cluster_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
-    ];
-    varlogpb.Replica source = 2 [(gogoproto.nullable) = false];
-    varlogpb.Replica destination = 3 [(gogoproto.nullable) = false];
-    SyncRange range = 4 [(gogoproto.nullable) = false];
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
+  varlogpb.Replica source = 2 [(gogoproto.nullable) = false];
+  varlogpb.Replica destination = 3 [(gogoproto.nullable) = false];
+  SyncRange range = 4 [(gogoproto.nullable) = false];
 }
 
 message SyncInitResponse {
-    SyncRange range = 1 [(gogoproto.nullable) = false];
+  SyncRange range = 1 [(gogoproto.nullable) = false];
 }
 
 message SyncReplicateRequest {
-    uint32 cluster_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.ClusterID",
-        (gogoproto.customname) = "ClusterID"
-    ];
-    varlogpb.Replica source = 2 [(gogoproto.nullable) = false];
-    varlogpb.Replica destination = 3 [(gogoproto.nullable) = false];
-    SyncPayload payload = 4 [(gogoproto.nullable) = false];
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
+  varlogpb.Replica source = 2 [(gogoproto.nullable) = false];
+  varlogpb.Replica destination = 3 [(gogoproto.nullable) = false];
+  SyncPayload payload = 4 [(gogoproto.nullable) = false];
 }
 
 message SyncReplicateResponse {
-    SyncStatus status = 1;
+  SyncStatus status = 1;
 }
 
 service Replicator {
-    rpc Replicate(stream ReplicationRequest)
-        returns (stream ReplicationResponse) {}
-    rpc SyncInit(SyncInitRequest) returns (SyncInitResponse) {}
-    rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}
+  rpc Replicate(stream ReplicationRequest)
+      returns (stream ReplicationResponse) {}
+  rpc SyncInit(SyncInitRequest) returns (SyncInitResponse) {}
+  rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}
 }

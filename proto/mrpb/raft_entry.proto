@@ -19,144 +19,143 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message RegisterStorageNode {
-    varlogpb.StorageNodeDescriptor storage_node = 1
-        [(gogoproto.nullable) = true];
+  varlogpb.StorageNodeDescriptor storage_node = 1 [(gogoproto.nullable) = true];
 }
 
 message UnregisterStorageNode {
-    int32 storage_node_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
-    ];
+  int32 storage_node_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.customname) = "StorageNodeID"
+  ];
 }
 
 message RegisterTopic {
-    int32 topic_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
 }
 
 message UnregisterTopic {
-    int32 topic_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.TopicID",
-        (gogoproto.customname) = "TopicID"
-    ];
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
 }
 
 message RegisterLogStream {
-    varlogpb.LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
+  varlogpb.LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
 }
 
 message UnregisterLogStream {
-    int32 log_stream_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
+  int32 log_stream_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
 }
 
 message UpdateLogStream {
-    varlogpb.LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
+  varlogpb.LogStreamDescriptor log_stream = 1 [(gogoproto.nullable) = true];
 }
 
 message Report {
-    int32 storage_node_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.StorageNodeID",
-        (gogoproto.customname) = "StorageNodeID"
-    ];
-    repeated snpb.LogStreamUncommitReport uncommit_report = 2
-        [(gogoproto.nullable) = false];
+  int32 storage_node_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.customname) = "StorageNodeID"
+  ];
+  repeated snpb.LogStreamUncommitReport uncommit_report = 2
+      [(gogoproto.nullable) = false];
 }
 
 message Reports {
-    repeated Report reports = 1;
+  repeated Report reports = 1;
 }
 
 message Commit {
-    uint64 node_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.NodeID",
-        (gogoproto.customname) = "NodeID"
-    ];
-    google.protobuf.Timestamp created_time = 2
-        [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+  uint64 node_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID"
+  ];
+  google.protobuf.Timestamp created_time = 2
+      [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 message Seal {
-    int32 log_stream_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
+  int32 log_stream_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
 }
 
 message Unseal {
-    int32 log_stream_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.LogStreamID",
-        (gogoproto.customname) = "LogStreamID"
-    ];
+  int32 log_stream_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
 }
 
 message AddPeer {
-    uint64 node_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.NodeID",
-        (gogoproto.customname) = "NodeID"
-    ];
-    string url = 2;
-    bool is_learner = 3;
+  uint64 node_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID"
+  ];
+  string url = 2;
+  bool is_learner = 3;
 }
 
 message RemovePeer {
-    uint64 node_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.NodeID",
-        (gogoproto.customname) = "NodeID"
-    ];
+  uint64 node_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID"
+  ];
 }
 
 message Endpoint {
-    uint64 node_id = 1 [
-        (gogoproto.casttype) =
-            "github.com/kakao/varlog/pkg/types.NodeID",
-        (gogoproto.customname) = "NodeID"
-    ];
-    string url = 2;
+  uint64 node_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID"
+  ];
+  string url = 2;
 }
 
 message RecoverStateMachine {
-    MetadataRepositoryDescriptor state_machine = 1;
+  MetadataRepositoryDescriptor state_machine = 1;
 }
 
 message RaftEntry {
-    message Request {
-        option (gogoproto.onlyone) = true;
+  message Request {
+    option (gogoproto.onlyone) = true;
 
-        RegisterStorageNode register_storage_node = 1;
-        UnregisterStorageNode unregister_storage_node = 2;
-        RegisterLogStream register_log_stream = 3;
-        UnregisterLogStream unregister_log_stream = 4;
-        UpdateLogStream update_log_stream = 5;
-        Reports report = 6;
-        Commit commit = 7;
-        Seal seal = 8;
-        Unseal unseal = 9;
-        AddPeer add_peer = 10;
-        RemovePeer remove_peer = 11;
-        Endpoint endpoint = 12;
-        RecoverStateMachine recover_state_machine = 13;
-        RegisterTopic register_topic = 14;
-        UnregisterTopic unregister_topic = 15;
-    }
-    uint64 node_index = 1;
-    uint64 request_index = 2;
-    uint64 applied_index = 3;
-    Request request = 4 [(gogoproto.nullable) = false];
+    RegisterStorageNode register_storage_node = 1;
+    UnregisterStorageNode unregister_storage_node = 2;
+    RegisterLogStream register_log_stream = 3;
+    UnregisterLogStream unregister_log_stream = 4;
+    UpdateLogStream update_log_stream = 5;
+    Reports report = 6;
+    Commit commit = 7;
+    Seal seal = 8;
+    Unseal unseal = 9;
+    AddPeer add_peer = 10;
+    RemovePeer remove_peer = 11;
+    Endpoint endpoint = 12;
+    RecoverStateMachine recover_state_machine = 13;
+    RegisterTopic register_topic = 14;
+    UnregisterTopic unregister_topic = 15;
+  }
+  uint64 node_index = 1;
+  uint64 request_index = 2;
+  uint64 applied_index = 3;
+  Request request = 4 [(gogoproto.nullable) = false];
 }
 
