@@ -796,8 +796,6 @@ func (cm *clusterManager) syncLogStream(ctx context.Context, topicID types.Topic
 		return
 	}
 
-	cm.logger.Info("syncLogStream", zap.Any("lsid", logStreamID), zap.Any("replicas", lsStat.Replicas()))
-
 	snIDs := make([]types.StorageNodeID, 0, len(lsStat.Replicas()))
 	for snID := range lsStat.Replicas() {
 		snIDs = append(snIDs, snID)
