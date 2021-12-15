@@ -24,6 +24,5 @@ RUN cd /varlog/build \
     && CGO_ENABLED=0 make build GOFLAGS="" \
     && cp /varlog/build/build/docker-entrypoint.sh /varlog/docker-entrypoint.sh \
     && cp -R /varlog/build/bin /varlog/bin \
-    && cp -R /varlog/build/pylib /varlog/pylib \
-    && rm -rf /varlog/build
+    && cp -R /varlog/build/pylib /varlog/pylib
 ENTRYPOINT ["/varlog/docker-entrypoint.sh"]
