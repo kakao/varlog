@@ -20,13 +20,15 @@ import (
 
 func TestK8sVarlogAppendLongTime(t *testing.T) {
 	const (
-		testTimeout  = 15 * time.Minute
+		testTimeout  = 10 * time.Minute
 		numRepFactor = 3
 		numMRs       = 3
 		numSNs       = 9
 		numLSs       = 3
 		numClients   = 10
 		clusterID    = types.ClusterID(1)
+
+		batchSize = 100
 	)
 
 	opts := getK8sVarlogClusterOpts()
@@ -100,15 +102,19 @@ func TestK8sVarlogAppendLongTime(t *testing.T) {
 					log.Printf("client-%d appended %d messages for %s.", clientIdx, n, elapsedTime.String())
 				}()
 
+				dataBatch := make([][]byte, batchSize)
 				for ctx.Err() == nil {
-					data := fmt.Sprintf("client-%d-log-%d", clientIdx, n)
+					for j := 0; j < batchSize; j++ {
+						data := fmt.Sprintf("client-%d-log-%d", clientIdx, n)
+						dataBatch[j] = []byte(data)
+					}
 					k8s.WithTimeoutContext(func(ctx context.Context) {
-						res := vlg.Append(ctx, topicID, [][]byte{[]byte(data)})
-						if res.Err == nil {
-							n++
-						}
+						res := vlg.Append(ctx, topicID, dataBatch)
+						err = res.Err
 					})
-					if err != nil {
+					if err == nil {
+						n += batchSize
+					} else {
 						break
 					}
 				}

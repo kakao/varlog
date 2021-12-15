@@ -118,31 +118,35 @@ TEST_DOCKER_MEMORY := 4GB
 TEST_POD_NAME := test-e2e
 .PHONY: test_docker test_e2e_docker test_e2e_docker_long
 
-test_docker: image_builder_dev
+test_docker:
 	docker run --rm -it \
+		--namespace default \
 		--cpus $(TEST_DOCKER_CPUS) \
 		--memory $(TEST_DOCKER_MEMORY) \
-		***REMOVED***/varlog/builder-dev:$(DOCKER_TAG) \
-		make test
+		$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG) \
+		sh -c "cd /varlog/build && make test"
 
-test_e2e_docker: image_builder_dev push_builder_dev
+test_e2e_docker:
 	kubectl run --rm -it $(TEST_POD_NAME) \
-		--image=***REMOVED***/varlog/builder-dev:$(DOCKER_TAG) \
-		--image-pull-policy=Always \
+		--namespace default \
+		--image=$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG) \
+		--image-pull-policy=IfNotPresent \
 		--restart=Never \
 		--env="VAULT_ADDR=$(VAULT_ADDR)" \
 		--env="VAULT_TOKEN=$(VAULT_TOKEN)" \
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
-		--command -- $(GO) test ./tests/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1
+		--command -- sh -c "cd /varlog/build && $(GO) test ./tests/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1"
 
-test_e2e_docker_long: image_builder_dev push_builder_dev
+test_e2e_docker_long:
 	kubectl run --rm -it $(TEST_POD_NAME) \
-		--image=***REMOVED***/varlog/builder-dev:$(DOCKER_TAG) \
-		--image-pull-policy=Always \
+		--namespace default \
+		--image=$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG) \
+		--image-pull-policy=IfNotPresent \
 		--restart=Never \
 		--env="VAULT_ADDR=$(VAULT_ADDR)" \
 		--env="VAULT_TOKEN=$(VAULT_TOKEN)" \
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
+		--command -- sh -c "cd /varlog/build && $(GO) test ./tests/e2e -tags=long_e2e -v -timeout 30m -failfast -count 1 -p 1"
 
 
 # docker
