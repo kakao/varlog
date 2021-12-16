@@ -67,5 +67,10 @@ deploy/k8s/sbx/kustomization.yaml
 deploy/k8s/pm/kustomization.yaml
 deploy/k8s/e2e/kustomization.yaml
 
+deploy/k8s-experiment/dev/kustomization.yaml
+deploy/k8s-experiment/sbx/kustomization.yaml
+deploy/k8s-experiment/pm/kustomization.yaml
+deploy/k8s-experiment/e2e/kustomization.yaml
+
 # temporary files
 build/reports/test_output.txt

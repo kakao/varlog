@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Added `CHANGELOG.md`. (#VARLOG-631/#548)
+- Added `mrtool` to retrieve metadata of MR without VMS. (#VARLOG-612/#546)
+- Added a new k8s manifests - `deploy/k8s-experiment` that changes MR from DaemonSet to StatefulSet. (#VARLOG-612/#546)
+- Added a new MR launcher - `bin/start_varlogmr.py` that uses `mrtool`. (#VARLOG-612/#546)
 
 ### Removed
 - Remove unnecessary file `TOPIC`. (#VARLOG-631/#548)
