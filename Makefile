@@ -30,13 +30,14 @@ VARLOGCTL := $(BIN_DIR)/varlogctl
 VSN := $(BIN_DIR)/vsn
 VMR := $(BIN_DIR)/vmr
 SNTOOL := $(BIN_DIR)/sntool
+MRTOOL := $(BIN_DIR)/mrtool
 RPC_TEST_SERVER := $(BIN_DIR)/rpc_test_server
 BENCHMARK := $(BIN_DIR)/benchmark
 RPCBENCH_SERVER := $(BIN_DIR)/rpcbench_server 
 RPCBENCH_CLIENT := $(BIN_DIR)/rpcbench_client
 
-.PHONY: build vms varlogctl vsn vmr sntool rpc_test_server benchmark rpcbench
-build: vms varlogctl vsn vmr sntool rpc_test_server benchmark rpcbench
+.PHONY: build vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark rpcbench
+build: vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark rpcbench
 vms:
 	$(GO) build $(GCFLAGS) -o $(VMS) cmd/vms/main.go
 varlogctl:
@@ -47,6 +48,8 @@ vmr:
 	$(GO) build $(GCFLAGS) -o $(VMR) cmd/metadata_repository/main.go
 sntool:
 	$(GO) build $(GCFLAGS) -o $(SNTOOL) cmd/sntool/sntool.go
+mrtool:
+	$(GO) build $(GCFLAGS) -o $(MRTOOL) $(CURDIR)/cmd/mrtool
 rpc_test_server:
 	$(GO) build -tags rpc_e2e $(GCFLAGS) -o $(RPC_TEST_SERVER) cmd/rpc_test_server/main.go
 benchmark:
@@ -233,7 +236,7 @@ clean:
 	$(RM) $(TEST_OUTPUT) $(TEST_REPORT)
 	$(RM) $(COVERAGE_OUTPUT_TMP) $(COVERAGE_OUTPUT) $(COVERAGE_REPORT)
 	$(RM) $(BENCH_OUTPUT) $(BENCH_REPORT)
-	$(RM) $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH_SERVER) $(RPCBENCH_CLIENT)
+	$(RM) $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(MRTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH_SERVER) $(RPCBENCH_CLIENT)
 
 clean_mock:
 	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.daumkakao.com/varlog/varlog/##),$(RM) -f $(path)/*_mock.go;)

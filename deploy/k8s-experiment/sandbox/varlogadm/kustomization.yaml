@@ -1,0 +1,10 @@
+images:
+  - name: busybox
+    newName: mdock.daumkakao.io/busybox
+    newTag: stable
+  - name: idock.daumkakao.io/varlog/all-in-one
+    newName: idock.daumkakao.io/varlog/all-in-one
+    newTag: varlog-612-0fe51065689a47d802acfabcb310e65fc4655983
+
+resources:
+  - ../../base/varlogadm

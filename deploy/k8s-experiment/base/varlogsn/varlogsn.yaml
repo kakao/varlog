@@ -1,0 +1,95 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: varlogsn
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: sn
+    app.kubernetes.io/part-of: varlog
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: varlog
+      app.kubernetes.io/component: sn
+      app.kubernetes.io/part-of: varlog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: varlog
+        app.kubernetes.io/component: sn
+        app.kubernetes.io/part-of: varlog
+    spec:
+      volumes:
+        - name: varlog-sn-data
+          hostPath:
+            path: /varlog/sn
+            type: DirectoryOrCreate
+      initContainers:
+        - name: init-admin
+          image: idock.daumkakao.io/varlog/all-in-one:latest
+          command:
+            - "sh"
+            - "-c"
+            - "until /varlog/tools/grpc_health_probe -addr=${VARLOGADM_RPC_SERVICE_HOST}:${VARLOGADM_RPC_SERVICE_PORT}; do echo waiting for admin; sleep 2; done"
+        - name: volume-perm
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "chmod -R 777 /varlog/sn"
+          volumeMounts:
+            - name: varlog-sn-data
+              mountPath: /varlog/sn
+          imagePullPolicy: IfNotPresent
+      containers:
+        - name: varlog-sn
+          image: idock.daumkakao.io/varlog/all-in-one:latest
+          command:
+            - "python3"
+            - "/varlog/bin/vsn.py"
+          ports:
+            - name: rpc
+              containerPort: 9091
+          env:
+            - name: TZ
+              value: Asia/Seoul
+            - name: VMS_ADDRESS
+              value: "$(VARLOGADM_RPC_SERVICE_HOST):$(VARLOGADM_RPC_SERVICE_PORT)"
+            - name: VOLUMES
+              value: /varlog/sn
+            - name: TELEMETRY
+              value: "localhost:4317"
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          volumeMounts:
+            - name: varlog-sn-data
+              mountPath: /varlog/sn
+          readinessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "/varlog/tools/grpc_health_probe -addr=${HOST_IP}:9091"
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "/varlog/tools/grpc_health_probe -addr=${HOST_IP}:9091"
+            periodSeconds: 10
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        dkosv3.9rum.cc/node-group: varlog-sn
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1

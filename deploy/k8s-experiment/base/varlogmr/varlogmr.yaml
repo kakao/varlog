@@ -1,0 +1,129 @@
+#---
+#kind: Service
+#apiVersion: v1
+#metadata:
+#  name: varlog-mr-rpc-svc
+#  namespace: default
+#spec:
+#  clusterIP: None
+#  selector:
+#    app: varlog-mr
+#  ports:
+#    - name: rpc
+#      port: 9092
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: varlogmr-rpc
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: mr
+    app.kubernetes.io/part-of: varlog
+spec:
+  selector:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: mr
+    app.kubernetes.io/part-of: varlog
+  ports:
+    - name: rpc
+      port: 9092
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: varlogmr
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: mr
+    app.kubernetes.io/part-of: varlog
+spec:
+  serviceName: varlogmr-rpc
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: varlog
+      app.kubernetes.io/component: mr
+      app.kubernetes.io/part-of: varlog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: varlog
+        app.kubernetes.io/component: mr
+        app.kubernetes.io/part-of: varlog
+    spec:
+      volumes:
+        - name: varlog-mr-home
+          hostPath:
+            path: /varlog/mr
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-perm
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "chmod -R 777 /varlog/mr"
+          volumeMounts:
+            - name: varlog-mr-home
+              mountPath: /varlog/mr
+      containers:
+        - name: varlog-mr
+          image: idock.daumkakao.io/varlog/all-in-one:latest
+          command:
+            - "python3"
+            - "/varlog/bin/start_varlogmr.py"
+          ports:
+            - name: rpc
+              containerPort: 9092
+          env:
+            - name: TZ
+              value: Asia/Seoul
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: VMS_ADDRESS
+              value: "$(VARLOGADM_RPC_SERVICE_HOST):$(VARLOGADM_RPC_SERVICE_PORT)"
+            - name: ADMIN_ADDRESS
+              value: "$(VARLOGADM_RPC_SERVICE_HOST):$(VARLOGADM_RPC_SERVICE_PORT)"
+            - name: RAFT_ADDRESS
+              value: "http://$(HOST_IP):10000"
+            - name: RPC_ADDRESS
+              value: "$(HOST_IP):9092"
+            - name: SEED_ADDRESS
+              value: "$(VARLOGMR_RPC_SERVICE_HOST):$(VARLOGMR_RPC_SERVICE_PORT)"
+            - name: VMR_HOME
+              value: /varlog/mr
+            - name: COLLECTOR_NAME
+              value: "otel"
+            - name: COLLECTOR_ENDPOINT
+              value: "localhost:4317"
+            - name: REPLICATION_FACTOR
+              value: "3"
+          volumeMounts:
+            - name: varlog-mr-home
+              mountPath: /varlog/mr
+          readinessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "/varlog/tools/grpc_health_probe -addr=${HOST_IP}:9092"
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "/varlog/tools/grpc_health_probe -addr=${HOST_IP}:9092"
+            periodSeconds: 10
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        dkosv3.9rum.cc/node-group: varlog-mr

@@ -1,0 +1,46 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: varlogsn
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: sn
+    app.kubernetes.io/part-of: varlog
+spec:
+  template:
+    spec:
+      volumes:
+        - name: varlog-sn-data
+          hostPath:
+            path: /varlog/sn
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-perm
+          command:
+            - "sh"
+            - "-c"
+            - "chmod -R 777 /varlog/sn"
+          volumeMounts:
+            - name: varlog-sn-data
+              mountPath: /varlog/sn
+      containers:
+        - name: varlog-sn
+          resources:
+            limits:
+              cpu: 4000m
+              memory: 4000Mi
+            requests:
+              cpu: 4000m
+              memory: 4000Mi
+          env:
+            - name: VOLUMES
+              value: "/varlog/sn"
+            - name: LOG_DIR
+              value: "/varlog/sn/log"
+            - name: LOGTOSTDERR
+              value: "true"
+          volumeMounts:
+            - name: varlog-sn-data
+              mountPath: /varlog/sn

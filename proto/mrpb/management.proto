@@ -62,19 +62,21 @@ message ClusterInfo {
   uint32 cluster_id = 1 [
     (gogoproto.casttype) =
         "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
-    (gogoproto.customname) = "ClusterID"
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.jsontag) = "clusterId"
   ];
 
   uint64 node_id = 2 [
     (gogoproto.casttype) =
         "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
-    (gogoproto.customname) = "NodeID"
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.jsontag) = "nodeId"
   ];
 
   uint64 leader = 3 [(gogoproto.casttype) =
                          "github.daumkakao.com/varlog/varlog/pkg/types.NodeID"];
 
-  int32 replication_factor = 4;
+  int32 replication_factor = 4 [(gogoproto.jsontag) = "replicationFactor"];
 
   map<uint64, Member> members = 5
       [(gogoproto.castkey) =
@@ -83,7 +85,7 @@ message ClusterInfo {
   // applied_index is the AppliedIndex of RAFT that is updated by changing
   // configuration of members. For example, AddPeer and RemovePeer result in
   // increasing applied_index.
-  uint64 applied_index = 6;
+  uint64 applied_index = 6 [(gogoproto.jsontag) = "appliedIndex"];
 }
 
 message GetClusterInfoResponse {
