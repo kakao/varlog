@@ -41,8 +41,17 @@ func NewSequentialLogStreamIDGenerator(ctx context.Context, cmView ClusterMetada
 		cmView: cmView,
 		snMgr:  snMgr,
 	}
-	if err := gen.Refresh(ctx); err != nil {
+
+	md, err := cmView.ClusterMetadata(ctx)
+	if err != nil {
 		return nil, err
+	}
+
+	gen.seq = types.LogStreamID(0)
+	for _, lsd := range md.LogStreams {
+		if gen.seq < lsd.LogStreamID {
+			gen.seq = lsd.LogStreamID
+		}
 	}
 	return gen, nil
 }
