@@ -90,6 +90,19 @@ func (s *clusterManagerService) Topics(ctx context.Context, req *vmspb.TopicsReq
 	return rspI.(*vmspb.TopicsResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
 }
 
+func (s *clusterManagerService) DescribeTopic(ctx context.Context, req *vmspb.DescribeTopicRequest) (*vmspb.DescribeTopicResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/DescribeTopic", req,
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			td, lsds, err := s.clusManager.DescribeTopic(ctx, req.TopicID)
+			return &vmspb.DescribeTopicResponse{
+				Topic:      td,
+				LogStreams: lsds,
+			}, err
+		},
+	)
+	return rspI.(*vmspb.DescribeTopicResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
+}
+
 func (s *clusterManagerService) UnregisterTopic(ctx context.Context, req *vmspb.UnregisterTopicRequest) (*vmspb.UnregisterTopicResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/UnregisterTopic", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {

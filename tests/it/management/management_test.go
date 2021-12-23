@@ -188,11 +188,46 @@ func TestSealUnseal(t *testing.T) {
 	topicID := clus.TopicIDs()[0]
 	lsID := clus.LogStreamIDs(topicID)[0]
 
-	_, err := clus.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
+	rsp, err := clus.GetVMSClient(t).DescribeTopic(context.Background(), topicID)
 	require.NoError(t, err)
+	require.Equal(t, topicID, rsp.Topic.TopicID)
+	require.Len(t, rsp.Topic.LogStreams, 1)
+	require.Len(t, rsp.LogStreams, 1)
+	require.Equal(t, topicID, rsp.LogStreams[0].TopicID)
+	require.Equal(t, rsp.Topic.LogStreams[0], rsp.LogStreams[0].LogStreamID)
+	require.Equal(t, varlogpb.LogStreamStatusRunning, rsp.LogStreams[0].Status)
+
+	_, err = clus.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
+	require.NoError(t, err)
+
+	// FIXME: The status of the log stream should be changed to be sealed instantly rather than
+	// waiting for it.
+	// We expect that calling Seal RPC must change the status of the log stream to be sealed.
+	// However, the RPC does not work as our expectation. Here, we wait for the log stream to be
+	// sealed for some time.
+	require.Eventually(t, func() bool {
+		rsp, err = clus.GetVMSClient(t).DescribeTopic(context.Background(), topicID)
+		require.NoError(t, err)
+		require.Equal(t, topicID, rsp.Topic.TopicID)
+		require.Len(t, rsp.Topic.LogStreams, 1)
+		require.Len(t, rsp.LogStreams, 1)
+		require.Equal(t, topicID, rsp.LogStreams[0].TopicID)
+		require.Equal(t, rsp.Topic.LogStreams[0], rsp.LogStreams[0].LogStreamID)
+		require.Equal(t, lsID, rsp.LogStreams[0].LogStreamID)
+		return rsp.LogStreams[0].Status == varlogpb.LogStreamStatusSealed
+	}, 3*time.Second, 100*time.Millisecond)
 
 	_, err = clus.GetVMSClient(t).Unseal(context.Background(), topicID, lsID)
 	require.NoError(t, err)
+
+	rsp, err = clus.GetVMSClient(t).DescribeTopic(context.Background(), topicID)
+	require.NoError(t, err)
+	require.Equal(t, topicID, rsp.Topic.TopicID)
+	require.Len(t, rsp.Topic.LogStreams, 1)
+	require.Len(t, rsp.LogStreams, 1)
+	require.Equal(t, topicID, rsp.LogStreams[0].TopicID)
+	require.Equal(t, rsp.Topic.LogStreams[0], rsp.LogStreams[0].LogStreamID)
+	require.Equal(t, varlogpb.LogStreamStatusRunning, rsp.LogStreams[0].Status)
 }
 
 func TestSyncLogStream(t *testing.T) {
@@ -469,6 +504,17 @@ func TestAddLogStreamTopic(t *testing.T) {
 	Convey("Given Topic", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
 		numLogs := 16
 
+		for _, topicID := range env.TopicIDs() {
+			rsp, err := env.GetVMSClient(t).DescribeTopic(context.Background(), topicID)
+			require.NoError(t, err)
+			require.Equal(t, topicID, rsp.Topic.TopicID)
+			require.Len(t, rsp.Topic.LogStreams, 1)
+			require.Len(t, rsp.LogStreams, 1)
+			require.Equal(t, topicID, rsp.LogStreams[0].TopicID)
+			require.Equal(t, rsp.Topic.LogStreams[0], rsp.LogStreams[0].LogStreamID)
+			require.Equal(t, varlogpb.LogStreamStatusRunning, rsp.LogStreams[0].Status)
+		}
+
 		client := env.ClientAtIndex(t, 0)
 		for _, topicID := range env.TopicIDs() {
 			for i := 0; i < numLogs; i++ {
@@ -485,6 +531,18 @@ func TestAddLogStreamTopic(t *testing.T) {
 			for _, topicID := range env.TopicIDs() {
 				_, err := vmsCL.AddLogStream(context.TODO(), topicID, nil)
 				So(err, ShouldBeNil)
+			}
+
+			for _, topicID := range env.TopicIDs() {
+				rsp, err := env.GetVMSClient(t).DescribeTopic(context.Background(), topicID)
+				require.NoError(t, err)
+				require.Equal(t, topicID, rsp.Topic.TopicID)
+				require.Len(t, rsp.Topic.LogStreams, 2)
+				require.Len(t, rsp.LogStreams, 2)
+				require.Equal(t, topicID, rsp.LogStreams[0].TopicID)
+				require.Equal(t, topicID, rsp.LogStreams[1].TopicID)
+				require.Equal(t, varlogpb.LogStreamStatusRunning, rsp.LogStreams[0].Status)
+				require.Equal(t, varlogpb.LogStreamStatusRunning, rsp.LogStreams[1].Status)
 			}
 
 			Convey("Then it should Appendable", func(ctx C) {

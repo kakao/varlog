@@ -47,6 +47,8 @@ type ClusterManager interface {
 
 	Topics(ctx context.Context) ([]varlogpb.TopicDescriptor, error)
 
+	DescribeTopic(ctx context.Context, topicID types.TopicID) (varlogpb.TopicDescriptor, []varlogpb.LogStreamDescriptor, error)
+
 	UnregisterTopic(ctx context.Context, topicID types.TopicID) error
 
 	AddLogStream(ctx context.Context, topicID types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
@@ -409,6 +411,34 @@ func (cm *clusterManager) Topics(ctx context.Context) ([]varlogpb.TopicDescripto
 		tds[idx] = *md.Topics[idx]
 	}
 	return tds, nil
+}
+
+func (cm *clusterManager) DescribeTopic(ctx context.Context, topicID types.TopicID) (td varlogpb.TopicDescriptor, lsds []varlogpb.LogStreamDescriptor, err error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	md, err := cm.cmView.ClusterMetadata(ctx)
+	if err != nil || len(md.Topics) == 0 {
+		return
+	}
+
+	tdPtr := md.GetTopic(topicID)
+	if tdPtr == nil {
+		err = errors.Wrapf(verrors.ErrNotExist, "no such topic (topicID=%d)", topicID)
+		return
+	}
+	td = *proto.Clone(tdPtr).(*varlogpb.TopicDescriptor)
+	lsds = make([]varlogpb.LogStreamDescriptor, 0, len(td.LogStreams))
+	for _, lsID := range td.LogStreams {
+		lsdPtr := md.GetLogStream(lsID)
+		if lsdPtr == nil {
+			continue
+		}
+		lsd := *proto.Clone(lsdPtr).(*varlogpb.LogStreamDescriptor)
+		lsds = append(lsds, lsd)
+	}
+
+	return td, lsds, nil
 }
 
 func (cm *clusterManager) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {

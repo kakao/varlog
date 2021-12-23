@@ -245,6 +245,20 @@ message RemoveMRPeerRequest {
 
 message RemoveMRPeerResponse {}
 
+message DescribeTopicRequest {
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+}
+
+message DescribeTopicResponse {
+  varlogpb.TopicDescriptor topic = 1 [(gogoproto.nullable) = false];
+  repeated varlogpb.LogStreamDescriptor log_streams = 2
+      [(gogoproto.nullable) = false];
+}
+
 service ClusterManager {
   rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {}
 
@@ -283,4 +297,6 @@ service ClusterManager {
 
   rpc GetStorageNodes(google.protobuf.Empty) returns (GetStorageNodesResponse) {
   }
+
+  rpc DescribeTopic(DescribeTopicRequest) returns (DescribeTopicResponse) {}
 }

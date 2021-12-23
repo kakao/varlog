@@ -113,6 +113,21 @@ func (mr *MockAdminMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockAdmin)(nil).Close))
 }
 
+// DescribeTopic mocks base method.
+func (m *MockAdmin) DescribeTopic(arg0 context.Context, arg1 types.TopicID) (*vmspb.DescribeTopicResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeTopic", arg0, arg1)
+	ret0, _ := ret[0].(*vmspb.DescribeTopicResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTopic indicates an expected call of DescribeTopic.
+func (mr *MockAdminMockRecorder) DescribeTopic(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTopic", reflect.TypeOf((*MockAdmin)(nil).DescribeTopic), arg0, arg1)
+}
+
 // GetMRMembers mocks base method.
 func (m *MockAdmin) GetMRMembers(arg0 context.Context) (*vmspb.GetMRMembersResponse, error) {
 	m.ctrl.T.Helper()

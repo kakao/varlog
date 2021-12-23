@@ -58,6 +58,10 @@ func TestVarlogTest(t *testing.T) {
 		localHWMs          = make(map[types.LogStreamID]types.LLSN, numLogStreams)
 	)
 
+	// No topic 1
+	_, err := adm.DescribeTopic(context.Background(), types.TopicID(1))
+	require.Error(t, err)
+
 	// Add topics
 	for i := 0; i < numTopics; i++ {
 		topicDesc, err := adm.AddTopic(context.Background())
@@ -67,6 +71,11 @@ func TestVarlogTest(t *testing.T) {
 		require.NotContains(t, topicIDs, topicDesc.TopicID)
 		topicIDs = append(topicIDs, topicDesc.TopicID)
 		topicLogStreamsMap[topicDesc.TopicID] = topicDesc.LogStreams
+
+		rsp, err := adm.DescribeTopic(context.Background(), topicDesc.TopicID)
+		require.NoError(t, err)
+		require.Equal(t, topicDesc, rsp.Topic)
+		require.Empty(t, rsp.LogStreams)
 	}
 
 	// Append logs, but no log stream
@@ -110,6 +119,18 @@ func TestVarlogTest(t *testing.T) {
 			snIDSet.Add(replicaDesc.StorageNodeID)
 		}
 		require.Len(t, snIDSet, replicationFactor)
+
+		rsp, err := adm.DescribeTopic(context.Background(), tpID)
+		require.NoError(t, err)
+		require.Contains(t, rsp.Topic.LogStreams, lsDesc.LogStreamID)
+		require.Condition(t, func() bool {
+			for _, lsID := range rsp.Topic.LogStreams {
+				if lsID == lsDesc.LogStreamID {
+					return true
+				}
+			}
+			return false
+		})
 
 		logStreamIDs = append(logStreamIDs, lsDesc.LogStreamID)
 		topicLogStreamsMap[tpID] = append(topicLogStreamsMap[tpID], lsDesc.LogStreamID)
