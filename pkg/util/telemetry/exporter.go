@@ -52,7 +52,6 @@ func newOTLPExporter(ctx context.Context, endpoint string) (*exporter, error) {
 	traceExporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithInsecure(),
 		otlptracegrpc.WithEndpoint(endpoint),
-		otlptracegrpc.WithDialOption(grpc.WithBlock()),
 		otlptracegrpc.WithReconnectionPeriod(defaultReconnectPeriod),
 	)
 	if err != nil {
