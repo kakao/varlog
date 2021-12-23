@@ -29,6 +29,9 @@ type Admin interface {
 	// Topics returns a list of topics.
 	Topics(ctx context.Context) ([]varlogpb.TopicDescriptor, error)
 
+	// DescribeTopic returns detailed metadata of the topic.
+	DescribeTopic(ctx context.Context, topicID types.TopicID) (*vmspb.DescribeTopicResponse, error)
+
 	// UnregisterTopic removes a topic identified by the argument TopicID from the cluster.
 	UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error)
 
@@ -116,6 +119,11 @@ func (c *admin) AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, error) 
 func (c *admin) Topics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
 	rsp, err := c.rpcClient.Topics(ctx, &vmspb.TopicsRequest{})
 	return rsp.GetTopics(), verrors.FromStatusError(err)
+}
+
+func (c *admin) DescribeTopic(ctx context.Context, topicID types.TopicID) (*vmspb.DescribeTopicResponse, error) {
+	rsp, err := c.rpcClient.DescribeTopic(ctx, &vmspb.DescribeTopicRequest{TopicID: topicID})
+	return rsp, verrors.FromStatusError(err)
 }
 
 func (c *admin) UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error) {

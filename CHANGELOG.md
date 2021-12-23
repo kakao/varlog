@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a new MR launcher - `bin/start_varlogmr.py` that uses `mrtool`. (#VARLOG-612/#546)
 - Added per-logstream mutex to `internal/vms.(*clusterManager)` to serialize various RPC methods and the method to check statuses of log streams (`internal/vms.(*clusterManager).checkLogStreamStatus`). (#VARLOG-383/#549)
 - Added a CGO_CFLAGS when building in mac os to Makefile. (#VARLOG-635/#551)
+- Added `DescribeTopic(context.Context, types.TopicID) (*vmspb.DescribeTopicResponse, error)` method to `pkg/varlog.(Admin)` (#VARLOG-632/#550)
+- Added `DescribeTopic` unary RPC to `proto/vmspb` (#VARLOG-632/#550)
 
 ### Removed
 - Remove unnecessary file `TOPIC`. (#VARLOG-631/#548)

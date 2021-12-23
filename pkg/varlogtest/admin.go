@@ -102,6 +102,31 @@ func (c *testAdmin) Topics(ctx context.Context) ([]varlogpb.TopicDescriptor, err
 	return ret, nil
 }
 
+func (c *testAdmin) DescribeTopic(ctx context.Context, topicID types.TopicID) (*vmspb.DescribeTopicResponse, error) {
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	topicDesc, ok := c.vt.topics[topicID]
+	if !ok || topicDesc.Status.Deleted() {
+		return nil, errors.New("no such topic")
+	}
+
+	rsp := &vmspb.DescribeTopicResponse{
+		Topic:      *proto.Clone(&topicDesc).(*varlogpb.TopicDescriptor),
+		LogStreams: make([]varlogpb.LogStreamDescriptor, len(topicDesc.LogStreams)),
+	}
+	for i, lsID := range topicDesc.LogStreams {
+		lsDesc, ok := c.vt.logStreams[lsID]
+		if !ok {
+			panic(errors.Errorf("inconsistency: no logstream %d in topic %d", lsID, topicID))
+		}
+		rsp.LogStreams[i] = *proto.Clone(&lsDesc).(*varlogpb.LogStreamDescriptor)
+	}
+	return rsp, nil
+}
+
 func (c *testAdmin) UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error) {
 	panic("not implemented")
 }
