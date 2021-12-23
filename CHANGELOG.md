@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `DescribeTopic(context.Context, types.TopicID) (*vmspb.DescribeTopicResponse, error)` method to `pkg/varlog.(Admin)` (#VARLOG-632/#550)
 - Added `DescribeTopic` unary RPC to `proto/vmspb` (#VARLOG-632/#550)
 
+### Changed
+- Use the non-blocking dial option to connect OpenTelemetry agent via OTLP. (#VARLOG-637/#552)
+
 ### Removed
 - Remove unnecessary file `TOPIC`. (#VARLOG-631/#548)
 
