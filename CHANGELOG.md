@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `mrtool` to retrieve metadata of MR without VMS. (#VARLOG-612/#546)
 - Added a new k8s manifests - `deploy/k8s-experiment` that changes MR from DaemonSet to StatefulSet. (#VARLOG-612/#546)
 - Added a new MR launcher - `bin/start_varlogmr.py` that uses `mrtool`. (#VARLOG-612/#546)
+- Added per-logstream mutex to `internal/vms.(*clusterManager)` to serialize various RPC methods and the method to check statuses of log streams (`internal/vms.(*clusterManager).checkLogStreamStatus`). (#VARLOG-383/#549)
+- Added a CGO_CFLAGS when building in mac os to Makefile. (#VARLOG-635/#551)
 
 ### Removed
 - Remove unnecessary file `TOPIC`. (#VARLOG-631/#548)
