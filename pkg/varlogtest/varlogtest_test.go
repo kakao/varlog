@@ -266,9 +266,13 @@ func TestVarlogTest(t *testing.T) {
 		for _, lsID := range lsIDs {
 			var sub varlog.Subscriber
 			sub = vlg.SubscribeTo(context.Background(), tpID, lsID, types.MinLLSN+1, types.MinLLSN)
+			_, err := sub.Next()
+			require.Error(t, err)
 			require.Error(t, sub.Close())
 
 			sub = vlg.SubscribeTo(context.Background(), tpID, lsID, types.InvalidLLSN, types.MinLLSN)
+			_, err = sub.Next()
+			require.Error(t, err)
 			require.Error(t, sub.Close())
 		}
 	}

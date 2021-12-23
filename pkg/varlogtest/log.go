@@ -196,46 +196,38 @@ func (c *testLog) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 }
 
 func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...varlog.SubscribeOption) varlog.Subscriber {
-	s := &subscriberImpl{
-		quit: make(chan struct{}),
-	}
-
 	if begin >= end {
-		s.err = errors.New("invalid range: begin should be greater than end")
-		return s
+		return newErrSubscriber(errors.New("invalid range: begin should be greater than end"))
 	}
 
 	if begin.Invalid() || end.Invalid() {
-		s.err = errors.New("invalid range: invalid LLSN")
-		return s
+		return newErrSubscriber(errors.New("invalid range: invalid LLSN"))
 	}
 
 	if err := c.lock(); err != nil {
-		s.err = verrors.ErrClosed
-		return s
+		return newErrSubscriber(errors.WithStack(verrors.ErrClosed))
 	}
 	defer c.unlock()
 
 	td, err := c.vt.topicDescriptor(topicID)
 	if err != nil {
-		s.err = err
-		return s
+		return newErrSubscriber(err)
 	}
 
 	if !td.HasLogStream(logStreamID) {
-		s.err = errors.New("no such log stream")
-		return s
+		return newErrSubscriber(errors.New("no such log stream"))
 	}
 
 	_, ok := c.vt.localLogEntries[logStreamID]
 	if !ok {
-		s.err = errors.New("no such log stream")
-		return s
+		return newErrSubscriber(errors.New("no such log stream"))
 	}
 
-	s.end = end
-	s.cursor = begin
-	s.quit = make(chan struct{})
+	s := &subscriberImpl{
+		quit:   make(chan struct{}),
+		end:    end,
+		cursor: begin,
+	}
 	s.contextError = func() error {
 		return ctx.Err()
 	}
@@ -295,6 +287,22 @@ func (c *testLog) LogStreamMetadata(_ context.Context, topicID types.TopicID, lo
 	logStreamDesc.Head = head
 	logStreamDesc.Tail = tail
 	return logStreamDesc, nil
+}
+
+type errSubscriber struct {
+	err error
+}
+
+func newErrSubscriber(err error) *errSubscriber {
+	return &errSubscriber{err: err}
+}
+
+func (s errSubscriber) Next() (varlogpb.LogEntry, error) {
+	return varlogpb.InvalidLogEntry(), s.err
+}
+
+func (s errSubscriber) Close() error {
+	return s.err
 }
 
 type subscriberImpl struct {
