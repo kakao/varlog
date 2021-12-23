@@ -9,6 +9,10 @@ PKGS := $(shell $(GO) list ./... | \
 	egrep -v "github.com/kakao/varlog/tools" | \
 	sed -e "s;github.com/kakao/varlog/;;")
 
+ifneq ($(shell echo $$OSTYPE | egrep "darwin"),)
+	export CGO_CFLAGS=-Wno-undef-prefix
+endif
+
 DOCKER_REPOS := ***REMOVED***
 
 
