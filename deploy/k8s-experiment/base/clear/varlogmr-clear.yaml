@@ -1,0 +1,58 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: varlogmr-clear
+  namespace: default
+  labels:
+    app: varlogmr-clear
+    name: varlogmr-clear
+spec:
+  selector:
+    matchLabels:
+      name: varlogmr-clear
+  template:
+    metadata:
+      labels:
+        app: varlogmr-clear
+        name: varlogmr-clear
+    spec:
+      volumes:
+        - name: varlogmr-data
+          hostPath:
+            path: /varlog/mr
+            type: DirectoryOrCreate
+      initContainers:
+        - name: check-varlogmr
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "echo"
+            - "wait for that all varlogmr are killed"
+        - name: rm-varlogmr-data
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "rm -rf /varlog/mr/raftdata"
+          volumeMounts:
+            - name: varlogmr-data
+              mountPath: /varlog/mr
+      containers:
+        - name: varlogmr-clear
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "[ ! -d /varlog/mr/raftdata ] && echo /varlog/mr/raftdata is clean"
+          volumeMounts:
+            - name: varlogmr-data
+              mountPath: /varlog/mr
+          imagePullPolicy: IfNotPresent
+      terminationGracePeriodSeconds: 1
+      nodeSelector:
+        dkosv3.9rum.cc/node-group: varlogmr
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 10
+  revisionHistoryLimit: 10

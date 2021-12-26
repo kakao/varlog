@@ -1,5 +1,5 @@
 import logging
-import os
+
 
 def get_logger(name):
     log_formatter = logging.Formatter(

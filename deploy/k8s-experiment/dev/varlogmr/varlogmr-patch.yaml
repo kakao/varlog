@@ -1,0 +1,22 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: varlogmr
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: varlogmr
+    app.kubernetes.io/part-of: varlog
+spec:
+  template:
+    spec:
+      containers:
+        - name: varlogmr
+          resources:
+            limits:
+              cpu: 4000m
+              memory: 4Gi
+            requests:
+              cpu: 4000m
+              memory: 4Gi

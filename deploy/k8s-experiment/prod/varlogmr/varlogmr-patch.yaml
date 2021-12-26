@@ -1,0 +1,52 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: varlogmr
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: varlogmr
+    app.kubernetes.io/part-of: varlog
+spec:
+  template:
+    spec:
+      volumes:
+        - name: varlogmr-data
+          hostPath:
+            path: /data1/varlog/mr
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-perm
+          command:
+            - "sh"
+            - "-c"
+            - "chmod -R 777 /data1/varlog/mr"
+          volumeMounts:
+            - name: varlogmr-data
+              mountPath: /data1/varlog/mr
+      containers:
+        - name: varlogmr
+          command:
+            - "python3"
+          args:
+            - "/varlog/bin/start_varlogmr.py"
+            - "--cluster-id=$(CLUSTER_ID)"
+            - "--raft-address=http://$(HOST_IP):10000"
+            - "--listen=$(HOST_IP):9092"
+            - "--seed=$(VARLOGMR_RPC_SERVICE_HOST):$(VARLOGMR_RPC_SERVICE_PORT)"
+            - "--admin=$(VARLOGADM_RPC_SERVICE_HOST):$(VARLOGADM_RPC_SERVICE_PORT)"
+            - "--replication-factor=$(REPLICATION_FACTOR)"
+            - "--raft-dir=/data1/varlog/mr/raftdata"
+            - "--log-dir=/data1/varlog/mr/logs"
+            - "--retry-interval-seconds=10"
+          resources:
+            limits:
+              cpu: 16000m
+              memory: 32Gi
+            requests:
+              cpu: 16000m
+              memory: 32Gi
+          volumeMounts:
+            - name: varlogmr-data
+              mountPath: /data1/varlog/mr

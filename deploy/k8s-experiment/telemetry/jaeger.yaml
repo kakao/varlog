@@ -1,0 +1,72 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-ui
+  namespace: default
+spec:
+  selector:
+    app: jaeger
+  ports:
+    - name: ui
+      port: 16686
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-collector
+  namespace: default
+spec:
+  selector:
+    app: jaeger
+  ports:
+    - name: collector
+      port: 14250
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-ui-vip
+  namespace: ingress-nginx
+  annotations:
+    service.beta.kubernetes.io/openstack-internal-load-balancer: "true"
+spec:
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+  type: LoadBalancer
+  ports:
+    - name: jaeger-ui
+      port: 16686
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: default
+  labels:
+    app: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/all-in-one:latest
+          ports:
+            - name: collector
+              containerPort: 14250
+            - name: ui
+              containerPort: 16686
+          readinessProbe:
+            tcpSocket:
+              port: 14250
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        dkosv3.9rum.cc/node-group: telemetry
