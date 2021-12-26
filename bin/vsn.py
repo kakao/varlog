@@ -1,10 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import grp
 import json
 import os
-import pwd
 import shutil
 import socket
 import subprocess

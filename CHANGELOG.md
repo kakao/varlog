@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a CGO_CFLAGS when building in mac os to Makefile. (#VARLOG-635/#551)
 - Added `DescribeTopic(context.Context, types.TopicID) (*vmspb.DescribeTopicResponse, error)` method to `pkg/varlog.(Admin)` (#VARLOG-632/#550)
 - Added `DescribeTopic` unary RPC to `proto/vmspb` (#VARLOG-632/#550)
+- Added arguments to python scripts that start metadata repository, storage node, and admin servers. (#VARLOG-638/#554)
 
 ### Changed
 - Use the non-blocking dial option to connect OpenTelemetry agent via OTLP. (#VARLOG-637/#552)
