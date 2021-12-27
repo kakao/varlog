@@ -37,9 +37,10 @@ SNTOOL := $(BIN_DIR)/sntool
 MRTOOL := $(BIN_DIR)/mrtool
 RPC_TEST_SERVER := $(BIN_DIR)/rpc_test_server
 BENCHMARK := $(BIN_DIR)/benchmark
+VARLOGCLI := $(BIN_DIR)/varlogcli
 
-.PHONY: build vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark
-build: vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark
+.PHONY: build vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark varlogcli
+build: vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark varlogcli
 vms:
 	$(GO) build $(GCFLAGS) -o $(VMS) cmd/vms/main.go
 varlogctl:
@@ -56,6 +57,8 @@ rpc_test_server:
 	$(GO) build -tags rpc_e2e $(GCFLAGS) -o $(RPC_TEST_SERVER) cmd/rpc_test_server/main.go
 benchmark:
 	$(GO) build $(GCFLAGS) -o $(BENCHMARK) cmd/benchmark/main.go
+varlogcli:
+	$(GO) build $(GCFLAGS) -o $(VARLOGCLI) $(CURDIR)/cmd/varlogcli
 
 
 # testing
@@ -235,7 +238,7 @@ clean:
 	$(RM) $(TEST_OUTPUT) $(TEST_REPORT)
 	$(RM) $(COVERAGE_OUTPUT_TMP) $(COVERAGE_OUTPUT) $(COVERAGE_REPORT)
 	$(RM) $(BENCH_OUTPUT) $(BENCH_REPORT)
-	$(RM) $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(MRTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH_SERVER) $(RPCBENCH_CLIENT)
+	$(RM) $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(MRTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH_SERVER) $(RPCBENCH_CLIENT) $(VARLOGCLI)
 
 clean_mock:
 	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.com/kakao/varlog/##),$(RM) -f $(path)/*_mock.go;)
