@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Use the non-blocking dial option to connect OpenTelemetry agent via OTLP. (#VARLOG-637/#552)
 - Initialize log stream id generator without refreshing which calls RPC to storage nodes. (#VARLOG-634/#553)
+- Bump `github.com/open-telemetry/opentelemetry-go` from v1.0.0/v0.23.0 to v1.3.0/v0.27.0 (#VARLOG-643/#556)
 
 ### Removed
 - Remove unnecessary file `TOPIC`. (#VARLOG-631/#548)

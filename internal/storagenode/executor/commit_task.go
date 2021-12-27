@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 )
 
@@ -47,19 +48,19 @@ func (t *commitTask) stale(ver types.Version) bool {
 	return t.version <= ver
 }
 
-func (t *commitTask) annotate(ctx context.Context, m MeasurableExecutor, discarded bool) {
+func (t *commitTask) annotate(ctx context.Context, metrics *telemetry.Metrics, discarded bool) {
 	if t.createdTime.IsZero() || t.poppedTime.IsZero() || !t.poppedTime.After(t.createdTime) {
 		return
 	}
 
 	// queue latency
 	ms := float64(t.poppedTime.Sub(t.createdTime).Microseconds()) / 1000.0
-	m.Stub().Metrics().ExecutorCommitQueueTime.Record(ctx, ms)
+	metrics.ExecutorCommitQueueTime.Record(ctx, ms)
 
 	if t.processingTime.IsZero() || !t.processingTime.After(t.poppedTime) {
 		return
 	}
 	// processing time
 	ms = float64(t.processingTime.Sub(t.poppedTime).Microseconds()) / 1000.0
-	m.Stub().Metrics().ExecutorCommitTime.Record(ctx, ms)
+	metrics.ExecutorCommitTime.Record(ctx, ms)
 }

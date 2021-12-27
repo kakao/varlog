@@ -18,6 +18,7 @@ import (
 
 	"github.com/kakao/varlog/internal/storagenode/id"
 	"github.com/kakao/varlog/internal/storagenode/replication"
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
@@ -37,10 +38,10 @@ func TestReplicationProcessorFailure(t *testing.T) {
 	_, err := newReplicator(replicatorConfig{
 		queueSize: 0,
 		state:     state,
-		me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+		metrics:   telemetry.NewMetrics(),
 		connectorOpts: []replication.ConnectorOption{
 			replication.WithClientOptions(
-				replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+				replication.WithMetrics(telemetry.NewMetrics()),
 			),
 		},
 	})
@@ -50,10 +51,10 @@ func TestReplicationProcessorFailure(t *testing.T) {
 	_, err = newReplicator(replicatorConfig{
 		queueSize: 1,
 		state:     nil,
-		me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+		metrics:   telemetry.NewMetrics(),
 		connectorOpts: []replication.ConnectorOption{
 			replication.WithClientOptions(
-				replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+				replication.WithMetrics(telemetry.NewMetrics()),
 			),
 		},
 	})
@@ -83,10 +84,10 @@ func TestReplicationProcessorNoClient(t *testing.T) {
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: queueSize,
 		state:     state,
-		me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+		metrics:   telemetry.NewMetrics(),
 		connectorOpts: []replication.ConnectorOption{
 			replication.WithClientOptions(
-				replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+				replication.WithMetrics(telemetry.NewMetrics()),
 			),
 		},
 	})
@@ -162,10 +163,10 @@ func TestReplicationProcessor(t *testing.T) {
 		rp, err := newReplicator(replicatorConfig{
 			queueSize: queueSize,
 			state:     state,
-			me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+			metrics:   telemetry.NewMetrics(),
 			connectorOpts: []replication.ConnectorOption{
 				replication.WithClientOptions(
-					replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+					replication.WithMetrics(telemetry.NewMetrics()),
 				),
 			},
 		})
@@ -272,7 +273,7 @@ func TestReplicatorResetConnector(t *testing.T) {
 	server := replication.NewServer(
 		replication.WithStorageNodeIDGetter(snidGetter),
 		replication.WithLogReplicatorGetter(replicatorGetter),
-		replication.WithMeasurable(NewTestMeasurable(ctrl)),
+		replication.WithMetrics(telemetry.NewMetrics()),
 	)
 
 	grpcServer := grpc.NewServer()
@@ -294,10 +295,10 @@ func TestReplicatorResetConnector(t *testing.T) {
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: queueSize,
 		state:     state,
-		me:        NewTestMeasurableExecutor(ctrl, 1, 1),
+		metrics:   telemetry.NewMetrics(),
 		connectorOpts: []replication.ConnectorOption{
 			replication.WithClientOptions(
-				replication.WithMeasurable(NewTestMeasurableExecutor(ctrl, 1, 1)),
+				replication.WithMetrics(telemetry.NewMetrics()),
 			),
 		},
 	})

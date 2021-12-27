@@ -2,10 +2,11 @@ package telemetry
 
 import (
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/metric/unit"
 )
 
-type MetricsBag struct {
+type Metrics struct {
 	RPCServerAppendDuration    metric.Float64Histogram
 	RPCServerReplicateDuration metric.Float64Histogram
 
@@ -31,86 +32,146 @@ type MetricsBag struct {
 	ExecutorReplicateFanoutTime             metric.Float64Histogram
 }
 
-func newMetricsBag(ts *Stub) *MetricsBag {
-	meter := metric.Must(ts.mt)
-	return &MetricsBag{
-		RPCServerAppendDuration: meter.NewFloat64Histogram(
-			"rpc.server.append.duration",
-			metric.WithUnit(unit.Milliseconds),
-		),
-		RPCServerReplicateDuration: meter.NewFloat64Histogram(
-			"rpc.server.replicate.duration",
-			metric.WithUnit(unit.Milliseconds),
-		),
-
-		ExecutorWriteQueueTime: meter.NewFloat64Histogram(
-			"executor.write_queue.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-		ExecutorWriteQueueTasks: meter.NewInt64Histogram(
-			"executor.write_queue.tasks",
-			metric.WithUnit(unit.Dimensionless),
-		),
-		ExecutorWriteTime: meter.NewFloat64Histogram(
-			"executor.write.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-
-		ExecutorCommitQueueTime: meter.NewFloat64Histogram(
-			"executor.commit_queue.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-		ExecutorCommitQueueTasks: meter.NewInt64Histogram(
-			"executor.commit_queue.tasks",
-			metric.WithUnit(unit.Dimensionless),
-		),
-		ExecutorCommitTime: meter.NewFloat64Histogram(
-			"executor.commit.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-
-		ExecutorCommitWaitQueueTime: meter.NewFloat64Histogram(
-			"executor.commit_wait_queue.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-		ExecutorCommitWaitQueueTasks: meter.NewInt64Histogram(
-			"executor.commit_wait_queue.tasks",
-			metric.WithUnit(unit.Dimensionless),
-		),
-
-		ExecutorReplicateQueueTime: meter.NewFloat64Histogram(
-			"executor.replicate_queue.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-		ExecutorReplicateTime: meter.NewFloat64Histogram(
-			"executor.replicate.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-		/*
-			ExecutorReplicateRequestPropagationTime: meter.NewFloat64Histogram(
-				"sn.executor.replicate.request.propagation.time",
-				metric.WithUnit(unit.Milliseconds),
-			),
-			ExecutorReplicateResponsePropagationTime: meter.NewFloat64Histogram(
-				"sn.executor.replicate.response.propagation.time",
-				metric.WithUnit(unit.Milliseconds),
-			),
-		*/
-		ExecutorReplicateConnectionGetTime: meter.NewFloat64Histogram(
-			"sn.executor.replicate.connection.get.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-		ExecutorReplicateRequestPrepareTime: meter.NewFloat64Histogram(
-			"sn.executor.replicate.request.prepare.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-		ExecutorReplicateClientRequestQueueTime: meter.NewFloat64Histogram(
-			"sn.executor.replicate.client.request_queue.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
-		ExecutorReplicateFanoutTime: meter.NewFloat64Histogram(
-			"sn.executor.replicate.fanout.time",
-			metric.WithUnit(unit.Milliseconds),
-		),
+func NewMetrics() *Metrics {
+	meter := global.Meter("varlog.sn")
+	metrics := &Metrics{}
+	var err error
+	metrics.RPCServerAppendDuration, err = meter.NewFloat64Histogram(
+		"rpc.server.append.duration",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
 	}
+
+	metrics.RPCServerReplicateDuration, err = meter.NewFloat64Histogram(
+		"rpc.server.replicate.duration",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorWriteQueueTime, err = meter.NewFloat64Histogram(
+		"executor.write_queue.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorWriteQueueTasks, err = meter.NewInt64Histogram(
+		"executor.write_queue.tasks",
+		metric.WithUnit(unit.Dimensionless),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorWriteTime, err = meter.NewFloat64Histogram(
+		"executor.write.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorCommitQueueTime, err = meter.NewFloat64Histogram(
+		"executor.commit_queue.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorCommitQueueTasks, err = meter.NewInt64Histogram(
+		"executor.commit_queue.tasks",
+		metric.WithUnit(unit.Dimensionless),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorCommitTime, err = meter.NewFloat64Histogram(
+		"executor.commit.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorCommitWaitQueueTime, err = meter.NewFloat64Histogram(
+		"executor.commit_wait_queue.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorCommitWaitQueueTasks, err = meter.NewInt64Histogram(
+		"executor.commit_wait_queue.tasks",
+		metric.WithUnit(unit.Dimensionless),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorReplicateQueueTime, err = meter.NewFloat64Histogram(
+		"executor.replicate_queue.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorReplicateTime, err = meter.NewFloat64Histogram(
+		"executor.replicate.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+	/*
+		ExecutorReplicateRequestPropagationTime: meter.NewFloat64Histogram(
+			"sn.executor.replicate.request.propagation.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+		ExecutorReplicateResponsePropagationTime: meter.NewFloat64Histogram(
+			"sn.executor.replicate.response.propagation.time",
+			metric.WithUnit(unit.Milliseconds),
+		),
+	*/
+	metrics.ExecutorReplicateConnectionGetTime, err = meter.NewFloat64Histogram(
+		"sn.executor.replicate.connection.get.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorReplicateRequestPrepareTime, err = meter.NewFloat64Histogram(
+		"sn.executor.replicate.request.prepare.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorReplicateClientRequestQueueTime, err = meter.NewFloat64Histogram(
+		"sn.executor.replicate.client.request_queue.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ExecutorReplicateFanoutTime, err = meter.NewFloat64Histogram(
+		"sn.executor.replicate.fanout.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	return metrics
 }

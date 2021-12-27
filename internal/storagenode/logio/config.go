@@ -12,7 +12,7 @@ import (
 type config struct {
 	storageNodeIDGetter id.StorageNodeIDGetter
 	readWriterGetter    Getter
-	measurable          telemetry.Measurable
+	metrics             *telemetry.Metrics
 	logger              *zap.Logger
 }
 
@@ -36,7 +36,7 @@ func (c *config) validate() error {
 	if c.readWriterGetter == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
-	if c.measurable == nil {
+	if c.metrics == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
 	if c.logger == nil {
@@ -74,14 +74,14 @@ func WithReadWriterGetter(getter Getter) Option {
 }
 
 type measurableOption struct {
-	m telemetry.Measurable
+	m *telemetry.Metrics
 }
 
 func (o measurableOption) apply(c *config) {
-	c.measurable = o.m
+	c.metrics = o.m
 }
 
-func WithMeasurable(measurable telemetry.Measurable) Option {
+func WithMetrics(measurable *telemetry.Metrics) Option {
 	return measurableOption{measurable}
 }
 

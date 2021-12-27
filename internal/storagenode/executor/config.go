@@ -35,7 +35,7 @@ type config struct {
 
 	replicateQueueSize int
 
-	measure telemetry.Measurable
+	metrics *telemetry.Metrics
 	logger  *zap.Logger
 }
 
@@ -61,7 +61,7 @@ func (c config) validate() error {
 	if c.replicateQueueSize <= 0 {
 		return errors.New("replicate queue size: negative or zero")
 	}
-	if c.measure == nil {
+	if c.metrics == nil {
 		return errors.New("no measurable")
 	}
 	if c.logger == nil {
@@ -251,14 +251,14 @@ func WithLogger(logger *zap.Logger) Option {
 }
 
 type measurableOption struct {
-	m telemetry.Measurable
+	m *telemetry.Metrics
 }
 
 func (o measurableOption) apply(c *config) {
-	c.measure = o.m
+	c.metrics = o.m
 }
 
-func WithMeasurable(measure telemetry.Measurable) Option {
+func WithMetrics(measure *telemetry.Metrics) Option {
 	return measurableOption{measure}
 }
 

@@ -18,7 +18,7 @@ const (
 type clientConfig struct {
 	replica          varlogpb.Replica
 	requestQueueSize int
-	measure          telemetry.Measurable
+	metrics          *telemetry.Metrics
 	logger           *zap.Logger
 }
 
@@ -44,7 +44,7 @@ func (c clientConfig) validate() error {
 	if c.requestQueueSize <= 0 {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
-	if c.measure == nil {
+	if c.metrics == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
 	if c.logger == nil {
@@ -57,7 +57,7 @@ type serverConfig struct {
 	storageNodeIDGetter id.StorageNodeIDGetter
 	pipelineQueueSize   int
 	logReplicatorGetter Getter
-	measure             telemetry.Measurable
+	metrics             *telemetry.Metrics
 	logger              *zap.Logger
 }
 
@@ -85,7 +85,7 @@ func (s serverConfig) validate() error {
 	if s.logReplicatorGetter == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
-	if s.measure == nil {
+	if s.metrics == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
 	if s.logger == nil {
@@ -222,17 +222,17 @@ type MeasurableOption interface {
 }
 
 type measurableOption struct {
-	m telemetry.Measurable
+	m *telemetry.Metrics
 }
 
 func (o measurableOption) applyServer(c *serverConfig) {
-	c.measure = o.m
+	c.metrics = o.m
 }
 
 func (o measurableOption) applyClient(c *clientConfig) {
-	c.measure = o.m
+	c.metrics = o.m
 }
 
-func WithMeasurable(measurable telemetry.Measurable) MeasurableOption {
+func WithMetrics(measurable *telemetry.Metrics) MeasurableOption {
 	return measurableOption{measurable}
 }

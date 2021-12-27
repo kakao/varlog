@@ -6,14 +6,11 @@ import (
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/codes"
-	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/storagenode/rpcserver"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/telemetry/attribute"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -38,11 +35,6 @@ func (s *server) Register(server *grpc.Server) {
 
 func (s *server) withTelemetry(ctx context.Context, spanName string, req interface{}, h rpcserver.Handler) (rsp interface{}, err error) {
 	// TODO: use resource to tag storage node id
-	ctx, span := s.tmStub.StartSpan(ctx, spanName,
-		oteltrace.WithAttributes(attribute.StorageNodeID(s.storageNode.StorageNodeID())),
-		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
-	)
-
 	if cidGetter, ok := req.(interface{ GetClusterID() types.ClusterID }); ok {
 		if cidGetter.GetClusterID() != s.storageNode.ClusterID() {
 			err = errors.New("storagenode: invalid ClusterID")
@@ -58,20 +50,17 @@ func (s *server) withTelemetry(ctx context.Context, spanName string, req interfa
 	rsp, err = h(ctx, req)
 out:
 	if err == nil {
-		span.SetStatus(codes.Ok, "")
 		s.logger.Info(spanName,
 			zap.Stringer("req", req.(fmt.Stringer)),
 			zap.Stringer("rsp", rsp.(fmt.Stringer)),
 		)
 	} else {
-		span.RecordError(err)
 		s.logger.Error(spanName,
 			zap.Error(err),
 			zap.Stringer("req", req.(fmt.Stringer)),
 		)
 	}
 
-	span.End()
 	return rsp, err
 }
 

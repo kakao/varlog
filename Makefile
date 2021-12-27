@@ -37,11 +37,9 @@ SNTOOL := $(BIN_DIR)/sntool
 MRTOOL := $(BIN_DIR)/mrtool
 RPC_TEST_SERVER := $(BIN_DIR)/rpc_test_server
 BENCHMARK := $(BIN_DIR)/benchmark
-RPCBENCH_SERVER := $(BIN_DIR)/rpcbench_server 
-RPCBENCH_CLIENT := $(BIN_DIR)/rpcbench_client
 
-.PHONY: build vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark rpcbench
-build: vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark rpcbench
+.PHONY: build vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark
+build: vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark
 vms:
 	$(GO) build $(GCFLAGS) -o $(VMS) cmd/vms/main.go
 varlogctl:
@@ -58,9 +56,6 @@ rpc_test_server:
 	$(GO) build -tags rpc_e2e $(GCFLAGS) -o $(RPC_TEST_SERVER) cmd/rpc_test_server/main.go
 benchmark:
 	$(GO) build $(GCFLAGS) -o $(BENCHMARK) cmd/benchmark/main.go
-rpcbench:
-	$(GO) build $(GCFLAGS) -o $(RPCBENCH_SERVER) cmd/rpcbench/server/main.go
-	$(GO) build $(GCFLAGS) -o $(RPCBENCH_CLIENT) cmd/rpcbench/client/main.go
 
 
 # testing

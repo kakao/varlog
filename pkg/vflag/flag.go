@@ -67,3 +67,13 @@ func (fd *FlagDescriptor) BoolFlag() *cli.BoolFlag {
 		Required: fd.Required,
 	}
 }
+
+func (fd *FlagDescriptor) DurationFlag() *cli.DurationFlag {
+	return &cli.DurationFlag{
+		Name:     fd.Name,
+		Aliases:  fd.Aliases,
+		Usage:    fd.Description,
+		EnvVars:  fd.EnvVars,
+		Required: fd.Required,
+	}
+}

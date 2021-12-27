@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/storagenode/storage"
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/mathutil"
 	"github.com/kakao/varlog/pkg/util/runner"
@@ -25,7 +26,7 @@ type writerConfig struct {
 	committer  committer
 	replicator replicator
 	state      stateProvider
-	me         MeasurableExecutor
+	metrics    *telemetry.Metrics
 }
 
 func (c writerConfig) validate() error {
@@ -50,7 +51,7 @@ func (c writerConfig) validate() error {
 	if c.state == nil {
 		return errors.Wrap(verrors.ErrInvalid, "writer: no state provider")
 	}
-	if c.me == nil {
+	if c.metrics == nil {
 		return errors.Wrap(verrors.ErrInvalid, "writer: no measurable")
 	}
 	return nil
@@ -185,7 +186,7 @@ func (w *writerImpl) writeLoop(ctx context.Context) {
 func (w *writerImpl) writeLoopInternal(ctx context.Context) error {
 	oldLLSN, newLLSN, numPopped, err := w.ready(ctx)
 	defer func() {
-		w.me.Stub().Metrics().ExecutorWriteQueueTasks.Record(ctx, numPopped)
+		w.metrics.ExecutorWriteQueueTasks.Record(ctx, numPopped)
 		atomic.AddInt64(&w.inflight, -numPopped)
 	}()
 	if err != nil {

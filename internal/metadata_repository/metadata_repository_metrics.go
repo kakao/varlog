@@ -13,10 +13,10 @@ type metricsBag struct {
 	counts   sync.Map
 }
 
-func newMetricsBag(ts *telemetryStub) *metricsBag {
+func newMetricsBag(mt metric.Meter) *metricsBag {
 	return &metricsBag{
-		mt:       ts.mt,
-		requests: metric.Must(ts.mt).NewInt64UpDownCounter("requests"),
+		mt:       mt,
+		requests: metric.Must(mt).NewInt64UpDownCounter("requests"),
 	}
 }
 

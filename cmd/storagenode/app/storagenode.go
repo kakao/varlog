@@ -2,13 +2,21 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/metric"
+	metricsdk "go.opentelemetry.io/otel/sdk/export/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/storagenode"
@@ -16,6 +24,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/storage"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
+	"github.com/kakao/varlog/pkg/util/telemetry"
 )
 
 func Main(c *cli.Context) error {
@@ -27,6 +36,17 @@ func Main(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
+	mp, stop, err := initMeterProvider(c, snid)
+	if err != nil {
+		return err
+	}
+	telemetry.SetGlobalMeterProvider(mp)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), c.Duration(flagExporterStopTimeout.Name))
+		defer cancel()
+		stop(ctx)
+	}()
 
 	logOpts := []log.Option{
 		log.WithHumanFriendly(),
@@ -85,7 +105,6 @@ func Main(c *cli.Context) error {
 			executor.WithReplicateQueueSize(c.Int(flagReplicateQueueSize.Name)),
 		),
 		storagenode.WithStorageOptions(storageOpts...),
-		storagenode.WithTelemetry(c.String(flagTelemetry.Name)),
 		storagenode.WithLogger(logger),
 	)
 	if err != nil {
@@ -100,4 +119,49 @@ func Main(c *cli.Context) error {
 	}()
 
 	return sn.Run()
+}
+
+func initMeterProvider(c *cli.Context, snid types.StorageNodeID) (metric.MeterProvider, telemetry.StopMeterProvider, error) {
+	var (
+		err               error
+		exporter          metricsdk.Exporter
+		shutdown          telemetry.ShutdownExporter
+		meterProviderOpts = []telemetry.MeterProviderOption{
+			telemetry.WithResource(resource.NewWithAttributes(
+				semconv.SchemaURL,
+				semconv.ServiceNameKey.String("sn"),
+				semconv.ServiceNamespaceKey.String("varlog"),
+				semconv.ServiceInstanceIDKey.String(snid.String()),
+			)),
+			telemetry.WithHostInstrumentation(),
+			telemetry.WithRuntimeInstrumentation(),
+		}
+	)
+	switch strings.ToLower(c.String(flagExporterType.Name)) {
+	case "stdout":
+		opts := []stdoutmetric.Option{}
+		if c.Bool(flagStdoutExporterPrettyPrint.Name) {
+			opts = append(opts, stdoutmetric.WithPrettyPrint())
+		}
+		exporter, shutdown, err = telemetry.NewStdoutExporter(opts...)
+	case "otlp":
+		opts := []otlpmetricgrpc.Option{}
+		if c.Bool(flagOTLPExporterInsecure.Name) {
+			opts = append(opts, otlpmetricgrpc.WithInsecure())
+		}
+		if !c.IsSet(flagOTLPExporterEndpoint.Name) {
+			return nil, nil, errors.New("no exporter endpoint")
+		}
+		opts = append(opts, otlpmetricgrpc.WithEndpoint(c.String(flagOTLPExporterEndpoint.Name)))
+		exporter, shutdown, err = telemetry.NewOLTPExporter(context.Background(), opts...)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if exporter != nil {
+		meterProviderOpts = append(meterProviderOpts, telemetry.WithExporter(exporter, shutdown))
+	}
+
+	return telemetry.NewMeterProvider(meterProviderOpts...)
 }

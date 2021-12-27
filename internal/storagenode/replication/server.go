@@ -8,13 +8,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/storagenode/rpcserver"
 	"github.com/kakao/varlog/internal/storagenode/stopchannel"
-	"github.com/kakao/varlog/pkg/util/telemetry/attribute"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
@@ -144,7 +142,7 @@ func (s *serverImpl) replicate(ctx context.Context, repCtxC <-chan *replicateTas
 					err = fmt.Errorf("no executor: %v", lsid)
 				}
 				repCtx.err = err
-				s.measure.Stub().Metrics().RPCServerReplicateDuration.Record(
+				s.metrics.RPCServerReplicateDuration.Record(
 					ctx,
 					float64(time.Since(startTime).Microseconds())/1000.0,
 				)
@@ -200,12 +198,6 @@ func (s *serverImpl) SyncInit(ctx context.Context, req *snpb.SyncInitRequest) (r
 		return nil, errors.WithStack(verrors.ErrClosed)
 	}
 
-	var spanName = "varlog.snpb.Replicator/SyncInit"
-	ctx, span := s.measure.Stub().StartSpan(ctx, spanName,
-		oteltrace.WithAttributes(attribute.StorageNodeID(s.storageNodeIDGetter.StorageNodeID())),
-		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
-	)
-
 	defer func() {
 		if err == nil {
 			s.logger.Info("SyncInit",
@@ -218,7 +210,6 @@ func (s *serverImpl) SyncInit(ctx context.Context, req *snpb.SyncInitRequest) (r
 				zap.String("request", req.String()),
 			)
 		}
-		span.End()
 	}()
 
 	tpID := req.GetDestination().TopicID
@@ -240,11 +231,6 @@ func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateR
 		return nil, errors.WithStack(verrors.ErrClosed)
 	}
 
-	var spanName = "varlog.snpb.Replicator/SyncReplicate"
-	ctx, span := s.measure.Stub().StartSpan(ctx, spanName,
-		oteltrace.WithAttributes(attribute.StorageNodeID(s.storageNodeIDGetter.StorageNodeID())),
-		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
-	)
 	defer func() {
 		if err == nil {
 			s.logger.Info("SyncReplicate",
@@ -257,7 +243,6 @@ func (s *serverImpl) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateR
 				zap.String("request", req.String()),
 			)
 		}
-		span.End()
 	}()
 
 	tpID := req.GetDestination().TopicID

@@ -20,6 +20,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/replication"
 	"github.com/kakao/varlog/internal/storagenode/stopchannel"
 	"github.com/kakao/varlog/internal/storagenode/storage"
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -37,7 +38,7 @@ func TestExecutorClose(t *testing.T) {
 
 	lse, err := New(
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -138,7 +139,7 @@ func TestExecutorAppend(t *testing.T) {
 	lse, err := New(
 		WithStorage(strg),
 		WithTopicID(topicID),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -222,7 +223,7 @@ func TestExecutorRead(t *testing.T) {
 	lse, err := New(
 		WithStorage(strg),
 		WithTopicID(topicID),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -331,7 +332,7 @@ func TestExecutorTrim(t *testing.T) {
 	lse, err := New(
 		WithStorage(strg),
 		WithTopicID(topicID),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -469,7 +470,7 @@ func TestExecutorSubscribe(t *testing.T) {
 	lse, err := New(
 		WithStorage(strg),
 		WithTopicID(topicID),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -793,7 +794,7 @@ func TestExecutorReplicate(t *testing.T) {
 		WithStorage(strg),
 		WithStorageNodeID(backupSNID),
 		WithLogStreamID(logStreamID),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -870,7 +871,7 @@ func TestExecutorSealSuddenly(t *testing.T) {
 
 	lse, err := New(
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -998,7 +999,7 @@ func TestExecutorSeal(t *testing.T) {
 	lse, err := New(
 		WithStorage(strg),
 		WithTopicID(topicID),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -1176,7 +1177,7 @@ func TestExecutorSealReason(t *testing.T) {
 	lse, err := New(
 		WithStorage(strg),
 		WithTopicID(topicID),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -1226,7 +1227,7 @@ func TestExecutorWithRecover(t *testing.T) {
 
 	lse, err := New(
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -1288,7 +1289,7 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 
 	lse, err := New(
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -1413,7 +1414,7 @@ func TestExecutorNew(t *testing.T) {
 	lse, err := New(
 		WithStorage(strg),
 		WithTopicID(topicID),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -1482,7 +1483,7 @@ func TestExecutorNew(t *testing.T) {
 	require.NoError(t, err)
 	lse, err = New(
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 
@@ -1549,7 +1550,7 @@ func TestExecutorGetPrevCommitInfo(t *testing.T) {
 		WithLogStreamID(logStreamID),
 		WithTopicID(topicID),
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1693,7 +1694,7 @@ func TestExecutorGetPrevCommitInfoWithEmptyCommitContext(t *testing.T) {
 	lse, err := New(
 		WithLogStreamID(logStreamID),
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1752,7 +1753,7 @@ func TestExecutorUnsealWithInvalidReplicas(t *testing.T) {
 	lse, err := New(
 		WithLogStreamID(1),
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1807,7 +1808,7 @@ func TestExecutorPrimaryBackup(t *testing.T) {
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1882,7 +1883,7 @@ func TestExecutorSyncInitNewReplica(t *testing.T) {
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1911,7 +1912,7 @@ func TestExecutorSyncInitInvalidState(t *testing.T) {
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -1958,7 +1959,7 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 		WithStorageNodeID(1),
 		WithLogStreamID(1),
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -2092,7 +2093,7 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 		WithLogStreamID(1),
 		WithTopicID(topicID),
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -2235,7 +2236,7 @@ func TestExecutorSync(t *testing.T) {
 		WithLogStreamID(1),
 		WithTopicID(topicID),
 		WithStorage(strg),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() {

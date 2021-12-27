@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -34,7 +35,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
-		me:                  NewMockMeasurableExecutor(ctrl),
+		metrics:             telemetry.NewMetrics(),
 	}
 	require.NoError(t, cfg.validate())
 
@@ -47,7 +48,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
-		me:                  NewMockMeasurableExecutor(ctrl),
+		metrics:             telemetry.NewMetrics(),
 	}
 	require.Error(t, cfg.validate())
 
@@ -60,7 +61,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
-		me:                  NewMockMeasurableExecutor(ctrl),
+		metrics:             telemetry.NewMetrics(),
 	}
 	require.Error(t, cfg.validate())
 
@@ -73,7 +74,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
-		me:                  NewMockMeasurableExecutor(ctrl),
+		metrics:             telemetry.NewMetrics(),
 	}
 	require.Error(t, cfg.validate())
 
@@ -86,7 +87,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
-		me:                  NewMockMeasurableExecutor(ctrl),
+		metrics:             telemetry.NewMetrics(),
 	}
 	require.Error(t, cfg.validate())
 
@@ -99,7 +100,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 nil,
 		decider:             decider,
 		state:               state,
-		me:                  NewMockMeasurableExecutor(ctrl),
+		metrics:             telemetry.NewMetrics(),
 	}
 	require.Error(t, cfg.validate())
 
@@ -112,7 +113,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             nil,
 		state:               state,
-		me:                  NewMockMeasurableExecutor(ctrl),
+		metrics:             telemetry.NewMetrics(),
 	}
 	require.Error(t, cfg.validate())
 
@@ -125,7 +126,7 @@ func TestCommitterConfig(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               nil,
-		me:                  NewMockMeasurableExecutor(ctrl),
+		metrics:             telemetry.NewMetrics(),
 	}
 	require.Error(t, cfg.validate())
 
@@ -171,7 +172,7 @@ func TestCommitterStop(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
-		me:                  NewTestMeasurableExecutor(ctrl, 1, 1),
+		metrics:             telemetry.NewMetrics(),
 	})
 	require.NoError(t, err)
 
@@ -245,7 +246,7 @@ func TestCommitter(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
-		me:                  NewTestMeasurableExecutor(ctrl, 1, 1),
+		metrics:             telemetry.NewMetrics(),
 	})
 	require.NoError(t, err)
 
@@ -342,7 +343,7 @@ func TestCommitterCatchupCommitVarlog459(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
-		me:                  NewTestMeasurableExecutor(ctrl, 1, 1),
+		metrics:             telemetry.NewMetrics(),
 	})
 	require.NoError(t, err)
 	defer committer.stop()
@@ -402,7 +403,7 @@ func TestCommitterState(t *testing.T) {
 		lsc:                 lsc,
 		decider:             decider,
 		state:               state,
-		me:                  NewTestMeasurableExecutor(ctrl, 1, 1),
+		metrics:             telemetry.NewMetrics(),
 	})
 	require.NoError(t, err)
 	defer committer.stop()

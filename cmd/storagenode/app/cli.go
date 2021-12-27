@@ -58,7 +58,12 @@ func initStartCommand() *cli.Command {
 		flagStorageDebugLog.BoolFlag(),
 
 		// flags for telemetry
-		flagTelemetry.StringFlag(),
+		flagExporterType.StringFlag(),
+		flagExporterStopTimeout.DurationFlag(),
+		flagStdoutExporterPrettyPrint.BoolFlag(),
+		flagOTLPExporterInsecure.BoolFlag(),
+		flagOTLPExporterEndpoint.StringFlag(),
+		//flagTelemetry.StringFlag(),
 	}
 	return startCmd
 }

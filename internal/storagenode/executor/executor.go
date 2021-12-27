@@ -15,7 +15,6 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/replication"
 	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode/storage"
-	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/internal/storagenode/timestamper"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -147,10 +146,10 @@ func (e *executor) initLogPipeline() error {
 	rp, err := newReplicator(replicatorConfig{
 		queueSize: e.replicateQueueSize,
 		state:     e,
-		me:        e,
+		metrics:   e.metrics,
 		connectorOpts: []replication.ConnectorOption{
 			replication.WithClientOptions(
-				replication.WithMeasurable(e),
+				replication.WithMetrics(e.metrics),
 			),
 		},
 	})
@@ -167,7 +166,7 @@ func (e *executor) initLogPipeline() error {
 		lsc:                 e.lsc,
 		decider:             e.decider,
 		state:               e,
-		me:                  e,
+		metrics:             e.metrics,
 	})
 	if err != nil {
 		return err
@@ -182,7 +181,7 @@ func (e *executor) initLogPipeline() error {
 		committer:  e.committer,
 		replicator: e.rp,
 		state:      e,
-		me:         e,
+		metrics:    e.metrics,
 	})
 	if err != nil {
 		rp.stop()
@@ -312,8 +311,4 @@ func (e *executor) TopicID() types.TopicID {
 
 func (e *executor) LogStreamID() types.LogStreamID {
 	return e.logStreamID
-}
-
-func (e *executor) Stub() *telemetry.Stub {
-	return e.measure.Stub()
 }
