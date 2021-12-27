@@ -78,7 +78,7 @@ type StorageNode struct {
 
 	tsp timestamper.Timestamper
 
-	tmStub *telemetry.Stub
+	metrics *telemetry.Metrics
 }
 
 var _ id.StorageNodeIDGetter = (*StorageNode)(nil)
@@ -87,7 +87,6 @@ var _ replication.Getter = (*StorageNode)(nil)
 var _ reportcommitter.Getter = (*StorageNode)(nil)
 var _ logio.Getter = (*StorageNode)(nil)
 var _ fmt.Stringer = (*StorageNode)(nil)
-var _ telemetry.Measurable = (*StorageNode)(nil)
 
 // New creates a StorageNode configured by the opts.
 // TODO: The argument ctx can be removed.
@@ -103,17 +102,18 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 		storageNodePaths: set.New(len(cfg.volumes)),
 		tsp:              timestamper.New(),
 		executors:        executorsmap.New(hintNumExecutors),
+		metrics:          telemetry.NewMetrics(),
 	}
 	sn.pprofServer = pprof.New(sn.pprofOpts...)
 
-	if len(sn.telemetryEndpoint) == 0 {
-		sn.tmStub = telemetry.NewNopTelmetryStub()
-	} else {
-		sn.tmStub, err = telemetry.NewTelemetryStub(ctx, "otel", sn.storageNodeID, sn.telemetryEndpoint)
-		if err != nil {
-			return nil, err
-		}
-	}
+	//if len(sn.telemetryEndpoint) == 0 {
+	//	sn.tmStub = telemetry.NewNopTelmetryStub()
+	//} else {
+	//	sn.tmStub, err = telemetry.NewTelemetryStub(ctx, "otel", sn.storageNodeID, sn.telemetryEndpoint)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//}
 
 	sn.logger = sn.logger.Named("storagenode").With(
 		zap.Uint32("cid", uint32(sn.clusterID)),
@@ -195,18 +195,18 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 	// services
 	grpc_health_v1.RegisterHealthServer(sn.rpcServer, sn.healthServer)
 	rpcserver.RegisterRPCServer(sn.rpcServer,
-		reportcommitter.NewServer(sn.lsr, sn),
+		reportcommitter.NewServer(sn.lsr, sn.metrics),
 		logio.NewServer(
 			logio.WithStorageNodeIDGetter(sn),
 			logio.WithReadWriterGetter(sn),
-			logio.WithMeasurable(sn),
+			logio.WithMetrics(sn.metrics),
 			logio.WithLogger(sn.logger),
 		),
 		replication.NewServer(
 			replication.WithStorageNodeIDGetter(sn),
 			replication.WithLogReplicatorGetter(sn),
 			replication.WithPipelineQueueSize(1),
-			replication.WithMeasurable(sn),
+			replication.WithMetrics(sn.metrics),
 			replication.WithLogger(sn.logger),
 		),
 		newServer(withStorageNode(sn)),
@@ -302,9 +302,6 @@ func (sn *StorageNode) StorageNodeID() types.StorageNodeID {
 
 // GetMetadata returns metadata of the storage node and the log stream replicas.
 func (sn *StorageNode) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
-	_, span := sn.tmStub.StartSpan(ctx, "storagenode.GetMetadata")
-	defer span.End()
-
 	sn.muAddr.RLock()
 	addr := sn.advertiseAddress
 	sn.muAddr.RUnlock()
@@ -402,7 +399,7 @@ func (sn *StorageNode) startLogStream(topicID types.TopicID, logStreamID types.L
 		executor.WithStorageNodeID(sn.storageNodeID),
 		executor.WithTopicID(topicID),
 		executor.WithLogStreamID(logStreamID),
-		executor.WithMeasurable(sn),
+		executor.WithMetrics(sn.metrics),
 		executor.WithLogger(sn.logger),
 	)...)
 	if err != nil {
@@ -558,9 +555,4 @@ func (sn *StorageNode) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "storagenode (cid=%d, snid=%d)", sn.ClusterID(), sn.StorageNodeID())
 	return sb.String()
-}
-
-// Stub implements `internal/storagenode/telemetry.Measurable.Stub`.
-func (sn *StorageNode) Stub() *telemetry.Stub {
-	return sn.tmStub
 }

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
@@ -39,12 +40,12 @@ func (rt *replicateTask) release() {
 	replicateTaskPool.Put(rt)
 }
 
-func (rt *replicateTask) annotate(ctx context.Context, m MeasurableExecutor) {
+func (rt *replicateTask) annotate(ctx context.Context, m *telemetry.Metrics) {
 	if rt.createdTime.IsZero() || rt.poppedTime.IsZero() || !rt.poppedTime.After(rt.createdTime) {
 		return
 	}
 
 	// write queue latency
 	ms := float64(rt.poppedTime.Sub(rt.createdTime).Microseconds()) / 1000.0
-	m.Stub().Metrics().ExecutorReplicateQueueTime.Record(ctx, ms)
+	m.ExecutorReplicateQueueTime.Record(ctx, ms)
 }

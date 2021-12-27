@@ -7,7 +7,6 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/executor"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/pprof"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/volume"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/container/set"
@@ -20,16 +19,15 @@ const (
 )
 
 type config struct {
-	clusterID         types.ClusterID
-	storageNodeID     types.StorageNodeID
-	listenAddress     string
-	advertiseAddress  string
-	telemetryEndpoint string
-	volumes           set.Set // set[Volume]
-	executorOpts      []executor.Option
-	storageOpts       []storage.Option
-	pprofOpts         []pprof.Option
-	logger            *zap.Logger
+	clusterID        types.ClusterID
+	storageNodeID    types.StorageNodeID
+	listenAddress    string
+	advertiseAddress string
+	volumes          set.Set // set[Volume]
+	executorOpts     []executor.Option
+	storageOpts      []storage.Option
+	pprofOpts        []pprof.Option
+	logger           *zap.Logger
 }
 
 func newConfig(opts []Option) (*config, error) {
@@ -165,26 +163,13 @@ func WithPProfOptions(opts ...pprof.Option) Option {
 	return pprofOptions{opts}
 }
 
-type telemetryOption string
-
-func (o telemetryOption) apply(c *config) {
-	c.telemetryEndpoint = string(o)
-}
-
-// WithTelemetry sets an endpoint of opentelemetry agent.
-func WithTelemetry(endpoint string) Option {
-	return telemetryOption(endpoint)
-}
-
 type serverConfig struct {
 	storageNode *StorageNode
-	tmStub      *telemetry.Stub
 	logger      *zap.Logger
 }
 
 func newServerConfig(opts []serverOption) serverConfig {
 	cfg := serverConfig{
-		tmStub: telemetry.NewNopTelmetryStub(),
 		logger: zap.NewNop(),
 	}
 	for _, opt := range opts {
@@ -199,9 +184,6 @@ func newServerConfig(opts []serverOption) serverConfig {
 func (c serverConfig) validate() error {
 	if c.storageNode == nil {
 		return errors.New("no storage node configured")
-	}
-	if c.tmStub == nil {
-		return errors.New("no telemetry stub configured")
 	}
 	if c.logger == nil {
 		return errors.New("no logger configured")

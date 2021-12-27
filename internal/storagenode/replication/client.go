@@ -134,7 +134,7 @@ func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, ca
 		return
 	}
 
-	c.measure.Stub().Metrics().ExecutorReplicateRequestPrepareTime.Record(
+	c.metrics.ExecutorReplicateRequestPrepareTime.Record(
 		ctx,
 		float64(time.Since(startTime).Microseconds())/1000.0,
 	)
@@ -159,7 +159,7 @@ Loop:
 		}
 		req := reqI.(*snpb.ReplicationRequest)
 		now := time.Now()
-		c.measure.Stub().Metrics().ExecutorReplicateClientRequestQueueTime.Record(
+		c.metrics.ExecutorReplicateClientRequestQueueTime.Record(
 			context.Background(),
 			float64(now.Sub(req.CreatedTime).Microseconds())/1000.0,
 		)

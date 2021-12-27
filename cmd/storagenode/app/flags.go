@@ -106,8 +106,33 @@ var (
 	}
 
 	// flags for telemetry
-	flagTelemetry = vflag.FlagDescriptor{
-		Name:    "telemetry",
-		EnvVars: []string{"TELEMETRY"},
+	//flagTelemetry = vflag.FlagDescriptor{
+	//	Name:    "telemetry",
+	//	EnvVars: []string{"TELEMETRY"},
+	//}
+	flagExporterType = vflag.FlagDescriptor{
+		Name:        "exporter-type",
+		Description: "exporter type: stdout, otlp or noop",
+		EnvVars:     []string{"EXPORTER_TYPE"},
+	}
+	flagExporterStopTimeout = vflag.FlagDescriptor{
+		Name:        "expoter-stop-timeout",
+		Description: "timeout for stopping exporter",
+		EnvVars:     []string{"EXPORTER_STOP_TIMEOUT"},
+	}
+	flagStdoutExporterPrettyPrint = vflag.FlagDescriptor{
+		Name:        "exporter-pretty-print",
+		Description: "pretty print when using stdout exporter",
+		EnvVars:     []string{"EXPORTER_PRETTY_PRINT"},
+	}
+	flagOTLPExporterInsecure = vflag.FlagDescriptor{
+		Name:        "exporter-otlp-insecure",
+		Description: "disable client transport security for the OTLP exporter",
+		EnvVars:     []string{"EXPORTER_OTLP_INSECURE"},
+	}
+	flagOTLPExporterEndpoint = vflag.FlagDescriptor{
+		Name:        "exporter-otlp-endpoint",
+		Description: "the endpoint that exporter connects",
+		EnvVars:     []string{"EXPORTER_OTLP_ENDPOINT"},
 	}
 )

@@ -1,81 +1,108 @@
 package telemetry
 
 import (
-	"github.com/pkg/errors"
+	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
+	metricsdk "go.opentelemetry.io/otel/sdk/export/metric"
 	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	"go.uber.org/zap"
+	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
+	"go.opentelemetry.io/otel/sdk/resource"
 )
 
-type config struct {
-	bspOpts []tracesdk.BatchSpanProcessorOption
-	tpOpts  []tracesdk.TracerProviderOption
+type meterProviderConfig struct {
+	resource           *resource.Resource
+	collectPeriod      time.Duration
+	collectTimeout     time.Duration
+	pushTimeout        time.Duration
+	exporter           metricsdk.Exporter
+	shutdownExporter   ShutdownExporter
+	aggregatorSelector metricsdk.AggregatorSelector
 
-	controllerOpts []controller.Option
+	hostInstrumentation bool
 
-	endpoint     string
-	exporterType string
-	logger       *zap.Logger
+	runtimeInstrumentation     bool
+	runtimeInstrumentationOpts []runtime.Option
 }
 
-func newConfig(opts []Option) (config, error) {
-	cfg := config{
-		logger: zap.NewNop(),
+func newMeterProviderConfig(opts []MeterProviderOption) meterProviderConfig {
+	cfg := meterProviderConfig{
+		resource:           resource.Default(),
+		collectPeriod:      controller.DefaultPeriod,
+		collectTimeout:     controller.DefaultPeriod,
+		pushTimeout:        controller.DefaultPeriod,
+		aggregatorSelector: simple.NewWithInexpensiveDistribution(),
 	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	if err := cfg.validate(); err != nil {
-		return config{}, err
-	}
-	return cfg, nil
+	return cfg
 }
 
-func (c config) validate() error {
-	switch c.exporterType {
-	case "nop", "":
-	case "stdout", "console":
-	case "otlp", "otel":
-	default:
-		return errors.Errorf("invalid exporter type: %s", c.exporterType)
-	}
-	return nil
-}
+// MeterProviderOption is the interface that applies the value to a meter provider configurations.
+type MeterProviderOption func(*meterProviderConfig)
 
-type Option func(*config)
-
-func WithEndpoint(endpoint string) Option {
-	return func(c *config) {
-		c.endpoint = endpoint
+// WithResource sets the Resource of a MeterProvider.
+func WithResource(resource *resource.Resource) MeterProviderOption {
+	return func(cfg *meterProviderConfig) {
+		cfg.resource = resource
 	}
 }
 
-func WithExporterType(epType string) Option {
-	return func(c *config) {
-		c.exporterType = epType
+// WithCollectPeriod sets CollectPeriod of a MeterProvider.
+//
+// CollectPeriod is the interval between calls to Collect a checkpoint.
+func WithCollectPeriod(collectPeriod time.Duration) MeterProviderOption {
+	return func(cfg *meterProviderConfig) {
+		cfg.collectPeriod = collectPeriod
 	}
 }
 
-func WithBatchSpanProcessorOptions(bspOpts ...tracesdk.BatchSpanProcessorOption) Option {
-	return func(c *config) {
-		c.bspOpts = bspOpts
+// WithCollectTimeout sets CollectTimeout of a MeterProvider.
+//
+// CollectTimeout is the timeout of the Context passed to Collect() and subsequently to Observer
+// instrument callbacks.
+func WithCollectTimeout(collectTimeout time.Duration) MeterProviderOption {
+	return func(cfg *meterProviderConfig) {
+		cfg.collectTimeout = collectTimeout
 	}
 }
 
-func WithTraceProviderOptions(tpOpts ...tracesdk.TracerProviderOption) Option {
-	return func(c *config) {
-		c.tpOpts = tpOpts
+// WithPushTimeout sets PushTimeout of a MeterProvider.
+//
+// PushTimeout is the timeout of the Context when a exporter is configured.
+func WithPushTimeout(pushTimeout time.Duration) MeterProviderOption {
+	return func(cfg *meterProviderConfig) {
+		cfg.pushTimeout = pushTimeout
 	}
 }
 
-func WithMetricControllerOptions(controllerOpts ...controller.Option) Option {
-	return func(c *config) {
-		c.controllerOpts = controllerOpts
+// WithExporter sets exporter and its shutdown function.
+func WithExporter(exporter metricsdk.Exporter, shutdownExporter ShutdownExporter) MeterProviderOption {
+	return func(cfg *meterProviderConfig) {
+		cfg.exporter = exporter
+		cfg.shutdownExporter = shutdownExporter
 	}
 }
 
-func WithLogger(logger *zap.Logger) Option {
-	return func(c *config) {
-		c.logger = logger
+// WithAggregatorSelector sets selector of aggregator.
+func WithAggregatorSelector(aggregatorSelector metricsdk.AggregatorSelector) MeterProviderOption {
+	return func(cfg *meterProviderConfig) {
+		cfg.aggregatorSelector = aggregatorSelector
+	}
+}
+
+// WithHostInstrumentation enables host instrumentation.
+func WithHostInstrumentation() MeterProviderOption {
+	return func(cfg *meterProviderConfig) {
+		cfg.hostInstrumentation = true
+	}
+}
+
+// WithRuntimeInstrumentation enables runtime instrumentation.
+func WithRuntimeInstrumentation(opts ...runtime.Option) MeterProviderOption {
+	return func(cfg *meterProviderConfig) {
+		cfg.runtimeInstrumentation = true
+		cfg.runtimeInstrumentationOpts = opts
 	}
 }

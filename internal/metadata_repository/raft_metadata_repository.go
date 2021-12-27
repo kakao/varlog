@@ -122,10 +122,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 
 	logger := options.Logger.Named("vmr").With(zap.Any("nodeid", options.NodeID))
 
-	// TODO: use initTimeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	tmStub, err := newTelemetryStub(ctx, options.TelemetryOptions.CollectorName, options.NodeID, options.TelemetryOptions.CollectorEndpoint)
+	tmStub, err := newTelemetryStub(context.Background(), options.TelemetryOptions.CollectorName, options.NodeID, options.TelemetryOptions.CollectorEndpoint)
 	if err != nil {
 		logger.Panic("telemetry", zap.Error(err))
 	}

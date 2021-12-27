@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/replication"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
@@ -22,7 +23,7 @@ type replicatorConfig struct {
 	queueSize     int
 	state         stateProvider
 	connectorOpts []replication.ConnectorOption
-	me            MeasurableExecutor
+	metrics       *telemetry.Metrics
 }
 
 func (c replicatorConfig) validate() error {
@@ -32,7 +33,7 @@ func (c replicatorConfig) validate() error {
 	if c.state == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
-	if c.me == nil {
+	if c.metrics == nil {
 		return errors.Wrap(verrors.ErrInvalid, "no measurable")
 	}
 	return nil
@@ -175,12 +176,12 @@ func (r *replicatorImpl) replicate(ctx context.Context, rt *replicateTask) error
 	startTime := time.Now()
 
 	defer func() {
-		r.me.Stub().Metrics().ExecutorReplicateFanoutTime.Record(
+		r.metrics.ExecutorReplicateFanoutTime.Record(
 			ctx,
 			float64(time.Since(startTime).Microseconds())/1000.0,
 		)
 
-		rt.annotate(ctx, r.me)
+		rt.annotate(ctx, r.metrics)
 		rt.release()
 	}()
 
@@ -197,7 +198,7 @@ func (r *replicatorImpl) replicate(ctx context.Context, rt *replicateTask) error
 			if err != nil {
 				return err
 			}
-			r.me.Stub().Metrics().ExecutorReplicateConnectionGetTime.Record(
+			r.metrics.ExecutorReplicateConnectionGetTime.Record(
 				ctx,
 				float64(time.Since(ts).Microseconds())/1000.0,
 			)
@@ -213,7 +214,7 @@ func (r *replicatorImpl) replicate(ctx context.Context, rt *replicateTask) error
 func (r *replicatorImpl) generateReplicateCallback(ctx context.Context, startTime time.Time) func(error) {
 	return func(err error) {
 		dur := float64(time.Since(startTime).Microseconds()) / 1000.0
-		r.me.Stub().Metrics().ExecutorReplicateTime.Record(ctx, dur)
+		r.metrics.ExecutorReplicateTime.Record(ctx, dur)
 
 		if err != nil {
 			r.state.setSealingWithReason(err)

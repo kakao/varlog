@@ -6,7 +6,7 @@ metadata:
   labels:
     app: prometheus
 spec:
-  replicas: 0
+  replicas: 1
   template:
     spec:
       containers:

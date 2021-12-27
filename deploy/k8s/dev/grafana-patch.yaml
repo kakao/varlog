@@ -6,4 +6,4 @@ metadata:
   name: grafana
   namespace: default
 spec:
-  replicas: 0
+  replicas: 1

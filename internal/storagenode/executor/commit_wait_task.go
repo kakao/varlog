@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
@@ -50,12 +51,12 @@ func (cwt *commitWaitTask) release() {
 	commitWaitTaskPool.Put(cwt)
 }
 
-func (cwt *commitWaitTask) annotate(ctx context.Context, m MeasurableExecutor) {
+func (cwt *commitWaitTask) annotate(ctx context.Context, m *telemetry.Metrics) {
 	if cwt.createdTime.IsZero() || cwt.poppedTime.IsZero() || !cwt.poppedTime.After(cwt.createdTime) {
 		return
 	}
 
 	// queue latency
 	ms := float64(cwt.poppedTime.Sub(cwt.createdTime).Microseconds()) / 1000.0
-	m.Stub().Metrics().ExecutorCommitWaitQueueTime.Record(ctx, ms)
+	m.ExecutorCommitWaitQueueTime.Record(ctx, ms)
 }

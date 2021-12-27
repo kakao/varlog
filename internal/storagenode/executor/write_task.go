@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
@@ -81,19 +82,19 @@ func (wt *writeTask) release() {
 	writeTaskPool.Put(wt)
 }
 
-func (wt *writeTask) annotate(ctx context.Context, m MeasurableExecutor) {
+func (wt *writeTask) annotate(ctx context.Context, m *telemetry.Metrics) {
 	if wt.createdTime.IsZero() || wt.poppedTime.IsZero() || !wt.poppedTime.After(wt.createdTime) {
 		return
 	}
 
 	// write queue latency
 	ms := float64(wt.poppedTime.Sub(wt.createdTime).Microseconds()) / 1000.0
-	m.Stub().Metrics().ExecutorWriteQueueTime.Record(ctx, ms)
+	m.ExecutorWriteQueueTime.Record(ctx, ms)
 
 	// processing time
 	if wt.processingTime.IsZero() || !wt.processingTime.After(wt.poppedTime) {
 		return
 	}
 	ms = float64(wt.processingTime.Sub(wt.poppedTime).Microseconds()) / 1000.0
-	m.Stub().Metrics().ExecutorWriteTime.Record(ctx, ms)
+	m.ExecutorWriteTime.Record(ctx, ms)
 }

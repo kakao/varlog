@@ -64,22 +64,6 @@ type (
 		LastValue() (number.Number, time.Time, error)
 	}
 
-	// Points returns the raw values that were aggregated.
-	Points interface {
-		Aggregation
-
-		// Points returns points in the order they were
-		// recorded.  Points are approximately ordered by
-		// timestamp, but this is not guaranteed.
-		Points() ([]Point, error)
-	}
-
-	// Point is a raw data point, consisting of a number and value.
-	Point struct {
-		number.Number
-		time.Time
-	}
-
 	// Buckets represents histogram buckets boundaries and counts.
 	//
 	// For a Histogram with N defined boundaries, e.g, [x, y, z].
@@ -100,15 +84,6 @@ type (
 		Sum() (number.Number, error)
 		Histogram() (Buckets, error)
 	}
-
-	// MinMaxSumCount supports the Min, Max, Sum, and Count interfaces.
-	MinMaxSumCount interface {
-		Aggregation
-		Min() (number.Number, error)
-		Max() (number.Number, error)
-		Sum() (number.Number, error)
-		Count() (uint64, error)
-	}
 )
 
 type (
@@ -122,19 +97,16 @@ type (
 	// deciding how to expose metric data.  This enables
 	// user-supplied Aggregators to replace builtin Aggregators.
 	//
-	// For example, test for a Distribution before testing for a
-	// MinMaxSumCount, test for a Histogram before testing for a
+	// For example, test for a Histogram before testing for a
 	// Sum, and so on.
 	Kind string
 )
 
 // Kind description constants.
 const (
-	SumKind            Kind = "Sum"
-	MinMaxSumCountKind Kind = "MinMaxSumCount"
-	HistogramKind      Kind = "Histogram"
-	LastValueKind      Kind = "Lastvalue"
-	ExactKind          Kind = "Exact"
+	SumKind       Kind = "Sum"
+	HistogramKind Kind = "Histogram"
+	LastValueKind Kind = "Lastvalue"
 )
 
 // Sentinel errors for Aggregation interface.
@@ -142,7 +114,10 @@ var (
 	ErrNegativeInput    = fmt.Errorf("negative value is out of range for this instrument")
 	ErrNaNInput         = fmt.Errorf("NaN value is an invalid input")
 	ErrInconsistentType = fmt.Errorf("inconsistent aggregator types")
-	ErrNoSubtraction    = fmt.Errorf("aggregator does not subtract")
+
+	// ErrNoCumulativeToDelta is returned when requesting delta
+	// export kind for a precomputed sum instrument.
+	ErrNoCumulativeToDelta = fmt.Errorf("cumulative to delta not implemented")
 
 	// ErrNoData is returned when (due to a race with collection)
 	// the Aggregator is check-pointed before the first value is set.

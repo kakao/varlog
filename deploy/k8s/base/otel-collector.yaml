@@ -28,9 +28,6 @@ data:
     exporters:
       logging:
         loglevel: debug
-      jaeger:
-        endpoint: "jaeger-collector.default:14250"
-        insecure: true
       prometheus:
         endpoint: "0.0.0.0:8889"
         namespace: "varlog"
@@ -40,10 +37,6 @@ data:
 
     service:
       pipelines:
-        traces:
-          receivers: [otlp]
-          processors: [batch, memory_limiter]
-          exporters: [jaeger]
         metrics:
           receivers: [otlp]
           processors: [batch, memory_limiter]

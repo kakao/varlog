@@ -13,7 +13,7 @@ images:
   newTag: IMAGE_TAG
 - name: otel/opentelemetry-collector
   newName: mdock.daumkakao.io/otel/opentelemetry-collector
-  newTag: 0.34.0
+  newTag: 0.41.0
 - name: jaegertracing/all-in-one
   newName: mdock.daumkakao.io/jaegertracing/all-in-one
   newTag: 1.26.0

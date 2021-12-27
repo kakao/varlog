@@ -9,14 +9,12 @@ import (
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
-	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/rpcserver"
-	"github.daumkakao.com/varlog/varlog/pkg/util/telemetry/attribute"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
@@ -44,20 +42,13 @@ func (s *server) Register(server *grpc.Server) {
 }
 
 func (s *server) withTelemetry(ctx context.Context, spanName string, req interface{}, h rpcserver.Handler) (rsp interface{}, err error) {
-	storageNodeID := s.storageNodeIDGetter.StorageNodeID()
-	ctx, span := s.measurable.Stub().StartSpan(ctx, spanName,
-		oteltrace.WithAttributes(attribute.StorageNodeID(storageNodeID)),
-		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
-	)
 	rsp, err = h(ctx, req)
 	if err != nil {
-		span.RecordError(err)
 		s.logger.Error(spanName,
 			zap.Error(err),
 			zap.Stringer("request", req.(fmt.Stringer)),
 		)
 	}
-	span.End()
 	return rsp, err
 }
 
@@ -68,7 +59,7 @@ func (s *server) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.App
 			startTime := time.Now()
 			defer func() {
 				dur := time.Since(startTime)
-				s.measurable.Stub().Metrics().RPCServerAppendDuration.Record(
+				s.metrics.RPCServerAppendDuration.Record(
 					ctx,
 					float64(dur.Microseconds())/1000.0,
 				)

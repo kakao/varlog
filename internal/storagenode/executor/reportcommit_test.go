@@ -13,6 +13,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/id"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
@@ -37,7 +38,7 @@ func TestLogStreamReporter(t *testing.T) {
 		WithStorageNodeID(snid),
 		WithLogStreamID(lsid1),
 		WithStorage(strg1),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, lse1.Close()) }()
@@ -62,7 +63,7 @@ func TestLogStreamReporter(t *testing.T) {
 		WithStorageNodeID(snid),
 		WithLogStreamID(lsid2),
 		WithStorage(strg2),
-		WithMeasurable(NewTestMeasurable(ctrl)),
+		WithMetrics(telemetry.NewMetrics()),
 	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, lse2.Close()) }()

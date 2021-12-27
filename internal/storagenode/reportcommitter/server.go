@@ -22,16 +22,16 @@ type Server interface {
 
 type server struct {
 	lsr     Reporter
-	measure telemetry.Measurable
+	metrics *telemetry.Metrics
 	logger  *zap.Logger
 }
 
 var _ Server = (*server)(nil)
 
-func NewServer(lsr Reporter, m telemetry.Measurable) *server {
+func NewServer(lsr Reporter, metrics *telemetry.Metrics) *server {
 	return &server{
 		lsr:     lsr,
-		measure: m,
+		metrics: metrics,
 		logger:  zap.NewNop(),
 	}
 }

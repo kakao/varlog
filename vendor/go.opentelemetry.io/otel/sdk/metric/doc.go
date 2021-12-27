@@ -28,9 +28,7 @@ and asynchronous instruments.  There are two constructors per instrument for
 the two kinds of number (int64, float64).
 
 Synchronous instruments are managed by a sync.Map containing a *record
-with the current state for each synchronous instrument.  A bound
-instrument encapsulates a direct pointer to the record, allowing
-bound metric events to bypass a sync.Map lookup.  A lock-free
+with the current state for each synchronous instrument.  A lock-free
 algorithm is used to protect against races when adding and removing
 items from the sync.Map.
 
@@ -45,7 +43,7 @@ record contains a set of recorders for every specific label set used in the
 callback.
 
 A sync.Map maintains the mapping of current instruments and label sets to
-internal records.  To create a new bound instrument, the SDK consults the Map to
+internal records.  To find a record, the SDK consults the Map to
 locate an existing record, otherwise it constructs a new record.  The SDK
 maintains a count of the number of references to each record, ensuring
 that records are not reclaimed from the Map while they are still active
@@ -102,7 +100,7 @@ record has an associated aggregator.
 Processor is an interface which sits between the SDK and an exporter.
 The Processor embeds an AggregatorSelector, used by the SDK to assign
 new Aggregators.  The Processor supports a Process() API for submitting
-checkpointed aggregators to the processor, and a CheckpointSet() API
+checkpointed aggregators to the processor, and a Reader() API
 for producing a complete checkpoint for the exporter.  Two default
 Processor implementations are provided, the "defaultkeys" Processor groups
 aggregate metrics by their recommended Descriptor.Keys(), the
@@ -113,9 +111,9 @@ provide the serialization logic for labels.  This allows avoiding
 duplicate serialization of labels, once as a unique key in the SDK (or
 Processor) and once in the exporter.
 
-CheckpointSet is an interface between the Processor and the Exporter.
-After completing a collection pass, the Processor.CheckpointSet() method
-returns a CheckpointSet, which the Exporter uses to iterate over all
+Reader is an interface between the Processor and the Exporter.
+After completing a collection pass, the Processor.Reader() method
+returns a Reader, which the Exporter uses to iterate over all
 the updated metrics.
 
 Record is a struct containing the state of an individual exported
@@ -126,7 +124,7 @@ Labels is a struct containing an ordered set of labels, the
 corresponding unique encoding, and the encoder that produced it.
 
 Exporter is the final stage of an export pipeline.  It is called with
-a CheckpointSet capable of enumerating all the updated metrics.
+a Reader capable of enumerating all the updated metrics.
 
 Controller is not an export interface per se, but it orchestrates the
 export pipeline.  For example, a "push" controller will establish a

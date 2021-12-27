@@ -48,7 +48,7 @@ spec:
         - name: VMR_HOME
           value: /varlog/mr
         - name: COLLECTOR_NAME
-          value: "otel"
+          value: "otlp"
         - name: COLLECTOR_ENDPOINT
           value: "localhost:4317"
         - name: HOST_IP

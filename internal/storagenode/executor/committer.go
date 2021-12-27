@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/storage"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/mathutil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
@@ -28,7 +29,7 @@ type committerConfig struct {
 	lsc     *logStreamContext
 	decider *decidableCondition
 	state   stateProvider
-	me      MeasurableExecutor
+	metrics *telemetry.Metrics
 }
 
 func (c committerConfig) validate() error {
@@ -53,7 +54,7 @@ func (c committerConfig) validate() error {
 	if c.state == nil {
 		return errors.Wrap(verrors.ErrInvalid, "committer: no state provider")
 	}
-	if c.me == nil {
+	if c.metrics == nil {
 		return errors.Wrap(verrors.ErrInvalid, "committer: no measurable")
 	}
 	return nil
@@ -198,7 +199,7 @@ func (c *committerImpl) commitLoop(ctx context.Context) {
 func (c *committerImpl) commitLoopInternal(ctx context.Context) error {
 	numPoppedCTs, err := c.ready(ctx)
 	defer func() {
-		c.me.Stub().Metrics().ExecutorCommitQueueTasks.Record(ctx, numPoppedCTs)
+		c.metrics.ExecutorCommitQueueTasks.Record(ctx, numPoppedCTs)
 		atomic.AddInt64(&c.inflightCommitTasks.cnt, -numPoppedCTs)
 	}()
 	if err != nil {
@@ -235,7 +236,7 @@ func (c *committerImpl) ready(ctx context.Context) (int64, error) {
 
 	commitVersion, _, _ := c.lsc.reportCommitBase()
 	if ct.stale(commitVersion) {
-		ct.annotate(ctx, c.me, true)
+		ct.annotate(ctx, c.metrics, true)
 		ct.release()
 	} else {
 		c.commitTaskBatch = append(c.commitTaskBatch, ct)
@@ -248,7 +249,7 @@ func (c *committerImpl) ready(ctx context.Context) (int64, error) {
 		ct.poppedTime = time.Now()
 
 		if ct.stale(commitVersion) {
-			ct.annotate(ctx, c.me, true)
+			ct.annotate(ctx, c.metrics, true)
 			ct.release()
 			continue
 		}
@@ -278,7 +279,7 @@ func (c *committerImpl) commit(ctx context.Context) error {
 	for _, ct := range c.commitTaskBatch {
 		commitVersion, _, _ := c.lsc.reportCommitBase()
 		if ct.stale(commitVersion) {
-			ct.annotate(ctx, c.me, true)
+			ct.annotate(ctx, c.metrics, true)
 			continue
 		}
 
@@ -301,7 +302,7 @@ func (c *committerImpl) commitInternal(ctx context.Context, ct *commitTask) erro
 	if uncommittedLLSNBegin != ct.committedLLSNBegin {
 		// skip this commit
 		// See #VARLOG-453 (https://jira.daumkakao.com/browse/VARLOG-453).
-		ct.annotate(ctx, c.me, true)
+		ct.annotate(ctx, c.metrics, true)
 		return nil
 	}
 
@@ -316,7 +317,7 @@ func (c *committerImpl) commitInternal(ctx context.Context, ct *commitTask) erro
 		// skip this commit
 		// NB: recovering phase?
 		// MR just sends past commit messages to recovered SN that has no written logs
-		ct.annotate(ctx, c.me, true)
+		ct.annotate(ctx, c.metrics, true)
 		return nil
 	}
 
@@ -330,7 +331,7 @@ func (c *committerImpl) commitInternal(ctx context.Context, ct *commitTask) erro
 	// storage, however, it is failed to push them into the commitWaitQueue.
 	// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
 	if c.commitWaitQ.size() < numCommits {
-		ct.annotate(ctx, c.me, true)
+		ct.annotate(ctx, c.metrics, true)
 		return nil
 	}
 
@@ -346,7 +347,7 @@ func (c *committerImpl) commitInternal(ctx context.Context, ct *commitTask) erro
 	if processed {
 		ct.processingTime = time.Now()
 	}
-	ct.annotate(ctx, c.me, !processed)
+	ct.annotate(ctx, c.metrics, !processed)
 	return err
 
 	/*
@@ -593,12 +594,12 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 		}
 		cwt.twg.done(nil)
 		cwt.processingTime = now
-		cwt.annotate(context.Background(), c.me)
+		cwt.annotate(context.Background(), c.metrics)
 		cwt.release()
 	}
 
 	if popSize > 0 {
-		c.me.Stub().Metrics().ExecutorCommitWaitQueueTasks.Record(context.Background(), int64(popSize))
+		c.metrics.ExecutorCommitWaitQueueTasks.Record(context.Background(), int64(popSize))
 		atomic.AddInt64(&c.inflightCommitWaitTasks, -int64(popSize))
 	}
 

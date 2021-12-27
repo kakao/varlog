@@ -48,6 +48,12 @@ spec:
           value: "$(VARLOG_VMS_RPC_SERVICE_HOST):$(VARLOG_VMS_RPC_SERVICE_PORT)"
         - name: VOLUMES
           value: /varlog/sn
+        - name: EXPORTER_TYPE
+          value: otlp
+        - name: EXPORTER_OTLP_INSECURE
+          value: "true"
+        - name: EXPORTER_OTLP_ENDPOINT
+          value: "localhost:4317"
         - name: TELEMETRY
           value: "localhost:4317"
         - name: HOST_IP
