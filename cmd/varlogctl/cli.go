@@ -32,10 +32,9 @@ func commonFlags(flags ...cli.Flag) []cli.Flag {
 
 func newVarlogControllerApp() *cli.App {
 	app := &cli.App{
-		Name:     appName,
-		Usage:    "controller application for varlog",
-		Version:  version,
-		Compiled: time.Now(),
+		Name:    appName,
+		Usage:   "controller application for varlog",
+		Version: version,
 		Commands: []*cli.Command{
 			newTopicCommand(),
 			newMetadataRepositoryCommand(),
