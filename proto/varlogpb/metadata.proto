@@ -223,9 +223,10 @@ message LogStreamMetadataDescriptor {
   uint64 version = 5
       [(gogoproto.casttype) =
            "github.com/kakao/varlog/pkg/types.Version"];
-  uint64 high_watermark = 6
-      [(gogoproto.casttype) =
-           "github.com/kakao/varlog/pkg/types.GLSN"];
+  uint64 high_watermark = 6 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.jsontag) = "highWatermark"
+  ];
   string path = 7;
   google.protobuf.Timestamp created_time = 8 [
     (gogoproto.stdtime) = true,

@@ -1,13 +1,68 @@
 package varlogpb
 
 import (
+	"encoding/json"
+	fmt "fmt"
 	"sort"
+	"strings"
 
 	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 )
+
+const (
+	logStreamStatusRunning   = "running"
+	logStreamStatusSealing   = "sealing"
+	logStreamStatusSealed    = "sealed"
+	logStreamStatusDeleted   = "deleted"
+	logStreamStatusUnsealing = "unsealing"
+)
+
+// MarshalJSON returns the JSON encoding of the LogStreamStatus.
+func (lss LogStreamStatus) MarshalJSON() ([]byte, error) {
+	var s string
+	switch lss {
+	case LogStreamStatusRunning:
+		s = logStreamStatusRunning
+	case LogStreamStatusSealing:
+		s = logStreamStatusSealing
+	case LogStreamStatusSealed:
+		s = logStreamStatusSealed
+	case LogStreamStatusDeleted:
+		s = logStreamStatusDeleted
+	case LogStreamStatusUnsealing:
+		s = logStreamStatusUnsealing
+	default:
+		return nil, fmt.Errorf("unexpected logstream status: %v", lss)
+	}
+	return json.Marshal(s)
+}
+
+// UnmarshalJSON parses the JSON-encoded data and stores the result in the value of type
+// LogStreamStatus.
+func (lss *LogStreamStatus) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	switch strings.ToLower(s) {
+	case logStreamStatusRunning:
+		*lss = LogStreamStatusRunning
+	case logStreamStatusSealing:
+		*lss = LogStreamStatusSealing
+	case logStreamStatusSealed:
+		*lss = LogStreamStatusSealed
+	case logStreamStatusDeleted:
+		*lss = LogStreamStatusDeleted
+	case logStreamStatusUnsealing:
+		*lss = LogStreamStatusUnsealing
+	default:
+		return fmt.Errorf("unexpected data: %s", s)
+	}
+	return nil
+}
 
 func (s LogStreamStatus) Deleted() bool {
 	return s == LogStreamStatusDeleted
