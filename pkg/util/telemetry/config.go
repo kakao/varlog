@@ -31,7 +31,7 @@ func newMeterProviderConfig(opts []MeterProviderOption) meterProviderConfig {
 		collectPeriod:      controller.DefaultPeriod,
 		collectTimeout:     controller.DefaultPeriod,
 		pushTimeout:        controller.DefaultPeriod,
-		aggregatorSelector: simple.NewWithInexpensiveDistribution(),
+		aggregatorSelector: simple.NewWithHistogramDistribution(),
 	}
 	for _, opt := range opts {
 		opt(&cfg)

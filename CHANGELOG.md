@@ -5,7 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
+### Changed
+- Use `go.opentelemetry.io/otel/sdk/metric/selector/simple.NewWithHistogramDistribution` as default aggregatorSelector. (#VARLOG-648/#562)
+- Changed initialization of `go.opentelemetry.io/otel/sdk/resource.(Resource)` in `cmd/storagenode/app.initMeterProvider`. (#VARLOG-648/#562)
 
 ## [0.1.1] - 2021-12-27
 ### Added
