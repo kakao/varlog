@@ -37,7 +37,11 @@ func Main(c *cli.Context) error {
 		return err
 	}
 
-	mp, stop, err := initMeterProvider(c, snid)
+	// TODO: add initTimeout option
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	mp, stop, err := initMeterProvider(ctx, c, snid)
 	if err != nil {
 		return err
 	}
@@ -88,9 +92,6 @@ func Main(c *cli.Context) error {
 		storageOpts = append(storageOpts, storage.WithDebugLog())
 	}
 
-	// TODO: add initTimeout option
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	sn, err := storagenode.New(ctx,
 		storagenode.WithClusterID(cid),
 		storagenode.WithStorageNodeID(snid),
@@ -121,22 +122,30 @@ func Main(c *cli.Context) error {
 	return sn.Run()
 }
 
-func initMeterProvider(c *cli.Context, snid types.StorageNodeID) (metric.MeterProvider, telemetry.StopMeterProvider, error) {
+func initMeterProvider(ctx context.Context, c *cli.Context, snid types.StorageNodeID) (metric.MeterProvider, telemetry.StopMeterProvider, error) {
 	var (
-		err               error
-		exporter          metricsdk.Exporter
-		shutdown          telemetry.ShutdownExporter
-		meterProviderOpts = []telemetry.MeterProviderOption{
-			telemetry.WithResource(resource.NewWithAttributes(
-				semconv.SchemaURL,
-				semconv.ServiceNameKey.String("sn"),
-				semconv.ServiceNamespaceKey.String("varlog"),
-				semconv.ServiceInstanceIDKey.String(snid.String()),
-			)),
-			telemetry.WithHostInstrumentation(),
-			telemetry.WithRuntimeInstrumentation(),
-		}
+		err      error
+		exporter metricsdk.Exporter
+		shutdown telemetry.ShutdownExporter
 	)
+
+	res, err := resource.New(ctx,
+		resource.WithFromEnv(),
+		resource.WithHost(),
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String("sn"),
+			semconv.ServiceNamespaceKey.String("varlog"),
+			semconv.ServiceInstanceIDKey.String(snid.String()),
+		))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	meterProviderOpts := []telemetry.MeterProviderOption{
+		telemetry.WithResource(res),
+		telemetry.WithHostInstrumentation(),
+		telemetry.WithRuntimeInstrumentation(),
+	}
 	switch strings.ToLower(c.String(flagExporterType.Name)) {
 	case "stdout":
 		opts := []stdoutmetric.Option{}
