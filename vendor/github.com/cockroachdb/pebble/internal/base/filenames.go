@@ -31,28 +31,36 @@ const (
 	FileTypeManifest
 	FileTypeCurrent
 	FileTypeOptions
+	FileTypeOldTemp
 	FileTypeTemp
 )
 
 // MakeFilename builds a filename from components.
-func MakeFilename(fs vfs.FS, dirname string, fileType FileType, fileNum FileNum) string {
+func MakeFilename(fileType FileType, fileNum FileNum) string {
 	switch fileType {
 	case FileTypeLog:
-		return fs.PathJoin(dirname, fmt.Sprintf("%s.log", fileNum))
+		return fmt.Sprintf("%s.log", fileNum)
 	case FileTypeLock:
-		return fs.PathJoin(dirname, "LOCK")
+		return "LOCK"
 	case FileTypeTable:
-		return fs.PathJoin(dirname, fmt.Sprintf("%s.sst", fileNum))
+		return fmt.Sprintf("%s.sst", fileNum)
 	case FileTypeManifest:
-		return fs.PathJoin(dirname, fmt.Sprintf("MANIFEST-%s", fileNum))
+		return fmt.Sprintf("MANIFEST-%s", fileNum)
 	case FileTypeCurrent:
-		return fs.PathJoin(dirname, "CURRENT")
+		return "CURRENT"
 	case FileTypeOptions:
-		return fs.PathJoin(dirname, fmt.Sprintf("OPTIONS-%s", fileNum))
+		return fmt.Sprintf("OPTIONS-%s", fileNum)
+	case FileTypeOldTemp:
+		return fmt.Sprintf("CURRENT.%s.dbtmp", fileNum)
 	case FileTypeTemp:
-		return fs.PathJoin(dirname, fmt.Sprintf("CURRENT.%s.dbtmp", fileNum))
+		return fmt.Sprintf("temporary.%s.dbtmp", fileNum)
 	}
 	panic("unreachable")
+}
+
+// MakeFilepath builds a filepath from components.
+func MakeFilepath(fs vfs.FS, dirname string, fileType FileType, fileNum FileNum) string {
+	return fs.PathJoin(dirname, MakeFilename(fileType, fileNum))
 }
 
 // ParseFilename parses the components from a filename.
@@ -77,6 +85,13 @@ func ParseFilename(fs vfs.FS, filename string) (fileType FileType, fileNum FileN
 		return FileTypeOptions, fileNum, ok
 	case strings.HasPrefix(filename, "CURRENT.") && strings.HasSuffix(filename, ".dbtmp"):
 		s := strings.TrimSuffix(filename[len("CURRENT."):], ".dbtmp")
+		fileNum, ok = parseFileNum(s)
+		if !ok {
+			break
+		}
+		return FileTypeOldTemp, fileNum, ok
+	case strings.HasPrefix(filename, "temporary.") && strings.HasSuffix(filename, ".dbtmp"):
+		s := strings.TrimSuffix(filename[len("temporary."):], ".dbtmp")
 		fileNum, ok = parseFileNum(s)
 		if !ok {
 			break

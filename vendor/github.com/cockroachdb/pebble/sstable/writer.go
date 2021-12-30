@@ -17,20 +17,25 @@ import (
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/cache"
 	"github.com/cockroachdb/pebble/internal/crc"
+	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/private"
-	"github.com/cockroachdb/pebble/internal/rangedel"
+	"github.com/cockroachdb/pebble/internal/rangekey"
 )
+
+var errWriterClosed = errors.New("pebble: writer is closed")
 
 // WriterMetadata holds info about a finished sstable.
 type WriterMetadata struct {
-	Size           uint64
-	SmallestPoint  InternalKey
-	SmallestRange  InternalKey
-	LargestPoint   InternalKey
-	LargestRange   InternalKey
-	SmallestSeqNum uint64
-	LargestSeqNum  uint64
-	Properties     Properties
+	Size             uint64
+	SmallestPoint    InternalKey
+	SmallestRangeDel InternalKey
+	SmallestRangeKey InternalKey
+	LargestPoint     InternalKey
+	LargestRangeDel  InternalKey
+	LargestRangeKey  InternalKey
+	SmallestSeqNum   uint64
+	LargestSeqNum    uint64
+	Properties       Properties
 }
 
 func (m *WriterMetadata) updateSeqNum(seqNum uint64) {
@@ -42,32 +47,32 @@ func (m *WriterMetadata) updateSeqNum(seqNum uint64) {
 	}
 }
 
-// Smallest returns the smaller of SmallestPoint and SmallestRange.
+// Smallest returns the smaller of SmallestPoint and SmallestRangeDel.
 func (m *WriterMetadata) Smallest(cmp Compare) InternalKey {
 	if m.SmallestPoint.UserKey == nil {
-		return m.SmallestRange
+		return m.SmallestRangeDel
 	}
-	if m.SmallestRange.UserKey == nil {
+	if m.SmallestRangeDel.UserKey == nil {
 		return m.SmallestPoint
 	}
-	if base.InternalCompare(cmp, m.SmallestPoint, m.SmallestRange) < 0 {
+	if base.InternalCompare(cmp, m.SmallestPoint, m.SmallestRangeDel) < 0 {
 		return m.SmallestPoint
 	}
-	return m.SmallestRange
+	return m.SmallestRangeDel
 }
 
-// Largest returns the larget of LargestPoint and LargestRange.
+// Largest returns the larget of LargestPoint and LargestRangeDel.
 func (m *WriterMetadata) Largest(cmp Compare) InternalKey {
 	if m.LargestPoint.UserKey == nil {
-		return m.LargestRange
+		return m.LargestRangeDel
 	}
-	if m.LargestRange.UserKey == nil {
+	if m.LargestRangeDel.UserKey == nil {
 		return m.LargestPoint
 	}
-	if base.InternalCompare(cmp, m.LargestPoint, m.LargestRange) > 0 {
+	if base.InternalCompare(cmp, m.LargestPoint, m.LargestRangeDel) > 0 {
 		return m.LargestPoint
 	}
-	return m.LargestRange
+	return m.LargestRangeDel
 }
 
 type flusher interface {
@@ -128,12 +133,15 @@ type Writer struct {
 	// Internal flag to allow creation of range-del-v1 format blocks. Only used
 	// for testing. Note that v2 format blocks are backwards compatible with v1
 	// format blocks.
-	rangeDelV1Format bool
-	block            blockWriter
-	indexBlock       blockWriter
-	rangeDelBlock    blockWriter
-	props            Properties
-	propCollectors   []TablePropertyCollector
+	rangeDelV1Format    bool
+	block               blockWriter
+	indexBlock          blockWriter
+	rangeDelBlock       blockWriter
+	rangeKeyBlock       blockWriter
+	props               Properties
+	propCollectors      []TablePropertyCollector
+	blockPropCollectors []BlockPropertyCollector
+	blockPropsEncoder   blockPropertiesEncoder
 	// compressedBuf is the destination buffer for compression. It is
 	// re-used over the lifetime of the writer, avoiding the allocation of a
 	// temporary buffer for each block.
@@ -143,13 +151,19 @@ type Writer struct {
 	// nil, or the full keys otherwise.
 	filter filterWriter
 	// tmp is a scratch buffer, large enough to hold either footerLen bytes,
-	// blockTrailerLen bytes, or (5 * binary.MaxVarintLen64) bytes.
-	tmp [rocksDBFooterLen]byte
+	// blockTrailerLen bytes, (5 * binary.MaxVarintLen64) bytes, and most
+	// likely large enough for a block handle with properties.
+	tmp [blockHandleLikelyMaxLen]byte
 
 	xxHasher *xxhash.Digest
 
 	topLevelIndexBlock blockWriter
-	indexPartitions    []blockWriter
+	indexPartitions    []indexBlockWriterAndBlockProperties
+}
+
+type indexBlockWriterAndBlockProperties struct {
+	writer     blockWriter
+	properties []byte
 }
 
 // Set sets the value for the given key. The sequence number is set to
@@ -207,14 +221,21 @@ func (w *Writer) Merge(key, value []byte) error {
 // rule is range deletion tombstones. Range deletion tombstones need to be
 // added ordered by their start key, but they can be added out of order from
 // point entries. Additionally, range deletion tombstones must be fragmented
-// (i.e. by rangedel.Fragmenter).
+// (i.e. by keyspan.Fragmenter).
 func (w *Writer) Add(key InternalKey, value []byte) error {
 	if w.err != nil {
 		return w.err
 	}
 
-	if key.Kind() == InternalKeyKindRangeDelete {
+	switch key.Kind() {
+	case InternalKeyKindRangeDelete:
 		return w.addTombstone(key, value)
+	case base.InternalKeyKindRangeKeyDelete,
+		base.InternalKeyKindRangeKeySet,
+		base.InternalKeyKindRangeKeyUnset:
+		w.err = errors.Errorf(
+			"pebble: range keys must be added via one of the AddRangeKey functions")
+		return w.err
 	}
 	return w.addPoint(key, value)
 }
@@ -238,6 +259,11 @@ func (w *Writer) addPoint(key InternalKey, value []byte) error {
 
 	for i := range w.propCollectors {
 		if err := w.propCollectors[i].Add(key, value); err != nil {
+			return err
+		}
+	}
+	for i := range w.blockPropCollectors {
+		if err := w.blockPropCollectors[i].Add(key, value); err != nil {
 			return err
 		}
 	}
@@ -283,8 +309,8 @@ func (w *Writer) addTombstone(key InternalKey, value []byte) error {
 			prevValue := w.rangeDelBlock.curValue
 			if w.compare(prevValue, value) != 0 {
 				w.err = errors.Errorf("pebble: overlapping tombstones must be fragmented: %s vs %s",
-					(rangedel.Tombstone{Start: prevKey, End: prevValue}).Pretty(w.formatKey),
-					(rangedel.Tombstone{Start: key, End: value}).Pretty(w.formatKey))
+					(keyspan.Span{Start: prevKey, End: prevValue}).Pretty(w.formatKey),
+					(keyspan.Span{Start: key, End: value}).Pretty(w.formatKey))
 				return w.err
 			}
 			if prevKey.SeqNum() <= key.SeqNum() {
@@ -296,8 +322,8 @@ func (w *Writer) addTombstone(key InternalKey, value []byte) error {
 			prevValue := w.rangeDelBlock.curValue
 			if w.compare(prevValue, key.UserKey) > 0 {
 				w.err = errors.Errorf("pebble: overlapping tombstones must be fragmented: %s vs %s",
-					(rangedel.Tombstone{Start: prevKey, End: prevValue}).Pretty(w.formatKey),
-					(rangedel.Tombstone{Start: key, End: value}).Pretty(w.formatKey))
+					(keyspan.Span{Start: prevKey, End: prevValue}).Pretty(w.formatKey),
+					(keyspan.Span{Start: key, End: value}).Pretty(w.formatKey))
 				return w.err
 			}
 		}
@@ -324,15 +350,15 @@ func (w *Writer) addTombstone(key InternalKey, value []byte) error {
 		//
 		// Note that writing the v1 format is only supported for tests.
 		if w.props.NumRangeDeletions == 0 {
-			w.meta.SmallestRange = key.Clone()
-			w.meta.LargestRange = base.MakeRangeDeleteSentinelKey(value).Clone()
+			w.meta.SmallestRangeDel = key.Clone()
+			w.meta.LargestRangeDel = base.MakeRangeDeleteSentinelKey(value).Clone()
 		} else {
-			if base.InternalCompare(w.compare, w.meta.SmallestRange, key) > 0 {
-				w.meta.SmallestRange = key.Clone()
+			if base.InternalCompare(w.compare, w.meta.SmallestRangeDel, key) > 0 {
+				w.meta.SmallestRangeDel = key.Clone()
 			}
 			end := base.MakeRangeDeleteSentinelKey(value)
-			if base.InternalCompare(w.compare, w.meta.LargestRange, end) < 0 {
-				w.meta.LargestRange = end.Clone()
+			if base.InternalCompare(w.compare, w.meta.LargestRangeDel, end) < 0 {
+				w.meta.LargestRangeDel = end.Clone()
 			}
 		}
 
@@ -342,7 +368,7 @@ func (w *Writer) addTombstone(key InternalKey, value []byte) error {
 		// range tombstone key. The largest range tombstone key will be determined
 		// in Writer.Close() as the end key of the last range tombstone added.
 		if w.props.NumRangeDeletions == 0 {
-			w.meta.SmallestRange = key.Clone()
+			w.meta.SmallestRangeDel = key.Clone()
 		}
 	}
 
@@ -352,6 +378,106 @@ func (w *Writer) addTombstone(key InternalKey, value []byte) error {
 	w.props.RawKeySize += uint64(key.Size())
 	w.props.RawValueSize += uint64(len(value))
 	w.rangeDelBlock.add(key, value)
+	return nil
+}
+
+// AddInternalRangeKey adds a range key set, unset, or delete key/value pair to
+// the table being written.
+//
+// Range keys must be supplied in strictly ascending order of start key (i.e.
+// user key ascending, sequence number descending, and key type descending).
+// Ranges added must also be supplied in fragmented span order - i.e. other than
+// spans that are perfectly aligned (same start and end keys), spans may not
+// overlap. Range keys may be added out of order relative to point keys and
+// range deletions.
+func (w *Writer) AddInternalRangeKey(key InternalKey, value []byte) error {
+	if w.err != nil {
+		return w.err
+	}
+	return w.addRangeKey(key, value)
+}
+
+func (w *Writer) addRangeKey(key InternalKey, value []byte) error {
+	if !w.disableKeyOrderChecks && w.rangeKeyBlock.nEntries > 0 {
+		prevStartKey := base.DecodeInternalKey(w.rangeKeyBlock.curKey)
+		prevEndKey, _, ok := rangekey.DecodeEndKey(prevStartKey.Kind(), w.rangeKeyBlock.curValue)
+		if !ok {
+			// We panic here as we should have previously decoded and validated this
+			// key and value when it was first added to the range key block.
+			panic(errors.Errorf("pebble: invalid end key for span: %s",
+				(keyspan.Span{Start: prevStartKey, End: prevEndKey}).Pretty(w.formatKey)))
+		}
+
+		curStartKey := key
+		curEndKey, _, ok := rangekey.DecodeEndKey(curStartKey.Kind(), value)
+		if !ok {
+			w.err = errors.Errorf("pebble: invalid end key for span: %s",
+				(keyspan.Span{Start: curStartKey, End: curEndKey}).Pretty(w.formatKey))
+			return w.err
+		}
+
+		// Start keys must be strictly increasing.
+		if base.InternalCompare(w.compare, prevStartKey, curStartKey) >= 0 {
+			w.err = errors.Errorf(
+				"pebble: range keys starts must be added in strictly increasing order: %s, %s",
+				prevStartKey.Pretty(w.formatKey), key.Pretty(w.formatKey))
+			return w.err
+		}
+
+		// Start keys are strictly increasing. If the start user keys are equal, the
+		// end keys must be equal (i.e. aligned spans).
+		if w.compare(prevStartKey.UserKey, curStartKey.UserKey) == 0 {
+			if w.compare(prevEndKey, curEndKey) != 0 {
+				w.err = errors.Errorf("pebble: overlapping range keys must be fragmented: %s, %s",
+					(keyspan.Span{Start: prevStartKey, End: prevEndKey}).Pretty(w.formatKey),
+					(keyspan.Span{Start: curStartKey, End: curEndKey}).Pretty(w.formatKey))
+				return w.err
+			}
+		} else if w.compare(prevEndKey, curStartKey.UserKey) > 0 {
+			// If the start user keys are NOT equal, the spans must be disjoint (i.e.
+			// no overlap).
+			// NOTE: the inequality excludes zero, as we allow the end key of the
+			// lower span be the same as the start key of the upper span, because
+			// the range end key is considered an exclusive bound.
+			w.err = errors.Errorf("pebble: overlapping range keys must be fragmented: %s, %s",
+				(keyspan.Span{Start: prevStartKey, End: prevEndKey}).Pretty(w.formatKey),
+				(keyspan.Span{Start: curStartKey, End: curEndKey}).Pretty(w.formatKey))
+			return w.err
+		}
+	}
+
+	// TODO(travers): Add an invariant-gated check to ensure that suffix-values
+	// are sorted within coalesced spans.
+
+	// Range-keys and point-keys are intended to live in "parallel" keyspaces.
+	// However, we track a single seqnum in the table metadata that spans both of
+	// these keyspaces.
+	// TODO(travers): Consider tracking range key seqnums separately.
+	w.meta.updateSeqNum(key.SeqNum())
+
+	// Range tombstones are fragmented, so the start key of the first range key
+	// added will be the smallest. The largest range key is determined in
+	// Writer.Close() as the end key of the last range key added to the block.
+	if w.props.NumRangeKeys() == 0 {
+		w.meta.SmallestRangeKey = key.Clone()
+	}
+
+	// Update block properties.
+	w.props.RawRangeKeyKeySize += uint64(key.Size())
+	w.props.RawRangeKeyValueSize += uint64(len(value))
+	switch key.Kind() {
+	case base.InternalKeyKindRangeKeyDelete:
+		w.props.NumRangeKeyDels++
+	case base.InternalKeyKindRangeKeySet:
+		w.props.NumRangeKeySets++
+	case base.InternalKeyKindRangeKeyUnset:
+		w.props.NumRangeKeyUnsets++
+	default:
+		panic(errors.Errorf("pebble: invalid range key type: %s", key.Kind()))
+	}
+
+	// Add the key to the block.
+	w.rangeKeyBlock.add(key, value)
 	return nil
 }
 
@@ -376,34 +502,69 @@ func (w *Writer) maybeFlush(key InternalKey, value []byte) error {
 		w.err = err
 		return w.err
 	}
-	w.addIndexEntry(key, bh)
+	var bhp BlockHandleWithProperties
+	if bhp, err = w.maybeAddBlockPropertiesToBlockHandle(bh); err != nil {
+		return err
+	}
+	prevKey := base.DecodeInternalKey(w.block.curKey)
+	if err = w.addIndexEntry(prevKey, key, bhp); err != nil {
+		return err
+	}
 	return nil
 }
 
+// The BlockHandleWithProperties returned by this method must be encoded
+// before any future use of the Writer.blockPropsEncoder, since the properties
+// slice will get reused by the blockPropsEncoder.
+func (w *Writer) maybeAddBlockPropertiesToBlockHandle(
+	bh BlockHandle,
+) (BlockHandleWithProperties, error) {
+	if len(w.blockPropCollectors) == 0 {
+		return BlockHandleWithProperties{BlockHandle: bh}, nil
+	}
+	var err error
+	w.blockPropsEncoder.resetProps()
+	for i := range w.blockPropCollectors {
+		scratch := w.blockPropsEncoder.getScratchForProp()
+		if scratch, err = w.blockPropCollectors[i].FinishDataBlock(scratch); err != nil {
+			return BlockHandleWithProperties{}, nil
+		}
+		if len(scratch) > 0 {
+			w.blockPropsEncoder.addProp(shortID(i), scratch)
+		}
+	}
+	return BlockHandleWithProperties{BlockHandle: bh, Props: w.blockPropsEncoder.unsafeProps()}, nil
+}
+
 // addIndexEntry adds an index entry for the specified key and block handle.
-func (w *Writer) addIndexEntry(key InternalKey, bh BlockHandle) {
-	if bh.Length == 0 {
+func (w *Writer) addIndexEntry(prevKey, key InternalKey, bhp BlockHandleWithProperties) error {
+	if bhp.Length == 0 {
 		// A valid blockHandle must be non-zero.
 		// In particular, it must have a non-zero length.
-		return
+		return nil
 	}
-	prevKey := base.DecodeInternalKey(w.block.curKey)
 	var sep InternalKey
 	if key.UserKey == nil && key.Trailer == 0 {
 		sep = prevKey.Successor(w.compare, w.successor, nil)
 	} else {
 		sep = prevKey.Separator(w.compare, w.separator, nil, key)
 	}
-	n := encodeBlockHandle(w.tmp[:], bh)
+	encoded := encodeBlockHandleWithProperties(w.tmp[:], bhp)
 
 	if supportsTwoLevelIndex(w.tableFormat) &&
-		shouldFlush(sep, w.tmp[:n], &w.indexBlock, w.indexBlockSize, w.indexBlockSizeThreshold) {
+		shouldFlush(sep, encoded, &w.indexBlock, w.indexBlockSize, w.indexBlockSizeThreshold) {
 		// Enable two level indexes if there is more than one index block.
 		w.twoLevelIndex = true
-		w.finishIndexBlock()
+		if err := w.finishIndexBlock(); err != nil {
+			return err
+		}
 	}
 
-	w.indexBlock.add(sep, w.tmp[:n])
+	for i := range w.blockPropCollectors {
+		w.blockPropCollectors[i].AddPrevDataBlockToIndexBlock()
+	}
+	w.indexBlock.add(sep, encoded)
+	return nil
 }
 
 func shouldFlush(
@@ -438,29 +599,51 @@ func shouldFlush(
 
 // finishIndexBlock finishes the current index block and adds it to the top
 // level index block. This is only used when two level indexes are enabled.
-func (w *Writer) finishIndexBlock() {
-	w.indexPartitions = append(w.indexPartitions, w.indexBlock)
+func (w *Writer) finishIndexBlock() error {
+	w.blockPropsEncoder.resetProps()
+	for i := range w.blockPropCollectors {
+		scratch := w.blockPropsEncoder.getScratchForProp()
+		var err error
+		if scratch, err = w.blockPropCollectors[i].FinishIndexBlock(scratch); err != nil {
+			return err
+		}
+		if len(scratch) > 0 {
+			w.blockPropsEncoder.addProp(shortID(i), scratch)
+		}
+	}
+	w.indexPartitions = append(w.indexPartitions,
+		indexBlockWriterAndBlockProperties{
+			writer:     w.indexBlock,
+			properties: w.blockPropsEncoder.props(),
+		})
 	w.indexBlock = blockWriter{
 		restartInterval: 1,
 	}
+	return nil
 }
 
 func (w *Writer) writeTwoLevelIndex() (BlockHandle, error) {
 	// Add the final unfinished index.
-	w.finishIndexBlock()
+	if err := w.finishIndexBlock(); err != nil {
+		return BlockHandle{}, err
+	}
 
 	for i := range w.indexPartitions {
 		b := &w.indexPartitions[i]
-		w.props.NumDataBlocks += uint64(b.nEntries)
-		sep := base.DecodeInternalKey(b.curKey)
-		data := b.finish()
+		w.props.NumDataBlocks += uint64(b.writer.nEntries)
+		sep := base.DecodeInternalKey(b.writer.curKey)
+		data := b.writer.finish()
 		w.props.IndexSize += uint64(len(data))
 		bh, err := w.writeBlock(data, w.compression)
 		if err != nil {
 			return BlockHandle{}, err
 		}
-		n := encodeBlockHandle(w.tmp[:], bh)
-		w.topLevelIndexBlock.add(sep, w.tmp[:n])
+		bhp := BlockHandleWithProperties{
+			BlockHandle: bh,
+			Props:       b.properties,
+		}
+		encoded := encodeBlockHandleWithProperties(w.tmp[:], bhp)
+		w.topLevelIndexBlock.add(sep, encoded)
 	}
 
 	// NB: RocksDB includes the block trailer length in the index size
@@ -486,7 +669,7 @@ func (w *Writer) writeBlock(b []byte, compression Compression) (BlockHandle, err
 		blockType = noCompressionBlockType
 	}
 
-	w.tmp[0] = blockType
+	w.tmp[0] = byte(blockType)
 
 	// Calculate the checksum.
 	var checksum uint32
@@ -506,7 +689,7 @@ func (w *Writer) writeBlock(b []byte, compression Compression) (BlockHandle, err
 		return BlockHandle{}, errors.Newf("unsupported checksum type: %d", w.checksumType)
 	}
 	binary.LittleEndian.PutUint32(w.tmp[1:5], checksum)
-	bh := BlockHandle{w.meta.Size, uint64(len(b))}
+	bh := BlockHandle{Offset: w.meta.Size, Length: uint64(len(b))}
 
 	if w.cacheID != 0 && w.fileNum != 0 {
 		// Remove the block being written from the cache. This provides defense in
@@ -557,7 +740,14 @@ func (w *Writer) Close() (err error) {
 			w.err = err
 			return w.err
 		}
-		w.addIndexEntry(InternalKey{}, bh)
+		var bhp BlockHandleWithProperties
+		if bhp, err = w.maybeAddBlockPropertiesToBlockHandle(bh); err != nil {
+			return err
+		}
+		prevKey := base.DecodeInternalKey(w.block.curKey)
+		if err = w.addIndexEntry(prevKey, InternalKey{}, bhp); err != nil {
+			return err
+		}
 	}
 	w.props.DataSize = w.meta.Size
 
@@ -622,7 +812,7 @@ func (w *Writer) Close() (err error) {
 			// slice passed into Write(). Also, w.meta will often outlive the
 			// blockWriter, and so cloning curValue allows the rangeDelBlock's
 			// internal buffer to get gc'd.
-			w.meta.LargestRange = base.MakeRangeDeleteSentinelKey(w.rangeDelBlock.curValue).Clone()
+			w.meta.LargestRangeDel = base.MakeRangeDeleteSentinelKey(w.rangeDelBlock.curValue).Clone()
 		}
 		rangeDelBH, err = w.writeBlock(w.rangeDelBlock.finish(), NoCompression)
 		if err != nil {
@@ -631,12 +821,60 @@ func (w *Writer) Close() (err error) {
 		}
 	}
 
+	// Write the range-key block.
+	var rangeKeyBH BlockHandle
+	if w.props.NumRangeKeys() > 0 {
+		key := base.DecodeInternalKey(w.rangeKeyBlock.curKey)
+		kind := key.Kind()
+		endKey, _, ok := rangekey.DecodeEndKey(kind, w.rangeKeyBlock.curValue)
+		if !ok {
+			w.err = errors.Newf("invalid end key: %s", w.rangeKeyBlock.curValue)
+			return w.err
+		}
+		w.meta.LargestRangeKey = base.MakeInternalKey(endKey, base.InternalKeySeqNumMax, key.Kind()).Clone()
+		// TODO(travers): The lack of compression on the range key block matches the
+		// lack of compression on the range-del block. Revisit whether we want to
+		// enable compression on this block.
+		rangeKeyBH, err = w.writeBlock(w.rangeKeyBlock.finish(), NoCompression)
+		if err != nil {
+			w.err = err
+			return w.err
+		}
+	}
+
+	// Add the range key block handle to the metaindex block. Note that we add the
+	// block handle to the metaindex block before the other meta blocks as the
+	// metaindex block entries must be sorted, and the range key block name sorts
+	// before the other block names.
+	if w.props.NumRangeKeys() > 0 {
+		n := encodeBlockHandle(w.tmp[:], rangeKeyBH)
+		metaindex.add(InternalKey{UserKey: []byte(metaRangeKeyName)}, w.tmp[:n])
+	}
+
 	{
 		userProps := make(map[string]string)
 		for i := range w.propCollectors {
 			if err := w.propCollectors[i].Finish(userProps); err != nil {
 				return err
 			}
+		}
+		for i := range w.blockPropCollectors {
+			scratch := w.blockPropsEncoder.getScratchForProp()
+			// Place the shortID in the first byte.
+			scratch = append(scratch, byte(i))
+			buf, err :=
+				w.blockPropCollectors[i].FinishTable(scratch)
+			if err != nil {
+				return err
+			}
+			var prop string
+			if len(buf) > 0 {
+				prop = string(buf)
+			}
+			// NB: The property is populated in the map even if it is the
+			// empty string, since the presence in the map is what indicates
+			// that the block property collector was used when writing.
+			userProps[w.blockPropCollectors[i].Name()] = prop
 		}
 		if len(userProps) > 0 {
 			w.props.UserProperties = userProps
@@ -712,7 +950,7 @@ func (w *Writer) Close() (err error) {
 	}
 
 	// Make any future calls to Set or Close return an error.
-	w.err = errors.New("pebble: writer is closed")
+	w.err = errWriterClosed
 	return nil
 }
 
@@ -737,6 +975,27 @@ type WriterOption interface {
 	// writerAPply is called on the writer during opening in order to set
 	// internal parameters.
 	writerApply(*Writer)
+}
+
+// PreviousPointKeyOpt is a WriterOption that provides access to the last
+// point key written to the writer while building a sstable.
+type PreviousPointKeyOpt struct {
+	w *Writer
+}
+
+// UnsafeKey returns the last point key written to the writer to which this
+// option was passed during creation. The returned key points directly into
+// a buffer belonging the Writer. The value's lifetime ends the next time a
+// point key is added to the Writer.
+func (o PreviousPointKeyOpt) UnsafeKey() base.InternalKey {
+	if o.w == nil {
+		return base.InvalidInternalKey
+	}
+	return o.w.meta.LargestPoint
+}
+
+func (o *PreviousPointKeyOpt) writerApply(w *Writer) {
+	o.w = w
 }
 
 // internalTableOpt is a WriterOption that sets properties for sstables being
@@ -781,6 +1040,9 @@ func NewWriter(f writeCloseSyncer, o WriterOptions, extraOpts ...WriterOption) *
 		rangeDelBlock: blockWriter{
 			restartInterval: 1,
 		},
+		rangeKeyBlock: blockWriter{
+			restartInterval: 1,
+		},
 		topLevelIndexBlock: blockWriter{
 			restartInterval: 1,
 		},
@@ -823,16 +1085,36 @@ func NewWriter(f writeCloseSyncer, o WriterOptions, extraOpts ...WriterOption) *
 	w.props.PropertyCollectorNames = "[]"
 	w.props.ExternalFormatVersion = rocksDBExternalFormatVersion
 
-	if len(o.TablePropertyCollectors) > 0 {
-		w.propCollectors = make([]TablePropertyCollector, len(o.TablePropertyCollectors))
+	if len(o.TablePropertyCollectors) > 0 || len(o.BlockPropertyCollectors) > 0 {
 		var buf bytes.Buffer
 		buf.WriteString("[")
-		for i := range o.TablePropertyCollectors {
-			w.propCollectors[i] = o.TablePropertyCollectors[i]()
-			if i > 0 {
-				buf.WriteString(",")
+		if len(o.TablePropertyCollectors) > 0 {
+			w.propCollectors = make([]TablePropertyCollector, len(o.TablePropertyCollectors))
+			for i := range o.TablePropertyCollectors {
+				w.propCollectors[i] = o.TablePropertyCollectors[i]()
+				if i > 0 {
+					buf.WriteString(",")
+				}
+				buf.WriteString(w.propCollectors[i].Name())
 			}
-			buf.WriteString(w.propCollectors[i].Name())
+		}
+		if len(o.BlockPropertyCollectors) > 0 {
+			// shortID is a uint8, so we cannot exceed that number of block
+			// property collectors.
+			if len(o.BlockPropertyCollectors) > math.MaxUint8 {
+				w.err = errors.New("pebble: too many block property collectors")
+				return w
+			}
+			// The shortID assigned to a collector is the same as its index in
+			// this slice.
+			w.blockPropCollectors = make([]BlockPropertyCollector, len(o.BlockPropertyCollectors))
+			for i := range o.BlockPropertyCollectors {
+				w.blockPropCollectors[i] = o.BlockPropertyCollectors[i]()
+				if i > 0 || len(o.TablePropertyCollectors) > 0 {
+					buf.WriteString(",")
+				}
+				buf.WriteString(w.blockPropCollectors[i].Name())
+			}
 		}
 		buf.WriteString("]")
 		w.props.PropertyCollectorNames = buf.String()

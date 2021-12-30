@@ -62,18 +62,6 @@ const (
 	TableFormatLevelDB
 )
 
-// ChecksumType specifies the checksum used for blocks. The default is CRC32c.
-type ChecksumType uint32
-
-// The available checksum types. Note that these values are not (and should not)
-// be serialized to disk (for the constants that are persisted, see table.go).
-const (
-	ChecksumTypeCRC32c ChecksumType = iota
-	ChecksumTypeNone
-	ChecksumTypeXXHash
-	ChecksumTypeXXHash64
-)
-
 // TablePropertyCollector provides a hook for collecting user-defined
 // properties based on the keys and values stored in an sstable. A new
 // TablePropertyCollector is created for an sstable when the sstable is being
@@ -211,6 +199,11 @@ type WriterOptions struct {
 	// and lives for the lifetime of the table.
 	TablePropertyCollectors []func() TablePropertyCollector
 
+	// BlockPropertyCollectors is a list of BlockPropertyCollector creation
+	// functions. A new BlockPropertyCollector is created for each sstable
+	// built and lives for the lifetime of writing that table.
+	BlockPropertyCollectors []func() BlockPropertyCollector
+
 	// Checksum specifies which checksum to use.
 	Checksum ChecksumType
 }
@@ -236,6 +229,9 @@ func (o WriterOptions) ensureDefaults() WriterOptions {
 	}
 	if o.MergerName == "" {
 		o.MergerName = base.DefaultMerger.Name
+	}
+	if o.Checksum == ChecksumTypeNone {
+		o.Checksum = ChecksumTypeCRC32c
 	}
 	return o
 }

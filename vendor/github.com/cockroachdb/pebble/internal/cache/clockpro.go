@@ -102,6 +102,15 @@ type shard struct {
 	sizeHot  int64
 	sizeCold int64
 	sizeTest int64
+
+	// The count fields are used exclusively for asserting expectations.
+	// We've seen infinite looping (cockroachdb/cockroach#70154) that
+	// could be explained by a corrupted sizeCold. Through asserting on
+	// these fields, we hope to gain more insight from any future
+	// reproductions.
+	countHot  int64
+	countCold int64
+	countTest int64
 }
 
 func (c *shard) Get(id uint64, fileNum base.FileNum, offset uint64) Handle {
@@ -141,6 +150,7 @@ func (c *shard) Set(id uint64, fileNum base.FileNum, offset uint64, value *Value
 		if c.metaAdd(k, e) {
 			value.ref.trace("add-cold")
 			c.sizeCold += e.size
+			c.countCold++
 		} else {
 			value.ref.trace("skip-cold")
 			e.free()
@@ -165,9 +175,11 @@ func (c *shard) Set(id uint64, fileNum base.FileNum, offset uint64, value *Value
 	default:
 		// cache entry was a test page
 		c.sizeTest -= e.size
+		c.countTest--
 		c.metaDel(e)
 		c.metaCheck(e)
 
+		e.size = int64(len(value.buf))
 		c.coldTarget += e.size
 		if c.coldTarget > c.targetSize() {
 			c.coldTarget = c.targetSize()
@@ -179,6 +191,7 @@ func (c *shard) Set(id uint64, fileNum base.FileNum, offset uint64, value *Value
 		if c.metaAdd(k, e) {
 			value.ref.trace("add-hot")
 			c.sizeHot += e.size
+			c.countHot++
 		} else {
 			value.ref.trace("skip-hot")
 			e.free()
@@ -186,9 +199,26 @@ func (c *shard) Set(id uint64, fileNum base.FileNum, offset uint64, value *Value
 		}
 	}
 
+	c.checkConsistency()
+
 	// Values are initialized with a reference count of 1. That reference count
 	// is being transferred to the returned Handle.
 	return Handle{value: value}
+}
+
+func (c *shard) checkConsistency() {
+	// See the comment above the count{Hot,Cold,Test} fields.
+	switch {
+	case c.sizeHot < 0 || c.sizeCold < 0 || c.sizeTest < 0 || c.countHot < 0 || c.countCold < 0 || c.countTest < 0:
+		panic(fmt.Sprintf("pebble: unexpected negative: %d (%d bytes) hot, %d (%d bytes) cold, %d (%d bytes) test",
+			c.countHot, c.sizeHot, c.countCold, c.sizeCold, c.countTest, c.sizeTest))
+	case c.sizeHot > 0 && c.countHot == 0:
+		panic(fmt.Sprintf("pebble: mismatch %d hot size, %d hot count", c.sizeHot, c.countHot))
+	case c.sizeCold > 0 && c.countCold == 0:
+		panic(fmt.Sprintf("pebble: mismatch %d cold size, %d cold count", c.sizeCold, c.countCold))
+	case c.sizeTest > 0 && c.countTest == 0:
+		panic(fmt.Sprintf("pebble: mismatch %d test size, %d test count", c.sizeTest, c.countTest))
+	}
 }
 
 // Delete deletes the cached value for the specified file and offset.
@@ -211,6 +241,8 @@ func (c *shard) Delete(id uint64, fileNum base.FileNum, offset uint64) {
 		return
 	}
 	c.metaEvict(e)
+
+	c.checkConsistency()
 }
 
 // EvictFile evicts all of the cache values for the specified file.
@@ -230,6 +262,8 @@ func (c *shard) EvictFile(id uint64, fileNum base.FileNum) {
 			break
 		}
 	}
+
+	c.checkConsistency()
 }
 
 func (c *shard) Free() {
@@ -250,9 +284,20 @@ func (c *shard) Free() {
 
 func (c *shard) Reserve(n int) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.reservedSize += int64(n)
+
+	// Changing c.reservedSize will either increase or decrease
+	// the targetSize. But we want coldTarget to be in the range
+	// [0, targetSize]. So, if c.targetSize decreases, make sure
+	// that the coldTarget fits within the limits.
+	targetSize := c.targetSize()
+	if c.coldTarget > targetSize {
+		c.coldTarget = targetSize
+	}
+
 	c.evict()
-	c.mu.Unlock()
+	c.checkConsistency()
 }
 
 // Size returns the current space used by the cache.
@@ -373,12 +418,39 @@ func (c *shard) metaCheck(e *entry) {
 		}
 		// NB: c.hand{Hot,Cold,Test} are pointers into a single linked list. We
 		// only have to traverse one of them to check all of them.
-		for t := c.handHot.next(); t != c.handHot; t = t.next() {
+		var countHot, countCold, countTest int64
+		var sizeHot, sizeCold, sizeTest int64
+		for t := c.handHot.next(); t != nil; t = t.next() {
+			// Recompute count{Hot,Cold,Test} and size{Hot,Cold,Test}.
+			switch t.ptype {
+			case etHot:
+				countHot++
+				sizeHot += t.size
+			case etCold:
+				countCold++
+				sizeCold += t.size
+			case etTest:
+				countTest++
+				sizeTest += t.size
+			}
 			if e == t {
 				fmt.Fprintf(os.Stderr, "%p: %s unexpectedly found in blocks list\n%s",
 					e, e.key, debug.Stack())
 				os.Exit(1)
 			}
+			if t == c.handHot {
+				break
+			}
+		}
+		if countHot != c.countHot || countCold != c.countCold || countTest != c.countTest ||
+			sizeHot != c.sizeHot || sizeCold != c.sizeCold || sizeTest != c.sizeTest {
+			fmt.Fprintf(os.Stderr, `divergence of Hot,Cold,Test statistics
+				cache's statistics: hot %d, %d, cold %d, %d, test %d, %d
+				recalculated statistics: hot %d, %d, cold %d, %d, test %d, %d\n%s`,
+				c.countHot, c.sizeHot, c.countCold, c.sizeCold, c.countTest, c.sizeTest,
+				countHot, sizeHot, countCold, sizeCold, countTest, sizeTest,
+				debug.Stack())
+			os.Exit(1)
 		}
 	}
 }
@@ -387,10 +459,13 @@ func (c *shard) metaEvict(e *entry) {
 	switch e.ptype {
 	case etHot:
 		c.sizeHot -= e.size
+		c.countHot--
 	case etCold:
 		c.sizeCold -= e.size
+		c.countCold--
 	case etTest:
 		c.sizeTest -= e.size
+		c.countTest--
 	}
 	c.metaDel(e)
 	c.metaCheck(e)
@@ -399,23 +474,37 @@ func (c *shard) metaEvict(e *entry) {
 
 func (c *shard) evict() {
 	for c.targetSize() <= c.sizeHot+c.sizeCold && c.handCold != nil {
-		c.runHandCold()
+		c.runHandCold(c.countCold, c.sizeCold)
 	}
 }
 
-func (c *shard) runHandCold() {
+func (c *shard) runHandCold(countColdDebug, sizeColdDebug int64) {
+	// countColdDebug and sizeColdDebug should equal c.countCold and
+	// c.sizeCold. They're parameters only to aid in debugging of
+	// cockroachdb/cockroach#70154. Since they're parameters, their
+	// arguments will appear within stack traces should we encounter
+	// a reproduction.
+	if c.countCold != countColdDebug || c.sizeCold != sizeColdDebug {
+		panic(fmt.Sprintf("runHandCold: cold count and size are %d, %d, arguments are %d and %d",
+			c.countCold, c.sizeCold, countColdDebug, sizeColdDebug))
+	}
+
 	e := c.handCold
 	if e.ptype == etCold {
 		if atomic.LoadInt32(&e.referenced) == 1 {
 			atomic.StoreInt32(&e.referenced, 0)
 			e.ptype = etHot
 			c.sizeCold -= e.size
+			c.countCold--
 			c.sizeHot += e.size
+			c.countHot++
 		} else {
 			e.setValue(nil)
 			e.ptype = etTest
 			c.sizeCold -= e.size
+			c.countCold--
 			c.sizeTest += e.size
+			c.countTest++
 			for c.targetSize() < c.sizeTest && c.handTest != nil {
 				c.runHandTest()
 			}
@@ -444,7 +533,9 @@ func (c *shard) runHandHot() {
 		} else {
 			e.ptype = etCold
 			c.sizeHot -= e.size
+			c.countHot--
 			c.sizeCold += e.size
+			c.countCold++
 		}
 	}
 
@@ -453,7 +544,13 @@ func (c *shard) runHandHot() {
 
 func (c *shard) runHandTest() {
 	if c.sizeCold > 0 && c.handTest == c.handCold && c.handCold != nil {
-		c.runHandCold()
+		// sizeCold is > 0, so assert that countCold == 0. See the
+		// comment above count{Hot,Cold,Test}.
+		if c.countCold == 0 {
+			panic(fmt.Sprintf("pebble: mismatch %d cold size, %d cold count", c.sizeCold, c.countCold))
+		}
+
+		c.runHandCold(c.countCold, c.sizeCold)
 		if c.handTest == nil {
 			return
 		}
@@ -462,6 +559,7 @@ func (c *shard) runHandTest() {
 	e := c.handTest
 	if e.ptype == etTest {
 		c.sizeTest -= e.size
+		c.countTest--
 		c.coldTarget -= e.size
 		if c.coldTarget < 0 {
 			c.coldTarget = 0

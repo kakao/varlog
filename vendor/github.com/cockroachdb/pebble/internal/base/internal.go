@@ -18,23 +18,47 @@ type InternalKeyKind uint8
 // These constants are part of the file format, and should not be changed.
 const (
 	InternalKeyKindDelete  InternalKeyKind = 0
-	InternalKeyKindSet                     = 1
-	InternalKeyKindMerge                   = 2
-	InternalKeyKindLogData                 = 3
-	// InternalKeyKindColumnFamilyDeletion                     = 4
-	// InternalKeyKindColumnFamilyValue                        = 5
-	// InternalKeyKindColumnFamilyMerge                        = 6
-	InternalKeyKindSingleDelete = 7
-	// InternalKeyKindColumnFamilySingleDelete                 = 8
-	// InternalKeyKindBeginPrepareXID                          = 9
-	// InternalKeyKindEndPrepareXID                            = 10
-	// InternalKeyKindCommitXID                                = 11
-	// InternalKeyKindRollbackXID                              = 12
-	// InternalKeyKindNoop                                     = 13
-	// InternalKeyKindColumnFamilyRangeDelete                  = 14
-	InternalKeyKindRangeDelete = 15
-	// InternalKeyKindColumnFamilyBlobIndex                    = 16
-	// InternalKeyKindBlobIndex                                = 17
+	InternalKeyKindSet     InternalKeyKind = 1
+	InternalKeyKindMerge   InternalKeyKind = 2
+	InternalKeyKindLogData InternalKeyKind = 3
+	//InternalKeyKindColumnFamilyDeletion     InternalKeyKind = 4
+	//InternalKeyKindColumnFamilyValue        InternalKeyKind = 5
+	//InternalKeyKindColumnFamilyMerge        InternalKeyKind = 6
+	InternalKeyKindSingleDelete InternalKeyKind = 7
+	//InternalKeyKindColumnFamilySingleDelete InternalKeyKind = 8
+	//InternalKeyKindBeginPrepareXID          InternalKeyKind = 9
+	//InternalKeyKindEndPrepareXID            InternalKeyKind = 10
+	//InternalKeyKindCommitXID                InternalKeyKind = 11
+	//InternalKeyKindRollbackXID              InternalKeyKind = 12
+	//InternalKeyKindNoop                     InternalKeyKind = 13
+	//InternalKeyKindColumnFamilyRangeDelete  InternalKeyKind = 14
+	InternalKeyKindRangeDelete InternalKeyKind = 15
+	//InternalKeyKindColumnFamilyBlobIndex    InternalKeyKind = 16
+	//InternalKeyKindBlobIndex                InternalKeyKind = 17
+
+	// InternalKeyKindSeparator is a key used for separator / successor keys
+	// written to sstable block indexes.
+	//
+	// NOTE: the RocksDB value has been repurposed. This was done to ensure that
+	// keys written to block indexes with value "17" (when 17 happened to be the
+	// max value, and InternalKeyKindMax was therefore set to 17), remain stable
+	// when new key kinds are supported in Pebble.
+	InternalKeyKindSeparator InternalKeyKind = 17
+
+	// InternalKeyKindSetWithDelete keys are SET keys that have met with a
+	// DELETE or SINGLEDEL key in a prior compaction. This key kind is
+	// specific to Pebble. See
+	// https://github.com/cockroachdb/pebble/issues/1255.
+	InternalKeyKindSetWithDelete InternalKeyKind = 18
+
+	// InternalKeyKindRangeKeyDelete removes all range keys within a key range.
+	// See the internal/rangekey package for more details.
+	InternalKeyKindRangeKeyDelete InternalKeyKind = 19
+	// InternalKeyKindRangeKeySet and InternalKeyKindRangeUnset represent
+	// keys that set and unset values associated with ranges of key
+	// space. See the internal/rangekey package for more details.
+	InternalKeyKindRangeKeyUnset InternalKeyKind = 20
+	InternalKeyKindRangeKeySet   InternalKeyKind = 21
 
 	// This maximum value isn't part of the file format. It's unlikely,
 	// but future extensions may increase this value.
@@ -45,7 +69,7 @@ const (
 	// which sorts 'less than or equal to' any other valid internalKeyKind, when
 	// searching for any kind of internal key formed by a certain user key and
 	// seqNum.
-	InternalKeyKindMax InternalKeyKind = 17
+	InternalKeyKindMax InternalKeyKind = 21
 
 	// A marker for an invalid key.
 	InternalKeyKindInvalid InternalKeyKind = 255
@@ -62,18 +86,28 @@ const (
 	// when a range deletion tombstone is the largest key in an sstable. This is
 	// necessary because sstable boundaries are inclusive, while the end key of a
 	// range deletion tombstone is exclusive.
-	InternalKeyRangeDeleteSentinel = (InternalKeySeqNumMax << 8) | InternalKeyKindRangeDelete
+	InternalKeyRangeDeleteSentinel = (InternalKeySeqNumMax << 8) | uint64(InternalKeyKindRangeDelete)
+
+	// InternalKeyBoundaryRangeKey is the marker for a range key boundary. This
+	// sequence number and kind are used during interleaved range key and point
+	// iteration to allow an iterator to stop at range key start keys where
+	// there exists no point key.
+	InternalKeyBoundaryRangeKey = (InternalKeySeqNumMax << 8) | uint64(InternalKeyKindRangeKeySet)
 )
 
 var internalKeyKindNames = []string{
-	InternalKeyKindDelete:       "DEL",
-	InternalKeyKindSet:          "SET",
-	InternalKeyKindMerge:        "MERGE",
-	InternalKeyKindLogData:      "LOGDATA",
-	InternalKeyKindSingleDelete: "SINGLEDEL",
-	InternalKeyKindRangeDelete:  "RANGEDEL",
-	InternalKeyKindMax:          "MAX",
-	InternalKeyKindInvalid:      "INVALID",
+	InternalKeyKindDelete:         "DEL",
+	InternalKeyKindSet:            "SET",
+	InternalKeyKindMerge:          "MERGE",
+	InternalKeyKindLogData:        "LOGDATA",
+	InternalKeyKindSingleDelete:   "SINGLEDEL",
+	InternalKeyKindRangeDelete:    "RANGEDEL",
+	InternalKeyKindSeparator:      "SEPARATOR",
+	InternalKeyKindSetWithDelete:  "SETWITHDEL",
+	InternalKeyKindRangeKeySet:    "RANGEKEYSET",
+	InternalKeyKindRangeKeyUnset:  "RANGEKEYUNSET",
+	InternalKeyKindRangeKeyDelete: "RANGEKEYDEL",
+	InternalKeyKindInvalid:        "INVALID",
 }
 
 func (k InternalKeyKind) String() string {
@@ -130,13 +164,17 @@ func MakeRangeDeleteSentinelKey(userKey []byte) InternalKey {
 }
 
 var kindsMap = map[string]InternalKeyKind{
-	"DEL":       InternalKeyKindDelete,
-	"SINGLEDEL": InternalKeyKindSingleDelete,
-	"RANGEDEL":  InternalKeyKindRangeDelete,
-	"SET":       InternalKeyKindSet,
-	"MERGE":     InternalKeyKindMerge,
-	"INVALID":   InternalKeyKindInvalid,
-	"MAX":       InternalKeyKindMax,
+	"DEL":           InternalKeyKindDelete,
+	"SINGLEDEL":     InternalKeyKindSingleDelete,
+	"RANGEDEL":      InternalKeyKindRangeDelete,
+	"SET":           InternalKeyKindSet,
+	"MERGE":         InternalKeyKindMerge,
+	"INVALID":       InternalKeyKindInvalid,
+	"SEPARATOR":     InternalKeyKindSeparator,
+	"SETWITHDEL":    InternalKeyKindSetWithDelete,
+	"RANGEKEYSET":   InternalKeyKindRangeKeySet,
+	"RANGEKEYUNSET": InternalKeyKindRangeKeyUnset,
+	"RANGEKEYDEL":   InternalKeyKindRangeKeyDelete,
 }
 
 // ParseInternalKey parses the string representation of an internal key. The
@@ -180,8 +218,8 @@ func DecodeInternalKey(encodedKey []byte) InternalKey {
 // InternalCompare compares two internal keys using the specified comparison
 // function. For equal user keys, internal keys compare in descending sequence
 // number order. For equal user keys and sequence numbers, internal keys
-// compare in descending kind order (though this should never happen in
-// practice).
+// compare in descending kind order (this may happen in practice among range
+// keys).
 func InternalCompare(userCmp Compare, a, b InternalKey) int {
 	if x := userCmp(a.UserKey, b.UserKey); x != 0 {
 		return x
@@ -224,7 +262,7 @@ func (k InternalKey) Separator(
 		// any sequence number and kind here to create a valid separator key. We
 		// use the max sequence number to match the behavior of LevelDB and
 		// RocksDB.
-		return MakeInternalKey(buf, InternalKeySeqNumMax, InternalKeyKindMax)
+		return MakeInternalKey(buf, InternalKeySeqNumMax, InternalKeyKindSeparator)
 	}
 	return k
 }
@@ -241,7 +279,7 @@ func (k InternalKey) Successor(cmp Compare, succ Successor, buf []byte) Internal
 		// any sequence number and kind here to create a valid separator key. We
 		// use the max sequence number to match the behavior of LevelDB and
 		// RocksDB.
-		return MakeInternalKey(buf, InternalKeySeqNumMax, InternalKeyKindMax)
+		return MakeInternalKey(buf, InternalKeySeqNumMax, InternalKeyKindSeparator)
 	}
 	return k
 }

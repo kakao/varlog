@@ -22,14 +22,15 @@ import (
 	"github.com/cockroachdb/pebble/record"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/pebble/vfs/atomicfs"
 )
 
 const (
-	// minTableCacheSize is the minimum size of the table cache.
+	// minTableCacheSize is the minimum size of the table cache, for a single db.
 	minTableCacheSize = 64
 
-	// numNonTableCacheFiles is an approximation for the number of MaxOpenFiles
-	// that we don't use for table caches.
+	// numNonTableCacheFiles is an approximation for the number of files
+	// that we don't use for table caches, for a given db.
 	numNonTableCacheFiles = 10
 )
 
@@ -37,12 +38,16 @@ var (
 	// ErrNotFound is returned when a get operation does not find the requested
 	// key.
 	ErrNotFound = base.ErrNotFound
-	// ErrClosed is returned when an operation is performed on a closed snapshot
-	// or DB. Use errors.Is(err, ErrClosed) to check for this error.
+	// ErrClosed is panicked when an operation is performed on a closed snapshot or
+	// DB. Use errors.Is(err, ErrClosed) to check for this error.
 	ErrClosed = errors.New("pebble: closed")
 	// ErrReadOnly is returned when a write operation is performed on a read-only
 	// database.
 	ErrReadOnly = errors.New("pebble: read-only")
+	// errNoSplit indicates that the user is trying to perform a range key
+	// operation but the configured Comparer does not provide a Split
+	// implementation.
+	errNoSplit = errors.New("pebble: Comparer.Split required for range key operations")
 )
 
 // Reader is a readable key/value store.
@@ -107,10 +112,12 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after SingleDelete returns.
 	SingleDelete(key []byte, o *WriteOptions) error
 
-	// DeleteRange deletes all of the keys (and values) in the range [start,end)
-	// (inclusive on start, exclusive on end).
+	// DeleteRange deletes all of the point keys (and values) in the range
+	// [start,end) (inclusive on start, exclusive on end). DeleteRange does NOT
+	// delete overlapping range keys (eg, keys set via RangeKeySet).
 	//
-	// It is safe to modify the contents of the arguments after Delete returns.
+	// It is safe to modify the contents of the arguments after DeleteRange
+	// returns.
 	DeleteRange(start, end []byte, o *WriteOptions) error
 
 	// LogData adds the specified to the batch. The data will be written to the
@@ -185,6 +192,9 @@ type DB struct {
 
 		// The size of the current log file (i.e. db.mu.log.queue[len(queue)-1].
 		logSize uint64
+
+		// The number of bytes available on disk.
+		diskAvailBytes uint64
 	}
 
 	cacheID        uint64
@@ -208,7 +218,7 @@ type DB struct {
 	dataDir  vfs.File
 	walDir   vfs.File
 
-	tableCache tableCache
+	tableCache *tableCacheContainer
 	newIters   tableNewIters
 
 	commit *commitPipeline
@@ -239,6 +249,11 @@ type DB struct {
 	// could grab db.mu, it must *not* be held while deleters.Wait() is called.
 	deleters sync.WaitGroup
 
+	// During an iterator close, we may asynchronously schedule read compactions.
+	// We want to wait for those goroutines to finish, before closing the DB.
+	// compactionShedulers.Wait() should not be called while the DB.mu is held.
+	compactionSchedulers sync.WaitGroup
+
 	// The main mutex protecting internal DB state. This mutex encompasses many
 	// fields because those fields need to be accessed and updated atomically. In
 	// particular, the current version, log.*, mem.*, and snapshot list need to
@@ -251,6 +266,19 @@ type DB struct {
 	// DB.mu will be held continuously across a set of calls.
 	mu struct {
 		sync.Mutex
+
+		formatVers struct {
+			// vers is the database's current format major version.
+			// Backwards-incompatible features are gated behind new
+			// format major versions and not enabled until a database's
+			// version is ratcheted upwards.
+			vers FormatMajorVersion
+			// marker is the atomic marker for the format major version.
+			// When a database's version is ratcheted upwards, the
+			// marker is moved in order to atomically record the new
+			// version.
+			marker *atomicfs.Marker
+		}
 
 		// The ID of the next job. Job IDs are passed to event listener
 		// notifications and act as a mechanism for tying together the events and
@@ -319,9 +347,14 @@ type DB struct {
 			manual []*manualCompaction
 			// inProgress is the set of in-progress flushes and compactions.
 			inProgress map[*compaction]struct{}
-			// readCompactions is a list of read triggered compactions. The next
-			// compaction to perform is as the start. New entries are added to the end.
-			readCompactions []readCompaction
+
+			// rescheduleReadCompaction indicates to an iterator that a read compaction
+			// should be scheduled.
+			rescheduleReadCompaction bool
+
+			// readCompactions is a readCompactionQueue which keeps track of the
+			// compactions which we might have to perform.
+			readCompactions readCompactionQueue
 		}
 
 		cleaner struct {
@@ -358,6 +391,17 @@ type DB struct {
 			// active stat collection goroutine clears the list and processes
 			// them.
 			pending []manifest.NewFileEntry
+		}
+
+		tableValidation struct {
+			// cond is a condition variable used to signal the completion of a
+			// job to validate one or more sstables.
+			cond sync.Cond
+			// pending is a slice of metadata for sstables waiting to be
+			// validated.
+			pending []newFileEntry
+			// validating is set to true when validation is running.
+			validating bool
 		}
 	}
 
@@ -574,6 +618,17 @@ func (d *DB) Apply(batch *Batch, opts *WriteOptions) error {
 	sync := opts.GetSync()
 	if sync && d.opts.DisableWAL {
 		return errors.New("pebble: WAL disabled")
+	}
+
+	if batch.countRangeKeys > 0 {
+		if d.split == nil {
+			return errNoSplit
+		}
+		// TODO(jackson): Assert that all range key operands are suffixless.
+
+		// TODO(jackson): Once the format major version for range keys is
+		// introduced, error if the batch includes range keys but the active
+		// format major version doesn't enable them.
 	}
 
 	if batch.db == nil {
@@ -938,12 +993,16 @@ func (d *DB) Close() error {
 	for d.mu.tableStats.loading {
 		d.mu.tableStats.cond.Wait()
 	}
+	for d.mu.tableValidation.validating {
+		d.mu.tableValidation.cond.Wait()
+	}
 
 	var err error
 	if n := len(d.mu.compact.inProgress); n > 0 {
 		err = errors.Errorf("pebble: %d unexpected in-progress compactions", errors.Safe(n))
 	}
-	err = firstError(err, d.tableCache.Close())
+	err = firstError(err, d.mu.formatVers.marker.Close())
+	err = firstError(err, d.tableCache.close())
 	if !d.opts.ReadOnly {
 		err = firstError(err, d.mu.log.Close())
 	} else if d.mu.log.LogWriter != nil {
@@ -996,6 +1055,7 @@ func (d *DB) Close() error {
 	// Wait for all the deletion goroutines spawned by cleaning jobs to finish.
 	d.mu.Unlock()
 	d.deleters.Wait()
+	d.compactionSchedulers.Wait()
 	d.mu.Lock()
 	return err
 }
@@ -1081,8 +1141,8 @@ func (d *DB) Compact(
 		}
 		level = manual.outputLevel
 		if level == numLevels-1 {
-			// A manual compaction of the bottommost level occured. There is no next
-			// level to try and compact.
+			// A manual compaction of the bottommost level occurred.
+			// There is no next level to try and compact.
 			break
 		}
 	}
@@ -1140,6 +1200,7 @@ func (d *DB) Metrics() *Metrics {
 	*metrics = d.mu.versions.metrics
 	metrics.Compact.EstimatedDebt = d.mu.versions.picker.estimatedCompactionDebt(0)
 	metrics.Compact.InProgressBytes = atomic.LoadInt64(&d.mu.versions.atomic.atomicInProgressBytes)
+	metrics.Compact.NumInProgress = int64(d.mu.compact.compactingCount)
 	for _, m := range d.mu.mem.queue {
 		metrics.MemTable.Size += m.totalBytes()
 	}
@@ -1470,7 +1531,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 			// Open will treat the previous log as corrupt.
 			err = d.mu.log.Close()
 
-			newLogName := base.MakeFilename(d.opts.FS, d.walDirname, fileTypeLog, newLogNum)
+			newLogName := base.MakeFilepath(d.opts.FS, d.walDirname, fileTypeLog, newLogNum)
 
 			// Try to use a recycled log file. Recycling log files is an important
 			// performance optimization as it is faster to sync a file that has
@@ -1483,7 +1544,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 			if err == nil {
 				recycleLog, recycleOK = d.logRecycler.peek()
 				if recycleOK {
-					recycleLogName := base.MakeFilename(d.opts.FS, d.walDirname, fileTypeLog, recycleLog.fileNum)
+					recycleLogName := base.MakeFilepath(d.opts.FS, d.walDirname, fileTypeLog, recycleLog.fileNum)
 					newLogFile, err = d.opts.FS.ReuseForWrite(recycleLogName, newLogName)
 					base.MustExist(d.opts.FS, newLogName, d.opts.Logger, err)
 				} else {
