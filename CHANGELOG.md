@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Release `internal/storagenode/executor.(*writeTask)` and `internal/storagenode/executor.(*taskWaitGroup)` to pool after appended. (#VARLOG-650/#565)
 
+### Changed
+- Bump `github.com/cockroachdb/pebble` from v0.0.0-20210817201821-5e4468e97817 to v0.0.0-20211222161641-06e42cfa82c0. (#VARLOG-651/#566)
+
 ## [0.1.2] - 2021-12-30
 ### Added
 - Implemented seal and unseal subcommand in `varlogctl`. (#VARLOG-646/#564)

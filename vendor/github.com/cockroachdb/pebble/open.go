@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"sort"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/internal/arenaskl"
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/cache"
@@ -37,6 +37,18 @@ const (
 	// internal/arenaskl.node, DeferredBatchOp, and flushableBatchEntry.
 	maxMemTableSize = 4 << 30 // 4 GB
 )
+
+// TableCacheSize can be used to determine the table
+// cache size for a single db, given the maximum open
+// files which can be used by a table cache which is
+// only used by a single db.
+func TableCacheSize(maxOpenFiles int) int {
+	tableCacheSize := maxOpenFiles - numNonTableCacheFiles
+	if tableCacheSize < minTableCacheSize {
+		tableCacheSize = minTableCacheSize
+	}
+	return tableCacheSize
+}
 
 // Open opens a DB whose files live in the given directory.
 func Open(dirname string, opts *Options) (db *DB, _ error) {
@@ -69,6 +81,8 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		closedCh:            make(chan struct{}),
 	}
 	d.mu.versions = &versionSet{}
+	d.atomic.diskAvailBytes = math.MaxUint64
+	d.mu.versions.diskAvailBytes = d.getDiskAvailableBytesCached
 
 	defer func() {
 		// If an error or panic occurs during open, attempt to release the manually
@@ -76,10 +90,16 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		// look for the return of a nil DB pointer.
 		if r := recover(); db == nil {
 			// Release our references to the Cache. Note that both the DB, and
-			// tableCache have a reference. The tableCache.Close will release
-			// the tableCache's reference.
+			// tableCache have a reference. When we release the reference to
+			// the tableCache, and if there are no other references to
+			// the tableCache, then the tableCache will also release its
+			// reference to the cache.
 			opts.Cache.Unref()
-			_ = d.tableCache.Close()
+
+			if d.tableCache != nil {
+				_ = d.tableCache.close()
+			}
+
 			for _, mem := range d.mu.mem.queue {
 				switch t := mem.flushable.(type) {
 				case *memTable:
@@ -96,12 +116,11 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	if d.equal == nil {
 		d.equal = bytes.Equal
 	}
-	tableCacheSize := opts.MaxOpenFiles - numNonTableCacheFiles
-	if tableCacheSize < minTableCacheSize {
-		tableCacheSize = minTableCacheSize
-	}
-	d.tableCache.init(d.cacheID, dirname, opts.FS, d.opts, tableCacheSize)
+
+	tableCacheSize := TableCacheSize(opts.MaxOpenFiles)
+	d.tableCache = newTableCacheContainer(opts.TableCache, d.cacheID, dirname, opts.FS, d.opts, tableCacheSize)
 	d.newIters = d.tableCache.newIters
+
 	d.commit = newCommitPipeline(commitEnv{
 		logSeqNum:     &d.mu.versions.atomic.logSeqNum,
 		visibleSeqNum: &d.mu.versions.atomic.visibleSeqNum,
@@ -169,7 +188,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	}
 
 	// Lock the database directory.
-	fileLock, err := opts.FS.Lock(base.MakeFilename(opts.FS, dirname, fileTypeLock, 0))
+	fileLock, err := opts.FS.Lock(base.MakeFilepath(opts.FS, dirname, fileTypeLock, 0))
 	if err != nil {
 		d.dataDir.Close()
 		if d.dataDir != d.walDir {
@@ -183,26 +202,61 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		}
 	}()
 
+	// Establish the format major version.
+	{
+		d.mu.formatVers.vers, d.mu.formatVers.marker, err = lookupFormatMajorVersion(opts.FS, dirname)
+		if err != nil {
+			return nil, err
+		}
+		if !d.opts.ReadOnly {
+			if err := d.mu.formatVers.marker.RemoveObsolete(); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	jobID := d.mu.nextJobID
 	d.mu.nextJobID++
 
-	currentName := base.MakeFilename(opts.FS, dirname, fileTypeCurrent, 0)
-	if _, err := opts.FS.Stat(currentName); oserror.IsNotExist(err) &&
-		!d.opts.ReadOnly && !d.opts.ErrorIfNotExists {
+	// Find the currently active manifest, if there is one.
+	manifestMarker, manifestFileNum, exists, err := findCurrentManifest(d.mu.formatVers.vers, opts.FS, dirname)
+	setCurrent := setCurrentFunc(d.mu.formatVers.vers, manifestMarker, opts.FS, dirname, d.dataDir)
+	if err != nil {
+		return nil, errors.Wrapf(err, "pebble: database %q", dirname)
+	} else if !exists && !d.opts.ReadOnly && !d.opts.ErrorIfNotExists {
 		// Create the DB if it did not already exist.
-		if err := d.mu.versions.create(jobID, dirname, d.dataDir, opts, &d.mu.Mutex); err != nil {
+
+		if err := d.mu.versions.create(jobID, dirname, opts, manifestMarker, setCurrent, &d.mu.Mutex); err != nil {
 			return nil, err
 		}
-	} else if err != nil {
-		return nil, errors.Wrapf(err, "pebble: database %q", dirname)
 	} else if opts.ErrorIfExists {
 		return nil, errors.Errorf("pebble: database %q already exists", dirname)
 	} else {
 		// Load the version set.
-		if err := d.mu.versions.load(dirname, opts, &d.mu.Mutex); err != nil {
+		if err := d.mu.versions.load(dirname, opts, manifestFileNum, manifestMarker, setCurrent, &d.mu.Mutex); err != nil {
 			return nil, err
 		}
 		if err := d.mu.versions.currentVersion().CheckConsistency(dirname, opts.FS); err != nil {
+			return nil, err
+		}
+
+	}
+
+	// If the Options specify a format major version higher than the
+	// loaded database's, upgrade it. If this is a new database, this
+	// code path also performs an initial upgrade from the starting
+	// implicit MostCompatible version.
+	if !d.opts.ReadOnly && opts.FormatMajorVersion > d.mu.formatVers.vers {
+		if err := d.ratchetFormatMajorVersionLocked(opts.FormatMajorVersion); err != nil {
+			return nil, err
+		}
+	}
+
+	// Atomic markers like the one used for the MANIFEST may leave
+	// behind obsolete files if there's a crash mid-update. Clean these
+	// up if we're not in read-only mode.
+	if !d.opts.ReadOnly {
+		if err := manifestMarker.RemoveObsolete(); err != nil {
 			return nil, err
 		}
 	}
@@ -234,7 +288,8 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		name string
 	}
 	var logFiles []fileNumAndName
-	var strictWALTail bool
+	var previousOptionsFileNum FileNum
+	var previousOptionsFilename string
 	for _, filename := range ls {
 		ft, fn, ok := base.ParseFilename(opts.FS, filename)
 		if !ok {
@@ -256,14 +311,16 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 				d.logRecycler.minRecycleLogNum = fn + 1
 			}
 		case fileTypeOptions:
-			strictWALTail, err = checkOptions(opts, opts.FS.PathJoin(dirname, filename))
-			if err != nil {
-				return nil, err
+			if previousOptionsFileNum < fn {
+				previousOptionsFileNum = fn
+				previousOptionsFilename = filename
 			}
-		case fileTypeTemp:
+		case fileTypeTemp, fileTypeOldTemp:
 			if !d.opts.ReadOnly {
-				// A temp file is leftover if a process exits in the middle of
-				// updating the CURRENT file. Remove it.
+				// Some codepaths write to a temporary file and then
+				// rename it to its final location when complete.  A
+				// temp file is leftover if a process exits before the
+				// rename.  Remove it.
 				err := opts.FS.Remove(opts.FS.PathJoin(dirname, filename))
 				if err != nil {
 					return nil, err
@@ -271,6 +328,17 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 			}
 		}
 	}
+
+	// Validate the most-recent OPTIONS file, if there is one.
+	var strictWALTail bool
+	if previousOptionsFilename != "" {
+		path := opts.FS.PathJoin(dirname, previousOptionsFilename)
+		strictWALTail, err = checkOptions(opts, path)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	sort.Slice(logFiles, func(i, j int) bool {
 		return logFiles[i].num < logFiles[j].num
 	})
@@ -304,13 +372,13 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		// crash before the manifest is synced could leave two WALs with
 		// unclean tails.
 		d.mu.versions.logLock()
-		if err := d.mu.versions.logAndApply(jobID, &ve, newFileMetrics(ve.NewFiles), d.dataDir, func() []compactionInfo {
+		if err := d.mu.versions.logAndApply(jobID, &ve, newFileMetrics(ve.NewFiles), func() []compactionInfo {
 			return nil
 		}); err != nil {
 			return nil, err
 		}
 
-		newLogName := base.MakeFilename(opts.FS, d.walDirname, fileTypeLog, newLogNum)
+		newLogName := base.MakeFilepath(opts.FS, d.walDirname, fileTypeLog, newLogNum)
 		d.mu.log.queue = append(d.mu.log.queue, fileInfo{fileNum: newLogNum, fileSize: 0})
 		logFile, err := opts.FS.Create(newLogName)
 		if err != nil {
@@ -341,18 +409,33 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	if !d.opts.ReadOnly {
 		// Write the current options to disk.
 		d.optionsFileNum = d.mu.versions.getNextFileNum()
-		optionsFile, err := opts.FS.Create(
-			base.MakeFilename(opts.FS, dirname, fileTypeOptions, d.optionsFileNum))
+		tmpPath := base.MakeFilepath(opts.FS, dirname, fileTypeTemp, d.optionsFileNum)
+		optionsPath := base.MakeFilepath(opts.FS, dirname, fileTypeOptions, d.optionsFileNum)
+
+		// Write them to a temporary file first, in case we crash before
+		// we're done. A corrupt options file prevents opening the
+		// database.
+		optionsFile, err := opts.FS.Create(tmpPath)
 		if err != nil {
 			return nil, err
 		}
 		serializedOpts := []byte(opts.String())
 		if _, err := optionsFile.Write(serializedOpts); err != nil {
-			return nil, err
+			return nil, errors.CombineErrors(err, optionsFile.Close())
 		}
 		d.optionsFileSize = uint64(len(serializedOpts))
-		_ = optionsFile.Sync()
-		_ = optionsFile.Close()
+		if err := optionsFile.Sync(); err != nil {
+			return nil, errors.CombineErrors(err, optionsFile.Close())
+		}
+		if err := optionsFile.Close(); err != nil {
+			return nil, err
+		}
+		// Atomically rename to the OPTIONS-XXXXXX path. This rename is
+		// guaranteed to be atomic because the destination path does not
+		// exist.
+		if err := opts.FS.Rename(tmpPath, optionsPath); err != nil {
+			return nil, err
+		}
 		if err := d.dataDir.Sync(); err != nil {
 			return nil, err
 		}
@@ -366,9 +449,12 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		d.mu.versions.metrics.WAL.Files = int64(len(logFiles))
 	}
 	d.mu.tableStats.cond.L = &d.mu.Mutex
+	d.mu.tableValidation.cond.L = &d.mu.Mutex
 	if !d.opts.ReadOnly && !d.opts.private.disableTableStats {
-		d.maybeCollectTableStats()
+		d.maybeCollectTableStatsLocked()
 	}
+	d.calculateDiskAvailableBytes()
+
 	d.maybeScheduleFlush()
 	d.maybeScheduleCompaction()
 
@@ -620,4 +706,51 @@ func checkOptions(opts *Options, path string) (strictWALTail bool, err error) {
 		return false, err
 	}
 	return opts.checkOptions(string(data))
+}
+
+// DBDesc briefly describes high-level state about a database.
+type DBDesc struct {
+	// Exists is true if an existing database was found.
+	Exists bool
+	// FormatMajorVersion indicates the database's current format
+	// version.
+	FormatMajorVersion FormatMajorVersion
+	// ManifestFilename is the filename of the current active manifest,
+	// if the database exists.
+	ManifestFilename string
+}
+
+// Peek looks for an existing database in dirname on the provided FS. It
+// returns a brief description of the database. Peek is read-only and
+// does not open the database.
+func Peek(dirname string, fs vfs.FS) (*DBDesc, error) {
+	vers, versMarker, err := lookupFormatMajorVersion(fs, dirname)
+	if err != nil {
+		return nil, err
+	}
+	// TODO(jackson): Immediately closing the marker is clunky. Add a
+	// PeekMarker variant that avoids opening the directory.
+	if err := versMarker.Close(); err != nil {
+		return nil, err
+	}
+
+	// Find the currently active manifest, if there is one.
+	manifestMarker, manifestFileNum, exists, err := findCurrentManifest(vers, fs, dirname)
+	if err != nil {
+		return nil, err
+	}
+	// TODO(jackson): Immediately closing the marker is clunky. Add a
+	// PeekMarker variant that avoids opening the directory.
+	if err := manifestMarker.Close(); err != nil {
+		return nil, err
+	}
+
+	desc := &DBDesc{
+		Exists:             exists,
+		FormatMajorVersion: vers,
+	}
+	if exists {
+		desc.ManifestFilename = base.MakeFilepath(fs, dirname, fileTypeManifest, manifestFileNum)
+	}
+	return desc, nil
 }

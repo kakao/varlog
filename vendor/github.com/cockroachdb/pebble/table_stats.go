@@ -8,8 +8,8 @@ import (
 	"math"
 
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/manifest"
-	"github.com/cockroachdb/pebble/internal/rangedel"
 	"github.com/cockroachdb/pebble/sstable"
 )
 
@@ -40,8 +40,8 @@ import (
 // collection job only needs to load statistics for new files appended to the
 // pending list.
 
-func (d *DB) maybeCollectTableStats() {
-	if d.shouldCollectTableStats() {
+func (d *DB) maybeCollectTableStatsLocked() {
+	if d.shouldCollectTableStatsLocked() {
 		go d.collectTableStats()
 	}
 }
@@ -62,22 +62,21 @@ func (d *DB) updateTableStatsLocked(newFiles []manifest.NewFileEntry) {
 	}
 
 	d.mu.tableStats.pending = append(d.mu.tableStats.pending, newFiles...)
-	d.maybeCollectTableStats()
+	d.maybeCollectTableStatsLocked()
 }
 
-func (d *DB) shouldCollectTableStats() bool {
-	ok := !d.mu.tableStats.loading
-	ok = ok && d.closed.Load() == nil
-	ok = ok && !d.opts.private.disableTableStats
-	ok = ok && (len(d.mu.tableStats.pending) > 0 || !d.mu.tableStats.loadedInitial)
-	return ok
+func (d *DB) shouldCollectTableStatsLocked() bool {
+	return !d.mu.tableStats.loading &&
+		d.closed.Load() == nil &&
+		!d.opts.private.disableTableStats &&
+		(len(d.mu.tableStats.pending) > 0 || !d.mu.tableStats.loadedInitial)
 }
 
 func (d *DB) collectTableStats() {
 	const maxTableStatsPerScan = 50
 
 	d.mu.Lock()
-	if !d.shouldCollectTableStats() {
+	if !d.shouldCollectTableStatsLocked() {
 		d.mu.Unlock()
 		return
 	}
@@ -126,7 +125,7 @@ func (d *DB) collectTableStats() {
 		maybeCompact = maybeCompact || c.fileMetadata.Stats.RangeDeletionsBytesEstimate > 0
 	}
 	d.mu.tableStats.cond.Broadcast()
-	d.maybeCollectTableStats()
+	d.maybeCollectTableStatsLocked()
 	if len(hints) > 0 {
 		// Verify that all of the hint tombstones' files still exist in the
 		// current version. Otherwise, the tombstone itself may have been
@@ -221,7 +220,7 @@ func (d *DB) scanReadStateTableStats(
 			// Limit how much work we do per read state. The older the read
 			// state is, the higher the likelihood files are no longer being
 			// used in the current version. If we've exhausted our allowance,
-			// return true for the second return value to signal there's more
+			// return true for the last return value to signal there's more
 			// work to do.
 			if len(fill) == cap(fill) {
 				moreRemain = true
@@ -282,13 +281,13 @@ func (d *DB) loadTableStats(
 		defer rangeDelIter.Close()
 		// Truncate tombstones to the containing file's bounds if necessary.
 		// See docs/range_deletions.md for why this is necessary.
-		rangeDelIter = rangedel.Truncate(
+		rangeDelIter = keyspan.Truncate(
 			d.cmp, rangeDelIter, meta.Smallest.UserKey, meta.Largest.UserKey, nil, nil)
 		err = foreachDefragmentedTombstone(rangeDelIter, d.cmp,
 			func(startUserKey, endUserKey []byte, smallestSeqNum, largestSeqNum uint64) error {
 				// If the file is in the last level of the LSM, there is no
 				// data beneath it. The fact that there is still a range
-				// tombstone in a bottomost file suggests that an open
+				// tombstone in a bottommost file suggests that an open
 				// snapshot kept the tombstone around. Estimate disk usage
 				// within the file itself.
 				if level == numLevels-1 {

@@ -11,11 +11,12 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/fastrand"
 	"github.com/cockroachdb/pebble/internal/invariants"
 	"github.com/cockroachdb/pebble/internal/manifest"
-	"github.com/cockroachdb/redact"
 )
 
 // iterPos describes the state of the internal iterator, in terms of whether it is
@@ -200,7 +201,7 @@ const (
 type readSampling struct {
 	bytesUntilReadSampling uint64
 	initialSamplePassed    bool
-	pendingCompactions     []readCompaction
+	pendingCompactions     readCompactionQueue
 	// forceReadSampling is used for testing purposes to force a read sample on every
 	// call to Iterator.maybeSampleRead()
 	forceReadSampling bool
@@ -211,12 +212,8 @@ func (i *Iterator) findNextEntry(limit []byte) {
 	i.pos = iterPosCurForward
 
 	// Close the closer for the current value if one was open.
-	if i.valueCloser != nil {
-		i.err = i.valueCloser.Close()
-		i.valueCloser = nil
-		if i.err != nil {
-			return
-		}
+	if i.closeValueCloser() != nil {
+		return
 	}
 
 	for i.iterKey != nil {
@@ -245,7 +242,7 @@ func (i *Iterator) findNextEntry(limit []byte) {
 			i.nextUserKey()
 			continue
 
-		case InternalKeyKindSet:
+		case InternalKeyKindSet, InternalKeyKindSetWithDelete:
 			i.keyBuf = append(i.keyBuf[:0], key.UserKey...)
 			i.key = i.keyBuf
 			i.value = i.iterValue
@@ -254,12 +251,23 @@ func (i *Iterator) findNextEntry(limit []byte) {
 
 		case InternalKeyKindMerge:
 			var valueMerger ValueMerger
-			valueMerger, i.err = i.merge(i.key, i.iterValue)
+			valueMerger, i.err = i.merge(key.UserKey, i.iterValue)
 			if i.err == nil {
 				i.mergeNext(key, valueMerger)
 			}
 			if i.err == nil {
-				i.value, i.valueCloser, i.err = valueMerger.Finish(true /* includesBase */)
+				var needDelete bool
+				i.value, needDelete, i.valueCloser, i.err = finishValueMerger(valueMerger, true /* includesBase */)
+				if i.err == nil && needDelete {
+					i.iterValidityState = IterExhausted
+					if i.pos != iterPosNext {
+						i.nextUserKey()
+					}
+					if i.closeValueCloser() == nil {
+						i.pos = iterPosCurForward
+						continue
+					}
+				}
 			} else {
 				// mergeNext may have been called, which can set
 				// i.iterValidityState=IterValid.
@@ -273,6 +281,14 @@ func (i *Iterator) findNextEntry(limit []byte) {
 			return
 		}
 	}
+}
+
+func (i *Iterator) closeValueCloser() error {
+	if i.valueCloser != nil {
+		i.err = i.valueCloser.Close()
+		i.valueCloser = nil
+	}
+	return i.err
 }
 
 func (i *Iterator) nextUserKey() {
@@ -382,12 +398,20 @@ func (i *Iterator) sampleRead() {
 	if numOverlappingLevels >= 2 {
 		allowedSeeks := atomic.AddInt64(&topFile.Atomic.AllowedSeeks, -1)
 		if allowedSeeks == 0 {
+
+			// Since the compaction queue can handle duplicates, we can keep
+			// adding to the queue even once allowedSeeks hits 0.
+			// In fact, we NEED to keep adding to the queue, because the queue
+			// is small and evicts older and possibly useful compactions.
+			atomic.AddInt64(&topFile.Atomic.AllowedSeeks, topFile.InitAllowedSeeks)
+
 			read := readCompaction{
-				start: topFile.Smallest.UserKey,
-				end:   topFile.Largest.UserKey,
-				level: topLevel,
+				start:   topFile.Smallest.UserKey,
+				end:     topFile.Largest.UserKey,
+				level:   topLevel,
+				fileNum: topFile.FileNum,
 			}
-			i.readSampling.pendingCompactions = append(i.readSampling.pendingCompactions, read)
+			i.readSampling.pendingCompactions.add(&read, i.cmp)
 		}
 	}
 }
@@ -427,7 +451,15 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 				// We've iterated to the previous user key.
 				i.pos = iterPosPrev
 				if valueMerger != nil {
-					i.value, i.valueCloser, i.err = valueMerger.Finish(true /* includesBase */)
+					var needDelete bool
+					i.value, needDelete, i.valueCloser, i.err = finishValueMerger(valueMerger, true /* includesBase */)
+					if i.err == nil && needDelete {
+						i.value = nil
+						i.iterValidityState = IterExhausted
+						if i.closeValueCloser() == nil {
+							continue
+						}
+					}
 				}
 				if i.err != nil {
 					i.iterValidityState = IterExhausted
@@ -459,7 +491,7 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 			}
 			continue
 
-		case InternalKeyKindSet:
+		case InternalKeyKindSet, InternalKeyKindSetWithDelete:
 			i.keyBuf = append(i.keyBuf[:0], key.UserKey...)
 			i.key = i.keyBuf
 			// iterValue is owned by i.iter and could change after the Prev()
@@ -514,7 +546,13 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 	if i.iterValidityState == IterValid {
 		i.pos = iterPosPrev
 		if valueMerger != nil {
-			i.value, i.valueCloser, i.err = valueMerger.Finish(true /* includesBase */)
+			var needDelete bool
+			i.value, needDelete, i.valueCloser, i.err = finishValueMerger(valueMerger, true /* includesBase */)
+			if i.err == nil && needDelete {
+				i.key = nil
+				i.value = nil
+				i.iterValidityState = IterExhausted
+			}
 		}
 		if i.err != nil {
 			i.iterValidityState = IterExhausted
@@ -570,7 +608,7 @@ func (i *Iterator) mergeNext(key InternalKey, valueMerger ValueMerger) {
 			// point.
 			return
 
-		case InternalKeyKindSet:
+		case InternalKeyKindSet, InternalKeyKindSetWithDelete:
 			// We've hit a Set value. Merge with the existing value and return.
 			i.err = valueMerger.MergeOlder(i.iterValue)
 			return
@@ -1072,11 +1110,21 @@ func (i *Iterator) Close() error {
 	err := i.err
 
 	if i.readState != nil {
-		if len(i.readSampling.pendingCompactions) > 0 {
+		if i.readSampling.pendingCompactions.size > 0 {
 			// Copy pending read compactions using db.mu.Lock()
 			i.readState.db.mu.Lock()
-			i.readState.db.mu.compact.readCompactions = append(i.readState.db.mu.compact.readCompactions, i.readSampling.pendingCompactions...)
+			i.readState.db.mu.compact.readCompactions.combine(&i.readSampling.pendingCompactions, i.cmp)
+			reschedule := i.readState.db.mu.compact.rescheduleReadCompaction
+			i.readState.db.mu.compact.rescheduleReadCompaction = false
+			concurrentCompactions := i.readState.db.mu.compact.compactingCount
 			i.readState.db.mu.Unlock()
+
+			if reschedule && concurrentCompactions == 0 {
+				// In a read heavy workload, flushes may not happen frequently enough to
+				// schedule compactions.
+				i.readState.db.compactionSchedulers.Add(1)
+				go i.readState.db.maybeScheduleCompactionAsync()
+			}
 		}
 
 		i.readState.unref()
@@ -1235,8 +1283,10 @@ func (stats *IteratorStats) String() string {
 func (stats *IteratorStats) SafeFormat(s redact.SafePrinter, verb rune) {
 	for i := range stats.ForwardStepCount {
 		switch IteratorStatsKind(i) {
-		case InterfaceCall: s.SafeString("(interface (dir, seek, step): ")
-		case InternalIterCall: s.SafeString(", (internal (dir, seek, step): ")
+		case InterfaceCall:
+			s.SafeString("(interface (dir, seek, step): ")
+		case InternalIterCall:
+			s.SafeString(", (internal (dir, seek, step): ")
 		}
 		s.Printf("(fwd, %d, %d), (rev, %d, %d))",
 			redact.Safe(stats.ForwardSeekCount[i]), redact.Safe(stats.ForwardStepCount[i]),
