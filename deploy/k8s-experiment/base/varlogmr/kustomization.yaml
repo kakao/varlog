@@ -3,14 +3,3 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - varlogmr.yaml
-configMapGenerator:
-  - name: varlog-conf
-    literals:
-      - cluster_id="1"
-      - replication_factor="3"
-    options:
-      disableNameSuffixHash: true
-      labels:
-        app.kubernetes.io/name: varlog
-        app.kubernetes.io/component: varlog-conf
-        app.kubernetes.io/part-of: varlog

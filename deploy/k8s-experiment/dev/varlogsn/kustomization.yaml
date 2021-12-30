@@ -7,7 +7,7 @@ images:
     newTag: stable
   - name: idock.daumkakao.io/varlog/all-in-one
     newName: idock.daumkakao.io/varlog/all-in-one
-    newTag: v0.1.0-3d530244
+    newTag: v0.1.3
 
 patchesStrategicMerge:
   - varlogsn-patch.yaml

@@ -29,9 +29,6 @@ data:
     exporters:
       logging:
         loglevel: debug
-      jaeger:
-        endpoint: "jaeger-collector.default:14250"
-        insecure: true
       prometheus:
         endpoint: "0.0.0.0:8889"
         namespace: "varlog"
@@ -41,10 +38,6 @@ data:
 
     service:
       pipelines:
-        traces:
-          receivers: [otlp]
-          processors: [batch, memory_limiter]
-          exporters: [jaeger]
         metrics:
           receivers: [otlp]
           processors: [batch, memory_limiter]
@@ -103,20 +96,12 @@ spec:
         app: opentelemetry
         component: otel-collector
     spec:
-      #      initContainers:
-      #        - name: "init-jaeger"
-      #          image: mdock.daumkakao.io/busybox:stable
-      #          command:
-      #            - "sh"
-      #            - "-c"
-      #            - "until nslookup jaeger-collector; do echo waiting for jaeger-collector; sleep 2; done"
       containers:
         - name: otel-collector
           image: otel/opentelemetry-collector:latest
           command:
             - "/otelcol"
             - "--config=/conf/otel-collector-config.yaml"
-            - "--mem-ballast-size-mib=1000"
           ports:
             - containerPort: 1777  # Default endpoint for pprof.
             - containerPort: 55679 # Default endpoint for ZPages.

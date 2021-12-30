@@ -11,19 +11,6 @@ metadata:
 data:
   otel-agent-config: |
     receivers:
-      hostmetrics:
-        collection_interval: 30s
-        scrapers:
-          cpu:
-          disk:
-          load:
-          filesystem:
-          memory:
-          network:
-          process:
-            include:
-              names: [vmr, vsn]
-              match_type: strict
       otlp:
         protocols:
           grpc:
@@ -34,7 +21,8 @@ data:
         loglevel: debug
       otlp:
         endpoint: "otel-collector.default:4317"
-        insecure: true
+        tls:
+          insecure: true
 
     processors:
       memory_limiter:
@@ -52,12 +40,8 @@ data:
 
     service:
       pipelines:
-        traces:
-          receivers: [otlp]
-          processors: [batch]
-          exporters: [otlp]
         metrics:
-          receivers: [hostmetrics, otlp]
+          receivers: [otlp]
           processors: [batch]
           exporters: [otlp]
       extensions: [health_check, pprof, zpages]

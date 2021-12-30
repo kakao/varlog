@@ -121,6 +121,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            - name: COLLECTOR_NAME
+              value: "otlp"
+            - name: COLLECTOR_ENDPOINT
+              value: "localhost:4317"
           volumeMounts:
             - name: varlogmr-data
               mountPath: /varlog/mr

@@ -74,6 +74,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            - name: EXPORTER_TYPE
+              value: otlp
+            - name: EXPORTER_OTLP_INSECURE
+              value: "true"
+            - name: EXPORTER_OTLP_ENDPOINT
+              value: "localhost:4317"
           volumeMounts:
             - name: varlogsn-data
               mountPath: /varlog/sn
