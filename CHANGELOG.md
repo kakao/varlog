@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added the OpenTelemetry to k8s manifests that is for the experiment. (#VARLOG-649/#563)
 
+### Changed
+- Fixed wrong URL in `CHANGELOG.md`. (#VARLOG-652/#569)
+
 ## [0.1.3] - 2021-12-30
 ### Added
 - Release `internal/storagenode/executor.(*writeTask)` and `internal/storagenode/executor.(*taskWaitGroup)` to pool after appended. (#VARLOG-650/#565)
@@ -51,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 [Unreleased]: https://github.com/kakao/varlog/compare/v0.1.3...HEAD
-[0.1.3]: https://github.com/olivierlacan/keep-a-changelog/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/olivierlacan/keep-a-changelog/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/olivierlacan/keep-a-changelog/compare/v0.1.0...v0.1.1
+[0.1.3]: https://github.com/kakao/varlog/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/kakao/varlog/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/kakao/varlog/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/kakao/varlog/releases/tag/v0.1.0
