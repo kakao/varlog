@@ -52,6 +52,14 @@ func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogp
 		}
 	}
 
+	defer func() {
+		for i := 0; i < batchSize; i++ {
+			wts[i].annotate(ctx, e.metrics)
+			wts[i].twg.release()
+			wts[i].release()
+		}
+	}()
+
 	result := make([]snpb.AppendResult, batchSize)
 	var sendErrIdx int
 	var sendErrReason string
