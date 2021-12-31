@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 
 	"github.com/pkg/errors"
@@ -18,6 +19,7 @@ func main() {
 func run() int {
 	app := newApp()
 	if err := app.Run(os.Args); err != nil {
+		log.Printf("error: %v", err)
 		return -1
 	}
 	return 0
@@ -40,11 +42,19 @@ const (
 	cmdSubscribe = "subscribe"
 )
 
+var (
+	flagBatchSize = flags.FlagDesc{Name: "batch-size"}
+)
+
 func newAppend() *cli.Command {
+
 	return &cli.Command{
 		Name:   cmdAppend,
 		Action: commandAction,
-		Flags:  commonFlags(),
+		Flags: append(
+			commonFlags(),
+			flagBatchSize.IntFlag(false, 1),
+		),
 	}
 }
 
@@ -86,10 +96,15 @@ func commandAction(c *cli.Context) error {
 
 	switch c.Command.Name {
 	case cmdAppend:
-		if c.IsSet(flags.LogStreamID().Name) {
-			return varlogcli.AppendTo(mrAddrs, clusterID, topicID, logStreamID)
+		batchSize := c.Int(flagBatchSize.Name)
+		if batchSize < 1 {
+			return errors.New("invalid batch size")
 		}
-		return varlogcli.Append(mrAddrs, clusterID, topicID)
+
+		if c.IsSet(flags.LogStreamID().Name) {
+			return varlogcli.AppendTo(mrAddrs, clusterID, topicID, logStreamID, batchSize)
+		}
+		return varlogcli.Append(mrAddrs, clusterID, topicID, batchSize)
 	case cmdSubscribe:
 		if c.IsSet(flags.LogStreamID().Name) {
 			return varlogcli.SubscribeTo(mrAddrs, clusterID, topicID, logStreamID)

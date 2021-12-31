@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Added the OpenTelemetry to k8s manifests that is for the experiment. (#VARLOG-649/#563)
+- Added `--batch-size` option to `varlogcli` to set the size of append batch. (#VARLOG-653/570)
 
 ### Changed
 - Fixed wrong URL in `CHANGELOG.md`. (#VARLOG-652/#569)
