@@ -21,6 +21,20 @@ import (
 
 const DefaultReportRefreshTime = time.Second
 const DefaultCatchupRefreshTime = 3 * time.Millisecond
+const DefaultSampleReportsRate = 1000
+
+type sampleTracer struct {
+	m          sync.Map
+	sampleRate uint64
+}
+
+type sampleReports struct {
+	mu        sync.Mutex
+	llsn      types.LLSN
+	skip      types.LLSN
+	created   map[types.StorageNodeID]time.Time
+	committed bool
+}
 
 type ReportCollector interface {
 	Run() error
@@ -87,7 +101,8 @@ type logStreamCommitter struct {
 	cancel context.CancelFunc
 	logger *zap.Logger
 
-	tmStub *telemetryStub
+	sampleTracer *sampleTracer
+	tmStub       *telemetryStub
 }
 
 type reportContext struct {
@@ -119,7 +134,8 @@ type reportCollectExecutor struct {
 	cancel context.CancelFunc
 	logger *zap.Logger
 
-	tmStub *telemetryStub
+	sampleTracer *sampleTracer
+	tmStub       *telemetryStub
 }
 
 type reportCollector struct {
@@ -127,6 +143,8 @@ type reportCollector struct {
 	mu        sync.RWMutex
 
 	helper ReportCollectorHelper
+
+	sampleTracer *sampleTracer
 
 	rpcTimeout time.Duration
 	closed     bool
@@ -141,12 +159,13 @@ type reportCollector struct {
 
 func NewReportCollector(helper ReportCollectorHelper, rpcTimeout time.Duration, tmStub *telemetryStub, logger *zap.Logger) *reportCollector {
 	return &reportCollector{
-		logger:     logger,
-		helper:     helper,
-		rpcTimeout: rpcTimeout,
-		tmStub:     tmStub,
-		commitC:    make(chan struct{}, 1),
-		runner:     runner.New("reportCollector", logger),
+		logger:       logger,
+		helper:       helper,
+		rpcTimeout:   rpcTimeout,
+		tmStub:       tmStub,
+		commitC:      make(chan struct{}, 1),
+		sampleTracer: &sampleTracer{sampleRate: DefaultSampleReportsRate},
+		runner:       runner.New("reportCollector", logger),
 	}
 }
 
@@ -324,6 +343,7 @@ func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		rpcTimeout:    rc.rpcTimeout,
 		runner:        runner.New("excutor", logger),
 		logger:        logger,
+		sampleTracer:  rc.sampleTracer,
 		tmStub:        rc.tmStub,
 	}
 
@@ -545,7 +565,7 @@ func (rce *reportCollectExecutor) registerLogStream(topicID types.TopicID, lsID 
 		return verrors.ErrExist
 	}
 
-	c := newLogStreamCommitter(topicID, lsID, rce, ver, status, rce.tmStub, rce.logger)
+	c := newLogStreamCommitter(topicID, lsID, rce, ver, status, rce.sampleTracer, rce.tmStub, rce.logger)
 	err := c.run()
 	if err != nil {
 		return err
@@ -705,6 +725,13 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 		diff.UncommitReports = append(diff.UncommitReports, report.UncommitReports[i:]...)
 	}
 
+	for _, r := range diff.UncommitReports {
+		for i := uint64(0); i < r.UncommittedLLSNLength; i++ {
+			llsn := r.UncommittedLLSNOffset + types.LLSN(i)
+			rce.sampleTracer.report(r.LogStreamID, rce.storageNodeID, llsn)
+		}
+	}
+
 	return diff
 }
 
@@ -780,17 +807,18 @@ func (rce *reportCollectExecutor) lookupNextCommitResults(ver types.Version) (*m
 	return rce.helper.LookupNextCommitResults(ver)
 }
 
-func newLogStreamCommitter(topicID types.TopicID, lsID types.LogStreamID, helper commitHelper, ver types.Version, status varlogpb.LogStreamStatus, tmStub *telemetryStub, logger *zap.Logger) *logStreamCommitter {
+func newLogStreamCommitter(topicID types.TopicID, lsID types.LogStreamID, helper commitHelper, ver types.Version, status varlogpb.LogStreamStatus, sampleTracer *sampleTracer, tmStub *telemetryStub, logger *zap.Logger) *logStreamCommitter {
 	triggerC := make(chan struct{}, 1)
 
 	c := &logStreamCommitter{
-		topicID:  topicID,
-		lsID:     lsID,
-		helper:   helper,
-		triggerC: triggerC,
-		runner:   runner.New("lscommitter", logger),
-		logger:   logger,
-		tmStub:   tmStub,
+		topicID:      topicID,
+		lsID:         lsID,
+		helper:       helper,
+		triggerC:     triggerC,
+		runner:       runner.New("lscommitter", logger),
+		logger:       logger,
+		sampleTracer: sampleTracer,
+		tmStub:       tmStub,
 	}
 
 	c.commitStatus.status = status
@@ -930,6 +958,15 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 			if err != nil {
 				return
 			}
+
+			min, max, recordable := lc.sampleTracer.commit(lc.lsID, cr.CommittedLLSNOffset, cr.CommittedLLSNOffset+types.LLSN(cr.CommittedGLSNLength))
+			if recordable {
+				lc.tmStub.mb.Records("mr.report_commit.delay").Record(ctx,
+					float64(time.Since(min).Nanoseconds())/float64(time.Millisecond))
+
+				lc.tmStub.mb.Records("mr.replicate.delay").Record(ctx,
+					float64(max.Sub(min).Nanoseconds())/float64(time.Millisecond))
+			}
 		}
 
 		lc.setSentVersion(crs.Version)
@@ -1005,4 +1042,87 @@ func (rc *reportContext) isExpire() bool {
 
 func (rc *reportContext) setExpire() {
 	rc.reloadAt = time.Time{}
+}
+
+func (st *sampleTracer) report(lsID types.LogStreamID, snID types.StorageNodeID, llsn types.LLSN) {
+	if uint64(llsn)%st.sampleRate == 0 {
+		f, _ := st.m.LoadOrStore(lsID, &sampleReports{llsn: llsn})
+		sample := f.(*sampleReports)
+		sample.report(snID, llsn)
+	}
+}
+
+func (st *sampleTracer) commit(lsID types.LogStreamID, begin, end types.LLSN) (min, max time.Time, recordable bool) {
+	if f, ok := st.m.Load(lsID); ok {
+		sr := f.(*sampleReports)
+
+		sr.mu.Lock()
+		defer sr.mu.Unlock()
+
+		if sr.committed {
+			return
+		}
+
+		if end > sr.llsn {
+			sr.committed = true
+
+			min, max = sr.minmax()
+			recordable = begin <= sr.llsn && len(sr.created) > 0
+		}
+	}
+
+	return
+}
+
+func (sr *sampleReports) reset(llsn types.LLSN) {
+	sr.llsn = llsn
+	sr.committed = false
+	sr.created = make(map[types.StorageNodeID]time.Time)
+}
+
+func (sr *sampleReports) update(snID types.StorageNodeID) {
+	if sr.created == nil {
+		sr.created = make(map[types.StorageNodeID]time.Time)
+	}
+
+	if _, ok := sr.created[snID]; !ok {
+		sr.created[snID] = time.Now()
+	}
+}
+
+func (sr *sampleReports) report(snID types.StorageNodeID, llsn types.LLSN) {
+	sr.mu.Lock()
+	defer sr.mu.Unlock()
+
+	if sr.llsn == llsn {
+		sr.update(snID)
+	} else if sr.llsn < llsn {
+		if sr.committed {
+			if sr.skip < llsn {
+				sr.reset(llsn)
+				sr.update(snID)
+			}
+		} else {
+			if sr.skip < llsn {
+				sr.skip = llsn
+			}
+		}
+	}
+}
+
+func (sr *sampleReports) minmax() (time.Time, time.Time) {
+	min := time.Now()
+	max := time.Time{}
+
+	for _, r := range sr.created {
+		if max.Before(r) {
+			max = r
+		}
+
+		if min.After(r) {
+			min = r
+		}
+	}
+
+	return min, max
 }

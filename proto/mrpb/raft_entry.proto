@@ -68,12 +68,19 @@ message Report {
         "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID"
   ];
-  repeated snpb.LogStreamUncommitReport uncommit_report = 2
+  repeated snpb.LogStreamUncommitReport uncommit_report = 3
       [(gogoproto.nullable) = false];
 }
 
 message Reports {
-  repeated Report reports = 1;
+  uint64 node_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID"
+  ];
+  google.protobuf.Timestamp created_time = 2
+      [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+  repeated Report reports = 3;
 }
 
 message Commit {

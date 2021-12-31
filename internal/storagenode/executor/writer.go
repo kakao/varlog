@@ -334,6 +334,7 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 			now := time.Now()
 			wt.processingTime = now
 			wt.twg.writtenTime = now
+
 			var cwt *commitWaitTask
 			if wt.primary { // primary
 				cwt = newCommitWaitTask(wt.llsn, wt.twg)

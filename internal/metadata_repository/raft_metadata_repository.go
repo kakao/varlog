@@ -393,7 +393,10 @@ func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
 			mr.muReportQueue.Lock()
 			num := len(mr.reportQueue)
 			if num > 0 {
-				reports = &mrpb.Reports{}
+				reports = &mrpb.Reports{
+					NodeID:      mr.nodeID,
+					CreatedTime: time.Now(),
+				}
 				reports.Reports = mr.reportQueue
 				mr.reportQueue = make([]*mrpb.Report, 0, 1024)
 			}
@@ -828,6 +831,13 @@ func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
 	atomic.AddUint64(&mr.nrReport, 1)
 	mr.nrReportSinceCommit++
 
+	mr.tmStub.mb.Records("mr.raft.reports.delay").Record(context.TODO(),
+		float64(time.Since(reports.CreatedTime).Nanoseconds())/float64(time.Millisecond),
+		attribute.KeyValue{
+			Key:   "nodeid",
+			Value: attribute.StringValue(mr.nodeID.String()),
+		})
+
 	for _, r := range reports.Reports {
 		snID := r.StorageNodeID
 	LS:
@@ -865,8 +875,8 @@ func topicBoundary(topicLSIDs []TopicLSID, idx int) (begin bool, end bool) {
 }
 
 func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint64) error {
-	if r.GetNodeID() == mr.nodeID {
-		mr.tmStub.mb.Records("raft_delay").Record(context.TODO(),
+	if r != nil {
+		mr.tmStub.mb.Records("mr.raft.commit.delay").Record(context.TODO(),
 			float64(time.Since(r.CreatedTime).Nanoseconds())/float64(time.Millisecond),
 			attribute.KeyValue{
 				Key:   "nodeid",
