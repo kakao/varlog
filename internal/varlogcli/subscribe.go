@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -13,8 +14,12 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
+const (
+	subscribeTimeout = 5 * time.Second
+)
+
 func Subscribe(mrAddrs []string, clusterID types.ClusterID, topicID types.TopicID) error {
-	const size = 1024
+	const size = 10
 
 	vlog, err := open(mrAddrs, clusterID)
 	if err != nil {
@@ -36,23 +41,29 @@ func subscribe(vlog varlog.Log, topicID types.TopicID, begin, end types.GLSN) er
 	errC := make(chan error)
 	onNext := func(logEntry varlogpb.LogEntry, err error) {
 		if err != nil {
-			defer close(errC)
 			errC <- err
+			close(errC)
 			return
 		}
 		log.Printf("Subscribe: %s (%+v)", string(logEntry.Data), logEntry)
 	}
 
-	closer, err := vlog.Subscribe(context.Background(), topicID, begin, end, onNext)
+	ctx, cancel := context.WithTimeout(context.Background(), subscribeTimeout)
+	defer cancel()
+	closer, err := vlog.Subscribe(ctx, topicID, begin, end, onNext)
 	if err != nil {
-		return errors.WithMessage(err, "subscribe error")
+		return errors.WithMessage(err, "could not subscribe")
 	}
 	defer closer()
-	err = <-errC
+	select {
+	case err = <-errC:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	if err == nil || errors.Is(err, io.EOF) {
 		return nil
 	}
-	return errors.WithMessage(err, "subscribe error")
+	return errors.WithMessage(err, "could not subscribe")
 }
 
 func SubscribeTo(mrAddrs []string, clusterID types.ClusterID, topicID types.TopicID, logStreamID types.LogStreamID) (err error) {
