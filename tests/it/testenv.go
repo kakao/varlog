@@ -20,7 +20,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode/volume"
-	"github.com/kakao/varlog/internal/vms"
+	"github.com/kakao/varlog/internal/varlogadm"
 	"github.com/kakao/varlog/pkg/logc"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
@@ -70,7 +70,7 @@ type VarlogCluster struct {
 	muCL    sync.Mutex
 
 	muVMS     sync.Mutex
-	vmsServer vms.ClusterManager
+	vmsServer varlogadm.ClusterManager
 	vmsCL     varlog.Admin
 
 	portLease *ports.Lease
@@ -1078,7 +1078,7 @@ func (clus *VarlogCluster) LookupMR(nodeID types.NodeID) (*metadata_repository.R
 	return nil, false
 }
 
-func (clus *VarlogCluster) GetVMS() vms.ClusterManager {
+func (clus *VarlogCluster) GetVMS() varlogadm.ClusterManager {
 	clus.muVMS.Lock()
 	defer clus.muVMS.Unlock()
 
@@ -1146,7 +1146,7 @@ func (clus *VarlogCluster) initVMS(t *testing.T) {
 	clus.VMSOpts.MetadataRepositoryAddresses = clus.mrRPCEndpoints
 	clus.VMSOpts.ReplicationFactor = uint(clus.nrRep)
 
-	cm, err := vms.NewClusterManager(context.Background(), clus.VMSOpts)
+	cm, err := varlogadm.NewClusterManager(context.Background(), clus.VMSOpts)
 	require.NoError(t, err)
 
 	require.NoError(t, cm.Run())
@@ -1559,7 +1559,7 @@ func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
 	require.Eventually(t, func() bool {
 		vmsMeta, err := clus.vmsServer.Metadata(context.Background())
 		return err == nil && vmsMeta.GetLogStream(lsID) != nil
-	}, vms.ReloadInterval*10, 100*time.Millisecond)
+	}, varlogadm.ReloadInterval*10, 100*time.Millisecond)
 
 	require.Eventually(t, func() bool {
 		snMCLs := clus.StorageNodesManagementClients()

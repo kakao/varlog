@@ -1,7 +1,7 @@
-package vms
+package varlogadm
 
 //go:generate stringer -type=clusterManagerState -trimprefix=clusterManager
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/vms -package vms -destination vms_mock.go . ClusterMetadataView,StorageNodeManager
+//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/varlogadm -package varlogadm -destination varlogadm_mock.go . ClusterMetadataView,StorageNodeManager
 
 import (
 	"context"

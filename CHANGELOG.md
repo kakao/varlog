@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Fixed wrong URL in `CHANGELOG.md`. (#VARLOG-652/#569)
 - Renamed existing metrics in the storage node to represent their purposes. (#VARLOG-656/#573)
+- Renamed package `internal/vms` to `internal/varlogadm` and `cmd/vms` to `cmd/varlogadm`. #(VARLOG-663/#576)
+
 
 ## [0.1.3] - 2021-12-30
 ### Added

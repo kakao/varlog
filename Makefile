@@ -42,7 +42,7 @@ VARLOGCLI := $(BIN_DIR)/varlogcli
 .PHONY: build vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark varlogcli
 build: vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark varlogcli
 vms:
-	$(GO) build $(GCFLAGS) -o $(VMS) cmd/vms/main.go
+	$(GO) build $(GCFLAGS) -o $(VMS) cmd/varlogadm/main.go
 varlogctl:
 	$(GO) build $(GCFLAGS) -o $(VARLOGCTL) $(CURDIR)/cmd/varlogctl
 vsn:
