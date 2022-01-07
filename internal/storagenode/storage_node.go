@@ -205,7 +205,7 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 		replication.NewServer(
 			replication.WithStorageNodeIDGetter(sn),
 			replication.WithLogReplicatorGetter(sn),
-			replication.WithPipelineQueueSize(1),
+			replication.WithPipelineQueueSize(512),
 			replication.WithMetrics(sn.metrics),
 			replication.WithLogger(sn.logger),
 		),

@@ -144,7 +144,12 @@ func (r *replicatorImpl) send(ctx context.Context, t *replicateTask) error {
 
 	atomic.AddInt64(&r.inflight, int64(len(t.replicas)))
 
-	return r.q.pushWithContext(ctx, t)
+	if err := r.q.pushWithContext(ctx, t); err != nil {
+		// TODO: check inflight
+		return err
+	}
+	r.metrics.ReplicateQueueTasks.Add(ctx, 1)
+	return nil
 }
 
 func (r *replicatorImpl) replicateLoop(ctx context.Context) {
@@ -165,6 +170,7 @@ func (r *replicatorImpl) replicateLoopInternal(ctx context.Context) error {
 		return err
 	}
 	rt.poppedTime = time.Now()
+	r.metrics.ReplicateQueueTasks.Add(ctx, -1)
 
 	if err := r.replicate(ctx, rt); err != nil {
 		return err
@@ -173,14 +179,7 @@ func (r *replicatorImpl) replicateLoopInternal(ctx context.Context) error {
 }
 
 func (r *replicatorImpl) replicate(ctx context.Context, rt *replicateTask) error {
-	startTime := time.Now()
-
 	defer func() {
-		r.metrics.ExecutorReplicateFanoutTime.Record(
-			ctx,
-			float64(time.Since(startTime).Microseconds())/1000.0,
-		)
-
 		rt.annotate(ctx, r.metrics)
 		rt.release()
 	}()
@@ -193,17 +192,12 @@ func (r *replicatorImpl) replicate(ctx context.Context, rt *replicateTask) error
 	for i := range replicas {
 		replica := replicas[i]
 		grp.Go(func() error {
-			ts := time.Now()
 			cl, err := r.connector.Get(ctx, replica)
 			if err != nil {
 				return err
 			}
-			r.metrics.ExecutorReplicateConnectionGetTime.Record(
-				ctx,
-				float64(time.Since(ts).Microseconds())/1000.0,
-			)
 			// FIXME: return some error?
-			cb := r.generateReplicateCallback(ctx, rt.poppedTime)
+			cb := r.generateReplicateCallback(ctx, time.Now() /*rt.poppedTime*/)
 			cl.Replicate(ctx, llsn, data, cb)
 			return nil
 		})
@@ -214,7 +208,7 @@ func (r *replicatorImpl) replicate(ctx context.Context, rt *replicateTask) error
 func (r *replicatorImpl) generateReplicateCallback(ctx context.Context, startTime time.Time) func(error) {
 	return func(err error) {
 		dur := float64(time.Since(startTime).Microseconds()) / 1000.0
-		r.metrics.ExecutorReplicateTime.Record(ctx, dur)
+		r.metrics.ReplicateTime.Record(ctx, dur)
 
 		if err != nil {
 			r.state.setSealingWithReason(err)

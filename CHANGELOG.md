@@ -8,9 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added the OpenTelemetry to k8s manifests that is for the experiment. (#VARLOG-649/#563)
 - Added `--batch-size` option to `varlogcli` to set the size of append batch. (#VARLOG-653/570)
+- Added metrics about the delay between reports and commits in the metadata repository. (#VARLOG-654/#571)
+- Added metrics about the various performance indices in the storage node. (#VARLOG-656/#573)
 
 ### Changed
 - Fixed wrong URL in `CHANGELOG.md`. (#VARLOG-652/#569)
+- Renamed existing metrics in the storage node to represent their purposes. (#VARLOG-656/#573)
 
 ## [0.1.3] - 2021-12-30
 ### Added

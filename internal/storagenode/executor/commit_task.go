@@ -55,12 +55,12 @@ func (t *commitTask) annotate(ctx context.Context, metrics *telemetry.Metrics, d
 
 	// queue latency
 	ms := float64(t.poppedTime.Sub(t.createdTime).Microseconds()) / 1000.0
-	metrics.ExecutorCommitQueueTime.Record(ctx, ms)
+	metrics.CommitQueueTime.Record(ctx, ms)
 
 	if t.processingTime.IsZero() || !t.processingTime.After(t.poppedTime) {
 		return
 	}
 	// processing time
 	ms = float64(t.processingTime.Sub(t.poppedTime).Microseconds()) / 1000.0
-	metrics.ExecutorCommitTime.Record(ctx, ms)
+	metrics.CommitTime.Record(ctx, ms)
 }

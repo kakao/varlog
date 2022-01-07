@@ -3,6 +3,9 @@ package executor
 import (
 	"context"
 	stderrors "errors"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
@@ -16,8 +19,20 @@ func (e *executor) GetReport() (snpb.LogStreamUncommitReport, error) {
 	}
 	defer e.unguard()
 
+	e.metrics.Reports.Add(context.TODO(), 1, attribute.Int64("lsid", int64(e.logStreamID)))
+
 	version, highWatermark, uncommittedLLSNBegin := e.lsc.reportCommitBase()
 	uncommittedLLSNEnd := e.lsc.uncommittedLLSNEnd.Load()
+	e.metrics.ReportedLogEntries.Record(context.TODO(), int64(uncommittedLLSNEnd-uncommittedLLSNBegin))
+
+	// trace
+	if uncommittedLLSNBegin%100 < e.metrics.WriteReportDelaySamplingPercentage {
+		if ts, ok := e.metrics.WrittenTimestamps.LoadAndDelete(uncommittedLLSNBegin); ok {
+			elapsed := time.Since(ts.(time.Time))
+			e.metrics.WriteReportDelay.Record(context.TODO(), float64(elapsed.Microseconds())/1000.0, attribute.Int64("lsid", int64(e.logStreamID)))
+		}
+	}
+
 	return snpb.LogStreamUncommitReport{
 		LogStreamID:           e.logStreamID,
 		Version:               version,
@@ -32,6 +47,8 @@ func (e *executor) Commit(ctx context.Context, commitResult snpb.LogStreamCommit
 		return err
 	}
 	defer e.unguard()
+
+	e.metrics.Commits.Add(context.TODO(), 1, attribute.Int64("lsid", int64(e.logStreamID)))
 
 	// TODO: check validate logic again
 	version, _, _ := e.lsc.reportCommitBase()

@@ -98,8 +98,6 @@ func (c *client) PeerStorageNodeID() types.StorageNodeID {
 }
 
 func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, callback func(error)) {
-	startTime := time.Now()
-
 	var err error
 
 	c.closed.mu.RLock()
@@ -129,15 +127,10 @@ func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, ca
 		Payload:     data,
 		CreatedTime: time.Now(),
 	}
-	err = c.requestQ.PushWithContext(ctx, req)
-	if err != nil {
+	if err := c.requestQ.PushWithContext(ctx, req); err != nil {
 		return
 	}
-
-	c.metrics.ExecutorReplicateRequestPrepareTime.Record(
-		ctx,
-		float64(time.Since(startTime).Microseconds())/1000.0,
-	)
+	c.metrics.ReplicateClientRequestQueueTasks.Add(ctx, 1)
 }
 
 func (c *client) sendLoop(stream snpb.Replicator_ReplicateClient) {
@@ -157,9 +150,10 @@ Loop:
 		if err != nil {
 			break Loop
 		}
-		req := reqI.(*snpb.ReplicationRequest)
 		now := time.Now()
-		c.metrics.ExecutorReplicateClientRequestQueueTime.Record(
+		req := reqI.(*snpb.ReplicationRequest)
+		c.metrics.ReplicateClientRequestQueueTasks.Add(stream.Context(), -1)
+		c.metrics.ReplicateClientRequestQueueTime.Record(
 			context.Background(),
 			float64(now.Sub(req.CreatedTime).Microseconds())/1000.0,
 		)
@@ -192,12 +186,6 @@ Loop:
 		if err != nil {
 			break Loop
 		}
-		/*
-			c.measure.Stub().Metrics().ExecutorReplicateResponsePropagationTime.Record(
-				context.Background(),
-				float64(time.Since(rsp.GetCreatedTime()).Microseconds())/1000.0,
-			)
-		*/
 
 		// TODO: Check if this is safe.
 		cb := c.callbackQ.Pop().(*callbackBlock)
