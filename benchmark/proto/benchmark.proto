@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package benchmark.proto;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option go_package = "github.daumkakao.com/varlog/varlog/benchmark/proto";
+
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+message Buffer {
+  bytes data = 1;
+}
+
+message PayloadA {
+  int64 id = 1;
+  bytes data = 2;
+}
+
+message PayloadB {
+  int64 id = 1;
+  Buffer data = 2 [(gogoproto.nullable) = false];
+}
+
+message PayloadC {
+  int64 id = 1;
+  Buffer data = 2;
+}
+
+message MessagePayloadAHeap {
+  repeated PayloadA payloads = 1;
+}
+
+message MessagePayloadALessHeap {
+  repeated PayloadA payloads = 1 [(gogoproto.nullable) = false];
+}
+
+message MessagePayloadBHeap {
+  repeated PayloadB payloads = 1;
+}
+
+message MessagePayloadBLessHeap {
+  repeated PayloadB payloads = 1 [(gogoproto.nullable) = false];
+}
+
+message MessagePayloadCHeap {
+  repeated PayloadC payloads = 1;
+}
+
+message MessagePayloadCLessHeap {
+  repeated PayloadC payloads = 1 [(gogoproto.nullable) = false];
+}
+
+message MessagePayloadASplit {
+  repeated int64 ids = 1;
+  repeated bytes datas = 2;
+}
+
+message MessagePayloadBSplit {
+  repeated int64 ids = 1;
+  repeated Buffer datas = 2 [(gogoproto.nullable) = false];
+}
+
+message MessagePayloadCSplit {
+  repeated int64 ids = 1;
+  repeated Buffer datas = 2;
+}
+
