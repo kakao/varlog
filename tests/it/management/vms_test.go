@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
-	"github.daumkakao.com/varlog/varlog/internal/vms"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
@@ -44,7 +44,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 			So(portLease.Release(), ShouldBeNil)
 		}()
 
-		vmsOpts := vms.DefaultOptions()
+		vmsOpts := varlogadm.DefaultOptions()
 
 		Convey("When MR does not start within specified periods", func(c C) {
 			vmsOpts.InitialMRConnRetryCount = 1
@@ -52,7 +52,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 			vmsOpts.MetadataRepositoryAddresses = []string{mrRPCAddr}
 
 			Convey("Then the MRManager should return an error", func(ctx C) {
-				_, err := vms.NewMRManager(context.TODO(), clusterID, vmsOpts.MRManagerOptions, zap.L())
+				_, err := varlogadm.NewMRManager(context.TODO(), clusterID, vmsOpts.MRManagerOptions, zap.L())
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -63,10 +63,10 @@ func TestVarlogNewMRManager(t *testing.T) {
 			vmsOpts.MetadataRepositoryAddresses = []string{mrRPCAddr}
 
 			// vms
-			mrmC := make(chan vms.MetadataRepositoryManager, 1)
+			mrmC := make(chan varlogadm.MetadataRepositoryManager, 1)
 			go func() {
 				defer close(mrmC)
-				mrm, err := vms.NewMRManager(context.TODO(), clusterID, vmsOpts.MRManagerOptions, zap.L())
+				mrm, err := varlogadm.NewMRManager(context.TODO(), clusterID, vmsOpts.MRManagerOptions, zap.L())
 				if err != nil {
 					fmt.Printf("err: %+v\n", err)
 				}
@@ -115,7 +115,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 	})
 
 	Convey("Given MR cluster", t, func(ctx C) {
-		vmsOpts := vms.DefaultOptions()
+		vmsOpts := varlogadm.DefaultOptions()
 		vmsOpts.InitialMRConnRetryCount = 3
 		env := it.NewVarlogCluster(t, it.WithVMSOptions(&vmsOpts))
 		defer env.Close(t)
@@ -129,7 +129,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 		Convey("When create MRManager with non addrs", func(ctx C) {
 			vmsOpts.MRManagerOptions.MetadataRepositoryAddresses = nil
 			// VMS Server
-			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), vmsOpts.MRManagerOptions, zap.L())
+			_, err := varlogadm.NewMRManager(context.TODO(), types.ClusterID(0), vmsOpts.MRManagerOptions, zap.L())
 			Convey("Then it should be fail", func(ctx C) {
 				So(err, ShouldNotBeNil)
 			})
@@ -138,7 +138,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 		Convey("When create MRManager with invalid addrs", func(ctx C) {
 			// VMS Server
 			vmsOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{fmt.Sprintf("%s%d", mrAddr, 0)}
-			_, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), vmsOpts.MRManagerOptions, zap.L())
+			_, err := varlogadm.NewMRManager(context.TODO(), types.ClusterID(0), vmsOpts.MRManagerOptions, zap.L())
 			Convey("Then it should be fail", func(ctx C) {
 				So(err, ShouldNotBeNil)
 			})
@@ -147,7 +147,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 		Convey("When create MRManager with valid addrs", func(ctx C) {
 			// VMS Server
 			vmsOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
-			mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), vmsOpts.MRManagerOptions, zap.L())
+			mrm, err := varlogadm.NewMRManager(context.TODO(), types.ClusterID(0), vmsOpts.MRManagerOptions, zap.L())
 			Convey("Then it should be success", func(ctx C) {
 				So(err, ShouldBeNil)
 
@@ -181,7 +181,7 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 
 		// VMS Server
 		vmsOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
-		mrm, err := vms.NewMRManager(context.TODO(), types.ClusterID(0), vmsOpts.MRManagerOptions, zap.L())
+		mrm, err := varlogadm.NewMRManager(context.TODO(), types.ClusterID(0), vmsOpts.MRManagerOptions, zap.L())
 		So(err, ShouldBeNil)
 		defer mrm.Close()
 
@@ -283,22 +283,22 @@ func TestVarlogSNWatcher(t *testing.T) {
 
 			vmsOpts := it.NewTestVMSOptions()
 			vmsOpts.MRManagerOptions.MetadataRepositoryAddresses = []string{mrAddr}
-			mrMgr, err := vms.NewMRManager(context.TODO(), env.ClusterID(), vmsOpts.MRManagerOptions, env.Logger())
+			mrMgr, err := varlogadm.NewMRManager(context.TODO(), env.ClusterID(), vmsOpts.MRManagerOptions, env.Logger())
 			So(err, ShouldBeNil)
 
 			cmView := mrMgr.ClusterMetadataView()
-			snMgr, err := vms.NewStorageNodeManager(context.TODO(), env.ClusterID(), cmView, zap.NewNop())
+			snMgr, err := varlogadm.NewStorageNodeManager(context.TODO(), env.ClusterID(), cmView, zap.NewNop())
 			So(err, ShouldBeNil)
 
 			snHandler := newTestSnHandler()
 
-			wopts := vms.WatcherOptions{
-				Tick:             vms.DefaultTick,
-				ReportInterval:   vms.DefaultReportInterval,
-				HeartbeatTimeout: vms.DefaultHeartbeatTimeout,
-				RPCTimeout:       vms.DefaultWatcherRPCTimeout,
+			wopts := varlogadm.WatcherOptions{
+				Tick:             varlogadm.DefaultTick,
+				ReportInterval:   varlogadm.DefaultReportInterval,
+				HeartbeatTimeout: varlogadm.DefaultHeartbeatTimeout,
+				RPCTimeout:       varlogadm.DefaultWatcherRPCTimeout,
 			}
-			snWatcher := vms.NewStorageNodeWatcher(wopts, cmView, snMgr, snHandler, zap.NewNop())
+			snWatcher := varlogadm.NewStorageNodeWatcher(wopts, cmView, snMgr, snHandler, zap.NewNop())
 			snWatcher.Run()
 			defer snWatcher.Close()
 
@@ -313,7 +313,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 						case meta := <-snHandler.reportC:
 							replica, exist := meta.FindLogStream(lsID)
 							return exist && replica.GetStatus().Sealed()
-						case <-time.After(vms.DefaultTick * time.Duration(2*vms.DefaultReportInterval)):
+						case <-time.After(varlogadm.DefaultTick * time.Duration(2*varlogadm.DefaultReportInterval)):
 						}
 
 						return false
@@ -330,7 +330,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 						select {
 						case hsnid := <-snHandler.hbC:
 							return hsnid == snID
-						case <-time.After(vms.DefaultTick * time.Duration(2*vms.DefaultHeartbeatTimeout)):
+						case <-time.After(varlogadm.DefaultTick * time.Duration(2*varlogadm.DefaultHeartbeatTimeout)):
 						}
 
 						return false
@@ -397,7 +397,7 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 				clusterID: env.ClusterID(),
 				addr:      mrAddr,
 			}
-			statRepository := vms.NewStatRepository(context.TODO(), cmView)
+			statRepository := varlogadm.NewStatRepository(context.TODO(), cmView)
 
 			metaIndex := statRepository.GetAppliedIndex()
 			So(metaIndex, ShouldBeGreaterThan, 0)
@@ -528,7 +528,7 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 				clusterID: env.ClusterID(),
 				addr:      mrAddr,
 			}
-			statRepository := vms.NewStatRepository(context.TODO(), cmView)
+			statRepository := varlogadm.NewStatRepository(context.TODO(), cmView)
 
 			So(statRepository.GetStorageNode(snID), ShouldNotBeNil)
 			lsStat := statRepository.GetLogStream(lsID)

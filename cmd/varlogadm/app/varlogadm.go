@@ -10,10 +10,10 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.daumkakao.com/varlog/varlog/internal/vms"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
 )
 
-func Main(opts *vms.Options) error {
+func Main(opts *varlogadm.Options) error {
 	loggerConfig := zap.NewProductionConfig()
 	loggerConfig.Sampling = nil
 	loggerConfig.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
@@ -31,7 +31,7 @@ func Main(opts *vms.Options) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	cm, err := vms.NewClusterManager(ctx, opts)
+	cm, err := varlogadm.NewClusterManager(ctx, opts)
 	if err != nil {
 		logger.Error("could not create cluster manager server", zap.Error(err))
 		return err

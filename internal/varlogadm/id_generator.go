@@ -1,4 +1,4 @@
-package vms
+package varlogadm
 
 import (
 	"context"

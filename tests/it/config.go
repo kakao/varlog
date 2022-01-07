@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
-	"github.daumkakao.com/varlog/varlog/internal/vms"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
 )
@@ -48,7 +48,7 @@ type config struct {
 	numCL    int
 	numTopic int
 
-	VMSOpts *vms.Options
+	VMSOpts *varlogadm.Options
 	logger  *zap.Logger
 
 	portBase      int
@@ -143,7 +143,7 @@ func WithStorageNodeManagementClientFactory(fac metadata_repository.StorageNodeM
 	}
 }
 
-func WithVMSOptions(vmsOpts *vms.Options) Option {
+func WithVMSOptions(vmsOpts *varlogadm.Options) Option {
 	return func(c *config) {
 		c.VMSOpts = vmsOpts
 	}
@@ -191,8 +191,8 @@ func WithoutVMS() Option {
 	}
 }
 
-func NewTestVMSOptions() *vms.Options {
-	vmsOpts := vms.DefaultOptions()
+func NewTestVMSOptions() *varlogadm.Options {
+	vmsOpts := varlogadm.DefaultOptions()
 	vmsOpts.Tick = 100 * time.Millisecond
 	vmsOpts.HeartbeatTimeout = 30
 	vmsOpts.ReportInterval = 10
