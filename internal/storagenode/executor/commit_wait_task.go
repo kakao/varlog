@@ -58,5 +58,5 @@ func (cwt *commitWaitTask) annotate(ctx context.Context, m *telemetry.Metrics) {
 
 	// queue latency
 	ms := float64(cwt.poppedTime.Sub(cwt.createdTime).Microseconds()) / 1000.0
-	m.ExecutorCommitWaitQueueTime.Record(ctx, ms)
+	m.CommitWaitQueueTime.Record(ctx, ms)
 }

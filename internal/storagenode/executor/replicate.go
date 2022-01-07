@@ -23,6 +23,7 @@ func (e *executor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) 
 	twg := newTaskWaitGroup()
 	wt := newBackupWriteTask(twg, data, llsn)
 	defer func() {
+		wt.annotate(ctx, e.metrics)
 		wt.release()
 		twg.release()
 	}()

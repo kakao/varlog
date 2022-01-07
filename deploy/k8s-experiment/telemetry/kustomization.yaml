@@ -8,8 +8,8 @@ resources:
   - grafana.yaml
 images:
   - name: otel/opentelemetry-collector
-    newName: mdock.daumkakao.io/otel/opentelemetry-collector
-    newTag: 0.41.0
+    newName: mdock.daumkakao.io/otel/opentelemetry-collector-contrib
+    newTag: 0.40.0
   - name: jaegertracing/all-in-one
     newName: mdock.daumkakao.io/jaegertracing/all-in-one
     newTag: 1.29.0

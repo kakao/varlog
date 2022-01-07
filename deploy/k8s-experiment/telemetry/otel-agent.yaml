@@ -15,6 +15,19 @@ data:
         protocols:
           grpc:
             endpoint: "0.0.0.0:4317"
+      hostmetrics:
+        collection_interval: 30s
+        scrapers:
+          load:
+          filesystem:
+          disk:
+            exclude:
+              devices: ["loop"]
+              match_type: regexp
+          process:
+            include:
+              names: ["vmr", "vsn"]
+              match_type: strict
 
     exporters:
       logging:
@@ -30,6 +43,12 @@ data:
         limit_percentage: 50
         spike_limit_percentage: 20
       batch:
+      resourcedetection/system:
+        detectors: [env, system]
+        timeout: 2s
+        override: false
+        system:
+          hostname_sources: [os]
 
     extensions:
       health_check:
@@ -41,8 +60,10 @@ data:
     service:
       pipelines:
         metrics:
-          receivers: [otlp]
-          processors: [batch]
+          receivers: [otlp, hostmetrics]
+          processors:
+            - batch
+            - resourcedetection/system
           exporters: [otlp]
       extensions: [health_check, pprof, zpages]
 ---
@@ -74,8 +95,7 @@ spec:
             - "until nslookup otel-collector.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local; do echo waiting for otel-collector; sleep 5; done"
       containers:
         - name: otel-agent
-          command:
-            - "/otelcol"
+          args:
             - "--config=/conf/otel-agent-config.yaml"
           image: otel/opentelemetry-collector:latest
           volumeMounts:

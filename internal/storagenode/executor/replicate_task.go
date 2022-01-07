@@ -47,5 +47,5 @@ func (rt *replicateTask) annotate(ctx context.Context, m *telemetry.Metrics) {
 
 	// write queue latency
 	ms := float64(rt.poppedTime.Sub(rt.createdTime).Microseconds()) / 1000.0
-	m.ExecutorReplicateQueueTime.Record(ctx, ms)
+	m.ReplicateQueueTime.Record(ctx, ms)
 }

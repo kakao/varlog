@@ -165,8 +165,15 @@ func (w *writerImpl) send(ctx context.Context, tb *writeTask) error {
 	if err := tb.validate(); err != nil {
 		return err
 	}
+
 	atomic.AddInt64(&w.inflight, 1)
-	return w.q.pushWithContext(ctx, tb)
+	if err := w.q.pushWithContext(ctx, tb); err != nil {
+		// TODO (jun): Should I subtract one from the variable inflight?
+		return err
+	}
+	w.metrics.WriteQueueTasks.Add(ctx, 1)
+
+	return nil
 }
 
 func (w *writerImpl) writeLoop(ctx context.Context) {
@@ -186,7 +193,7 @@ func (w *writerImpl) writeLoop(ctx context.Context) {
 func (w *writerImpl) writeLoopInternal(ctx context.Context) error {
 	oldLLSN, newLLSN, numPopped, err := w.ready(ctx)
 	defer func() {
-		w.metrics.ExecutorWriteQueueTasks.Record(ctx, numPopped)
+		w.metrics.WriteQueueTasks.Add(ctx, -numPopped)
 		atomic.AddInt64(&w.inflight, -numPopped)
 	}()
 	if err != nil {
@@ -288,6 +295,9 @@ func (w *writerImpl) write() (err error) {
 		}
 	}
 
+	// FIXME: use proper context.
+	w.metrics.WriteBatchSize.Record(context.TODO(), int64(len(w.writeTaskBatch)))
+
 	err = batch.Apply()
 	return
 }
@@ -365,6 +375,10 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 		// commitWaitQ with numCommits.
 		// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
 		defer func() {
+			if oldLLSN%100 < w.metrics.WriteReportDelaySamplingPercentage {
+				w.metrics.WrittenTimestamps.Store(oldLLSN, time.Now())
+			}
+
 			if !w.lsc.uncommittedLLSNEnd.CompareAndSwap(oldLLSN, newLLSN) {
 				// NOTE: If this CAS operation fails, it means other goroutine changes
 				// uncommittedLLSNEnd of LogStreamContext.

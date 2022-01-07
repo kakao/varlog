@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/component: varlogmr
     app.kubernetes.io/part-of: varlog
 spec:
+  replicas: 1
   template:
     spec:
       containers:

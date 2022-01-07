@@ -89,12 +89,12 @@ func (wt *writeTask) annotate(ctx context.Context, m *telemetry.Metrics) {
 
 	// write queue latency
 	ms := float64(wt.poppedTime.Sub(wt.createdTime).Microseconds()) / 1000.0
-	m.ExecutorWriteQueueTime.Record(ctx, ms)
+	m.WriteQueueTime.Record(ctx, ms)
 
 	// processing time
 	if wt.processingTime.IsZero() || !wt.processingTime.After(wt.poppedTime) {
 		return
 	}
 	ms = float64(wt.processingTime.Sub(wt.poppedTime).Microseconds()) / 1000.0
-	m.ExecutorWriteTime.Record(ctx, ms)
+	m.WriteTime.Record(ctx, ms)
 }

@@ -99,8 +99,7 @@ spec:
       containers:
         - name: otel-collector
           image: otel/opentelemetry-collector:latest
-          command:
-            - "/otelcol"
+          args:
             - "--config=/conf/otel-collector-config.yaml"
           ports:
             - containerPort: 1777  # Default endpoint for pprof.

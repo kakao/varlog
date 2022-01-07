@@ -19,8 +19,10 @@ import (
 
 // TODO: use pool
 type replicateTask struct {
-	req *snpb.ReplicationRequest
-	err error
+	req            *snpb.ReplicationRequest
+	err            error
+	createdTime    time.Time
+	replicatedTime time.Time
 }
 
 type Server interface {
@@ -100,21 +102,17 @@ func (s *serverImpl) recv(ctx context.Context, stream snpb.Replicator_ReplicateS
 		var err error
 		for {
 			req, err = stream.Recv()
-			/*
-				s.measure.Stub().Metrics().ExecutorReplicateRequestPropagationTime.Record(
-					ctx,
-					float64(time.Since(req.GetCreatedTime()).Milliseconds())/1000.0,
-				)
-			*/
 			repCtx := &replicateTask{
-				req: req,
-				err: err,
+				req:         req,
+				err:         err,
+				createdTime: time.Now(),
 			}
 			select {
 			case c <- repCtx:
 				if err != nil {
 					return
 				}
+				s.metrics.ReplicateServerRequestQueueTasks.Add(ctx, 1)
 			case <-ctx.Done():
 				return
 			}
@@ -133,6 +131,8 @@ func (s *serverImpl) replicate(ctx context.Context, repCtxC <-chan *replicateTas
 		for repCtx := range repCtxC {
 			err = repCtx.err
 			if repCtx.err == nil {
+				s.metrics.ReplicateServerRequestQueueTime.Record(ctx, float64(time.Since(repCtx.createdTime).Microseconds())/1000.0)
+				s.metrics.ReplicateServerRequestQueueTasks.Add(ctx, -1)
 				startTime := time.Now()
 				tpid := repCtx.req.GetTopicID()
 				lsid := repCtx.req.GetLogStreamID()
@@ -141,6 +141,7 @@ func (s *serverImpl) replicate(ctx context.Context, repCtxC <-chan *replicateTas
 				} else {
 					err = fmt.Errorf("no executor: %v", lsid)
 				}
+				repCtx.replicatedTime = time.Now()
 				repCtx.err = err
 				s.metrics.RPCServerReplicateDuration.Record(
 					ctx,
@@ -152,6 +153,7 @@ func (s *serverImpl) replicate(ctx context.Context, repCtxC <-chan *replicateTas
 				if err != nil {
 					return
 				}
+				s.metrics.ReplicateServerResponseQueueTasks.Add(ctx, 1)
 			case <-ctx.Done():
 				return
 			}
@@ -170,6 +172,8 @@ func (s *serverImpl) send(ctx context.Context, stream snpb.Replicator_ReplicateS
 		for repCtx := range repCtxC {
 			err = repCtx.err
 			if repCtx.err == nil {
+				s.metrics.ReplicateServerResponseQueueTime.Record(ctx, float64(time.Since(repCtx.replicatedTime).Microseconds())/1000.0)
+				s.metrics.ReplicateServerResponseQueueTasks.Add(ctx, -1)
 				err = stream.Send(&snpb.ReplicationResponse{
 					StorageNodeID: s.storageNodeIDGetter.StorageNodeID(),
 					LogStreamID:   repCtx.req.GetLogStreamID(),

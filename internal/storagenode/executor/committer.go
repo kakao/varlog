@@ -142,7 +142,7 @@ func (c *committerImpl) init() error {
 	return nil
 }
 
-func (c *committerImpl) sendCommitWaitTask(_ context.Context, cwt *commitWaitTask) error {
+func (c *committerImpl) sendCommitWaitTask(ctx context.Context, cwt *commitWaitTask) error {
 	if cwt == nil {
 		return errors.WithStack(verrors.ErrInvalid)
 	}
@@ -159,7 +159,12 @@ func (c *committerImpl) sendCommitWaitTask(_ context.Context, cwt *commitWaitTas
 	defer c.state.releaseBarrier()
 
 	atomic.AddInt64(&c.inflightCommitWaitTasks, 1)
-	return c.commitWaitQ.push(cwt)
+	if err := c.commitWaitQ.push(cwt); err != nil {
+		// TODO: check inflightCommitWaitTasks
+		return err
+	}
+	c.metrics.CommitWaitQueueTasks.Add(ctx, 1)
+	return nil
 }
 
 func (c *committerImpl) sendCommitTask(ctx context.Context, ct *commitTask) error {
@@ -179,7 +184,12 @@ func (c *committerImpl) sendCommitTask(ctx context.Context, ct *commitTask) erro
 	defer c.state.releaseBarrier()
 
 	atomic.AddInt64(&c.inflightCommitTasks.cnt, 1)
-	return c.commitTaskQ.pushWithContext(ctx, ct)
+	if err := c.commitTaskQ.pushWithContext(ctx, ct); err != nil {
+		// TODO (jun): check inflightCommitTasks
+		return err
+	}
+	c.metrics.CommitQueueTasks.Add(ctx, 1)
+	return nil
 }
 
 func (c *committerImpl) commitLoop(ctx context.Context) {
@@ -199,7 +209,7 @@ func (c *committerImpl) commitLoop(ctx context.Context) {
 func (c *committerImpl) commitLoopInternal(ctx context.Context) error {
 	numPoppedCTs, err := c.ready(ctx)
 	defer func() {
-		c.metrics.ExecutorCommitQueueTasks.Record(ctx, numPoppedCTs)
+		c.metrics.CommitQueueTasks.Add(ctx, -numPoppedCTs)
 		atomic.AddInt64(&c.inflightCommitTasks.cnt, -numPoppedCTs)
 	}()
 	if err != nil {
@@ -530,9 +540,11 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 		// If cwt is null, it means that there is no task in commitWaitQ anymore. When this
 		// method is executed by SyncReplicate, it is okay for cwt not to exist.
 		cwt := iter.task()
-		if cwt != nil && cwt.twg != nil {
-			cwt.twg.glsn = glsn
+		if cwt != nil {
 			cwt.poppedTime = time.Now()
+			if cwt.twg != nil {
+				cwt.twg.glsn = glsn
+			}
 		}
 
 		if err := batch.Put(llsn, glsn); err != nil {
@@ -561,6 +573,7 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 	}
 
 	// NOTE: localGLSN should be increased only when numCommits is greater than zero.
+	// TODO(jun): popSize or numCommits? Which one should I use? Check again!
 	if numCommits > 0 {
 		// only the first commit changes local low watermark
 		localLWM := varlogpb.LogEntryMeta{
@@ -599,8 +612,9 @@ func (c *committerImpl) commitDirectly(commitContext storage.CommitContext, requ
 	}
 
 	if popSize > 0 {
-		c.metrics.ExecutorCommitWaitQueueTasks.Record(context.Background(), int64(popSize))
+		c.metrics.CommitWaitQueueTasks.Add(context.TODO(), -int64(popSize))
 		atomic.AddInt64(&c.inflightCommitWaitTasks, -int64(popSize))
+		c.metrics.CommitBatchSize.Record(context.TODO(), int64(popSize))
 	}
 
 	return true, nil
