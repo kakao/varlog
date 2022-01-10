@@ -21,7 +21,6 @@ type taskWaitGroup struct {
 	err  error
 
 	createdTime   time.Time
-	writtenTime   time.Time
 	committedTime time.Time
 }
 
@@ -37,7 +36,6 @@ func (twg *taskWaitGroup) release() {
 	twg.llsn = types.InvalidLLSN
 	twg.err = nil
 	twg.createdTime = time.Time{}
-	twg.writtenTime = time.Time{}
 	twg.committedTime = time.Time{}
 	taskWaitGroupPool.Put(twg)
 }

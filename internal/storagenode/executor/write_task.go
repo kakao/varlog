@@ -34,6 +34,7 @@ type writeTask struct {
 
 	validate func() error
 
+	// variables for metrics
 	createdTime    time.Time
 	poppedTime     time.Time
 	processingTime time.Time
@@ -41,9 +42,6 @@ type writeTask struct {
 
 // newWriteTask creates a new appendTask. The parameter twg should not be nil.
 func newWriteTaskInternal(twg *taskWaitGroup, data []byte) *writeTask {
-	if twg == nil {
-		panic("twg is nil")
-	}
 	wt := writeTaskPool.Get().(*writeTask)
 	wt.twg = twg
 	wt.data = data
@@ -51,18 +49,30 @@ func newWriteTaskInternal(twg *taskWaitGroup, data []byte) *writeTask {
 	return wt
 }
 
+// newPrimaryWriteTask creates a new writeTask to be used in a primary replica.
 func newPrimaryWriteTask(twg *taskWaitGroup, data []byte, backups []varlogpb.Replica) *writeTask {
+	if twg == nil {
+		panic("twg is nil")
+	}
 	wt := newWriteTaskInternal(twg, data)
 	wt.primary = true
 	wt.backups = backups
 	return wt
 }
 
-func newBackupWriteTask(twg *taskWaitGroup, data []byte, llsn types.LLSN) *writeTask {
+// newBackupWriteTask creates a new writeTask to be used in a backup replica.
+//
+// Field llsn should be valid since replicated data must have a position in the log stream.
+// Field twg is nil since the Replicate RPC in the backup replica must not wait for the data to be committed.
+//
+// Even, the Replicate RPC does not wait for data to be written into a disk, thus releasing the
+// writeTask in the backup replica is the responsibility of the
+// `internal/storagenode/executor.(writer)`.
+func newBackupWriteTask(data []byte, llsn types.LLSN) *writeTask {
 	if llsn.Invalid() {
 		panic("invalid LLSN")
 	}
-	wt := newWriteTaskInternal(twg, data)
+	wt := newWriteTaskInternal(nil, data)
 	wt.llsn = llsn
 	wt.primary = false
 	wt.backups = nil

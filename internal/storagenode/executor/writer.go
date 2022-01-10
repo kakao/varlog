@@ -341,9 +341,7 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 
 		// After successful writing, commitWatiTaskBatch should be made.
 		for _, wt := range w.writeTaskBatch {
-			now := time.Now()
-			wt.processingTime = now
-			wt.twg.writtenTime = now
+			wt.processingTime = time.Now()
 
 			var cwt *commitWaitTask
 			if wt.primary { // primary
@@ -366,6 +364,10 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 			// nil.
 			if !wt.primary {
 				wt.twg.done(nil)
+				wt.annotate(ctx, w.metrics)
+				// NOTE: Releasing writeTask in backup replica should be handled by
+				// the writer.
+				wt.release()
 			}
 		}
 
@@ -417,8 +419,11 @@ func (w *writerImpl) stop() {
 func (w *writerImpl) drainQueue(err error) {
 	for w.q.size() > 0 {
 		tb := w.q.pop()
-		tb.twg.err = err
-		tb.twg.wg.Done()
+		// In a primary replica, twg in replicateTask is not nil.
+		if tb.twg != nil {
+			tb.twg.err = err
+			tb.twg.wg.Done()
+		}
 	}
 }
 

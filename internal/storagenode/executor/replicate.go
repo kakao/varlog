@@ -20,14 +20,9 @@ func (e *executor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) 
 	}
 	defer e.unguard()
 
-	twg := newTaskWaitGroup()
-	wt := newBackupWriteTask(twg, data, llsn)
-	defer func() {
-		wt.annotate(ctx, e.metrics)
-		wt.release()
-		twg.release()
-	}()
-
+	// NOTE: Releasing wt is the responsibility of the `internal/storagenode/executor.(writer)`
+	// rather than this method.
+	wt := newBackupWriteTask(data, llsn)
 	wt.validate = func() error {
 		if e.isPrimay() {
 			return errors.Wrapf(verrors.ErrInvalid, "primary replica")
@@ -35,13 +30,7 @@ func (e *executor) Replicate(ctx context.Context, llsn types.LLSN, data []byte) 
 		return nil
 	}
 
-	if err := e.writer.send(ctx, wt); err != nil {
-		twg.wg.Done()
-		return err
-	}
-
-	twg.wg.Wait()
-	return twg.err
+	return e.writer.send(ctx, wt)
 }
 
 func (e *executor) SyncInit(ctx context.Context, srcRange snpb.SyncRange) (syncRange snpb.SyncRange, err error) {

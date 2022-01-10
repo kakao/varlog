@@ -275,7 +275,7 @@ func (sn *StorageNode) Close() {
 
 	// LogStreamExecutors
 	sn.forEachExecutors(func(_ types.LogStreamID, extor executor.Executor) {
-		extor.Close()
+		_ = extor.Close()
 	})
 
 	// RPC Server

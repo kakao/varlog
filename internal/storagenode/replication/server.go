@@ -17,14 +17,6 @@ import (
 	"github.com/kakao/varlog/proto/snpb"
 )
 
-// TODO: use pool
-type replicateTask struct {
-	req            *snpb.ReplicationRequest
-	err            error
-	createdTime    time.Time
-	replicatedTime time.Time
-}
-
 type Server interface {
 	io.Closer
 	snpb.ReplicatorServer
@@ -78,16 +70,18 @@ func (s *serverImpl) Replicate(stream snpb.Replicator_ReplicateServer) error {
 		case <-stream.Context().Done():
 			return stream.Context().Err()
 		case rt, ok := <-c:
-			if ok && rt.err == nil {
+			err := rt.err
+			rt.release()
+			if ok && err == nil {
 				continue
 			}
 			if !ok {
 				return errors.WithStack(verrors.ErrClosed)
 			}
-			if rt.err == io.EOF {
+			if err == io.EOF {
 				return nil
 			}
-			return rt.err
+			return err
 		}
 	}
 }
@@ -98,15 +92,12 @@ func (s *serverImpl) recv(ctx context.Context, stream snpb.Replicator_ReplicateS
 	go func() {
 		defer s.pipelines.Done()
 		defer close(c)
-		var req *snpb.ReplicationRequest
-		var err error
+		var req snpb.ReplicationRequest
 		for {
-			req, err = stream.Recv()
-			repCtx := &replicateTask{
-				req:         req,
-				err:         err,
-				createdTime: time.Now(),
-			}
+			err := stream.RecvMsg(&req)
+			repCtx := newReplicateTask()
+			repCtx.req = req
+			repCtx.err = err
 			select {
 			case c <- repCtx:
 				if err != nil {
