@@ -10,7 +10,6 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/storagenode/replication"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
@@ -184,25 +183,18 @@ func (r *replicatorImpl) replicate(ctx context.Context, rt *replicateTask) error
 		rt.release()
 	}()
 
-	replicas := rt.replicas
 	llsn := rt.llsn
 	data := rt.data
-
-	grp, ctx := errgroup.WithContext(ctx)
-	for i := range replicas {
-		replica := replicas[i]
-		grp.Go(func() error {
-			cl, err := r.connector.Get(ctx, replica)
-			if err != nil {
-				return err
-			}
-			// FIXME: return some error?
-			cb := r.generateReplicateCallback(ctx, time.Now() /*rt.poppedTime*/)
-			cl.Replicate(ctx, llsn, data, cb)
-			return nil
-		})
+	for i := range rt.replicas {
+		cl, err := r.connector.Get(ctx, rt.replicas[i])
+		if err != nil {
+			return err
+		}
+		// FIXME: return some error?
+		cb := r.generateReplicateCallback(ctx, time.Now() /*rt.poppedTime*/)
+		cl.Replicate(ctx, llsn, data, cb)
 	}
-	return grp.Wait()
+	return nil
 }
 
 func (r *replicatorImpl) generateReplicateCallback(ctx context.Context, startTime time.Time) func(error) {

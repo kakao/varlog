@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Used pool of `internal/storagenode/replication.(*replicateTask)`. (#VARLOG-660/#575)
 - Wait for only enqueueing writeTask into writeQueue in backup replica rather than waiting for completion of disk I/O. (#VARLOG-660/#575)
 - Script `bin/start_varlogsn.py` accepts multiple of `--volumes` arguments correctly. (#VARLOG-670/#587)
+- Call `internal/storagenode/replication.(Client).Replicate` sequentially in replicator. (#VARLOG-666/#582)
 
 ### Removed
 - Removed the metric `sn.write.report.delay`. (#VARLOG-665/#581)
