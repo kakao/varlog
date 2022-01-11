@@ -125,7 +125,7 @@ func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, ca
 		LogStreamID: c.replica.GetLogStreamID(),
 		LLSN:        llsn,
 		Payload:     data,
-		CreatedTime: time.Now(),
+		CreatedTime: time.Now().UnixMicro(),
 	}
 	if err := c.requestQ.PushWithContext(ctx, req); err != nil {
 		return
@@ -150,12 +150,12 @@ Loop:
 		if err != nil {
 			break Loop
 		}
-		now := time.Now()
+		now := time.Now().UnixMicro()
 		req := reqI.(*snpb.ReplicationRequest)
 		c.metrics.ReplicateClientRequestQueueTasks.Add(stream.Context(), -1)
 		c.metrics.ReplicateClientRequestQueueTime.Record(
 			context.Background(),
-			float64(now.Sub(req.CreatedTime).Microseconds())/1000.0,
+			float64(now-req.CreatedTime)/1000.0,
 		)
 		req.CreatedTime = now
 		if err := stream.Send(req); err != nil {
@@ -171,10 +171,11 @@ func (c *client) recvLoop(stream snpb.Replicator_ReplicateClient) {
 
 	var (
 		err error
-		rsp *snpb.ReplicationResponse
+		rsp = &snpb.ReplicationResponse{}
 	)
 Loop:
 	for {
+		// TODO(jun): Is this necessary?
 		select {
 		case <-stream.Context().Done():
 			err = stream.Context().Err()
@@ -182,10 +183,15 @@ Loop:
 		default:
 		}
 
-		rsp, err = stream.Recv()
+		err = stream.RecvMsg(rsp)
 		if err != nil {
 			break Loop
 		}
+
+		c.metrics.ReplicateResponsePropagationTime.Record(
+			context.TODO(),
+			float64(time.Now().UnixMicro()-rsp.CreatedTime)/1000.0,
+		)
 
 		// TODO: Check if this is safe.
 		cb := c.callbackQ.Pop().(*callbackBlock)

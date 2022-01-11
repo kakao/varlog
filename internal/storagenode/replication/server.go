@@ -95,6 +95,12 @@ func (s *serverImpl) recv(ctx context.Context, stream snpb.Replicator_ReplicateS
 		var req snpb.ReplicationRequest
 		for {
 			err := stream.RecvMsg(&req)
+			if err == nil {
+				s.metrics.ReplicateRequestPropagationTime.Record(
+					ctx,
+					float64(time.Now().UnixMicro()-req.CreatedTime)/1000.0,
+				)
+			}
 			repCtx := newReplicateTask()
 			repCtx.req = req
 			repCtx.err = err
@@ -159,18 +165,18 @@ func (s *serverImpl) send(ctx context.Context, stream snpb.Replicator_ReplicateS
 	go func() {
 		defer s.pipelines.Done()
 		defer close(c)
+
 		var err error
+		rsp := &snpb.ReplicationResponse{}
 		for repCtx := range repCtxC {
 			err = repCtx.err
 			if repCtx.err == nil {
 				s.metrics.ReplicateServerResponseQueueTime.Record(ctx, float64(time.Since(repCtx.replicatedTime).Microseconds())/1000.0)
 				s.metrics.ReplicateServerResponseQueueTasks.Add(ctx, -1)
-				err = stream.Send(&snpb.ReplicationResponse{
-					StorageNodeID: s.storageNodeIDGetter.StorageNodeID(),
-					LogStreamID:   repCtx.req.GetLogStreamID(),
-					LLSN:          repCtx.req.GetLLSN(),
-					CreatedTime:   time.Now(),
-				})
+
+				rsp.LLSN = repCtx.req.GetLLSN()
+				rsp.CreatedTime = time.Now().UnixMicro()
+				err = stream.SendMsg(rsp)
 				repCtx.err = err
 			}
 			select {
