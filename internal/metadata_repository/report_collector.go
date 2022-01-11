@@ -924,9 +924,10 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 		lc.tmStub.mb.Records("mr.log_stream_committer.catchup.counts").Record(ctx, float64(numCatchups))
 	}()
 
+CATCHUP_LOOP:
 	for ctx.Err() == nil {
 		if ver+1 != crs.Version {
-			crs, err = lc.helper.lookupNextCommitResults(ver)
+			tmp, err := lc.helper.lookupNextCommitResults(ver)
 			if err != nil {
 				latestVersion, ok := lc.getCatchupVersion(false)
 				if !ok {
@@ -935,16 +936,18 @@ func (lc *logStreamCommitter) catchup(ctx context.Context) {
 
 				if latestVersion > ver {
 					ver = latestVersion
-					continue
+					continue CATCHUP_LOOP
 				}
 
 				lc.logger.Warn(fmt.Sprintf("lsid:%v latest:%v err:%v", lc.lsID, latestVersion, err.Error()))
 				return
 			}
-		}
 
-		if crs == nil {
-			return
+			if tmp == nil {
+				return
+			}
+
+			crs = tmp
 		}
 
 		cr, expectedPos, ok := crs.LookupCommitResult(lc.topicID, lc.lsID, lc.catchupHelper.expectedPos)

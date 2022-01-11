@@ -949,16 +949,13 @@ func TestCommitWithDelay(t *testing.T) {
 
 			time.Sleep(10 * time.Millisecond)
 
-			gls = cc.newDummyCommitResults(knownVer+1, glsn, 1)
-			mr.appendGLS(gls)
-			knownVer = gls.Version
-			glsn += types.GLSN(len(gls.CommitResults))
-
-			gls = cc.newDummyCommitResults(knownVer+1, glsn, 1)
-			mr.appendGLS(gls)
-			knownVer = gls.Version
-			glsn += types.GLSN(len(gls.CommitResults))
-
+			for i := 0; i < 10; i++ {
+				dummySN.increaseUncommitted(0)
+				gls = cc.newDummyCommitResults(knownVer+1, glsn, 1)
+				mr.appendGLS(gls)
+				knownVer = gls.Version
+				glsn += types.GLSN(len(gls.CommitResults))
+			}
 			reportCollector.Commit()
 
 			So(testutil.CompareWaitN(10, func() bool {
@@ -969,7 +966,7 @@ func TestCommitWithDelay(t *testing.T) {
 			So(executor.reportCtx.getReport().UncommitReports[0].Version, ShouldEqual, reportedVer)
 
 			Convey("set commit delay & enable report to trim during catchup", func() {
-				dummySN.SetCommitDelay(30 * time.Millisecond)
+				dummySN.SetCommitDelay(100 * time.Millisecond)
 				reportCollector.Commit()
 
 				time.Sleep(10 * time.Millisecond)
@@ -980,8 +977,6 @@ func TestCommitWithDelay(t *testing.T) {
 					return reports.UncommitReports[0].Version == knownVer
 				}), ShouldBeTrue)
 
-				// wait for prev catchup job to finish
-				time.Sleep(time.Second)
 				mr.trimGLS(knownVer)
 
 				gls = cc.newDummyCommitResults(knownVer+1, glsn, 1)
