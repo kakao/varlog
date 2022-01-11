@@ -332,7 +332,7 @@ func (w *writerImpl) sendToReplicator(ctx context.Context) (err error) {
 }
 
 func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) error {
-	grp, ctx := errgroup.WithContext(ctx)
+	grp, gctx := errgroup.WithContext(ctx)
 	grp.Go(func() error {
 		// write pipeline
 		if err := w.write(); err != nil {
@@ -364,7 +364,7 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 			// nil.
 			if !wt.primary {
 				wt.twg.done(nil)
-				wt.annotate(ctx, w.metrics)
+				wt.annotate(gctx, w.metrics)
 				// NOTE: Releasing writeTask in backup replica should be handled by
 				// the writer.
 				wt.release()
@@ -386,13 +386,10 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 				))
 			}
 		}()
-		return w.sendToCommitter(ctx)
+		return w.sendToCommitter(gctx)
 	})
-	grp.Go(func() error {
-		// replication
-		return w.sendToReplicator(ctx)
-	})
-	return grp.Wait()
+	err := w.sendToReplicator(ctx)
+	return multierr.Append(err, grp.Wait())
 }
 
 func (w *writerImpl) stop() {
