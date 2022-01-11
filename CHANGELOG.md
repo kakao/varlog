@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added metrics about the delay between reports and commits in the metadata repository. (#VARLOG-654/#571)
 - Added metrics about the various performance indices in the storage node. (#VARLOG-656/#573)
 - Added `--ballast-size` option to storage node. (#VARLOG-669/#585)
+- Added new replica selector `internal/varlogadm.(*balancedReplicaSelector)` that makes balance of replicas and primary replicas across storage nodes. (#VARLOG-657/#577)
 
 ### Changed
 - Fixed wrong URL in `CHANGELOG.md`. (#VARLOG-652/#569)
