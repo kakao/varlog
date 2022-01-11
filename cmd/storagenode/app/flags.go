@@ -33,6 +33,11 @@ var (
 		Aliases: []string{"advertise"},
 		EnvVars: []string{"ADVERTISE_ADDRESS", "ADVERTISE"},
 	}
+	flagBallastSize = vflag.FlagDescriptor{
+		Name:        "ballast-size",
+		EnvVars:     []string{"BALLAST_SIZE"},
+		Description: "B, KiB, MiB, GiB",
+	}
 
 	// logging
 	flagLogDir = vflag.FlagDescriptor{
