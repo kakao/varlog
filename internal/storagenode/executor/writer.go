@@ -377,10 +377,6 @@ func (w *writerImpl) fanout(ctx context.Context, oldLLSN, newLLSN types.LLSN) er
 		// commitWaitQ with numCommits.
 		// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
 		defer func() {
-			if oldLLSN%100 < w.metrics.WriteReportDelaySamplingPercentage {
-				w.metrics.WrittenTimestamps.Store(oldLLSN, time.Now())
-			}
-
 			if !w.lsc.uncommittedLLSNEnd.CompareAndSwap(oldLLSN, newLLSN) {
 				// NOTE: If this CAS operation fails, it means other goroutine changes
 				// uncommittedLLSNEnd of LogStreamContext.
