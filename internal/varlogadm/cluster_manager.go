@@ -157,7 +157,7 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		return nil, err
 	}
 
-	snSelector, err := newRandomReplicaSelector(cmView, opts.ReplicationFactor)
+	snSelector, err := newBalancedReplicaSelector(cmView, int(opts.ReplicationFactor))
 	if err != nil {
 		return nil, err
 	}
