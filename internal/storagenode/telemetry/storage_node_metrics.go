@@ -42,6 +42,9 @@ type Metrics struct {
 	ReplicateServerResponseQueueTime  metric.Float64Histogram
 	ReplicateServerResponseQueueTasks metric.Int64UpDownCounter
 
+	ReplicateRequestPropagationTime  metric.Float64Histogram
+	ReplicateResponsePropagationTime metric.Float64Histogram
+
 	// Reports
 	Reports            metric.Int64Counter
 	Commits            metric.Int64Counter
@@ -234,6 +237,21 @@ func NewMetrics() *Metrics {
 		"sn.replicate_server.response_queue.tasks",
 		metric.WithDescription("number of tasks in response queue in replicate server"),
 		metric.WithUnit(unit.Dimensionless),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.ReplicateRequestPropagationTime, err = meter.NewFloat64Histogram(
+		"sn.replicate_request.propagation.time",
+		metric.WithUnit(unit.Milliseconds),
+	)
+	if err != nil {
+		panic(err)
+	}
+	metrics.ReplicateResponsePropagationTime, err = meter.NewFloat64Histogram(
+		"sn.replicate_response.propagation.time",
+		metric.WithUnit(unit.Milliseconds),
 	)
 	if err != nil {
 		panic(err)
