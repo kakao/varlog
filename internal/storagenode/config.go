@@ -16,6 +16,8 @@ import (
 const (
 	// DefaultListenAddress is a default address to listen to incomming RPC connections.
 	DefaultListenAddress = "0.0.0.0:9091"
+
+	DefaultBallastSize = 1 << 30
 )
 
 type config struct {

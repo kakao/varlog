@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/docker/go-units"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
@@ -36,6 +37,15 @@ func Main(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
+	ballastSize, err := units.RAMInBytes(c.String(flagBallastSize.Name))
+	if err != nil {
+		return err
+	}
+
+	// ballast
+	ballast := make([]byte, ballastSize)
+	_ = ballast
 
 	// TODO: add initTimeout option
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
