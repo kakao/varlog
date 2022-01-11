@@ -1,13 +1,9 @@
 package telemetry
 
 import (
-	"sync"
-
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/metric/unit"
-
-	"github.com/kakao/varlog/pkg/types"
 )
 
 type Metrics struct {
@@ -50,10 +46,6 @@ type Metrics struct {
 	Reports            metric.Int64Counter
 	Commits            metric.Int64Counter
 	ReportedLogEntries metric.Int64Histogram
-
-	WriteReportDelay                   metric.Float64Histogram
-	WrittenTimestamps                  sync.Map // map<LLSN, time.Time>
-	WriteReportDelaySamplingPercentage types.LLSN
 }
 
 func NewMetrics() *Metrics {
@@ -268,16 +260,6 @@ func NewMetrics() *Metrics {
 		"sn.reported.log_entries",
 		metric.WithDescription("number of log entries reported"),
 		metric.WithUnit(unit.Dimensionless),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	metrics.WriteReportDelaySamplingPercentage = 10
-	metrics.WriteReportDelay, err = meter.NewFloat64Histogram(
-		"sn.write.report.delay",
-		metric.WithDescription("delay between write and report in milliseconds"),
-		metric.WithUnit(unit.Milliseconds),
 	)
 	if err != nil {
 		panic(err)

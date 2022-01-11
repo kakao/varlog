@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wait for only enqueueing writeTask into writeQueue in backup replica rather than waiting for completion of disk I/O. (#VARLOG-660/#575)
 - Script `bin/start_varlogsn.py` accepts multiple of `--volumes` arguments correctly. (#VARLOG-670/#587)
 
+### Removed
+- Removed the metric `sn.write.report.delay`. (#VARLOG-665/#581)
+
 
 ## [0.1.3] - 2021-12-30
 ### Added
