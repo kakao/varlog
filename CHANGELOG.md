@@ -14,9 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Fixed wrong URL in `CHANGELOG.md`. (#VARLOG-652/#569)
 - Renamed existing metrics in the storage node to represent their purposes. (#VARLOG-656/#573)
-- Renamed package `internal/vms` to `internal/varlogadm` and `cmd/vms` to `cmd/varlogadm`. #(VARLOG-663/#576)
+- Renamed package `internal/vms` to `internal/varlogadm` and `cmd/vms` to `cmd/varlogadm`. (#VARLOG-663/#576)
 - Used pool of `internal/storagenode/replication.(*replicateTask)`. (#VARLOG-660/#575)
 - Wait for only enqueueing writeTask into writeQueue in backup replica rather than waiting for completion of disk I/O. (#VARLOG-660/#575)
+- Script `bin/start_varlogsn.py` accepts multiple of `--volumes` arguments correctly. (#VARLOG-670/#587)
 
 
 ## [0.1.3] - 2021-12-30
