@@ -187,7 +187,8 @@ def main() -> None:
     parser.add_argument("--listen", default=f"0.0.0.0:{DEFAULT_PORT}")
     parser.add_argument("--advertise", default=f"{addr}:{DEFAULT_PORT}")
     parser.add_argument("--admin", required=True)
-    parser.add_argument("--volumes", nargs="+", required=True, action="append")
+    parser.add_argument("--volumes", nargs="+", required=True, action="extend",
+                        type=str)
     parser.add_argument("--add-after-seconds",
                         default=DEFAULT_ADD_AFTER_SECONDS,
                         type=int)
