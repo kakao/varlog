@@ -19,18 +19,24 @@ type pebbleWriteBatch struct {
 	b               *pebble.Batch
 	ps              *pebbleStorage
 	prevWrittenLLSN types.LLSN
+
+	dataKeyArray  [dataKeyLength]byte
+	dataKeyBuffer []byte
 }
 
 var _ WriteBatch = (*pebbleWriteBatch)(nil)
 
 func newPebbleWriteBatch() *pebbleWriteBatch {
-	return pebbleWriteBatchPool.Get().(*pebbleWriteBatch)
+	pwb := pebbleWriteBatchPool.Get().(*pebbleWriteBatch)
+	pwb.dataKeyBuffer = pwb.dataKeyArray[:]
+	return pwb
 }
 
 func (pwb *pebbleWriteBatch) release() {
 	pwb.b = nil
 	pwb.ps = nil
 	pwb.prevWrittenLLSN = types.InvalidLLSN
+	pwb.dataKeyBuffer = pwb.dataKeyBuffer[0:0]
 	pebbleWriteBatchPool.Put(pwb)
 }
 
@@ -57,7 +63,7 @@ func (pwb *pebbleWriteBatch) Put(llsn types.LLSN, data []byte) error {
 		}
 	*/
 
-	dk := encodeDataKey(llsn)
+	dk := encodeDataKeyInternal(llsn, pwb.dataKeyBuffer)
 	if err := pwb.b.Set(dk, data, pwb.ps.writeOption); err != nil {
 		return err
 	}
