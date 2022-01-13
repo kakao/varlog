@@ -67,15 +67,15 @@ func (mr *MockClientMockRecorder) PeerStorageNodeID() *gomock.Call {
 }
 
 // Replicate mocks base method.
-func (m *MockClient) Replicate(arg0 context.Context, arg1 types.LLSN, arg2 []byte, arg3 func(error)) {
+func (m *MockClient) Replicate(arg0 context.Context, arg1 types.LLSN, arg2 []byte, arg3 int64, arg4 func(int64, error)) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Replicate", arg0, arg1, arg2, arg3)
+	m.ctrl.Call(m, "Replicate", arg0, arg1, arg2, arg3, arg4)
 }
 
 // Replicate indicates an expected call of Replicate.
-func (mr *MockClientMockRecorder) Replicate(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) Replicate(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockClient)(nil).Replicate), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replicate", reflect.TypeOf((*MockClient)(nil).Replicate), arg0, arg1, arg2, arg3, arg4)
 }
 
 // SyncInit mocks base method.

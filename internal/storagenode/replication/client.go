@@ -22,7 +22,7 @@ import (
 
 type Client interface {
 	io.Closer
-	Replicate(ctx context.Context, llsn types.LLSN, data []byte, cb func(error))
+	Replicate(ctx context.Context, llsn types.LLSN, data []byte, startTimeMicro int64, cb func(int64, error))
 	PeerStorageNodeID() types.StorageNodeID
 	SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.SyncRange, error)
 	SyncReplicate(ctx context.Context, replica varlogpb.Replica, payload snpb.SyncPayload) error
@@ -97,14 +97,14 @@ func (c *client) PeerStorageNodeID() types.StorageNodeID {
 	return c.replica.StorageNode.StorageNodeID
 }
 
-func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, callback func(error)) {
+func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, startTimeMicro int64, callback func(int64, error)) {
 	var err error
 
 	c.closed.mu.RLock()
 	defer func() {
 		c.closed.mu.RUnlock()
 		if err != nil {
-			callback(err)
+			callback(startTimeMicro, err)
 		}
 	}()
 
@@ -113,21 +113,16 @@ func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, ca
 		return
 	}
 
-	cb := newCallbackBlock(llsn, callback)
+	cb := newCallbackBlock(llsn, startTimeMicro, callback)
 	err = c.callbackQ.PushWithContext(ctx, cb)
 	if err != nil {
 		cb.release()
 		return
 	}
 
-	req := &snpb.ReplicationRequest{
-		TopicID:     c.replica.GetTopicID(),
-		LogStreamID: c.replica.GetLogStreamID(),
-		LLSN:        llsn,
-		Payload:     data,
-		CreatedTime: time.Now().UnixMicro(),
-	}
-	if err := c.requestQ.PushWithContext(ctx, req); err != nil {
+	reqTask := newRequestTask(c.replica.TopicID, c.replica.LogStreamID, llsn, data)
+	err = c.requestQ.PushWithContext(ctx, reqTask)
+	if err != nil {
 		return
 	}
 	c.metrics.ReplicateClientRequestQueueTasks.Add(ctx, 1)
@@ -136,6 +131,7 @@ func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, ca
 func (c *client) sendLoop(stream snpb.Replicator_ReplicateClient) {
 	defer c.dispatchers.Done()
 
+	req := &snpb.ReplicationRequest{}
 Loop:
 	for {
 		select {
@@ -151,13 +147,20 @@ Loop:
 			break Loop
 		}
 		now := time.Now().UnixMicro()
-		req := reqI.(*snpb.ReplicationRequest)
+		reqTask := reqI.(*requestTask)
+
 		c.metrics.ReplicateClientRequestQueueTasks.Add(stream.Context(), -1)
 		c.metrics.ReplicateClientRequestQueueTime.Record(
 			context.Background(),
-			float64(now-req.CreatedTime)/1000.0,
+			float64(now-reqTask.createdTimeMicro)/1000.0,
 		)
+
+		req.TopicID = reqTask.topicID
+		req.LogStreamID = reqTask.logStreamID
+		req.LLSN = reqTask.llsn
+		req.Payload = reqTask.data
 		req.CreatedTime = now
+		reqTask.release()
 		if err := stream.Send(req); err != nil {
 			break Loop
 		}
@@ -198,13 +201,13 @@ Loop:
 		if cb.llsn != rsp.GetLLSN() {
 			panic(errors.Errorf("llsn mismatch: %d != %d", cb.llsn, rsp.GetLLSN()))
 		}
-		cb.callback(nil)
+		cb.callback(cb.startTimeMicro, nil)
 		cb.release()
 	}
 
 	for c.callbackQ.Size() > 0 {
 		cb := c.callbackQ.Pop().(*callbackBlock)
-		cb.callback(err)
+		cb.callback(cb.startTimeMicro, err)
 		cb.release()
 	}
 }

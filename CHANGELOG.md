@@ -6,15 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+<<<<<<< HEAD
 - Added `--server-read-buffer-size` option to storage node. (#VARLOG-671/#591)
 - Added `--server-write-buffer-size` option to storage node. (#VARLOG-671/#591)
 - Added `--replication-client-read-buffer-size` option to storage node. (#VARLOG-671/#591)
 - Added `--replication-client-write-buffer-size` option to storage node. (#VARLOG-671/#591)
 - Added `--reportcommitter-read-buffer-size` option to metadata repository. (#VARLOG-671/#591)
 - Added `--reportcommitter-write-buffer-size` option to metadata repository. (#VARLOG-671/#591)
+- Added pool of `internal/storagenode/replication.(*requestTask)` to lower heap allocations of replication request tasks. (#VARLOG-672/#592)
 
 ### Changed
 - Fixed bug of `--volumes` arguments in `bin/start_varlogsn.py` again. (#VARLOG-670/#589)
+- Reuse `proto/snpb/ReplicationRequest` whenever calling Replicate RPCs. (#VARLOG-672/#592)
+- Change callbacks of Replicate RPC from dynamically generated closures to pre-defined methods to avoid excessive heap allocations. (#VARLOG-672/#592)
 
 
 ## [0.1.4] - 2022-01-11

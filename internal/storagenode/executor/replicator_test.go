@@ -138,9 +138,9 @@ func TestReplicationProcessor(t *testing.T) {
 		}{}
 
 		client := replication.NewMockClient(ctrl)
-		client.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ context.Context, _ types.LLSN, _ []byte, f func(error)) {
-				f(cbErr)
+		client.EXPECT().Replicate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, _ types.LLSN, _ []byte, _ int64, f func(int64, error)) {
+				f(0, cbErr)
 			},
 		).AnyTimes()
 

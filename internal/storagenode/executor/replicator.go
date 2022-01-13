@@ -191,25 +191,27 @@ func (r *replicatorImpl) replicate(ctx context.Context, rt *replicateTask) error
 			return err
 		}
 		// FIXME: return some error?
-		cb := r.generateReplicateCallback(ctx, time.Now() /*rt.poppedTime*/)
-		cl.Replicate(ctx, llsn, data, cb)
+		// NOTE: The argument startTimeMicro is just only to measure the response time of
+		// replication. It avoids excessive heap allocation of closure function for every
+		// log replication.
+		// TODO: To simplify the signature of the Replicate method, we can measure the
+		// response time of the replication in the client of replication RPC.
+		cl.Replicate(ctx, llsn, data, time.Now().UnixMicro(), r.replicateCallback)
 	}
 	return nil
 }
 
-func (r *replicatorImpl) generateReplicateCallback(ctx context.Context, startTime time.Time) func(error) {
-	return func(err error) {
-		dur := float64(time.Since(startTime).Microseconds()) / 1000.0
-		r.metrics.ReplicateTime.Record(ctx, dur)
+func (r *replicatorImpl) replicateCallback(startTimestampMicro int64, err error) {
+	dur := float64(time.Now().UnixMicro()-startTimestampMicro) / 1000.0
+	r.metrics.ReplicateTime.Record(context.TODO(), dur)
 
-		if err != nil {
-			r.state.setSealingWithReason(err)
-		}
-
-		// NOTE: `inflight` should be decreased when the callback is called since all
-		// responses either success and failure should be come before unsealing.
-		atomic.AddInt64(&r.inflight, -1)
+	if err != nil {
+		r.state.setSealingWithReason(err)
 	}
+
+	// NOTE: `inflight` should be decreased when the callback is called since all
+	// responses either success and failure should be come before unsealing.
+	atomic.AddInt64(&r.inflight, -1)
 }
 
 func (r *replicatorImpl) stop() {
