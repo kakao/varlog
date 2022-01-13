@@ -12,6 +12,7 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
+	"google.golang.org/grpc"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -35,18 +36,20 @@ type logClientManager struct {
 		k func(types.StorageNodeID) string
 	}
 
+	grpcDialOptions []grpc.DialOption
+
 	logger *zap.Logger
 }
 
 var _ LogClientManager = (*logClientManager)(nil)
 
-func NewLogClientManager(ctx context.Context, metadata *varlogpb.MetadataDescriptor, logger *zap.Logger) (mgr *logClientManager, err error) {
+func NewLogClientManager(ctx context.Context, metadata *varlogpb.MetadataDescriptor, grpcDialOptions []grpc.DialOption, logger *zap.Logger) (mgr *logClientManager, err error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("logclmanager")
 
-	mgr = &logClientManager{logger: logger}
+	mgr = &logClientManager{grpcDialOptions: grpcDialOptions, logger: logger}
 	mgr.clients.m = make(map[types.StorageNodeID]*logClientProxy, len(metadata.GetStorageNodes()))
 	mgr.clients.k = func(storageNodeID types.StorageNodeID) string {
 		return strconv.FormatUint(uint64(storageNodeID), 10)
@@ -107,7 +110,7 @@ func (mgr *logClientManager) GetOrConnect(ctx context.Context, storageNodeID typ
 			return proxy, nil
 		}
 
-		logcl, err := NewLogIOClient(ctx, addr)
+		logcl, err := NewLogIOClient(ctx, addr, mgr.grpcDialOptions...)
 		if err != nil {
 			proxy = nil
 			return proxy, errors.WithMessagef(err, "logclmanager: snid=%d", storageNodeID)

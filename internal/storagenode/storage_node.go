@@ -141,7 +141,10 @@ func New(ctx context.Context, opts ...Option) (*StorageNode, error) {
 		// TODO: WithLogger
 	}
 	sn.lsr = reportcommitter.New(lsrOpts...)
-	sn.rpcServer = grpc.NewServer()
+	sn.rpcServer = grpc.NewServer(
+		grpc.ReadBufferSize(sn.serverReadBufferSize),
+		grpc.WriteBufferSize(sn.serverWriteBufferSize),
+	)
 	sn.healthServer = health.NewServer()
 
 	// Listener

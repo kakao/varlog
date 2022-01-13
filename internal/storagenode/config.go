@@ -18,18 +18,28 @@ const (
 	DefaultListenAddress = "0.0.0.0:9091"
 
 	DefaultBallastSize = 1 << 30
+
+	DefaultServerReadBufferSize = 32 * 1024
+
+	DefaultServerWriteBufferSize = 32 * 1024
+
+	DefaultReplicationClientReadBufferSize = 32 * 1024
+
+	DefaultReplicationClientWriteBufferSize = 32 * 1024
 )
 
 type config struct {
-	clusterID        types.ClusterID
-	storageNodeID    types.StorageNodeID
-	listenAddress    string
-	advertiseAddress string
-	volumes          set.Set // set[Volume]
-	executorOpts     []executor.Option
-	storageOpts      []storage.Option
-	pprofOpts        []pprof.Option
-	logger           *zap.Logger
+	clusterID             types.ClusterID
+	storageNodeID         types.StorageNodeID
+	listenAddress         string
+	advertiseAddress      string
+	volumes               set.Set // set[Volume]
+	executorOpts          []executor.Option
+	storageOpts           []storage.Option
+	pprofOpts             []pprof.Option
+	serverReadBufferSize  int
+	serverWriteBufferSize int
+	logger                *zap.Logger
 }
 
 func newConfig(opts []Option) (*config, error) {
@@ -49,6 +59,12 @@ func newConfig(opts []Option) (*config, error) {
 func (c config) validate() error {
 	if c.volumes.Size() == 0 {
 		return errors.Wrap(verrors.ErrInvalid, "no volumes")
+	}
+	if c.serverReadBufferSize < 0 {
+		return errors.Wrap(verrors.ErrInvalid, "invalid serverReadBufferSize")
+	}
+	if c.serverWriteBufferSize < 0 {
+		return errors.Wrap(verrors.ErrInvalid, "invalid serverWriteBufferSize")
 	}
 	return nil
 }
@@ -168,6 +184,26 @@ func WithPProfOptions(opts ...pprof.Option) Option {
 type serverConfig struct {
 	storageNode *StorageNode
 	logger      *zap.Logger
+}
+
+type serverReadBufferSizeOption int
+
+func (o serverReadBufferSizeOption) apply(c *config) {
+	c.serverReadBufferSize = int(o)
+}
+
+func WithServerReadBufferSize(readBufferSize int) Option {
+	return serverReadBufferSizeOption(readBufferSize)
+}
+
+type serverWriteBufferSizeOption int
+
+func (o serverWriteBufferSizeOption) apply(c *config) {
+	c.serverWriteBufferSize = int(o)
+}
+
+func WithServerWriteBufferSize(writeBufferSize int) Option {
+	return serverWriteBufferSizeOption(writeBufferSize)
 }
 
 func newServerConfig(opts []serverOption) serverConfig {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
+	"google.golang.org/grpc"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/id"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/logio"
@@ -150,6 +151,10 @@ func (e *executor) initLogPipeline() error {
 		connectorOpts: []replication.ConnectorOption{
 			replication.WithClientOptions(
 				replication.WithMetrics(e.metrics),
+				replication.WithGRPCDialOptions(
+					grpc.WithReadBufferSize(e.replicationClientReadBufferSize),
+					grpc.WithWriteBufferSize(e.replicationClientWriteBufferSize),
+				),
 			),
 		},
 	})

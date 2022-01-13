@@ -107,6 +107,10 @@ def start(
     advertise: str,
     admin: str,
     volumes: list,
+    server_read_buffer_size: str,
+    server_write_buffer_size: str,
+    replication_client_read_buffer_size: str,
+    replication_client_write_buffer_size: str,
     add_after_seconds: int,
     retry_register: int,
     retry_interval_seconds: int,
@@ -121,6 +125,10 @@ def start(
         advertise: advertise address
         admin: admin address
         volumes: volumes
+        server_read_buffer_size:
+        server_write_buffer_size:
+        replication_client_read_buffer_size:
+        replication_client_write_buffer_size:
         add_after_seconds: add after seconds
         retry_register: the number of retrial of register
         retry_interval_seconds: retry interval seconds
@@ -162,6 +170,18 @@ def start(
                 cmd.append("--logtostderr")
             if logdir:
                 cmd.append(f"--log-dir={logdir}")
+            if server_read_buffer_size:
+                cmd.append(
+                    f"--server-read-buffer-size={server_read_buffer_size}")
+            if server_write_buffer_size:
+                cmd.append(
+                    f"--server-write-buffer-size={server_write_buffer_size}")
+            if replication_client_read_buffer_size:
+                cmd.append(
+                    f"--replication-client-read-buffer-size={replication_client_read_buffer_size}")
+            if replication_client_write_buffer_size:
+                cmd.append(
+                    f"--replication-client-write-buffer-size={replication_client_write_buffer_size}")
 
             logger.info(f"vsn: cmd={cmd}")
             subprocess.Popen(cmd)
@@ -189,6 +209,10 @@ def main() -> None:
     parser.add_argument("--admin", required=True)
     parser.add_argument("--volumes", nargs="+", required=True, action="extend",
                         type=str)
+    parser.add_argument("--server-read-buffer-size", type=str)
+    parser.add_argument("--server-write-buffer-size", type=str)
+    parser.add_argument("--replication-client-read-buffer-size", type=str)
+    parser.add_argument("--replication-client-write-buffer-size", type=str)
     parser.add_argument("--add-after-seconds",
                         default=DEFAULT_ADD_AFTER_SECONDS,
                         type=int)
@@ -211,6 +235,10 @@ def main() -> None:
         args.advertise,
         args.admin,
         args.volumes,
+        args.server_read_buffer_size,
+        args.server_write_buffer_size,
+        args.replication_client_read_buffer_size,
+        args.replication_client_write_buffer_size,
         args.add_after_seconds,
         args.retry_register,
         args.retry_interval_seconds,

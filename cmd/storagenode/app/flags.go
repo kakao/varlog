@@ -39,6 +39,27 @@ var (
 		Description: "B, KiB, MiB, GiB",
 	}
 
+	flagServerReadBufferSize = vflag.FlagDescriptor{
+		Name:        "server-read-buffer-size",
+		EnvVars:     []string{"SERVER_READ_BUFFER_SIZE"},
+		Description: "B, KiB, MiB, GiB",
+	}
+	flagServerWriteBufferSize = vflag.FlagDescriptor{
+		Name:        "server-write-buffer-size",
+		EnvVars:     []string{"SERVER_WRITE_BUFFER_SIZE"},
+		Description: "B, KiB, MiB, GiB",
+	}
+	flagReplicationClientReadBufferSize = vflag.FlagDescriptor{
+		Name:        "replication-client-read-buffer-size",
+		EnvVars:     []string{"REPLICATION_CLIENT_READ_BUFFER_SIZE"},
+		Description: "B, KiB, MiB, GiB",
+	}
+	flagReplicationClientWriteBufferSize = vflag.FlagDescriptor{
+		Name:        "replication-client-write-buffer-size",
+		EnvVars:     []string{"REPLICATION_CLIENT_WRITE_BUFFER_SIZE"},
+		Description: "B, KiB, MiB, GiB",
+	}
+
 	// logging
 	flagLogDir = vflag.FlagDescriptor{
 		Name:    "log-dir",

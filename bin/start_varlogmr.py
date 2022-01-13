@@ -40,6 +40,7 @@ class Node:
         raft_address: An address to use RAFT protocol
         rpc_address: An address to use RPC communications.
     """
+
     def __init__(self, raft_address: str, rpc_address: str):
         self.raft_address = raft_address
         self.rpc_address = rpc_address
@@ -147,6 +148,8 @@ def start(
     seed: str,
     admin: str,
     replication_factor: int,
+    reportcommitter_read_buffer_size: str,
+    reportcommitter_write_buffer_size: str,
     add_after_seconds: int,
     retry_interval_seconds: int,
     raft_dir: str,
@@ -162,6 +165,8 @@ def start(
           metadata repositories can be used.
         admin: An address to connect to admin server.
         replication_factor: Replication factor.
+        reportcommitter_write_buffer_size:
+        reportcommitter_read_buffer_size:
         add_after_seconds: Add this node to the metadata repository cluster
           after this number of seconds.
         retry_interval_seconds: Retry interval seconds.
@@ -204,6 +209,15 @@ def start(
             f"--raft-dir={raft_dir}",
             f"--log-dir={log_dir}",
         ]
+
+        if reportcommitter_read_buffer_size:
+            cmd.append(
+                f"--reportcommitter-read-buffer-size={reportcommitter_read_buffer_size}")
+
+        if reportcommitter_write_buffer_size:
+            cmd.append(
+                f"--reportcommitter-write-buffer-size={reportcommitter_write_buffer_size}")
+
         if len(peers) > 0 or restart:
             cmd.append("--join=true")
 
@@ -236,6 +250,8 @@ def main() -> None:
     parser.add_argument("--seed", required=True)
     parser.add_argument("--admin", required=True)
     parser.add_argument("--replication-factor", required=True, type=int)
+    parser.add_argument("--reportcommitter-read-buffer-size", type=str)
+    parser.add_argument("--reportcommitter-write-buffer-size", type=str)
     parser.add_argument("--raft-dir")
     parser.add_argument("--log-dir")
     parser.add_argument("--add-after-seconds",
@@ -255,6 +271,8 @@ def main() -> None:
         args.seed,
         args.admin,
         args.replication_factor,
+        args.reportcommitter_read_buffer_size,
+        args.reportcommitter_write_buffer_size,
         args.add_after_seconds,
         args.retry_interval_seconds,
         args.raft_dir,

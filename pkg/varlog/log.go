@@ -135,7 +135,7 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	// TODO (jun): metadataRefresher should implement ClusterMetadataView
 	metadata := refresher.Metadata()
 
-	logCLManager, err := logc.NewLogClientManager(ctx, metadata, v.logger)
+	logCLManager, err := logc.NewLogClientManager(ctx, metadata, v.opts.grpcDialOptions, v.logger)
 	if err != nil {
 		return nil, err
 	}

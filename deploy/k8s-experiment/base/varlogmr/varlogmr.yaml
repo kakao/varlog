@@ -98,6 +98,8 @@ spec:
             - "--seed=$(VARLOGMR_RPC_SERVICE_HOST):$(VARLOGMR_RPC_SERVICE_PORT)"
             - "--admin=$(VARLOGADM_RPC_SERVICE_HOST):$(VARLOGADM_RPC_SERVICE_PORT)"
             - "--replication-factor=$(REPLICATION_FACTOR)"
+            - "--reportcommitter-read-buffer-size=128kb"
+            - "--reportcommitter-write-buffer-size=128kb"
             - "--raft-dir=/varlog/mr/raftdata"
             - "--log-dir=/varlog/mr/logs"
             - "--retry-interval-seconds=10"
