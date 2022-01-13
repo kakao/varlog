@@ -28,6 +28,13 @@ type pebbleCommitBatch struct {
 		prevCommittedLLSN types.LLSN
 		prevCommittedGLSN types.GLSN
 	}
+
+	commitKeyArray  [commitKeyLength]byte
+	commitKeyBuffer []byte
+
+	dataKeyArray  [dataKeyLength]byte
+	dataKeyBuffer []byte
+
 	/*
 		prevWrittenLLSN   types.LLSN // snapshot
 		prevCommittedLLSN types.LLSN // fixed value
@@ -38,7 +45,10 @@ type pebbleCommitBatch struct {
 var _ CommitBatch = (*pebbleCommitBatch)(nil)
 
 func newPebbleCommitBatch() *pebbleCommitBatch {
-	return pebbleCommitBatchPool.Get().(*pebbleCommitBatch)
+	pcb := pebbleCommitBatchPool.Get().(*pebbleCommitBatch)
+	pcb.commitKeyBuffer = pcb.commitKeyArray[:]
+	pcb.dataKeyBuffer = pcb.dataKeyArray[:]
+	return pcb
 }
 
 func (pcb *pebbleCommitBatch) release() {
@@ -50,6 +60,8 @@ func (pcb *pebbleCommitBatch) release() {
 	pcb.snapshot.prevCommittedGLSN = types.InvalidGLSN
 	pcb.progress.prevCommittedLLSN = types.InvalidLLSN
 	pcb.progress.prevCommittedGLSN = types.InvalidGLSN
+	pcb.commitKeyBuffer = pcb.commitKeyBuffer[0:0]
+	pcb.dataKeyBuffer = pcb.dataKeyBuffer[0:0]
 	pebbleCommitBatchPool.Put(pcb)
 }
 
@@ -92,8 +104,8 @@ func (pcb *pebbleCommitBatch) Put(llsn types.LLSN, glsn types.GLSN) error {
 		}
 	*/
 
-	ck := encodeCommitKey(glsn)
-	dk := encodeDataKey(llsn)
+	ck := encodeCommitKeyInternal(glsn, pcb.commitKeyBuffer)
+	dk := encodeDataKeyInternal(llsn, pcb.dataKeyBuffer)
 	if err := pcb.b.Set(ck, dk, pcb.ps.commitOption); err != nil {
 		return errors.WithStack(err)
 	}
