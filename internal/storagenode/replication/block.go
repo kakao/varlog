@@ -13,13 +13,15 @@ var callbackBlockPool = sync.Pool{
 }
 
 type callbackBlock struct {
-	llsn     types.LLSN
-	callback func(error)
+	llsn           types.LLSN
+	startTimeMicro int64
+	callback       func(int64, error)
 }
 
-func newCallbackBlock(llsn types.LLSN, callback func(error)) *callbackBlock {
+func newCallbackBlock(llsn types.LLSN, startTimeMicro int64, callback func(int64, error)) *callbackBlock {
 	t := callbackBlockPool.Get().(*callbackBlock)
 	t.llsn = llsn
+	t.startTimeMicro = startTimeMicro
 	t.callback = callback
 	return t
 }
@@ -27,5 +29,6 @@ func newCallbackBlock(llsn types.LLSN, callback func(error)) *callbackBlock {
 func (t *callbackBlock) release() {
 	t.llsn = types.InvalidLLSN
 	t.callback = nil
+	t.startTimeMicro = 0
 	callbackBlockPool.Put(t)
 }

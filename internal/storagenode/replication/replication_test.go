@@ -140,7 +140,7 @@ func TestReplicationClosedClient(t *testing.T) {
 	// closed client
 	cliWg := sync.WaitGroup{}
 	cliWg.Add(1)
-	client.Replicate(context.TODO(), 1, nil, func(err error) {
+	client.Replicate(context.TODO(), 1, nil, 0, func(_ int64, err error) {
 		defer cliWg.Done()
 		require.Error(t, err)
 	})
@@ -271,7 +271,7 @@ func TestReplication(t *testing.T) {
 	for llsn := beginLLSN; llsn < midLLSN; llsn++ {
 		llsn := llsn
 		wg.Add(1)
-		client.Replicate(context.TODO(), llsn, []byte("foo"), func(err error) {
+		client.Replicate(context.TODO(), llsn, []byte("foo"), 0, func(_ int64, err error) {
 			atomic.AddInt64(&doneCnt, 1)
 			defer wg.Done()
 			require.NoError(t, err)
@@ -284,7 +284,7 @@ func TestReplication(t *testing.T) {
 	for llsn := midLLSN; llsn < endLLSN; llsn++ {
 		llsn := llsn
 		wg.Add(1)
-		client.Replicate(context.TODO(), llsn, []byte("foo"), func(err error) {
+		client.Replicate(context.TODO(), llsn, []byte("foo"), 0, func(_ int64, err error) {
 			atomic.AddInt64(&doneCnt, 1)
 			defer wg.Done()
 			if llsn < badLLSN {
