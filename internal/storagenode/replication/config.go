@@ -3,6 +3,7 @@ package replication
 import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/storagenode/id"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
@@ -18,6 +19,7 @@ const (
 type clientConfig struct {
 	replica          varlogpb.Replica
 	requestQueueSize int
+	grpcDialOptions  []grpc.DialOption
 	metrics          *telemetry.Metrics
 	logger           *zap.Logger
 }
@@ -142,6 +144,20 @@ func (o requestQueueSizeOption) applyClient(c *clientConfig) {
 
 func WithRequestQueueSize(queueSize int) ClientOption {
 	return requestQueueSizeOption(queueSize)
+}
+
+type grpcDialOpt struct {
+	grpcDialOptions []grpc.DialOption
+}
+
+func (o grpcDialOpt) applyClient(c *clientConfig) {
+	c.grpcDialOptions = append(c.grpcDialOptions, o.grpcDialOptions...)
+}
+
+func WithGRPCDialOptions(grpcDialOptions ...grpc.DialOption) ClientOption {
+	return grpcDialOpt{
+		grpcDialOptions: grpcDialOptions,
+	}
 }
 
 type LoggerOption interface {

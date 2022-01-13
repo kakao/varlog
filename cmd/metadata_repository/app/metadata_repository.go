@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"google.golang.org/grpc"
+
 	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/pkg/util/log"
 )
@@ -30,7 +32,10 @@ func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
 	defer logger.Sync()
 
 	opts.Logger = logger
-	opts.ReporterClientFac = metadata_repository.NewReporterClientFactory()
+	opts.ReporterClientFac = metadata_repository.NewReporterClientFactory(
+		grpc.WithReadBufferSize(opts.ReportCommitterReadBufferSize),
+		grpc.WithWriteBufferSize(opts.ReportCommitterWriteBufferSize),
+	)
 	opts.StorageNodeManagementClientFac = metadata_repository.NewStorageNodeManagementClientFactory()
 
 	mr := metadata_repository.NewRaftMetadataRepository(opts)

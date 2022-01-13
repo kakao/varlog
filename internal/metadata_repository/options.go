@@ -32,6 +32,9 @@ const (
 	DefaultTelemetryCollectorName    string = "nop"
 	DefaultTelmetryCollectorEndpoint string = "localhost:55680"
 
+	DefaultReportCommitterReadBufferSize  = 32 * 1024 // 32KB
+	DefaultReportCommitterWriteBufferSize = 32 * 1024 // 32KB
+
 	UnusedRequestIndex uint64 = 0
 )
 
@@ -67,6 +70,8 @@ type MetadataRepositoryOptions struct {
 	LogDir                         string
 	SyncStorageNodes               []string
 	Logger                         *zap.Logger
+	ReportCommitterReadBufferSize  int
+	ReportCommitterWriteBufferSize int
 }
 
 type RaftOptions struct {

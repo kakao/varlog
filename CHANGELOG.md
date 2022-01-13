@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Added `--server-read-buffer-size` option to storage node. (#VARLOG-671/#591)
+- Added `--server-write-buffer-size` option to storage node. (#VARLOG-671/#591)
+- Added `--replication-client-read-buffer-size` option to storage node. (#VARLOG-671/#591)
+- Added `--replication-client-write-buffer-size` option to storage node. (#VARLOG-671/#591)
+- Added `--reportcommitter-read-buffer-size` option to metadata repository. (#VARLOG-671/#591)
+- Added `--reportcommitter-write-buffer-size` option to metadata repository. (#VARLOG-671/#591)
+
 ### Changed
 - Fixed bug of `--volumes` arguments in `bin/start_varlogsn.py` again. (#VARLOG-670/#589)
 

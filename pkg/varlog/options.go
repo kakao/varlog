@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -34,6 +35,11 @@ func defaultOptions() options {
 		denyTTL:            defaultDenyTTL,
 		expireDenyInterval: defaultExpireDenyInterval,
 		logger:             zap.NewNop(),
+		grpcDialOptions: []grpc.DialOption{
+			grpc.WithInsecure(),
+			grpc.WithReadBufferSize(1 << 20),
+			grpc.WithWriteBufferSize(1 << 20),
+		},
 	}
 }
 
@@ -54,6 +60,9 @@ type options struct {
 	// allowlist.
 	denyTTL            time.Duration
 	expireDenyInterval time.Duration
+
+	// grpcOptions
+	grpcDialOptions []grpc.DialOption
 
 	logger *zap.Logger
 }
@@ -119,6 +128,12 @@ func WithExpireDenyInterval(interval time.Duration) Option {
 func WithLogger(logger *zap.Logger) Option {
 	return newOption(func(opts *options) {
 		opts.logger = logger
+	})
+}
+
+func WithGRPCDialOptions(grpcDialOptions ...grpc.DialOption) Option {
+	return newOption(func(opts *options) {
+		opts.grpcDialOptions = append(opts.grpcDialOptions, grpcDialOptions...)
 	})
 }
 

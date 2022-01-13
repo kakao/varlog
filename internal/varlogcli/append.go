@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -102,7 +103,10 @@ func appendInternal(mrAddrs []string, clusterID types.ClusterID, batchSize int, 
 func open(mrAddrs []string, clusterID types.ClusterID) (varlog.Log, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), openTimeout)
 	defer cancel()
-	return varlog.Open(ctx, clusterID, mrAddrs)
+	return varlog.Open(ctx, clusterID, mrAddrs, varlog.WithGRPCDialOptions(
+		grpc.WithReadBufferSize(4*1024*1024),
+		grpc.WithWriteBufferSize(4*1024*1024),
+	))
 }
 
 func scanLoop(ctx context.Context, vlog varlog.Log, ch chan<- []byte) error {

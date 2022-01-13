@@ -1,12 +1,12 @@
 package app
 
 import (
-	"github.com/docker/go-units"
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/executor"
 	"github.com/kakao/varlog/internal/storagenode/storage"
+	"github.com/kakao/varlog/pkg/util/units"
 	"github.com/kakao/varlog/pkg/vflag"
 )
 
@@ -38,7 +38,11 @@ func initStartCommand() *cli.Command {
 		flagVolumes.StringSliceFlag(),
 		flagListenAddress.StringFlag(),
 		flagAdvertiseAddress.StringFlag(),
-		flagBallastSize.StringFlagV(units.BytesSize(storagenode.DefaultBallastSize)),
+		flagBallastSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultBallastSize)),
+		flagServerReadBufferSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultServerReadBufferSize)),
+		flagServerWriteBufferSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultServerWriteBufferSize)),
+		flagReplicationClientReadBufferSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultReplicationClientReadBufferSize)),
+		flagReplicationClientWriteBufferSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultReplicationClientWriteBufferSize)),
 
 		// flags for logging
 		flagLogDir.StringFlag(),

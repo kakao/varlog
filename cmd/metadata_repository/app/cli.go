@@ -5,6 +5,7 @@ import (
 
 	"github.com/kakao/varlog/internal/metadata_repository"
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/units"
 )
 
 func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
@@ -29,6 +30,18 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 			}
 
 			options.Peers = c.StringSlice("peers")
+
+			if size, err := units.FromByteSizeString(c.String("reportcommitter-read-buffer-size")); err != nil {
+				return err
+			} else {
+				options.ReportCommitterReadBufferSize = int(size)
+			}
+
+			if size, err := units.FromByteSizeString(c.String("reportcommitter-write-buffer-size")); err != nil {
+				return err
+			} else {
+				options.ReportCommitterWriteBufferSize = int(size)
+			}
 
 			return Main(options)
 		},
@@ -151,6 +164,16 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 			Usage:       "Debug Address",
 			EnvVars:     []string{"DEBUG_ADDRESS"},
 			Destination: &options.DebugAddress,
+		},
+		&cli.StringFlag{
+			Name:    "reportcommitter-read-buffer-size",
+			Value:   units.ToByteSizeString(metadata_repository.DefaultReportCommitterReadBufferSize),
+			EnvVars: []string{"REPORTCOMMITTER_READ_BUFFER_SIZE"},
+		},
+		&cli.StringFlag{
+			Name:    "reportcommitter-write-buffer-size",
+			Value:   units.ToByteSizeString(metadata_repository.DefaultReportCommitterWriteBufferSize),
+			EnvVars: []string{"REPORTCOMMITTER_WRITE_BUFFER_SIZE"},
 		},
 	}
 

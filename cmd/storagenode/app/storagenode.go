@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/docker/go-units"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
@@ -26,6 +26,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
 	"github.com/kakao/varlog/pkg/util/telemetry"
+	"github.com/kakao/varlog/pkg/util/units"
 )
 
 func Main(c *cli.Context) error {
@@ -38,7 +39,7 @@ func Main(c *cli.Context) error {
 		return err
 	}
 
-	ballastSize, err := units.RAMInBytes(c.String(flagBallastSize.Name))
+	ballastSize, err := units.FromByteSizeString(c.String(flagBallastSize.Name))
 	if err != nil {
 		return err
 	}
@@ -79,6 +80,30 @@ func Main(c *cli.Context) error {
 	}
 	defer logger.Sync()
 
+	size, err := units.FromByteSizeString(c.String(flagServerReadBufferSize.Name))
+	if err != nil {
+		return fmt.Errorf("serverReadBufferSize: %w", err)
+	}
+	serverReadBufferSize := int(size)
+
+	size, err = units.FromByteSizeString(c.String(flagServerWriteBufferSize.Name))
+	if err != nil {
+		return fmt.Errorf("serverWriteBufferSize: %w", err)
+	}
+	serverWriteBufferSize := int(size)
+
+	size, err = units.FromByteSizeString(c.String(flagReplicationClientReadBufferSize.Name))
+	if err != nil {
+		return fmt.Errorf("replicationClientReadBufferSize: %w", err)
+	}
+	replicationClientReadBufferSize := int(size)
+
+	size, err = units.FromByteSizeString(c.String(flagReplicationClientWriteBufferSize.Name))
+	if err != nil {
+		return fmt.Errorf("replicationClientWriteBufferSize: %w", err)
+	}
+	replicationClientWriteBufferSize := int(size)
+
 	storageOpts := []storage.Option{}
 	if c.Bool(flagDisableWriteSync.Name) {
 		storageOpts = append(storageOpts, storage.WithoutWriteSync())
@@ -108,12 +133,16 @@ func Main(c *cli.Context) error {
 		storagenode.WithListenAddress(c.String(flagListenAddress.Name)),
 		storagenode.WithAdvertiseAddress(c.String(flagAdvertiseAddress.Name)),
 		storagenode.WithVolumes(c.StringSlice(flagVolumes.Name)...),
+		storagenode.WithServerReadBufferSize(serverReadBufferSize),
+		storagenode.WithServerWriteBufferSize(serverWriteBufferSize),
 		storagenode.WithExecutorOptions(
 			executor.WithWriteQueueSize(c.Int(flagWriteQueueSize.Name)),
 			executor.WithWriteBatchSize(c.Int(flagWriteBatchSize.Name)),
 			executor.WithCommitQueueSize(c.Int(flagCommitQueueSize.Name)),
 			executor.WithCommitBatchSize(c.Int(flagCommitBatchSize.Name)),
 			executor.WithReplicateQueueSize(c.Int(flagReplicateQueueSize.Name)),
+			executor.WithReplicationClientReadBufferSize(replicationClientReadBufferSize),
+			executor.WithReplicationClientWriteBufferSize(replicationClientWriteBufferSize),
 		),
 		storagenode.WithStorageOptions(storageOpts...),
 		storagenode.WithLogger(logger),

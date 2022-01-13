@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -43,8 +44,8 @@ type logIOClient struct {
 	rpcClient snpb.LogIOClient
 }
 
-func NewLogIOClient(ctx context.Context, address string) (LogIOClient, error) {
-	rpcConn, err := rpc.NewConn(ctx, address)
+func NewLogIOClient(ctx context.Context, address string, grpcDialOptions ...grpc.DialOption) (LogIOClient, error) {
+	rpcConn, err := rpc.NewConn(ctx, address, grpcDialOptions...)
 	if err != nil {
 		return nil, errors.WithMessage(err, "logiocl")
 	}

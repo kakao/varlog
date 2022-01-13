@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"go.uber.org/multierr"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/proto/snpb"
@@ -36,8 +37,8 @@ type client struct {
 	muCommitStream sync.Mutex
 }
 
-func NewClient(ctx context.Context, address string) (cl Client, err error) {
-	rpcConn, err := rpc.NewConn(ctx, address)
+func NewClient(ctx context.Context, address string, grpcDialOptions ...grpc.DialOption) (cl Client, err error) {
+	rpcConn, err := rpc.NewConn(ctx, address, grpcDialOptions...)
 	if err != nil {
 		return nil, err
 	}

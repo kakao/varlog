@@ -78,7 +78,7 @@ func newClient(ctx context.Context, opts ...ClientOption) (*client, error) {
 }
 
 func (c *client) run(ctx context.Context) (err error) {
-	c.rpcConn, err = rpc.NewConn(ctx, c.replica.GetAddress())
+	c.rpcConn, err = rpc.NewConn(ctx, c.replica.GetAddress(), c.grpcDialOptions...)
 	if err != nil {
 		return err
 	}

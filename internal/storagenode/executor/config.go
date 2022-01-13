@@ -33,7 +33,9 @@ type config struct {
 	commitTaskQueueSize int
 	commitBatchSize     int
 
-	replicateQueueSize int
+	replicateQueueSize               int
+	replicationClientReadBufferSize  int
+	replicationClientWriteBufferSize int
 
 	metrics *telemetry.Metrics
 	logger  *zap.Logger
@@ -236,6 +238,26 @@ func (o replicateQueueSizeOption) apply(c *config) {
 
 func WithReplicateQueueSize(queueSize int) Option {
 	return replicateQueueSizeOption(queueSize)
+}
+
+type replicationClientReadBufferSizeOption int
+
+func (o replicationClientReadBufferSizeOption) apply(c *config) {
+	c.replicationClientReadBufferSize = int(o)
+}
+
+func WithReplicationClientReadBufferSize(readBufferSize int) Option {
+	return replicationClientReadBufferSizeOption(readBufferSize)
+}
+
+type replicationClientWriteBufferSizeOption int
+
+func (o replicationClientWriteBufferSizeOption) apply(c *config) {
+	c.replicationClientWriteBufferSize = int(o)
+}
+
+func WithReplicationClientWriteBufferSize(writeBufferSize int) Option {
+	return replicationClientWriteBufferSizeOption(writeBufferSize)
 }
 
 type loggerOption struct {
