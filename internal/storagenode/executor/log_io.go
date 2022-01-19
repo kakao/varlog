@@ -426,8 +426,7 @@ func (e *executor) subscribeTo(ctx context.Context, begin, end types.LLSN) (*sub
 }
 
 func (e *executor) scanDataLoop(ctx context.Context, subToEnv *subscribeToEnvImpl) error {
-	beginLLSN, endLLSN := subToEnv.begin, subToEnv.end
-
+	beginLLSN := subToEnv.begin
 	for {
 		select {
 		case <-ctx.Done():
@@ -436,6 +435,11 @@ func (e *executor) scanDataLoop(ctx context.Context, subToEnv *subscribeToEnvImp
 		}
 
 		_, hwm, _ := e.lsc.reportCommitBase()
+		localHWM := e.lsc.localHighWatermark()
+		endLLSN := subToEnv.end
+		if localHWM.LLSN+1 < endLLSN {
+			endLLSN = localHWM.LLSN + 1
+		}
 
 		err := e.scanTo(ctx, subToEnv, beginLLSN, endLLSN)
 		if err != nil {
@@ -443,7 +447,7 @@ func (e *executor) scanDataLoop(ctx context.Context, subToEnv *subscribeToEnvImp
 		}
 
 		if !subToEnv.lastLLSN.Invalid() {
-			if subToEnv.lastLLSN == endLLSN-1 {
+			if subToEnv.lastLLSN == subToEnv.end-1 {
 				return nil
 			}
 			beginLLSN = subToEnv.lastLLSN + 1

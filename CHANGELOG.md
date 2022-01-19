@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `--reportcommitter-read-buffer-size` option to metadata repository. (#VARLOG-671/#591)
 - Added `--reportcommitter-write-buffer-size` option to metadata repository. (#VARLOG-671/#591)
 - Added pool of `internal/storagenode/replication.(*requestTask)` to lower heap allocations of replication request tasks. (#VARLOG-672/#592)
+- Compare local high watermark with the end of the requested range in subscribeTo. (#VARLOG-676/#595)
 
 ### Changed
 - Fixed bug of `--volumes` arguments in `bin/start_varlogsn.py` again. (#VARLOG-670/#589)

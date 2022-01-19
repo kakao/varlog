@@ -495,10 +495,10 @@ func TestExecutorSubscribe(t *testing.T) {
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
 
-	// HWM:         5          10
-	// COMMIT:  +-------+  +---- ...
-	// GLSN:    1 2 3 4 5  6 7 8 ...
-	// HAVE:    X X O X X  X X O ...
+	// HWM:         5          10             50
+	// COMMIT:  +-------+  +---- ...   +-------------+
+	// GLSN:    1 2 3 4 5  6 7 8 ...   46 47 48 49 50
+	// LLSN:    X X 1 X X  X X 2 ...    X X  10  X  X
 	for i := 1; i <= numAppends; i++ {
 		expectedHWM := types.GLSN(i * 5)
 		expectedLLSN := types.LLSN(i)
@@ -640,6 +640,10 @@ func TestExecutorSubscribe(t *testing.T) {
 	// subscribeTo [10, 12)
 	// subscribeTo [10, max)
 	// append 53 (hwm=55)
+	// HWM:         5          10             50               55
+	// COMMIT:  +-------+  +---- ...   +-------------+  +-----------
+	// GLSN:    1 2 3 4 5  6 7 8 ...   46 47 48 49 50    51 52 53 54 55
+	// LLSN:    X X 1 X X  X X 2 ...    X X  10  X  X     X  X 11  X  X
 	wg := sync.WaitGroup{}
 	wg.Add(6)
 	go func() {
@@ -772,6 +776,52 @@ func TestExecutorSubscribe(t *testing.T) {
 	subEnv2.Stop()
 	subEnv3.Stop()
 	subEnv4.Stop()
+	wg.Wait()
+
+	// subscribeTo before appended
+	// HWM:         5          10             50               55              60
+	// COMMIT:  +-------+  +---- ...   +-------------+  +----------------+
+	// GLSN:    1 2 3 4 5  6 7 8 ...   46 47 48 49 50    51 52 53 54 55    56 57 58 59 60
+	// LLSN:    X X 1 X X  X X 2 ...    X X  10  X  X     X  X 11  X  X     X  X 12  X  X
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err := lse.Append(context.TODO(), [][]byte{[]byte("foo")})
+		require.NoError(t, err)
+	}()
+
+	// data is stored, but not committed
+	require.Eventually(t, func() bool {
+		report, err := lse.GetReport()
+		require.NoError(t, err)
+		return report.UncommittedLLSNLength > 0
+	}, time.Second, time.Millisecond)
+
+	// subscribeTo [1,13), but last one (12) is not committed yet.
+	subEnv, err = lse.SubscribeTo(context.TODO(), 1, 13)
+	require.NoError(t, err)
+	for i := 0; i < 11; i++ {
+		sr, ok := <-subEnv.ScanResultC()
+		require.True(t, ok)
+		require.Equal(t, types.LLSN(i+1), sr.LogEntry.LLSN)
+	}
+
+	// it blocks until last one can be decided.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, ok = <-subEnv.ScanResultC()
+		require.True(t, ok)
+	}()
+
+	err = lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
+		Version:             12,
+		HighWatermark:       60,
+		CommittedGLSNOffset: 58,
+		CommittedGLSNLength: 1,
+		CommittedLLSNOffset: 12,
+	})
+	require.NoError(t, err)
 	wg.Wait()
 }
 
