@@ -6,7 +6,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-<<<<<<< HEAD
 - Added `--server-read-buffer-size` option to storage node. (#VARLOG-671/#591)
 - Added `--server-write-buffer-size` option to storage node. (#VARLOG-671/#591)
 - Added `--replication-client-read-buffer-size` option to storage node. (#VARLOG-671/#591)
@@ -20,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reuse `proto/snpb/ReplicationRequest` whenever calling Replicate RPCs. (#VARLOG-672/#592)
 - Change callbacks of Replicate RPC from dynamically generated closures to pre-defined methods to avoid excessive heap allocations. (#VARLOG-672/#592)
 - Reuse pre-defined buffer to encode data key and commit key while creating write batch and commit batch. (#VARLOG-673/#593)
+- Writing logs and sending them to internal queues runs in separate goroutines. (#VARLOG-675/#594)
 
 
 ## [0.1.4] - 2022-01-11
@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Script `bin/start_varlogsn.py` accepts multiple of `--volumes` arguments correctly. (#VARLOG-670/#587)
 - Call `internal/storagenode/replication.(Client).Replicate` sequentially in replicator. (#VARLOG-666/#582)
 - Reuse `proto/snpb.ReplicationResponse` whenever receiving and sending the response in server and client. (#VARLOG-667/#583)
+
 
 ### Removed
 - Removed the metric `sn.write.report.delay`. (#VARLOG-665/#581)

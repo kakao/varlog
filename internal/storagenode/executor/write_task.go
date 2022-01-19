@@ -17,8 +17,10 @@ var writeTaskPool = sync.Pool{
 	},
 }
 
-// writeTask represents either append or replicate. In the Append or the Replicate RPC handlers, an
-// writeTask is created.
+// writeTask is a task that represents appending and replicating.
+// It is managed by writeTaskPool and acquired by the Append or the Replicate RPC handlers.
+// It is sent to the writer through internal/storagenode/executor.writeQueue.
+// Note that the writer releases the writeTask that is either written to disk or failed.
 type writeTask struct {
 	llsn types.LLSN
 	data []byte
@@ -83,7 +85,6 @@ func (wt *writeTask) release() {
 	wt.llsn = types.InvalidLLSN
 	wt.data = nil
 	wt.backups = nil
-	// wt.primary = false
 	wt.validate = nil
 	wt.twg = nil
 	wt.createdTime = time.Time{}

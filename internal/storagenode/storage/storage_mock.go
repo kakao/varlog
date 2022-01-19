@@ -129,6 +129,20 @@ func (mr *MockWriteBatchMockRecorder) Put(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockWriteBatch)(nil).Put), arg0, arg1)
 }
 
+// Size mocks base method.
+func (m *MockWriteBatch) Size() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Size")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// Size indicates an expected call of Size.
+func (mr *MockWriteBatchMockRecorder) Size() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Size", reflect.TypeOf((*MockWriteBatch)(nil).Size))
+}
+
 // MockCommitBatch is a mock of CommitBatch interface.
 type MockCommitBatch struct {
 	ctrl     *gomock.Controller

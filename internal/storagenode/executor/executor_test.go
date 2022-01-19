@@ -86,6 +86,7 @@ func newTestStorage(ctrl *gomock.Controller, cfg *testStorageConfig) storage.Sto
 		cfg.writeBatchCloseSignal <- struct{}{}
 		return nil
 	}).AnyTimes()
+	writeBatch.EXPECT().Size().Return(0).AnyTimes()
 
 	commitBatch := storage.NewMockCommitBatch(ctrl)
 	commitBatch.EXPECT().Put(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -1130,7 +1131,7 @@ func TestExecutorSeal(t *testing.T) {
 		report, err := lse.GetReport()
 		require.NoError(t, err)
 		return report.UncommittedLLSNLength == 10
-	}, time.Second, time.Millisecond)
+	}, time.Second, 100*time.Millisecond)
 
 	err = lse.Commit(context.TODO(), snpb.LogStreamCommitResult{
 		Version:             3,

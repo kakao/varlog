@@ -14,6 +14,7 @@ var taskWaitGroupPool = sync.Pool{
 	},
 }
 
+// taskWaitGroup is to wait for the commit of the log in Append RPC.
 type taskWaitGroup struct {
 	glsn types.GLSN
 	llsn types.LLSN
