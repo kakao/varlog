@@ -121,6 +121,7 @@ type WriteBatch interface {
 	Put(llsn types.LLSN, data []byte) error
 	Apply() error
 	Close() error
+	Size() int
 }
 
 type CommitBatch interface {

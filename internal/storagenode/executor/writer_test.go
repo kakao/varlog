@@ -196,7 +196,6 @@ func TestWriterStop(t *testing.T) {
 	defer twg.release()
 	wt := newPrimaryWriteTask(twg, nil, nil)
 	wt.validate = func() error { return nil }
-	defer wt.release()
 
 	err = writer.send(context.TODO(), wt)
 	require.NoError(t, err)
@@ -284,6 +283,7 @@ func TestWriter(t *testing.T) {
 			return nil
 		}).AnyTimes()
 		writeBatch.EXPECT().Close().Return(nil).AnyTimes()
+		writeBatch.EXPECT().Size().Return(writeBatchLen).AnyTimes()
 
 		strg := storage.NewMockStorage(ctrl)
 		strg.EXPECT().NewWriteBatch().Return(writeBatch).AnyTimes()
@@ -419,10 +419,10 @@ func TestWriterCleanup(t *testing.T) {
 			twg := newTaskWaitGroup()
 			wt := newPrimaryWriteTask(twg, nil, nil)
 			wt.validate = func() error { return nil }
-			defer wt.release()
 
 			if err := writer.send(context.TODO(), wt); err != nil {
 				twg.wg.Done()
+				wt.release()
 			}
 			twg.wg.Wait()
 		}()
@@ -472,18 +472,18 @@ func TestWriterVarlog444(t *testing.T) {
 		require.NoError(t, strg.Close())
 	}()
 
-	// initial state
+	// initial state -> UncommittedLLSNEnd == 1
 	require.Equal(t, lsc.uncommittedLLSNEnd.Load(), types.MinLLSN)
 
 	var wg sync.WaitGroup
 
-	// LLSN=1, Write=OK
+	// LLSN=1, Write=OK -> ++UncommittedLLSNEnd == 2
 	testCommitter.EXPECT().sendCommitWaitTask(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, cwt *commitWaitTask) error {
 			defer cwt.twg.wg.Done()
 			return nil
 		},
-	).Times(1)
+	)
 
 	wg.Add(1)
 	go func() {
@@ -492,10 +492,10 @@ func TestWriterVarlog444(t *testing.T) {
 		twg := newTaskWaitGroup()
 		wt := newPrimaryWriteTask(twg, nil, nil)
 		wt.validate = func() error { return nil }
-		defer wt.release()
 
 		if !assert.NoError(t, writer.send(context.Background(), wt)) {
 			twg.wg.Done()
+			wt.release()
 		}
 		twg.wg.Wait()
 		assert.NoError(t, twg.err)
@@ -506,12 +506,12 @@ func TestWriterVarlog444(t *testing.T) {
 		return lsc.uncommittedLLSNEnd.Load() == types.LLSN(2)
 	}, time.Second, 10*time.Millisecond)
 
-	// LLSN=2, Write=OK, SendToCommit=Fail
+	// LLSN=2, Write=OK SendToCommit=Fail -> No progress
 	testCommitter.EXPECT().sendCommitWaitTask(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, _ *commitWaitTask) error {
 			return errors.New("fake")
 		},
-	).Times(2)
+	)
 
 	wg.Add(1)
 	go func() {
@@ -520,10 +520,10 @@ func TestWriterVarlog444(t *testing.T) {
 		twg := newTaskWaitGroup()
 		wt := newPrimaryWriteTask(twg, nil, nil)
 		wt.validate = func() error { return nil }
-		defer wt.release()
 
 		if !assert.NoError(t, writer.send(context.Background(), wt)) {
 			twg.wg.Done()
+			wt.release()
 			return
 		}
 		twg.wg.Wait()
@@ -532,28 +532,6 @@ func TestWriterVarlog444(t *testing.T) {
 	wg.Wait()
 
 	require.Eventually(t, func() bool {
-		return lsc.uncommittedLLSNEnd.Load() == types.LLSN(3)
-	}, time.Second, 10*time.Millisecond)
-
-	// LLSN=3, Write=OK, SendToCommit=Fail
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		twg := newTaskWaitGroup()
-		wt := newPrimaryWriteTask(twg, nil, nil)
-		wt.validate = func() error { return nil }
-		defer wt.release()
-
-		if !assert.NoError(t, writer.send(context.Background(), wt)) {
-			twg.wg.Done()
-		}
-		twg.wg.Wait()
-		assert.Error(t, twg.err)
-	}()
-	wg.Wait()
-
-	require.Eventually(t, func() bool {
-		return lsc.uncommittedLLSNEnd.Load() == types.LLSN(4)
+		return lsc.uncommittedLLSNEnd.Load() == types.LLSN(2)
 	}, time.Second, 10*time.Millisecond)
 }

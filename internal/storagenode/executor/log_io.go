@@ -36,10 +36,12 @@ func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogp
 	}
 
 	wts := make([]*writeTask, batchSize)
+	twgs := make([]*taskWaitGroup, batchSize)
 	for i := 0; i < batchSize; i++ {
 		twg := newTaskWaitGroup()
 		wt := newPrimaryWriteTask(twg, data[i], backups)
 		wts[i] = wt
+		twgs[i] = twg
 
 		wt.validate = func() error {
 			if !e.isPrimay() {
@@ -54,9 +56,8 @@ func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogp
 
 	defer func() {
 		for i := 0; i < batchSize; i++ {
-			wts[i].annotate(ctx, e.metrics)
-			wts[i].twg.release()
-			wts[i].release()
+			// wts[i].annotate(ctx, e.metrics)
+			twgs[i].release()
 		}
 	}()
 
@@ -76,17 +77,18 @@ func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogp
 	for i := 0; i < batchSize; i++ {
 		// clear failed write tasks
 		if i >= sendErrIdx {
-			wts[i].twg.wg.Done()
-			wts[i].twg.wg.Wait()
+			twgs[i].wg.Done()
+			twgs[i].wg.Wait()
 			result[i] = snpb.AppendResult{Error: sendErrReason}
 			if firstErr == nil {
 				firstErr = sendErr
 			}
+			wts[i].release()
 			continue
 		}
 
-		wts[i].twg.wg.Wait()
-		err := wts[i].twg.err
+		twgs[i].wg.Wait()
+		err := twgs[i].err
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
@@ -99,8 +101,8 @@ func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogp
 			Meta: varlogpb.LogEntryMeta{
 				TopicID:     e.topicID,
 				LogStreamID: e.logStreamID,
-				GLSN:        wts[i].twg.glsn,
-				LLSN:        wts[i].twg.llsn,
+				GLSN:        twgs[i].glsn,
+				LLSN:        twgs[i].llsn,
 			},
 		}
 	}

@@ -17,6 +17,13 @@ type Metrics struct {
 	WriteTime      metric.Float64Histogram
 	WriteBatchSize metric.Int64Histogram
 
+	WriteReadyTime metric.Int64Histogram
+
+	WritePureTime        metric.Int64Histogram
+	WriteFanoutTime      metric.Int64Histogram
+	WriteFanoutWriteTime metric.Int64Histogram
+	WriteFanoutSendTime  metric.Int64Histogram
+
 	// Commit
 	CommitQueueTime  metric.Float64Histogram
 	CommitQueueTasks metric.Int64UpDownCounter
@@ -96,6 +103,29 @@ func NewMetrics() *Metrics {
 		metric.WithDescription("the duration in milliseconds that write task is handled"),
 		metric.WithUnit(unit.Milliseconds),
 	)
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.WriteReadyTime, err = meter.NewInt64Histogram("sn.write_ready.time")
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.WritePureTime, err = meter.NewInt64Histogram("sn.write_pure.time")
+	if err != nil {
+		panic(err)
+	}
+
+	metrics.WriteFanoutTime, err = meter.NewInt64Histogram("sn.write_fanout.time")
+	if err != nil {
+		panic(err)
+	}
+	metrics.WriteFanoutWriteTime, err = meter.NewInt64Histogram("sn.write_fanout.write.time")
+	if err != nil {
+		panic(err)
+	}
+	metrics.WriteFanoutSendTime, err = meter.NewInt64Histogram("sn.write_fanout.send.time")
 	if err != nil {
 		panic(err)
 	}

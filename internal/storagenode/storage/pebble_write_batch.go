@@ -74,6 +74,10 @@ func (pwb *pebbleWriteBatch) Apply() error {
 	return pwb.ps.applyWriteBatch(pwb)
 }
 
+func (pwb *pebbleWriteBatch) Size() int {
+	return int(pwb.b.Count())
+}
+
 func (pwb *pebbleWriteBatch) Close() error {
 	err := pwb.b.Close()
 	pwb.release()
