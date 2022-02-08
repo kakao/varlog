@@ -13,7 +13,6 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
-	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/tests/it"
 	"github.com/kakao/varlog/vtesting"
@@ -170,6 +169,7 @@ func TestVarlogFailoverSNBackupInitialFault(t *testing.T) {
 	require.NoError(t, res.Err)
 }
 
+// FIXME (jun): Flaky test: VARLOG-494
 func TestVarlogFailoverSNBackupFail(t *testing.T) {
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
@@ -186,6 +186,12 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 
 		done := make(chan struct{})
 		defer close(done)
+
+		for _, topicID := range env.TopicIDs() {
+			for _, logStreamID := range env.LogStreamIDs(topicID) {
+				log.Printf("TopicID: %d, LogStreamID: %d", topicID, logStreamID)
+			}
+		}
 
 		var wg sync.WaitGroup
 		for i := 0; i < env.NumberOfClients(); i++ {
@@ -275,19 +281,40 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					Convey("Then it should be able to append", func(ctx C) {
-						// FIXME (jun): Explicit refreshing clients is not
-						// necessary. Rather automated refreshing metadata
-						// and connections in clients should be worked.
-						env.ClientRefresh(t)
-						client := env.ClientAtIndex(t, 0)
-						var res varlog.AppendResult
+						// Double-checking whether all log streams in the topic
+						// are running.
+						rsp, err := env.GetVMSClient(t).DescribeTopic(context.TODO(), topicID)
+						require.NoError(t, err)
+						require.Condition(t, func() bool {
+							ret := true
+							for _, lsd := range rsp.LogStreams {
+								ret = ret && lsd.Status.Running()
+								if !ret {
+									t.Logf("not-running logstream: %+v", lsd)
+								}
+							}
+							return ret
+						}, 3*time.Second, 500*time.Millisecond)
+
 						So(testutil.CompareWaitN(10, func() bool {
-							res = client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
-							return res.Err == nil
+							// FIXME (jun): Explicit refreshing clients is not
+							// necessary. Rather automated refreshing metadata
+							// and connections in clients should be worked.
+							env.ClientRefresh(t)
+							client := env.ClientAtIndex(t, 0)
+
+							ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+							defer cancel()
+							res := client.Append(ctx, topicID, [][]byte{[]byte("foo")})
+							if res.Err == nil {
+								return true
+							}
+							t.Logf("unexpected append error: %v", res.Err)
+							if _, err := env.GetVMSClient(t).Unseal(context.TODO(), topicID, lsID); err != nil {
+								t.Logf("could not unseal: %+v", err)
+							}
+							return false
 						}), ShouldBeTrue)
-						if res.Err != nil {
-							log.Printf("Error=%+v", res.Err)
-						}
 					})
 				})
 			})
