@@ -441,16 +441,18 @@ func (e *executor) scanDataLoop(ctx context.Context, subToEnv *subscribeToEnvImp
 			endLLSN = localHWM.LLSN + 1
 		}
 
-		err := e.scanTo(ctx, subToEnv, beginLLSN, endLLSN)
-		if err != nil {
-			return err
-		}
-
-		if !subToEnv.lastLLSN.Invalid() {
-			if subToEnv.lastLLSN == subToEnv.end-1 {
-				return nil
+		if beginLLSN < endLLSN {
+			err := e.scanTo(ctx, subToEnv, beginLLSN, endLLSN)
+			if err != nil {
+				return err
 			}
-			beginLLSN = subToEnv.lastLLSN + 1
+
+			if !subToEnv.lastLLSN.Invalid() {
+				if subToEnv.lastLLSN == subToEnv.end-1 {
+					return nil
+				}
+				beginLLSN = subToEnv.lastLLSN + 1
+			}
 		}
 
 		if err := e.decider.waitC(ctx, hwm+1); err != nil {
