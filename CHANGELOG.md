@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.1.6] - 2022-02-09
+### Changed
+- Fixed a bug that SubscribeTo API returns an invalid range error while waiting for new logs committed. (#VARLOG-683/#598)
+
+
 ## [0.1.5] - 2022-01-19
 ### Added
 - Added `--server-read-buffer-size` option to storage node. (#VARLOG-671/#591)
@@ -24,7 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Change callbacks of Replicate RPC from dynamically generated closures to pre-defined methods to avoid excessive heap allocations. (#VARLOG-672/#592)
 - Reuse pre-defined buffer to encode data key and commit key while creating write batch and commit batch. (#VARLOG-673/#593)
 - Writing logs and sending them to internal queues runs in separate goroutines. (#VARLOG-675/#594)
-- Fixed a bug that SubscribeTo API returns an invalid range error while waiting for new logs committed. (#VARLOG-683/#598)
 
 
 ## [0.1.4] - 2022-01-11
@@ -93,7 +97,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2021-12-15
 
 
-[Unreleased]: https://github.com/kakao/varlog/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/kakao/varlog/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/kakao/varlog/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/kakao/varlog/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/kakao/varlog/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/kakao/varlog/compare/v0.1.2...v0.1.3
