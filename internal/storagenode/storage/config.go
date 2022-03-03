@@ -16,8 +16,8 @@ const (
 	DefaultDeleteUncommittedSync = true
 
 	// private configs (`github.com/cockroachdb/pebble/options.go`)
-	DefaultMemTableSize                = 4 << 20
-	DefaultMemTableStopWritesThreshold = 2
+	DefaultMemTableSize                = 64 << 20
+	DefaultMemTableStopWritesThreshold = 4
 )
 
 type config struct {
