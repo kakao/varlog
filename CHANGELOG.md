@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.6] - 2022-02-09
 ### Changed
 - Fixed a bug that SubscribeTo API returns an invalid range error while waiting for new logs committed. (#VARLOG-683/#598)
+- Changed default storage settings for good performance in usual cases. (#VARLOG-668/#584)
 
 
 ## [0.1.5] - 2022-01-19

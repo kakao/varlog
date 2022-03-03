@@ -39,6 +39,7 @@ github.com/cockroachdb/logtags
 # github.com/cockroachdb/pebble v0.0.0-20211222161641-06e42cfa82c0
 ## explicit; go 1.13
 github.com/cockroachdb/pebble
+github.com/cockroachdb/pebble/bloom
 github.com/cockroachdb/pebble/internal/arenaskl
 github.com/cockroachdb/pebble/internal/base
 github.com/cockroachdb/pebble/internal/batchskl

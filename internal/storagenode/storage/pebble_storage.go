@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/bloom"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
@@ -47,31 +48,31 @@ func newPebbleStorage(cfg *config) (Storage, error) {
 		MemTableStopWritesThreshold: cfg.memTableStopWritesThreshold,
 		// quite performance gain, but not durable
 		// DisableWAL:                  true,
-		// L0CompactionThreshold:       2,
-		// L0StopWritesThreshold:       1000,
-		// LBaseMaxBytes:               64 << 20,
-		// Levels:                      make([]pebble.LevelOptions, 7),
-		// MaxConcurrentCompactions:    3,
+		L0CompactionThreshold:    2,
+		L0StopWritesThreshold:    1000,
+		LBaseMaxBytes:            64 << 20,
+		Levels:                   make([]pebble.LevelOptions, 7),
+		MaxConcurrentCompactions: 3,
+		MaxOpenFiles:             16384,
 	}
 
 	if cfg.debugLog {
 		pebbleOpts.EventListener = pebble.MakeLoggingEventListener(cfg.logger.Sugar())
 	}
-	/*
-		for i := 0; i < len(pebbleOpts.Levels); i++ {
-			l := &pebbleOpts.Levels[i]
-			l.BlockSize = 32 << 10
-			l.IndexBlockSize = 256 << 10
-			l.FilterPolicy = bloom.FilterPolicy(10)
-			l.FilterType = pebble.TableFilter
-			if i > 0 {
-				l.TargetFileSize = pebbleOpts.Levels[i-1].TargetFileSize * 2
-			}
-			l.EnsureDefaults()
+	for i := 0; i < len(pebbleOpts.Levels); i++ {
+		l := &pebbleOpts.Levels[i]
+		l.BlockSize = 32 << 10
+		l.IndexBlockSize = 256 << 10
+		l.FilterPolicy = bloom.FilterPolicy(10)
+		l.FilterType = pebble.TableFilter
+		if i > 0 {
+			l.TargetFileSize = pebbleOpts.Levels[i-1].TargetFileSize * 2
 		}
-		pebbleOpts.Levels[6].FilterPolicy = nil
-		pebbleOpts.EnsureDefaults()
-	*/
+		l.EnsureDefaults()
+	}
+	pebbleOpts.Levels[6].FilterPolicy = nil
+	pebbleOpts.FlushSplitBytes = pebbleOpts.Levels[0].TargetFileSize
+	pebbleOpts.EnsureDefaults()
 
 	db, err := pebble.Open(cfg.path, pebbleOpts)
 	if err != nil {
