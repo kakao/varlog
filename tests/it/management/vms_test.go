@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
+	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/varlogadm"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
@@ -537,11 +538,11 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 			Convey("When Report", func(ctx C) {
 				sn := env.LookupSN(t, snID)
 
-				_, _, err := sn.Seal(context.TODO(), topicID, lsID, types.InvalidGLSN)
-				So(err, ShouldBeNil)
+				addr := storagenode.TestGetAdvertiseAddress(t, sn)
 
-				snm, err := sn.GetMetadata(context.TODO())
-				So(err, ShouldBeNil)
+				storagenode.TestSealLogStreamReplica(t, env.ClusterID(), topicID, lsID, types.InvalidGLSN, addr)
+
+				snm := storagenode.TestGetStorageNodeMetadataDescriptor(t, env.ClusterID(), addr)
 
 				statRepository.Report(context.TODO(), snm)
 

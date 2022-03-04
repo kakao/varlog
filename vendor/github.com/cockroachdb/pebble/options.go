@@ -58,6 +58,21 @@ type BlockPropertyCollector = sstable.BlockPropertyCollector
 // BlockPropertyFilter exports the sstable.BlockPropertyFilter type.
 type BlockPropertyFilter = sstable.BlockPropertyFilter
 
+// IterKeyType configures which types of keys an iterator should surface.
+type IterKeyType int8
+
+const (
+	// IterKeyTypePointsOnly configures an iterator to iterate over point keys
+	// only.
+	IterKeyTypePointsOnly IterKeyType = iota
+	// IterKeyTypeRangesOnly configures an iterator to iterate over range keys
+	// only.
+	IterKeyTypeRangesOnly
+	// IterKeyTypePointsAndRanges configures an iterator iterate over both point
+	// keys and range keys simultaneously.
+	IterKeyTypePointsAndRanges
+)
+
 // IterOptions hold the optional per-query parameters for NewIter.
 //
 // Like Options, a nil *IterOptions is valid and means to use the default
@@ -78,12 +93,52 @@ type IterOptions struct {
 	// false to skip scanning. This function must be thread-safe since the same
 	// function can be used by multiple iterators, if the iterator is cloned.
 	TableFilter func(userProps map[string]string) bool
-	// BlockPropertyFilters can be used to avoid scanning tables and blocks in
-	// tables. It is requires that this slice is sorted in increasing order of
-	// the BlockPropertyFilter.ShortID. This slice represents an intersection
-	// across all filters, i.e., all filters must indicate that the block is
-	// relevant.
-	BlockPropertyFilters []BlockPropertyFilter
+	// PointKeyFilters can be used to avoid scanning tables and blocks in tables
+	// when iterating over point keys. It is requires that this slice is sorted in
+	// increasing order of the BlockPropertyFilter.ShortID. This slice represents
+	// an intersection across all filters, i.e., all filters must indicate that the
+	// block is relevant.
+	PointKeyFilters []BlockPropertyFilter
+	// RangeKeyFilters can be usefd to avoid scanning tables and blocks in tables
+	// when iterating over range keys. The same requirements that apply to
+	// PointKeyFilters apply here too.
+	RangeKeyFilters []BlockPropertyFilter
+	// KeyTypes configures which types of keys to iterate over: point keys,
+	// range keys, or both.
+	KeyTypes IterKeyType
+	// RangeKeyMasking can be used to enable automatic masking of point keys by
+	// range keys. Range key masking is only supported during combined range key
+	// and point key iteration mode (IterKeyTypePointsAndRanges).
+	RangeKeyMasking RangeKeyMasking
+
+	// OnlyReadGuaranteedDurable is an advanced option that is only supported by
+	// the Reader implemented by DB. When set to true, only the guaranteed to be
+	// durable state is visible in the iterator.
+	// - This definition is made under the assumption that the FS implementation
+	//   is providing a durability guarantee when data is synced.
+	// - The visible state represents a consistent point in the history of the
+	//   DB.
+	// - The implementation is free to choose a conservative definition of what
+	//   is guaranteed durable. For simplicity, the current implementation
+	//   ignores memtables. A more sophisticated implementation could track the
+	//   highest seqnum that is synced to the WAL and published and use that as
+	//   the visible seqnum for an iterator. Note that the latter approach is
+	//   not strictly better than the former since we can have DBs that are (a)
+	//   synced more rarely than memtable flushes, (b) have no WAL. (a) is
+	//   likely to be true in a future CockroachDB context where the DB
+	//   containing the state machine may be rarely synced.
+	// NB: this current implementation relies on the fact that memtables are
+	// flushed in seqnum order, and any ingested sstables that happen to have a
+	// lower seqnum than a non-flushed memtable don't have any overlapping keys.
+	// This is the fundamental level invariant used in other code too, like when
+	// merging iterators.
+	//
+	// Semantically, using this option provides the caller a "snapshot" as of
+	// the time the most recent memtable was flushed. An alternate interface
+	// would be to add a NewSnapshot variant. Creating a snapshot is heavier
+	// weight than creating an iterator, so we have opted to support this
+	// iterator option.
+	OnlyReadGuaranteedDurable bool
 	// Internal options.
 	logger Logger
 }
@@ -104,11 +159,50 @@ func (o *IterOptions) GetUpperBound() []byte {
 	return o.UpperBound
 }
 
+func (o *IterOptions) pointKeys() bool {
+	if o == nil {
+		return true
+	}
+	return o.KeyTypes == IterKeyTypePointsOnly || o.KeyTypes == IterKeyTypePointsAndRanges
+}
+
+func (o *IterOptions) rangeKeys() bool {
+	if o == nil {
+		return false
+	}
+	return o.KeyTypes == IterKeyTypeRangesOnly || o.KeyTypes == IterKeyTypePointsAndRanges
+}
+
 func (o *IterOptions) getLogger() Logger {
 	if o == nil || o.logger == nil {
 		return DefaultLogger
 	}
 	return o.logger
+}
+
+// RangeKeyMasking configures automatic hiding of point keys by range keys. A
+// non-nil Suffix enables range-key masking. When enabled, range keys with
+// suffixes ≤ Suffix behave as masks. All point keys that are contained within a
+// masking range key's bounds and have suffixes less than the range key's suffix
+// are automatically skipped.
+//
+// Specifically, when configured with a RangeKeyMasking.Suffix _s_, and there
+// exists a range key with suffix _r_ covering a point key with suffix _p_, and
+//
+//     _s_ ≤ _r_ < _p_
+//
+// then the point key is elided.
+//
+// Range-key masking may only be used when iterating over both point keys and
+// range keys with IterKeyTypePointsAndRanges.
+type RangeKeyMasking struct {
+	// Suffix configures which range keys may mask point keys. Only range keys
+	// that are defined at suffixes less than or equal to Suffix will mask point
+	// keys.
+	Suffix []byte
+
+	// TODO(jackson): Add fields necessary for constructing and updating block
+	// property collectors.
 }
 
 // WriteOptions hold the optional per-query parameters for Set and Delete
@@ -322,6 +416,12 @@ type Options struct {
 		// deletion pacing, which is also the default.
 		MinDeletionRate int
 
+		// RangeKeys enables the experimental use of range keys, stored in an
+		// in-memory nondurable arena. This option is only intended to be
+		// temporary, to allow the Pebble metamorphic tests to reuse the
+		// range-key arena across DB restarts.
+		RangeKeys *RangeKeysArena
+
 		// ReadCompactionRate controls the frequency of read triggered
 		// compactions by adjusting `AllowedSeeks` in manifest.FileMetadata:
 		//
@@ -480,9 +580,16 @@ type Options struct {
 	Merger *Merger
 
 	// MaxConcurrentCompactions specifies the maximum number of concurrent
-	// compactions. The default is 1. Concurrent compactions are only performed
-	// when L0 read-amplification passes the L0CompactionConcurrency threshold.
+	// compactions. The default is 1. Concurrent compactions are performed
+	// - when L0 read-amplification passes the L0CompactionConcurrency threshold
+	// - for automatic background compactions
+	// - when a manual compaction for a level is split and parallelized
 	MaxConcurrentCompactions int
+
+	// DisableAutomaticCompactions dictates whether automatic compactions are
+	// scheduled or not. The default is false (enabled). This option is only used
+	// externally when running a manual compaction, and internally for tests.
+	DisableAutomaticCompactions bool
 
 	// NumPrevManifest is the number of non-current or older manifests which
 	// we want to keep around for debugging purposes. By default, we're going
@@ -561,9 +668,6 @@ type Options struct {
 
 		// A private option to disable stats collection.
 		disableTableStats bool
-
-		// A private option disable automatic compactions.
-		disableAutomaticCompactions bool
 
 		// minCompactionRate sets the minimum rate at which compactions occur. The
 		// default is 4 MB/s. Currently disabled as this option has no effect while
@@ -694,6 +798,13 @@ func (o *Options) EnsureDefaults() *Options {
 
 	o.initMaps()
 	return o
+}
+
+func (o *Options) equal() Equal {
+	if o.Comparer.Equal == nil {
+		return bytes.Equal
+	}
+	return o.Comparer.Equal
 }
 
 // initMaps initializes the Comparers, Filters, and Mergers maps.
@@ -1172,15 +1283,15 @@ func (o *Options) MakeReaderOptions() sstable.ReaderOptions {
 
 // MakeWriterOptions constructs sstable.WriterOptions for the specified level
 // from the corresponding options in the receiver.
-func (o *Options) MakeWriterOptions(level int) sstable.WriterOptions {
+func (o *Options) MakeWriterOptions(level int, format sstable.TableFormat) sstable.WriterOptions {
 	var writerOpts sstable.WriterOptions
+	writerOpts.TableFormat = format
 	if o != nil {
 		writerOpts.Cache = o.Cache
 		writerOpts.Comparer = o.Comparer
 		if o.Merger != nil {
 			writerOpts.MergerName = o.Merger.Name
 		}
-		writerOpts.TableFormat = sstable.TableFormatRocksDBv2
 		writerOpts.TablePropertyCollectors = o.TablePropertyCollectors
 		writerOpts.BlockPropertyCollectors = o.BlockPropertyCollectors
 	}

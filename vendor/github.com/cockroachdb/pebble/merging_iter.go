@@ -21,7 +21,7 @@ type mergingIterLevel struct {
 	// configured with a levelIter, this pointer changes as sstable boundaries
 	// are crossed. See levelIter.initRangeDel and the Range Deletions comment
 	// below.
-	rangeDelIter internalIterator
+	rangeDelIter keyspan.FragmentIterator
 	// iterKey and iterValue cache the current key and value iter are pointed at.
 	iterKey   *InternalKey
 	iterValue []byte
@@ -350,7 +350,7 @@ func (m *mergingIter) initMaxRangeDelIters(oldTopLevel int) {
 func (m *mergingIter) switchToMinHeap() {
 	if m.heap.len() == 0 {
 		if m.lower != nil {
-			m.SeekGE(m.lower)
+			m.SeekGE(m.lower, false /* trySeekUsingNext */)
 		} else {
 			m.First()
 		}
@@ -400,10 +400,10 @@ func (m *mergingIter) switchToMinHeap() {
 		// bound.  Instead, we seek it to >= f and Next from there.
 
 		if l.iterKey == nil || (m.lower != nil && l.isSyntheticIterBoundsKey &&
-			l.iterKey.Trailer == InternalKeyRangeDeleteSentinel &&
+			l.iterKey.IsExclusiveSentinel() &&
 			m.heap.cmp(l.iterKey.UserKey, m.lower) <= 0) {
 			if m.lower != nil {
-				l.iterKey, l.iterValue = l.iter.SeekGE(m.lower)
+				l.iterKey, l.iterValue = l.iter.SeekGE(m.lower, false /* trySeekUsingNext */)
 			} else {
 				l.iterKey, l.iterValue = l.iter.First()
 			}
@@ -475,8 +475,7 @@ func (m *mergingIter) switchToMaxHeap() {
 		// bound.  Instead, we seek it to < g, and Prev from there.
 
 		if l.iterKey == nil || (m.upper != nil && l.isSyntheticIterBoundsKey &&
-			l.iterKey.Trailer == InternalKeyRangeDeleteSentinel &&
-			m.heap.cmp(l.iterKey.UserKey, m.upper) >= 0) {
+			l.iterKey.IsExclusiveSentinel() && m.heap.cmp(l.iterKey.UserKey, m.upper) >= 0) {
 			if m.upper != nil {
 				l.iterKey, l.iterValue = l.iter.SeekLT(m.upper)
 			} else {
@@ -829,7 +828,7 @@ func (m *mergingIter) seekGE(key []byte, level int, trySeekUsingNext bool) {
 		if m.prefix != nil {
 			l.iterKey, l.iterValue = l.iter.SeekPrefixGE(m.prefix, key, trySeekUsingNext)
 		} else {
-			l.iterKey, l.iterValue = l.iter.SeekGE(key)
+			l.iterKey, l.iterValue = l.iter.SeekGE(key, trySeekUsingNext)
 		}
 
 		if rangeDelIter := l.rangeDelIter; rangeDelIter != nil {
@@ -881,10 +880,10 @@ func (m *mergingIter) String() string {
 // SeekGE implements base.InternalIterator.SeekGE. Note that SeekGE only checks
 // the upper bound. It is up to the caller to ensure that key is greater than
 // or equal to the lower bound.
-func (m *mergingIter) SeekGE(key []byte) (*InternalKey, []byte) {
+func (m *mergingIter) SeekGE(key []byte, trySeekUsingNext bool) (*InternalKey, []byte) {
 	m.err = nil // clear cached iteration error
 	m.prefix = nil
-	m.seekGE(key, 0 /* start level */, false /* trySeekUsingNext */)
+	m.seekGE(key, 0 /* start level */, trySeekUsingNext)
 	return m.findNextEntry()
 }
 

@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/internal/rangekey"
 )
 
 // Block properties are an optional user-facing feature that can be used to
@@ -80,6 +81,32 @@ type BlockPropertyCollector interface {
 	FinishTable(buf []byte) ([]byte, error)
 }
 
+// SuffixReplaceableBlockCollector is an extension to the BlockPropertyCollector
+// interface that allows a block property collector to indicate the it supports
+// being *updated* during suffix replacement, i.e. when an existing SST in which
+// all keys have the same key suffix is updated to have a new suffix.
+//
+// A collector which supports being updated in such cases must be able to derive
+// its updated value from its old value and the change being made to the suffix,
+// without needing to be passed each updated K/V.
+//
+// For example, a collector that only inspects values would can simply copy its
+// previously computed property as-is, since key-suffix replacement does not
+// change values, while a collector that depends only on key suffixes, like one
+// which collected mvcc-timestamp bounds from timestamp-suffixed keys, can just
+// set its new bounds from the new suffix, as it is common to all keys, without
+// needing to recompute it from every key.
+//
+// An implementation of DataBlockIntervalCollector can also implement this
+// interface, in which case the BlockPropertyCollector returned by passing it to
+// NewBlockIntervalCollector will also implement this interface automatically.
+type SuffixReplaceableBlockCollector interface {
+	// UpdateKeySuffixes is called when a block is updated to change the suffix of
+	// all keys in the block, and is passed the old value for that prop, if any,
+	// for that block as well as the old and new suffix.
+	UpdateKeySuffixes(oldProp []byte, oldSuffix, newSuffix []byte) error
+}
+
 // BlockPropertyFilter is used in an Iterator to filter sstables and blocks
 // within the sstable. It should not maintain any per-sstable state, and must
 // be thread-safe.
@@ -101,9 +128,18 @@ type BlockPropertyFilter interface {
 //
 // Users must not expect this to preserve differences between empty sets --
 // they will all get turned into the semantically equivalent [0,0).
+//
+// A BlockIntervalCollector that collects over point and range keys needs to
+// have both the point and range DataBlockIntervalCollector specified, since
+// point and range keys are fed to the BlockIntervalCollector in an interleaved
+// fashion, independently of one another. This also implies that the
+// DataBlockIntervalCollectors for point and range keys should be references to
+// independent instances, rather than references to the same collector, as point
+// and range keys are tracked independently.
 type BlockIntervalCollector struct {
-	name string
-	dbic DataBlockIntervalCollector
+	name   string
+	points DataBlockIntervalCollector
+	ranges DataBlockIntervalCollector
 
 	blockInterval interval
 	indexInterval interval
@@ -126,12 +162,35 @@ type DataBlockIntervalCollector interface {
 	FinishDataBlock() (lower uint64, upper uint64, err error)
 }
 
-// NewBlockIntervalCollector constructs a BlockIntervalCollector, with the
-// given name and data block collector.
+// NewBlockIntervalCollector constructs a BlockIntervalCollector with the given
+// name. The BlockIntervalCollector makes use of the given point and range key
+// DataBlockIntervalCollectors when encountering point and range keys,
+// respectively.
+//
+// The caller may pass a nil DataBlockIntervalCollector for one of the point or
+// range key collectors, in which case keys of those types will be ignored. This
+// allows for flexible construction of BlockIntervalCollectors that operate on
+// just point keys, just range keys, or both point and range keys.
+//
+// If both point and range keys are to be tracked, two independent collectors
+// should be provided, rather than the same collector passed in twice (see the
+// comment on BlockIntervalCollector for more detail)
 func NewBlockIntervalCollector(
-	name string, blockAttributeCollector DataBlockIntervalCollector) *BlockIntervalCollector {
-	return &BlockIntervalCollector{
-		name: name, dbic: blockAttributeCollector}
+	name string,
+	pointCollector, rangeCollector DataBlockIntervalCollector,
+) BlockPropertyCollector {
+	if pointCollector == nil && rangeCollector == nil {
+		panic("sstable: at least one interval collector must be provided")
+	}
+	bic := BlockIntervalCollector{
+		name:   name,
+		points: pointCollector,
+		ranges: rangeCollector,
+	}
+	if _, ok := pointCollector.(SuffixReplaceableBlockCollector); ok {
+		return &suffixReplacementBlockCollectorWrapper{bic}
+	}
+	return &bic
 }
 
 // Name implements the BlockPropertyCollector interface.
@@ -141,13 +200,23 @@ func (b *BlockIntervalCollector) Name() string {
 
 // Add implements the BlockPropertyCollector interface.
 func (b *BlockIntervalCollector) Add(key InternalKey, value []byte) error {
-	return b.dbic.Add(key, value)
+	if rangekey.IsRangeKey(key.Kind()) {
+		if b.ranges != nil {
+			return b.ranges.Add(key, value)
+		}
+	} else if b.points != nil {
+		return b.points.Add(key, value)
+	}
+	return nil
 }
 
 // FinishDataBlock implements the BlockPropertyCollector interface.
 func (b *BlockIntervalCollector) FinishDataBlock(buf []byte) ([]byte, error) {
+	if b.points == nil {
+		return buf, nil
+	}
 	var err error
-	b.blockInterval.lower, b.blockInterval.upper, err = b.dbic.FinishDataBlock()
+	b.blockInterval.lower, b.blockInterval.upper, err = b.points.FinishDataBlock()
 	if err != nil {
 		return buf, err
 	}
@@ -172,6 +241,17 @@ func (b *BlockIntervalCollector) FinishIndexBlock(buf []byte) ([]byte, error) {
 
 // FinishTable implements the BlockPropertyCollector interface.
 func (b *BlockIntervalCollector) FinishTable(buf []byte) ([]byte, error) {
+	// If the collector is tracking range keys, the range key interval is union-ed
+	// with the point key interval for the table.
+	if b.ranges != nil {
+		var rangeInterval interval
+		var err error
+		rangeInterval.lower, rangeInterval.upper, err = b.ranges.FinishDataBlock()
+		if err != nil {
+			return buf, err
+		}
+		b.tableInterval.union(rangeInterval)
+	}
 	return b.tableInterval.encode(buf), nil
 }
 
@@ -242,31 +322,42 @@ func (i interval) intersects(x interval) bool {
 	return i.upper > x.lower && i.lower < x.upper
 }
 
-// BlockIntervalFilter is an implementation of BlockPropertyFilter when the
+type suffixReplacementBlockCollectorWrapper struct {
+	BlockIntervalCollector
+}
+
+// UpdateKeySuffixes implements the SuffixReplaceableBlockCollector interface.
+func (w *suffixReplacementBlockCollectorWrapper) UpdateKeySuffixes(oldProp []byte, from, to []byte) error {
+	return w.BlockIntervalCollector.points.(SuffixReplaceableBlockCollector).UpdateKeySuffixes(oldProp, from, to)
+}
+
+// blockIntervalFilter is an implementation of BlockPropertyFilter when the
 // corresponding collector is a BlockIntervalCollector. That is, the set is of
 // the form [lower, upper).
-type BlockIntervalFilter struct {
+type blockIntervalFilter struct {
 	name           string
 	filterInterval interval
 }
 
-// NewBlockIntervalFilter constructs a BlockIntervalFilter with the given name
-// and [lower, upper) bounds.
+// NewBlockIntervalFilter constructs a BlockPropertyFilter that filters blocks
+// based on an interval property collected by BlockIntervalCollector and the
+// given [lower, upper) bounds. The given name specifies the
+// BlockIntervalCollector's properties to read.
 func NewBlockIntervalFilter(
-	name string, lower uint64, upper uint64) *BlockIntervalFilter {
-	return &BlockIntervalFilter{
+	name string, lower uint64, upper uint64) BlockPropertyFilter {
+	return &blockIntervalFilter{
 		name:           name,
 		filterInterval: interval{lower: lower, upper: upper},
 	}
 }
 
 // Name implements the BlockPropertyFilter interface.
-func (b *BlockIntervalFilter) Name() string {
+func (b *blockIntervalFilter) Name() string {
 	return b.name
 }
 
 // Intersects implements the BlockPropertyFilter interface.
-func (b *BlockIntervalFilter) Intersects(prop []byte) (bool, error) {
+func (b *blockIntervalFilter) Intersects(prop []byte) (bool, error) {
 	var i interval
 	if err := i.decode(prop); err != nil {
 		return false, err

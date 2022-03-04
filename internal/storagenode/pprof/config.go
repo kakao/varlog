@@ -30,32 +30,32 @@ type Option interface {
 	apply(*config)
 }
 
-type readHeaderTimeoutOption time.Duration
-
-func (o readHeaderTimeoutOption) apply(c *config) {
-	c.readHeaderTimeout = time.Duration(o)
+type funcOption struct {
+	f func(*config)
 }
 
-func WithReadHeaderTimeout(timeout time.Duration) Option {
-	return readHeaderTimeoutOption(timeout)
+func newFuncOption(f func(*config)) *funcOption {
+	return &funcOption{f: f}
 }
 
-type writeTimeoutOption time.Duration
-
-func (o writeTimeoutOption) apply(c *config) {
-	c.writeTimeout = time.Duration(o)
+func (fo *funcOption) apply(cfg *config) {
+	fo.f(cfg)
 }
 
-func WithWriteTimeout(timeout time.Duration) Option {
-	return writeTimeoutOption(timeout)
+func WithReadHeaderTimeout(readHeaderTimeout time.Duration) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.readHeaderTimeout = readHeaderTimeout
+	})
 }
 
-type idleTimeoutOption time.Duration
-
-func (o idleTimeoutOption) apply(c *config) {
-	c.idleTimeout = time.Duration(o)
+func WithWriteTimeout(writeTimeout time.Duration) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.writeTimeout = writeTimeout
+	})
 }
 
-func WithIdleTimeout(timeout time.Duration) Option {
-	return idleTimeoutOption(timeout)
+func WithIdleTimeout(idleTimeout time.Duration) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.idleTimeout = idleTimeout
+	})
 }

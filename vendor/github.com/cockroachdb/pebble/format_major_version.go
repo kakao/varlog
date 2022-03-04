@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
 )
@@ -69,9 +70,30 @@ const (
 	// FormatBlockPropertyCollector is a format major version that introduces
 	// BlockPropertyCollectors.
 	FormatBlockPropertyCollector
+	// FormatRangeKeys is a format major version that introduces range keys.
+	FormatRangeKeys
 	// FormatNewest always contains the most recent format major version.
-	FormatNewest FormatMajorVersion = FormatBlockPropertyCollector
+	// NB: When adding new versions, the MaxTableFormat method should also be
+	// updated to return the maximum allowable version for the new
+	// FormatMajorVersion.
+	FormatNewest FormatMajorVersion = FormatRangeKeys
 )
+
+// MaxTableFormat returns the maximum sstable.TableFormat that can be used at
+// this FormatMajorVersion.
+func (v FormatMajorVersion) MaxTableFormat() sstable.TableFormat {
+	switch v {
+	case FormatDefault, FormatMostCompatible, formatVersionedManifestMarker,
+		FormatVersioned, FormatSetWithDelete:
+		return sstable.TableFormatRocksDBv2
+	case FormatBlockPropertyCollector:
+		return sstable.TableFormatPebblev1
+	case FormatRangeKeys:
+		return sstable.TableFormatPebblev2
+	default:
+		panic(fmt.Sprintf("pebble: unsupported format major version: %s", v))
+	}
+}
 
 // formatMajorVersionMigrations defines the migrations from one format
 // major version to the next. Each migration is defined as a closure
@@ -148,6 +170,9 @@ var formatMajorVersionMigrations = map[FormatMajorVersion]func(*DB) error{
 	},
 	FormatBlockPropertyCollector: func(d *DB) error {
 		return d.finalizeFormatVersUpgrade(FormatBlockPropertyCollector)
+	},
+	FormatRangeKeys: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(FormatRangeKeys)
 	},
 }
 

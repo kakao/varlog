@@ -3,7 +3,7 @@ module github.com/kakao/varlog
 go 1.17
 
 require (
-	github.com/cockroachdb/pebble v0.0.0-20211222161641-06e42cfa82c0
+	github.com/cockroachdb/pebble v0.0.0-20220227235451-40d39da505a5
 	github.com/docker/go-units v0.4.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
@@ -35,7 +35,7 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210909193231-528a39cd75f3
 	golang.org/x/tools v0.1.5
-	google.golang.org/grpc v1.42.0
+	google.golang.org/grpc v1.44.0
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.23.1

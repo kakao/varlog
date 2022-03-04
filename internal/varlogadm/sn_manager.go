@@ -345,9 +345,10 @@ func (sm *snManager) Unseal(ctx context.Context, topicID types.TopicID, logStrea
 		replicas = append(replicas, varlogpb.Replica{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: rd.StorageNodeID,
+				Address:       sm.cs[rd.StorageNodeID].PeerAddress(),
 			},
+			TopicID:     topicID,
 			LogStreamID: logStreamID,
-			// TODO: need address field?
 		})
 	}
 

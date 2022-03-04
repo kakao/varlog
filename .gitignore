@@ -37,6 +37,8 @@ bin/rpcbench_client
 bin/rpcbench_server
 bin/benchmark
 bin/varlogcli
+bin/stress
+bin/varlogsn
 
 # Python
 *.pyc

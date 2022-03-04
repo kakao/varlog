@@ -67,32 +67,28 @@ type SuffixValue struct {
 	Value  []byte
 }
 
-// EncodedSetValueLen precomputes the length of a RangeKeySet's value when
-// encoded.  It may be used to construct a buffer of the appropriate size before
-// encoding.
-func EncodedSetValueLen(endKey []byte, suffixValues []SuffixValue) int {
-	n := lenVarint(len(endKey))
-	n += len(endKey)
+// EncodedSetSuffixValuesLen precomputes the length of the given slice of
+// SuffixValues, when encoded for a RangeKeySet. It may be used to construct a
+// buffer of the appropriate size before encoding.
+func EncodedSetSuffixValuesLen(suffixValues []SuffixValue) int {
+	var n int
 	for i := 0; i < len(suffixValues); i++ {
 		n += lenVarint(len(suffixValues[i].Suffix))
 		n += len(suffixValues[i].Suffix)
 		n += lenVarint(len(suffixValues[i].Value))
 		n += len(suffixValues[i].Value)
 	}
-
 	return n
 }
 
-// EncodeSetValue encodes a RangeKeySet's value into dst. The length of dst must
-// be greater than or equal to EncodedSetValueLen. EncodeSetValue returns the
-// number of bytes written, which should always equal the EncodedSetValueLen
-// with the same arguments.
-func EncodeSetValue(dst []byte, endKey []byte, suffixValues []SuffixValue) int {
-	// First encode the end key as a varstring.
-	n := binary.PutUvarint(dst, uint64(len(endKey)))
-	n += copy(dst[n:], endKey)
-
+// EncodeSetSuffixValues encodes a slice of SuffixValues for a RangeKeySet into
+// dst. The length of dst must be greater than or equal to
+// EncodedSetSuffixValuesLen. EncodeSetSuffixValues returns the number of bytes
+// written, which should always equal the EncodedSetValueLen with the same
+// arguments.
+func EncodeSetSuffixValues(dst []byte, suffixValues []SuffixValue) int {
 	// Encode the list of (suffix, value-len) tuples.
+	var n int
 	for i := 0; i < len(suffixValues); i++ {
 		// Encode the length of the suffix.
 		n += binary.PutUvarint(dst[n:], uint64(len(suffixValues[i].Suffix)))
@@ -109,6 +105,28 @@ func EncodeSetValue(dst []byte, endKey []byte, suffixValues []SuffixValue) int {
 	return n
 }
 
+// EncodedSetValueLen precomputes the length of a RangeKeySet's value when
+// encoded. It may be used to construct a buffer of the appropriate size before
+// encoding.
+func EncodedSetValueLen(endKey []byte, suffixValues []SuffixValue) int {
+	n := lenVarint(len(endKey))
+	n += len(endKey)
+	n += EncodedSetSuffixValuesLen(suffixValues)
+	return n
+}
+
+// EncodeSetValue encodes a RangeKeySet's value into dst. The length of dst must
+// be greater than or equal to EncodedSetValueLen. EncodeSetValue returns the
+// number of bytes written, which should always equal the EncodedSetValueLen
+// with the same arguments.
+func EncodeSetValue(dst []byte, endKey []byte, suffixValues []SuffixValue) int {
+	// First encode the end key as a varstring.
+	n := binary.PutUvarint(dst, uint64(len(endKey)))
+	n += copy(dst[n:], endKey)
+	n += EncodeSetSuffixValues(dst[n:], suffixValues)
+	return n
+}
+
 // DecodeEndKey reads the end key from the beginning of a range key (RANGEKEYSET,
 // RANGEKEYUNSET or RANGEKEYDEL)'s physical encoded value. Both sets and unsets
 // encode the range key, plus additional data in the value.
@@ -120,7 +138,7 @@ func DecodeEndKey(kind base.InternalKeyKind, data []byte) (endKey, value []byte,
 		return data, nil, true
 	case base.InternalKeyKindRangeKeySet, base.InternalKeyKindRangeKeyUnset:
 		v, n := binary.Uvarint(data)
-		if n <= 0 {
+		if n <= 0 || uint64(n)+v >= uint64(len(data)) {
 			return nil, nil, false
 		}
 		endKey, value = data[n:n+int(v)], data[n+int(v):]
@@ -147,17 +165,42 @@ func DecodeSuffixValue(data []byte) (sv SuffixValue, rest []byte, ok bool) {
 	return sv, data, true
 }
 
+// EncodedUnsetSuffixesLen precomputes the length of the given slice of
+// suffixes, when encoded for a RangeKeyUnset. It may be used to construct a
+// buffer of the appropriate size before encoding.
+func EncodedUnsetSuffixesLen(suffixes [][]byte) int {
+	var n int
+	for i := 0; i < len(suffixes); i++ {
+		n += lenVarint(len(suffixes[i]))
+		n += len(suffixes[i])
+	}
+	return n
+}
+
+// EncodeUnsetSuffixes encodes a slice of suffixes for a RangeKeyUnset into dst.
+// The length of dst must be greater than or equal to EncodedUnsetSuffixesLen.
+// EncodeUnsetSuffixes returns the number of bytes written, which should always
+// equal the EncodedUnsetSuffixesLen with the same arguments.
+func EncodeUnsetSuffixes(dst []byte, suffixes [][]byte) int {
+	// Encode the list of (suffix, value-len) tuples.
+	var n int
+	for i := 0; i < len(suffixes); i++ {
+		//  Encode the length of the suffix.
+		n += binary.PutUvarint(dst[n:], uint64(len(suffixes[i])))
+
+		// Encode the suffix itself.
+		n += copy(dst[n:], suffixes[i])
+	}
+	return n
+}
+
 // EncodedUnsetValueLen precomputes the length of a RangeKeyUnset's value when
 // encoded.  It may be used to construct a buffer of the appropriate size before
 // encoding.
 func EncodedUnsetValueLen(endKey []byte, suffixes [][]byte) int {
 	n := lenVarint(len(endKey))
 	n += len(endKey)
-
-	for i := 0; i < len(suffixes); i++ {
-		n += lenVarint(len(suffixes[i]))
-		n += len(suffixes[i])
-	}
+	n += EncodedUnsetSuffixesLen(suffixes)
 	return n
 }
 
@@ -169,15 +212,7 @@ func EncodeUnsetValue(dst []byte, endKey []byte, suffixes [][]byte) int {
 	// First encode the end key as a varstring.
 	n := binary.PutUvarint(dst, uint64(len(endKey)))
 	n += copy(dst[n:], endKey)
-
-	// Encode the list of suffix varstrings.
-	for i := 0; i < len(suffixes); i++ {
-		//  Encode the length of the suffix.
-		n += binary.PutUvarint(dst[n:], uint64(len(suffixes[i])))
-
-		// Encode the suffix itself.
-		n += copy(dst[n:], suffixes[i])
-	}
+	n += EncodeUnsetSuffixes(dst[n:], suffixes)
 	return n
 }
 
@@ -277,13 +312,18 @@ func Parse(s string) (key base.InternalKey, value []byte) {
 		panic("range key string representation missing key-value separator :")
 	}
 	startKey := base.ParseInternalKey(strings.TrimSpace(s[:sep]))
+	return startKey, ParseValue(startKey.Kind(), s[sep+1:])
+}
 
-	switch startKey.Kind() {
+// ParseValue parses a string representation of a range key value into its
+// serialized form. See Parse for the input string format.
+func ParseValue(kind base.InternalKeyKind, s string) (value []byte) {
+	switch kind {
 	case base.InternalKeyKindRangeKeySet:
-		openBracket := strings.IndexByte(s[sep:], '[')
-		closeBracket := strings.IndexByte(s[sep:], ']')
-		endKey := strings.TrimSpace(s[sep+1 : sep+openBracket])
-		itemStrs := strings.Split(s[sep+openBracket+1:sep+closeBracket], ",")
+		openBracket := strings.IndexByte(s[:], '[')
+		closeBracket := strings.IndexByte(s[:], ']')
+		endKey := strings.TrimSpace(s[:openBracket])
+		itemStrs := strings.Split(s[openBracket+1:closeBracket], ",")
 
 		var suffixValues []SuffixValue
 		for _, itemStr := range itemStrs {
@@ -299,13 +339,13 @@ func Parse(s string) (key base.InternalKey, value []byte) {
 		}
 		value = make([]byte, EncodedSetValueLen([]byte(endKey), suffixValues))
 		EncodeSetValue(value, []byte(endKey), suffixValues)
-		return startKey, value
+		return value
 
 	case base.InternalKeyKindRangeKeyUnset:
-		openBracket := strings.IndexByte(s[sep:], '[')
-		closeBracket := strings.IndexByte(s[sep:], ']')
-		endKey := strings.TrimSpace(s[sep+1 : sep+openBracket])
-		itemStrs := strings.Split(s[sep+openBracket+1:sep+closeBracket], ",")
+		openBracket := strings.IndexByte(s[:], '[')
+		closeBracket := strings.IndexByte(s[:], ']')
+		endKey := strings.TrimSpace(s[:openBracket])
+		itemStrs := strings.Split(s[openBracket+1:closeBracket], ",")
 
 		var suffixes [][]byte
 		for _, itemStr := range itemStrs {
@@ -313,13 +353,13 @@ func Parse(s string) (key base.InternalKey, value []byte) {
 		}
 		value = make([]byte, EncodedUnsetValueLen([]byte(endKey), suffixes))
 		EncodeUnsetValue(value, []byte(endKey), suffixes)
-		return startKey, value
+		return value
 
 	case base.InternalKeyKindRangeKeyDelete:
-		return startKey, []byte(strings.TrimSpace(s[sep+1:]))
+		return []byte(strings.TrimSpace(s))
 
 	default:
-		panic(fmt.Sprintf("key kind %q not a range key", startKey.Kind()))
+		panic(fmt.Sprintf("key kind %q not a range key", kind))
 	}
 }
 

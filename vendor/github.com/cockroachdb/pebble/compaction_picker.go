@@ -191,7 +191,7 @@ func newPickedCompactionFromL0(
 	files := make([]*manifest.FileMetadata, 0, len(lcf.Files))
 	iter := vers.Levels[0].Iter()
 	for j, f := 0, iter.First(); f != nil; j, f = j+1, iter.Next() {
-		if lcf.FilesIncluded[j] {
+		if lcf.FilesIncluded[f.L0Index] {
 			files = append(files, f)
 		}
 	}
@@ -217,7 +217,8 @@ func (pc *pickedCompaction) setupInputs(opts *Options, diskAvailBytes uint64) bo
 	// sstables, and then expand those tables to a clean cut. No need to do
 	// this for intra-L0 compactions; outputLevel.files is left empty for those.
 	if pc.startLevel.level != pc.outputLevel.level {
-		pc.outputLevel.files = pc.version.Overlaps(pc.outputLevel.level, pc.cmp, pc.smallest.UserKey, pc.largest.UserKey)
+		pc.outputLevel.files = pc.version.Overlaps(pc.outputLevel.level, pc.cmp, pc.smallest.UserKey,
+			pc.largest.UserKey, pc.largest.IsExclusiveSentinel())
 		pc.outputLevel.files, isCompacting = expandToAtomicUnit(pc.cmp, pc.outputLevel.files, false /* disableIsCompacting */)
 		if isCompacting {
 			return false
@@ -276,7 +277,7 @@ func (pc *pickedCompaction) setupInputs(opts *Options, diskAvailBytes uint64) bo
 			iter := pc.version.Levels[0].Iter()
 			var sizeSum uint64
 			for j, f := 0, iter.First(); f != nil; j, f = j+1, iter.Next() {
-				if pc.lcf.FilesIncluded[j] {
+				if pc.lcf.FilesIncluded[f.L0Index] {
 					newStartLevelFiles = append(newStartLevelFiles, f)
 					sizeSum += f.Size
 				}
@@ -303,7 +304,8 @@ func (pc *pickedCompaction) grow(sm, la InternalKey, maxExpandedBytes uint64) bo
 	if pc.outputLevel.files.Empty() {
 		return false
 	}
-	grow0 := pc.version.Overlaps(pc.startLevel.level, pc.cmp, sm.UserKey, la.UserKey)
+	grow0 := pc.version.Overlaps(pc.startLevel.level, pc.cmp, sm.UserKey,
+		la.UserKey, la.IsExclusiveSentinel())
 	grow0, isCompacting := expandToAtomicUnit(pc.cmp, grow0, false /* disableIsCompacting */)
 	if isCompacting {
 		return false
@@ -315,7 +317,8 @@ func (pc *pickedCompaction) grow(sm, la InternalKey, maxExpandedBytes uint64) bo
 		return false
 	}
 	sm1, la1 := manifest.KeyRange(pc.cmp, grow0.Iter())
-	grow1 := pc.version.Overlaps(pc.outputLevel.level, pc.cmp, sm1.UserKey, la1.UserKey)
+	grow1 := pc.version.Overlaps(pc.outputLevel.level, pc.cmp, sm1.UserKey,
+		la1.UserKey, la1.IsExclusiveSentinel())
 	grow1, isCompacting = expandToAtomicUnit(pc.cmp, grow1, false /* disableIsCompacting */)
 	if isCompacting {
 		return false
@@ -371,6 +374,11 @@ func (pc *pickedCompaction) grow(sm, la InternalKey, maxExpandedBytes uint64) bo
 // disableIsCompacting is true, isCompacting always returns false. This helps
 // avoid spurious races from being detected when this method is used outside
 // of compaction picking code.
+//
+// TODO(jackson): Compactions and flushes no longer split a user key between two
+// sstables. We could perform a migration, re-compacting any sstables with split
+// user keys, which would allow us to remove atomic compaction unit expansion
+// code.
 func expandToAtomicUnit(
 	cmp Compare, inputs manifest.LevelSlice, disableIsCompacting bool,
 ) (slice manifest.LevelSlice, isCompacting bool) {
@@ -392,12 +400,9 @@ func expandToAtomicUnit(
 			if cmp(prev.Largest.UserKey, cur.Smallest.UserKey) < 0 {
 				break
 			}
-			if prev.Largest.Trailer == InternalKeyRangeDeleteSentinel {
-				// The range deletion sentinel key is set for the largest key in a
-				// table when a range deletion tombstone straddles a table. It
-				// isn't necessary to include the prev table in the atomic
-				// compaction unit as prev.largest.UserKey does not actually exist
-				// in the prev table.
+			if prev.Largest.IsExclusiveSentinel() {
+				// The table prev has a largest key indicating that the user key
+				// prev.largest.UserKey doesn't actually exist in the table.
 				break
 			}
 			// prev.Largest.UserKey == cur.Smallest.UserKey, so we need to
@@ -413,12 +418,9 @@ func expandToAtomicUnit(
 			if cmp(cur.Largest.UserKey, next.Smallest.UserKey) < 0 {
 				break
 			}
-			if cur.Largest.Trailer == InternalKeyRangeDeleteSentinel {
-				// The range deletion sentinel key is set for the largest key
-				// in a table when a range deletion tombstone straddles a
-				// table. It isn't necessary to include the next table in the
-				// compaction as PeekPrev().Largest.UserKey does not actually
-				// exist in the table.
+			if cur.Largest.IsExclusiveSentinel() {
+				// The table cur has a largest key indicating that the user key
+				// cur.largest.UserKey doesn't actually exist in the table.
 				break
 			}
 			// cur.Largest.UserKey == next.Smallest.UserKey, so we need to
@@ -1169,7 +1171,8 @@ func pickAutoHelper(
 	if pc.startLevel.level == 0 {
 		cmp := opts.Comparer.Compare
 		smallest, largest := manifest.KeyRange(cmp, pc.startLevel.files.Iter())
-		pc.startLevel.files = vers.Overlaps(0, cmp, smallest.UserKey, largest.UserKey)
+		pc.startLevel.files = vers.Overlaps(0, cmp, smallest.UserKey,
+			largest.UserKey, largest.IsExclusiveSentinel())
 		if pc.startLevel.files.Empty() {
 			panic("pebble: empty compaction")
 		}
@@ -1354,9 +1357,14 @@ func (p *compactionPickerByScore) pickManual(
 		// points to an empty level).
 		return nil, false
 	}
-	// TODO(peter): The conflictsWithInProgress call should no longer be
-	// necessary, but TestManualCompaction currently expects it.
-	if conflictsWithInProgress(manual.level, outputLevel, env.inProgressCompactions) {
+	// This conflictsWithInProgress call is necessary for the manual compaction to
+	// be retried when it conflicts with an ongoing automatic compaction. Without
+	// it, the compaction is dropped due to pc.setupInputs returning false since
+	// the input/output range is already being compacted, and the manual
+	// compaction ends with a non-compacted LSM.
+	// The check is skipped when a manual compaction has been split across a level
+	// because we allow parallel execution of compactions in a level.
+	if !manual.split && conflictsWithInProgress(manual.level, outputLevel, env.inProgressCompactions) {
 		return nil, true
 	}
 	pc = pickManualHelper(p.opts, manual, p.vers, p.baseLevel, p.diskAvailBytes)
@@ -1383,7 +1391,7 @@ func pickManualHelper(
 	pc = newPickedCompaction(opts, vers, manual.level, baseLevel)
 	manual.outputLevel = pc.outputLevel.level
 	cmp := opts.Comparer.Compare
-	pc.startLevel.files = vers.Overlaps(manual.level, cmp, manual.start.UserKey, manual.end.UserKey)
+	pc.startLevel.files = vers.Overlaps(manual.level, cmp, manual.start, manual.end, false)
 	if pc.startLevel.files.Empty() {
 		// Nothing to do
 		return nil
@@ -1413,9 +1421,10 @@ func (p *compactionPickerByScore) pickReadTriggeredCompaction(
 }
 
 func pickReadTriggeredCompactionHelper(
-	p *compactionPickerByScore, rc *readCompaction, env compactionEnv) (pc *pickedCompaction) {
+	p *compactionPickerByScore, rc *readCompaction, env compactionEnv,
+) (pc *pickedCompaction) {
 	cmp := p.opts.Comparer.Compare
-	overlapSlice := p.vers.Overlaps(rc.level, cmp, rc.start, rc.end)
+	overlapSlice := p.vers.Overlaps(rc.level, cmp, rc.start, rc.end, false /* exclusiveEnd */)
 	if overlapSlice.Empty() {
 		// If there is no overlap, then the file with the key range
 		// must have been compacted away. So, we don't proceed to
@@ -1448,8 +1457,8 @@ func pickReadTriggeredCompactionHelper(
 
 	// Prevent read compactions which are too wide.
 	outputOverlaps := pc.version.Overlaps(
-		pc.outputLevel.level, pc.cmp, pc.smallest.UserKey, pc.largest.UserKey,
-	)
+		pc.outputLevel.level, pc.cmp, pc.smallest.UserKey,
+		pc.largest.UserKey, pc.largest.IsExclusiveSentinel())
 	if outputOverlaps.SizeSum() > pc.maxReadCompactionBytes {
 		return nil
 	}

@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/kakao/varlog/internal/storagenode/reportcommitter"
+	"github.com/kakao/varlog/internal/storagenode_deprecated/reportcommitter"
 	"github.com/kakao/varlog/pkg/snc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"

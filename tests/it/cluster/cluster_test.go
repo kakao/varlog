@@ -145,13 +145,14 @@ func TestReadSealedLogStream(t *testing.T) {
 
 	// TODO: Test if VMS keeps correct status for the log stream
 
+	// NOTE: Read API is deprecated.
 	// read sealed log streams
-	for glsn := types.MinGLSN; glsn <= sealedGLSN; glsn++ {
-		idx := rand.Intn(clus.NumberOfClients())
-		client := clus.ClientAtIndex(t, idx)
-		_, err := client.Read(context.TODO(), topicID, lsID, glsn)
-		require.NoError(t, err)
-	}
+	// for glsn := types.MinGLSN; glsn <= sealedGLSN; glsn++ {
+	//	idx := rand.Intn(clus.NumberOfClients())
+	//	client := clus.ClientAtIndex(t, idx)
+	//	_, err := client.Read(context.TODO(), topicID, lsID, glsn)
+	//	require.NoError(t, err)
+	// }
 }
 
 func TestTrimGLS(t *testing.T) {

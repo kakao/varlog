@@ -3,9 +3,9 @@ package app
 import (
 	"github.com/urfave/cli/v2"
 
-	"github.com/kakao/varlog/internal/storagenode"
-	"github.com/kakao/varlog/internal/storagenode/executor"
-	"github.com/kakao/varlog/internal/storagenode/storage"
+	"github.com/kakao/varlog/internal/storagenode_deprecated"
+	"github.com/kakao/varlog/internal/storagenode_deprecated/executor"
+	"github.com/kakao/varlog/internal/storagenode_deprecated/storage"
 	"github.com/kakao/varlog/pkg/util/units"
 	"github.com/kakao/varlog/pkg/vflag"
 )
@@ -38,11 +38,11 @@ func initStartCommand() *cli.Command {
 		flagVolumes.StringSliceFlag(),
 		flagListenAddress.StringFlag(),
 		flagAdvertiseAddress.StringFlag(),
-		flagBallastSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultBallastSize)),
-		flagServerReadBufferSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultServerReadBufferSize)),
-		flagServerWriteBufferSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultServerWriteBufferSize)),
-		flagReplicationClientReadBufferSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultReplicationClientReadBufferSize)),
-		flagReplicationClientWriteBufferSize.StringFlagV(units.ToByteSizeString(storagenode.DefaultReplicationClientWriteBufferSize)),
+		flagBallastSize.StringFlagV(units.ToByteSizeString(storagenode_deprecated.DefaultBallastSize)),
+		flagServerReadBufferSize.StringFlagV(units.ToByteSizeString(storagenode_deprecated.DefaultServerReadBufferSize)),
+		flagServerWriteBufferSize.StringFlagV(units.ToByteSizeString(storagenode_deprecated.DefaultServerWriteBufferSize)),
+		flagReplicationClientReadBufferSize.StringFlagV(units.ToByteSizeString(storagenode_deprecated.DefaultReplicationClientReadBufferSize)),
+		flagReplicationClientWriteBufferSize.StringFlagV(units.ToByteSizeString(storagenode_deprecated.DefaultReplicationClientWriteBufferSize)),
 
 		// flags for logging
 		flagLogDir.StringFlag(),

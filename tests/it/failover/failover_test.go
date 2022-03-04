@@ -35,7 +35,6 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 			glsnC := make(chan types.GLSN, 1024)
 
 			topicID := env.TopicIDs()[0]
-			lsID := env.LogStreamIDs(topicID)[0]
 
 			var (
 				wg   sync.WaitGroup
@@ -108,10 +107,11 @@ func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 					res := client.Append(context.Background(), topicID, [][]byte{[]byte("bar")})
 					So(res.Err, ShouldBeNil)
 
-					for glsn := types.MinGLSN; glsn <= maxGLSN; glsn += types.GLSN(1) {
-						_, err := client.Read(context.TODO(), topicID, lsID, glsn)
-						So(err, ShouldBeNil)
-					}
+					// NOTE: Read API is deprecated.
+					// for glsn := types.MinGLSN; glsn <= maxGLSN; glsn += types.GLSN(1) {
+					//	_, err := client.Read(context.TODO(), topicID, lsID, glsn)
+					//	So(err, ShouldBeNil)
+					// }
 				})
 			})
 		}))

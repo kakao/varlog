@@ -23,7 +23,7 @@ from varlog import procutil  # noqa
 from varlog.killer import Killer  # noqa
 from varlog.logger import get_logger  # noqa
 
-APP_NAME = "vsn"
+APP_NAME = "varlogsn"
 DEFAULT_CLUSTER_ID = 1
 DEFAULT_PORT = 9091
 DEFAULT_RETRY_INTERVAL_SECONDS = 3
@@ -55,7 +55,7 @@ def fetch_storage_node_id(admin: str, advertise: str) -> Tuple[int, bool]:
     for item in items:
         if item["address"] == advertise:
             return item["storageNodeId"], True
-    return random.randint(1, (2 ^ 31) - 1), False
+    return random.randint(1, 2 ** 10), False
 
 
 def truncate(path: str) -> None:
@@ -101,102 +101,99 @@ def register_storage_node(admin: str, advertise: str, retry: int,
     raise subprocess.CalledProcessError
 
 
-def start(
-    cluster_id: int,
-    listen: str,
-    advertise: str,
-    admin: str,
-    volumes: list,
-    server_read_buffer_size: str,
-    server_write_buffer_size: str,
-    replication_client_read_buffer_size: str,
-    replication_client_write_buffer_size: str,
-    add_after_seconds: int,
-    retry_register: int,
-    retry_interval_seconds: int,
-    logtostderr: bool = False,
-    logdir: str = None,
-) -> None:
+def start(args: argparse.Namespace) -> None:
     """Start storage node.
 
     Args:
-        cluster_id: cluster id
-        listen: listen address
-        advertise: advertise address
-        admin: admin address
-        volumes: volumes
-        server_read_buffer_size:
-        server_write_buffer_size:
-        replication_client_read_buffer_size:
-        replication_client_write_buffer_size:
-        add_after_seconds: add after seconds
-        retry_register: the number of retrial of register
-        retry_interval_seconds: retry interval seconds
-        logtostderr: log to stderr
-        logdir: log directory
+        args: arguments
     """
-    for volume in volumes:
+
+    for volume in args.volumes:
         os.makedirs(volume, exist_ok=True)
-    os.makedirs(logdir, exist_ok=True)
+    os.makedirs(args.log_dir, exist_ok=True)
 
     killer = Killer()
     ok = False
     while not killer.kill_now:
         if ok and procutil.check_liveness(APP_NAME):
-            time.sleep(retry_interval_seconds)
+            time.sleep(args.retry_interval_seconds)
             continue
         try:
             procutil.kill(APP_NAME)
 
-            snid, registered = fetch_storage_node_id(admin, advertise)
+            snid, registered = fetch_storage_node_id(args.admin, args.advertise)
             logger.info(
                 f"storage node id: {snid}, already registered: {registered}")
 
             cmd = [
-                f"{binpath}/vsn",
+                f"{binpath}/varlogsn",
                 "start",
-                f"--cluster-id={cluster_id}",
+                f"--cluster-id={args.cluster_id}",
                 f"--storage-node-id={snid}",
-                f"--listen-address={listen}",
-                f"--advertise-address={advertise}",
-                "--disable-write-sync",
-                "--disable-commit-sync",
+                f"--listen-address={args.listen}",
+                f"--advertise-address={args.advertise}"
             ]
-            for volume in volumes:
+            for volume in args.volumes:
                 if not registered:
                     truncate(volume)
                 cmd.append(f"--volumes={volume}")
-            if logtostderr:
-                cmd.append("--logtostderr")
-            if logdir:
-                cmd.append(f"--log-dir={logdir}")
-            if server_read_buffer_size:
-                cmd.append(
-                    f"--server-read-buffer-size={server_read_buffer_size}")
-            if server_write_buffer_size:
-                cmd.append(
-                    f"--server-write-buffer-size={server_write_buffer_size}")
-            if replication_client_read_buffer_size:
-                cmd.append(
-                    f"--replication-client-read-buffer-size={replication_client_read_buffer_size}")
-            if replication_client_write_buffer_size:
-                cmd.append(
-                    f"--replication-client-write-buffer-size={replication_client_write_buffer_size}")
 
-            logger.info(f"vsn: cmd={cmd}")
+            # grpc options
+            if args.server_read_buffer_size:
+                cmd.append(
+                    f"--server-read-buffer-size={args.server_read_buffer_size}")
+            if args.server_write_buffer_size:
+                cmd.append(
+                    f"--server-write-buffer-size={args.server_write_buffer_size}")
+            if args.replication_client_read_buffer_size:
+                cmd.append(
+                    f"--replication-client-read-buffer-size={args.replication_client_read_buffer_size}")
+            if args.replication_client_write_buffer_size:
+                cmd.append(
+                    f"--replication-client-write-buffer-size={args.replication_client_write_buffer_size}")
+
+            # storage options
+            if args.storage_disable_wal:
+                cmd.append("--storage-disable-wal")
+            if args.storage_no_sync:
+                cmd.append("--storage-no-sync")
+            if args.storage_l0_compaction_threshold:
+                cmd.append(f"--storage-l0-compaction-threshold={args.storage_l0_compaction_threshold}")
+            if args.storage_l0_stop_writes_threshold:
+                cmd.append(f"--storage-l0-stop-writes-threshold={args.storage_l0_stop_writes_threshold}")
+            if args.storage_lbase_max_bytes:
+                cmd.append(f"--storage-lbase-max-bytes={args.storage_lbase_max_bytes}")
+            if args.storage_max_open_files:
+                cmd.append(f"--storage-max-open-files={args.storage_max_open_files}")
+            if args.storage_mem_table_size:
+                cmd.append(f"--storage-mem-table-size={args.storage_mem_table_size}")
+            if args.storage_mem_table_stop_writes_threshold:
+                cmd.append(f"--storage-mem-table-stop-writes-threshold={args.storage_mem_table_stop_writes_threshold}")
+            if args.storage_max_concurrent_compaction:
+                cmd.append(f"--storage-max-concurrent-compaction={args.storage_max_concurrent_compaction}")
+            if args.storage_verbose:
+                cmd.append("--storage-verbose")
+
+            # logging options
+            if args.logtostderr:
+                cmd.append("--logtostderr")
+            if args.log_dir:
+                cmd.append(f"--logdir={args.log_dir}")
+
+            logger.info(f"varlogsn: cmd={cmd}")
             subprocess.Popen(cmd)
 
-            time.sleep(add_after_seconds)
+            time.sleep(args.add_after_seconds)
             if not registered:
-                register_storage_node(admin, advertise, retry_register,
-                                      retry_interval_seconds)
+                register_storage_node(args.admin, args.advertise, args.retry_register,
+                                      args.retry_interval_seconds)
                 logger.info("registered storage node to cluster")
             ok = True
         except (OSError, ValueError, subprocess.SubprocessError):
             ok = False
             logger.exception("could not run storage node")
         finally:
-            time.sleep(retry_interval_seconds)
+            time.sleep(args.retry_interval_seconds)
     procutil.stop(APP_NAME)
 
 
@@ -209,10 +206,31 @@ def main() -> None:
     parser.add_argument("--admin", required=True)
     parser.add_argument("--volumes", nargs="+", required=True, action="extend",
                         type=str)
+    parser.add_argument("--ballast-size", type=str)
+
+    # grpc options
     parser.add_argument("--server-read-buffer-size", type=str)
     parser.add_argument("--server-write-buffer-size", type=str)
     parser.add_argument("--replication-client-read-buffer-size", type=str)
     parser.add_argument("--replication-client-write-buffer-size", type=str)
+
+    # storage options
+    parser.add_argument("--storage-disable-wal", action="store_true")
+    parser.add_argument("--storage-no-sync", action="store_true")
+    parser.add_argument("--storage-l0-compaction-threshold", type=int)
+    parser.add_argument("--storage-l0-stop-writes-threshold", type=int)
+    parser.add_argument("--storage-lbase-max-bytes", type=str)
+    parser.add_argument("--storage-max-open-files", type=int)
+    parser.add_argument("--storage-mem-table-size", type=str)
+    parser.add_argument("--storage-mem-table-stop-writes-threshold", type=int)
+    parser.add_argument("--storage-max-concurrent-compaction", type=int)
+    parser.add_argument("--storage-verbose", action="store_true")
+
+    # logging options
+    parser.add_argument("--logtostderr", action="store_true")
+    parser.add_argument("--log-dir")
+
+    # start_varlogsn options
     parser.add_argument("--add-after-seconds",
                         default=DEFAULT_ADD_AFTER_SECONDS,
                         type=int)
@@ -222,29 +240,13 @@ def main() -> None:
     parser.add_argument("--retry-interval-seconds",
                         default=DEFAULT_RETRY_INTERVAL_SECONDS,
                         type=int)
-    parser.add_argument("--logtostderr", action="store_true")
-    parser.add_argument("--log-dir")
+
     args = parser.parse_args()
     logger.info(f"args: {args}")
 
     random.seed()
     limits.set_limits()
-    start(
-        args.cluster_id,
-        args.listen,
-        args.advertise,
-        args.admin,
-        args.volumes,
-        args.server_read_buffer_size,
-        args.server_write_buffer_size,
-        args.replication_client_read_buffer_size,
-        args.replication_client_write_buffer_size,
-        args.add_after_seconds,
-        args.retry_register,
-        args.retry_interval_seconds,
-        args.logtostderr,
-        args.log_dir,
-    )
+    start(args)
 
 
 if __name__ == "__main__":

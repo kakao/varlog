@@ -98,6 +98,13 @@ func ClusterID() *FlagDesc {
 	}
 }
 
+func StorageNodeID() *FlagDesc {
+	return &FlagDesc{
+		Name:    "storage-node-id",
+		Aliases: []string{"storage-node", "storagenode", "snid"},
+	}
+}
+
 func TopicID() *FlagDesc {
 	return &FlagDesc{
 		Name:    "topic-id",

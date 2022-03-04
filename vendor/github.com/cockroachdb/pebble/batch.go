@@ -64,13 +64,13 @@ type DeferredBatchOp struct {
 // have been filled into Key and Value. Not calling Finish or not
 // copying/encoding keys will result in an incomplete index, and calling Finish
 // twice may result in a panic.
-func (d DeferredBatchOp) Finish() {
+func (d DeferredBatchOp) Finish() error {
 	if d.index != nil {
 		if err := d.index.Add(d.offset); err != nil {
-			// We never add duplicate entries, so an error should never occur.
-			panic(err)
+			return err
 		}
 	}
+	return nil
 }
 
 // A Batch is a sequence of Sets, Merges, Deletes, DeleteRanges, RangeKeySets,
@@ -219,9 +219,6 @@ type Batch struct {
 
 	// The count of range key sets, unsets and deletes in the batch. Updated
 	// every time a RANGEKEYSET, RANGEKEYUNSET or RANGEKEYDEL key is added.
-	// TODO(jackson): This likely won't be necessary long-term, but it's useful
-	// for the in-memory only implementation in which these keys require special
-	// handling.
 	countRangeKeys uint64
 
 	// A deferredOp struct, stored in the Batch so that a pointer can be returned
@@ -394,8 +391,7 @@ func (b *Batch) Apply(batch *Batch, _ *WriteOptions) error {
 					err = b.index.Add(uint32(offset))
 				}
 				if err != nil {
-					// We never add duplicate entries, so an error should never occur.
-					panic(err)
+					return err
 				}
 			}
 			b.memTableSize += memTableEntrySize(len(key), len(value))
@@ -512,8 +508,7 @@ func (b *Batch) Set(key, value []byte, _ *WriteOptions) error {
 	// in go1.13 will remove the need for this.
 	if b.index != nil {
 		if err := b.index.Add(deferredOp.offset); err != nil {
-			// We never add duplicate entries, so an error should never occur.
-			panic(err)
+			return err
 		}
 	}
 	return nil
@@ -542,8 +537,7 @@ func (b *Batch) Merge(key, value []byte, _ *WriteOptions) error {
 	// in go1.13 will remove the need for this.
 	if b.index != nil {
 		if err := b.index.Add(deferredOp.offset); err != nil {
-			// We never add duplicate entries, so an error should never occur.
-			panic(err)
+			return err
 		}
 	}
 	return nil
@@ -569,8 +563,7 @@ func (b *Batch) Delete(key []byte, _ *WriteOptions) error {
 	// in go1.13 will remove the need for this.
 	if b.index != nil {
 		if err := b.index.Add(deferredOp.offset); err != nil {
-			// We never add duplicate entries, so an error should never occur.
-			panic(err)
+			return err
 		}
 	}
 	return nil
@@ -597,8 +590,7 @@ func (b *Batch) SingleDelete(key []byte, _ *WriteOptions) error {
 	// in go1.13 will remove the need for this.
 	if b.index != nil {
 		if err := b.index.Add(deferredOp.offset); err != nil {
-			// We never add duplicate entries, so an error should never occur.
-			panic(err)
+			return err
 		}
 	}
 	return nil
@@ -628,8 +620,7 @@ func (b *Batch) DeleteRange(start, end []byte, _ *WriteOptions) error {
 	// in go1.13 will remove the need for this.
 	if deferredOp.index != nil {
 		if err := deferredOp.index.Add(deferredOp.offset); err != nil {
-			// We never add duplicate entries, so an error should never occur.
-			panic(err)
+			return err
 		}
 	}
 	return nil
@@ -655,26 +646,17 @@ func (b *Batch) DeleteRangeDeferred(startLen, endLen int) *DeferredBatchOp {
 	return &b.deferredOp
 }
 
-// Experimental returns the same batch, with experimental portions of the API
-// exposed.
-func (b *Batch) Experimental() ExperimentalBatch {
-	return ExperimentalBatch{b}
+// Experimental returns the experimental write API, backed by the same batch.
+func (b *Batch) Experimental() ExperimentalWriter {
+	return experimentalBatch{b}
 }
 
-// ExperimentalBatch provides access to experimental features of a Batch.
-type ExperimentalBatch struct {
+type experimentalBatch struct {
 	*Batch
 }
 
-// RangeKeySet sets a range key mapping the key range [start, end) at the MVCC
-// timestamp suffix to value. The suffix is optional. If any portion of the key
-// range [start, end) is already set by a range key with the same suffix value,
-// RangeKeySet overrides it.
-//
-// It is safe to modify the contents of the arguments after RangeKeySet returns.
-//
-// WARNING: This is an experimental feature with limited functionality.
-func (b ExperimentalBatch) RangeKeySet(start, end, suffix, value []byte, _ *WriteOptions) error {
+// RangeKeySet implements the ExperimentalWriter interface.
+func (b experimentalBatch) RangeKeySet(start, end, suffix, value []byte, _ *WriteOptions) error {
 	suffixValues := [1]rangekey.SuffixValue{{Suffix: suffix, Value: value}}
 	internalValueLen := rangekey.EncodedSetValueLen(end, suffixValues[:])
 
@@ -688,8 +670,7 @@ func (b ExperimentalBatch) RangeKeySet(start, end, suffix, value []byte, _ *Writ
 	// Manually inline DeferredBatchOp.Finish().
 	if deferredOp.index != nil {
 		if err := deferredOp.index.Add(deferredOp.offset); err != nil {
-			// We never add duplicate entries, so an error should never occur.
-			panic(err)
+			return err
 		}
 	}
 	return nil
@@ -713,17 +694,8 @@ func (b *Batch) incrementRangeKeysCount() {
 	}
 }
 
-// RangeKeyUnset removes a range key mapping the key range [start, end) at the
-// MVCC timestamp suffix. The suffix may be omitted to remove an unsuffixed
-// range key. RangeKeyUnset only removes portions of range keys that fall within
-// the [start, end) key span, and only range keys with suffixes that exactly
-// match the unset suffix.
-//
-// It is safe to modify the contents of the arguments after RangeKeyUnset
-// returns.
-//
-// WARNING: This is an experimental feature with limited functionality.
-func (b ExperimentalBatch) RangeKeyUnset(start, end, suffix []byte, _ *WriteOptions) error {
+// RangeKeyUnset implements the ExperimentalWriter interface.
+func (b experimentalBatch) RangeKeyUnset(start, end, suffix []byte, _ *WriteOptions) error {
 	suffixes := [1][]byte{suffix}
 	internalValueLen := rangekey.EncodedUnsetValueLen(end, suffixes[:])
 
@@ -737,8 +709,7 @@ func (b ExperimentalBatch) RangeKeyUnset(start, end, suffix []byte, _ *WriteOpti
 	// Manually inline DeferredBatchOp.Finish()
 	if deferredOp.index != nil {
 		if err := deferredOp.index.Add(deferredOp.offset); err != nil {
-			// We never add duplicate entries, so an error should never occur.
-			panic(err)
+			return err
 		}
 	}
 	return nil
@@ -750,24 +721,15 @@ func (b *Batch) rangeKeyUnsetDeferred(startLen, internalValueLen int) *DeferredB
 	return &b.deferredOp
 }
 
-// RangeKeyDelete deletes all of the range keys in the range [start,end)
-// (inclusive on start, exclusive on end). It does not delete point keys (for
-// that use DeleteRange). RangeKeyDelete removes all range keys within the
-// bounds, including those with or without suffixes.
-//
-// It is safe to modify the contents of the arguments after RangeKeyDelete
-// returns.
-//
-// WARNING: This is an experimental feature with limited functionality.
-func (b ExperimentalBatch) RangeKeyDelete(start, end []byte, _ *WriteOptions) error {
+// RangeKeyDelete implements the ExperimentalWriter interface.
+func (b experimentalBatch) RangeKeyDelete(start, end []byte, _ *WriteOptions) error {
 	deferredOp := b.RangeKeyDeleteDeferred(len(start), len(end))
 	copy(deferredOp.Key, start)
 	copy(deferredOp.Value, end)
 	// Manually inline DeferredBatchOp.Finish().
 	if deferredOp.index != nil {
 		if err := deferredOp.index.Add(deferredOp.offset); err != nil {
-			// We never add duplicate entries, so an error should never occur.
-			panic(err)
+			return err
 		}
 	}
 	return nil
@@ -779,7 +741,7 @@ func (b ExperimentalBatch) RangeKeyDelete(start, end []byte, _ *WriteOptions) er
 // objects and then call Finish() on the returned object. Note that
 // DeferredBatchOp.Key should be populated with the start key, and
 // DeferredBatchOp.Value should be populated with the end key.
-func (b ExperimentalBatch) RangeKeyDeleteDeferred(startLen, endLen int) *DeferredBatchOp {
+func (b *Batch) RangeKeyDeleteDeferred(startLen, endLen int) *DeferredBatchOp {
 	b.prepareDeferredKeyValueRecord(startLen, endLen, InternalKeyKindRangeKeyDelete)
 	b.incrementRangeKeysCount()
 	return &b.deferredOp
@@ -856,7 +818,7 @@ func (b *Batch) newInternalIter(o *IterOptions) internalIterator {
 	}
 }
 
-func (b *Batch) newRangeDelIter(o *IterOptions) internalIterator {
+func (b *Batch) newRangeDelIter(_ *IterOptions) keyspan.FragmentIterator {
 	if b.index == nil {
 		return newErrorIter(ErrNotIndexed)
 	}
@@ -893,6 +855,49 @@ func (b *Batch) newRangeDelIter(o *IterOptions) internalIterator {
 	}
 
 	return keyspan.NewIter(b.cmp, b.tombstones)
+}
+
+func (b *Batch) newRangeKeyIter(_ *IterOptions) keyspan.FragmentIterator {
+	if b.index == nil {
+		return newErrorIter(ErrNotIndexed)
+	}
+	if b.rangeKeyIndex == nil {
+		return nil
+	}
+
+	// Fragment the range keys the first time a range key iterator is requested.
+	// The cached range keys are invalidated if another range key is added to
+	// the batch.
+	if b.rangeKeys == nil {
+		frag := &keyspan.Fragmenter{
+			Cmp:    b.cmp,
+			Format: b.formatKey,
+			Emit: func(fragmented []keyspan.Span) {
+				b.rangeKeys = append(b.rangeKeys, fragmented...)
+			},
+		}
+		it := &batchIter{
+			cmp:   b.cmp,
+			batch: b,
+			iter:  b.rangeKeyIndex.NewIter(nil, nil),
+		}
+		// The memory management here is a bit subtle. The keys and values
+		// returned by the iterator are slices in Batch.data. Thus the
+		// fragmented key spans are slices within Batch.data. If additional
+		// entries are added to the Batch, Batch.data may be reallocated. The
+		// references in the fragmented keys will remain valid, pointing into
+		// the old Batch.data. GC for the win.
+		for key, val := it.First(); key != nil; key, val = it.Next() {
+			endKey, val, ok := rangekey.DecodeEndKey(key.Kind(), val)
+			if !ok {
+				panic(fmt.Sprintf("pebble: unable to split range key value %s", key.Pretty(b.formatKey)))
+			}
+			frag.Add(keyspan.Span{Start: *key, End: endKey, Value: val})
+		}
+		frag.Finish()
+	}
+
+	return keyspan.NewIter(b.cmp, b.rangeKeys)
 }
 
 // Commit applies the batch to its parent writer.
@@ -954,6 +959,7 @@ func (b *Batch) Reset() {
 	if b.index != nil {
 		b.index.Init(&b.data, b.cmp, b.abbreviatedKey)
 		b.rangeDelIndex = nil
+		b.rangeKeyIndex = nil
 	}
 }
 
@@ -1080,7 +1086,8 @@ func (r *BatchReader) Next() (kind InternalKeyKind, ukey []byte, value []byte, o
 		return 0, nil, nil, false
 	}
 	switch kind {
-	case InternalKeyKindSet, InternalKeyKindMerge, InternalKeyKindRangeDelete, InternalKeyKindRangeKeySet, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeyDelete:
+	case InternalKeyKindSet, InternalKeyKindMerge, InternalKeyKindRangeDelete,
+		InternalKeyKindRangeKeySet, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeyDelete:
 		*r, value, ok = batchDecodeStr(*r)
 		if !ok {
 			return 0, nil, nil, false
@@ -1105,7 +1112,9 @@ func (i *batchIter) String() string {
 	return "batch"
 }
 
-func (i *batchIter) SeekGE(key []byte) (*InternalKey, []byte) {
+func (i *batchIter) SeekGE(key []byte, trySeekUsingNext bool) (*InternalKey, []byte) {
+	// Ignore trySeekUsingNext since the batch may have changed, so using Next
+	// would be incorrect.
 	i.err = nil // clear cached iteration error
 	ikey := i.iter.SeekGE(key)
 	if ikey == nil {
@@ -1117,10 +1126,8 @@ func (i *batchIter) SeekGE(key []byte) (*InternalKey, []byte) {
 func (i *batchIter) SeekPrefixGE(
 	prefix, key []byte, trySeekUsingNext bool,
 ) (*base.InternalKey, []byte) {
-	// Ignore trySeekUsingNext since the batch may have changed, so using Next
-	// would be incorrect.
 	i.err = nil // clear cached iteration error
-	return i.SeekGE(key)
+	return i.SeekGE(key, trySeekUsingNext)
 }
 
 func (i *batchIter) SeekLT(key []byte) (*InternalKey, []byte) {
@@ -1179,7 +1186,8 @@ func (i *batchIter) Value() []byte {
 	}
 
 	switch InternalKeyKind(data[offset]) {
-	case InternalKeyKindSet, InternalKeyKindMerge, InternalKeyKindRangeDelete:
+	case InternalKeyKindSet, InternalKeyKindMerge, InternalKeyKindRangeDelete,
+		InternalKeyKindRangeKeySet, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeyDelete:
 		_, value, ok := batchDecodeStr(data[keyEnd:])
 		if !ok {
 			return nil
@@ -1239,11 +1247,14 @@ type flushableBatch struct {
 	// Sorted in increasing order of key and decreasing order of offset (since
 	// higher offsets correspond to higher sequence numbers).
 	//
-	// Does not include range deletion entries.
+	// Does not include range deletion entries or range key entries.
 	offsets []flushableBatchEntry
 
 	// Fragmented range deletion tombstones.
 	tombstones []keyspan.Span
+
+	// Fragmented range keys.
+	rangeKeys []keyspan.Span
 }
 
 var _ flushable = (*flushableBatch)(nil)
@@ -1267,6 +1278,7 @@ func newFlushableBatch(batch *Batch, comparer *Comparer) *flushableBatch {
 		b.seqNum = batch.SeqNum()
 	}
 	var rangeDelOffsets []flushableBatchEntry
+	var rangeKeyOffsets []flushableBatchEntry
 	if len(b.data) > batchHeaderLen {
 		// Non-empty batch.
 		var index uint32
@@ -1290,19 +1302,26 @@ func newFlushableBatch(batch *Batch, comparer *Comparer) *flushableBatch {
 					uintptr(unsafe.Pointer(&b.data[0])))
 				entry.keyEnd = entry.keyStart + keySize
 			}
-			if kind == InternalKeyKindRangeDelete {
+			switch kind {
+			case InternalKeyKindRangeDelete:
 				rangeDelOffsets = append(rangeDelOffsets, entry)
-			} else {
+			case InternalKeyKindRangeKeySet, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeyDelete:
+				rangeKeyOffsets = append(rangeKeyOffsets, entry)
+			default:
 				b.offsets = append(b.offsets, entry)
 			}
 		}
 	}
 
-	// Sort both offsets and rangeDelOffsets.
+	// Sort all of offsets, rangeDelOffsets and rangeKeyOffsets, using *batch's
+	// sort.Interface implementation.
+	pointOffsets := b.offsets
 	sort.Sort(b)
-	rangeDelOffsets, b.offsets = b.offsets, rangeDelOffsets
+	b.offsets = rangeDelOffsets
 	sort.Sort(b)
-	rangeDelOffsets, b.offsets = b.offsets, rangeDelOffsets
+	b.offsets = rangeKeyOffsets
+	sort.Sort(b)
+	b.offsets = pointOffsets
 
 	if len(rangeDelOffsets) > 0 {
 		frag := &keyspan.Fragmenter{
@@ -1324,6 +1343,31 @@ func newFlushableBatch(batch *Batch, comparer *Comparer) *flushableBatch {
 		}
 		frag.Finish()
 	}
+	if len(rangeKeyOffsets) > 0 {
+		frag := &keyspan.Fragmenter{
+			Cmp:    b.cmp,
+			Format: b.formatKey,
+			Emit: func(fragmented []keyspan.Span) {
+				b.rangeKeys = append(b.rangeKeys, fragmented...)
+			},
+		}
+		it := &flushableBatchIter{
+			batch:   b,
+			data:    b.data,
+			offsets: rangeKeyOffsets,
+			cmp:     b.cmp,
+			index:   -1,
+		}
+		for key, val := it.First(); key != nil; key, val = it.Next() {
+			endKey, rangeKeyVal, ok := rangekey.DecodeEndKey(key.Kind(), val)
+			if !ok {
+				panic(base.CorruptionErrorf("pebble: unable to decode range key value for key %s",
+					key.Pretty(b.formatKey)))
+			}
+			frag.Add(keyspan.Span{Start: *key, End: endKey, Value: rangeKeyVal})
+		}
+		frag.Finish()
+	}
 	return b
 }
 
@@ -1334,6 +1378,10 @@ func (b *flushableBatch) setSeqNum(seqNum uint64) {
 	b.seqNum = seqNum
 	for i := range b.tombstones {
 		start := &b.tombstones[i].Start
+		start.SetSeqNum(seqNum + start.SeqNum())
+	}
+	for i := range b.rangeKeys {
+		start := &b.rangeKeys[i].Start
 		start.SetSeqNum(seqNum + start.SeqNum())
 	}
 }
@@ -1386,11 +1434,18 @@ func (b *flushableBatch) newFlushIter(o *IterOptions, bytesFlushed *uint64) inte
 	}
 }
 
-func (b *flushableBatch) newRangeDelIter(o *IterOptions) internalIterator {
+func (b *flushableBatch) newRangeDelIter(o *IterOptions) keyspan.FragmentIterator {
 	if len(b.tombstones) == 0 {
 		return nil
 	}
 	return keyspan.NewIter(b.cmp, b.tombstones)
+}
+
+func (b *flushableBatch) newRangeKeyIter(o *IterOptions) keyspan.FragmentIterator {
+	if len(b.rangeKeys) == 0 {
+		return nil
+	}
+	return keyspan.NewIter(b.cmp, b.rangeKeys)
 }
 
 func (b *flushableBatch) inuseBytes() uint64 {
@@ -1436,8 +1491,9 @@ func (i *flushableBatchIter) String() string {
 }
 
 // SeekGE implements internalIterator.SeekGE, as documented in the pebble
-// package.
-func (i *flushableBatchIter) SeekGE(key []byte) (*InternalKey, []byte) {
+// package. Ignore trySeekUsingNext since we don't expect this optimization
+// to provide much benefit here at the moment.
+func (i *flushableBatchIter) SeekGE(key []byte, trySeekUsingNext bool) (*InternalKey, []byte) {
 	i.err = nil // clear cached iteration error
 	ikey := base.MakeSearchKey(key)
 	i.index = sort.Search(len(i.offsets), func(j int) bool {
@@ -1459,9 +1515,7 @@ func (i *flushableBatchIter) SeekGE(key []byte) (*InternalKey, []byte) {
 func (i *flushableBatchIter) SeekPrefixGE(
 	prefix, key []byte, trySeekUsingNext bool,
 ) (*base.InternalKey, []byte) {
-	// Ignore trySeekUsingNext since flushable batches are not user-facing, so
-	// optimizing prefix seeks is not important.
-	return i.SeekGE(key)
+	return i.SeekGE(key, trySeekUsingNext)
 }
 
 // SeekLT implements internalIterator.SeekLT, as documented in the pebble
@@ -1575,7 +1629,8 @@ func (i *flushableBatchIter) Value() []byte {
 	var value []byte
 	var ok bool
 	switch kind {
-	case InternalKeyKindSet, InternalKeyKindMerge, InternalKeyKindRangeDelete:
+	case InternalKeyKindSet, InternalKeyKindMerge, InternalKeyKindRangeDelete,
+		InternalKeyKindRangeKeySet, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeyDelete:
 		keyEnd := i.offsets[i.index].keyEnd
 		_, value, ok = batchDecodeStr(i.data[keyEnd:])
 		if !ok {
@@ -1617,7 +1672,7 @@ func (i *flushFlushableBatchIter) String() string {
 	return "flushable-batch"
 }
 
-func (i *flushFlushableBatchIter) SeekGE(key []byte) (*InternalKey, []byte) {
+func (i *flushFlushableBatchIter) SeekGE(key []byte, trySeekUsingNext bool) (*InternalKey, []byte) {
 	panic("pebble: SeekGE unimplemented")
 }
 

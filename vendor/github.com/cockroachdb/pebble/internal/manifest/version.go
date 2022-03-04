@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -94,34 +96,129 @@ type FileMetadata struct {
 	// UTC). For ingested sstables, this corresponds to the time the file was
 	// ingested.
 	CreationTime int64
-	// Smallest and Largest are the inclusive bounds for the internal keys
-	// stored in the table.
-	Smallest InternalKey
-	Largest  InternalKey
-	// Smallest and largest sequence numbers in the table.
+	// Smallest and largest sequence numbers in the table, across both point and
+	// range keys.
 	SmallestSeqNum uint64
 	LargestSeqNum  uint64
-	// True if the file is actively being compacted. Protected by DB.mu.
-	Compacting bool
+	// SmallestPointKey and LargestPointKey are the inclusive bounds for the
+	// internal point keys stored in the table. This includes RANGEDELs, which
+	// alter point keys.
+	// NB: these field should be set using ExtendPointKeyBounds. They are left
+	// exported for reads as an optimization.
+	SmallestPointKey InternalKey
+	LargestPointKey  InternalKey
+	// SmallestRangeKey and LargestRangeKey are the inclusive bounds for the
+	// internal range keys stored in the table.
+	// NB: these field should be set using ExtendRangeKeyBounds. They are left
+	// exported for reads as an optimization.
+	SmallestRangeKey InternalKey
+	LargestRangeKey  InternalKey
+	// Smallest and Largest are the inclusive bounds for the internal keys stored
+	// in the table, across both point and range keys.
+	// NB: these fields are derived from their point and range key equivalents,
+	// and are updated via the MaybeExtend{Point,Range}KeyBounds methods.
+	Smallest InternalKey
+	Largest  InternalKey
 	// Stats describe table statistics. Protected by DB.mu.
 	Stats TableStats
+
+	subLevel         int
+	L0Index          int
+	minIntervalIndex int
+	maxIntervalIndex int
+
+	// NB: the alignment of this struct is 8 bytes. We pack all the bools to
+	// ensure an optimal packing.
+
 	// For L0 files only. Protected by DB.mu. Used to generate L0 sublevels and
-	// pick L0 compactions.
+	// pick L0 compactions. Only accurate for the most recent Version.
 	//
 	// IsIntraL0Compacting is set to True if this file is part of an intra-L0
 	// compaction. When it's true, Compacting must also be true. If Compacting
 	// is true and IsIntraL0Compacting is false for an L0 file, the file must
 	// be part of a compaction to Lbase.
 	IsIntraL0Compacting bool
-	subLevel            int
-	l0Index             int
-	minIntervalIndex    int
-	maxIntervalIndex    int
-
+	// True if the file is actively being compacted. Protected by DB.mu.
+	Compacting bool
 	// True if user asked us to compact this file. This flag is only set and
 	// respected by RocksDB but exists here to preserve its value in the
 	// MANIFEST.
 	markedForCompaction bool
+	// HasPointKeys and HasRangeKeys track whether the table contains point and
+	// range keys, respectively.
+	HasPointKeys bool
+	HasRangeKeys bool
+	// smallestSet and largestSet track whether the overall bounds have been set.
+	boundsSet bool
+}
+
+// ExtendPointKeyBounds attempts to extend the lower and upper point key bounds
+// and overall table bounds with the given smallest and largest keys. The
+// smallest and largest bounds may not be extended if the table already has a
+// bound that is smaller or larger, respectively. The receiver is returned.
+// NB: calling this method should be preferred to manually setting the bounds by
+// manipulating the fields directly, to maintain certain invariants.
+func (m *FileMetadata) ExtendPointKeyBounds(
+	cmp Compare, smallest, largest InternalKey,
+) *FileMetadata {
+	// Update the point key bounds.
+	if !m.HasPointKeys {
+		m.SmallestPointKey, m.LargestPointKey = smallest, largest
+		m.HasPointKeys = true
+	} else {
+		if base.InternalCompare(cmp, smallest, m.SmallestPointKey) < 0 {
+			m.SmallestPointKey = smallest
+		}
+		if base.InternalCompare(cmp, largest, m.LargestPointKey) > 0 {
+			m.LargestPointKey = largest
+		}
+	}
+	// Update the overall bounds.
+	m.extendOverallBounds(cmp, m.SmallestPointKey, m.LargestPointKey)
+	return m
+}
+
+// ExtendRangeKeyBounds attempts to extend the lower and upper range key bounds
+// and overall table bounds with the given smallest and largest keys. The
+// smallest and largest bounds may not be extended if the table already has a
+// bound that is smaller or larger, respectively. The receiver is returned.
+// NB: calling this method should be preferred to manually setting the bounds by
+// manipulating the fields directly, to maintain certain invariants.
+func (m *FileMetadata) ExtendRangeKeyBounds(
+	cmp Compare, smallest, largest InternalKey,
+) *FileMetadata {
+	// Update the range key bounds.
+	if !m.HasRangeKeys {
+		m.SmallestRangeKey, m.LargestRangeKey = smallest, largest
+		m.HasRangeKeys = true
+	} else {
+		if base.InternalCompare(cmp, smallest, m.SmallestRangeKey) < 0 {
+			m.SmallestRangeKey = smallest
+		}
+		if base.InternalCompare(cmp, largest, m.LargestRangeKey) > 0 {
+			m.LargestRangeKey = largest
+		}
+	}
+	// Update the overall bounds.
+	m.extendOverallBounds(cmp, m.SmallestRangeKey, m.LargestRangeKey)
+	return m
+}
+
+// extendOverallBounds attempts to extend the overall table lower and upper
+// bounds. The given bounds may not be used if a lower or upper bound already
+// exists that is smaller or larger than the given keys, respectively.
+func (m *FileMetadata) extendOverallBounds(cmp Compare, smallest, largest InternalKey) {
+	if !m.boundsSet {
+		m.Smallest, m.Largest = smallest, largest
+		m.boundsSet = true
+	} else {
+		if base.InternalCompare(cmp, smallest, m.Smallest) < 0 {
+			m.Smallest = smallest
+		}
+		if base.InternalCompare(cmp, largest, m.Largest) > 0 {
+			m.Largest = largest
+		}
+	}
 }
 
 func (m *FileMetadata) String() string {
@@ -131,6 +228,12 @@ func (m *FileMetadata) String() string {
 // Validate validates the metadata for consistency with itself, returning an
 // error if inconsistent.
 func (m *FileMetadata) Validate(cmp Compare, formatKey base.FormatKey) error {
+	// Combined range and point key validation.
+
+	if !m.HasPointKeys && !m.HasRangeKeys {
+		return base.CorruptionErrorf("file %s has neither point nor range keys",
+			errors.Safe(m.FileNum))
+	}
 	if base.InternalCompare(cmp, m.Smallest, m.Largest) > 0 {
 		return base.CorruptionErrorf("file %s has inconsistent bounds: %s vs %s",
 			errors.Safe(m.FileNum), m.Smallest.Pretty(formatKey),
@@ -140,6 +243,47 @@ func (m *FileMetadata) Validate(cmp Compare, formatKey base.FormatKey) error {
 		return base.CorruptionErrorf("file %s has inconsistent seqnum bounds: %d vs %d",
 			errors.Safe(m.FileNum), m.SmallestSeqNum, m.LargestSeqNum)
 	}
+
+	// Point key validation.
+
+	if m.HasPointKeys {
+		if base.InternalCompare(cmp, m.SmallestPointKey, m.LargestPointKey) > 0 {
+			return base.CorruptionErrorf("file %s has inconsistent point key bounds: %s vs %s",
+				errors.Safe(m.FileNum), m.SmallestPointKey.Pretty(formatKey),
+				m.LargestPointKey.Pretty(formatKey))
+		}
+		if base.InternalCompare(cmp, m.SmallestPointKey, m.Smallest) < 0 ||
+			base.InternalCompare(cmp, m.LargestPointKey, m.Largest) > 0 {
+			return base.CorruptionErrorf(
+				"file %s has inconsistent point key bounds relative to overall bounds: "+
+					"overall = [%s-%s], point keys = [%s-%s]",
+				errors.Safe(m.FileNum),
+				m.Smallest.Pretty(formatKey), m.Largest.Pretty(formatKey),
+				m.SmallestPointKey.Pretty(formatKey), m.LargestPointKey.Pretty(formatKey),
+			)
+		}
+	}
+
+	// Range key validation.
+
+	if m.HasRangeKeys {
+		if base.InternalCompare(cmp, m.SmallestRangeKey, m.LargestRangeKey) > 0 {
+			return base.CorruptionErrorf("file %s has inconsistent range key bounds: %s vs %s",
+				errors.Safe(m.FileNum), m.SmallestRangeKey.Pretty(formatKey),
+				m.LargestRangeKey.Pretty(formatKey))
+		}
+		if base.InternalCompare(cmp, m.SmallestRangeKey, m.Smallest) < 0 ||
+			base.InternalCompare(cmp, m.LargestRangeKey, m.Largest) > 0 {
+			return base.CorruptionErrorf(
+				"file %s has inconsistent range key bounds relative to overall bounds: "+
+					"overall = [%s-%s], range keys = [%s-%s]",
+				errors.Safe(m.FileNum),
+				m.Smallest.Pretty(formatKey), m.Largest.Pretty(formatKey),
+				m.SmallestRangeKey.Pretty(formatKey), m.LargestRangeKey.Pretty(formatKey),
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -242,22 +386,44 @@ func SortBySmallest(files []*FileMetadata, cmp Compare) {
 	sort.Sort(bySmallest{files, cmp})
 }
 
-func overlaps(iter LevelIterator, cmp Compare, start, end []byte) LevelSlice {
+func overlaps(iter LevelIterator, cmp Compare, start, end []byte, exclusiveEnd bool) LevelSlice {
 	startIter := iter.Clone()
 	startIter.SeekGE(cmp, start)
+
+	// SeekGE compares user keys. The user key `start` may be equal to the
+	// f.Largest because f.Largest is a range deletion sentinel, indicating that
+	// the user key `start` is NOT contained within the file f. If that's the
+	// case, we can narrow the overlapping bounds to exclude the file with the
+	// sentinel.
+	if f := startIter.Current(); f != nil && f.Largest.IsExclusiveSentinel() &&
+		cmp(f.Largest.UserKey, start) == 0 {
+		startIter.Next()
+	}
 
 	endIter := iter.Clone()
 	endIter.SeekGE(cmp, end)
 
-	// endIter is now pointing at the *first* file with a largest key >= end.
-	// If there are multiple files including the user key `end`, we want all
-	// of them, so move forward.
-	for endIter.Current() != nil && cmp(endIter.Current().Largest.UserKey, end) == 0 {
-		endIter.Next()
+	if !exclusiveEnd {
+		// endIter is now pointing at the *first* file with a largest key >= end.
+		// If there are multiple files including the user key `end`, we want all
+		// of them, so move forward.
+		for f := endIter.Current(); f != nil && cmp(f.Largest.UserKey, end) == 0; {
+			f = endIter.Next()
+		}
 	}
+
 	// LevelSlice uses inclusive bounds, so if we seeked to the end sentinel
 	// or nexted too far because Largest.UserKey equaled `end`, go back.
-	if !endIter.iter.valid() || cmp(endIter.Current().Smallest.UserKey, end) > 0 {
+	//
+	// Consider !exclusiveEnd and end = 'f', with the following file bounds:
+	//
+	//     [b,d] [e, f] [f, f] [g, h]
+	//
+	// the above for loop will Next until it arrives at [g, h]. We need to
+	// observe that g > f, and Prev to the file with bounds [f, f].
+	if !endIter.iter.valid() {
+		endIter.Prev()
+	} else if c := cmp(endIter.Current().Smallest.UserKey, end); c > 0 || c == 0 && exclusiveEnd {
 		endIter.Prev()
 	}
 
@@ -283,6 +449,7 @@ func NewVersion(
 		// they appear within `files`. Some tests depend on this behavior in
 		// order to test consistency checking, etc. Once we've constructed the
 		// initial B-Tree, we swap out the btreeCmp for the correct one.
+		// TODO(jackson): Adjust or remove the tests and remove this.
 		v.Levels[l].tree, _ = makeBTree(btreeCmpSpecificOrder(files[l]), files[l])
 
 		if l == 0 {
@@ -390,6 +557,7 @@ func (v *Version) Pretty(format base.FormatKey) string {
 
 // DebugString returns an alternative format to String() which includes
 // sequence number and kind information for the sstable boundaries.
+// TODO(travers): Print separate point and range bounds.
 func (v *Version) DebugString(format base.FormatKey) string {
 	var buf bytes.Buffer
 
@@ -414,6 +582,49 @@ func (v *Version) DebugString(format base.FormatKey) string {
 		}
 	}
 	return buf.String()
+}
+
+// ParseVersionDebug parses a Version from its DebugString output.
+// TODO(travers): Parse separate point and range bounds.
+func ParseVersionDebug(
+	cmp Compare, formatKey base.FormatKey, flushSplitBytes int64, s string,
+) (*Version, error) {
+	var level int
+	var files [NumLevels][]*FileMetadata
+	for _, l := range strings.Split(s, "\n") {
+		l = strings.TrimSpace(l)
+
+		switch l[:2] {
+		case "0.", "0:", "1:", "2:", "3:", "4:", "5:", "6:":
+			var err error
+			level, err = strconv.Atoi(l[:1])
+			if err != nil {
+				return nil, err
+			}
+		default:
+			// Example format:
+			//   000971:[acutc@6#4227,SET-zzhra@12#72057594037927935,RANGEDEL]
+			delim := map[rune]bool{':': true, '[': true, '-': true, ']': true}
+			fields := strings.FieldsFunc(l, func(c rune) bool { return delim[c] })
+			fileNum, err := strconv.ParseUint(fields[0], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			smallest := base.ParsePrettyInternalKey(fields[1])
+			largest := base.ParsePrettyInternalKey(fields[2])
+			m := (&FileMetadata{
+				FileNum: base.FileNum(fileNum),
+			}).ExtendPointKeyBounds(cmp, smallest, largest)
+			files[level] = append(files[level], m)
+		}
+	}
+	// Reverse the order of L0 files. This ensures we construct the same
+	// sublevels. (They're printed from higher sublevel to lower, which means in
+	// a partial order that represents newest to oldest).
+	for i := 0; i < len(files[0])/2; i++ {
+		files[0][i], files[0][len(files[0])-i-1] = files[0][len(files[0])-i-1], files[0][i]
+	}
+	return NewVersion(cmp, formatKey, flushSplitBytes, files), nil
 }
 
 // Refs returns the number of references to the version.
@@ -484,7 +695,8 @@ func (v *Version) InitL0Sublevels(
 func (v *Version) Contains(level int, cmp Compare, m *FileMetadata) bool {
 	iter := v.Levels[level].Iter()
 	if level > 0 {
-		overlaps := v.Overlaps(level, cmp, m.Smallest.UserKey, m.Largest.UserKey)
+		overlaps := v.Overlaps(level, cmp, m.Smallest.UserKey, m.Largest.UserKey,
+			m.Largest.IsExclusiveSentinel())
 		iter = overlaps.Iter()
 	}
 	for f := iter.First(); f != nil; f = iter.Next() {
@@ -503,7 +715,9 @@ func (v *Version) Contains(level int, cmp Compare, m *FileMetadata) bool {
 // and the computation is repeated until [start, end] stabilizes.
 // The returned files are a subsequence of the input files, i.e., the ordering
 // is not changed.
-func (v *Version) Overlaps(level int, cmp Compare, start, end []byte) LevelSlice {
+func (v *Version) Overlaps(
+	level int, cmp Compare, start, end []byte, exclusiveEnd bool,
+) LevelSlice {
 	if level == 0 {
 		// Indices that have been selected as overlapping.
 		l0 := v.Levels[level]
@@ -520,11 +734,11 @@ func (v *Version) Overlaps(level int, cmp Compare, start, end []byte) LevelSlice
 				}
 				smallest := meta.Smallest.UserKey
 				largest := meta.Largest.UserKey
-				if cmp(largest, start) < 0 {
+				if c := cmp(largest, start); c < 0 || c == 0 && meta.Largest.IsExclusiveSentinel() {
 					// meta is completely before the specified range; skip it.
 					continue
 				}
-				if cmp(smallest, end) > 0 {
+				if c := cmp(smallest, end); c > 0 || c == 0 && exclusiveEnd {
 					// meta is completely after the specified range; skip it.
 					continue
 				}
@@ -541,8 +755,14 @@ func (v *Version) Overlaps(level int, cmp Compare, start, end []byte) LevelSlice
 					start = smallest
 					restart = true
 				}
-				if cmp(largest, end) > 0 {
+				if v := cmp(largest, end); v > 0 {
 					end = largest
+					exclusiveEnd = meta.Largest.IsExclusiveSentinel()
+					restart = true
+				} else if v == 0 && exclusiveEnd && !meta.Largest.IsExclusiveSentinel() {
+					// Only update the exclusivity of our existing `end`
+					// bound.
+					exclusiveEnd = false
 					restart = true
 				}
 			}
@@ -571,7 +791,7 @@ func (v *Version) Overlaps(level int, cmp Compare, start, end []byte) LevelSlice
 		return slice
 	}
 
-	return overlaps(v.Levels[level].Iter(), cmp, start, end)
+	return overlaps(v.Levels[level].Iter(), cmp, start, end, exclusiveEnd)
 }
 
 // CheckOrdering checks that the files are consistent with respect to

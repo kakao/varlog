@@ -20,9 +20,9 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/internal/storagenode"
-	"github.com/kakao/varlog/internal/storagenode/executor"
-	"github.com/kakao/varlog/internal/storagenode/storage"
+	"github.com/kakao/varlog/internal/storagenode_deprecated"
+	"github.com/kakao/varlog/internal/storagenode_deprecated/executor"
+	"github.com/kakao/varlog/internal/storagenode_deprecated/storage"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
 	"github.com/kakao/varlog/pkg/util/telemetry"
@@ -127,15 +127,15 @@ func Main(c *cli.Context) error {
 		storageOpts = append(storageOpts, storage.WithDebugLog())
 	}
 
-	sn, err := storagenode.New(ctx,
-		storagenode.WithClusterID(cid),
-		storagenode.WithStorageNodeID(snid),
-		storagenode.WithListenAddress(c.String(flagListenAddress.Name)),
-		storagenode.WithAdvertiseAddress(c.String(flagAdvertiseAddress.Name)),
-		storagenode.WithVolumes(c.StringSlice(flagVolumes.Name)...),
-		storagenode.WithServerReadBufferSize(serverReadBufferSize),
-		storagenode.WithServerWriteBufferSize(serverWriteBufferSize),
-		storagenode.WithExecutorOptions(
+	sn, err := storagenode_deprecated.New(ctx,
+		storagenode_deprecated.WithClusterID(cid),
+		storagenode_deprecated.WithStorageNodeID(snid),
+		storagenode_deprecated.WithListenAddress(c.String(flagListenAddress.Name)),
+		storagenode_deprecated.WithAdvertiseAddress(c.String(flagAdvertiseAddress.Name)),
+		storagenode_deprecated.WithVolumes(c.StringSlice(flagVolumes.Name)...),
+		storagenode_deprecated.WithServerReadBufferSize(serverReadBufferSize),
+		storagenode_deprecated.WithServerWriteBufferSize(serverWriteBufferSize),
+		storagenode_deprecated.WithExecutorOptions(
 			executor.WithWriteQueueSize(c.Int(flagWriteQueueSize.Name)),
 			executor.WithWriteBatchSize(c.Int(flagWriteBatchSize.Name)),
 			executor.WithCommitQueueSize(c.Int(flagCommitQueueSize.Name)),
@@ -144,8 +144,8 @@ func Main(c *cli.Context) error {
 			executor.WithReplicationClientReadBufferSize(replicationClientReadBufferSize),
 			executor.WithReplicationClientWriteBufferSize(replicationClientWriteBufferSize),
 		),
-		storagenode.WithStorageOptions(storageOpts...),
-		storagenode.WithLogger(logger),
+		storagenode_deprecated.WithStorageOptions(storageOpts...),
+		storagenode_deprecated.WithLogger(logger),
 	)
 	if err != nil {
 		return err

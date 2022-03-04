@@ -51,9 +51,53 @@ import (
 //
 // InterleavedIter elides range keys that do not contain any visible range keys
 // (eg, internal range key spans that contain only Unsets and Deletes).
+//
+// Masking
+//
+// An InterleavingIter may be configured to treat range keys as masks. If a
+// non-nil maskingThresholdSuffix is passed to Init, masking is enabled. Masking
+// hides point keys, transparently skipping over the keys. Whether or not a
+// point key is masked is determined by comparing the point key's suffix, the
+// overlapping range keys' suffixes, and the maskingTreshresholdSuffix. When
+// configured with a range-key masking threshold _t_, and there exists a range key
+// with suffix _r_ covering a point key with suffix _p_, and
+//
+//     _t_ ≤ _r_ < _p_
+//
+// then the point key is elided. Consider the following rendering, where
+// suffixes with higher integers sort before suffixes with lower integers:
+//
+//          ^
+//       @9 |        •―――――――――――――――○ [e,m)@9
+//     s  8 |                      • l@8
+//     u  7 |------------------------------------ @7 masking
+//     f  6 |      [h,q)@6 •―――――――――――――――――○     threshold
+//     f  5 |              • h@5
+//     f  4 |                          • n@4
+//     i  3 |          •―――――――――――○ [f,l)@3
+//     x  2 |  • b@2
+//        1 |
+//        0 |___________________________________
+//           a b c d e f g h i j k l m n o p q
+//
+// An iterator scanning the entire keyspace with the masking threshold set to @7
+// will observe point keys b@2 and l@8. The range keys [h,q)@6 and [f,l)@3 serve
+// as masks, because cmp(@6,@7) ≥ 0 and cmp(@3,@7) ≥ 0. The range key [e,m)@9
+// does not serve as a mask, because cmp(@9,@7) < 0.
+//
+// Although point l@8 falls within the user key bounds of [e,m)@9, [e,m)@9 is
+// non-masking due to its suffix. The point key l@8 also falls within the user
+// key bounds of [h,q)@6, but since cmp(@6,@8) ≥ 0, l@8 is unmasked.
+//
+// All range keys, including those acting as masks, are exposed during
+// iteration.
 type InterleavingIter struct {
-	pointIter    base.InternalIterator
-	rangeKeyIter *Iter
+	cmp                    base.Compare
+	split                  base.Split
+	pointIter              base.InternalIterator
+	rangeKeyIter           Iterator
+	maskingThresholdSuffix []byte
+	maskSuffix             []byte
 
 	// lower and upper hold the iteration bounds set through SetBounds.
 	lower, upper []byte
@@ -61,13 +105,15 @@ type InterleavingIter struct {
 	// to truncate a range key. The byte slices backing a SeekGE/SeekPrefixGE
 	// search keys can come directly from the end user, so they're copied into
 	// keyBuf to ensure key stability.
-	keyBuf        []byte
-	pointKey      *base.InternalKey
-	pointVal      []byte
+	keyBuf   []byte
+	pointKey *base.InternalKey
+	pointVal []byte
+	// rangeKey, rangeKeyStart and rangeKeyEnd describe the current range key
+	// state. rangeKey{Start,End} are a function of the rangeKey and the
+	// Iterator's bounds. rangeKey{Start,End} will be nil iff rangeKey is nil.
 	rangeKey      *CoalescedSpan
 	rangeKeyStart []byte
 	rangeKeyEnd   []byte
-	rangeKeyItems []SuffixItem
 	// rangeKeyMarker holds the synthetic RangeKeySet key that is returned when
 	// the iterator passes over a range key's start bound.
 	rangeKeyMarker base.InternalKey
@@ -110,15 +156,25 @@ var _ base.InternalIterator = &InterleavingIter{}
 
 // Init initializes the InterleavingIter to interleave point keys from pointIter
 // with range keys from rangeKeyIter.
-func (i *InterleavingIter) Init(pointIter base.InternalIterator, rangeKeyIter *Iter) {
+//
+// If maskingThresholdSuffix is non-nil, masking of point keys by range keys is
+// enabled. Any range keys encountered with a suffix > maskingThresholdSuffix
+// will act as a mask, hiding all point keys with suffixes > the range key's
+// suffix within their user key bounds.
+func (i *InterleavingIter) Init(
+	cmp base.Compare,
+	split base.Split,
+	pointIter base.InternalIterator,
+	rangeKeyIter Iterator,
+	maskingThresholdSuffix []byte,
+) {
 	*i = InterleavingIter{
-		pointIter:    pointIter,
-		rangeKeyIter: rangeKeyIter,
+		cmp:                    cmp,
+		split:                  split,
+		pointIter:              pointIter,
+		rangeKeyIter:           rangeKeyIter,
+		maskingThresholdSuffix: maskingThresholdSuffix,
 	}
-}
-
-func (i *InterleavingIter) cmp(a, b []byte) int {
-	return i.rangeKeyIter.coalescer.items.cmp(a, b)
 }
 
 // SeekGE implements (base.InternalIterator).SeekGE.
@@ -131,8 +187,8 @@ func (i *InterleavingIter) cmp(a, b []byte) int {
 //
 // NB: In accordance with the base.InternalIterator contract:
 //   i.lower ≤ key
-func (i *InterleavingIter) SeekGE(key []byte) (*base.InternalKey, []byte) {
-	i.pointKey, i.pointVal = i.pointIter.SeekGE(key)
+func (i *InterleavingIter) SeekGE(key []byte, trySeekUsingNext bool) (*base.InternalKey, []byte) {
+	i.pointKey, i.pointVal = i.pointIter.SeekGE(key, trySeekUsingNext)
 	i.pointKeyInterleaved = false
 	i.nextRangeKey(i.rangeKeyIter.SeekGE(key))
 	i.dir = +1
@@ -201,26 +257,34 @@ func (i *InterleavingIter) Next() (*base.InternalKey, []byte) {
 		i.pointKey, i.pointVal = i.pointIter.Next()
 		i.pointKeyInterleaved = false
 
-		// Regardless of the current iterator state, we mark the range key as
-		// interleaved when switching to forward iteration, justified below.
-		//
-		// If the point key is the last key returned:
-		//   pointIter    :         ... (y)   z ...
-		//   rangeKeyIter : ... ([x -               )) ...
-		//                               ^
-		// The range key's start must be ≤ the point key, otherwise we'd have
-		// interleaved the range key's start. From a forward-iteration
-		// perspective, the range key's start is in the past and should be
-		// considered already-interleaved.
-		//
-		// If the range key start boundary is the last key returned:
-		//   pointIter    : ... (x)       z ...
-		//   rangeKeyIter :     ... ([y -        )) ...
-		//                            ^
-		// i.rangeKey.Start is the key we last returned during reverse
-		// iteration. From the perspective of forward-iteration, its start key
-		// was just visited.
-		i.rangeKeyInterleaved = true
+		if i.rangeKey == nil {
+			// There was no range key in the reverse direction, but there may be
+			// a range key in the forward direction.
+			i.nextRangeKey(i.rangeKeyIter.Next())
+			i.rangeKeyInterleaved = false
+		} else {
+			// Regardless of the current iterator state, we mark any existing
+			// range key as interleaved when switching to forward iteration,
+			// justified below.
+			//
+			// If the point key is the last key returned:
+			//   pointIter    :         ... (y)   z ...
+			//   rangeKeyIter : ... ([x -               )) ...
+			//                               ^
+			// The range key's start must be ≤ the point key, otherwise we'd have
+			// interleaved the range key's start. From a forward-iteration
+			// perspective, the range key's start is in the past and should be
+			// considered already-interleaved.
+			//
+			// If the range key start boundary is the last key returned:
+			//   pointIter    : ... (x)       z ...
+			//   rangeKeyIter :     ... ([y -        )) ...
+			//                            ^
+			// i.rangeKey.Start is the key we last returned during reverse
+			// iteration. From the perspective of forward-iteration, its start key
+			// was just visited.
+			i.rangeKeyInterleaved = true
+		}
 	}
 
 	// Refresh the point key if the current point key has already been
@@ -314,120 +378,174 @@ func (i *InterleavingIter) Prev() (*base.InternalKey, []byte) {
 }
 
 func (i *InterleavingIter) interleaveForward(lowerBound []byte) (*base.InternalKey, []byte) {
-	// Check invariants.
-	// INVARIANT: !pointKeyInterleaved
-	if i.pointKeyInterleaved {
-		panic("pebble: invariant violation: point key interleaved")
-	}
-	switch {
-	case i.rangeKey == nil:
-	case i.pointKey == nil:
-		// INVARIANT: rangeKey.HasSets()
-		if !i.rangeKey.HasSets() {
-			panic("pebble: invariant violation: range-key span without visible Sets")
-		}
-	default:
-		// INVARIANT: rangeKey.HasSets()
-		if !i.rangeKey.HasSets() {
-			panic("pebble: invariant violation: range-key span without visible Sets")
-		}
-		// INVARIANT: !rangeKeyInterleaved || pointKey < rangeKey.End
-		// The caller is responsible for advancing this range key if it's
-		// already been interleaved and the range key ends before the point key.
-		// Absolute positioning methods will never have already interleaved the
-		// range key, so only Next needs to handle the case where
-		// pointKey >= rangeKey.End.
-		if i.rangeKeyInterleaved && i.cmp(i.pointKey.UserKey, i.rangeKey.End) >= 0 {
-			panic("pebble: invariant violation: range key interleaved, but point key >= range key end")
-		}
-	}
-
-	// Interleave.
-	switch {
-	case i.rangeKey == nil:
-		// If we're out of range keys, just return the point key.
-		return i.yieldPointKey(false /* covered */)
-	case i.pointKey == nil:
+	// This loop determines whether a point key or a range key should be
+	// interleaved on each iteration. If masking is disabled, this loop executes
+	// for exactly one iteration. If masking is enabled and a masked key is
+	// determined to be interleaved next, this loop continues until the
+	// interleaved key is unmasked.
+	for {
+		// Check invariants.
+		// INVARIANT: !pointKeyInterleaved
 		if i.pointKeyInterleaved {
-			panic("pebble: invariant violation: point key already interleaved")
+			panic("pebble: invariant violation: point key interleaved")
 		}
-		// If we're out of point keys, we need to return a range key marker. If
-		// the current range key has already been interleaved, advance it. Since
-		// there are no more point keys, we don't need to worry about advancing
-		// past the current point key.
-		if i.rangeKeyInterleaved {
-			i.nextRangeKey(i.rangeKeyIter.Next())
-			if i.rangeKey == nil {
-				return i.yieldNil()
+		switch {
+		case i.rangeKey == nil:
+		case i.pointKey == nil:
+			// INVARIANT: rangeKey.HasSets()
+			if !i.rangeKey.HasSets() {
+				panic("pebble: invariant violation: range-key span without visible Sets")
+			}
+		default:
+			// INVARIANT: rangeKey.HasSets()
+			if !i.rangeKey.HasSets() {
+				panic("pebble: invariant violation: range-key span without visible Sets")
+			}
+			// INVARIANT: !rangeKeyInterleaved || pointKey < rangeKey.End
+			// The caller is responsible for advancing this range key if it's
+			// already been interleaved and the range key ends before the point key.
+			// Absolute positioning methods will never have already interleaved the
+			// range key, so only Next needs to handle the case where
+			// pointKey >= rangeKey.End.
+			if i.rangeKeyInterleaved && i.cmp(i.pointKey.UserKey, i.rangeKey.End) >= 0 {
+				panic("pebble: invariant violation: range key interleaved, but point key >= range key end")
 			}
 		}
-		return i.yieldSyntheticRangeKeyMarker(lowerBound)
-	default:
-		if i.cmp(i.pointKey.UserKey, i.rangeKey.Start) >= 0 {
-			// The range key starts before the point key. If we haven't
-			// interleaved it, we should.
-			if !i.rangeKeyInterleaved {
-				return i.yieldSyntheticRangeKeyMarker(lowerBound)
-			}
 
-			// Otherwise, the range key is already interleaved and we need to
-			// return the point key. The current range key necessarily must
-			// cover the point key:
-			//
-			// Since the range key's start is less than or equal to the point
-			// key, the only way for this range key to not cover the point would
-			// be if the range key's end is less than or equal to the point.
-			// (For example range key = [a, b), point key = c).
-			//
-			// However, the invariant at the beginning of the function
-			// guarantees that if:
-			//  * we have both a point key and a range key
-			//  * and the range key has already been interleaved
-			// => then the point key must be less than the range key's end, and
-			//    the point key must be covered by the current range key.
-			return i.yieldPointKey(true /* covered */)
+		// Interleave.
+		switch {
+		case i.rangeKey == nil:
+			// If we're out of range keys, just return the point key.
+			return i.yieldPointKey(false /* covered */)
+		case i.pointKey == nil:
+			if i.pointKeyInterleaved {
+				panic("pebble: invariant violation: point key already interleaved")
+			}
+			// If we're out of point keys, we need to return a range key marker. If
+			// the current range key has already been interleaved, advance it. Since
+			// there are no more point keys, we don't need to worry about advancing
+			// past the current point key.
+			if i.rangeKeyInterleaved {
+				i.nextRangeKey(i.rangeKeyIter.Next())
+				if i.rangeKey == nil {
+					return i.yieldNil()
+				}
+			}
+			return i.yieldSyntheticRangeKeyMarker(lowerBound)
+		default:
+			if i.cmp(i.pointKey.UserKey, i.rangeKey.Start) >= 0 {
+				// The range key starts before the point key. If we haven't
+				// interleaved it, we should.
+				if !i.rangeKeyInterleaved {
+					return i.yieldSyntheticRangeKeyMarker(lowerBound)
+				}
+
+				// Otherwise, the range key is already interleaved and we need to
+				// return the point key. The current range key necessarily must
+				// cover the point key:
+				//
+				// Since the range key's start is less than or equal to the point
+				// key, the only way for this range key to not cover the point would
+				// be if the range key's end is less than or equal to the point.
+				// (For example range key = [a, b), point key = c).
+				//
+				// However, the invariant at the beginning of the function
+				// guarantees that if:
+				//  * we have both a point key and a range key
+				//  * and the range key has already been interleaved
+				// => then the point key must be less than the range key's end, and
+				//    the point key must be covered by the current range key.
+
+				// The range key covers the point key. The point key might be
+				// masked too if range-key masking is enabled.
+				if i.maskSuffix != nil {
+					pointSuffix := i.pointKey.UserKey[i.split(i.pointKey.UserKey):]
+					if len(pointSuffix) > 0 && i.cmp(i.maskSuffix, pointSuffix) < 0 {
+						// A range key in the current coalesced span masks this
+						// point key. Skip the point key.
+						i.pointKey, i.pointVal = i.pointIter.Next()
+						// We may have just invalidated the invariant that
+						// ensures the range key's End is > the point key, so
+						// reestablish it before the next iteration.
+						if i.pointKey != nil && i.cmp(i.pointKey.UserKey, i.rangeKey.End) >= 0 {
+							i.nextRangeKey(i.rangeKeyIter.Next())
+						}
+						continue
+					}
+				}
+
+				// Point key is unmasked but covered.
+				return i.yieldPointKey(true /* covered */)
+			}
+			return i.yieldPointKey(false /* covered */)
 		}
-		return i.yieldPointKey(false /* covered */)
 	}
 }
 
 func (i *InterleavingIter) interleaveBackward() (*base.InternalKey, []byte) {
-	// Check invariants.
-	// INVARIANT: !pointKeyInterleaved
-	if i.pointKeyInterleaved {
-		panic("pebble: invariant violation: point key interleaved")
-	}
-	switch {
-	case i.rangeKey == nil:
-	case i.pointKey == nil:
-		// INVARAINT: rangeKey.HasSets()
-		if i.rangeKey != nil && !i.rangeKey.HasSets() {
-			panic("pebble: invariant violation: range-key span without visible Sets")
+	// This loop determines whether a point key or a range key should be
+	// interleaved on each iteration. If masking is disabled, this loop executes
+	// for exactly one iteration. If masking is enabled and a masked key is
+	// determined to be interleaved next, this loop continues until the
+	// interleaved key is unmasked.
+	for {
+		// Check invariants.
+		// INVARIANT: !pointKeyInterleaved
+		if i.pointKeyInterleaved {
+			panic("pebble: invariant violation: point key interleaved")
 		}
-	default:
-		// INVARAINT: rangeKey.HasSets()
-		if i.rangeKey != nil && !i.rangeKey.HasSets() {
-			panic("pebble: invariant violation: range-key span without visible Sets")
+		switch {
+		case i.rangeKey == nil:
+		case i.pointKey == nil:
+			// INVARAINT: rangeKey.HasSets()
+			if i.rangeKey != nil && !i.rangeKey.HasSets() {
+				panic("pebble: invariant violation: range-key span without visible Sets")
+			}
+		default:
+			// INVARAINT: rangeKey.HasSets()
+			if i.rangeKey != nil && !i.rangeKey.HasSets() {
+				panic("pebble: invariant violation: range-key span without visible Sets")
+			}
 		}
-	}
 
-	// Interleave.
-	switch {
-	case i.rangeKey == nil:
-		// If we're out of range keys, just return the point key.
-		return i.yieldPointKey(false /* covered */)
-	case i.pointKey == nil:
-		// If we're out of point keys, we need to return a range key marker.
-		return i.yieldSyntheticRangeKeyMarker(i.lower)
-	default:
-		// If the range key's start key is greater than the point key, return a
-		// marker for the range key.
-		if i.cmp(i.rangeKey.Start, i.pointKey.UserKey) > 0 {
+		// Interleave.
+		switch {
+		case i.rangeKey == nil:
+			// If we're out of range keys, just return the point key.
+			return i.yieldPointKey(false /* covered */)
+		case i.pointKey == nil:
+			// If we're out of point keys, we need to return a range key marker.
 			return i.yieldSyntheticRangeKeyMarker(i.lower)
+		default:
+			// If the range key's start key is greater than the point key, return a
+			// marker for the range key.
+			if i.cmp(i.rangeKey.Start, i.pointKey.UserKey) > 0 {
+				return i.yieldSyntheticRangeKeyMarker(i.lower)
+			}
+			// We have a range key but it has not been interleaved and begins at
+			// a key equal to or before the current point key. The point key
+			// should be interleaved next, if it's not masked.
+			if i.cmp(i.pointKey.UserKey, i.rangeKey.End) < 0 {
+				// The range key covers the point key. The point key might be
+				// masked too if range-key masking is enabled.
+
+				// Since this point key is covered by the range key, it might be
+				// masked by the range key if range-key masking is enabled.
+				if i.maskSuffix != nil {
+					pointSuffix := i.pointKey.UserKey[i.split(i.pointKey.UserKey):]
+					if len(pointSuffix) > 0 && i.cmp(i.maskSuffix, pointSuffix) < 0 {
+						// A range key in the current coalesced span masks this
+						// point key. Skip the point key.
+						i.pointKey, i.pointVal = i.pointIter.Prev()
+						continue
+					}
+				}
+
+				// Point key is unmasked but covered.
+				return i.yieldPointKey(true /* covered */)
+			}
+			return i.yieldPointKey(false /* covered */)
 		}
-		// We have a range key but it has not been interleaved and begins at a
-		// key before the current point key. Return the point key.
-		return i.yieldPointKey(i.cmp(i.pointKey.UserKey, i.rangeKey.End) < 0)
 	}
 }
 
@@ -487,6 +605,15 @@ func (i *InterleavingIter) yieldSyntheticRangeKeyMarker(lowerBound []byte) (*bas
 	// argument is guaranteed to be ≥ i.lower. It may be equal to the SetBounds
 	// lower bound, or it could come from a SeekGE or SeekPrefixGE search key.
 	if lowerBound != nil && i.cmp(lowerBound, i.rangeKey.Start) > 0 {
+		// Truncating to the lower bound may violate the upper bound if
+		// lowerBound == i.upper.  For example, a SeekGE(k) uses a k as a lower
+		// bound for truncating a range key. The range key a-z will be truncated
+		// to [k, z). If i.upper == k, we'd mistakenly try to return a range key
+		// [k, k), an invariant violation.
+		if i.cmp(lowerBound, i.upper) == 0 {
+			return i.yieldNil()
+		}
+
 		// If the lowerBound argument is the lower bound set by SetBounds,
 		// Pebble owns the slice's memory and there's no need to make a copy of
 		// the lower bound.
@@ -527,9 +654,14 @@ func (i *InterleavingIter) verify(k *base.InternalKey, v []byte) (*base.Internal
 	case k != nil && i.lower != nil && i.cmp(k.UserKey, i.lower) < 0:
 		panic("pebble: invariant violation: key < lower bound")
 	case k != nil && i.upper != nil && i.cmp(k.UserKey, i.upper) >= 0:
-		panic("pebble: invariant violation: key ≥ lower bound")
-	case i.HasRangeKey() && len(i.rangeKeyItems) == 0:
+		panic("pebble: invariant violation: key ≥ upper bound")
+	case i.HasRangeKey() && len(i.rangeKey.Items) == 0:
 		panic("pebble: invariant violation: range key with no items")
+	case i.rangeKey != nil && k != nil && i.maskSuffix != nil && i.pointKeyInterleaved &&
+		i.split(k.UserKey) != len(k.UserKey) &&
+		i.cmp(i.maskSuffix, k.UserKey[i.split(k.UserKey):]) < 0 &&
+		i.cmp(k.UserKey, i.rangeKeyStart) >= 0 && i.cmp(k.UserKey, i.rangeKeyEnd) < 0:
+		panic("pebble: invariant violation: point key eligible for masking returned")
 	}
 
 	return k, v
@@ -539,13 +671,13 @@ func (i *InterleavingIter) saveRangeKey(rk *CoalescedSpan) {
 	i.rangeKeyInterleaved = false
 	i.rangeKeyMarkerTruncated = false
 	i.rangeKey = rk
+	i.maskSuffix = nil
 	if rk == nil {
-		i.rangeKeyItems = nil
 		i.rangeKeyStart = nil
 		i.rangeKeyEnd = nil
 		return
 	}
-	i.rangeKeyItems = rk.Items
+	i.maskSuffix = rk.SmallestSetSuffix(i.cmp, i.maskingThresholdSuffix)
 	i.rangeKeyStart = rk.Start
 	i.rangeKeyEnd = rk.End
 	// TODO(jackson): The key comparisons below truncate bounds whenever the
@@ -586,7 +718,7 @@ func (i *InterleavingIter) RangeKeyBounds() (start, end []byte) {
 // Suffix). The returned items may include Unsets, which the caller may need to
 // ignore.
 func (i *InterleavingIter) RangeKeys() []SuffixItem {
-	return i.rangeKeyItems
+	return i.rangeKey.Items
 }
 
 // SetBounds implements (base.InternalIterator).SetBounds.
@@ -602,7 +734,9 @@ func (i *InterleavingIter) Error() error {
 
 // Close implements (base.InternalIterator).Close.
 func (i *InterleavingIter) Close() error {
-	return i.pointIter.Close()
+	perr := i.pointIter.Close()
+	rerr := i.rangeKeyIter.Close()
+	return firstError(perr, rerr)
 }
 
 // String implements (base.InternalIterator).String.

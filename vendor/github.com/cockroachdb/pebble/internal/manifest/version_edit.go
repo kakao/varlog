@@ -252,17 +252,29 @@ func (v *VersionEdit) Decode(r io.Reader) error {
 					}
 				}
 			}
+			smallestPointKey := base.DecodeInternalKey(smallest)
+			largestPointKey := base.DecodeInternalKey(largest)
 			v.NewFiles = append(v.NewFiles, NewFileEntry{
 				Level: level,
 				Meta: &FileMetadata{
 					FileNum:             fileNum,
 					Size:                size,
 					CreationTime:        int64(creationTime),
-					Smallest:            base.DecodeInternalKey(smallest),
-					Largest:             base.DecodeInternalKey(largest),
+					SmallestPointKey:    smallestPointKey,
+					LargestPointKey:     largestPointKey,
+					HasPointKeys:        true,
 					SmallestSeqNum:      smallestSeqNum,
 					LargestSeqNum:       largestSeqNum,
 					markedForCompaction: markedForCompaction,
+					// TODO(travers): For now the smallest and largest keys are pinned to
+					// the smallest and largest point keys, as these are the only types of
+					// keys supported in the manifest. This will need to change when the
+					// manifest is updated to support range keys, which will most likely
+					// leverage a bitset to infer which key types (points or ranges) are
+					// used for the overall smallest and largest keys.
+					Smallest:  smallestPointKey,
+					Largest:   largestPointKey,
+					boundsSet: true,
 				},
 			})
 
@@ -597,7 +609,23 @@ func (b *BulkVersionEdit) Apply(
 		}
 
 		if level == 0 {
-			if err := v.InitL0Sublevels(cmp, formatKey, flushSplitBytes); err != nil {
+			if curr != nil && curr.L0Sublevels != nil && len(deletedMap) == 0 {
+				// Flushes and ingestions that do not delete any L0 files do not require
+				// a regeneration of L0Sublevels from scratch. We can instead generate
+				// it incrementally.
+				var err error
+				// AddL0Files requires addedFiles to be sorted in seqnum order.
+				addedFiles = append([]*FileMetadata(nil), addedFiles...)
+				SortBySeqNum(addedFiles)
+				v.L0Sublevels, err = curr.L0Sublevels.AddL0Files(addedFiles, flushSplitBytes, &v.Levels[0])
+				if errors.Is(err, errInvalidL0SublevelsOpt) {
+					err = v.InitL0Sublevels(cmp, formatKey, flushSplitBytes)
+				}
+				if err != nil {
+					return nil, nil, errors.Wrap(err, "pebble: internal error")
+				}
+				v.L0SublevelFiles = v.L0Sublevels.Levels
+			} else if err := v.InitL0Sublevels(cmp, formatKey, flushSplitBytes); err != nil {
 				return nil, nil, errors.Wrap(err, "pebble: internal error")
 			}
 			if err := CheckOrdering(cmp, formatKey, Level(0), v.Levels[level].Iter()); err != nil {
@@ -608,7 +636,8 @@ func (b *BulkVersionEdit) Apply(
 
 		// Check consistency of the level in the vicinity of our edits.
 		if sm != nil && la != nil {
-			overlap := overlaps(v.Levels[level].Iter(), cmp, sm.Smallest.UserKey, la.Largest.UserKey)
+			overlap := overlaps(v.Levels[level].Iter(), cmp, sm.Smallest.UserKey,
+				la.Largest.UserKey, la.Largest.IsExclusiveSentinel())
 			// overlap contains all of the added files. We want to ensure that
 			// the added files are consistent with neighboring existing files
 			// too, so reslice the overlap to pull in a neighbor on each side.

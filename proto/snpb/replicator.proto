@@ -46,6 +46,26 @@ message ReplicationResponse {
   int64 created_time = 2;
 }
 
+message ReplicateRequest {
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+      "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) =
+      "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+  repeated uint64 llsn = 3 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LLSN"
+  ];
+  repeated bytes data = 4;
+}
+
+message ReplicateResponse {}
+
 enum SyncState {
   option (gogoproto.goproto_enum_prefix) = false;
   option (gogoproto.goproto_enum_stringer) = false;
@@ -125,6 +145,7 @@ message SyncReplicateResponse {
 service Replicator {
   rpc Replicate(stream ReplicationRequest)
       returns (stream ReplicationResponse) {}
+  rpc ReplicateNew(stream ReplicateRequest) returns (ReplicateResponse) {}
   rpc SyncInit(SyncInitRequest) returns (SyncInitResponse) {}
   rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}
 }
