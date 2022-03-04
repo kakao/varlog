@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"sync"
 	"testing"
 	"time"
@@ -137,9 +138,10 @@ func TestClientAppendTo(t *testing.T) {
 	res = client.AppendTo(context.TODO(), topicID, lsID, [][]byte{[]byte("foo")})
 	require.NoError(t, res.Err)
 
-	data, err := client.Read(context.Background(), topicID, lsID, res.Metadata[0].GLSN)
-	require.NoError(t, err)
-	require.EqualValues(t, []byte("foo"), data)
+	// NOTE: Read API is deprecated.
+	// data, err := client.Read(context.Background(), topicID, lsID, res.Metadata[0].GLSN)
+	// require.NoError(t, err)
+	// require.EqualValues(t, []byte("foo"), data)
 }
 
 func TestClientAppend(t *testing.T) {
@@ -190,14 +192,15 @@ func TestClientAppend(t *testing.T) {
 		require.Equal(t, topicID, lem.TopicID)
 	}
 
-	require.Condition(t, func() bool {
-		for _, lsid := range clus.LogStreamIDs(topicID) {
-			if _, errRead := client.Read(context.TODO(), topicID, lsid, types.MinGLSN); errRead == nil {
-				return true
-			}
-		}
-		return false
-	})
+	// NOTE: Read API is deprecated.
+	// require.Condition(t, func() bool {
+	// 	for _, lsid := range clus.LogStreamIDs(topicID) {
+	// 		if _, errRead := client.Read(context.TODO(), topicID, lsid, types.MinGLSN); errRead == nil {
+	//			return true
+	//		}
+	//	}
+	//	return false
+	// })
 
 	for _, logStreamID := range clus.LogStreamIDs(topicID) {
 		lsd, err := client.LogStreamMetadata(context.Background(), topicID, logStreamID)
@@ -302,6 +305,7 @@ func TestClientSubscribe(t *testing.T) {
 		}
 		res := client.Append(context.TODO(), topicID, batch)
 		require.NoError(t, res.Err)
+		log.Printf("append: %+v", res)
 		require.Len(t, res.Metadata, batchSize)
 		require.Equal(t, issuedGLSN, res.Metadata[len(res.Metadata)-1].GLSN)
 		require.Equal(t, issuedGLSN-types.GLSN(batchSize)+1, res.Metadata[0].GLSN)

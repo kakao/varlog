@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/pebble/internal/arenaskl"
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/keyspan"
+	"github.com/cockroachdb/pebble/internal/rangekey"
 )
 
 func memTableEntrySize(keyBytes, valueBytes int) uint64 {
@@ -27,9 +28,11 @@ func memTableEntrySize(keyBytes, valueBytes int) uint64 {
 var memTableEmptySize = func() uint32 {
 	var pointSkl arenaskl.Skiplist
 	var rangeDelSkl arenaskl.Skiplist
+	var rangeKeySkl arenaskl.Skiplist
 	arena := arenaskl.NewArena(make([]byte, 16<<10 /* 16 KB */))
 	pointSkl.Reset(arena, bytes.Compare)
 	rangeDelSkl.Reset(arena, bytes.Compare)
+	rangeKeySkl.Reset(arena, bytes.Compare)
 	return arena.Size()
 }()
 
@@ -65,6 +68,7 @@ type memTable struct {
 	arenaBuf    []byte
 	skl         arenaskl.Skiplist
 	rangeDelSkl arenaskl.Skiplist
+	rangeKeySkl arenaskl.Skiplist
 	// reserved tracks the amount of space used by the memtable, both by actual
 	// data stored in the memtable as well as inflight batch commit
 	// operations. This value is incremented pessimistically by prepare() in
@@ -77,6 +81,7 @@ type memTable struct {
 	// drops to zero.
 	writerRefs int32
 	tombstones keySpanCache
+	rangeKeys  keySpanCache
 	// The current logSeqNum at the time the memtable was created. This is
 	// guaranteed to be less than or equal to any seqnum stored in the memtable.
 	logSeqNum uint64
@@ -117,9 +122,24 @@ func newMemTable(opts memTableOptions) *memTable {
 		logSeqNum:  opts.logSeqNum,
 	}
 	m.tombstones = keySpanCache{
+		cmp:        m.cmp,
+		formatKey:  m.formatKey,
+		skl:        &m.rangeDelSkl,
+		splitValue: rangeDelSplitValue,
+	}
+	m.rangeKeys = keySpanCache{
 		cmp:       m.cmp,
 		formatKey: m.formatKey,
-		skl:       &m.rangeDelSkl,
+		skl:       &m.rangeKeySkl,
+		splitValue: func(kind base.InternalKeyKind, rawValue []byte) (endKey []byte, value []byte, err error) {
+			var ok bool
+			endKey, value, ok = rangekey.DecodeEndKey(kind, rawValue)
+			if !ok {
+				err = base.CorruptionErrorf("unable to decode end key for key of kind %s", kind)
+			}
+			// NB: This value encodes a series of (suffix,value) tuples.
+			return endKey, value, err
+		},
 	}
 
 	if m.arenaBuf == nil {
@@ -129,6 +149,7 @@ func newMemTable(opts memTableOptions) *memTable {
 	arena := arenaskl.NewArena(m.arenaBuf)
 	m.skl.Reset(arena, m.cmp)
 	m.rangeDelSkl.Reset(arena, m.cmp)
+	m.rangeKeySkl.Reset(arena, m.cmp)
 	return m
 }
 
@@ -176,7 +197,7 @@ func (m *memTable) apply(batch *Batch, seqNum uint64) error {
 	}
 
 	var ins arenaskl.Inserter
-	var tombstoneCount uint32
+	var tombstoneCount, rangeKeyCount uint32
 	startSeqNum := seqNum
 	for r := batch.Reader(); ; seqNum++ {
 		kind, ukey, value, ok := r.Next()
@@ -189,12 +210,13 @@ func (m *memTable) apply(batch *Batch, seqNum uint64) error {
 		case InternalKeyKindRangeDelete:
 			err = m.rangeDelSkl.Add(ikey, value)
 			tombstoneCount++
+		case InternalKeyKindRangeKeySet, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeyDelete:
+			err = m.rangeKeySkl.Add(ikey, value)
+			rangeKeyCount++
 		case InternalKeyKindLogData:
 			// Don't increment seqNum for LogData, since these are not applied
 			// to the memtable.
 			seqNum--
-		case InternalKeyKindRangeKeySet, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeyDelete:
-			// TODO(jackson): Implement.
 		default:
 			err = ins.Add(&m.skl, ikey, value)
 		}
@@ -208,6 +230,9 @@ func (m *memTable) apply(batch *Batch, seqNum uint64) error {
 	}
 	if tombstoneCount != 0 {
 		m.tombstones.invalidate(tombstoneCount)
+	}
+	if rangeKeyCount != 0 {
+		m.rangeKeys.invalidate(rangeKeyCount)
 	}
 	return nil
 }
@@ -223,12 +248,20 @@ func (m *memTable) newFlushIter(o *IterOptions, bytesFlushed *uint64) internalIt
 	return m.skl.NewFlushIter(bytesFlushed)
 }
 
-func (m *memTable) newRangeDelIter(*IterOptions) internalIterator {
+func (m *memTable) newRangeDelIter(*IterOptions) keyspan.FragmentIterator {
 	tombstones := m.tombstones.get()
 	if tombstones == nil {
 		return nil
 	}
 	return keyspan.NewIter(m.cmp, tombstones)
+}
+
+func (m *memTable) newRangeKeyIter(*IterOptions) keyspan.FragmentIterator {
+	rangeKeys := m.rangeKeys.get()
+	if rangeKeys == nil {
+		return nil
+	}
+	return keyspan.NewIter(m.cmp, rangeKeys)
 }
 
 func (m *memTable) availBytes() uint32 {
@@ -276,6 +309,17 @@ type keySpanFrags struct {
 	spans []keyspan.Span
 }
 
+type splitValue func(kind base.InternalKeyKind, rawValue []byte) (endKey []byte, value []byte, err error)
+
+func rangeDelSplitValue(
+	kind base.InternalKeyKind, rawValue []byte,
+) (endKey []byte, value []byte, err error) {
+	if kind != base.InternalKeyKindRangeDelete {
+		panic(fmt.Sprintf("pebble: rangeDelSplitValue called on %s key kind", kind))
+	}
+	return rawValue, nil, nil
+}
+
 // get retrieves the fragmented spans, populating them if necessary. Note that
 // the populated span fragments may be built from more than f.count memTable
 // spans, but that is ok for correctness. All we're requiring is that the
@@ -285,7 +329,7 @@ type keySpanFrags struct {
 // it even though is has been invalidated (i.e. replaced with a newer
 // keySpanFrags).
 func (f *keySpanFrags) get(
-	skl *arenaskl.Skiplist, cmp Compare, formatKey base.FormatKey,
+	skl *arenaskl.Skiplist, cmp Compare, formatKey base.FormatKey, splitValue splitValue,
 ) []keyspan.Span {
 	f.once.Do(func() {
 		frag := &keyspan.Fragmenter{
@@ -297,7 +341,11 @@ func (f *keySpanFrags) get(
 		}
 		it := skl.NewIter(nil, nil)
 		for key, val := it.First(); key != nil; key, val = it.Next() {
-			frag.Add(keyspan.Span{Start: *key, End: val})
+			e, v, err := splitValue(key.Kind(), val)
+			if err != nil {
+				panic(err)
+			}
+			frag.Add(keyspan.Span{Start: *key, End: e, Value: v})
 		}
 		frag.Finish()
 	})
@@ -308,11 +356,12 @@ func (f *keySpanFrags) get(
 // invalidated whenever a key of the same kind is added to a memTable, and
 // populated when empty when a span iterator of that key kind is created.
 type keySpanCache struct {
-	count     uint32
-	frags     unsafe.Pointer
-	cmp       Compare
-	formatKey base.FormatKey
-	skl       *arenaskl.Skiplist
+	count      uint32
+	frags      unsafe.Pointer
+	cmp        Compare
+	formatKey  base.FormatKey
+	splitValue splitValue
+	skl        *arenaskl.Skiplist
 }
 
 // Invalidate the current set of cached spans, indicating the number of
@@ -347,5 +396,5 @@ func (c *keySpanCache) get() []keyspan.Span {
 	if frags == nil {
 		return nil
 	}
-	return frags.get(c.skl, c.cmp, c.formatKey)
+	return frags.get(c.skl, c.cmp, c.formatKey, c.splitValue)
 }

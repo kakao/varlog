@@ -143,7 +143,7 @@ func MakeInternalKey(userKey []byte, seqNum uint64, kind InternalKeyKind) Intern
 }
 
 // MakeSearchKey constructs an internal key that is appropriate for searching
-// for a the specified user key. The search key contain the maximual sequence
+// for a the specified user key. The search key contain the maximal sequence
 // number and kind ensuring that it sorts before any other internal keys for
 // the same user key.
 func MakeSearchKey(userKey []byte) InternalKey {
@@ -160,6 +160,16 @@ func MakeRangeDeleteSentinelKey(userKey []byte) InternalKey {
 	return InternalKey{
 		UserKey: userKey,
 		Trailer: InternalKeyRangeDeleteSentinel,
+	}
+}
+
+// MakeRangeKeySentinelKey constructs an internal key that is a range key
+// sentinel key, used as the upper boundary for an sstable when a range key is
+// the largest key in an sstable.
+func MakeRangeKeySentinelKey(kind InternalKeyKind, userKey []byte) InternalKey {
+	return InternalKey{
+		UserKey: userKey,
+		Trailer: (InternalKeySeqNumMax << 8) | uint64(kind),
 	}
 }
 
@@ -342,6 +352,20 @@ func (k InternalKey) Pretty(f FormatKey) fmt.Formatter {
 	return prettyInternalKey{k, f}
 }
 
+// IsExclusiveSentinel returns whether this internal key excludes point keys
+// with the same user key if used as an end boundary. See the comment on
+// InternalKeyRangeDeletionSentinel.
+func (k InternalKey) IsExclusiveSentinel() bool {
+	switch kind := k.Kind(); kind {
+	case InternalKeyKindRangeDelete:
+		return k.Trailer == InternalKeyRangeDeleteSentinel
+	case InternalKeyKindRangeKeyDelete, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeySet:
+		return (k.Trailer >> 8) == InternalKeySeqNumMax
+	default:
+		return false
+	}
+}
+
 type prettyInternalKey struct {
 	InternalKey
 	formatKey FormatKey
@@ -349,4 +373,17 @@ type prettyInternalKey struct {
 
 func (k prettyInternalKey) Format(s fmt.State, c rune) {
 	fmt.Fprintf(s, "%s#%d,%s", k.formatKey(k.UserKey), k.SeqNum(), k.Kind())
+}
+
+// ParsePrettyInternalKey parses the pretty string representation of an
+// internal key. The format is <user-key>#<seq-num>,<kind>.
+func ParsePrettyInternalKey(s string) InternalKey {
+	x := strings.FieldsFunc(s, func(c rune) bool { return c == '#' || c == ',' })
+	ukey := x[0]
+	kind, ok := kindsMap[x[2]]
+	if !ok {
+		panic(fmt.Sprintf("unknown kind: %q", x[2]))
+	}
+	seqNum, _ := strconv.ParseUint(x[1], 10, 64)
+	return MakeInternalKey([]byte(ukey), seqNum, kind)
 }

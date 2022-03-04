@@ -5,6 +5,7 @@
 package pebble
 
 import (
+	"fmt"
 	"io"
 	"sort"
 	"strconv"
@@ -146,7 +147,7 @@ import (
 // exported function, and before a subsequent call to Next advances the iterator
 // and mutates the contents of the returned key and value.
 type compactionIter struct {
-	cmp   Compare
+	equal Equal
 	merge Merge
 	iter  internalIterator
 	err   error
@@ -212,6 +213,7 @@ type compactionIter struct {
 
 func newCompactionIter(
 	cmp Compare,
+	equal Equal,
 	formatKey base.FormatKey,
 	merge Merge,
 	iter internalIterator,
@@ -223,7 +225,7 @@ func newCompactionIter(
 	formatVersion FormatMajorVersion,
 ) *compactionIter {
 	i := &compactionIter{
-		cmp:                 cmp,
+		equal:               equal,
 		merge:               merge,
 		iter:                iter,
 		snapshots:           snapshots,
@@ -456,9 +458,9 @@ func (i *compactionIter) skipInStripe() {
 
 func (i *compactionIter) iterNext() bool {
 	i.iterKey, i.iterValue = i.iter.Next()
-	// We should never see a range delete sentinel in the compaction input.
-	if i.iterKey != nil && i.iterKey.Trailer == InternalKeyRangeDeleteSentinel {
-		panic("pebble: unexpected range delete sentinel in compaction input")
+	// We should never see an exclusive sentinel in the compaction input.
+	if i.iterKey != nil && i.iterKey.IsExclusiveSentinel() {
+		panic(fmt.Sprintf("pebble: unexpected exclusive sentinel in compaction input, trailer = %x", i.iterKey.Trailer))
 	}
 	return i.iterKey != nil
 }
@@ -486,7 +488,7 @@ func (i *compactionIter) nextInStripe() stripeChangeType {
 		return newStripe
 	}
 	key := i.iterKey
-	if i.cmp(i.key.UserKey, key.UserKey) != 0 {
+	if !i.equal(i.key.UserKey, key.UserKey) {
 		i.curSnapshotIdx, i.curSnapshotSeqNum = snapshotIndex(key.SeqNum(), i.snapshots)
 		return newStripe
 	}
@@ -768,17 +770,14 @@ func (i *compactionIter) Close() error {
 // exclude specifies if the specified key is exclusive or inclusive.
 // When exclude = true, all returned range tombstones are truncated to the
 // specified key.
-func (i *compactionIter) Tombstones(key []byte, exclude bool) []keyspan.Span {
-	switch {
-	case key == nil:
+func (i *compactionIter) Tombstones(key []byte) []keyspan.Span {
+	if key == nil {
 		i.rangeDelFrag.Finish()
-	case exclude:
+	} else {
 		// The specified end key is exclusive; no versions of the specified
 		// user key (including range tombstones covering that key) should
 		// be flushed yet.
 		i.rangeDelFrag.TruncateAndFlushTo(key)
-	default:
-		i.rangeDelFrag.FlushTo(key)
 	}
 	tombstones := i.tombstones
 	i.tombstones = nil

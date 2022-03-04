@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/cache"
+	"github.com/cockroachdb/pebble/internal/keyspan"
+	"github.com/cockroachdb/pebble/internal/rangekey"
 )
 
 func uvarintLen(v uint32) int {
@@ -160,8 +162,13 @@ func (w *blockWriter) finish() []byte {
 	return result
 }
 
+// emptyBlockSize holds the size of an empty block. Every block ends
+// in a uint32 trailer encoding the number of restart points within the
+// block.
+const emptyBlockSize = 4
+
 func (w *blockWriter) estimatedSize() int {
-	return len(w.buf) + 4*(len(w.restarts)+1)
+	return len(w.buf) + 4*len(w.restarts) + emptyBlockSize
 }
 
 type blockEntry struct {
@@ -515,7 +522,7 @@ func (i *blockIter) cacheEntry() {
 
 // SeekGE implements internalIterator.SeekGE, as documented in the pebble
 // package.
-func (i *blockIter) SeekGE(key []byte) (*InternalKey, []byte) {
+func (i *blockIter) SeekGE(key []byte, trySeekUsingNext bool) (*InternalKey, []byte) {
 	i.clearCache()
 
 	ikey := base.MakeSearchKey(key)
@@ -608,7 +615,7 @@ func (i *blockIter) SeekGE(key []byte) (*InternalKey, []byte) {
 	i.decodeInternalKey(i.key)
 
 	// Iterate from that restart point to somewhere >= the key sought.
-	for ; i.Valid(); i.Next() {
+	for ; i.valid(); i.Next() {
 		if base.InternalCompare(i.cmp, i.ikey, ikey) >= 0 {
 			return &i.ikey, i.val
 		}
@@ -757,7 +764,7 @@ func (i *blockIter) SeekLT(key []byte) (*InternalKey, []byte) {
 		i.cacheEntry()
 	}
 
-	if !i.Valid() {
+	if !i.valid() {
 		return nil, nil
 	}
 	return &i.ikey, i.val
@@ -767,7 +774,7 @@ func (i *blockIter) SeekLT(key []byte) (*InternalKey, []byte) {
 // package.
 func (i *blockIter) First() (*InternalKey, []byte) {
 	i.offset = 0
-	if !i.Valid() {
+	if !i.valid() {
 		return nil, nil
 	}
 	i.clearCache()
@@ -780,7 +787,7 @@ func (i *blockIter) First() (*InternalKey, []byte) {
 func (i *blockIter) Last() (*InternalKey, []byte) {
 	// Seek forward from the last restart point.
 	i.offset = int32(binary.LittleEndian.Uint32(i.data[i.restarts+4*(i.numRestarts-1):]))
-	if !i.Valid() {
+	if !i.valid() {
 		return nil, nil
 	}
 
@@ -816,7 +823,7 @@ func (i *blockIter) Next() (*InternalKey, []byte) {
 	}
 
 	i.offset = i.nextOffset
-	if !i.Valid() {
+	if !i.valid() {
 		return nil, nil
 	}
 	i.readEntry()
@@ -916,12 +923,6 @@ func (i *blockIter) Value() []byte {
 	return i.val
 }
 
-// Valid implements internalIterator.Valid, as documented in the pebble
-// package.
-func (i *blockIter) Valid() bool {
-	return i.offset >= 0 && i.offset < i.restarts
-}
-
 // Error implements internalIterator.Error, as documented in the pebble
 // package.
 func (i *blockIter) Error() error {
@@ -940,4 +941,159 @@ func (i *blockIter) Close() error {
 func (i *blockIter) SetBounds(lower, upper []byte) {
 	// This should never be called as bounds are handled by sstable.Iterator.
 	panic("pebble: SetBounds unimplemented")
+}
+
+func (i *blockIter) valid() bool {
+	return i.offset >= 0 && i.offset < i.restarts
+}
+
+// fragmentBlockIter wraps a blockIter, implementing the
+// keyspan.FragmentIterator interface.
+type fragmentBlockIter struct {
+	blockIter blockIter
+	span      keyspan.Span
+	err       error
+	closeHook func(i keyspan.FragmentIterator) error
+}
+
+func (i *fragmentBlockIter) decodeSpan(
+	k *InternalKey, internalValue []byte,
+) (*InternalKey, []byte) {
+	if k == nil {
+		i.span = keyspan.Span{}
+		i.err = nil
+		return nil, nil
+	}
+
+	// decode the end key from a fragment's raw internal value. RANGEDELs store
+	// the end key directly as the value, whereas range keys require decoding to
+	// separate the end key from the rest of the range key state.
+	var endKey, decodedValue []byte
+	switch kind := k.Kind(); kind {
+	case base.InternalKeyKindRangeDelete:
+		endKey = internalValue
+	case base.InternalKeyKindRangeKeySet, base.InternalKeyKindRangeKeyUnset, base.InternalKeyKindRangeKeyDelete:
+		var ok bool
+		endKey, decodedValue, ok = rangekey.DecodeEndKey(kind, internalValue)
+		if !ok {
+			i.span = keyspan.Span{}
+			i.err = base.CorruptionErrorf("pebble: corrupt keyspan fragment of kind %d", kind)
+			return nil, nil
+		}
+	default:
+		i.span = keyspan.Span{}
+		i.err = base.CorruptionErrorf("pebble: corrupt keyspan fragment of kind %d", kind)
+		return nil, nil
+	}
+	i.err = nil
+	i.span = keyspan.Span{Start: *k, End: endKey, Value: decodedValue}
+
+	// We have to return the internalValue, not the decodedValue,
+	// because there are still range-deletion usages that depend on it.
+	// TODO(jackson): Remove remaining dependencies on the internal
+	// value being propagated via positioning methods and refactor the
+	// FragmentIterator to be independent of base.InternalIterator.
+	return k, internalValue
+}
+
+// Error implements (base.InternalIterator).Error, as documented in the
+// internal/base package.
+func (i *fragmentBlockIter) Error() error {
+	return i.err
+}
+
+// Valid implements (keyspan.FragmentIterator).Valid, as documented in the
+// internal/keyspan package.
+func (i *fragmentBlockIter) Valid() bool {
+	return i.err == nil && i.blockIter.valid()
+}
+
+// End implements (keyspan.FragmentIterator).End, as documented in the
+// internal/keyspan package.
+func (i *fragmentBlockIter) End() []byte {
+	return i.span.End
+}
+
+// Current implements (keyspan.FragmentIterator).Current, as documented in the
+// internal/keyspan package.
+func (i *fragmentBlockIter) Current() keyspan.Span {
+	return i.span
+}
+
+// Clone implements (keyspan.FragmentIterator).Clone, as documented in the
+// internal/keyspan package.
+func (i *fragmentBlockIter) Clone() keyspan.FragmentIterator {
+	// TODO(jackson): Remove keyspan.FragmentIterator.Clone.
+	panic("unimplemented")
+}
+
+// Close implements (base.InternalIterator).Close, as documented in the
+// internal/base package.
+func (i *fragmentBlockIter) Close() error {
+	var err error
+	if i.closeHook != nil {
+		err = i.closeHook(i)
+	}
+	err = firstError(err, i.blockIter.Close())
+	return err
+}
+
+// First implements (base.InternalIterator).First, as documented in the
+// internal/base package.
+func (i *fragmentBlockIter) First() (*InternalKey, []byte) {
+	return i.decodeSpan(i.blockIter.First())
+}
+
+// Last implements (base.InternalIterator).Last, as documented in the
+// internal/base package.
+func (i *fragmentBlockIter) Last() (*InternalKey, []byte) {
+	return i.decodeSpan(i.blockIter.Last())
+}
+
+// Next implements (base.InternalIterator).Next, as documented in the
+// internal/base package.
+func (i *fragmentBlockIter) Next() (*InternalKey, []byte) {
+	return i.decodeSpan(i.blockIter.Next())
+}
+
+// Prev implements (base.InternalIterator).Prev, as documented in the
+// internal/base package.
+func (i *fragmentBlockIter) Prev() (*InternalKey, []byte) {
+	return i.decodeSpan(i.blockIter.Prev())
+}
+
+// SeekGE implements (base.InternalIterator).SeekGE, as documented in the
+// internal/base package.
+func (i *fragmentBlockIter) SeekGE(k []byte, trySeekUsingNext bool) (*InternalKey, []byte) {
+	return i.decodeSpan(i.blockIter.SeekGE(k, trySeekUsingNext))
+}
+
+// SeekPrefixGE implements (base.InternalIterator).SeekPrefixGE, as
+// documented in the internal/base package.
+func (i *fragmentBlockIter) SeekPrefixGE(
+	prefix, k []byte, trySeekUsingNext bool,
+) (*InternalKey, []byte) {
+	return i.decodeSpan(i.blockIter.SeekPrefixGE(prefix, k, trySeekUsingNext))
+}
+
+// SeekLT implements (base.InternalIterator).SeekLT, as documented in the
+// internal/base package.
+func (i *fragmentBlockIter) SeekLT(k []byte) (*InternalKey, []byte) {
+	return i.decodeSpan(i.blockIter.SeekLT(k))
+}
+
+// SetBounds implements (base.InternalIterator).SetBounds, as documented
+// in the internal/base package.
+func (i *fragmentBlockIter) SetBounds(lower, upper []byte) {
+	i.blockIter.SetBounds(lower, upper)
+}
+
+// String implements fmt.Stringer.
+func (i *fragmentBlockIter) String() string {
+	return "fragment-block-iter"
+}
+
+// SetCloseHook implements sstable.FragmentIterator.
+func (i *fragmentBlockIter) SetCloseHook(fn func(i keyspan.FragmentIterator) error) {
+	i.closeHook = fn
 }

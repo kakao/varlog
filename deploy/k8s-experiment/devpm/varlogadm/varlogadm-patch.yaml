@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: varlogadm
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: varlogadm
+    app.kubernetes.io/part-of: varlog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: varlog
+      app.kubernetes.io/component: varlogadm
+      app.kubernetes.io/part-of: varlog
+  template:
+    spec:
+      volumes:
+        - name: varlogadm-logdir
+          hostPath:
+            path: /data1/varlog/adm/logs
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-perm
+          image: mdock.daumkakao.io/busybox
+          command: [ "sh", "-c", "chmod -R 777 /data1/varlog/adm/logs" ]
+          volumeMounts:
+            - name: varlogadm-logdir
+              mountPath: /data1/varlog/adm/logs
+          imagePullPolicy: IfNotPresent
+      containers:
+        - name: varlogadm
+          resources:
+            limits:
+              cpu: 6000m
+              memory: 6Gi
+            requests:
+              cpu: 6000m
+              memory: 6Gi
+          volumeMounts:
+            - name: varlogadm-logdir
+              mountPath: /data1/varlog/adm/logs
+      nodeSelector:
+        $patch: delete
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kov/component
+                    operator: In
+                    values:
+                      - adm
+                  - key: coke/zone
+                    operator: NotIn
+                    values:
+                      - dev3

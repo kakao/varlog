@@ -57,7 +57,7 @@ metadata:
     app.kubernetes.io/part-of: varlog
 spec:
   serviceName: varlogmr-rpc
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: varlog

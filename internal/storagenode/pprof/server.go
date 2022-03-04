@@ -9,28 +9,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Server interface {
-	Run(net.Listener) error
-	Close(context.Context) error
-}
-
-type server struct {
+type Server struct {
 	config
-	http.Server
+	httpServer http.Server
 }
 
-var _ Server = (*server)(nil)
-
-func New(opts ...Option) Server {
+func New(opts ...Option) *Server {
 	cfg := newConfig(opts)
-	s := &server{config: cfg}
+	s := &Server{config: cfg}
 	return s
 }
 
-func (s *server) Run(ls net.Listener) error {
-	return errors.WithStack(s.Server.Serve(ls))
+func (s *Server) Run(ls net.Listener) error {
+	return errors.WithStack(s.httpServer.Serve(ls))
 }
 
-func (s *server) Close(ctx context.Context) error {
-	return s.Server.Shutdown(ctx)
+func (s *Server) Close(ctx context.Context) error {
+	return s.httpServer.Shutdown(ctx)
 }

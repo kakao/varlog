@@ -1,0 +1,112 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: varlogsn
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: varlogsn
+    app.kubernetes.io/part-of: varlog
+spec:
+  template:
+    spec:
+      volumes:
+        - name: varlogsn-data
+          $patch: delete
+        - name: varlogsn-data1
+          hostPath:
+            path: /data1/varlog/sn
+            type: DirectoryOrCreate
+        - name: varlogsn-data2
+          hostPath:
+            path: /data2/varlog/sn
+            type: DirectoryOrCreate
+        - name: varlogsn-data3
+          hostPath:
+            path: /data3/varlog/sn
+            type: DirectoryOrCreate
+        - name: varlogsn-data4
+          hostPath:
+            path: /data4/varlog/sn
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-perm
+          command:
+            - "sh"
+            - "-c"
+            - "chmod -R 777 /data1/varlog/sn && chmod -R 777 /data2/varlog/sn && chmod -R 777 /data3/varlog/sn && chmod -R 777 /data4/varlog/sn"
+          volumeMounts:
+            - name: varlogsn-data
+              $patch: delete
+            - name: varlogsn-data1
+              mountPath: /data1/varlog/sn
+            - name: varlogsn-data2
+              mountPath: /data2/varlog/sn
+            - name: varlogsn-data3
+              mountPath: /data3/varlog/sn
+            - name: varlogsn-data4
+              mountPath: /data4/varlog/sn
+      containers:
+        - name: varlogsn
+          command:
+            - "python3"
+          args:
+            - "/varlog/bin/start_varlogsn.py"
+            - "--cluster-id=$(CLUSTER_ID)"
+            - "--listen=0.0.0.0:9091"
+            - "--advertise=$(HOST_IP):9091"
+            - "--admin=$(VARLOGADM_RPC_SERVICE_HOST):$(VARLOGADM_RPC_SERVICE_PORT)"
+            - "--volumes=/data1/varlog/sn/data"
+            - "--volumes=/data2/varlog/sn/data"
+            - "--volumes=/data3/varlog/sn/data"
+            - "--volumes=/data4/varlog/sn/data"
+            - "--ballast-size=15g"
+            - "--server-read-buffer-size=16m"
+            - "--server-write-buffer-size=16m"
+            - "--replication-client-read-buffer-size=2m"
+            - "--replication-client-write-buffer-size=2m"
+            - "--storage-l0-compaction-threshold=2"
+            - "--storage-l0-stop-writes-threshold=1000"
+            - "--storage-lbase-max-bytes=64m"
+            - "--storage-max-open-files=16384"
+            - "--storage-mem-table-size=64m"
+            - "--storage-mem-table-stop-writes-threshold=4"
+            - "--storage-max-concurrent-compaction=3"
+            - "--add-after-seconds=1"
+            - "--retry-interval-seconds=10"
+            - "--logtostderr"
+            - "--log-dir=/data1/varlog/sn/logs"
+          resources:
+            limits:
+              cpu: 20000m
+              memory: 40Gi
+            requests:
+              cpu: 20000m
+              memory: 40Gi
+          volumeMounts:
+            - name: varlogsn-data
+              $patch: delete
+            - name: varlogsn-data1
+              mountPath: /data1/varlog/sn
+            - name: varlogsn-data2
+              mountPath: /data2/varlog/sn
+            - name: varlogsn-data3
+              mountPath: /data3/varlog/sn
+            - name: varlogsn-data4
+              mountPath: /data4/varlog/sn
+      nodeSelector:
+        $patch: delete
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kov/component
+                    operator: In
+                    values:
+                      - bp
+                  - key: coke/zone
+                    operator: NotIn
+                    values:
+                      - dev3

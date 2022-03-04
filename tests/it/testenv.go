@@ -17,9 +17,8 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
+	"github.daumkakao.com/varlog/varlog/internal/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/volume"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
 	"github.daumkakao.com/varlog/varlog/pkg/logc"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
@@ -52,7 +51,7 @@ type VarlogCluster struct {
 	storageNodes     map[types.StorageNodeID]*storagenode.StorageNode
 	snMCLs           map[types.StorageNodeID]snc.StorageNodeManagementClient
 	reportCommitters map[types.StorageNodeID]reportcommitter.Client
-	volumes          map[types.StorageNodeID]volume.Volume
+	volumes          map[types.StorageNodeID]string
 	snAddrs          map[types.StorageNodeID]string
 	storageNodeIDs   []types.StorageNodeID
 	nextSNID         types.StorageNodeID
@@ -90,7 +89,7 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 		mrMCLs:               make(map[types.NodeID]mrc.MetadataRepositoryManagementClient),
 		storageNodes:         make(map[types.StorageNodeID]*storagenode.StorageNode),
 		snMCLs:               make(map[types.StorageNodeID]snc.StorageNodeManagementClient),
-		volumes:              make(map[types.StorageNodeID]volume.Volume),
+		volumes:              make(map[types.StorageNodeID]string),
 		snAddrs:              make(map[types.StorageNodeID]string),
 		reportCommitters:     make(map[types.StorageNodeID]reportcommitter.Client),
 		replicas:             make(map[types.LogStreamID][]*varlogpb.ReplicaDescriptor),
@@ -406,7 +405,7 @@ func (clus *VarlogCluster) Close(t *testing.T) {
 
 	// sn
 	for _, sn := range clus.storageNodes {
-		sn.Close()
+		_ = sn.Close()
 	}
 	for _, wg := range clus.snWGs {
 		wg.Wait()
@@ -423,7 +422,9 @@ func (clus *VarlogCluster) healthCheckForMR(t *testing.T, idx int) {
 		if !assert.NoError(t, err) {
 			return false
 		}
-		defer conn.Close()
+		defer func() {
+			_ = conn.Close()
+		}()
 
 		rsp, err := grpc_health_v1.NewHealthClient(conn.Conn).Check(
 			context.Background(), &grpc_health_v1.HealthCheckRequest{},
@@ -482,17 +483,13 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 	snID := clus.nextSNID
 	clus.nextSNID++
 
-	volumeDir := t.TempDir()
-	volume, err := volume.New(volumeDir)
-	require.NoError(t, err)
+	volume := t.TempDir()
 
-	sn, err := storagenode.New(context.TODO(),
-		storagenode.WithListenAddress("127.0.0.1:0"),
+	sn := storagenode.TestNewSimpleStorageNode(t,
 		storagenode.WithClusterID(clus.clusterID),
 		storagenode.WithStorageNodeID(snID),
-		storagenode.WithVolumes(volumeDir),
+		storagenode.WithVolumes(volume),
 	)
-	require.NoError(t, err)
 
 	if _, ok := clus.snWGs[snID]; !ok {
 		clus.snWGs[snID] = new(sync.WaitGroup)
@@ -501,25 +498,21 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 	clus.snWGs[snID].Add(1)
 	go func() {
 		defer clus.snWGs[snID].Done()
-		_ = sn.Run()
+		_ = sn.Serve()
 	}()
 
 	log.Printf("SN.New: %v", snID)
 
+	var addr string
 	require.Eventually(t, func() bool {
-		meta, err := sn.GetMetadata(context.Background())
-		return assert.NoError(t, err) && meta.GetStorageNode().GetAddress() != ""
+		meta := storagenode.TestGetStorageNodeMetadataDescriptorWithoutAddr(t, sn)
+		addr = meta.StorageNode.Address
+		return len(addr) > 0
 	}, time.Second, 10*time.Millisecond)
-
-	log.Printf("SN(%v) GetMetadata", snID)
-
-	snmd, err := sn.GetMetadata(context.Background())
-	require.NoError(t, err)
-	addr := snmd.GetStorageNode().GetAddress()
 
 	log.Printf("SN(%v) GetMetadata: %s", snID, addr)
 
-	_, err = clus.vmsCL.AddStorageNode(context.Background(), addr)
+	_, err := clus.vmsCL.AddStorageNode(context.Background(), addr)
 	require.NoError(t, err)
 
 	log.Printf("SN(%v) AddStorageNode", snID)
@@ -563,10 +556,9 @@ func (clus *VarlogCluster) NewSNClient(t *testing.T, snID types.StorageNodeID) {
 	require.Contains(t, clus.storageNodes, snID)
 	require.NotContains(t, clus.snMCLs, snID)
 
-	snmd, err := clus.storageNodes[snID].GetMetadata(context.Background())
-	require.NoError(t, err)
+	addr, ok := clus.snAddrs[snID]
+	require.True(t, ok)
 
-	addr := snmd.GetStorageNode().GetAddress()
 	mcl, err := snc.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger)
 	require.NoError(t, err)
 
@@ -585,13 +577,12 @@ func (clus *VarlogCluster) RecoverSN(t *testing.T, snID types.StorageNodeID) *st
 	volume := clus.volumes[snID]
 	addr := clus.snAddrs[snID]
 
-	sn, err := storagenode.New(context.TODO(),
+	sn := storagenode.TestNewSimpleStorageNode(t,
 		storagenode.WithClusterID(clus.clusterID),
 		storagenode.WithStorageNodeID(snID),
 		storagenode.WithListenAddress(addr),
-		storagenode.WithVolumes(string(volume)),
+		storagenode.WithVolumes(volume),
 	)
-	require.NoError(t, err)
 
 	if _, ok := clus.snWGs[snID]; !ok {
 		clus.snWGs[snID] = new(sync.WaitGroup)
@@ -600,13 +591,10 @@ func (clus *VarlogCluster) RecoverSN(t *testing.T, snID types.StorageNodeID) *st
 	clus.snWGs[snID].Add(1)
 	go func() {
 		defer clus.snWGs[snID].Done()
-		_ = sn.Run()
+		_ = sn.Serve()
 	}()
 
-	require.Eventually(t, func() bool {
-		meta, err := sn.GetMetadata(context.Background())
-		return assert.NoError(t, err) && meta.GetStorageNode().GetAddress() != ""
-	}, time.Second, 10*time.Millisecond)
+	storagenode.TestWaitForStartingOfServe(t, sn)
 
 	clus.storageNodes[snID] = sn
 
@@ -940,7 +928,7 @@ func (clus *VarlogCluster) CloseSN(t *testing.T, snID types.StorageNodeID) {
 	defer clus.muSN.Unlock()
 
 	require.Contains(t, clus.storageNodes, snID)
-	clus.storageNodes[snID].Close()
+	_ = clus.storageNodes[snID].Close()
 	clus.snWGs[snID].Wait()
 
 	log.Printf("SN.Close: %v", snID)
@@ -1119,7 +1107,8 @@ func (clus *VarlogCluster) newClient(t *testing.T) varlog.Log {
 }
 
 func (clus *VarlogCluster) PrimaryStorageNodeIDOf(t *testing.T, lsID types.LogStreamID) types.StorageNodeID {
-	return clus.getSN(t, lsID, 0).StorageNodeID()
+	sn := clus.getSN(t, lsID, 0)
+	return storagenode.TestGetStorageNodeID(t, sn)
 }
 
 func (clus *VarlogCluster) BackupStorageNodeIDOf(t *testing.T, lsID types.LogStreamID) types.StorageNodeID {
@@ -1127,7 +1116,8 @@ func (clus *VarlogCluster) BackupStorageNodeIDOf(t *testing.T, lsID types.LogStr
 	if clus.nrRep > 2 {
 		idx += rand.Intn(clus.nrRep - 1)
 	}
-	return clus.getSN(t, lsID, idx).StorageNodeID()
+	sn := clus.getSN(t, lsID, idx)
+	return storagenode.TestGetStorageNodeID(t, sn)
 }
 
 func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) logc.LogIOClient {
@@ -1467,7 +1457,9 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, topicID types.Topi
 				if !assert.NoError(t, err) {
 					return
 				}
-				defer cli.Close()
+				defer func() {
+					_ = cli.Close()
+				}()
 
 				_, err = cli.Append(ctx, topicID, lsID, [][]byte{data})
 				assert.Error(t, err)

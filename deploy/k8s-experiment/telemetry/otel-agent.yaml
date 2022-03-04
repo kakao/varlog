@@ -18,15 +18,18 @@ data:
       hostmetrics:
         collection_interval: 30s
         scrapers:
-          load:
-          filesystem:
+          cpu:
           disk:
             exclude:
               devices: ["loop"]
               match_type: regexp
+          load:
+          filesystem:
+          memory:
+          network:
           process:
             include:
-              names: ["vmr", "vsn"]
+              names: ["vmr", "vsn", "varlogsn"]
               match_type: strict
 
     exporters:

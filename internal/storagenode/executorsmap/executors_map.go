@@ -6,12 +6,12 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/executor"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/logstream"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 type executorSlot struct {
-	extor executor.Executor
+	extor *logstream.Executor
 	id    logStreamTopicID
 }
 
@@ -34,7 +34,7 @@ func New(initSize int) *ExecutorsMap {
 }
 
 // Load returns the executor stored in the map for a lsid, or nil if the executor is not present.
-func (m *ExecutorsMap) Load(tpid types.TopicID, lsid types.LogStreamID) (extor executor.Executor, loaded bool) {
+func (m *ExecutorsMap) Load(tpid types.TopicID, lsid types.LogStreamID) (extor *logstream.Executor, loaded bool) {
 	id := packLogStreamTopicID(lsid, tpid)
 	m.mu.RLock()
 	slot, ok := m.fastLookup(id)
@@ -47,7 +47,7 @@ func (m *ExecutorsMap) Load(tpid types.TopicID, lsid types.LogStreamID) (extor e
 
 // Store stores the executor for a lsid. Setting nil as an executor is also possible. However,
 // overwriting a non-nil executor is not possible.
-func (m *ExecutorsMap) Store(tpid types.TopicID, lsid types.LogStreamID, extor executor.Executor) (err error) {
+func (m *ExecutorsMap) Store(tpid types.TopicID, lsid types.LogStreamID, extor *logstream.Executor) (err error) {
 	id := packLogStreamTopicID(lsid, tpid)
 	m.mu.Lock()
 
@@ -72,7 +72,7 @@ func (m *ExecutorsMap) Store(tpid types.TopicID, lsid types.LogStreamID, extor e
 
 // LoadOrStore returns the existing executor for the lsid if present. If not, it stores the
 // executor. The loaded result is true if the executor is loaded, otherwise, false.
-func (m *ExecutorsMap) LoadOrStore(tpid types.TopicID, lsid types.LogStreamID, extor executor.Executor) (actual executor.Executor, loaded bool) {
+func (m *ExecutorsMap) LoadOrStore(tpid types.TopicID, lsid types.LogStreamID, extor *logstream.Executor) (actual *logstream.Executor, loaded bool) {
 	id := packLogStreamTopicID(lsid, tpid)
 	m.mu.Lock()
 
@@ -89,7 +89,7 @@ func (m *ExecutorsMap) LoadOrStore(tpid types.TopicID, lsid types.LogStreamID, e
 
 // LoadAndDelete deletes the executor for a lsid, and returns the old executor. The loaded result is
 // true if the executor is loaded, otherwise, false.
-func (m *ExecutorsMap) LoadAndDelete(tpid types.TopicID, lsid types.LogStreamID) (executor.Executor, bool) {
+func (m *ExecutorsMap) LoadAndDelete(tpid types.TopicID, lsid types.LogStreamID) (*logstream.Executor, bool) {
 	id := packLogStreamTopicID(lsid, tpid)
 	m.mu.Lock()
 
@@ -106,13 +106,13 @@ func (m *ExecutorsMap) LoadAndDelete(tpid types.TopicID, lsid types.LogStreamID)
 }
 
 // Range calls f in order by LogStreamID for each executor in the map.
-func (m *ExecutorsMap) Range(f func(types.LogStreamID, executor.Executor) bool) {
+func (m *ExecutorsMap) Range(f func(types.LogStreamID, types.TopicID, *logstream.Executor) bool) {
 	m.mu.RLock()
 	for i := 0; i < len(m.slots); i++ {
 		id := m.slots[i].id
-		lsid, _ := id.unpack()
+		lsid, tpid := id.unpack()
 		extor := m.slots[i].extor
-		if !f(lsid, extor) {
+		if !f(lsid, tpid, extor) {
 			break
 		}
 	}
@@ -141,7 +141,7 @@ func (m *ExecutorsMap) lookup(lsid logStreamTopicID) (extor executorSlot, idx in
 	return nilSlot, n, false
 }
 
-func (m *ExecutorsMap) store(lsid logStreamTopicID, extor executor.Executor) {
+func (m *ExecutorsMap) store(lsid logStreamTopicID, extor *logstream.Executor) {
 	idx := m.search(lsid)
 	slot := executorSlot{extor: extor, id: lsid}
 	m.insert(idx, slot)

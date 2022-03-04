@@ -6,7 +6,7 @@ images:
   newTag: stable
 - name: idock.daumkakao.io/varlog/all-in-one
   newName: idock.daumkakao.io/varlog/all-in-one
-  newTag: v0.1.4
+  newTag: v0.1.5-0aabea2e
 
 resources:
 - ../../base/varlogadm

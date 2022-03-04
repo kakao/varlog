@@ -11,7 +11,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode/reportcommitter"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode_deprecated/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/pkg/snc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"

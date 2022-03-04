@@ -50,18 +50,6 @@ type FilterWriter = base.FilterWriter
 // FilterPolicy exports the base.FilterPolicy type.
 type FilterPolicy = base.FilterPolicy
 
-// TableFormat specifies the format version for sstables. The legacy LevelDB
-// format is format version 0.
-type TableFormat uint32
-
-// The available table formats. Note that these values are not (and should not)
-// be serialized to disk. TableFormatRocksDBv2 is the default if otherwise
-// unspecified.
-const (
-	TableFormatRocksDBv2 TableFormat = iota
-	TableFormatLevelDB
-)
-
 // TablePropertyCollector provides a hook for collecting user-defined
 // properties based on the keys and values stored in an sstable. A new
 // TablePropertyCollector is created for an sstable when the sstable is being
@@ -81,6 +69,28 @@ type TablePropertyCollector interface {
 
 	// The name of the property collector.
 	Name() string
+}
+
+// SuffixReplaceableTableCollector is an extension to the TablePropertyCollector
+// interface that allows a table property collector to indicate that it supports
+// being *updated* during suffix replacement, i.e. when an existing SST in which
+// all keys have the same key suffix is updated to have a new suffix.
+//
+// A collector which supports being updated in such cases must be able to derive
+// its updated value from its old value and the change being made to the suffix,
+// without needing to be passed each updated K/V.
+//
+// For example, a collector that only inspects values can simply copy its
+// previously computed property as-is, since key-suffix replacement does not
+// change values, while a collector that depends only on key suffixes, like one
+// which collected mvcc-timestamp bounds from timestamp-suffixed keys, can just
+// set its new bounds from the new suffix, as it is common to all keys, without
+// needing to recompute it from every key.
+type SuffixReplaceableTableCollector interface {
+	// UpdateKeySuffixes is called when a table is updated to change the suffix of
+	// all keys in the table, and is passed the old value for that prop, if any,
+	// for that table as well as the old and new suffix.
+	UpdateKeySuffixes(oldProps map[string]string, oldSuffix, newSuffix []byte) error
 }
 
 // ReaderOptions holds the parameters needed for reading an sstable.
@@ -232,6 +242,11 @@ func (o WriterOptions) ensureDefaults() WriterOptions {
 	}
 	if o.Checksum == ChecksumTypeNone {
 		o.Checksum = ChecksumTypeCRC32c
+	}
+	// By default, if the table format is not specified, fall back to using the
+	// most compatible format.
+	if o.TableFormat == TableFormatUnspecified {
+		o.TableFormat = TableFormatRocksDBv2
 	}
 	return o
 }

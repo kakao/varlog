@@ -225,8 +225,10 @@ func TestUnseal(t *testing.T) {
 		var sndescList []*varlogpb.StorageNodeDescriptor
 		var snmclList []*snc.MockStorageNodeManagementClient
 		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
+			peerAddr := "127.0.0.1:" + strconv.Itoa(10000+int(snid))
 			snmcl := snc.NewMockStorageNodeManagementClient(ctrl)
 			snmcl.EXPECT().PeerStorageNodeID().Return(snid).AnyTimes()
+			snmcl.EXPECT().PeerAddress().Return(peerAddr).AnyTimes()
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
 
 			snManager.AddStorageNode(snmcl)
@@ -236,7 +238,7 @@ func TestUnseal(t *testing.T) {
 			sndescList = append(sndescList, &varlogpb.StorageNodeDescriptor{
 				StorageNode: varlogpb.StorageNode{
 					StorageNodeID: snid,
-					Address:       "127.0.0.1:" + strconv.Itoa(10000+int(snid)),
+					Address:       peerAddr,
 				},
 				Status: varlogpb.StorageNodeStatusRunning,
 				Storages: []*varlogpb.StorageDescriptor{
@@ -274,9 +276,9 @@ func TestUnseal(t *testing.T) {
 			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil).AnyTimes()
 			for i := 0; i < len(snmclList)-1; i++ {
 				snmcl := snmclList[i]
-				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			}
-			snmclList[len(sndescList)-1].EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(verrors.ErrInternal)
+			snmclList[len(sndescList)-1].EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(verrors.ErrInternal).AnyTimes()
 
 			Convey("Then Unseal should fail", func() {
 				err := snManager.Unseal(context.TODO(), topicID, logStreamID)

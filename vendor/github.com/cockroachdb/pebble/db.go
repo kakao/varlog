@@ -138,6 +138,47 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Set returns.
 	Set(key, value []byte, o *WriteOptions) error
+
+	// Experimental returns the experimental write API.
+	Experimental() ExperimentalWriter
+}
+
+// ExperimentalWriter provides access to experimental features of a Batch.
+type ExperimentalWriter interface {
+	Writer
+
+	// RangeKeySet sets a range key mapping the key range [start, end) at the MVCC
+	// timestamp suffix to value. The suffix is optional. If any portion of the key
+	// range [start, end) is already set by a range key with the same suffix value,
+	// RangeKeySet overrides it.
+	//
+	// It is safe to modify the contents of the arguments after RangeKeySet returns.
+	//
+	// WARNING: This is an experimental feature with limited functionality.
+	RangeKeySet(start, end, suffix, value []byte, opts *WriteOptions) error
+
+	// RangeKeyUnset removes a range key mapping the key range [start, end) at the
+	// MVCC timestamp suffix. The suffix may be omitted to remove an unsuffixed
+	// range key. RangeKeyUnset only removes portions of range keys that fall within
+	// the [start, end) key span, and only range keys with suffixes that exactly
+	// match the unset suffix.
+	//
+	// It is safe to modify the contents of the arguments after RangeKeyUnset
+	// returns.
+	//
+	// WARNING: This is an experimental feature with limited functionality.
+	RangeKeyUnset(start, end, suffix []byte, opts *WriteOptions) error
+
+	// RangeKeyDelete deletes all of the range keys in the range [start,end)
+	// (inclusive on start, exclusive on end). It does not delete point keys (for
+	// that use DeleteRange). RangeKeyDelete removes all range keys within the
+	// bounds, including those with or without suffixes.
+	//
+	// It is safe to modify the contents of the arguments after RangeKeyDelete
+	// returns.
+	//
+	// WARNING: This is an experimental feature with limited functionality.
+	RangeKeyDelete(start, end []byte, opts *WriteOptions) error
 }
 
 // DB provides a concurrent, persistent ordered key/value store.
@@ -218,8 +259,9 @@ type DB struct {
 	dataDir  vfs.File
 	walDir   vfs.File
 
-	tableCache *tableCacheContainer
-	newIters   tableNewIters
+	tableCache           *tableCacheContainer
+	newIters             tableNewIters
+	tableNewRangeKeyIter tableNewRangeKeyIter
 
 	commit *commitPipeline
 
@@ -404,6 +446,11 @@ type DB struct {
 			validating bool
 		}
 	}
+
+	// rangeKeys is a temporary field so that Pebble can provide a non-durable
+	// implementation of range keys in advance of the real implementation.
+	// TODO(jackson): Remove this.
+	rangeKeys *RangeKeysArena
 
 	// Normally equal to time.Now() but may be overridden in tests.
 	timeNow func() time.Time
@@ -595,6 +642,54 @@ func (d *DB) LogData(data []byte, opts *WriteOptions) error {
 	return nil
 }
 
+// Experimental returns the experimental write API.
+func (d *DB) Experimental() ExperimentalWriter {
+	return experimentalDB{d}
+}
+
+type experimentalDB struct {
+	*DB
+}
+
+// RangeKeySet implements the ExperimentalWriter interface.
+func (e experimentalDB) RangeKeySet(start, end, suffix, value []byte, opts *WriteOptions) error {
+	b := newBatch(e.DB)
+	eb := b.Experimental()
+	_ = eb.RangeKeySet(start, end, suffix, value, opts)
+	if err := e.Apply(b, opts); err != nil {
+		return err
+	}
+	// Only release the batch on success.
+	b.release()
+	return nil
+}
+
+// RangeKeyUnset implements the ExperimentalWriter interface.
+func (e experimentalDB) RangeKeyUnset(start, end, suffix []byte, opts *WriteOptions) error {
+	b := newBatch(e.DB)
+	eb := b.Experimental()
+	_ = eb.RangeKeyUnset(start, end, suffix, opts)
+	if err := e.Apply(b, opts); err != nil {
+		return err
+	}
+	// Only release the batch on success.
+	b.release()
+	return nil
+}
+
+// RangeKeyDelete implements the ExperimentalWriter interface.
+func (e experimentalDB) RangeKeyDelete(start, end []byte, opts *WriteOptions) error {
+	b := newBatch(e.DB)
+	eb := b.Experimental()
+	_ = eb.RangeKeyDelete(start, end, opts)
+	if err := e.Apply(b, opts); err != nil {
+		return err
+	}
+	// Only release the batch on success.
+	b.release()
+	return nil
+}
+
 // Apply the operations contained in the batch to the DB. If the batch is large
 // the contents of the batch may be retained by the database. If that occurs
 // the batch contents will be cleared preventing the caller from attempting to
@@ -624,11 +719,17 @@ func (d *DB) Apply(batch *Batch, opts *WriteOptions) error {
 		if d.split == nil {
 			return errNoSplit
 		}
-		// TODO(jackson): Assert that all range key operands are suffixless.
+		if d.opts.Experimental.RangeKeys == nil {
+			panic("pebble: range keys require the Experimental.RangeKeys option")
+		}
+		if d.FormatMajorVersion() < FormatRangeKeys {
+			panic(fmt.Sprintf(
+				"pebble: range keys require at least format major version %d (current: %d)",
+				FormatRangeKeys, d.FormatMajorVersion(),
+			))
+		}
 
-		// TODO(jackson): Once the format major version for range keys is
-		// introduced, error if the batch includes range keys but the active
-		// format major version doesn't enable them.
+		// TODO(jackson): Assert that all range key operands are suffixless.
 	}
 
 	if batch.db == nil {
@@ -762,7 +863,27 @@ func (d *DB) newIterInternal(batch *Batch, s *Snapshot, o *IterOptions) *Iterato
 	if err := d.closed.Load(); err != nil {
 		panic(err)
 	}
-
+	if o.rangeKeys() {
+		if d.opts.Experimental.RangeKeys == nil {
+			panic("pebble: range keys require the Experimental.RangeKeys option")
+		}
+		if d.FormatMajorVersion() < FormatRangeKeys {
+			panic(fmt.Sprintf(
+				"pebble: range keys require at least format major version %d (current: %d)",
+				FormatRangeKeys, d.FormatMajorVersion(),
+			))
+		}
+	}
+	if o != nil && o.RangeKeyMasking.Suffix != nil && o.KeyTypes != IterKeyTypePointsAndRanges {
+		panic("pebble: range key masking requires IterKeyTypePointsAndRanges")
+	}
+	if (batch != nil || s != nil) && (o != nil && o.OnlyReadGuaranteedDurable) {
+		// We could add support for OnlyReadGuaranteedDurable on snapshots if
+		// there was a need: this would require checking that the sequence number
+		// of the snapshot has been flushed, by comparing with
+		// DB.mem.queue[0].logSeqNum.
+		panic("OnlyReadGuaranteedDurable is not supported for batches or snapshots")
+	}
 	// Grab and reference the current readState. This prevents the underlying
 	// files in the associated version from being deleted if there is a current
 	// compaction. The readState is unref'd by Iterator.Close().
@@ -795,6 +916,13 @@ func (d *DB) newIterInternal(batch *Batch, s *Snapshot, o *IterOptions) *Iterato
 		newIters:            d.newIters,
 		seqNum:              seqNum,
 	}
+
+	if o.rangeKeys() {
+		// TODO(jackson): Pool range-key iterator objects.
+		dbi.rangeKey = &iteratorRangeKeyState{
+			rangeKeyIter: d.newRangeKeyIter(seqNum, batch, readState, o),
+		}
+	}
 	if o != nil {
 		dbi.opts = *o
 	}
@@ -811,6 +939,9 @@ func finishInitializingIter(buf *iterAlloc) *Iterator {
 	batch := dbi.batch
 	seqNum := dbi.seqNum
 	memtables := readState.memtables
+	if dbi.opts.OnlyReadGuaranteedDurable {
+		memtables = nil
+	}
 	current := readState.current
 
 	// Merging levels and levels from iterAlloc.
@@ -843,73 +974,87 @@ func finishInitializingIter(buf *iterAlloc) *Iterator {
 		numMergingLevels++
 		numLevelIters++
 	}
-	if numMergingLevels > cap(mlevels) {
-		mlevels = make([]mergingIterLevel, 0, numMergingLevels)
-	}
-	if numLevelIters > cap(levels) {
-		levels = make([]levelIter, 0, numLevelIters)
-	}
 
-	// Top-level is the batch, if any.
-	if batch != nil {
-		mlevels = append(mlevels, mergingIterLevel{
-			iter:         batch.newInternalIter(&dbi.opts),
-			rangeDelIter: batch.newRangeDelIter(&dbi.opts),
-		})
-	}
-
-	// Next are the memtables.
-	for i := len(memtables) - 1; i >= 0; i-- {
-		mem := memtables[i]
-		// We only need to read from memtables which contain sequence numbers older
-		// than seqNum.
-		if logSeqNum := mem.logSeqNum; logSeqNum >= seqNum {
-			continue
+	if dbi.opts.pointKeys() {
+		if numMergingLevels > cap(mlevels) {
+			mlevels = make([]mergingIterLevel, 0, numMergingLevels)
 		}
-		mlevels = append(mlevels, mergingIterLevel{
-			iter:         mem.newIter(&dbi.opts),
-			rangeDelIter: mem.newRangeDelIter(&dbi.opts),
-		})
-	}
-
-	// Next are the file levels: L0 sub-levels followed by lower levels.
-	mlevelsIndex := len(mlevels)
-	levelsIndex := len(levels)
-	mlevels = mlevels[:numMergingLevels]
-	levels = levels[:numLevelIters]
-
-	addLevelIterForFiles := func(files manifest.LevelIterator, level manifest.Level) {
-		li := &levels[levelsIndex]
-
-		li.init(dbi.opts, dbi.cmp, dbi.split, dbi.newIters, files, level, nil)
-		li.initRangeDel(&mlevels[mlevelsIndex].rangeDelIter)
-		li.initSmallestLargestUserKey(&mlevels[mlevelsIndex].smallestUserKey,
-			&mlevels[mlevelsIndex].largestUserKey,
-			&mlevels[mlevelsIndex].isLargestUserKeyRangeDelSentinel)
-		li.initIsSyntheticIterBoundsKey(&mlevels[mlevelsIndex].isSyntheticIterBoundsKey)
-		mlevels[mlevelsIndex].iter = li
-
-		levelsIndex++
-		mlevelsIndex++
-	}
-
-	// Add level iterators for the L0 sublevels, iterating from newest to
-	// oldest.
-	for i := len(current.L0SublevelFiles) - 1; i >= 0; i-- {
-		addLevelIterForFiles(current.L0SublevelFiles[i].Iter(), manifest.L0Sublevel(i))
-	}
-
-	// Add level iterators for the non-empty non-L0 levels.
-	for level := 1; level < len(current.Levels); level++ {
-		if current.Levels[level].Empty() {
-			continue
+		if numLevelIters > cap(levels) {
+			levels = make([]levelIter, 0, numLevelIters)
 		}
-		addLevelIterForFiles(current.Levels[level].Iter(), manifest.Level(level))
+
+		// Top-level is the batch, if any.
+		if batch != nil {
+			mlevels = append(mlevels, mergingIterLevel{
+				iter:         batch.newInternalIter(&dbi.opts),
+				rangeDelIter: batch.newRangeDelIter(&dbi.opts),
+			})
+		}
+
+		// Next are the memtables.
+		for i := len(memtables) - 1; i >= 0; i-- {
+			mem := memtables[i]
+			// We only need to read from memtables which contain sequence numbers older
+			// than seqNum.
+			if logSeqNum := mem.logSeqNum; logSeqNum >= seqNum {
+				continue
+			}
+			mlevels = append(mlevels, mergingIterLevel{
+				iter:         mem.newIter(&dbi.opts),
+				rangeDelIter: mem.newRangeDelIter(&dbi.opts),
+			})
+		}
+
+		// Next are the file levels: L0 sub-levels followed by lower levels.
+		mlevelsIndex := len(mlevels)
+		levelsIndex := len(levels)
+		mlevels = mlevels[:numMergingLevels]
+		levels = levels[:numLevelIters]
+
+		addLevelIterForFiles := func(files manifest.LevelIterator, level manifest.Level) {
+			li := &levels[levelsIndex]
+
+			li.init(dbi.opts, dbi.cmp, dbi.split, dbi.newIters, files, level, nil)
+			li.initRangeDel(&mlevels[mlevelsIndex].rangeDelIter)
+			li.initSmallestLargestUserKey(&mlevels[mlevelsIndex].smallestUserKey,
+				&mlevels[mlevelsIndex].largestUserKey,
+				&mlevels[mlevelsIndex].isLargestUserKeyRangeDelSentinel)
+			li.initIsSyntheticIterBoundsKey(&mlevels[mlevelsIndex].isSyntheticIterBoundsKey)
+			mlevels[mlevelsIndex].iter = li
+
+			levelsIndex++
+			mlevelsIndex++
+		}
+
+		// Add level iterators for the L0 sublevels, iterating from newest to
+		// oldest.
+		for i := len(current.L0SublevelFiles) - 1; i >= 0; i-- {
+			addLevelIterForFiles(current.L0SublevelFiles[i].Iter(), manifest.L0Sublevel(i))
+		}
+
+		// Add level iterators for the non-empty non-L0 levels.
+		for level := 1; level < len(current.Levels); level++ {
+			if current.Levels[level].Empty() {
+				continue
+			}
+			addLevelIterForFiles(current.Levels[level].Iter(), manifest.Level(level))
+		}
+		buf.merging.init(&dbi.opts, dbi.cmp, dbi.split, mlevels...)
+		buf.merging.snapshot = seqNum
+		buf.merging.elideRangeTombstones = true
+	} else {
+		// This is a merging iterator with no levels, that produces nothing.
+		buf.merging.init(&dbi.opts, dbi.cmp, dbi.split)
 	}
 
-	buf.merging.init(&dbi.opts, dbi.cmp, dbi.split, mlevels...)
-	buf.merging.snapshot = seqNum
-	buf.merging.elideRangeTombstones = true
+	// For the in-memory prototype of range keys, wrap the merging iterator with
+	// an interleaving iterator. The dbi.rangeKeysIter is an iterator into
+	// fragmented range keys read from the global range key arena.
+	if dbi.rangeKey != nil {
+		dbi.rangeKey.iter.Init(dbi.cmp, dbi.split, &buf.merging, dbi.rangeKey.rangeKeyIter, dbi.opts.RangeKeyMasking.Suffix)
+		dbi.iter = &dbi.rangeKey.iter
+		dbi.iter.SetBounds(dbi.opts.LowerBound, dbi.opts.UpperBound)
+	}
 	return dbi
 }
 
@@ -1061,9 +1206,7 @@ func (d *DB) Close() error {
 }
 
 // Compact the specified range of keys in the database.
-func (d *DB) Compact(
-	start, end []byte, /* CompactionOptions */
-) error {
+func (d *DB) Compact(start, end []byte, parallelize bool) error {
 	if err := d.closed.Load(); err != nil {
 		panic(err)
 	}
@@ -1076,13 +1219,14 @@ func (d *DB) Compact(
 	}
 	iStart := base.MakeInternalKey(start, InternalKeySeqNumMax, InternalKeyKindMax)
 	iEnd := base.MakeInternalKey(end, 0, 0)
-	meta := []*fileMetadata{{Smallest: iStart, Largest: iEnd}}
+	m := (&fileMetadata{}).ExtendPointKeyBounds(d.cmp, iStart, iEnd)
+	meta := []*fileMetadata{m}
 
 	d.mu.Lock()
 	maxLevelWithFiles := 1
 	cur := d.mu.versions.currentVersion()
 	for level := 0; level < numLevels; level++ {
-		overlaps := cur.Overlaps(level, d.cmp, start, end)
+		overlaps := cur.Overlaps(level, d.cmp, start, end, iEnd.IsExclusiveSentinel())
 		if !overlaps.Empty() {
 			maxLevelWithFiles = level + 1
 		}
@@ -1130,16 +1274,10 @@ func (d *DB) Compact(
 	}
 
 	for level := 0; level < maxLevelWithFiles; {
-		manual := &manualCompaction{
-			done:  make(chan error, 1),
-			level: level,
-			start: iStart,
-			end:   iEnd,
-		}
-		if err := d.manualCompact(manual); err != nil {
+		if err := d.manualCompact(iStart.UserKey, iEnd.UserKey, level, parallelize); err != nil {
 			return err
 		}
-		level = manual.outputLevel
+		level++
 		if level == numLevels-1 {
 			// A manual compaction of the bottommost level occurred.
 			// There is no next level to try and compact.
@@ -1149,12 +1287,67 @@ func (d *DB) Compact(
 	return nil
 }
 
-func (d *DB) manualCompact(manual *manualCompaction) error {
+func (d *DB) manualCompact(start, end []byte, level int, parallelize bool) error {
 	d.mu.Lock()
-	d.mu.compact.manual = append(d.mu.compact.manual, manual)
+	curr := d.mu.versions.currentVersion()
+	files := curr.Overlaps(level, d.cmp, start, end, false)
+	if files.Empty() {
+		d.mu.Unlock()
+		return nil
+	}
+
+	var compactions []*manualCompaction
+	if parallelize {
+		compactions = append(compactions, d.splitManualCompaction(start, end, level)...)
+	} else {
+		compactions = append(compactions, &manualCompaction{
+			level: level,
+			done:  make(chan error, 1),
+			start: start,
+			end:   end,
+		})
+	}
+	d.mu.compact.manual = append(d.mu.compact.manual, compactions...)
 	d.maybeScheduleCompaction()
 	d.mu.Unlock()
-	return <-manual.done
+
+	// Each of the channels is guaranteed to be eventually sent to once. After a
+	// compaction is possibly picked in d.maybeScheduleCompaction(), either the
+	// compaction is dropped, executed after being scheduled, or retried later.
+	// Assuming eventual progress when a compaction is retried, all outcomes send
+	// a value to the done channel. Since the channels are buffered, it is not
+	// necessary to read from each channel, and so we can exit early in the event
+	// of an error.
+	for _, compaction := range compactions {
+		if err := <-compaction.done; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// splitManualCompaction splits a manual compaction over [start,end] on level
+// such that the resulting compactions have no key overlap.
+func (d *DB) splitManualCompaction(
+	start, end []byte, level int,
+) (splitCompactions []*manualCompaction) {
+	curr := d.mu.versions.currentVersion()
+	endLevel := level + 1
+	baseLevel := d.mu.versions.picker.getBaseLevel()
+	if level == 0 {
+		endLevel = baseLevel
+	}
+	keyRanges := calculateInuseKeyRanges(curr, d.cmp, level, endLevel, start, end)
+	for _, keyRange := range keyRanges {
+		splitCompactions = append(splitCompactions, &manualCompaction{
+			level: level,
+			done:  make(chan error, 1),
+			start: keyRange.Start,
+			end:   keyRange.End,
+			split: true,
+		})
+	}
+	return splitCompactions
 }
 
 // Flush the memtable to stable storage.
@@ -1203,6 +1396,10 @@ func (d *DB) Metrics() *Metrics {
 	metrics.Compact.NumInProgress = int64(d.mu.compact.compactingCount)
 	for _, m := range d.mu.mem.queue {
 		metrics.MemTable.Size += m.totalBytes()
+	}
+	metrics.Snapshots.Count = d.mu.snapshots.count()
+	if metrics.Snapshots.Count > 0 {
+		metrics.Snapshots.EarliestSeqNum = d.mu.snapshots.earliest()
 	}
 	metrics.MemTable.Count = int64(len(d.mu.mem.queue))
 	metrics.MemTable.ZombieCount = atomic.LoadInt64(&d.atomic.memTableCount) - metrics.MemTable.Count
@@ -1356,7 +1553,7 @@ func (d *DB) EstimateDiskUsage(start, end []byte) (uint64, error) {
 			// We can only use `Overlaps` to restrict `files` at L1+ since at L0 it
 			// expands the range iteratively until it has found a set of files that
 			// do not overlap any other L0 files outside that set.
-			overlaps := readState.current.Overlaps(level, d.opts.Comparer.Compare, start, end)
+			overlaps := readState.current.Overlaps(level, d.opts.Comparer.Compare, start, end, false /* exclusiveEnd */)
 			iter = overlaps.Iter()
 		}
 		for file := iter.First(); file != nil; file = iter.Next() {

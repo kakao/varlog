@@ -33,10 +33,14 @@ func flushExternalTable(untypedDB interface{}, path string, originalMeta *fileMe
 		FileNum:        fileNum,
 		Size:           originalMeta.Size,
 		CreationTime:   time.Now().Unix(),
-		Smallest:       originalMeta.Smallest,
-		Largest:        originalMeta.Largest,
 		SmallestSeqNum: originalMeta.SmallestSeqNum,
 		LargestSeqNum:  originalMeta.LargestSeqNum,
+	}
+	if originalMeta.HasPointKeys {
+		m.ExtendPointKeyBounds(d.cmp, originalMeta.SmallestPointKey, originalMeta.LargestPointKey)
+	}
+	if originalMeta.HasRangeKeys {
+		m.ExtendRangeKeyBounds(d.cmp, originalMeta.SmallestRangeKey, originalMeta.LargestRangeKey)
 	}
 
 	// Hard link the sstable into the DB directory.
