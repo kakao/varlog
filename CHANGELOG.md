@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Changed default storage settings for good performance in usual cases. (#VARLOG-668/#584)
+- Redesigned and reimplemented `internal/storagenode` and `internal/storage`. (#VARLOG-681/#600)
+- Fixed data race issue that can occur in the sequencer when the log stream replica is sealed. (#VARLOG-691/#602)
 
 ## [0.1.6] - 2022-02-09
 ### Changed

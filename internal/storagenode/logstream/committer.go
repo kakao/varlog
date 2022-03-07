@@ -53,24 +53,32 @@ func newCommitter(cfg committerConfig) (*committer, error) {
 // The commit wait task is pushed into commitWaitQ in the committer.
 // The writer calls this method internally to push commit wait tasks to the committer.
 // If the input list of commit wait tasks are nil or empty, it panics.
-func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) error {
-	switch cm.lse.esm.load() {
-	case executorStateSealing, executorStateSealed, executorStateLearning:
-		return verrors.ErrSealed
-	case executorStateClosed:
-		return verrors.ErrClosed
-	}
-
+func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) (err error) {
 	if cwts == nil {
 		panic("log stream: committer: commit wait task list is nil")
 	}
-
 	cnt := cwts.Len()
 	if cnt == 0 {
 		panic("log stream: committer: commit wait task list is empty")
 	}
 
 	atomic.AddInt64(&cm.inflightCommitWait, int64(cnt))
+	defer func() {
+		if err != nil {
+			atomic.AddInt64(&cm.inflightCommitWait, -int64(cnt))
+		}
+	}()
+
+	switch cm.lse.esm.load() {
+	case executorStateSealing, executorStateSealed, executorStateLearning:
+		err = verrors.ErrSealed
+	case executorStateClosed:
+		err = verrors.ErrClosed
+	}
+	if err != nil {
+		return err
+	}
+
 	_ = cm.commitWaitQ.pushList(cwts)
 	return nil
 }
@@ -78,26 +86,34 @@ func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) erro
 // sendCommitTask sends a commit task to the committer.
 // The commit task is pushed into commitQueue in the committer.
 // The Commit RPC handler calls this method to push commit request to the committer.
-func (cm *committer) sendCommitTask(ctx context.Context, ct *commitTask) error {
+func (cm *committer) sendCommitTask(ctx context.Context, ct *commitTask) (err error) {
+	atomic.AddInt64(&cm.inflightCommit, 1)
+	defer func() {
+		if err != nil {
+			atomic.AddInt64(&cm.inflightCommit, -1)
+		}
+	}()
+
 	switch cm.lse.esm.load() {
 	case executorStateSealing, executorStateSealed, executorStateLearning:
-		return verrors.ErrSealed
+		err = verrors.ErrSealed
 	case executorStateClosed:
-		return verrors.ErrClosed
+		err = verrors.ErrClosed
+	}
+	if err != nil {
+		return err
 	}
 
 	if ct == nil {
 		panic("log stream: committer: commit task is nil")
 	}
 
-	atomic.AddInt64(&cm.inflightCommit, 1)
 	select {
 	case cm.commitQueue <- ct:
 	case <-ctx.Done():
-		atomic.AddInt64(&cm.inflightCommit, -1)
-		return ctx.Err()
+		err = ctx.Err()
 	}
-	return nil
+	return err
 }
 
 // commitLoop is the main loop of committer.
@@ -290,14 +306,14 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 
 // drainCommitWaitQ drains the commit wait tasks in commitWaitQ.
 func (cm *committer) drainCommitWaitQ(cause error) {
-	for cm.commitWaitQ.size() > 0 {
+	for atomic.LoadInt64(&cm.inflightCommitWait) > 0 {
 		cwt := cm.commitWaitQ.pop()
+		if cwt == nil {
+			continue
+		}
 		cwt.awg.commitDone(cause)
 		cwt.release()
 		atomic.AddInt64(&cm.inflightCommitWait, -1)
-	}
-	if atomic.LoadInt64(&cm.inflightCommitWait) != 0 {
-		panic("log stream: inconsistent commit wait queue while draining")
 	}
 }
 

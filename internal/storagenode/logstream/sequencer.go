@@ -41,22 +41,30 @@ func newSequencer(cfg sequencerConfig) (*sequencer, error) {
 
 // send sends a sequence task to the sequencer.
 // If state of the log stream executor is not appendable, it returns an error.
-func (sq *sequencer) send(ctx context.Context, st *sequenceTask) error {
+func (sq *sequencer) send(ctx context.Context, st *sequenceTask) (err error) {
+	atomic.AddInt64(&sq.inflight, 1)
+	defer func() {
+		if err != nil {
+			atomic.AddInt64(&sq.inflight, -1)
+		}
+	}()
+
 	switch sq.lse.esm.load() {
 	case executorStateSealing, executorStateSealed:
-		return verrors.ErrSealed
+		err = verrors.ErrSealed
 	case executorStateClosed:
-		return verrors.ErrClosed
+		err = verrors.ErrClosed
+	}
+	if err != nil {
+		return err
 	}
 
-	atomic.AddInt64(&sq.inflight, 1)
 	select {
 	case sq.queue <- st:
 	case <-ctx.Done():
-		atomic.AddInt64(&sq.inflight, -1)
-		return ctx.Err()
+		err = ctx.Err()
 	}
-	return nil
+	return err
 }
 
 // sequenceLoop is the main loop of the sequencer.
