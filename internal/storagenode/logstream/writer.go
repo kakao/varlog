@@ -36,22 +36,30 @@ func newWriter(cfg writerConfig) (*writer, error) {
 }
 
 // send sends a sequenceTask to the queue.
-func (w *writer) send(ctx context.Context, st *sequenceTask) error {
+func (w *writer) send(ctx context.Context, st *sequenceTask) (err error) {
+	atomic.AddInt64(&w.inflight, 1)
+	defer func() {
+		if err != nil {
+			atomic.AddInt64(&w.inflight, -1)
+		}
+	}()
+
 	switch w.lse.esm.load() {
 	case executorStateSealing, executorStateSealed, executorStateLearning:
-		return verrors.ErrSealed
+		err = verrors.ErrSealed
 	case executorStateClosed:
-		return verrors.ErrClosed
+		err = verrors.ErrClosed
+	}
+	if err != nil {
+		return err
 	}
 
-	atomic.AddInt64(&w.inflight, 1)
 	select {
 	case w.queue <- st:
 	case <-ctx.Done():
-		atomic.AddInt64(&w.inflight, -1)
-		return ctx.Err()
+		err = ctx.Err()
 	}
-	return nil
+	return err
 }
 
 // writeLoop is the main loop of the writer.

@@ -37,22 +37,30 @@ func newBackupWriter(cfg backupWriterConfig) (*backupWriter, error) {
 	return sq, nil
 }
 
-func (bw *backupWriter) send(ctx context.Context, bwt *backupWriteTask) error {
+func (bw *backupWriter) send(ctx context.Context, bwt *backupWriteTask) (err error) {
+	atomic.AddInt64(&bw.inflight, 1)
+	defer func() {
+		if err != nil {
+			atomic.AddInt64(&bw.inflight, -1)
+		}
+	}()
+
 	switch bw.lse.esm.load() {
 	case executorStateSealing, executorStateSealed, executorStateLearning:
-		return verrors.ErrSealed
+		err = verrors.ErrSealed
 	case executorStateClosed:
-		return verrors.ErrClosed
+		err = verrors.ErrClosed
+	}
+	if err != nil {
+		return err
 	}
 
-	atomic.AddInt64(&bw.inflight, 1)
 	select {
 	case bw.queue <- bwt:
 	case <-ctx.Done():
-		atomic.AddInt64(&bw.inflight, -1)
-		return ctx.Err()
+		err = ctx.Err()
 	}
-	return nil
+	return err
 }
 
 func (bw *backupWriter) writeLoop(ctx context.Context) {

@@ -305,7 +305,7 @@ func (lse *Executor) resetInternalState(lastCommittedLLSN types.LLSN, discardCom
 	lse.rcs.close()
 	lse.rcs = nil
 
-	// backupWriter
+	// sequencer
 	lse.sq.waitForDrainage(verrors.ErrSealed, false)
 
 	// writer
