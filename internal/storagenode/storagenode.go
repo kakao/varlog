@@ -77,6 +77,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		server: grpc.NewServer(
 			grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
 			grpc.WriteBufferSize(int(cfg.grpcServerWriteBufferSize)),
+			grpc.MaxRecvMsgSize(int(cfg.grpcServerMaxRecvMsgSize)),
 		),
 		healthServer: health.NewServer(),
 		closedC:      make(chan struct{}),
@@ -140,6 +141,7 @@ func (sn *StorageNode) Serve() error {
 		zap.Int64("ballast", sn.ballastSize),
 		zap.Int64("grpcServerReadBufferSize", sn.grpcServerReadBufferSize),
 		zap.Int64("grpcServerWriteBufferSize", sn.grpcServerWriteBufferSize),
+		zap.Int64("grpcServerMaxRecvMsgSize", sn.grpcServerMaxRecvMsgSize),
 		zap.Int64("grpcReplicateClientReadBufferSize", sn.replicateClientReadBufferSize),
 		zap.Int64("grpcReplicateClientWriteBufferSize", sn.replicateClientWriteBufferSize),
 	)

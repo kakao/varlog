@@ -15,6 +15,14 @@ import (
 	"github.com/kakao/varlog/pkg/util/fputil"
 )
 
+const (
+	DefaultServerReadBufferSize           = 32 << 10
+	DefaultServerWriteBufferSize          = 32 << 10
+	DefaultServerMaxRecvSize              = 4 << 20
+	DefaultReplicateClientReadBufferSize  = 32 << 10
+	DefaultReplicateClientWriteBufferSize = 32 << 10
+)
+
 type config struct {
 	cid                             types.ClusterID
 	snid                            types.StorageNodeID
@@ -23,6 +31,7 @@ type config struct {
 	ballastSize                     int64
 	grpcServerReadBufferSize        int64
 	grpcServerWriteBufferSize       int64
+	grpcServerMaxRecvMsgSize        int64
 	replicateClientReadBufferSize   int64
 	replicateClientWriteBufferSize  int64
 	volumes                         []string
@@ -34,7 +43,12 @@ type config struct {
 
 func newConfig(opts []Option) (config, error) {
 	cfg := config{
-		logger: zap.NewNop(),
+		grpcServerReadBufferSize:       DefaultServerReadBufferSize,
+		grpcServerWriteBufferSize:      DefaultServerWriteBufferSize,
+		grpcServerMaxRecvMsgSize:       DefaultServerMaxRecvSize,
+		replicateClientReadBufferSize:  DefaultReplicateClientReadBufferSize,
+		replicateClientWriteBufferSize: DefaultReplicateClientWriteBufferSize,
+		logger:                         zap.NewNop(),
 	}
 	for _, opt := range opts {
 		opt.apply(&cfg)
@@ -148,6 +162,12 @@ func WithGRPCServerReadBufferSize(grpcServerReadBufferSize int64) Option {
 func WithGRPCServerWriteBufferSize(grpcServerWriteBufferSize int64) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.grpcServerWriteBufferSize = grpcServerWriteBufferSize
+	})
+}
+
+func WithGRPCServerMaxRecvMsgSize(grpcServerMaxRecvMsgSize int64) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.grpcServerMaxRecvMsgSize = grpcServerMaxRecvMsgSize
 	})
 }
 

@@ -39,6 +39,12 @@ var (
 		Envs:  []string{"SERVER_WRITE_BUFFER_SIZE"},
 		Usage: "B, KiB, MiB, GiB",
 	}
+	flagServerMaxRecvMsgSize = flags.FlagDesc{
+		Name:    "server-max-msg-size",
+		Aliases: []string{"server-max-message-size"},
+		Envs:    []string{"SERVER_MAX_MSG_SIZE", "SERVER_MAX_MESSAGE_SIZE"},
+		Usage:   "B, KiB, MiB, GiB",
+	}
 	flagReplicationClientReadBufferSize = flags.FlagDesc{
 		Name:  "replication-client-read-buffer-size",
 		Envs:  []string{"REPLICATION_CLIENT_READ_BUFFER_SIZE"},

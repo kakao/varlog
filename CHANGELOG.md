@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Added `--server-max-msg-size` option to storage node. (#VARLOG-688/#601)
+
+### Changed
+- Changed default storage settings for good performance in usual cases. (#VARLOG-668/#584)
+- Redesigned and reimplemented `internal/storagenode` and `internal/storage`. (#VARLOG-681/#600)
 
 ### Changed
 - Changed default storage settings for good performance in usual cases. (#VARLOG-668/#584)
@@ -14,8 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.6] - 2022-02-09
 ### Changed
 - Fixed a bug that SubscribeTo API returns an invalid range error while waiting for new logs committed. (#VARLOG-683/#598)
-- Changed default storage settings for good performance in usual cases. (#VARLOG-668/#584)
-- Redesigned and reimplemented `internal/storagenode` and `internal/storage`. (#VARLOG-681/#600)
 
 
 ## [0.1.5] - 2022-01-19

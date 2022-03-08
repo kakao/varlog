@@ -89,6 +89,11 @@ func start(c *cli.Context) error {
 		return fmt.Errorf("serverWriteBufferSize: %w", err)
 	}
 
+	maxRecvMsgSize, err := units.FromByteSizeString(c.String(flagServerMaxRecvMsgSize.Name))
+	if err != nil {
+		return fmt.Errorf("serverMaxRecvMsgSize: %w", err)
+	}
+
 	replicateClientReadBufferSize, err := units.FromByteSizeString(c.String(flagReplicationClientReadBufferSize.Name))
 	if err != nil {
 		return fmt.Errorf("replicationClientReadBufferSize: %w", err)
@@ -144,6 +149,7 @@ func start(c *cli.Context) error {
 		storagenode.WithBallastSize(ballastSize),
 		storagenode.WithGRPCServerReadBufferSize(readBufferSize),
 		storagenode.WithGRPCServerWriteBufferSize(writeBufferSize),
+		storagenode.WithGRPCServerMaxRecvMsgSize(maxRecvMsgSize),
 		storagenode.WithReplicateClientReadBufferSize(replicateClientReadBufferSize),
 		storagenode.WithReplicateClientWriteBufferSize(replicateClientWriteBufferSize),
 		storagenode.WithDefaultLogStreamExecutorOptions(
