@@ -6,6 +6,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.daumkakao.com/varlog/varlog/internal/storage"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/logstream"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/units"
@@ -39,10 +40,11 @@ func newStartCommand() *cli.Command {
 			flagAdvertise.StringFlag(false, ""),
 			flagVolumes.StringSliceFlag(true, nil),
 			flagBallastSize.StringFlag(false, "1G"),
-			flagServerReadBufferSize.StringFlag(false, "32K"),
-			flagServerWriteBufferSize.StringFlag(false, "32K"),
-			flagReplicationClientReadBufferSize.StringFlag(false, "32K"),
-			flagReplicationClientWriteBufferSize.StringFlag(false, "32K"),
+			flagServerReadBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerReadBufferSize)),
+			flagServerWriteBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerWriteBufferSize)),
+			flagServerMaxRecvMsgSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerMaxRecvSize)),
+			flagReplicationClientReadBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultReplicateClientReadBufferSize)),
+			flagReplicationClientWriteBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultReplicateClientWriteBufferSize)),
 
 			// lse options
 			flagLogStreamExecutorSequenceQueueCapacity.IntFlag(false, logstream.DefaultSequenceQueueCapacity),
