@@ -1,16 +1,12 @@
 package executor
 
 import (
-	"github.daumkakao.com/varlog/varlog/internal/storagenode_deprecated/storage"
-	"github.daumkakao.com/varlog/varlog/pkg/types"
-	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type MetadataProvider interface {
 	Metadata() varlogpb.LogStreamMetadataDescriptor
 	Path() string
-	GetPrevCommitInfo(ver types.Version) (*snpb.LogStreamCommitInfo, error)
 }
 
 func (e *executor) Path() string {
@@ -73,29 +69,4 @@ func (e *executor) LogStreamMetadata() (lsd varlogpb.LogStreamDescriptor, err er
 		Tail:        localHWM,
 	}
 	return lsd, nil
-}
-
-func (e *executor) GetPrevCommitInfo(ver types.Version) (*snpb.LogStreamCommitInfo, error) {
-	info := &snpb.LogStreamCommitInfo{
-		LogStreamID:        e.logStreamID,
-		HighestWrittenLLSN: e.lsc.uncommittedLLSNEnd.Load() - 1,
-	}
-
-	cc, err := e.storage.ReadFloorCommitContext(ver)
-	switch err {
-	case storage.ErrNotFoundCommitContext:
-		info.Status = snpb.GetPrevCommitStatusNotFound
-		return info, nil
-	case storage.ErrInconsistentCommitContext:
-		info.Status = snpb.GetPrevCommitStatusInconsistent
-		return info, nil
-	default:
-		info.Status = snpb.GetPrevCommitStatusOK
-	}
-
-	info.CommittedLLSNOffset = cc.CommittedLLSNBegin
-	info.CommittedGLSNOffset = cc.CommittedGLSNBegin
-	info.CommittedGLSNLength = uint64(cc.CommittedGLSNEnd - cc.CommittedGLSNBegin)
-	info.Version = cc.Version
-	return info, nil
 }

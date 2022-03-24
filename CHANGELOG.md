@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed data race issue that can occur in the sequencer when the log stream replica is sealed. (#VARLOG-691/#602)
 - Rearrange the order of sending tasks to the committer and sending tasks to the writer in the sequencer. (#VARLOG-693/#603)
 
+### Removed
+- Removed state machine log from metadata repository. (#VARLOG-687/#606)
+
+
 ## [0.1.6] - 2022-02-09
 ### Changed
 - Fixed a bug that SubscribeTo API returns an invalid range error while waiting for new logs committed. (#VARLOG-683/#598)

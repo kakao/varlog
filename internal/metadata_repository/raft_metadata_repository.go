@@ -57,8 +57,7 @@ type RaftMetadataRepository struct {
 	reporterClientFac     ReporterClientFactory
 	snManagementClientFac StorageNodeManagementClientFactory
 
-	storage         *MetadataStorage
-	stateMachineLog StateMachineLog
+	storage *MetadataStorage
 
 	// for ack
 	requestNum uint64
@@ -144,16 +143,6 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
 	mr.membership = mr.storage
 
-	mr.stateMachineLog = newStateMachineLog(logger.Named("sml"),
-		fmt.Sprintf("%s/sml/%d", options.RaftDir, options.NodeID))
-
-	// TODO:: recover read
-	if options.EnableSML && !options.RecoverFromSML {
-		if err = mr.stateMachineLog.OpenForWrite(0); err != nil {
-			logger.Panic("stateMachineLog", zap.Error(err))
-		}
-	}
-
 	mr.listenNotifyC = make(chan struct{})
 
 	mr.proposeC = make(chan *mrpb.RaftEntry, 4096)
@@ -224,13 +213,6 @@ func (mr *RaftMetadataRepository) Run() {
 		case <-ctx.Done():
 			return
 		case <-mr.listenNotifyC:
-		}
-
-		if mr.options.RecoverFromSML {
-			if err := mr.recoverStateMachine(mctx); err != nil {
-				fmt.Printf("could not recover. err:%v\n", err)
-				mr.logger.Panic("could not recover", zap.Error(err))
-			}
 		}
 
 		// commit trigger should run after recover complete
@@ -596,13 +578,6 @@ func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, e
 	}
 }
 
-func (mr *RaftMetadataRepository) saveSML(entry *mrpb.StateMachineLogEntry) {
-	mr.withTelemetry(context.TODO(), "save_sml", func(ctx context.Context) (interface{}, error) {
-		mr.stateMachineLog.Append(entry)
-		return nil, nil
-	})
-}
-
 func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 	mr.withTelemetry(context.TODO(), "apply", func(ctx context.Context) (interface{}, error) {
 		if c == nil || c.entry == nil {
@@ -611,14 +586,6 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 
 		e := c.entry
 		f := e.Request.GetValue()
-
-		if mr.options.EnableSML {
-			lentry := &mrpb.StateMachineLogEntry{}
-			lentry.AppliedIndex = e.AppliedIndex
-			if lentry.Payload.SetValue(f) {
-				mr.saveSML(lentry)
-			}
-		}
 
 		switch r := f.(type) {
 		case *mrpb.RegisterStorageNode:
@@ -649,15 +616,6 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 			mr.applyRemovePeer(r, c.confState, e.AppliedIndex)
 		case *mrpb.Endpoint:
 			mr.applyEndpoint(r, e.NodeIndex, e.RequestIndex)
-		case *mrpb.RecoverStateMachine:
-			// TODO:: handle duplicated recover entry
-			mr.applyRecoverStateMachine(r, e.AppliedIndex, e.NodeIndex, e.RequestIndex)
-			if mr.options.EnableSML {
-				if err := mr.stateMachineLog.OpenForWrite(0); err != nil {
-					mr.logger.Panic("stateMachineLog", zap.Error(err))
-				}
-			}
-
 		}
 
 		mr.storage.UpdateAppliedIndex(e.AppliedIndex)
@@ -1028,17 +986,6 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 		crs.Version = curVer + 1
 
 		if totalCommitted > 0 {
-			if mr.options.EnableSML {
-				lentry := &mrpb.StateMachineLogEntry{
-					AppliedIndex: appliedIndex,
-				}
-
-				lentry.Payload.SetValue(&mrpb.StateMachineLogCommitResult{
-					TrimVersion:  trimVer,
-					CommitResult: crs,
-				})
-				mr.saveSML(lentry)
-			}
 			mr.storage.AppendLogStreamCommitHistory(crs)
 		}
 
@@ -1619,83 +1566,4 @@ func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string
 			Value: attribute.StringValue(mr.nodeID.String()),
 		})
 	return rsp, err
-}
-
-func (mr *RaftMetadataRepository) recoverStateMachine(ctx context.Context) error {
-	storage := NewMetadataStorage(nil, 0, mr.logger.Named("storage"))
-
-	err := mr.restoreStateMachineFromStateMachineLog(storage)
-	if err != nil {
-		return err
-	}
-
-	// TODO:: sync with SNs. recover commitResults & UncommitReports
-	err = mr.syncStateMachineFromStorageNodes(ctx, storage)
-	if err != nil {
-		return err
-	}
-
-	r := &mrpb.RecoverStateMachine{
-		StateMachine: storage.origStateMachine,
-	}
-
-	mr.propose(ctx, r, true)
-
-	return nil
-}
-
-func (mr *RaftMetadataRepository) restoreStateMachineFromStateMachineLog(storage *MetadataStorage) error {
-	logIndex := uint64(0)
-
-	snap := mr.raftNode.loadSnapshot()
-	if snap != nil {
-		err := storage.ApplySnapshot(snap.Data, nil, 0)
-		if err != nil {
-			return err
-		}
-
-		logIndex = snap.Metadata.Index + 1
-	}
-
-	ents, err := mr.stateMachineLog.ReadFrom(logIndex)
-	if err != nil {
-		mr.logger.Warn("read stateMachineLog", zap.Uint64("from", logIndex), zap.Error(err))
-	}
-
-	for _, ent := range ents {
-		f := ent.Payload.GetValue()
-		switch r := f.(type) {
-		case *mrpb.RegisterStorageNode:
-			storage.RegisterStorageNode(r.StorageNode, 0, 0)
-		case *mrpb.UnregisterStorageNode:
-			storage.UnregisterStorageNode(r.StorageNodeID, 0, 0)
-		case *mrpb.RegisterLogStream:
-			storage.RegisterLogStream(r.LogStream, 0, 0)
-		case *mrpb.UnregisterLogStream:
-			storage.UnregisterLogStream(r.LogStreamID, 0, 0)
-		case *mrpb.UpdateLogStream:
-			storage.UpdateLogStream(r.LogStream, 0, 0)
-		case *mrpb.StateMachineLogCommitResult:
-			storage.AppendLogStreamCommitHistory(r.CommitResult)
-			if !r.TrimVersion.Invalid() {
-				storage.TrimLogStreamCommitHistory(r.TrimVersion)
-			}
-		}
-	}
-
-	// reset applied index & merge state machine
-	storage.UpdateAppliedIndex(0)
-
-	return nil
-}
-
-func (mr *RaftMetadataRepository) syncStateMachineFromStorageNodes(ctx context.Context, storage *MetadataStorage) error {
-	syncer, err := NewStateMachineSyncer(mr.options.SyncStorageNodes, mr.nrReplica, mr.GetSNManagementClient)
-	if err != nil {
-		return err
-	}
-
-	defer syncer.Close()
-
-	return syncer.SyncCommitResults(ctx, storage)
 }

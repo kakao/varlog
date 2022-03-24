@@ -26,7 +26,6 @@ type StorageNodeManagementClient interface {
 	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
 	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.Replica) error
 	Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
-	GetPrevCommitInfo(ctx context.Context, ver types.Version) (*snpb.GetPrevCommitInfoResponse, error)
 	Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]error, error)
 	Close() error
 }
@@ -149,13 +148,6 @@ func (c *snManagementClient) Sync(ctx context.Context, tpid types.TopicID, logSt
 		},
 	})
 	return rsp.GetStatus(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
-}
-
-func (c *snManagementClient) GetPrevCommitInfo(ctx context.Context, prevVer types.Version) (*snpb.GetPrevCommitInfoResponse, error) {
-	rsp, err := c.rpcClient.GetPrevCommitInfo(ctx, &snpb.GetPrevCommitInfoRequest{
-		PrevVersion: prevVer,
-	})
-	return rsp, errors.WithStack(verrors.FromStatusError(err))
 }
 
 func (c *snManagementClient) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]error, error) {

@@ -164,23 +164,6 @@ func (s *server) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncRes
 	return rspI.(*snpb.SyncResponse), nil
 }
 
-func (s *server) GetPrevCommitInfo(ctx context.Context, req *snpb.GetPrevCommitInfoRequest) (*snpb.GetPrevCommitInfoResponse, error) {
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/GetPrevCommitInfo", req,
-		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			info, err := s.storageNode.getPrevCommitInfo(ctx, req.GetPrevVersion())
-			rsp := &snpb.GetPrevCommitInfoResponse{
-				StorageNodeID: s.storageNode.StorageNodeID(),
-				CommitInfos:   info,
-			}
-			return rsp, err
-		},
-	)
-	if err != nil {
-		return nil, verrors.ToStatusError(err)
-	}
-	return rspI.(*snpb.GetPrevCommitInfoResponse), nil
-}
-
 func (s *server) Trim(context.Context, *snpb.TrimRequest) (*snpb.TrimResponse, error) {
 	panic("not implemented")
 }

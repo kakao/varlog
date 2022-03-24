@@ -140,7 +140,7 @@ func (clus *VarlogCluster) initMR(t *testing.T) {
 
 	for i := range clus.mrPeers {
 		clus.clearMR(t, i)
-		clus.createMR(t, i, false, clus.unsafeNoWAL, false)
+		clus.createMR(t, i, false, clus.unsafeNoWAL)
 	}
 
 	for i := range clus.metadataRepositories {
@@ -199,21 +199,14 @@ func (clus *VarlogCluster) clearMR(t *testing.T, idx int) {
 
 	walPath := fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID)
 	snapPath := fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID)
-	smlPath := fmt.Sprintf("%s/sml/%d", vtesting.TestRaftDir(), nodeID)
 
 	require.NoError(t, os.RemoveAll(walPath))
 	require.NoError(t, os.RemoveAll(snapPath))
-	require.NoError(t, os.RemoveAll(smlPath))
 
-	t.Logf("MetadataRepository was cleared: idx=%d, nid=%v, wal=%s, snap=%s, sml=%s",
-		idx,
-		nodeID, walPath,
-		snapPath,
-		smlPath,
-	)
+	t.Logf("MetadataRepository was cleared: idx=%d, nid=%v, wal=%s, snap=%s", idx, nodeID, walPath, snapPath)
 }
 
-func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal, recoverFromSML bool) {
+func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal bool) {
 	require.GreaterOrEqual(t, idx, 0)
 	require.Less(t, idx, len(clus.metadataRepositories))
 
@@ -222,22 +215,10 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal, re
 
 	peers := clus.mrPeers
 
-	var syncStorageNodes []string
-	if recoverFromSML {
-		for _, addr := range clus.snAddrs {
-			syncStorageNodes = append(syncStorageNodes, addr)
-		}
-
-		fmt.Printf("sync %+v\n", syncStorageNodes)
-
-		peers = nil
-	}
-
 	opts := &metadata_repository.MetadataRepositoryOptions{
 		RaftOptions: metadata_repository.RaftOptions{
 			Join:        join,
 			UnsafeNoWal: unsafeNoWal,
-			EnableSML:   unsafeNoWal,
 			SnapCount:   uint64(clus.snapCount),
 			RaftTick:    vtesting.TestRaftTick(),
 			RaftDir:     vtesting.TestRaftDir(),
@@ -248,8 +229,6 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal, re
 		RaftAddress:                    clus.mrPeers[idx],
 		RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
 		NumRep:                         clus.nrRep,
-		RecoverFromSML:                 recoverFromSML,
-		SyncStorageNodes:               syncStorageNodes,
 		RPCBindAddress:                 clus.mrRPCEndpoints[idx],
 		ReporterClientFac:              clus.reporterClientFac,
 		StorageNodeManagementClientFac: clus.snManagementClientFac,
@@ -291,7 +270,7 @@ func (clus *VarlogCluster) AppendMR(t *testing.T) {
 	clus.metadataRepositories = append(clus.metadataRepositories, nil)
 
 	clus.clearMR(t, idx)
-	clus.createMR(t, idx, true, clus.unsafeNoWAL, false)
+	clus.createMR(t, idx, true, clus.unsafeNoWAL)
 }
 
 func (clus *VarlogCluster) RecoverMR(t *testing.T) {
@@ -306,7 +285,7 @@ func (clus *VarlogCluster) RecoverMR(t *testing.T) {
 	clus.mrIDs = []types.NodeID{types.InvalidNodeID}
 	clus.metadataRepositories = []*metadata_repository.RaftMetadataRepository{nil}
 
-	clus.createMR(t, idx, false, clus.unsafeNoWAL, true)
+	clus.createMR(t, idx, false, clus.unsafeNoWAL)
 	clus.startMR(t, idx)
 }
 
@@ -342,7 +321,7 @@ func (clus *VarlogCluster) RestartMR(t *testing.T, idx int) {
 	require.Less(t, idx, len(clus.metadataRepositories))
 
 	clus.stopMR(t, idx)
-	clus.createMR(t, idx, false, clus.unsafeNoWAL, clus.unsafeNoWAL)
+	clus.createMR(t, idx, false, clus.unsafeNoWAL)
 	clus.startMR(t, idx)
 }
 

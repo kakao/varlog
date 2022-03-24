@@ -59,7 +59,6 @@ type MetadataRepositoryOptions struct {
 	DebugAddress                   string
 	ClusterID                      types.ClusterID
 	Verbose                        bool
-	RecoverFromSML                 bool
 	NumRep                         int
 	RaftProposeTimeout             time.Duration
 	RPCTimeout                     time.Duration
@@ -68,7 +67,6 @@ type MetadataRepositoryOptions struct {
 	ReporterClientFac              ReporterClientFactory
 	StorageNodeManagementClientFac StorageNodeManagementClientFactory
 	LogDir                         string
-	SyncStorageNodes               []string
 	Logger                         *zap.Logger
 	ReportCommitterReadBufferSize  int
 	ReportCommitterWriteBufferSize int
@@ -78,7 +76,6 @@ type RaftOptions struct {
 	NodeID            types.NodeID
 	Join              bool
 	UnsafeNoWal       bool
-	EnableSML         bool
 	SnapCount         uint64
 	SnapCatchUpCount  uint64
 	MaxSnapPurgeCount uint
@@ -170,11 +167,6 @@ func (options *MetadataRepositoryOptions) validate() error {
 
 	if options.LogDir == "" {
 		options.LogDir = DefaultLogDir
-	}
-
-	if (options.UnsafeNoWal && !options.EnableSML) ||
-		(!options.UnsafeNoWal && options.EnableSML) {
-		return errors.New("only one of wal and sml must be enabled")
 	}
 
 	return nil

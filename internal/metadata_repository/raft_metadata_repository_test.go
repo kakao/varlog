@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -106,7 +105,6 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 			RaftDir:          vtesting.TestRaftDir(),
 			Peers:            peers,
 			UnsafeNoWal:      clus.unsafeNoWal,
-			EnableSML:        clus.unsafeNoWal,
 		},
 
 		ClusterID:                      types.ClusterID(1),
@@ -144,10 +142,8 @@ func (clus *metadataRepoCluster) createForRecoverMetadataRepo(idx int) error {
 			RaftDir:          vtesting.TestRaftDir(),
 			Peers:            peers,
 			UnsafeNoWal:      clus.unsafeNoWal,
-			EnableSML:        clus.unsafeNoWal,
 		},
 
-		RecoverFromSML:                 true,
 		ClusterID:                      types.ClusterID(1),
 		RaftAddress:                    clus.peers[idx],
 		CommitTick:                     vtesting.TestCommitTick(),
@@ -157,11 +153,6 @@ func (clus *metadataRepoCluster) createForRecoverMetadataRepo(idx int) error {
 		ReporterClientFac:              clus.reporterClientFac,
 		StorageNodeManagementClientFac: clus.snManagementClientFac,
 		Logger:                         clus.logger,
-	}
-
-	// DummyStorageNodeClient recognizes id as addr
-	for _, id := range clus.reporterClientFac.(*DummyStorageNodeClientFactory).getClientIDs() {
-		options.SyncStorageNodes = append(options.SyncStorageNodes, strconv.Itoa(int(id)))
 	}
 
 	options.CollectorName = "nop"
@@ -497,19 +488,6 @@ func makeLogStream(topicID types.TopicID, lsID types.LogStreamID, snIDs []types.
 	}
 
 	return ls
-}
-
-func makeCommitResult(snID types.StorageNodeID, lsID types.LogStreamID, llsn types.LLSN, ver types.Version, offset types.GLSN) snpb.CommitRequest {
-	return snpb.CommitRequest{
-		StorageNodeID: snID,
-		CommitResult: snpb.LogStreamCommitResult{
-			LogStreamID:         lsID,
-			Version:             ver,
-			CommittedGLSNOffset: offset,
-			CommittedLLSNOffset: llsn,
-			CommittedGLSNLength: 1,
-		},
-	}
 }
 
 func TestMRApplyReport(t *testing.T) {
@@ -2524,322 +2502,6 @@ func TestMRUnsafeNoWal(t *testing.T) {
 					}
 					return true
 				}), ShouldBeTrue)
-			})
-		})
-	})
-}
-
-func TestMRFailoverRecoverFromStateMachineLog(t *testing.T) {
-	Convey("Given MR cluster", t, func(ctx C) {
-		nrRep := 1
-		nrNode := 1
-
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
-		Reset(func() {
-			clus.closeNoErrors(t)
-		})
-		So(clus.Start(), ShouldBeNil)
-		So(testutil.CompareWaitN(10, func() bool {
-			return clus.healthCheckAll()
-		}), ShouldBeTrue)
-
-		mr := clus.nodes[0]
-
-		Convey("When apply recover request", func(ctx C) {
-			sm := &mrpb.MetadataRepositoryDescriptor{}
-			sm.Metadata = &varlogpb.MetadataDescriptor{}
-			sm.LogStream = &mrpb.MetadataRepositoryDescriptor_LogStreamDescriptor{}
-			sm.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
-
-			sm.PeersMap.Peers = make(map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor)
-			sm.Endpoints = make(map[types.NodeID]string)
-
-			snIDs := make([]types.StorageNodeID, 2)
-			for i := range snIDs {
-				snIDs[i] = types.StorageNodeID(i)
-				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNode: varlogpb.StorageNode{
-						StorageNodeID: snIDs[i],
-					},
-				}
-
-				sm.Metadata.InsertStorageNode(sn)
-			}
-
-			r := &mrpb.RecoverStateMachine{
-				StateMachine: sm,
-			}
-
-			mr.propose(context.TODO(), r, true)
-
-			Convey("Then ReportCollector should recover", func(ctx C) {
-				So(testutil.CompareWaitN(10, func() bool {
-					return mr.reportCollector.NumExecutors() == len(snIDs)
-				}), ShouldBeTrue)
-			})
-		})
-	})
-}
-
-func TestMRFailoverRecoverFromStateMachineLogWithIncompleteLog(t *testing.T) {
-	t.Skip()
-	Convey("Given MR cluster with unsafeNoWal", t, func(ctx C) {
-		testSnapCount = 10
-		defer func() { testSnapCount = 0 }()
-		nrRep := 1
-		nrNode := 1
-		nrSN := 5
-		topicID := types.TopicID(1)
-
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, true)
-		clus.Start()
-		Reset(func() {
-			clus.closeNoErrors(t)
-		})
-		So(testutil.CompareWaitN(10, func() bool {
-			return clus.healthCheckAll()
-		}), ShouldBeTrue)
-
-		leader := clus.leader()
-		So(leader, ShouldBeGreaterThan, -1)
-
-		// register SN & LS
-		err := clus.initDummyStorageNode(nrSN, 1)
-		So(err, ShouldBeNil)
-
-		So(testutil.CompareWaitN(50, func() bool {
-			return len(clus.getSNIDs()) == nrSN
-		}), ShouldBeTrue)
-
-		snIDs := clus.getSNIDs()
-
-		// make sn alive during mr crash
-		clus.incrSNRefAll()
-		defer clus.descSNRefAll()
-
-		// append to SN
-		written := 0
-		for _, snID := range snIDs {
-			snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-			snCli.increaseUncommitted(0)
-			written++
-		}
-
-		for _, snID := range snIDs {
-			snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-
-			So(testutil.CompareWaitN(50, func() bool {
-				return snCli.numUncommitted(0) == 0
-			}), ShouldBeTrue)
-		}
-
-		version := clus.nodes[leader].GetLastCommitVersion()
-
-		Convey("When mr crashed and then commit to sn before restart mr. (it's for simulating lost data)", func(ctx C) {
-			/*
-				        LS0        LS1        LS2        LS3        LS4
-				status  ok         ok         ok         ok         ok
-				highest 2          2          2          2          2
-				LLSN
-			*/
-			So(clus.stop(leader), ShouldBeNil)
-
-			//dummy commit result to SN direct
-			version++
-
-			offset := types.GLSN(written + 1)
-
-			expected := make(map[types.LogStreamID]uint64)
-			for _, snID := range snIDs {
-				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-				lsID := snCli.logStreamID(0)
-				cr := makeCommitResult(snID, lsID, snCli.uncommittedLLSNOffset[0], version, offset)
-
-				snCli.increaseUncommitted(0)
-				expected[lsID] = 1
-				offset += types.GLSN(1)
-
-				snCli.Commit(cr)
-				So(snCli.getKnownVersion(0), ShouldEqual, version)
-			}
-
-			So(clus.recoverMetadataRepo(leader), ShouldBeNil)
-
-			Convey("Then it should sync from SN", func(ctx C) {
-				So(testutil.CompareWaitN(100, func() bool {
-					return clus.healthCheck(leader)
-				}), ShouldBeTrue)
-
-				So(clus.nodes[leader].GetLastCommitVersion(), ShouldEqual, version)
-				fmt.Printf("recover version:%v\n", clus.nodes[leader].GetLastCommitVersion())
-
-				/*
-					             LS0        LS1        LS2        LS3        LS4
-					committedOff 2          2          2          2          2
-					committedLen 1          1          1          1          1
-				*/
-				for _, snID := range snIDs {
-					snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-					lsID := snCli.logStreamID(0)
-
-					l, ok := expected[lsID]
-					So(ok, ShouldBeTrue)
-					So(clus.nodes[leader].getLastCommittedLength(topicID, lsID), ShouldEqual, l)
-				}
-			})
-		})
-
-		Convey("When some SN lost commit result", func(ctx C) {
-			/*
-				        LS0        LS1        LS2        LS3        LS4
-				status  notfound   notfound   ok         ok         ok
-				highest 3          2          2          2          2
-				LLSN
-			*/
-			So(clus.stop(leader), ShouldBeNil)
-
-			//dummy commit result to SN direct
-			version++
-
-			offset := types.GLSN(written + 1)
-
-			expected := make(map[types.LogStreamID]uint64)
-			for i, snID := range snIDs {
-				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-				lsID := snCli.logStreamID(0)
-
-				cr := makeCommitResult(snID, lsID, snCli.uncommittedLLSNOffset[0], version, offset)
-
-				snCli.increaseUncommitted(0)
-				expected[lsID] = 1
-				offset += types.GLSN(1)
-
-				if i == 0 {
-					// increase uncommitted for make different commit result
-					snCli.increaseUncommitted(0)
-					expected[lsID] = 2
-
-					// for simulate loss commit result
-					continue
-				} else if i == 1 {
-					expected[lsID] = 0
-
-					// for simulate loss commit result
-					continue
-				}
-
-				snCli.Commit(cr)
-				So(snCli.getKnownVersion(0), ShouldEqual, version)
-			}
-
-			So(clus.recoverMetadataRepo(leader), ShouldBeNil)
-
-			Convey("Then it should recover valid", func(ctx C) {
-				So(testutil.CompareWaitN(100, func() bool {
-					return clus.healthCheck(leader)
-				}), ShouldBeTrue)
-
-				So(clus.nodes[leader].GetLastCommitVersion(), ShouldEqual, version)
-				fmt.Printf("recover version:%v\n", clus.nodes[leader].GetLastCommitVersion())
-
-				/*
-					             LS0        LS1        LS2        LS3        LS4
-					committedOff 2          2          2          2          2
-					committedLen 2          0          1          1          1
-				*/
-				for _, snID := range snIDs {
-					snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-					lsID := snCli.logStreamID(0)
-
-					l, ok := expected[lsID]
-					So(ok, ShouldBeTrue)
-					So(clus.nodes[leader].getLastCommittedLength(topicID, lsID), ShouldEqual, l)
-				}
-			})
-		})
-
-		Convey("When some SN has empty commit", func(ctx C) {
-			/*
-				        LS0        LS1        LS2        LS3        LS4
-
-				status  ok         ok         ok         ok         ok
-				highest 2          2          3          3          3
-				LLSN
-
-				status  empty      empty      ok         ok         ok
-				highest 2          2          3          3          3
-				LLSN
-			*/
-
-			So(clus.stop(leader), ShouldBeNil)
-
-			//dummy commit result to SN direct
-			nrEmpty := 2
-			version++
-
-			offset := types.GLSN(written + 1)
-
-			for i, snID := range snIDs {
-				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-				lsID := snCli.logStreamID(0)
-
-				if i < nrEmpty {
-					// for simulate empty commit
-					continue
-				}
-
-				cr := makeCommitResult(snID, lsID, snCli.uncommittedLLSNOffset[0], version, offset)
-				offset += types.GLSN(1)
-
-				snCli.increaseUncommitted(0)
-
-				snCli.Commit(cr)
-				So(snCli.getKnownVersion(0), ShouldEqual, version)
-			}
-
-			version = version + types.Version(1)
-
-			expected := make(map[types.LogStreamID]uint64)
-			for _, snID := range snIDs {
-				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-				lsID := snCli.logStreamID(0)
-
-				cr := makeCommitResult(snID, lsID, snCli.uncommittedLLSNOffset[0], version, offset)
-				offset += types.GLSN(1)
-
-				expected[lsID] = 1
-				snCli.increaseUncommitted(0)
-
-				snCli.Commit(cr)
-				So(snCli.getKnownVersion(0), ShouldEqual, version)
-			}
-
-			So(clus.recoverMetadataRepo(leader), ShouldBeNil)
-
-			Convey("Then it should recover valid", func(ctx C) {
-				So(testutil.CompareWaitN(100, func() bool {
-					return clus.healthCheck(leader)
-				}), ShouldBeTrue)
-
-				So(clus.nodes[leader].GetLastCommitVersion(), ShouldEqual, version)
-				fmt.Printf("recover version:%v\n", clus.nodes[leader].GetLastCommitVersion())
-
-				/*
-					             LS0        LS1        LS2        LS3        LS4
-					committedOff 2          2          3          3          3
-					committedLen 1          1          1          1          1
-
-					committedOff 2          2          2          2          2
-					committedLen 0          0          1          1          1
-				*/
-				for _, snID := range snIDs {
-					snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-					lsID := snCli.logStreamID(0)
-
-					l, ok := expected[lsID]
-					So(ok, ShouldBeTrue)
-					So(clus.nodes[leader].getLastCommittedLength(topicID, lsID), ShouldEqual, l)
-				}
 			})
 		})
 	})

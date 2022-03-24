@@ -111,14 +111,6 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 			EnvVars:     []string{"UNSAFE_NOWAL"},
 			Destination: &options.UnsafeNoWal,
 		},
-		&cli.BoolFlag{
-			Name:        "enable-sml",
-			Aliases:     []string{},
-			Value:       false,
-			Usage:       "enable state machine log",
-			EnvVars:     []string{"ENABLE_SML"},
-			Destination: &options.EnableSML,
-		},
 		&cli.IntFlag{
 			Name:        "log-rep-factor",
 			Aliases:     []string{},
