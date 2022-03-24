@@ -248,3 +248,7 @@ func (s *clusterManagerService) GetStorageNodes(ctx context.Context, req *pbtype
 	)
 	return rspI.(*vmspb.GetStorageNodesResponse), verrors.ToStatusError(err)
 }
+
+func (s *clusterManagerService) Trim(context.Context, *vmspb.TrimRequest) (*vmspb.TrimResponse, error) {
+	panic("not implemented")
+}
