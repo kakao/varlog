@@ -644,7 +644,6 @@ func TestExecutor_AppendSeal(t *testing.T) {
 	}()
 
 	var wg sync.WaitGroup
-	defer wg.Wait()
 
 	// Append
 	for i := 0; i < numClients; i++ {
@@ -701,6 +700,8 @@ func TestExecutor_AppendSeal(t *testing.T) {
 		assert.NoError(t, err)
 		return status == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
 	}, time.Second, 10*time.Millisecond)
+
+	wg.Wait()
 
 	// Unseal
 	err := lse.Unseal(context.Background(), lse.primaryBackups)
@@ -765,6 +766,8 @@ func TestExecutor_AppendSeal(t *testing.T) {
 		assert.NoError(t, err)
 		return status == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
 	}, time.Second, 10*time.Millisecond)
+
+	wg.Wait()
 
 	rpt, err = lse.Report(context.Background())
 	assert.NoError(t, err)

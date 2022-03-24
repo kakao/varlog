@@ -177,7 +177,7 @@ func (sq *sequencer) waitForDrainage(cause error, forceDrain bool) {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	for atomic.LoadInt64(&sq.inflight) > 0 || len(sq.queue) > 0 {
+	for atomic.LoadInt64(&sq.inflight) > 0 {
 		if !forceDrain {
 			select {
 			case <-timer.C:

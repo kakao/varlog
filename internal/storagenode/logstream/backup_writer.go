@@ -118,7 +118,7 @@ func (bw *backupWriter) waitForDrainage(forceDrain bool) {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	for atomic.LoadInt64(&bw.inflight) > 0 || len(bw.queue) > 0 {
+	for atomic.LoadInt64(&bw.inflight) > 0 {
 		if !forceDrain {
 			select {
 			case <-timer.C:
