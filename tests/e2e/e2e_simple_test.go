@@ -81,11 +81,6 @@ func TestK8sVarlogSimple(t *testing.T) {
 				glsn = res.Metadata[0].GLSN
 			})
 
-			readCtx, readCancel := k8s.TimeoutContext()
-			defer readCancel()
-			_, err = vlg.Read(readCtx, topicID, lsID, glsn)
-			So(err, ShouldBeNil)
-
 			Convey("Seal", func() {
 				sealCtx, sealCancel := k8s.TimeoutContext()
 				defer sealCancel()

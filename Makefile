@@ -29,9 +29,8 @@ precommit_lint: fmt tidy vet lint test
 
 # build
 BIN_DIR := $(CURDIR)/bin
-VMS := $(BIN_DIR)/vms
+VARLOGADM := $(BIN_DIR)/varlogadm
 VARLOGCTL := $(BIN_DIR)/varlogctl
-VSN := $(BIN_DIR)/vsn
 VMR := $(BIN_DIR)/vmr
 SNTOOL := $(BIN_DIR)/sntool
 MRTOOL := $(BIN_DIR)/mrtool
@@ -41,14 +40,12 @@ VARLOGCLI := $(BIN_DIR)/varlogcli
 VARLOGSN := $(BIN_DIR)/varlogsn
 STRESS := $(BIN_DIR)/stress
 
-.PHONY: build vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark varlogcli varlogsn stress
-build: vms varlogctl vsn vmr sntool mrtool rpc_test_server benchmark varlogcli varlogsn stress
-vms:
-	$(GO) build $(GCFLAGS) -o $(VMS) cmd/varlogadm/main.go
+.PHONY: build varlogadm varlogctl vmr sntool mrtool rpc_test_server benchmark varlogcli varlogsn stress
+build: varlogadm varlogctl vmr sntool mrtool rpc_test_server benchmark varlogcli varlogsn stress
+varlogadm:
+	$(GO) build $(GCFLAGS) -o $(VARLOGADM) $(CURDIR)/cmd/varlogadm
 varlogctl:
 	$(GO) build $(GCFLAGS) -o $(VARLOGCTL) $(CURDIR)/cmd/varlogctl
-vsn:
-	$(GO) build $(GCFLAGS) -o $(VSN) cmd/storagenode/main.go
 vmr:
 	$(GO) build $(GCFLAGS) -o $(VMR) cmd/metadata_repository/main.go
 sntool:
@@ -181,11 +178,11 @@ docker:
 		-t $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG) . && \
 	docker push $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG)
 
-KUSTOMIZE_ENV := dev
+KUSTOMIZE_ENV := e2e
 kustomize:
-	@sed "s/IMAGE_TAG/$(DOCKER_TAG)/" $(CURDIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.template.yaml > \
-		$(CURDIR)/deploy/k8s/$(KUSTOMIZE_ENV)/kustomization.yaml
-	@echo "Run this command to apply: kubectl apply -k $(CURDIR)/deploy/k8s/$(KUSTOMIZE_ENV)/"
+	@cd $(CURDIR)/deploy/k8s-e2e/$(KUSTOMIZE_ENV) && \
+		kustomize edit set image "$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS)=$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG)"
+	@echo "Run this command to apply: kubectl apply -k $(CURDIR)/deploy/k8s-e2e/$(KUSTOMIZE_ENV)/"
 
 
 # proto
@@ -244,7 +241,7 @@ clean:
 	$(RM) $(TEST_OUTPUT) $(TEST_REPORT)
 	$(RM) $(COVERAGE_OUTPUT_TMP) $(COVERAGE_OUTPUT) $(COVERAGE_REPORT)
 	$(RM) $(BENCH_OUTPUT) $(BENCH_REPORT)
-	$(RM) $(VMS) $(VMC) $(VSN) $(VMR) $(SNTOOL) $(MRTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH_SERVER) $(RPCBENCH_CLIENT) $(VARLOGCLI) $(VARLOGSN) $(STRESS)
+	$(RM) $(VARLOGADM) $(VARLOGCTL) $(VARLOGSN) $(VMR) $(SNTOOL) $(MRTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH_SERVER) $(RPCBENCH_CLIENT) $(VARLOGCLI) $(STRESS)
 
 clean_mock:
 	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.daumkakao.com/varlog/varlog/##),$(RM) -f $(path)/*_mock.go;)

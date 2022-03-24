@@ -1,0 +1,69 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: varlogmr-clear
+  namespace: default
+  labels:
+    app: varlogmr-clear
+    name: varlogmr-clear
+spec:
+  selector:
+    matchLabels:
+      name: varlogmr-clear
+  template:
+    metadata:
+      labels:
+        app: varlogmr-clear
+        name: varlogmr-clear
+    spec:
+      volumes:
+        - name: varlogmr-home
+          hostPath:
+            path: /varlog/mr
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-mr-clear
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "rm -rf /varlog/mr/raftdata"
+          volumeMounts:
+            - name: varlogmr-home
+              mountPath: /varlog/mr
+        - name: volume-set-standalone
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "touch /varlog/mr/.standalone"
+          volumeMounts:
+            - name: varlogmr-home
+              mountPath: /varlog/mr
+      containers:
+        - name: varlogmr-clear
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "ls -alh /varlog/mr; echo The app is running! && sleep 3600"
+          volumeMounts:
+            - name: varlogmr-home
+              mountPath: /varlog/mr
+          imagePullPolicy: IfNotPresent
+      terminationGracePeriodSeconds: 1
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: varlog-type
+                    operator: In
+                    values:
+                      - varlogmr-clear
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 10
+  revisionHistoryLimit: 10
+
