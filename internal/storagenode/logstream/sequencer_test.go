@@ -89,34 +89,6 @@ func testSequenceTask(stg *storage.Storage) *sequenceTask {
 	return st
 }
 
-func TestSequencer_FailToSendToWriter(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
-	stg := storage.TestNewStorage(t)
-	defer func() {
-		assert.NoError(t, stg.Close())
-	}()
-
-	wr := &writer{}
-	wr.logger = zap.NewNop()
-	wr.lse = &Executor{
-		esm: newExecutorStateManager(executorStateSealing),
-	}
-	wr.queue = make(chan *sequenceTask, 1)
-
-	sq := &sequencer{}
-	sq.logger = zap.NewNop()
-	sq.lse = &Executor{
-		esm: newExecutorStateManager(executorStateAppendable),
-	}
-	sq.lse.wr = wr
-
-	st := testSequenceTask(stg)
-	sq.sequenceLoopInternal(context.Background(), st)
-	assert.Empty(t, wr.queue)
-	assert.Equal(t, executorStateSealing, sq.lse.esm.load())
-}
-
 func TestSequencer_FailToSendToCommitter(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
@@ -125,19 +97,19 @@ func TestSequencer_FailToSendToCommitter(t *testing.T) {
 		assert.NoError(t, stg.Close())
 	}()
 
-	wr := &writer{}
-	wr.logger = zap.NewNop()
-	wr.lse = &Executor{
-		esm: newExecutorStateManager(executorStateAppendable),
-	}
-	wr.queue = make(chan *sequenceTask, 1)
-
 	cm := &committer{}
 	cm.logger = zap.NewNop()
 	cm.commitWaitQ = newCommitWaitQueue()
 	cm.lse = &Executor{
 		esm: newExecutorStateManager(executorStateSealing),
 	}
+
+	wr := &writer{}
+	wr.logger = zap.NewNop()
+	wr.lse = &Executor{
+		esm: newExecutorStateManager(executorStateAppendable),
+	}
+	wr.queue = make(chan *sequenceTask, 1)
 
 	sq := &sequencer{}
 	sq.logger = zap.NewNop()
@@ -149,8 +121,44 @@ func TestSequencer_FailToSendToCommitter(t *testing.T) {
 
 	st := testSequenceTask(stg)
 	sq.sequenceLoopInternal(context.Background(), st)
-	assert.Len(t, wr.queue, 1)
+	assert.Len(t, wr.queue, 0)
 	assert.Equal(t, 0, cm.commitWaitQ.size())
+	assert.Equal(t, executorStateSealing, sq.lse.esm.load())
+}
+
+func TestSequencer_FailToSendToWriter(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	stg := storage.TestNewStorage(t)
+	defer func() {
+		assert.NoError(t, stg.Close())
+	}()
+
+	cm := &committer{}
+	cm.logger = zap.NewNop()
+	cm.commitWaitQ = newCommitWaitQueue()
+	cm.lse = &Executor{
+		esm: newExecutorStateManager(executorStateAppendable),
+	}
+
+	wr := &writer{}
+	wr.logger = zap.NewNop()
+	wr.lse = &Executor{
+		esm: newExecutorStateManager(executorStateSealing),
+	}
+	wr.queue = make(chan *sequenceTask, 1)
+
+	sq := &sequencer{}
+	sq.logger = zap.NewNop()
+	sq.lse = &Executor{
+		esm: newExecutorStateManager(executorStateAppendable),
+	}
+	sq.lse.cm = cm
+	sq.lse.wr = wr
+
+	st := testSequenceTask(stg)
+	sq.sequenceLoopInternal(context.Background(), st)
+	assert.Empty(t, wr.queue)
 	assert.Equal(t, executorStateSealing, sq.lse.esm.load())
 }
 
