@@ -69,6 +69,10 @@ func (rc *EmptyStorageNodeClient) GetPrevCommitInfo(context.Context, types.Versi
 	panic("not implemented")
 }
 
+func (rc *EmptyStorageNodeClient) Trim(context.Context, types.TopicID, types.GLSN) (map[types.LogStreamID]error, error) {
+	panic("not implemented")
+}
+
 type EmptyStorageNodeClientFactory struct {
 }
 
@@ -475,6 +479,10 @@ func (r *DummyStorageNodeClient) Unseal(context.Context, types.TopicID, types.Lo
 }
 
 func (r *DummyStorageNodeClient) Sync(context.Context, types.TopicID, types.LogStreamID, types.StorageNodeID, string, types.GLSN) (*snpb.SyncStatus, error) {
+	panic("not implemented")
+}
+
+func (r *DummyStorageNodeClient) Trim(context.Context, types.TopicID, types.GLSN) (map[types.LogStreamID]error, error) {
 	panic("not implemented")
 }
 

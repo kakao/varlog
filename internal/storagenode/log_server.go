@@ -109,7 +109,7 @@ Loop:
 	return multierr.Append(err, sr.Err())
 }
 
-func (ls logServer) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtypes.Empty, error) {
+func (ls logServer) TrimDeprecated(ctx context.Context, req *snpb.TrimDeprecatedRequest) (*pbtypes.Empty, error) {
 	ls.sn.executors.Range(func(_ types.LogStreamID, tpid types.TopicID, lse *logstream.Executor) bool {
 		if req.TopicID != tpid {
 			return true

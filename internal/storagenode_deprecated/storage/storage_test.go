@@ -429,7 +429,7 @@ func TestStorageWriteCommitReadScanDelete(t *testing.T) {
 			require.NoError(t, wb.Apply())
 			require.NoError(t, wb.Close())
 
-			// DeleteCommitted (Prefix Trim)
+			// DeleteCommitted (Prefix TrimDeprecated)
 			// invalid range
 			require.Error(t, strg.DeleteCommitted(0))
 			require.Error(t, strg.DeleteCommitted(9))

@@ -47,7 +47,7 @@ func TestTrim(t *testing.T) {
 				func(_ context.Context, storageNodeID types.StorageNodeID, storagNodeAddr string) (logc.LogIOClient, error) {
 					logCL := logc.NewMockLogIOClient(ctrl)
 					expectedTrimResult := expectedTrimResults[int(storageNodeID)]
-					logCL.EXPECT().Trim(gomock.Any(), gomock.Any(), gomock.Any()).Return(expectedTrimResult)
+					logCL.EXPECT().TrimDeprecated(gomock.Any(), gomock.Any(), gomock.Any()).Return(expectedTrimResult)
 					return logCL, nil
 				},
 			).Times(numStorageNodes)

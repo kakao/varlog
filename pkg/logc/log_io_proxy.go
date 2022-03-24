@@ -38,8 +38,8 @@ func (l *logClientProxy) SubscribeTo(ctx context.Context, topicID types.TopicID,
 	return l.client.SubscribeTo(ctx, topicID, logStreamID, begin, end)
 }
 
-func (l *logClientProxy) Trim(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error {
-	return l.client.Trim(ctx, topicID, glsn)
+func (l *logClientProxy) TrimDeprecated(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error {
+	return l.client.TrimDeprecated(ctx, topicID, glsn)
 }
 
 func (l *logClientProxy) LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {

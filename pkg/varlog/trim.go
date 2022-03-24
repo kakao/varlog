@@ -55,7 +55,7 @@ func (v *logImpl) makeTrimmer(trimArg *trimArgument, topicID types.TopicID, unti
 			trimArg.err = err
 			return
 		}
-		trimArg.err = logCL.Trim(ctx, topicID, until)
+		trimArg.err = logCL.TrimDeprecated(ctx, topicID, until)
 		// TODO (jun): Like subscribe, `ErrUndecidable` is ignored since the local
 		// highwatermark of some log streams are less than the `until` of trim.
 		// It is a sign of the need to clarify undecidable error in the log stream executor.

@@ -120,11 +120,11 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 		return stream, nil
 	}).AnyTimes()
 
-	// Trim
-	mockClient.EXPECT().Trim(
+	// TrimDeprecated
+	mockClient.EXPECT().TrimDeprecated(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *snpb.TrimRequest) (*pbtypes.Empty, error) {
+	).DoAndReturn(func(_ context.Context, req *snpb.TrimDeprecatedRequest) (*pbtypes.Empty, error) {
 		sn.mu.Lock()
 		defer sn.mu.Unlock()
 		var num uint64 = 0
@@ -153,7 +153,7 @@ func TestBasicOperations(t *testing.T) {
 	mockClient := newMockStorageNodeServiceClient(ctrl, &sn, topicID, logStreamID)
 
 	client := &logIOClient{rpcClient: mockClient}
-	Convey("Simple Append/Read/Subscribe/Trim operations should work", t, func() {
+	Convey("Simple Append/Read/Subscribe/TrimDeprecated operations should work", t, func() {
 		var prevGLSN types.GLSN
 		var currGLSN types.GLSN
 		var currLogEntry *varlogpb.LogEntry
@@ -194,7 +194,7 @@ func TestBasicOperations(t *testing.T) {
 		So(subRes.LLSN, ShouldEqual, types.LLSN(1))
 		So(string(subRes.Data), ShouldEqual, "msg-2")
 
-		err = client.Trim(context.TODO(), topicID, types.GLSN(0))
+		err = client.TrimDeprecated(context.TODO(), topicID, types.GLSN(0))
 		So(subRes.Error, ShouldBeNil)
 
 		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, types.GLSN(0))

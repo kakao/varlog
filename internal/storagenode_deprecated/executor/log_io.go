@@ -510,7 +510,7 @@ func (e *executor) Trim(_ context.Context, glsn types.GLSN) error {
 		return errors.New("too high prefix")
 	}
 
-	// TODO: design trimming of commit context, then reconsider Trim API
+	// TODO: design trimming of commit context, then reconsider TrimDeprecated API
 	trimGLSN := updateDeferredTrim()
 
 	// already trimmed

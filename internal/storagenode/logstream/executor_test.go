@@ -924,7 +924,7 @@ func TestExecutor_SubscribeWithInvalidRange(t *testing.T) {
 	_, err = lse.SubscribeWithLLSN(1, 1)
 	assert.Error(t, err)
 
-	// FIXME: Use Trim rather than modifying localLowWatermark manually.
+	// FIXME: Use TrimDeprecated rather than modifying localLowWatermark manually.
 	lse.globalLowWatermark.glsn = 3
 	lse.lsc.setLocalLowWatermark(varlogpb.LogEntryMeta{LLSN: 3, GLSN: 3})
 

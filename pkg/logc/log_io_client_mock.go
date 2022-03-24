@@ -132,16 +132,16 @@ func (mr *MockLogIOClientMockRecorder) SubscribeTo(arg0, arg1, arg2, arg3, arg4 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTo", reflect.TypeOf((*MockLogIOClient)(nil).SubscribeTo), arg0, arg1, arg2, arg3, arg4)
 }
 
-// Trim mocks base method.
-func (m *MockLogIOClient) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) error {
+// TrimDeprecated mocks base method.
+func (m *MockLogIOClient) TrimDeprecated(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Trim", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "TrimDeprecated", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Trim indicates an expected call of Trim.
-func (mr *MockLogIOClientMockRecorder) Trim(arg0, arg1, arg2 interface{}) *gomock.Call {
+// TrimDeprecated indicates an expected call of TrimDeprecated.
+func (mr *MockLogIOClientMockRecorder) TrimDeprecated(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockLogIOClient)(nil).Trim), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrimDeprecated", reflect.TypeOf((*MockLogIOClient)(nil).TrimDeprecated), arg0, arg1, arg2)
 }

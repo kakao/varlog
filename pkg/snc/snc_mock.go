@@ -169,6 +169,21 @@ func (mr *MockStorageNodeManagementClientMockRecorder) Sync(arg0, arg1, arg2, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Sync), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
+// Trim mocks base method.
+func (m *MockStorageNodeManagementClient) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) (map[types.LogStreamID]error, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Trim", arg0, arg1, arg2)
+	ret0, _ := ret[0].(map[types.LogStreamID]error)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Trim indicates an expected call of Trim.
+func (mr *MockStorageNodeManagementClientMockRecorder) Trim(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Trim), arg0, arg1, arg2)
+}
+
 // Unseal mocks base method.
 func (m *MockStorageNodeManagementClient) Unseal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 []varlogpb.Replica) error {
 	m.ctrl.T.Helper()
