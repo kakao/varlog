@@ -228,6 +228,24 @@ message GetPrevCommitInfoResponse {
   repeated LogStreamCommitInfo commit_infos = 2;
 }
 
+message TrimRequest {
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  uint64 last_glsn = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "LastGLSN"
+  ];
+}
+
+message TrimResponse {
+  map<int32, string> results = 1
+      [(gogoproto.castkey) =
+           "github.com/kakao/varlog/pkg/types.LogStreamID"];
+}
+
 // Management defines the public APIs for managing StorageNode.
 service Management {
   // GetMetadata returns metadata of StorageNode.
@@ -246,4 +264,5 @@ service Management {
   rpc Sync(SyncRequest) returns (SyncResponse) {}
   rpc GetPrevCommitInfo(GetPrevCommitInfoRequest)
       returns (GetPrevCommitInfoResponse) {}
+  rpc Trim(TrimRequest) returns (TrimResponse) {}
 }

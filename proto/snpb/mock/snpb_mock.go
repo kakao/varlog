@@ -731,24 +731,24 @@ func (mr *MockLogIOClientMockRecorder) SubscribeTo(arg0, arg1 interface{}, arg2 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTo", reflect.TypeOf((*MockLogIOClient)(nil).SubscribeTo), varargs...)
 }
 
-// Trim mocks base method.
-func (m *MockLogIOClient) Trim(arg0 context.Context, arg1 *snpb.TrimRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+// TrimDeprecated mocks base method.
+func (m *MockLogIOClient) TrimDeprecated(arg0 context.Context, arg1 *snpb.TrimDeprecatedRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "Trim", varargs...)
+	ret := m.ctrl.Call(m, "TrimDeprecated", varargs...)
 	ret0, _ := ret[0].(*types.Empty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Trim indicates an expected call of Trim.
-func (mr *MockLogIOClientMockRecorder) Trim(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+// TrimDeprecated indicates an expected call of TrimDeprecated.
+func (mr *MockLogIOClientMockRecorder) TrimDeprecated(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockLogIOClient)(nil).Trim), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrimDeprecated", reflect.TypeOf((*MockLogIOClient)(nil).TrimDeprecated), varargs...)
 }
 
 // MockLogIOServer is a mock of LogIOServer interface.
@@ -847,19 +847,19 @@ func (mr *MockLogIOServerMockRecorder) SubscribeTo(arg0, arg1 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTo", reflect.TypeOf((*MockLogIOServer)(nil).SubscribeTo), arg0, arg1)
 }
 
-// Trim mocks base method.
-func (m *MockLogIOServer) Trim(arg0 context.Context, arg1 *snpb.TrimRequest) (*types.Empty, error) {
+// TrimDeprecated mocks base method.
+func (m *MockLogIOServer) TrimDeprecated(arg0 context.Context, arg1 *snpb.TrimDeprecatedRequest) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Trim", arg0, arg1)
+	ret := m.ctrl.Call(m, "TrimDeprecated", arg0, arg1)
 	ret0, _ := ret[0].(*types.Empty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Trim indicates an expected call of Trim.
-func (mr *MockLogIOServerMockRecorder) Trim(arg0, arg1 interface{}) *gomock.Call {
+// TrimDeprecated indicates an expected call of TrimDeprecated.
+func (mr *MockLogIOServerMockRecorder) TrimDeprecated(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockLogIOServer)(nil).Trim), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrimDeprecated", reflect.TypeOf((*MockLogIOServer)(nil).TrimDeprecated), arg0, arg1)
 }
 
 // MockLogIO_SubscribeClient is a mock of LogIO_SubscribeClient interface.
@@ -1361,6 +1361,26 @@ func (mr *MockManagementClientMockRecorder) Sync(arg0, arg1 interface{}, arg2 ..
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManagementClient)(nil).Sync), varargs...)
 }
 
+// Trim mocks base method.
+func (m *MockManagementClient) Trim(arg0 context.Context, arg1 *snpb.TrimRequest, arg2 ...grpc.CallOption) (*snpb.TrimResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Trim", varargs...)
+	ret0, _ := ret[0].(*snpb.TrimResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Trim indicates an expected call of Trim.
+func (mr *MockManagementClientMockRecorder) Trim(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockManagementClient)(nil).Trim), varargs...)
+}
+
 // Unseal mocks base method.
 func (m *MockManagementClient) Unseal(arg0 context.Context, arg1 *snpb.UnsealRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
@@ -1492,6 +1512,21 @@ func (m *MockManagementServer) Sync(arg0 context.Context, arg1 *snpb.SyncRequest
 func (mr *MockManagementServerMockRecorder) Sync(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockManagementServer)(nil).Sync), arg0, arg1)
+}
+
+// Trim mocks base method.
+func (m *MockManagementServer) Trim(arg0 context.Context, arg1 *snpb.TrimRequest) (*snpb.TrimResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Trim", arg0, arg1)
+	ret0, _ := ret[0].(*snpb.TrimResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Trim indicates an expected call of Trim.
+func (mr *MockManagementServerMockRecorder) Trim(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockManagementServer)(nil).Trim), arg0, arg1)
 }
 
 // Unseal mocks base method.

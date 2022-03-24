@@ -180,3 +180,7 @@ func (s *server) GetPrevCommitInfo(ctx context.Context, req *snpb.GetPrevCommitI
 	}
 	return rspI.(*snpb.GetPrevCommitInfoResponse), nil
 }
+
+func (s *server) Trim(context.Context, *snpb.TrimRequest) (*snpb.TrimResponse, error) {
+	panic("not implemented")
+}

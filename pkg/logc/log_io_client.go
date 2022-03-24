@@ -34,7 +34,7 @@ type LogIOClient interface {
 	Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) (*varlogpb.LogEntry, error)
 	Subscribe(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error)
 	SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN) (<-chan SubscribeResult, error)
-	Trim(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error
+	TrimDeprecated(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error
 	LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error)
 	io.Closer
 }
@@ -183,14 +183,14 @@ func (c *logIOClient) SubscribeTo(ctx context.Context, topicID types.TopicID, lo
 	return out, nil
 }
 
-// Trim deletes log entries greater than or equal to given GLSN in the storage node. The number of
+// TrimDeprecated deletes log entries greater than or equal to given GLSN in the storage node. The number of
 // deleted log entries are returned.
-func (c *logIOClient) Trim(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error {
-	req := &snpb.TrimRequest{
+func (c *logIOClient) TrimDeprecated(ctx context.Context, topicID types.TopicID, glsn types.GLSN) error {
+	req := &snpb.TrimDeprecatedRequest{
 		TopicID: topicID,
 		GLSN:    glsn,
 	}
-	_, err := c.rpcClient.Trim(ctx, req)
+	_, err := c.rpcClient.TrimDeprecated(ctx, req)
 	return errors.Wrap(verrors.FromStatusError(err), "logiocl")
 }
 

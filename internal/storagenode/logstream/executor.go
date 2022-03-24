@@ -456,7 +456,7 @@ func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
 
 	// NB: When a replica is started just ago, it may not know the global high watermark.
 	// It means that it can return an error accidentally.
-	// It can fix by allowing Trim RPC only when the replica is executorStateAppendable.
+	// It can fix by allowing TrimDeprecated RPC only when the replica is executorStateAppendable.
 	_, globalHWM, _ := lse.lsc.reportCommitBase()
 	if glsn > globalHWM {
 		// not appended yet

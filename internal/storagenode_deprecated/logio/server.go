@@ -234,9 +234,9 @@ func (s *server) SubscribeTo(req *snpb.SubscribeToRequest, stream snpb.LogIO_Sub
 	return verrors.ToStatusErrorWithCode(err, code)
 }
 
-func (s *server) Trim(ctx context.Context, req *snpb.TrimRequest) (*pbtypes.Empty, error) {
+func (s *server) TrimDeprecated(ctx context.Context, req *snpb.TrimDeprecatedRequest) (*pbtypes.Empty, error) {
 	code := codes.Internal
-	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/Trim", req,
+	rspI, err := s.withTelemetry(ctx, "varlog.snpb.LogIO/TrimDeprecated", req,
 		func(ctx context.Context, reqI interface{}) (interface{}, error) {
 			trimGLSN := req.GetGLSN()
 

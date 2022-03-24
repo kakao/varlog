@@ -139,7 +139,7 @@ message SubscribeToResponse {
 // TrimRequest contains inclusive GLSN until which a client wants to delete.
 // If async field is true, the trim operation returns immediately and the
 // storage node removes its log entry in the background.
-message TrimRequest {
+message TrimDeprecatedRequest {
   int32 topic_id = 1 [
     (gogoproto.casttype) =
         "github.com/kakao/varlog/pkg/types.TopicID",
@@ -174,7 +174,7 @@ service LogIO {
   rpc Read(ReadRequest) returns (ReadResponse) {}
   rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
   rpc SubscribeTo(SubscribeToRequest) returns (stream SubscribeToResponse) {}
-  rpc Trim(TrimRequest) returns (google.protobuf.Empty) {}
+  rpc TrimDeprecated(TrimDeprecatedRequest) returns (google.protobuf.Empty) {}
   rpc LogStreamMetadata(LogStreamMetadataRequest)
       returns (LogStreamMetadataResponse) {}
 }

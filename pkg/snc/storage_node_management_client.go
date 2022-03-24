@@ -27,6 +27,7 @@ type StorageNodeManagementClient interface {
 	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.Replica) error
 	Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
 	GetPrevCommitInfo(ctx context.Context, ver types.Version) (*snpb.GetPrevCommitInfoResponse, error)
+	Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]error, error)
 	Close() error
 }
 
@@ -155,6 +156,23 @@ func (c *snManagementClient) GetPrevCommitInfo(ctx context.Context, prevVer type
 		PrevVersion: prevVer,
 	})
 	return rsp, errors.WithStack(verrors.FromStatusError(err))
+}
+
+func (c *snManagementClient) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]error, error) {
+	rsp, err := c.rpcClient.Trim(ctx, &snpb.TrimRequest{
+		TopicID:  topicID,
+		LastGLSN: lastGLSN,
+	})
+	results := rsp.GetResults()
+	ret := make(map[types.LogStreamID]error, len(results))
+	for lsid, cause := range results {
+		var err error
+		if len(cause) > 0 {
+			err = errors.New(cause)
+		}
+		ret[lsid] = err
+	}
+	return ret, errors.WithStack(verrors.FromStatusError(err))
 }
 
 // Close closes connection to the storage node.

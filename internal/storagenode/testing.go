@@ -183,6 +183,6 @@ func TestTrim(t *testing.T, tpid types.TopicID, glsn types.GLSN, addr string) {
 	client, closer := TestNewLogIOClient(t, addr)
 	defer closer()
 
-	err := client.Trim(context.Background(), tpid, glsn)
+	err := client.TrimDeprecated(context.Background(), tpid, glsn)
 	assert.NoError(t, err)
 }
