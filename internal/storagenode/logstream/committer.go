@@ -324,7 +324,7 @@ func (cm *committer) waitForDrainageOfCommitQueue(forceDrain bool) {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	for atomic.LoadInt64(&cm.inflightCommit) > 0 || len(cm.commitQueue) > 0 {
+	for atomic.LoadInt64(&cm.inflightCommit) > 0 {
 		if !forceDrain {
 			select {
 			case <-timer.C:
