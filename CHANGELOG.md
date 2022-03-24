@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `--server-max-msg-size` option to storage node. (#VARLOG-688/#601)
 - Added `--logdir` and `--logtostderr` options to varlogadm. (#VARLOG-692/#604)
+- Added Trim RPC to package `proto/vmspb`. (#VARLOG-706/#608)
 
 ### Changed
 - Changed default storage settings for good performance in usual cases. (#VARLOG-668/#584)

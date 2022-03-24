@@ -260,6 +260,34 @@ message DescribeTopicResponse {
       [(gogoproto.nullable) = false];
 }
 
+message TrimRequest {
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID",
+    (gogoproto.jsontag) = "topicId"
+  ];
+  uint64 last_glsn = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "LastGLSN",
+    (gogoproto.jsontag) = "lastGLSN"
+  ];
+}
+
+message TrimResult {
+  int32 log_stream_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID",
+    (gogoproto.jsontag) = "logStreamId"
+  ];
+  string error = 2 [(gogoproto.jsontag) = "error,omitempty"];
+}
+
+message TrimResponse {
+  repeated TrimResult results = 1 [(gogoproto.nullable) = false];
+}
+
 service ClusterManager {
   rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {}
 
@@ -300,4 +328,6 @@ service ClusterManager {
   }
 
   rpc DescribeTopic(DescribeTopicRequest) returns (DescribeTopicResponse) {}
+
+  rpc Trim(TrimRequest) returns (TrimResponse) {}
 }
