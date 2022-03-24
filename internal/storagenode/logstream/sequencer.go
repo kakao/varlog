@@ -115,27 +115,42 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 	cwts := st.cwts
 	rts := st.rts
 
-	// send to writer
-	if err := sq.lse.wr.send(ctx, st); err != nil {
-		sq.logger.Error("could not send to writer", zap.Error(err))
+	// NOTE: If sending to the writer is ahead of sending to the committer,
+	// it is very subtle when sending tasks to the committer fails but
+	// sending tasks to the writer succeeds.
+	// - If tasks are sent to the writer successfully, they may be
+	// reflected by reports.
+	// - Then, if commitWaitTasks is not sent to the writer, the committer
+	// has no tasks to commit.
+	// - In addition, the Append RPC handler can wait indefinitely to wait
+	// for the commit that the committer won't process.
+	//
+	// To avoid this problem, sending tasks to committer must be happened
+	// before sending tasks to writer. It prevents the above subtle case.
+	//
+	// send to committer
+	if err := sq.lse.cm.sendCommitWaitTask(ctx, cwts); err != nil {
+		sq.logger.Error("could not send to committer", zap.Error(err))
 		sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		st.wwg.done(err)
-		// _ = st.dwb.Close()
 		_ = st.wb.Close()
-		releaseCommitWaitTaskList(st.cwts)
-		releaseReplicateTasks(st.rts)
+		releaseCommitWaitTaskList(cwts)
+		releaseReplicateTasks(rts)
 		releaseReplicateTaskSlice(rts)
 		st.release()
 		return
 	}
 
-	// send to committer
-	if err := sq.lse.cm.sendCommitWaitTask(ctx, cwts); err != nil {
-		sq.logger.Error("could not send to committer", zap.Error(err))
+	// send to writer
+	if err := sq.lse.wr.send(ctx, st); err != nil {
+		sq.logger.Error("could not send to writer", zap.Error(err))
 		sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
+		st.wwg.done(err)
+		_ = st.wb.Close()
 		releaseCommitWaitTaskList(cwts)
 		releaseReplicateTasks(rts)
 		releaseReplicateTaskSlice(rts)
+		st.release()
 		return
 	}
 
