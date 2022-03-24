@@ -118,7 +118,7 @@ func TestVarlogNewMRManager(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		vmsOpts := varlogadm.DefaultOptions()
 		vmsOpts.InitialMRConnRetryCount = 3
-		env := it.NewVarlogCluster(t, it.WithVMSOptions(&vmsOpts))
+		env := it.NewVarlogCluster(t, it.WithVMSOptions(vmsOpts))
 		defer env.Close(t)
 
 		mr := env.GetMR(t)

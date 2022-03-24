@@ -33,8 +33,7 @@ type Options struct {
 	ClusterID         types.ClusterID
 	ReplicationFactor uint
 
-	Verbose bool
-	Logger  *zap.Logger
+	Logger *zap.Logger
 }
 
 type MRManagerOptions struct {
@@ -57,8 +56,8 @@ type WatcherOptions struct {
 	RPCTimeout time.Duration
 }
 
-func DefaultOptions() Options {
-	return Options{
+func DefaultOptions() *Options {
+	return &Options{
 		WatcherOptions: WatcherOptions{
 			Tick:             DefaultTick,
 			ReportInterval:   DefaultReportInterval,

@@ -50,6 +50,18 @@ func (fd *FlagDesc) IntFlag(required bool, defaultValue int) *cli.IntFlag {
 	}
 }
 
+func (fd *FlagDesc) UintFlag(required bool, defaultValue uint) *cli.UintFlag {
+	return &cli.UintFlag{
+		Name:        fd.Name,
+		Aliases:     fd.Aliases,
+		Usage:       fd.Usage,
+		EnvVars:     fd.Envs,
+		Required:    required,
+		Value:       defaultValue,
+		DefaultText: fd.DefaultText,
+	}
+}
+
 func (fd *FlagDesc) StringFlag(required bool, defaultValue string) *cli.StringFlag {
 	return &cli.StringFlag{
 		Name:        fd.Name,

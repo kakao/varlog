@@ -197,5 +197,5 @@ func NewTestVMSOptions() *varlogadm.Options {
 	vmsOpts.HeartbeatTimeout = 30
 	vmsOpts.ReportInterval = 10
 	vmsOpts.Logger = zap.L()
-	return &vmsOpts
+	return vmsOpts
 }
