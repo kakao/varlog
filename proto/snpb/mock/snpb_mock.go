@@ -1281,26 +1281,6 @@ func (mr *MockManagementClientMockRecorder) GetMetadata(arg0, arg1 interface{}, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockManagementClient)(nil).GetMetadata), varargs...)
 }
 
-// GetPrevCommitInfo mocks base method.
-func (m *MockManagementClient) GetPrevCommitInfo(arg0 context.Context, arg1 *snpb.GetPrevCommitInfoRequest, arg2 ...grpc.CallOption) (*snpb.GetPrevCommitInfoResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1}
-	for _, a := range arg2 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "GetPrevCommitInfo", varargs...)
-	ret0, _ := ret[0].(*snpb.GetPrevCommitInfoResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPrevCommitInfo indicates an expected call of GetPrevCommitInfo.
-func (mr *MockManagementClientMockRecorder) GetPrevCommitInfo(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrevCommitInfo", reflect.TypeOf((*MockManagementClient)(nil).GetPrevCommitInfo), varargs...)
-}
-
 // RemoveLogStream mocks base method.
 func (m *MockManagementClient) RemoveLogStream(arg0 context.Context, arg1 *snpb.RemoveLogStreamRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
@@ -1452,21 +1432,6 @@ func (m *MockManagementServer) GetMetadata(arg0 context.Context, arg1 *snpb.GetM
 func (mr *MockManagementServerMockRecorder) GetMetadata(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockManagementServer)(nil).GetMetadata), arg0, arg1)
-}
-
-// GetPrevCommitInfo mocks base method.
-func (m *MockManagementServer) GetPrevCommitInfo(arg0 context.Context, arg1 *snpb.GetPrevCommitInfoRequest) (*snpb.GetPrevCommitInfoResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPrevCommitInfo", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.GetPrevCommitInfoResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPrevCommitInfo indicates an expected call of GetPrevCommitInfo.
-func (mr *MockManagementServerMockRecorder) GetPrevCommitInfo(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrevCommitInfo", reflect.TypeOf((*MockManagementServer)(nil).GetPrevCommitInfo), arg0, arg1)
 }
 
 // RemoveLogStream mocks base method.

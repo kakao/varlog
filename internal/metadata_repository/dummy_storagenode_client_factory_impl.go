@@ -65,10 +65,6 @@ func (rc *EmptyStorageNodeClient) Sync(context.Context, types.TopicID, types.Log
 	panic("not implemented")
 }
 
-func (rc *EmptyStorageNodeClient) GetPrevCommitInfo(context.Context, types.Version) (*snpb.GetPrevCommitInfoResponse, error) {
-	panic("not implemented")
-}
-
 func (rc *EmptyStorageNodeClient) Trim(context.Context, types.TopicID, types.GLSN) (map[types.LogStreamID]error, error) {
 	panic("not implemented")
 }
@@ -105,7 +101,6 @@ type DummyStorageNodeClient struct {
 	knownVersion          []types.Version
 	uncommittedLLSNOffset []types.LLSN
 	uncommittedLLSNLength []uint64
-	commitResultHistory   [][]snpb.LogStreamCommitInfo
 
 	manual bool
 	mu     sync.Mutex
@@ -167,7 +162,6 @@ func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(_ context.Context
 	}
 
 	uncommittedLLSNLength := make([]uint64, fac.nrLogStreams)
-	commitResultHistory := make([][]snpb.LogStreamCommitInfo, fac.nrLogStreams)
 
 	cli := &DummyStorageNodeClient{
 		manual:                fac.manual,
@@ -176,7 +170,6 @@ func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(_ context.Context
 		knownVersion:          knownVersion,
 		uncommittedLLSNOffset: uncommittedLLSNOffset,
 		uncommittedLLSNLength: uncommittedLLSNLength,
-		commitResultHistory:   commitResultHistory,
 		status:                status,
 		factory:               fac,
 		reportDelay:           atomicutil.AtomicDuration(DefaultDelay),
@@ -290,13 +283,6 @@ func (r *DummyStorageNodeClient) Commit(cr snpb.CommitRequest) error {
 	}
 
 	r.knownVersion[idx] = cr.CommitResult.Version
-	r.commitResultHistory[idx] = append(r.commitResultHistory[idx], snpb.LogStreamCommitInfo{
-		LogStreamID:         cr.CommitResult.LogStreamID,
-		CommittedLLSNOffset: r.uncommittedLLSNOffset[idx],
-		CommittedGLSNOffset: cr.CommitResult.CommittedGLSNOffset,
-		CommittedGLSNLength: cr.CommitResult.CommittedGLSNLength,
-		Version:             cr.CommitResult.Version,
-	})
 
 	r.uncommittedLLSNOffset[idx] += types.LLSN(cr.CommitResult.CommittedGLSNLength)
 	r.uncommittedLLSNLength[idx] -= cr.CommitResult.CommittedGLSNLength
@@ -484,55 +470,4 @@ func (r *DummyStorageNodeClient) Sync(context.Context, types.TopicID, types.LogS
 
 func (r *DummyStorageNodeClient) Trim(context.Context, types.TopicID, types.GLSN) (map[types.LogStreamID]error, error) {
 	panic("not implemented")
-}
-
-func (r *DummyStorageNodeClient) lookupCommitInfo(idx int, ver types.Version) (snpb.LogStreamCommitInfo, bool) {
-	i := sort.Search(len(r.commitResultHistory[idx]), func(i int) bool {
-		return r.commitResultHistory[idx][i].Version >= ver
-	})
-
-	if i < len(r.commitResultHistory[idx]) &&
-		r.commitResultHistory[idx][i].Version == ver {
-		return r.commitResultHistory[idx][i], true
-	}
-
-	if i > 0 {
-		return r.commitResultHistory[idx][i-1], true
-	}
-
-	return snpb.LogStreamCommitInfo{}, false
-}
-
-func (r *DummyStorageNodeClient) GetPrevCommitInfo(_ context.Context, ver types.Version) (*snpb.GetPrevCommitInfoResponse, error) {
-	ci := &snpb.GetPrevCommitInfoResponse{
-		StorageNodeID: r.storageNodeID,
-	}
-
-	ci.CommitInfos = make([]*snpb.LogStreamCommitInfo, len(r.logStreamIDs))
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for i, lsID := range r.logStreamIDs {
-		lsci := &snpb.LogStreamCommitInfo{
-			LogStreamID:        lsID,
-			HighestWrittenLLSN: r.uncommittedLLSNOffset[i] + types.LLSN(r.uncommittedLLSNLength[i]) - types.MinLLSN,
-		}
-
-		if r.knownVersion[i] <= ver {
-			lsci.Status = snpb.GetPrevCommitStatusNotFound
-		} else if cr, ok := r.lookupCommitInfo(i, ver+1); ok {
-			lsci.Status = snpb.GetPrevCommitStatusOK
-			lsci.CommittedLLSNOffset = cr.CommittedLLSNOffset
-			lsci.CommittedGLSNOffset = cr.CommittedGLSNOffset
-			lsci.CommittedGLSNLength = cr.CommittedGLSNLength
-			lsci.Version = cr.Version
-		} else {
-			lsci.Status = snpb.GetPrevCommitStatusNotFound
-		}
-
-		ci.CommitInfos[i] = lsci
-	}
-
-	return ci, nil
 }

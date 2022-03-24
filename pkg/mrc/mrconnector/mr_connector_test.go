@@ -96,7 +96,6 @@ func newTestMR(t *testing.T, portLease *ports.Lease, clusterID types.ClusterID, 
 			RaftOptions: metadata_repository.RaftOptions{
 				Join:        false,
 				UnsafeNoWal: false,
-				EnableSML:   false,
 				SnapCount:   10,
 				RaftTick:    vtesting.TestRaftTick(),
 				RaftDir:     raftDir,

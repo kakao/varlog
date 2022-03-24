@@ -87,21 +87,6 @@ func (mr *MockExecutorMockRecorder) Commit(arg0, arg1 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockExecutor)(nil).Commit), arg0, arg1)
 }
 
-// GetPrevCommitInfo mocks base method.
-func (m *MockExecutor) GetPrevCommitInfo(arg0 types.Version) (*snpb.LogStreamCommitInfo, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPrevCommitInfo", arg0)
-	ret0, _ := ret[0].(*snpb.LogStreamCommitInfo)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPrevCommitInfo indicates an expected call of GetPrevCommitInfo.
-func (mr *MockExecutorMockRecorder) GetPrevCommitInfo(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrevCommitInfo", reflect.TypeOf((*MockExecutor)(nil).GetPrevCommitInfo), arg0)
-}
-
 // GetReport mocks base method.
 func (m *MockExecutor) GetReport() (snpb.LogStreamUncommitReport, error) {
 	m.ctrl.T.Helper()

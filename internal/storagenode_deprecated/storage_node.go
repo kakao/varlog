@@ -13,7 +13,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/soheilhy/cmux"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -473,30 +472,6 @@ func (sn *StorageNode) sync(ctx context.Context, topicID types.TopicID, logStrea
 
 	sts, err := lse.Sync(ctx, replica)
 	return sts, err
-}
-
-func (sn *StorageNode) getPrevCommitInfo(ctx context.Context, version types.Version) (infos []*snpb.LogStreamCommitInfo, err error) {
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	infos = make([]*snpb.LogStreamCommitInfo, 0, sn.estimatedNumberOfExecutors())
-
-	sn.forEachExecutors(func(_ types.LogStreamID, extor executor.Executor) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			info, cerr := extor.GetPrevCommitInfo(version)
-			mu.Lock()
-			infos = append(infos, info)
-			err = multierr.Append(err, cerr)
-			defer mu.Unlock()
-		}()
-	})
-	wg.Wait()
-
-	if err != nil {
-		return nil, err
-	}
-	return infos, nil
 }
 
 // ReportCommitter implements `internal/storagenode/reportcommitter.Getter.ReportCommitter`.

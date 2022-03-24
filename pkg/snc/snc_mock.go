@@ -81,21 +81,6 @@ func (mr *MockStorageNodeManagementClientMockRecorder) GetMetadata(arg0 interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).GetMetadata), arg0)
 }
 
-// GetPrevCommitInfo mocks base method.
-func (m *MockStorageNodeManagementClient) GetPrevCommitInfo(arg0 context.Context, arg1 types.Version) (*snpb.GetPrevCommitInfoResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPrevCommitInfo", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.GetPrevCommitInfoResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPrevCommitInfo indicates an expected call of GetPrevCommitInfo.
-func (mr *MockStorageNodeManagementClientMockRecorder) GetPrevCommitInfo(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrevCommitInfo", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).GetPrevCommitInfo), arg0, arg1)
-}
-
 // PeerAddress mocks base method.
 func (m *MockStorageNodeManagementClient) PeerAddress() string {
 	m.ctrl.T.Helper()

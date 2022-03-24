@@ -72,10 +72,6 @@ func (as *adminServer) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.S
 	return &snpb.SyncResponse{Status: syncStatus}, err
 }
 
-func (as *adminServer) GetPrevCommitInfo(context.Context, *snpb.GetPrevCommitInfoRequest) (*snpb.GetPrevCommitInfoResponse, error) {
-	panic("not implemented")
-}
-
 func (as *adminServer) Trim(context.Context, *snpb.TrimRequest) (*snpb.TrimResponse, error) {
 	panic("not implemented")
 }
