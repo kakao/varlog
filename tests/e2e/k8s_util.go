@@ -27,22 +27,22 @@ const (
 	AppLabelKey  = "app"
 
 	// metadata repository
-	MRLabel      = "varlog-mr"
-	MRStopLabel  = "varlog-mr-stop"
-	MRDropLabel  = "varlog-mr-drop"
-	MRClearLabel = "varlog-mr-clear"
+	MRLabel      = "varlogmr"
+	MRStopLabel  = "varlogmr-stop"
+	MRDropLabel  = "varlogmr-drop"
+	MRClearLabel = "varlogmr-clear"
 
 	// storage node
-	SNLabel     = "varlog-sn"
-	SNStopLabel = "varlog-sn-stop"
-	SNDropLabel = "varlog-sn-drop"
+	SNLabel     = "varlogsn"
+	SNStopLabel = "varlogsn-stop"
+	SNDropLabel = "varlogsn-drop"
 
 	// vms
-	VMSRSName = "varlog-vms"
+	VMSRSName = "varlogadm"
 
 	// vip
-	VMSVIPName = "varlog-vms-rpc-vip"
-	MRVIPName  = "varlog-mr-rpc-vip"
+	VMSVIPName = "varlogadm-rpc-vip"
+	MRVIPName  = "varlogmr-rpc-vip"
 
 	// namespaces
 	VarlogNamespace       = "default"

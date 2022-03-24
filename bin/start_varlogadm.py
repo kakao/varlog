@@ -18,7 +18,7 @@ from varlog import procutil  # noqa
 from varlog.killer import Killer  # noqa
 from varlog.logger import get_logger  # noqa
 
-APP_NAME = "vms"
+APP_NAME = "varlogadm"
 DEFAULT_RETRY_INTERVAL_SECONDS = 3
 DEFAULT_REPLICATION_FACTOR = "1"
 DEFAULT_CLUSTER_ID = "1"
@@ -29,8 +29,8 @@ logger = get_logger(APP_NAME)
 
 def start(cluster_id: int, listen: str, replication_factor: int,
           mr_address: str) -> None:
-    vms = [
-        f"{binpath}/vms",
+    cmd = [
+        f"{binpath}/varlogadm",
         "start",
         f"--cluster-id={cluster_id}",
         f"--replication-factor={replication_factor}",
@@ -45,8 +45,8 @@ def start(cluster_id: int, listen: str, replication_factor: int,
             continue
         try:
             procutil.kill(APP_NAME)
-            logger.info(f"running management server: {vms}")
-            subprocess.Popen(vms)
+            logger.info(f"running management server: {cmd}")
+            subprocess.Popen(cmd)
         except (OSError, ValueError, subprocess.SubprocessError):
             logger.exception("could not run management server")
         time.sleep(DEFAULT_RETRY_INTERVAL_SECONDS)
