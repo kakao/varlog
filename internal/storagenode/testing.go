@@ -179,10 +179,11 @@ func TestSync(t *testing.T, cid types.ClusterID, tpid types.TopicID, lsid types.
 	return st
 }
 
-func TestTrim(t *testing.T, tpid types.TopicID, glsn types.GLSN, addr string) {
-	client, closer := TestNewLogIOClient(t, addr)
+func TestTrim(t *testing.T, cid types.ClusterID, tpid types.TopicID, glsn types.GLSN, addr string) map[types.LogStreamID]error {
+	snmc, closer := TestNewManagementClient(t, cid, addr)
 	defer closer()
 
-	err := client.TrimDeprecated(context.Background(), tpid, glsn)
+	results, err := snmc.Trim(context.Background(), tpid, glsn)
 	assert.NoError(t, err)
+	return results
 }
