@@ -15,6 +15,7 @@ import (
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
+	"github.com/kakao/varlog/proto/vmspb"
 )
 
 type StorageNodeManager interface {
@@ -47,6 +48,8 @@ type StorageNodeManager interface {
 	Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
 
 	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error
+
+	Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error)
 
 	Close() error
 }
@@ -365,6 +368,71 @@ func (sm *snManager) Unseal(ctx context.Context, topicID types.TopicID, logStrea
 		}
 	}
 	return nil
+}
+
+func (sm *snManager) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	clusmeta, err := sm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	td := clusmeta.GetTopic(topicID)
+	if td == nil {
+		return nil, errors.Errorf("trim: no such topic %d", topicID)
+	}
+
+	clients := make(map[types.StorageNodeID]snc.StorageNodeManagementClient)
+	for _, lsid := range td.LogStreams {
+		rds, err := sm.replicaDescriptors(ctx, lsid)
+		if err != nil {
+			return nil, err
+		}
+		for _, rd := range rds {
+			if _, ok := clients[rd.StorageNodeID]; ok {
+				continue
+			}
+			cli, ok := sm.cs[rd.StorageNodeID]
+			if !ok {
+				sm.refresh(ctx)
+				return nil, err
+			}
+			clients[rd.StorageNodeID] = cli
+		}
+	}
+
+	var (
+		mu      sync.Mutex
+		results []vmspb.TrimResult
+	)
+	g, ctx := errgroup.WithContext(ctx)
+	for snid, client := range clients {
+		snid := snid
+		client := client
+		g.Go(func() error {
+			res, err := client.Trim(ctx, topicID, lastGLSN)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			for lsid, err := range res {
+				var msg string
+				if err != nil {
+					msg = err.Error()
+				}
+				results = append(results, vmspb.TrimResult{
+					StorageNodeID: snid,
+					LogStreamID:   lsid,
+					Error:         msg,
+				})
+			}
+			return nil
+		})
+	}
+	err = g.Wait()
+	return results, err
 }
 
 func (sm *snManager) replicaDescriptors(ctx context.Context, logStreamID types.LogStreamID) ([]*varlogpb.ReplicaDescriptor, error) {

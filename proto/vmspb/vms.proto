@@ -275,13 +275,19 @@ message TrimRequest {
 }
 
 message TrimResult {
-  int32 log_stream_id = 1 [
+  int32 storage_node_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.customname) = "StorageNodeID",
+    (gogoproto.jsontag) = "storageNodeId"
+  ];
+  int32 log_stream_id = 2 [
     (gogoproto.casttype) =
         "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID",
     (gogoproto.jsontag) = "logStreamId"
   ];
-  string error = 2 [(gogoproto.jsontag) = "error,omitempty"];
+  string error = 3 [(gogoproto.jsontag) = "error,omitempty"];
 }
 
 message TrimResponse {

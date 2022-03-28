@@ -213,8 +213,8 @@ generate:
 tools:
 	$(GO) install golang.org/x/tools/cmd/goimports
 	$(GO) install golang.org/x/lint/golint
-	$(GO) install github.com/golang/mock/mockgen
-	$(GO) get golang.org/x/tools/cmd/stringer
+	$(GO) install github.com/golang/mock/mockgen@v1.6.0
+	$(GO) install golang.org/x/tools/cmd/stringer
 
 fmt:
 	@echo goimports

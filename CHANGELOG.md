@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Trim RPC to package `proto/vmspb`. (#VARLOG-706/#608)
 - Added Trim RPC to `proto/snpb/management.proto`. (#VARLOG-708/#609)
 - Added `Trim` method to `pkg/snc.(StorageNodeManagementClient)`. (#VARLOG-708/#609)
-- Added `Trim` method to `internal/storagenode.(adminServer)`. (#VARLOG-708/#609,#VARLOG-711/#611)
+- Added `Trim` method to `internal/storagenode.(adminServer)`. (#VARLOG-708/#609)
+- Implemented `Trim` in varlogadm. (#VARLOG-707/#612)
 
 ### Changed
 - Changed default storage settings for good performance in usual cases. (#VARLOG-668/#584)

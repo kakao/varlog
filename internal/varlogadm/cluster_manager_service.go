@@ -249,6 +249,12 @@ func (s *clusterManagerService) GetStorageNodes(ctx context.Context, req *pbtype
 	return rspI.(*vmspb.GetStorageNodesResponse), verrors.ToStatusError(err)
 }
 
-func (s *clusterManagerService) Trim(context.Context, *vmspb.TrimRequest) (*vmspb.TrimResponse, error) {
-	panic("not implemented")
+func (s *clusterManagerService) Trim(ctx context.Context, req *vmspb.TrimRequest) (*vmspb.TrimResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/Trim", req,
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			res, err := s.clusManager.Trim(ctx, req.TopicID, req.LastGLSN)
+			return &vmspb.TrimResponse{Results: res}, err
+		},
+	)
+	return rspI.(*vmspb.TrimResponse), verrors.ToStatusError(err)
 }

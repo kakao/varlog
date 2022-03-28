@@ -1,6 +1,5 @@
 package varlogadm
 
-//go:generate stringer -type=clusterManagerState -trimprefix=clusterManager
 //go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/varlogadm -package varlogadm -destination varlogadm_mock.go . ClusterMetadataView,StorageNodeManager
 
 import (
@@ -26,6 +25,7 @@ import (
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
+	"github.com/kakao/varlog/proto/vmspb"
 )
 
 type StorageNodeEventHandler interface {
@@ -84,6 +84,8 @@ type ClusterManager interface {
 	AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error)
 
 	RemoveMRPeer(ctx context.Context, raftURL string) error
+
+	Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error)
 
 	Run() error
 
@@ -925,4 +927,10 @@ func (cm *clusterManager) HandleReport(ctx context.Context, snm *varlogpb.Storag
 			cm.syncLogStream(ctx, ls.TopicID, ls.LogStreamID)
 		}
 	}
+}
+
+func (cm *clusterManager) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	return cm.snMgr.Trim(ctx, topicID, lastGLSN)
 }
