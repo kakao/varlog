@@ -345,3 +345,19 @@ func (sn *StorageNode) sync(ctx context.Context, tpid types.TopicID, lsid types.
 
 	return lse.Sync(ctx, dst)
 }
+
+func (sn *StorageNode) trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) map[types.LogStreamID]string {
+	ret := make(map[types.LogStreamID]string)
+	sn.executors.Range(func(lsid types.LogStreamID, tpid types.TopicID, lse *logstream.Executor) bool {
+		if topicID != tpid {
+			return true
+		}
+		var msg string
+		if err := lse.Trim(ctx, lastGLSN); err != nil {
+			msg = err.Error()
+		}
+		ret[lsid] = msg
+		return true
+	})
+	return ret
+}

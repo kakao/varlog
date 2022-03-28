@@ -72,6 +72,7 @@ func (as *adminServer) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.S
 	return &snpb.SyncResponse{Status: syncStatus}, err
 }
 
-func (as *adminServer) Trim(context.Context, *snpb.TrimRequest) (*snpb.TrimResponse, error) {
-	panic("not implemented")
+func (as *adminServer) Trim(ctx context.Context, req *snpb.TrimRequest) (*snpb.TrimResponse, error) {
+	results := as.sn.trim(ctx, req.TopicID, req.LastGLSN)
+	return &snpb.TrimResponse{Results: results}, nil
 }

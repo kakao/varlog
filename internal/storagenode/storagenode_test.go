@@ -299,8 +299,8 @@ func TestStorageNode(t *testing.T) {
 	TestUnsealLogStreamReplica(t, cid, tpid, lsid, replicas, sn2.advertise)
 
 	// trim
-	TestTrim(t, tpid, 13, sn1.advertise)
-	TestTrim(t, tpid, 13, sn2.advertise)
+	TestTrim(t, cid, tpid, 13, sn1.advertise)
+	TestTrim(t, cid, tpid, 13, sn2.advertise)
 
 	// CC  : +-- 1 --+ +-- 2 ---+ +---- 3 -----+ +---- 4 -----+
 	// LLSN: _ _ _ _ _ _ _ _ _ __ __ __ __ 14 15 16 17 18 19 20
