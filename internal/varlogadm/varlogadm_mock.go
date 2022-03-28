@@ -14,6 +14,7 @@ import (
 	types "github.daumkakao.com/varlog/varlog/pkg/types"
 	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	vmspb "github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
 // MockClusterMetadataView is a mock of ClusterMetadataView interface.
@@ -273,6 +274,21 @@ func (m *MockStorageNodeManager) Sync(arg0 context.Context, arg1 types.TopicID, 
 func (mr *MockStorageNodeManagerMockRecorder) Sync(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockStorageNodeManager)(nil).Sync), arg0, arg1, arg2, arg3, arg4, arg5)
+}
+
+// Trim mocks base method.
+func (m *MockStorageNodeManager) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) ([]vmspb.TrimResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Trim", arg0, arg1, arg2)
+	ret0, _ := ret[0].([]vmspb.TrimResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Trim indicates an expected call of Trim.
+func (mr *MockStorageNodeManagerMockRecorder) Trim(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockStorageNodeManager)(nil).Trim), arg0, arg1, arg2)
 }
 
 // Unseal mocks base method.

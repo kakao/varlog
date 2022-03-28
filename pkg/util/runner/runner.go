@@ -1,7 +1,5 @@
 package runner
 
-//go:generate stringer -type=State
-
 import (
 	"context"
 	"fmt"

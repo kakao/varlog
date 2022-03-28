@@ -2,6 +2,7 @@ package varlogadm
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
 func withTestStorageNodeManager(t *testing.T, f func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView)) func() {
@@ -296,6 +298,168 @@ func TestUnseal(t *testing.T) {
 			Convey("Then Unseal should succeed", func() {
 				err := snManager.Unseal(context.TODO(), topicID, logStreamID)
 				So(err, ShouldBeNil)
+			})
+		})
+	}))
+}
+
+func TestTrim(t *testing.T) {
+	Convey("Given a StorageNodeManager", t, withTestStorageNodeManager(t, func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView) {
+		// Replication Factor = 2, Number of Storage Nodes = 2
+		// [TopicID = 1] LogStreamID = 1, 2, 3
+		// [TopicID = 2] LogStreamID = 4, 5, 6
+		const (
+			snid1 = types.StorageNodeID(1)
+			snid2 = types.StorageNodeID(2)
+
+			tpid1 = types.TopicID(1)
+			lsid1 = types.LogStreamID(1)
+			lsid2 = types.LogStreamID(2)
+			lsid3 = types.LogStreamID(3)
+
+			tpid2 = types.TopicID(2)
+			lsid4 = types.LogStreamID(4)
+			lsid5 = types.LogStreamID(5)
+			lsid6 = types.LogStreamID(6)
+		)
+		fakeError := errors.New("error")
+
+		snmcl1 := snc.NewMockStorageNodeManagementClient(ctrl)
+		snmcl1.EXPECT().Close().Return(nil).AnyTimes()
+		snmcl1.EXPECT().PeerStorageNodeID().Return(snid1).AnyTimes()
+		snmcl1.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid1), gomock.Any()).Return(map[types.LogStreamID]error{
+			lsid1: nil,
+			lsid2: nil,
+			lsid3: fakeError,
+		}, nil).AnyTimes()
+		snmcl1.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid2), gomock.Any()).Return(map[types.LogStreamID]error{
+			lsid4: nil,
+			lsid5: nil,
+			lsid6: nil,
+		}, nil).AnyTimes()
+
+		snmcl2 := snc.NewMockStorageNodeManagementClient(ctrl)
+		snmcl2.EXPECT().Close().Return(nil).AnyTimes()
+		snmcl2.EXPECT().PeerStorageNodeID().Return(snid2).AnyTimes()
+		snmcl2.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid1), gomock.Any()).Return(map[types.LogStreamID]error{
+			lsid1: nil,
+			lsid2: nil,
+			lsid3: nil,
+		}, nil).AnyTimes()
+		snmcl2.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid2), gomock.Any()).Return(nil, fakeError).AnyTimes()
+
+		snManager.AddStorageNode(snmcl1)
+		snManager.AddStorageNode(snmcl2)
+
+		cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+			StorageNodes: []*varlogpb.StorageNodeDescriptor{},
+			LogStreams: []*varlogpb.LogStreamDescriptor{
+				{
+					TopicID:     tpid1,
+					LogStreamID: lsid1,
+					Status:      varlogpb.LogStreamStatusRunning,
+					Replicas: []*varlogpb.ReplicaDescriptor{
+						{StorageNodeID: snid1},
+						{StorageNodeID: snid2},
+					},
+				},
+				{
+					TopicID:     tpid1,
+					LogStreamID: lsid2,
+					Status:      varlogpb.LogStreamStatusRunning,
+					Replicas: []*varlogpb.ReplicaDescriptor{
+						{StorageNodeID: snid1},
+						{StorageNodeID: snid2},
+					},
+				},
+				{
+					TopicID:     tpid1,
+					LogStreamID: lsid3,
+					Status:      varlogpb.LogStreamStatusRunning,
+					Replicas: []*varlogpb.ReplicaDescriptor{
+						{StorageNodeID: snid1},
+						{StorageNodeID: snid2},
+					},
+				},
+				{
+					TopicID:     tpid2,
+					LogStreamID: lsid4,
+					Status:      varlogpb.LogStreamStatusRunning,
+					Replicas: []*varlogpb.ReplicaDescriptor{
+						{StorageNodeID: snid1},
+						{StorageNodeID: snid2},
+					},
+				},
+				{
+					TopicID:     tpid2,
+					LogStreamID: lsid5,
+					Status:      varlogpb.LogStreamStatusRunning,
+					Replicas: []*varlogpb.ReplicaDescriptor{
+						{StorageNodeID: snid1},
+						{StorageNodeID: snid2},
+					},
+				},
+				{
+					TopicID:     tpid2,
+					LogStreamID: lsid6,
+					Status:      varlogpb.LogStreamStatusRunning,
+					Replicas: []*varlogpb.ReplicaDescriptor{
+						{StorageNodeID: snid1},
+						{StorageNodeID: snid2},
+					},
+				},
+			},
+			Topics: []*varlogpb.TopicDescriptor{
+				{
+					TopicID:    tpid1,
+					Status:     varlogpb.TopicStatusRunning,
+					LogStreams: []types.LogStreamID{lsid1, lsid2, lsid3},
+				},
+				{
+					TopicID:    tpid2,
+					Status:     varlogpb.TopicStatusRunning,
+					LogStreams: []types.LogStreamID{lsid4, lsid5, lsid6},
+				},
+			},
+		}, nil).AnyTimes()
+
+		Convey("When some of the log stream replicas in a topic could not trim logs", func() {
+			Convey("Then Trim should succeed", func() {
+				result, err := snManager.Trim(context.Background(), tpid1, types.GLSN(10))
+				So(err, ShouldBeNil)
+				So(result, ShouldHaveLength, 6)
+				So(result, ShouldContain, vmspb.TrimResult{
+					StorageNodeID: snid1,
+					LogStreamID:   lsid1,
+				})
+				So(result, ShouldContain, vmspb.TrimResult{
+					StorageNodeID: snid2,
+					LogStreamID:   lsid1,
+				})
+				So(result, ShouldContain, vmspb.TrimResult{
+					StorageNodeID: snid1,
+					LogStreamID:   lsid2,
+				})
+				So(result, ShouldContain, vmspb.TrimResult{
+					StorageNodeID: snid2,
+					LogStreamID:   lsid2,
+				})
+				So(result, ShouldContain, vmspb.TrimResult{
+					StorageNodeID: snid1,
+					LogStreamID:   lsid3,
+					Error:         fakeError.Error(),
+				})
+				So(result, ShouldContain, vmspb.TrimResult{
+					StorageNodeID: snid2,
+					LogStreamID:   lsid3,
+				})
+			})
+		})
+
+		Convey("When some the Trim RPC fails", func() {
+			Convey("Then Trim should fail", func() {
+				_, err := snManager.Trim(context.Background(), tpid2, types.GLSN(10))
+				So(err, ShouldNotBeNil)
 			})
 		})
 	}))
