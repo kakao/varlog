@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/internal/storage"
@@ -97,6 +98,12 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.Replica) (*sn
 		lse:        lse,
 		logger:     lse.logger.Named("sync client").With(zap.String("dst", dstReplica.String())),
 	})
+
+	defer func() {
+		if err != nil {
+			err = multierr.Append(err, sc.close())
+		}
+	}()
 
 	localLWM, localHWM := lse.lsc.localLowWatermark(), lse.lsc.localHighWatermark()
 	syncRange, err := sc.syncInit(ctx, snpb.SyncRange{
