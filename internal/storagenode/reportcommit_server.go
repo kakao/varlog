@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"io"
 
+	"go.uber.org/multierr"
+	"go.uber.org/zap"
+
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
@@ -18,6 +21,10 @@ type reportCommitServer struct {
 var _ snpb.LogStreamReporterServer = (*reportCommitServer)(nil)
 
 func (rcs reportCommitServer) GetReport(stream snpb.LogStreamReporter_GetReportServer) (err error) {
+	defer func() {
+		rcs.sn.logger.Info("report commit server: closed report stream", zap.Error(err))
+	}()
+
 	req := &snpb.GetReportRequest{}
 	rsp := &snpb.GetReportResponse{
 		StorageNodeID:   rcs.sn.snid,
@@ -51,6 +58,11 @@ func (rcs reportCommitServer) GetReport(stream snpb.LogStreamReporter_GetReportS
 }
 
 func (rcs reportCommitServer) Commit(stream snpb.LogStreamReporter_CommitServer) (err error) {
+	defer func() {
+		err = multierr.Append(err, stream.SendAndClose(&snpb.CommitResponse{}))
+		rcs.sn.logger.Info("report commit server: closed commit stream", zap.Error(err))
+	}()
+
 	// NOTE: Each connection of Commit is paired with only one log stream replica. Thus, lse can be safely cached.
 	lseMap := make(map[types.LogStreamID]*logstream.Executor, defaultReportsCapacity)
 	req := &snpb.CommitRequest{}
