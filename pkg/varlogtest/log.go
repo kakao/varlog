@@ -151,6 +151,10 @@ func (c *testLog) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 		return nil, err
 	}
 
+	if c.vt.trimGLSNs[topicID] >= begin {
+		return nil, errors.New("trimmed")
+	}
+
 	logEntries := c.vt.globalLogEntries[topicID]
 	n := len(logEntries)
 	if logEntries[n-1].GLSN < begin {
@@ -218,9 +222,13 @@ func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStr
 		return newErrSubscriber(errors.New("no such log stream"))
 	}
 
-	_, ok := c.vt.localLogEntries[logStreamID]
+	localLogEntries, ok := c.vt.localLogEntries[logStreamID]
 	if !ok {
 		return newErrSubscriber(errors.New("no such log stream"))
+	}
+
+	if len(localLogEntries) > int(begin) && localLogEntries[begin].GLSN <= c.vt.trimGLSNs[topicID] {
+		return newErrSubscriber(verrors.ErrTrimmed)
 	}
 
 	s := &subscriberImpl{

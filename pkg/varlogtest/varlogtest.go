@@ -2,6 +2,7 @@ package varlogtest
 
 import (
 	"math/rand"
+	"sort"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ type VarlogTest struct {
 	globalLogEntries map[types.TopicID][]*varlogpb.LogEntry
 	localLogEntries  map[types.LogStreamID][]*varlogpb.LogEntry
 	version          types.Version
+	trimGLSNs        map[types.TopicID]types.GLSN
 
 	nextTopicID       types.TopicID
 	nextStorageNodeID types.StorageNodeID
@@ -48,6 +50,7 @@ func New(clusterID types.ClusterID, replicationFactor int) *VarlogTest {
 		topics:            make(map[types.TopicID]varlogpb.TopicDescriptor),
 		globalLogEntries:  make(map[types.TopicID][]*varlogpb.LogEntry),
 		localLogEntries:   make(map[types.LogStreamID][]*varlogpb.LogEntry),
+		trimGLSNs:         make(map[types.TopicID]types.GLSN),
 	}
 	vt.cond = sync.NewCond(&vt.mu)
 	vt.admin = &testAdmin{vt: vt}
@@ -123,8 +126,17 @@ func (vt *VarlogTest) peek(topicID types.TopicID, logStreamID types.LogStreamID)
 		return
 	}
 
-	head.GLSN = vt.localLogEntries[logStreamID][1].GLSN
-	head.LLSN = vt.localLogEntries[logStreamID][1].LLSN
+	trimGLSN := vt.trimGLSNs[topicID]
+
+	idx := sort.Search(len(vt.localLogEntries[logStreamID]), func(i int) bool {
+		return vt.localLogEntries[logStreamID][i].GLSN >= trimGLSN
+	})
+	if idx < len(vt.localLogEntries[logStreamID]) && vt.localLogEntries[logStreamID][idx].GLSN == trimGLSN {
+		idx++
+	}
+
+	head.GLSN = vt.localLogEntries[logStreamID][idx].GLSN
+	head.LLSN = vt.localLogEntries[logStreamID][idx].LLSN
 	lastIdx := len(vt.localLogEntries[logStreamID]) - 1
 	tail.GLSN = vt.localLogEntries[logStreamID][lastIdx].GLSN
 	tail.LLSN = vt.localLogEntries[logStreamID][lastIdx].LLSN

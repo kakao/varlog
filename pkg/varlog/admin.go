@@ -4,6 +4,7 @@ package varlog
 
 import (
 	"context"
+	"errors"
 
 	pbtypes "github.com/gogo/protobuf/types"
 
@@ -68,6 +69,10 @@ type Admin interface {
 
 	// GetStorageNodes returns a map of StorageNodeIDs and their addresses.
 	GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]string, error)
+
+	// Trim deletes logs whose GLSNs are less than or equal to the argument lastGLSN.
+	// Note that the return type of this method can be changed soon.
+	Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error)
 
 	// Close closes a connection to the admin server.
 	// Once this method is called, the Client can't be used anymore.
@@ -210,4 +215,27 @@ func (c *admin) RemoveMRPeer(ctx context.Context, raftURL string) error {
 func (c *admin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]string, error) {
 	rsp, err := c.rpcClient.GetStorageNodes(ctx, &pbtypes.Empty{})
 	return rsp.GetStorageNodes(), verrors.FromStatusError(err)
+}
+
+func (c *admin) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error) {
+	rsp, err := c.rpcClient.Trim(ctx, &vmspb.TrimRequest{
+		TopicID:  topicID,
+		LastGLSN: lastGLSN,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ret := make(map[types.LogStreamID]map[types.StorageNodeID]error)
+	for _, result := range rsp.Results {
+		lsid := result.LogStreamID
+		if _, ok := ret[lsid]; !ok {
+			ret[lsid] = make(map[types.StorageNodeID]error)
+		}
+		var err error
+		if len(result.Error) > 0 {
+			err = errors.New(result.Error)
+		}
+		ret[lsid][result.StorageNodeID] = err
+	}
+	return ret, nil
 }
