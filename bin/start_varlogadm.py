@@ -28,7 +28,10 @@ logger = get_logger(APP_NAME)
 
 
 def start(cluster_id: int, listen: str, replication_factor: int,
-          mr_address: str) -> None:
+          mr_address: str, logdir: str = None) -> None:
+    if logdir:
+        os.makedirs(logdir, exist_ok=True)
+
     cmd = [
         f"{binpath}/varlogadm",
         "start",
@@ -36,7 +39,11 @@ def start(cluster_id: int, listen: str, replication_factor: int,
         f"--replication-factor={replication_factor}",
         f"--mr-address={mr_address}",
         f"--rpc-bind-address={listen}",
+        "--logtostderr",
     ]
+
+    if logdir:
+        cmd.append(f"--logdir={logdir}")
 
     killer = Killer()
     while not killer.kill_now:
@@ -59,6 +66,7 @@ def main() -> None:
     parser.add_argument("--listen", default=f"0.0.0.0:{DEFAULT_PORT}")
     parser.add_argument("--replication-factor", required=True, type=int)
     parser.add_argument("--mr-address", required=True)
+    parser.add_argument("--logdir")
     args = parser.parse_args()
     logger.info(f"args: {args}")
 
@@ -68,6 +76,7 @@ def main() -> None:
         args.listen,
         args.replication_factor,
         args.mr_address,
+        args.logdir,
     )
 
 

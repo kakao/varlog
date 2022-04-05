@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `Trim` method to `pkg/snc.(StorageNodeManagementClient)`. (#VARLOG-708/#609)
 - Added `Trim` method to `internal/storagenode.(adminServer)`. (#VARLOG-708/#609)
 - Implemented `Trim` in varlogadm. (#VARLOG-707/#612)
+- Added logging settings to `bin/start_varlogadm.py`. (#VARLOG-713/#617)
 
 ### Changed
 - Changed default storage settings for good performance in usual cases. (#VARLOG-668/#584)
