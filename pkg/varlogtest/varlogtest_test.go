@@ -449,3 +449,108 @@ func TestVarlogTest(t *testing.T) {
 	wg.Wait()
 	require.Error(t, sub3.Close())
 }
+
+func TestVarlogTest_Trim(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	const (
+		clusterID         = types.ClusterID(1)
+		replicationFactor = 3
+		numLogStreams     = 2
+		numLogs           = 10
+	)
+
+	vt := varlogtest.New(clusterID, replicationFactor)
+	adm := vt.Admin()
+	vlg := vt.Log()
+	defer func() {
+		require.NoError(t, vlg.Close())
+		require.NoError(t, adm.Close())
+	}()
+
+	td, err := adm.AddTopic(context.Background())
+	assert.NoError(t, err)
+
+	for i := 0; i < replicationFactor; i++ {
+		addr := fmt.Sprintf("sn-%d", i+1)
+		_, err := adm.AddStorageNode(context.Background(), addr)
+		assert.NoError(t, err)
+	}
+
+	var lsds []*varlogpb.LogStreamDescriptor
+	for i := 0; i < numLogStreams; i++ {
+		lsd, err := adm.AddLogStream(context.Background(), td.TopicID, nil)
+		assert.NoError(t, err)
+		lsds = append(lsds, lsd)
+	}
+
+	lastGLSN := types.InvalidGLSN
+	for i := 0; i < numLogs; i++ {
+		lsd := lsds[i%numLogStreams]
+		res := vlg.AppendTo(context.Background(), td.TopicID, lsd.LogStreamID, [][]byte{nil})
+		assert.NoError(t, res.Err)
+		assert.Equal(t, lastGLSN+1, res.Metadata[0].GLSN)
+		lastGLSN++
+	}
+
+	// LSID: 1  2  1  2  1  2  1  2  1  2
+	// LLSN: 1  1  2  2  3  3  4  4  5  5
+	// GLSN: 1  2  3  4  5  6  7  9  9 10
+
+	trimGLSN := types.GLSN(3)
+	res, err := adm.Trim(context.Background(), td.TopicID, trimGLSN)
+	assert.NoError(t, err)
+	assert.Len(t, res, numLogStreams)
+	for _, lsd := range lsds {
+		assert.Contains(t, res, lsd.LogStreamID)
+		assert.Len(t, res[lsd.LogStreamID], replicationFactor)
+		for _, rd := range lsd.Replicas {
+			assert.NoError(t, res[lsd.LogStreamID][rd.StorageNodeID])
+		}
+	}
+
+	// LSID: 1  2  1  2  1  2  1  2  1  2
+	// LLSN: X  X  X  2  3  3  4  4  5  5
+	// GLSN: X  X  X  4  5  6  7  9  9 10
+
+	for _, lsd := range lsds {
+		subscriber := vlg.SubscribeTo(context.Background(), lsd.TopicID, lsd.LogStreamID, types.MinLLSN, types.LLSN(3))
+		_, err := subscriber.Next()
+		assert.Error(t, err)
+		assert.Error(t, subscriber.Close())
+	}
+
+	lsd, err := vlg.LogStreamMetadata(context.Background(), td.TopicID, lsds[0].LogStreamID)
+	assert.NoError(t, err)
+	assert.Equal(t, types.LLSN(3), lsd.Head.LLSN)
+	assert.Equal(t, types.GLSN(5), lsd.Head.GLSN)
+	assert.Equal(t, types.LLSN(5), lsd.Tail.LLSN)
+	assert.Equal(t, types.GLSN(9), lsd.Tail.GLSN)
+
+	lsd, err = vlg.LogStreamMetadata(context.Background(), td.TopicID, lsds[1].LogStreamID)
+	assert.NoError(t, err)
+	assert.Equal(t, types.LLSN(2), lsd.Head.LLSN)
+	assert.Equal(t, types.GLSN(4), lsd.Head.GLSN)
+	assert.Equal(t, types.LLSN(5), lsd.Tail.LLSN)
+	assert.Equal(t, types.GLSN(10), lsd.Tail.GLSN)
+
+	subscriber := vlg.SubscribeTo(context.Background(), td.TopicID, lsds[0].LogStreamID, types.LLSN(3), types.LLSN(6))
+	expectedLLSN := types.LLSN(3)
+	for i := 0; i < 3; i++ {
+		le, err := subscriber.Next()
+		assert.NoError(t, err)
+		assert.Equal(t, expectedLLSN, le.LLSN)
+		expectedLLSN++
+	}
+	assert.NoError(t, subscriber.Close())
+
+	subscriber = vlg.SubscribeTo(context.Background(), td.TopicID, lsds[1].LogStreamID, types.LLSN(2), types.LLSN(6))
+	expectedLLSN = types.LLSN(2)
+	for i := 0; i < 4; i++ {
+		le, err := subscriber.Next()
+		assert.NoError(t, err)
+		assert.Equal(t, expectedLLSN, le.LLSN)
+		expectedLLSN++
+	}
+	assert.NoError(t, subscriber.Close())
+}

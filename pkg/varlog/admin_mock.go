@@ -231,6 +231,21 @@ func (mr *MockAdminMockRecorder) Topics(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Topics", reflect.TypeOf((*MockAdmin)(nil).Topics), arg0)
 }
 
+// Trim mocks base method.
+func (m *MockAdmin) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Trim", arg0, arg1, arg2)
+	ret0, _ := ret[0].(map[types.LogStreamID]map[types.StorageNodeID]error)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Trim indicates an expected call of Trim.
+func (mr *MockAdminMockRecorder) Trim(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockAdmin)(nil).Trim), arg0, arg1, arg2)
+}
+
 // UnregisterLogStream mocks base method.
 func (m *MockAdmin) UnregisterLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) error {
 	m.ctrl.T.Helper()

@@ -81,6 +81,7 @@ func (c *testAdmin) AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, err
 		LogStreams: nil,
 	}
 	c.vt.topics[topicID] = topicDesc
+	c.vt.trimGLSNs[topicID] = types.InvalidGLSN
 
 	invalidLogEntry := varlogpb.InvalidLogEntry()
 	c.vt.globalLogEntries[topicID] = []*varlogpb.LogEntry{&invalidLogEntry}
@@ -264,6 +265,35 @@ func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeI
 	for snID, snMetaDesc := range c.vt.storageNodes {
 		ret[snID] = snMetaDesc.StorageNode.Address
 	}
+	return ret, nil
+}
+
+func (c *testAdmin) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error) {
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	td, err := c.vt.topicDescriptor(topicID)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := make(map[types.LogStreamID]map[types.StorageNodeID]error)
+	for _, lsid := range td.LogStreams {
+		lsd, err := c.vt.logStreamDescriptor(topicID, lsid)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := ret[lsid]; !ok {
+			ret[lsid] = make(map[types.StorageNodeID]error)
+		}
+		for _, rd := range lsd.Replicas {
+			snid := rd.StorageNodeID
+			ret[lsid][snid] = nil
+		}
+	}
+	c.vt.trimGLSNs[topicID] = lastGLSN
 	return ret, nil
 }
 
