@@ -27,6 +27,22 @@ spec:
       labels:
         app: varlogadm
     spec:
+      volumes:
+        - name: varlogadm-data
+          hostPath:
+            path: /varlog/adm
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-perm
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "chmod -R 777 /varlog/adm"
+          volumeMounts:
+            - name: varlogadm-data
+              mountPath: /varlog/adm
+          imagePullPolicy: IfNotPresent
       containers:
         - name: varlogadm
           image: idock.daumkakao.io/varlog/all-in-one:latest
@@ -38,6 +54,7 @@ spec:
             - "--listen=0.0.0.0:9093"
             - "--replication-factor=$(REPLICATION_FACTOR)"
             - "--mr-address=$(VARLOGMR_RPC_SERVICE_HOST):$(VARLOGMR_RPC_SERVICE_PORT)"
+            - "--logdir=/varlog/adm/logs"
           env:
             - name: TZ
               value: Asia/Seoul
@@ -51,6 +68,9 @@ spec:
                 configMapKeyRef:
                   key: replication_factor
                   name: varlog-conf
+          volumeMounts:
+            - name: varlogadm-data
+              mountPath: /varlog/adm
           ports:
             - name: rpc
               containerPort: 9093

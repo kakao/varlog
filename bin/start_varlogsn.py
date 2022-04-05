@@ -110,7 +110,8 @@ def start(args: argparse.Namespace) -> None:
 
     for volume in args.volumes:
         os.makedirs(volume, exist_ok=True)
-    os.makedirs(args.log_dir, exist_ok=True)
+    if args.log_dir:
+        os.makedirs(args.log_dir, exist_ok=True)
 
     killer = Killer()
     ok = False

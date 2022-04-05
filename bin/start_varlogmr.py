@@ -174,7 +174,8 @@ def start(
         log_dir: Path to the log directory.
     """
     os.makedirs(raft_dir, exist_ok=True)
-    os.makedirs(log_dir, exist_ok=True)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
 
     # If the join is true, the old write-ahead-log will be re-used.
     restart = exists_wal(raft_dir)
@@ -207,8 +208,10 @@ def start(
             f"--bind={listen}",
             f"--log-rep-factor={replication_factor}",
             f"--raft-dir={raft_dir}",
-            f"--log-dir={log_dir}",
         ]
+
+        if log_dir:
+            cmd.append(f"--log-dir={log_dir}")
 
         if reportcommitter_read_buffer_size:
             cmd.append(
