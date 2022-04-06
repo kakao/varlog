@@ -78,7 +78,7 @@ func TestReplicateClient_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 	rc.lse = lse
 	rc.logger = zap.NewNop()
 
-	mockStreamClient := mock.NewMockReplicator_ReplicateNewClient(ctrl)
+	mockStreamClient := mock.NewMockReplicator_ReplicateClient(ctrl)
 	mockStreamClient.EXPECT().Context().Return(context.Background()).AnyTimes()
 	rc.streamClient = mockStreamClient
 
@@ -101,7 +101,7 @@ func TestReplicateClient_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 	assert.Error(t, err)
 
 	lse.esm.store(executorStateAppendable)
-	mockStreamClient = mock.NewMockReplicator_ReplicateNewClient(ctrl)
+	mockStreamClient = mock.NewMockReplicator_ReplicateClient(ctrl)
 	mockStreamClient.EXPECT().Context().Return(canceledCtx).AnyTimes()
 	rc.streamClient = mockStreamClient
 	err = rc.send(context.Background(), &replicateTask{})
@@ -120,7 +120,7 @@ func TestReplicateClientRPCError(t *testing.T) {
 	lse.tpid = 1
 	lse.lsid = 2
 
-	mockStreamClient := mock.NewMockReplicator_ReplicateNewClient(ctrl)
+	mockStreamClient := mock.NewMockReplicator_ReplicateClient(ctrl)
 	mockStreamClient.EXPECT().Send(gomock.Any()).Return(errors.New("fake"))
 	mockStreamClient.EXPECT().Context().Return(context.Background()).AnyTimes()
 	mockStreamClient.EXPECT().CloseSend().Return(nil)
@@ -154,7 +154,7 @@ func TestReplicateClientDrain(t *testing.T) {
 
 	const numTasks = 10
 
-	mockStreamClient := mock.NewMockReplicator_ReplicateNewClient(ctrl)
+	mockStreamClient := mock.NewMockReplicator_ReplicateClient(ctrl)
 	mockStreamClient.EXPECT().Context().Return(context.Background()).AnyTimes()
 	lse := &Executor{
 		esm: newExecutorStateManager(executorStateAppendable),
@@ -193,8 +193,8 @@ func TestReplicateClient(t *testing.T) {
 	ch := make(chan testReplicateRequest, 1)
 
 	serverMock := mock.NewMockReplicatorServer(ctrl)
-	serverMock.EXPECT().ReplicateNew(gomock.Any()).DoAndReturn(
-		func(stream snpb.Replicator_ReplicateNewServer) error {
+	serverMock.EXPECT().Replicate(gomock.Any()).DoAndReturn(
+		func(stream snpb.Replicator_ReplicateServer) error {
 			req, err := stream.Recv()
 			ch <- testReplicateRequest{req: req, err: err}
 			return err

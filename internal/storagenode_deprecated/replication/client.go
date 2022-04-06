@@ -83,7 +83,7 @@ func (c *client) run(ctx context.Context) (err error) {
 		return err
 	}
 	c.rpcClient = snpb.NewReplicatorClient(c.rpcConn.Conn)
-	stream, err := c.rpcClient.Replicate(context.Background())
+	stream, err := c.rpcClient.ReplicateDeprecated(context.Background())
 	if err != nil {
 		return multierr.Append(errors.WithStack(err), c.rpcConn.Close())
 	}
@@ -128,7 +128,7 @@ func (c *client) Replicate(ctx context.Context, llsn types.LLSN, data []byte, st
 	c.metrics.ReplicateClientRequestQueueTasks.Add(ctx, 1)
 }
 
-func (c *client) sendLoop(stream snpb.Replicator_ReplicateClient) {
+func (c *client) sendLoop(stream snpb.Replicator_ReplicateDeprecatedClient) {
 	defer c.dispatchers.Done()
 
 	req := &snpb.ReplicationRequest{}
@@ -169,7 +169,7 @@ Loop:
 	_ = stream.CloseSend()
 }
 
-func (c *client) recvLoop(stream snpb.Replicator_ReplicateClient) {
+func (c *client) recvLoop(stream snpb.Replicator_ReplicateDeprecatedClient) {
 	defer c.dispatchers.Done()
 
 	var (

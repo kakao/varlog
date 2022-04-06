@@ -21,12 +21,12 @@ type testReplicateServer struct {
 
 var _ snpb.ReplicatorServer = (*testReplicateServer)(nil)
 
-func (trs *testReplicateServer) Replicate(stream snpb.Replicator_ReplicateServer) error {
-	return trs.mock.Replicate(stream)
+func (trs *testReplicateServer) ReplicateDeprecated(stream snpb.Replicator_ReplicateDeprecatedServer) error {
+	return trs.mock.ReplicateDeprecated(stream)
 }
 
-func (trs *testReplicateServer) ReplicateNew(stream snpb.Replicator_ReplicateNewServer) error {
-	return trs.mock.ReplicateNew(stream)
+func (trs *testReplicateServer) Replicate(stream snpb.Replicator_ReplicateServer) error {
+	return trs.mock.Replicate(stream)
 }
 
 func (trs *testReplicateServer) SyncInit(ctx context.Context, req *snpb.SyncInitRequest) (*snpb.SyncInitResponse, error) {
