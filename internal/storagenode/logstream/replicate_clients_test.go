@@ -17,8 +17,8 @@ func TestReplicateClients(t *testing.T) {
 	defer ctrl.Finish()
 
 	serverMock := mock.NewMockReplicatorServer(ctrl)
-	serverMock.EXPECT().ReplicateNew(gomock.Any()).DoAndReturn(
-		func(stream snpb.Replicator_ReplicateNewServer) error {
+	serverMock.EXPECT().Replicate(gomock.Any()).DoAndReturn(
+		func(stream snpb.Replicator_ReplicateServer) error {
 			return stream.SendAndClose(&snpb.ReplicateResponse{})
 		},
 	).MaxTimes(1)

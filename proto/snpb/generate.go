@@ -1,3 +1,3 @@
 package snpb
 
-//go:generate mockgen -build_flags -mod=vendor -package mock -destination mock/snpb_mock.go . ReplicatorClient,ReplicatorServer,Replicator_ReplicateClient,Replicator_ReplicateServer,Replicator_ReplicateNewClient,LogIOClient,LogIOServer,LogIO_SubscribeClient,LogIO_SubscribeServer,LogStreamReporterClient,LogStreamReporterServer,ManagementClient,ManagementServer
+//go:generate mockgen -build_flags -mod=vendor -package mock -destination mock/snpb_mock.go . ReplicatorClient,ReplicatorServer,Replicator_ReplicateDeprecatedClient,Replicator_ReplicateDeprecatedServer,Replicator_ReplicateClient,LogIOClient,LogIOServer,LogIO_SubscribeClient,LogIO_SubscribeServer,LogStreamReporterClient,LogStreamReporterServer,ManagementClient,ManagementServer

@@ -25,7 +25,7 @@ type replicateClient struct {
 	runner   *runner.Runner
 
 	rpcClient    snpb.ReplicatorClient
-	streamClient snpb.Replicator_ReplicateNewClient
+	streamClient snpb.Replicator_ReplicateClient
 	//req          *snpb.ReplicateRequest
 }
 
@@ -41,7 +41,7 @@ func newReplicateClient(ctx context.Context, cfg replicateClientConfig) (*replic
 	//	return nil, err
 	//}
 	rpcClient := snpb.NewReplicatorClient(cfg.rpcConn.Conn)
-	streamClient, err := rpcClient.ReplicateNew(ctx)
+	streamClient, err := rpcClient.Replicate(ctx)
 	if err != nil {
 		_ = cfg.rpcConn.Close()
 		return nil, err

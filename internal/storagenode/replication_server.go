@@ -20,7 +20,7 @@ type replicationServer struct {
 
 var _ snpb.ReplicatorServer = (*replicationServer)(nil)
 
-func (rs *replicationServer) ReplicateNew(stream snpb.Replicator_ReplicateNewServer) error {
+func (rs *replicationServer) Replicate(stream snpb.Replicator_ReplicateServer) error {
 	wg := &sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer func() {
@@ -34,7 +34,7 @@ func (rs *replicationServer) ReplicateNew(stream snpb.Replicator_ReplicateNewSer
 	return err
 }
 
-func (rs *replicationServer) Replicate(stream snpb.Replicator_ReplicateServer) error {
+func (rs *replicationServer) ReplicateDeprecated(stream snpb.Replicator_ReplicateDeprecatedServer) error {
 	panic("not implemented")
 }
 
@@ -80,7 +80,7 @@ func (rst *replicationServerTask) release() {
 	replicationServerTaskPool.Put(rst)
 }
 
-func (rs *replicationServer) recv(ctx context.Context, stream snpb.Replicator_ReplicateNewServer, wg *sync.WaitGroup) <-chan *replicationServerTask {
+func (rs *replicationServer) recv(ctx context.Context, stream snpb.Replicator_ReplicateServer, wg *sync.WaitGroup) <-chan *replicationServerTask {
 	wg.Add(1)
 	// TODO: add configuration
 	c := make(chan *replicationServerTask, 4096)

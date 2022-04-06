@@ -53,11 +53,11 @@ func (s *serverImpl) Register(server *grpc.Server) {
 	snpb.RegisterReplicatorServer(server, s)
 }
 
-func (s *serverImpl) ReplicateNew(stream snpb.Replicator_ReplicateNewServer) error {
+func (s *serverImpl) Replicate(stream snpb.Replicator_ReplicateServer) error {
 	panic("not implemented")
 }
 
-func (s *serverImpl) Replicate(stream snpb.Replicator_ReplicateServer) error {
+func (s *serverImpl) ReplicateDeprecated(stream snpb.Replicator_ReplicateDeprecatedServer) error {
 	s.barrier.mu.RLock()
 	defer s.barrier.mu.RUnlock()
 	if !s.barrier.running {
@@ -90,7 +90,7 @@ func (s *serverImpl) Replicate(stream snpb.Replicator_ReplicateServer) error {
 	}
 }
 
-func (s *serverImpl) recv(ctx context.Context, stream snpb.Replicator_ReplicateServer) <-chan *replicateTask {
+func (s *serverImpl) recv(ctx context.Context, stream snpb.Replicator_ReplicateDeprecatedServer) <-chan *replicateTask {
 	s.pipelines.Add(1)
 	c := make(chan *replicateTask, s.pipelineQueueSize)
 	go func() {
@@ -163,7 +163,7 @@ func (s *serverImpl) replicate(ctx context.Context, repCtxC <-chan *replicateTas
 	return c
 }
 
-func (s *serverImpl) send(ctx context.Context, stream snpb.Replicator_ReplicateServer, repCtxC <-chan *replicateTask) <-chan *replicateTask {
+func (s *serverImpl) send(ctx context.Context, stream snpb.Replicator_ReplicateDeprecatedServer, repCtxC <-chan *replicateTask) <-chan *replicateTask {
 	s.pipelines.Add(1)
 	c := make(chan *replicateTask, s.pipelineQueueSize)
 	go func() {
