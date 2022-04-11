@@ -83,7 +83,7 @@ type executor struct {
 
 	// The primaryBackups is a slice of replicas of a log stream. It is updated by Unseal
 	// and is read by many codes.
-	primaryBackups []varlogpb.Replica
+	primaryBackups []varlogpb.LogStreamReplica
 }
 
 var _ Executor = (*executor)(nil)

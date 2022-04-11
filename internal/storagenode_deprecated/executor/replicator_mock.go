@@ -38,7 +38,7 @@ func (m *MockReplicator) EXPECT() *MockReplicatorMockRecorder {
 }
 
 // clientOf mocks base method.
-func (m *MockReplicator) clientOf(ctx context.Context, replica varlogpb.Replica) (replication.Client, error) {
+func (m *MockReplicator) clientOf(ctx context.Context, replica varlogpb.LogStreamReplica) (replication.Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "clientOf", ctx, replica)
 	ret0, _ := ret[0].(replication.Client)

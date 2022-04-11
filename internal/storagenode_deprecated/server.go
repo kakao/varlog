@@ -146,13 +146,15 @@ func (s *server) Unseal(ctx context.Context, req *snpb.UnsealRequest) (*pbtypes.
 func (s *server) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.snpb.Server/Sync", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			replica := varlogpb.Replica{
+			replica := varlogpb.LogStreamReplica{
 				StorageNode: varlogpb.StorageNode{
 					StorageNodeID: req.GetBackup().GetStorageNodeID(),
 					Address:       req.GetBackup().GetAddress(),
 				},
-				TopicID:     req.GetTopicID(),
-				LogStreamID: req.GetLogStreamID(),
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     req.GetTopicID(),
+					LogStreamID: req.GetLogStreamID(),
+				},
 			}
 			status, err := s.storageNode.sync(ctx, req.GetTopicID(), req.GetLogStreamID(), replica)
 			return &snpb.SyncResponse{Status: status}, err

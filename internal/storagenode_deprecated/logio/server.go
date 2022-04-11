@@ -72,15 +72,17 @@ func (s *server) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.App
 				return rsp, errors.WithStack(verrors.ErrInvalid)
 			}
 
-			backups := make([]varlogpb.Replica, 0, len(req.Backups))
+			backups := make([]varlogpb.LogStreamReplica, 0, len(req.Backups))
 			for i := range req.Backups {
-				backups = append(backups, varlogpb.Replica{
+				backups = append(backups, varlogpb.LogStreamReplica{
 					StorageNode: varlogpb.StorageNode{
 						StorageNodeID: req.Backups[i].GetStorageNodeID(),
 						Address:       req.Backups[i].GetAddress(),
 					},
-					TopicID:     req.GetTopicID(),
-					LogStreamID: req.GetLogStreamID(),
+					TopicLogStream: varlogpb.TopicLogStream{
+						TopicID:     req.GetTopicID(),
+						LogStreamID: req.GetLogStreamID(),
+					},
 				})
 			}
 

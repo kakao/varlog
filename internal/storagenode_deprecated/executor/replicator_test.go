@@ -96,13 +96,15 @@ func TestReplicationProcessorNoClient(t *testing.T) {
 
 	rtb := newReplicateTask()
 	rtb.llsn = types.LLSN(1)
-	rtb.replicas = []varlogpb.Replica{
+	rtb.replicas = []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 				Address:       "localhost:12345",
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 	}
 
@@ -191,13 +193,15 @@ func TestReplicationProcessor(t *testing.T) {
 			for i := 1; i <= numLogs; i++ {
 				rt := newReplicateTask()
 				rt.llsn = types.LLSN(i)
-				rt.replicas = []varlogpb.Replica{
+				rt.replicas = []varlogpb.LogStreamReplica{
 					{
 						StorageNode: varlogpb.StorageNode{
 							StorageNodeID: 1,
 							Address:       "localhost:12345",
 						},
-						LogStreamID: 1,
+						TopicLogStream: varlogpb.TopicLogStream{
+							LogStreamID: 1,
+						},
 					},
 				}
 				if err := tc.rp.send(context.TODO(), rt); err != nil {
@@ -308,12 +312,14 @@ func TestReplicatorResetConnector(t *testing.T) {
 	for llsn := types.MinLLSN; llsn <= maxReplicatedLLSN+1; llsn++ {
 		rt := newReplicateTask()
 		rt.llsn = llsn
-		rt.replicas = []varlogpb.Replica{{
+		rt.replicas = []varlogpb.LogStreamReplica{{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: backupSNID,
 				Address:       addrs[0],
 			},
-			LogStreamID: logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: logStreamID,
+			},
 		}}
 		require.NoError(t, rp.send(context.Background(), rt))
 	}

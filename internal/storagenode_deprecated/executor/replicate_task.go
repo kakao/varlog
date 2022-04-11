@@ -19,7 +19,7 @@ var replicateTaskPool = sync.Pool{
 type replicateTask struct {
 	llsn     types.LLSN
 	data     []byte
-	replicas []varlogpb.Replica
+	replicas []varlogpb.LogStreamReplica
 
 	createdTime time.Time
 	poppedTime  time.Time

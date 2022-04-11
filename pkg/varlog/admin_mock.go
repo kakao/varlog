@@ -70,10 +70,10 @@ func (mr *MockAdminMockRecorder) AddMRPeer(arg0, arg1, arg2 interface{}) *gomock
 }
 
 // AddStorageNode mocks base method.
-func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 string) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 string) (*snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddStorageNode", arg0, arg1)
-	ret0, _ := ret[0].(*varlogpb.StorageNodeMetadataDescriptor)
+	ret0, _ := ret[0].(*snpb.StorageNodeMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

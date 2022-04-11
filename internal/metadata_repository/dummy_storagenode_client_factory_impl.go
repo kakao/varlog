@@ -41,7 +41,7 @@ func (rc *EmptyStorageNodeClient) PeerStorageNodeID() types.StorageNodeID {
 	panic("not implemented")
 }
 
-func (rc *EmptyStorageNodeClient) GetMetadata(context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (rc *EmptyStorageNodeClient) GetMetadata(context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
 	panic("not implemented")
 }
 
@@ -57,7 +57,7 @@ func (rc *EmptyStorageNodeClient) Seal(context.Context, types.TopicID, types.Log
 	panic("not implemented")
 }
 
-func (rc *EmptyStorageNodeClient) Unseal(context.Context, types.TopicID, types.LogStreamID, []varlogpb.Replica) error {
+func (rc *EmptyStorageNodeClient) Unseal(context.Context, types.TopicID, types.LogStreamID, []varlogpb.LogStreamReplica) error {
 	panic("not implemented")
 }
 
@@ -416,7 +416,7 @@ func (r *DummyStorageNodeClient) PeerStorageNodeID() types.StorageNodeID {
 	return r.storageNodeID
 }
 
-func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -425,16 +425,22 @@ func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*varlogpb.Storage
 		status = varlogpb.StorageNodeStatusDeleted
 	}
 
-	var logStreams []varlogpb.LogStreamMetadataDescriptor
+	var logStreams []snpb.LogStreamReplicaMetadataDescriptor
 	for i, lsID := range r.logStreamIDs {
-		logStreams = append(logStreams, varlogpb.LogStreamMetadataDescriptor{
-			StorageNodeID: r.storageNodeID,
-			LogStreamID:   lsID,
-			Version:       r.knownVersion[i],
+		logStreams = append(logStreams, snpb.LogStreamReplicaMetadataDescriptor{
+			LogStreamReplica: varlogpb.LogStreamReplica{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: r.storageNodeID,
+				},
+				TopicLogStream: varlogpb.TopicLogStream{
+					LogStreamID: lsID,
+				},
+			},
+			Version: r.knownVersion[i],
 		})
 	}
 
-	meta := &varlogpb.StorageNodeMetadataDescriptor{
+	meta := &snpb.StorageNodeMetadataDescriptor{
 		StorageNode: &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: r.storageNodeID,
@@ -442,7 +448,7 @@ func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*varlogpb.Storage
 			},
 			Status: status,
 		},
-		LogStreams: logStreams,
+		LogStreamReplicas: logStreams,
 	}
 
 	return meta, nil
@@ -460,7 +466,7 @@ func (r *DummyStorageNodeClient) Seal(context.Context, types.TopicID, types.LogS
 	panic("not implemented")
 }
 
-func (r *DummyStorageNodeClient) Unseal(context.Context, types.TopicID, types.LogStreamID, []varlogpb.Replica) error {
+func (r *DummyStorageNodeClient) Unseal(context.Context, types.TopicID, types.LogStreamID, []varlogpb.LogStreamReplica) error {
 	panic("not implemented")
 }
 

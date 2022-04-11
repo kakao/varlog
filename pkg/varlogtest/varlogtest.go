@@ -10,6 +10,7 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -24,7 +25,7 @@ type VarlogTest struct {
 
 	mu               sync.Mutex
 	cond             *sync.Cond
-	storageNodes     map[types.StorageNodeID]varlogpb.StorageNodeMetadataDescriptor
+	storageNodes     map[types.StorageNodeID]snpb.StorageNodeMetadataDescriptor
 	logStreams       map[types.LogStreamID]varlogpb.LogStreamDescriptor
 	topics           map[types.TopicID]varlogpb.TopicDescriptor
 	globalLogEntries map[types.TopicID][]*varlogpb.LogEntry
@@ -45,7 +46,7 @@ func New(clusterID types.ClusterID, replicationFactor int) *VarlogTest {
 		clusterID:         clusterID,
 		replicationFactor: replicationFactor,
 		rng:               rand.New(rand.NewSource(time.Now().UnixMilli())),
-		storageNodes:      make(map[types.StorageNodeID]varlogpb.StorageNodeMetadataDescriptor),
+		storageNodes:      make(map[types.StorageNodeID]snpb.StorageNodeMetadataDescriptor),
 		logStreams:        make(map[types.LogStreamID]varlogpb.LogStreamDescriptor),
 		topics:            make(map[types.TopicID]varlogpb.TopicDescriptor),
 		globalLogEntries:  make(map[types.TopicID][]*varlogpb.LogEntry),

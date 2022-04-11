@@ -303,12 +303,12 @@ func (sn *StorageNode) StorageNodeID() types.StorageNodeID {
 }
 
 // GetMetadata returns metadata of the storage node and the log stream replicas.
-func (sn *StorageNode) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (sn *StorageNode) GetMetadata(ctx context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
 	sn.muAddr.RLock()
 	addr := sn.advertiseAddress
 	sn.muAddr.RUnlock()
 
-	snmeta := &varlogpb.StorageNodeMetadataDescriptor{
+	snmeta := &snpb.StorageNodeMetadataDescriptor{
 		ClusterID: sn.clusterID,
 		StorageNode: &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
@@ -332,12 +332,12 @@ func (sn *StorageNode) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMe
 		})
 	}
 
-	snmeta.LogStreams = sn.logStreamMetadataDescriptors()
+	snmeta.LogStreamReplicas = sn.logStreamMetadataDescriptors()
 	return snmeta, nil
 }
 
-func (sn *StorageNode) logStreamMetadataDescriptors() []varlogpb.LogStreamMetadataDescriptor {
-	lsmetas := make([]varlogpb.LogStreamMetadataDescriptor, 0, sn.estimatedNumberOfExecutors())
+func (sn *StorageNode) logStreamMetadataDescriptors() []snpb.LogStreamReplicaMetadataDescriptor {
+	lsmetas := make([]snpb.LogStreamReplicaMetadataDescriptor, 0, sn.estimatedNumberOfExecutors())
 	sn.forEachExecutors(func(_ types.LogStreamID, extor executor.Executor) {
 		lsmetas = append(lsmetas, extor.Metadata())
 	})
@@ -454,7 +454,7 @@ func (sn *StorageNode) Seal(ctx context.Context, topicID types.TopicID, logStrea
 	return status, hwm, nil
 }
 
-func (sn *StorageNode) unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.Replica) error {
+func (sn *StorageNode) unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.LogStreamReplica) error {
 	lse, err := sn.lookupExecutor(topicID, logStreamID)
 	if err != nil {
 		return err
@@ -464,7 +464,7 @@ func (sn *StorageNode) unseal(ctx context.Context, topicID types.TopicID, logStr
 	return lse.Unseal(ctx, replicas)
 }
 
-func (sn *StorageNode) sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replica varlogpb.Replica) (*snpb.SyncStatus, error) {
+func (sn *StorageNode) sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replica varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
 	lse, err := sn.lookupExecutor(topicID, logStreamID)
 	if err != nil {
 		return nil, err

@@ -5,6 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Added the fields `LocalLowWatermark` and `GlobalHighWatermark` to `proto/snpb.(LogStreamReplicaMetadataDescriptor).LocalHighWatermark`. (#VARLOG-719/#624)
+- Added `proto/varlogpb.(TopicLogStream)`, `proto/varlogpb.(LogStreamReplica)` and `proto/varlogpb.(LogSequenceNumber)` to package `proto/varlogpb`. (#VARLOG-719/#624)
+
+### Changed
+- Merged `proto/varlogpb.(Replica)` and `proto/varlogpb.(LogStreamReplicaDescriptor)` into `proto/varlogpb.(LogStreamReplica)`. (#VARLOG-719/#624)
+- Moved `proto/varlogpb.(StorageNodeMetadataDescriptor)` to `proto/snpb.(StorageNodeMetadataDescriptor)`. (#VARLOG-719/#624)
+- Moved `proto/varlogpb.(LogStreamMetadataDescriptor)` to `proto/snpb.(LogStreamReplicaMetadataDescriptor)`. (#VARLOG-719/#624)
+- Renamed `proto/snpb.(LogStreamReplicaMetadataDescriptor).HighWatermark` to `proto/snpb.(LogStreamReplicaMetadataDescriptor).LocalHighWatermark`. (#VARLOG-719/#624)
 
 
 ## [0.1.7] - 2022-04-06

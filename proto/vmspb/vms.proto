@@ -6,6 +6,7 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
 import "varlogpb/metadata.proto";
 import "snpb/replicator.proto";
+import "snpb/metadata.proto";
 
 option go_package = "github.com/kakao/varlog/proto/vmspb";
 
@@ -22,7 +23,7 @@ message AddStorageNodeRequest {
 }
 
 message AddStorageNodeResponse {
-  varlogpb.StorageNodeMetadataDescriptor storage_node = 1;
+  snpb.StorageNodeMetadataDescriptor storage_node = 1;
 }
 
 message UnregisterStorageNodeRequest {
@@ -153,7 +154,7 @@ message SealRequest {
 }
 
 message SealResponse {
-  repeated varlogpb.LogStreamMetadataDescriptor log_streams = 1
+  repeated snpb.LogStreamReplicaMetadataDescriptor log_streams = 1
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
   uint64 sealed_glsn = 2 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",

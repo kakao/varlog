@@ -37,10 +37,10 @@ func (m *MockReplicasRetriever) EXPECT() *MockReplicasRetrieverMockRecorder {
 }
 
 // All mocks base method.
-func (m *MockReplicasRetriever) All(arg0 types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor {
+func (m *MockReplicasRetriever) All(arg0 types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplica {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "All", arg0)
-	ret0, _ := ret[0].(map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+	ret0, _ := ret[0].(map[types.LogStreamID][]varlogpb.LogStreamReplica)
 	return ret0
 }
 
@@ -51,10 +51,10 @@ func (mr *MockReplicasRetrieverMockRecorder) All(arg0 interface{}) *gomock.Call 
 }
 
 // Retrieve mocks base method.
-func (m *MockReplicasRetriever) Retrieve(arg0 types.TopicID, arg1 types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool) {
+func (m *MockReplicasRetriever) Retrieve(arg0 types.TopicID, arg1 types.LogStreamID) ([]varlogpb.LogStreamReplica, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Retrieve", arg0, arg1)
-	ret0, _ := ret[0].([]varlogpb.LogStreamReplicaDescriptor)
+	ret0, _ := ret[0].([]varlogpb.LogStreamReplica)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -89,10 +89,10 @@ func (m *MockRenewableReplicasRetriever) EXPECT() *MockRenewableReplicasRetrieve
 }
 
 // All mocks base method.
-func (m *MockRenewableReplicasRetriever) All(arg0 types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor {
+func (m *MockRenewableReplicasRetriever) All(arg0 types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplica {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "All", arg0)
-	ret0, _ := ret[0].(map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+	ret0, _ := ret[0].(map[types.LogStreamID][]varlogpb.LogStreamReplica)
 	return ret0
 }
 
@@ -115,10 +115,10 @@ func (mr *MockRenewableReplicasRetrieverMockRecorder) Renew(arg0 interface{}) *g
 }
 
 // Retrieve mocks base method.
-func (m *MockRenewableReplicasRetriever) Retrieve(arg0 types.TopicID, arg1 types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool) {
+func (m *MockRenewableReplicasRetriever) Retrieve(arg0 types.TopicID, arg1 types.LogStreamID) ([]varlogpb.LogStreamReplica, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Retrieve", arg0, arg1)
-	ret0, _ := ret[0].([]varlogpb.LogStreamReplicaDescriptor)
+	ret0, _ := ret[0].([]varlogpb.LogStreamReplica)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }

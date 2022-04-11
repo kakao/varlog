@@ -118,8 +118,8 @@ message SyncInitRequest {
         "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
-  varlogpb.Replica source = 2 [(gogoproto.nullable) = false];
-  varlogpb.Replica destination = 3 [(gogoproto.nullable) = false];
+  varlogpb.LogStreamReplica source = 2 [(gogoproto.nullable) = false];
+  varlogpb.LogStreamReplica destination = 3 [(gogoproto.nullable) = false];
   SyncRange range = 4 [(gogoproto.nullable) = false];
 }
 
@@ -133,8 +133,8 @@ message SyncReplicateRequest {
         "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
-  varlogpb.Replica source = 2 [(gogoproto.nullable) = false];
-  varlogpb.Replica destination = 3 [(gogoproto.nullable) = false];
+  varlogpb.LogStreamReplica source = 2 [(gogoproto.nullable) = false];
+  varlogpb.LogStreamReplica destination = 3 [(gogoproto.nullable) = false];
   SyncPayload payload = 4 [(gogoproto.nullable) = false];
 }
 

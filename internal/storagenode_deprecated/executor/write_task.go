@@ -27,7 +27,7 @@ type writeTask struct {
 
 	// backups is a list of backups of the log stream. The first element is the primary
 	// replica, and the others are backup backups.
-	backups []varlogpb.Replica
+	backups []varlogpb.LogStreamReplica
 
 	// NOTE: primary can be removed by using isPrimary method of executor.
 	primary bool
@@ -52,7 +52,7 @@ func newWriteTaskInternal(twg *taskWaitGroup, data []byte) *writeTask {
 }
 
 // newPrimaryWriteTask creates a new writeTask to be used in a primary replica.
-func newPrimaryWriteTask(twg *taskWaitGroup, data []byte, backups []varlogpb.Replica) *writeTask {
+func newPrimaryWriteTask(twg *taskWaitGroup, data []byte, backups []varlogpb.LogStreamReplica) *writeTask {
 	if twg == nil {
 		panic("twg is nil")
 	}

@@ -15,7 +15,7 @@ import (
 // progressing.
 type syncState struct {
 	cancel context.CancelFunc
-	dst    varlogpb.Replica
+	dst    varlogpb.LogStreamReplica
 	first  varlogpb.LogEntry
 	last   varlogpb.LogEntry
 
@@ -24,7 +24,7 @@ type syncState struct {
 	err  error
 }
 
-func newSyncState(cancel context.CancelFunc, dstReplica varlogpb.Replica, first, last varlogpb.LogEntry) *syncState {
+func newSyncState(cancel context.CancelFunc, dstReplica varlogpb.LogStreamReplica, first, last varlogpb.LogEntry) *syncState {
 	return &syncState{
 		cancel: cancel,
 		dst:    dstReplica,

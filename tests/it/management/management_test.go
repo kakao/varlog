@@ -426,7 +426,7 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 						return false
 					}
 
-					for _, r := range meta.LogStreams {
+					for _, r := range meta.LogStreamReplicas {
 						return r.Status.Sealed()
 					}
 

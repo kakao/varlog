@@ -160,7 +160,7 @@ func (rc *replicateClient) stop() {
 }
 
 type replicateClientConfig struct {
-	replica varlogpb.Replica
+	replica varlogpb.LogStreamReplica
 	rpcConn *rpc.Conn
 
 	queueCapacity int

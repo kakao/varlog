@@ -6,6 +6,7 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
 
 import "varlogpb/metadata.proto";
+import "snpb/metadata.proto";
 import "snpb/replicator.proto";
 
 option go_package = "github.com/kakao/varlog/proto/snpb";
@@ -26,7 +27,7 @@ message GetMetadataRequest {
 }
 
 message GetMetadataResponse {
-  varlogpb.StorageNodeMetadataDescriptor storage_node_metadata = 1;
+  StorageNodeMetadataDescriptor storage_node_metadata = 1;
 }
 
 message AddLogStreamReplicaRequest {
@@ -136,7 +137,7 @@ message UnsealRequest {
         "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
-  repeated varlogpb.Replica replicas = 5 [(gogoproto.nullable) = false];
+  repeated varlogpb.LogStreamReplica replicas = 5 [(gogoproto.nullable) = false];
 }
 
 message SyncRequest {

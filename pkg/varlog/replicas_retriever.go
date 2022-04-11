@@ -18,8 +18,8 @@ var (
 //
 // Retrieve searches replicas belongs to the log stream.
 type ReplicasRetriever interface {
-	Retrieve(topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool)
-	All(topicID types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor
+	Retrieve(topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplica, bool)
+	All(topicID types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplica
 }
 
 type RenewableReplicasRetriever interface {
@@ -28,15 +28,15 @@ type RenewableReplicasRetriever interface {
 }
 
 type renewableReplicasRetriever struct {
-	topic atomic.Value // map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor
+	topic atomic.Value // map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplica
 }
 
-func (r *renewableReplicasRetriever) Retrieve(topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplicaDescriptor, bool) {
+func (r *renewableReplicasRetriever) Retrieve(topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplica, bool) {
 	topicMapIf := r.topic.Load()
 	if topicMapIf == nil {
 		return nil, false
 	}
-	topicMap := topicMapIf.(map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+	topicMap := topicMapIf.(map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplica)
 	if lsReplicasMap, ok := topicMap[topicID]; ok {
 		if lsreplicas, ok := lsReplicasMap[logStreamID]; ok {
 			return lsreplicas, true
@@ -45,19 +45,19 @@ func (r *renewableReplicasRetriever) Retrieve(topicID types.TopicID, logStreamID
 	return nil, false
 }
 
-func (r *renewableReplicasRetriever) All(topicID types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor {
+func (r *renewableReplicasRetriever) All(topicID types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplica {
 	topicMapIf := r.topic.Load()
 	if topicMapIf == nil {
 		return nil
 	}
-	topicMap := topicMapIf.(map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+	topicMap := topicMapIf.(map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplica)
 
 	lsReplicasMap, ok := topicMap[topicID]
 	if !ok {
 		return nil
 	}
 
-	ret := make(map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+	ret := make(map[types.LogStreamID][]varlogpb.LogStreamReplica)
 	for lsID, replicas := range lsReplicasMap {
 		ret[lsID] = replicas
 	}
@@ -71,18 +71,18 @@ func (r *renewableReplicasRetriever) Renew(metadata *varlogpb.MetadataDescriptor
 		snMap[storageNode.GetStorageNodeID()] = storageNode.GetAddress()
 	}
 
-	newTopicMap := make(map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+	newTopicMap := make(map[types.TopicID]map[types.LogStreamID][]varlogpb.LogStreamReplica)
 	topicdescs := metadata.GetTopics()
 	for _, topicdesc := range topicdescs {
 		topicID := topicdesc.TopicID
 
-		newLSReplicasMap := make(map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor)
+		newLSReplicasMap := make(map[types.LogStreamID][]varlogpb.LogStreamReplica)
 		for _, lsid := range topicdesc.LogStreams {
 			lsdesc := metadata.GetLogStream(lsid)
 
 			logStreamID := lsdesc.GetLogStreamID()
 			replicas := lsdesc.GetReplicas()
-			lsreplicas := make([]varlogpb.LogStreamReplicaDescriptor, len(replicas))
+			lsreplicas := make([]varlogpb.LogStreamReplica, len(replicas))
 			for i, replica := range replicas {
 				storageNodeID := replica.GetStorageNodeID()
 				lsreplicas[i].StorageNodeID = storageNodeID

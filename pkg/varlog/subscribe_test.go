@@ -42,13 +42,17 @@ func TestSubscribe(t *testing.T) {
 		metadataRefresher.EXPECT().Metadata().Return(nil).AnyTimes()
 
 		replicasRetriever := NewMockReplicasRetriever(ctrl)
-		replicasMap := make(map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor, numLogStreams)
+		replicasMap := make(map[types.LogStreamID][]varlogpb.LogStreamReplica, numLogStreams)
 		for logStreamID := minLogStreamID; logStreamID < minLogStreamID+numLogStreams; logStreamID++ {
-			replicasMap[logStreamID] = []varlogpb.LogStreamReplicaDescriptor{
+			replicasMap[logStreamID] = []varlogpb.LogStreamReplica{
 				{
-					StorageNodeID: types.StorageNodeID(logStreamID),
-					LogStreamID:   logStreamID,
-					Address:       "127.0.0.1:" + strconv.Itoa(int(logStreamID)),
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(logStreamID),
+						Address:       "127.0.0.1:" + strconv.Itoa(int(logStreamID)),
+					},
+					TopicLogStream: varlogpb.TopicLogStream{
+						LogStreamID: logStreamID,
+					},
 				},
 			}
 		}

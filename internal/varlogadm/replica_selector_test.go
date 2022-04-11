@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -120,18 +121,24 @@ func TestVictimSelector(t *testing.T) {
 
 		Convey("When all replicas are LogStreamStatusSealed, thus none are victims", func() {
 			snMgr.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ context.Context, snid types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error) {
-					return &varlogpb.StorageNodeMetadataDescriptor{
+				func(_ context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+					return &snpb.StorageNodeMetadataDescriptor{
 						StorageNode: &varlogpb.StorageNodeDescriptor{
 							StorageNode: varlogpb.StorageNode{
 								StorageNodeID: snid,
 							},
 						},
-						LogStreams: []varlogpb.LogStreamMetadataDescriptor{
+						LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
 							{
-								StorageNodeID: snid,
-								LogStreamID:   logStreamID,
-								Status:        varlogpb.LogStreamStatusSealed,
+								LogStreamReplica: varlogpb.LogStreamReplica{
+									StorageNode: varlogpb.StorageNode{
+										StorageNodeID: snid,
+									},
+									TopicLogStream: varlogpb.TopicLogStream{
+										LogStreamID: logStreamID,
+									},
+								},
+								Status: varlogpb.LogStreamStatusSealed,
 							},
 						},
 					}, nil
@@ -148,18 +155,24 @@ func TestVictimSelector(t *testing.T) {
 
 		Convey("When all replicas are not LogStreamStatusSealed, thus all are victims", func() {
 			snMgr.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ context.Context, snid types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error) {
-					return &varlogpb.StorageNodeMetadataDescriptor{
+				func(_ context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+					return &snpb.StorageNodeMetadataDescriptor{
 						StorageNode: &varlogpb.StorageNodeDescriptor{
 							StorageNode: varlogpb.StorageNode{
 								StorageNodeID: snid,
 							},
 						},
-						LogStreams: []varlogpb.LogStreamMetadataDescriptor{
+						LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
 							{
-								StorageNodeID: snid,
-								LogStreamID:   logStreamID,
-								Status:        varlogpb.LogStreamStatusSealing,
+								LogStreamReplica: varlogpb.LogStreamReplica{
+									StorageNode: varlogpb.StorageNode{
+										StorageNodeID: snid,
+									},
+									TopicLogStream: varlogpb.TopicLogStream{
+										LogStreamID: logStreamID,
+									},
+								},
+								Status: varlogpb.LogStreamStatusSealing,
 							},
 						},
 					}, nil
@@ -177,7 +190,7 @@ func TestVictimSelector(t *testing.T) {
 
 		Convey("When there are LogStreamStatusSealed and non-LogStreamStatusSealed", func() {
 			snMgr.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ context.Context, snid types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+				func(_ context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
 					var status varlogpb.LogStreamStatus
 					switch snid {
 					case types.StorageNodeID(1):
@@ -185,17 +198,23 @@ func TestVictimSelector(t *testing.T) {
 					default:
 						status = varlogpb.LogStreamStatusSealing
 					}
-					return &varlogpb.StorageNodeMetadataDescriptor{
+					return &snpb.StorageNodeMetadataDescriptor{
 						StorageNode: &varlogpb.StorageNodeDescriptor{
 							StorageNode: varlogpb.StorageNode{
 								StorageNodeID: snid,
 							},
 						},
-						LogStreams: []varlogpb.LogStreamMetadataDescriptor{
+						LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
 							{
-								StorageNodeID: snid,
-								LogStreamID:   logStreamID,
-								Status:        status,
+								LogStreamReplica: varlogpb.LogStreamReplica{
+									StorageNode: varlogpb.StorageNode{
+										StorageNodeID: snid,
+									},
+									TopicLogStream: varlogpb.TopicLogStream{
+										LogStreamID: logStreamID,
+									},
+								},
+								Status: status,
 							},
 						},
 					}, nil

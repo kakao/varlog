@@ -61,13 +61,15 @@ func (as *adminServer) Unseal(ctx context.Context, req *snpb.UnsealRequest) (*pb
 }
 
 func (as *adminServer) Sync(ctx context.Context, req *snpb.SyncRequest) (*snpb.SyncResponse, error) {
-	syncStatus, err := as.sn.sync(ctx, req.TopicID, req.LogStreamID, varlogpb.Replica{
+	syncStatus, err := as.sn.sync(ctx, req.TopicID, req.LogStreamID, varlogpb.LogStreamReplica{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: req.Backup.StorageNodeID,
 			Address:       req.Backup.Address,
 		},
-		TopicID:     req.TopicID,
-		LogStreamID: req.LogStreamID,
+		TopicLogStream: varlogpb.TopicLogStream{
+			TopicID:     req.TopicID,
+			LogStreamID: req.LogStreamID,
+		},
 	})
 	return &snpb.SyncResponse{Status: syncStatus}, err
 }

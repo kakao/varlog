@@ -19,6 +19,7 @@ import (
 	"github.com/kakao/varlog/internal/varlogctl/topic"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/proto/vmspb"
 )
@@ -109,7 +110,7 @@ func TestStorageNode(t *testing.T) {
 
 	// Add
 	admin.EXPECT().AddStorageNode(gomock.Any(), gomock.Any()).Return(
-		&varlogpb.StorageNodeMetadataDescriptor{
+		&snpb.StorageNodeMetadataDescriptor{
 			ClusterID: types.ClusterID(1),
 			StorageNode: &varlogpb.StorageNodeDescriptor{
 				StorageNode: varlogpb.StorageNode{

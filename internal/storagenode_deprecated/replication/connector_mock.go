@@ -51,7 +51,7 @@ func (mr *MockConnectorMockRecorder) Close() *gomock.Call {
 }
 
 // Get mocks base method.
-func (m *MockConnector) Get(arg0 context.Context, arg1 varlogpb.Replica) (Client, error) {
+func (m *MockConnector) Get(arg0 context.Context, arg1 varlogpb.LogStreamReplica) (Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", arg0, arg1)
 	ret0, _ := ret[0].(Client)

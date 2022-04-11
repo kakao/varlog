@@ -115,7 +115,7 @@ func getLocalMaxLogStreamID(ctx context.Context, storageNodeID types.StorageNode
 	if err != nil {
 		return maxID, err
 	}
-	lsmetaList := snmeta.GetLogStreams()
+	lsmetaList := snmeta.GetLogStreamReplicas()
 	for i := range lsmetaList {
 		lsmeta := lsmetaList[i]
 		logStreamID := lsmeta.GetLogStreamID()

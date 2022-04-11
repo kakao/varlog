@@ -20,11 +20,11 @@ import (
 type StorageNodeManagementClient interface {
 	PeerAddress() string
 	PeerStorageNodeID() types.StorageNodeID
-	GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(ctx context.Context) (*snpb.StorageNodeMetadataDescriptor, error)
 	AddLogStreamReplica(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, path string) error
 	RemoveLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error
 	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
-	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.Replica) error
+	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.LogStreamReplica) error
 	Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
 	Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]error, error)
 	Close() error
@@ -79,7 +79,7 @@ func (c snManagementClient) PeerStorageNodeID() types.StorageNodeID {
 	return c.storageNodeID
 }
 
-func (c *snManagementClient) GetMetadata(ctx context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (c *snManagementClient) GetMetadata(ctx context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
 		ClusterID: c.clusterID,
 	})
@@ -124,7 +124,7 @@ func (c *snManagementClient) Seal(ctx context.Context, tpid types.TopicID, lsid 
 	return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
 }
 
-func (c *snManagementClient) Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.Replica) error {
+func (c *snManagementClient) Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.LogStreamReplica) error {
 	// TODO(jun): Check ranges CID, SNID and LSID
 	_, err := c.rpcClient.Unseal(ctx, &snpb.UnsealRequest{
 		ClusterID:     c.clusterID,

@@ -40,7 +40,7 @@ func (m *MockExecutor) EXPECT() *MockExecutorMockRecorder {
 }
 
 // Append mocks base method.
-func (m *MockExecutor) Append(arg0 context.Context, arg1 [][]byte, arg2 ...varlogpb.Replica) ([]snpb.AppendResult, error) {
+func (m *MockExecutor) Append(arg0 context.Context, arg1 [][]byte, arg2 ...varlogpb.LogStreamReplica) ([]snpb.AppendResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -132,10 +132,10 @@ func (mr *MockExecutorMockRecorder) LogStreamMetadata() *gomock.Call {
 }
 
 // Metadata mocks base method.
-func (m *MockExecutor) Metadata() varlogpb.LogStreamMetadataDescriptor {
+func (m *MockExecutor) Metadata() snpb.LogStreamReplicaMetadataDescriptor {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Metadata")
-	ret0, _ := ret[0].(varlogpb.LogStreamMetadataDescriptor)
+	ret0, _ := ret[0].(snpb.LogStreamReplicaMetadataDescriptor)
 	return ret0
 }
 
@@ -249,7 +249,7 @@ func (mr *MockExecutorMockRecorder) SubscribeTo(arg0, arg1, arg2 interface{}) *g
 }
 
 // Sync mocks base method.
-func (m *MockExecutor) Sync(arg0 context.Context, arg1 varlogpb.Replica) (*snpb.SyncStatus, error) {
+func (m *MockExecutor) Sync(arg0 context.Context, arg1 varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", arg0, arg1)
 	ret0, _ := ret[0].(*snpb.SyncStatus)
@@ -307,7 +307,7 @@ func (mr *MockExecutorMockRecorder) Trim(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // Unseal mocks base method.
-func (m *MockExecutor) Unseal(arg0 context.Context, arg1 []varlogpb.Replica) error {
+func (m *MockExecutor) Unseal(arg0 context.Context, arg1 []varlogpb.LogStreamReplica) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Unseal", arg0, arg1)
 	ret0, _ := ret[0].(error)

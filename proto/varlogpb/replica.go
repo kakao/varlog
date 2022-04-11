@@ -7,7 +7,7 @@ import (
 	"github.com/kakao/varlog/pkg/verrors"
 )
 
-func EqualReplicas(xs []Replica, ys []Replica) bool {
+func EqualReplicas(xs []LogStreamReplica, ys []LogStreamReplica) bool {
 	if len(xs) != len(ys) {
 		return false
 	}
@@ -30,7 +30,7 @@ func EqualReplicas(xs []Replica, ys []Replica) bool {
 
 // ValidReplicas checks whether given replicas are valid. Valid replicas should contain at least one
 // replica, and all replicas have the same LogStreamID. They also have different StorageNodeIDs.
-func ValidReplicas(replicas []Replica) error {
+func ValidReplicas(replicas []LogStreamReplica) error {
 	if len(replicas) < 1 {
 		return errors.Wrap(verrors.ErrInvalid, "no replica")
 	}

@@ -69,7 +69,7 @@ func (st *syncTracker) end() bool {
 	return st.syncRange.last.LLSN == st.cursor.LLSN
 }
 
-func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.Replica) (*snpb.SyncStatus, error) {
+func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)
 
@@ -224,7 +224,7 @@ func (lse *Executor) syncLoop(ctx context.Context, sc *syncClient, st *syncTrack
 
 // syncReplicateBuffer represents the progress of sync replication.
 type syncReplicateBuffer struct {
-	srcReplica varlogpb.Replica
+	srcReplica varlogpb.LogStreamReplica
 	// syncRange is a range of overall sync replication, which is set for the first time.
 	syncRange snpb.SyncRange
 
@@ -236,7 +236,7 @@ type syncReplicateBuffer struct {
 	updatedAt time.Time
 }
 
-func newSyncReplicateBuffer(srcReplica varlogpb.Replica, syncRange snpb.SyncRange) (*syncReplicateBuffer, error) {
+func newSyncReplicateBuffer(srcReplica varlogpb.LogStreamReplica, syncRange snpb.SyncRange) (*syncReplicateBuffer, error) {
 	if syncRange.Invalid() {
 		return nil, fmt.Errorf("sync replicate: invalid sync range %s", syncRange.String())
 	}
@@ -250,7 +250,7 @@ func newSyncReplicateBuffer(srcReplica varlogpb.Replica, syncRange snpb.SyncRang
 // add inserts either a commit context or a log entry.
 // If the srb already has a commit context, the payload should be a log entry.
 // If the srb does not have a commit context, the payload should be a commit context.
-func (srb *syncReplicateBuffer) add(srcReplica varlogpb.Replica, payload snpb.SyncPayload, updatedAt time.Time) (err error) {
+func (srb *syncReplicateBuffer) add(srcReplica varlogpb.LogStreamReplica, payload snpb.SyncPayload, updatedAt time.Time) (err error) {
 	if !srb.srcReplica.Equal(srcReplica) {
 		return fmt.Errorf("log stream: sync replicate: invalid source replica %s", srcReplica)
 	}
@@ -329,7 +329,7 @@ func (srb *syncReplicateBuffer) reset() {
 	srb.les = nil
 }
 
-func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.Replica, srcRange snpb.SyncRange) (syncRange snpb.SyncRange, err error) {
+func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamReplica, srcRange snpb.SyncRange) (syncRange snpb.SyncRange, err error) {
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)
 
@@ -395,7 +395,7 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.Replica, sr
 	return syncRange, nil
 }
 
-func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.Replica, payload snpb.SyncPayload) (err error) {
+func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStreamReplica, payload snpb.SyncPayload) (err error) {
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)
 

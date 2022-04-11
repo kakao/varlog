@@ -12,7 +12,7 @@ import (
 
 type SealUnsealer interface {
 	Seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
-	Unseal(ctx context.Context, replicas []varlogpb.Replica) error
+	Unseal(ctx context.Context, replicas []varlogpb.LogStreamReplica) error
 }
 
 func (e *executor) Seal(ctx context.Context, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
@@ -80,7 +80,7 @@ func (e *executor) sealInternal(lastCommittedGLSN types.GLSN) (varlogpb.LogStrea
 	return varlogpb.LogStreamStatusSealed, lastCommittedGLSN, nil
 }
 
-func (e *executor) Unseal(_ context.Context, replicas []varlogpb.Replica) error {
+func (e *executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamReplica) error {
 	if err := varlogpb.ValidReplicas(replicas); err != nil {
 		return err
 	}

@@ -48,7 +48,7 @@ type replicator interface {
 	// connector has no clients.
 	resetConnector() error
 
-	clientOf(ctx context.Context, replica varlogpb.Replica) (replication.Client, error)
+	clientOf(ctx context.Context, replica varlogpb.LogStreamReplica) (replication.Client, error)
 }
 
 type replicatorImpl struct {
@@ -272,6 +272,6 @@ func (r *replicatorImpl) resetConnector() error {
 }
 
 // TODO (jun): Is this good method? If not, replicator can have interface for sync.
-func (r *replicatorImpl) clientOf(ctx context.Context, replica varlogpb.Replica) (replication.Client, error) {
+func (r *replicatorImpl) clientOf(ctx context.Context, replica varlogpb.LogStreamReplica) (replication.Client, error) {
 	return r.connector.Get(ctx, replica)
 }

@@ -49,7 +49,7 @@ type Executor struct {
 	muAdmin sync.Mutex
 	// primaryBackups is a slice of replicas of a log stream.
 	// It is updated by Unseal and is read by many codes.
-	primaryBackups []varlogpb.Replica
+	primaryBackups []varlogpb.LogStreamReplica
 	// sync replicate buffer
 	srb        *syncReplicateBuffer
 	sts        map[types.StorageNodeID]*syncTracker
@@ -237,7 +237,7 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 	return status, localHWM, nil
 }
 
-func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.Replica) (err error) {
+func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamReplica) (err error) {
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)
 
@@ -380,13 +380,9 @@ func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamComm
 	return nil
 }
 
-func (lse *Executor) Metadata() (varlogpb.LogStreamMetadataDescriptor, error) {
+func (lse *Executor) Metadata() (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)
-
-	if lse.esm.load() == executorStateClosed {
-		return varlogpb.LogStreamMetadataDescriptor{}, verrors.ErrClosed
-	}
 
 	var status varlogpb.LogStreamStatus
 	switch lse.esm.load() {
@@ -396,17 +392,36 @@ func (lse *Executor) Metadata() (varlogpb.LogStreamMetadataDescriptor, error) {
 		status = varlogpb.LogStreamStatusSealing
 	case executorStateSealed:
 		status = varlogpb.LogStreamStatusSealed
+	case executorStateClosed:
+		return snpb.LogStreamReplicaMetadataDescriptor{}, verrors.ErrClosed
 	}
-	version, _, _ := lse.lsc.reportCommitBase()
-	return varlogpb.LogStreamMetadataDescriptor{
-		StorageNodeID: lse.snid,
-		LogStreamID:   lse.lsid,
-		TopicID:       lse.tpid,
-		Version:       version,
-		HighWatermark: lse.lsc.localHighWatermark().GLSN,
-		Status:        status,
-		Path:          lse.stg.Path(),
-		CreatedTime:   lse.createdTime,
+
+	localLowWatermark := lse.lsc.localLowWatermark()
+	localHighWatermark := lse.lsc.localHighWatermark()
+	version, globalHighWatermark, _ := lse.lsc.reportCommitBase()
+	return snpb.LogStreamReplicaMetadataDescriptor{
+		LogStreamReplica: varlogpb.LogStreamReplica{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: lse.snid,
+			},
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     lse.tpid,
+				LogStreamID: lse.lsid,
+			},
+		},
+		Version:             version,
+		GlobalHighWatermark: globalHighWatermark,
+		LocalLowWatermark: varlogpb.LogSequenceNumber{
+			LLSN: localLowWatermark.LLSN,
+			GLSN: localLowWatermark.GLSN,
+		},
+		LocalHighWatermark: varlogpb.LogSequenceNumber{
+			LLSN: localHighWatermark.LLSN,
+			GLSN: localHighWatermark.GLSN,
+		},
+		Status:      status,
+		Path:        lse.stg.Path(),
+		CreatedTime: lse.createdTime,
 	}, nil
 }
 

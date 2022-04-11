@@ -17,7 +17,7 @@ const (
 )
 
 type clientConfig struct {
-	replica          varlogpb.Replica
+	replica          varlogpb.LogStreamReplica
 	requestQueueSize int
 	grpcDialOptions  []grpc.DialOption
 	metrics          *telemetry.Metrics
@@ -126,13 +126,13 @@ type ConnectorOption interface {
 	applyConnector(*connectorConfig)
 }
 
-type replicaOption varlogpb.Replica
+type replicaOption varlogpb.LogStreamReplica
 
 func (o replicaOption) applyClient(c *clientConfig) {
-	c.replica = varlogpb.Replica(o)
+	c.replica = varlogpb.LogStreamReplica(o)
 }
 
-func WithReplica(replica varlogpb.Replica) ClientOption {
+func WithReplica(replica varlogpb.LogStreamReplica) ClientOption {
 	return replicaOption(replica)
 }
 

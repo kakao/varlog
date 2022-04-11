@@ -55,13 +55,15 @@ func TestExecutor_Closed(t *testing.T) {
 	)
 
 	lse := testNewExecutor(t,
-		[]varlogpb.Replica{
+		[]varlogpb.LogStreamReplica{
 			{
 				StorageNode: varlogpb.StorageNode{
 					StorageNodeID: snid,
 				},
-				TopicID:     tpid,
-				LogStreamID: lsid,
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+				},
 			},
 		},
 		WithStorageNodeID(snid),
@@ -83,14 +85,16 @@ func TestExecutor_Closed(t *testing.T) {
 	_, _, err = lse.Seal(context.Background(), types.MinGLSN)
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
-	err = lse.Unseal(context.Background(), []varlogpb.Replica{
+	err = lse.Unseal(context.Background(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snid + 1,
 				Address:       "addr",
 			},
-			TopicID:     tpid,
-			LogStreamID: lsid,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+			},
 		},
 	})
 	assert.ErrorIs(t, err, verrors.ErrClosed)
@@ -113,10 +117,10 @@ func TestExecutor_Closed(t *testing.T) {
 	_, err = lse.SubscribeWithLLSN(types.MinLLSN, types.MinLLSN)
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
-	_, err = lse.SyncInit(context.Background(), varlogpb.Replica{}, snpb.SyncRange{FirstLLSN: 1, LastLLSN: 1})
+	_, err = lse.SyncInit(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncRange{FirstLLSN: 1, LastLLSN: 1})
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
-	err = lse.SyncReplicate(context.Background(), varlogpb.Replica{}, snpb.SyncPayload{
+	err = lse.SyncReplicate(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncPayload{
 		CommitContext: &varlogpb.CommitContext{
 			Version:            1,
 			HighWatermark:      1,
@@ -127,13 +131,15 @@ func TestExecutor_Closed(t *testing.T) {
 	})
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
-	_, err = lse.Sync(context.Background(), varlogpb.Replica{
+	_, err = lse.Sync(context.Background(), varlogpb.LogStreamReplica{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: snid + 1,
 			Address:       "addr",
 		},
-		TopicID:     tpid,
-		LogStreamID: lsid,
+		TopicLogStream: varlogpb.TopicLogStream{
+			TopicID:     tpid,
+			LogStreamID: lsid,
+		},
 	})
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
@@ -151,13 +157,15 @@ func TestExecutor_Sealing(t *testing.T) {
 	)
 
 	lse := testNewExecutor(t,
-		[]varlogpb.Replica{
+		[]varlogpb.LogStreamReplica{
 			{
 				StorageNode: varlogpb.StorageNode{
 					StorageNodeID: snid,
 				},
-				TopicID:     tpid,
-				LogStreamID: lsid,
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+				},
 			},
 		},
 		WithStorageNodeID(snid),
@@ -195,13 +203,15 @@ func TestExecutor_Sealed(t *testing.T) {
 	)
 
 	lse := testNewExecutor(t,
-		[]varlogpb.Replica{
+		[]varlogpb.LogStreamReplica{
 			{
 				StorageNode: varlogpb.StorageNode{
 					StorageNodeID: snid,
 				},
-				TopicID:     tpid,
-				LogStreamID: lsid,
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+				},
 			},
 		},
 		WithStorageNodeID(snid),
@@ -229,7 +239,7 @@ func TestExecutor_Sealed(t *testing.T) {
 	assert.ErrorIs(t, err, verrors.ErrSealed)
 }
 
-func testUnsealInitialExecutor(t *testing.T, lse *Executor, replicas []varlogpb.Replica, lastGLSN types.GLSN) {
+func testUnsealInitialExecutor(t *testing.T, lse *Executor, replicas []varlogpb.LogStreamReplica, lastGLSN types.GLSN) {
 	lsmd, err := lse.Metadata()
 	assert.NoError(t, err)
 	assert.Equal(t, varlogpb.LogStreamStatusSealing, lsmd.Status)
@@ -249,7 +259,7 @@ func testUnsealInitialExecutor(t *testing.T, lse *Executor, replicas []varlogpb.
 	assert.Equal(t, varlogpb.LogStreamStatusRunning, lsmd.Status)
 }
 
-func testNewExecutor(t *testing.T, replicas []varlogpb.Replica, executorOpts ...ExecutorOption) *Executor {
+func testNewExecutor(t *testing.T, replicas []varlogpb.LogStreamReplica, executorOpts ...ExecutorOption) *Executor {
 	stg := storage.TestNewStorage(t)
 
 	lse, err := NewExecutor(append(executorOpts, WithStorage(stg))...)
@@ -282,13 +292,15 @@ func testNewPrimaryExecutor(t *testing.T, opts ...ExecutorOption) *Executor {
 		tpid = types.TopicID(2)
 		lsid = types.LogStreamID(3)
 	)
-	replicas := []varlogpb.Replica{
+	replicas := []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snid,
 			},
-			TopicID:     tpid,
-			LogStreamID: lsid,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+			},
 		},
 	}
 	executorOpts := []ExecutorOption{
@@ -314,20 +326,24 @@ func testNewBackupExecutor(t *testing.T, opts ...ExecutorOption) *Executor {
 		lsid          = types.LogStreamID(3)
 		queueCapacity = 1024
 	)
-	replicas := []varlogpb.Replica{
+	replicas := []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snid - 1,
 			},
-			TopicID:     tpid,
-			LogStreamID: lsid,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+			},
 		},
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snid,
 			},
-			TopicID:     tpid,
-			LogStreamID: lsid,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+			},
 		},
 	}
 	executorOpts := []ExecutorOption{
@@ -1344,7 +1360,7 @@ func TestExecutorSyncInit_InvalidState(t *testing.T) {
 
 	lse := testNewPrimaryExecutor(t)
 
-	_, err := lse.SyncInit(context.Background(), varlogpb.Replica{}, snpb.SyncRange{
+	_, err := lse.SyncInit(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncRange{
 		FirstLLSN: 1,
 		LastLLSN:  10,
 	})
@@ -1352,7 +1368,7 @@ func TestExecutorSyncInit_InvalidState(t *testing.T) {
 
 	assert.NoError(t, lse.Close())
 
-	_, err = lse.SyncInit(context.Background(), varlogpb.Replica{}, snpb.SyncRange{
+	_, err = lse.SyncInit(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncRange{
 		FirstLLSN: 1,
 		LastLLSN:  10,
 	})
@@ -1372,13 +1388,13 @@ func TestExecutorSyncInit_InvalidRange(t *testing.T) {
 	assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
 	assert.Equal(t, types.InvalidGLSN, localHWM)
 
-	_, err = lse.SyncInit(context.Background(), varlogpb.Replica{}, snpb.SyncRange{
+	_, err = lse.SyncInit(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncRange{
 		FirstLLSN: 0,
 		LastLLSN:  1,
 	})
 	assert.Error(t, err)
 
-	_, err = lse.SyncInit(context.Background(), varlogpb.Replica{}, snpb.SyncRange{
+	_, err = lse.SyncInit(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncRange{
 		FirstLLSN: 2,
 		LastLLSN:  1,
 	})
@@ -1398,13 +1414,15 @@ func TestExecutorSyncInit(t *testing.T) {
 		assert.NoError(t, lse.Close())
 	}()
 
-	srcReplica := varlogpb.Replica{
+	srcReplica := varlogpb.LogStreamReplica{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: lse.snid + 1,
 			Address:       "fake-addr",
 		},
-		TopicID:     lse.tpid,
-		LogStreamID: lse.lsid,
+		TopicLogStream: varlogpb.TopicLogStream{
+			TopicID:     lse.tpid,
+			LogStreamID: lse.lsid,
+		},
 	}
 
 	var wg sync.WaitGroup
@@ -1500,13 +1518,15 @@ func TestExecutorSyncReplicate(t *testing.T) {
 		assert.NoError(t, lse.Close())
 	}()
 
-	srcReplica := varlogpb.Replica{
+	srcReplica := varlogpb.LogStreamReplica{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: lse.snid + 1,
 			Address:       "fake-addr",
 		},
-		TopicID:     lse.tpid,
-		LogStreamID: lse.lsid,
+		TopicLogStream: varlogpb.TopicLogStream{
+			TopicID:     lse.tpid,
+			LogStreamID: lse.lsid,
+		},
 	}
 
 	assert.Error(t, lse.SyncReplicate(context.Background(), srcReplica, snpb.SyncPayload{
@@ -1600,13 +1620,15 @@ func TestExecutor_SyncInvalidState(t *testing.T) {
 	}
 	for _, st := range []executorState{executorStateSealing, executorStateLearning, executorStateAppendable} {
 		lse.esm.store(st)
-		_, err := lse.Sync(context.Background(), varlogpb.Replica{
+		_, err := lse.Sync(context.Background(), varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 2,
 				Address:       "addr",
 			},
-			TopicID:     2,
-			LogStreamID: 3,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     2,
+				LogStreamID: 3,
+			},
 		})
 		assert.Error(t, err)
 	}
