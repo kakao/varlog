@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added the fields `LocalLowWatermark` and `GlobalHighWatermark` to `proto/snpb.(LogStreamReplicaMetadataDescriptor).LocalHighWatermark`. (#VARLOG-719/#624)
 - Added `proto/varlogpb.(TopicLogStream)`, `proto/varlogpb.(LogStreamReplica)` and `proto/varlogpb.(LogSequenceNumber)` to package `proto/varlogpb`. (#VARLOG-719/#624)
+- Added `internal.storage.(*Storage).DiskUsage` to package `internal/storage`. (#VARLOG-722/#625)
 
 ### Changed
 - Merged `proto/varlogpb.(Replica)` and `proto/varlogpb.(LogStreamReplicaDescriptor)` into `proto/varlogpb.(LogStreamReplica)`. (#VARLOG-719/#624)
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implemented `Trim` in varlogadm. (#VARLOG-707/#612)
 - Added logging settings to `bin/start_varlogadm.py`. (#VARLOG-713/#617)
 - Added `Trim` method to `pkg/varlog.(Admin)`. (#VARLOG-712/#613)
+
 
 ### Changed
 - Changed default storage settings for good performance in usual cases. (#VARLOG-668/#584)

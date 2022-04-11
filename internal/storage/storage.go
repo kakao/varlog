@@ -8,6 +8,7 @@ import (
 	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/fputil"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -268,8 +269,12 @@ func (s *Storage) findLTE(glsn types.GLSN) (lem varlogpb.LogEntryMeta, err error
 }
 
 // Path returns the path to the storage.
-func (s Storage) Path() string {
+func (s *Storage) Path() string {
 	return s.path
+}
+
+func (s *Storage) DiskUsage() int64 {
+	return fputil.DirectorySize(s.path)
 }
 
 // Close closes the storage.
