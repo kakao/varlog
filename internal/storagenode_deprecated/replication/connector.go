@@ -17,7 +17,7 @@ import (
 
 type Connector interface {
 	io.Closer
-	Get(ctx context.Context, replica varlogpb.Replica) (Client, error)
+	Get(ctx context.Context, replica varlogpb.LogStreamReplica) (Client, error)
 }
 
 type connector struct {
@@ -39,7 +39,7 @@ func NewConnector(opts ...ConnectorOption) (Connector, error) {
 	return c, nil
 }
 
-func (c *connector) Get(ctx context.Context, replica varlogpb.Replica) (Client, error) {
+func (c *connector) Get(ctx context.Context, replica varlogpb.LogStreamReplica) (Client, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -78,7 +78,7 @@ func (c *connector) Close() (err error) {
 	return err
 }
 
-func (c *connector) newClient(ctx context.Context, replica varlogpb.Replica) (*client, error) {
+func (c *connector) newClient(ctx context.Context, replica varlogpb.LogStreamReplica) (*client, error) {
 	cl, err := newClient(ctx, append(c.clientOptions, WithReplica(replica))...)
 	if err != nil {
 		return nil, err

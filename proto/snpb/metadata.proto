@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package varlog.snpb;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+import "varlogpb/metadata.proto";
+
+option go_package = "github.daumkakao.com/varlog/varlog/proto/snpb";
+
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+// StorageNodeMetadataDescriptor represents the metadata of stroage node.
+message StorageNodeMetadataDescriptor {
+  // ClusterID is the identifier of the cluster.
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.jsontag) = "clusterId"
+  ];
+
+  // StorageNode is detailed information about the storage node.
+  varlogpb.StorageNodeDescriptor storage_node = 2
+      [(gogoproto.jsontag) = "storageNode"];
+
+  // LogStreams are the list of metadata for log stream replicas.
+  repeated LogStreamReplicaMetadataDescriptor log_stream_replicas = 3
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
+
+  // CreatedTime is the creation time of the storage node.
+  // Note that the CreatedTime is immutable after the metadata repository sets.
+  // TODO: Currently the storage node has no responsibility to persist
+  // CreatedTime. How can we tell a recovered storage node the CreatedTime?
+  //
+  // Deprecated:
+  google.protobuf.Timestamp created_time = 4 [
+    (gogoproto.stdtime) = true,
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "createdTime"
+  ];
+
+  // UpdatedTime
+  //
+  // Deprecated:
+  google.protobuf.Timestamp updated_time = 5 [
+    (gogoproto.stdtime) = true,
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "updatedTime"
+  ];
+
+  // TODO: Consider these fields:
+  // - UpTime (or StartTime, then compute UpTime)
+  // - RegisteredTime (instead of CreatedTime)
+  // - Volumes
+}
+
+// LogStreamReplicaMetadataDescriptor represents the metadata of log stream
+// replica.
+message LogStreamReplicaMetadataDescriptor {
+  option (gogoproto.equal) = true;
+
+  varlogpb.LogStreamReplica log_stream_replica = 1
+      [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Status is the status of the log stream replica.
+  //
+  // TODO: Use a separate type to represent the status of the log stream replica
+  // rather than `varlogpb.LogStreamStatus` that is shared with the metadata
+  // repository.
+  varlogpb.LogStreamStatus status = 2;
+
+  // Version is the latest version of the commit received from the metadata
+  // repository.
+  uint64 version = 3
+      [(gogoproto.casttype) =
+           "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
+
+  // GlobalHighWatermark is the latest high watermark received from the metadata
+  // repository.
+  uint64 global_high_watermark = 4 [
+    (gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
+    (gogoproto.jsontag) = "globalHighWatermark"
+  ];
+
+  // LocalLowWatermark is the first log sequence number in the log stream
+  // replica.
+  // The LocalLowWatermark becomes higher when the log is truncated by prefix
+  // trimming.
+  varlogpb.LogSequenceNumber local_low_watermark = 5
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "localLowWatermark"];
+
+  // LocalHighWatermark is the last log sequence number in the log stream
+  // replica.
+  varlogpb.LogSequenceNumber local_high_watermark = 6 [
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "localHighWatermark"
+  ];
+
+  // Path is the directory where the data for the log stream replica is stored.
+  string path = 7;
+
+  // CreatedTime
+  //
+  // FIXME: StartTime or UpTime
+  google.protobuf.Timestamp created_time = 8 [
+    (gogoproto.stdtime) = true,
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "createdTime"
+  ];
+
+  // UpdatedTime
+  //
+  // Deprecated:
+  google.protobuf.Timestamp updated_time = 9 [
+    (gogoproto.stdtime) = true,
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "updatedTime"
+  ];
+
+  // TODO: Consider these fields:
+  // - Various meta for path
+  // - RegisteredTime
+  // - SealedTime
+  // - UnsealedTime
+  // - Some basic metrics
+}

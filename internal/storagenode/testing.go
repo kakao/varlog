@@ -72,12 +72,12 @@ func TestNewManagementClient(t *testing.T, cid types.ClusterID, addr string) (sn
 	return snmc, closer
 }
 
-func TestGetStorageNodeMetadataDescriptorWithoutAddr(t *testing.T, sn *StorageNode) *varlogpb.StorageNodeMetadataDescriptor {
+func TestGetStorageNodeMetadataDescriptorWithoutAddr(t *testing.T, sn *StorageNode) *snpb.StorageNodeMetadataDescriptor {
 	TestWaitForStartingOfServe(t, sn)
 	return TestGetStorageNodeMetadataDescriptor(t, sn.cid, sn.advertise)
 }
 
-func TestGetStorageNodeMetadataDescriptor(t *testing.T, cid types.ClusterID, addr string) *varlogpb.StorageNodeMetadataDescriptor {
+func TestGetStorageNodeMetadataDescriptor(t *testing.T, cid types.ClusterID, addr string) *snpb.StorageNodeMetadataDescriptor {
 	snmc, closer := TestNewManagementClient(t, cid, addr)
 	defer closer()
 	snmd, err := snmc.GetMetadata(context.Background())
@@ -100,7 +100,7 @@ func TestSealLogStreamReplica(t *testing.T, cid types.ClusterID, tpid types.Topi
 	return status, localHWM
 }
 
-func TestUnsealLogStreamReplica(t *testing.T, cid types.ClusterID, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.Replica, addr string) {
+func TestUnsealLogStreamReplica(t *testing.T, cid types.ClusterID, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.LogStreamReplica, addr string) {
 	snmc, closer := TestNewManagementClient(t, cid, addr)
 	defer closer()
 	err := snmc.Unseal(context.Background(), tpid, lsid, replicas)
@@ -116,7 +116,7 @@ func TestNewLogIOClient(t *testing.T, addr string) (logc.LogIOClient, func()) {
 	return client, closer
 }
 
-func TestAppend(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, dataBatch [][]byte, replicas []varlogpb.Replica) []snpb.AppendResult {
+func TestAppend(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, dataBatch [][]byte, replicas []varlogpb.LogStreamReplica) []snpb.AppendResult {
 	client, closer := TestNewLogIOClient(t, replicas[0].Address)
 	defer closer()
 

@@ -67,10 +67,10 @@ func (mr *MockStorageNodeManagementClientMockRecorder) Close() *gomock.Call {
 }
 
 // GetMetadata mocks base method.
-func (m *MockStorageNodeManagementClient) GetMetadata(arg0 context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockStorageNodeManagementClient) GetMetadata(arg0 context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadata", arg0)
-	ret0, _ := ret[0].(*varlogpb.StorageNodeMetadataDescriptor)
+	ret0, _ := ret[0].(*snpb.StorageNodeMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -170,7 +170,7 @@ func (mr *MockStorageNodeManagementClientMockRecorder) Trim(arg0, arg1, arg2 int
 }
 
 // Unseal mocks base method.
-func (m *MockStorageNodeManagementClient) Unseal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 []varlogpb.Replica) error {
+func (m *MockStorageNodeManagementClient) Unseal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 []varlogpb.LogStreamReplica) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Unseal", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)

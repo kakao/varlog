@@ -97,7 +97,7 @@ func TestVarlogTest(t *testing.T) {
 		snMetaDesc, err := adm.AddStorageNode(context.Background(), addr)
 		require.NoError(t, err)
 		require.Equal(t, clusterID, snMetaDesc.ClusterID)
-		require.Empty(t, snMetaDesc.LogStreams)
+		require.Empty(t, snMetaDesc.LogStreamReplicas)
 		snDesc := snMetaDesc.StorageNode
 		require.Equal(t, varlogpb.StorageNodeStatusRunning, snDesc.Status)
 		require.Equal(t, addr, snDesc.Address)

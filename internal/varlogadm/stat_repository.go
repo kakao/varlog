@@ -7,13 +7,14 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type StatRepository interface {
 	Refresh(context.Context)
 
-	Report(context.Context, *varlogpb.StorageNodeMetadataDescriptor)
+	Report(context.Context, *snpb.StorageNodeMetadataDescriptor)
 
 	GetLogStream(types.LogStreamID) *LogStreamStat
 
@@ -35,7 +36,7 @@ type statRepository struct {
 
 type LogStreamStat struct {
 	status   varlogpb.LogStreamStatus
-	replicas map[types.StorageNodeID]varlogpb.LogStreamMetadataDescriptor
+	replicas map[types.StorageNodeID]snpb.LogStreamReplicaMetadataDescriptor
 	mu       sync.RWMutex
 }
 
@@ -45,13 +46,13 @@ func (lss *LogStreamStat) Status() varlogpb.LogStreamStatus {
 	return lss.status
 }
 
-func (lss *LogStreamStat) Replicas() map[types.StorageNodeID]varlogpb.LogStreamMetadataDescriptor {
+func (lss *LogStreamStat) Replicas() map[types.StorageNodeID]snpb.LogStreamReplicaMetadataDescriptor {
 	lss.mu.RLock()
 	defer lss.mu.RUnlock()
 	return lss.replicasInternal()
 }
 
-func (lss *LogStreamStat) Replica(storageNodeID types.StorageNodeID) (varlogpb.LogStreamMetadataDescriptor, bool) {
+func (lss *LogStreamStat) Replica(storageNodeID types.StorageNodeID) (snpb.LogStreamReplicaMetadataDescriptor, bool) {
 	lss.mu.RLock()
 	defer lss.mu.RUnlock()
 	lsmd, ok := lss.replicas[storageNodeID]
@@ -67,8 +68,8 @@ func (lss *LogStreamStat) Copy() LogStreamStat {
 	}
 }
 
-func (lss *LogStreamStat) replicasInternal() map[types.StorageNodeID]varlogpb.LogStreamMetadataDescriptor {
-	replicas := make(map[types.StorageNodeID]varlogpb.LogStreamMetadataDescriptor, len(lss.replicas))
+func (lss *LogStreamStat) replicasInternal() map[types.StorageNodeID]snpb.LogStreamReplicaMetadataDescriptor {
+	replicas := make(map[types.StorageNodeID]snpb.LogStreamReplicaMetadataDescriptor, len(lss.replicas))
 	for snid, lsmd := range lss.replicas {
 		replicas[snid] = lsmd
 	}
@@ -114,7 +115,7 @@ func (s *statRepository) Refresh(ctx context.Context) {
 
 	for _, ls := range meta.GetLogStreams() {
 		lsStat := &LogStreamStat{
-			replicas: make(map[types.StorageNodeID]varlogpb.LogStreamMetadataDescriptor),
+			replicas: make(map[types.StorageNodeID]snpb.LogStreamReplicaMetadataDescriptor),
 		}
 		lsStat.mu.Lock()
 		if existls, ok := s.logStreams[ls.LogStreamID]; ok {
@@ -124,9 +125,13 @@ func (s *statRepository) Refresh(ctx context.Context) {
 				if existr, ok := existls.Replica(r.StorageNodeID); ok {
 					lsStat.replicas[r.StorageNodeID] = existr
 				} else {
-					lsStat.replicas[r.StorageNodeID] = varlogpb.LogStreamMetadataDescriptor{
-						LogStreamID: ls.LogStreamID,
-						Path:        r.Path,
+					lsStat.replicas[r.StorageNodeID] = snpb.LogStreamReplicaMetadataDescriptor{
+						LogStreamReplica: varlogpb.LogStreamReplica{
+							TopicLogStream: varlogpb.TopicLogStream{
+								LogStreamID: ls.LogStreamID,
+							},
+						},
+						Path: r.Path,
 					}
 					// To reset the status of the log stream, set it as LogStreamStatusRunning
 					lsStat.status = varlogpb.LogStreamStatusRunning
@@ -134,9 +139,13 @@ func (s *statRepository) Refresh(ctx context.Context) {
 			}
 		} else {
 			for _, r := range ls.GetReplicas() {
-				lsStat.replicas[r.StorageNodeID] = varlogpb.LogStreamMetadataDescriptor{
-					LogStreamID: ls.LogStreamID,
-					Path:        r.Path,
+				lsStat.replicas[r.StorageNodeID] = snpb.LogStreamReplicaMetadataDescriptor{
+					LogStreamReplica: varlogpb.LogStreamReplica{
+						TopicLogStream: varlogpb.TopicLogStream{
+							LogStreamID: ls.LogStreamID,
+						},
+					},
+					Path: r.Path,
 				}
 			}
 		}
@@ -150,7 +159,7 @@ func (s *statRepository) Refresh(ctx context.Context) {
 	s.meta = proto.Clone(meta).(*varlogpb.MetadataDescriptor)
 }
 
-func (s *statRepository) Report(ctx context.Context, r *varlogpb.StorageNodeMetadataDescriptor) {
+func (s *statRepository) Report(ctx context.Context, r *snpb.StorageNodeMetadataDescriptor) {
 	s.Refresh(ctx)
 
 	s.mu.Lock()
@@ -168,7 +177,7 @@ func (s *statRepository) Report(ctx context.Context, r *varlogpb.StorageNodeMeta
 
 	s.storageNodes[snID] = sn
 
-	for _, ls := range r.GetLogStreams() {
+	for _, ls := range r.GetLogStreamReplicas() {
 		lsStat, ok := s.logStreams[ls.LogStreamID]
 		if !ok {
 			continue

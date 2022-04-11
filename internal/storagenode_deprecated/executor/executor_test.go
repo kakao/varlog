@@ -154,12 +154,14 @@ func TestExecutorAppend(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -238,12 +240,14 @@ func TestExecutorRead(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -347,12 +351,14 @@ func TestExecutorTrim(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -485,12 +491,14 @@ func TestExecutorSubscribe(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -859,18 +867,22 @@ func TestExecutorReplicate(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: primarySNID,
 			},
-			LogStreamID: logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: logStreamID,
+			},
 		},
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: backupSNID,
 			},
-			LogStreamID: logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -935,12 +947,14 @@ func TestExecutorSealSuddenly(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -1064,12 +1078,14 @@ func TestExecutorSeal(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -1151,12 +1167,14 @@ func TestExecutorSeal(t *testing.T) {
 	assert.Equal(t, 7, numErrs)
 
 	// unseal
-	err = lse.Unseal(context.TODO(), []varlogpb.Replica{
+	err = lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	})
 	assert.NoError(t, err)
@@ -1248,12 +1266,14 @@ func TestExecutorSealReason(t *testing.T) {
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
 	// RUNNING
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -1292,12 +1312,14 @@ func TestExecutorWithRecover(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -1349,12 +1371,14 @@ func TestExecutorCloseSuddenly(t *testing.T) {
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -1473,12 +1497,14 @@ func TestExecutorNew(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 
@@ -1571,12 +1597,14 @@ func TestExecutorNew(t *testing.T) {
 	require.EqualValues(t, 0, report.UncommittedLLSNLength)
 
 	// Unseal
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse.storageNodeID,
 			},
-			LogStreamID: lse.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse.Metadata().Status)
@@ -1607,33 +1635,41 @@ func TestExecutorUnsealWithInvalidReplicas(t *testing.T) {
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
 	require.Error(t, lse.Unseal(context.TODO(), nil))
-	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.Replica{}))
-	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{}))
+	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 2,
 			},
-			LogStreamID: 2,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 2,
+			},
 		},
 	}))
-	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 	}))
 }
@@ -1661,12 +1697,14 @@ func TestExecutorPrimaryBackup(t *testing.T) {
 	status, _, err := lse.Seal(context.TODO(), types.InvalidGLSN)
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 	}))
 	require.True(t, lse.isPrimay())
@@ -1675,18 +1713,22 @@ func TestExecutorPrimaryBackup(t *testing.T) {
 	status, _, err = lse.Seal(context.TODO(), types.InvalidGLSN)
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 2,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 	}))
 	require.False(t, lse.isPrimay())
@@ -1695,20 +1737,24 @@ func TestExecutorPrimaryBackup(t *testing.T) {
 	status, _, err = lse.Seal(context.TODO(), types.InvalidGLSN)
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
-	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 2,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 	}))
-	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.Error(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 2,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 2,
+			},
 		},
 	}))
 }
@@ -1772,12 +1818,14 @@ func TestExecutorSyncInitInvalidState(t *testing.T) {
 	require.Error(t, err)
 
 	// RUNNING
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 	}))
 	// FIXME (jun): use varlogpb.LogStreamStatus!
@@ -1812,18 +1860,22 @@ func TestExecutorSyncBackupReplica(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 2,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 	}))
 	require.False(t, lse.isPrimay())
@@ -1946,12 +1998,14 @@ func TestExecutorSyncPrimaryReplica(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 	}))
 	require.True(t, lse.isPrimay())
@@ -2104,18 +2158,22 @@ func TestExecutorSync(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
-	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 1,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: 2,
 			},
-			LogStreamID: 1,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: 1,
+			},
 		},
 	}))
 	require.True(t, lse.isPrimay())
@@ -2158,11 +2216,13 @@ func TestExecutorSync(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")}, varlogpb.Replica{
+			_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")}, varlogpb.LogStreamReplica{
 				StorageNode: varlogpb.StorageNode{
 					StorageNodeID: 2,
 				},
-				LogStreamID: 1,
+				TopicLogStream: varlogpb.TopicLogStream{
+					LogStreamID: 1,
+				},
 			})
 			assert.NoError(t, err)
 		}()
@@ -2218,7 +2278,7 @@ func TestExecutorSync(t *testing.T) {
 	exptectedGLSN := types.GLSN(11)
 	expectedVer := types.Version(3)
 	dstClient.EXPECT().SyncReplicate(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, replica varlogpb.Replica, payload snpb.SyncPayload) error {
+		func(ctx context.Context, replica varlogpb.LogStreamReplica, payload snpb.SyncPayload) error {
 			defer func() {
 				step++
 			}()
@@ -2246,7 +2306,7 @@ func TestExecutorSync(t *testing.T) {
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
 	require.Eventually(t, func() bool {
-		sts, err := lse.Sync(context.Background(), varlogpb.Replica{})
+		sts, err := lse.Sync(context.Background(), varlogpb.LogStreamReplica{})
 		assert.NoError(t, err)
 		return sts != nil && sts.State == snpb.SyncStateComplete
 	}, time.Second, 10*time.Millisecond)

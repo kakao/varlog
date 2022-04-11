@@ -12,19 +12,21 @@ import (
 
 type syncClient struct {
 	syncClientConfig
-	srcReplica varlogpb.Replica
+	srcReplica varlogpb.LogStreamReplica
 	rpcClient  snpb.ReplicatorClient
 }
 
 func newSyncClient(cfg syncClientConfig) *syncClient {
 	sc := &syncClient{syncClientConfig: cfg}
-	sc.srcReplica = varlogpb.Replica{
+	sc.srcReplica = varlogpb.LogStreamReplica{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: sc.lse.snid,
 			Address:       sc.lse.advertiseAddress,
 		},
-		TopicID:     sc.lse.tpid,
-		LogStreamID: sc.lse.lsid,
+		TopicLogStream: varlogpb.TopicLogStream{
+			TopicID:     sc.lse.tpid,
+			LogStreamID: sc.lse.lsid,
+		},
 	}
 	sc.rpcClient = snpb.NewReplicatorClient(sc.rpcConn.Conn)
 	return sc
@@ -55,7 +57,7 @@ func (sc *syncClient) close() error {
 }
 
 type syncClientConfig struct {
-	dstReplica varlogpb.Replica
+	dstReplica varlogpb.LogStreamReplica
 	rpcConn    *rpc.Conn
 
 	lse    *Executor

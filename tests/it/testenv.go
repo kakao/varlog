@@ -681,15 +681,17 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T, topicID types.TopicID) t
 	clus.manualNextLSID--
 
 	rds := make([]*varlogpb.ReplicaDescriptor, 0, clus.nrRep)
-	replicas := make([]varlogpb.Replica, 0, clus.nrRep)
+	replicas := make([]varlogpb.LogStreamReplica, 0, clus.nrRep)
 	for idx := range clus.rng.Perm(len(clus.storageNodeIDs))[:clus.nrRep] {
 		snID := clus.storageNodeIDs[idx]
-		replicas = append(replicas, varlogpb.Replica{
+		replicas = append(replicas, varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snID,
 				Address:       clus.snAddrs[snID],
 			},
-			LogStreamID: lsID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lsID,
+			},
 		})
 
 		snmd, err := clus.storageNodeManagementClientOf(t, snID).GetMetadata(context.Background())
@@ -740,15 +742,17 @@ func (clus *VarlogCluster) AddLSIncomplete(t *testing.T, topicID types.TopicID) 
 	lsID := clus.manualNextLSID
 	clus.manualNextLSID--
 
-	replicas := make([]varlogpb.Replica, 0, clus.nrRep-1)
+	replicas := make([]varlogpb.LogStreamReplica, 0, clus.nrRep-1)
 	for idx := range clus.rng.Perm(len(clus.storageNodeIDs))[:clus.nrRep-1] {
 		snID := clus.storageNodeIDs[idx]
-		replicas = append(replicas, varlogpb.Replica{
+		replicas = append(replicas, varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snID,
 				Address:       clus.snAddrs[snID],
 			},
-			LogStreamID: lsID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lsID,
+			},
 		})
 	}
 
@@ -800,7 +804,7 @@ func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, topicID types.TopicID
 				return false
 			}
 
-			_, _, err = clus.snMCLs[snid].Seal(context.Background(), topicID, logStreamID, lsmd.HighWatermark)
+			_, _, err = clus.snMCLs[snid].Seal(context.Background(), topicID, logStreamID, lsmd.LocalHighWatermark.GLSN)
 			require.NoError(t, err)
 		}
 		return true
@@ -839,7 +843,7 @@ func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, topicID types.TopicID, 
 	rds, ok := clus.replicas[logStreamID]
 	require.Equal(t, ok, true)
 
-	replicas := make([]varlogpb.Replica, 0, len(rds))
+	replicas := make([]varlogpb.LogStreamReplica, 0, len(rds))
 	for _, rd := range rds {
 		snid := rd.GetStorageNodeID()
 		require.Contains(t, clus.snMCLs, snid)
@@ -851,13 +855,15 @@ func (clus *VarlogCluster) UnsealWithoutMR(t *testing.T, topicID types.TopicID, 
 		require.True(t, ok)
 		require.NotEqual(t, lsmd.GetStatus(), varlogpb.LogStreamStatusRunning)
 
-		require.Equal(t, expectedHighWatermark, lsmd.GetHighWatermark())
+		require.Equal(t, expectedHighWatermark, lsmd.GetLocalHighWatermark())
 
-		replicas = append(replicas, varlogpb.Replica{
+		replicas = append(replicas, varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snid,
 			},
-			LogStreamID: logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: logStreamID,
+			},
 		})
 	}
 

@@ -88,7 +88,7 @@ func TestK8sVarlogSimple(t *testing.T) {
 				So(err, ShouldBeNil)
 				lsmetaList := rsp.GetLogStreams()
 				So(len(lsmetaList), ShouldEqual, k8s.RepFactor)
-				So(lsmetaList[0].HighWatermark, ShouldEqual, glsn)
+				So(lsmetaList[0].LocalHighWatermark.GLSN, ShouldEqual, glsn)
 
 				appendCtx, appendCancel := k8s.TimeoutContext()
 				defer appendCancel()
@@ -106,7 +106,7 @@ func TestK8sVarlogSimple(t *testing.T) {
 						defer cancel()
 
 						res := vlg.Append(ctx, topicID, [][]byte{[]byte("foo")})
-						return res.Err == nil && res.Metadata[0].GLSN > lsmetaList[0].HighWatermark
+						return res.Err == nil && res.Metadata[0].GLSN > lsmetaList[0].LocalHighWatermark.GLSN
 					}), ShouldBeTrue)
 				})
 			})

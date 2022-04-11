@@ -184,7 +184,7 @@ func (e *executor) SyncReplicate(ctx context.Context, payload snpb.SyncPayload) 
 // TODO: Add unit tests for various situations.
 // NOTE:
 // - What if it has no entries to sync because they are trimmed?
-func (e *executor) Sync(ctx context.Context, replica varlogpb.Replica) (*snpb.SyncStatus, error) {
+func (e *executor) Sync(ctx context.Context, replica varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
 	if err := e.guard(); err != nil {
 		return nil, err
 	}

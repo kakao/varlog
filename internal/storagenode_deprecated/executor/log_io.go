@@ -18,7 +18,7 @@ import (
 
 // FIXME(jun): Batch append can report the error by using either return value or field of
 // AppendResult, which makes it hard to handle the error.
-func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogpb.Replica) ([]snpb.AppendResult, error) {
+func (e *executor) Append(ctx context.Context, data [][]byte, backups ...varlogpb.LogStreamReplica) ([]snpb.AppendResult, error) {
 	// FIXME: e.guard() can be removed, but doing ops to storage after closing should be
 	// handled. Mostly, trim and read can be occurred after clsoing storage.
 	if err := e.guard(); err != nil {

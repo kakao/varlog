@@ -9,11 +9,9 @@ import (
 	io "io"
 	math "math"
 	math_bits "math/bits"
-	time "time"
 
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
-	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	_ "google.golang.org/protobuf/types/known/timestamppb"
 
 	github_daumkakao_com_varlog_varlog_pkg_types "github.daumkakao.com/varlog/varlog/pkg/types"
@@ -23,7 +21,6 @@ import (
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
-var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -115,25 +112,27 @@ func (TopicStatus) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_eb4411772ca3492a, []int{2}
 }
 
-// StorageNode is a structure to represent identifier and address of storage
-// node.
-type StorageNode struct {
-	StorageNodeID github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storageNodeId"`
-	Address       string                                                     `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
+// MetadataDescriptor is metadata to persist the overall state of the cluster in
+// the metadata repository.
+type MetadataDescriptor struct {
+	AppliedIndex uint64                   `protobuf:"varint,1,opt,name=applied_index,json=appliedIndex,proto3" json:"appliedIndex"`
+	StorageNodes []*StorageNodeDescriptor `protobuf:"bytes,2,rep,name=storage_nodes,json=storageNodes,proto3" json:"storageNodes"`
+	LogStreams   []*LogStreamDescriptor   `protobuf:"bytes,3,rep,name=log_streams,json=logStreams,proto3" json:"logStreams"`
+	Topics       []*TopicDescriptor       `protobuf:"bytes,4,rep,name=topics,proto3" json:"topics"`
 }
 
-func (m *StorageNode) Reset()         { *m = StorageNode{} }
-func (m *StorageNode) String() string { return proto.CompactTextString(m) }
-func (*StorageNode) ProtoMessage()    {}
-func (*StorageNode) Descriptor() ([]byte, []int) {
+func (m *MetadataDescriptor) Reset()         { *m = MetadataDescriptor{} }
+func (m *MetadataDescriptor) String() string { return proto.CompactTextString(m) }
+func (*MetadataDescriptor) ProtoMessage()    {}
+func (*MetadataDescriptor) Descriptor() ([]byte, []int) {
 	return fileDescriptor_eb4411772ca3492a, []int{0}
 }
-func (m *StorageNode) XXX_Unmarshal(b []byte) error {
+func (m *MetadataDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *StorageNode) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *MetadataDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_StorageNode.Marshal(b, m, deterministic)
+		return xxx_messageInfo_MetadataDescriptor.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -143,50 +142,66 @@ func (m *StorageNode) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) 
 		return b[:n], nil
 	}
 }
-func (m *StorageNode) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StorageNode.Merge(m, src)
+func (m *MetadataDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MetadataDescriptor.Merge(m, src)
 }
-func (m *StorageNode) XXX_Size() int {
+func (m *MetadataDescriptor) XXX_Size() int {
 	return m.ProtoSize()
 }
-func (m *StorageNode) XXX_DiscardUnknown() {
-	xxx_messageInfo_StorageNode.DiscardUnknown(m)
+func (m *MetadataDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_MetadataDescriptor.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_StorageNode proto.InternalMessageInfo
+var xxx_messageInfo_MetadataDescriptor proto.InternalMessageInfo
 
-func (m *StorageNode) GetStorageNodeID() github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID {
+func (m *MetadataDescriptor) GetAppliedIndex() uint64 {
 	if m != nil {
-		return m.StorageNodeID
+		return m.AppliedIndex
 	}
 	return 0
 }
 
-func (m *StorageNode) GetAddress() string {
+func (m *MetadataDescriptor) GetStorageNodes() []*StorageNodeDescriptor {
 	if m != nil {
-		return m.Address
+		return m.StorageNodes
 	}
-	return ""
+	return nil
 }
 
-type Replica struct {
-	StorageNode `protobuf:"bytes,1,opt,name=storage_node,json=storageNode,proto3,embedded=storage_node" json:"storage_node"`
-	TopicID     github_daumkakao_com_varlog_varlog_pkg_types.TopicID     `protobuf:"varint,2,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
-	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,3,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+func (m *MetadataDescriptor) GetLogStreams() []*LogStreamDescriptor {
+	if m != nil {
+		return m.LogStreams
+	}
+	return nil
 }
 
-func (m *Replica) Reset()         { *m = Replica{} }
-func (m *Replica) String() string { return proto.CompactTextString(m) }
-func (*Replica) ProtoMessage()    {}
-func (*Replica) Descriptor() ([]byte, []int) {
+func (m *MetadataDescriptor) GetTopics() []*TopicDescriptor {
+	if m != nil {
+		return m.Topics
+	}
+	return nil
+}
+
+// StorageNodeDescriptor is metadata to persist information of a storage node in
+// the metadata repository.
+type StorageNodeDescriptor struct {
+	StorageNode `protobuf:"bytes,1,opt,name=storage_node,json=storageNode,proto3,embedded=storage_node" json:""`
+	Status      StorageNodeStatus    `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.varlogpb.StorageNodeStatus" json:"status,omitempty"`
+	Storages    []*StorageDescriptor `protobuf:"bytes,3,rep,name=storages,proto3" json:"storages,omitempty"`
+}
+
+func (m *StorageNodeDescriptor) Reset()         { *m = StorageNodeDescriptor{} }
+func (m *StorageNodeDescriptor) String() string { return proto.CompactTextString(m) }
+func (*StorageNodeDescriptor) ProtoMessage()    {}
+func (*StorageNodeDescriptor) Descriptor() ([]byte, []int) {
 	return fileDescriptor_eb4411772ca3492a, []int{1}
 }
-func (m *Replica) XXX_Unmarshal(b []byte) error {
+func (m *StorageNodeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *Replica) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *StorageNodeDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_Replica.Marshal(b, m, deterministic)
+		return xxx_messageInfo_StorageNodeDescriptor.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -196,30 +211,30 @@ func (m *Replica) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (m *Replica) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Replica.Merge(m, src)
+func (m *StorageNodeDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StorageNodeDescriptor.Merge(m, src)
 }
-func (m *Replica) XXX_Size() int {
+func (m *StorageNodeDescriptor) XXX_Size() int {
 	return m.ProtoSize()
 }
-func (m *Replica) XXX_DiscardUnknown() {
-	xxx_messageInfo_Replica.DiscardUnknown(m)
+func (m *StorageNodeDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_StorageNodeDescriptor.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_Replica proto.InternalMessageInfo
+var xxx_messageInfo_StorageNodeDescriptor proto.InternalMessageInfo
 
-func (m *Replica) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+func (m *StorageNodeDescriptor) GetStatus() StorageNodeStatus {
 	if m != nil {
-		return m.TopicID
+		return m.Status
 	}
-	return 0
+	return StorageNodeStatusRunning
 }
 
-func (m *Replica) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
+func (m *StorageNodeDescriptor) GetStorages() []*StorageDescriptor {
 	if m != nil {
-		return m.LogStreamID
+		return m.Storages
 	}
-	return 0
+	return nil
 }
 
 type StorageDescriptor struct {
@@ -282,130 +297,26 @@ func (m *StorageDescriptor) GetTotal() uint64 {
 	return 0
 }
 
-type StorageNodeDescriptor struct {
-	StorageNode `protobuf:"bytes,1,opt,name=storage_node,json=storageNode,proto3,embedded=storage_node" json:""`
-	Status      StorageNodeStatus    `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.varlogpb.StorageNodeStatus" json:"status,omitempty"`
-	Storages    []*StorageDescriptor `protobuf:"bytes,3,rep,name=storages,proto3" json:"storages,omitempty"`
-}
-
-func (m *StorageNodeDescriptor) Reset()         { *m = StorageNodeDescriptor{} }
-func (m *StorageNodeDescriptor) String() string { return proto.CompactTextString(m) }
-func (*StorageNodeDescriptor) ProtoMessage()    {}
-func (*StorageNodeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{3}
-}
-func (m *StorageNodeDescriptor) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *StorageNodeDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_StorageNodeDescriptor.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *StorageNodeDescriptor) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StorageNodeDescriptor.Merge(m, src)
-}
-func (m *StorageNodeDescriptor) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *StorageNodeDescriptor) XXX_DiscardUnknown() {
-	xxx_messageInfo_StorageNodeDescriptor.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_StorageNodeDescriptor proto.InternalMessageInfo
-
-func (m *StorageNodeDescriptor) GetStatus() StorageNodeStatus {
-	if m != nil {
-		return m.Status
-	}
-	return StorageNodeStatusRunning
-}
-
-func (m *StorageNodeDescriptor) GetStorages() []*StorageDescriptor {
-	if m != nil {
-		return m.Storages
-	}
-	return nil
-}
-
-type ReplicaDescriptor struct {
-	StorageNodeID github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storageNodeId"`
-	Path          string                                                     `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-}
-
-func (m *ReplicaDescriptor) Reset()         { *m = ReplicaDescriptor{} }
-func (m *ReplicaDescriptor) String() string { return proto.CompactTextString(m) }
-func (*ReplicaDescriptor) ProtoMessage()    {}
-func (*ReplicaDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{4}
-}
-func (m *ReplicaDescriptor) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ReplicaDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ReplicaDescriptor.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ReplicaDescriptor) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ReplicaDescriptor.Merge(m, src)
-}
-func (m *ReplicaDescriptor) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *ReplicaDescriptor) XXX_DiscardUnknown() {
-	xxx_messageInfo_ReplicaDescriptor.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ReplicaDescriptor proto.InternalMessageInfo
-
-func (m *ReplicaDescriptor) GetStorageNodeID() github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID {
-	if m != nil {
-		return m.StorageNodeID
-	}
-	return 0
-}
-
-func (m *ReplicaDescriptor) GetPath() string {
-	if m != nil {
-		return m.Path
-	}
-	return ""
-}
-
-// FIXME (jun): LogStreamDescriptor
-// - Similar types
-// - Ambiguous naming
-//
-// Information for log stream, not replica
+// LogStreamDescriptor is metadata to persist information of a log stream in the
+// metadata repository.
 type LogStreamDescriptor struct {
 	TopicID     github_daumkakao_com_varlog_varlog_pkg_types.TopicID     `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topicId"`
 	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"logStreamId"`
 	Status      LogStreamStatus                                          `protobuf:"varint,3,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
 	Replicas    []*ReplicaDescriptor                                     `protobuf:"bytes,4,rep,name=replicas,proto3" json:"replicas,omitempty"`
-	Head        LogEntryMeta                                             `protobuf:"bytes,5,opt,name=head,proto3" json:"head,omitempty"`
-	Tail        LogEntryMeta                                             `protobuf:"bytes,6,opt,name=tail,proto3" json:"tail,omitempty"`
+	// Deprecated: The members - head and tail are not used by the metadata
+	// repository. It exists here just since the LogStreamDescriptor is used
+	// elsewhere other than the metadata repository. It leads to misusing the
+	// LogStreamDescriptor.
+	Head LogEntryMeta `protobuf:"bytes,5,opt,name=head,proto3" json:"head,omitempty"`
+	Tail LogEntryMeta `protobuf:"bytes,6,opt,name=tail,proto3" json:"tail,omitempty"`
 }
 
 func (m *LogStreamDescriptor) Reset()         { *m = LogStreamDescriptor{} }
 func (m *LogStreamDescriptor) String() string { return proto.CompactTextString(m) }
 func (*LogStreamDescriptor) ProtoMessage()    {}
 func (*LogStreamDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{5}
+	return fileDescriptor_eb4411772ca3492a, []int{3}
 }
 func (m *LogStreamDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -476,9 +387,63 @@ func (m *LogStreamDescriptor) GetTail() LogEntryMeta {
 	return LogEntryMeta{}
 }
 
+type ReplicaDescriptor struct {
+	StorageNodeID github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storageNodeId"`
+	Path          string                                                     `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+}
+
+func (m *ReplicaDescriptor) Reset()         { *m = ReplicaDescriptor{} }
+func (m *ReplicaDescriptor) String() string { return proto.CompactTextString(m) }
+func (*ReplicaDescriptor) ProtoMessage()    {}
+func (*ReplicaDescriptor) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eb4411772ca3492a, []int{4}
+}
+func (m *ReplicaDescriptor) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ReplicaDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ReplicaDescriptor.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ReplicaDescriptor) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReplicaDescriptor.Merge(m, src)
+}
+func (m *ReplicaDescriptor) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *ReplicaDescriptor) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReplicaDescriptor.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReplicaDescriptor proto.InternalMessageInfo
+
+func (m *ReplicaDescriptor) GetStorageNodeID() github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID {
+	if m != nil {
+		return m.StorageNodeID
+	}
+	return 0
+}
+
+func (m *ReplicaDescriptor) GetPath() string {
+	if m != nil {
+		return m.Path
+	}
+	return ""
+}
+
+// TopicDescriptor is metadata to persist information of a topic in the metadata
+// repository.
 type TopicDescriptor struct {
 	TopicID    github_daumkakao_com_varlog_varlog_pkg_types.TopicID       `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topicId"`
-	Status     TopicStatus                                                `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.varlogpb.TopicStatus" json:"status,omitempty"`
+	Status     TopicStatus                                                `protobuf:"varint,2,opt,name=status,proto3,enum=varlog.varlogpb.TopicStatus" json:"status"`
 	LogStreams []github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,3,rep,packed,name=log_streams,json=logStreams,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"logStreams,omitempty"`
 }
 
@@ -486,7 +451,7 @@ func (m *TopicDescriptor) Reset()         { *m = TopicDescriptor{} }
 func (m *TopicDescriptor) String() string { return proto.CompactTextString(m) }
 func (*TopicDescriptor) ProtoMessage()    {}
 func (*TopicDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{6}
+	return fileDescriptor_eb4411772ca3492a, []int{5}
 }
 func (m *TopicDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -536,183 +501,25 @@ func (m *TopicDescriptor) GetLogStreams() []github_daumkakao_com_varlog_varlog_p
 	return nil
 }
 
-type MetadataDescriptor struct {
-	AppliedIndex uint64                   `protobuf:"varint,1,opt,name=applied_index,json=appliedIndex,proto3" json:"applied_index,omitempty"`
-	StorageNodes []*StorageNodeDescriptor `protobuf:"bytes,2,rep,name=storage_nodes,json=storageNodes,proto3" json:"storage_nodes,omitempty"`
-	LogStreams   []*LogStreamDescriptor   `protobuf:"bytes,3,rep,name=log_streams,json=logStreams,proto3" json:"log_streams,omitempty"`
-	Topics       []*TopicDescriptor       `protobuf:"bytes,4,rep,name=topics,proto3" json:"topics,omitempty"`
-}
-
-func (m *MetadataDescriptor) Reset()         { *m = MetadataDescriptor{} }
-func (m *MetadataDescriptor) String() string { return proto.CompactTextString(m) }
-func (*MetadataDescriptor) ProtoMessage()    {}
-func (*MetadataDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{7}
-}
-func (m *MetadataDescriptor) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *MetadataDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_MetadataDescriptor.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *MetadataDescriptor) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MetadataDescriptor.Merge(m, src)
-}
-func (m *MetadataDescriptor) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *MetadataDescriptor) XXX_DiscardUnknown() {
-	xxx_messageInfo_MetadataDescriptor.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_MetadataDescriptor proto.InternalMessageInfo
-
-func (m *MetadataDescriptor) GetAppliedIndex() uint64 {
-	if m != nil {
-		return m.AppliedIndex
-	}
-	return 0
-}
-
-func (m *MetadataDescriptor) GetStorageNodes() []*StorageNodeDescriptor {
-	if m != nil {
-		return m.StorageNodes
-	}
-	return nil
-}
-
-func (m *MetadataDescriptor) GetLogStreams() []*LogStreamDescriptor {
-	if m != nil {
-		return m.LogStreams
-	}
-	return nil
-}
-
-func (m *MetadataDescriptor) GetTopics() []*TopicDescriptor {
-	if m != nil {
-		return m.Topics
-	}
-	return nil
-}
-
-// StorageNodeMetadataDescriptor represents metadata of stroage node.
-type StorageNodeMetadataDescriptor struct {
-	// ClusterID is the identifier of the cluster that the storage node belongs
-	// to.
-	ClusterID github_daumkakao_com_varlog_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.ClusterID" json:"clusterId"`
-	// StorageNode is detailed information about the storage node.
-	StorageNode *StorageNodeDescriptor        `protobuf:"bytes,2,opt,name=storage_node,json=storageNode,proto3" json:"storageNode"`
-	LogStreams  []LogStreamMetadataDescriptor `protobuf:"bytes,3,rep,name=log_streams,json=logStreams,proto3" json:"logStreams"`
-	CreatedTime time.Time                     `protobuf:"bytes,4,opt,name=created_time,json=createdTime,proto3,stdtime" json:"createdTime"`
-	UpdatedTime time.Time                     `protobuf:"bytes,5,opt,name=updated_time,json=updatedTime,proto3,stdtime" json:"updatedTime"`
-}
-
-func (m *StorageNodeMetadataDescriptor) Reset()         { *m = StorageNodeMetadataDescriptor{} }
-func (m *StorageNodeMetadataDescriptor) String() string { return proto.CompactTextString(m) }
-func (*StorageNodeMetadataDescriptor) ProtoMessage()    {}
-func (*StorageNodeMetadataDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{8}
-}
-func (m *StorageNodeMetadataDescriptor) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *StorageNodeMetadataDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_StorageNodeMetadataDescriptor.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *StorageNodeMetadataDescriptor) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StorageNodeMetadataDescriptor.Merge(m, src)
-}
-func (m *StorageNodeMetadataDescriptor) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *StorageNodeMetadataDescriptor) XXX_DiscardUnknown() {
-	xxx_messageInfo_StorageNodeMetadataDescriptor.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_StorageNodeMetadataDescriptor proto.InternalMessageInfo
-
-func (m *StorageNodeMetadataDescriptor) GetClusterID() github_daumkakao_com_varlog_varlog_pkg_types.ClusterID {
-	if m != nil {
-		return m.ClusterID
-	}
-	return 0
-}
-
-func (m *StorageNodeMetadataDescriptor) GetStorageNode() *StorageNodeDescriptor {
-	if m != nil {
-		return m.StorageNode
-	}
-	return nil
-}
-
-func (m *StorageNodeMetadataDescriptor) GetLogStreams() []LogStreamMetadataDescriptor {
-	if m != nil {
-		return m.LogStreams
-	}
-	return nil
-}
-
-func (m *StorageNodeMetadataDescriptor) GetCreatedTime() time.Time {
-	if m != nil {
-		return m.CreatedTime
-	}
-	return time.Time{}
-}
-
-func (m *StorageNodeMetadataDescriptor) GetUpdatedTime() time.Time {
-	if m != nil {
-		return m.UpdatedTime
-	}
-	return time.Time{}
-}
-
-// FIXME (jun): LogStreamMetadataDescriptor
-// - Similar types
-// - Ambiguous naming
-//
-// maybe LogStreamReplica's information
-type LogStreamMetadataDescriptor struct {
+// StorageNode is a structure to represent identifier and address of storage
+// node.
+type StorageNode struct {
 	StorageNodeID github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storageNodeId"`
-	LogStreamID   github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID   `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"logStreamId"`
-	TopicID       github_daumkakao_com_varlog_varlog_pkg_types.TopicID       `protobuf:"varint,3,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topicId"`
-	Status        LogStreamStatus                                            `protobuf:"varint,4,opt,name=status,proto3,enum=varlog.varlogpb.LogStreamStatus" json:"status,omitempty"`
-	Version       github_daumkakao_com_varlog_varlog_pkg_types.Version       `protobuf:"varint,5,opt,name=version,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.Version" json:"version,omitempty"`
-	HighWatermark github_daumkakao_com_varlog_varlog_pkg_types.GLSN          `protobuf:"varint,6,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"highWatermark"`
-	Path          string                                                     `protobuf:"bytes,7,opt,name=path,proto3" json:"path,omitempty"`
-	CreatedTime   time.Time                                                  `protobuf:"bytes,8,opt,name=created_time,json=createdTime,proto3,stdtime" json:"createdTime"`
-	UpdatedTime   time.Time                                                  `protobuf:"bytes,9,opt,name=updated_time,json=updatedTime,proto3,stdtime" json:"updatedTime"`
+	Address       string                                                     `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
 }
 
-func (m *LogStreamMetadataDescriptor) Reset()         { *m = LogStreamMetadataDescriptor{} }
-func (m *LogStreamMetadataDescriptor) String() string { return proto.CompactTextString(m) }
-func (*LogStreamMetadataDescriptor) ProtoMessage()    {}
-func (*LogStreamMetadataDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{9}
+func (m *StorageNode) Reset()         { *m = StorageNode{} }
+func (m *StorageNode) String() string { return proto.CompactTextString(m) }
+func (*StorageNode) ProtoMessage()    {}
+func (*StorageNode) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eb4411772ca3492a, []int{6}
 }
-func (m *LogStreamMetadataDescriptor) XXX_Unmarshal(b []byte) error {
+func (m *StorageNode) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *LogStreamMetadataDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *StorageNode) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_LogStreamMetadataDescriptor.Marshal(b, m, deterministic)
+		return xxx_messageInfo_StorageNode.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -722,153 +529,177 @@ func (m *LogStreamMetadataDescriptor) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-func (m *LogStreamMetadataDescriptor) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_LogStreamMetadataDescriptor.Merge(m, src)
+func (m *StorageNode) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StorageNode.Merge(m, src)
 }
-func (m *LogStreamMetadataDescriptor) XXX_Size() int {
+func (m *StorageNode) XXX_Size() int {
 	return m.ProtoSize()
 }
-func (m *LogStreamMetadataDescriptor) XXX_DiscardUnknown() {
-	xxx_messageInfo_LogStreamMetadataDescriptor.DiscardUnknown(m)
+func (m *StorageNode) XXX_DiscardUnknown() {
+	xxx_messageInfo_StorageNode.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_LogStreamMetadataDescriptor proto.InternalMessageInfo
+var xxx_messageInfo_StorageNode proto.InternalMessageInfo
 
-func (m *LogStreamMetadataDescriptor) GetStorageNodeID() github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID {
+func (m *StorageNode) GetStorageNodeID() github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID {
 	if m != nil {
 		return m.StorageNodeID
 	}
 	return 0
 }
 
-func (m *LogStreamMetadataDescriptor) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
-	if m != nil {
-		return m.LogStreamID
-	}
-	return 0
-}
-
-func (m *LogStreamMetadataDescriptor) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
-	if m != nil {
-		return m.TopicID
-	}
-	return 0
-}
-
-func (m *LogStreamMetadataDescriptor) GetStatus() LogStreamStatus {
-	if m != nil {
-		return m.Status
-	}
-	return LogStreamStatusRunning
-}
-
-func (m *LogStreamMetadataDescriptor) GetVersion() github_daumkakao_com_varlog_varlog_pkg_types.Version {
-	if m != nil {
-		return m.Version
-	}
-	return 0
-}
-
-func (m *LogStreamMetadataDescriptor) GetHighWatermark() github_daumkakao_com_varlog_varlog_pkg_types.GLSN {
-	if m != nil {
-		return m.HighWatermark
-	}
-	return 0
-}
-
-func (m *LogStreamMetadataDescriptor) GetPath() string {
-	if m != nil {
-		return m.Path
-	}
-	return ""
-}
-
-func (m *LogStreamMetadataDescriptor) GetCreatedTime() time.Time {
-	if m != nil {
-		return m.CreatedTime
-	}
-	return time.Time{}
-}
-
-func (m *LogStreamMetadataDescriptor) GetUpdatedTime() time.Time {
-	if m != nil {
-		return m.UpdatedTime
-	}
-	return time.Time{}
-}
-
-// FIXME (jun): LogStreamReplicaDescriptor
-// - Similar types
-// - Ambiguous naming
-//
-// maybe LogStreamReplica's information
-// TODO: LogStreamMetadataDescriptor + LogStreamReplicaDescriptor
-type LogStreamReplicaDescriptor struct {
-	StorageNodeID github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID `protobuf:"varint,1,opt,name=storage_node_id,json=storageNodeId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID" json:"storage_node_id,omitempty"`
-	LogStreamID   github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID   `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	TopicID       github_daumkakao_com_varlog_varlog_pkg_types.TopicID       `protobuf:"varint,3,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
-	Address       string                                                     `protobuf:"bytes,4,opt,name=address,proto3" json:"address,omitempty"`
-}
-
-func (m *LogStreamReplicaDescriptor) Reset()         { *m = LogStreamReplicaDescriptor{} }
-func (m *LogStreamReplicaDescriptor) String() string { return proto.CompactTextString(m) }
-func (*LogStreamReplicaDescriptor) ProtoMessage()    {}
-func (*LogStreamReplicaDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{10}
-}
-func (m *LogStreamReplicaDescriptor) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *LogStreamReplicaDescriptor) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_LogStreamReplicaDescriptor.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *LogStreamReplicaDescriptor) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_LogStreamReplicaDescriptor.Merge(m, src)
-}
-func (m *LogStreamReplicaDescriptor) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *LogStreamReplicaDescriptor) XXX_DiscardUnknown() {
-	xxx_messageInfo_LogStreamReplicaDescriptor.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_LogStreamReplicaDescriptor proto.InternalMessageInfo
-
-func (m *LogStreamReplicaDescriptor) GetStorageNodeID() github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID {
-	if m != nil {
-		return m.StorageNodeID
-	}
-	return 0
-}
-
-func (m *LogStreamReplicaDescriptor) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
-	if m != nil {
-		return m.LogStreamID
-	}
-	return 0
-}
-
-func (m *LogStreamReplicaDescriptor) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
-	if m != nil {
-		return m.TopicID
-	}
-	return 0
-}
-
-func (m *LogStreamReplicaDescriptor) GetAddress() string {
+func (m *StorageNode) GetAddress() string {
 	if m != nil {
 		return m.Address
 	}
 	return ""
+}
+
+// TopicLogStream wraps TopicID and LogStreamID.
+type TopicLogStream struct {
+	TopicID     github_daumkakao_com_varlog_varlog_pkg_types.TopicID     `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.TopicID" json:"topicId"`
+	LogStreamID github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID" json:"logStreamId"`
+}
+
+func (m *TopicLogStream) Reset()         { *m = TopicLogStream{} }
+func (m *TopicLogStream) String() string { return proto.CompactTextString(m) }
+func (*TopicLogStream) ProtoMessage()    {}
+func (*TopicLogStream) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eb4411772ca3492a, []int{7}
+}
+func (m *TopicLogStream) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TopicLogStream) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_TopicLogStream.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *TopicLogStream) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TopicLogStream.Merge(m, src)
+}
+func (m *TopicLogStream) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *TopicLogStream) XXX_DiscardUnknown() {
+	xxx_messageInfo_TopicLogStream.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TopicLogStream proto.InternalMessageInfo
+
+func (m *TopicLogStream) GetTopicID() github_daumkakao_com_varlog_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
+func (m *TopicLogStream) GetLogStreamID() github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID {
+	if m != nil {
+		return m.LogStreamID
+	}
+	return 0
+}
+
+// LogStreamReplica represents replica of log stream.
+type LogStreamReplica struct {
+	StorageNode    `protobuf:"bytes,1,opt,name=storage_node,json=storageNode,proto3,embedded=storage_node" json:"storage_node"`
+	TopicLogStream `protobuf:"bytes,2,opt,name=topic_log_stream,json=topicLogStream,proto3,embedded=topic_log_stream" json:"topic_log_stream"`
+}
+
+func (m *LogStreamReplica) Reset()         { *m = LogStreamReplica{} }
+func (m *LogStreamReplica) String() string { return proto.CompactTextString(m) }
+func (*LogStreamReplica) ProtoMessage()    {}
+func (*LogStreamReplica) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eb4411772ca3492a, []int{8}
+}
+func (m *LogStreamReplica) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogStreamReplica) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_LogStreamReplica.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *LogStreamReplica) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogStreamReplica.Merge(m, src)
+}
+func (m *LogStreamReplica) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *LogStreamReplica) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogStreamReplica.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogStreamReplica proto.InternalMessageInfo
+
+// LogSequenceNumber wraps LLSN and GLSN.
+// LLSN is the sequence number of logs in a log stream.
+// GLSN is the sequence number of logs in a topic.
+type LogSequenceNumber struct {
+	LLSN github_daumkakao_com_varlog_varlog_pkg_types.LLSN `protobuf:"varint,1,opt,name=llsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.LLSN" json:"llsn,omitempty"`
+	GLSN github_daumkakao_com_varlog_varlog_pkg_types.GLSN `protobuf:"varint,2,opt,name=glsn,proto3,casttype=github.daumkakao.com/varlog/varlog/pkg/types.GLSN" json:"glsn,omitempty"`
+}
+
+func (m *LogSequenceNumber) Reset()         { *m = LogSequenceNumber{} }
+func (m *LogSequenceNumber) String() string { return proto.CompactTextString(m) }
+func (*LogSequenceNumber) ProtoMessage()    {}
+func (*LogSequenceNumber) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eb4411772ca3492a, []int{9}
+}
+func (m *LogSequenceNumber) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LogSequenceNumber) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_LogSequenceNumber.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *LogSequenceNumber) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LogSequenceNumber.Merge(m, src)
+}
+func (m *LogSequenceNumber) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *LogSequenceNumber) XXX_DiscardUnknown() {
+	xxx_messageInfo_LogSequenceNumber.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LogSequenceNumber proto.InternalMessageInfo
+
+func (m *LogSequenceNumber) GetLLSN() github_daumkakao_com_varlog_varlog_pkg_types.LLSN {
+	if m != nil {
+		return m.LLSN
+	}
+	return 0
+}
+
+func (m *LogSequenceNumber) GetGLSN() github_daumkakao_com_varlog_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.GLSN
+	}
+	return 0
 }
 
 type LogEntryMeta struct {
@@ -882,7 +713,7 @@ func (m *LogEntryMeta) Reset()         { *m = LogEntryMeta{} }
 func (m *LogEntryMeta) String() string { return proto.CompactTextString(m) }
 func (*LogEntryMeta) ProtoMessage()    {}
 func (*LogEntryMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{11}
+	return fileDescriptor_eb4411772ca3492a, []int{10}
 }
 func (m *LogEntryMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -948,7 +779,7 @@ func (m *LogEntry) Reset()         { *m = LogEntry{} }
 func (m *LogEntry) String() string { return proto.CompactTextString(m) }
 func (*LogEntry) ProtoMessage()    {}
 func (*LogEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{12}
+	return fileDescriptor_eb4411772ca3492a, []int{11}
 }
 func (m *LogEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -996,7 +827,7 @@ func (m *CommitContext) Reset()         { *m = CommitContext{} }
 func (m *CommitContext) String() string { return proto.CompactTextString(m) }
 func (*CommitContext) ProtoMessage()    {}
 func (*CommitContext) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eb4411772ca3492a, []int{13}
+	return fileDescriptor_eb4411772ca3492a, []int{12}
 }
 func (m *CommitContext) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1064,17 +895,16 @@ func init() {
 	proto.RegisterEnum("varlog.varlogpb.StorageNodeStatus", StorageNodeStatus_name, StorageNodeStatus_value)
 	proto.RegisterEnum("varlog.varlogpb.LogStreamStatus", LogStreamStatus_name, LogStreamStatus_value)
 	proto.RegisterEnum("varlog.varlogpb.TopicStatus", TopicStatus_name, TopicStatus_value)
-	proto.RegisterType((*StorageNode)(nil), "varlog.varlogpb.StorageNode")
-	proto.RegisterType((*Replica)(nil), "varlog.varlogpb.Replica")
-	proto.RegisterType((*StorageDescriptor)(nil), "varlog.varlogpb.StorageDescriptor")
-	proto.RegisterType((*StorageNodeDescriptor)(nil), "varlog.varlogpb.StorageNodeDescriptor")
-	proto.RegisterType((*ReplicaDescriptor)(nil), "varlog.varlogpb.ReplicaDescriptor")
-	proto.RegisterType((*LogStreamDescriptor)(nil), "varlog.varlogpb.LogStreamDescriptor")
-	proto.RegisterType((*TopicDescriptor)(nil), "varlog.varlogpb.TopicDescriptor")
 	proto.RegisterType((*MetadataDescriptor)(nil), "varlog.varlogpb.MetadataDescriptor")
-	proto.RegisterType((*StorageNodeMetadataDescriptor)(nil), "varlog.varlogpb.StorageNodeMetadataDescriptor")
-	proto.RegisterType((*LogStreamMetadataDescriptor)(nil), "varlog.varlogpb.LogStreamMetadataDescriptor")
-	proto.RegisterType((*LogStreamReplicaDescriptor)(nil), "varlog.varlogpb.LogStreamReplicaDescriptor")
+	proto.RegisterType((*StorageNodeDescriptor)(nil), "varlog.varlogpb.StorageNodeDescriptor")
+	proto.RegisterType((*StorageDescriptor)(nil), "varlog.varlogpb.StorageDescriptor")
+	proto.RegisterType((*LogStreamDescriptor)(nil), "varlog.varlogpb.LogStreamDescriptor")
+	proto.RegisterType((*ReplicaDescriptor)(nil), "varlog.varlogpb.ReplicaDescriptor")
+	proto.RegisterType((*TopicDescriptor)(nil), "varlog.varlogpb.TopicDescriptor")
+	proto.RegisterType((*StorageNode)(nil), "varlog.varlogpb.StorageNode")
+	proto.RegisterType((*TopicLogStream)(nil), "varlog.varlogpb.TopicLogStream")
+	proto.RegisterType((*LogStreamReplica)(nil), "varlog.varlogpb.LogStreamReplica")
+	proto.RegisterType((*LogSequenceNumber)(nil), "varlog.varlogpb.LogSequenceNumber")
 	proto.RegisterType((*LogEntryMeta)(nil), "varlog.varlogpb.LogEntryMeta")
 	proto.RegisterType((*LogEntry)(nil), "varlog.varlogpb.LogEntry")
 	proto.RegisterType((*CommitContext)(nil), "varlog.varlogpb.CommitContext")
@@ -1083,110 +913,99 @@ func init() {
 func init() { proto.RegisterFile("proto/varlogpb/metadata.proto", fileDescriptor_eb4411772ca3492a) }
 
 var fileDescriptor_eb4411772ca3492a = []byte{
-	// 1477 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x58, 0xbd, 0x6f, 0xdb, 0x46,
-	0x1f, 0x16, 0x25, 0xfa, 0xeb, 0x24, 0xc5, 0xf6, 0xc5, 0xc9, 0xab, 0x57, 0x6f, 0x22, 0x0a, 0x7e,
-	0x5f, 0xbc, 0x08, 0x82, 0x54, 0x6a, 0x3e, 0x5a, 0x04, 0x29, 0x5a, 0x20, 0xb2, 0xd4, 0x54, 0x88,
-	0xa2, 0x34, 0x94, 0x9c, 0x14, 0x19, 0xaa, 0xd2, 0xe2, 0x95, 0x26, 0x4c, 0x91, 0x02, 0x79, 0x8a,
-	0xe3, 0xa1, 0x45, 0x81, 0x2c, 0x81, 0xbb, 0x64, 0xec, 0x50, 0xa3, 0x01, 0x3a, 0x76, 0xec, 0x92,
-	0x3f, 0xc1, 0xdd, 0x32, 0x74, 0xe8, 0xc4, 0x02, 0xf2, 0x52, 0x78, 0xe8, 0x1f, 0x90, 0xa9, 0xb8,
-	0xe3, 0x51, 0x3c, 0x92, 0x72, 0x1a, 0x39, 0x76, 0x93, 0x49, 0xe2, 0x1d, 0x9f, 0xe7, 0xf7, 0xf5,
-	0xfc, 0xee, 0x83, 0xe0, 0x6c, 0xdf, 0xb6, 0xb0, 0x55, 0x7e, 0xa0, 0xd8, 0x86, 0xa5, 0xf5, 0xd7,
-	0xca, 0x3d, 0x84, 0x15, 0x55, 0xc1, 0x4a, 0x89, 0x8e, 0xc3, 0x79, 0x6f, 0xa2, 0xe4, 0xcf, 0xe7,
-	0x25, 0xcd, 0xb2, 0x34, 0x03, 0x95, 0xe9, 0xf4, 0xda, 0xe0, 0xcb, 0x32, 0xd6, 0x7b, 0xc8, 0xc1,
-	0x4a, 0xaf, 0xef, 0x21, 0xf2, 0xef, 0x68, 0x3a, 0x5e, 0x1f, 0xac, 0x95, 0xba, 0x56, 0xaf, 0xac,
-	0x59, 0x9a, 0x15, 0xbc, 0x49, 0x9e, 0x3c, 0x6b, 0xe4, 0x9f, 0xf7, 0xfa, 0xf2, 0x33, 0x01, 0xa4,
-	0x5b, 0xd8, 0xb2, 0x15, 0x0d, 0x35, 0x2d, 0x15, 0xc1, 0xc7, 0x02, 0x98, 0x77, 0xbc, 0xe7, 0x8e,
-	0x69, 0xa9, 0xa8, 0xa3, 0xab, 0x39, 0xa1, 0x28, 0x9c, 0x9b, 0xaa, 0x7c, 0x31, 0x74, 0xa5, 0x2c,
-	0xf7, 0x6a, 0xbd, 0xba, 0xef, 0x4a, 0x59, 0x87, 0x1b, 0x50, 0x5f, 0xb8, 0xd2, 0x35, 0x66, 0x5e,
-	0x55, 0x06, 0xbd, 0x0d, 0x65, 0x43, 0xb1, 0xa8, 0x23, 0x9e, 0xfb, 0xfe, 0x4f, 0x7f, 0x43, 0x2b,
-	0xe3, 0xad, 0x3e, 0x72, 0x4a, 0x21, 0x3a, 0x39, 0x4c, 0x06, 0x73, 0x60, 0x46, 0x51, 0x55, 0x1b,
-	0x39, 0x4e, 0x2e, 0x59, 0x14, 0xce, 0xcd, 0xc9, 0xfe, 0xe3, 0x35, 0xf1, 0x8f, 0xa7, 0x92, 0xb0,
-	0xfc, 0x53, 0x12, 0xcc, 0xc8, 0xa8, 0x6f, 0xe8, 0x5d, 0x05, 0xd6, 0x41, 0x86, 0xf7, 0x9a, 0xba,
-	0x9c, 0xbe, 0x74, 0xa6, 0x14, 0x49, 0x1f, 0x6f, 0xb0, 0x32, 0xbb, 0xeb, 0x4a, 0x89, 0xe7, 0xae,
-	0x24, 0xc8, 0x69, 0xce, 0x30, 0xfc, 0x1c, 0xcc, 0x62, 0xab, 0xaf, 0x77, 0x49, 0xe4, 0x49, 0x1a,
-	0xf9, 0xca, 0xd0, 0x95, 0x66, 0xda, 0x64, 0xac, 0x5e, 0x7d, 0xe1, 0x4a, 0x57, 0x26, 0x0a, 0x91,
-	0xe1, 0xe4, 0x19, 0x4a, 0x5a, 0x57, 0xa1, 0x05, 0xb2, 0x86, 0xa5, 0x75, 0x1c, 0x6c, 0x23, 0xa5,
-	0x47, 0x8c, 0xa4, 0xa8, 0x91, 0x9b, 0x43, 0x57, 0x4a, 0x37, 0x2c, 0xad, 0x45, 0xc7, 0xa9, 0xa1,
-	0xab, 0x13, 0x19, 0xe2, 0xb0, 0x72, 0xda, 0x18, 0x3d, 0xa8, 0x2c, 0x5b, 0xf7, 0xc0, 0x22, 0x0b,
-	0xbe, 0x8a, 0x9c, 0xae, 0xad, 0xf7, 0xb1, 0x65, 0x43, 0x08, 0xc4, 0xbe, 0x82, 0xd7, 0x69, 0xba,
-	0xe6, 0x64, 0xfa, 0x9f, 0x8c, 0x0d, 0x1c, 0xe4, 0xc5, 0x2e, 0xca, 0xf4, 0x3f, 0x5c, 0x02, 0x53,
-	0xd8, 0xc2, 0x8a, 0x41, 0x7d, 0x15, 0x65, 0xef, 0x81, 0x11, 0xff, 0x29, 0x80, 0x53, 0x5c, 0x5a,
-	0x39, 0xf6, 0x5b, 0x87, 0x28, 0x4a, 0xc6, 0x2f, 0xca, 0xbe, 0x2b, 0x25, 0xc2, 0x85, 0xb9, 0x06,
-	0xa6, 0x1d, 0xac, 0xe0, 0x81, 0x27, 0x87, 0x13, 0x97, 0x96, 0x5f, 0x46, 0xd4, 0xa2, 0x6f, 0xca,
-	0x0c, 0x01, 0xab, 0x60, 0x96, 0x51, 0x39, 0xb9, 0x54, 0x31, 0x75, 0x2e, 0x7d, 0x30, 0x3a, 0x08,
-	0xa0, 0x22, 0xee, 0x12, 0x75, 0x8c, 0x90, 0x2c, 0xe0, 0x67, 0x02, 0x58, 0x64, 0xba, 0xe3, 0x82,
-	0x7d, 0x8b, 0x1a, 0xc7, 0xaf, 0x6a, 0x32, 0xa8, 0x2a, 0x73, 0xfd, 0x7b, 0x11, 0x9c, 0x1c, 0xe9,
-	0x84, 0x73, 0x5e, 0xe7, 0x34, 0xef, 0x39, 0xdd, 0xe4, 0x34, 0xbf, 0xef, 0x4a, 0xbe, 0x7a, 0x5f,
-	0x5f, 0xfe, 0x5f, 0x47, 0xe5, 0xef, 0xf5, 0xd8, 0xfd, 0x88, 0xfc, 0xf7, 0x5d, 0x89, 0x17, 0xf1,
-	0x91, 0x75, 0x03, 0xbc, 0x3a, 0x52, 0x51, 0x8a, 0xaa, 0xa8, 0x18, 0xd3, 0xc1, 0x08, 0x1a, 0xd7,
-	0x90, 0xed, 0x95, 0xdd, 0xc9, 0x89, 0x07, 0x68, 0x28, 0xa6, 0x0b, 0x5f, 0x43, 0x3e, 0x12, 0xd6,
-	0x81, 0xb8, 0x8e, 0x14, 0x35, 0x37, 0x45, 0x9b, 0xe1, 0xec, 0x38, 0xeb, 0x35, 0x13, 0xdb, 0x5b,
-	0xb7, 0x10, 0x56, 0x2a, 0xa7, 0x49, 0x37, 0xec, 0xbb, 0xd2, 0x09, 0x02, 0xb9, 0x60, 0xf5, 0x74,
-	0x8c, 0x7a, 0x7d, 0xbc, 0x25, 0x53, 0x0a, 0x42, 0x85, 0x15, 0xdd, 0xc8, 0x4d, 0x4f, 0x44, 0x45,
-	0x20, 0x3c, 0x15, 0x79, 0x66, 0xf2, 0xf8, 0x39, 0x09, 0xe6, 0x69, 0xc1, 0xde, 0x8c, 0x34, 0xae,
-	0x44, 0x1a, 0x3c, 0xbe, 0x52, 0x50, 0x48, 0xa4, 0x2c, 0x5b, 0x20, 0x1d, 0x08, 0xca, 0xeb, 0xee,
-	0xa9, 0xca, 0x67, 0xbb, 0xde, 0x12, 0xb2, 0x34, 0x2a, 0xbd, 0x13, 0xc4, 0xfc, 0x5a, 0x62, 0x02,
-	0x01, 0x23, 0xcb, 0xda, 0x0f, 0x49, 0x00, 0x6f, 0xb1, 0x6d, 0x9b, 0x4b, 0xdc, 0x7f, 0x41, 0x56,
-	0xe9, 0xf7, 0x0d, 0x1d, 0xa9, 0x1d, 0xdd, 0x54, 0xd1, 0x43, 0x9a, 0x3d, 0x51, 0xce, 0xb0, 0xc1,
-	0x3a, 0x19, 0x83, 0x77, 0x40, 0x96, 0x5f, 0x34, 0x48, 0xe4, 0x44, 0x58, 0xff, 0x7f, 0xd9, 0xd2,
-	0x16, 0x13, 0x57, 0x86, 0x6b, 0x7f, 0x07, 0xde, 0x8c, 0xe7, 0x23, 0x7d, 0xe9, 0x7f, 0x07, 0xab,
-	0x3c, 0x46, 0xc7, 0x45, 0x08, 0x3f, 0x02, 0xd3, 0xb4, 0x3a, 0xbe, 0xe2, 0x8b, 0xe3, 0x4b, 0x12,
-	0xe3, 0x60, 0x28, 0x96, 0xa1, 0x47, 0x22, 0x38, 0xcb, 0x05, 0x30, 0x26, 0x59, 0x0e, 0x00, 0x5d,
-	0x63, 0xe0, 0x60, 0x64, 0xfb, 0x3a, 0xcb, 0x56, 0xda, 0x43, 0x57, 0x9a, 0x5b, 0xf1, 0x46, 0xa9,
-	0xd2, 0xe6, 0xd8, 0x2b, 0x54, 0x6b, 0xef, 0x4f, 0x54, 0xc1, 0x11, 0x8d, 0x1c, 0x90, 0xc0, 0xfb,
-	0x91, 0xfd, 0x29, 0x49, 0xfb, 0xe8, 0x55, 0x73, 0x3f, 0x4f, 0x96, 0x28, 0x2e, 0xf3, 0xe1, 0xcd,
-	0x4a, 0x19, 0x57, 0x85, 0x0b, 0x07, 0x57, 0x21, 0x9e, 0x93, 0x0a, 0x64, 0x1d, 0xcb, 0xd5, 0x23,
-	0x54, 0x9b, 0xbb, 0x20, 0xd3, 0xb5, 0x91, 0x82, 0x91, 0xda, 0x21, 0x87, 0xc0, 0x9c, 0x48, 0xdd,
-	0xcf, 0x97, 0xbc, 0x13, 0x62, 0xc9, 0x3f, 0xf7, 0x95, 0xda, 0xfe, 0x09, 0xb1, 0xf2, 0x2f, 0xc6,
-	0x98, 0x66, 0x38, 0x32, 0xf3, 0xe4, 0x77, 0x72, 0x00, 0xe2, 0x06, 0x08, 0xef, 0xa0, 0xaf, 0x06,
-	0xbc, 0x53, 0xaf, 0xce, 0xcb, 0x70, 0x01, 0x2f, 0x37, 0xb0, 0xfc, 0xeb, 0x34, 0xf8, 0xcf, 0x4b,
-	0xe2, 0x7d, 0x9b, 0x76, 0xd0, 0x37, 0xbd, 0x49, 0xf1, 0x8b, 0x6e, 0xea, 0x78, 0x17, 0xdd, 0x60,
-	0x3f, 0x14, 0x27, 0xdc, 0x0f, 0x65, 0x30, 0xf3, 0x00, 0xd9, 0x8e, 0x6e, 0x99, 0x54, 0x22, 0x62,
-	0xe5, 0xea, 0xc4, 0xde, 0xdc, 0xf5, 0xf0, 0xb2, 0x4f, 0x04, 0x7b, 0xe0, 0xc4, 0xba, 0xae, 0xad,
-	0x77, 0x36, 0x15, 0x8c, 0xec, 0x9e, 0x62, 0x6f, 0xd0, 0xcd, 0x4d, 0xac, 0x7c, 0x4c, 0x0a, 0x4e,
-	0x66, 0xee, 0xf9, 0x13, 0x2f, 0x5c, 0xe9, 0xe2, 0x44, 0xb6, 0x6e, 0x34, 0x5a, 0x4d, 0x39, 0xcc,
-	0x31, 0x3a, 0x29, 0xcd, 0x70, 0xe7, 0xdf, 0x68, 0x5b, 0xcd, 0x1e, 0x53, 0x5b, 0xcd, 0x1d, 0x51,
-	0x5b, 0x7d, 0x93, 0x02, 0xf9, 0x51, 0x89, 0xe2, 0xe7, 0xd2, 0xcd, 0x83, 0x9a, 0xea, 0x76, 0xac,
-	0xa9, 0x8e, 0xb6, 0x87, 0xac, 0xf1, 0x3d, 0x74, 0x6c, 0xf7, 0x9c, 0xd0, 0xc5, 0x2d, 0x75, 0x0c,
-	0x17, 0x37, 0xee, 0x3e, 0x2a, 0x86, 0xee, 0xa3, 0xcb, 0xdf, 0xa6, 0x40, 0x86, 0x3f, 0x6c, 0x85,
-	0x5c, 0x11, 0xfe, 0x89, 0x3b, 0xe4, 0x71, 0xe7, 0xf6, 0x0e, 0x10, 0x35, 0xc3, 0x31, 0xbd, 0xfb,
-	0x5f, 0xe5, 0xc3, 0xa1, 0x2b, 0x89, 0xa4, 0x9f, 0x0e, 0xd7, 0x84, 0x94, 0x8a, 0x50, 0x1a, 0x84,
-	0x52, 0x0c, 0x28, 0x1b, 0x87, 0xa1, 0x6c, 0x50, 0x4a, 0x42, 0xc5, 0x4e, 0x1b, 0x0a, 0x98, 0xf5,
-	0x8b, 0x01, 0x3f, 0x00, 0x62, 0x0f, 0x61, 0x85, 0x5d, 0x3d, 0xff, 0xe6, 0x88, 0x1c, 0x7c, 0x10,
-	0xa0, 0x20, 0xb2, 0x3a, 0x90, 0x2d, 0x8a, 0x26, 0x37, 0x23, 0xd3, 0xff, 0xcc, 0xc4, 0x2f, 0x22,
-	0xc8, 0xae, 0x58, 0xbd, 0x9e, 0x8e, 0x57, 0x2c, 0x13, 0xa3, 0x87, 0x98, 0x5f, 0x0c, 0x85, 0xe3,
-	0x5b, 0x0c, 0x93, 0xde, 0x62, 0x48, 0x3a, 0xf7, 0x93, 0x23, 0x5f, 0x0c, 0xbf, 0x02, 0x4b, 0x5d,
-	0x1a, 0x13, 0x59, 0xa2, 0x48, 0x89, 0x3a, 0x6b, 0x48, 0xd3, 0xfd, 0x9a, 0x13, 0x6d, 0xc1, 0x15,
-	0x7f, 0x9e, 0xe0, 0x2b, 0x64, 0xf6, 0x70, 0x96, 0xe1, 0xc8, 0xd0, 0x0d, 0xc3, 0x31, 0x29, 0x11,
-	0xdc, 0x04, 0x30, 0x62, 0x1e, 0x99, 0x2a, 0x53, 0x47, 0x7d, 0xe8, 0x4a, 0x0b, 0x21, 0xe3, 0x35,
-	0x53, 0x3d, 0x9c, 0xe9, 0x85, 0x90, 0xe9, 0x9a, 0xa9, 0x86, 0xe3, 0x36, 0x82, 0xb8, 0xa7, 0xc6,
-	0xc4, 0xdd, 0x38, 0x74, 0xdc, 0x8d, 0x70, 0xdc, 0x0d, 0x3f, 0xee, 0xf3, 0x8f, 0x84, 0xd1, 0x97,
-	0x99, 0xe0, 0xc3, 0x05, 0xbc, 0x0c, 0x16, 0x5b, 0xcd, 0x4e, 0xab, 0x7d, 0xbd, 0xbd, 0xda, 0xea,
-	0xc8, 0xab, 0xcd, 0x66, 0xbd, 0x79, 0x63, 0x21, 0x91, 0x3f, 0xb3, 0xbd, 0x53, 0xcc, 0xc5, 0x3f,
-	0x73, 0x0c, 0x4c, 0x53, 0x37, 0xb5, 0x30, 0xa8, 0x5a, 0x6b, 0xd4, 0xda, 0xb5, 0xea, 0x82, 0x70,
-	0x00, 0xa8, 0x8a, 0x0c, 0x84, 0x91, 0x9a, 0x17, 0x1f, 0xff, 0x58, 0x48, 0x9c, 0xff, 0x2e, 0x09,
-	0xe6, 0x23, 0x1b, 0x3d, 0xbc, 0x08, 0x16, 0x1b, 0xad, 0xb8, 0x0f, 0xf9, 0xed, 0x9d, 0xe2, 0xe9,
-	0xe8, 0xa1, 0x80, 0x79, 0x10, 0x82, 0xb4, 0x6a, 0xd7, 0x1b, 0x04, 0x22, 0x8c, 0x85, 0xb4, 0x90,
-	0x62, 0x10, 0x48, 0x19, 0x2c, 0x84, 0x21, 0xb5, 0xea, 0x42, 0x32, 0xff, 0xef, 0xed, 0x9d, 0xe2,
-	0xa9, 0x31, 0x08, 0xa4, 0x86, 0x6d, 0xf8, 0x51, 0xa6, 0xc6, 0xda, 0x60, 0x31, 0xc2, 0xf7, 0xc0,
-	0xc9, 0x00, 0xb2, 0xda, 0xf4, 0x1d, 0x13, 0xbd, 0xd4, 0x44, 0x40, 0xab, 0xa6, 0xe3, 0xb9, 0xc6,
-	0x52, 0xb3, 0x09, 0xd2, 0xdc, 0xbd, 0x13, 0xbe, 0x0b, 0x96, 0xda, 0xb7, 0x3f, 0xad, 0xaf, 0xc4,
-	0x13, 0x73, 0x7a, 0x7b, 0xa7, 0x08, 0xf9, 0x2b, 0x2a, 0x4b, 0x4a, 0x14, 0x11, 0x54, 0x26, 0x8a,
-	0x08, 0xd5, 0xa4, 0x72, 0x73, 0x77, 0x58, 0x10, 0x9e, 0x0f, 0x0b, 0xc2, 0x93, 0xbd, 0x42, 0xe2,
-	0xe9, 0x5e, 0x41, 0x78, 0xbe, 0x57, 0x48, 0xfc, 0xb6, 0x57, 0x48, 0xdc, 0x7f, 0x25, 0xe9, 0x85,
-	0x3e, 0x2c, 0xaf, 0x4d, 0xd3, 0xe7, 0xcb, 0x7f, 0x05, 0x00, 0x00, 0xff, 0xff, 0x2a, 0xdc, 0xfa,
-	0xcf, 0x71, 0x16, 0x00, 0x00,
+	// 1297 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe4, 0x58, 0xcf, 0x6f, 0x1b, 0x45,
+	0x14, 0xf6, 0xda, 0x9b, 0x1f, 0x8c, 0x63, 0xc7, 0x99, 0xa6, 0x95, 0xb1, 0x5a, 0xaf, 0x55, 0x21,
+	0x54, 0x55, 0x60, 0xd3, 0x94, 0x4a, 0x51, 0x10, 0x12, 0x75, 0x6c, 0x52, 0xab, 0xae, 0x81, 0xdd,
+	0x84, 0x42, 0x0f, 0x98, 0xb5, 0x77, 0x58, 0xaf, 0xb2, 0xbf, 0xd8, 0x1d, 0x37, 0xcd, 0x01, 0x24,
+	0xc4, 0xa5, 0x0a, 0x17, 0x8e, 0x1c, 0x88, 0x54, 0x89, 0x7f, 0x82, 0x1b, 0xd7, 0x70, 0xcb, 0x11,
+	0x2e, 0x7b, 0x70, 0x2e, 0x28, 0x07, 0xfe, 0x80, 0x9e, 0xd0, 0xcc, 0xce, 0x7a, 0x77, 0xbd, 0x4e,
+	0x21, 0x6e, 0x84, 0x90, 0x38, 0x79, 0x67, 0xdf, 0xbc, 0xef, 0xcd, 0x7b, 0xdf, 0x37, 0x6f, 0x66,
+	0x0d, 0xae, 0xd9, 0x8e, 0x85, 0xad, 0xda, 0x63, 0xd9, 0xd1, 0x2d, 0xd5, 0xee, 0xd5, 0x0c, 0x84,
+	0x65, 0x45, 0xc6, 0x72, 0x95, 0xbe, 0x87, 0xcb, 0xbe, 0xa1, 0x1a, 0xd8, 0x4b, 0x82, 0x6a, 0x59,
+	0xaa, 0x8e, 0x6a, 0xd4, 0xdc, 0x1b, 0x7e, 0x51, 0xc3, 0x9a, 0x81, 0x5c, 0x2c, 0x1b, 0xb6, 0xef,
+	0x51, 0x7a, 0x53, 0xd5, 0xf0, 0x60, 0xd8, 0xab, 0xf6, 0x2d, 0xa3, 0xa6, 0x5a, 0xaa, 0x15, 0xce,
+	0x24, 0x23, 0x3f, 0x1a, 0x79, 0xf2, 0xa7, 0x5f, 0xff, 0x3d, 0x0d, 0xe0, 0x03, 0x16, 0xb3, 0x81,
+	0xdc, 0xbe, 0xa3, 0xd9, 0xd8, 0x72, 0xe0, 0x1d, 0x90, 0x93, 0x6d, 0x5b, 0xd7, 0x90, 0xd2, 0xd5,
+	0x4c, 0x05, 0x3d, 0x29, 0x72, 0x15, 0xee, 0x06, 0x5f, 0x2f, 0x9c, 0x7a, 0xc2, 0x12, 0x33, 0xb4,
+	0xc8, 0x7b, 0x31, 0x36, 0x82, 0x32, 0xc8, 0xb9, 0xd8, 0x72, 0x64, 0x15, 0x75, 0x4d, 0x4b, 0x41,
+	0x6e, 0x31, 0x5d, 0xc9, 0xdc, 0xc8, 0xae, 0xbd, 0x5e, 0x9d, 0x48, 0xa3, 0x2a, 0xf9, 0xb3, 0x3a,
+	0x96, 0x82, 0xc2, 0xa8, 0xf5, 0xd5, 0x23, 0x4f, 0xe0, 0x48, 0x08, 0x37, 0x34, 0xbb, 0x62, 0x6c,
+	0x04, 0x3f, 0x05, 0x59, 0xdd, 0x52, 0xbb, 0x2e, 0x76, 0x90, 0x6c, 0xb8, 0xc5, 0x0c, 0x0d, 0xf0,
+	0x5a, 0x22, 0x40, 0xdb, 0x52, 0x25, 0x3a, 0x25, 0x02, 0x0f, 0x19, 0x3c, 0xd0, 0x03, 0xa3, 0x2b,
+	0x46, 0x9e, 0xe1, 0x3d, 0x30, 0x8f, 0x2d, 0x5b, 0xeb, 0xbb, 0x45, 0x9e, 0xa2, 0x56, 0x12, 0xa8,
+	0xdb, 0xc4, 0x1c, 0x41, 0xcc, 0x33, 0x44, 0xe6, 0x27, 0xb2, 0xdf, 0x0d, 0xfe, 0x8f, 0x67, 0x02,
+	0x77, 0xfd, 0x4f, 0x0e, 0x5c, 0x9e, 0x9a, 0x28, 0x7c, 0x00, 0x96, 0xa2, 0x75, 0xa2, 0xd5, 0xcd,
+	0xae, 0x5d, 0x7d, 0x51, 0x99, 0xea, 0x4b, 0x47, 0x9e, 0x90, 0x3a, 0xf6, 0xe3, 0xa5, 0xc4, 0x6c,
+	0xa4, 0x28, 0x70, 0x03, 0xcc, 0xbb, 0x58, 0xc6, 0x43, 0x52, 0x6f, 0xee, 0x46, 0x7e, 0xed, 0xfa,
+	0x8b, 0x80, 0x24, 0x3a, 0x53, 0x64, 0x1e, 0xb0, 0x01, 0x16, 0x19, 0x54, 0x50, 0xcc, 0x33, 0xbd,
+	0x23, 0x89, 0xf3, 0x24, 0x71, 0x71, 0xec, 0xc9, 0x12, 0x7e, 0x08, 0x56, 0x12, 0x53, 0x21, 0x04,
+	0xbc, 0x2d, 0xe3, 0x01, 0xcd, 0xf1, 0x15, 0x91, 0x3e, 0x93, 0x77, 0x43, 0x17, 0x29, 0x74, 0xb9,
+	0xbc, 0x48, 0x9f, 0xe1, 0x2a, 0x98, 0xc3, 0x16, 0x96, 0xf5, 0x62, 0x86, 0xbe, 0xf4, 0x07, 0x0c,
+	0xf8, 0x47, 0x1e, 0x5c, 0x9a, 0xc2, 0x28, 0xd4, 0xc0, 0x22, 0xad, 0x78, 0x57, 0x53, 0x28, 0xfe,
+	0x5c, 0xbd, 0x33, 0xf2, 0x84, 0x05, 0x4a, 0x53, 0xab, 0x71, 0xea, 0x09, 0x0b, 0xd4, 0xdc, 0x52,
+	0x9e, 0x7b, 0xc2, 0xdb, 0x6c, 0x63, 0x28, 0xf2, 0xd0, 0xd8, 0x95, 0x77, 0x65, 0x8b, 0x6e, 0x11,
+	0x3f, 0xc7, 0xe0, 0xc7, 0xde, 0x55, 0x6b, 0x78, 0xdf, 0x46, 0x6e, 0x95, 0x41, 0x88, 0x01, 0x00,
+	0xfc, 0x1a, 0xe4, 0x42, 0xdd, 0x91, 0x78, 0x69, 0x1a, 0xef, 0xd1, 0xc8, 0x13, 0xb2, 0xe3, 0xa5,
+	0xd1, 0x98, 0xd9, 0xb1, 0xa4, 0x68, 0xdc, 0xf5, 0x73, 0xc5, 0x8d, 0x40, 0x89, 0x51, 0x20, 0xb8,
+	0x3e, 0xe6, 0x38, 0x43, 0x39, 0xae, 0x9c, 0x2d, 0xf9, 0x24, 0xc3, 0x0e, 0xb2, 0x75, 0xad, 0x2f,
+	0x07, 0xc2, 0x4e, 0x32, 0x2c, 0xfa, 0x13, 0x92, 0x0c, 0x07, 0x9e, 0xb0, 0x05, 0xf8, 0x01, 0x92,
+	0x95, 0xe2, 0x1c, 0x95, 0xea, 0xb5, 0x69, 0xd1, 0x9b, 0x26, 0x76, 0xf6, 0x49, 0x33, 0xa9, 0x5f,
+	0x21, 0x5a, 0x3d, 0xf5, 0x84, 0x3c, 0x71, 0x79, 0xc3, 0x32, 0x34, 0x8c, 0x0c, 0x1b, 0xef, 0x8b,
+	0x14, 0x82, 0x40, 0x61, 0x59, 0xd3, 0x8b, 0xf3, 0xe7, 0x82, 0x22, 0x2e, 0x51, 0x28, 0x32, 0x66,
+	0xf2, 0xf8, 0x99, 0x03, 0x2b, 0x89, 0x0c, 0xe0, 0x53, 0x0e, 0x2c, 0x47, 0x77, 0x59, 0x28, 0x92,
+	0xcf, 0x47, 0x9e, 0x90, 0x8b, 0x6c, 0x09, 0x4a, 0x5b, 0x2e, 0xb2, 0xa3, 0x28, 0x71, 0x1b, 0xe7,
+	0x22, 0x2e, 0x06, 0x27, 0xc6, 0xc1, 0xc6, 0x7b, 0x20, 0x1d, 0xee, 0x01, 0xb6, 0xf4, 0x5f, 0xd2,
+	0x60, 0x79, 0xa2, 0xab, 0xfc, 0x9b, 0xaa, 0x7e, 0x6f, 0xa2, 0x73, 0x5c, 0x9d, 0xde, 0xf2, 0x7c,
+	0x45, 0xd5, 0x01, 0x69, 0x75, 0x6e, 0x5c, 0x5d, 0xfb, 0xc9, 0x7e, 0x3c, 0x57, 0xff, 0x84, 0xf5,
+	0xc5, 0xd5, 0xb0, 0xbb, 0x86, 0xd4, 0xbd, 0xd4, 0x9e, 0x88, 0xf4, 0xeb, 0x90, 0xfc, 0x6c, 0xa4,
+	0xf8, 0xff, 0x25, 0xda, 0x8b, 0x60, 0x41, 0x56, 0x14, 0x07, 0xb9, 0x2e, 0x63, 0x3e, 0x18, 0xb2,
+	0xa5, 0x7f, 0x93, 0x06, 0x79, 0x5a, 0xdf, 0x71, 0x86, 0xff, 0xa3, 0x8e, 0x16, 0xd2, 0x57, 0x18,
+	0x4f, 0x61, 0x9b, 0x18, 0xb6, 0x66, 0x38, 0x1f, 0x17, 0x83, 0xf3, 0x31, 0x7e, 0x36, 0x4a, 0xa0,
+	0xe0, 0x17, 0x34, 0xcc, 0x95, 0x26, 0x9a, 0x5d, 0x13, 0xa6, 0x6b, 0x7d, 0xbc, 0x98, 0x08, 0x62,
+	0x1e, 0xc7, 0x2c, 0xc1, 0xde, 0xe5, 0xc0, 0x0a, 0x79, 0x87, 0xbe, 0x1c, 0x22, 0xb3, 0x8f, 0x3a,
+	0x43, 0xa3, 0x87, 0x1c, 0xf8, 0x11, 0xe0, 0x75, 0xdd, 0x35, 0xd9, 0x8d, 0xe9, 0xdd, 0x91, 0x27,
+	0xf0, 0xed, 0xb6, 0xd4, 0x79, 0xee, 0x09, 0xb7, 0xce, 0x57, 0xb7, 0xb6, 0xd4, 0x11, 0x29, 0x14,
+	0x81, 0x54, 0x09, 0x64, 0x3a, 0x84, 0xdc, 0x9a, 0x05, 0x72, 0x8b, 0x42, 0x12, 0x28, 0x96, 0xc1,
+	0x77, 0x19, 0xb0, 0x14, 0xed, 0xb6, 0xf0, 0xb3, 0x84, 0xfc, 0x36, 0x23, 0xf2, 0x7b, 0x79, 0xcd,
+	0x59, 0xd3, 0x35, 0x77, 0x7f, 0x42, 0x73, 0x17, 0x77, 0x6c, 0x06, 0xa5, 0xcb, 0x5c, 0x58, 0xe9,
+	0xc6, 0x04, 0xf3, 0x17, 0x46, 0x30, 0x63, 0x43, 0x06, 0x8b, 0x01, 0x19, 0xf0, 0x1d, 0xc0, 0x93,
+	0x4f, 0x01, 0xa6, 0xfc, 0xbf, 0x39, 0x23, 0x43, 0xa1, 0x52, 0x27, 0x72, 0xdc, 0x90, 0xfb, 0x3c,
+	0x2d, 0xee, 0x92, 0x48, 0x9f, 0x59, 0x88, 0x5f, 0x79, 0x90, 0xdb, 0xb4, 0x0c, 0x43, 0xc3, 0x9b,
+	0x96, 0x89, 0xd1, 0x13, 0x0c, 0x45, 0xb0, 0xf0, 0x18, 0x39, 0xae, 0x66, 0x05, 0x8a, 0x5d, 0x3f,
+	0x37, 0xcb, 0x1f, 0xfb, 0xfe, 0x62, 0x00, 0x04, 0x0d, 0x90, 0x1f, 0x68, 0xea, 0xa0, 0xbb, 0x27,
+	0x63, 0xe4, 0x18, 0xb2, 0xb3, 0xcb, 0x94, 0xfb, 0x3e, 0x69, 0xc0, 0xf7, 0x34, 0x75, 0xf0, 0x30,
+	0x30, 0xcc, 0xc6, 0x43, 0x6e, 0x10, 0xc5, 0x80, 0x5f, 0x81, 0xd5, 0x3e, 0xcd, 0x09, 0x23, 0xa5,
+	0x4b, 0x28, 0xea, 0xf6, 0x90, 0xaa, 0x05, 0x9c, 0x13, 0x6d, 0xc1, 0xcd, 0xc0, 0x4e, 0xfc, 0xeb,
+	0xc4, 0x3a, 0x5b, 0x64, 0x38, 0x0e, 0xb4, 0xa5, 0xbb, 0x26, 0x05, 0x82, 0x7b, 0x00, 0x4e, 0x84,
+	0x47, 0xa6, 0xc2, 0xd4, 0xd1, 0x1a, 0x79, 0x42, 0x21, 0x16, 0xbc, 0x69, 0x2a, 0xb3, 0x85, 0x2e,
+	0xc4, 0x42, 0x37, 0x4d, 0x25, 0x9e, 0xb7, 0x1e, 0xe6, 0x3d, 0x37, 0x25, 0xef, 0xf6, 0xcc, 0x79,
+	0xb7, 0xe3, 0x79, 0xb7, 0x83, 0xbc, 0x6f, 0x7e, 0xcb, 0x8d, 0xaf, 0xfb, 0xe1, 0x77, 0x05, 0xbc,
+	0x0d, 0x56, 0xa4, 0x4e, 0x57, 0xda, 0xbe, 0xbb, 0xbd, 0x23, 0x75, 0xc5, 0x9d, 0x4e, 0xa7, 0xd5,
+	0xd9, 0x2a, 0xa4, 0x4a, 0x57, 0x0f, 0x0e, 0x2b, 0xc5, 0xe4, 0x57, 0xc8, 0xd0, 0x34, 0x35, 0x53,
+	0x8d, 0x3b, 0x35, 0x9a, 0xed, 0xe6, 0x76, 0xb3, 0x51, 0xe0, 0xce, 0x70, 0x6a, 0x20, 0x1d, 0x61,
+	0xa4, 0x94, 0xf8, 0xa7, 0x3f, 0x95, 0x53, 0x37, 0x7f, 0x48, 0x83, 0xe5, 0x89, 0x9b, 0x2f, 0xbc,
+	0x05, 0x56, 0xda, 0x52, 0x72, 0x0d, 0xa5, 0x83, 0xc3, 0xca, 0x95, 0xc9, 0x5b, 0x32, 0x5b, 0x41,
+	0xcc, 0x45, 0x6a, 0xde, 0x6d, 0x13, 0x17, 0x6e, 0xaa, 0x8b, 0x84, 0x64, 0x9d, 0xb8, 0xd4, 0x40,
+	0x21, 0xee, 0xd2, 0x6c, 0x14, 0xd2, 0xa5, 0x57, 0x0f, 0x0e, 0x2b, 0x97, 0xa7, 0x78, 0x20, 0x25,
+	0x1e, 0x23, 0xc8, 0x32, 0x33, 0x35, 0x06, 0xcb, 0x11, 0xde, 0x01, 0x97, 0x42, 0x97, 0x9d, 0x4e,
+	0xb0, 0x30, 0xde, 0x2f, 0xcd, 0x84, 0xd3, 0x8e, 0xe9, 0xfa, 0x4b, 0x63, 0xa5, 0xd9, 0x03, 0xd9,
+	0xc8, 0xed, 0x0d, 0xbe, 0x05, 0x56, 0xb7, 0x3f, 0xf8, 0xb0, 0xb5, 0x99, 0x2c, 0xcc, 0x95, 0x83,
+	0xc3, 0x0a, 0x8c, 0x4c, 0x0d, 0x8a, 0x32, 0xe9, 0x11, 0x32, 0x33, 0xe9, 0x11, 0xe3, 0xa4, 0x7e,
+	0xff, 0x68, 0x54, 0xe6, 0x8e, 0x47, 0x65, 0xee, 0xfb, 0x93, 0x72, 0xea, 0xd9, 0x49, 0x99, 0x3b,
+	0x3e, 0x29, 0xa7, 0x7e, 0x3b, 0x29, 0xa7, 0x1e, 0xfd, 0x23, 0xe9, 0xc5, 0xfe, 0x11, 0xe9, 0xcd,
+	0xd3, 0xf1, 0xed, 0xbf, 0x02, 0x00, 0x00, 0xff, 0xff, 0x76, 0x37, 0x6b, 0x89, 0x2a, 0x11, 0x00,
+	0x00,
 }
 
-func (this *StorageNode) Equal(that interface{}) bool {
+func (this *MetadataDescriptor) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*StorageNode)
+	that1, ok := that.(*MetadataDescriptor)
 	if !ok {
-		that2, ok := that.(StorageNode)
+		that2, ok := that.(MetadataDescriptor)
 		if ok {
 			that1 = &that2
 		} else {
@@ -1198,71 +1017,32 @@ func (this *StorageNode) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.StorageNodeID != that1.StorageNodeID {
+	if this.AppliedIndex != that1.AppliedIndex {
 		return false
 	}
-	if this.Address != that1.Address {
+	if len(this.StorageNodes) != len(that1.StorageNodes) {
 		return false
 	}
-	return true
-}
-func (this *Replica) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*Replica)
-	if !ok {
-		that2, ok := that.(Replica)
-		if ok {
-			that1 = &that2
-		} else {
+	for i := range this.StorageNodes {
+		if !this.StorageNodes[i].Equal(that1.StorageNodes[i]) {
 			return false
 		}
 	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
+	if len(this.LogStreams) != len(that1.LogStreams) {
 		return false
 	}
-	if !this.StorageNode.Equal(&that1.StorageNode) {
-		return false
-	}
-	if this.TopicID != that1.TopicID {
-		return false
-	}
-	if this.LogStreamID != that1.LogStreamID {
-		return false
-	}
-	return true
-}
-func (this *StorageDescriptor) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*StorageDescriptor)
-	if !ok {
-		that2, ok := that.(StorageDescriptor)
-		if ok {
-			that1 = &that2
-		} else {
+	for i := range this.LogStreams {
+		if !this.LogStreams[i].Equal(that1.LogStreams[i]) {
 			return false
 		}
 	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
+	if len(this.Topics) != len(that1.Topics) {
 		return false
 	}
-	if this.Path != that1.Path {
-		return false
-	}
-	if this.Used != that1.Used {
-		return false
-	}
-	if this.Total != that1.Total {
-		return false
+	for i := range this.Topics {
+		if !this.Topics[i].Equal(that1.Topics[i]) {
+			return false
+		}
 	}
 	return true
 }
@@ -1301,14 +1081,14 @@ func (this *StorageNodeDescriptor) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *ReplicaDescriptor) Equal(that interface{}) bool {
+func (this *StorageDescriptor) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*ReplicaDescriptor)
+	that1, ok := that.(*StorageDescriptor)
 	if !ok {
-		that2, ok := that.(ReplicaDescriptor)
+		that2, ok := that.(StorageDescriptor)
 		if ok {
 			that1 = &that2
 		} else {
@@ -1320,10 +1100,13 @@ func (this *ReplicaDescriptor) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.StorageNodeID != that1.StorageNodeID {
+	if this.Path != that1.Path {
 		return false
 	}
-	if this.Path != that1.Path {
+	if this.Used != that1.Used {
+		return false
+	}
+	if this.Total != that1.Total {
 		return false
 	}
 	return true
@@ -1372,6 +1155,33 @@ func (this *LogStreamDescriptor) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *ReplicaDescriptor) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ReplicaDescriptor)
+	if !ok {
+		that2, ok := that.(ReplicaDescriptor)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.StorageNodeID != that1.StorageNodeID {
+		return false
+	}
+	if this.Path != that1.Path {
+		return false
+	}
+	return true
+}
 func (this *TopicDescriptor) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -1407,14 +1217,14 @@ func (this *TopicDescriptor) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *MetadataDescriptor) Equal(that interface{}) bool {
+func (this *StorageNode) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*MetadataDescriptor)
+	that1, ok := that.(*StorageNode)
 	if !ok {
-		that2, ok := that.(MetadataDescriptor)
+		that2, ok := that.(StorageNode)
 		if ok {
 			that1 = &that2
 		} else {
@@ -1426,32 +1236,92 @@ func (this *MetadataDescriptor) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.AppliedIndex != that1.AppliedIndex {
+	if this.StorageNodeID != that1.StorageNodeID {
 		return false
 	}
-	if len(this.StorageNodes) != len(that1.StorageNodes) {
+	if this.Address != that1.Address {
 		return false
 	}
-	for i := range this.StorageNodes {
-		if !this.StorageNodes[i].Equal(that1.StorageNodes[i]) {
+	return true
+}
+func (this *TopicLogStream) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*TopicLogStream)
+	if !ok {
+		that2, ok := that.(TopicLogStream)
+		if ok {
+			that1 = &that2
+		} else {
 			return false
 		}
 	}
-	if len(this.LogStreams) != len(that1.LogStreams) {
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
 		return false
 	}
-	for i := range this.LogStreams {
-		if !this.LogStreams[i].Equal(that1.LogStreams[i]) {
+	if this.TopicID != that1.TopicID {
+		return false
+	}
+	if this.LogStreamID != that1.LogStreamID {
+		return false
+	}
+	return true
+}
+func (this *LogStreamReplica) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*LogStreamReplica)
+	if !ok {
+		that2, ok := that.(LogStreamReplica)
+		if ok {
+			that1 = &that2
+		} else {
 			return false
 		}
 	}
-	if len(this.Topics) != len(that1.Topics) {
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
 		return false
 	}
-	for i := range this.Topics {
-		if !this.Topics[i].Equal(that1.Topics[i]) {
+	if !this.StorageNode.Equal(&that1.StorageNode) {
+		return false
+	}
+	if !this.TopicLogStream.Equal(&that1.TopicLogStream) {
+		return false
+	}
+	return true
+}
+func (this *LogSequenceNumber) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*LogSequenceNumber)
+	if !ok {
+		that2, ok := that.(LogSequenceNumber)
+		if ok {
+			that1 = &that2
+		} else {
 			return false
 		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.LLSN != that1.LLSN {
+		return false
+	}
+	if this.GLSN != that1.GLSN {
+		return false
 	}
 	return true
 }
@@ -1515,7 +1385,7 @@ func (this *LogEntry) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (m *StorageNode) Marshal() (dAtA []byte, err error) {
+func (m *MetadataDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1525,110 +1395,62 @@ func (m *StorageNode) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *StorageNode) MarshalTo(dAtA []byte) (int, error) {
+func (m *MetadataDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	size := m.ProtoSize()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *StorageNode) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *MetadataDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Address) > 0 {
-		i -= len(m.Address)
-		copy(dAtA[i:], m.Address)
-		i = encodeVarintMetadata(dAtA, i, uint64(len(m.Address)))
-		i--
-		dAtA[i] = 0x12
+	if len(m.Topics) > 0 {
+		for iNdEx := len(m.Topics) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Topics[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintMetadata(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x22
+		}
 	}
-	if m.StorageNodeID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.StorageNodeID))
+	if len(m.LogStreams) > 0 {
+		for iNdEx := len(m.LogStreams) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.LogStreams[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintMetadata(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.StorageNodes) > 0 {
+		for iNdEx := len(m.StorageNodes) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.StorageNodes[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintMetadata(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.AppliedIndex != 0 {
+		i = encodeVarintMetadata(dAtA, i, uint64(m.AppliedIndex))
 		i--
 		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *Replica) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *Replica) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Replica) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.LogStreamID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.LogStreamID))
-		i--
-		dAtA[i] = 0x18
-	}
-	if m.TopicID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.TopicID))
-		i--
-		dAtA[i] = 0x10
-	}
-	{
-		size, err := m.StorageNode.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
-		}
-		i -= size
-		i = encodeVarintMetadata(dAtA, i, uint64(size))
-	}
-	i--
-	dAtA[i] = 0xa
-	return len(dAtA) - i, nil
-}
-
-func (m *StorageDescriptor) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *StorageDescriptor) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *StorageDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.Total != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.Total))
-		i--
-		dAtA[i] = 0x18
-	}
-	if m.Used != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.Used))
-		i--
-		dAtA[i] = 0x10
-	}
-	if len(m.Path) > 0 {
-		i -= len(m.Path)
-		copy(dAtA[i:], m.Path)
-		i = encodeVarintMetadata(dAtA, i, uint64(len(m.Path)))
-		i--
-		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -1685,7 +1507,7 @@ func (m *StorageNodeDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *ReplicaDescriptor) Marshal() (dAtA []byte, err error) {
+func (m *StorageDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1695,27 +1517,32 @@ func (m *ReplicaDescriptor) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *ReplicaDescriptor) MarshalTo(dAtA []byte) (int, error) {
+func (m *StorageDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	size := m.ProtoSize()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *ReplicaDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *StorageDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.Total != 0 {
+		i = encodeVarintMetadata(dAtA, i, uint64(m.Total))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.Used != 0 {
+		i = encodeVarintMetadata(dAtA, i, uint64(m.Used))
+		i--
+		dAtA[i] = 0x10
+	}
 	if len(m.Path) > 0 {
 		i -= len(m.Path)
 		copy(dAtA[i:], m.Path)
 		i = encodeVarintMetadata(dAtA, i, uint64(len(m.Path)))
 		i--
-		dAtA[i] = 0x12
-	}
-	if m.StorageNodeID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.StorageNodeID))
-		i--
-		dAtA[i] = 0x8
+		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -1792,6 +1619,41 @@ func (m *LogStreamDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *ReplicaDescriptor) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ReplicaDescriptor) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ReplicaDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Path) > 0 {
+		i -= len(m.Path)
+		copy(dAtA[i:], m.Path)
+		i = encodeVarintMetadata(dAtA, i, uint64(len(m.Path)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.StorageNodeID != 0 {
+		i = encodeVarintMetadata(dAtA, i, uint64(m.StorageNodeID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *TopicDescriptor) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
@@ -1813,21 +1675,21 @@ func (m *TopicDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.LogStreams) > 0 {
-		dAtA6 := make([]byte, len(m.LogStreams)*10)
-		var j5 int
+		dAtA5 := make([]byte, len(m.LogStreams)*10)
+		var j4 int
 		for _, num1 := range m.LogStreams {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				dAtA6[j5] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA5[j4] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j5++
+				j4++
 			}
-			dAtA6[j5] = uint8(num)
-			j5++
+			dAtA5[j4] = uint8(num)
+			j4++
 		}
-		i -= j5
-		copy(dAtA[i:], dAtA6[:j5])
-		i = encodeVarintMetadata(dAtA, i, uint64(j5))
+		i -= j4
+		copy(dAtA[i:], dAtA5[:j4])
+		i = encodeVarintMetadata(dAtA, i, uint64(j4))
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -1844,7 +1706,7 @@ func (m *TopicDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *MetadataDescriptor) Marshal() (dAtA []byte, err error) {
+func (m *StorageNode) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1854,228 +1716,12 @@ func (m *MetadataDescriptor) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *MetadataDescriptor) MarshalTo(dAtA []byte) (int, error) {
+func (m *StorageNode) MarshalTo(dAtA []byte) (int, error) {
 	size := m.ProtoSize()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MetadataDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.Topics) > 0 {
-		for iNdEx := len(m.Topics) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Topics[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintMetadata(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x22
-		}
-	}
-	if len(m.LogStreams) > 0 {
-		for iNdEx := len(m.LogStreams) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.LogStreams[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintMetadata(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x1a
-		}
-	}
-	if len(m.StorageNodes) > 0 {
-		for iNdEx := len(m.StorageNodes) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.StorageNodes[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintMetadata(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x12
-		}
-	}
-	if m.AppliedIndex != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.AppliedIndex))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *StorageNodeMetadataDescriptor) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *StorageNodeMetadataDescriptor) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *StorageNodeMetadataDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	n7, err7 := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.UpdatedTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(m.UpdatedTime):])
-	if err7 != nil {
-		return 0, err7
-	}
-	i -= n7
-	i = encodeVarintMetadata(dAtA, i, uint64(n7))
-	i--
-	dAtA[i] = 0x2a
-	n8, err8 := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.CreatedTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(m.CreatedTime):])
-	if err8 != nil {
-		return 0, err8
-	}
-	i -= n8
-	i = encodeVarintMetadata(dAtA, i, uint64(n8))
-	i--
-	dAtA[i] = 0x22
-	if len(m.LogStreams) > 0 {
-		for iNdEx := len(m.LogStreams) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.LogStreams[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintMetadata(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x1a
-		}
-	}
-	if m.StorageNode != nil {
-		{
-			size, err := m.StorageNode.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintMetadata(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x12
-	}
-	if m.ClusterID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.ClusterID))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *LogStreamMetadataDescriptor) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *LogStreamMetadataDescriptor) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *LogStreamMetadataDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	n10, err10 := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.UpdatedTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(m.UpdatedTime):])
-	if err10 != nil {
-		return 0, err10
-	}
-	i -= n10
-	i = encodeVarintMetadata(dAtA, i, uint64(n10))
-	i--
-	dAtA[i] = 0x4a
-	n11, err11 := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.CreatedTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(m.CreatedTime):])
-	if err11 != nil {
-		return 0, err11
-	}
-	i -= n11
-	i = encodeVarintMetadata(dAtA, i, uint64(n11))
-	i--
-	dAtA[i] = 0x42
-	if len(m.Path) > 0 {
-		i -= len(m.Path)
-		copy(dAtA[i:], m.Path)
-		i = encodeVarintMetadata(dAtA, i, uint64(len(m.Path)))
-		i--
-		dAtA[i] = 0x3a
-	}
-	if m.HighWatermark != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.HighWatermark))
-		i--
-		dAtA[i] = 0x30
-	}
-	if m.Version != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.Version))
-		i--
-		dAtA[i] = 0x28
-	}
-	if m.Status != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.Status))
-		i--
-		dAtA[i] = 0x20
-	}
-	if m.TopicID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.TopicID))
-		i--
-		dAtA[i] = 0x18
-	}
-	if m.LogStreamID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.LogStreamID))
-		i--
-		dAtA[i] = 0x10
-	}
-	if m.StorageNodeID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.StorageNodeID))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *LogStreamReplicaDescriptor) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *LogStreamReplicaDescriptor) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *LogStreamReplicaDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *StorageNode) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2085,20 +1731,119 @@ func (m *LogStreamReplicaDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, err
 		copy(dAtA[i:], m.Address)
 		i = encodeVarintMetadata(dAtA, i, uint64(len(m.Address)))
 		i--
-		dAtA[i] = 0x22
+		dAtA[i] = 0x12
 	}
-	if m.TopicID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.TopicID))
+	if m.StorageNodeID != 0 {
+		i = encodeVarintMetadata(dAtA, i, uint64(m.StorageNodeID))
 		i--
-		dAtA[i] = 0x18
+		dAtA[i] = 0x8
 	}
+	return len(dAtA) - i, nil
+}
+
+func (m *TopicLogStream) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TopicLogStream) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TopicLogStream) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
 	if m.LogStreamID != 0 {
 		i = encodeVarintMetadata(dAtA, i, uint64(m.LogStreamID))
 		i--
 		dAtA[i] = 0x10
 	}
-	if m.StorageNodeID != 0 {
-		i = encodeVarintMetadata(dAtA, i, uint64(m.StorageNodeID))
+	if m.TopicID != 0 {
+		i = encodeVarintMetadata(dAtA, i, uint64(m.TopicID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *LogStreamReplica) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LogStreamReplica) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LogStreamReplica) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.TopicLogStream.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintMetadata(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.StorageNode.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintMetadata(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *LogSequenceNumber) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LogSequenceNumber) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LogSequenceNumber) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.GLSN != 0 {
+		i = encodeVarintMetadata(dAtA, i, uint64(m.GLSN))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.LLSN != 0 {
+		i = encodeVarintMetadata(dAtA, i, uint64(m.LLSN))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -2247,54 +1992,32 @@ func encodeVarintMetadata(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-func (m *StorageNode) ProtoSize() (n int) {
+func (m *MetadataDescriptor) ProtoSize() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.StorageNodeID != 0 {
-		n += 1 + sovMetadata(uint64(m.StorageNodeID))
+	if m.AppliedIndex != 0 {
+		n += 1 + sovMetadata(uint64(m.AppliedIndex))
 	}
-	l = len(m.Address)
-	if l > 0 {
-		n += 1 + l + sovMetadata(uint64(l))
+	if len(m.StorageNodes) > 0 {
+		for _, e := range m.StorageNodes {
+			l = e.ProtoSize()
+			n += 1 + l + sovMetadata(uint64(l))
+		}
 	}
-	return n
-}
-
-func (m *Replica) ProtoSize() (n int) {
-	if m == nil {
-		return 0
+	if len(m.LogStreams) > 0 {
+		for _, e := range m.LogStreams {
+			l = e.ProtoSize()
+			n += 1 + l + sovMetadata(uint64(l))
+		}
 	}
-	var l int
-	_ = l
-	l = m.StorageNode.ProtoSize()
-	n += 1 + l + sovMetadata(uint64(l))
-	if m.TopicID != 0 {
-		n += 1 + sovMetadata(uint64(m.TopicID))
-	}
-	if m.LogStreamID != 0 {
-		n += 1 + sovMetadata(uint64(m.LogStreamID))
-	}
-	return n
-}
-
-func (m *StorageDescriptor) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.Path)
-	if l > 0 {
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	if m.Used != 0 {
-		n += 1 + sovMetadata(uint64(m.Used))
-	}
-	if m.Total != 0 {
-		n += 1 + sovMetadata(uint64(m.Total))
+	if len(m.Topics) > 0 {
+		for _, e := range m.Topics {
+			l = e.ProtoSize()
+			n += 1 + l + sovMetadata(uint64(l))
+		}
 	}
 	return n
 }
@@ -2319,18 +2042,21 @@ func (m *StorageNodeDescriptor) ProtoSize() (n int) {
 	return n
 }
 
-func (m *ReplicaDescriptor) ProtoSize() (n int) {
+func (m *StorageDescriptor) ProtoSize() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.StorageNodeID != 0 {
-		n += 1 + sovMetadata(uint64(m.StorageNodeID))
-	}
 	l = len(m.Path)
 	if l > 0 {
 		n += 1 + l + sovMetadata(uint64(l))
+	}
+	if m.Used != 0 {
+		n += 1 + sovMetadata(uint64(m.Used))
+	}
+	if m.Total != 0 {
+		n += 1 + sovMetadata(uint64(m.Total))
 	}
 	return n
 }
@@ -2363,6 +2089,22 @@ func (m *LogStreamDescriptor) ProtoSize() (n int) {
 	return n
 }
 
+func (m *ReplicaDescriptor) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.StorageNodeID != 0 {
+		n += 1 + sovMetadata(uint64(m.StorageNodeID))
+	}
+	l = len(m.Path)
+	if l > 0 {
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	return n
+}
+
 func (m *TopicDescriptor) ProtoSize() (n int) {
 	if m == nil {
 		return 0
@@ -2385,63 +2127,7 @@ func (m *TopicDescriptor) ProtoSize() (n int) {
 	return n
 }
 
-func (m *MetadataDescriptor) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.AppliedIndex != 0 {
-		n += 1 + sovMetadata(uint64(m.AppliedIndex))
-	}
-	if len(m.StorageNodes) > 0 {
-		for _, e := range m.StorageNodes {
-			l = e.ProtoSize()
-			n += 1 + l + sovMetadata(uint64(l))
-		}
-	}
-	if len(m.LogStreams) > 0 {
-		for _, e := range m.LogStreams {
-			l = e.ProtoSize()
-			n += 1 + l + sovMetadata(uint64(l))
-		}
-	}
-	if len(m.Topics) > 0 {
-		for _, e := range m.Topics {
-			l = e.ProtoSize()
-			n += 1 + l + sovMetadata(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *StorageNodeMetadataDescriptor) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.ClusterID != 0 {
-		n += 1 + sovMetadata(uint64(m.ClusterID))
-	}
-	if m.StorageNode != nil {
-		l = m.StorageNode.ProtoSize()
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	if len(m.LogStreams) > 0 {
-		for _, e := range m.LogStreams {
-			l = e.ProtoSize()
-			n += 1 + l + sovMetadata(uint64(l))
-		}
-	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.CreatedTime)
-	n += 1 + l + sovMetadata(uint64(l))
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.UpdatedTime)
-	n += 1 + l + sovMetadata(uint64(l))
-	return n
-}
-
-func (m *LogStreamMetadataDescriptor) ProtoSize() (n int) {
+func (m *StorageNode) ProtoSize() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2449,51 +2135,53 @@ func (m *LogStreamMetadataDescriptor) ProtoSize() (n int) {
 	_ = l
 	if m.StorageNodeID != 0 {
 		n += 1 + sovMetadata(uint64(m.StorageNodeID))
-	}
-	if m.LogStreamID != 0 {
-		n += 1 + sovMetadata(uint64(m.LogStreamID))
-	}
-	if m.TopicID != 0 {
-		n += 1 + sovMetadata(uint64(m.TopicID))
-	}
-	if m.Status != 0 {
-		n += 1 + sovMetadata(uint64(m.Status))
-	}
-	if m.Version != 0 {
-		n += 1 + sovMetadata(uint64(m.Version))
-	}
-	if m.HighWatermark != 0 {
-		n += 1 + sovMetadata(uint64(m.HighWatermark))
-	}
-	l = len(m.Path)
-	if l > 0 {
-		n += 1 + l + sovMetadata(uint64(l))
-	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.CreatedTime)
-	n += 1 + l + sovMetadata(uint64(l))
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.UpdatedTime)
-	n += 1 + l + sovMetadata(uint64(l))
-	return n
-}
-
-func (m *LogStreamReplicaDescriptor) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.StorageNodeID != 0 {
-		n += 1 + sovMetadata(uint64(m.StorageNodeID))
-	}
-	if m.LogStreamID != 0 {
-		n += 1 + sovMetadata(uint64(m.LogStreamID))
-	}
-	if m.TopicID != 0 {
-		n += 1 + sovMetadata(uint64(m.TopicID))
 	}
 	l = len(m.Address)
 	if l > 0 {
 		n += 1 + l + sovMetadata(uint64(l))
+	}
+	return n
+}
+
+func (m *TopicLogStream) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovMetadata(uint64(m.TopicID))
+	}
+	if m.LogStreamID != 0 {
+		n += 1 + sovMetadata(uint64(m.LogStreamID))
+	}
+	return n
+}
+
+func (m *LogStreamReplica) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.StorageNode.ProtoSize()
+	n += 1 + l + sovMetadata(uint64(l))
+	l = m.TopicLogStream.ProtoSize()
+	n += 1 + l + sovMetadata(uint64(l))
+	return n
+}
+
+func (m *LogSequenceNumber) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.LLSN != 0 {
+		n += 1 + sovMetadata(uint64(m.LLSN))
+	}
+	if m.GLSN != 0 {
+		n += 1 + sovMetadata(uint64(m.GLSN))
 	}
 	return n
 }
@@ -2564,7 +2252,7 @@ func sovMetadata(x uint64) (n int) {
 func sozMetadata(x uint64) (n int) {
 	return sovMetadata(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *StorageNode) Unmarshal(dAtA []byte) error {
+func (m *MetadataDescriptor) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -2587,17 +2275,17 @@ func (m *StorageNode) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: StorageNode: wiretype end group for non-group")
+			return fmt.Errorf("proto: MetadataDescriptor: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: StorageNode: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: MetadataDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field AppliedIndex", wireType)
 			}
-			m.StorageNodeID = 0
+			m.AppliedIndex = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMetadata
@@ -2607,96 +2295,14 @@ func (m *StorageNode) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.StorageNodeID |= github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
+				m.AppliedIndex |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Address = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMetadata(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *Replica) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMetadata
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Replica: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Replica: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StorageNode", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodes", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2723,103 +2329,16 @@ func (m *Replica) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.StorageNode.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			m.StorageNodes = append(m.StorageNodes, &StorageNodeDescriptor{})
+			if err := m.StorageNodes[len(m.StorageNodes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
-			}
-			m.TopicID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
-			}
-			m.LogStreamID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.LogStreamID |= github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMetadata(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *StorageDescriptor) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMetadata
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: StorageDescriptor: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: StorageDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Path", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field LogStreams", wireType)
 			}
-			var stringLen uint64
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMetadata
@@ -2829,29 +2348,31 @@ func (m *StorageDescriptor) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLengthMetadata
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + msglen
 			if postIndex < 0 {
 				return ErrInvalidLengthMetadata
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Path = string(dAtA[iNdEx:postIndex])
+			m.LogStreams = append(m.LogStreams, &LogStreamDescriptor{})
+			if err := m.LogStreams[len(m.LogStreams)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Used", wireType)
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Topics", wireType)
 			}
-			m.Used = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMetadata
@@ -2861,30 +2382,26 @@ func (m *StorageDescriptor) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Used |= uint64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Total", wireType)
+			if msglen < 0 {
+				return ErrInvalidLengthMetadata
 			}
-			m.Total = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Total |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMetadata
 			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Topics = append(m.Topics, &TopicDescriptor{})
+			if err := m.Topics[len(m.Topics)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMetadata(dAtA[iNdEx:])
@@ -3042,7 +2559,7 @@ func (m *StorageNodeDescriptor) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *ReplicaDescriptor) Unmarshal(dAtA []byte) error {
+func (m *StorageDescriptor) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -3065,32 +2582,13 @@ func (m *ReplicaDescriptor) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: ReplicaDescriptor: wiretype end group for non-group")
+			return fmt.Errorf("proto: StorageDescriptor: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ReplicaDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: StorageDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
-			}
-			m.StorageNodeID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.StorageNodeID |= github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Path", wireType)
 			}
@@ -3122,6 +2620,44 @@ func (m *ReplicaDescriptor) Unmarshal(dAtA []byte) error {
 			}
 			m.Path = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Used", wireType)
+			}
+			m.Used = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Used |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Total", wireType)
+			}
+			m.Total = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Total |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMetadata(dAtA[iNdEx:])
@@ -3350,6 +2886,107 @@ func (m *LogStreamDescriptor) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *ReplicaDescriptor) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMetadata
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ReplicaDescriptor: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ReplicaDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
+			}
+			m.StorageNodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StorageNodeID |= github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Path", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Path = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMetadata(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *TopicDescriptor) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3514,7 +3151,7 @@ func (m *TopicDescriptor) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *MetadataDescriptor) Unmarshal(dAtA []byte) error {
+func (m *StorageNode) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -3537,386 +3174,10 @@ func (m *MetadataDescriptor) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: MetadataDescriptor: wiretype end group for non-group")
+			return fmt.Errorf("proto: StorageNode: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MetadataDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AppliedIndex", wireType)
-			}
-			m.AppliedIndex = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.AppliedIndex |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodes", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.StorageNodes = append(m.StorageNodes, &StorageNodeDescriptor{})
-			if err := m.StorageNodes[len(m.StorageNodes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LogStreams", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.LogStreams = append(m.LogStreams, &LogStreamDescriptor{})
-			if err := m.LogStreams[len(m.LogStreams)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Topics", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Topics = append(m.Topics, &TopicDescriptor{})
-			if err := m.Topics[len(m.Topics)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMetadata(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *StorageNodeMetadataDescriptor) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMetadata
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: StorageNodeMetadataDescriptor: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: StorageNodeMetadataDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClusterID", wireType)
-			}
-			m.ClusterID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.ClusterID |= github_daumkakao_com_varlog_varlog_pkg_types.ClusterID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StorageNode", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.StorageNode == nil {
-				m.StorageNode = &StorageNodeDescriptor{}
-			}
-			if err := m.StorageNode.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LogStreams", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.LogStreams = append(m.LogStreams, LogStreamMetadataDescriptor{})
-			if err := m.LogStreams[len(m.LogStreams)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CreatedTime", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.CreatedTime, dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field UpdatedTime", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.UpdatedTime, dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMetadata(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *LogStreamMetadataDescriptor) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMetadata
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: LogStreamMetadataDescriptor: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: LogStreamMetadataDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: StorageNode: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -3939,306 +3200,6 @@ func (m *LogStreamMetadataDescriptor) Unmarshal(dAtA []byte) error {
 				}
 			}
 		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
-			}
-			m.LogStreamID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.LogStreamID |= github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
-			}
-			m.TopicID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
-			}
-			m.Status = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Status |= LogStreamStatus(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
-			}
-			m.Version = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Version |= github_daumkakao_com_varlog_varlog_pkg_types.Version(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
-			}
-			m.HighWatermark = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.HighWatermark |= github_daumkakao_com_varlog_varlog_pkg_types.GLSN(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 7:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Path", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Path = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 8:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CreatedTime", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.CreatedTime, dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 9:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field UpdatedTime", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.UpdatedTime, dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMetadata(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMetadata
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *LogStreamReplicaDescriptor) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMetadata
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: LogStreamReplicaDescriptor: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: LogStreamReplicaDescriptor: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StorageNodeID", wireType)
-			}
-			m.StorageNodeID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.StorageNodeID |= github_daumkakao_com_varlog_varlog_pkg_types.StorageNodeID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
-			}
-			m.LogStreamID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.LogStreamID |= github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
-			}
-			m.TopicID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMetadata
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Address", wireType)
 			}
@@ -4270,6 +3231,298 @@ func (m *LogStreamReplicaDescriptor) Unmarshal(dAtA []byte) error {
 			}
 			m.Address = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMetadata(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TopicLogStream) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMetadata
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TopicLogStream: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TopicLogStream: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_daumkakao_com_varlog_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
+			}
+			m.LogStreamID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LogStreamID |= github_daumkakao_com_varlog_varlog_pkg_types.LogStreamID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMetadata(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LogStreamReplica) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMetadata
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LogStreamReplica: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LogStreamReplica: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StorageNode", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.StorageNode.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicLogStream", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TopicLogStream.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMetadata(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMetadata
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LogSequenceNumber) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMetadata
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LogSequenceNumber: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LogSequenceNumber: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LLSN", wireType)
+			}
+			m.LLSN = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LLSN |= github_daumkakao_com_varlog_varlog_pkg_types.LLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GLSN", wireType)
+			}
+			m.GLSN = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.GLSN |= github_daumkakao_com_varlog_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMetadata(dAtA[iNdEx:])

@@ -47,12 +47,14 @@ func TestLogStreamReporter(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
-	require.NoError(t, lse1.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse1.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse1.storageNodeID,
 			},
-			LogStreamID: lse1.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse1.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse1.Metadata().Status)
@@ -72,12 +74,14 @@ func TestLogStreamReporter(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.InvalidGLSN, sealedGLSN)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, status)
-	require.NoError(t, lse2.Unseal(context.TODO(), []varlogpb.Replica{
+	require.NoError(t, lse2.Unseal(context.TODO(), []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: lse2.storageNodeID,
 			},
-			LogStreamID: lse2.logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: lse2.logStreamID,
+			},
 		},
 	}))
 	require.Equal(t, varlogpb.LogStreamStatusRunning, lse2.Metadata().Status)

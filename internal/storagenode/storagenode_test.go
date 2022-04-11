@@ -67,22 +67,26 @@ func TestStorageNode(t *testing.T) {
 	TestWaitForStartingOfServe(t, sn2)
 
 	// replicas
-	replicas := []varlogpb.Replica{
+	replicas := []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snid1,
 				Address:       sn1.advertise,
 			},
-			TopicID:     tpid,
-			LogStreamID: lsid,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+			},
 		},
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snid2,
 				Address:       sn2.advertise,
 			},
-			TopicID:     tpid,
-			LogStreamID: lsid,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+			},
 		},
 	}
 

@@ -12,7 +12,7 @@ import (
 )
 
 type SyncTaskStatus struct {
-	Replica varlogpb.Replica
+	Replica varlogpb.LogStreamReplica
 	State   snpb.SyncState
 	Span    snpb.SyncRange
 	Curr    types.LLSN
@@ -25,7 +25,7 @@ type Replicator interface {
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte) error
 	SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.SyncRange, error)
 	SyncReplicate(ctx context.Context, payload snpb.SyncPayload) error
-	Sync(ctx context.Context, replica varlogpb.Replica) (*snpb.SyncStatus, error)
+	Sync(ctx context.Context, replica varlogpb.LogStreamReplica) (*snpb.SyncStatus, error)
 }
 
 // Getter is an interface that gets Replicator.

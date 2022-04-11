@@ -34,7 +34,7 @@ func (c testAdmin) unlock() {
 	c.vt.cond.L.Unlock()
 }
 
-func (c *testAdmin) AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (c *testAdmin) AddStorageNode(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (c *testAdmin) AddStorageNode(ctx context.Context, addr string) (*varlogpb.
 	// NOTE: Use UTC rather than local to use gogoproto's non-nullable stdtime.
 	now := time.Now().UTC()
 	storageNodeID := c.vt.generateStorageNodeID()
-	storageNodeMetaDesc := varlogpb.StorageNodeMetadataDescriptor{
+	storageNodeMetaDesc := snpb.StorageNodeMetadataDescriptor{
 		ClusterID: c.vt.clusterID,
 		StorageNode: &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
@@ -55,13 +55,13 @@ func (c *testAdmin) AddStorageNode(ctx context.Context, addr string) (*varlogpb.
 				{Path: "/tmp"},
 			},
 		},
-		LogStreams:  nil,
-		CreatedTime: now,
-		UpdatedTime: now,
+		LogStreamReplicas: nil,
+		CreatedTime:       now,
+		UpdatedTime:       now,
 	}
 	c.vt.storageNodes[storageNodeID] = storageNodeMetaDesc
 
-	return proto.Clone(&storageNodeMetaDesc).(*varlogpb.StorageNodeMetadataDescriptor), nil
+	return proto.Clone(&storageNodeMetaDesc).(*snpb.StorageNodeMetadataDescriptor), nil
 }
 
 func (c *testAdmin) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
@@ -204,18 +204,26 @@ func (c *testAdmin) Seal(_ context.Context, topicID types.TopicID, logStreamID t
 	c.vt.logStreams[logStreamID] = logStreamDesc
 
 	rsp := &vmspb.SealResponse{
-		LogStreams: make([]varlogpb.LogStreamMetadataDescriptor, len(logStreamDesc.Replicas)),
+		LogStreams: make([]snpb.LogStreamReplicaMetadataDescriptor, len(logStreamDesc.Replicas)),
 		SealedGLSN: sealedGLSN,
 	}
 	for i, replica := range logStreamDesc.Replicas {
-		rsp.LogStreams[i] = varlogpb.LogStreamMetadataDescriptor{
-			StorageNodeID: replica.StorageNodeID,
-			LogStreamID:   logStreamID,
-			TopicID:       topicID,
-			Status:        logStreamDesc.Status,
-			Version:       c.vt.version,
-			HighWatermark: c.vt.globalHighWatermark(topicID),
-			Path:          replica.Path,
+		rsp.LogStreams[i] = snpb.LogStreamReplicaMetadataDescriptor{
+			LogStreamReplica: varlogpb.LogStreamReplica{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: replica.StorageNodeID,
+				},
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     topicID,
+					LogStreamID: logStreamID,
+				},
+			},
+			Status:  logStreamDesc.Status,
+			Version: c.vt.version,
+			LocalHighWatermark: varlogpb.LogSequenceNumber{
+				GLSN: c.vt.globalHighWatermark(topicID),
+			},
+			Path: replica.Path,
 		}
 	}
 

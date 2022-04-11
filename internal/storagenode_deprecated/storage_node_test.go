@@ -10,6 +10,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
@@ -52,8 +53,8 @@ func TestStorageNodeAddLogStream(t *testing.T) {
 
 	var (
 		ok   bool
-		snmd *varlogpb.StorageNodeMetadataDescriptor
-		lsmd varlogpb.LogStreamMetadataDescriptor
+		snmd *snpb.StorageNodeMetadataDescriptor
+		lsmd snpb.LogStreamReplicaMetadataDescriptor
 	)
 
 	// AddLogStream: LSID=1, expected=ok
@@ -68,8 +69,8 @@ func TestStorageNodeAddLogStream(t *testing.T) {
 	// GetMetadata: Check if the log stream is created.
 	snmd, err = sn.GetMetadata(context.TODO())
 	assert.NoError(t, err)
-	assert.Len(t, snmd.GetLogStreams(), 1)
-	assert.Equal(t, logStreamID, snmd.GetLogStreams()[0].GetLogStreamID())
+	assert.Len(t, snmd.GetLogStreamReplicas(), 1)
+	assert.Equal(t, logStreamID, snmd.GetLogStreamReplicas()[0].GetLogStreamID())
 	lsmd, ok = snmd.GetLogStream(logStreamID)
 	assert.True(t, ok)
 	assert.Equal(t, lsPath, lsmd.GetPath())
@@ -116,24 +117,28 @@ func TestStorageNodeIncorrectTopic(t *testing.T) {
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, status)
 
 	// Unseal: ERROR (incorrect topicID)
-	assert.Error(t, sn.unseal(context.Background(), tpID+1, lsID, []varlogpb.Replica{
+	assert.Error(t, sn.unseal(context.Background(), tpID+1, lsID, []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snID,
 			},
-			TopicID:     tpID,
-			LogStreamID: lsID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpID,
+				LogStreamID: lsID,
+			},
 		},
 	}))
 
 	// Unseal: OK
-	assert.NoError(t, sn.unseal(context.Background(), tpID, lsID, []varlogpb.Replica{
+	assert.NoError(t, sn.unseal(context.Background(), tpID, lsID, []varlogpb.LogStreamReplica{
 		{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snID,
 			},
-			TopicID:     tpID,
-			LogStreamID: lsID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpID,
+				LogStreamID: lsID,
+			},
 		},
 	}))
 }

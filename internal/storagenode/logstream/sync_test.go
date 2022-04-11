@@ -25,7 +25,7 @@ func TestExecutor_SyncTracker(t *testing.T) {
 }
 
 func TestExecutor_SyncReplicateBuffer_InvalidSyncRange(t *testing.T) {
-	srcReplica := varlogpb.Replica{}
+	srcReplica := varlogpb.LogStreamReplica{}
 	_, err := newSyncReplicateBuffer(srcReplica, snpb.SyncRange{
 		FirstLLSN: types.InvalidLLSN,
 		LastLLSN:  types.LLSN(10),
@@ -40,13 +40,15 @@ func TestExecutor_SyncReplicateBuffer_InvalidSyncRange(t *testing.T) {
 }
 
 func TestExecutor_SyncReplicateBuffer_Add(t *testing.T) {
-	srcReplica := varlogpb.Replica{
+	srcReplica := varlogpb.LogStreamReplica{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: types.StorageNodeID(1),
 			Address:       "sn1",
 		},
-		TopicID:     types.TopicID(2),
-		LogStreamID: types.LogStreamID(3),
+		TopicLogStream: varlogpb.TopicLogStream{
+			TopicID:     types.TopicID(2),
+			LogStreamID: types.LogStreamID(3),
+		},
 	}
 	srb, err := newSyncReplicateBuffer(srcReplica, snpb.SyncRange{
 		FirstLLSN: types.LLSN(1),
@@ -57,13 +59,15 @@ func TestExecutor_SyncReplicateBuffer_Add(t *testing.T) {
 	now := time.Now()
 
 	// bad source replica
-	assert.Error(t, srb.add(varlogpb.Replica{
+	assert.Error(t, srb.add(varlogpb.LogStreamReplica{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: types.StorageNodeID(2),
 			Address:       "sn1",
 		},
-		TopicID:     types.TopicID(2),
-		LogStreamID: types.LogStreamID(3),
+		TopicLogStream: varlogpb.TopicLogStream{
+			TopicID:     types.TopicID(2),
+			LogStreamID: types.LogStreamID(3),
+		},
 	}, snpb.SyncPayload{}, now))
 
 	// neither commit context nor log entry

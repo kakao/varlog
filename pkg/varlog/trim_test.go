@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
@@ -29,13 +29,17 @@ func TestTrim(t *testing.T) {
 		defer ctrl.Finish()
 
 		replicasRetriever := NewMockReplicasRetriever(ctrl)
-		replicasMap := make(map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor, numStorageNodes)
+		replicasMap := make(map[types.LogStreamID][]varlogpb.LogStreamReplica, numStorageNodes)
 		for i := minStorageNodeID; i < numStorageNodes; i++ {
-			replicasMap[types.LogStreamID(i)] = []varlogpb.LogStreamReplicaDescriptor{
+			replicasMap[types.LogStreamID(i)] = []varlogpb.LogStreamReplica{
 				{
-					StorageNodeID: types.StorageNodeID(i),
-					LogStreamID:   types.LogStreamID(i),
-					Address:       "127.0.0.1:" + strconv.Itoa(i),
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: types.StorageNodeID(i),
+						Address:       "127.0.0.1:" + strconv.Itoa(i),
+					},
+					TopicLogStream: varlogpb.TopicLogStream{
+						LogStreamID: types.LogStreamID(i),
+					},
 				},
 			}
 		}

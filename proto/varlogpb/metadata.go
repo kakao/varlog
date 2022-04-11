@@ -2,7 +2,7 @@ package varlogpb
 
 import (
 	"encoding/json"
-	fmt "fmt"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -405,16 +405,6 @@ func (m *MetadataDescriptor) GetLogStreamsByStorageNodeID(id types.StorageNodeID
 		}
 	}
 	return ret
-}
-
-func (snmd *StorageNodeMetadataDescriptor) GetLogStream(logStreamID types.LogStreamID) (LogStreamMetadataDescriptor, bool) {
-	logStreams := snmd.GetLogStreams()
-	for i := range logStreams {
-		if logStreams[i].GetLogStreamID() == logStreamID {
-			return logStreams[i], true
-		}
-	}
-	return LogStreamMetadataDescriptor{}, false
 }
 
 func (m *MetadataDescriptor) searchTopic(id types.TopicID) (int, bool) {

@@ -40,7 +40,7 @@ func TestReplicationBadConnectorClient(t *testing.T) {
 		),
 	)
 	require.NoError(t, err)
-	_, err = connector.Get(context.TODO(), varlogpb.Replica{})
+	_, err = connector.Get(context.TODO(), varlogpb.LogStreamReplica{})
 	require.Error(t, err)
 	require.NoError(t, connector.Close())
 
@@ -52,7 +52,7 @@ func TestReplicationBadConnectorClient(t *testing.T) {
 		))
 	require.NoError(t, err)
 	_, err = connector.Get(context.TODO(),
-		varlogpb.Replica{
+		varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
 				Address: "localhost:12345",
 			},
@@ -68,7 +68,7 @@ func TestReplicationBadConnectorClient(t *testing.T) {
 	))
 	require.NoError(t, err)
 	_, err = connector.Get(context.TODO(),
-		varlogpb.Replica{
+		varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
 				Address: "bad-address",
 			},
@@ -125,12 +125,14 @@ func TestReplicationClosedClient(t *testing.T) {
 	require.NoError(t, err)
 
 	// replicator client
-	replica := varlogpb.Replica{
+	replica := varlogpb.LogStreamReplica{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: 1,
 			Address:       addrs[0],
 		},
-		LogStreamID: 1,
+		TopicLogStream: varlogpb.TopicLogStream{
+			LogStreamID: 1,
+		},
 	}
 
 	client, err := connector.Get(context.TODO(), replica)
@@ -255,12 +257,14 @@ func TestReplication(t *testing.T) {
 	}()
 
 	// replicator client
-	replica := varlogpb.Replica{
+	replica := varlogpb.LogStreamReplica{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: storageNodeID,
 			Address:       addrs[0],
 		},
-		LogStreamID: logStreamID,
+		TopicLogStream: varlogpb.TopicLogStream{
+			LogStreamID: logStreamID,
+		},
 	}
 
 	client, err := connector.Get(context.TODO(), replica)

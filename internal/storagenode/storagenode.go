@@ -193,14 +193,14 @@ func (sn *StorageNode) Close() (err error) {
 	return err
 }
 
-func (sn *StorageNode) getMetadata(_ context.Context) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {
 		return nil, errors.New("storage node: closed")
 	}
 
-	snmeta := &varlogpb.StorageNodeMetadataDescriptor{
+	snmeta := &snpb.StorageNodeMetadataDescriptor{
 		ClusterID: sn.cid,
 		StorageNode: &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
@@ -221,7 +221,7 @@ func (sn *StorageNode) getMetadata(_ context.Context) (*varlogpb.StorageNodeMeta
 
 	sn.executors.Range(func(_ types.LogStreamID, _ types.TopicID, lse *logstream.Executor) bool {
 		if lsmd, err := lse.Metadata(); err == nil {
-			snmeta.LogStreams = append(snmeta.LogStreams, lsmd)
+			snmeta.LogStreamReplicas = append(snmeta.LogStreamReplicas, lsmd)
 		}
 		return true
 	})
@@ -316,7 +316,7 @@ func (sn *StorageNode) seal(ctx context.Context, tpid types.TopicID, lsid types.
 	return lse.Seal(ctx, lastCommittedGLSN)
 }
 
-func (sn *StorageNode) unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.Replica) error {
+func (sn *StorageNode) unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.LogStreamReplica) error {
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {
@@ -331,7 +331,7 @@ func (sn *StorageNode) unseal(ctx context.Context, tpid types.TopicID, lsid type
 	return lse.Unseal(ctx, replicas)
 }
 
-func (sn *StorageNode) sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, dst varlogpb.Replica) (*snpb.SyncStatus, error) {
+func (sn *StorageNode) sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, dst varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {

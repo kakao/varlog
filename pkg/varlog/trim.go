@@ -65,7 +65,7 @@ func (v *logImpl) makeTrimmer(trimArg *trimArgument, topicID types.TopicID, unti
 	}
 }
 
-func createTrimArguments(replicasMap map[types.LogStreamID][]varlogpb.LogStreamReplicaDescriptor) []*trimArgument {
+func createTrimArguments(replicasMap map[types.LogStreamID][]varlogpb.LogStreamReplica) []*trimArgument {
 	snIDSet := make(map[types.StorageNodeID]struct{})
 	var trimArgs []*trimArgument
 	for _, replicas := range replicasMap {

@@ -25,7 +25,7 @@ type Client interface {
 	Replicate(ctx context.Context, llsn types.LLSN, data []byte, startTimeMicro int64, cb func(int64, error))
 	PeerStorageNodeID() types.StorageNodeID
 	SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.SyncRange, error)
-	SyncReplicate(ctx context.Context, replica varlogpb.Replica, payload snpb.SyncPayload) error
+	SyncReplicate(ctx context.Context, replica varlogpb.LogStreamReplica, payload snpb.SyncPayload) error
 }
 
 type client struct {
@@ -227,7 +227,7 @@ func (c *client) SyncInit(ctx context.Context, srcRnage snpb.SyncRange) (snpb.Sy
 	return rsp.GetRange(), errors.WithStack(verrors.FromStatusError(err))
 }
 
-func (c *client) SyncReplicate(ctx context.Context, replica varlogpb.Replica, payload snpb.SyncPayload) error {
+func (c *client) SyncReplicate(ctx context.Context, replica varlogpb.LogStreamReplica, payload snpb.SyncPayload) error {
 	c.closed.mu.RLock()
 	if c.closed.val {
 		c.closed.mu.RUnlock()

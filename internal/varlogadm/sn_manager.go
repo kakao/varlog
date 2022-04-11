@@ -27,9 +27,9 @@ type StorageNodeManager interface {
 
 	// GetMetadataByAddr returns metadata about a storage node. It is useful when id of the
 	// storage node is not known.
-	GetMetadataByAddr(ctx context.Context, addr string) (snc.StorageNodeManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error)
+	GetMetadataByAddr(ctx context.Context, addr string) (snc.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error)
 
-	GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error)
 
 	AddStorageNode(snmcl snc.StorageNodeManagementClient)
 
@@ -43,7 +43,7 @@ type StorageNodeManager interface {
 
 	// Seal seals logstream replicas of storage nodes corresponded with the logStreamID. It
 	// passes the last committed GLSN to the logstream replicas.
-	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]varlogpb.LogStreamMetadataDescriptor, error)
+	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]snpb.LogStreamReplicaMetadataDescriptor, error)
 
 	Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID, lastGLSN types.GLSN) (*snpb.SyncStatus, error)
 
@@ -174,7 +174,7 @@ func (sm *snManager) ContainsAddress(addr string) bool {
 	return false
 }
 
-func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (snc.StorageNodeManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error) {
+func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (snc.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error) {
 	mc, err := snc.NewManagementClient(ctx, sm.clusterID, addr, sm.logger)
 	if err != nil {
 		return nil, nil, err
@@ -186,7 +186,7 @@ func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (snc.St
 	return mc, snMeta, nil
 }
 
-func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -269,7 +269,7 @@ func (sm *snManager) RemoveLogStream(ctx context.Context, storageNodeID types.St
 	return snmcl.RemoveLogStream(ctx, topicID, logStreamID)
 }
 
-func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]varlogpb.LogStreamMetadataDescriptor, error) {
+func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]snpb.LogStreamReplicaMetadataDescriptor, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -279,7 +279,7 @@ func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamI
 	if err != nil {
 		return nil, err
 	}
-	lsmetaDesc := make([]varlogpb.LogStreamMetadataDescriptor, 0, len(replicas))
+	lsmetaDesc := make([]snpb.LogStreamReplicaMetadataDescriptor, 0, len(replicas))
 	for _, replica := range replicas {
 		storageNodeID := replica.GetStorageNodeID()
 		cli, ok := sm.cs[storageNodeID]
@@ -293,12 +293,21 @@ func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamI
 			sm.logger.Warn("could not seal replica", zap.Int32("snid", int32(storageNodeID)), zap.Int32("lsid", int32(logStreamID)))
 			continue
 		}
-		lsmetaDesc = append(lsmetaDesc, varlogpb.LogStreamMetadataDescriptor{
-			StorageNodeID: storageNodeID,
-			LogStreamID:   logStreamID,
-			Status:        status,
-			HighWatermark: highWatermark,
-			Path:          replica.GetPath(),
+		lsmetaDesc = append(lsmetaDesc, snpb.LogStreamReplicaMetadataDescriptor{
+			LogStreamReplica: varlogpb.LogStreamReplica{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: storageNodeID,
+				},
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     topicID,
+					LogStreamID: logStreamID,
+				},
+			},
+			Status: status,
+			LocalHighWatermark: varlogpb.LogSequenceNumber{
+				GLSN: highWatermark,
+			},
+			Path: replica.GetPath(),
 		})
 	}
 	sm.logger.Info("seal result", zap.Reflect("logstream_meta", lsmetaDesc))
@@ -343,15 +352,17 @@ func (sm *snManager) Unseal(ctx context.Context, topicID types.TopicID, logStrea
 		return err
 	}
 
-	replicas := make([]varlogpb.Replica, 0, len(rds))
+	replicas := make([]varlogpb.LogStreamReplica, 0, len(rds))
 	for _, rd := range rds {
-		replicas = append(replicas, varlogpb.Replica{
+		replicas = append(replicas, varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: rd.StorageNodeID,
 				Address:       sm.cs[rd.StorageNodeID].PeerAddress(),
 			},
-			TopicID:     topicID,
-			LogStreamID: logStreamID,
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     topicID,
+				LogStreamID: logStreamID,
+			},
 		})
 	}
 

@@ -14,35 +14,32 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
-// StorageNode is a structure to represent identifier and address of storage
-// node.
-message StorageNode {
+// MetadataDescriptor is metadata to persist the overall state of the cluster in
+// the metadata repository.
+message MetadataDescriptor {
   option (gogoproto.equal) = true;
 
-  int32 storage_node_id = 1 [
-    (gogoproto.casttype) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-    (gogoproto.customname) = "StorageNodeID",
-    (gogoproto.jsontag) = "storageNodeId"
-  ];
-  string address = 2;
+  uint64 applied_index = 1 [(gogoproto.jsontag) = "appliedIndex"];
+  repeated StorageNodeDescriptor storage_nodes = 2
+      [(gogoproto.nullable) = true, (gogoproto.jsontag) = "storageNodes"];
+  repeated LogStreamDescriptor log_streams = 3
+      [(gogoproto.nullable) = true, (gogoproto.jsontag) = "logStreams"];
+  repeated TopicDescriptor topics = 4
+      [(gogoproto.nullable) = true, (gogoproto.jsontag) = "topics"];
 }
 
-message Replica {
+// StorageNodeDescriptor is metadata to persist information of a storage node in
+// the metadata repository.
+message StorageNodeDescriptor {
   option (gogoproto.equal) = true;
 
-  StorageNode storage_node = 1
-      [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  int32 topic_id = 2 [
-    (gogoproto.casttype) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
-    (gogoproto.customname) = "TopicID"
+  StorageNode storage_node = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.embed) = true,
+    (gogoproto.jsontag) = ""
   ];
-  int32 log_stream_id = 3 [
-    (gogoproto.casttype) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-    (gogoproto.customname) = "LogStreamID"
-  ];
+  StorageNodeStatus status = 2;
+  repeated StorageDescriptor storages = 3 [(gogoproto.nullable) = true];
 }
 
 enum StorageNodeStatus {
@@ -54,30 +51,6 @@ enum StorageNodeStatus {
       [(gogoproto.enumvalue_customname) = "StorageNodeStatusDeleted"];
 }
 
-enum LogStreamStatus {
-  option (gogoproto.goproto_enum_prefix) = false;
-
-  LS_STATUS_RUNNING = 0
-      [(gogoproto.enumvalue_customname) = "LogStreamStatusRunning"];
-  LS_STATUS_SEALING = 1
-      [(gogoproto.enumvalue_customname) = "LogStreamStatusSealing"];
-  LS_STATUS_SEALED = 2
-      [(gogoproto.enumvalue_customname) = "LogStreamStatusSealed"];
-  LS_STATUS_DELETED = 3
-      [(gogoproto.enumvalue_customname) = "LogStreamStatusDeleted"];
-  LS_STATUS_UNSEALING = 4
-      [(gogoproto.enumvalue_customname) = "LogStreamStatusUnsealing"];
-}
-
-enum TopicStatus {
-  option (gogoproto.goproto_enum_prefix) = false;
-
-  TOPIC_STATUS_RUNNING = 0
-      [(gogoproto.enumvalue_customname) = "TopicStatusRunning"];
-  TOPIC_STATUS_DELETED = 1
-      [(gogoproto.enumvalue_customname) = "TopicStatusDeleted"];
-}
-
 message StorageDescriptor {
   option (gogoproto.equal) = true;
 
@@ -86,36 +59,8 @@ message StorageDescriptor {
   uint64 total = 3;
 }
 
-message StorageNodeDescriptor {
-  option (gogoproto.equal) = true;
-
-  StorageNode storage_node = 1 [
-    (gogoproto.nullable) = false,
-    (gogoproto.embed) = true,
-    (gogoproto.jsontag) = ""
-  ];
-
-  StorageNodeStatus status = 2;
-  repeated StorageDescriptor storages = 3 [(gogoproto.nullable) = true];
-}
-
-message ReplicaDescriptor {
-  option (gogoproto.equal) = true;
-
-  int32 storage_node_id = 1 [
-    (gogoproto.casttype) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-    (gogoproto.customname) = "StorageNodeID",
-    (gogoproto.jsontag) = "storageNodeId"
-  ];
-  string path = 2;
-}
-
-// FIXME (jun): LogStreamDescriptor
-// - Similar types
-// - Ambiguous naming
-//
-// Information for log stream, not replica
+// LogStreamDescriptor is metadata to persist information of a log stream in the
+// metadata repository.
 message LogStreamDescriptor {
   option (gogoproto.equal) = true;
 
@@ -133,12 +78,46 @@ message LogStreamDescriptor {
   ];
   LogStreamStatus status = 3;
   repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = true];
+
+  // Deprecated: The members - head and tail are not used by the metadata
+  // repository. It exists here just since the LogStreamDescriptor is used
+  // elsewhere other than the metadata repository. It leads to misusing the
+  // LogStreamDescriptor.
   LogEntryMeta head = 5
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "head,omitempty"];
   LogEntryMeta tail = 6
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "tail,omitempty"];
 }
 
+enum LogStreamStatus {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  LS_STATUS_RUNNING = 0
+      [(gogoproto.enumvalue_customname) = "LogStreamStatusRunning"];
+  LS_STATUS_SEALING = 1
+      [(gogoproto.enumvalue_customname) = "LogStreamStatusSealing"];
+  LS_STATUS_SEALED = 2
+      [(gogoproto.enumvalue_customname) = "LogStreamStatusSealed"];
+  LS_STATUS_DELETED = 3
+      [(gogoproto.enumvalue_customname) = "LogStreamStatusDeleted"];
+  LS_STATUS_UNSEALING = 4
+      [(gogoproto.enumvalue_customname) = "LogStreamStatusUnsealing"];
+}
+
+message ReplicaDescriptor {
+  option (gogoproto.equal) = true;
+
+  int32 storage_node_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
+    (gogoproto.customname) = "StorageNodeID",
+    (gogoproto.jsontag) = "storageNodeId"
+  ];
+  string path = 2;
+}
+
+// TopicDescriptor is metadata to persist information of a topic in the metadata
+// repository.
 message TopicDescriptor {
   option (gogoproto.equal) = true;
 
@@ -148,9 +127,7 @@ message TopicDescriptor {
     (gogoproto.customname) = "TopicID",
     (gogoproto.jsontag) = "topicId"
   ];
-
-  TopicStatus status = 2;
-
+  TopicStatus status = 2 [(gogoproto.jsontag) = "status"];
   repeated int32 log_streams = 3 [
     (gogoproto.casttype) =
         "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
@@ -159,53 +136,38 @@ message TopicDescriptor {
   ];
 }
 
-message MetadataDescriptor {
+enum TopicStatus {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  TOPIC_STATUS_RUNNING = 0
+      [(gogoproto.enumvalue_customname) = "TopicStatusRunning"];
+  TOPIC_STATUS_DELETED = 1
+      [(gogoproto.enumvalue_customname) = "TopicStatusDeleted"];
+}
+
+// StorageNode is a structure to represent identifier and address of storage
+// node.
+message StorageNode {
   option (gogoproto.equal) = true;
 
-  uint64 applied_index = 1;
-  repeated StorageNodeDescriptor storage_nodes = 2
-      [(gogoproto.nullable) = true];
-  repeated LogStreamDescriptor log_streams = 3 [(gogoproto.nullable) = true];
-  repeated TopicDescriptor topics = 4 [(gogoproto.nullable) = true];
-}
-
-// StorageNodeMetadataDescriptor represents metadata of stroage node.
-message StorageNodeMetadataDescriptor {
-  // ClusterID is the identifier of the cluster that the storage node belongs
-  // to.
-  uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.ClusterID",
-    (gogoproto.customname) = "ClusterID",
-    (gogoproto.jsontag) = "clusterId"
-  ];
-  // StorageNode is detailed information about the storage node.
-  StorageNodeDescriptor storage_node = 2 [(gogoproto.jsontag) = "storageNode"];
-  repeated LogStreamMetadataDescriptor log_streams = 3
-      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
-  google.protobuf.Timestamp created_time = 4 [
-    (gogoproto.stdtime) = true,
-    (gogoproto.nullable) = false,
-    (gogoproto.jsontag) = "createdTime"
-  ];
-  google.protobuf.Timestamp updated_time = 5 [
-    (gogoproto.stdtime) = true,
-    (gogoproto.nullable) = false,
-    (gogoproto.jsontag) = "updatedTime"
-  ];
-}
-
-// FIXME (jun): LogStreamMetadataDescriptor
-// - Similar types
-// - Ambiguous naming
-//
-// maybe LogStreamReplica's information
-message LogStreamMetadataDescriptor {
   int32 storage_node_id = 1 [
     (gogoproto.casttype) =
         "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID",
     (gogoproto.jsontag) = "storageNodeId"
+  ];
+  string address = 2;
+}
+
+// TopicLogStream wraps TopicID and LogStreamID.
+message TopicLogStream {
+  option (gogoproto.equal) = true;
+
+  int32 topic_id = 1 [
+    (gogoproto.casttype) =
+        "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID",
+    (gogoproto.jsontag) = "topicId"
   ];
   int32 log_stream_id = 2 [
     (gogoproto.casttype) =
@@ -213,56 +175,32 @@ message LogStreamMetadataDescriptor {
     (gogoproto.customname) = "LogStreamID",
     (gogoproto.jsontag) = "logStreamId"
   ];
-  int32 topic_id = 3 [
-    (gogoproto.casttype) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
-    (gogoproto.customname) = "TopicID",
-    (gogoproto.jsontag) = "topicId"
-  ];
-  LogStreamStatus status = 4;
-  uint64 version = 5
-      [(gogoproto.casttype) =
-           "github.daumkakao.com/varlog/varlog/pkg/types.Version"];
-  uint64 high_watermark = 6 [
-    (gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
-    (gogoproto.jsontag) = "highWatermark"
-  ];
-  string path = 7;
-  google.protobuf.Timestamp created_time = 8 [
-    (gogoproto.stdtime) = true,
-    (gogoproto.nullable) = false,
-    (gogoproto.jsontag) = "createdTime"
-  ];
-  google.protobuf.Timestamp updated_time = 9 [
-    (gogoproto.stdtime) = true,
-    (gogoproto.nullable) = false,
-    (gogoproto.jsontag) = "updatedTime"
-  ];
 }
 
-// FIXME (jun): LogStreamReplicaDescriptor
-// - Similar types
-// - Ambiguous naming
-//
-// maybe LogStreamReplica's information
-// TODO: LogStreamMetadataDescriptor + LogStreamReplicaDescriptor
-message LogStreamReplicaDescriptor {
-  int32 storage_node_id = 1 [
-    (gogoproto.casttype) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-    (gogoproto.customname) = "StorageNodeID"
+// LogStreamReplica represents replica of log stream.
+message LogStreamReplica {
+  option (gogoproto.equal) = true;
+
+  StorageNode storage_node = 1
+      [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  TopicLogStream topic_log_stream = 2
+      [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// LogSequenceNumber wraps LLSN and GLSN.
+// LLSN is the sequence number of logs in a log stream.
+// GLSN is the sequence number of logs in a topic.
+message LogSequenceNumber {
+  option (gogoproto.equal) = true;
+
+  uint64 llsn = 1 [
+    (gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LLSN"
   ];
-  int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.LogStreamID",
-    (gogoproto.customname) = "LogStreamID"
+  uint64 glsn = 2 [
+    (gogoproto.casttype) = "github.daumkakao.com/varlog/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "GLSN"
   ];
-  int32 topic_id = 3 [
-    (gogoproto.casttype) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.TopicID",
-    (gogoproto.customname) = "TopicID"
-  ];
-  string address = 4;
 }
 
 message LogEntryMeta {

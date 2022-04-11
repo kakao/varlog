@@ -1,11 +1,12 @@
 package executor
 
 import (
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type MetadataProvider interface {
-	Metadata() varlogpb.LogStreamMetadataDescriptor
+	Metadata() snpb.LogStreamReplicaMetadataDescriptor
 	Path() string
 }
 
@@ -13,7 +14,7 @@ func (e *executor) Path() string {
 	return e.storage.Path()
 }
 
-func (e *executor) Metadata() varlogpb.LogStreamMetadataDescriptor {
+func (e *executor) Metadata() snpb.LogStreamReplicaMetadataDescriptor {
 	var status varlogpb.LogStreamStatus
 	switch e.stateBarrier.state.load() {
 	case executorMutable:
@@ -24,16 +25,24 @@ func (e *executor) Metadata() varlogpb.LogStreamMetadataDescriptor {
 		status = varlogpb.LogStreamStatusSealed
 	}
 	version, _, _ := e.lsc.reportCommitBase()
-	return varlogpb.LogStreamMetadataDescriptor{
-		StorageNodeID: e.storageNodeID,
-		LogStreamID:   e.logStreamID,
-		TopicID:       e.topicID,
-		Version:       version,
-		HighWatermark: e.lsc.localHighWatermark().GLSN,
-		Status:        status,
-		Path:          e.storage.Path(),
-		CreatedTime:   e.tsp.Created(),
-		UpdatedTime:   e.tsp.LastUpdated(),
+	return snpb.LogStreamReplicaMetadataDescriptor{
+		LogStreamReplica: varlogpb.LogStreamReplica{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: e.storageNodeID,
+			},
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: e.logStreamID,
+				TopicID:     e.topicID,
+			},
+		},
+		Version: version,
+		LocalHighWatermark: varlogpb.LogSequenceNumber{
+			GLSN: e.lsc.localHighWatermark().GLSN,
+		},
+		Status:      status,
+		Path:        e.storage.Path(),
+		CreatedTime: e.tsp.Created(),
+		UpdatedTime: e.tsp.LastUpdated(),
 	}
 }
 

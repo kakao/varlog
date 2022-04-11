@@ -31,7 +31,7 @@ import (
 type StorageNodeEventHandler interface {
 	HandleHeartbeatTimeout(context.Context, types.StorageNodeID)
 
-	HandleReport(context.Context, *varlogpb.StorageNodeMetadataDescriptor)
+	HandleReport(context.Context, *snpb.StorageNodeMetadataDescriptor)
 }
 
 // ClusterManager manages varlog cluster.
@@ -39,7 +39,7 @@ type ClusterManager interface {
 	io.Closer
 
 	// AddStorageNode adds new StorageNode to the cluster.
-	AddStorageNode(ctx context.Context, addr string) (*varlogpb.StorageNodeMetadataDescriptor, error)
+	AddStorageNode(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error)
 
 	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error
 
@@ -60,7 +60,7 @@ type ClusterManager interface {
 	UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 
 	// Seal seals the log stream replicas corresponded with the given logStreamID.
-	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, types.GLSN, error)
+	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) ([]snpb.LogStreamReplicaMetadataDescriptor, types.GLSN, error)
 
 	// Sync copies the log entries of the src to the dst. Sync may be long-running, thus it
 	// returns immediately without waiting for the completion of sync. Callers of Sync
@@ -312,7 +312,7 @@ func (cm *clusterManager) RemoveMRPeer(ctx context.Context, raftURL string) erro
 	return nil
 }
 
-func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (snmeta *varlogpb.StorageNodeMetadataDescriptor, err error) {
+func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (snmeta *snpb.StorageNodeMetadataDescriptor, err error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -719,14 +719,14 @@ func (cm *clusterManager) unlockLogStreamStatus(logStreamID types.LogStreamID) {
 	cm.muLogStreamStatus[logStreamID%numLogStreamMutex].Unlock()
 }
 
-func (cm *clusterManager) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, types.GLSN, error) {
+func (cm *clusterManager) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) ([]snpb.LogStreamReplicaMetadataDescriptor, types.GLSN, error) {
 	cm.lockLogStreamStatus(logStreamID)
 	defer cm.unlockLogStreamStatus(logStreamID)
 
 	return cm.seal(ctx, topicID, logStreamID)
 }
 
-func (cm *clusterManager) seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamMetadataDescriptor, types.GLSN, error) {
+func (cm *clusterManager) seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) ([]snpb.LogStreamReplicaMetadataDescriptor, types.GLSN, error) {
 	cm.statRepository.SetLogStreamStatus(logStreamID, varlogpb.LogStreamStatusSealing)
 
 	lastGLSN, err := cm.mrMgr.Seal(ctx, logStreamID)
@@ -901,7 +901,7 @@ func (cm *clusterManager) syncLogStream(ctx context.Context, topicID types.Topic
 	}
 }
 
-func (cm *clusterManager) HandleReport(ctx context.Context, snm *varlogpb.StorageNodeMetadataDescriptor) {
+func (cm *clusterManager) HandleReport(ctx context.Context, snm *snpb.StorageNodeMetadataDescriptor) {
 	meta, err := cm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return
@@ -910,7 +910,7 @@ func (cm *clusterManager) HandleReport(ctx context.Context, snm *varlogpb.Storag
 	cm.statRepository.Report(ctx, snm)
 
 	// Sync LogStreamStatus
-	for _, ls := range snm.GetLogStreams() {
+	for _, ls := range snm.GetLogStreamReplicas() {
 		mls := meta.GetLogStream(ls.LogStreamID)
 		if mls != nil {
 			cm.checkLogStreamStatus(ctx, ls.TopicID, ls.LogStreamID, mls.Status, ls.Status)
@@ -922,7 +922,7 @@ func (cm *clusterManager) HandleReport(ctx context.Context, snm *varlogpb.Storag
 	}
 
 	// Sync LogStream
-	for _, ls := range snm.GetLogStreams() {
+	for _, ls := range snm.GetLogStreamReplicas() {
 		if ls.Status.Sealed() {
 			cm.syncLogStream(ctx, ls.TopicID, ls.LogStreamID)
 		}

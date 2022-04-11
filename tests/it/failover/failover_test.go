@@ -711,7 +711,7 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 				sn := env.PrimaryStorageNodeIDOf(t, lsID)
 				snCL := env.SNClientOf(t, sn)
 				snmd, _ := snCL.GetMetadata(context.TODO())
-				if len(snmd.GetLogStreams()) == 1 {
+				if len(snmd.GetLogStreamReplicas()) == 1 {
 					updateLS = lsID
 					victim = sn
 					break
@@ -720,7 +720,7 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 				sn = env.BackupStorageNodeIDOf(t, lsID)
 				snCL = env.SNClientOf(t, sn)
 				snmd, _ = snCL.GetMetadata(context.TODO())
-				if len(snmd.GetLogStreams()) == 1 {
+				if len(snmd.GetLogStreamReplicas()) == 1 {
 					updateLS = lsID
 					victim = sn
 					break

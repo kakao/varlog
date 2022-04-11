@@ -176,10 +176,10 @@ func (mr *MockStorageNodeManagerMockRecorder) ContainsAddress(arg0 interface{}) 
 }
 
 // GetMetadata mocks base method.
-func (m *MockStorageNodeManager) GetMetadata(arg0 context.Context, arg1 types.StorageNodeID) (*varlogpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockStorageNodeManager) GetMetadata(arg0 context.Context, arg1 types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadata", arg0, arg1)
-	ret0, _ := ret[0].(*varlogpb.StorageNodeMetadataDescriptor)
+	ret0, _ := ret[0].(*snpb.StorageNodeMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -191,11 +191,11 @@ func (mr *MockStorageNodeManagerMockRecorder) GetMetadata(arg0, arg1 interface{}
 }
 
 // GetMetadataByAddr mocks base method.
-func (m *MockStorageNodeManager) GetMetadataByAddr(arg0 context.Context, arg1 string) (snc.StorageNodeManagementClient, *varlogpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockStorageNodeManager) GetMetadataByAddr(arg0 context.Context, arg1 string) (snc.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadataByAddr", arg0, arg1)
 	ret0, _ := ret[0].(snc.StorageNodeManagementClient)
-	ret1, _ := ret[1].(*varlogpb.StorageNodeMetadataDescriptor)
+	ret1, _ := ret[1].(*snpb.StorageNodeMetadataDescriptor)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -247,10 +247,10 @@ func (mr *MockStorageNodeManagerMockRecorder) RemoveStorageNode(arg0 interface{}
 }
 
 // Seal mocks base method.
-func (m *MockStorageNodeManager) Seal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 types.GLSN) ([]varlogpb.LogStreamMetadataDescriptor, error) {
+func (m *MockStorageNodeManager) Seal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 types.GLSN) ([]snpb.LogStreamReplicaMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seal", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].([]varlogpb.LogStreamMetadataDescriptor)
+	ret0, _ := ret[0].([]snpb.LogStreamReplicaMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

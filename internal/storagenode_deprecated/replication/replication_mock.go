@@ -53,7 +53,7 @@ func (mr *MockReplicatorMockRecorder) Replicate(arg0, arg1, arg2 interface{}) *g
 }
 
 // Sync mocks base method.
-func (m *MockReplicator) Sync(arg0 context.Context, arg1 varlogpb.Replica) (*snpb.SyncStatus, error) {
+func (m *MockReplicator) Sync(arg0 context.Context, arg1 varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Sync", arg0, arg1)
 	ret0, _ := ret[0].(*snpb.SyncStatus)

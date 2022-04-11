@@ -12,7 +12,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/snpb/mock"
-	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 func TestManagementClientGetMetadata(t *testing.T) {
@@ -150,12 +150,14 @@ func TestManagementClientUnseal(t *testing.T) {
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(nil, verrors.ErrInternal)
 			Convey("Then the ManagementClient should return the error", func() {
-				err := mc.Unseal(context.TODO(), types.TopicID(1), types.LogStreamID(1), []varlogpb.Replica{
+				err := mc.Unseal(context.TODO(), types.TopicID(1), types.LogStreamID(1), []varlogpb.LogStreamReplica{
 					{
 						StorageNode: varlogpb.StorageNode{
 							StorageNodeID: 1,
 						},
-						LogStreamID: 1,
+						TopicLogStream: varlogpb.TopicLogStream{
+							LogStreamID: 1,
+						},
 					},
 				})
 				So(err, ShouldNotBeNil)
@@ -165,12 +167,14 @@ func TestManagementClientUnseal(t *testing.T) {
 		Convey("When the ManagementService succeeds to unseal the LogStream", func() {
 			mockClient.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(&pbtypes.Empty{}, nil)
 			Convey("Then the ManagementClient should not return an error", func() {
-				err := mc.Unseal(context.TODO(), types.TopicID(1), types.LogStreamID(1), []varlogpb.Replica{
+				err := mc.Unseal(context.TODO(), types.TopicID(1), types.LogStreamID(1), []varlogpb.LogStreamReplica{
 					{
 						StorageNode: varlogpb.StorageNode{
 							StorageNodeID: 1,
 						},
-						LogStreamID: 1,
+						TopicLogStream: varlogpb.TopicLogStream{
+							LogStreamID: 1,
+						},
 					},
 				})
 				So(err, ShouldBeNil)

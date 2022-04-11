@@ -20,6 +20,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
+	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/tests/it"
 	"github.daumkakao.com/varlog/varlog/vtesting"
@@ -237,13 +238,13 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 
 type testSnHandler struct {
 	hbC     chan types.StorageNodeID
-	reportC chan *varlogpb.StorageNodeMetadataDescriptor
+	reportC chan *snpb.StorageNodeMetadataDescriptor
 }
 
 func newTestSnHandler() *testSnHandler {
 	return &testSnHandler{
 		hbC:     make(chan types.StorageNodeID),
-		reportC: make(chan *varlogpb.StorageNodeMetadataDescriptor),
+		reportC: make(chan *snpb.StorageNodeMetadataDescriptor),
 	}
 }
 
@@ -254,7 +255,7 @@ func (sh *testSnHandler) HandleHeartbeatTimeout(ctx context.Context, snID types.
 	}
 }
 
-func (sh *testSnHandler) HandleReport(ctx context.Context, sn *varlogpb.StorageNodeMetadataDescriptor) {
+func (sh *testSnHandler) HandleReport(ctx context.Context, sn *snpb.StorageNodeMetadataDescriptor) {
 	select {
 	case sh.reportC <- sn:
 	default:
