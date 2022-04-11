@@ -306,6 +306,11 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 
 // drainCommitWaitQ drains the commit wait tasks in commitWaitQ.
 func (cm *committer) drainCommitWaitQ(cause error) {
+	cm.logger.Debug("draining commit wait tasks",
+		zap.Int64("inflight", atomic.LoadInt64(&cm.inflightCommitWait)),
+		zap.Error(cause),
+	)
+
 	for atomic.LoadInt64(&cm.inflightCommitWait) > 0 {
 		cwt := cm.commitWaitQ.pop()
 		if cwt == nil {
@@ -313,7 +318,8 @@ func (cm *committer) drainCommitWaitQ(cause error) {
 		}
 		cwt.awg.commitDone(cause)
 		cwt.release()
-		atomic.AddInt64(&cm.inflightCommitWait, -1)
+		inflight := atomic.AddInt64(&cm.inflightCommitWait, -1)
+		cm.logger.Debug("discard a commit wait task", zap.Int64("inflight", inflight))
 	}
 }
 

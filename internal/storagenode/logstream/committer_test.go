@@ -153,6 +153,7 @@ func TestCommitter_DrainCommitWaitQ(t *testing.T) {
 	cm := &committer{}
 	cm.commitWaitQ = newCommitWaitQueue()
 	cm.lse = lse
+	cm.logger = zap.NewNop()
 
 	cwts := newListQueue()
 	cwts.PushFront(newCommitWaitTask(newAppendWaitGroup(newWriteWaitGroup())))

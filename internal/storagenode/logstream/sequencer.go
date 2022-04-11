@@ -42,11 +42,15 @@ func newSequencer(cfg sequencerConfig) (*sequencer, error) {
 // send sends a sequence task to the sequencer.
 // If state of the log stream executor is not appendable, it returns an error.
 func (sq *sequencer) send(ctx context.Context, st *sequenceTask) (err error) {
-	atomic.AddInt64(&sq.inflight, 1)
+	inflight := atomic.AddInt64(&sq.inflight, 1)
 	defer func() {
 		if err != nil {
-			atomic.AddInt64(&sq.inflight, -1)
+			inflight = atomic.AddInt64(&sq.inflight, -1)
 		}
+		sq.logger.Debug("sent seqeuencer a task",
+			zap.Int64("inflight", inflight),
+			zap.Error(err),
+		)
 	}()
 
 	switch sq.lse.esm.load() {
@@ -176,6 +180,11 @@ func (sq *sequencer) waitForDrainage(cause error, forceDrain bool) {
 	const tick = time.Millisecond
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
+
+	sq.logger.Debug("draining sequencer tasks",
+		zap.Int64("inflight", atomic.LoadInt64(&sq.inflight)),
+		zap.Error(cause),
+	)
 
 	for atomic.LoadInt64(&sq.inflight) > 0 {
 		if !forceDrain {

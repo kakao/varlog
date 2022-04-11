@@ -10,6 +10,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
@@ -171,6 +172,10 @@ func TestVarlogFailoverSNBackupInitialFault(t *testing.T) {
 
 // FIXME (jun): Flaky test: VARLOG-494
 func TestVarlogFailoverSNBackupFail(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+	defer logger.Sync()
+
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
@@ -178,6 +183,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		it.WithNumberOfClients(5),
 		it.WithVMSOptions(it.NewTestVMSOptions()),
 		it.WithNumberOfTopics(1),
+		it.WithLogger(logger),
 	}
 
 	Convey("Given Varlog cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {

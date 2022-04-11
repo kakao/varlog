@@ -37,11 +37,15 @@ func newWriter(cfg writerConfig) (*writer, error) {
 
 // send sends a sequenceTask to the queue.
 func (w *writer) send(ctx context.Context, st *sequenceTask) (err error) {
-	atomic.AddInt64(&w.inflight, 1)
+	inflight := atomic.AddInt64(&w.inflight, 1)
 	defer func() {
 		if err != nil {
-			atomic.AddInt64(&w.inflight, -1)
+			inflight = atomic.AddInt64(&w.inflight, -1)
 		}
+		w.logger.Debug("sent writer a task",
+			zap.Int64("inflight", inflight),
+			zap.Error(err),
+		)
 	}()
 
 	switch w.lse.esm.load() {
@@ -126,6 +130,11 @@ func (w *writer) waitForDrainage(cause error, forceDrain bool) {
 	const tick = time.Millisecond
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
+
+	w.logger.Debug("draining writer tasks",
+		zap.Int64("inflight", atomic.LoadInt64(&w.inflight)),
+		zap.Error(cause),
+	)
 
 	for atomic.LoadInt64(&w.inflight) > 0 {
 		if !forceDrain {

@@ -9,6 +9,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/metadata_repository"
@@ -87,11 +88,16 @@ func TestAppendLogs(t *testing.T) {
 func TestReadSealedLogStream(t *testing.T) {
 	const boundary = types.GLSN(10)
 
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+	defer logger.Sync()
+
 	clus := it.NewVarlogCluster(t,
 		it.WithNumberOfStorageNodes(1),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(5),
 		it.WithNumberOfTopics(1),
+		it.WithLogger(logger),
 	)
 	defer clus.Close(t)
 
@@ -107,8 +113,10 @@ func TestReadSealedLogStream(t *testing.T) {
 			topicID := clus.TopicIDs()[0]
 			client := clus.ClientAtIndex(t, idx)
 			for {
+				t.Logf("[%d] appending", idx)
 				res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
 				if res.Err != nil {
+					t.Logf("[%d] append error: %+v", idx, res.Err)
 					assert.ErrorIs(t, res.Err, verrors.ErrSealed)
 					errC <- res.Err
 					break
@@ -135,6 +143,7 @@ func TestReadSealedLogStream(t *testing.T) {
 			}
 		case err := <-errC:
 			numSealedErr++
+			t.Logf("%d sealed errors", numSealedErr)
 			require.ErrorIs(t, err, verrors.ErrSealed)
 		}
 	}
