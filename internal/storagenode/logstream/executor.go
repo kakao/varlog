@@ -36,7 +36,8 @@ type Executor struct {
 	cm      *committer
 	bw      *backupWriter
 
-	inflight int64
+	inflight       int64
+	inflightAppend int64
 
 	// FIXME: move to lsc
 	globalLowWatermark struct {
@@ -301,6 +302,11 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.Replica) (err
 }
 
 func (lse *Executor) resetInternalState(lastCommittedLLSN types.LLSN, discardCommitWaitTasks bool) {
+	lse.logger.Debug("resetting internal state",
+		zap.Int64("inflight", atomic.LoadInt64(&lse.inflight)),
+		zap.Int64("inflight_append", atomic.LoadInt64(&lse.inflightAppend)),
+	)
+
 	// close replicClients in replica connector
 	lse.rcs.close()
 	lse.rcs = nil

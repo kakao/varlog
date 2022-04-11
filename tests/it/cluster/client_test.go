@@ -372,6 +372,7 @@ func TestClientTrim(t *testing.T) {
 	require.Eventually(t, func() bool {
 		errC := make(chan error)
 		nopOnNext := func(le varlogpb.LogEntry, err error) {
+			t.Logf("subscribe: le=%+v err=%v", le, err)
 			isErr := err != nil
 			errC <- err
 			if isErr {

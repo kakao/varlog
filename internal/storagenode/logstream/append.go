@@ -21,7 +21,12 @@ type appendContext struct {
 // Append appends a batch of logs to the log stream.
 func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.AppendResult, error) {
 	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	atomic.AddInt64(&lse.inflightAppend, 1)
+
+	defer func() {
+		atomic.AddInt64(&lse.inflightAppend, -1)
+		atomic.AddInt64(&lse.inflight, -1)
+	}()
 
 	switch lse.esm.load() {
 	case executorStateSealing, executorStateSealed, executorStateLearning:
