@@ -8,8 +8,8 @@ images:
 - name: busybox
   newName: mdock.daumkakao.io/busybox
   newTag: stable
-- name: idock.daumkakao.io/varlog/all-in-one
-  newName: idock.daumkakao.io/varlog/all-in-one
+- name: idock.daumkakao.io/varlog/varlog-test
+  newName: idock.daumkakao.io/varlog/varlog-test
   newTag: v0.1.6-9b13d96d
 
 patchesStrategicMerge:

@@ -36,10 +36,10 @@ pipeline {
       steps {
         timeout([time: 3, unit: "MINUTES"]) {
           waitUntil([initialRecurrencePeriod: 5000, quiet: true]) {
-            echo "precondition: all-in-one image"
+            echo "precondition: varlog/varlog-test image"
             script {
               def ret = sh([
-                script: 'D2HUB_ID=${D2HUB_USR} D2HUB_PW=${D2HUB_PSW} build/d2hub-check-image.sh',
+                script: 'D2HUB_ID=${D2HUB_USR} D2HUB_PW=${D2HUB_PSW} build/e2e/d2hub-check-image.sh',
                 returnStatus: true
               ])
               return (ret == 0)
@@ -54,7 +54,7 @@ pipeline {
             sh 'kubectl config set-context varlog-dev-e2e-context --cluster=varlog-dev-e2e-cluster --user=${DEV_E2E_USR}'
             sh 'kubectl config use-context varlog-dev-e2e-context'
             sh 'kubectl config view'
-            sh 'make kustomize DOCKER_TAG=$(build/d2hub-image-tag.sh) KUSTOMIZE_ENV=e2e'
+            sh 'make kustomize DOCKER_TAG=$(build/e2e/d2hub-image-tag.sh) KUSTOMIZE_ENV=e2e'
             sh 'kubectl apply -k deploy/k8s-e2e/e2e/'
             sh 'make test_e2e TEST_FLAGS="-v -race -failfast -count=1 -timeout=30m"'
           } // end of lock

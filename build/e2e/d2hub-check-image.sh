@@ -3,7 +3,7 @@
 scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null && pwd )"
 
 NAMESPACE="${NAMESPACE:=varlog}"
-REPOS="${REPOS:=all-in-one}"
+REPOS="${REPOS:=varlog-test}"
 TAG="${TAG:=$(${scriptdir}/d2hub-image-tag.sh)}"
 
 D2HUB_ID="${D2HUB_ID:=ldap-id}"

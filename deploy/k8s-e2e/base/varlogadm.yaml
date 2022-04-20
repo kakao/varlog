@@ -45,7 +45,7 @@ spec:
           imagePullPolicy: IfNotPresent
       containers:
         - name: varlogadm
-          image: idock.daumkakao.io/varlog/all-in-one:latest
+          image: idock.daumkakao.io/varlog/varlog-test:latest
           command:
             - "python3"
           args:
