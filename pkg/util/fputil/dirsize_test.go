@@ -16,3 +16,9 @@ func TestDirectorySize(t *testing.T) {
 	assert.NoError(t, ioutil.WriteFile(filepath.Join(path, "foo"), []byte{'a'}, fs.FileMode(777)))
 	assert.EqualValues(t, 1, DirectorySize(path))
 }
+
+func TestDiskSize(t *testing.T) {
+	all, used, err := DiskSize("/")
+	assert.NoError(t, err)
+	t.Logf("all=%d, free=%d, used=%d", all, all-used, used)
+}
