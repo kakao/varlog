@@ -13,8 +13,6 @@ ifneq ($(shell echo $$OSTYPE | egrep "darwin"),)
 	export CGO_CFLAGS=-Wno-undef-prefix
 endif
 
-DOCKER_REPOS := ***REMOVED***
-
 
 .DEFAULT_GOAL := all
 .PHONY: all
@@ -29,37 +27,28 @@ precommit_lint: fmt tidy vet lint test
 
 # build
 BIN_DIR := $(CURDIR)/bin
-VARLOGADM := $(BIN_DIR)/varlogadm
-VARLOGCTL := $(BIN_DIR)/varlogctl
 VMR := $(BIN_DIR)/vmr
-SNTOOL := $(BIN_DIR)/sntool
-MRTOOL := $(BIN_DIR)/mrtool
-RPC_TEST_SERVER := $(BIN_DIR)/rpc_test_server
-BENCHMARK := $(BIN_DIR)/benchmark
-VARLOGCLI := $(BIN_DIR)/varlogcli
+VARLOGADM := $(BIN_DIR)/varlogadm
 VARLOGSN := $(BIN_DIR)/varlogsn
+VARLOGCTL := $(BIN_DIR)/varlogctl
+VARLOGCLI := $(BIN_DIR)/varlogcli
+MRTOOL := $(BIN_DIR)/mrtool
 STRESS := $(BIN_DIR)/stress
 
-.PHONY: build varlogadm varlogctl vmr sntool mrtool rpc_test_server benchmark varlogcli varlogsn stress
-build: varlogadm varlogctl vmr sntool mrtool rpc_test_server benchmark varlogcli varlogsn stress
-varlogadm:
-	$(GO) build $(GCFLAGS) -o $(VARLOGADM) $(CURDIR)/cmd/varlogadm
-varlogctl:
-	$(GO) build $(GCFLAGS) -o $(VARLOGCTL) $(CURDIR)/cmd/varlogctl
+.PHONY: build vmr varlogadm varlogsn varlogctl varlogcli mrtool stress
+build: vmr varlogadm varlogsn varlogctl varlogcli mrtool stress
 vmr:
 	$(GO) build $(GCFLAGS) -o $(VMR) cmd/metadata_repository/main.go
-sntool:
-	$(GO) build $(GCFLAGS) -o $(SNTOOL) cmd/sntool/sntool.go
-mrtool:
-	$(GO) build $(GCFLAGS) -o $(MRTOOL) $(CURDIR)/cmd/mrtool
-rpc_test_server:
-	$(GO) build -tags rpc_e2e $(GCFLAGS) -o $(RPC_TEST_SERVER) cmd/rpc_test_server/main.go
-benchmark:
-	$(GO) build $(GCFLAGS) -o $(BENCHMARK) cmd/benchmark/main.go
-varlogcli:
-	$(GO) build $(GCFLAGS) -o $(VARLOGCLI) $(CURDIR)/cmd/varlogcli
+varlogadm:
+	$(GO) build $(GCFLAGS) -o $(VARLOGADM) $(CURDIR)/cmd/varlogadm
 varlogsn:
 	$(GO) build $(GCFLAGS) -o $(VARLOGSN) $(CURDIR)/cmd/varlogsn
+varlogctl:
+	$(GO) build $(GCFLAGS) -o $(VARLOGCTL) $(CURDIR)/cmd/varlogctl
+varlogcli:
+	$(GO) build $(GCFLAGS) -o $(VARLOGCLI) $(CURDIR)/cmd/varlogcli
+mrtool:
+	$(GO) build $(GCFLAGS) -o $(MRTOOL) $(CURDIR)/cmd/mrtool
 stress:
 	$(GO) build $(GCFLAGS) -o $(STRESS) $(CURDIR)/cmd/stress
 
@@ -159,21 +148,16 @@ test_e2e_docker_long:
 
 # docker
 BUILD_DIR := $(CURDIR)/build
-DOCKERFILE := $(BUILD_DIR)/release/all-in-one/Dockerfile
+DOCKERFILE := $(BUILD_DIR)/e2e/Dockerfile
 IMAGE_REGISTRY := ***REMOVED***
 IMAGE_NAMESPACE := varlog
-IMAGE_REPOS := all-in-one
-
-VERSION := $(shell cat $(CURDIR)/VERSION)
-GIT_HASH := $(shell git describe --always --broken)
-BUILD_DATE := $(shell date -u '+%FT%T%z')
-DOCKER_TAG := v$(VERSION)-$(GIT_HASH)
-# DOCKER_TAG := $(shell $(BUILD_DIR)/d2hub-image-tag.sh)
+IMAGE_REPOS := varlog-test
+DOCKER_TAG := $(shell git branch --show-current)-$(shell git describe --always --broken)
 
 .PHONY: docker kustomize
 docker: 
 	docker build \
-		--target varlog-all-in-one \
+		--target varlog-test \
 		-f $(DOCKERFILE) \
 		-t $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG) . && \
 	docker push $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG)
@@ -186,7 +170,7 @@ kustomize:
 
 
 # proto
-DOCKER_PROTOBUF = $(DOCKER_REPOS)/varlog/protobuf:0.0.3
+DOCKER_PROTOBUF = $(IMAGE_REGISTRY)/varlog/protobuf:0.0.3
 PROTOC := docker run --rm -u $(shell id -u) -v$(PWD):$(PWD) -w$(PWD) $(DOCKER_PROTOBUF) --proto_path=$(PWD)
 PROTO_SRCS := $(shell find . -name "*.proto" -not -path "./vendor/*")
 PROTO_PBS := $(PROTO_SRCS:.proto=.pb.go)
@@ -241,7 +225,7 @@ clean:
 	$(RM) $(TEST_OUTPUT) $(TEST_REPORT)
 	$(RM) $(COVERAGE_OUTPUT_TMP) $(COVERAGE_OUTPUT) $(COVERAGE_REPORT)
 	$(RM) $(BENCH_OUTPUT) $(BENCH_REPORT)
-	$(RM) $(VARLOGADM) $(VARLOGCTL) $(VARLOGSN) $(VMR) $(SNTOOL) $(MRTOOL) $(RPC_TEST_SERVER) $(BENCHMARK) $(RPCBENCH_SERVER) $(RPCBENCH_CLIENT) $(VARLOGCLI) $(STRESS)
+	$(RM) $(VMR) $(VARLOGADM) $(VARLOGSN) $(VARLOGCTL) $(VARLOGCLI) $(MRTOOL) $(STRESS)
 
 clean_mock:
 	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.com/kakao/varlog/##),$(RM) -f $(path)/*_mock.go;)
