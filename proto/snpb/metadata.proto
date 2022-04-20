@@ -106,11 +106,12 @@ message LogStreamReplicaMetadataDescriptor {
 
   // Path is the directory where the data for the log stream replica is stored.
   string path = 7;
+  int64 storage_size_bytes = 8;
 
   // CreatedTime
   //
   // FIXME: StartTime or UpTime
-  google.protobuf.Timestamp created_time = 8 [
+  google.protobuf.Timestamp created_time = 9 [
     (gogoproto.stdtime) = true,
     (gogoproto.nullable) = false,
     (gogoproto.jsontag) = "createdTime"
@@ -119,7 +120,7 @@ message LogStreamReplicaMetadataDescriptor {
   // UpdatedTime
   //
   // Deprecated:
-  google.protobuf.Timestamp updated_time = 9 [
+  google.protobuf.Timestamp updated_time = 10 [
     (gogoproto.stdtime) = true,
     (gogoproto.nullable) = false,
     (gogoproto.jsontag) = "updatedTime"

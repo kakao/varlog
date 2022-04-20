@@ -14,6 +14,7 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -24,13 +25,17 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/pprof"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
+	"github.daumkakao.com/varlog/varlog/pkg/util/fputil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
-const hintNumExecutors = 32
+const (
+	hintNumExecutors        = 32
+	singleflightKeyMetadata = "metadata"
+)
 
 type StorageNode struct {
 	config
@@ -50,6 +55,8 @@ type StorageNode struct {
 	// FIXME: some metadata should be stored into storage.
 
 	metrics *telemetry.Metrics
+
+	sf singleflight.Group
 }
 
 func NewStorageNode(opts ...Option) (*StorageNode, error) {
@@ -200,33 +207,39 @@ func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadata
 		return nil, errors.New("storage node: closed")
 	}
 
-	snmeta := &snpb.StorageNodeMetadataDescriptor{
-		ClusterID: sn.cid,
-		StorageNode: &varlogpb.StorageNodeDescriptor{
-			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: sn.snid,
-				Address:       sn.advertise,
+	ret, _, _ := sn.sf.Do(singleflightKeyMetadata, func() (interface{}, error) {
+		snmeta := &snpb.StorageNodeMetadataDescriptor{
+			ClusterID: sn.cid,
+			StorageNode: &varlogpb.StorageNodeDescriptor{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: sn.snid,
+					Address:       sn.advertise,
+				},
+				Status: varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
 			},
-			Status: varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
-		},
-	}
-
-	for i := range sn.snPaths {
-		snmeta.StorageNode.Storages = append(snmeta.StorageNode.Storages,
-			&varlogpb.StorageDescriptor{
-				Path: sn.snPaths[i],
-			},
-		)
-	}
-
-	sn.executors.Range(func(_ types.LogStreamID, _ types.TopicID, lse *logstream.Executor) bool {
-		if lsmd, err := lse.Metadata(); err == nil {
-			snmeta.LogStreamReplicas = append(snmeta.LogStreamReplicas, lsmd)
 		}
-		return true
-	})
 
-	return snmeta, nil
+		for _, path := range sn.snPaths {
+			all, used, _ := fputil.DiskSize(path)
+			snmeta.StorageNode.Storages = append(snmeta.StorageNode.Storages,
+				&varlogpb.StorageDescriptor{
+					Path:  path,
+					Used:  used,
+					Total: all,
+				},
+			)
+		}
+
+		sn.executors.Range(func(_ types.LogStreamID, _ types.TopicID, lse *logstream.Executor) bool {
+			if lsmd, err := lse.Metadata(); err == nil {
+				snmeta.LogStreamReplicas = append(snmeta.LogStreamReplicas, lsmd)
+			}
+			return true
+		})
+
+		return snmeta, nil
+	})
+	return ret.(*snpb.StorageNodeMetadataDescriptor), nil
 }
 
 func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, snPath string) (string, error) {

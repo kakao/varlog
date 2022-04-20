@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 
 	"github.daumkakao.com/varlog/varlog/internal/storage"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
@@ -24,6 +25,8 @@ import (
 const (
 	minQueueCapacity = 0
 	maxQueueCapacity = 1 << 16
+
+	singleflightKeyMetadata = "metadata"
 )
 
 type Executor struct {
@@ -63,6 +66,9 @@ type Executor struct {
 
 	// metric attributes
 	metricAttrs []attribute.KeyValue
+
+	// singleflight for metadata
+	sf singleflight.Group
 }
 
 func NewExecutor(opts ...ExecutorOption) (lse *Executor, err error) {
@@ -384,45 +390,49 @@ func (lse *Executor) Metadata() (snpb.LogStreamReplicaMetadataDescriptor, error)
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)
 
-	var status varlogpb.LogStreamStatus
-	switch lse.esm.load() {
-	case executorStateAppendable:
-		status = varlogpb.LogStreamStatusRunning
-	case executorStateSealing, executorStateLearning:
-		status = varlogpb.LogStreamStatusSealing
-	case executorStateSealed:
-		status = varlogpb.LogStreamStatusSealed
-	case executorStateClosed:
-		return snpb.LogStreamReplicaMetadataDescriptor{}, verrors.ErrClosed
-	}
+	ret, err, _ := lse.sf.Do(singleflightKeyMetadata, func() (interface{}, error) {
+		var status varlogpb.LogStreamStatus
+		switch lse.esm.load() {
+		case executorStateAppendable:
+			status = varlogpb.LogStreamStatusRunning
+		case executorStateSealing, executorStateLearning:
+			status = varlogpb.LogStreamStatusSealing
+		case executorStateSealed:
+			status = varlogpb.LogStreamStatusSealed
+		case executorStateClosed:
+			return snpb.LogStreamReplicaMetadataDescriptor{}, verrors.ErrClosed
+		}
 
-	localLowWatermark := lse.lsc.localLowWatermark()
-	localHighWatermark := lse.lsc.localHighWatermark()
-	version, globalHighWatermark, _ := lse.lsc.reportCommitBase()
-	return snpb.LogStreamReplicaMetadataDescriptor{
-		LogStreamReplica: varlogpb.LogStreamReplica{
-			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: lse.snid,
+		localLowWatermark := lse.lsc.localLowWatermark()
+		localHighWatermark := lse.lsc.localHighWatermark()
+		version, globalHighWatermark, _ := lse.lsc.reportCommitBase()
+		return snpb.LogStreamReplicaMetadataDescriptor{
+			LogStreamReplica: varlogpb.LogStreamReplica{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: lse.snid,
+				},
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     lse.tpid,
+					LogStreamID: lse.lsid,
+				},
 			},
-			TopicLogStream: varlogpb.TopicLogStream{
-				TopicID:     lse.tpid,
-				LogStreamID: lse.lsid,
+			Version:             version,
+			GlobalHighWatermark: globalHighWatermark,
+			LocalLowWatermark: varlogpb.LogSequenceNumber{
+				LLSN: localLowWatermark.LLSN,
+				GLSN: localLowWatermark.GLSN,
 			},
-		},
-		Version:             version,
-		GlobalHighWatermark: globalHighWatermark,
-		LocalLowWatermark: varlogpb.LogSequenceNumber{
-			LLSN: localLowWatermark.LLSN,
-			GLSN: localLowWatermark.GLSN,
-		},
-		LocalHighWatermark: varlogpb.LogSequenceNumber{
-			LLSN: localHighWatermark.LLSN,
-			GLSN: localHighWatermark.GLSN,
-		},
-		Status:      status,
-		Path:        lse.stg.Path(),
-		CreatedTime: lse.createdTime,
-	}, nil
+			LocalHighWatermark: varlogpb.LogSequenceNumber{
+				LLSN: localHighWatermark.LLSN,
+				GLSN: localHighWatermark.GLSN,
+			},
+			Status:           status,
+			Path:             lse.stg.Path(),
+			StorageSizeBytes: lse.stg.DiskUsage(),
+			CreatedTime:      lse.createdTime,
+		}, nil
+	})
+	return ret.(snpb.LogStreamReplicaMetadataDescriptor), err
 }
 
 func (lse *Executor) LogStreamMetadata() (lsd varlogpb.LogStreamDescriptor, err error) {

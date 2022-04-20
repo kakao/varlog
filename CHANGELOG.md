@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the fields `LocalLowWatermark` and `GlobalHighWatermark` to `proto/snpb.(LogStreamReplicaMetadataDescriptor).LocalHighWatermark`. (#VARLOG-719/#624)
 - Added `proto/varlogpb.(TopicLogStream)`, `proto/varlogpb.(LogStreamReplica)` and `proto/varlogpb.(LogSequenceNumber)` to package `proto/varlogpb`. (#VARLOG-719/#624)
 - Added `internal.storage.(*Storage).DiskUsage` to package `internal/storage`. (#VARLOG-722/#625)
+- Added disk usages to the response of `proto/snpb.(ManagementServer).GetMetadata`. (#VARLOG-720/#628)
 
 ### Changed
 - Merged `proto/varlogpb.(Replica)` and `proto/varlogpb.(LogStreamReplicaDescriptor)` into `proto/varlogpb.(LogStreamReplica)`. (#VARLOG-719/#624)
