@@ -468,7 +468,7 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 		storagenode.WithClusterID(clus.clusterID),
 		storagenode.WithStorageNodeID(snID),
 		storagenode.WithVolumes(volume),
-		storagenode.WithLogger(clus.logger),
+		storagenode.WithLogger(clus.logger.Named("sn").With(zap.Int32("snid", int32(snID)))),
 	)
 
 	if _, ok := clus.snWGs[snID]; !ok {
