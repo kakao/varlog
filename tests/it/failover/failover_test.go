@@ -212,11 +212,15 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 						return
 					default:
 					}
+
+					logger.Info("trying to append", zap.Int("cidx", idx))
 					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
 					if res.Err != nil {
+						logger.Info("failed to append", zap.Int("cidx", idx), zap.String("error", res.Err.Error()))
 						errC <- res.Err
 						return
 					}
+					logger.Info("succeeded to append", zap.Int("cidx", idx), zap.Any("glsn", res.Metadata[0].GLSN))
 					glsnC <- res.Metadata[0].GLSN
 				}
 			}(i)
@@ -238,6 +242,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 				case <-timer.C:
 					t.Fatal("timeout")
 				case glsn := <-glsnC:
+					logger.Info("collected glsn", zap.Any("glsn", glsn), zap.Any("maxGLSN", maxGLSN))
 					if maxGLSN < glsn {
 						maxGLSN = glsn
 					}
@@ -248,6 +253,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					}
 				case <-errC:
 					errCnt++
+					logger.Info("collected error", zap.Int("count", errCnt))
 				}
 			}
 
