@@ -263,15 +263,15 @@ func (c *testAdmin) RemoveMRPeer(ctx context.Context, raftURL string) error {
 	panic("not implemented")
 }
 
-func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]string, error) {
+func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
 	defer c.unlock()
 
-	ret := make(map[types.StorageNodeID]string)
+	ret := make(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor)
 	for snID, snMetaDesc := range c.vt.storageNodes {
-		ret[snID] = snMetaDesc.StorageNode.Address
+		ret[snID] = &snMetaDesc
 	}
 	return ret, nil
 }

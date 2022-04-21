@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Moved `proto/varlogpb.(StorageNodeMetadataDescriptor)` to `proto/snpb.(StorageNodeMetadataDescriptor)`. (#VARLOG-719/#624)
 - Moved `proto/varlogpb.(LogStreamMetadataDescriptor)` to `proto/snpb.(LogStreamReplicaMetadataDescriptor)`. (#VARLOG-719/#624)
 - Renamed `proto/snpb.(LogStreamReplicaMetadataDescriptor).HighWatermark` to `proto/snpb.(LogStreamReplicaMetadataDescriptor).LocalHighWatermark`. (#VARLOG-719/#624)
+- Enriched the response of `proto/vmspb.(ClusterManager).GetStorageNodes` RPC. (#VARLOG-723/#630)
 
 
 ## [0.1.7] - 2022-04-06

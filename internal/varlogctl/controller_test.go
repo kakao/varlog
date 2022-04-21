@@ -94,8 +94,15 @@ func TestStorageNode(t *testing.T) {
 		require.Equal(t, 0, res.NumberOfDataItem())
 	})
 
-	admin.EXPECT().GetStorageNodes(gomock.Any()).Return(map[types.StorageNodeID]string{
-		types.StorageNodeID(1): "sn1",
+	admin.EXPECT().GetStorageNodes(gomock.Any()).Return(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor{
+		types.StorageNodeID(1): {
+			StorageNode: &varlogpb.StorageNodeDescriptor{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: types.StorageNodeID(1),
+					Address:       "sn1",
+				},
+			},
+		},
 	}, nil)
 	testController(t, admin, storagenode.Describe(), func(res result.Result) {
 		require.NoError(t, res.Err())

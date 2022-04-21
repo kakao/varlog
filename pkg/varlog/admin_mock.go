@@ -144,10 +144,10 @@ func (mr *MockAdminMockRecorder) GetMRMembers(arg0 interface{}) *gomock.Call {
 }
 
 // GetStorageNodes mocks base method.
-func (m *MockAdmin) GetStorageNodes(arg0 context.Context) (map[types.StorageNodeID]string, error) {
+func (m *MockAdmin) GetStorageNodes(arg0 context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStorageNodes", arg0)
-	ret0, _ := ret[0].(map[types.StorageNodeID]string)
+	ret0, _ := ret[0].(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

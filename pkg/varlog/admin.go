@@ -68,7 +68,7 @@ type Admin interface {
 	RemoveMRPeer(ctx context.Context, raftURL string) error
 
 	// GetStorageNodes returns a map of StorageNodeIDs and their addresses.
-	GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]string, error)
+	GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error)
 
 	// Trim deletes logs whose GLSNs are less than or equal to the argument lastGLSN.
 	// Note that the return type of this method can be changed soon.
@@ -212,8 +212,8 @@ func (c *admin) RemoveMRPeer(ctx context.Context, raftURL string) error {
 	return verrors.FromStatusError(err)
 }
 
-func (c *admin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]string, error) {
-	rsp, err := c.rpcClient.GetStorageNodes(ctx, &pbtypes.Empty{})
+func (c *admin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
+	rsp, err := c.rpcClient.GetStorageNodes(ctx, &vmspb.GetStorageNodesRequest{})
 	return rsp.GetStorageNodes(), verrors.FromStatusError(err)
 }
 

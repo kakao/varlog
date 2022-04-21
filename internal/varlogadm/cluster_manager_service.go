@@ -227,22 +227,11 @@ func (s *clusterManagerService) RemoveMRPeer(ctx context.Context, req *vmspb.Rem
 	return rspI.(*vmspb.RemoveMRPeerResponse), verrors.ToStatusError(err)
 }
 
-func (s *clusterManagerService) GetStorageNodes(ctx context.Context, req *pbtypes.Empty) (*vmspb.GetStorageNodesResponse, error) {
+func (s *clusterManagerService) GetStorageNodes(ctx context.Context, req *vmspb.GetStorageNodesRequest) (*vmspb.GetStorageNodesResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/GetStorageNodes", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			var rsp *vmspb.GetStorageNodesResponse
-			meta, err := s.clusManager.Metadata(ctx)
-			if err != nil {
-				return rsp, err
-			}
-			rsp = &vmspb.GetStorageNodesResponse{}
-			if meta != nil && meta.StorageNodes != nil {
-				rsp.StorageNodes = make(map[types.StorageNodeID]string, len(meta.StorageNodes))
-				for _, sn := range meta.StorageNodes {
-					rsp.StorageNodes[sn.StorageNodeID] = sn.Address
-				}
-			}
-			return rsp, nil
+			snmds, err := s.clusManager.StorageNodes(ctx)
+			return &vmspb.GetStorageNodesResponse{StorageNodes: snmds}, err
 		},
 	)
 	return rspI.(*vmspb.GetStorageNodesResponse), verrors.ToStatusError(err)

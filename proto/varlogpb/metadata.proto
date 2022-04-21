@@ -45,10 +45,12 @@ message StorageNodeDescriptor {
 enum StorageNodeStatus {
   option (gogoproto.goproto_enum_prefix) = false;
 
-  SN_STATUS_RUNNING = 0
+  STORAGE_NODE_STATUS_RUNNING = 0
       [(gogoproto.enumvalue_customname) = "StorageNodeStatusRunning"];
-  SN_STATUS_DELETED = 1
+  STORAGE_NODE_STATUS_DELETED = 1
       [(gogoproto.enumvalue_customname) = "StorageNodeStatusDeleted"];
+  STORAGE_NODE_STATUS_UNAVAILABLE = 2
+      [(gogoproto.enumvalue_customname) = "StorageNodeStatusUnavailable"];
 }
 
 message StorageDescriptor {
