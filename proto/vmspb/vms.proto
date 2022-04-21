@@ -219,8 +219,10 @@ message GetMRMembersResponse {
            "github.com/kakao/varlog/pkg/types.NodeID"];
 }
 
+message GetStorageNodesRequest {}
+
 message GetStorageNodesResponse {
-  map<int32, string> storage_nodes = 1 [
+  map<int32, snpb.StorageNodeMetadataDescriptor> storage_nodes = 1 [
     (gogoproto.castkey) =
         "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.jsontag) = "storageNodes"
@@ -331,8 +333,8 @@ service ClusterManager {
 
   rpc RemoveMRPeer(RemoveMRPeerRequest) returns (RemoveMRPeerResponse) {}
 
-  rpc GetStorageNodes(google.protobuf.Empty) returns (GetStorageNodesResponse) {
-  }
+  rpc GetStorageNodes(GetStorageNodesRequest)
+      returns (GetStorageNodesResponse) {}
 
   rpc DescribeTopic(DescribeTopicRequest) returns (DescribeTopicResponse) {}
 

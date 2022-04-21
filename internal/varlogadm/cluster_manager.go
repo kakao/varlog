@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -78,6 +79,8 @@ type ClusterManager interface {
 	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error)
 
 	Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error)
+
+	StorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error)
 
 	MRInfos(ctx context.Context) (*mrpb.ClusterInfo, error)
 
@@ -266,6 +269,38 @@ func (cm *clusterManager) Metadata(ctx context.Context) (*varlogpb.MetadataDescr
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.cmView.ClusterMetadata(ctx)
+}
+
+func (cm *clusterManager) StorageNodes(ctx context.Context) (ret map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, err error) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	metadata, err := cm.cmView.ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var mu sync.Mutex
+	ret = make(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, len(metadata.StorageNodes))
+	g, ctx := errgroup.WithContext(ctx)
+	for i := range metadata.StorageNodes {
+		snd := metadata.StorageNodes[i]
+		g.Go(func() error {
+			snmd, err := cm.snMgr.GetMetadata(ctx, snd.StorageNodeID)
+			if err != nil {
+				copied := proto.Clone(snd).(*varlogpb.StorageNodeDescriptor)
+				copied.Status = varlogpb.StorageNodeStatusUnavailable
+				snmd = &snpb.StorageNodeMetadataDescriptor{
+					ClusterID:   cm.options.ClusterID,
+					StorageNode: copied,
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			ret[snd.StorageNodeID] = snmd
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return ret, nil
 }
 
 func (cm *clusterManager) MRInfos(ctx context.Context) (*mrpb.ClusterInfo, error) {

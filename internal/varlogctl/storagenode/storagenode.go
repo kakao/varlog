@@ -39,13 +39,14 @@ func Describe(id ...types.StorageNodeID) varlogctl.ExecuteFunc {
 			res.AddErrors(err)
 			return res
 		}
-		for snID, snAddr := range snMap {
+		for snID, snmd := range snMap {
 			if len(id) > 0 && id[0] != snID {
 				continue
 			}
 			res.AddDataItems(map[string]interface{}{
 				"storageNodeId": snID,
-				"address":       snAddr,
+				"address":       snmd.StorageNode.Address,
+				"metadata":      snmd,
 			})
 			if len(id) > 0 {
 				break
