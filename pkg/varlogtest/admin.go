@@ -270,8 +270,9 @@ func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeI
 	defer c.unlock()
 
 	ret := make(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor)
-	for snID, snMetaDesc := range c.vt.storageNodes {
-		ret[snID] = &snMetaDesc
+	for snID := range c.vt.storageNodes {
+		snmd := c.vt.storageNodes[snID]
+		ret[snID] = &snmd
 	}
 	return ret, nil
 }
