@@ -10,7 +10,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/internal/storagenode_deprecated/reportcommitter"
+	"github.daumkakao.com/varlog/varlog/internal/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
