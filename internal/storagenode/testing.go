@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/pkg/logc"
+	"github.daumkakao.com/varlog/varlog/pkg/logclient"
 	"github.daumkakao.com/varlog/varlog/pkg/snc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
@@ -107,8 +107,8 @@ func TestUnsealLogStreamReplica(t *testing.T, cid types.ClusterID, tpid types.To
 	assert.NoError(t, err)
 }
 
-func TestNewLogIOClient(t *testing.T, addr string) (logc.LogIOClient, func()) {
-	client, err := logc.NewLogIOClient(context.Background(), addr)
+func TestNewLogIOClient(t *testing.T, addr string) (logclient.LogIOClient, func()) {
+	client, err := logclient.NewLogIOClient(context.Background(), addr)
 	assert.NoError(t, err)
 	closer := func() {
 		assert.NoError(t, client.Close())

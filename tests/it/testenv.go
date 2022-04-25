@@ -20,7 +20,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
-	"github.daumkakao.com/varlog/varlog/pkg/logc"
+	"github.daumkakao.com/varlog/varlog/pkg/logclient"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
 	"github.daumkakao.com/varlog/varlog/pkg/snc"
@@ -1106,12 +1106,12 @@ func (clus *VarlogCluster) BackupStorageNodeIDOf(t *testing.T, lsID types.LogStr
 	return storagenode.TestGetStorageNodeID(t, sn)
 }
 
-func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) logc.LogIOClient {
+func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) logclient.LogIOClient {
 	snID := clus.PrimaryStorageNodeIDOf(t, lsID)
 	snmd, err := clus.SNClientOf(t, snID).GetMetadata(context.Background())
 	require.NoError(t, err)
 
-	cl, err := logc.NewLogIOClient(context.TODO(), snmd.GetStorageNode().GetAddress())
+	cl, err := logclient.NewLogIOClient(context.TODO(), snmd.GetStorageNode().GetAddress())
 	require.NoError(t, err)
 	return cl
 }
@@ -1439,7 +1439,7 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, topicID types.Topi
 			go func() {
 				defer wg.Done()
 
-				cli, err := logc.NewLogIOClient(context.TODO(), addr)
+				cli, err := logclient.NewLogIOClient(context.TODO(), addr)
 				if !assert.NoError(t, err) {
 					return
 				}

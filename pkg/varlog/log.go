@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/pkg/logc"
+	"github.daumkakao.com/varlog/varlog/pkg/logclient"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc/mrconnector"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
@@ -60,7 +60,7 @@ type logImpl struct {
 	replicasRetriever ReplicasRetriever
 	allowlist         Allowlist
 
-	logCLManager logc.LogClientManager
+	logCLManager logclient.LogClientManager
 	logger       *zap.Logger
 	opts         *options
 
@@ -135,7 +135,7 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	// TODO (jun): metadataRefresher should implement ClusterMetadataView
 	metadata := refresher.Metadata()
 
-	logCLManager, err := logc.NewLogClientManager(ctx, metadata, v.opts.grpcDialOptions, v.logger)
+	logCLManager, err := logclient.NewLogClientManager(ctx, metadata, v.opts.grpcDialOptions, v.logger)
 	if err != nil {
 		return nil, err
 	}

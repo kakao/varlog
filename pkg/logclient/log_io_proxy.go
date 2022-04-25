@@ -1,4 +1,4 @@
-package logc
+package logclient
 
 import (
 	"context"
