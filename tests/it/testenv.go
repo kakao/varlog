@@ -20,7 +20,7 @@ import (
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/varlogadm"
-	"github.com/kakao/varlog/pkg/logc"
+	"github.com/kakao/varlog/pkg/logclient"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/snc"
@@ -1106,12 +1106,12 @@ func (clus *VarlogCluster) BackupStorageNodeIDOf(t *testing.T, lsID types.LogStr
 	return storagenode.TestGetStorageNodeID(t, sn)
 }
 
-func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) logc.LogIOClient {
+func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) logclient.LogIOClient {
 	snID := clus.PrimaryStorageNodeIDOf(t, lsID)
 	snmd, err := clus.SNClientOf(t, snID).GetMetadata(context.Background())
 	require.NoError(t, err)
 
-	cl, err := logc.NewLogIOClient(context.TODO(), snmd.GetStorageNode().GetAddress())
+	cl, err := logclient.NewLogIOClient(context.TODO(), snmd.GetStorageNode().GetAddress())
 	require.NoError(t, err)
 	return cl
 }
@@ -1439,7 +1439,7 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, topicID types.Topi
 			go func() {
 				defer wg.Done()
 
-				cli, err := logc.NewLogIOClient(context.TODO(), addr)
+				cli, err := logclient.NewLogIOClient(context.TODO(), addr)
 				if !assert.NoError(t, err) {
 					return
 				}

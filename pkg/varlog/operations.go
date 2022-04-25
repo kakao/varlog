@@ -20,6 +20,7 @@ func (v *logImpl) append(ctx context.Context, tpid types.TopicID, lsid types.Log
 	for _, opt := range opts {
 		opt.apply(&appendOpts)
 	}
+
 	for i := 0; i < appendOpts.retryCount+1; i++ {
 		if appendOpts.selectLogStream {
 			var ok bool

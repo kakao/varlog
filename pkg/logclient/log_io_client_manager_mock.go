@@ -2,7 +2,7 @@
 // Source: github.com/kakao/varlog/pkg/logc (interfaces: LogClientManager)
 
 // Package logc is a generated GoMock package.
-package logc
+package logclient
 
 import (
 	context "context"

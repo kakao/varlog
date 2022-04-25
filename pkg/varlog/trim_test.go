@@ -9,7 +9,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/pkg/logc"
+	"github.com/kakao/varlog/pkg/logclient"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -45,11 +45,11 @@ func TestTrim(t *testing.T) {
 		}
 		replicasRetriever.EXPECT().All(topicID).Return(replicasMap).MaxTimes(1)
 
-		createMockLogClientManager := func(expectedTrimResults []error) *logc.MockLogClientManager {
-			logCLManager := logc.NewMockLogClientManager(ctrl)
+		createMockLogClientManager := func(expectedTrimResults []error) *logclient.MockLogClientManager {
+			logCLManager := logclient.NewMockLogClientManager(ctrl)
 			logCLManager.EXPECT().GetOrConnect(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ context.Context, storageNodeID types.StorageNodeID, storagNodeAddr string) (logc.LogIOClient, error) {
-					logCL := logc.NewMockLogIOClient(ctrl)
+				func(_ context.Context, storageNodeID types.StorageNodeID, storagNodeAddr string) (logclient.LogIOClient, error) {
+					logCL := logclient.NewMockLogIOClient(ctrl)
 					expectedTrimResult := expectedTrimResults[int(storageNodeID)]
 					logCL.EXPECT().TrimDeprecated(gomock.Any(), gomock.Any(), gomock.Any()).Return(expectedTrimResult)
 					return logCL, nil

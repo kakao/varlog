@@ -1,4 +1,4 @@
-package logc
+package logclient
 
 //go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/logc -package logc -destination log_io_client_mock.go . LogIOClient
 

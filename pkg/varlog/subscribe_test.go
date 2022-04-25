@@ -12,7 +12,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/pkg/logc"
+	"github.com/kakao/varlog/pkg/logclient"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -58,14 +58,14 @@ func TestSubscribe(t *testing.T) {
 		}
 		replicasRetriever.EXPECT().All(topicID).Return(replicasMap).MaxTimes(1)
 
-		createMockLogClientManager := func(results map[types.LogStreamID][]logc.SubscribeResult) *logc.MockLogClientManager {
-			logCLManager := logc.NewMockLogClientManager(ctrl)
+		createMockLogClientManager := func(results map[types.LogStreamID][]logclient.SubscribeResult) *logclient.MockLogClientManager {
+			logCLManager := logclient.NewMockLogClientManager(ctrl)
 			logCLManager.EXPECT().GetOrConnect(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ context.Context, storageNodeID types.StorageNodeID, addr string) (logc.LogIOClient, error) {
-					logCL := logc.NewMockLogIOClient(ctrl)
-					logCL.EXPECT().Subscribe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ types.TopicID, logStreamID types.LogStreamID, _ types.GLSN, _ types.GLSN) (<-chan logc.SubscribeResult, error) {
+				func(_ context.Context, storageNodeID types.StorageNodeID, addr string) (logclient.LogIOClient, error) {
+					logCL := logclient.NewMockLogIOClient(ctrl)
+					logCL.EXPECT().Subscribe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ types.TopicID, logStreamID types.LogStreamID, _ types.GLSN, _ types.GLSN) (<-chan logclient.SubscribeResult, error) {
 						result := results[logStreamID]
-						c := make(chan logc.SubscribeResult, len(result))
+						c := make(chan logclient.SubscribeResult, len(result))
 						for _, res := range result {
 							c <- res
 						}
@@ -98,7 +98,7 @@ func TestSubscribe(t *testing.T) {
 			begin = types.GLSN(1)
 			end = begin + types.GLSN(numLogs)
 
-			results := make(map[types.LogStreamID][]logc.SubscribeResult, numLogStreams)
+			results := make(map[types.LogStreamID][]logclient.SubscribeResult, numLogStreams)
 			for logStreamID := minLogStreamID; logStreamID < minLogStreamID+numLogStreams; logStreamID++ {
 				results[logStreamID] = nil
 			}
@@ -125,13 +125,13 @@ func TestSubscribe(t *testing.T) {
 		Convey("When log streams have log entries", func() {
 			begin = types.GLSN(1)
 			end = begin + types.GLSN(numLogs)
-			results := make(map[types.LogStreamID][]logc.SubscribeResult, numLogStreams)
+			results := make(map[types.LogStreamID][]logclient.SubscribeResult, numLogStreams)
 			lastLLSNs := make(map[types.LogStreamID]types.LLSN, numLogStreams)
 			for glsn := begin; glsn < end; glsn++ {
 				logStreamID := types.LogStreamID(rand.Intn(numLogStreams) + 1)
 				lastLLSN := lastLLSNs[logStreamID]
 				lastLLSN++
-				results[logStreamID] = append(results[logStreamID], logc.SubscribeResult{
+				results[logStreamID] = append(results[logStreamID], logclient.SubscribeResult{
 					LogEntry: varlogpb.LogEntry{
 						LogEntryMeta: varlogpb.LogEntryMeta{
 							GLSN: glsn,
