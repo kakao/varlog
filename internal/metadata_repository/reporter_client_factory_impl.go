@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/kakao/varlog/internal/storagenode_deprecated/reportcommitter"
+	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
