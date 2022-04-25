@@ -227,33 +227,28 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		}
 
 		Convey("When backup SN fail", func(ctx C) {
-			errCnt := 0
 			maxGLSN := types.InvalidGLSN
 
 			topicID := env.TopicIDs()[0]
 			lsID := env.LogStreamID(t, topicID, 0)
 			backupSNID := env.BackupStorageNodeIDOf(t, lsID)
 
-			timer := time.NewTimer(vtesting.TimeoutUnitTimesFactor(100))
-			defer timer.Stop()
-
-			for errCnt < env.NumberOfClients() {
+		Loop:
+			for {
 				select {
-				case <-timer.C:
-					t.Fatal("timeout")
 				case glsn := <-glsnC:
 					logger.Info("collected glsn", zap.Any("glsn", glsn), zap.Any("maxGLSN", maxGLSN))
 					if maxGLSN < glsn {
 						maxGLSN = glsn
 					}
-
 					if glsn == types.GLSN(32) {
 						env.CloseSN(t, backupSNID)
 						env.CloseSNClientOf(t, backupSNID)
+						break Loop
 					}
-				case <-errC:
-					errCnt++
-					logger.Info("collected error", zap.Int("count", errCnt))
+				case err := <-errC:
+					logger.Info("collected error", zap.Error(err))
+					require.NoError(t, err)
 				}
 			}
 
