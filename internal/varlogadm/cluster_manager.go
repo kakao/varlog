@@ -1,6 +1,6 @@
 package varlogadm
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/varlogadm -package varlogadm -destination varlogadm_mock.go . ClusterMetadataView,StorageNodeManager
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/varlogadm -package varlogadm -destination varlogadm_mock.go . ClusterMetadataView,StorageNodeManager,MetadataRepositoryManager,StorageNodeWatcher,StatRepository
 
 import (
 	"context"
@@ -913,18 +913,21 @@ func (cm *clusterManager) syncLogStream(ctx context.Context, topicID types.Topic
 			return
 		}
 
-		if i == 0 || r.Version < min {
+		if r.Status == varlogpb.LogStreamStatusSealing && (i == 0 || r.Version < min) {
 			min = r.Version
 			tgt = snID
 		}
 
-		if i == 0 || r.Version > max {
+		if r.Status == varlogpb.LogStreamStatusSealed && (i == 0 || r.Version > max) {
 			max = r.Version
 			src = snID
 		}
 	}
 
-	if src != tgt {
+	// FIXME (jun): Since there is no invalid identifier for the storage
+	// node, it cannot check whether a source or target is selected. It
+	// thus checks that min and max are in a valid range.
+	if src != tgt && !max.Invalid() && min != types.MaxVersion {
 		status, err := cm.sync(ctx, topicID, logStreamID, src, tgt)
 		cm.logger.Debug("sync", zap.Any("lsid", logStreamID), zap.Any("src", src), zap.Any("dst", tgt), zap.String("status", status.String()), zap.Error(err))
 
