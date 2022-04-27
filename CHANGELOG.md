@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed package `pkg/logc` to `pkg/logclient`. (#VARLOG-701/#614)
 - Renamed `pkg/logclient.(LogClientManager)` to `pkg/logclient.(Manager)`. (#VARLOG-702/#615)
 - Changed `pkg/logclient.(Manager)` from interface to structure. (#VARLOG-702/#615)
+- Removed unnecessary singleflight from `pkg/logclient.(Manager)`. (#VARLOG-703/#616)
 
 
 ## [0.1.7] - 2022-04-06
