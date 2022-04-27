@@ -60,7 +60,7 @@ type logImpl struct {
 	replicasRetriever ReplicasRetriever
 	allowlist         Allowlist
 
-	logCLManager logclient.LogClientManager
+	logCLManager *logclient.Manager
 	logger       *zap.Logger
 	opts         *options
 
@@ -135,7 +135,7 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	// TODO (jun): metadataRefresher should implement ClusterMetadataView
 	metadata := refresher.Metadata()
 
-	logCLManager, err := logclient.NewLogClientManager(ctx, metadata, v.opts.grpcDialOptions, v.logger)
+	logCLManager, err := logclient.NewManager(ctx, metadata, v.opts.grpcDialOptions, v.logger)
 	if err != nil {
 		return nil, err
 	}
