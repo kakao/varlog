@@ -1,6 +1,6 @@
 package logclient
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/pkg/logc -package logc -destination log_io_client_mock.go . LogIOClient
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/pkg/logclient -package logclient -destination log_io_client_mock.go . LogIOClient
 
 import (
 	"context"

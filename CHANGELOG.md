@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed `proto/snpb.(LogStreamReplicaMetadataDescriptor).HighWatermark` to `proto/snpb.(LogStreamReplicaMetadataDescriptor).LocalHighWatermark`. (#VARLOG-719/#624)
 - Enriched the response of `proto/vmspb.(ClusterManager).GetStorageNodes` RPC. (#VARLOG-723/#630)
 - Renamed package `pkg/logc` to `pkg/logclient`. (#VARLOG-701/#614)
+- Renamed `pkg/logclient.(LogClientManager)` to `pkg/logclient.(Manager)`. (#VARLOG-702/#615)
+- Changed `pkg/logclient.(Manager)` from interface to structure. (#VARLOG-702/#615)
 
 
 ## [0.1.7] - 2022-04-06

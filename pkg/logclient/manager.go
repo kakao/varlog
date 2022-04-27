@@ -1,10 +1,7 @@
 package logclient
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/pkg/logc -package logc -destination log_io_client_manager_mock.go . LogClientManager
-
 import (
 	"context"
-	"io"
 	"strconv"
 	"sync"
 
@@ -19,12 +16,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
-type LogClientManager interface {
-	GetOrConnect(ctx context.Context, storageNodeID types.StorageNodeID, addr string) (LogIOClient, error)
-	io.Closer
-}
-
-type logClientManager struct {
+type Manager struct {
 	mu     sync.RWMutex
 	closed bool
 
@@ -41,15 +33,13 @@ type logClientManager struct {
 	logger *zap.Logger
 }
 
-var _ LogClientManager = (*logClientManager)(nil)
-
-func NewLogClientManager(ctx context.Context, metadata *varlogpb.MetadataDescriptor, grpcDialOptions []grpc.DialOption, logger *zap.Logger) (mgr *logClientManager, err error) {
+func NewManager(ctx context.Context, metadata *varlogpb.MetadataDescriptor, grpcDialOptions []grpc.DialOption, logger *zap.Logger) (mgr *Manager, err error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("logclmanager")
 
-	mgr = &logClientManager{grpcDialOptions: grpcDialOptions, logger: logger}
+	mgr = &Manager{grpcDialOptions: grpcDialOptions, logger: logger}
 	mgr.clients.m = make(map[types.StorageNodeID]*logClientProxy, len(metadata.GetStorageNodes()))
 	mgr.clients.k = func(storageNodeID types.StorageNodeID) string {
 		return strconv.FormatUint(uint64(storageNodeID), 10)
@@ -65,7 +55,7 @@ func NewLogClientManager(ctx context.Context, metadata *varlogpb.MetadataDescrip
 	return mgr, err
 }
 
-func (mgr *logClientManager) Close() (err error) {
+func (mgr *Manager) Close() (err error) {
 	mgr.mu.Lock()
 	mgr.closed = true
 	mgr.mu.Unlock()
@@ -90,7 +80,7 @@ func (mgr *logClientManager) Close() (err error) {
 	return err
 }
 
-func (mgr *logClientManager) GetOrConnect(ctx context.Context, storageNodeID types.StorageNodeID, addr string) (LogIOClient, error) {
+func (mgr *Manager) GetOrConnect(ctx context.Context, storageNodeID types.StorageNodeID, addr string) (LogIOClient, error) {
 	mgr.mu.RLock()
 	defer mgr.mu.RUnlock()
 	if mgr.closed {
