@@ -293,6 +293,14 @@ func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamI
 			sm.logger.Warn("could not seal replica", zap.Int32("snid", int32(storageNodeID)), zap.Int32("lsid", int32(logStreamID)))
 			continue
 		}
+		sm.logger.Debug("seal",
+			zap.Int32("snid", int32(storageNodeID)),
+			zap.Int32("tpid", int32(topicID)),
+			zap.Int32("lsid", int32(logStreamID)),
+			zap.Uint64("last_glsn", uint64(lastCommittedGLSN)),
+			zap.String("status", status.String()),
+			zap.Uint64("local_hwm", uint64(highWatermark)),
+		)
 		lsmetaDesc = append(lsmetaDesc, snpb.LogStreamReplicaMetadataDescriptor{
 			LogStreamReplica: varlogpb.LogStreamReplica{
 				StorageNode: varlogpb.StorageNode{

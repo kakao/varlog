@@ -1121,6 +1121,7 @@ func (clus *VarlogCluster) initVMS(t *testing.T) {
 	clus.VMSOpts.ClusterID = clus.clusterID
 	clus.VMSOpts.MetadataRepositoryAddresses = clus.mrRPCEndpoints
 	clus.VMSOpts.ReplicationFactor = uint(clus.nrRep)
+	clus.VMSOpts.Logger = clus.logger.Named("admin")
 
 	cm, err := varlogadm.NewClusterManager(context.Background(), clus.VMSOpts)
 	require.NoError(t, err)

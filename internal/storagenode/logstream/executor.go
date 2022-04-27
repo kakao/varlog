@@ -391,48 +391,57 @@ func (lse *Executor) Metadata() (snpb.LogStreamReplicaMetadataDescriptor, error)
 	defer atomic.AddInt64(&lse.inflight, -1)
 
 	ret, err, _ := lse.sf.Do(singleflightKeyMetadata, func() (interface{}, error) {
-		var status varlogpb.LogStreamStatus
-		switch lse.esm.load() {
-		case executorStateAppendable:
-			status = varlogpb.LogStreamStatusRunning
-		case executorStateSealing, executorStateLearning:
-			status = varlogpb.LogStreamStatusSealing
-		case executorStateSealed:
-			status = varlogpb.LogStreamStatusSealed
-		case executorStateClosed:
+		state := lse.esm.load()
+		if state == executorStateClosed {
 			return snpb.LogStreamReplicaMetadataDescriptor{}, verrors.ErrClosed
 		}
-
-		localLowWatermark := lse.lsc.localLowWatermark()
-		localHighWatermark := lse.lsc.localHighWatermark()
-		version, globalHighWatermark, _ := lse.lsc.reportCommitBase()
-		return snpb.LogStreamReplicaMetadataDescriptor{
-			LogStreamReplica: varlogpb.LogStreamReplica{
-				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: lse.snid,
-				},
-				TopicLogStream: varlogpb.TopicLogStream{
-					TopicID:     lse.tpid,
-					LogStreamID: lse.lsid,
-				},
-			},
-			Version:             version,
-			GlobalHighWatermark: globalHighWatermark,
-			LocalLowWatermark: varlogpb.LogSequenceNumber{
-				LLSN: localLowWatermark.LLSN,
-				GLSN: localLowWatermark.GLSN,
-			},
-			LocalHighWatermark: varlogpb.LogSequenceNumber{
-				LLSN: localHighWatermark.LLSN,
-				GLSN: localHighWatermark.GLSN,
-			},
-			Status:           status,
-			Path:             lse.stg.Path(),
-			StorageSizeBytes: lse.stg.DiskUsage(),
-			CreatedTime:      lse.createdTime,
-		}, nil
+		return lse.metadataDescriptor(state), nil
 	})
 	return ret.(snpb.LogStreamReplicaMetadataDescriptor), err
+}
+
+func (lse *Executor) metadataDescriptor(state executorState) snpb.LogStreamReplicaMetadataDescriptor {
+	var status varlogpb.LogStreamStatus
+	switch state {
+	case executorStateAppendable:
+		status = varlogpb.LogStreamStatusRunning
+	case executorStateSealing, executorStateLearning:
+		status = varlogpb.LogStreamStatusSealing
+	case executorStateSealed:
+		status = varlogpb.LogStreamStatusSealed
+	case executorStateClosed:
+		// FIXME: It is not correct status
+		status = varlogpb.LogStreamStatusSealed
+	}
+
+	localLowWatermark := lse.lsc.localLowWatermark()
+	localHighWatermark := lse.lsc.localHighWatermark()
+	version, globalHighWatermark, _ := lse.lsc.reportCommitBase()
+	return snpb.LogStreamReplicaMetadataDescriptor{
+		LogStreamReplica: varlogpb.LogStreamReplica{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: lse.snid,
+			},
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     lse.tpid,
+				LogStreamID: lse.lsid,
+			},
+		},
+		Version:             version,
+		GlobalHighWatermark: globalHighWatermark,
+		LocalLowWatermark: varlogpb.LogSequenceNumber{
+			LLSN: localLowWatermark.LLSN,
+			GLSN: localLowWatermark.GLSN,
+		},
+		LocalHighWatermark: varlogpb.LogSequenceNumber{
+			LLSN: localHighWatermark.LLSN,
+			GLSN: localHighWatermark.GLSN,
+		},
+		Status:           status,
+		Path:             lse.stg.Path(),
+		StorageSizeBytes: lse.stg.DiskUsage(),
+		CreatedTime:      lse.createdTime,
+	}
 }
 
 func (lse *Executor) LogStreamMetadata() (lsd varlogpb.LogStreamDescriptor, err error) {
@@ -557,7 +566,8 @@ func (lse *Executor) Close() (err error) {
 	}
 	lse.decider.destroy()
 	lse.waitForDrainage()
-	lse.logger.Info("closed")
+	lsrmd := lse.metadataDescriptor(lse.esm.load())
+	lse.logger.Info("closed", zap.String("metadata", lsrmd.String()))
 	return err
 }
 
