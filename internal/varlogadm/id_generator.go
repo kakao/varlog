@@ -18,6 +18,7 @@ type LogStreamIDGenerator interface {
 	Refresh(ctx context.Context) error
 }
 
+// TopicIDGenerator generates valid TopicIDs.
 type TopicIDGenerator interface {
 	// Generate returns conflict-free TopicID. If the returned identifier is duplicated, it
 	// means that the varlog cluster consistency is broken.
