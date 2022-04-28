@@ -12,7 +12,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
+	"github.daumkakao.com/varlog/varlog/internal/metarepos"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
@@ -81,8 +81,8 @@ func TestVarlogNewMRManager(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 
 			// mr
-			mrOpts := &metadata_repository.MetadataRepositoryOptions{
-				RaftOptions: metadata_repository.RaftOptions{
+			mrOpts := &metarepos.MetadataRepositoryOptions{
+				RaftOptions: metarepos.RaftOptions{
 					Join:      false,
 					SnapCount: uint64(10),
 					RaftTick:  vtesting.TestRaftTick(),
@@ -93,14 +93,14 @@ func TestVarlogNewMRManager(t *testing.T) {
 				ClusterID:                      clusterID,
 				RaftAddress:                    mrRAFTAddr,
 				LogDir:                         filepath.Join(t.TempDir(), "log"),
-				RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
+				RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout),
 				NumRep:                         1,
 				RPCBindAddress:                 mrRPCAddr,
-				ReporterClientFac:              metadata_repository.NewReporterClientFactory(),
-				StorageNodeManagementClientFac: metadata_repository.NewEmptyStorageNodeClientFactory(),
+				ReporterClientFac:              metarepos.NewReporterClientFactory(),
+				StorageNodeManagementClientFac: metarepos.NewEmptyStorageNodeClientFactory(),
 				Logger:                         zap.L(),
 			}
-			mr := metadata_repository.NewRaftMetadataRepository(mrOpts)
+			mr := metarepos.NewRaftMetadataRepository(mrOpts)
 			mr.Run()
 
 			Reset(func() {
@@ -169,8 +169,8 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		vmsOpts := it.NewTestVMSOptions()
 		env := it.NewVarlogCluster(t,
-			it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 			it.WithVMSOptions(vmsOpts),
 		)
 		defer env.Close(t)
@@ -267,8 +267,8 @@ func TestVarlogSNWatcher(t *testing.T) {
 
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := []it.Option{
-			it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		}
 
 		Convey("cluster", it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
@@ -379,8 +379,8 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := []it.Option{
-			it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		}
 
 		Convey("cluster", it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
@@ -510,8 +510,8 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := []it.Option{
-			it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		}
 
 		Convey("cluster", it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {

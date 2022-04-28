@@ -1,4 +1,4 @@
-package metadata_repository
+package metarepos
 
 import (
 	"go.uber.org/zap"

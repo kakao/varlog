@@ -3,12 +3,12 @@ package app
 import (
 	"github.com/urfave/cli/v2"
 
-	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
+	"github.daumkakao.com/varlog/varlog/internal/metarepos"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/units"
 )
 
-func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
+func InitCLI(options *metarepos.MetadataRepositoryOptions) *cli.App {
 	app := &cli.App{
 		Name:    "metadata_repository",
 		Usage:   "run metadata repository",
@@ -58,7 +58,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.StringFlag{
 			Name:        "bind",
 			Aliases:     []string{"b"},
-			Value:       metadata_repository.DefaultRPCBindAddress,
+			Value:       metarepos.DefaultRPCBindAddress,
 			Usage:       "Bind Address",
 			EnvVars:     []string{"BIND"},
 			Destination: &options.RPCBindAddress,
@@ -66,7 +66,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.StringFlag{
 			Name:        "raft-address",
 			Aliases:     []string{},
-			Value:       metadata_repository.DefaultRaftAddress,
+			Value:       metarepos.DefaultRaftAddress,
 			Usage:       "Raft Address",
 			EnvVars:     []string{"RAFT_ADDRESS"},
 			Destination: &options.RaftAddress,
@@ -74,7 +74,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.StringFlag{
 			Name:        "raft-dir",
 			Aliases:     []string{},
-			Value:       metadata_repository.DefaultRaftDir,
+			Value:       metarepos.DefaultRaftDir,
 			Usage:       "Raft Dir",
 			EnvVars:     []string{"RAFT_DIR"},
 			Destination: &options.RaftDir,
@@ -82,7 +82,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.StringFlag{
 			Name:        "log-dir",
 			Aliases:     []string{},
-			Value:       metadata_repository.DefaultLogDir,
+			Value:       metarepos.DefaultLogDir,
 			Usage:       "Log Dir",
 			EnvVars:     []string{"LOG_DIR"},
 			Destination: &options.LogDir,
@@ -114,7 +114,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.IntFlag{
 			Name:        "log-rep-factor",
 			Aliases:     []string{},
-			Value:       metadata_repository.DefaultLogReplicationFactor,
+			Value:       metarepos.DefaultLogReplicationFactor,
 			Usage:       "Replication factor or log stream",
 			EnvVars:     []string{"LOG_REP_FACTOR"},
 			Destination: &options.NumRep,
@@ -122,7 +122,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.Uint64Flag{
 			Name:        "snapshot-count",
 			Aliases:     []string{},
-			Value:       metadata_repository.DefaultSnapshotCount,
+			Value:       metarepos.DefaultSnapshotCount,
 			Usage:       "Count of entries for Snapshot",
 			EnvVars:     []string{"SNAPSHOT_COUNT"},
 			Destination: &options.SnapCount,
@@ -130,7 +130,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.UintFlag{
 			Name:        "max-snap-purge-count",
 			Aliases:     []string{},
-			Value:       metadata_repository.DefaultSnapshotPurgeCount,
+			Value:       metarepos.DefaultSnapshotPurgeCount,
 			Usage:       "Count of purge files for Snapshot",
 			EnvVars:     []string{"MAX_SNAP_PURGE_COUNT"},
 			Destination: &options.MaxSnapPurgeCount,
@@ -138,7 +138,7 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.UintFlag{
 			Name:        "max-wal-purge-count",
 			Aliases:     []string{},
-			Value:       metadata_repository.DefaultWalPurgeCount,
+			Value:       metarepos.DefaultWalPurgeCount,
 			Usage:       "Count of purge files for WAL",
 			EnvVars:     []string{"MAX_WAL_PURGE_COUNT"},
 			Destination: &options.MaxWalPurgeCount,
@@ -152,19 +152,19 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 		&cli.StringFlag{
 			Name:        "debug-addr",
 			Aliases:     []string{"d"},
-			Value:       metadata_repository.DefaultDebugAddress,
+			Value:       metarepos.DefaultDebugAddress,
 			Usage:       "Debug Address",
 			EnvVars:     []string{"DEBUG_ADDRESS"},
 			Destination: &options.DebugAddress,
 		},
 		&cli.StringFlag{
 			Name:    "reportcommitter-read-buffer-size",
-			Value:   units.ToByteSizeString(metadata_repository.DefaultReportCommitterReadBufferSize),
+			Value:   units.ToByteSizeString(metarepos.DefaultReportCommitterReadBufferSize),
 			EnvVars: []string{"REPORTCOMMITTER_READ_BUFFER_SIZE"},
 		},
 		&cli.StringFlag{
 			Name:    "reportcommitter-write-buffer-size",
-			Value:   units.ToByteSizeString(metadata_repository.DefaultReportCommitterWriteBufferSize),
+			Value:   units.ToByteSizeString(metarepos.DefaultReportCommitterWriteBufferSize),
 			EnvVars: []string{"REPORTCOMMITTER_WRITE_BUFFER_SIZE"},
 		},
 	}
@@ -175,18 +175,18 @@ func InitCLI(options *metadata_repository.MetadataRepositoryOptions) *cli.App {
 	return app
 }
 
-func initTelemetryFlags(options *metadata_repository.TelemetryOptions) []cli.Flag {
+func initTelemetryFlags(options *metarepos.TelemetryOptions) []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
 			Name:        "collector-name",
-			Value:       metadata_repository.DefaultTelemetryCollectorName,
+			Value:       metarepos.DefaultTelemetryCollectorName,
 			Usage:       "Collector name",
 			EnvVars:     []string{"COLLECTOR_NAME"},
 			Destination: &options.CollectorName,
 		},
 		&cli.StringFlag{
 			Name:        "collector-endpoint",
-			Value:       metadata_repository.DefaultTelmetryCollectorEndpoint,
+			Value:       metarepos.DefaultTelmetryCollectorEndpoint,
 			Usage:       "Collector endpoint",
 			EnvVars:     []string{"COLLECTOR_ENDPOINT"},
 			Destination: &options.CollectorEndpoint,

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
+	"github.daumkakao.com/varlog/varlog/internal/metarepos"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
@@ -25,12 +25,12 @@ const (
 	defaultStartVMS      = true
 )
 
-func defaultReportClientFactory() metadata_repository.ReporterClientFactory {
-	return metadata_repository.NewReporterClientFactory()
+func defaultReportClientFactory() metarepos.ReporterClientFactory {
+	return metarepos.NewReporterClientFactory()
 }
 
-func defaultStorageNodeManagementClientFactory() metadata_repository.StorageNodeManagementClientFactory {
-	return metadata_repository.NewStorageNodeManagementClientFactory()
+func defaultStorageNodeManagementClientFactory() metarepos.StorageNodeManagementClientFactory {
+	return metarepos.NewStorageNodeManagementClientFactory()
 }
 
 type config struct {
@@ -40,8 +40,8 @@ type config struct {
 	snapCount             int
 	collectorName         string
 	unsafeNoWAL           bool
-	reporterClientFac     metadata_repository.ReporterClientFactory
-	snManagementClientFac metadata_repository.StorageNodeManagementClientFactory
+	reporterClientFac     metarepos.ReporterClientFactory
+	snManagementClientFac metarepos.StorageNodeManagementClientFactory
 
 	numSN    int
 	numLS    int
@@ -131,13 +131,13 @@ func WithCollectorName(collector string) Option {
 	}
 }
 
-func WithReporterClientFactory(fac metadata_repository.ReporterClientFactory) Option {
+func WithReporterClientFactory(fac metarepos.ReporterClientFactory) Option {
 	return func(c *config) {
 		c.reporterClientFac = fac
 	}
 }
 
-func WithStorageNodeManagementClientFactory(fac metadata_repository.StorageNodeManagementClientFactory) Option {
+func WithStorageNodeManagementClientFactory(fac metarepos.StorageNodeManagementClientFactory) Option {
 	return func(c *config) {
 		c.snManagementClientFac = fac
 	}

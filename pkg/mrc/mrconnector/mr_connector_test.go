@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.daumkakao.com/varlog/varlog/internal/metadata_repository"
+	"github.daumkakao.com/varlog/varlog/internal/metarepos"
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
@@ -62,7 +62,7 @@ type testMR struct {
 	rpcAddr   string
 	clusterID types.ClusterID
 	nodeID    types.NodeID
-	mr        *metadata_repository.RaftMetadataRepository
+	mr        *metarepos.RaftMetadataRepository
 }
 
 func newTestMR(t *testing.T, portLease *ports.Lease, clusterID types.ClusterID, cnt int) []testMR {
@@ -92,8 +92,8 @@ func newTestMR(t *testing.T, portLease *ports.Lease, clusterID types.ClusterID, 
 		testMRs[i].clusterID = clusterID
 		testMRs[i].nodeID = nodeID
 
-		opts := &metadata_repository.MetadataRepositoryOptions{
-			RaftOptions: metadata_repository.RaftOptions{
+		opts := &metarepos.MetadataRepositoryOptions{
+			RaftOptions: metarepos.RaftOptions{
 				Join:        false,
 				UnsafeNoWal: false,
 				SnapCount:   10,
@@ -106,11 +106,11 @@ func newTestMR(t *testing.T, portLease *ports.Lease, clusterID types.ClusterID, 
 			RPCTimeout:                     time.Second,
 			NumRep:                         1,
 			RPCBindAddress:                 rpcAddr,
-			ReporterClientFac:              metadata_repository.NewReporterClientFactory(),
-			StorageNodeManagementClientFac: metadata_repository.NewStorageNodeManagementClientFactory(),
+			ReporterClientFac:              metarepos.NewReporterClientFactory(),
+			StorageNodeManagementClientFac: metarepos.NewStorageNodeManagementClientFactory(),
 			Logger:                         zap.NewNop(),
 		}
-		testMRs[i].mr = metadata_repository.NewRaftMetadataRepository(opts)
+		testMRs[i].mr = metarepos.NewRaftMetadataRepository(opts)
 	}
 
 	for i := 0; i < cnt; i++ {
