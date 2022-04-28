@@ -315,7 +315,6 @@ func (lse *Executor) resetInternalState(lastCommittedLLSN types.LLSN, discardCom
 
 	// close replicClients in replica connector
 	lse.rcs.close()
-	lse.rcs = nil
 
 	// sequencer
 	lse.sq.waitForDrainage(verrors.ErrSealed, false)
@@ -549,6 +548,7 @@ func (lse *Executor) Metrics() *telemetry.LogStreamMetrics {
 
 func (lse *Executor) Close() (err error) {
 	lse.esm.store(executorStateClosed)
+	lse.rcs.close()
 	if lse.cm != nil {
 		lse.cm.stop()
 	}
