@@ -16,7 +16,6 @@ func (rcs *replicateClients) close() {
 	// Connector of backup replica is nil.
 	if rcs != nil {
 		clients := rcs.clients
-		rcs.clients = nil
 		for i := range clients {
 			clients[i].stop()
 		}
