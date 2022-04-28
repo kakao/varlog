@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/kakao/varlog/internal/metadata_repository"
+	"github.com/kakao/varlog/internal/metarepos"
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/varlogadm"
@@ -38,7 +38,7 @@ type VarlogCluster struct {
 
 	// metadata repository
 	muMR                 sync.Mutex
-	metadataRepositories []*metadata_repository.RaftMetadataRepository
+	metadataRepositories []*metarepos.RaftMetadataRepository
 	mrPeers              []string
 	mrRPCEndpoints       []string
 	mrIDs                []types.NodeID
@@ -83,7 +83,7 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 		config:               cfg,
 		mrPeers:              make([]string, cfg.nrMR),
 		mrRPCEndpoints:       make([]string, cfg.nrMR),
-		metadataRepositories: make([]*metadata_repository.RaftMetadataRepository, cfg.nrMR),
+		metadataRepositories: make([]*metarepos.RaftMetadataRepository, cfg.nrMR),
 		mrIDs:                make([]types.NodeID, cfg.nrMR),
 		mrCLs:                make(map[types.NodeID]mrc.MetadataRepositoryClient),
 		mrMCLs:               make(map[types.NodeID]mrc.MetadataRepositoryManagementClient),
@@ -215,8 +215,8 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal boo
 
 	peers := clus.mrPeers
 
-	opts := &metadata_repository.MetadataRepositoryOptions{
-		RaftOptions: metadata_repository.RaftOptions{
+	opts := &metarepos.MetadataRepositoryOptions{
+		RaftOptions: metarepos.RaftOptions{
 			Join:        join,
 			UnsafeNoWal: unsafeNoWal,
 			SnapCount:   uint64(clus.snapCount),
@@ -227,7 +227,7 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal boo
 
 		ClusterID:                      clus.clusterID,
 		RaftAddress:                    clus.mrPeers[idx],
-		RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(metadata_repository.DefaultRPCTimeout),
+		RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout),
 		NumRep:                         clus.nrRep,
 		RPCBindAddress:                 clus.mrRPCEndpoints[idx],
 		ReporterClientFac:              clus.reporterClientFac,
@@ -242,7 +242,7 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal boo
 	opts.CollectorEndpoint = "localhost:55680"
 
 	clus.mrIDs[idx] = nodeID
-	clus.metadataRepositories[idx] = metadata_repository.NewRaftMetadataRepository(opts)
+	clus.metadataRepositories[idx] = metarepos.NewRaftMetadataRepository(opts)
 
 	t.Logf("MetadataRepository was created: idx=%d, nid=%v", idx, nodeID)
 }
@@ -283,7 +283,7 @@ func (clus *VarlogCluster) RecoverMR(t *testing.T) {
 	clus.mrPeers = []string{fmt.Sprintf("http://127.0.0.1:%d", raftPort)}
 	clus.mrRPCEndpoints = []string{fmt.Sprintf("127.0.0.1:%d", rpcPort)}
 	clus.mrIDs = []types.NodeID{types.InvalidNodeID}
-	clus.metadataRepositories = []*metadata_repository.RaftMetadataRepository{nil}
+	clus.metadataRepositories = []*metarepos.RaftMetadataRepository{nil}
 
 	clus.createMR(t, idx, false, clus.unsafeNoWAL)
 	clus.startMR(t, idx)
@@ -943,22 +943,22 @@ func (clus *VarlogCluster) newMRClient(t *testing.T, idx int) {
 	clus.mrMCLs[id] = mcl
 }
 
-func (clus *VarlogCluster) MetadataRepositories() []*metadata_repository.RaftMetadataRepository {
+func (clus *VarlogCluster) MetadataRepositories() []*metarepos.RaftMetadataRepository {
 	clus.muMR.Lock()
 	defer clus.muMR.Unlock()
 
-	ret := make([]*metadata_repository.RaftMetadataRepository, len(clus.metadataRepositories))
+	ret := make([]*metarepos.RaftMetadataRepository, len(clus.metadataRepositories))
 	for i, mr := range clus.metadataRepositories {
 		ret[i] = mr
 	}
 	return ret
 }
 
-func (clus *VarlogCluster) GetMR(t *testing.T) *metadata_repository.RaftMetadataRepository {
+func (clus *VarlogCluster) GetMR(t *testing.T) *metarepos.RaftMetadataRepository {
 	return clus.GetMRByIndex(t, 0)
 }
 
-func (clus *VarlogCluster) GetMRByIndex(t *testing.T, idx int) *metadata_repository.RaftMetadataRepository {
+func (clus *VarlogCluster) GetMRByIndex(t *testing.T, idx int) *metarepos.RaftMetadataRepository {
 	clus.muMR.Lock()
 	defer clus.muMR.Unlock()
 
@@ -1040,7 +1040,7 @@ func (clus *VarlogCluster) MRManagementClientAt(t *testing.T, idx int) mrc.Metad
 	return clus.mrMCLs[id]
 }
 
-func (clus *VarlogCluster) LookupMR(nodeID types.NodeID) (*metadata_repository.RaftMetadataRepository, bool) {
+func (clus *VarlogCluster) LookupMR(nodeID types.NodeID) (*metarepos.RaftMetadataRepository, bool) {
 	clus.muMR.Lock()
 	defer clus.muMR.Unlock()
 

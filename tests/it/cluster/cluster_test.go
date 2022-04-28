@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kakao/varlog/internal/metadata_repository"
+	"github.com/kakao/varlog/internal/metarepos"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -170,8 +170,8 @@ func TestTrimGLS(t *testing.T) {
 		it.WithNumberOfStorageNodes(1),
 		it.WithNumberOfLogStreams(2),
 		it.WithNumberOfClients(1),
-		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 
@@ -214,8 +214,8 @@ func TestTrimGLSWithSealedLS(t *testing.T) {
 			it.WithNumberOfStorageNodes(1),
 			it.WithNumberOfLogStreams(2),
 			it.WithNumberOfClients(1),
-			it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 			it.WithNumberOfTopics(1),
 		}
 
@@ -267,8 +267,8 @@ func TestNewbieLogStream(t *testing.T) {
 		it.WithNumberOfStorageNodes(1),
 		it.WithNumberOfLogStreams(2),
 		it.WithNumberOfClients(1),
-		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 

@@ -9,11 +9,11 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/kakao/varlog/internal/metadata_repository"
+	"github.com/kakao/varlog/internal/metarepos"
 	"github.com/kakao/varlog/pkg/util/log"
 )
 
-func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
+func Main(opts *metarepos.MetadataRepositoryOptions) error {
 	path, err := filepath.Abs(opts.LogDir)
 	if err != nil {
 		fmt.Printf("could not create abs path:: %v\n", err)
@@ -32,13 +32,13 @@ func Main(opts *metadata_repository.MetadataRepositoryOptions) error {
 	defer logger.Sync()
 
 	opts.Logger = logger
-	opts.ReporterClientFac = metadata_repository.NewReporterClientFactory(
+	opts.ReporterClientFac = metarepos.NewReporterClientFactory(
 		grpc.WithReadBufferSize(opts.ReportCommitterReadBufferSize),
 		grpc.WithWriteBufferSize(opts.ReportCommitterWriteBufferSize),
 	)
-	opts.StorageNodeManagementClientFac = metadata_repository.NewStorageNodeManagementClientFactory()
+	opts.StorageNodeManagementClientFac = metarepos.NewStorageNodeManagementClientFactory()
 
-	mr := metadata_repository.NewRaftMetadataRepository(opts)
+	mr := metarepos.NewRaftMetadataRepository(opts)
 	mr.Run()
 
 	sigC := make(chan os.Signal, 1)

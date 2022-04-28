@@ -38,7 +38,7 @@ STRESS := $(BIN_DIR)/stress
 .PHONY: build vmr varlogadm varlogsn varlogctl varlogcli mrtool stress
 build: vmr varlogadm varlogsn varlogctl varlogcli mrtool stress
 vmr:
-	$(GO) build $(GCFLAGS) -o $(VMR) cmd/metadata_repository/main.go
+	$(GO) build $(GCFLAGS) -o $(VMR) $(CURDIR)/cmd/varlogmr
 varlogadm:
 	$(GO) build $(GCFLAGS) -o $(VARLOGADM) $(CURDIR)/cmd/varlogadm
 varlogsn:

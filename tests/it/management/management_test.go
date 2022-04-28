@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kakao/varlog/internal/metadata_repository"
+	"github.com/kakao/varlog/internal/metarepos"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -238,8 +238,8 @@ func TestSyncLogStream(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
-		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 
@@ -322,8 +322,8 @@ func TestSealLogStreamSealedIncompletely(t *testing.T) {
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
-		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 
@@ -381,8 +381,8 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
-		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 
@@ -442,8 +442,8 @@ func TestGCZombieLogStream(t *testing.T) {
 	vmsOpts.GCTimeout = 6 * time.Duration(vmsOpts.ReportInterval) * vmsOpts.Tick
 	opts := []it.Option{
 		it.WithNumberOfStorageNodes(1),
-		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithVMSOptions(vmsOpts),
 		it.WithNumberOfTopics(1),
 	}
@@ -495,8 +495,8 @@ func TestAddLogStreamTopic(t *testing.T) {
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
-		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(10),
 		it.WithNumberOfClients(1),
 	}
@@ -562,8 +562,8 @@ func TestRemoveTopic(t *testing.T) {
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(2),
-		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(10),
 		it.WithNumberOfClients(1),
 	}
@@ -616,8 +616,8 @@ func TestAddTopic(t *testing.T) {
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(2),
-		it.WithReporterClientFactory(metadata_repository.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metadata_repository.NewEmptyStorageNodeClientFactory()),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(3),
 	}
 

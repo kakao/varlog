@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed `pkg/logclient.(LogClientManager)` to `pkg/logclient.(Manager)`. (#VARLOG-702/#615)
 - Changed `pkg/logclient.(Manager)` from interface to structure. (#VARLOG-702/#615)
 - Removed unnecessary singleflight from `pkg/logclient.(Manager)`. (#VARLOG-703/#616)
+- Changed package `cmd/metadata_repository` to `cmd/varlogmr`. (#VARLOG-731/#640)
+- Changed package `internal/metadata_repository` to `internal/metarepos`. (#VARLOG-731/#640)
 
 
 ## [0.1.7] - 2022-04-06
