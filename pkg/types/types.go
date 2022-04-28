@@ -78,6 +78,10 @@ func (tpid TopicID) String() string {
 	return strconv.FormatInt(int64(tpid), 10)
 }
 
+func (tpid TopicID) Invalid() bool {
+	return tpid <= 0
+}
+
 type Version uint64
 
 const (
