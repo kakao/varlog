@@ -9,6 +9,10 @@ import (
 	"go.uber.org/goleak"
 )
 
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
+
 func TestStopChannel(t *testing.T) {
 	sc := New()
 	sc.Stop()
@@ -19,8 +23,6 @@ func TestStopChannel(t *testing.T) {
 
 func TestStopChannelGoroutines(t *testing.T) {
 	const concurrency = 100
-
-	defer goleak.VerifyNone(t)
 
 	sc := New()
 

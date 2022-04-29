@@ -18,9 +18,11 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-func TestExecutor_InvalidConfig(t *testing.T) {
-	defer goleak.VerifyNone(t)
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
+func TestExecutor_InvalidConfig(t *testing.T) {
 	stg := storage.TestNewStorage(t)
 	defer func() {
 		assert.NoError(t, stg.Close())
@@ -46,8 +48,6 @@ func TestExecutor_InvalidConfig(t *testing.T) {
 }
 
 func TestExecutor_Closed(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const (
 		snid = types.StorageNodeID(1)
 		tpid = types.TopicID(2)
@@ -148,8 +148,6 @@ func TestExecutor_Closed(t *testing.T) {
 }
 
 func TestExecutor_Sealing(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const (
 		snid = types.StorageNodeID(1)
 		tpid = types.TopicID(2)
@@ -194,8 +192,6 @@ func TestExecutor_Sealing(t *testing.T) {
 }
 
 func TestExecutor_Sealed(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const (
 		snid = types.StorageNodeID(1)
 		tpid = types.TopicID(2)
@@ -363,7 +359,6 @@ func testNewBackupExecutor(t *testing.T, opts ...ExecutorOption) *Executor {
 }
 
 func TestExecutor_ShouldBeSealedAtFirst(t *testing.T) {
-	defer goleak.VerifyNone(t)
 	testCases := []struct {
 		name      string
 		generator func(t *testing.T) *Executor
@@ -391,7 +386,6 @@ func TestExecutor_ShouldBeSealedAtFirst(t *testing.T) {
 }
 
 func TestExecutor_Append(t *testing.T) {
-	defer goleak.VerifyNone(t)
 	testCases := []struct {
 		name      string
 		generator func(t *testing.T) *Executor
@@ -525,7 +519,6 @@ func TestExecutor_Append(t *testing.T) {
 }
 
 func TestExecutor_Replicate(t *testing.T) {
-	defer goleak.VerifyNone(t)
 	testCases := []struct {
 		name      string
 		generator func(t *testing.T) *Executor
@@ -648,8 +641,6 @@ func TestExecutor_Replicate(t *testing.T) {
 }
 
 func TestExecutor_AppendSeal(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const (
 		numClients = 20
 		numLogs    = 10
@@ -797,8 +788,6 @@ func TestExecutor_AppendSeal(t *testing.T) {
 }
 
 func TestExecutor_ReplicateSeal(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const numLogs = 10
 
 	lse := testNewBackupExecutor(t)
@@ -930,8 +919,6 @@ func TestExecutor_ReplicateSeal(t *testing.T) {
 }
 
 func TestExecutor_SubscribeWithInvalidRange(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lse := testNewPrimaryExecutor(t)
 	defer func() {
 		assert.NoError(t, lse.Close())
@@ -955,8 +942,6 @@ func TestExecutor_SubscribeWithInvalidRange(t *testing.T) {
 }
 
 func TestExecutor_Subscribe(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const numLogs = 10
 
 	lse := testNewPrimaryExecutor(t)
@@ -1253,8 +1238,6 @@ func TestExecutor_Subscribe(t *testing.T) {
 }
 
 func TestExecutor_Recover(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const (
 		numClients       = 20
 		numCommitLogs    = 10
@@ -1356,8 +1339,6 @@ func TestExecutor_Recover(t *testing.T) {
 }
 
 func TestExecutorSyncInit_InvalidState(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lse := testNewPrimaryExecutor(t)
 
 	_, err := lse.SyncInit(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncRange{
@@ -1376,8 +1357,6 @@ func TestExecutorSyncInit_InvalidState(t *testing.T) {
 }
 
 func TestExecutorSyncInit_InvalidRange(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lse := testNewPrimaryExecutor(t)
 	defer func() {
 		assert.NoError(t, lse.Close())
@@ -1402,8 +1381,6 @@ func TestExecutorSyncInit_InvalidRange(t *testing.T) {
 }
 
 func TestExecutorSyncInit(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const (
 		numLogs         = 10
 		syncInitTimeout = time.Second
@@ -1511,8 +1488,6 @@ func TestExecutorSyncInit(t *testing.T) {
 }
 
 func TestExecutorSyncReplicate(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lse := testNewPrimaryExecutor(t)
 	defer func() {
 		assert.NoError(t, lse.Close())
@@ -1635,8 +1610,6 @@ func TestExecutor_SyncInvalidState(t *testing.T) {
 }
 
 func TestExecutor_Trim(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const (
 		numLogs   = 10
 		commitLen = 5

@@ -9,7 +9,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/rpc"
@@ -19,8 +18,6 @@ import (
 )
 
 func TestReplicateClient_InvalidConfig(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lis, connect := rpc.TestNewConn(t, context.Background(), 1)
 	defer func() {
 		assert.NoError(t, lis.Close())
@@ -66,8 +63,6 @@ func TestReplicateClient_InvalidConfig(t *testing.T) {
 }
 
 func TestReplicateClient_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -109,8 +104,6 @@ func TestReplicateClient_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 }
 
 func TestReplicateClientRPCError(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -147,8 +140,6 @@ func TestReplicateClientRPCError(t *testing.T) {
 }
 
 func TestReplicateClientDrain(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -185,8 +176,6 @@ type testReplicateRequest struct {
 }
 
 func TestReplicateClient(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

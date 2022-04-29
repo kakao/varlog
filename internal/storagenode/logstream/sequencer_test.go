@@ -9,15 +9,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/storage"
 )
 
 func TestSequencer_InvalidConfig(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	_, err := newSequencer(sequencerConfig{
 		queueCapacity: minQueueCapacity - 1,
 		lse:           &Executor{},
@@ -44,8 +41,6 @@ func TestSequencer_InvalidConfig(t *testing.T) {
 }
 
 func TestSequencer_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lse := &Executor{
 		esm: newExecutorStateManager(executorStateSealing),
 	}
@@ -90,8 +85,6 @@ func testSequenceTask(stg *storage.Storage) *sequenceTask {
 }
 
 func TestSequencer_FailToSendToCommitter(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	stg := storage.TestNewStorage(t)
 	defer func() {
 		assert.NoError(t, stg.Close())
@@ -127,8 +120,6 @@ func TestSequencer_FailToSendToCommitter(t *testing.T) {
 }
 
 func TestSequencer_FailToSendToWriter(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	stg := storage.TestNewStorage(t)
 	defer func() {
 		assert.NoError(t, stg.Close())
@@ -163,8 +154,6 @@ func TestSequencer_FailToSendToWriter(t *testing.T) {
 }
 
 func TestSequencer_FailToSendToReplicateClient(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	stg := storage.TestNewStorage(t)
 	defer func() {
 		assert.NoError(t, stg.Close())
@@ -214,8 +203,6 @@ func TestSequencer_FailToSendToReplicateClient(t *testing.T) {
 }
 
 func TestSequencer_Drain(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const numTasks = 10
 
 	stg := storage.TestNewStorage(t)
@@ -273,8 +260,6 @@ func TestSequencer_Drain(t *testing.T) {
 }
 
 func TestSequencer_ForceDrain(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const numTasks = 10
 
 	stg := storage.TestNewStorage(t)

@@ -13,9 +13,11 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-func TestStorage_InvalidConfig(t *testing.T) {
-	defer goleak.VerifyNone(t)
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
+func TestStorage_InvalidConfig(t *testing.T) {
 	_, err := New(WithLogger(zap.NewNop()))
 	assert.Error(t, err)
 
@@ -96,7 +98,6 @@ func TestStorageCommitContext(t *testing.T) {
 }
 
 func testStorage(t *testing.T, f func(testing.TB, *Storage)) {
-	defer goleak.VerifyNone(t)
 	stg := TestNewStorage(t)
 	defer func() {
 		err := stg.Close()

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/storage"
@@ -15,8 +14,6 @@ import (
 )
 
 func TestWriter_InvalidConfig(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	_, err := newWriter(writerConfig{
 		queueCapacity: minQueueCapacity - 1,
 		lse:           &Executor{},
@@ -47,8 +44,6 @@ func TestWriter_InvalidConfig(t *testing.T) {
 }
 
 func TestWriter_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lse := &Executor{
 		esm: newExecutorStateManager(executorStateSealing),
 	}
@@ -76,8 +71,6 @@ func TestWriter_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 }
 
 func TestWriter_DrainForce(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const numTasks = 10
 
 	stg := storage.TestNewStorage(t)
@@ -108,8 +101,6 @@ func TestWriter_DrainForce(t *testing.T) {
 }
 
 func TestWriter_UnexpectedLLSN(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	stg := storage.TestNewStorage(t)
 	defer func() {
 		assert.NoError(t, stg.Close())
