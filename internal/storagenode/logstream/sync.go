@@ -114,6 +114,9 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 		return nil, err
 	}
 	if syncRange.FirstLLSN.Invalid() && syncRange.LastLLSN.Invalid() {
+		// NOTE: The sync client should be closed to avoid leaks of the
+		// gRPC connection and goroutine.
+		_ = sc.close()
 		return &snpb.SyncStatus{
 			State: snpb.SyncStateComplete,
 			First: snpb.SyncPosition{
