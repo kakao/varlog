@@ -260,17 +260,19 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 			}
 
 			Convey("Then it should not be able to append", func(ctx C) {
-				rsp, err := env.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
-				So(err, ShouldBeNil)
-				sealedGLSN := rsp.GetSealedGLSN()
-				So(sealedGLSN, ShouldBeGreaterThanOrEqualTo, maxGLSN)
-				t.Logf("SealedGLSN=%d", sealedGLSN)
+				assert.Eventually(t, func() bool {
+					rsp, err := env.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
+					assert.NoError(t, err)
+					sealedGLSN := rsp.GetSealedGLSN()
+					assert.GreaterOrEqual(t, sealedGLSN, maxGLSN)
+					t.Logf("SealedGLSN=%d", sealedGLSN)
 
-				primarySNID := env.PrimaryStorageNodeIDOf(t, lsID)
-				snmd, err := env.SNClientOf(t, primarySNID).GetMetadata(context.Background())
-				lsmd, ok := snmd.GetLogStream(lsID)
-				So(ok, ShouldBeTrue)
-				So(lsmd.GetStatus(), ShouldEqual, varlogpb.LogStreamStatusSealed)
+					primarySNID := env.PrimaryStorageNodeIDOf(t, lsID)
+					snmd, err := env.SNClientOf(t, primarySNID).GetMetadata(context.Background())
+					lsmd, ok := snmd.GetLogStream(lsID)
+					assert.True(t, ok)
+					return lsmd.GetStatus() == varlogpb.LogStreamStatusSealed
+				}, 3*time.Second, 100*time.Millisecond)
 
 				// check if all clients stopped
 				wg.Wait()

@@ -567,7 +567,11 @@ func (lse *Executor) Close() (err error) {
 	lse.decider.destroy()
 	lse.waitForDrainage()
 	lsrmd := lse.metadataDescriptor(lse.esm.load())
-	lse.logger.Info("closed", zap.String("metadata", lsrmd.String()))
+	lse.logger.Info("closed",
+		zap.String("local_lwm", lsrmd.LocalLowWatermark.String()),
+		zap.String("local_hwm", lsrmd.LocalHighWatermark.String()),
+		zap.Uint64("global_hwm", uint64(lsrmd.GlobalHighWatermark)),
+	)
 	return err
 }
 
