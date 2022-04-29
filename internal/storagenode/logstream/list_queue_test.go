@@ -4,12 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/goleak"
 )
 
 func TestListQueueBack(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lq := newListQueue()
 	defer lq.release()
 
@@ -28,8 +25,6 @@ func TestListQueueBack(t *testing.T) {
 }
 
 func TestListQueueConcatFront(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lq1 := newListQueue()
 	defer lq1.release()
 	lq1.PushFront(1)
@@ -54,8 +49,6 @@ func TestListQueueConcatFront(t *testing.T) {
 }
 
 func TestListQueueConcatFrontAndRemoveBack(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lq := newListQueue()
 	defer lq.release()
 
@@ -74,8 +67,6 @@ func TestListQueueConcatFrontAndRemoveBack(t *testing.T) {
 }
 
 func TestListQueue(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	// <Front> 3 -> 2 -> 1 <Back>
 	lst1 := newListQueue()
 	defer lst1.release()

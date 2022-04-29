@@ -10,6 +10,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -18,6 +19,12 @@ import (
 	"github.daumkakao.com/varlog/varlog/tests/it"
 	"github.daumkakao.com/varlog/varlog/vtesting"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+}
 
 func TestVarlogFailoverMRLeaderFail(t *testing.T) {
 	Convey("Given Varlog cluster", t, func(ctx C) {

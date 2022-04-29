@@ -9,13 +9,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/goleak"
 	"go.uber.org/zap"
 )
 
 func TestCommitter_InvalidConfig(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	_, err := newCommitter(committerConfig{
 		commitQueueCapacity: minQueueCapacity - 1,
 		lse:                 &Executor{},
@@ -46,8 +43,6 @@ func TestCommitter_InvalidConfig(t *testing.T) {
 }
 
 func TestCommitter_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lse := &Executor{
 		esm: newExecutorStateManager(executorStateSealing),
 	}
@@ -108,8 +103,6 @@ func TestCommitter_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 }
 
 func TestCommitter_DrainCommitQueue(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const numCommitTasks = 10
 
 	lse := &Executor{
@@ -144,8 +137,6 @@ func TestCommitter_DrainCommitQueue(t *testing.T) {
 }
 
 func TestCommitter_DrainCommitWaitQ(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lse := &Executor{
 		esm: newExecutorStateManager(executorStateAppendable),
 	}

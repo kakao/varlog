@@ -8,15 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 func TestLogStreamContext(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lsc := newLogStreamContext()
 
 	version, highWatermark, uncommittedLLSNBegin := lsc.reportCommitBase()
@@ -38,8 +35,6 @@ func TestLogStreamContext(t *testing.T) {
 }
 
 func TestDecidableCondition(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lsc := newLogStreamContext()
 	dc := newDecidableCondition(lsc)
 
@@ -54,8 +49,6 @@ func TestDecidableCondition(t *testing.T) {
 }
 
 func TestDecidableCondition_InterruptWaiters(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	lsc := newLogStreamContext()
 	dc := newDecidableCondition(lsc)
 

@@ -8,6 +8,7 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"golang.org/x/sync/errgroup"
 
 	"github.daumkakao.com/varlog/varlog/internal/metarepos"
@@ -17,6 +18,12 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/tests/it"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+}
 
 func TestUnregisterInactiveStorageNode(t *testing.T) {
 	clus := it.NewVarlogCluster(t, it.WithNumberOfStorageNodes(1))

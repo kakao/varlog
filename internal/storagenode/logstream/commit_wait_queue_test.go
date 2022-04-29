@@ -6,14 +6,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/goleak"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 func TestCommitWaitQueue(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const n = 10
 
 	cwq := newCommitWaitQueue()
@@ -57,8 +54,6 @@ func TestCommitWaitQueue(t *testing.T) {
 }
 
 func TestCommitWaitQueueConcurrentPushPop(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	const (
 		numRepeat  = 100
 		cwtsLength = 128

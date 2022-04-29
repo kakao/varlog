@@ -4,14 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/goleak"
 
 	"github.daumkakao.com/varlog/varlog/internal/batchlet"
 )
 
 func TestReplicateTaskPools(t *testing.T) {
-	defer goleak.VerifyNone(t)
-
 	for poolIdx, batchletLen := range batchlet.LengthClasses {
 		rt := newReplicateTask(poolIdx)
 		assert.Empty(t, rt.llsnList)
