@@ -1,6 +1,9 @@
 package log
 
 import (
+	"testing"
+
+	"go.uber.org/goleak"
 	"go.uber.org/zap"
 )
 
@@ -12,4 +15,8 @@ func ExampleLogger() {
 	defer logger.Sync()
 
 	logger.Info("this is log", zap.String("example", "first"))
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

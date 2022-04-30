@@ -3,7 +3,13 @@ package set
 import (
 	"strconv"
 	"testing"
+
+	"go.uber.org/goleak"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func TestStringSet(t *testing.T) {
 	ss := New(0)

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/goleak"
+
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
@@ -54,4 +56,8 @@ func TestGlobalLogStreamMarshal(t *testing.T) {
 	gls.Marshal()
 
 	log.Println(time.Since(st))
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

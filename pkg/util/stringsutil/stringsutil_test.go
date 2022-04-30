@@ -2,6 +2,8 @@ package stringsutil
 
 import (
 	"testing"
+
+	"go.uber.org/goleak"
 )
 
 func TestEmpty(t *testing.T) {
@@ -33,4 +35,8 @@ func TestEmpty(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

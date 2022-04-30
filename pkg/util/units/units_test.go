@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 func TestFromByteSizeString(t *testing.T) {
@@ -33,4 +34,8 @@ func TestToByteSizeString(t *testing.T) {
 	size, err := FromByteSizeString(ToByteSizeString(sizeInBytes))
 	require.NoError(t, err)
 	require.EqualValues(t, sizeInBytes, size)
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

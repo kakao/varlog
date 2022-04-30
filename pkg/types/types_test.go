@@ -6,9 +6,14 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/goleak"
 
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func TestClusterID(t *testing.T) {
 	Convey("ClusterID", t, func() {

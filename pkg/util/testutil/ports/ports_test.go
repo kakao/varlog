@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/goleak"
 )
 
 func TestReserveWeakly(t *testing.T) {
@@ -53,4 +54,8 @@ func TestReserveWeakly(t *testing.T) {
 			})
 		})
 	})
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

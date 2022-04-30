@@ -19,9 +19,13 @@ import (
 	"github.daumkakao.com/varlog/varlog/vtesting"
 )
 
-func TestConnectorBadOptions(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"))
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+}
 
+func TestConnectorBadOptions(t *testing.T) {
 	var err error
 
 	_, err = New(context.Background(),
@@ -44,8 +48,6 @@ func TestConnectorBadOptions(t *testing.T) {
 }
 
 func TestConnectorWithoutLiveMR(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"))
-
 	_, err := New(
 		context.Background(),
 		WithSeed([]string{
@@ -139,8 +141,6 @@ func newTestMR(t *testing.T, portLease *ports.Lease, clusterID types.ClusterID, 
 }
 
 func TestConnectorUnreachableMR(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"))
-
 	const (
 		basePort      = 10000
 		fetchInterval = 100 * time.Millisecond
@@ -180,8 +180,6 @@ func TestConnectorUnreachableMR(t *testing.T) {
 }
 
 func TestConnectorRemovePeer(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"))
-
 	const (
 		numMRs        = 2
 		clusterID     = types.ClusterID(1)

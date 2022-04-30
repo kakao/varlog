@@ -7,6 +7,7 @@ import (
 	"github.com/gogo/status"
 	"github.com/pkg/errors"
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/goleak"
 	"google.golang.org/grpc/codes"
 )
 
@@ -91,4 +92,8 @@ func TestStatusError(t *testing.T) {
 			})
 		})
 	})
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }
