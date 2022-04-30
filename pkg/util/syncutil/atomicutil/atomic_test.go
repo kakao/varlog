@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/goleak"
 )
 
 func TestAtomicBool(t *testing.T) {
@@ -38,4 +39,8 @@ func TestAtomicBool(t *testing.T) {
 			So(swapped, ShouldBeTrue)
 		})
 	})
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

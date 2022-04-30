@@ -6,6 +6,7 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -218,4 +219,8 @@ func BenchmarkAllowlistPick(b *testing.B) {
 			b.Fatal("pick error")
 		}
 	}
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

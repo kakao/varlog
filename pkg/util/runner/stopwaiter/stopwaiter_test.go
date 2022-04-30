@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"go.uber.org/goleak"
 )
 
 func TestStopWaiter(t *testing.T) {
@@ -50,4 +52,8 @@ func TestStopWaiter(t *testing.T) {
 	if atomic.LoadInt32(&called) != 1 {
 		t.Errorf("called: expected=1 actual=%v", atomic.LoadInt32(&called))
 	}
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

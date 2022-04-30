@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+
+	"go.uber.org/goleak"
 )
 
 func testStringSlice(nums ...int) []interface{} {
@@ -61,4 +63,8 @@ func TestRun(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

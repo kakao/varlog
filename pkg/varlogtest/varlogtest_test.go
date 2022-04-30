@@ -554,3 +554,7 @@ func TestVarlogTest_Trim(t *testing.T) {
 	}
 	assert.NoError(t, subscriber.Close())
 }
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}

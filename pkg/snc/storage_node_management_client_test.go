@@ -7,6 +7,7 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/goleak"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -14,6 +15,10 @@ import (
 	"github.com/kakao/varlog/proto/snpb/mock"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func TestManagementClientGetMetadata(t *testing.T) {
 	Convey("Given that a ManagementClient calls GetMetadata to a ManagementService", t, func() {

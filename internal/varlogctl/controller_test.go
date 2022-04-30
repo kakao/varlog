@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/kakao/varlog/internal/varlogctl"
 	"github.com/kakao/varlog/internal/varlogctl/logstream"
@@ -44,6 +45,10 @@ func testController(t *testing.T, admin varlog.Admin, executeFunc varlogctl.Exec
 	r := result.Result{}
 	require.NoError(t, json.Unmarshal([]byte(sb.String()), &r))
 	resultCheck(r)
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }
 
 func TestMetadataRepository(t *testing.T) {

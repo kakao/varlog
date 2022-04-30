@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/goleak"
 )
 
 func TestOnlyOnce(t *testing.T) {
@@ -58,4 +59,8 @@ func TestOnlyOnce(t *testing.T) {
 			So(err, ShouldNotBeNil)
 		})
 	})
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

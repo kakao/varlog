@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/kakao/varlog/pkg/types"
 )
@@ -117,4 +118,8 @@ func TestNodeIDGen(t *testing.T) {
 		t.Logf("addr=%v nodeid=%v", addr, nodeID)
 	}
 
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

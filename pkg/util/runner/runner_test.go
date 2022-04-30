@@ -7,6 +7,7 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
@@ -171,4 +172,8 @@ func TestRunner(t *testing.T) {
 			So(r.State(), ShouldEqual, Stopped)
 		})
 	})
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }

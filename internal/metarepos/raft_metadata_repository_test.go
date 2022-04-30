@@ -14,6 +14,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"go.etcd.io/etcd/pkg/fileutil"
 	"go.etcd.io/etcd/raft/raftpb"
+	"go.uber.org/goleak"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -2682,4 +2683,10 @@ func TestMRTopicCatchup(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
 }

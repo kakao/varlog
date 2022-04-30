@@ -9,6 +9,7 @@ import (
 	_ "github.com/golang/mock/mockgen/model"
 	assert "github.com/smartystreets/assertions"
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/goleak"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -16,6 +17,10 @@ import (
 	"github.com/kakao/varlog/proto/mrpb/mock"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func TestMRClientGetMetadata(t *testing.T) {
 	Convey("Given that a MRClient calls GetMetadata to a MRService", t, func() {
