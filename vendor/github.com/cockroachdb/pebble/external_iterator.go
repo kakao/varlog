@@ -50,7 +50,6 @@ func NewExternalIter(
 		alloc:               buf,
 		cmp:                 o.Comparer.Compare,
 		equal:               o.equal(),
-		iter:                &buf.merging,
 		merge:               o.Merger.Merge,
 		split:               o.Comparer.Split,
 		readState:           nil,
@@ -112,7 +111,7 @@ func NewExternalIter(
 				return nil, err
 			}
 			mlevels = append(mlevels, mergingIterLevel{
-				iter:         pointIter,
+				iter:         base.WrapIterWithStats(pointIter),
 				rangeDelIter: rangeDelIter,
 			})
 		}
@@ -120,6 +119,8 @@ func NewExternalIter(
 	buf.merging.init(&dbi.opts, dbi.cmp, dbi.split, mlevels...)
 	buf.merging.snapshot = base.InternalKeySeqNumMax
 	buf.merging.elideRangeTombstones = true
+	dbi.pointIter = &buf.merging
+	dbi.iter = dbi.pointIter
 
 	if dbi.opts.rangeKeys() {
 		for _, r := range readers {
@@ -132,15 +133,19 @@ func NewExternalIter(
 			}
 		}
 
-		// TODO(jackson): Pool range-key iterator objects.
-		dbi.rangeKey = &iteratorRangeKeyState{}
-		fragmentedIter := &rangekey.Iter{}
-		fragmentedIter.Init(o.Comparer.Compare, o.Comparer.FormatKey, base.InternalKeySeqNumMax, rangeKeyIters...)
-		iter := &rangekey.DefragmentingIter{}
-		iter.Init(o.Comparer.Compare, fragmentedIter, rangekey.DefragmentLogical)
-		dbi.rangeKey.rangeKeyIter = iter
+		dbi.rangeKey = iterRangeKeyStateAllocPool.Get().(*iteratorRangeKeyState)
+		dbi.rangeKey.rangeKeyIter = rangekey.InitUserIteration(
+			o.Comparer.Compare,
+			base.InternalKeySeqNumMax,
+			&dbi.rangeKey.alloc.merging,
+			&dbi.rangeKey.alloc.defraging,
+			rangeKeyIters...,
+		)
 
-		dbi.rangeKey.iter.Init(dbi.cmp, dbi.split, &buf.merging, iter, dbi.opts.RangeKeyMasking.Suffix)
+		dbi.rangeKey.iter.Init(dbi.cmp, &buf.merging, dbi.rangeKey.rangeKeyIter, keyspan.Hooks{
+			SpanChanged: dbi.rangeKeySpanChanged,
+			SkipPoint:   dbi.rangeKeySkipPoint,
+		})
 		dbi.iter = &dbi.rangeKey.iter
 		dbi.iter.SetBounds(dbi.opts.LowerBound, dbi.opts.UpperBound)
 	}

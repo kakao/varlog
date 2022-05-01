@@ -72,13 +72,16 @@ func (d *DB) shouldCollectTableStatsLocked() bool {
 		(len(d.mu.tableStats.pending) > 0 || !d.mu.tableStats.loadedInitial)
 }
 
-func (d *DB) collectTableStats() {
+// collectTableStats runs a table stats collection job, returning true if the
+// invocation did the collection work, false otherwise (e.g. if another job was
+// already running).
+func (d *DB) collectTableStats() bool {
 	const maxTableStatsPerScan = 50
 
 	d.mu.Lock()
 	if !d.shouldCollectTableStatsLocked() {
 		d.mu.Unlock()
-		return
+		return false
 	}
 
 	pending := d.mu.tableStats.pending
@@ -150,6 +153,7 @@ func (d *DB) collectTableStats() {
 	if maybeCompact {
 		d.maybeScheduleCompaction()
 	}
+	return true
 }
 
 type collectedStats struct {
@@ -253,85 +257,111 @@ func (d *DB) loadTableStats(
 		stats.NumEntries = r.Properties.NumEntries
 		stats.NumDeletions = r.Properties.NumDeletions
 		if r.Properties.NumPointDeletions() > 0 {
-			// TODO(jackson): If the file has a wide keyspace, the average
-			// value size beneath the entire file might not be representative
-			// of the size of the keys beneath the point tombstones.
-			// We could write the ranges of 'clusters' of point tombstones to
-			// a sstable property and call averageValueSizeBeneath for each of
-			// these narrower ranges to improve the estimate.
-			avgKeySize, avgValSize, err := d.averageEntrySizeBeneath(v, level, meta)
-			if err != nil {
-				return err
+			if err = d.loadTablePointKeyStats(r, v, level, meta, &stats); err != nil {
+				return
 			}
-			stats.PointDeletionsBytesEstimate = pointDeletionsBytesEstimate(&r.Properties, avgKeySize, avgValSize)
 		}
-
-		if r.Properties.NumRangeDeletions == 0 {
-			return nil
+		if r.Properties.NumRangeDeletions > 0 {
+			if compactionHints, err = d.loadTableRangeDelStats(r, v, level, meta, &stats); err != nil {
+				return
+			}
 		}
-		// We iterate over the defragmented range tombstones, which ensures
-		// we don't double count ranges deleted at different sequence numbers.
-		// Also, merging abutting tombstones reduces the number of calls to
-		// estimateSizeBeneath which is costly, and improves the accuracy of
-		// our overall estimate.
-		rangeDelIter, err := r.NewRawRangeDelIter()
-		if err != nil {
-			return err
-		}
-		defer rangeDelIter.Close()
-		// Truncate tombstones to the containing file's bounds if necessary.
-		// See docs/range_deletions.md for why this is necessary.
-		rangeDelIter = keyspan.Truncate(
-			d.cmp, rangeDelIter, meta.Smallest.UserKey, meta.Largest.UserKey, nil, nil)
-		err = foreachDefragmentedTombstone(rangeDelIter, d.cmp,
-			func(startUserKey, endUserKey []byte, smallestSeqNum, largestSeqNum uint64) error {
-				// If the file is in the last level of the LSM, there is no
-				// data beneath it. The fact that there is still a range
-				// tombstone in a bottommost file suggests that an open
-				// snapshot kept the tombstone around. Estimate disk usage
-				// within the file itself.
-				if level == numLevels-1 {
-					size, err := r.EstimateDiskUsage(startUserKey, endUserKey)
-					if err != nil {
-						return err
-					}
-					stats.RangeDeletionsBytesEstimate += size
-					return nil
-				}
-
-				estimate, hintSeqNum, err := d.estimateSizeBeneath(v, level, meta, startUserKey, endUserKey)
-				if err != nil {
-					return err
-				}
-				stats.RangeDeletionsBytesEstimate += estimate
-
-				// If any files were completely contained with the range,
-				// hintSeqNum is the smallest sequence number contained in any
-				// such file.
-				if hintSeqNum == math.MaxUint64 {
-					return nil
-				}
-				hint := deleteCompactionHint{
-					start:                   make([]byte, len(startUserKey)),
-					end:                     make([]byte, len(endUserKey)),
-					tombstoneFile:           meta,
-					tombstoneLevel:          level,
-					tombstoneLargestSeqNum:  largestSeqNum,
-					tombstoneSmallestSeqNum: smallestSeqNum,
-					fileSmallestSeqNum:      hintSeqNum,
-				}
-				copy(hint.start, startUserKey)
-				copy(hint.end, endUserKey)
-				compactionHints = append(compactionHints, hint)
-				return nil
-			})
-		return err
+		// TODO(travers): Once we have real-world data, consider collecting
+		// additional stats that may provide improved heuristics for compaction
+		// picking.
+		stats.NumRangeKeys = r.Properties.NumRangeKeys()
+		return
 	})
 	if err != nil {
 		return stats, nil, err
 	}
 	stats.Valid = true
 	return stats, compactionHints, nil
+}
+
+// loadTablePointKeyStats calculates the point key statistics for the given
+// table. The provided manifest.TableStats are updated.
+func (d *DB) loadTablePointKeyStats(
+	r *sstable.Reader, v *version, level int, meta *fileMetadata, stats *manifest.TableStats,
+) error {
+	// TODO(jackson): If the file has a wide keyspace, the average
+	// value size beneath the entire file might not be representative
+	// of the size of the keys beneath the point tombstones.
+	// We could write the ranges of 'clusters' of point tombstones to
+	// a sstable property and call averageValueSizeBeneath for each of
+	// these narrower ranges to improve the estimate.
+	avgKeySize, avgValSize, err := d.averageEntrySizeBeneath(v, level, meta)
+	if err != nil {
+		return err
+	}
+	stats.PointDeletionsBytesEstimate =
+		pointDeletionsBytesEstimate(&r.Properties, avgKeySize, avgValSize)
+	return nil
+}
+
+// loadTableRangeDelStats calculates the range deletion statistics for the given
+// table.
+func (d *DB) loadTableRangeDelStats(
+	r *sstable.Reader, v *version, level int, meta *fileMetadata, stats *manifest.TableStats,
+) ([]deleteCompactionHint, error) {
+	var compactionHints []deleteCompactionHint
+	// We iterate over the defragmented range tombstones, which ensures
+	// we don't double count ranges deleted at different sequence numbers.
+	// Also, merging abutting tombstones reduces the number of calls to
+	// estimateSizeBeneath which is costly, and improves the accuracy of
+	// our overall estimate.
+	rangeDelIter, err := r.NewRawRangeDelIter()
+	if err != nil {
+		return nil, err
+	}
+	defer rangeDelIter.Close()
+	// Truncate tombstones to the containing file's bounds if necessary.
+	// See docs/range_deletions.md for why this is necessary.
+	rangeDelIter = keyspan.Truncate(
+		d.cmp, rangeDelIter, meta.Smallest.UserKey, meta.Largest.UserKey, nil, nil)
+	err = foreachDefragmentedTombstone(rangeDelIter, d.cmp,
+		func(startUserKey, endUserKey []byte, smallestSeqNum, largestSeqNum uint64) error {
+			// If the file is in the last level of the LSM, there is no
+			// data beneath it. The fact that there is still a range
+			// tombstone in a bottommost file suggests that an open
+			// snapshot kept the tombstone around. Estimate disk usage
+			// within the file itself.
+			if level == numLevels-1 {
+				size, err := r.EstimateDiskUsage(startUserKey, endUserKey)
+				if err != nil {
+					return err
+				}
+				stats.RangeDeletionsBytesEstimate += size
+				return nil
+			}
+
+			estimate, hintSeqNum, err := d.estimateSizeBeneath(v, level, meta, startUserKey, endUserKey)
+			if err != nil {
+				return err
+			}
+			stats.RangeDeletionsBytesEstimate += estimate
+
+			// If any files were completely contained with the range,
+			// hintSeqNum is the smallest sequence number contained in any
+			// such file.
+			if hintSeqNum == math.MaxUint64 {
+				return nil
+			}
+			hint := deleteCompactionHint{
+				start:                   make([]byte, len(startUserKey)),
+				end:                     make([]byte, len(endUserKey)),
+				tombstoneFile:           meta,
+				tombstoneLevel:          level,
+				tombstoneLargestSeqNum:  largestSeqNum,
+				tombstoneSmallestSeqNum: smallestSeqNum,
+				fileSmallestSeqNum:      hintSeqNum,
+			}
+			copy(hint.start, startUserKey)
+			copy(hint.end, endUserKey)
+			compactionHints = append(compactionHints, hint)
+			return nil
+		})
+	return compactionHints, err
 }
 
 func (d *DB) averageEntrySizeBeneath(
@@ -423,70 +453,51 @@ func (d *DB) estimateSizeBeneath(
 }
 
 func foreachDefragmentedTombstone(
-	rangeDelIter base.InternalIterator,
+	rangeDelIter keyspan.FragmentIterator,
 	cmp base.Compare,
 	fn func([]byte, []byte, uint64, uint64) error,
 ) error {
-	var startUserKey, endUserKey []byte
-	var smallestSeqNum, largestSeqNum uint64
-	var initialized bool
-	for start, end := rangeDelIter.First(); start != nil; start, end = rangeDelIter.Next() {
-
-		// Range tombstones are fragmented such that any two tombstones
-		// that share the same start key also share the same end key.
-		// Multiple tombstones may exist at different sequence numbers.
-		// If this tombstone starts or ends at the same point, it's a fragment
-		// of the previous one.
-		if cmp(startUserKey, start.UserKey) == 0 || cmp(endUserKey, end) == 0 {
-			if smallestSeqNum > start.SeqNum() {
-				smallestSeqNum = start.SeqNum()
-			}
-			if largestSeqNum < start.SeqNum() {
-				largestSeqNum = start.SeqNum()
-			}
-			continue
+	// Use an equals func that will always merge abutting spans.
+	equal := func(_ base.Compare, _, _ keyspan.Span) bool { return true }
+	// Reduce keys by maintaining a slice of length two, corresponding to the
+	// largest and smallest keys in the defragmented span. This maintains the
+	// contract that the emitted slice is sorted by (SeqNum, Kind) descending.
+	reducer := func(current, incoming []keyspan.Key) []keyspan.Key {
+		if len(current) == 0 && len(incoming) == 0 {
+			// While this should never occur in practice, a defensive return is used
+			// here to preserve correctness.
+			return current
 		}
-
-		// If this fragmented tombstone begins where the previous
-		// tombstone ended, merge it and continue.
-		if cmp(endUserKey, start.UserKey) == 0 {
-			endUserKey = append(endUserKey[:0], end...)
-			if smallestSeqNum > start.SeqNum() {
-				smallestSeqNum = start.SeqNum()
+		// Determine the smallest / largest keys across the two slices. As `current`
+		// and `incoming` are both sorted by (seqnum, kind) descending, only the
+		// first and last element of each slice need to be consulted.
+		var largest, smallest keyspan.Key
+		var largestSet, smallestSet bool
+		for _, keys := range [2][]keyspan.Key{current, incoming} {
+			if len(keys) == 0 {
+				continue
 			}
-			if largestSeqNum < start.SeqNum() {
-				largestSeqNum = start.SeqNum()
+			first, last := keys[0], keys[len(keys)-1]
+			// Update largest.
+			if !largestSet || first.Trailer > largest.Trailer {
+				largest, largestSet = first, true
 			}
-			continue
+			// Update smallest.
+			if !smallestSet || last.Trailer < smallest.Trailer {
+				smallest, smallestSet = last, true
+			}
 		}
-
-		// If this is the first iteration, continue so we have an
-		// opportunity to merge subsequent abutting tombstones.
-		if !initialized {
-			startUserKey = append(startUserKey[:0], start.UserKey...)
-			endUserKey = append(endUserKey[:0], end...)
-			smallestSeqNum, largestSeqNum = start.SeqNum(), start.SeqNum()
-			initialized = true
-			continue
-		}
-
-		if err := fn(startUserKey, endUserKey, smallestSeqNum, largestSeqNum); err != nil {
-			return err
-		}
-		startUserKey = append(startUserKey[:0], start.UserKey...)
-		endUserKey = append(endUserKey[:0], end...)
-		smallestSeqNum, largestSeqNum = start.SeqNum(), start.SeqNum()
+		return append(current[:0], largest, smallest)
 	}
-	if initialized {
-		if err := fn(startUserKey, endUserKey, smallestSeqNum, largestSeqNum); err != nil {
+	iter := keyspan.DefragmentingIter{}
+	iter.Init(cmp, rangeDelIter, equal, reducer)
+	for s := iter.First(); s.Valid(); s = iter.Next() {
+		if err := fn(s.Start, s.End, s.SmallestSeqNum(), s.LargestSeqNum()); err != nil {
+			_ = iter.Close()
 			return err
 		}
 	}
-	if err := rangeDelIter.Error(); err != nil {
-		_ = rangeDelIter.Close()
-		return err
-	}
-	return rangeDelIter.Close()
+	return iter.Close()
 }
 
 func maybeSetStatsFromProperties(meta *fileMetadata, props *sstable.Properties) bool {
@@ -521,6 +532,7 @@ func maybeSetStatsFromProperties(meta *fileMetadata, props *sstable.Properties) 
 		Valid:                       true,
 		NumEntries:                  props.NumEntries,
 		NumDeletions:                props.NumDeletions,
+		NumRangeKeys:                props.NumRangeKeys(),
 		PointDeletionsBytesEstimate: pointEstimate,
 		RangeDeletionsBytesEstimate: 0,
 	}

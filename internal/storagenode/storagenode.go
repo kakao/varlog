@@ -51,6 +51,8 @@ type StorageNode struct {
 	closed       bool
 	closedC      chan struct{}
 
+	mux cmux.CMux
+
 	pprofServer *pprof.Server
 	// FIXME: some metadata should be stored into storage.
 
@@ -154,9 +156,9 @@ func (sn *StorageNode) Serve() error {
 	)
 	sn.mu.Unlock()
 
-	mux := cmux.New(sn.lis)
-	httpL := mux.Match(cmux.HTTP1Fast())
-	grpcL := mux.Match(cmux.Any())
+	sn.mux = cmux.New(sn.lis)
+	httpL := sn.mux.Match(cmux.HTTP1Fast())
+	grpcL := sn.mux.Match(cmux.Any())
 
 	var g errgroup.Group
 	g.Go(func() error {
@@ -170,7 +172,7 @@ func (sn *StorageNode) Serve() error {
 		return err
 	})
 	g.Go(func() error {
-		err := mux.Serve()
+		err := sn.mux.Serve()
 		if err != nil && !strings.Contains(err.Error(), "use of closed") {
 			return err
 		}
@@ -186,11 +188,12 @@ func (sn *StorageNode) Close() (err error) {
 	if sn.closed {
 		return nil
 	}
-
 	sn.closed = true
 	close(sn.closedC)
-	sn.healthServer.Shutdown()
 
+	sn.mux.Close()
+	sn.pprofServer.Close(context.Background())
+	sn.healthServer.Shutdown()
 	sn.executors.Range(func(_ types.LogStreamID, _ types.TopicID, lse *logstream.Executor) bool {
 		err = multierr.Append(err, lse.Close())
 		return true

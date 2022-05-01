@@ -14,14 +14,16 @@ import (
 // LevelMetadata contains metadata for all of the files within
 // a level of the LSM.
 type LevelMetadata struct {
-	tree btree
+	level int
+	tree  btree
 }
 
 // clone makes a copy of the level metadata, implicitly increasing the ref
 // count of every file contained within lm.
 func (lm *LevelMetadata) clone() LevelMetadata {
 	return LevelMetadata{
-		tree: lm.tree.clone(),
+		level: lm.level,
+		tree:  lm.tree.clone(),
 	}
 }
 
@@ -35,6 +37,7 @@ func makeLevelMetadata(cmp Compare, level int, files []*FileMetadata) LevelMetad
 		bcmp = btreeCmpSmallestKey(cmp)
 	}
 	var lm LevelMetadata
+	lm.level = level
 	lm.tree, _ = makeBTree(bcmp, files)
 	return lm
 }
@@ -68,13 +71,16 @@ func (lm *LevelMetadata) Slice() LevelSlice {
 	return LevelSlice{iter: lm.tree.iter(), length: lm.tree.length}
 }
 
-// Find finds the provided file in the level if it exists. The level must be
-// key-sorted (eg, non-L0).
+// Find finds the provided file in the level if it exists.
 func (lm *LevelMetadata) Find(cmp base.Compare, m *FileMetadata) *LevelFile {
-	// TODO(jackson): Add an assertion that lm is key-sorted.
-	o := overlaps(lm.Iter(), cmp, m.Smallest.UserKey,
-		m.Largest.UserKey, m.Largest.IsExclusiveSentinel())
-	iter := o.Iter()
+	iter := lm.Iter()
+	if lm.level != 0 {
+		// If lm holds files for levels >0, we can narrow our search by binary
+		// searching by bounds.
+		o := overlaps(iter, cmp, m.Smallest.UserKey,
+			m.Largest.UserKey, m.Largest.IsExclusiveSentinel())
+		iter = o.Iter()
+	}
 	for f := iter.First(); f != nil; f = iter.Next() {
 		if f == m {
 			lf := iter.Take()
@@ -95,6 +101,18 @@ func (lm *LevelMetadata) Annotation(annotator Annotator) interface{} {
 	}
 	v, _ := lm.tree.root.annotation(annotator)
 	return v
+}
+
+// InvalidateAnnotation clears any cached annotations defined by Annotator. The
+// Annotator is used as the key for pre-calculated values, so equal Annotators
+// must be used to clear the appropriate cached annotation. InvalidateAnnotation
+// must not be called concurrently, and in practice this is achieved by
+// requiring callers to hold DB.mu.
+func (lm *LevelMetadata) InvalidateAnnotation(annotator Annotator) {
+	if lm.Empty() {
+		return
+	}
+	lm.tree.root.invalidateAnnotation(annotator)
 }
 
 // LevelFile holds a file's metadata along with its position
@@ -242,12 +260,30 @@ func (ls LevelSlice) Reslice(resliceFunc func(start, end *LevelIterator)) LevelS
 	return s
 }
 
+// KeyType is used to specify the type of keys we're looking for in
+// LevelIterator positioning operations. Files not containing any keys of the
+// desired type are skipped.
+type KeyType int8
+
+const (
+	// KeyTypePointAndRange denotes a search among the entire keyspace, including
+	// both point keys and range keys. No sstables are skipped.
+	KeyTypePointAndRange KeyType = iota
+	// KeyTypePoint denotes a search among the point keyspace. SSTables with no
+	// point keys will be skipped. Note that the point keyspace includes rangedels.
+	KeyTypePoint
+	// KeyTypeRange denotes a search among the range keyspace. SSTables with no
+	// range keys will be skipped.
+	KeyTypeRange
+)
+
 // LevelIterator iterates over a set of files' metadata. Its zero value is an
 // empty iterator.
 type LevelIterator struct {
-	iter  iterator
-	start *iterator
-	end   *iterator
+	iter   iterator
+	start  *iterator
+	end    *iterator
+	filter KeyType
 }
 
 func (i LevelIterator) String() string {
@@ -297,9 +333,10 @@ func (i *LevelIterator) Clone() LevelIterator {
 	// The start and end iterators are not cloned and are treated as
 	// immutable.
 	return LevelIterator{
-		iter:  i.iter.clone(),
-		start: i.start,
-		end:   i.end,
+		iter:   i.iter.clone(),
+		start:  i.start,
+		end:    i.end,
+		filter: i.filter,
 	}
 }
 
@@ -313,6 +350,14 @@ func (i *LevelIterator) Current() *FileMetadata {
 
 func (i *LevelIterator) empty() bool {
 	return emptyWithBounds(i.iter, i.start, i.end)
+}
+
+// Filter clones the iterator and sets the desired KeyType as the key to filter
+// files on.
+func (i *LevelIterator) Filter(keyType KeyType) LevelIterator {
+	l := i.Clone()
+	l.filter = keyType
+	return l
 }
 
 func emptyWithBounds(i iterator, start, end *iterator) bool {
@@ -335,7 +380,7 @@ func (i *LevelIterator) First() *FileMetadata {
 	if !i.iter.valid() {
 		return nil
 	}
-	return i.iter.cur()
+	return i.filteredNextFile(i.iter.cur())
 }
 
 // Last seeks to the last file in the iterator and returns it.
@@ -351,7 +396,7 @@ func (i *LevelIterator) Last() *FileMetadata {
 	if !i.iter.valid() {
 		return nil
 	}
-	return i.iter.cur()
+	return i.filteredPrevFile(i.iter.cur())
 }
 
 // Next advances the iterator to the next file and returns it.
@@ -363,7 +408,7 @@ func (i *LevelIterator) Next() *FileMetadata {
 	if i.end != nil && cmpIter(i.iter, *i.end) > 0 {
 		return nil
 	}
-	return i.iter.cur()
+	return i.filteredNextFile(i.iter.cur())
 }
 
 // Prev moves the iterator the previous file and returns it.
@@ -375,7 +420,7 @@ func (i *LevelIterator) Prev() *FileMetadata {
 	if i.start != nil && cmpIter(i.iter, *i.start) < 0 {
 		return nil
 	}
-	return i.iter.cur()
+	return i.filteredPrevFile(i.iter.cur())
 }
 
 // SeekGE seeks to the first file in the iterator's file set with a largest
@@ -387,9 +432,10 @@ func (i *LevelIterator) SeekGE(cmp Compare, userKey []byte) *FileMetadata {
 	if i.empty() {
 		return nil
 	}
-	return i.seek(func(m *FileMetadata) bool {
+	meta := i.seek(func(m *FileMetadata) bool {
 		return cmp(m.Largest.UserKey, userKey) >= 0
 	})
+	return i.filteredNextFile(meta)
 }
 
 // SeekLT seeks to the last file in the iterator's file set with a smallest
@@ -404,7 +450,50 @@ func (i *LevelIterator) SeekLT(cmp Compare, userKey []byte) *FileMetadata {
 	i.seek(func(m *FileMetadata) bool {
 		return cmp(m.Smallest.UserKey, userKey) >= 0
 	})
-	return i.Prev()
+	meta := i.Prev()
+	return i.filteredPrevFile(meta)
+}
+
+func (i *LevelIterator) filteredNextFile(meta *FileMetadata) *FileMetadata {
+	switch i.filter {
+	case KeyTypePoint:
+		for meta != nil && !meta.HasPointKeys {
+			meta = i.Next()
+		}
+		return meta
+	case KeyTypeRange:
+		// TODO(bilal): Range keys are expected to be rare and sparse. Add an
+		// optimization to annotate the tree and efficiently skip over files that
+		// do not contain range keys right at the seek step, to reduce iterations
+		// here.
+		for meta != nil && !meta.HasRangeKeys {
+			meta = i.Next()
+		}
+		return meta
+	default:
+		return meta
+	}
+}
+
+func (i *LevelIterator) filteredPrevFile(meta *FileMetadata) *FileMetadata {
+	switch i.filter {
+	case KeyTypePoint:
+		for meta != nil && !meta.HasPointKeys {
+			meta = i.Prev()
+		}
+		return meta
+	case KeyTypeRange:
+		// TODO(bilal): Range keys are expected to be rare and sparse. Add an
+		// optimization to annotate the tree and efficiently skip over files that
+		// do not contain range keys right at the seek step, to reduce iterations
+		// here.
+		for meta != nil && !meta.HasRangeKeys {
+			meta = i.Prev()
+		}
+		return meta
+	default:
+		return meta
+	}
 }
 
 func (i *LevelIterator) seek(fn func(*FileMetadata) bool) *FileMetadata {

@@ -143,6 +143,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	d.mu.cleaner.cond.L = &d.mu.Mutex
 	d.mu.compact.cond.L = &d.mu.Mutex
 	d.mu.compact.inProgress = make(map[*compaction]struct{})
+	d.mu.compact.noOngoingFlushStartTime = time.Now()
 	d.mu.snapshots.init()
 	// logSeqNum is the next sequence number that will be assigned. Start
 	// assigning sequence numbers from 1 to match rocksdb.
@@ -237,7 +238,6 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		if err := d.mu.versions.currentVersion().CheckConsistency(dirname, opts.FS); err != nil {
 			return nil, err
 		}
-
 	}
 
 	// If the Options specify a format major version higher than the
@@ -370,7 +370,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		// crash before the manifest is synced could leave two WALs with
 		// unclean tails.
 		d.mu.versions.logLock()
-		if err := d.mu.versions.logAndApply(jobID, &ve, newFileMetrics(ve.NewFiles), func() []compactionInfo {
+		if err := d.mu.versions.logAndApply(jobID, &ve, newFileMetrics(ve.NewFiles), false /* forceRotation */, func() []compactionInfo {
 			return nil
 		}); err != nil {
 			return nil, err
@@ -402,7 +402,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		d.mu.log.LogWriter.SetMinSyncInterval(d.opts.WALMinSyncInterval)
 		d.mu.versions.metrics.WAL.Files++
 	}
-	d.updateReadStateLocked(d.opts.DebugCheck)
+	d.updateReadStateLocked(d.opts.DebugCheck, nil)
 
 	if !d.opts.ReadOnly {
 		// Write the current options to disk.
@@ -681,6 +681,12 @@ func (d *DB) replayWAL(
 		c := newFlush(d.opts, d.mu.versions.currentVersion(),
 			1 /* base level */, toFlush, &d.atomic.bytesFlushed)
 		newVE, _, err := d.runCompaction(jobID, c, nilPacer)
+		if err != nil {
+			return 0, err
+		}
+		// TODO(jackson): Remove the below call to applyFlushedRangeKeys once
+		// flushes actually persist range keys to sstables.
+		err = d.applyFlushedRangeKeys(toFlush)
 		if err != nil {
 			return 0, err
 		}

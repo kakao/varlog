@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unicode"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
@@ -49,6 +50,8 @@ type TableStats struct {
 	NumEntries uint64
 	// The number of point and range deletion entries in the table.
 	NumDeletions uint64
+	// NumRangeKeys is the total number of range keys in the table.
+	NumRangeKeys uint64
 	// Estimate of the total disk space that may be dropped by this table's
 	// point deletions by compacting them.
 	PointDeletionsBytesEstimate uint64
@@ -64,6 +67,15 @@ type TableStats struct {
 	// tombstones.
 	RangeDeletionsBytesEstimate uint64
 }
+
+// boundType represents the type of key (point or range) present as the smallest
+// and largest keys.
+type boundType uint8
+
+const (
+	boundTypePointKey boundType = iota + 1
+	boundTypeRangeKey
+)
 
 // FileMetadata holds the metadata for an on-disk table.
 type FileMetadata struct {
@@ -140,16 +152,33 @@ type FileMetadata struct {
 	IsIntraL0Compacting bool
 	// True if the file is actively being compacted. Protected by DB.mu.
 	Compacting bool
-	// True if user asked us to compact this file. This flag is only set and
-	// respected by RocksDB but exists here to preserve its value in the
-	// MANIFEST.
-	markedForCompaction bool
+	// True if compaction of this file has been explicitly requested.
+	// Previously, RocksDB and earlier versions of Pebble allowed this
+	// flag to be set by a user table property collector. Some earlier
+	// versions of Pebble respected this flag, while other more recent
+	// versions ignored this flag.
+	//
+	// More recently this flag has been repurposed to facilitate the
+	// compaction of 'atomic compaction units'. Files marked for
+	// compaction are compacted in a rewrite compaction at the lowest
+	// possible compaction priority.
+	//
+	// NB: A count of files marked for compaction is maintained on
+	// Version, and compaction picking reads cached annotations
+	// determined by this field.
+	//
+	// Protected by DB.mu.
+	MarkedForCompaction bool
 	// HasPointKeys and HasRangeKeys track whether the table contains point and
 	// range keys, respectively.
 	HasPointKeys bool
 	HasRangeKeys bool
 	// smallestSet and largestSet track whether the overall bounds have been set.
 	boundsSet bool
+	// boundTypeSmallest and boundTypeLargest provide an indication as to which
+	// key type (point or range) corresponds to the smallest and largest overall
+	// table bounds.
+	boundTypeSmallest, boundTypeLargest boundType
 }
 
 // ExtendPointKeyBounds attempts to extend the lower and upper point key bounds
@@ -174,7 +203,7 @@ func (m *FileMetadata) ExtendPointKeyBounds(
 		}
 	}
 	// Update the overall bounds.
-	m.extendOverallBounds(cmp, m.SmallestPointKey, m.LargestPointKey)
+	m.extendOverallBounds(cmp, m.SmallestPointKey, m.LargestPointKey, boundTypePointKey)
 	return m
 }
 
@@ -200,29 +229,140 @@ func (m *FileMetadata) ExtendRangeKeyBounds(
 		}
 	}
 	// Update the overall bounds.
-	m.extendOverallBounds(cmp, m.SmallestRangeKey, m.LargestRangeKey)
+	m.extendOverallBounds(cmp, m.SmallestRangeKey, m.LargestRangeKey, boundTypeRangeKey)
 	return m
 }
 
 // extendOverallBounds attempts to extend the overall table lower and upper
 // bounds. The given bounds may not be used if a lower or upper bound already
-// exists that is smaller or larger than the given keys, respectively.
-func (m *FileMetadata) extendOverallBounds(cmp Compare, smallest, largest InternalKey) {
+// exists that is smaller or larger than the given keys, respectively. The given
+// boundType will be used if the bounds are updated.
+func (m *FileMetadata) extendOverallBounds(
+	cmp Compare, smallest, largest InternalKey, bTyp boundType,
+) {
 	if !m.boundsSet {
 		m.Smallest, m.Largest = smallest, largest
 		m.boundsSet = true
+		m.boundTypeSmallest, m.boundTypeLargest = bTyp, bTyp
 	} else {
 		if base.InternalCompare(cmp, smallest, m.Smallest) < 0 {
 			m.Smallest = smallest
+			m.boundTypeSmallest = bTyp
 		}
 		if base.InternalCompare(cmp, largest, m.Largest) > 0 {
 			m.Largest = largest
+			m.boundTypeLargest = bTyp
 		}
 	}
 }
 
+const (
+	maskContainsPointKeys = 1 << 0
+	maskSmallest          = 1 << 1
+	maskLargest           = 1 << 2
+)
+
+// boundsMarker returns a marker byte whose bits encode the following
+// information (in order from least significant bit):
+// - if the table contains point keys
+// - if the table's smallest key is a point key
+// - if the table's largest key is a point key
+func (m *FileMetadata) boundsMarker() (sentinel uint8, err error) {
+	if m.HasPointKeys {
+		sentinel |= maskContainsPointKeys
+	}
+	switch m.boundTypeSmallest {
+	case boundTypePointKey:
+		sentinel |= maskSmallest
+	case boundTypeRangeKey:
+		// No op - leave bit unset.
+	default:
+		return 0, base.CorruptionErrorf("file %s has neither point nor range key as smallest key", m.FileNum)
+	}
+	switch m.boundTypeLargest {
+	case boundTypePointKey:
+		sentinel |= maskLargest
+	case boundTypeRangeKey:
+		// No op - leave bit unset.
+	default:
+		return 0, base.CorruptionErrorf("file %s has neither point nor range key as largest key", m.FileNum)
+	}
+	return
+}
+
+// String implements fmt.Stringer, printing the file number and the overall
+// table bounds.
 func (m *FileMetadata) String() string {
-	return fmt.Sprintf("%s:%s-%s", m.FileNum, m.Smallest, m.Largest)
+	return fmt.Sprintf("%s:[%s-%s]", m.FileNum, m.Smallest, m.Largest)
+}
+
+// DebugString returns a verbose representation of FileMetadata, typically for
+// use in tests and debugging, returning the file number and the point, range
+// and overall bounds for the table.
+func (m *FileMetadata) DebugString(format base.FormatKey, verbose bool) string {
+	var b bytes.Buffer
+	fmt.Fprintf(&b, "%s:[%s-%s]",
+		m.FileNum, m.Smallest.Pretty(format), m.Largest.Pretty(format))
+	if !verbose {
+		return b.String()
+	}
+	if m.HasPointKeys {
+		fmt.Fprintf(&b, " points:[%s-%s]",
+			m.SmallestPointKey.Pretty(format), m.LargestPointKey.Pretty(format))
+	}
+	if m.HasRangeKeys {
+		fmt.Fprintf(&b, " ranges:[%s-%s]",
+			m.SmallestRangeKey.Pretty(format), m.LargestRangeKey.Pretty(format))
+	}
+	return b.String()
+}
+
+// ParseFileMetadataDebug parses a FileMetadata from its DebugString
+// representation.
+func ParseFileMetadataDebug(s string) (m FileMetadata, err error) {
+	// Split lines of the form:
+	//  000000:[a#0,SET-z#0,SET] points:[...] ranges:[...]
+	fields := strings.FieldsFunc(s, func(c rune) bool {
+		switch c {
+		case ':', '[', '-', ']':
+			return true
+		default:
+			return unicode.IsSpace(c) // NB: also trim whitespace padding.
+		}
+	})
+	if len(fields)%3 != 0 {
+		return m, errors.Newf("malformed input: %s", s)
+	}
+	for len(fields) > 0 {
+		prefix := fields[0]
+		smallest := base.ParsePrettyInternalKey(fields[1])
+		largest := base.ParsePrettyInternalKey(fields[2])
+		switch prefix {
+		case "points":
+			m.SmallestPointKey, m.LargestPointKey = smallest, largest
+			m.HasPointKeys = true
+		case "ranges":
+			m.SmallestRangeKey, m.LargestRangeKey = smallest, largest
+			m.HasRangeKeys = true
+		default:
+			fileNum, err := strconv.ParseUint(prefix, 10, 64)
+			if err != nil {
+				return m, errors.Newf("malformed input: %s: %s", s, err)
+			}
+			m.FileNum = base.FileNum(fileNum)
+			m.Smallest, m.Largest = smallest, largest
+			m.boundsSet = true
+		}
+		fields = fields[3:]
+	}
+	// By default, when the parser sees just the overall bounds, we set the point
+	// keys. This preserves backwards compatability with existing test cases that
+	// specify only the overall bounds.
+	if !m.HasPointKeys && !m.HasRangeKeys {
+		m.SmallestPointKey, m.LargestPointKey = m.Smallest, m.Largest
+		m.HasPointKeys = true
+	}
+	return
 }
 
 // Validate validates the metadata for consistency with itself, returning an
@@ -451,7 +591,7 @@ func NewVersion(
 		// initial B-Tree, we swap out the btreeCmp for the correct one.
 		// TODO(jackson): Adjust or remove the tests and remove this.
 		v.Levels[l].tree, _ = makeBTree(btreeCmpSpecificOrder(files[l]), files[l])
-
+		v.Levels[l].level = l
 		if l == 0 {
 			v.Levels[l].tree.cmp = btreeCmpSeqNum
 		} else {
@@ -518,6 +658,14 @@ type Version struct {
 	// removed. Will be called with list.mu held.
 	Deleted func(obsolete []*FileMetadata)
 
+	// Stats holds aggregated stats about the version maintained from
+	// version to version.
+	Stats struct {
+		// MarkedForCompaction records the count of files marked for
+		// compaction within the version.
+		MarkedForCompaction int
+	}
+
 	// The list the version is linked into.
 	list *VersionList
 
@@ -525,48 +673,25 @@ type Version struct {
 	prev, next *Version
 }
 
+// String implements fmt.Stringer, printing the FileMetadata for each level in
+// the Version.
 func (v *Version) String() string {
-	return v.Pretty(base.DefaultFormatter)
+	return v.string(base.DefaultFormatter, false)
 }
 
-// Pretty returns a string representation of the version.
-func (v *Version) Pretty(format base.FormatKey) string {
-	var buf bytes.Buffer
-	if len(v.L0SublevelFiles) > 0 {
-		for sublevel := len(v.L0SublevelFiles) - 1; sublevel >= 0; sublevel-- {
-			fmt.Fprintf(&buf, "0.%d:\n", sublevel)
-			v.L0SublevelFiles[sublevel].Each(func(f *FileMetadata) {
-				fmt.Fprintf(&buf, "  %06d:[%s-%s]\n", f.FileNum,
-					format(f.Smallest.UserKey), format(f.Largest.UserKey))
-			})
-		}
-	}
-	for level := 1; level < NumLevels; level++ {
-		if v.Levels[level].Empty() {
-			continue
-		}
-		fmt.Fprintf(&buf, "%d:\n", level)
-		iter := v.Levels[level].Iter()
-		for f := iter.First(); f != nil; f = iter.Next() {
-			fmt.Fprintf(&buf, "  %s:[%s-%s]\n", f.FileNum,
-				format(f.Smallest.UserKey), format(f.Largest.UserKey))
-		}
-	}
-	return buf.String()
-}
-
-// DebugString returns an alternative format to String() which includes
-// sequence number and kind information for the sstable boundaries.
-// TODO(travers): Print separate point and range bounds.
+// DebugString returns an alternative format to String() which includes sequence
+// number and kind information for the sstable boundaries.
 func (v *Version) DebugString(format base.FormatKey) string {
-	var buf bytes.Buffer
+	return v.string(format, true)
+}
 
+func (v *Version) string(format base.FormatKey, verbose bool) string {
+	var buf bytes.Buffer
 	if len(v.L0SublevelFiles) > 0 {
 		for sublevel := len(v.L0SublevelFiles) - 1; sublevel >= 0; sublevel-- {
 			fmt.Fprintf(&buf, "0.%d:\n", sublevel)
 			v.L0SublevelFiles[sublevel].Each(func(f *FileMetadata) {
-				fmt.Fprintf(&buf, "  %06d:[%s-%s]\n", f.FileNum,
-					f.Smallest.Pretty(format), f.Largest.Pretty(format))
+				fmt.Fprintf(&buf, "  %s\n", f.DebugString(format, verbose))
 			})
 		}
 	}
@@ -577,15 +702,13 @@ func (v *Version) DebugString(format base.FormatKey) string {
 		fmt.Fprintf(&buf, "%d:\n", level)
 		iter := v.Levels[level].Iter()
 		for f := iter.First(); f != nil; f = iter.Next() {
-			fmt.Fprintf(&buf, "  %s:[%s-%s]\n", f.FileNum,
-				f.Smallest.Pretty(format), f.Largest.Pretty(format))
+			fmt.Fprintf(&buf, "  %s\n", f.DebugString(format, verbose))
 		}
 	}
 	return buf.String()
 }
 
 // ParseVersionDebug parses a Version from its DebugString output.
-// TODO(travers): Parse separate point and range bounds.
 func ParseVersionDebug(
 	cmp Compare, formatKey base.FormatKey, flushSplitBytes int64, s string,
 ) (*Version, error) {
@@ -602,20 +725,16 @@ func ParseVersionDebug(
 				return nil, err
 			}
 		default:
-			// Example format:
-			//   000971:[acutc@6#4227,SET-zzhra@12#72057594037927935,RANGEDEL]
-			delim := map[rune]bool{':': true, '[': true, '-': true, ']': true}
-			fields := strings.FieldsFunc(l, func(c rune) bool { return delim[c] })
-			fileNum, err := strconv.ParseUint(fields[0], 10, 64)
+			m, err := ParseFileMetadataDebug(l)
 			if err != nil {
 				return nil, err
 			}
-			smallest := base.ParsePrettyInternalKey(fields[1])
-			largest := base.ParsePrettyInternalKey(fields[2])
-			m := (&FileMetadata{
-				FileNum: base.FileNum(fileNum),
-			}).ExtendPointKeyBounds(cmp, smallest, largest)
-			files[level] = append(files[level], m)
+			// If we only parsed overall bounds, default to setting the point bounds.
+			if !m.HasPointKeys && !m.HasRangeKeys {
+				m.SmallestPointKey, m.LargestPointKey = m.Smallest, m.Largest
+				m.HasPointKeys = true
+			}
+			files[level] = append(files[level], &m)
 		}
 	}
 	// Reverse the order of L0 files. This ensures we construct the same

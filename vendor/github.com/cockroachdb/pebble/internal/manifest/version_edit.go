@@ -47,7 +47,10 @@ const (
 	tagColumnFamilyDrop = 202
 	tagMaxColumnFamily  = 203
 
-	// The custom tags sub-format used by tagNewFile4.
+	// Pebble tags.
+	tagNewFile5 = 104 // Range keys.
+
+	// The custom tags sub-format used by tagNewFile4 and above.
 	customTagTerminate         = 1
 	customTagNeedsCompaction   = 2
 	customTagCreationTime      = 6
@@ -173,7 +176,7 @@ func (v *VersionEdit) Decode(r io.Reader) error {
 			}
 			v.DeletedFiles[DeletedFileEntry{level, fileNum}] = nil
 
-		case tagNewFile, tagNewFile2, tagNewFile3, tagNewFile4:
+		case tagNewFile, tagNewFile2, tagNewFile3, tagNewFile4, tagNewFile5:
 			level, err := d.readLevel()
 			if err != nil {
 				return err
@@ -193,13 +196,62 @@ func (v *VersionEdit) Decode(r io.Reader) error {
 			if err != nil {
 				return err
 			}
-			smallest, err := d.readBytes()
-			if err != nil {
-				return err
-			}
-			largest, err := d.readBytes()
-			if err != nil {
-				return err
+			// We read the smallest / largest key bounds differently depending on
+			// whether we have point, range or both types of keys present in the
+			// table.
+			var (
+				smallestPointKey, largestPointKey []byte
+				smallestRangeKey, largestRangeKey []byte
+				parsedPointBounds                 bool
+				boundsMarker                      byte
+			)
+			if tag != tagNewFile5 {
+				// Range keys not present in the table. Parse the point key bounds.
+				smallestPointKey, err = d.readBytes()
+				if err != nil {
+					return err
+				}
+				largestPointKey, err = d.readBytes()
+				if err != nil {
+					return err
+				}
+			} else {
+				// Range keys are present in the table. Determine whether we have point
+				// keys to parse, in addition to the bounds.
+				boundsMarker, err = d.ReadByte()
+				if err != nil {
+					return err
+				}
+				// Parse point key bounds, if present.
+				if boundsMarker&maskContainsPointKeys > 0 {
+					smallestPointKey, err = d.readBytes()
+					if err != nil {
+						return err
+					}
+					largestPointKey, err = d.readBytes()
+					if err != nil {
+						return err
+					}
+					parsedPointBounds = true
+				} else {
+					// The table does not have point keys.
+					// Sanity check: the bounds must be range keys.
+					if boundsMarker&maskSmallest != 0 || boundsMarker&maskLargest != 0 {
+						return base.CorruptionErrorf(
+							"new-file-4-range-keys: table without point keys has point key bounds: marker=%x",
+							boundsMarker,
+						)
+					}
+				}
+				// Parse range key bounds.
+				smallestRangeKey, err = d.readBytes()
+				if err != nil {
+					return err
+				}
+				largestRangeKey, err = d.readBytes()
+				if err != nil {
+					return err
+				}
 			}
 			var smallestSeqNum uint64
 			var largestSeqNum uint64
@@ -215,7 +267,7 @@ func (v *VersionEdit) Decode(r io.Reader) error {
 			}
 			var markedForCompaction bool
 			var creationTime uint64
-			if tag == tagNewFile4 {
+			if tag == tagNewFile4 || tag == tagNewFile5 {
 				for {
 					customTag, err := d.readUvarint()
 					if err != nil {
@@ -252,30 +304,47 @@ func (v *VersionEdit) Decode(r io.Reader) error {
 					}
 				}
 			}
-			smallestPointKey := base.DecodeInternalKey(smallest)
-			largestPointKey := base.DecodeInternalKey(largest)
+			m := &FileMetadata{
+				FileNum:             fileNum,
+				Size:                size,
+				CreationTime:        int64(creationTime),
+				SmallestSeqNum:      smallestSeqNum,
+				LargestSeqNum:       largestSeqNum,
+				MarkedForCompaction: markedForCompaction,
+			}
+			if tag != tagNewFile5 { // no range keys present
+				m.SmallestPointKey = base.DecodeInternalKey(smallestPointKey)
+				m.LargestPointKey = base.DecodeInternalKey(largestPointKey)
+				m.HasPointKeys = true
+				m.Smallest, m.Largest = m.SmallestPointKey, m.LargestPointKey
+				m.boundTypeSmallest, m.boundTypeLargest = boundTypePointKey, boundTypePointKey
+			} else { // range keys present
+				// Set point key bounds, if parsed.
+				if parsedPointBounds {
+					m.SmallestPointKey = base.DecodeInternalKey(smallestPointKey)
+					m.LargestPointKey = base.DecodeInternalKey(largestPointKey)
+					m.HasPointKeys = true
+				}
+				// Set range key bounds.
+				m.SmallestRangeKey = base.DecodeInternalKey(smallestRangeKey)
+				m.LargestRangeKey = base.DecodeInternalKey(largestRangeKey)
+				m.HasRangeKeys = true
+				// Set overall bounds (by default assume range keys).
+				m.Smallest, m.Largest = m.SmallestRangeKey, m.LargestRangeKey
+				m.boundTypeSmallest, m.boundTypeLargest = boundTypeRangeKey, boundTypeRangeKey
+				if boundsMarker&maskSmallest == maskSmallest {
+					m.Smallest = m.SmallestPointKey
+					m.boundTypeSmallest = boundTypePointKey
+				}
+				if boundsMarker&maskLargest == maskLargest {
+					m.Largest = m.LargestPointKey
+					m.boundTypeLargest = boundTypePointKey
+				}
+			}
+			m.boundsSet = true
 			v.NewFiles = append(v.NewFiles, NewFileEntry{
 				Level: level,
-				Meta: &FileMetadata{
-					FileNum:             fileNum,
-					Size:                size,
-					CreationTime:        int64(creationTime),
-					SmallestPointKey:    smallestPointKey,
-					LargestPointKey:     largestPointKey,
-					HasPointKeys:        true,
-					SmallestSeqNum:      smallestSeqNum,
-					LargestSeqNum:       largestSeqNum,
-					markedForCompaction: markedForCompaction,
-					// TODO(travers): For now the smallest and largest keys are pinned to
-					// the smallest and largest point keys, as these are the only types of
-					// keys supported in the manifest. This will need to change when the
-					// manifest is updated to support range keys, which will most likely
-					// leverage a bitset to infer which key types (points or ranges) are
-					// used for the overall smallest and largest keys.
-					Smallest:  smallestPointKey,
-					Largest:   largestPointKey,
-					boundsSet: true,
-				},
+				Meta:  m,
 			})
 
 		case tagPrevLogNumber:
@@ -328,18 +397,46 @@ func (v *VersionEdit) Encode(w io.Writer) error {
 		e.writeUvarint(uint64(x.FileNum))
 	}
 	for _, x := range v.NewFiles {
-		var customFields bool
-		if x.Meta.markedForCompaction || x.Meta.CreationTime != 0 {
-			customFields = true
-			e.writeUvarint(tagNewFile4)
-		} else {
-			e.writeUvarint(tagNewFile2)
+		customFields := x.Meta.MarkedForCompaction || x.Meta.CreationTime != 0
+		var tag uint64
+		switch {
+		case x.Meta.HasRangeKeys:
+			tag = tagNewFile5
+		case customFields:
+			tag = tagNewFile4
+		default:
+			tag = tagNewFile2
 		}
+		e.writeUvarint(tag)
 		e.writeUvarint(uint64(x.Level))
 		e.writeUvarint(uint64(x.Meta.FileNum))
 		e.writeUvarint(x.Meta.Size)
-		e.writeKey(x.Meta.Smallest)
-		e.writeKey(x.Meta.Largest)
+		if !x.Meta.HasRangeKeys {
+			// If we have no range keys, preserve the original format and write the
+			// smallest and largest point keys.
+			e.writeKey(x.Meta.SmallestPointKey)
+			e.writeKey(x.Meta.LargestPointKey)
+		} else {
+			// When range keys are present, we first write a marker byte that
+			// indicates if the table also contains point keys, in addition to how the
+			// overall bounds for the table should be reconstructed. This byte is
+			// followed by the keys themselves.
+			b, err := x.Meta.boundsMarker()
+			if err != nil {
+				return err
+			}
+			if err = e.WriteByte(b); err != nil {
+				return err
+			}
+			// Write point key bounds (if present).
+			if x.Meta.HasPointKeys {
+				e.writeKey(x.Meta.SmallestPointKey)
+				e.writeKey(x.Meta.LargestPointKey)
+			}
+			// Write range key bounds.
+			e.writeKey(x.Meta.SmallestRangeKey)
+			e.writeKey(x.Meta.LargestRangeKey)
+		}
 		e.writeUvarint(x.Meta.SmallestSeqNum)
 		e.writeUvarint(x.Meta.LargestSeqNum)
 		if customFields {
@@ -349,7 +446,7 @@ func (v *VersionEdit) Encode(w io.Writer) error {
 				n := binary.PutUvarint(buf[:], uint64(x.Meta.CreationTime))
 				e.writeBytes(buf[:n])
 			}
-			if x.Meta.markedForCompaction {
+			if x.Meta.MarkedForCompaction {
 				e.writeUvarint(customTagNeedsCompaction)
 				e.writeBytes([]byte{1})
 			}
@@ -453,6 +550,10 @@ type BulkVersionEdit struct {
 	// uses AddedByFileNum to correctly populate the BulkVersionEdit's Deleted
 	// field with non-nil *FileMetadata.
 	AddedByFileNum map[base.FileNum]*FileMetadata
+
+	// MarkedForCompactionCountDiff holds the aggregated count of files
+	// marked for compaction added or removed.
+	MarkedForCompactionCountDiff int
 }
 
 // Accumulate adds the file addition and deletions in the specified version
@@ -475,6 +576,9 @@ func (b *BulkVersionEdit) Accumulate(ve *VersionEdit) error {
 				return base.CorruptionErrorf("pebble: file deleted L%d.%s before it was inserted", df.Level, df.FileNum)
 			}
 		}
+		if m.MarkedForCompaction {
+			b.MarkedForCompactionCountDiff--
+		}
 		dmap[df.FileNum] = m
 	}
 
@@ -489,6 +593,9 @@ func (b *BulkVersionEdit) Accumulate(ve *VersionEdit) error {
 		b.Added[nf.Level] = append(b.Added[nf.Level], nf.Meta)
 		if b.AddedByFileNum != nil {
 			b.AddedByFileNum[nf.Meta.FileNum] = nf.Meta
+		}
+		if nf.Meta.MarkedForCompaction {
+			b.MarkedForCompactionCountDiff++
 		}
 	}
 	return nil
@@ -525,6 +632,16 @@ func (b *BulkVersionEdit) Apply(
 	}
 
 	v := new(Version)
+
+	// Adjust the count of files marked for compaction.
+	if curr != nil {
+		v.Stats.MarkedForCompaction = curr.Stats.MarkedForCompaction
+	}
+	v.Stats.MarkedForCompaction += b.MarkedForCompactionCountDiff
+	if v.Stats.MarkedForCompaction < 0 {
+		return nil, nil, base.CorruptionErrorf("pebble: version marked for compaction count negative")
+	}
+
 	for level := range v.Levels {
 		if curr == nil || curr.Levels[level].tree.root == nil {
 			v.Levels[level] = makeLevelMetadata(cmp, level, nil /* files */)

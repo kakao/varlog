@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/manifest"
 	"github.com/cockroachdb/pebble/internal/private"
-	"github.com/cockroachdb/pebble/internal/rangekey"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 )
@@ -46,11 +45,7 @@ func ingestValidateKey(opts *Options, key *InternalKey) error {
 }
 
 func ingestLoad1(
-	opts *Options,
-	fmv FormatMajorVersion,
-	path string,
-	cacheID uint64,
-	fileNum FileNum,
+	opts *Options, fmv FormatMajorVersion, path string, cacheID uint64, fileNum FileNum,
 ) (*fileMetadata, error) {
 	stat, err := opts.FS.Stat(path)
 	if err != nil {
@@ -86,7 +81,7 @@ func ingestLoad1(
 	meta.Size = uint64(stat.Size())
 	meta.CreationTime = time.Now().Unix()
 
-	// Avoid loading into into the table cache for collecting stats if we
+	// Avoid loading into the table cache for collecting stats if we
 	// don't need to. If there are no range deletions, we have all the
 	// information to compute the stats here.
 	//
@@ -131,21 +126,23 @@ func ingestLoad1(
 	if iter != nil {
 		defer iter.Close()
 		var smallest InternalKey
-		if key, _ := iter.First(); key != nil {
-			if err := ingestValidateKey(opts, key); err != nil {
+		if s := iter.First(); s.Valid() {
+			key := s.SmallestKey()
+			if err := ingestValidateKey(opts, &key); err != nil {
 				return nil, err
 			}
-			smallest = (*key).Clone()
+			smallest = key.Clone()
 		}
 		if err := iter.Error(); err != nil {
 			return nil, err
 		}
-		if key, val := iter.Last(); key != nil {
-			if err := ingestValidateKey(opts, key); err != nil {
+		if s := iter.Last(); s.Valid() {
+			k := s.SmallestKey()
+			if err := ingestValidateKey(opts, &k); err != nil {
 				return nil, err
 			}
-			end := base.MakeRangeDeleteSentinelKey(val)
-			meta.ExtendPointKeyBounds(opts.Comparer.Compare, smallest, end.Clone())
+			largest := s.LargestKey().Clone()
+			meta.ExtendPointKeyBounds(opts.Comparer.Compare, smallest, largest)
 		}
 	}
 
@@ -158,27 +155,25 @@ func ingestLoad1(
 		if iter != nil {
 			defer iter.Close()
 			var smallest InternalKey
-			if key, _ := iter.First(); key != nil {
-				if err := ingestValidateKey(opts, key); err != nil {
+			if s := iter.First(); s.Valid() {
+				key := s.SmallestKey()
+				if err := ingestValidateKey(opts, &key); err != nil {
 					return nil, err
 				}
-				smallest = (*key).Clone()
+				smallest = key.Clone()
 			}
 			if err := iter.Error(); err != nil {
 				return nil, err
 			}
-			if key, value := iter.Last(); key != nil {
-				if err := ingestValidateKey(opts, key); err != nil {
+			if s := iter.Last(); s.Valid() {
+				k := s.SmallestKey()
+				if err := ingestValidateKey(opts, &k); err != nil {
 					return nil, err
 				}
 				// As range keys are fragmented, the end key of the last range key in
 				// the table provides the upper bound for the table.
-				end, _, ok := rangekey.DecodeEndKey(key.Kind(), value)
-				if !ok {
-					return nil, errors.Newf("pebble: could not decode range end key")
-				}
-				k := base.MakeRangeKeySentinelKey(key.Kind(), end).Clone()
-				meta.ExtendRangeKeyBounds(opts.Comparer.Compare, smallest, k.Clone())
+				largest := s.LargestKey().Clone()
+				meta.ExtendRangeKeyBounds(opts.Comparer.Compare, smallest, largest)
 			}
 			if err := iter.Error(); err != nil {
 				return nil, err
@@ -199,11 +194,7 @@ func ingestLoad1(
 }
 
 func ingestLoad(
-	opts *Options,
-	fmv FormatMajorVersion,
-	paths []string,
-	cacheID uint64,
-	pending []FileNum,
+	opts *Options, fmv FormatMajorVersion, paths []string, cacheID uint64, pending []FileNum,
 ) ([]*fileMetadata, []string, error) {
 	meta := make([]*fileMetadata, 0, len(paths))
 	newPaths := make([]string, 0, len(paths))
@@ -343,10 +334,7 @@ func ingestMemtableOverlaps(cmp Compare, mem flushable, meta []*fileMetadata) bo
 }
 
 func ingestUpdateSeqNum(
-	cmp Compare,
-	format base.FormatKey,
-	seqNum uint64,
-	meta []*fileMetadata,
+	cmp Compare, format base.FormatKey, seqNum uint64, meta []*fileMetadata,
 ) error {
 	setSeqFn := func(k base.InternalKey) base.InternalKey {
 		return base.MakeInternalKey(k.UserKey, seqNum, k.Kind())
@@ -422,18 +410,19 @@ func overlapWithIterator(
 		return false
 	}
 	rangeDelItr := *rangeDelIter
-	key, val := rangeDelItr.SeekLT(meta.Smallest.UserKey)
-	if key == nil {
-		key, val = rangeDelItr.Next()
+	rangeDel := rangeDelItr.SeekLT(meta.Smallest.UserKey)
+	if !rangeDel.Valid() {
+		rangeDel = rangeDelItr.Next()
 	}
-	for ; key != nil; key, val = rangeDelItr.Next() {
-		c := sstableKeyCompare(cmp, *key, meta.Largest)
+	for ; rangeDel.Valid(); rangeDel = rangeDelItr.Next() {
+		key := rangeDel.SmallestKey()
+		c := sstableKeyCompare(cmp, key, meta.Largest)
 		if c > 0 {
 			// The start of the tombstone is after the largest key in the
 			// ingested table.
 			return false
 		}
-		if cmp(val, meta.Smallest.UserKey) > 0 {
+		if cmp(rangeDel.End, meta.Smallest.UserKey) > 0 {
 			// The end of the tombstone is greater than the smallest in the
 			// table. Note that the tombstone end key is exclusive, thus ">0"
 			// instead of ">=0".
@@ -557,7 +546,7 @@ func ingestTargetLevel(
 //
 // The steps for ingestion are:
 //
-//   1. Allocate file numbers for every sstable beign ingested.
+//   1. Allocate file numbers for every sstable being ingested.
 //   2. Load the metadata for all sstables being ingest.
 //   3. Sort the sstables by smallest key, verifying non overlap.
 //   4. Hard link (or copy) the sstables into the DB directory.
@@ -584,7 +573,38 @@ func (d *DB) Ingest(paths []string) error {
 	if d.opts.ReadOnly {
 		return ErrReadOnly
 	}
+	_, err := d.ingest(paths, ingestTargetLevel)
+	return err
+}
 
+// IngestOperationStats provides some information about where in the LSM the
+// bytes were ingested.
+type IngestOperationStats struct {
+	// Bytes is the total bytes in the ingested sstables.
+	Bytes uint64
+	// ApproxIngestedIntoL0Bytes is the approximate number of bytes ingested
+	// into L0.
+	// Currently, this value is completely accurate, but we are allowing this to
+	// be approximate once https://github.com/cockroachdb/pebble/issues/25 is
+	// implemented.
+	ApproxIngestedIntoL0Bytes uint64
+}
+
+// IngestWithStats does the same as Ingest, and additionally returns
+// IngestOperationStats.
+func (d *DB) IngestWithStats(paths []string) (IngestOperationStats, error) {
+	if err := d.closed.Load(); err != nil {
+		panic(err)
+	}
+	if d.opts.ReadOnly {
+		return IngestOperationStats{}, ErrReadOnly
+	}
+	return d.ingest(paths, ingestTargetLevel)
+}
+
+func (d *DB) ingest(
+	paths []string, targetLevelFunc ingestTargetLevelFunc,
+) (IngestOperationStats, error) {
 	// Allocate file numbers for all of the files being ingested and mark them as
 	// pending in order to prevent them from being deleted. Note that this causes
 	// the file number ordering to be out of alignment with sequence number
@@ -603,16 +623,16 @@ func (d *DB) Ingest(paths []string) error {
 	// and elides empty sstables.
 	meta, paths, err := ingestLoad(d.opts, d.FormatMajorVersion(), paths, d.cacheID, pendingOutputs)
 	if err != nil {
-		return err
+		return IngestOperationStats{}, err
 	}
 	if len(meta) == 0 {
 		// All of the sstables to be ingested were empty. Nothing to do.
-		return nil
+		return IngestOperationStats{}, nil
 	}
 
 	// Verify the sstables do not overlap.
 	if err := ingestSortAndVerify(d.cmp, meta, paths); err != nil {
-		return err
+		return IngestOperationStats{}, err
 	}
 
 	// Hard link the sstables into the DB directory. Since the sstables aren't
@@ -621,14 +641,14 @@ func (d *DB) Ingest(paths []string) error {
 	// fall back to copying, and if that fails we undo our work and return an
 	// error.
 	if err := ingestLink(jobID, d.opts, d.dirname, paths, meta); err != nil {
-		return err
+		return IngestOperationStats{}, err
 	}
 	// Fsync the directory we added the tables to. We need to do this at some
 	// point before we update the MANIFEST (via logAndApply), otherwise a crash
 	// can have the tables referenced in the MANIFEST, but not present in the
 	// directory.
 	if err := d.dataDir.Sync(); err != nil {
-		return err
+		return IngestOperationStats{}, err
 	}
 
 	var mem *flushableEntry
@@ -681,7 +701,7 @@ func (d *DB) Ingest(paths []string) error {
 
 		// Assign the sstables to the correct level in the LSM and apply the
 		// version edit.
-		ve, err = d.ingestApply(jobID, meta)
+		ve, err = d.ingestApply(jobID, meta, targetLevelFunc)
 	}
 
 	d.commit.AllocateSeqNum(len(meta), prepare, apply)
@@ -703,6 +723,7 @@ func (d *DB) Ingest(paths []string) error {
 		GlobalSeqNum: meta[0].SmallestSeqNum,
 		Err:          err,
 	}
+	var stats IngestOperationStats
 	if ve != nil {
 		info.Tables = make([]struct {
 			TableInfo
@@ -712,14 +733,30 @@ func (d *DB) Ingest(paths []string) error {
 			e := &ve.NewFiles[i]
 			info.Tables[i].Level = e.Level
 			info.Tables[i].TableInfo = e.Meta.TableInfo()
+			stats.Bytes += e.Meta.Size
+			if e.Level == 0 {
+				stats.ApproxIngestedIntoL0Bytes += e.Meta.Size
+			}
 		}
 	}
 	d.opts.EventListener.TableIngested(info)
 
-	return err
+	return stats, err
 }
 
-func (d *DB) ingestApply(jobID int, meta []*fileMetadata) (*versionEdit, error) {
+type ingestTargetLevelFunc func(
+	newIters tableNewIters,
+	iterOps IterOptions,
+	cmp Compare,
+	v *version,
+	baseLevel int,
+	compactions map[*compaction]struct{},
+	meta *fileMetadata,
+) (int, error)
+
+func (d *DB) ingestApply(
+	jobID int, meta []*fileMetadata, findTargetLevel ingestTargetLevelFunc,
+) (*versionEdit, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -744,7 +781,7 @@ func (d *DB) ingestApply(jobID int, meta []*fileMetadata) (*versionEdit, error) 
 		m := meta[i]
 		f := &ve.NewFiles[i]
 		var err error
-		f.Level, err = ingestTargetLevel(d.newIters, iterOps, d.cmp, current, baseLevel, d.mu.compact.inProgress, m)
+		f.Level, err = findTargetLevel(d.newIters, iterOps, d.cmp, current, baseLevel, d.mu.compact.inProgress, m)
 		if err != nil {
 			d.mu.versions.logUnlock()
 			return nil, err
@@ -760,12 +797,12 @@ func (d *DB) ingestApply(jobID int, meta []*fileMetadata) (*versionEdit, error) 
 		levelMetrics.BytesIngested += m.Size
 		levelMetrics.TablesIngested++
 	}
-	if err := d.mu.versions.logAndApply(jobID, ve, metrics, func() []compactionInfo {
+	if err := d.mu.versions.logAndApply(jobID, ve, metrics, false /* forceRotation */, func() []compactionInfo {
 		return d.getInProgressCompactionInfoLocked(nil)
 	}); err != nil {
 		return nil, err
 	}
-	d.updateReadStateLocked(d.opts.DebugCheck)
+	d.updateReadStateLocked(d.opts.DebugCheck, nil)
 	d.updateTableStatsLocked(ve.NewFiles)
 	d.deleteObsoleteFiles(jobID, false /* waitForOngoing */)
 	// The ingestion may have pushed a level over the threshold for compaction,

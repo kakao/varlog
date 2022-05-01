@@ -7,10 +7,12 @@ package pebble
 import (
 	"fmt"
 
+	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/cache"
 	"github.com/cockroachdb/pebble/internal/humanize"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/redact"
+	"github.com/codahale/hdrhistogram"
 )
 
 // CacheMetrics holds metrics for the block and table cache.
@@ -18,6 +20,10 @@ type CacheMetrics = cache.Metrics
 
 // FilterMetrics holds metrics for the filter policy
 type FilterMetrics = sstable.FilterMetrics
+
+// ThroughputMetric is a cumulative throughput metric. See the detailed
+// comment in base.
+type ThroughputMetric = base.ThroughputMetric
 
 func formatCacheMetrics(w redact.SafePrinter, m *CacheMetrics, name redact.SafeString) {
 	w.Printf("%7s %9s %7s %6.1f%%  (score == hit-rate)\n",
@@ -133,6 +139,7 @@ type Metrics struct {
 		ElisionOnlyCount int64
 		MoveCount        int64
 		ReadCount        int64
+		RewriteCount     int64
 		// An estimate of the number of bytes that need to be compacted for the LSM
 		// to reach a stable state.
 		EstimatedDebt uint64
@@ -142,6 +149,10 @@ type Metrics struct {
 		InProgressBytes int64
 		// Number of compactions that are in-progress.
 		NumInProgress int64
+		// MarkedFiles is a count of files that are marked for
+		// compaction. Such files are compacted in a rewrite compaction
+		// when no other compactions are picked.
+		MarkedFiles int
 	}
 
 	Flush struct {
@@ -375,12 +386,13 @@ func (m *Metrics) SafeFormat(w redact.SafePrinter, _ rune) {
 		humanize.IEC.Int64(m.Compact.InProgressBytes),
 		redact.Safe(m.Compact.NumInProgress),
 		redact.SafeString(""))
-	w.Printf("  ctype %9d %7d %7d %7d %7d  (default, delete, elision, move, read)\n",
+	w.Printf("  ctype %9d %7d %7d %7d %7d %7d  (default, delete, elision, move, read, rewrite)\n",
 		redact.Safe(m.Compact.DefaultCount),
 		redact.Safe(m.Compact.DeleteOnlyCount),
 		redact.Safe(m.Compact.ElisionOnlyCount),
 		redact.Safe(m.Compact.MoveCount),
-		redact.Safe(m.Compact.ReadCount))
+		redact.Safe(m.Compact.ReadCount),
+		redact.Safe(m.Compact.RewriteCount))
 	w.Printf(" memtbl %9d %7s\n",
 		redact.Safe(m.MemTable.Count),
 		humanize.IEC.Uint64(m.MemTable.Size))
@@ -409,4 +421,42 @@ func hitRate(hits, misses int64) float64 {
 		return 0
 	}
 	return 100 * float64(hits) / float64(sum)
+}
+
+// InternalIntervalMetrics exposes metrics about internal subsystems, that can
+// be useful for deep observability purposes, and for higher-level admission
+// control systems that are trying to estimate the capacity of the DB. These
+// are experimental and subject to change, since they expose internal
+// implementation details, so do not rely on these without discussion with the
+// Pebble team.
+// These represent the metrics over the interval of time from the last call to
+// retrieve these metrics. These are not cumulative, unlike Metrics. The main
+// challenge in making these cumulative is the hdrhistogram.Histogram, which
+// does not have the ability to subtract a histogram from a preceding metric
+// retrieval.
+type InternalIntervalMetrics struct {
+	// LogWriter metrics.
+	LogWriter struct {
+		// WriteThroughput is the WAL throughput.
+		WriteThroughput ThroughputMetric
+		// PendingBufferUtilization is the utilization of the WAL writer's
+		// finite-sized pending blocks buffer. It provides an additional signal
+		// regarding how close to "full" the WAL writer is. The value is in the
+		// interval [0,1].
+		PendingBufferUtilization float64
+		// SyncQueueUtilization is the utilization of the WAL writer's
+		// finite-sized queue of work that is waiting to sync. The value is in the
+		// interval [0,1].
+		SyncQueueUtilization float64
+		// SyncLatencyMicros is a distribution of the fsync latency observed by
+		// the WAL writer. It can be nil if there were no fsyncs.
+		SyncLatencyMicros *hdrhistogram.Histogram
+	}
+	// Flush loop metrics.
+	Flush struct {
+		// WriteThroughput is the flushing throughput.
+		WriteThroughput ThroughputMetric
+	}
+	// NB: the LogWriter throughput and the Flush throughput are not directly
+	// comparable because the former does not compress, unlike the latter.
 }
