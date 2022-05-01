@@ -110,13 +110,7 @@ type SuffixReplaceableBlockCollector interface {
 // BlockPropertyFilter is used in an Iterator to filter sstables and blocks
 // within the sstable. It should not maintain any per-sstable state, and must
 // be thread-safe.
-type BlockPropertyFilter interface {
-	// Name returns the name of the block property collector.
-	Name() string
-	// Intersects returns true if the set represented by prop intersects with
-	// the set in the filter.
-	Intersects(prop []byte) (bool, error)
-}
+type BlockPropertyFilter = base.BlockPropertyFilter
 
 // BlockIntervalCollector is a helper implementation of BlockPropertyCollector
 // for users who want to represent a set of the form [lower,upper) where both
@@ -176,8 +170,7 @@ type DataBlockIntervalCollector interface {
 // should be provided, rather than the same collector passed in twice (see the
 // comment on BlockIntervalCollector for more detail)
 func NewBlockIntervalCollector(
-	name string,
-	pointCollector, rangeCollector DataBlockIntervalCollector,
+	name string, pointCollector, rangeCollector DataBlockIntervalCollector,
 ) BlockPropertyCollector {
 	if pointCollector == nil && rangeCollector == nil {
 		panic("sstable: at least one interval collector must be provided")
@@ -327,7 +320,9 @@ type suffixReplacementBlockCollectorWrapper struct {
 }
 
 // UpdateKeySuffixes implements the SuffixReplaceableBlockCollector interface.
-func (w *suffixReplacementBlockCollectorWrapper) UpdateKeySuffixes(oldProp []byte, from, to []byte) error {
+func (w *suffixReplacementBlockCollectorWrapper) UpdateKeySuffixes(
+	oldProp []byte, from, to []byte,
+) error {
 	return w.BlockIntervalCollector.points.(SuffixReplaceableBlockCollector).UpdateKeySuffixes(oldProp, from, to)
 }
 
@@ -343,8 +338,7 @@ type blockIntervalFilter struct {
 // based on an interval property collected by BlockIntervalCollector and the
 // given [lower, upper) bounds. The given name specifies the
 // BlockIntervalCollector's properties to read.
-func NewBlockIntervalFilter(
-	name string, lower uint64, upper uint64) BlockPropertyFilter {
+func NewBlockIntervalFilter(name string, lower uint64, upper uint64) BlockPropertyFilter {
 	return &blockIntervalFilter{
 		name:           name,
 		filterInterval: interval{lower: lower, upper: upper},
@@ -488,7 +482,8 @@ func releaseBlockPropertiesFilterer(filterer *BlockPropertiesFilterer) {
 // additionally initializes the shortIDToFiltersIndex for the filters that are
 // relevant to this sstable.
 func (f *BlockPropertiesFilterer) IntersectsUserPropsAndFinishInit(
-	userProperties map[string]string) (bool, error) {
+	userProperties map[string]string,
+) (bool, error) {
 	for i := range f.filters {
 		props, ok := userProperties[f.filters[i].Name()]
 		if !ok {

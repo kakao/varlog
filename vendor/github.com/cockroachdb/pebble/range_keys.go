@@ -7,9 +7,9 @@ package pebble
 import (
 	"sync"
 
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/arenaskl"
 	"github.com/cockroachdb/pebble/internal/base"
-	"github.com/cockroachdb/pebble/internal/invariants"
 	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/rangekey"
 )
@@ -31,6 +31,8 @@ type RangeKeysArena struct {
 // use a separate arena that exists beyond the lifetime of any individual
 // memtable.  For as long as we're relying on this hack, a single *pebble.DB may
 // only store as many range keys as fit in this arena.
+//
+// TODO(jackson): Remove applyFlushedRangeKeys when range keys are persisted.
 func (d *DB) applyFlushedRangeKeys(flushable []*flushableEntry) error {
 	var added uint32
 	for i := 0; i < len(flushable); i++ {
@@ -40,38 +42,37 @@ func (d *DB) applyFlushedRangeKeys(flushable []*flushableEntry) error {
 		}
 		d.maybeInitializeRangeKeys()
 
-		var buf []byte
-		for k, _ := iter.First(); k != nil; k, _ = iter.Next() {
-			if invariants.Enabled && !rangekey.IsRangeKey(k.Kind()) {
-				panic("pebble: non-range key written to range key skiplist")
-			}
-
+		for s := iter.First(); s.Valid(); s = iter.Next() {
 			// flushable.newRangeKeyIter provides a FragmentIterator, which
-			// iterates over keyspan.Spans with their end keys already
-			// extracted from the rest of the values.
+			// iterates over parsed keyspan.Spans.
 			//
-			// While we're faking a flush, we just want to copy the original
-			// key into the global arena, so we need to recombine the span's end
-			// key and value (which encodes a list of suffix-value tuples, a
-			// list of suffixes, or nothing depending on the key kind).
+			// While we're faking a flush, we just want to write the original
+			// key into the global arena, so we need to re-encode the span's
+			// keys into internal key-value pairs.
 			//
 			// This awkward recombination will be removed when flushes implement
-			// range-key logic, coalescing fragments into CoalescedSpans and
-			// then constructing internal keys from them.
-			s := iter.Current()
-			buf = buf[:0]
-			n := rangekey.RecombinedValueLen(k.Kind(), s.End, s.Value)
-			if cap(buf) < n {
-				buf = make([]byte, n)
-			} else {
-				buf = buf[:n]
-			}
-			rangekey.RecombineValue(k.Kind(), buf, s.End, s.Value)
-
-			if err := d.rangeKeys.skl.Add(*k, buf[:n]); err != nil {
+			// range-key logic, coalescing range keys and constructing internal
+			// keys.
+			err := rangekey.Encode(s, func(k base.InternalKey, v []byte) error {
+				err := d.rangeKeys.skl.Add(k, v)
+				switch {
+				case err == nil:
+					added++
+					return nil
+				case errors.Is(err, arenaskl.ErrRecordExists):
+					// It's possible that we'll try to add a key to the arena twice
+					// during metamorphic tests that reset the synced state. Ignore.
+					// When range keys are actually flushed to stable storage, this
+					// will go away.
+					return nil
+				default:
+					// err != nil
+					return err
+				}
+			})
+			if err != nil {
 				return err
 			}
-			added++
 		}
 	}
 	if added > 0 {
@@ -89,25 +90,17 @@ func (d *DB) maybeInitializeRangeKeys() {
 		d.rangeKeys.arena = arenaskl.NewArena(arenaBuf)
 		d.rangeKeys.skl.Reset(d.rangeKeys.arena, d.cmp)
 		d.rangeKeys.fragCache = keySpanCache{
-			cmp:       d.cmp,
-			formatKey: d.opts.Comparer.FormatKey,
-			skl:       &d.rangeKeys.skl,
-			splitValue: func(kind base.InternalKeyKind, rawValue []byte) (endKey []byte, value []byte, err error) {
-				var ok bool
-				endKey, value, ok = rangekey.DecodeEndKey(kind, rawValue)
-				if !ok {
-					err = base.CorruptionErrorf("unable to decode end key for key of kind %s", kind)
-				}
-				// NB: This value encodes a series of (suffix,value) tuples.
-				return endKey, value, err
-			},
+			cmp:           d.cmp,
+			formatKey:     d.opts.Comparer.FormatKey,
+			skl:           &d.rangeKeys.skl,
+			constructSpan: rangekey.Decode,
 		}
 	})
 }
 
 func (d *DB) newRangeKeyIter(
-	seqNum uint64, batch *Batch, readState *readState, opts *IterOptions,
-) rangekey.Iterator {
+	it *iteratorRangeKeyState, seqNum uint64, batch *Batch, readState *readState, opts *IterOptions,
+) keyspan.FragmentIterator {
 	d.maybeInitializeRangeKeys()
 
 	// TODO(jackson): Preallocate iters, mergingIter, rangeKeyIter in a
@@ -140,10 +133,8 @@ func (d *DB) newRangeKeyIter(
 	if len(frags) > 0 {
 		iters = append(iters, keyspan.NewIter(d.cmp, frags))
 	}
-
-	iter := &rangekey.Iter{}
-	iter.Init(d.cmp, d.opts.Comparer.FormatKey, seqNum, iters...)
-	defragIter := &rangekey.DefragmentingIter{}
-	defragIter.Init(d.cmp, iter, rangekey.DefragmentLogical)
-	return defragIter
+	it.rangeKeyIter = rangekey.InitUserIteration(
+		d.cmp, seqNum, &it.alloc.merging, &it.alloc.defraging, iters...,
+	)
+	return it.rangeKeyIter
 }

@@ -11,6 +11,7 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
+	"google.golang.org/grpc"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
@@ -48,7 +49,8 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 	mockClient.EXPECT().Append(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(ctx context.Context, req *snpb.AppendRequest) (*snpb.AppendResponse, error) {
+		gomock.Any(),
+	).DoAndReturn(func(ctx context.Context, req *snpb.AppendRequest, opts ...grpc.CallOption) (*snpb.AppendResponse, error) {
 		sn.mu.Lock()
 		defer sn.mu.Unlock()
 
@@ -74,7 +76,8 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 	mockClient.EXPECT().Read(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *snpb.ReadRequest) (*snpb.ReadResponse, error) {
+		gomock.Any(),
+	).DoAndReturn(func(_ context.Context, req *snpb.ReadRequest, opts ...grpc.CallOption) (*snpb.ReadResponse, error) {
 		sn.mu.Lock()
 		defer sn.mu.Unlock()
 		data, ok := sn.logEntries[req.GetGLSN()]
@@ -91,7 +94,8 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 	mockClient.EXPECT().Subscribe(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *snpb.SubscribeRequest) (snpb.LogIO_SubscribeClient, error) {
+		gomock.Any(),
+	).DoAndReturn(func(_ context.Context, req *snpb.SubscribeRequest, opts ...grpc.CallOption) (snpb.LogIO_SubscribeClient, error) {
 		nextGLSN := req.GetGLSNBegin()
 		stream := mock.NewMockLogIO_SubscribeClient(ctrl)
 		stream.EXPECT().Recv().DoAndReturn(
@@ -124,7 +128,8 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 	mockClient.EXPECT().TrimDeprecated(
 		gomock.Any(),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *snpb.TrimDeprecatedRequest) (*pbtypes.Empty, error) {
+		gomock.Any(),
+	).DoAndReturn(func(_ context.Context, req *snpb.TrimDeprecatedRequest, opts ...grpc.CallOption) (*pbtypes.Empty, error) {
 		sn.mu.Lock()
 		defer sn.mu.Unlock()
 		var num uint64 = 0

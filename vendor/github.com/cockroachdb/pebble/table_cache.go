@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"runtime/debug"
 	"runtime/pprof"
 	"sync"
@@ -25,6 +26,7 @@ import (
 )
 
 var emptyIter = &errorIter{err: nil}
+var emptyKeyspanIter = &errorKeyspanIter{err: nil}
 
 var tableCacheLabels = pprof.Labels("pebble", "table-cache")
 
@@ -118,7 +120,7 @@ func (c *tableCacheContainer) newIters(
 }
 
 func (c *tableCacheContainer) newRangeKeyIter(
-	file *manifest.FileMetadata, opts *IterOptions,
+	file *manifest.FileMetadata, opts *keyspan.RangeIterOptions,
 ) (keyspan.FragmentIterator, error) {
 	return c.tableCache.getShard(file.FileNum).newRangeKeyIter(file, opts, &c.dbOpts)
 }
@@ -267,7 +269,7 @@ type tableCacheShard struct {
 		sync.RWMutex
 		nodes map[tableCacheKey]*tableCacheNode
 		// The iters map is only created and populated in race builds.
-		iters map[base.InternalIterator][]byte
+		iters map[io.Closer][]byte
 
 		handHot  *tableCacheNode
 		handCold *tableCacheNode
@@ -291,7 +293,7 @@ func (c *tableCacheShard) init(size int) {
 	go c.releaseLoop()
 
 	if invariants.RaceEnabled {
-		c.mu.iters = make(map[base.InternalIterator][]byte)
+		c.mu.iters = make(map[io.Closer][]byte)
 	}
 }
 
@@ -307,7 +309,8 @@ func (c *tableCacheShard) releaseLoop() {
 // for intersection with any available table and block-level properties. Returns
 // true for ok if this table should be read by this iterator.
 func (c *tableCacheShard) checkAndIntersectFilters(
-	v *tableCacheValue, tableFilter func(userProps map[string]string) bool,
+	v *tableCacheValue,
+	tableFilter func(userProps map[string]string) bool,
 	blockPropertyFilters []BlockPropertyFilter,
 ) (ok bool, filterer *sstable.BlockPropertiesFilterer, err error) {
 	if tableFilter != nil &&
@@ -399,7 +402,7 @@ func (c *tableCacheShard) newIters(
 }
 
 func (c *tableCacheShard) newRangeKeyIter(
-	file *manifest.FileMetadata, opts *IterOptions, dbOpts *tableCacheOpts,
+	file *manifest.FileMetadata, opts *keyspan.RangeIterOptions, dbOpts *tableCacheOpts,
 ) (keyspan.FragmentIterator, error) {
 	// Calling findNode gives us the responsibility of decrementing v's
 	// refCount. If opening the underlying table resulted in error, then we
@@ -415,7 +418,7 @@ func (c *tableCacheShard) newRangeKeyIter(
 	ok := true
 	var err error
 	if opts != nil {
-		ok, _, err = c.checkAndIntersectFilters(v, opts.TableFilter, opts.RangeKeyFilters)
+		ok, _, err = c.checkAndIntersectFilters(v, nil, opts.Filters)
 	}
 	if err != nil {
 		c.unrefValue(v)
@@ -425,7 +428,7 @@ func (c *tableCacheShard) newRangeKeyIter(
 		c.unrefValue(v)
 		// Return the empty iterator. This iterator has no mutable state, so
 		// using a singleton is fine.
-		return emptyIter, err
+		return emptyKeyspanIter, err
 	}
 
 	var iter sstable.FragmentIterator
@@ -600,7 +603,7 @@ func (c *tableCacheShard) findNode(meta *fileMetadata, dbOpts *tableCacheOpts) *
 	}
 	// Cache the closure invoked when an iterator is closed. This avoids an
 	// allocation on every call to newIters.
-	v.closeHook = func(i base.InternalIterator) error {
+	v.closeHook = func(i io.Closer) error {
 		if invariants.RaceEnabled {
 			c.mu.Lock()
 			delete(c.mu.iters, i)
@@ -830,7 +833,7 @@ func (c *tableCacheShard) Close() error {
 }
 
 type tableCacheValue struct {
-	closeHook func(i base.InternalIterator) error
+	closeHook func(i io.Closer) error
 	reader    *sstable.Reader
 	filename  string
 	err       error

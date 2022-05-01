@@ -21,9 +21,6 @@ type tableNewIters func(
 	file *manifest.FileMetadata, opts *IterOptions, bytesIterated *uint64,
 ) (internalIterator, keyspan.FragmentIterator, error)
 
-// tableNewRangeKeyIter creates a new range key iterator for the given file.
-type tableNewRangeKeyIter func(file *manifest.FileMetadata, opts *IterOptions) (keyspan.FragmentIterator, error)
-
 // levelIter provides a merged view of the sstables in a level.
 //
 // levelIter is used during compaction and as part of the Iterator
@@ -74,7 +71,7 @@ type levelIter struct {
 	// - err != nil
 	// - some other constraint, like the bounds in opts, caused the file at index to not
 	//   be relevant to the iteration.
-	iter     internalIterator
+	iter     internalIteratorWithStats
 	iterFile *fileMetadata
 	newIters tableNewIters
 	// When rangeDelIterPtr != nil, the caller requires that *rangeDelIterPtr must
@@ -90,6 +87,8 @@ type levelIter struct {
 	rangeDelIterCopy keyspan.FragmentIterator
 	files            manifest.LevelIterator
 	err              error
+	// stats accumulates the stats of iters that have been closed.
+	stats InternalIteratorStats
 
 	// Pointer into this level's entry in `mergingIterLevel::smallestUserKey,largestUserKey`.
 	// We populate it with the corresponding bounds for the currently opened file. It is used for
@@ -194,7 +193,7 @@ func (l *levelIter) init(
 	l.split = split
 	l.iterFile = nil
 	l.newIters = newIters
-	l.files = files
+	l.files = files.Filter(manifest.KeyTypePoint)
 	l.bytesIterated = bytesIterated
 }
 
@@ -229,8 +228,8 @@ func (l *levelIter) findFileGE(key []byte) *fileMetadata {
 	// (see the comment in that function).
 
 	m := l.files.SeekGE(l.cmp, key)
-	for m != nil && m.Largest.IsExclusiveSentinel() &&
-		l.cmp(m.Largest.UserKey, key) == 0 {
+	for m != nil && m.LargestPointKey.IsExclusiveSentinel() &&
+		l.cmp(m.LargestPointKey.UserKey, key) == 0 {
 		m = l.files.Next()
 	}
 	return m
@@ -243,7 +242,7 @@ func (l *levelIter) findFileLT(key []byte) *fileMetadata {
 
 // Init the iteration bounds for the current table. Returns -1 if the table
 // lies fully before the lower bound, +1 if the table lies fully after the
-// upper bound, and 0 if the table overlaps the the iteration bounds.
+// upper bound, and 0 if the table overlaps the iteration bounds.
 func (l *levelIter) initTableBounds(f *fileMetadata) int {
 	l.tableOpts.LowerBound = l.lower
 	if l.tableOpts.LowerBound != nil {
@@ -340,7 +339,9 @@ func (l *levelIter) loadFile(file *fileMetadata, dir int) loadFileReturnIndicato
 		}
 
 		var rangeDelIter keyspan.FragmentIterator
-		l.iter, rangeDelIter, l.err = l.newIters(l.files.Current(), &l.tableOpts, l.bytesIterated)
+		var iter internalIterator
+		iter, rangeDelIter, l.err = l.newIters(l.files.Current(), &l.tableOpts, l.bytesIterated)
+		l.iter = base.WrapIterWithStats(iter)
 		if l.err != nil {
 			return noFileLoaded
 		}
@@ -729,6 +730,7 @@ func (l *levelIter) Error() error {
 
 func (l *levelIter) Close() error {
 	if l.iter != nil {
+		l.stats.Merge(l.iter.Stats())
 		l.err = l.iter.Close()
 		l.iter = nil
 	}
@@ -767,4 +769,23 @@ func (l *levelIter) String() string {
 		return fmt.Sprintf("%s: fileNum=%s", l.level, l.iter.String())
 	}
 	return fmt.Sprintf("%s: fileNum=<nil>", l.level)
+}
+
+var _ internalIteratorWithStats = &levelIter{}
+
+// Stats implements InternalIteratorWithStats.
+func (l *levelIter) Stats() base.InternalIteratorStats {
+	stats := l.stats
+	if l.iter != nil {
+		stats.Merge(l.iter.Stats())
+	}
+	return stats
+}
+
+// ResetStats implements InternalIteratorWithStats.
+func (l *levelIter) ResetStats() {
+	l.stats = base.InternalIteratorStats{}
+	if l.iter != nil {
+		l.iter.ResetStats()
+	}
 }

@@ -5,41 +5,68 @@
 package keyspan
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/internal/manifest"
 )
 
-// TODO(jackson): Disentangle FragmentIterator from InternalIterator and return
-// full Spans from the positioning methods.
-
-// FragmentIterator defines an interator interface over keyspan fragments. The
-// spans surfaced by a FragmentIterator must already be fragmented — that is if
-// two spans overlap, they must have identical start and end bounds. In forward
-// iteration, spans are returned ascending by their start keys:
+// FragmentIterator defines an iterator interface over spans. The spans
+// surfaced by a FragmentIterator must be non-overlapping. This is achieved by
+// fragmenting spans at overlap points (see Fragmenter).
 //
-//     (user key ASC, sequence number DESC, kind DESC)
-//
-// In reverse iteration, spans are returned in opposite order:
-//
-//     (user key DESC, sequence number ASC, kind ASC)
-//
+// A Span returned by a FragmentIterator is only valid until the next
+// positioning method. Some implementations (eg, keyspan.Iter) may provide
+// longer lifetimes but implementations need only guarantee stability until the
+// next positioning method.
 type FragmentIterator interface {
-	base.InternalIterator
+	// SeekGE moves the iterator to the first span whose start key is greater
+	// than or equal to the given key.
+	SeekGE(key []byte) Span
 
-	// Valid returns true iff the iterator is currently positioned over a
-	// fragment.
-	Valid() bool
+	// SeekLT moves the iterator to the last span whose start key is less than
+	// the given key.
+	SeekLT(key []byte) Span
 
-	// End returns the end user key for the fragment at the current iterator
-	// position.
-	End() []byte
+	// First moves the iterator to the first span.
+	First() Span
 
-	// Current returns the fragment at the current iterator position.
-	Current() Span
+	// Last moves the iterator to the last span.
+	Last() Span
 
-	// Clone returns an unpositioned iterator containing the same spans.
-	Clone() FragmentIterator
+	// Next moves the iterator to the next span.
+	//
+	// It is valid to call Next when the iterator is positioned before the first
+	// key/value pair due to either a prior call to SeekLT or Prev which
+	// returned an invalid span. It is not allowed to call Next when the
+	// previous call to SeekGE, SeekPrefixGE or Next returned an invalid span.
+	Next() Span
+
+	// Prev moves the iterator to the previous span.
+	//
+	// It is valid to call Prev when the iterator is positioned after the last
+	// key/value pair due to either a prior call to SeekGE or Next which
+	// returned an invalid span. It is not allowed to call Prev when the
+	// previous call to SeekLT or Prev returned an invalid span.
+	Prev() Span
+
+	// Error returns any accumulated error.
+	Error() error
+
+	// Close closes the iterator and returns any accumulated error. Exhausting
+	// the iterator is not considered to be an error. It is valid to call Close
+	// multiple times. Other methods should not be called after the iterator has
+	// been closed.
+	Close() error
+}
+
+// TableNewRangeKeyIter creates a new range key iterator for the given file.
+type TableNewRangeKeyIter func(file *manifest.FileMetadata, iterOptions *RangeIterOptions) (FragmentIterator, error)
+
+// RangeIterOptions is a subset of IterOptions that are necessary to instantiate
+// per-sstable range key iterators.
+type RangeIterOptions struct {
+	// Filters can be used to avoid scanning tables and blocks in tables
+	// when iterating over range keys.
+	Filters []base.BlockPropertyFilter
 }
 
 // Iter is an iterator over a set of fragmented spans.
@@ -47,11 +74,6 @@ type Iter struct {
 	cmp   base.Compare
 	spans []Span
 	index int
-
-	// lower and upper are indexes into spans, indicating the spans within the
-	// current bounds set by SetBounds. lower is inclusive, upper exclusive.
-	lower int
-	upper int
 }
 
 // Iter implements the FragmentIterator interface.
@@ -63,25 +85,21 @@ func NewIter(cmp base.Compare, spans []Span) *Iter {
 		cmp:   cmp,
 		spans: spans,
 		index: -1,
-		lower: 0,
-		upper: len(spans),
 	}
 }
 
-// SeekGE implements InternalIterator.SeekGE, as documented in the
-// internal/base package.
-func (i *Iter) SeekGE(key []byte, trySeekUsingNext bool) (*base.InternalKey, []byte) {
-	// NB: manually inlined sort.Seach is ~5% faster.
+// SeekGE implements FragmentIterator.SeekGE.
+func (i *Iter) SeekGE(key []byte) Span {
+	// NB: manually inlined sort.Search is ~5% faster.
 	//
 	// Define f(-1) == false and f(n) == true.
 	// Invariant: f(index-1) == false, f(upper) == true.
-	ikey := base.MakeSearchKey(key)
-	i.index = i.lower
-	upper := i.upper
+	i.index = 0
+	upper := len(i.spans)
 	for i.index < upper {
 		h := int(uint(i.index+upper) >> 1) // avoid overflow when computing h
 		// i.index ≤ h < upper
-		if base.InternalCompare(i.cmp, ikey, i.spans[h].Start) >= 0 {
+		if i.cmp(key, i.spans[h].Start) > 0 {
 			i.index = h + 1 // preserves f(i-1) == false
 		} else {
 			upper = h // preserves f(j) == true
@@ -89,34 +107,24 @@ func (i *Iter) SeekGE(key []byte, trySeekUsingNext bool) (*base.InternalKey, []b
 	}
 	// i.index == upper, f(i.index-1) == false, and f(upper) (= f(i.index)) ==
 	// true => answer is i.index.
-	if i.index >= i.upper {
-		return nil, nil
+	if i.index >= len(i.spans) {
+		return Span{}
 	}
-	s := &i.spans[i.index]
-	return &s.Start, s.End
+	return i.spans[i.index]
 }
 
-// SeekPrefixGE implements InternalIterator.SeekPrefixGE, as documented in the
-// internal/base package.
-func (i *Iter) SeekPrefixGE(prefix, key []byte, trySeekUsingNext bool) (*base.InternalKey, []byte) {
-	// This should never be called as prefix iteration is only done for point records.
-	panic("pebble: SeekPrefixGE unimplemented")
-}
-
-// SeekLT implements InternalIterator.SeekLT, as documented in the
-// internal/base package.
-func (i *Iter) SeekLT(key []byte) (*base.InternalKey, []byte) {
+// SeekLT implements FragmentIterator.SeekLT.
+func (i *Iter) SeekLT(key []byte) Span {
 	// NB: manually inlined sort.Search is ~5% faster.
 	//
 	// Define f(-1) == false and f(n) == true.
 	// Invariant: f(index-1) == false, f(upper) == true.
-	ikey := base.MakeSearchKey(key)
-	i.index = i.lower
-	upper := i.upper
+	i.index = 0
+	upper := len(i.spans)
 	for i.index < upper {
 		h := int(uint(i.index+upper) >> 1) // avoid overflow when computing h
 		// i.index ≤ h < upper
-		if base.InternalCompare(i.cmp, ikey, i.spans[h].Start) > 0 {
+		if i.cmp(key, i.spans[h].Start) > 0 {
 			i.index = h + 1 // preserves f(i-1) == false
 		} else {
 			upper = h // preserves f(j) == true
@@ -128,124 +136,62 @@ func (i *Iter) SeekLT(key []byte) (*base.InternalKey, []byte) {
 	// Since keys are strictly increasing, if i.index > 0 then i.index-1 will be
 	// the largest whose key is < the key sought.
 	i.index--
-	if i.index < i.lower {
-		return nil, nil
+	if i.index < 0 {
+		return Span{}
 	}
-	s := &i.spans[i.index]
-	return &s.Start, s.End
+	return i.spans[i.index]
 }
 
-// First implements InternalIterator.First, as documented in the internal/base
-// package.
-func (i *Iter) First() (*base.InternalKey, []byte) {
-	if i.upper <= i.lower {
-		return nil, nil
+// First implements FragmentIterator.First.
+func (i *Iter) First() Span {
+	if len(i.spans) == 0 {
+		return Span{}
 	}
-	i.index = i.lower
-	s := &i.spans[i.index]
-	return &s.Start, s.End
+	i.index = 0
+	return i.spans[i.index]
 }
 
-// Last implements InternalIterator.Last, as documented in the internal/base
-// package.
-func (i *Iter) Last() (*base.InternalKey, []byte) {
-	if i.upper <= i.lower {
-		return nil, nil
+// Last implements FragmentIterator.Last.
+func (i *Iter) Last() Span {
+	if len(i.spans) == 0 {
+		return Span{}
 	}
-	i.index = i.upper - 1
-	s := &i.spans[i.index]
-	return &s.Start, s.End
+	i.index = len(i.spans) - 1
+	return i.spans[i.index]
 }
 
-// Next implements InternalIterator.Next, as documented in the internal/base
-// package.
-func (i *Iter) Next() (*base.InternalKey, []byte) {
-	if i.index >= i.upper {
-		return nil, nil
+// Next implements FragmentIterator.Next.
+func (i *Iter) Next() Span {
+	if i.index >= len(i.spans) {
+		return Span{}
 	}
 	i.index++
-	if i.index >= i.upper {
-		return nil, nil
+	if i.index >= len(i.spans) {
+		return Span{}
 	}
-	s := &i.spans[i.index]
-	return &s.Start, s.End
+	return i.spans[i.index]
 }
 
-// Prev implements InternalIterator.Prev, as documented in the internal/base
-// package.
-func (i *Iter) Prev() (*base.InternalKey, []byte) {
-	if i.index < i.lower {
-		return nil, nil
+// Prev implements FragmentIterator.Prev.
+func (i *Iter) Prev() Span {
+	if i.index < 0 {
+		return Span{}
 	}
 	i.index--
-	if i.index < i.lower {
-		return nil, nil
+	if i.index < 0 {
+		return Span{}
 	}
-	s := &i.spans[i.index]
-	return &s.Start, s.End
+	return i.spans[i.index]
 }
 
-// Current returns the current span.
-func (i *Iter) Current() Span {
-	if i.Valid() {
-		return i.spans[i.index]
-	}
-	return Span{}
-}
-
-// End returns the end user key of the fragment at the current iterator
-// position, implementing FragmentIterator.End.
-func (i *Iter) End() []byte {
-	return i.spans[i.index].End
-}
-
-// Valid implements InternalIterator.Valid, as documented in the internal/base
-// package.
-func (i *Iter) Valid() bool {
-	return i.index >= i.lower && i.index < i.upper
-}
-
-// Error implements InternalIterator.Error, as documented in the internal/base
-// package.
+// Error implements FragmentIterator.Error.
 func (i *Iter) Error() error {
 	return nil
 }
 
-// Close implements InternalIterator.Close, as documented in the internal/base
-// package.
+// Close implements FragmentIterator.Close.
 func (i *Iter) Close() error {
 	return nil
-}
-
-// SetBounds implements InternalIterator.SetBounds, as documented in the
-// internal/base package.
-//
-// Iter may still return spans that extend beyond the lower or upper bounds, as
-// long as some portion of the span overlaps [lower, upper).
-func (i *Iter) SetBounds(lower, upper []byte) {
-	// SetBounds is never called for range deletion iterators. It may be called
-	// for range key iterators.
-	if lower == nil {
-		i.lower = 0
-	} else {
-		i.lower = sort.Search(len(i.spans), func(j int) bool {
-			return i.cmp(i.spans[j].End, lower) > 0
-		})
-	}
-	if upper == nil {
-		i.upper = len(i.spans)
-	} else {
-		i.upper = sort.Search(len(i.spans), func(j int) bool {
-			return i.cmp(i.spans[j].Start.UserKey, upper) >= 0
-		})
-	}
-}
-
-// Clone implements FragmentIterator.Clone.
-func (i *Iter) Clone() FragmentIterator {
-	cloneIter := &Iter{}
-	*cloneIter = *i
-	return cloneIter
 }
 
 func (i *Iter) String() string {
