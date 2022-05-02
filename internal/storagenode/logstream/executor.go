@@ -69,6 +69,10 @@ type Executor struct {
 
 	// singleflight for metadata
 	sf singleflight.Group
+
+	// for debug
+	prevUncommittedLLSNEnd types.AtomicLLSN
+	prevCommitVersion      uint64
 }
 
 func NewExecutor(opts ...ExecutorOption) (lse *Executor, err error) {
@@ -350,13 +354,19 @@ func (lse *Executor) Report(_ context.Context) (snpb.LogStreamUncommitReport, er
 
 	version, highWatermark, uncommittedLLSNBegin := lse.lsc.reportCommitBase()
 	uncommittedLLSNEnd := lse.lsc.uncommittedLLSNEnd.Load()
-	return snpb.LogStreamUncommitReport{
+	report := snpb.LogStreamUncommitReport{
 		LogStreamID:           lse.lsid,
 		Version:               version,
 		HighWatermark:         highWatermark,
 		UncommittedLLSNOffset: uncommittedLLSNBegin,
 		UncommittedLLSNLength: uint64(uncommittedLLSNEnd - uncommittedLLSNBegin),
-	}, nil
+	}
+	prevUncommittedLLSNEnd := lse.prevUncommittedLLSNEnd.Load()
+	if prevUncommittedLLSNEnd != uncommittedLLSNEnd {
+		lse.logger.Debug("log stream: report", zap.Any("report", report))
+		lse.prevUncommittedLLSNEnd.Store(uncommittedLLSNEnd)
+	}
+	return report, nil
 }
 
 func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamCommitResult) error {
@@ -370,6 +380,11 @@ func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamComm
 	version, _, _ := lse.lsc.reportCommitBase()
 	if commitResult.Version <= version {
 		return errors.New("too old commit result")
+	}
+
+	if types.Version(atomic.LoadUint64(&lse.prevCommitVersion)) != commitResult.Version {
+		lse.logger.Debug("commit", zap.String("commit_result", commitResult.String()))
+		atomic.StoreUint64(&lse.prevCommitVersion, uint64(commitResult.Version))
 	}
 
 	ct := newCommitTask()

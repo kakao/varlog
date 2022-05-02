@@ -67,25 +67,36 @@ func newReplicateClient(ctx context.Context, cfg replicateClientConfig) (*replic
 }
 
 // send sends a replicate task to the queue of the replicate client.
-func (rc *replicateClient) send(ctx context.Context, rt *replicateTask) error {
+func (rc *replicateClient) send(ctx context.Context, rt *replicateTask) (err error) {
+	inflight := atomic.AddInt64(&rc.inflight, 1)
+	defer func() {
+		if err != nil {
+			inflight = atomic.AddInt64(&rc.inflight, -1)
+		}
+		rc.logger.Debug("sent replicate client a task",
+			zap.Int64("inflight", inflight),
+			zap.Error(err),
+		)
+	}()
+
 	switch rc.lse.esm.load() {
 	case executorStateSealing, executorStateSealed, executorStateLearning:
-		return verrors.ErrSealed
+		err = verrors.ErrSealed
 	case executorStateClosed:
-		return verrors.ErrClosed
+		err = verrors.ErrClosed
+	}
+	if err != nil {
+		return err
 	}
 
-	atomic.AddInt64(&rc.inflight, 1)
 	select {
 	case rc.queue <- rt:
 	case <-ctx.Done():
-		atomic.AddInt64(&rc.inflight, -1)
-		return fmt.Errorf("replicate client: given context canceled: %w", ctx.Err())
+		err = fmt.Errorf("replicate client: given context canceled: %w", ctx.Err())
 	case <-rc.streamClient.Context().Done():
-		atomic.AddInt64(&rc.inflight, -1)
-		return fmt.Errorf("replicate client: stream canceled: %w", rc.streamClient.Context().Err())
+		err = fmt.Errorf("replicate client: stream canceled: %w", rc.streamClient.Context().Err())
 	}
-	return nil
+	return err
 }
 
 // sendLoop is the main loop of the replicate client.
