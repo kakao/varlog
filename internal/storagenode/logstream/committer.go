@@ -62,11 +62,15 @@ func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) (err
 		panic("log stream: committer: commit wait task list is empty")
 	}
 
-	atomic.AddInt64(&cm.inflightCommitWait, int64(cnt))
+	inflight := atomic.AddInt64(&cm.inflightCommitWait, int64(cnt))
 	defer func() {
 		if err != nil {
-			atomic.AddInt64(&cm.inflightCommitWait, -int64(cnt))
+			inflight = atomic.AddInt64(&cm.inflightCommitWait, -int64(cnt))
 		}
+		cm.logger.Debug("send committer commit wait tasks",
+			zap.Int64("inflight", inflight),
+			zap.Error(err),
+		)
 	}()
 
 	switch cm.lse.esm.load() {

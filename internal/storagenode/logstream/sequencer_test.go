@@ -222,9 +222,11 @@ func TestSequencer_Drain(t *testing.T) {
 
 	wr := &writer{}
 	wr.lse = lse
+	wr.logger = zap.NewNop()
 
 	cm := &committer{}
 	cm.lse = lse
+	cm.logger = zap.NewNop()
 
 	lse.sq = sq
 	lse.wr = wr

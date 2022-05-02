@@ -151,6 +151,7 @@ func TestReplicateClientDrain(t *testing.T) {
 		esm: newExecutorStateManager(executorStateAppendable),
 	}
 	rc := &replicateClient{}
+	rc.logger = zap.NewNop()
 	rc.lse = lse
 	rc.streamClient = mockStreamClient
 	rc.queue = make(chan *replicateTask, numTasks)
