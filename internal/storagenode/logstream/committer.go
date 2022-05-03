@@ -98,8 +98,12 @@ func (cm *committer) sendCommitTask(ctx context.Context, ct *commitTask) (err er
 		}
 	}()
 
+	// NOTE: The log stream executor in executorStateSealing state should
+	// be able to accept Commit RPC since it can have logs that have been
+	// written and reported but not yet committed.
+	// TODO: Need to notify that the log stream is the learning state.
 	switch cm.lse.esm.load() {
-	case executorStateSealing, executorStateSealed, executorStateLearning:
+	case executorStateSealed, executorStateLearning:
 		err = verrors.ErrSealed
 	case executorStateClosed:
 		err = verrors.ErrClosed
