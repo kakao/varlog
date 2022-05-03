@@ -104,21 +104,6 @@ func (mr *MockLogMockRecorder) LogStreamMetadata(arg0, arg1, arg2 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamMetadata", reflect.TypeOf((*MockLog)(nil).LogStreamMetadata), arg0, arg1, arg2)
 }
 
-// Read mocks base method.
-func (m *MockLog) Read(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 types.GLSN) ([]byte, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Read", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Read indicates an expected call of Read.
-func (mr *MockLogMockRecorder) Read(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockLog)(nil).Read), arg0, arg1, arg2, arg3)
-}
-
 // Subscribe mocks base method.
 func (m *MockLog) Subscribe(arg0 context.Context, arg1 types.TopicID, arg2, arg3 types.GLSN, arg4 OnNext, arg5 ...SubscribeOption) (SubscribeCloser, error) {
 	m.ctrl.T.Helper()

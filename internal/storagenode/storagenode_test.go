@@ -184,8 +184,8 @@ func TestStorageNode(t *testing.T) {
 	// GLSN: 1 2 3 4 5 6 7 8 9 10
 
 	// Subscribe: [1, 11)
-	les1 := TestSubscribe(t, tpid, lsid, types.MinGLSN, types.GLSN(lastGLSN)+1, sn1.advertise)
-	les2 := TestSubscribe(t, tpid, lsid, types.MinGLSN, types.GLSN(lastGLSN)+1, sn2.advertise)
+	les1 := TestSubscribe(t, tpid, lsid, types.MinGLSN, types.GLSN(lastGLSN)+1, snid1, sn1.advertise)
+	les2 := TestSubscribe(t, tpid, lsid, types.MinGLSN, types.GLSN(lastGLSN)+1, snid2, sn2.advertise)
 	expectedLen := int(lastLLSN)
 	assert.Equal(t, les1, les2)
 	assert.Len(t, les1, expectedLen)
@@ -198,8 +198,8 @@ func TestStorageNode(t *testing.T) {
 	}))
 
 	// SubscribeTo: [1, 11)
-	les1 = TestSubscribeTo(t, tpid, lsid, types.MinLLSN, types.LLSN(lastLLSN)+1, sn1.advertise)
-	les2 = TestSubscribeTo(t, tpid, lsid, types.MinLLSN, types.LLSN(lastLLSN)+1, sn2.advertise)
+	les1 = TestSubscribeTo(t, tpid, lsid, types.MinLLSN, types.LLSN(lastLLSN)+1, snid1, sn1.advertise)
+	les2 = TestSubscribeTo(t, tpid, lsid, types.MinLLSN, types.LLSN(lastLLSN)+1, snid2, sn2.advertise)
 	expectedLen = int(lastLLSN)
 	assert.Equal(t, les1, les2)
 	assert.Len(t, les1, expectedLen)
@@ -257,7 +257,7 @@ func TestStorageNode(t *testing.T) {
 	// GLSN: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
 
 	// Subscribe: [1, 21)
-	les1 = TestSubscribe(t, tpid, lsid, types.MinGLSN, types.GLSN(lastGLSN)+1, sn1.advertise)
+	les1 = TestSubscribe(t, tpid, lsid, types.MinGLSN, types.GLSN(lastGLSN)+1, snid1, sn1.advertise)
 	expectedLen = int(lastLLSN)
 	assert.Len(t, les1, expectedLen)
 	assert.Equal(t, types.MinLLSN, les1[0].LLSN)
@@ -286,7 +286,7 @@ func TestStorageNode(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	// Subscribe: [1, 21)
-	les2 = TestSubscribe(t, tpid, lsid, types.MinGLSN, types.GLSN(lastGLSN)+1, sn2.advertise)
+	les2 = TestSubscribe(t, tpid, lsid, types.MinGLSN, types.GLSN(lastGLSN)+1, snid2, sn2.advertise)
 	expectedLen = int(lastLLSN)
 	assert.Len(t, les2, expectedLen)
 	assert.Equal(t, types.MinLLSN, les2[0].LLSN)
@@ -311,8 +311,8 @@ func TestStorageNode(t *testing.T) {
 	// GLSN: _ _ _ _ _ _ _ _ _ __ __ __ __ 14 15 16 17 18 19 20
 
 	// Subscribe: [14, 21)
-	les1 = TestSubscribe(t, tpid, lsid, 14, types.GLSN(lastGLSN)+1, sn1.advertise)
-	les2 = TestSubscribe(t, tpid, lsid, 14, types.GLSN(lastGLSN)+1, sn2.advertise)
+	les1 = TestSubscribe(t, tpid, lsid, 14, types.GLSN(lastGLSN)+1, snid1, sn1.advertise)
+	les2 = TestSubscribe(t, tpid, lsid, 14, types.GLSN(lastGLSN)+1, snid2, sn2.advertise)
 	expectedLen = int(lastLLSN - 14 + 1)
 	assert.Equal(t, les1, les2)
 	assert.Len(t, les1, expectedLen)

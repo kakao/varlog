@@ -79,7 +79,7 @@ func (v *logImpl) appendTo(ctx context.Context, tpid types.TopicID, lsid types.L
 		}
 
 		// FIXME: Do not close clients. Let gRPC manages the connection.
-		_ = cl.Close()
+		// _ = cl.Close()
 
 		// add deny list
 		v.allowlist.Deny(tpid, lsid)
@@ -88,26 +88,6 @@ func (v *logImpl) appendTo(ctx context.Context, tpid types.TopicID, lsid types.L
 	}
 
 	return res, nil
-}
-
-func (v *logImpl) read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) (varlogpb.LogEntry, error) {
-	replicas, ok := v.replicasRetriever.Retrieve(topicID, logStreamID)
-	if !ok {
-		return varlogpb.InvalidLogEntry(), errNoLogStream
-	}
-	primarySNID := replicas[0].GetStorageNodeID()
-	primaryLogCL, err := v.logCLManager.GetOrConnect(ctx, primarySNID, replicas[0].GetAddress())
-	if err != nil {
-		return varlogpb.InvalidLogEntry(), errNoLogIOClient
-	}
-	// FIXME (jun
-	// 1) LogEntry -> non-nullable field
-	// 2) deepcopy LogEntry
-	logEntry, err := primaryLogCL.Read(ctx, topicID, logStreamID, glsn)
-	if err != nil {
-		return varlogpb.InvalidLogEntry(), err
-	}
-	return *logEntry, nil
 }
 
 func (v *logImpl) logStreamMetadata(ctx context.Context, tpID types.TopicID, lsID types.LogStreamID) (lsd varlogpb.LogStreamDescriptor, err error) {

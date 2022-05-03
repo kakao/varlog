@@ -107,17 +107,21 @@ func TestUnsealLogStreamReplica(t *testing.T, cid types.ClusterID, tpid types.To
 	assert.NoError(t, err)
 }
 
-func TestNewLogIOClient(t *testing.T, addr string) (logclient.LogIOClient, func()) {
-	client, err := logclient.NewLogIOClient(context.Background(), addr)
+func TestNewLogIOClient(t *testing.T, snid types.StorageNodeID, addr string) (*logclient.Client, func()) {
+	mgr, err := logclient.NewManager(context.Background(), nil)
 	assert.NoError(t, err)
+
+	client, err := mgr.GetOrConnect(context.Background(), snid, addr)
+	assert.NoError(t, err)
+
 	closer := func() {
-		assert.NoError(t, client.Close())
+		assert.NoError(t, mgr.Close())
 	}
 	return client, closer
 }
 
 func TestAppend(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, dataBatch [][]byte, replicas []varlogpb.LogStreamReplica) []snpb.AppendResult {
-	client, closer := TestNewLogIOClient(t, replicas[0].Address)
+	client, closer := TestNewLogIOClient(t, replicas[0].StorageNodeID, replicas[0].Address)
 	defer closer()
 
 	var backups []varlogpb.StorageNode
@@ -132,8 +136,8 @@ func TestAppend(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, dataBa
 	return res
 }
 
-func TestSubscribe(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, begin, end types.GLSN, addr string) []varlogpb.LogEntry {
-	client, closer := TestNewLogIOClient(t, addr)
+func TestSubscribe(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, begin, end types.GLSN, snid types.StorageNodeID, addr string) []varlogpb.LogEntry {
+	client, closer := TestNewLogIOClient(t, snid, addr)
 	defer closer()
 
 	ch, err := client.Subscribe(context.Background(), tpid, lsid, begin, end)
@@ -151,8 +155,8 @@ func TestSubscribe(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, beg
 	return les
 }
 
-func TestSubscribeTo(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, begin, end types.LLSN, addr string) []varlogpb.LogEntry {
-	client, closer := TestNewLogIOClient(t, addr)
+func TestSubscribeTo(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, begin, end types.LLSN, snid types.StorageNodeID, addr string) []varlogpb.LogEntry {
+	client, closer := TestNewLogIOClient(t, snid, addr)
 	defer closer()
 
 	ch, err := client.SubscribeTo(context.Background(), tpid, lsid, begin, end)

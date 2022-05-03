@@ -68,6 +68,9 @@ type VarlogCluster struct {
 	clients []varlog.Log
 	muCL    sync.Mutex
 
+	// logclient
+	logClientManager *logclient.Manager
+
 	muVMS     sync.Mutex
 	vmsServer varlogadm.ClusterManager
 	vmsCL     varlog.Admin
@@ -104,6 +107,9 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 	portLease, err := ports.ReserveWeaklyWithRetry(clus.portBase)
 	require.NoError(t, err)
 	clus.portLease = portLease
+
+	clus.logClientManager, err = logclient.NewManager(context.Background(), nil)
+	assert.NoError(t, err)
 
 	// mr
 	clus.initMR(t)
@@ -390,6 +396,8 @@ func (clus *VarlogCluster) Close(t *testing.T) {
 		wg.Wait()
 	}
 	clus.topicLogStreamIDs = nil
+
+	assert.NoError(t, clus.logClientManager.Close())
 
 	require.NoError(t, clus.portLease.Release())
 }
@@ -1106,7 +1114,8 @@ func (clus *VarlogCluster) BackupStorageNodeIDOf(t *testing.T, lsID types.LogStr
 	return storagenode.TestGetStorageNodeID(t, sn)
 }
 
-func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) logclient.LogIOClient {
+/*
+func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) *logclient.Client {
 	snID := clus.PrimaryStorageNodeIDOf(t, lsID)
 	snmd, err := clus.SNClientOf(t, snID).GetMetadata(context.Background())
 	require.NoError(t, err)
@@ -1115,6 +1124,7 @@ func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) 
 	require.NoError(t, err)
 	return cl
 }
+*/
 
 func (clus *VarlogCluster) initVMS(t *testing.T) {
 	clus.VMSOpts.ListenAddress = fmt.Sprintf("127.0.0.1:%d", clus.portLease.Base()+clus.vmsPortOffset)
@@ -1440,13 +1450,15 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, topicID types.Topi
 			go func() {
 				defer wg.Done()
 
-				cli, err := logclient.NewLogIOClient(context.TODO(), addr)
+				cli, err := clus.logClientManager.GetOrConnect(context.TODO(), snID, addr)
 				if !assert.NoError(t, err) {
 					return
 				}
-				defer func() {
-					_ = cli.Close()
-				}()
+				/*
+					defer func() {
+						_ = cli.Close()
+					}()
+				*/
 
 				_, err = cli.Append(ctx, topicID, lsID, [][]byte{data})
 				assert.Error(t, err)
