@@ -83,10 +83,6 @@ func TestCommitter_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 		_ = cm.sendCommitTask(context.Background(), nil)
 	})
 
-	lse.esm.store(executorStateSealing)
-	err = cm.sendCommitTask(context.Background(), &commitTask{})
-	assert.Error(t, err)
-
 	lse.esm.store(executorStateSealed)
 	err = cm.sendCommitTask(context.Background(), &commitTask{})
 	assert.Error(t, err)
