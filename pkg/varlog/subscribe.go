@@ -32,11 +32,18 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 		opt.apply(&subscribeOpts)
 	}
 
+	subscribeRunner := runner.New("subscribe", v.logger.Named("subscribe").With(
+		zap.Int32("tpid", int32(topicID)),
+		zap.Uint64("begin", uint64(begin)),
+		zap.Uint64("end", uint64(end)),
+	))
+
 	transmitCV := make(chan struct{}, 1)
 
-	mctx, cancel := v.runner.WithManagedCancel(context.Background())
+	mctx, cancel := subscribeRunner.WithManagedCancel(context.Background())
 	closer = func() {
 		cancel()
+		subscribeRunner.Stop()
 	}
 
 	sleq := newSubscribedLogEntiresQueue(begin, end, closer, v.logger)
@@ -63,10 +70,10 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 		sleq:       sleq,
 		logger:     v.logger,
 	}
-	if err = v.runner.RunC(mctx, tsm.transmit); err != nil {
+	if err = subscribeRunner.RunC(mctx, tsm.transmit); err != nil {
 		goto errOut
 	}
-	if err = v.runner.RunC(mctx, dis.dispatch); err != nil {
+	if err = subscribeRunner.RunC(mctx, dis.dispatch); err != nil {
 		goto errOut
 	}
 
@@ -155,11 +162,12 @@ func (tq *transmitQueue) Front() (transmitResult, bool) {
 }
 
 type subscriber struct {
-	topicID       types.TopicID
-	logStreamID   types.LogStreamID
-	storageNodeID types.StorageNodeID
-	logCL         logclient.LogIOClient
-	resultC       <-chan logclient.SubscribeResult
+	topicID         types.TopicID
+	logStreamID     types.LogStreamID
+	storageNodeID   types.StorageNodeID
+	logCL           *logclient.Client
+	resultC         <-chan logclient.SubscribeResult
+	cancelSubscribe context.CancelFunc
 
 	transmitQ  *transmitQueue
 	transmitCV chan struct{}
@@ -173,21 +181,24 @@ type subscriber struct {
 	logger *zap.Logger
 }
 
-func newSubscriber(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, logCL logclient.LogIOClient, begin, end types.GLSN, transmitQ *transmitQueue, transmitCV chan struct{}, logger *zap.Logger) (*subscriber, error) {
+func newSubscriber(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, logCL *logclient.Client, begin, end types.GLSN, transmitQ *transmitQueue, transmitCV chan struct{}, logger *zap.Logger) (*subscriber, error) {
+	ctx, cancel := context.WithCancel(ctx)
 	resultC, err := logCL.Subscribe(ctx, topicID, logStreamID, begin, end)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	s := &subscriber{
-		topicID:       topicID,
-		logStreamID:   logStreamID,
-		storageNodeID: storageNodeID,
-		logCL:         logCL,
-		resultC:       resultC,
-		transmitQ:     transmitQ,
-		transmitCV:    transmitCV,
-		done:          make(chan struct{}),
-		logger:        logger.Named("subscriber").With(zap.Int32("lsid", int32(logStreamID))),
+		topicID:         topicID,
+		logStreamID:     logStreamID,
+		storageNodeID:   storageNodeID,
+		logCL:           logCL,
+		resultC:         resultC,
+		cancelSubscribe: cancel,
+		transmitQ:       transmitQ,
+		transmitCV:      transmitCV,
+		done:            make(chan struct{}),
+		logger:          logger.Named("subscriber").With(zap.Int32("lsid", int32(logStreamID))),
 	}
 	s.lastSubscribeAt.Store(time.Now())
 	s.closed.Store(false)
@@ -196,13 +207,14 @@ func newSubscriber(ctx context.Context, topicID types.TopicID, logStreamID types
 }
 
 func (s *subscriber) stop() {
+	s.cancelSubscribe()
 	close(s.done)
 	s.closed.Store(true)
 }
 
 func (s *subscriber) subscribe(ctx context.Context) {
 	defer func() {
-		s.logCL.Close()
+		// s.logCL.Close()
 		s.closed.Store(true)
 	}()
 	for {
@@ -330,7 +342,7 @@ func (p *transmitter) refreshSubscriber(ctx context.Context) error {
 
 			s, err = newSubscriber(ctx, p.topicID, logStreamID, snid, logCL, p.wanted, p.end, p.transmitQ, p.transmitCV, p.logger)
 			if err != nil {
-				logCL.Close()
+				// logCL.Close()
 				continue CONNECT
 			}
 
@@ -467,7 +479,7 @@ func (q *subscribedLogEntriesQueue) pushable(result logclient.SubscribeResult) b
 
 func (q *subscribedLogEntriesQueue) close() {
 	close(q.c)
-	q.closer()
+	// q.closer()
 }
 
 func (q *subscribedLogEntriesQueue) sendC() chan<- logclient.SubscribeResult {
@@ -532,7 +544,7 @@ func (v *logImpl) subscribeTo(ctx context.Context, topicID types.TopicID, logStr
 
 	ctx, cancel := context.WithCancel(ctx)
 	var (
-		logCL   logclient.LogIOClient
+		logCL   *logclient.Client
 		resultC <-chan logclient.SubscribeResult
 		err     error
 	)
@@ -543,14 +555,14 @@ func (v *logImpl) subscribeTo(ctx context.Context, topicID types.TopicID, logStr
 		logCL, cerr = v.logCLManager.GetOrConnect(ctx, storageNodeID, storageNodeAddr)
 		if cerr != nil {
 			err = multierr.Append(err, cerr)
-			_ = logCL.Close()
+			// _ = logCL.Close()
 			continue
 		}
 
 		resultC, cerr = logCL.SubscribeTo(ctx, topicID, logStreamID, begin, end)
 		if cerr != nil {
 			err = multierr.Append(err, cerr)
-			_ = logCL.Close()
+			// _ = logCL.Close()
 			continue
 		}
 
@@ -579,7 +591,7 @@ type logStreamSubscriber struct {
 	cancel context.CancelFunc
 
 	closeC  <-chan struct{}
-	logCL   logclient.LogIOClient
+	logCL   *logclient.Client
 	resultC <-chan logclient.SubscribeResult
 
 	mu      sync.Mutex

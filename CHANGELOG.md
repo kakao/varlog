@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed unnecessary singleflight from `pkg/logclient.(Manager)`. (#VARLOG-703/#616)
 - Changed package `cmd/metadata_repository` to `cmd/varlogmr`. (#VARLOG-731/#640)
 - Changed package `internal/metadata_repository` to `internal/metarepos`. (#VARLOG-731/#640)
+- Changed interface `pkg/logclient.(LogIOClient)` to struct `pkg/logclient.(Client)`. (#VARLOG-704/#647)
+
+### Removed
+- Removed unnecessary `pkg/logclient.(logClientProxy)`. (#VARLOG-704/#647)
 
 
 ## [0.1.7] - 2022-04-06

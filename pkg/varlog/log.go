@@ -30,8 +30,6 @@ type Log interface {
 	// metadata for failed operations is not included in the metadata list.
 	AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, opts ...AppendOption) AppendResult
 
-	Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error)
-
 	Subscribe(ctx context.Context, topicID types.TopicID, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error)
 
 	SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...SubscribeOption) Subscriber
@@ -135,7 +133,10 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	// TODO (jun): metadataRefresher should implement ClusterMetadataView
 	metadata := refresher.Metadata()
 
-	logCLManager, err := logclient.NewManager(ctx, metadata, v.opts.grpcDialOptions, v.logger)
+	logCLManager, err := logclient.NewManager(ctx, metadata,
+		logclient.WithDefaultGRPCDialOptions(v.opts.grpcDialOptions...),
+		logclient.WithLogger(v.logger),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -151,14 +152,6 @@ func (v *logImpl) Append(ctx context.Context, topicID types.TopicID, data [][]by
 func (v *logImpl) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, opts ...AppendOption) AppendResult {
 	opts = append(opts, withoutSelectLogStream())
 	return v.append(ctx, topicID, logStreamID, data, opts...)
-}
-
-func (v *logImpl) Read(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, glsn types.GLSN) ([]byte, error) {
-	logEntry, err := v.read(ctx, topicID, logStreamID, glsn)
-	if err != nil {
-		return nil, err
-	}
-	return logEntry.Data, nil
 }
 
 func (v *logImpl) Subscribe(ctx context.Context, topicID types.TopicID, begin types.GLSN, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error) {

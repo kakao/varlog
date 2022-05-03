@@ -157,11 +157,10 @@ func TestBasicOperations(t *testing.T) {
 	sn := newStorageNode()
 	mockClient := newMockStorageNodeServiceClient(ctrl, &sn, topicID, logStreamID)
 
-	client := &logIOClient{rpcClient: mockClient}
+	client := &Client{rpcClient: mockClient}
 	Convey("Simple Append/Read/Subscribe/TrimDeprecated operations should work", t, func() {
 		var prevGLSN types.GLSN
 		var currGLSN types.GLSN
-		var currLogEntry *varlogpb.LogEntry
 		var res []snpb.AppendResult
 		var err error
 		var msg string
@@ -170,9 +169,6 @@ func TestBasicOperations(t *testing.T) {
 		res, err = client.Append(context.TODO(), topicID, logStreamID, [][]byte{[]byte(msg)})
 		currGLSN = res[0].Meta.GLSN
 		So(err, ShouldBeNil)
-		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, currGLSN)
-		So(err, ShouldBeNil)
-		So(string(currLogEntry.Data), ShouldEqual, msg)
 		prevGLSN = currGLSN
 
 		msg = "msg-2"
@@ -180,9 +176,6 @@ func TestBasicOperations(t *testing.T) {
 		currGLSN = res[0].Meta.GLSN
 		So(err, ShouldBeNil)
 		So(currGLSN, ShouldBeGreaterThan, prevGLSN)
-		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, currGLSN)
-		So(err, ShouldBeNil)
-		So(string(currLogEntry.Data), ShouldEqual, msg)
 		prevGLSN = currGLSN
 
 		ch, err := client.Subscribe(context.TODO(), topicID, logStreamID, types.GLSN(0), types.GLSN(10))
@@ -201,8 +194,5 @@ func TestBasicOperations(t *testing.T) {
 
 		err = client.TrimDeprecated(context.TODO(), topicID, types.GLSN(0))
 		So(subRes.Error, ShouldBeNil)
-
-		currLogEntry, err = client.Read(context.TODO(), topicID, logStreamID, types.GLSN(0))
-		So(err, ShouldNotBeNil)
 	})
 }
