@@ -492,6 +492,9 @@ func makeLogStream(topicID types.TopicID, lsID types.LogStreamID, snIDs []types.
 }
 
 func TestMRApplyReport(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
 
 	Convey("Report Should not be applied if not register LogStream", t, func(ctx C) {
 		rep := 2
@@ -586,6 +589,10 @@ func TestMRApplyReport(t *testing.T) {
 }
 
 func TestMRCalculateCommit(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Calculate commit", t, func(ctx C) {
 		clus := newMetadataRepoCluster(1, 2, false, false)
 		Reset(func() {
@@ -655,6 +662,10 @@ func TestMRCalculateCommit(t *testing.T) {
 }
 
 func TestMRGlobalCommit(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Calculate commit", t, func(ctx C) {
 		topicID := types.TopicID(1)
 		rep := 2
@@ -768,6 +779,10 @@ func TestMRGlobalCommit(t *testing.T) {
 }
 
 func TestMRGlobalCommitConsistency(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given 2 mr nodes & 5 log streams", t, func(ctx C) {
 		rep := 1
 		nrNodes := 2
@@ -848,6 +863,10 @@ func TestMRGlobalCommitConsistency(t *testing.T) {
 }
 
 func TestMRSimpleReportNCommit(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("UncommitReport should be committed", t, func(ctx C) {
 		clus := newMetadataRepoCluster(1, 1, false, false)
 		Reset(func() {
@@ -900,6 +919,10 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 }
 
 func TestMRRequestMap(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("requestMap should have request when wait ack", t, func(ctx C) {
 		clus := newMetadataRepoCluster(1, 1, false, false)
 		Reset(func() {
@@ -1037,6 +1060,10 @@ func TestMRRequestMap(t *testing.T) {
 }
 
 func TestMRGetLastCommitted(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("getLastCommitted", t, func(ctx C) {
 		rep := 2
 		topicID := types.TopicID(1)
@@ -1191,6 +1218,10 @@ func TestMRGetLastCommitted(t *testing.T) {
 }
 
 func TestMRSeal(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("seal", t, func(ctx C) {
 		rep := 2
 		topicID := types.TopicID(1)
@@ -1279,6 +1310,10 @@ func TestMRSeal(t *testing.T) {
 }
 
 func TestMRUnseal(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("unseal", t, func(ctx C) {
 		rep := 2
 		topicID := types.TopicID(1)
@@ -1413,6 +1448,10 @@ func TestMRUnseal(t *testing.T) {
 }
 
 func TestMRUpdateLogStream(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster", t, func(ctx C) {
 		nrStorageNode := 2
 		rep := 1
@@ -1488,6 +1527,10 @@ func TestMRUpdateLogStream(t *testing.T) {
 }
 
 func TestMRFailoverLeaderElection(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 3
@@ -1556,6 +1599,10 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 }
 
 func TestMRFailoverJoinNewNode(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 3
@@ -1713,6 +1760,10 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 }
 
 func TestMRFailoverLeaveNode(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 3
@@ -1792,6 +1843,10 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 }
 
 func TestMRFailoverRestart(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster with 5 peers", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 5
@@ -1887,6 +1942,10 @@ func TestMRFailoverRestart(t *testing.T) {
 }
 
 func TestMRLoadSnapshot(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster which have snapshot", t, func(ctx C) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
@@ -1964,6 +2023,10 @@ func TestMRLoadSnapshot(t *testing.T) {
 }
 
 func TestMRRemoteSnapshot(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster which have snapshot", t, func(ctx C) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
@@ -2042,6 +2105,10 @@ func TestMRRemoteSnapshot(t *testing.T) {
 }
 
 func TestMRFailoverRestartWithSnapshot(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster with 5 peers", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 5
@@ -2101,6 +2168,10 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 }
 
 func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster with 3 peers", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 3
@@ -2152,6 +2223,10 @@ func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
 }
 
 func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster with 3 peers", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 3
@@ -2205,6 +2280,10 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 }
 
 func TestMRFailoverRecoverReportCollector(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster with 3 peers, 5 StorageNodes", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 3
@@ -2296,6 +2375,10 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 }
 
 func TestMRProposeTimeout(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR which is not running", t, func(ctx C) {
 		clus := newMetadataRepoCluster(1, 1, false, false)
 		Reset(func() {
@@ -2322,6 +2405,10 @@ func TestMRProposeTimeout(t *testing.T) {
 }
 
 func TestMRProposeRetry(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR", t, func(ctx C) {
 		clus := newMetadataRepoCluster(3, 1, false, false)
 		So(clus.Start(), ShouldBeNil)
@@ -2357,6 +2444,10 @@ func TestMRProposeRetry(t *testing.T) {
 }
 
 func TestMRScaleOutJoin(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 1
@@ -2428,6 +2519,10 @@ func TestMRScaleOutJoin(t *testing.T) {
 }
 
 func TestMRUnregisterTopic(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given 1 topic & 5 log streams", t, func(ctx C) {
 		rep := 1
 		nrNodes := 1
@@ -2484,6 +2579,10 @@ func TestMRUnregisterTopic(t *testing.T) {
 }
 
 func TestMRTopicLastHighWatermark(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("given metadata repository with multiple topics", t, func(ctx C) {
 		nrTopics := 3
 		nrLS := 2
@@ -2639,6 +2738,10 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 }
 
 func TestMRTopicCatchup(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given MR cluster with multi topic", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 1
@@ -2683,10 +2786,4 @@ func TestMRTopicCatchup(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
 }

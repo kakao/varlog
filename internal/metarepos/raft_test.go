@@ -10,6 +10,7 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 	"go.etcd.io/etcd/raft/raftpb"
+	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -145,6 +146,10 @@ func (clus *cluster) closeNoErrors(t *testing.T) {
 }
 
 func TestProposeOnFollower(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	clus := newCluster(3)
 	defer clus.closeNoErrors(t)
 
@@ -174,6 +179,10 @@ func TestProposeOnFollower(t *testing.T) {
 }
 
 func TestFailoverLeaderElection(t *testing.T) {
+	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
+		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+	))
+
 	Convey("Given Raft Cluster", t, func(ctx C) {
 		clus := newCluster(3)
 		defer clus.closeNoErrors(t)
