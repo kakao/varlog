@@ -127,7 +127,7 @@ type clusterManager struct {
 	snSelector     ReplicaSelector
 	snWatcher      StorageNodeWatcher
 	statRepository StatRepository
-	logStreamIDGen LogStreamIDGenerator
+	logStreamIDGen *LogStreamIDGenerator
 	topicIDGen     TopicIDGenerator
 
 	logger  *zap.Logger
@@ -151,7 +151,7 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		return nil, err
 	}
 
-	logStreamIDGen, err := NewSequentialLogStreamIDGenerator(ctx, cmView, snMgr)
+	logStreamIDGen, err := NewLogStreamIDGenerator(ctx, cmView)
 	if err != nil {
 		return nil, err
 	}
