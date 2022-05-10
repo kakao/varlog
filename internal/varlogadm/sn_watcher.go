@@ -21,7 +21,7 @@ type StorageNodeWatcher interface {
 var _ StorageNodeWatcher = (*snWatcher)(nil)
 
 type snWatcher struct {
-	WatcherOptions
+	watcherConfig
 
 	cmView    ClusterMetadataView
 	snMgr     StorageNodeManager
@@ -36,19 +36,23 @@ type snWatcher struct {
 	logger *zap.Logger
 }
 
-func NewStorageNodeWatcher(opts WatcherOptions, cmView ClusterMetadataView, snMgr StorageNodeManager, snHandler StorageNodeEventHandler, logger *zap.Logger) StorageNodeWatcher {
+func NewStorageNodeWatcher(opts []WatcherOption, cmView ClusterMetadataView, snMgr StorageNodeManager, snHandler StorageNodeEventHandler, logger *zap.Logger) StorageNodeWatcher {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("snwatcher")
+	cfg, err := newWatcherConfig(opts)
+	if err != nil {
+		panic(err)
+	}
 	return &snWatcher{
-		WatcherOptions: opts,
-		cmView:         cmView,
-		snMgr:          snMgr,
-		snHandler:      snHandler,
-		hb:             make(map[types.StorageNodeID]time.Time),
-		runner:         runner.New("wt", logger),
-		logger:         logger,
+		watcherConfig: cfg,
+		cmView:        cmView,
+		snMgr:         snMgr,
+		snHandler:     snHandler,
+		hb:            make(map[types.StorageNodeID]time.Time),
+		runner:        runner.New("wt", logger),
+		logger:        logger,
 	}
 }
 
@@ -68,10 +72,10 @@ func (w *snWatcher) Close() error {
 }
 
 func (w *snWatcher) run(ctx context.Context) {
-	ticker := time.NewTicker(w.Tick)
+	ticker := time.NewTicker(w.tick)
 	defer ticker.Stop()
 
-	reportInterval := w.ReportInterval
+	reportInterval := w.reportInterval
 
 Loop:
 	for {
@@ -82,7 +86,7 @@ Loop:
 			reportInterval--
 			if reportInterval == 0 {
 				w.report(ctx)
-				reportInterval = w.ReportInterval
+				reportInterval = w.reportInterval
 			}
 
 		case <-ctx.Done():
@@ -92,7 +96,7 @@ Loop:
 }
 
 func (w *snWatcher) heartbeat(c context.Context) {
-	ctx, cancel := context.WithTimeout(c, w.RPCTimeout)
+	ctx, cancel := context.WithTimeout(c, w.rpcTimeout)
 	defer cancel()
 	meta, err := w.cmView.ClusterMetadata(ctx)
 	if err != nil {
@@ -149,7 +153,7 @@ func (w *snWatcher) handleHeartbeat(ctx context.Context) {
 
 	cur := time.Now()
 	for snID, t := range w.hb {
-		if cur.Sub(t) > w.Tick*time.Duration(w.HeartbeatTimeout) {
+		if cur.Sub(t) > w.tick*time.Duration(w.heartbeatTimeout) {
 			w.snHandler.HandleHeartbeatTimeout(ctx, snID)
 			w.hb[snID] = time.Now()
 		}
@@ -157,7 +161,7 @@ func (w *snWatcher) handleHeartbeat(ctx context.Context) {
 }
 
 func (w *snWatcher) report(c context.Context) {
-	ctx, cancel := context.WithTimeout(c, w.RPCTimeout)
+	ctx, cancel := context.WithTimeout(c, w.rpcTimeout)
 	defer cancel()
 
 	meta, err := w.cmView.ClusterMetadata(ctx)
@@ -171,7 +175,7 @@ func (w *snWatcher) report(c context.Context) {
 		snd := meta.GetStorageNodes()[idx]
 		grp.Go(func() error {
 			if snmd, err := w.snMgr.GetMetadata(gCtx, snd.GetStorageNodeID()); err == nil {
-				w.snHandler.HandleReport(gCtx, snmd)
+				w.snHandler.HandleReport(gCtx, snmd, w.gcTimeout)
 			}
 			return nil
 		})

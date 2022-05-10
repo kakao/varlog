@@ -32,7 +32,7 @@ import (
 type StorageNodeEventHandler interface {
 	HandleHeartbeatTimeout(context.Context, types.StorageNodeID)
 
-	HandleReport(context.Context, *snpb.StorageNodeMetadataDescriptor)
+	HandleReport(context.Context, *snpb.StorageNodeMetadataDescriptor, time.Duration)
 }
 
 // ClusterManager manages varlog cluster.
@@ -110,6 +110,8 @@ const (
 )
 
 type clusterManager struct {
+	config
+
 	server       *grpc.Server
 	serverAddr   string
 	healthServer *health.Server
@@ -129,24 +131,22 @@ type clusterManager struct {
 	statRepository StatRepository
 	logStreamIDGen *LogStreamIDGenerator
 	topicIDGen     TopicIDGenerator
-
-	logger  *zap.Logger
-	options *Options
 }
 
-func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, error) {
-	if opts.Logger == nil {
-		opts.Logger = zap.NewNop()
+func NewClusterManager(ctx context.Context, opts ...Option) (ClusterManager, error) {
+	cfg, err := newConfig(opts)
+	if err != nil {
+		return nil, err
 	}
 
-	mrMgr, err := NewMRManager(ctx, opts.ClusterID, opts.MRManagerOptions, opts.Logger)
+	mrMgr, err := NewMRManager(ctx, cfg.clusterID, cfg.mrManagerOptions, cfg.logger)
 	if err != nil {
 		return nil, err
 	}
 
 	cmView := mrMgr.ClusterMetadataView()
 
-	snMgr, err := NewStorageNodeManager(ctx, opts.ClusterID, cmView, opts.Logger)
+	snMgr, err := NewStorageNodeManager(ctx, cfg.clusterID, cmView, cfg.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -161,12 +161,13 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		return nil, err
 	}
 
-	snSelector, err := newBalancedReplicaSelector(cmView, int(opts.ReplicationFactor))
+	snSelector, err := newBalancedReplicaSelector(cmView, int(cfg.replicationFactor))
 	if err != nil {
 		return nil, err
 	}
 
 	cm := &clusterManager{
+		config:         cfg,
 		sw:             stopwaiter.New(),
 		cmState:        clusterManagerReady,
 		snMgr:          snMgr,
@@ -176,11 +177,11 @@ func NewClusterManager(ctx context.Context, opts *Options) (ClusterManager, erro
 		statRepository: NewStatRepository(ctx, cmView),
 		logStreamIDGen: logStreamIDGen,
 		topicIDGen:     topicIDGen,
-		logger:         opts.Logger,
-		options:        opts,
+		//logger:         opts.Logger,
+		//options:        opts,
 	}
 
-	cm.snWatcher = NewStorageNodeWatcher(opts.WatcherOptions, cmView, snMgr, cm, opts.Logger)
+	cm.snWatcher = NewStorageNodeWatcher(cfg.watcherOptions, cmView, snMgr, cm, cm.logger)
 
 	cm.server = grpc.NewServer()
 	cm.healthServer = health.NewServer()
@@ -210,7 +211,7 @@ func (cm *clusterManager) Run() error {
 	cm.cmState = clusterManagerRunning
 
 	// Listener
-	lis, err := net.Listen("tcp", cm.options.ListenAddress)
+	lis, err := net.Listen("tcp", cm.listenAddress)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -289,7 +290,7 @@ func (cm *clusterManager) StorageNodes(ctx context.Context) (ret map[types.Stora
 				copied := proto.Clone(snd).(*varlogpb.StorageNodeDescriptor)
 				copied.Status = varlogpb.StorageNodeStatusUnavailable
 				snmd = &snpb.StorageNodeMetadataDescriptor{
-					ClusterID:   cm.options.ClusterID,
+					ClusterID:   cm.clusterID,
 					StorageNode: copied,
 				}
 			}
@@ -607,7 +608,7 @@ func (cm *clusterManager) UnregisterLogStream(ctx context.Context, topicID types
 func (cm *clusterManager) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor, lsdesc *varlogpb.LogStreamDescriptor) error {
 	replicas := lsdesc.GetReplicas()
 	// the number of logstream replica
-	if uint(len(replicas)) != cm.options.ReplicationFactor {
+	if uint(len(replicas)) != cm.replicationFactor {
 		return errors.Errorf("invalid number of log stream replicas: %d", len(replicas))
 	}
 	// storagenode existence
@@ -939,7 +940,7 @@ func (cm *clusterManager) syncLogStream(ctx context.Context, topicID types.Topic
 	}
 }
 
-func (cm *clusterManager) HandleReport(ctx context.Context, snm *snpb.StorageNodeMetadataDescriptor) {
+func (cm *clusterManager) HandleReport(ctx context.Context, snm *snpb.StorageNodeMetadataDescriptor, gcTimeout time.Duration) {
 	meta, err := cm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return
@@ -954,7 +955,7 @@ func (cm *clusterManager) HandleReport(ctx context.Context, snm *snpb.StorageNod
 			cm.checkLogStreamStatus(ctx, ls.TopicID, ls.LogStreamID, mls.Status, ls.Status)
 			continue
 		}
-		if time.Since(ls.CreatedTime) > cm.options.WatcherOptions.GCTimeout {
+		if time.Since(ls.CreatedTime) > gcTimeout {
 			cm.RemoveLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.TopicID, ls.LogStreamID)
 		}
 	}

@@ -1127,19 +1127,24 @@ func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) 
 */
 
 func (clus *VarlogCluster) initVMS(t *testing.T) {
-	clus.VMSOpts.ListenAddress = fmt.Sprintf("127.0.0.1:%d", clus.portLease.Base()+clus.vmsPortOffset)
-	clus.VMSOpts.ClusterID = clus.clusterID
-	clus.VMSOpts.MetadataRepositoryAddresses = clus.mrRPCEndpoints
-	clus.VMSOpts.ReplicationFactor = uint(clus.nrRep)
-	clus.VMSOpts.Logger = clus.logger.Named("admin")
+	listenAddress := fmt.Sprintf("127.0.0.1:%d", clus.portLease.Base()+clus.vmsPortOffset)
+	opts := append(clus.VMSOpts,
+		varlogadm.WithListenAddress(listenAddress),
+		varlogadm.WithClusterID(clus.clusterID),
+		varlogadm.WithReplicationFactor(uint(clus.nrRep)),
+		varlogadm.WithLogger(clus.logger.Named("admin")),
+		varlogadm.WithMRManagerOptions(
+			varlogadm.WithMetadataRepositoryAddress(clus.mrRPCEndpoints...),
+		),
+	)
 
-	cm, err := varlogadm.NewClusterManager(context.Background(), clus.VMSOpts)
+	cm, err := varlogadm.NewClusterManager(context.Background(), opts...)
 	require.NoError(t, err)
 
 	require.NoError(t, cm.Run())
 
 	require.Eventually(t, func() bool {
-		rpcConn, err := rpc.NewConn(context.Background(), clus.VMSOpts.ListenAddress)
+		rpcConn, err := rpc.NewConn(context.Background(), listenAddress)
 		if err != nil {
 			return false
 		}
