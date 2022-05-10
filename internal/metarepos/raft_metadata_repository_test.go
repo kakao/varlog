@@ -2787,3 +2787,14 @@ func TestMRTopicCatchup(t *testing.T) {
 		}
 	})
 }
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m,
+		goleak.IgnoreTopFunction(
+			"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+		),
+		goleak.IgnoreTopFunction(
+			"github.com/kakao/varlog/internal/metarepos.(*reportCollector).runPropagateCommit",
+		),
+	)
+}
