@@ -9,7 +9,6 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
-	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
@@ -112,10 +111,6 @@ func (mr *dummyMetadataRepository) trimGLS(ver types.Version) {
 }
 
 func TestRegisterStorageNode(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Registering nil storage node should return an error", t, func() {
 		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
@@ -159,10 +154,6 @@ func TestRegisterStorageNode(t *testing.T) {
 }
 
 func TestRegisterLogStream(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Register LogStream", t, func() {
 		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
@@ -205,10 +196,6 @@ func TestRegisterLogStream(t *testing.T) {
 }
 
 func TestUnregisterStorageNode(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Unregister StorageNode", t, func() {
 		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
@@ -265,10 +252,6 @@ func TestUnregisterStorageNode(t *testing.T) {
 }
 
 func TestUnregisterLogStream(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Register LogStream", t, func() {
 		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
@@ -311,10 +294,6 @@ func TestUnregisterLogStream(t *testing.T) {
 }
 
 func TestRecoverStorageNode(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given ReportCollector", t, func() {
 		a := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(a)
@@ -455,10 +434,6 @@ func TestRecoverStorageNode(t *testing.T) {
 }
 
 func TestReport(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("ReportCollector should collect report from registered storage node", t, func() {
 		nrStorage := 5
 		a := NewDummyStorageNodeClientFactory(1, false)
@@ -521,10 +496,6 @@ func TestReport(t *testing.T) {
 }
 
 func TestReportDedup(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given ReportCollector", t, func() {
 		a := NewDummyStorageNodeClientFactory(3, true)
 		mr := NewDummyMetadataRepository(a)
@@ -585,10 +556,6 @@ func TestReportDedup(t *testing.T) {
 }
 
 func TestReportCollectorSeal(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given ReportCollector", t, func() {
 		nrStorage := 5
 		nrLogStream := nrStorage
@@ -771,10 +738,6 @@ func (cc *dummyCommitContext) newDummyCommitResults(ver types.Version, baseGLSN 
 }
 
 func TestCommit(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given ReportCollector", t, func() {
 		nrStorage := 5
 		nrLogStream := nrStorage
@@ -919,10 +882,6 @@ func TestCommit(t *testing.T) {
 }
 
 func TestCommitWithDelay(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given ReportCollector", t, func() {
 		knownVer := types.InvalidVersion
 		glsn := types.MinGLSN
@@ -1039,10 +998,6 @@ func TestCommitWithDelay(t *testing.T) {
 }
 
 func TestRPCFail(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given ReportCollector", t, func(ctx C) {
 		//knownVer := types.InvalidVersion
 
@@ -1113,10 +1068,6 @@ func TestRPCFail(t *testing.T) {
 }
 
 func TestReporterClientReconnect(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given Reporter Client", t, func(ctx C) {
 		clientFac := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(clientFac)

@@ -10,7 +10,6 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 	"go.etcd.io/etcd/raft/raftpb"
-	"go.uber.org/goleak"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
@@ -22,10 +21,6 @@ import (
 )
 
 func TestStorageRegisterSN(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("SN should be registered", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -57,10 +52,6 @@ func TestStorageRegisterSN(t *testing.T) {
 }
 
 func TestStoragUnregisterSN(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given a MetadataStorage", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -132,10 +123,6 @@ func TestStoragUnregisterSN(t *testing.T) {
 }
 
 func TestStoragGetAllSN(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given a MetadataStorage", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -207,10 +194,6 @@ func TestStoragGetAllSN(t *testing.T) {
 }
 
 func TestStoragGetAllLS(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given a MetadataStorage", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -304,10 +287,6 @@ func TestStoragGetAllLS(t *testing.T) {
 }
 
 func TestStorageRegisterLS(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("LS which has no SN should not be registered", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -376,10 +355,6 @@ func TestStorageRegisterLS(t *testing.T) {
 }
 
 func TestStoragUnregisterLS(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("LS which is not exist should not be unregistered", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -439,10 +414,6 @@ func TestStoragUnregisterLS(t *testing.T) {
 }
 
 func TestStorageUpdateLS(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("LS should not be updated if not exist proper SN", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 		ms.Run()
@@ -532,10 +503,6 @@ func TestStorageUpdateLS(t *testing.T) {
 }
 
 func TestStorageUpdateLSUnderCOW(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("update LS to COW storage should applyed after merge", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -614,10 +581,6 @@ func TestStorageUpdateLSUnderCOW(t *testing.T) {
 }
 
 func TestStorageSealLS(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("LS should not be sealed if not exist", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -726,10 +689,6 @@ func TestStorageSealLS(t *testing.T) {
 }
 
 func TestStorageSealLSUnderCOW(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("seal LS to COW storage should applyed after merge", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -794,10 +753,6 @@ func TestStorageSealLSUnderCOW(t *testing.T) {
 }
 
 func TestStorageUnsealLS(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Storage should return ErrNotExsit if Unseal to not exist LS", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -887,10 +842,6 @@ func TestStorageUnsealLS(t *testing.T) {
 }
 
 func TestStorageTrim(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given a GlobalLogStreams", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -921,10 +872,6 @@ func TestStorageTrim(t *testing.T) {
 }
 
 func TestStorageReport(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("storage should not apply report if not registered LS", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -992,10 +939,6 @@ func TestStorageReport(t *testing.T) {
 }
 
 func TestStorageCopyOnWrite(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("storage should returns different stateMachine while copyOnWrite", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -1226,10 +1169,6 @@ func TestStorageCopyOnWrite(t *testing.T) {
 }
 
 func TestStorageMetadataCache(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("metadata storage returns empty cache, when it has no metadata", t, func(ctx C) {
 		cb := func(uint64, uint64, error) {}
 
@@ -1348,10 +1287,6 @@ func TestStorageMetadataCache(t *testing.T) {
 }
 
 func TestStorageStateMachineMerge(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("merge stateMachine should not operate while job running", t, func(ctx C) {
 		ch := make(chan struct{}, 1)
 		cb := func(uint64, uint64, error) {
@@ -1464,10 +1399,6 @@ func TestStorageStateMachineMerge(t *testing.T) {
 }
 
 func TestStorageSnapshot(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("create snapshot should not operate while job running", t, func(ctx C) {
 		ch := make(chan struct{})
 		cb := func(uint64, uint64, error) {
@@ -1553,10 +1484,6 @@ func TestStorageSnapshot(t *testing.T) {
 }
 
 func TestStorageApplySnapshot(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given MetadataStorage Snapshop", t, func(ctx C) {
 		ch := make(chan struct{}, 1)
 		cb := func(uint64, uint64, error) {
@@ -1638,10 +1565,6 @@ func TestStorageApplySnapshot(t *testing.T) {
 }
 
 func TestStorageSnapshotRace(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("create snapshot", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 		ms.snapCount = uint64(100 + rand.Int31n(64))
@@ -1771,10 +1694,6 @@ func TestStorageSnapshotRace(t *testing.T) {
 }
 
 func TestStorageVerifyReport(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given MetadataStorage which has GlobalLogSteams with HWM [10,15,20]", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -1843,10 +1762,6 @@ func TestStorageVerifyReport(t *testing.T) {
 }
 
 func TestStorageRecoverStateMachine(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Given MetadataStorage", t, func(ctx C) {
 		ch := make(chan struct{}, 1)
 		cb := func(uint64, uint64, error) {
@@ -1922,10 +1837,6 @@ func TestStorageRecoverStateMachine(t *testing.T) {
 }
 
 func TestStorageRegisterTopic(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("Topic should be registered if not existed", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -1988,10 +1899,6 @@ func TestStorageRegisterTopic(t *testing.T) {
 }
 
 func TestStoragUnregisterTopic(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("unregister non-exist topic should return ErrNotExist", t, func(ctx C) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, nil)
 
@@ -2014,10 +1921,6 @@ func TestStoragUnregisterTopic(t *testing.T) {
 }
 
 func TestStorageSortedTopicLogStreamIDs(t *testing.T) {
-	goleak.VerifyNone(t, goleak.IgnoreTopFunction(
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
-	))
-
 	Convey("UncommitReport should be committed", t, func(ctx C) {
 		/*
 			Topic-1 : LS-1, LS-3
