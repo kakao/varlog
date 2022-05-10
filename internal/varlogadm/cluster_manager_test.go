@@ -61,13 +61,11 @@ func TestAdmin_StorageNodes(t *testing.T) {
 		},
 	}, nil).AnyTimes()
 
-	var cm ClusterManager = &clusterManager{
+	var cm = &clusterManager{
 		cmView: cmview,
 		snMgr:  snmgr,
-		options: &Options{
-			ClusterID: cid,
-		},
 	}
+	cm.clusterID = cid
 	snmds, err := cm.StorageNodes(context.Background())
 	assert.NoError(t, err)
 	assert.Len(t, snmds, 2)
@@ -82,13 +80,6 @@ func TestAdmin_StorageNodes(t *testing.T) {
 func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-
-	snwatcherOpts := WatcherOptions{
-		Tick:             10 * time.Millisecond,
-		ReportInterval:   10,
-		HeartbeatTimeout: 20,
-		GCTimeout:        time.Duration(math.MaxInt64),
-	}
 
 	var (
 		mu       sync.Mutex
@@ -201,15 +192,20 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 		snMgr:          snmgr,
 		cmView:         cmview,
 		statRepository: statrepos,
-		options: &Options{
-			ListenAddress:  "127.0.0.1:0",
-			WatcherOptions: snwatcherOpts,
-		},
-		server:       grpcServer,
-		healthServer: health.NewServer(),
-		sw:           stopwaiter.New(),
-		logger:       zap.NewNop(),
+		server:         grpcServer,
+		healthServer:   health.NewServer(),
+		sw:             stopwaiter.New(),
 	}
+	mgr.listenAddress = "127.0.0.1:0"
+	mgr.logger = zap.NewNop()
+
+	snwatcherOpts := []WatcherOption{
+		WithWatcherTick(10 * time.Millisecond),
+		WithWatcherReportInterval(10),
+		WithWatcherHeartbeatTimeout(20),
+		WithWatcherGCTimeout(time.Duration(math.MaxInt64)),
+	}
+
 	snwatcher := NewStorageNodeWatcher(snwatcherOpts, cmview, snmgr, mgr, zap.NewNop())
 	mgr.snWatcher = snwatcher
 	assert.NoError(t, mgr.Run())

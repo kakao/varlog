@@ -58,17 +58,22 @@ func start(c *cli.Context) error {
 		_ = logger.Sync()
 	}()
 
-	opts := varlogadm.DefaultOptions()
-	opts.Logger = logger
-	opts.MetadataRepositoryAddresses = c.StringSlice(flagMetadataRepository.Name)
-	opts.ListenAddress = c.String(flagListen.Name)
-	opts.ReplicationFactor = c.Uint(flagReplicationFactor.Name)
-	opts.InitialMRConnRetryCount = c.Int(flagInitMRConnRetryCount.Name)
-	opts.InitialMRConnRetryBackoff = c.Duration(flagInitMRConnRetryBackoff.Name)
-	opts.WatcherOptions.RPCTimeout = c.Duration(flagSNWatcherRPCTimeout.Name)
-	opts.MRManagerOptions.ConnTimeout = c.Duration(flagMRConnTimeout.Name)
-	opts.MRManagerOptions.CallTimeout = c.Duration(flagMRCallTimeout.Name)
-	return Main(opts)
+	opts := []varlogadm.Option{
+		varlogadm.WithLogger(logger),
+		varlogadm.WithListenAddress(c.String(flagListen.Name)),
+		varlogadm.WithReplicationFactor(c.Uint(flagReplicationFactor.Name)),
+		varlogadm.WithMRManagerOptions(
+			varlogadm.WithMetadataRepositoryAddress(c.StringSlice(flagMetadataRepository.Name)...),
+			varlogadm.WithInitialMRConnRetryCount(c.Int(flagInitMRConnRetryCount.Name)),
+			varlogadm.WithInitialMRConnRetryBackoff(c.Duration(flagInitMRConnRetryBackoff.Name)),
+			varlogadm.WithMRManagerConnTimeout(c.Duration(flagMRConnTimeout.Name)),
+			varlogadm.WithMRManagerCallTimeout(c.Duration(flagMRCallTimeout.Name)),
+		),
+		varlogadm.WithWatcherOptions(
+			varlogadm.WithWatcherRPCTimeout(c.Duration(flagSNWatcherRPCTimeout.Name)),
+		),
+	}
+	return Main(opts, logger)
 }
 
 func newLogger(c *cli.Context) (*zap.Logger, error) {

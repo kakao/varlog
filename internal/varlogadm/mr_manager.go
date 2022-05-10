@@ -84,6 +84,8 @@ var (
 )
 
 type mrManager struct {
+	mrManagerConfig
+
 	clusterID types.ClusterID
 
 	mu        sync.RWMutex
@@ -100,37 +102,35 @@ const (
 	RPCAddrsFetchRetryInterval = 100 * time.Millisecond
 )
 
-func NewMRManager(ctx context.Context, clusterID types.ClusterID, mrOpts MRManagerOptions, logger *zap.Logger) (MetadataRepositoryManager, error) {
+func NewMRManager(ctx context.Context, clusterID types.ClusterID, opts []MRManagerOption, logger *zap.Logger) (MetadataRepositoryManager, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("mrmanager")
 
-	if len(mrOpts.MetadataRepositoryAddresses) == 0 {
-		return nil, errors.New("mrmanager: no metadata repository address")
+	cfg, err := newMRManagerConfig(opts)
+	if err != nil {
+		return nil, err
 	}
 
-	opts := []mrconnector.Option{
+	mrConnOpts := []mrconnector.Option{
 		mrconnector.WithClusterID(clusterID),
 		mrconnector.WithInitRetryInterval(RPCAddrsFetchRetryInterval),
-		mrconnector.WithConnectTimeout(mrOpts.ConnTimeout),
-		mrconnector.WithRPCTimeout(mrOpts.CallTimeout),
-		mrconnector.WithSeed(mrOpts.MetadataRepositoryAddresses),
+		mrconnector.WithConnectTimeout(cfg.connTimeout),
+		mrconnector.WithRPCTimeout(cfg.callTimeout),
+		mrconnector.WithSeed(cfg.metadataRepositoryAddresses),
 		mrconnector.WithLogger(logger),
 	}
-	tryCnt := mrOpts.InitialMRConnRetryCount + 1
+	tryCnt := cfg.initialMRConnRetryCount + 1
 	if tryCnt <= 0 {
 		tryCnt = math.MaxInt32
 	}
 
-	var (
-		err       error
-		connector mrconnector.Connector
-	)
+	var connector mrconnector.Connector
 	for i := 0; i < tryCnt; i++ {
-		connector, err = mrconnector.New(ctx, opts...)
+		connector, err = mrconnector.New(ctx, mrConnOpts...)
 		if err != nil {
-			time.Sleep(mrOpts.InitialMRConnRetryBackoff)
+			time.Sleep(cfg.initialMRConnRetryBackoff)
 			continue
 		}
 		return &mrManager{

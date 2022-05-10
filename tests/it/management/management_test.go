@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/metarepos"
+	"github.com/kakao/varlog/internal/varlogadm"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -445,8 +446,20 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 }
 
 func TestGCZombieLogStream(t *testing.T) {
-	vmsOpts := it.NewTestVMSOptions()
-	vmsOpts.GCTimeout = 6 * time.Duration(vmsOpts.ReportInterval) * vmsOpts.Tick
+	const (
+		tick             = 100 * time.Millisecond
+		reportInterval   = 10
+		heartbeatTimeout = 30
+		gcTimeout        = 6 * reportInterval * tick
+	)
+	vmsOpts := it.NewTestVMSOptions(
+		varlogadm.WithWatcherOptions(
+			varlogadm.WithWatcherTick(tick),
+			varlogadm.WithWatcherHeartbeatTimeout(heartbeatTimeout),
+			varlogadm.WithWatcherReportInterval(reportInterval),
+			varlogadm.WithWatcherGCTimeout(gcTimeout),
+		),
+	)
 	opts := []it.Option{
 		it.WithNumberOfStorageNodes(1),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
@@ -477,7 +490,7 @@ func TestGCZombieLogStream(t *testing.T) {
 			So(exist, ShouldBeTrue)
 
 			Convey("Then the LogStream should removed after GCTimeout", func(ctx C) {
-				time.Sleep(vmsOpts.GCTimeout / 2)
+				time.Sleep(gcTimeout / 2)
 				meta, err := snMCL.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 
@@ -491,7 +504,7 @@ func TestGCZombieLogStream(t *testing.T) {
 					}
 					_, exist := meta.FindLogStream(lsID)
 					return !exist
-				}, vmsOpts.GCTimeout), ShouldBeTrue)
+				}, gcTimeout), ShouldBeTrue)
 			})
 		})
 	}))

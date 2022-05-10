@@ -48,7 +48,7 @@ type config struct {
 	numCL    int
 	numTopic int
 
-	VMSOpts *varlogadm.Options
+	VMSOpts []varlogadm.Option
 	logger  *zap.Logger
 
 	portBase      int
@@ -143,7 +143,7 @@ func WithStorageNodeManagementClientFactory(fac metarepos.StorageNodeManagementC
 	}
 }
 
-func WithVMSOptions(vmsOpts *varlogadm.Options) Option {
+func WithVMSOptions(vmsOpts []varlogadm.Option) Option {
 	return func(c *config) {
 		c.VMSOpts = vmsOpts
 	}
@@ -191,11 +191,15 @@ func WithoutVMS() Option {
 	}
 }
 
-func NewTestVMSOptions() *varlogadm.Options {
-	vmsOpts := varlogadm.DefaultOptions()
-	vmsOpts.Tick = 100 * time.Millisecond
-	vmsOpts.HeartbeatTimeout = 30
-	vmsOpts.ReportInterval = 10
-	vmsOpts.Logger = zap.L()
-	return vmsOpts
+func NewTestVMSOptions(opts ...varlogadm.Option) []varlogadm.Option {
+	ret := []varlogadm.Option{
+		varlogadm.WithWatcherOptions(
+			varlogadm.WithWatcherTick(100*time.Millisecond),
+			varlogadm.WithWatcherHeartbeatTimeout(30),
+			varlogadm.WithWatcherReportInterval(10),
+		),
+		varlogadm.WithLogger(zap.L()),
+	}
+	ret = append(ret, opts...)
+	return ret
 }
