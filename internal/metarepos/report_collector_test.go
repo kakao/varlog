@@ -369,7 +369,6 @@ func TestRecoverStorageNode(t *testing.T) {
 				Convey("When ReportCollector Recover", func(ctx C) {
 					reportCollector.Recover(SNs, LSs, ver)
 					Convey("Then there should be ReportCollectExecutor", func(ctx C) {
-
 						sealing := false
 						sealed := false
 						for i := 0; i < nrSN; i++ {
@@ -728,7 +727,7 @@ func (cc *dummyCommitContext) newDummyCommitResults(ver types.Version, baseGLSN 
 			CommittedLLSNOffset: cc.committedLLSNBeginOffset[i],
 			CommittedGLSNLength: uint64(numUncommitLen),
 		}
-		cc.committedLLSNBeginOffset[i] = cc.committedLLSNBeginOffset[i] + types.LLSN(numUncommitLen)
+		cc.committedLLSNBeginOffset[i] += types.LLSN(numUncommitLen)
 		glsn += types.GLSN(numUncommitLen)
 
 		cr.CommitResults = append(cr.CommitResults, r)

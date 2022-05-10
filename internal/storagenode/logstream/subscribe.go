@@ -28,7 +28,6 @@ func (lse *Executor) newSubscribeResult() (*SubscribeResult, context.Context) {
 		cancel:  cancel,
 	}
 	return sr, ctx
-
 }
 
 // Result returns the channel of the result.

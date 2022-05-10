@@ -425,8 +425,7 @@ func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStr
 	}
 
 	ccLen := int(lse.srb.cc.CommittedGLSNEnd - lse.srb.cc.CommittedGLSNBegin)
-	leCnt := len(lse.srb.les)
-	if ccLen < leCnt {
+	if leCnt := len(lse.srb.les); ccLen < leCnt {
 		lse.logger.Panic("sync replicate: too many log entries", zap.Any("srb", lse.srb))
 	}
 	if ccLen > len(lse.srb.les) {
@@ -460,8 +459,7 @@ func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStr
 		return err
 	}
 
-	end := lse.srb.end()
-	if !end {
+	if end := lse.srb.end(); !end {
 		lse.srb.reset()
 		return nil
 	}

@@ -127,7 +127,6 @@ func TestAddLogStream(t *testing.T) {
 			})
 		})
 	}))
-
 }
 
 func TestSeal(t *testing.T) {
@@ -210,7 +209,6 @@ func TestSeal(t *testing.T) {
 				So(snIDs, ShouldContain, types.StorageNodeID(1))
 				So(snIDs, ShouldContain, types.StorageNodeID(2))
 			})
-
 		})
 	}))
 }

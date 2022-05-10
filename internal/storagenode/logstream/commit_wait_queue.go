@@ -77,8 +77,7 @@ func (cwq *commitWaitQueue) peekIterator() commitWaitQueueIterator {
 func (cwq *commitWaitQueue) pop() *commitWaitTask {
 	cwq.mu.Lock()
 	defer cwq.mu.Unlock()
-	elem := cwq.queue.Back()
-	if elem == nil {
+	if elem := cwq.queue.Back(); elem == nil {
 		return nil
 	}
 	return cwq.queue.RemoveBack().(*commitWaitTask)

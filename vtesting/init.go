@@ -18,11 +18,11 @@ const defaultProcCount = 8
 const defaultRaftDir = "raftdata"
 
 var (
-	testRaftDir     string        = defaultRaftDir
-	testRaftTick    time.Duration = defaultRaftTick
-	testCommitTick  time.Duration = defaultCommitTick
-	testTimeoutUnit time.Duration = defaultTimeoutUnit
-	testLogger      *zap.Logger   = zap.NewNop()
+	testRaftDir     = defaultRaftDir
+	testRaftTick    = defaultRaftTick
+	testCommitTick  = defaultCommitTick
+	testTimeoutUnit = defaultTimeoutUnit
+	testLogger      = zap.NewNop()
 )
 
 func init() {
@@ -65,8 +65,7 @@ func TimeoutUnitTimesFactor(factor int64) time.Duration {
 }
 
 func TimeoutAccordingToProcCnt(timeout time.Duration) time.Duration {
-	procs := runtime.GOMAXPROCS(0)
-	if procs < defaultProcCount {
+	if procs := runtime.GOMAXPROCS(0); procs < defaultProcCount {
 		timeout += timeout * time.Duration(math.Log2(float64(defaultProcCount/procs)))
 	}
 

@@ -117,7 +117,6 @@ func TestNodeIDGen(t *testing.T) {
 		nodeID := types.NewNodeID(addr)
 		t.Logf("addr=%v nodeid=%v", addr, nodeID)
 	}
-
 }
 
 func TestMain(m *testing.M) {

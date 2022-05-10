@@ -12,21 +12,21 @@ func TestLogStreamStatus(t *testing.T) {
 		f   func(st LogStreamStatus) bool
 		out bool
 	}{
-		{LogStreamStatusRunning, (LogStreamStatus).Deleted, false},
-		{LogStreamStatusRunning, (LogStreamStatus).Running, true},
-		{LogStreamStatusRunning, (LogStreamStatus).Sealed, false},
+		{LogStreamStatusRunning, LogStreamStatus.Deleted, false},
+		{LogStreamStatusRunning, LogStreamStatus.Running, true},
+		{LogStreamStatusRunning, LogStreamStatus.Sealed, false},
 
-		{LogStreamStatusSealing, (LogStreamStatus).Deleted, false},
-		{LogStreamStatusSealing, (LogStreamStatus).Running, false},
-		{LogStreamStatusSealing, (LogStreamStatus).Sealed, true},
+		{LogStreamStatusSealing, LogStreamStatus.Deleted, false},
+		{LogStreamStatusSealing, LogStreamStatus.Running, false},
+		{LogStreamStatusSealing, LogStreamStatus.Sealed, true},
 
-		{LogStreamStatusSealed, (LogStreamStatus).Deleted, false},
-		{LogStreamStatusSealed, (LogStreamStatus).Running, false},
-		{LogStreamStatusSealed, (LogStreamStatus).Sealed, true},
+		{LogStreamStatusSealed, LogStreamStatus.Deleted, false},
+		{LogStreamStatusSealed, LogStreamStatus.Running, false},
+		{LogStreamStatusSealed, LogStreamStatus.Sealed, true},
 
-		{LogStreamStatusDeleted, (LogStreamStatus).Deleted, true},
-		{LogStreamStatusDeleted, (LogStreamStatus).Running, false},
-		{LogStreamStatusDeleted, (LogStreamStatus).Sealed, false},
+		{LogStreamStatusDeleted, LogStreamStatus.Deleted, true},
+		{LogStreamStatusDeleted, LogStreamStatus.Running, false},
+		{LogStreamStatusDeleted, LogStreamStatus.Sealed, false},
 	}
 
 	for i := range tests {
@@ -41,11 +41,11 @@ func TestLogStreamStatus(t *testing.T) {
 }
 
 func TestDiffReplicaDescriptorSet(t *testing.T) {
-	var tests = []struct {
+	var tests []struct {
 		xs       []*ReplicaDescriptor
 		ys       []*ReplicaDescriptor
 		expected []*ReplicaDescriptor
-	}{}
+	}
 
 	for i := range tests {
 		test := tests[i]

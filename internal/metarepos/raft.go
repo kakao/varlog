@@ -608,7 +608,6 @@ func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 		}
 
 		if ms[i].Type == raftpb.MsgSnap {
-
 			snapshot, _ := rc.raftStorage.Snapshot()
 			if !raft.IsEmptySnap(snapshot) {
 				ms[i].Snapshot = snapshot

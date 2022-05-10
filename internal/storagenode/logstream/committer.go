@@ -23,9 +23,6 @@ type committer struct {
 	commitWaitQ        *commitWaitQueue
 	inflightCommitWait int64
 
-	registerQueue     chan []*commitWaitTask
-	intflightRegister int64
-
 	commitQueue    chan *commitTask
 	inflightCommit int64
 
@@ -340,10 +337,8 @@ func (cm *committer) waitForDrainageOfCommitQueue(forceDrain bool) {
 
 	for atomic.LoadInt64(&cm.inflightCommit) > 0 {
 		if !forceDrain {
-			select {
-			case <-timer.C:
-				timer.Reset(tick)
-			}
+			<-timer.C
+			timer.Reset(tick)
 			continue
 		}
 

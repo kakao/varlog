@@ -111,7 +111,6 @@ func (adl *transientAllowlist) expireDenyTTL(ctx context.Context) {
 			if changed {
 				adl.warmup()
 			}
-
 		}
 	}
 }

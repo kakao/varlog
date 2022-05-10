@@ -74,7 +74,6 @@ func newTelemetryStub(ctx context.Context, name string, nodeID types.NodeID, end
 	ts.mb = newMetricsBag(meter)
 
 	return ts, nil
-
 }
 
 func (ts *telemetryStub) close(ctx context.Context) {
