@@ -89,6 +89,7 @@ WORKDIR /varlog
 COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
 COPY --from=builder-debug /varlog/bin/start_varlogmr.py /varlog/bin/start_varlogmr.py
 COPY --from=builder-debug /varlog/bin/vmr /varlog/bin/vmr
+COPY --from=builder-debug /varlog/bin/mrtool /varlog/bin/mrtool
 COPY --from=builder-debug /varlog/bin/varlogctl /varlog/bin/varlogctl
 COPY --from=builder-debug /varlog/pylib /varlog/pylib
 
@@ -101,6 +102,7 @@ WORKDIR /varlog
 COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
 COPY --from=builder-cgo /varlog/bin/start_varlogmr.py /varlog/bin/start_varlogmr.py
 COPY --from=builder-cgo /varlog/bin/vmr /varlog/bin/vmr
+COPY --from=builder-cgo /varlog/bin/mrtool /varlog/bin/mrtool
 COPY --from=builder-cgo /varlog/bin/varlogctl /varlog/bin/varlogctl
 COPY --from=builder-cgo /varlog/pylib /varlog/pylib
 
@@ -113,6 +115,7 @@ WORKDIR /varlog
 COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
 COPY --from=builder-noncgo /varlog/bin/start_varlogmr.py /varlog/bin/start_varlogmr.py
 COPY --from=builder-noncgo /varlog/bin/vmr /varlog/bin/vmr
+COPY --from=builder-noncgo /varlog/bin/mrtool /varlog/bin/mrtool
 COPY --from=builder-noncgo /varlog/bin/varlogctl /varlog/bin/varlogctl
 COPY --from=builder-noncgo /varlog/pylib /varlog/pylib
 

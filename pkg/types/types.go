@@ -52,7 +52,8 @@ func (snid StorageNodeID) String() string {
 
 type LogStreamID int32
 
-const MaxLogStreamID = math.MaxInt32
+const MinLogStreamID = LogStreamID(1)
+const MaxLogStreamID = LogStreamID(math.MaxInt32)
 
 var _ fmt.Stringer = (*LogStreamID)(nil)
 
@@ -63,6 +64,10 @@ func ParseLogStreamID(s string) (LogStreamID, error) {
 
 func (lsid LogStreamID) String() string {
 	return strconv.FormatInt(int64(lsid), 10)
+}
+
+func (lsid LogStreamID) Invalid() bool {
+	return lsid < MinLogStreamID
 }
 
 type TopicID int32
