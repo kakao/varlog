@@ -729,7 +729,7 @@ func TestStorageSealLSUnderCOW(t *testing.T) {
 		difflls := ms.diffStateMachine.LogStream.UncommitReports[lsID]
 
 		origls := ms.origStateMachine.Metadata.GetLogStream(lsID)
-		origlls, _ := ms.origStateMachine.LogStream.UncommitReports[lsID]
+		origlls := ms.origStateMachine.LogStream.UncommitReports[lsID]
 
 		So(diffls.Equal(origls), ShouldBeFalse)
 		So(difflls.Equal(origlls), ShouldBeFalse)
@@ -742,7 +742,7 @@ func TestStorageSealLSUnderCOW(t *testing.T) {
 
 		// compare
 		mergedls := ms.origStateMachine.Metadata.GetLogStream(lsID)
-		mergedlls, _ := ms.origStateMachine.LogStream.UncommitReports[lsID]
+		mergedlls := ms.origStateMachine.LogStream.UncommitReports[lsID]
 
 		So(diffls.Equal(mergedls), ShouldBeTrue)
 		So(difflls.Equal(mergedlls), ShouldBeTrue)
@@ -1053,7 +1053,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		So(cur.Metadata.GetLogStream(lsID), ShouldBeNil)
 
 		conflict := makeLogStream(types.TopicID(1), lsID, snIDs)
-		ls.Replicas[0].StorageNodeID = ls.Replicas[0].StorageNodeID + 100
+		ls.Replicas[0].StorageNodeID += 100
 		err = ms.RegisterLogStream(conflict, 0, 0)
 		So(err, ShouldResemble, verrors.ErrAlreadyExists)
 
@@ -1322,7 +1322,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 				testutil.GC()
 			})
 
-			snID = snID + types.StorageNodeID(1)
+			snID += types.StorageNodeID(1)
 			sn := &varlogpb.StorageNodeDescriptor{
 				StorageNode: varlogpb.StorageNode{
 					StorageNodeID: snID,
@@ -1430,7 +1430,7 @@ func TestStorageSnapshot(t *testing.T) {
 
 		<-ch
 
-		snID = snID + types.StorageNodeID(1)
+		snID += types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snID,
@@ -1514,7 +1514,7 @@ func TestStorageApplySnapshot(t *testing.T) {
 
 		<-ch
 
-		snID = snID + types.StorageNodeID(1)
+		snID += types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: snID,

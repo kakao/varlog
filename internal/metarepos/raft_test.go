@@ -152,7 +152,6 @@ func TestProposeOnFollower(t *testing.T) {
 	for i := range clus.peers {
 		// feedback for "n" committed entries, then update donec
 		go func(pC chan<- string, cC <-chan *raftCommittedEntry) {
-
 		Loop:
 			for range cC {
 				break Loop

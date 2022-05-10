@@ -678,7 +678,6 @@ func TestStorage_CommitContextOf(t *testing.T) {
 			_, err = stg.NextCommitContextOf(cc)
 			assert.ErrorIs(t, err, ErrNoCommitContext)
 		}
-
 	})
 }
 

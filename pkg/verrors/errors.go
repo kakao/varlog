@@ -71,7 +71,7 @@ func (e *transientError) Is(target error) bool {
 	return e.err != nil && errors.Is(e.err, target)
 }
 
-var errorRegistry map[string]error = make(map[string]error)
+var errorRegistry = make(map[string]error)
 
 func init() {
 	initErrorRegistry(

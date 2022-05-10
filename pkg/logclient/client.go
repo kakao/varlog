@@ -166,7 +166,6 @@ func (c *Client) LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid
 		return rsp.GetLogStreamDescriptor(), fmt.Errorf("logclient: %w", verrors.FromStatusError(err))
 	}
 	return rsp.GetLogStreamDescriptor(), nil
-
 }
 
 // Target returns connected storage node.

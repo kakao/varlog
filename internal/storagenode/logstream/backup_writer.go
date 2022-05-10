@@ -86,11 +86,9 @@ func (bw *backupWriter) writeLoopInternal(_ context.Context, bwt *backupWriteTas
 		}
 		atomic.AddInt64(&bw.lse.lsm.WriterOperationDuration, time.Since(startTime).Microseconds())
 		atomic.AddInt64(&bw.lse.lsm.WriterOperations, 1)
-
 	}()
 
-	err := wb.Apply()
-	if err != nil {
+	if err := wb.Apply(); err != nil {
 		bw.logger.Error("could not apply backup data", zap.Error(err))
 		bw.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		return
@@ -120,10 +118,8 @@ func (bw *backupWriter) waitForDrainage(forceDrain bool) {
 
 	for atomic.LoadInt64(&bw.inflight) > 0 {
 		if !forceDrain {
-			select {
-			case <-timer.C:
-				timer.Reset(tick)
-			}
+			<-timer.C
+			timer.Reset(tick)
 			continue
 		}
 

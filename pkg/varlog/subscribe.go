@@ -318,11 +318,11 @@ func (p *transmitter) refreshSubscriber(ctx context.Context) error {
 			if !s.closed.Load() || s.complete.Load() {
 				continue
 			}
-		SELECT_REPLICA:
+		SelectReplica:
 			for i, r := range replicas {
 				if r.StorageNodeID == s.storageNodeID {
 					idx = (i + 1) % len(replicas)
-					break SELECT_REPLICA
+					break SelectReplica
 				}
 			}
 		}
@@ -568,7 +568,6 @@ func (v *logImpl) subscribeTo(ctx context.Context, topicID types.TopicID, logStr
 
 		err = nil
 		break
-
 	}
 	if err != nil {
 		cancel()

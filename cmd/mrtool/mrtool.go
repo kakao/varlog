@@ -34,8 +34,7 @@ func run() int {
 			return errors.Errorf("unexpected args: %v", c.Args().Slice())
 		}
 
-		switch c.Command.Name {
-		case cmdDescribe:
+		if c.Command.Name == cmdDescribe {
 			return describe(c)
 		}
 		return errors.Errorf("unknown command: %s", c.Command.Name)

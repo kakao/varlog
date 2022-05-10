@@ -596,10 +596,8 @@ func (lse *Executor) waitForDrainage() {
 	defer timer.Stop()
 
 	for atomic.LoadInt64(&lse.inflight) > 0 {
-		select {
-		case <-timer.C:
-			timer.Reset(tick)
-		}
+		<-timer.C
+		timer.Reset(tick)
 	}
 }
 

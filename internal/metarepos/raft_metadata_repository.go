@@ -489,7 +489,6 @@ func (mr *RaftMetadataRepository) processRNCommit(context.Context) {
 				mr.logger.Panic("unknown type")
 			}
 			e.AppliedIndex = d.index
-
 		}
 
 		mr.commitC <- c
@@ -1057,21 +1056,6 @@ func (mr *RaftMetadataRepository) applyEndpoint(r *mrpb.Endpoint, nodeIndex, req
 	}
 
 	return nil
-}
-
-func (mr *RaftMetadataRepository) applyRecoverStateMachine(r *mrpb.RecoverStateMachine, appliedIndex, nodeIndex, requestIndex uint64) error {
-	err := mr.storage.RecoverStateMachine(r.StateMachine, appliedIndex, nodeIndex, requestIndex)
-	if err != nil {
-		return err
-	}
-
-	mr.reportCollector.Reset()
-
-	return mr.reportCollector.Recover(
-		mr.storage.GetStorageNodes(),
-		mr.storage.GetLogStreams(),
-		mr.storage.GetFirstCommitResults().GetVersion(),
-	)
 }
 
 func (mr *RaftMetadataRepository) numCommitSince(topicID types.TopicID, lsID types.LogStreamID, base, latest *mrpb.LogStreamCommitResults, hintPos int) uint64 {

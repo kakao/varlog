@@ -126,43 +126,6 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 	return nil
 }
 
-func (clus *metadataRepoCluster) createForRecoverMetadataRepo(idx int) error {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return errors.New("out of range")
-	}
-
-	peers := make([]string, len(clus.peers))
-	copy(peers, clus.peers)
-
-	options := &MetadataRepositoryOptions{
-		RaftOptions: RaftOptions{
-			Join:             false,
-			SnapCount:        testSnapCount,
-			SnapCatchUpCount: testSnapCount,
-			RaftTick:         vtesting.TestRaftTick(),
-			RaftDir:          vtesting.TestRaftDir(),
-			Peers:            peers,
-			UnsafeNoWal:      clus.unsafeNoWal,
-		},
-
-		ClusterID:                      types.ClusterID(1),
-		RaftAddress:                    clus.peers[idx],
-		CommitTick:                     vtesting.TestCommitTick(),
-		RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
-		NumRep:                         clus.nrRep,
-		RPCBindAddress:                 ":0",
-		ReporterClientFac:              clus.reporterClientFac,
-		StorageNodeManagementClientFac: clus.snManagementClientFac,
-		Logger:                         clus.logger,
-	}
-
-	options.CollectorName = "nop"
-	options.CollectorEndpoint = "localhost:55680"
-
-	clus.nodes[idx] = NewRaftMetadataRepository(options)
-	return nil
-}
-
 func (clus *metadataRepoCluster) appendMetadataRepo() error {
 	idx := len(clus.nodes)
 	clus.peers = append(clus.peers, fmt.Sprintf("http://127.0.0.1:%d", clus.portLease.Base()+idx))
@@ -378,15 +341,6 @@ func (clus *metadataRepoCluster) closeNoErrors(t *testing.T) {
 		t.Log(err)
 	}
 	clus.logger.Info("cluster stop complete")
-}
-
-func (clus *metadataRepoCluster) recoverMetadataRepo(idx int) error {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return errors.New("out of range")
-	}
-
-	clus.createForRecoverMetadataRepo(idx)
-	return clus.start(idx)
 }
 
 func (clus *metadataRepoCluster) initDummyStorageNode(nrSN, nrTopic int) error {

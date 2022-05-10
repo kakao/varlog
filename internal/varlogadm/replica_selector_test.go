@@ -176,7 +176,6 @@ func TestVictimSelector(t *testing.T) {
 							},
 						},
 					}, nil
-
 				},
 			).AnyTimes()
 
@@ -218,7 +217,6 @@ func TestVictimSelector(t *testing.T) {
 							},
 						},
 					}, nil
-
 				},
 			).AnyTimes()
 
