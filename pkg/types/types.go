@@ -72,6 +72,8 @@ func (lsid LogStreamID) Invalid() bool {
 
 type TopicID int32
 
+const MinTopicID = TopicID(1)
+
 var _ fmt.Stringer = (*TopicID)(nil)
 
 func ParseTopicID(s string) (TopicID, error) {
