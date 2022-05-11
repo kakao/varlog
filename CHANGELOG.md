@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.9] - 2022-05-11
 ### Added
 - Added interface types for functional options in varlogadm, for instance, `internal/varlogadm.(Option)`, `internal/varlogadm.(MRManagerOption)` and `internal/varlogadm.(WatcherOption)`. (#VARLOG-740/#654)
+- Added `pkg/rpc.(*Manager)` to manage gRPC connections. (#VARLOG-739/#660)
 
 ### Removed
 - Removed structs for options in varlogadm, for instance, `internal/varlogadm.(Options)`, `internal/varlogadm.(MRManagerOptions)` and `internal/varlogadm.(WatcherOptions)`. (#VARLOG-740/#654)
