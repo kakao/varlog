@@ -108,7 +108,7 @@ func TestUnsealLogStreamReplica(t *testing.T, cid types.ClusterID, tpid types.To
 }
 
 func TestNewLogIOClient(t *testing.T, snid types.StorageNodeID, addr string) (*logclient.Client, func()) {
-	mgr, err := logclient.NewManager(context.Background(), nil)
+	mgr, err := logclient.NewManager()
 	assert.NoError(t, err)
 
 	client, err := mgr.GetOrConnect(context.Background(), snid, addr)

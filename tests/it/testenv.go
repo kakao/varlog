@@ -69,7 +69,7 @@ type VarlogCluster struct {
 	muCL    sync.Mutex
 
 	// logclient
-	logClientManager *logclient.Manager
+	logClientManager *logclient.Manager[*logclient.Client]
 
 	muVMS     sync.Mutex
 	vmsServer varlogadm.ClusterManager
@@ -108,7 +108,7 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 	require.NoError(t, err)
 	clus.portLease = portLease
 
-	clus.logClientManager, err = logclient.NewManager(context.Background(), nil)
+	clus.logClientManager, err = logclient.NewManager()
 	assert.NoError(t, err)
 
 	// mr

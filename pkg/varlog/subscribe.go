@@ -275,7 +275,7 @@ type transmitter struct {
 	timeout time.Duration
 	timer   *time.Timer
 
-	logCLManager *logclient.Manager
+	logCLManager *logclient.Manager[*logclient.Client]
 	runner       *runner.Runner
 	logger       *zap.Logger
 }

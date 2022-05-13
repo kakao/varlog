@@ -46,20 +46,20 @@ func TestManager(t *testing.T) {
 		assert.NoError(t, mgr.Close())
 	}()
 
-	addr, closer := testNewServer(t)
-	defer closer()
+	addr1, closer1 := testNewServer(t)
+	defer closer1()
 
 	// new
-	conn1, err := mgr.GetOrConnect(context.Background(), 1, addr)
+	conn1, err := mgr.GetOrConnect(context.Background(), 1, addr1)
 	assert.NoError(t, err)
 
 	// cached
-	conn2, err := mgr.GetOrConnect(context.Background(), 1, addr)
+	conn2, err := mgr.GetOrConnect(context.Background(), 1, addr1)
 	assert.NoError(t, err)
 	assert.Equal(t, conn1, conn2)
 
-	// unexpected addr
-	_, err = mgr.GetOrConnect(context.Background(), 1, addr+"0")
+	// unexpected addr1
+	_, err = mgr.GetOrConnect(context.Background(), 1, addr1+"0")
 	assert.Error(t, err)
 
 	// failed connection
@@ -67,6 +67,18 @@ func TestManager(t *testing.T) {
 	defer cancel()
 	_, err = mgr.GetOrConnect(ctx, 2, "bad-address", grpc.WithBlock())
 	assert.Error(t, err)
+
+	// close unknown id
+	err = mgr.CloseClient(2)
+	assert.NoError(t, err)
+
+	addr2, closer2 := testNewServer(t)
+	defer closer2()
+	_, err = mgr.GetOrConnect(context.Background(), 2, addr2)
+	assert.NoError(t, err)
+
+	err = mgr.CloseClient(2)
+	assert.NoError(t, err)
 }
 
 func TestManagerBadConfig(t *testing.T) {
