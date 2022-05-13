@@ -27,11 +27,11 @@ type Client struct {
 	target    varlogpb.StorageNode
 }
 
-// newClient creates a client that connects to the storage node specified by
-// the argument target.
+// reset creates a client that connects to the storage node specified by the
+// argument target.
 // TODO: Fetch metadata of the storage node to confirm whether the snid is
 // correct.
-func newClient(rpcConn *rpc.Conn, target varlogpb.StorageNode) *Client {
+func (c *Client) reset(rpcConn *rpc.Conn, target varlogpb.StorageNode) any {
 	return &Client{
 		rpcClient: snpb.NewLogIOClient(rpcConn.Conn),
 		target:    target,

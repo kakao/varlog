@@ -58,7 +58,7 @@ type logImpl struct {
 	replicasRetriever ReplicasRetriever
 	allowlist         Allowlist
 
-	logCLManager *logclient.Manager
+	logCLManager *logclient.Manager[*logclient.Client]
 	logger       *zap.Logger
 	opts         *options
 
@@ -133,7 +133,7 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 	// TODO (jun): metadataRefresher should implement ClusterMetadataView
 	metadata := refresher.Metadata()
 
-	logCLManager, err := logclient.NewManager(ctx, metadata,
+	logCLManager, err := logclient.NewManager(
 		logclient.WithDefaultGRPCDialOptions(v.opts.grpcDialOptions...),
 		logclient.WithLogger(v.logger),
 	)
@@ -141,6 +141,13 @@ func Open(ctx context.Context, clusterID types.ClusterID, mrAddrs []string, opts
 		return nil, err
 	}
 	v.logCLManager = logCLManager
+
+	for _, snd := range metadata.GetStorageNodes() {
+		if _, err := v.logCLManager.GetOrConnect(ctx, snd.StorageNodeID, snd.Address); err != nil {
+			_ = v.logCLManager.Close()
+			return nil, err
+		}
+	}
 
 	return v, nil
 }

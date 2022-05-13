@@ -67,6 +67,20 @@ func (m *Manager[T]) GetOrConnect(ctx context.Context, id T, addr string, grpcDi
 	return rpcConn, nil
 }
 
+// CloseClient closes a connection identified by the argument id and removes the connection from the manager.
+// It returns nil if the connection does not exist.
+func (m *Manager[T]) CloseClient(id T) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	conn, ok := m.conns[id]
+	if !ok {
+		return nil
+	}
+	delete(m.conns, id)
+	return conn.rpcConn.Close()
+}
+
 // Close closes all underlying connections managed by the Manager.
 func (m *Manager[T]) Close() (err error) {
 	m.mu.Lock()

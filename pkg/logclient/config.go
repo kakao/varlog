@@ -19,8 +19,11 @@ func newManagerConfig(opts []ManagerOption) (managerConfig, error) {
 	for _, opt := range opts {
 		opt.applyManager(&cfg)
 	}
+	if err := cfg.validate(); err != nil {
+		return cfg, err
+	}
 	cfg.logger = cfg.logger.Named("logclient manager")
-	return cfg, cfg.validate()
+	return cfg, nil
 }
 
 func (cfg *managerConfig) validate() error {
