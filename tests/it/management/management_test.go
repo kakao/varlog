@@ -53,7 +53,7 @@ func TestAddAlreadyExistedStorageNode(t *testing.T) {
 	defer clus.Close(t)
 
 	snID := clus.StorageNodeIDAtIndex(t, 0)
-	addr := clus.SNClientOf(t, snID).PeerAddress()
+	addr := clus.SNClientOf(t, snID).Target().Address
 	_, err := clus.GetVMSClient(t).AddStorageNode(context.TODO(), addr)
 	require.Error(t, err)
 }
@@ -247,7 +247,6 @@ func TestSyncLogStream(t *testing.T) {
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 
@@ -331,7 +330,6 @@ func TestSealLogStreamSealedIncompletely(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 
@@ -390,7 +388,6 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 
@@ -463,7 +460,6 @@ func TestGCZombieLogStream(t *testing.T) {
 	opts := []it.Option{
 		it.WithNumberOfStorageNodes(1),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithVMSOptions(vmsOpts),
 		it.WithNumberOfTopics(1),
 	}
@@ -516,7 +512,6 @@ func TestAddLogStreamTopic(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(10),
 		it.WithNumberOfClients(1),
 	}
@@ -583,7 +578,6 @@ func TestRemoveTopic(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(2),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(10),
 		it.WithNumberOfClients(1),
 	}
@@ -637,7 +631,6 @@ func TestAddTopic(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(2),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(3),
 	}
 

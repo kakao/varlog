@@ -7,10 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/pkg/logclient"
-	"github.com/kakao/varlog/pkg/snc"
+	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -32,6 +30,7 @@ func TestNewSimpleStorageNode(t *testing.T, opts ...Option) *StorageNode {
 }
 
 func TestNewStorageNode(tb testing.TB, opts ...Option) *StorageNode {
+	tb.Helper()
 	sn, err := NewStorageNode(opts...)
 	assert.NoError(tb, err)
 	return sn
@@ -61,67 +60,71 @@ func TestGetAdvertiseAddress(t *testing.T, sn *StorageNode) string {
 	return sn.advertise
 }
 
-func TestNewManagementClient(t *testing.T, cid types.ClusterID, addr string) (snc.StorageNodeManagementClient, func()) {
-	snmc, err := snc.NewManagementClient(context.Background(), cid, addr, zap.NewNop())
+func TestNewManagementClient(t *testing.T, cid types.ClusterID, snid types.StorageNodeID, addr string) (*client.ManagementClient, func()) {
+	mgr, err := client.NewManager[*client.ManagementClient](client.WithClusterID(cid))
 	assert.NoError(t, err)
+
+	mc, err := mgr.GetOrConnect(context.Background(), snid, addr)
+	assert.NoError(t, err)
+
 	closer := func() {
 		defer func() {
-			assert.NoError(t, snmc.Close())
+			assert.NoError(t, mgr.Close())
 		}()
 	}
-	return snmc, closer
+	return mc, closer
 }
 
 func TestGetStorageNodeMetadataDescriptorWithoutAddr(t *testing.T, sn *StorageNode) *snpb.StorageNodeMetadataDescriptor {
 	TestWaitForStartingOfServe(t, sn)
-	return TestGetStorageNodeMetadataDescriptor(t, sn.cid, sn.advertise)
+	return TestGetStorageNodeMetadataDescriptor(t, sn.cid, sn.snid, sn.advertise)
 }
 
-func TestGetStorageNodeMetadataDescriptor(t *testing.T, cid types.ClusterID, addr string) *snpb.StorageNodeMetadataDescriptor {
-	snmc, closer := TestNewManagementClient(t, cid, addr)
+func TestGetStorageNodeMetadataDescriptor(t *testing.T, cid types.ClusterID, snid types.StorageNodeID, addr string) *snpb.StorageNodeMetadataDescriptor {
+	snmc, closer := TestNewManagementClient(t, cid, snid, addr)
 	defer closer()
 	snmd, err := snmc.GetMetadata(context.Background())
 	assert.NoError(t, err)
 	return snmd
 }
 
-func TestAddLogStreamReplica(t *testing.T, cid types.ClusterID, tpid types.TopicID, lsid types.LogStreamID, path, addr string) {
-	snmc, closer := TestNewManagementClient(t, cid, addr)
+func TestAddLogStreamReplica(t *testing.T, cid types.ClusterID, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path, addr string) {
+	snmc, closer := TestNewManagementClient(t, cid, snid, addr)
 	defer closer()
 	err := snmc.AddLogStreamReplica(context.Background(), tpid, lsid, path)
 	assert.NoError(t, err)
 }
 
-func TestSealLogStreamReplica(t *testing.T, cid types.ClusterID, tpid types.TopicID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN, addr string) (varlogpb.LogStreamStatus, types.GLSN) {
-	snmc, closer := TestNewManagementClient(t, cid, addr)
+func TestSealLogStreamReplica(t *testing.T, cid types.ClusterID, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN, addr string) (varlogpb.LogStreamStatus, types.GLSN) {
+	snmc, closer := TestNewManagementClient(t, cid, snid, addr)
 	defer closer()
 	status, localHWM, err := snmc.Seal(context.Background(), tpid, lsid, lastCommittedGLSN)
 	assert.NoError(t, err)
 	return status, localHWM
 }
 
-func TestUnsealLogStreamReplica(t *testing.T, cid types.ClusterID, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.LogStreamReplica, addr string) {
-	snmc, closer := TestNewManagementClient(t, cid, addr)
+func TestUnsealLogStreamReplica(t *testing.T, cid types.ClusterID, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.LogStreamReplica, addr string) {
+	snmc, closer := TestNewManagementClient(t, cid, snid, addr)
 	defer closer()
 	err := snmc.Unseal(context.Background(), tpid, lsid, replicas)
 	assert.NoError(t, err)
 }
 
-func TestNewLogIOClient(t *testing.T, snid types.StorageNodeID, addr string) (*logclient.Client, func()) {
-	mgr, err := logclient.NewManager()
+func TestNewLogIOClient(t *testing.T, snid types.StorageNodeID, addr string) (*client.LogClient, func()) {
+	mgr, err := client.NewManager[*client.LogClient]()
 	assert.NoError(t, err)
 
-	client, err := mgr.GetOrConnect(context.Background(), snid, addr)
+	lc, err := mgr.GetOrConnect(context.Background(), snid, addr)
 	assert.NoError(t, err)
 
 	closer := func() {
 		assert.NoError(t, mgr.Close())
 	}
-	return client, closer
+	return lc, closer
 }
 
 func TestAppend(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, dataBatch [][]byte, replicas []varlogpb.LogStreamReplica) []snpb.AppendResult {
-	client, closer := TestNewLogIOClient(t, replicas[0].StorageNodeID, replicas[0].Address)
+	lc, closer := TestNewLogIOClient(t, replicas[0].StorageNodeID, replicas[0].Address)
 	defer closer()
 
 	var backups []varlogpb.StorageNode
@@ -131,16 +134,16 @@ func TestAppend(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, dataBa
 			Address:       replica.Address,
 		})
 	}
-	res, err := client.Append(context.Background(), tpid, lsid, dataBatch, backups...)
+	res, err := lc.Append(context.Background(), tpid, lsid, dataBatch, backups...)
 	assert.NoError(t, err)
 	return res
 }
 
 func TestSubscribe(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, begin, end types.GLSN, snid types.StorageNodeID, addr string) []varlogpb.LogEntry {
-	client, closer := TestNewLogIOClient(t, snid, addr)
+	lc, closer := TestNewLogIOClient(t, snid, addr)
 	defer closer()
 
-	ch, err := client.Subscribe(context.Background(), tpid, lsid, begin, end)
+	ch, err := lc.Subscribe(context.Background(), tpid, lsid, begin, end)
 	assert.NoError(t, err)
 
 	var les []varlogpb.LogEntry
@@ -156,10 +159,10 @@ func TestSubscribe(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, beg
 }
 
 func TestSubscribeTo(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, begin, end types.LLSN, snid types.StorageNodeID, addr string) []varlogpb.LogEntry {
-	client, closer := TestNewLogIOClient(t, snid, addr)
+	lc, closer := TestNewLogIOClient(t, snid, addr)
 	defer closer()
 
-	ch, err := client.SubscribeTo(context.Background(), tpid, lsid, begin, end)
+	ch, err := lc.SubscribeTo(context.Background(), tpid, lsid, begin, end)
 	assert.NoError(t, err)
 
 	var les []varlogpb.LogEntry
@@ -174,8 +177,8 @@ func TestSubscribeTo(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, b
 	return les
 }
 
-func TestSync(t *testing.T, cid types.ClusterID, tpid types.TopicID, lsid types.LogStreamID, lastGLSN types.GLSN, addr string, dst varlogpb.StorageNode) *snpb.SyncStatus {
-	snmc, closer := TestNewManagementClient(t, cid, addr)
+func TestSync(t *testing.T, cid types.ClusterID, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, lastGLSN types.GLSN, addr string, dst varlogpb.StorageNode) *snpb.SyncStatus {
+	snmc, closer := TestNewManagementClient(t, cid, snid, addr)
 	defer closer()
 
 	st, err := snmc.Sync(context.Background(), tpid, lsid, dst.StorageNodeID, dst.Address, lastGLSN)
@@ -183,8 +186,8 @@ func TestSync(t *testing.T, cid types.ClusterID, tpid types.TopicID, lsid types.
 	return st
 }
 
-func TestTrim(t *testing.T, cid types.ClusterID, tpid types.TopicID, glsn types.GLSN, addr string) map[types.LogStreamID]error {
-	snmc, closer := TestNewManagementClient(t, cid, addr)
+func TestTrim(t *testing.T, cid types.ClusterID, snid types.StorageNodeID, tpid types.TopicID, glsn types.GLSN, addr string) map[types.LogStreamID]error {
+	snmc, closer := TestNewManagementClient(t, cid, snid, addr)
 	defer closer()
 
 	results, err := snmc.Trim(context.Background(), tpid, glsn)

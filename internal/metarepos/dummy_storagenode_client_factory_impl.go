@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
-	"github.com/kakao/varlog/pkg/snc"
+	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/proto/snpb"
@@ -34,10 +34,7 @@ func (rc *EmptyStorageNodeClient) Close() error {
 	return nil
 }
 
-func (rc *EmptyStorageNodeClient) PeerAddress() string {
-	panic("not implemented")
-}
-func (rc *EmptyStorageNodeClient) PeerStorageNodeID() types.StorageNodeID {
+func (rc *EmptyStorageNodeClient) Target() varlogpb.StorageNode {
 	panic("not implemented")
 }
 
@@ -80,7 +77,7 @@ func (rcf *EmptyStorageNodeClientFactory) GetReporterClient(context.Context, *va
 	return &EmptyStorageNodeClient{}, nil
 }
 
-func (rcf *EmptyStorageNodeClientFactory) GetManagementClient(context.Context, types.ClusterID, string, *zap.Logger) (snc.StorageNodeManagementClient, error) {
+func (rcf *EmptyStorageNodeClientFactory) GetManagementClient(context.Context, types.ClusterID, string, *zap.Logger) (client.StorageNodeManagementClient, error) {
 	return &EmptyStorageNodeClient{}, nil
 }
 
@@ -188,7 +185,7 @@ func (fac *DummyStorageNodeClientFactory) GetReporterClient(ctx context.Context,
 	return fac.getStorageNodeClient(ctx, sn.StorageNodeID)
 }
 
-func (fac *DummyStorageNodeClientFactory) GetManagementClient(ctx context.Context, _ types.ClusterID, address string, _ *zap.Logger) (snc.StorageNodeManagementClient, error) {
+func (fac *DummyStorageNodeClientFactory) GetManagementClient(ctx context.Context, _ types.ClusterID, address string, _ *zap.Logger) (client.StorageNodeManagementClient, error) {
 	// cheating for test
 	snID, err := strconv.Atoi(address)
 	if err != nil {
@@ -409,11 +406,11 @@ func (fac *DummyStorageNodeClientFactory) recoverRPC(snID types.StorageNodeID) {
 	fac.m.Store(snID, cli)
 }
 
-func (r *DummyStorageNodeClient) PeerAddress() string {
-	return r.storageNodeID.String()
-}
-func (r *DummyStorageNodeClient) PeerStorageNodeID() types.StorageNodeID {
-	return r.storageNodeID
+func (r *DummyStorageNodeClient) Target() varlogpb.StorageNode {
+	return varlogpb.StorageNode{
+		StorageNodeID: r.storageNodeID,
+		Address:       r.storageNodeID.String(),
+	}
 }
 
 func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
@@ -425,7 +422,7 @@ func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*snpb.StorageNode
 		status = varlogpb.StorageNodeStatusDeleted
 	}
 
-	var logStreams []snpb.LogStreamReplicaMetadataDescriptor
+	logStreams := make([]snpb.LogStreamReplicaMetadataDescriptor, 0, len(r.logStreamIDs))
 	for i, lsID := range r.logStreamIDs {
 		logStreams = append(logStreams, snpb.LogStreamReplicaMetadataDescriptor{
 			LogStreamReplica: varlogpb.LogStreamReplica{
@@ -442,11 +439,8 @@ func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*snpb.StorageNode
 
 	meta := &snpb.StorageNodeMetadataDescriptor{
 		StorageNode: &varlogpb.StorageNodeDescriptor{
-			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: r.storageNodeID,
-				Address:       r.PeerAddress(),
-			},
-			Status: status,
+			StorageNode: r.Target(),
+			Status:      status,
 		},
 		LogStreamReplicas: logStreams,
 	}

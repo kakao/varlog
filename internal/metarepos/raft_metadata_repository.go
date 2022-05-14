@@ -22,7 +22,6 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
-	"github.com/kakao/varlog/pkg/snc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/util/netutil"
@@ -49,13 +48,12 @@ type ReportCollectorHelper interface {
 }
 
 type RaftMetadataRepository struct {
-	clusterID             types.ClusterID
-	nodeID                types.NodeID
-	nrReplica             int
-	reportCollector       ReportCollector
-	raftNode              *raftNode
-	reporterClientFac     ReporterClientFactory
-	snManagementClientFac StorageNodeManagementClientFactory
+	clusterID         types.ClusterID
+	nodeID            types.NodeID
+	nrReplica         int
+	reportCollector   ReportCollector
+	raftNode          *raftNode
+	reporterClientFac ReporterClientFactory
 
 	storage *MetadataStorage
 
@@ -127,17 +125,16 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	}
 
 	mr := &RaftMetadataRepository{
-		clusterID:             options.ClusterID,
-		nodeID:                options.NodeID,
-		nrReplica:             options.NumRep,
-		logger:                logger,
-		reporterClientFac:     options.ReporterClientFac,
-		snManagementClientFac: options.StorageNodeManagementClientFac,
-		options:               options,
-		runner:                runner.New("mr", options.Logger),
-		sw:                    stopwaiter.New(),
-		tmStub:                tmStub,
-		topicEndPos:           make(map[types.TopicID]int),
+		clusterID:         options.ClusterID,
+		nodeID:            options.NodeID,
+		nrReplica:         options.NumRep,
+		logger:            logger,
+		reporterClientFac: options.ReporterClientFac,
+		options:           options,
+		runner:            runner.New("mr", options.Logger),
+		sw:                stopwaiter.New(),
+		tmStub:            tmStub,
+		topicEndPos:       make(map[types.TopicID]int),
 	}
 
 	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
@@ -1524,10 +1521,6 @@ func (mr *RaftMetadataRepository) ProposeReport(snID types.StorageNodeID, ur []s
 
 func (mr *RaftMetadataRepository) GetReporterClient(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) (reportcommitter.Client, error) {
 	return mr.reporterClientFac.GetReporterClient(ctx, sn)
-}
-
-func (mr *RaftMetadataRepository) GetSNManagementClient(ctx context.Context, address string) (snc.StorageNodeManagementClient, error) {
-	return mr.snManagementClientFac.GetManagementClient(ctx, mr.clusterID, address, mr.logger)
 }
 
 func (mr *RaftMetadataRepository) GetLastCommitResults() *mrpb.LogStreamCommitResults {

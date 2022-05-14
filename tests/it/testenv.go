@@ -19,11 +19,10 @@ import (
 	"github.com/kakao/varlog/internal/metarepos"
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/internal/varlogadm"
-	"github.com/kakao/varlog/pkg/logclient"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
-	"github.com/kakao/varlog/pkg/snc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
@@ -49,7 +48,7 @@ type VarlogCluster struct {
 	// storage node
 	muSN             sync.Mutex
 	storageNodes     map[types.StorageNodeID]*storagenode.StorageNode
-	snMCLs           map[types.StorageNodeID]snc.StorageNodeManagementClient
+	snMCLs           map[types.StorageNodeID]client.StorageNodeManagementClient
 	reportCommitters map[types.StorageNodeID]reportcommitter.Client
 	volumes          map[types.StorageNodeID]string
 	snAddrs          map[types.StorageNodeID]string
@@ -69,7 +68,7 @@ type VarlogCluster struct {
 	muCL    sync.Mutex
 
 	// logclient
-	logClientManager *logclient.Manager[*logclient.Client]
+	logClientManager *client.Manager[*client.LogClient]
 
 	muVMS     sync.Mutex
 	vmsServer varlogadm.ClusterManager
@@ -91,7 +90,7 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 		mrCLs:                make(map[types.NodeID]mrc.MetadataRepositoryClient),
 		mrMCLs:               make(map[types.NodeID]mrc.MetadataRepositoryManagementClient),
 		storageNodes:         make(map[types.StorageNodeID]*storagenode.StorageNode),
-		snMCLs:               make(map[types.StorageNodeID]snc.StorageNodeManagementClient),
+		snMCLs:               make(map[types.StorageNodeID]client.StorageNodeManagementClient),
 		volumes:              make(map[types.StorageNodeID]string),
 		snAddrs:              make(map[types.StorageNodeID]string),
 		reportCommitters:     make(map[types.StorageNodeID]reportcommitter.Client),
@@ -108,7 +107,7 @@ func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 	require.NoError(t, err)
 	clus.portLease = portLease
 
-	clus.logClientManager, err = logclient.NewManager()
+	clus.logClientManager, err = client.NewManager[*client.LogClient]()
 	assert.NoError(t, err)
 
 	// mr
@@ -231,14 +230,13 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal boo
 			Peers:       peers,
 		},
 
-		ClusterID:                      clus.clusterID,
-		RaftAddress:                    clus.mrPeers[idx],
-		RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout),
-		NumRep:                         clus.nrRep,
-		RPCBindAddress:                 clus.mrRPCEndpoints[idx],
-		ReporterClientFac:              clus.reporterClientFac,
-		StorageNodeManagementClientFac: clus.snManagementClientFac,
-		Logger:                         clus.logger,
+		ClusterID:         clus.clusterID,
+		RaftAddress:       clus.mrPeers[idx],
+		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout),
+		NumRep:            clus.nrRep,
+		RPCBindAddress:    clus.mrRPCEndpoints[idx],
+		ReporterClientFac: clus.reporterClientFac,
+		Logger:            clus.logger,
 	}
 
 	opts.CollectorName = "nop"
@@ -505,7 +503,7 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 
 	log.Printf("SN(%v) AddStorageNode", snID)
 
-	mcl, err := snc.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger)
+	mcl, err := client.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger)
 	require.NoError(t, err)
 
 	log.Printf("SN(%v) MCL", snID)
@@ -547,7 +545,7 @@ func (clus *VarlogCluster) NewSNClient(t *testing.T, snID types.StorageNodeID) {
 	addr, ok := clus.snAddrs[snID]
 	require.True(t, ok)
 
-	mcl, err := snc.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger)
+	mcl, err := client.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger)
 	require.NoError(t, err)
 
 	clus.snMCLs[snID] = mcl
@@ -905,11 +903,11 @@ func (clus *VarlogCluster) StorageNodes() map[types.StorageNodeID]*storagenode.S
 	return ret
 }
 
-func (clus *VarlogCluster) StorageNodesManagementClients() map[types.StorageNodeID]snc.StorageNodeManagementClient {
+func (clus *VarlogCluster) StorageNodesManagementClients() map[types.StorageNodeID]client.StorageNodeManagementClient {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
-	ret := make(map[types.StorageNodeID]snc.StorageNodeManagementClient, len(clus.snMCLs))
+	ret := make(map[types.StorageNodeID]client.StorageNodeManagementClient, len(clus.snMCLs))
 	for id, sn := range clus.snMCLs {
 		ret[id] = sn
 	}
@@ -1115,7 +1113,7 @@ func (clus *VarlogCluster) BackupStorageNodeIDOf(t *testing.T, lsID types.LogStr
 }
 
 /*
-func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) *logclient.Client {
+func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) *logclient.LogClient {
 	snID := clus.PrimaryStorageNodeIDOf(t, lsID)
 	snmd, err := clus.SNClientOf(t, snID).GetMetadata(context.Background())
 	require.NoError(t, err)
@@ -1290,7 +1288,7 @@ func (clus *VarlogCluster) closeReportCommitterClientOf(t *testing.T, snID types
 	delete(clus.reportCommitters, snID)
 }
 
-func (clus *VarlogCluster) SNClientOf(t *testing.T, snID types.StorageNodeID) snc.StorageNodeManagementClient {
+func (clus *VarlogCluster) SNClientOf(t *testing.T, snID types.StorageNodeID) client.StorageNodeManagementClient {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -1304,7 +1302,7 @@ func (clus *VarlogCluster) ReportCommitterClientOf(t *testing.T, snID types.Stor
 	return clus.reportCommitters[snID]
 }
 
-func (clus *VarlogCluster) storageNodeManagementClientOf(t *testing.T, snID types.StorageNodeID) snc.StorageNodeManagementClient {
+func (clus *VarlogCluster) storageNodeManagementClientOf(t *testing.T, snID types.StorageNodeID) client.StorageNodeManagementClient {
 	require.Contains(t, clus.snMCLs, snID)
 	return clus.snMCLs[snID]
 }

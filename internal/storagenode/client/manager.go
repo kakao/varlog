@@ -1,8 +1,7 @@
-package logclient
+package client
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -12,18 +11,18 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-// ClientType is a generic type for clients managed by the Manager.
-type ClientType interface {
-	*Client
+// Kind is a generic type for clients managed by the Manager.
+type Kind interface {
+	*LogClient | *ManagementClient
 
 	// Target returns target storage node.
 	Target() varlogpb.StorageNode
 
-	reset(rpcConn *rpc.Conn, target varlogpb.StorageNode) any
+	reset(rpcConn *rpc.Conn, cid types.ClusterID, target varlogpb.StorageNode) any
 }
 
-// Manager manages clients typed ClientType.
-type Manager[T ClientType] struct {
+// Manager manages clients typed Kind.
+type Manager[T Kind] struct {
 	managerConfig
 
 	conns *rpc.Manager[types.StorageNodeID]
@@ -34,7 +33,7 @@ type Manager[T ClientType] struct {
 }
 
 // NewManager creates a Manager.
-func NewManager[T ClientType](opts ...ManagerOption) (*Manager[T], error) {
+func NewManager[T Kind](opts ...ManagerOption) (*Manager[T], error) {
 	cfg, err := newManagerConfig(opts)
 	if err != nil {
 		return nil, err
@@ -60,13 +59,14 @@ func NewManager[T ClientType](opts ...ManagerOption) (*Manager[T], error) {
 func (mgr *Manager[T]) Get(snid types.StorageNodeID) (T, error) {
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
+
 	if mgr.closed {
-		return nil, fmt.Errorf("logclmanager: %w", verrors.ErrClosed)
+		return nil, fmt.Errorf("client manager: %w", verrors.ErrClosed)
 	}
 
 	client, ok := mgr.clients[snid]
 	if !ok {
-		return nil, errors.New("manager: client not exist")
+		return nil, fmt.Errorf("client manager: client %d not exist", int32(snid))
 	}
 	return client, nil
 }
@@ -79,14 +79,15 @@ func (mgr *Manager[T]) Get(snid types.StorageNodeID) (T, error) {
 func (mgr *Manager[T]) GetOrConnect(ctx context.Context, snid types.StorageNodeID, addr string) (T, error) {
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
+
 	if mgr.closed {
-		return nil, fmt.Errorf("logclmanager: %w", verrors.ErrClosed)
+		return nil, fmt.Errorf("client manager: %w", verrors.ErrClosed)
 	}
 
 	client, ok := mgr.clients[snid]
 	if ok {
-		if target := (*client).Target(); target.Address != addr {
-			return nil, fmt.Errorf("logclient manager: unexpected target address for snid %d, cached=%s requested=%s", uint64(snid), target.Address, addr)
+		if target := client.Target(); target.Address != addr {
+			return nil, fmt.Errorf("client manager: unexpected target address for snid %d, cached=%s requested=%s", uint64(snid), target.Address, addr)
 		}
 		return client, nil
 	}
@@ -96,7 +97,7 @@ func (mgr *Manager[T]) GetOrConnect(ctx context.Context, snid types.StorageNodeI
 		return nil, err
 	}
 
-	client = client.reset(conn, varlogpb.StorageNode{
+	client = client.reset(conn, mgr.cid, varlogpb.StorageNode{
 		StorageNodeID: snid,
 		Address:       addr,
 	}).(T)
@@ -117,6 +118,7 @@ func (mgr *Manager[T]) CloseClient(snid types.StorageNodeID) error {
 func (mgr *Manager[T]) Close() (err error) {
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
+
 	if mgr.closed {
 		return nil
 	}

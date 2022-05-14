@@ -10,7 +10,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/pkg/snc"
+	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -39,9 +39,11 @@ func withTestStorageNodeManager(t *testing.T, f func(ctrl *gomock.Controller, sn
 func TestAddStorageNode(t *testing.T) {
 	Convey("Given a StorageNodeManager", t, withTestStorageNodeManager(t, func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView) {
 		Convey("When a StorageNodeID of StorageNode doesn't exist in it", func() {
-			snmcl := snc.NewMockStorageNodeManagementClient(ctrl)
+			snmcl := client.NewMockStorageNodeManagementClient(ctrl)
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
-			snmcl.EXPECT().PeerStorageNodeID().Return(types.StorageNodeID(1)).Times(2)
+			snmcl.EXPECT().Target().Return(varlogpb.StorageNode{
+				StorageNodeID: types.StorageNodeID(1),
+			}).Times(2)
 
 			Convey("Then the StorageNode should be added to it", func() {
 				snManager.AddStorageNode(snmcl)
@@ -69,7 +71,7 @@ func TestAddLogStream(t *testing.T) {
 			Status:      varlogpb.LogStreamStatusRunning,
 		}
 
-		var snmclList []*snc.MockStorageNodeManagementClient
+		var snmclList []*client.MockStorageNodeManagementClient
 
 		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
 			logStreamDesc.Replicas = append(logStreamDesc.Replicas, &varlogpb.ReplicaDescriptor{
@@ -77,9 +79,11 @@ func TestAddLogStream(t *testing.T) {
 				Path:          "/tmp",
 			})
 
-			snmcl := snc.NewMockStorageNodeManagementClient(ctrl)
+			snmcl := client.NewMockStorageNodeManagementClient(ctrl)
 			snmclList = append(snmclList, snmcl)
-			snmcl.EXPECT().PeerStorageNodeID().Return(snid).AnyTimes()
+			snmcl.EXPECT().Target().Return(varlogpb.StorageNode{
+				StorageNodeID: snid,
+			}).AnyTimes()
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
 		}
 
@@ -139,10 +143,12 @@ func TestSeal(t *testing.T) {
 
 		var replicaDescList []*varlogpb.ReplicaDescriptor
 		var sndescList []*varlogpb.StorageNodeDescriptor
-		var snmclList []*snc.MockStorageNodeManagementClient
+		var snmclList []*client.MockStorageNodeManagementClient
 		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
-			snmcl := snc.NewMockStorageNodeManagementClient(ctrl)
-			snmcl.EXPECT().PeerStorageNodeID().Return(snid).AnyTimes()
+			snmcl := client.NewMockStorageNodeManagementClient(ctrl)
+			snmcl.EXPECT().Target().Return(varlogpb.StorageNode{
+				StorageNodeID: snid,
+			}).AnyTimes()
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
 
 			snManager.AddStorageNode(snmcl)
@@ -223,12 +229,14 @@ func TestUnseal(t *testing.T) {
 
 		var replicaDescList []*varlogpb.ReplicaDescriptor
 		var sndescList []*varlogpb.StorageNodeDescriptor
-		var snmclList []*snc.MockStorageNodeManagementClient
+		var snmclList []*client.MockStorageNodeManagementClient
 		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
 			peerAddr := "127.0.0.1:" + strconv.Itoa(10000+int(snid))
-			snmcl := snc.NewMockStorageNodeManagementClient(ctrl)
-			snmcl.EXPECT().PeerStorageNodeID().Return(snid).AnyTimes()
-			snmcl.EXPECT().PeerAddress().Return(peerAddr).AnyTimes()
+			snmcl := client.NewMockStorageNodeManagementClient(ctrl)
+			snmcl.EXPECT().Target().Return(varlogpb.StorageNode{
+				StorageNodeID: snid,
+				Address:       peerAddr,
+			}).AnyTimes()
 			snmcl.EXPECT().Close().Return(nil).AnyTimes()
 
 			snManager.AddStorageNode(snmcl)
@@ -322,9 +330,11 @@ func TestTrim(t *testing.T) {
 		)
 		fakeError := errors.New("error")
 
-		snmcl1 := snc.NewMockStorageNodeManagementClient(ctrl)
+		snmcl1 := client.NewMockStorageNodeManagementClient(ctrl)
 		snmcl1.EXPECT().Close().Return(nil).AnyTimes()
-		snmcl1.EXPECT().PeerStorageNodeID().Return(snid1).AnyTimes()
+		snmcl1.EXPECT().Target().Return(varlogpb.StorageNode{
+			StorageNodeID: snid1,
+		}).AnyTimes()
 		snmcl1.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid1), gomock.Any()).Return(map[types.LogStreamID]error{
 			lsid1: nil,
 			lsid2: nil,
@@ -336,9 +346,11 @@ func TestTrim(t *testing.T) {
 			lsid6: nil,
 		}, nil).AnyTimes()
 
-		snmcl2 := snc.NewMockStorageNodeManagementClient(ctrl)
+		snmcl2 := client.NewMockStorageNodeManagementClient(ctrl)
 		snmcl2.EXPECT().Close().Return(nil).AnyTimes()
-		snmcl2.EXPECT().PeerStorageNodeID().Return(snid2).AnyTimes()
+		snmcl2.EXPECT().Target().Return(varlogpb.StorageNode{
+			StorageNodeID: snid2,
+		}).AnyTimes()
 		snmcl2.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid1), gomock.Any()).Return(map[types.LogStreamID]error{
 			lsid1: nil,
 			lsid2: nil,

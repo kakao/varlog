@@ -1,4 +1,4 @@
-package logclient
+package client
 
 import (
 	"context"
@@ -157,7 +157,7 @@ func TestBasicOperations(t *testing.T) {
 	sn := newStorageNode()
 	mockClient := newMockStorageNodeServiceClient(ctrl, &sn, topicID, logStreamID)
 
-	client := &Client{rpcClient: mockClient}
+	client := &LogClient{rpcClient: mockClient}
 	Convey("Simple Append/Read/Subscribe/TrimDeprecated operations should work", t, func() {
 		var prevGLSN types.GLSN
 		var currGLSN types.GLSN
@@ -191,6 +191,10 @@ func TestBasicOperations(t *testing.T) {
 		So(subRes.GLSN, ShouldEqual, types.GLSN(1))
 		So(subRes.LLSN, ShouldEqual, types.LLSN(1))
 		So(string(subRes.Data), ShouldEqual, "msg-2")
+
+		// drain channel to avoid leak of goroutine
+		for range ch {
+		}
 
 		err = client.TrimDeprecated(context.TODO(), topicID, types.GLSN(0))
 		So(subRes.Error, ShouldBeNil)

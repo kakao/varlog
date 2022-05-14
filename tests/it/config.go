@@ -29,19 +29,14 @@ func defaultReportClientFactory() metarepos.ReporterClientFactory {
 	return metarepos.NewReporterClientFactory()
 }
 
-func defaultStorageNodeManagementClientFactory() metarepos.StorageNodeManagementClientFactory {
-	return metarepos.NewStorageNodeManagementClientFactory()
-}
-
 type config struct {
-	clusterID             types.ClusterID
-	nrRep                 int
-	nrMR                  int
-	snapCount             int
-	collectorName         string
-	unsafeNoWAL           bool
-	reporterClientFac     metarepos.ReporterClientFactory
-	snManagementClientFac metarepos.StorageNodeManagementClientFactory
+	clusterID         types.ClusterID
+	nrRep             int
+	nrMR              int
+	snapCount         int
+	collectorName     string
+	unsafeNoWAL       bool
+	reporterClientFac metarepos.ReporterClientFactory
 
 	numSN    int
 	numLS    int
@@ -59,17 +54,16 @@ type config struct {
 
 func newConfig(t *testing.T, opts []Option) config {
 	cfg := config{
-		nrRep:                 defaultReplicationFactor,
-		nrMR:                  defaultMRCount,
-		snapCount:             defaultSnapCount,
-		unsafeNoWAL:           defaultUnsafeNoWAL,
-		reporterClientFac:     defaultReportClientFactory(),
-		snManagementClientFac: defaultStorageNodeManagementClientFactory(),
-		VMSOpts:               NewTestVMSOptions(),
-		logger:                zap.NewNop(),
-		portBase:              defaultPortBase,
-		vmsPortOffset:         defaultVMSPortOffset,
-		startVMS:              defaultStartVMS,
+		nrRep:             defaultReplicationFactor,
+		nrMR:              defaultMRCount,
+		snapCount:         defaultSnapCount,
+		unsafeNoWAL:       defaultUnsafeNoWAL,
+		reporterClientFac: defaultReportClientFactory(),
+		VMSOpts:           NewTestVMSOptions(),
+		logger:            zap.NewNop(),
+		portBase:          defaultPortBase,
+		vmsPortOffset:     defaultVMSPortOffset,
+		startVMS:          defaultStartVMS,
 	}
 
 	for _, opt := range opts {
@@ -85,7 +79,6 @@ func (c *config) validate(t *testing.T) {
 	require.GreaterOrEqual(t, c.nrMR, 0)
 	require.GreaterOrEqual(t, c.snapCount, 0)
 	require.NotNil(t, c.reporterClientFac)
-	require.NotNil(t, c.snManagementClientFac)
 	require.NotNil(t, c.VMSOpts)
 	require.GreaterOrEqual(t, c.numSN, 0)
 	require.GreaterOrEqual(t, c.numLS, 0)
@@ -134,12 +127,6 @@ func WithCollectorName(collector string) Option {
 func WithReporterClientFactory(fac metarepos.ReporterClientFactory) Option {
 	return func(c *config) {
 		c.reporterClientFac = fac
-	}
-}
-
-func WithStorageNodeManagementClientFactory(fac metarepos.StorageNodeManagementClientFactory) Option {
-	return func(c *config) {
-		c.snManagementClientFac = fac
 	}
 }
 
