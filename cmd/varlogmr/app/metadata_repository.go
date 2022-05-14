@@ -36,7 +36,6 @@ func Main(opts *metarepos.MetadataRepositoryOptions) error {
 		grpc.WithReadBufferSize(opts.ReportCommitterReadBufferSize),
 		grpc.WithWriteBufferSize(opts.ReportCommitterWriteBufferSize),
 	)
-	opts.StorageNodeManagementClientFac = metarepos.NewStorageNodeManagementClientFactory()
 
 	mr := metarepos.NewRaftMetadataRepository(opts)
 	mr.Run()

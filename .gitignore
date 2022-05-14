@@ -27,7 +27,6 @@
 *.out
 *.app
 
-bin/sntool
 bin/varlogctl
 bin/vmr
 bin/vms

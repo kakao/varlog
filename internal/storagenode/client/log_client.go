@@ -1,4 +1,4 @@
-package logclient
+package client
 
 import (
 	"context"
@@ -22,7 +22,7 @@ var InvalidSubscribeResult = SubscribeResult{
 	Error:    errors.New("invalid subscribe result"),
 }
 
-type Client struct {
+type LogClient struct {
 	rpcClient snpb.LogIOClient
 	target    varlogpb.StorageNode
 }
@@ -31,8 +31,8 @@ type Client struct {
 // argument target.
 // TODO: Fetch metadata of the storage node to confirm whether the snid is
 // correct.
-func (c *Client) reset(rpcConn *rpc.Conn, target varlogpb.StorageNode) any {
-	return &Client{
+func (c *LogClient) reset(rpcConn *rpc.Conn, _ types.ClusterID, target varlogpb.StorageNode) any {
+	return &LogClient{
 		rpcClient: snpb.NewLogIOClient(rpcConn.Conn),
 		target:    target,
 	}
@@ -41,7 +41,7 @@ func (c *Client) reset(rpcConn *rpc.Conn, target varlogpb.StorageNode) any {
 // Append stores data to the log stream specified with the topicID and the logStreamID.
 // The backup indicates the storage nodes that have backup replicas of that log stream.
 // It returns valid GLSN if the append completes successfully.
-func (c *Client) Append(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, data [][]byte, backups ...varlogpb.StorageNode) ([]snpb.AppendResult, error) {
+func (c *LogClient) Append(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, data [][]byte, backups ...varlogpb.StorageNode) ([]snpb.AppendResult, error) {
 	req := &snpb.AppendRequest{
 		TopicID:     tpid,
 		LogStreamID: lsid,
@@ -57,7 +57,7 @@ func (c *Client) Append(ctx context.Context, tpid types.TopicID, lsid types.LogS
 
 // Subscribe gets log entries continuously from the storage node. It guarantees that LLSNs of log
 // entries taken are sequential.
-func (c *Client) Subscribe(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error) {
+func (c *LogClient) Subscribe(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error) {
 	if begin >= end {
 		return nil, errors.New("logclient: invalid argument")
 	}
@@ -104,7 +104,7 @@ func (c *Client) Subscribe(ctx context.Context, tpid types.TopicID, lsid types.L
 	return out, nil
 }
 
-func (c *Client) SubscribeTo(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, begin, end types.LLSN) (<-chan SubscribeResult, error) {
+func (c *LogClient) SubscribeTo(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, begin, end types.LLSN) (<-chan SubscribeResult, error) {
 	if begin >= end {
 		return nil, errors.New("logclient: invalid argument")
 	}
@@ -146,7 +146,7 @@ func (c *Client) SubscribeTo(ctx context.Context, tpid types.TopicID, lsid types
 
 // TrimDeprecated deletes log entries greater than or equal to given GLSN in
 // the storage node. The number of deleted log entries are returned.
-func (c *Client) TrimDeprecated(ctx context.Context, tpid types.TopicID, glsn types.GLSN) error {
+func (c *LogClient) TrimDeprecated(ctx context.Context, tpid types.TopicID, glsn types.GLSN) error {
 	req := &snpb.TrimDeprecatedRequest{
 		TopicID: tpid,
 		GLSN:    glsn,
@@ -157,7 +157,7 @@ func (c *Client) TrimDeprecated(ctx context.Context, tpid types.TopicID, glsn ty
 	return nil
 }
 
-func (c *Client) LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
+func (c *LogClient) LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
 	rsp, err := c.rpcClient.LogStreamMetadata(ctx, &snpb.LogStreamMetadataRequest{
 		TopicID:     tpid,
 		LogStreamID: lsid,
@@ -169,6 +169,6 @@ func (c *Client) LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid
 }
 
 // Target returns connected storage node.
-func (c *Client) Target() varlogpb.StorageNode {
+func (c *LogClient) Target() varlogpb.StorageNode {
 	return c.target
 }

@@ -10,7 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 
-	snc "github.daumkakao.com/varlog/varlog/pkg/snc"
+	client "github.daumkakao.com/varlog/varlog/internal/storagenode/client"
 	types "github.daumkakao.com/varlog/varlog/pkg/types"
 	mrpb "github.daumkakao.com/varlog/varlog/proto/mrpb"
 	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
@@ -123,7 +123,7 @@ func (mr *MockStorageNodeManagerMockRecorder) AddLogStreamReplica(arg0, arg1, ar
 }
 
 // AddStorageNode mocks base method.
-func (m *MockStorageNodeManager) AddStorageNode(arg0 snc.StorageNodeManagementClient) {
+func (m *MockStorageNodeManager) AddStorageNode(arg0 client.StorageNodeManagementClient) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AddStorageNode", arg0)
 }
@@ -192,10 +192,10 @@ func (mr *MockStorageNodeManagerMockRecorder) GetMetadata(arg0, arg1 interface{}
 }
 
 // GetMetadataByAddr mocks base method.
-func (m *MockStorageNodeManager) GetMetadataByAddr(arg0 context.Context, arg1 string) (snc.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockStorageNodeManager) GetMetadataByAddr(arg0 context.Context, arg1 string) (client.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadataByAddr", arg0, arg1)
-	ret0, _ := ret[0].(snc.StorageNodeManagementClient)
+	ret0, _ := ret[0].(client.StorageNodeManagementClient)
 	ret1, _ := ret[1].(*snpb.StorageNodeMetadataDescriptor)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

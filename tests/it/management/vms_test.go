@@ -92,15 +92,14 @@ func TestVarlogNewMRManager(t *testing.T) {
 					Peers:     []string{mrRAFTAddr},
 				},
 
-				ClusterID:                      clusterID,
-				RaftAddress:                    mrRAFTAddr,
-				LogDir:                         filepath.Join(t.TempDir(), "log"),
-				RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout),
-				NumRep:                         1,
-				RPCBindAddress:                 mrRPCAddr,
-				ReporterClientFac:              metarepos.NewReporterClientFactory(),
-				StorageNodeManagementClientFac: metarepos.NewEmptyStorageNodeClientFactory(),
-				Logger:                         zap.L(),
+				ClusterID:         clusterID,
+				RaftAddress:       mrRAFTAddr,
+				LogDir:            filepath.Join(t.TempDir(), "log"),
+				RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout),
+				NumRep:            1,
+				RPCBindAddress:    mrRPCAddr,
+				ReporterClientFac: metarepos.NewReporterClientFactory(),
+				Logger:            zap.L(),
 			}
 			mr := metarepos.NewRaftMetadataRepository(mrOpts)
 			mr.Run()
@@ -175,7 +174,6 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 		vmsOpts := it.NewTestVMSOptions()
 		env := it.NewVarlogCluster(t,
 			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 			it.WithVMSOptions(vmsOpts),
 		)
 		defer env.Close(t)
@@ -275,7 +273,6 @@ func TestVarlogSNWatcher(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := []it.Option{
 			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		}
 
 		Convey("cluster", it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
@@ -388,7 +385,6 @@ func TestVarlogStatRepositoryRefresh(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := []it.Option{
 			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		}
 
 		Convey("cluster", it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
@@ -519,7 +515,6 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		opts := []it.Option{
 			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		}
 
 		Convey("cluster", it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
@@ -549,9 +544,9 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 
 				addr := storagenode.TestGetAdvertiseAddress(t, sn)
 
-				storagenode.TestSealLogStreamReplica(t, env.ClusterID(), topicID, lsID, types.InvalidGLSN, addr)
+				storagenode.TestSealLogStreamReplica(t, env.ClusterID(), snID, topicID, lsID, types.InvalidGLSN, addr)
 
-				snm := storagenode.TestGetStorageNodeMetadataDescriptor(t, env.ClusterID(), addr)
+				snm := storagenode.TestGetStorageNodeMetadataDescriptor(t, env.ClusterID(), snID, addr)
 
 				statRepository.Report(context.TODO(), snm)
 

@@ -65,7 +65,6 @@ type MetadataRepositoryOptions struct {
 	CommitTick                     time.Duration
 	PromoteTick                    time.Duration
 	ReporterClientFac              ReporterClientFactory
-	StorageNodeManagementClientFac StorageNodeManagementClientFactory
 	LogDir                         string
 	Logger                         *zap.Logger
 	ReportCommitterReadBufferSize  int
@@ -127,10 +126,6 @@ func (options *MetadataRepositoryOptions) validate() error {
 
 	if options.ReporterClientFac == nil {
 		return errors.New("reporterClientFac should not be nil")
-	}
-
-	if options.StorageNodeManagementClientFac == nil {
-		return errors.New("storageNodeManagementClientFac should not be nil")
 	}
 
 	if options.SnapCount == 0 {

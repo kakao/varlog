@@ -91,31 +91,31 @@ func TestStorageNode(t *testing.T) {
 	}
 
 	// sn1: get path
-	snmd1 := TestGetStorageNodeMetadataDescriptor(t, cid, sn1.advertise)
+	snmd1 := TestGetStorageNodeMetadataDescriptor(t, cid, sn1.snid, sn1.advertise)
 	assert.Equal(t, snid1, snmd1.StorageNode.StorageNodeID)
 	assert.NotEmpty(t, snmd1.StorageNode.Storages)
 	assert.NotEmpty(t, snmd1.StorageNode.Storages[0].Path)
 	// sn1: add ls
-	TestAddLogStreamReplica(t, cid, tpid, lsid, snmd1.StorageNode.Storages[0].Path, sn1.advertise)
+	TestAddLogStreamReplica(t, cid, sn1.snid, tpid, lsid, snmd1.StorageNode.Storages[0].Path, sn1.advertise)
 
 	// sn2: get path
-	snmd2 := TestGetStorageNodeMetadataDescriptor(t, cid, sn2.advertise)
+	snmd2 := TestGetStorageNodeMetadataDescriptor(t, cid, sn2.snid, sn2.advertise)
 	assert.Equal(t, snid2, snmd2.StorageNode.StorageNodeID)
 	assert.NotEmpty(t, snmd2.StorageNode.Storages)
 	assert.NotEmpty(t, snmd2.StorageNode.Storages[0].Path)
 	// sn2: add ls
-	TestAddLogStreamReplica(t, cid, tpid, lsid, snmd2.StorageNode.Storages[0].Path, sn2.advertise)
+	TestAddLogStreamReplica(t, cid, sn2.snid, tpid, lsid, snmd2.StorageNode.Storages[0].Path, sn2.advertise)
 
 	// sn1: seal & unseal
-	lss, lastCommittedGLSN := TestSealLogStreamReplica(t, cid, tpid, lsid, types.InvalidGLSN, sn1.advertise)
+	lss, lastCommittedGLSN := TestSealLogStreamReplica(t, cid, sn1.snid, tpid, lsid, types.InvalidGLSN, sn1.advertise)
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 	assert.Equal(t, types.InvalidGLSN, lastCommittedGLSN)
-	TestUnsealLogStreamReplica(t, cid, tpid, lsid, replicas, sn1.advertise)
+	TestUnsealLogStreamReplica(t, cid, sn1.snid, tpid, lsid, replicas, sn1.advertise)
 	// sn2: seal & unseal
-	lss, lastCommittedGLSN = TestSealLogStreamReplica(t, cid, tpid, lsid, types.InvalidGLSN, sn2.advertise)
+	lss, lastCommittedGLSN = TestSealLogStreamReplica(t, cid, sn2.snid, tpid, lsid, types.InvalidGLSN, sn2.advertise)
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 	assert.Equal(t, types.InvalidGLSN, lastCommittedGLSN)
-	TestUnsealLogStreamReplica(t, cid, tpid, lsid, replicas, sn2.advertise)
+	TestUnsealLogStreamReplica(t, cid, sn2.snid, tpid, lsid, replicas, sn2.advertise)
 
 	var (
 		lastGLSN    = types.InvalidGLSN
@@ -268,16 +268,16 @@ func TestStorageNode(t *testing.T) {
 	}))
 
 	// seal
-	lss, lastCommittedGLSN = TestSealLogStreamReplica(t, cid, tpid, lsid, lastGLSN, sn1.advertise)
+	lss, lastCommittedGLSN = TestSealLogStreamReplica(t, cid, sn1.snid, tpid, lsid, lastGLSN, sn1.advertise)
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 	assert.Equal(t, lastGLSN, lastCommittedGLSN)
-	lss, lastCommittedGLSN = TestSealLogStreamReplica(t, cid, tpid, lsid, lastGLSN, sn2.advertise)
+	lss, lastCommittedGLSN = TestSealLogStreamReplica(t, cid, sn2.snid, tpid, lsid, lastGLSN, sn2.advertise)
 	assert.Equal(t, varlogpb.LogStreamStatusSealing, lss)
 	assert.Equal(t, types.GLSN(numLogs), lastCommittedGLSN)
 
 	// sync
 	assert.Eventually(t, func() bool {
-		syncStatus := TestSync(t, cid, tpid, lsid, lastGLSN, sn1.advertise, varlogpb.StorageNode{
+		syncStatus := TestSync(t, cid, sn1.snid, tpid, lsid, lastGLSN, sn1.advertise, varlogpb.StorageNode{
 			StorageNodeID: snid2,
 			Address:       sn2.advertise,
 		})
@@ -297,21 +297,21 @@ func TestStorageNode(t *testing.T) {
 	}))
 
 	// seal & unseal
-	TestUnsealLogStreamReplica(t, cid, tpid, lsid, replicas, sn1.advertise)
-	TestSealLogStreamReplica(t, cid, tpid, lsid, lastGLSN, sn2.advertise)
-	TestUnsealLogStreamReplica(t, cid, tpid, lsid, replicas, sn2.advertise)
+	TestUnsealLogStreamReplica(t, cid, sn1.snid, tpid, lsid, replicas, sn1.advertise)
+	TestSealLogStreamReplica(t, cid, sn2.snid, tpid, lsid, lastGLSN, sn2.advertise)
+	TestUnsealLogStreamReplica(t, cid, sn2.snid, tpid, lsid, replicas, sn2.advertise)
 
 	// trim
-	TestTrim(t, cid, tpid, 13, sn1.advertise)
-	TestTrim(t, cid, tpid, 13, sn2.advertise)
+	TestTrim(t, cid, sn1.snid, tpid, 13, sn1.advertise)
+	TestTrim(t, cid, sn2.snid, tpid, 13, sn2.advertise)
 
 	// CC  : +-- 1 --+ +-- 2 ---+ +---- 3 -----+ +---- 4 -----+
 	// LLSN: _ _ _ _ _ _ _ _ _ __ __ __ __ 14 15 16 17 18 19 20
 	// GLSN: _ _ _ _ _ _ _ _ _ __ __ __ __ 14 15 16 17 18 19 20
 
 	// Subscribe: [14, 21)
-	les1 = TestSubscribe(t, tpid, lsid, 14, types.GLSN(lastGLSN)+1, snid1, sn1.advertise)
-	les2 = TestSubscribe(t, tpid, lsid, 14, types.GLSN(lastGLSN)+1, snid2, sn2.advertise)
+	les1 = TestSubscribe(t, tpid, lsid, 14, lastGLSN+1, snid1, sn1.advertise)
+	les2 = TestSubscribe(t, tpid, lsid, 14, lastGLSN+1, snid2, sn2.advertise)
 	expectedLen = int(lastLLSN - 14 + 1)
 	assert.Equal(t, les1, les2)
 	assert.Len(t, les1, expectedLen)

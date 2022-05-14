@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
-	"github.daumkakao.com/varlog/varlog/pkg/snc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
@@ -33,11 +33,11 @@ func (v *varlogIDGetter) MetadataRepositoryID(ctx context.Context, addr string) 
 }
 
 func (v *varlogIDGetter) StorageNodeID(ctx context.Context, addr string, clusterID types.ClusterID) (types.StorageNodeID, error) {
-	cli, err := snc.NewManagementClient(ctx, clusterID, addr, zap.NewNop())
+	cli, err := client.NewManagementClient(ctx, clusterID, addr, zap.NewNop())
 	if err != nil {
 		return types.StorageNodeID(0), err
 	}
 	defer cli.Close()
 
-	return cli.PeerStorageNodeID(), nil
+	return cli.Target().StorageNodeID, nil
 }

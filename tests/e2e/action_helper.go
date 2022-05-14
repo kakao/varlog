@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
-	"github.daumkakao.com/varlog/varlog/pkg/snc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
@@ -610,7 +610,7 @@ func isSealed(k8s *K8sVarlogCluster, meta *varlogpb.MetadataDescriptor, lsID typ
 func isReplicaSealed(k8s *K8sVarlogCluster, addr string, lsID types.LogStreamID) (bool, error) {
 	connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
 	defer connCancel()
-	sncli, err := snc.NewManagementClient(connCtx, types.ClusterID(1), addr, zap.NewNop())
+	sncli, err := client.NewManagementClient(connCtx, types.ClusterID(1), addr, zap.NewNop())
 	if err != nil {
 		return false, err
 	}

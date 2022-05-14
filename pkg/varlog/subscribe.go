@@ -12,7 +12,7 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/pkg/logclient"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/pkg/util/syncutil/atomicutil"
@@ -116,7 +116,7 @@ func (pq *PriorityQueue) Pop() interface{} {
 type transmitResult struct {
 	logStreamID   types.LogStreamID
 	storageNodeID types.StorageNodeID
-	result        logclient.SubscribeResult
+	result        client.SubscribeResult
 }
 
 func (t transmitResult) Priority() uint64 {
@@ -141,7 +141,7 @@ func (tq *transmitQueue) Pop() (transmitResult, bool) {
 
 	if tq.pq.Len() == 0 {
 		return transmitResult{
-			result: logclient.InvalidSubscribeResult,
+			result: client.InvalidSubscribeResult,
 		}, false
 	}
 
@@ -154,7 +154,7 @@ func (tq *transmitQueue) Front() (transmitResult, bool) {
 
 	if tq.pq.Len() == 0 {
 		return transmitResult{
-			result: logclient.InvalidSubscribeResult,
+			result: client.InvalidSubscribeResult,
 		}, false
 	}
 
@@ -165,8 +165,8 @@ type subscriber struct {
 	topicID         types.TopicID
 	logStreamID     types.LogStreamID
 	storageNodeID   types.StorageNodeID
-	logCL           *logclient.Client
-	resultC         <-chan logclient.SubscribeResult
+	logCL           *client.LogClient
+	resultC         <-chan client.SubscribeResult
 	cancelSubscribe context.CancelFunc
 
 	transmitQ  *transmitQueue
@@ -181,7 +181,7 @@ type subscriber struct {
 	logger *zap.Logger
 }
 
-func newSubscriber(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, logCL *logclient.Client, begin, end types.GLSN, transmitQ *transmitQueue, transmitCV chan struct{}, logger *zap.Logger) (*subscriber, error) {
+func newSubscriber(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, storageNodeID types.StorageNodeID, logCL *client.LogClient, begin, end types.GLSN, transmitQ *transmitQueue, transmitCV chan struct{}, logger *zap.Logger) (*subscriber, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	resultC, err := logCL.Subscribe(ctx, topicID, logStreamID, begin, end)
 	if err != nil {
@@ -232,7 +232,7 @@ func (s *subscriber) subscribe(ctx context.Context) {
 			if ok {
 				r.result = res
 			} else {
-				r.result = logclient.InvalidSubscribeResult
+				r.result = client.InvalidSubscribeResult
 			}
 
 			needExit := r.result.Error != nil
@@ -275,7 +275,7 @@ type transmitter struct {
 	timeout time.Duration
 	timer   *time.Timer
 
-	logCLManager *logclient.Manager[*logclient.Client]
+	logCLManager *client.Manager[*client.LogClient]
 	runner       *runner.Runner
 	logger       *zap.Logger
 }
@@ -292,7 +292,7 @@ func (p *transmitter) transmit(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			res := logclient.InvalidSubscribeResult
+			res := client.InvalidSubscribeResult
 			res.Error = ctx.Err()
 			p.logger.Debug("transmit error result", zap.Reflect("res", res))
 			p.sleq.pushBack(res)
@@ -443,7 +443,7 @@ func (p *transmitter) transmitLoop(ctx context.Context) bool {
 }
 
 type subscribedLogEntriesQueue struct {
-	c      chan logclient.SubscribeResult
+	c      chan client.SubscribeResult
 	wanted types.GLSN
 	end    types.GLSN
 	closer SubscribeCloser
@@ -452,7 +452,7 @@ type subscribedLogEntriesQueue struct {
 
 func newSubscribedLogEntiresQueue(begin, end types.GLSN, closer SubscribeCloser, logger *zap.Logger) *subscribedLogEntriesQueue {
 	q := &subscribedLogEntriesQueue{
-		c:      make(chan logclient.SubscribeResult, end-begin),
+		c:      make(chan client.SubscribeResult, end-begin),
 		wanted: begin,
 		end:    end,
 		closer: closer,
@@ -461,7 +461,7 @@ func newSubscribedLogEntiresQueue(begin, end types.GLSN, closer SubscribeCloser,
 	return q
 }
 
-func (q *subscribedLogEntriesQueue) pushBack(result logclient.SubscribeResult) {
+func (q *subscribedLogEntriesQueue) pushBack(result client.SubscribeResult) {
 	if !q.pushable(result) {
 		q.logger.Panic("not pushable")
 	}
@@ -473,7 +473,7 @@ func (q *subscribedLogEntriesQueue) pushBack(result logclient.SubscribeResult) {
 	}
 }
 
-func (q *subscribedLogEntriesQueue) pushable(result logclient.SubscribeResult) bool {
+func (q *subscribedLogEntriesQueue) pushable(result client.SubscribeResult) bool {
 	return result.LogEntry.GLSN == q.wanted || result.Error != nil
 }
 
@@ -482,11 +482,11 @@ func (q *subscribedLogEntriesQueue) close() {
 	// q.closer()
 }
 
-func (q *subscribedLogEntriesQueue) sendC() chan<- logclient.SubscribeResult {
+func (q *subscribedLogEntriesQueue) sendC() chan<- client.SubscribeResult {
 	return q.c
 }
 
-func (q *subscribedLogEntriesQueue) recvC() <-chan logclient.SubscribeResult {
+func (q *subscribedLogEntriesQueue) recvC() <-chan client.SubscribeResult {
 	return q.c
 }
 
@@ -544,8 +544,8 @@ func (v *logImpl) subscribeTo(ctx context.Context, topicID types.TopicID, logStr
 
 	ctx, cancel := context.WithCancel(ctx)
 	var (
-		logCL   *logclient.Client
-		resultC <-chan logclient.SubscribeResult
+		logCL   *client.LogClient
+		resultC <-chan client.SubscribeResult
 		err     error
 	)
 	for _, logStreamReplica := range logStreamReplicas {
@@ -590,8 +590,8 @@ type logStreamSubscriber struct {
 	cancel context.CancelFunc
 
 	closeC  <-chan struct{}
-	logCL   *logclient.Client
-	resultC <-chan logclient.SubscribeResult
+	logCL   *client.LogClient
+	resultC <-chan client.SubscribeResult
 
 	mu      sync.Mutex
 	closer  func()

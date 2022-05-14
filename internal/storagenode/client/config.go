@@ -1,13 +1,16 @@
-package logclient
+package client
 
 import (
 	"errors"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 type managerConfig struct {
+	cid                    types.ClusterID
 	defaultGRPCDialOptions []grpc.DialOption
 	logger                 *zap.Logger
 }
@@ -47,6 +50,12 @@ func newFuncManagerOption(f func(*managerConfig)) *funcManagerOption {
 
 func (fmo *funcManagerOption) applyManager(cfg *managerConfig) {
 	fmo.f(cfg)
+}
+
+func WithClusterID(cid types.ClusterID) ManagerOption {
+	return newFuncManagerOption(func(cfg *managerConfig) {
+		cfg.cid = cid
+	})
 }
 
 func WithDefaultGRPCDialOptions(defaultGRPCDialOptions ...grpc.DialOption) ManagerOption {

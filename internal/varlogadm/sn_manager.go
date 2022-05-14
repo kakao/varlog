@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.daumkakao.com/varlog/varlog/pkg/snc"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/container/set"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -27,11 +27,11 @@ type StorageNodeManager interface {
 
 	// GetMetadataByAddr returns metadata about a storage node. It is useful when id of the
 	// storage node is not known.
-	GetMetadataByAddr(ctx context.Context, addr string) (snc.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error)
+	GetMetadataByAddr(ctx context.Context, addr string) (client.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error)
 
 	GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error)
 
-	AddStorageNode(snmcl snc.StorageNodeManagementClient)
+	AddStorageNode(snmcl client.StorageNodeManagementClient)
 
 	RemoveStorageNode(storageNodeID types.StorageNodeID)
 
@@ -59,7 +59,7 @@ var _ StorageNodeManager = (*snManager)(nil)
 type snManager struct {
 	clusterID types.ClusterID
 
-	cs     map[types.StorageNodeID]snc.StorageNodeManagementClient
+	cs     map[types.StorageNodeID]client.StorageNodeManagementClient
 	cmView ClusterMetadataView
 	mu     sync.RWMutex
 
@@ -74,7 +74,7 @@ func NewStorageNodeManager(ctx context.Context, clusterID types.ClusterID, cmVie
 	sm := &snManager{
 		clusterID: clusterID,
 		cmView:    cmView,
-		cs:        make(map[types.StorageNodeID]snc.StorageNodeManagementClient),
+		cs:        make(map[types.StorageNodeID]client.StorageNodeManagementClient),
 		logger:    logger,
 	}
 
@@ -94,14 +94,14 @@ func (sm *snManager) refresh(ctx context.Context) error {
 		return err
 	}
 
-	oldCS := make(map[types.StorageNodeID]snc.StorageNodeManagementClient, len(sm.cs))
+	oldCS := make(map[types.StorageNodeID]client.StorageNodeManagementClient, len(sm.cs))
 	for storageNodeID, snmcl := range sm.cs {
 		oldCS[storageNodeID] = snmcl
 	}
 
 	var mu sync.Mutex
 	var errs error
-	newCS := make(map[types.StorageNodeID]snc.StorageNodeManagementClient, len(sm.cs))
+	newCS := make(map[types.StorageNodeID]client.StorageNodeManagementClient, len(sm.cs))
 
 	g, ctx := errgroup.WithContext(ctx)
 	sndescList := meta.GetStorageNodes()
@@ -167,15 +167,15 @@ func (sm *snManager) ContainsAddress(addr string) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	for _, snmcl := range sm.cs {
-		if snmcl.PeerAddress() == addr {
+		if snmcl.Target().Address == addr {
 			return true
 		}
 	}
 	return false
 }
 
-func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (snc.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error) {
-	mc, err := snc.NewManagementClient(ctx, sm.clusterID, addr, sm.logger)
+func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (client.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error) {
+	mc, err := client.NewManagementClient(ctx, sm.clusterID, addr, sm.logger)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -198,14 +198,14 @@ func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.Storag
 	return snmcl.GetMetadata(ctx)
 }
 
-func (sm *snManager) AddStorageNode(snmcl snc.StorageNodeManagementClient) {
+func (sm *snManager) AddStorageNode(snmcl client.StorageNodeManagementClient) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.addStorageNode(snmcl)
 }
 
-func (sm *snManager) addStorageNode(snmcl snc.StorageNodeManagementClient) {
-	storageNodeID := snmcl.PeerStorageNodeID()
+func (sm *snManager) addStorageNode(snmcl client.StorageNodeManagementClient) {
+	storageNodeID := snmcl.Target().StorageNodeID
 	if _, ok := sm.cs[storageNodeID]; ok {
 		sm.logger.Panic("already registered storagenode", zap.Int32("snid", int32(storageNodeID)))
 	}
@@ -348,7 +348,7 @@ func (sm *snManager) Sync(ctx context.Context, topicID types.TopicID, logStreamI
 		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 	// TODO: check cluster meta if snids exist
-	return srcCli.Sync(ctx, topicID, logStreamID, dstID, dstCli.PeerAddress(), lastGLSN)
+	return srcCli.Sync(ctx, topicID, logStreamID, dstID, dstCli.Target().Address, lastGLSN)
 }
 
 func (sm *snManager) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {
@@ -365,7 +365,7 @@ func (sm *snManager) Unseal(ctx context.Context, topicID types.TopicID, logStrea
 		replicas = append(replicas, varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: rd.StorageNodeID,
-				Address:       sm.cs[rd.StorageNodeID].PeerAddress(),
+				Address:       sm.cs[rd.StorageNodeID].Target().Address,
 			},
 			TopicLogStream: varlogpb.TopicLogStream{
 				TopicID:     topicID,
@@ -402,7 +402,7 @@ func (sm *snManager) Trim(ctx context.Context, topicID types.TopicID, lastGLSN t
 		return nil, errors.Errorf("trim: no such topic %d", topicID)
 	}
 
-	clients := make(map[types.StorageNodeID]snc.StorageNodeManagementClient)
+	clients := make(map[types.StorageNodeID]client.StorageNodeManagementClient)
 	for _, lsid := range td.LogStreams {
 		rds, err := sm.replicaDescriptors(ctx, lsid)
 		if err != nil {

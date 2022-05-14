@@ -33,15 +33,14 @@ import (
 const rpcTimeout = 3 * time.Second
 
 type metadataRepoCluster struct {
-	nrRep                 int
-	unsafeNoWal           bool
-	peers                 []string
-	nodes                 []*RaftMetadataRepository
-	reporterClientFac     ReporterClientFactory
-	snManagementClientFac StorageNodeManagementClientFactory
-	logger                *zap.Logger
-	portLease             *ports.Lease
-	rpcTimeout            time.Duration // conn + call
+	nrRep             int
+	unsafeNoWal       bool
+	peers             []string
+	nodes             []*RaftMetadataRepository
+	reporterClientFac ReporterClientFactory
+	logger            *zap.Logger
+	portLease         *ports.Lease
+	rpcTimeout        time.Duration // conn + call
 }
 
 var testSnapCount uint64
@@ -61,15 +60,14 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool, unsafeNoWal bool
 
 	sncf := NewDummyStorageNodeClientFactory(1, !increseUncommit)
 	clus := &metadataRepoCluster{
-		nrRep:                 nrRep,
-		unsafeNoWal:           unsafeNoWal,
-		peers:                 peers,
-		nodes:                 nodes,
-		reporterClientFac:     sncf,
-		snManagementClientFac: sncf,
-		logger:                zap.L(),
-		portLease:             portLease,
-		rpcTimeout:            rpcTimeout,
+		nrRep:             nrRep,
+		unsafeNoWal:       unsafeNoWal,
+		peers:             peers,
+		nodes:             nodes,
+		reporterClientFac: sncf,
+		logger:            zap.L(),
+		portLease:         portLease,
+		rpcTimeout:        rpcTimeout,
 	}
 
 	for i := range clus.peers {
@@ -108,15 +106,14 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 			UnsafeNoWal:      clus.unsafeNoWal,
 		},
 
-		ClusterID:                      types.ClusterID(1),
-		RaftAddress:                    clus.peers[idx],
-		CommitTick:                     vtesting.TestCommitTick(),
-		RPCTimeout:                     vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
-		NumRep:                         clus.nrRep,
-		RPCBindAddress:                 ":0",
-		ReporterClientFac:              clus.reporterClientFac,
-		StorageNodeManagementClientFac: clus.snManagementClientFac,
-		Logger:                         clus.logger,
+		ClusterID:         types.ClusterID(1),
+		RaftAddress:       clus.peers[idx],
+		CommitTick:        vtesting.TestCommitTick(),
+		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
+		NumRep:            clus.nrRep,
+		RPCBindAddress:    ":0",
+		ReporterClientFac: clus.reporterClientFac,
+		Logger:            clus.logger,
 	}
 
 	options.CollectorName = "nop"

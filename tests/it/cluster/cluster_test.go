@@ -184,7 +184,6 @@ func TestTrimGLS(t *testing.T) {
 		it.WithNumberOfLogStreams(2),
 		it.WithNumberOfClients(1),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 
@@ -228,7 +227,6 @@ func TestTrimGLSWithSealedLS(t *testing.T) {
 			it.WithNumberOfLogStreams(2),
 			it.WithNumberOfClients(1),
 			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-			it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 			it.WithNumberOfTopics(1),
 		}
 
@@ -281,7 +279,6 @@ func TestNewbieLogStream(t *testing.T) {
 		it.WithNumberOfLogStreams(2),
 		it.WithNumberOfClients(1),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithStorageNodeManagementClientFactory(metarepos.NewEmptyStorageNodeClientFactory()),
 		it.WithNumberOfTopics(1),
 	}
 
