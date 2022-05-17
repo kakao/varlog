@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -19,27 +18,34 @@ import (
 )
 
 type StorageNodeManager interface {
-	Refresh(ctx context.Context) error
-
 	Contains(storageNodeID types.StorageNodeID) bool
 
 	ContainsAddress(addr string) bool
 
 	// GetMetadataByAddr returns metadata about a storage node. It is useful when id of the
 	// storage node is not known.
-	GetMetadataByAddr(ctx context.Context, addr string) (client.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error)
+	GetMetadataByAddr(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error)
 
-	GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error)
+	// GetMetadata returns metadata for the storage node identified by the argument snid.
+	GetMetadata(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error)
 
-	AddStorageNode(snmcl client.StorageNodeManagementClient)
+	// RegisterStorageNode adds the storage node to the manager.
+	// The new storage node should be registered to the metadata repository first.
+	// It is idempotent - already registered one also can be passed by this method.
+	// Note that this method cannot guarantee that the manager maintains the storage node immediately. However, the storage node is eventually managed since it is registered to the metadata repository.
+	RegisterStorageNode(ctx context.Context, snid types.StorageNodeID, addr string)
 
-	RemoveStorageNode(storageNodeID types.StorageNodeID)
+	// RemoveStorageNode unregisters the storage node identified by the argument snid.
+	RemoveStorageNode(snid types.StorageNodeID)
 
-	AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error
+	// AddLogStream adds a new log stream to storage nodes.
+	AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDescriptor) error
 
-	AddLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID, path string) error
+	// AddLogStreamReplica adds a new log stream replica to the storage node whose ID is the argument snid.
+	// The new log stream replica is identified by the argument tpid and lsid.
+	AddLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) error
 
-	RemoveLogStream(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) error
+	RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error
 
 	// Seal seals logstream replicas of storage nodes corresponded with the logStreamID. It
 	// passes the last committed GLSN to the logstream replicas.
@@ -59,9 +65,9 @@ var _ StorageNodeManager = (*snManager)(nil)
 type snManager struct {
 	clusterID types.ClusterID
 
-	cs     map[types.StorageNodeID]client.StorageNodeManagementClient
-	cmView ClusterMetadataView
-	mu     sync.RWMutex
+	cmView  ClusterMetadataView
+	mu      sync.RWMutex
+	clients *client.Manager[*client.ManagementClient]
 
 	logger *zap.Logger
 }
@@ -71,232 +77,194 @@ func NewStorageNodeManager(ctx context.Context, clusterID types.ClusterID, cmVie
 		logger = zap.NewNop()
 	}
 	logger = logger.Named("snmanager")
+
+	clients, err := client.NewManager[*client.ManagementClient]()
+	if err != nil {
+		return nil, err
+	}
+
 	sm := &snManager{
 		clusterID: clusterID,
 		cmView:    cmView,
-		cs:        make(map[types.StorageNodeID]client.StorageNodeManagementClient),
 		logger:    logger,
+		clients:   clients,
 	}
 
-	sm.Refresh(ctx)
+	sm.refresh(ctx)
 	return sm, nil
 }
 
-func (sm *snManager) Refresh(ctx context.Context) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	return sm.refresh(ctx)
-}
-
 func (sm *snManager) refresh(ctx context.Context) error {
-	meta, err := sm.cmView.ClusterMetadata(ctx)
+	md, err := sm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return err
 	}
 
-	oldCS := make(map[types.StorageNodeID]client.StorageNodeManagementClient, len(sm.cs))
-	for storageNodeID, snmcl := range sm.cs {
-		oldCS[storageNodeID] = snmcl
+	var wg sync.WaitGroup
+	snds := md.GetStorageNodes()
+	for i := range snds {
+		snd := snds[i]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			sm.clients.GetOrConnect(ctx, snd.StorageNodeID, snd.Address)
+		}()
 	}
-
-	var mu sync.Mutex
-	var errs error
-	newCS := make(map[types.StorageNodeID]client.StorageNodeManagementClient, len(sm.cs))
-
-	g, ctx := errgroup.WithContext(ctx)
-	sndescList := meta.GetStorageNodes()
-	for i := range sndescList {
-		sndesc := sndescList[i]
-		storageNodeID := sndesc.GetStorageNodeID()
-		g.Go(func() error {
-			var err error
-			snmcl, ok := oldCS[storageNodeID]
-			if ok {
-				if _, err = snmcl.GetMetadata(ctx); err == nil {
-					mu.Lock()
-					defer mu.Unlock()
-					newCS[storageNodeID] = snmcl
-					delete(oldCS, storageNodeID)
-					return nil
-				}
-			}
-
-			if snmcl, _, err = sm.GetMetadataByAddr(ctx, sndesc.GetAddress()); err == nil {
-				mu.Lock()
-				defer mu.Unlock()
-				newCS[storageNodeID] = snmcl
-				return nil
-			}
-
-			mu.Lock()
-			defer mu.Unlock()
-			errs = multierr.Append(errs, errors.WithMessagef(err, "snmanager: snid = %d", storageNodeID))
-			return nil
-		})
-	}
-	g.Wait()
-
-	sm.cs = newCS
-	for _, snmcl := range oldCS {
-		if err := snmcl.Close(); err != nil {
-			sm.logger.Error("could not close storage node manager client", zap.Error(err))
-		}
-	}
-
-	return errs
+	wg.Wait()
+	return nil
 }
 
 func (sm *snManager) Close() (err error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	for id, cli := range sm.cs {
-		err = multierr.Append(err, errors.WithMessagef(cli.Close(), "snmanager: snid = %d", id))
-	}
-	return err
+	return sm.clients.Close()
 }
 
 func (sm *snManager) Contains(storageNodeID types.StorageNodeID) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	_, ok := sm.cs[storageNodeID]
-	return ok
+	_, err := sm.clients.Get(storageNodeID)
+	return err == nil
 }
 
 func (sm *snManager) ContainsAddress(addr string) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
-	for _, snmcl := range sm.cs {
-		if snmcl.Target().Address == addr {
-			return true
-		}
-	}
-	return false
+
+	_, err := sm.clients.GetByAddress(addr)
+	return err == nil
 }
 
-func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (client.StorageNodeManagementClient, *snpb.StorageNodeMetadataDescriptor, error) {
-	mc, err := client.NewManagementClient(ctx, sm.clusterID, addr, sm.logger)
+func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
+	mgr, err := client.NewManager[*client.ManagementClient]()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	snMeta, err := mc.GetMetadata(ctx)
+	defer func() {
+		_ = mgr.Close()
+	}()
+
+	snid := types.StorageNodeID(0)
+	mc, err := mgr.GetOrConnect(ctx, snid, addr)
 	if err != nil {
-		return nil, nil, multierr.Append(err, mc.Close())
+		return nil, err
 	}
-	return mc, snMeta, nil
+
+	return mc.GetMetadata(ctx)
 }
 
-func (sm *snManager) GetMetadata(ctx context.Context, storageNodeID types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (sm *snManager) GetMetadata(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	snmcl, ok := sm.cs[storageNodeID]
-	if !ok {
+	mc, err := sm.clients.Get(snid)
+	if err != nil {
 		sm.refresh(ctx)
 		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
-	return snmcl.GetMetadata(ctx)
+	return mc.GetMetadata(ctx)
 }
 
-func (sm *snManager) AddStorageNode(snmcl client.StorageNodeManagementClient) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.addStorageNode(snmcl)
-}
-
-func (sm *snManager) addStorageNode(snmcl client.StorageNodeManagementClient) {
-	storageNodeID := snmcl.Target().StorageNodeID
-	if _, ok := sm.cs[storageNodeID]; ok {
-		sm.logger.Panic("already registered storagenode", zap.Int32("snid", int32(storageNodeID)))
-	}
-	sm.cs[storageNodeID] = snmcl
-}
-
-func (sm *snManager) RemoveStorageNode(storageNodeID types.StorageNodeID) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	snmcl, ok := sm.cs[storageNodeID]
-	if !ok {
-		sm.logger.Warn("tried to remove nonexistent storage node", zap.Any("snid", storageNodeID))
-		return
-	}
-	delete(sm.cs, storageNodeID)
-	if err := snmcl.Close(); err != nil {
-		sm.logger.Warn("error while closing storage node management client", zap.Error(err), zap.Any("snid", storageNodeID))
-	}
-}
-
-func (sm *snManager) AddLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID, path string) error {
+func (sm *snManager) RegisterStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	return sm.addLogStreamReplica(ctx, storageNodeID, topicID, logStreamID, path)
+	if _, err := sm.clients.GetOrConnect(ctx, snid, addr); err != nil {
+		sm.logger.Warn("could not register storage node",
+			zap.Int32("snid", int32(snid)),
+			zap.String("addr", addr),
+			zap.Error(err),
+		)
+	}
 }
 
-func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.StorageNodeID, topicid types.TopicID, lsid types.LogStreamID, path string) error {
-	snmcl, ok := sm.cs[snid]
-	if !ok {
+func (sm *snManager) RemoveStorageNode(snid types.StorageNodeID) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	if err := sm.clients.CloseClient(snid); err != nil {
+		sm.logger.Warn("close client",
+			zap.Int32("snid", int32(snid)),
+			zap.Error(err),
+		)
+	}
+}
+
+func (sm *snManager) AddLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	return sm.addLogStreamReplica(ctx, snid, tpid, lsid, path)
+}
+
+func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) error {
+	mc, err := sm.clients.Get(snid)
+	if err != nil {
 		sm.refresh(ctx)
 		return errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
-	return snmcl.AddLogStreamReplica(ctx, topicid, lsid, path)
+	return mc.AddLogStreamReplica(ctx, tpid, lsid, path)
 }
 
-func (sm *snManager) AddLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
+func (sm *snManager) AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDescriptor) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	topicID := logStreamDesc.GetTopicID()
-	logStreamID := logStreamDesc.GetLogStreamID()
-	for _, replica := range logStreamDesc.GetReplicas() {
-		err := sm.addLogStreamReplica(ctx, replica.GetStorageNodeID(), topicID, logStreamID, replica.GetPath())
-		if err != nil {
-			return err
-		}
+	tpid := lsd.GetTopicID()
+	lsid := lsd.GetLogStreamID()
+	g, ctx := errgroup.WithContext(ctx)
+	for i := range lsd.GetReplicas() {
+		rd := lsd.Replicas[i]
+		g.Go(func() error {
+			return sm.addLogStreamReplica(ctx, rd.StorageNodeID, tpid, lsid, rd.Path)
+		})
 	}
-	return nil
+	return g.Wait()
 }
 
-func (sm *snManager) RemoveLogStream(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) error {
+func (sm *snManager) RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	snmcl, ok := sm.cs[storageNodeID]
-	if !ok {
+	mc, err := sm.clients.Get(snid)
+	if err != nil {
 		sm.refresh(ctx)
 		return errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
-	return snmcl.RemoveLogStream(ctx, topicID, logStreamID)
+	return mc.RemoveLogStream(ctx, tpid, lsid)
 }
 
-func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) ([]snpb.LogStreamReplicaMetadataDescriptor, error) {
+func (sm *snManager) Seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) ([]snpb.LogStreamReplicaMetadataDescriptor, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	var err error
 
-	replicas, err := sm.replicaDescriptors(ctx, logStreamID)
+	replicas, err := sm.replicaDescriptors(ctx, lsid)
 	if err != nil {
 		return nil, err
 	}
 	lsmetaDesc := make([]snpb.LogStreamReplicaMetadataDescriptor, 0, len(replicas))
 	for _, replica := range replicas {
 		storageNodeID := replica.GetStorageNodeID()
-		cli, ok := sm.cs[storageNodeID]
-		if !ok {
+		cli, err := sm.clients.Get(storageNodeID)
+		if err != nil {
 			sm.refresh(ctx)
 			return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 		}
-		status, highWatermark, errSeal := cli.Seal(ctx, topicID, logStreamID, lastCommittedGLSN)
+		status, highWatermark, errSeal := cli.Seal(ctx, tpid, lsid, lastCommittedGLSN)
 		if errSeal != nil {
 			// NOTE: The sealing log stream ignores the failure of sealing its replica.
-			sm.logger.Warn("could not seal replica", zap.Int32("snid", int32(storageNodeID)), zap.Int32("lsid", int32(logStreamID)))
+			sm.logger.Warn("could not seal replica", zap.Int32("snid", int32(storageNodeID)), zap.Int32("lsid", int32(lsid)))
 			continue
 		}
 		sm.logger.Debug("seal",
 			zap.Int32("snid", int32(storageNodeID)),
-			zap.Int32("tpid", int32(topicID)),
-			zap.Int32("lsid", int32(logStreamID)),
+			zap.Int32("tpid", int32(tpid)),
+			zap.Int32("lsid", int32(lsid)),
 			zap.Uint64("last_glsn", uint64(lastCommittedGLSN)),
 			zap.String("status", status.String()),
 			zap.Uint64("local_hwm", uint64(highWatermark)),
@@ -307,8 +275,8 @@ func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamI
 					StorageNodeID: storageNodeID,
 				},
 				TopicLogStream: varlogpb.TopicLogStream{
-					TopicID:     topicID,
-					LogStreamID: logStreamID,
+					TopicID:     tpid,
+					LogStreamID: lsid,
 				},
 			},
 			Status: status,
@@ -322,11 +290,11 @@ func (sm *snManager) Seal(ctx context.Context, topicID types.TopicID, logStreamI
 	return lsmetaDesc, err
 }
 
-func (sm *snManager) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcID, dstID types.StorageNodeID, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
+func (sm *snManager) Sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	replicas, err := sm.replicaDescriptors(ctx, logStreamID)
+	replicas, err := sm.replicaDescriptors(ctx, lsid)
 	if err != nil {
 		return nil, err
 	}
@@ -341,35 +309,45 @@ func (sm *snManager) Sync(ctx context.Context, topicID types.TopicID, logStreamI
 		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 
-	srcCli := sm.cs[srcID]
-	dstCli := sm.cs[dstID]
-	if srcCli == nil || dstCli == nil {
+	srcCli, err := sm.clients.Get(srcID)
+	if err != nil {
 		sm.refresh(ctx)
 		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
+	dstCli, err := sm.clients.Get(dstID)
+	if err != nil {
+		sm.refresh(ctx)
+		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
+	}
+
 	// TODO: check cluster meta if snids exist
-	return srcCli.Sync(ctx, topicID, logStreamID, dstID, dstCli.Target().Address, lastGLSN)
+	return srcCli.Sync(ctx, tpid, lsid, dstID, dstCli.Target().Address, lastGLSN)
 }
 
-func (sm *snManager) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {
+func (sm *snManager) Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	rds, err := sm.replicaDescriptors(ctx, logStreamID)
+	rds, err := sm.replicaDescriptors(ctx, lsid)
 	if err != nil {
 		return err
 	}
 
 	replicas := make([]varlogpb.LogStreamReplica, 0, len(rds))
 	for _, rd := range rds {
+		mc, err := sm.clients.Get(rd.StorageNodeID)
+		if err != nil {
+			return err
+		}
+		addr := mc.Target().Address
 		replicas = append(replicas, varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
 				StorageNodeID: rd.StorageNodeID,
-				Address:       sm.cs[rd.StorageNodeID].Target().Address,
+				Address:       addr,
 			},
 			TopicLogStream: varlogpb.TopicLogStream{
-				TopicID:     topicID,
-				LogStreamID: logStreamID,
+				TopicID:     tpid,
+				LogStreamID: lsid,
 			},
 		})
 	}
@@ -377,19 +355,19 @@ func (sm *snManager) Unseal(ctx context.Context, topicID types.TopicID, logStrea
 	// TODO: use errgroup
 	for _, replica := range rds {
 		storageNodeID := replica.GetStorageNodeID()
-		cli, ok := sm.cs[storageNodeID]
-		if !ok {
+		cli, err := sm.clients.Get(storageNodeID)
+		if err != nil {
 			sm.refresh(ctx)
 			return errors.Wrap(verrors.ErrNotExist, "storage node")
 		}
-		if err := cli.Unseal(ctx, topicID, logStreamID, replicas); err != nil {
+		if err := cli.Unseal(ctx, tpid, lsid, replicas); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (sm *snManager) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
+func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -397,9 +375,9 @@ func (sm *snManager) Trim(ctx context.Context, topicID types.TopicID, lastGLSN t
 	if err != nil {
 		return nil, err
 	}
-	td := clusmeta.GetTopic(topicID)
+	td := clusmeta.GetTopic(tpid)
 	if td == nil {
-		return nil, errors.Errorf("trim: no such topic %d", topicID)
+		return nil, errors.Errorf("trim: no such topic %d", tpid)
 	}
 
 	clients := make(map[types.StorageNodeID]client.StorageNodeManagementClient)
@@ -412,8 +390,9 @@ func (sm *snManager) Trim(ctx context.Context, topicID types.TopicID, lastGLSN t
 			if _, ok := clients[rd.StorageNodeID]; ok {
 				continue
 			}
-			cli, ok := sm.cs[rd.StorageNodeID]
-			if !ok {
+
+			cli, err := sm.clients.Get(rd.StorageNodeID)
+			if err != nil {
 				sm.refresh(ctx)
 				return nil, err
 			}
@@ -430,7 +409,7 @@ func (sm *snManager) Trim(ctx context.Context, topicID types.TopicID, lastGLSN t
 		snid := snid
 		client := client
 		g.Go(func() error {
-			res, err := client.Trim(ctx, topicID, lastGLSN)
+			res, err := client.Trim(ctx, tpid, lastGLSN)
 			if err != nil {
 				return err
 			}
@@ -454,12 +433,12 @@ func (sm *snManager) Trim(ctx context.Context, topicID types.TopicID, lastGLSN t
 	return results, err
 }
 
-func (sm *snManager) replicaDescriptors(ctx context.Context, logStreamID types.LogStreamID) ([]*varlogpb.ReplicaDescriptor, error) {
+func (sm *snManager) replicaDescriptors(ctx context.Context, lsid types.LogStreamID) ([]*varlogpb.ReplicaDescriptor, error) {
 	clusmeta, err := sm.cmView.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
-	lsdesc, err := clusmeta.MustHaveLogStream(logStreamID)
+	lsdesc, err := clusmeta.MustHaveLogStream(lsid)
 	if err != nil {
 		return nil, err
 	}

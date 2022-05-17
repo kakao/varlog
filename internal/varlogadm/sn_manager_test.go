@@ -3,474 +3,582 @@ package varlogadm
 import (
 	"context"
 	"errors"
-	"strconv"
 	"testing"
 
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/internal/storagenode/client"
+	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 )
 
-func withTestStorageNodeManager(t *testing.T, f func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView)) func() {
-	return func() {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
+func TestStorageNodeManager_RegisterUnregister(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-		meta := &varlogpb.MetadataDescriptor{}
-		cmView := NewMockClusterMetadataView(ctrl)
-		cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(meta, nil)
-		snManager, err := NewStorageNodeManager(context.TODO(), types.ClusterID(1), cmView, zap.L())
-		So(err, ShouldBeNil)
+	cmView := NewMockClusterMetadataView(ctrl)
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
 
-		Reset(func() {
-			So(snManager.Close(), ShouldBeNil)
-		})
+	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, snmgr.Close())
+	}()
 
-		f(ctrl, snManager, cmView)
-	}
+	ts := storagenode.TestNewRPCServer(t, ctrl, 1)
+	ts.Run()
+	defer ts.Close()
+
+	snmgr.RegisterStorageNode(context.Background(), ts.StorageNodeID(), ts.Address())
+	snmgr.RegisterStorageNode(context.Background(), ts.StorageNodeID(), ts.Address()) // idempotent
+	assert.True(t, snmgr.Contains(ts.StorageNodeID()))
+	assert.True(t, snmgr.ContainsAddress(ts.Address()))
+
+	snmgr.RemoveStorageNode(ts.StorageNodeID())
+	snmgr.RemoveStorageNode(ts.StorageNodeID()) // idempotent
+	assert.False(t, snmgr.Contains(ts.StorageNodeID()))
+	assert.False(t, snmgr.ContainsAddress(ts.Address()))
+
+	// Register unreachable storage node.
+	snmgr.RegisterStorageNode(context.Background(), ts.StorageNodeID()+1, "unreachable")
+	assert.True(t, snmgr.Contains(ts.StorageNodeID()+1))
+	assert.True(t, snmgr.ContainsAddress("unreachable"))
+	_, err = snmgr.GetMetadata(context.Background(), ts.StorageNodeID()+1)
+	assert.Error(t, err)
+
+	// Remove not existing storage node.
+	snmgr.RemoveStorageNode(ts.StorageNodeID() + 1)
 }
 
-func TestAddStorageNode(t *testing.T) {
-	Convey("Given a StorageNodeManager", t, withTestStorageNodeManager(t, func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView) {
-		Convey("When a StorageNodeID of StorageNode doesn't exist in it", func() {
-			snmcl := client.NewMockStorageNodeManagementClient(ctrl)
-			snmcl.EXPECT().Close().Return(nil).AnyTimes()
-			snmcl.EXPECT().Target().Return(varlogpb.StorageNode{
-				StorageNodeID: types.StorageNodeID(1),
-			}).Times(2)
+func TestStorageNodeManager_RegisterStorageNodeEventually(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-			Convey("Then the StorageNode should be added to it", func() {
-				snManager.AddStorageNode(snmcl)
+	cmView := NewMockClusterMetadataView(ctrl)
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
 
-				Convey("When the StorageNodeID of StorageNode already exists in it", func() {
-					Convey("Then the StorageNode should not be added to it", func() {
-						f := func() { snManager.AddStorageNode(snmcl) }
-						So(f, ShouldPanic)
-					})
-				})
-			})
-		})
-	}))
-}
+	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, snmgr.Close())
+	}()
 
-func TestAddLogStream(t *testing.T) {
-	Convey("Given a StorageNodeManager", t, withTestStorageNodeManager(t, func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView) {
-		const (
-			logStreamID = types.LogStreamID(1)
-			nrSN        = 3
-		)
+	ts := storagenode.TestNewRPCServer(t, ctrl, 1)
+	ts.Run()
+	defer ts.Close()
 
-		logStreamDesc := &varlogpb.LogStreamDescriptor{
-			LogStreamID: logStreamID,
-			Status:      varlogpb.LogStreamStatusRunning,
-		}
-
-		var snmclList []*client.MockStorageNodeManagementClient
-
-		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
-			logStreamDesc.Replicas = append(logStreamDesc.Replicas, &varlogpb.ReplicaDescriptor{
-				StorageNodeID: snid,
-				Path:          "/tmp",
-			})
-
-			snmcl := client.NewMockStorageNodeManagementClient(ctrl)
-			snmclList = append(snmclList, snmcl)
-			snmcl.EXPECT().Target().Return(varlogpb.StorageNode{
-				StorageNodeID: snid,
-			}).AnyTimes()
-			snmcl.EXPECT().Close().Return(nil).AnyTimes()
-		}
-
-		Convey("When a StorageNode doesn't exist", func() {
-			// missing SNID=1
-			for i := 1; i < len(snmclList); i++ {
-				snmcl := snmclList[i]
-				snManager.AddStorageNode(snmcl)
-			}
-
-			Convey("Then LogStream should not be added", func() {
-				cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
-				err := snManager.AddLogStream(context.TODO(), logStreamDesc)
-				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("When at least one of AddLogStream rpc to storage node fails", func() {
-			snmclList[0].EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(verrors.ErrInternal).MaxTimes(1)
-			for i := 1; i < len(snmclList); i++ {
-				snmcl := snmclList[i]
-				snmcl.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).MaxTimes(1)
-			}
-			for i := 0; i < len(snmclList); i++ {
-				snmcl := snmclList[i]
-				snManager.AddStorageNode(snmcl)
-			}
-
-			Convey("Then LogStream should not be added", func() {
-				err := snManager.AddLogStream(context.TODO(), logStreamDesc)
-				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("When AddLogStream rpc to StorageNode succeeds", func() {
-			for i := 0; i < len(snmclList); i++ {
-				snmcl := snmclList[i]
-				snManager.AddStorageNode(snmcl)
-				snmcl.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-			}
-
-			Convey("Then LogStream should be added", func() {
-				err := snManager.AddLogStream(context.TODO(), logStreamDesc)
-				So(err, ShouldBeNil)
-			})
-		})
-	}))
-}
-
-func TestSeal(t *testing.T) {
-	Convey("Given a StorageNodeManager and StorageNodes", t, withTestStorageNodeManager(t, func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView) {
-		const (
-			nrSN        = 3
-			topicID     = types.TopicID(1)
-			logStreamID = types.LogStreamID(1)
-		)
-
-		var replicaDescList []*varlogpb.ReplicaDescriptor
-		var sndescList []*varlogpb.StorageNodeDescriptor
-		var snmclList []*client.MockStorageNodeManagementClient
-		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
-			snmcl := client.NewMockStorageNodeManagementClient(ctrl)
-			snmcl.EXPECT().Target().Return(varlogpb.StorageNode{
-				StorageNodeID: snid,
-			}).AnyTimes()
-			snmcl.EXPECT().Close().Return(nil).AnyTimes()
-
-			snManager.AddStorageNode(snmcl)
-
-			snmclList = append(snmclList, snmcl)
-
-			sndescList = append(sndescList, &varlogpb.StorageNodeDescriptor{
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+		StorageNodes: []*varlogpb.StorageNodeDescriptor{
+			{
 				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: snid,
-					Address:       "127.0.0.1:" + strconv.Itoa(10000+int(snid)),
-				},
-				Status: varlogpb.StorageNodeStatusRunning,
-				Storages: []*varlogpb.StorageDescriptor{
-					{Path: "/tmp", Used: 0, Total: 1},
-				},
-			})
-
-			replicaDescList = append(replicaDescList, &varlogpb.ReplicaDescriptor{
-				StorageNodeID: snid,
-				Path:          "/tmp",
-			})
-		}
-
-		metaDesc := &varlogpb.MetadataDescriptor{
-			StorageNodes: sndescList,
-			LogStreams: []*varlogpb.LogStreamDescriptor{
-				{
-					LogStreamID: logStreamID,
-					Status:      varlogpb.LogStreamStatusRunning,
-					Replicas:    replicaDescList,
+					StorageNodeID: ts.StorageNodeID(),
+					Address:       ts.Address(),
 				},
 			},
-		}
+		},
+	}, nil)
 
-		Convey("When getting cluster metadata fails", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, verrors.ErrInternal).AnyTimes()
-
-			Convey("Then Seal shoud return error", func() {
-				_, err := snManager.Seal(context.TODO(), topicID, logStreamID, types.MinGLSN)
-				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("When Seal rpc to StorageNode fails", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil).AnyTimes()
-			const lastGLSN = types.GLSN(10)
-
-			for i := 0; i < len(snmclList)-1; i++ {
-				snmcl := snmclList[i]
-				snmcl.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), lastGLSN).Return(varlogpb.LogStreamStatusSealed, lastGLSN, nil)
-			}
-			snmclList[len(sndescList)-1].EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), lastGLSN).Return(varlogpb.LogStreamStatusRunning, types.InvalidGLSN, verrors.ErrInternal)
-
-			Convey("Then Seal should return response not having the failed node", func() {
-				lsMetaDescList, err := snManager.Seal(context.TODO(), topicID, logStreamID, lastGLSN)
-				So(err, ShouldBeNil)
-				So(len(lsMetaDescList), ShouldEqual, nrSN-1)
-
-				var snIDs []types.StorageNodeID
-				for _, lsMeta := range lsMetaDescList {
-					snIDs = append(snIDs, lsMeta.GetStorageNodeID())
-				}
-
-				So(snIDs, ShouldContain, types.StorageNodeID(1))
-				So(snIDs, ShouldContain, types.StorageNodeID(2))
-			})
-		})
-	}))
+	_, err = snmgr.GetMetadata(context.Background(), ts.StorageNodeID())
+	assert.Error(t, err)
+	assert.True(t, snmgr.Contains(ts.StorageNodeID()))
+	assert.True(t, snmgr.ContainsAddress(ts.Address()))
 }
 
-func TestUnseal(t *testing.T) {
-	Convey("Given a StorageNodeManager and StorageNodes", t, withTestStorageNodeManager(t, func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView) {
-		const (
-			nrSN        = 3
-			topicID     = types.TopicID(1)
-			logStreamID = types.LogStreamID(1)
-		)
+func TestStorageNodeManager_AddLogStreamReplica(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-		var replicaDescList []*varlogpb.ReplicaDescriptor
-		var sndescList []*varlogpb.StorageNodeDescriptor
-		var snmclList []*client.MockStorageNodeManagementClient
-		for snid := types.StorageNodeID(1); snid <= nrSN; snid++ {
-			peerAddr := "127.0.0.1:" + strconv.Itoa(10000+int(snid))
-			snmcl := client.NewMockStorageNodeManagementClient(ctrl)
-			snmcl.EXPECT().Target().Return(varlogpb.StorageNode{
-				StorageNodeID: snid,
-				Address:       peerAddr,
-			}).AnyTimes()
-			snmcl.EXPECT().Close().Return(nil).AnyTimes()
+	cmView := NewMockClusterMetadataView(ctrl)
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
 
-			snManager.AddStorageNode(snmcl)
+	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, snmgr.Close())
+	}()
 
-			snmclList = append(snmclList, snmcl)
+	ts := storagenode.TestNewRPCServer(t, ctrl, 1)
+	ts.Run()
+	defer ts.Close()
+	ts.MockManagementServer.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any()).Return(
+		&snpb.AddLogStreamReplicaResponse{}, nil,
+	)
 
-			sndescList = append(sndescList, &varlogpb.StorageNodeDescriptor{
-				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: snid,
-					Address:       peerAddr,
-				},
-				Status: varlogpb.StorageNodeStatusRunning,
-				Storages: []*varlogpb.StorageDescriptor{
-					{Path: "/tmp", Used: 0, Total: 1},
-				},
-			})
+	// Not registered yet.
+	err = snmgr.AddLogStreamReplica(context.Background(), ts.StorageNodeID(), 1, 1, "/tmp")
+	assert.Error(t, err)
 
-			replicaDescList = append(replicaDescList, &varlogpb.ReplicaDescriptor{
-				StorageNodeID: snid,
-				Path:          "/tmp",
-			})
-		}
-
-		metaDesc := &varlogpb.MetadataDescriptor{
-			StorageNodes: sndescList,
-			LogStreams: []*varlogpb.LogStreamDescriptor{
-				{
-					LogStreamID: logStreamID,
-					Status:      varlogpb.LogStreamStatusRunning,
-					Replicas:    replicaDescList,
-				},
-			},
-		}
-
-		Convey("When getting cluster metadata fails", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, verrors.ErrInternal).AnyTimes()
-
-			Convey("Then Unseal should return error", func() {
-				err := snManager.Unseal(context.TODO(), topicID, logStreamID)
-				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("When Unseal rpc to StorageNode fails", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil).AnyTimes()
-			for i := 0; i < len(snmclList)-1; i++ {
-				snmcl := snmclList[i]
-				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-			}
-			snmclList[len(sndescList)-1].EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(verrors.ErrInternal).AnyTimes()
-
-			Convey("Then Unseal should fail", func() {
-				err := snManager.Unseal(context.TODO(), topicID, logStreamID)
-				So(err, ShouldNotBeNil)
-			})
-		})
-
-		Convey("When Unseal rpc to StorageNode succeeds", func() {
-			cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(metaDesc, nil).AnyTimes()
-			for i := 0; i < len(snmclList); i++ {
-				snmcl := snmclList[i]
-				snmcl.EXPECT().Unseal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-			}
-
-			Convey("Then Unseal should succeed", func() {
-				err := snManager.Unseal(context.TODO(), topicID, logStreamID)
-				So(err, ShouldBeNil)
-			})
-		})
-	}))
+	snmgr.RegisterStorageNode(context.Background(), ts.StorageNodeID(), ts.Address())
+	err = snmgr.AddLogStreamReplica(context.Background(), ts.StorageNodeID(), 1, 1, "/tmp")
+	assert.NoError(t, err)
 }
 
-func TestTrim(t *testing.T) {
-	Convey("Given a StorageNodeManager", t, withTestStorageNodeManager(t, func(ctrl *gomock.Controller, snManager StorageNodeManager, cmView *MockClusterMetadataView) {
-		// Replication Factor = 2, Number of Storage Nodes = 2
-		// [TopicID = 1] LogStreamID = 1, 2, 3
-		// [TopicID = 2] LogStreamID = 4, 5, 6
-		const (
-			snid1 = types.StorageNodeID(1)
-			snid2 = types.StorageNodeID(2)
+func TestStorageNodeManager_AddLogStream(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-			tpid1 = types.TopicID(1)
-			lsid1 = types.LogStreamID(1)
-			lsid2 = types.LogStreamID(2)
-			lsid3 = types.LogStreamID(3)
+	cmView := NewMockClusterMetadataView(ctrl)
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
 
-			tpid2 = types.TopicID(2)
-			lsid4 = types.LogStreamID(4)
-			lsid5 = types.LogStreamID(5)
-			lsid6 = types.LogStreamID(6)
-		)
-		fakeError := errors.New("error")
+	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, snmgr.Close())
+	}()
 
-		snmcl1 := client.NewMockStorageNodeManagementClient(ctrl)
-		snmcl1.EXPECT().Close().Return(nil).AnyTimes()
-		snmcl1.EXPECT().Target().Return(varlogpb.StorageNode{
-			StorageNodeID: snid1,
-		}).AnyTimes()
-		snmcl1.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid1), gomock.Any()).Return(map[types.LogStreamID]error{
-			lsid1: nil,
-			lsid2: nil,
-			lsid3: fakeError,
-		}, nil).AnyTimes()
-		snmcl1.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid2), gomock.Any()).Return(map[types.LogStreamID]error{
-			lsid4: nil,
-			lsid5: nil,
-			lsid6: nil,
-		}, nil).AnyTimes()
+	ts1 := storagenode.TestNewRPCServer(t, ctrl, 1)
+	ts1.Run()
+	defer ts1.Close()
 
-		snmcl2 := client.NewMockStorageNodeManagementClient(ctrl)
-		snmcl2.EXPECT().Close().Return(nil).AnyTimes()
-		snmcl2.EXPECT().Target().Return(varlogpb.StorageNode{
-			StorageNodeID: snid2,
-		}).AnyTimes()
-		snmcl2.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid1), gomock.Any()).Return(map[types.LogStreamID]error{
-			lsid1: nil,
-			lsid2: nil,
-			lsid3: nil,
-		}, nil).AnyTimes()
-		snmcl2.EXPECT().Trim(gomock.Any(), gomock.Eq(tpid2), gomock.Any()).Return(nil, fakeError).AnyTimes()
+	ts2 := storagenode.TestNewRPCServer(t, ctrl, 2)
+	ts2.Run()
+	defer ts2.Close()
 
-		snManager.AddStorageNode(snmcl1)
-		snManager.AddStorageNode(snmcl2)
+	// One of the storage nodes is not registered.
+	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	ts1.MockManagementServer.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any()).Return(
+		&snpb.AddLogStreamReplicaResponse{}, nil,
+	).AnyTimes()
+	err = snmgr.AddLogStream(context.Background(), &varlogpb.LogStreamDescriptor{
+		TopicID:     1,
+		LogStreamID: 1,
+		Replicas: []*varlogpb.ReplicaDescriptor{
+			{
+				StorageNodeID: ts1.StorageNodeID(),
+				Path:          "/tmp",
+			},
+			{
+				StorageNodeID: ts2.StorageNodeID(),
+				Path:          "/tmp",
+			},
+		},
+	})
+	assert.Error(t, err)
 
-		cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
-			StorageNodes: []*varlogpb.StorageNodeDescriptor{},
-			LogStreams: []*varlogpb.LogStreamDescriptor{
-				{
-					TopicID:     tpid1,
-					LogStreamID: lsid1,
-					Status:      varlogpb.LogStreamStatusRunning,
-					Replicas: []*varlogpb.ReplicaDescriptor{
-						{StorageNodeID: snid1},
-						{StorageNodeID: snid2},
+	// One of the storage nodes returns an error.
+	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	ts2.MockManagementServer.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any()).Return(
+		nil, errors.New("error"),
+	).Times(1)
+	err = snmgr.AddLogStream(context.Background(), &varlogpb.LogStreamDescriptor{
+		TopicID:     1,
+		LogStreamID: 1,
+		Replicas: []*varlogpb.ReplicaDescriptor{
+			{
+				StorageNodeID: ts1.StorageNodeID(),
+				Path:          "/tmp",
+			},
+			{
+				StorageNodeID: ts2.StorageNodeID(),
+				Path:          "/tmp",
+			},
+		},
+	})
+	assert.Error(t, err)
+
+	// Both succeed.
+	ts2.MockManagementServer.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any()).Return(
+		&snpb.AddLogStreamReplicaResponse{}, nil,
+	).AnyTimes()
+	err = snmgr.AddLogStream(context.Background(), &varlogpb.LogStreamDescriptor{
+		TopicID:     1,
+		LogStreamID: 1,
+		Replicas: []*varlogpb.ReplicaDescriptor{
+			{
+				StorageNodeID: ts1.StorageNodeID(),
+				Path:          "/tmp",
+			},
+			{
+				StorageNodeID: ts2.StorageNodeID(),
+				Path:          "/tmp",
+			},
+		},
+	})
+	assert.NoError(t, err)
+}
+
+func TestStorageNodeManager_Seal(t *testing.T) {
+	const (
+		tpid     = types.TopicID(1)
+		lsid     = types.LogStreamID(1)
+		lastGLSN = types.GLSN(10)
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cmView := NewMockClusterMetadataView(ctrl)
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
+
+	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, snmgr.Close())
+	}()
+
+	// It could not fetch cluster metadata.
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, errors.New("error"))
+	_, err = snmgr.Seal(context.Background(), tpid, lsid, lastGLSN)
+	assert.Error(t, err)
+
+	ts1 := storagenode.TestNewRPCServer(t, ctrl, 1)
+	ts1.Run()
+	defer ts1.Close()
+
+	ts2 := storagenode.TestNewRPCServer(t, ctrl, 2)
+	ts2.Run()
+	defer ts2.Close()
+
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+		LogStreams: []*varlogpb.LogStreamDescriptor{
+			{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+				Replicas: []*varlogpb.ReplicaDescriptor{
+					{
+						StorageNodeID: ts1.StorageNodeID(),
+						Path:          "/tmp",
 					},
-				},
-				{
-					TopicID:     tpid1,
-					LogStreamID: lsid2,
-					Status:      varlogpb.LogStreamStatusRunning,
-					Replicas: []*varlogpb.ReplicaDescriptor{
-						{StorageNodeID: snid1},
-						{StorageNodeID: snid2},
-					},
-				},
-				{
-					TopicID:     tpid1,
-					LogStreamID: lsid3,
-					Status:      varlogpb.LogStreamStatusRunning,
-					Replicas: []*varlogpb.ReplicaDescriptor{
-						{StorageNodeID: snid1},
-						{StorageNodeID: snid2},
-					},
-				},
-				{
-					TopicID:     tpid2,
-					LogStreamID: lsid4,
-					Status:      varlogpb.LogStreamStatusRunning,
-					Replicas: []*varlogpb.ReplicaDescriptor{
-						{StorageNodeID: snid1},
-						{StorageNodeID: snid2},
-					},
-				},
-				{
-					TopicID:     tpid2,
-					LogStreamID: lsid5,
-					Status:      varlogpb.LogStreamStatusRunning,
-					Replicas: []*varlogpb.ReplicaDescriptor{
-						{StorageNodeID: snid1},
-						{StorageNodeID: snid2},
-					},
-				},
-				{
-					TopicID:     tpid2,
-					LogStreamID: lsid6,
-					Status:      varlogpb.LogStreamStatusRunning,
-					Replicas: []*varlogpb.ReplicaDescriptor{
-						{StorageNodeID: snid1},
-						{StorageNodeID: snid2},
+					{
+						StorageNodeID: ts2.StorageNodeID(),
+						Path:          "/tmp",
 					},
 				},
 			},
-			Topics: []*varlogpb.TopicDescriptor{
-				{
-					TopicID:    tpid1,
-					Status:     varlogpb.TopicStatusRunning,
-					LogStreams: []types.LogStreamID{lsid1, lsid2, lsid3},
-				},
-				{
-					TopicID:    tpid2,
-					Status:     varlogpb.TopicStatusRunning,
-					LogStreams: []types.LogStreamID{lsid4, lsid5, lsid6},
+		},
+	}, nil).AnyTimes()
+
+	// One of the storage nodes is not registered.
+	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	ts1.MockManagementServer.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(
+		&snpb.SealResponse{}, nil,
+	).AnyTimes()
+	_, err = snmgr.Seal(context.Background(), tpid, lsid, lastGLSN)
+	assert.Error(t, err)
+
+	// One of the storage nodes returns an error.
+	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	ts2.MockManagementServer.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(
+		nil, errors.New("error"),
+	).Times(1)
+	_, err = snmgr.Seal(context.Background(), tpid, lsid, lastGLSN)
+	// TODO (jun): Check this behavior.
+	assert.NoError(t, err)
+
+	// Both succeed.
+	ts2.MockManagementServer.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(
+		&snpb.SealResponse{}, nil,
+	).AnyTimes()
+	_, err = snmgr.Seal(context.Background(), tpid, lsid, lastGLSN)
+	assert.NoError(t, err)
+}
+
+func TestStorageNodeManager_Unseal(t *testing.T) {
+	const (
+		tpid = types.TopicID(1)
+		lsid = types.LogStreamID(1)
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cmView := NewMockClusterMetadataView(ctrl)
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
+
+	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, snmgr.Close())
+	}()
+
+	// It could not fetch cluster metadata.
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, errors.New("error"))
+	err = snmgr.Unseal(context.Background(), tpid, lsid)
+	assert.Error(t, err)
+
+	ts1 := storagenode.TestNewRPCServer(t, ctrl, 1)
+	ts1.Run()
+	defer ts1.Close()
+
+	ts2 := storagenode.TestNewRPCServer(t, ctrl, 2)
+	ts2.Run()
+	defer ts2.Close()
+
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+		LogStreams: []*varlogpb.LogStreamDescriptor{
+			{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+				Replicas: []*varlogpb.ReplicaDescriptor{
+					{
+						StorageNodeID: ts1.StorageNodeID(),
+						Path:          "/tmp",
+					},
+					{
+						StorageNodeID: ts2.StorageNodeID(),
+						Path:          "/tmp",
+					},
 				},
 			},
-		}, nil).AnyTimes()
+		},
+	}, nil).AnyTimes()
 
-		Convey("When some of the log stream replicas in a topic could not trim logs", func() {
-			Convey("Then Trim should succeed", func() {
-				result, err := snManager.Trim(context.Background(), tpid1, types.GLSN(10))
-				So(err, ShouldBeNil)
-				So(result, ShouldHaveLength, 6)
-				So(result, ShouldContain, vmspb.TrimResult{
-					StorageNodeID: snid1,
-					LogStreamID:   lsid1,
-				})
-				So(result, ShouldContain, vmspb.TrimResult{
-					StorageNodeID: snid2,
-					LogStreamID:   lsid1,
-				})
-				So(result, ShouldContain, vmspb.TrimResult{
-					StorageNodeID: snid1,
-					LogStreamID:   lsid2,
-				})
-				So(result, ShouldContain, vmspb.TrimResult{
-					StorageNodeID: snid2,
-					LogStreamID:   lsid2,
-				})
-				So(result, ShouldContain, vmspb.TrimResult{
-					StorageNodeID: snid1,
-					LogStreamID:   lsid3,
-					Error:         fakeError.Error(),
-				})
-				So(result, ShouldContain, vmspb.TrimResult{
-					StorageNodeID: snid2,
-					LogStreamID:   lsid3,
-				})
-			})
-		})
+	// One of the storage nodes is not registered.
+	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	ts1.MockManagementServer.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(
+		&pbtypes.Empty{}, nil,
+	).AnyTimes()
+	err = snmgr.Unseal(context.Background(), tpid, lsid)
+	assert.Error(t, err)
 
-		Convey("When some the Trim RPC fails", func() {
-			Convey("Then Trim should fail", func() {
-				_, err := snManager.Trim(context.Background(), tpid2, types.GLSN(10))
-				So(err, ShouldNotBeNil)
-			})
-		})
-	}))
+	// One of the storage nodes returns an error.
+	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	ts2.MockManagementServer.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(
+		nil, errors.New("error"),
+	).Times(1)
+	err = snmgr.Unseal(context.Background(), tpid, lsid)
+	assert.Error(t, err)
+
+	// Both succeed.
+	ts2.MockManagementServer.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(
+		&pbtypes.Empty{}, nil,
+	).AnyTimes()
+	err = snmgr.Unseal(context.Background(), tpid, lsid)
+	assert.NoError(t, err)
+}
+
+func TestStorageNodeManager_Trim(t *testing.T) {
+	const (
+		tpid     = types.TopicID(1)
+		lsid1    = types.LogStreamID(1)
+		lsid2    = types.LogStreamID(2)
+		lastGLSN = types.GLSN(10)
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cmView := NewMockClusterMetadataView(ctrl)
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
+
+	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, snmgr.Close())
+	}()
+
+	// It could not fetch cluster metadata.
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, errors.New("error"))
+	_, err = snmgr.Trim(context.Background(), tpid, lastGLSN)
+	assert.Error(t, err)
+
+	// No such topic.
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
+	_, err = snmgr.Trim(context.Background(), tpid, lastGLSN)
+	assert.Error(t, err)
+
+	ts1 := storagenode.TestNewRPCServer(t, ctrl, 1)
+	ts1.Run()
+	defer ts1.Close()
+
+	ts2 := storagenode.TestNewRPCServer(t, ctrl, 2)
+	ts2.Run()
+	defer ts2.Close()
+
+	// Inconsistency between topic descriptor and log stream descriptors.
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+		LogStreams: []*varlogpb.LogStreamDescriptor{
+			{
+				TopicID:     tpid,
+				LogStreamID: lsid1,
+				Replicas: []*varlogpb.ReplicaDescriptor{
+					{
+						StorageNodeID: ts1.StorageNodeID(),
+						Path:          "/tmp",
+					},
+					{
+						StorageNodeID: ts2.StorageNodeID(),
+						Path:          "/tmp",
+					},
+				},
+			},
+		},
+		Topics: []*varlogpb.TopicDescriptor{
+			{
+				TopicID:    tpid,
+				LogStreams: []types.LogStreamID{lsid1, lsid2},
+			},
+		},
+	}, nil).MaxTimes(3)
+	_, err = snmgr.Trim(context.Background(), tpid, lastGLSN)
+	assert.Error(t, err)
+
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+		LogStreams: []*varlogpb.LogStreamDescriptor{
+			{
+				TopicID:     tpid,
+				LogStreamID: lsid1,
+				Replicas: []*varlogpb.ReplicaDescriptor{
+					{
+						StorageNodeID: ts1.StorageNodeID(),
+						Path:          "/tmp",
+					},
+					{
+						StorageNodeID: ts2.StorageNodeID(),
+						Path:          "/tmp",
+					},
+				},
+			},
+			{
+				TopicID:     tpid,
+				LogStreamID: lsid2,
+				Replicas: []*varlogpb.ReplicaDescriptor{
+					{
+						StorageNodeID: ts1.StorageNodeID(),
+						Path:          "/tmp",
+					},
+					{
+						StorageNodeID: ts2.StorageNodeID(),
+						Path:          "/tmp",
+					},
+				},
+			},
+		},
+		Topics: []*varlogpb.TopicDescriptor{
+			{
+				TopicID:    tpid,
+				LogStreams: []types.LogStreamID{lsid1, lsid2},
+			},
+		},
+	}, nil).AnyTimes()
+
+	// One of the storage nodes is not registered.
+	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	ts1.MockManagementServer.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(
+		&snpb.TrimResponse{}, nil,
+	).AnyTimes()
+	_, err = snmgr.Trim(context.Background(), tpid, lastGLSN)
+	assert.Error(t, err)
+
+	// One of the storage nodes returns an error.
+	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	ts2.MockManagementServer.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(
+		nil, errors.New("error"),
+	).Times(1)
+	_, err = snmgr.Trim(context.Background(), tpid, lastGLSN)
+	assert.Error(t, err)
+
+	// Both succeed.
+	ts2.MockManagementServer.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(
+		&snpb.TrimResponse{}, nil,
+	).Times(1)
+	_, err = snmgr.Trim(context.Background(), tpid, lastGLSN)
+	assert.NoError(t, err)
+
+	// Partial failure/success.
+	ts2.MockManagementServer.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(
+		&snpb.TrimResponse{
+			Results: map[types.LogStreamID]string{
+				lsid2: "error",
+			},
+		}, nil,
+	).Times(1)
+	res, err := snmgr.Trim(context.Background(), tpid, lastGLSN)
+	assert.NoError(t, err)
+	assert.Len(t, res, 1)
+	assert.Equal(t, lsid2, res[0].LogStreamID)
+	assert.Equal(t, "error", res[0].Error)
+}
+
+func TestStorageNodeManager_Sync(t *testing.T) {
+	const (
+		tpid     = types.TopicID(1)
+		lsid     = types.LogStreamID(1)
+		snid1    = types.StorageNodeID(1)
+		snid2    = types.StorageNodeID(2)
+		lastGLSN = types.GLSN(10)
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cmView := NewMockClusterMetadataView(ctrl)
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
+
+	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, snmgr.Close())
+	}()
+
+	// It could not fetch cluster metadata.
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, errors.New("error"))
+	_, err = snmgr.Sync(context.Background(), tpid, lsid, snid1, snid2, lastGLSN)
+	assert.Error(t, err)
+
+	// No such storage node.
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+		LogStreams: []*varlogpb.LogStreamDescriptor{
+			{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+				Replicas: []*varlogpb.ReplicaDescriptor{
+					{
+						StorageNodeID: snid1,
+						Path:          "/tmp",
+					},
+				},
+			},
+		},
+	}, nil)
+	_, err = snmgr.Sync(context.Background(), tpid, lsid, snid1, snid2, lastGLSN)
+	assert.Error(t, err)
+
+	ts1 := storagenode.TestNewRPCServer(t, ctrl, snid1)
+	ts1.Run()
+	defer ts1.Close()
+
+	ts2 := storagenode.TestNewRPCServer(t, ctrl, snid2)
+	ts2.Run()
+	defer ts2.Close()
+
+	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+		LogStreams: []*varlogpb.LogStreamDescriptor{
+			{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+				Replicas: []*varlogpb.ReplicaDescriptor{
+					{
+						StorageNodeID: ts1.StorageNodeID(),
+						Path:          "/tmp",
+					},
+					{
+						StorageNodeID: ts2.StorageNodeID(),
+						Path:          "/tmp",
+					},
+				},
+			},
+		},
+	}, nil).AnyTimes()
+
+	// Nothing is registered.
+	_, err = snmgr.Sync(context.Background(), tpid, lsid, snid1, snid2, lastGLSN)
+	assert.Error(t, err)
+
+	// One of the storage nodes is not registered.
+	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	ts1.MockManagementServer.EXPECT().Sync(gomock.Any(), gomock.Any()).Return(
+		&snpb.SyncResponse{}, nil,
+	).AnyTimes()
+	_, err = snmgr.Sync(context.Background(), tpid, lsid, snid1, snid2, lastGLSN)
+	assert.Error(t, err)
+
+	// Both are registered.
+	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	_, err = snmgr.Sync(context.Background(), tpid, lsid, snid1, snid2, lastGLSN)
+	assert.NoError(t, err)
 }

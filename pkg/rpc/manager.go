@@ -94,5 +94,6 @@ func (m *Manager[T]) Close() (err error) {
 	for id := range m.conns {
 		err = multierr.Append(err, m.conns[id].rpcConn.Close())
 	}
+	m.conns = map[T]*connection[T]{}
 	return err
 }
