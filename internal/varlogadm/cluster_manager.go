@@ -356,7 +356,7 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (snme
 		return nil, errors.Wrap(verrors.ErrExist, "storage node address")
 	}
 
-	snmcl, snmeta, err := cm.snMgr.GetMetadataByAddr(ctx, addr)
+	snmeta, err = cm.snMgr.GetMetadataByAddr(ctx, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -384,11 +384,11 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (snme
 		goto errOut
 	}
 
-	cm.snMgr.AddStorageNode(snmcl)
-	return snmeta, nil
+	cm.snMgr.RegisterStorageNode(ctx, snmeta.StorageNode.StorageNodeID, addr)
+	return snmeta, err
 
 errOut:
-	return nil, multierr.Append(err, snmcl.Close())
+	return nil, err
 }
 
 func (cm *clusterManager) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
@@ -646,7 +646,7 @@ func (cm *clusterManager) RemoveLogStreamReplica(ctx context.Context, storageNod
 		return err
 	}
 
-	return cm.snMgr.RemoveLogStream(ctx, storageNodeID, topicID, logStreamID)
+	return cm.snMgr.RemoveLogStreamReplica(ctx, storageNodeID, topicID, logStreamID)
 }
 
 func (cm *clusterManager) UpdateLogStream(ctx context.Context, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {

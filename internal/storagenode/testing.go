@@ -3,14 +3,19 @@ package storagenode
 import (
 	"context"
 	"io"
+	"net"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
+	"github.daumkakao.com/varlog/varlog/proto/snpb/mock"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
@@ -193,4 +198,65 @@ func TestTrim(t *testing.T, cid types.ClusterID, snid types.StorageNodeID, tpid 
 	results, err := snmc.Trim(context.Background(), tpid, glsn)
 	assert.NoError(t, err)
 	return results
+}
+
+type testRPCServer struct {
+	listener   net.Listener
+	grpcServer *grpc.Server
+	address    string
+	snid       types.StorageNodeID
+	wg         sync.WaitGroup
+
+	*mock.MockLogIOServer
+	*mock.MockManagementServer
+}
+
+var _ snpb.LogIOServer = (*testRPCServer)(nil)
+var _ snpb.ManagementServer = (*testRPCServer)(nil)
+
+func TestNewRPCServer(t *testing.T, ctrl *gomock.Controller, snid types.StorageNodeID, address ...string) *testRPCServer {
+	t.Helper()
+	var addr string
+	if len(address) == 0 {
+		addr = "127.0.0.1:0"
+	} else {
+		addr = address[0]
+	}
+	lis, err := net.Listen("tcp", addr)
+	assert.NoError(t, err)
+	addr = lis.Addr().String()
+
+	trs := &testRPCServer{
+		listener:             lis,
+		grpcServer:           grpc.NewServer(),
+		address:              addr,
+		snid:                 snid,
+		MockLogIOServer:      mock.NewMockLogIOServer(ctrl),
+		MockManagementServer: mock.NewMockManagementServer(ctrl),
+	}
+	snpb.RegisterLogIOServer(trs.grpcServer, trs.MockLogIOServer)
+	snpb.RegisterManagementServer(trs.grpcServer, trs.MockManagementServer)
+	return trs
+}
+
+func (trs *testRPCServer) Run() {
+	trs.wg.Add(1)
+	go func() {
+		defer trs.wg.Done()
+		_ = trs.grpcServer.Serve(trs.listener)
+	}()
+}
+
+func (trs *testRPCServer) Close() {
+	trs.grpcServer.Stop()
+	_ = trs.listener.Close()
+	trs.wg.Wait()
+}
+
+func (trs *testRPCServer) StorageNodeID() types.StorageNodeID {
+	return trs.snid
+}
+
+func (trs *testRPCServer) Address() string {
+	return trs.address
 }

@@ -29,6 +29,7 @@ type Manager[T Kind] struct {
 
 	mu      sync.Mutex
 	clients map[types.StorageNodeID]T
+	addrs   map[string]T
 	closed  bool
 }
 
@@ -51,6 +52,7 @@ func NewManager[T Kind](opts ...ManagerOption) (*Manager[T], error) {
 		managerConfig: cfg,
 		conns:         conns,
 		clients:       make(map[types.StorageNodeID]T),
+		addrs:         make(map[string]T),
 	}, nil
 }
 
@@ -67,6 +69,21 @@ func (mgr *Manager[T]) Get(snid types.StorageNodeID) (T, error) {
 	client, ok := mgr.clients[snid]
 	if !ok {
 		return nil, fmt.Errorf("client manager: client %d not exist", int32(snid))
+	}
+	return client, nil
+}
+
+func (mgr *Manager[T]) GetByAddress(addr string) (T, error) {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
+	if mgr.closed {
+		return nil, fmt.Errorf("client manager: %w", verrors.ErrClosed)
+	}
+
+	client, ok := mgr.addrs[addr]
+	if !ok {
+		return nil, fmt.Errorf("client manager: client %s not exist", addr)
 	}
 	return client, nil
 }
@@ -102,6 +119,7 @@ func (mgr *Manager[T]) GetOrConnect(ctx context.Context, snid types.StorageNodeI
 		Address:       addr,
 	}).(T)
 	mgr.clients[snid] = client
+	mgr.addrs[addr] = client
 	return client, nil
 }
 
@@ -110,7 +128,10 @@ func (mgr *Manager[T]) CloseClient(snid types.StorageNodeID) error {
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
 
-	delete(mgr.clients, snid)
+	if client, ok := mgr.clients[snid]; ok {
+		delete(mgr.clients, snid)
+		delete(mgr.addrs, client.Target().Address)
+	}
 	return mgr.conns.CloseClient(snid)
 }
 
@@ -123,5 +144,8 @@ func (mgr *Manager[T]) Close() (err error) {
 		return nil
 	}
 	mgr.closed = true
-	return mgr.conns.Close()
+	err = mgr.conns.Close()
+	mgr.clients = map[types.StorageNodeID]T{}
+	mgr.addrs = map[string]T{}
+	return err
 }
