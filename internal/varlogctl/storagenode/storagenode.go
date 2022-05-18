@@ -13,10 +13,10 @@ import (
 
 const resourceType = "storage node"
 
-func Add(addr string, _ types.StorageNodeID) varlogctl.ExecuteFunc {
+func Add(addr string, snid types.StorageNodeID) varlogctl.ExecuteFunc {
 	return func(ctx context.Context, adm varlog.Admin) *result.Result {
 		res := result.New(resourceType)
-		if snmd, err := adm.AddStorageNode(ctx, addr); err != nil {
+		if snmd, err := adm.AddStorageNode(ctx, snid, addr); err != nil {
 			res.AddErrors(err)
 		} else {
 			res.AddDataItems(snmd)

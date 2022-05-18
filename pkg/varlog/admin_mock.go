@@ -70,18 +70,18 @@ func (mr *MockAdminMockRecorder) AddMRPeer(arg0, arg1, arg2 interface{}) *gomock
 }
 
 // AddStorageNode mocks base method.
-func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 string) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string) (*snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddStorageNode", arg0, arg1)
+	ret := m.ctrl.Call(m, "AddStorageNode", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*snpb.StorageNodeMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddStorageNode indicates an expected call of AddStorageNode.
-func (mr *MockAdminMockRecorder) AddStorageNode(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) AddStorageNode(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStorageNode", reflect.TypeOf((*MockAdmin)(nil).AddStorageNode), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStorageNode", reflect.TypeOf((*MockAdmin)(nil).AddStorageNode), arg0, arg1, arg2)
 }
 
 // AddTopic mocks base method.

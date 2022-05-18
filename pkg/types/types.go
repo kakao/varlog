@@ -4,12 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"math/rand"
 	"net"
 	"net/url"
 	"strconv"
 	"sync/atomic"
-	"time"
 )
 
 type ClusterID uint32
@@ -34,12 +32,9 @@ func (cid ClusterID) String() string {
 
 type StorageNodeID int32
 
-var _ fmt.Stringer = (*StorageNodeID)(nil)
+const MinStorageNodeID = StorageNodeID(1)
 
-func RandomStorageNodeID() StorageNodeID {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	return StorageNodeID(r.Int31())
-}
+var _ fmt.Stringer = (*StorageNodeID)(nil)
 
 func ParseStorageNodeID(s string) (StorageNodeID, error) {
 	id, err := strconv.ParseInt(s, 10, 32)
@@ -48,6 +43,10 @@ func ParseStorageNodeID(s string) (StorageNodeID, error) {
 
 func (snid StorageNodeID) String() string {
 	return strconv.FormatInt(int64(snid), 10)
+}
+
+func (snid StorageNodeID) Invalid() bool {
+	return snid < MinStorageNodeID
 }
 
 type LogStreamID int32

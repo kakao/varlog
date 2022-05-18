@@ -121,6 +121,18 @@ func (mr *MockStorageNodeManagerMockRecorder) AddLogStreamReplica(arg0, arg1, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStreamReplica", reflect.TypeOf((*MockStorageNodeManager)(nil).AddLogStreamReplica), arg0, arg1, arg2, arg3, arg4)
 }
 
+// AddStorageNode mocks base method.
+func (m *MockStorageNodeManager) AddStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddStorageNode", arg0, arg1, arg2)
+}
+
+// AddStorageNode indicates an expected call of AddStorageNode.
+func (mr *MockStorageNodeManagerMockRecorder) AddStorageNode(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStorageNode", reflect.TypeOf((*MockStorageNodeManager)(nil).AddStorageNode), arg0, arg1, arg2)
+}
+
 // Close mocks base method.
 func (m *MockStorageNodeManager) Close() error {
 	m.ctrl.T.Helper()
@@ -176,33 +188,6 @@ func (m *MockStorageNodeManager) GetMetadata(arg0 context.Context, arg1 types.St
 func (mr *MockStorageNodeManagerMockRecorder) GetMetadata(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockStorageNodeManager)(nil).GetMetadata), arg0, arg1)
-}
-
-// GetMetadataByAddr mocks base method.
-func (m *MockStorageNodeManager) GetMetadataByAddr(arg0 context.Context, arg1 string) (*snpb.StorageNodeMetadataDescriptor, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetadataByAddr", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.StorageNodeMetadataDescriptor)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetMetadataByAddr indicates an expected call of GetMetadataByAddr.
-func (mr *MockStorageNodeManagerMockRecorder) GetMetadataByAddr(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadataByAddr", reflect.TypeOf((*MockStorageNodeManager)(nil).GetMetadataByAddr), arg0, arg1)
-}
-
-// RegisterStorageNode mocks base method.
-func (m *MockStorageNodeManager) RegisterStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterStorageNode", arg0, arg1, arg2)
-}
-
-// RegisterStorageNode indicates an expected call of RegisterStorageNode.
-func (mr *MockStorageNodeManagerMockRecorder) RegisterStorageNode(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStorageNode", reflect.TypeOf((*MockStorageNodeManager)(nil).RegisterStorageNode), arg0, arg1, arg2)
 }
 
 // RemoveLogStreamReplica mocks base method.

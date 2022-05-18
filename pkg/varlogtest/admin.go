@@ -34,7 +34,8 @@ func (c testAdmin) unlock() {
 	c.vt.cond.L.Unlock()
 }
 
-func (c *testAdmin) AddStorageNode(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
+// FIXME: Argument snid
+func (c *testAdmin) AddStorageNode(ctx context.Context, _ types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}

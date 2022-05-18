@@ -19,7 +19,7 @@ import (
 // Admin provides various methods to manage the varlog cluster.
 type Admin interface {
 	// AddStorageNode registers a storage node to the cluster.
-	AddStorageNode(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error)
+	AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error)
 
 	// UnregisterStorageNode unregisters a storage node identified by the argument storageNodeID
 	// from the cluster.
@@ -103,8 +103,13 @@ func (c *admin) Close() error {
 	return c.rpcConn.Close()
 }
 
-func (c *admin) AddStorageNode(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
-	rsp, err := c.rpcClient.AddStorageNode(ctx, &vmspb.AddStorageNodeRequest{Address: addr})
+func (c *admin) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
+	rsp, err := c.rpcClient.AddStorageNode(ctx, &vmspb.AddStorageNodeRequest{
+		StorageNode: varlogpb.StorageNode{
+			StorageNodeID: snid,
+			Address:       addr,
+		},
+	})
 	return rsp.GetStorageNode(), verrors.FromStatusError(err)
 }
 

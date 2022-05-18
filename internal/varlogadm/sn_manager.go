@@ -22,18 +22,14 @@ type StorageNodeManager interface {
 
 	ContainsAddress(addr string) bool
 
-	// GetMetadataByAddr returns metadata about a storage node. It is useful when id of the
-	// storage node is not known.
-	GetMetadataByAddr(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error)
-
 	// GetMetadata returns metadata for the storage node identified by the argument snid.
 	GetMetadata(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error)
 
-	// RegisterStorageNode adds the storage node to the manager.
+	// AddStorageNode adds the storage node to the manager.
 	// The new storage node should be registered to the metadata repository first.
 	// It is idempotent - already registered one also can be passed by this method.
 	// Note that this method cannot guarantee that the manager maintains the storage node immediately. However, the storage node is eventually managed since it is registered to the metadata repository.
-	RegisterStorageNode(ctx context.Context, snid types.StorageNodeID, addr string)
+	AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string)
 
 	// RemoveStorageNode unregisters the storage node identified by the argument snid.
 	RemoveStorageNode(snid types.StorageNodeID)
@@ -138,24 +134,6 @@ func (sm *snManager) ContainsAddress(addr string) bool {
 	return err == nil
 }
 
-func (sm *snManager) GetMetadataByAddr(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
-	mgr, err := client.NewManager[*client.ManagementClient]()
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = mgr.Close()
-	}()
-
-	snid := types.StorageNodeID(0)
-	mc, err := mgr.GetOrConnect(ctx, snid, addr)
-	if err != nil {
-		return nil, err
-	}
-
-	return mc.GetMetadata(ctx)
-}
-
 func (sm *snManager) GetMetadata(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -168,7 +146,7 @@ func (sm *snManager) GetMetadata(ctx context.Context, snid types.StorageNodeID) 
 	return mc.GetMetadata(ctx)
 }
 
-func (sm *snManager) RegisterStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) {
+func (sm *snManager) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 

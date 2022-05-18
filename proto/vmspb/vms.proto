@@ -18,8 +18,7 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message AddStorageNodeRequest {
-  // address is IP of a node to be added to the cluster.
-  string address = 1;
+  varlogpb.StorageNode storage_node = 1 [(gogoproto.nullable) = false];
 }
 
 message AddStorageNodeResponse {
@@ -298,6 +297,8 @@ message TrimResponse {
 }
 
 service ClusterManager {
+  // AddStorageNode adds a new storage node to the cluster.
+  // It is idempotent, that is, adding an already added storage node is okay.
   rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {}
 
   rpc UnregisterStorageNode(UnregisterStorageNodeRequest)

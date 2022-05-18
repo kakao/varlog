@@ -1017,7 +1017,7 @@ func (m *RaftEntry_Request) GetUnregisterTopic() *UnregisterTopic {
 }
 
 func init() {
-	proto.RegisterType((*RegisterStorageNode)(nil), "varlog.mrpb.RegisterStorageNode")
+	proto.RegisterType((*RegisterStorageNode)(nil), "varlog.mrpb.AddStorageNode")
 	proto.RegisterType((*UnregisterStorageNode)(nil), "varlog.mrpb.UnregisterStorageNode")
 	proto.RegisterType((*RegisterTopic)(nil), "varlog.mrpb.RegisterTopic")
 	proto.RegisterType((*UnregisterTopic)(nil), "varlog.mrpb.UnregisterTopic")
@@ -2346,10 +2346,10 @@ func (m *RegisterStorageNode) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: RegisterStorageNode: wiretype end group for non-group")
+			return fmt.Errorf("proto: AddStorageNode: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: RegisterStorageNode: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: AddStorageNode: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -3884,7 +3884,7 @@ func (m *RaftEntry_Request) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RegisterStorageNode", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field AddStorageNode", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {

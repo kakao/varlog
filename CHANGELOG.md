@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Moved package `pkg/logclient` and `pkg/snc` to `internal/storagenode/client` to prevent exposing the package. (#VARLOG-743/#662)
 - `internal/storagenode/client.(Manager)` manages both `internal/storagenode/client.(LogClient)` and `internal/storagenode/client.(ManagementClient)`. (#VARLOG-743/#662)
 - The type of field `proto/varlogpb.(StorageNodeMetadataDescriptor).StorageNode` is changed from `varlogpb.StorageNodeDescriptor` to `varlogpb.StorageNode`. (#VARLOG-745/#664)
+- The `proto/vmspb.(AddStorageNodeRequest)` now takes the ID as well as the address of the storage node. (#VARLOG-737/#665)
+- The RPC `proto/vmspb.(ClusterManagerClient).AddStorageNode` is now idempotent - adding already added storage node is okay. (#VARLOG-737/#665)
 
 ### Removed
 - Removed structs for options in varlogadm, for instance, `internal/varlogadm.(Options)`, `internal/varlogadm.(MRManagerOptions)` and `internal/varlogadm.(WatcherOptions)`. (#VARLOG-740/#654)

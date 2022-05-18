@@ -33,8 +33,8 @@ func TestStorageNodeManager_RegisterUnregister(t *testing.T) {
 	ts.Run()
 	defer ts.Close()
 
-	snmgr.RegisterStorageNode(context.Background(), ts.StorageNodeID(), ts.Address())
-	snmgr.RegisterStorageNode(context.Background(), ts.StorageNodeID(), ts.Address()) // idempotent
+	snmgr.AddStorageNode(context.Background(), ts.StorageNodeID(), ts.Address())
+	snmgr.AddStorageNode(context.Background(), ts.StorageNodeID(), ts.Address()) // idempotent
 	assert.True(t, snmgr.Contains(ts.StorageNodeID()))
 	assert.True(t, snmgr.ContainsAddress(ts.Address()))
 
@@ -44,7 +44,7 @@ func TestStorageNodeManager_RegisterUnregister(t *testing.T) {
 	assert.False(t, snmgr.ContainsAddress(ts.Address()))
 
 	// Register unreachable storage node.
-	snmgr.RegisterStorageNode(context.Background(), ts.StorageNodeID()+1, "unreachable")
+	snmgr.AddStorageNode(context.Background(), ts.StorageNodeID()+1, "unreachable")
 	assert.True(t, snmgr.Contains(ts.StorageNodeID()+1))
 	assert.True(t, snmgr.ContainsAddress("unreachable"))
 	_, err = snmgr.GetMetadata(context.Background(), ts.StorageNodeID()+1)
@@ -112,7 +112,7 @@ func TestStorageNodeManager_AddLogStreamReplica(t *testing.T) {
 	err = snmgr.AddLogStreamReplica(context.Background(), ts.StorageNodeID(), 1, 1, "/tmp")
 	assert.Error(t, err)
 
-	snmgr.RegisterStorageNode(context.Background(), ts.StorageNodeID(), ts.Address())
+	snmgr.AddStorageNode(context.Background(), ts.StorageNodeID(), ts.Address())
 	err = snmgr.AddLogStreamReplica(context.Background(), ts.StorageNodeID(), 1, 1, "/tmp")
 	assert.NoError(t, err)
 }
@@ -139,7 +139,7 @@ func TestStorageNodeManager_AddLogStream(t *testing.T) {
 	defer ts2.Close()
 
 	// One of the storage nodes is not registered.
-	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	snmgr.AddStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
 	ts1.MockManagementServer.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any()).Return(
 		&snpb.AddLogStreamReplicaResponse{}, nil,
 	).AnyTimes()
@@ -160,7 +160,7 @@ func TestStorageNodeManager_AddLogStream(t *testing.T) {
 	assert.Error(t, err)
 
 	// One of the storage nodes returns an error.
-	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	snmgr.AddStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
 	ts2.MockManagementServer.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any()).Return(
 		nil, errors.New("error"),
 	).Times(1)
@@ -253,7 +253,7 @@ func TestStorageNodeManager_Seal(t *testing.T) {
 	}, nil).AnyTimes()
 
 	// One of the storage nodes is not registered.
-	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	snmgr.AddStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
 	ts1.MockManagementServer.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(
 		&snpb.SealResponse{}, nil,
 	).AnyTimes()
@@ -261,7 +261,7 @@ func TestStorageNodeManager_Seal(t *testing.T) {
 	assert.Error(t, err)
 
 	// One of the storage nodes returns an error.
-	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	snmgr.AddStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
 	ts2.MockManagementServer.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(
 		nil, errors.New("error"),
 	).Times(1)
@@ -328,7 +328,7 @@ func TestStorageNodeManager_Unseal(t *testing.T) {
 	}, nil).AnyTimes()
 
 	// One of the storage nodes is not registered.
-	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	snmgr.AddStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
 	ts1.MockManagementServer.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(
 		&pbtypes.Empty{}, nil,
 	).AnyTimes()
@@ -336,7 +336,7 @@ func TestStorageNodeManager_Unseal(t *testing.T) {
 	assert.Error(t, err)
 
 	// One of the storage nodes returns an error.
-	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	snmgr.AddStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
 	ts2.MockManagementServer.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(
 		nil, errors.New("error"),
 	).Times(1)
@@ -457,7 +457,7 @@ func TestStorageNodeManager_Trim(t *testing.T) {
 	}, nil).AnyTimes()
 
 	// One of the storage nodes is not registered.
-	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	snmgr.AddStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
 	ts1.MockManagementServer.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(
 		&snpb.TrimResponse{}, nil,
 	).AnyTimes()
@@ -465,7 +465,7 @@ func TestStorageNodeManager_Trim(t *testing.T) {
 	assert.Error(t, err)
 
 	// One of the storage nodes returns an error.
-	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	snmgr.AddStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
 	ts2.MockManagementServer.EXPECT().Trim(gomock.Any(), gomock.Any()).Return(
 		nil, errors.New("error"),
 	).Times(1)
@@ -570,7 +570,7 @@ func TestStorageNodeManager_Sync(t *testing.T) {
 	assert.Error(t, err)
 
 	// One of the storage nodes is not registered.
-	snmgr.RegisterStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
+	snmgr.AddStorageNode(context.Background(), ts1.StorageNodeID(), ts1.Address())
 	ts1.MockManagementServer.EXPECT().Sync(gomock.Any(), gomock.Any()).Return(
 		&snpb.SyncResponse{}, nil,
 	).AnyTimes()
@@ -578,7 +578,7 @@ func TestStorageNodeManager_Sync(t *testing.T) {
 	assert.Error(t, err)
 
 	// Both are registered.
-	snmgr.RegisterStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
+	snmgr.AddStorageNode(context.Background(), ts2.StorageNodeID(), ts2.Address())
 	_, err = snmgr.Sync(context.Background(), tpid, lsid, snid1, snid2, lastGLSN)
 	assert.NoError(t, err)
 }

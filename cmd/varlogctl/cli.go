@@ -226,6 +226,7 @@ func newStorageNodeCommand() *cli.Command {
 				Action: action,
 				Flags: append(commonFlags(
 					flagSNAddr.StringFlag(true, ""),
+					flagStorageNodeID.StringFlag(true, ""),
 				)),
 			},
 			{

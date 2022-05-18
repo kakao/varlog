@@ -60,6 +60,9 @@ func newConfig(opts []Option) (config, error) {
 }
 
 func (cfg config) validate() error {
+	if cfg.snid.Invalid() {
+		return fmt.Errorf("storage node: invalid id %d", int32(cfg.snid))
+	}
 	if len(cfg.listen) == 0 {
 		return errors.New("storage node: no listen address")
 	}

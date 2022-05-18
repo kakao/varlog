@@ -69,12 +69,13 @@ def truncate(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def register_storage_node(admin: str, advertise: str, retry: int,
+def register_storage_node(admin: str, snid: int, advertise: str, retry: int,
                           backoff: int) -> None:
     """Register storage node to cluster.
 
     Args:
         admin: admin address
+        snid: storage node id
         advertise: advertise address
         retry: the number of retrial of register
         backoff: backoff duration in seconds
@@ -86,6 +87,7 @@ def register_storage_node(admin: str, advertise: str, retry: int,
         f"{binpath}/varlogctl",
         "sn",
         "add",
+        f"--storage-node-id={snid}",
         f"--storage-node-address={advertise}",
         f"--admin={admin}",
     ]
@@ -186,7 +188,7 @@ def start(args: argparse.Namespace) -> None:
 
             time.sleep(args.add_after_seconds)
             if not registered:
-                register_storage_node(args.admin, args.advertise, args.retry_register,
+                register_storage_node(args.admin, snid, args.advertise, args.retry_register,
                                       args.retry_interval_seconds)
                 logger.info("registered storage node to cluster")
             ok = True

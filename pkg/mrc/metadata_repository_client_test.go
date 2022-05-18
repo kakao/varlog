@@ -49,7 +49,7 @@ func TestMRClientGetMetadata(t *testing.T) {
 }
 
 func TestMRClientRegisterStorageNode(t *testing.T) {
-	Convey("Given that a MRClient calls RegisterStorageNode to a MRService", t, func() {
+	Convey("Given that a MRClient calls AddStorageNode to a MRService", t, func() {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
