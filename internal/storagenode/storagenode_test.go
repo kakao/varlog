@@ -354,11 +354,16 @@ func TestStorageNode(t *testing.T) {
 }
 
 func TestStorageNode_InvalidConfig(t *testing.T) {
-	// TODO: uncomment it
-	// defer goleak.VerifyNone(t)
+	// bad id
+	_, err := NewStorageNode(
+		WithStorageNodeID(0),
+		WithListenAddress("127.0.0.1:0"),
+		WithVolumes(t.TempDir()),
+	)
+	assert.Error(t, err)
 
 	// bad listen address
-	_, err := NewStorageNode(
+	_, err = NewStorageNode(
 		WithListenAddress(""),
 		WithVolumes(t.TempDir()),
 	)

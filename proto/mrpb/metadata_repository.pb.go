@@ -544,7 +544,7 @@ func NewMetadataRepositoryServiceClient(cc *grpc.ClientConn) MetadataRepositoryS
 
 func (c *metadataRepositoryServiceClient) RegisterStorageNode(ctx context.Context, in *StorageNodeRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	out := new(types.Empty)
-	err := c.cc.Invoke(ctx, "/varlog.mrpb.MetadataRepositoryService/RegisterStorageNode", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/varlog.mrpb.MetadataRepositoryService/AddStorageNode", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -651,7 +651,7 @@ type UnimplementedMetadataRepositoryServiceServer struct {
 }
 
 func (*UnimplementedMetadataRepositoryServiceServer) RegisterStorageNode(ctx context.Context, req *StorageNodeRequest) (*types.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RegisterStorageNode not implemented")
+	return nil, status.Errorf(codes.Unimplemented, "method AddStorageNode not implemented")
 }
 func (*UnimplementedMetadataRepositoryServiceServer) UnregisterStorageNode(ctx context.Context, req *StorageNodeRequest) (*types.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterStorageNode not implemented")
@@ -695,7 +695,7 @@ func _MetadataRepositoryService_RegisterStorageNode_Handler(srv interface{}, ctx
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/varlog.mrpb.MetadataRepositoryService/RegisterStorageNode",
+		FullMethod: "/varlog.mrpb.MetadataRepositoryService/AddStorageNode",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MetadataRepositoryServiceServer).RegisterStorageNode(ctx, req.(*StorageNodeRequest))
@@ -870,7 +870,7 @@ var _MetadataRepositoryService_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*MetadataRepositoryServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "RegisterStorageNode",
+			MethodName: "AddStorageNode",
 			Handler:    _MetadataRepositoryService_RegisterStorageNode_Handler,
 		},
 		{

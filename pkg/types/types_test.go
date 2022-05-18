@@ -6,9 +6,8 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 	"go.uber.org/goleak"
-
-	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -32,21 +31,10 @@ func TestClusterID(t *testing.T) {
 	})
 }
 
-func TestStorageNodeID(t *testing.T) {
-	Convey("StorageNodeID", t, func() {
-		Convey("Random generator (non-deterministic test)", func() {
-			idset := make(map[StorageNodeID]bool)
-			for i := 0; i < 10000; i++ {
-				var id StorageNodeID
-				testutil.CompareWait1(func() bool {
-					id = RandomStorageNodeID()
-					return !idset[id]
-				})
-				So(idset[id], ShouldBeFalse)
-				idset[id] = true
-			}
-		})
-	})
+func TestTypesStorageNodeID(t *testing.T) {
+	assert.True(t, StorageNodeID(-1).Invalid())
+	assert.True(t, StorageNodeID(0).Invalid())
+	assert.False(t, StorageNodeID(1).Invalid())
 }
 
 func TestGLSN(t *testing.T) {

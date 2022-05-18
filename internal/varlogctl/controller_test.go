@@ -119,7 +119,7 @@ func TestStorageNode(t *testing.T) {
 	})
 
 	// Add
-	admin.EXPECT().AddStorageNode(gomock.Any(), gomock.Any()).Return(
+	admin.EXPECT().AddStorageNode(gomock.Any(), gomock.Any(), gomock.Any()).Return(
 		&snpb.StorageNodeMetadataDescriptor{
 			ClusterID: types.ClusterID(1),
 			StorageNode: varlogpb.StorageNode{

@@ -498,7 +498,7 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 
 	log.Printf("SN(%v) GetMetadata: %s", snID, addr)
 
-	_, err := clus.vmsCL.AddStorageNode(context.Background(), addr)
+	_, err := clus.vmsCL.AddStorageNode(context.Background(), snID, addr)
 	require.NoError(t, err)
 
 	log.Printf("SN(%v) AddStorageNode", snID)

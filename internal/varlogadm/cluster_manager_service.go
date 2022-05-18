@@ -52,7 +52,7 @@ func (s *clusterManagerService) withTelemetry(ctx context.Context, spanName stri
 func (s *clusterManagerService) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManager/AddStorageNode", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			snmeta, err := s.clusManager.AddStorageNode(ctx, req.GetAddress())
+			snmeta, err := s.clusManager.AddStorageNode(ctx, req.StorageNode.StorageNodeID, req.StorageNode.Address)
 			return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, err
 		},
 	)

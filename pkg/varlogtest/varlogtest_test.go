@@ -93,8 +93,9 @@ func TestVarlogTest(t *testing.T) {
 
 	// Add storage nodes
 	for i := 0; i < numStorageNodes; i++ {
+		snid := types.StorageNodeID(i + 1)
 		addr := fmt.Sprintf("sn%03d", i+1)
-		snMetaDesc, err := adm.AddStorageNode(context.Background(), addr)
+		snMetaDesc, err := adm.AddStorageNode(context.Background(), snid, addr)
 		require.NoError(t, err)
 		require.Equal(t, clusterID, snMetaDesc.ClusterID)
 		require.Empty(t, snMetaDesc.LogStreamReplicas)
@@ -471,8 +472,9 @@ func TestVarlogTest_Trim(t *testing.T) {
 	assert.NoError(t, err)
 
 	for i := 0; i < replicationFactor; i++ {
+		snid := types.StorageNodeID(i + 1)
 		addr := fmt.Sprintf("sn-%d", i+1)
-		_, err := adm.AddStorageNode(context.Background(), addr)
+		_, err := adm.AddStorageNode(context.Background(), snid, addr)
 		assert.NoError(t, err)
 	}
 

@@ -54,8 +54,8 @@ func TestAddAlreadyExistedStorageNode(t *testing.T) {
 
 	snID := clus.StorageNodeIDAtIndex(t, 0)
 	addr := clus.SNClientOf(t, snID).Target().Address
-	_, err := clus.GetVMSClient(t).AddStorageNode(context.TODO(), addr)
-	require.Error(t, err)
+	_, err := clus.GetVMSClient(t).AddStorageNode(context.TODO(), snID, addr)
+	require.NoError(t, err)
 }
 
 func TestUnregisterLogStream(t *testing.T) {

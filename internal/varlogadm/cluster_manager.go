@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner/stopwaiter"
@@ -39,8 +40,9 @@ type StorageNodeEventHandler interface {
 type ClusterManager interface {
 	io.Closer
 
-	// AddStorageNode adds new StorageNode to the cluster.
-	AddStorageNode(ctx context.Context, addr string) (*snpb.StorageNodeMetadataDescriptor, error)
+	// AddStorageNode adds a new storage node to the cluster.
+	// It is idempotent, that is, adding an already added storage node is okay.
+	AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error)
 
 	UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error
 
@@ -347,50 +349,23 @@ func (cm *clusterManager) RemoveMRPeer(ctx context.Context, raftURL string) erro
 	return nil
 }
 
-func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (snmeta *snpb.StorageNodeMetadataDescriptor, err error) {
+func (cm *clusterManager) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	if cm.snMgr.ContainsAddress(addr) {
-		return nil, errors.Wrap(verrors.ErrExist, "storage node address")
-	}
-
-	snmeta, err = cm.snMgr.GetMetadataByAddr(ctx, addr)
+	snmd, err := getMetadataByAddr(ctx, snid, addr)
 	if err != nil {
 		return nil, err
 	}
 
-	var (
-		snd           *varlogpb.StorageNodeDescriptor
-		clusmeta      *varlogpb.MetadataDescriptor
-		storageNodeID = snmeta.StorageNode.StorageNodeID
-	)
-
-	if cm.snMgr.Contains(storageNodeID) {
-		err = errors.Wrap(verrors.ErrExist, "storage node id")
-		goto errOut
-	}
-
-	clusmeta, err = cm.cmView.ClusterMetadata(ctx)
-	if err != nil {
-		goto errOut
-	}
-
-	if err = clusmeta.MustNotHaveStorageNode(storageNodeID); err != nil {
-		goto errOut
-	}
-
-	snd = snmeta.ToStorageNodeDescriptor()
+	snd := snmd.ToStorageNodeDescriptor()
 	snd.Status = varlogpb.StorageNodeStatusRunning
 	if err = cm.mrMgr.RegisterStorageNode(ctx, snd); err != nil {
-		goto errOut
+		return nil, err
 	}
 
-	cm.snMgr.RegisterStorageNode(ctx, snmeta.StorageNode.StorageNodeID, addr)
-	return snmeta, err
-
-errOut:
-	return nil, err
+	cm.snMgr.AddStorageNode(ctx, snmd.StorageNode.StorageNodeID, addr)
+	return snmd, err
 }
 
 func (cm *clusterManager) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
@@ -974,4 +949,21 @@ func (cm *clusterManager) Trim(ctx context.Context, topicID types.TopicID, lastG
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	return cm.snMgr.Trim(ctx, topicID, lastGLSN)
+}
+
+func getMetadataByAddr(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
+	mgr, err := client.NewManager[*client.ManagementClient]()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = mgr.Close()
+	}()
+
+	mc, err := mgr.GetOrConnect(ctx, snid, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	return mc.GetMetadata(ctx)
 }
