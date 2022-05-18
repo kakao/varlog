@@ -17,7 +17,9 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
-// StorageNodeMetadataDescriptor represents the metadata of stroage node.
+// StorageNodeMetadataDescriptor is the metadata of the storage node.
+// It contains mutable properties, for instance, usage of storage, log streams,
+// etc.
 message StorageNodeMetadataDescriptor {
   // ClusterID is the identifier of the cluster.
   uint32 cluster_id = 1 [
@@ -27,13 +29,17 @@ message StorageNodeMetadataDescriptor {
     (gogoproto.jsontag) = "clusterId"
   ];
 
-  // StorageNode is detailed information about the storage node.
-  varlogpb.StorageNodeDescriptor storage_node = 2
-      [(gogoproto.jsontag) = "storageNode"];
+  varlogpb.StorageNode storage_node = 2
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "storageNode"];
+
+  repeated varlogpb.StorageDescriptor storages = 3
+      [(gogoproto.nullable) = false];
 
   // LogStreams are the list of metadata for log stream replicas.
-  repeated LogStreamReplicaMetadataDescriptor log_stream_replicas = 3
+  repeated LogStreamReplicaMetadataDescriptor log_stream_replicas = 4
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
+
+  varlogpb.StorageNodeStatus status = 5;
 
   // CreatedTime is the creation time of the storage node.
   // Note that the CreatedTime is immutable after the metadata repository sets.
@@ -41,7 +47,7 @@ message StorageNodeMetadataDescriptor {
   // CreatedTime. How can we tell a recovered storage node the CreatedTime?
   //
   // Deprecated:
-  google.protobuf.Timestamp created_time = 4 [
+  google.protobuf.Timestamp created_time = 6 [
     (gogoproto.stdtime) = true,
     (gogoproto.nullable) = false,
     (gogoproto.jsontag) = "createdTime"
@@ -50,7 +56,7 @@ message StorageNodeMetadataDescriptor {
   // UpdatedTime
   //
   // Deprecated:
-  google.protobuf.Timestamp updated_time = 5 [
+  google.protobuf.Timestamp updated_time = 7 [
     (gogoproto.stdtime) = true,
     (gogoproto.nullable) = false,
     (gogoproto.jsontag) = "updatedTime"

@@ -45,15 +45,13 @@ func (c *testAdmin) AddStorageNode(ctx context.Context, addr string) (*snpb.Stor
 	storageNodeID := c.vt.generateStorageNodeID()
 	storageNodeMetaDesc := snpb.StorageNodeMetadataDescriptor{
 		ClusterID: c.vt.clusterID,
-		StorageNode: &varlogpb.StorageNodeDescriptor{
-			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: storageNodeID,
-				Address:       addr,
-			},
-			Status: varlogpb.StorageNodeStatusRunning,
-			Storages: []*varlogpb.StorageDescriptor{
-				{Path: "/tmp"},
-			},
+		StorageNode: varlogpb.StorageNode{
+			StorageNodeID: storageNodeID,
+			Address:       addr,
+		},
+		Status: varlogpb.StorageNodeStatusRunning,
+		Storages: []varlogpb.StorageDescriptor{
+			{Path: "/tmp"},
 		},
 		LogStreamReplicas: nil,
 		CreatedTime:       now,
@@ -160,7 +158,7 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 		snID := snIDs[j]
 		logStreamDesc.Replicas[i] = &varlogpb.ReplicaDescriptor{
 			StorageNodeID: c.vt.storageNodes[snID].StorageNode.StorageNodeID,
-			Path:          c.vt.storageNodes[snID].StorageNode.Storages[0].Path,
+			Path:          c.vt.storageNodes[snID].Storages[0].Path,
 		}
 	}
 	c.vt.logStreams[logStreamID] = logStreamDesc

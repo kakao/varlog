@@ -69,13 +69,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 					StorageNode: varlogpb.StorageNode{
 						StorageNodeID: types.StorageNodeID(0),
 					},
-					Storages: []*varlogpb.StorageDescriptor{
-						{
-							Path:  "path",
-							Used:  0,
-							Total: 100,
-						},
-					},
+					Paths: []string{"path"},
 				}
 				err := mc.RegisterStorageNode(context.TODO(), sn)
 				So(err, assert.ShouldWrap, verrors.ErrInvalid)
@@ -102,32 +96,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 						StorageNodeID: types.StorageNodeID(0),
 						Address:       "address",
 					},
-					Storages: []*varlogpb.StorageDescriptor{
-						{
-							Used:  0,
-							Total: 100,
-						},
-					},
-				}
-				err := mc.RegisterStorageNode(context.TODO(), sn)
-				So(err, assert.ShouldWrap, verrors.ErrInvalid)
-			})
-		})
-
-		Convey("When passed Used > Total in StorageDescriptor", func() {
-			Convey("Then the MRClient should return an ErrInvalid", func() {
-				sn := &varlogpb.StorageNodeDescriptor{
-					StorageNode: varlogpb.StorageNode{
-						StorageNodeID: types.StorageNodeID(0),
-						Address:       "address",
-					},
-					Storages: []*varlogpb.StorageDescriptor{
-						{
-							Path:  "path",
-							Used:  10,
-							Total: 0,
-						},
-					},
+					Paths: []string{""},
 				}
 				err := mc.RegisterStorageNode(context.TODO(), sn)
 				So(err, assert.ShouldWrap, verrors.ErrInvalid)
@@ -142,13 +111,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 						StorageNodeID: types.StorageNodeID(0),
 						Address:       "address",
 					},
-					Storages: []*varlogpb.StorageDescriptor{
-						{
-							Path:  "path",
-							Used:  0,
-							Total: 100,
-						},
-					},
+					Paths: []string{"path"},
 				}
 				So(sn.Valid(), ShouldBeTrue)
 
@@ -165,13 +128,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 						StorageNodeID: types.StorageNodeID(0),
 						Address:       "address",
 					},
-					Storages: []*varlogpb.StorageDescriptor{
-						{
-							Path:  "path",
-							Used:  0,
-							Total: 100,
-						},
-					},
+					Paths: []string{"path"},
 				}
 				So(sn.Valid(), ShouldBeTrue)
 

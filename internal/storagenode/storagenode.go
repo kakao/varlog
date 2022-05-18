@@ -213,19 +213,17 @@ func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadata
 	ret, _, _ := sn.sf.Do(singleflightKeyMetadata, func() (interface{}, error) {
 		snmeta := &snpb.StorageNodeMetadataDescriptor{
 			ClusterID: sn.cid,
-			StorageNode: &varlogpb.StorageNodeDescriptor{
-				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: sn.snid,
-					Address:       sn.advertise,
-				},
-				Status: varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: sn.snid,
+				Address:       sn.advertise,
 			},
+			Status: varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
 		}
 
 		for _, path := range sn.snPaths {
 			all, used, _ := fputil.DiskSize(path)
-			snmeta.StorageNode.Storages = append(snmeta.StorageNode.Storages,
-				&varlogpb.StorageDescriptor{
+			snmeta.Storages = append(snmeta.Storages,
+				varlogpb.StorageDescriptor{
 					Path:  path,
 					Used:  used,
 					Total: all,

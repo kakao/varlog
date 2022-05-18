@@ -104,7 +104,7 @@ func TestAddLogStreamManually(t *testing.T) {
 
 		replicas = append(replicas, &varlogpb.ReplicaDescriptor{
 			StorageNodeID: snID,
-			Path:          snmd.GetStorageNode().GetStorages()[0].GetPath(),
+			Path:          snmd.Storages[0].Path,
 		})
 	}
 
@@ -132,7 +132,7 @@ func TestAddLogStreamPartiallyRegistered(t *testing.T) {
 	require.NoError(t, err)
 
 	topicID := clus.TopicIDs()[0]
-	err = sn1.AddLogStreamReplica(context.Background(), topicID, lsID, snmd1.GetStorageNode().GetStorages()[0].GetPath())
+	err = sn1.AddLogStreamReplica(context.Background(), topicID, lsID, snmd1.GetStorages()[0].GetPath())
 	require.NoError(t, err)
 
 	snid2 := clus.StorageNodeIDAtIndex(t, 1)
@@ -145,11 +145,11 @@ func TestAddLogStreamPartiallyRegistered(t *testing.T) {
 	replicas := []*varlogpb.ReplicaDescriptor{
 		{
 			StorageNodeID: snid1,
-			Path:          snmd1.GetStorageNode().GetStorages()[0].GetPath(),
+			Path:          snmd1.GetStorages()[0].GetPath(),
 		},
 		{
 			StorageNodeID: snid2,
-			Path:          snmd2.GetStorageNode().GetStorages()[0].GetPath(),
+			Path:          snmd2.GetStorages()[0].GetPath(),
 		},
 	}
 	_, err = clus.GetVMSClient(t).AddLogStream(context.Background(), topicID, replicas)
@@ -176,7 +176,7 @@ func TestRemoveLogStreamReplica(t *testing.T) {
 	snmd, err := sn.GetMetadata(context.Background())
 	require.NoError(t, err)
 	topicID := clus.TopicIDs()[0]
-	err = sn.AddLogStreamReplica(context.Background(), topicID, lsID, snmd.GetStorageNode().GetStorages()[0].GetPath())
+	err = sn.AddLogStreamReplica(context.Background(), topicID, lsID, snmd.GetStorages()[0].GetPath())
 	require.NoError(t, err)
 
 	err = clus.GetVMSClient(t).RemoveLogStreamReplica(context.TODO(), snid, topicID, lsID)
@@ -359,7 +359,7 @@ func TestSealLogStreamSealedIncompletely(t *testing.T) {
 				snmeta, err := failedSN.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 
-				path := snmeta.GetStorageNode().GetStorages()[0].GetPath()
+				path := snmeta.GetStorages()[0].GetPath()
 				So(len(path), ShouldBeGreaterThan, 0)
 
 				err = failedSN.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
@@ -419,7 +419,7 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 				snmeta, err := failedSN.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 
-				path := snmeta.GetStorageNode().GetStorages()[0].GetPath()
+				path := snmeta.GetStorages()[0].GetPath()
 				So(len(path), ShouldBeGreaterThan, 0)
 
 				err = failedSN.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
@@ -475,7 +475,7 @@ func TestGCZombieLogStream(t *testing.T) {
 			meta, err := snMCL.GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 
-			path := meta.GetStorageNode().GetStorages()[0].GetPath()
+			path := meta.GetStorages()[0].GetPath()
 			err = snMCL.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
 			So(err, ShouldBeNil)
 

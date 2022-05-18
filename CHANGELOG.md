@@ -11,14 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added interface types for functional options in varlogadm, for instance, `internal/varlogadm.(Option)`, `internal/varlogadm.(MRManagerOption)` and `internal/varlogadm.(WatcherOption)`. (#VARLOG-740/#654)
 - Added `pkg/rpc.(*Manager)` to manage gRPC connections. (#VARLOG-739/#660)
+- Field `proto/varlogpb.(StorageNodeDescriptor).Paths` is added to `proto.varlogpb.(StorageNodeDescriptor)` since it is immutable properties of the storage node. (#VARLOG-745/#664)
 
 ### Changed
 - Moved package `pkg/logclient` and `pkg/snc` to `internal/storagenode/client` to prevent exposing the package. (#VARLOG-743/#662)
 - `internal/storagenode/client.(Manager)` manages both `internal/storagenode/client.(LogClient)` and `internal/storagenode/client.(ManagementClient)`. (#VARLOG-743/#662)
+- The type of field `proto/varlogpb.(StorageNodeMetadataDescriptor).StorageNode` is changed from `varlogpb.StorageNodeDescriptor` to `varlogpb.StorageNode`. (#VARLOG-745/#664)
 
 ### Removed
 - Removed structs for options in varlogadm, for instance, `internal/varlogadm.(Options)`, `internal/varlogadm.(MRManagerOptions)` and `internal/varlogadm.(WatcherOptions)`. (#VARLOG-740/#654)
 - Removed dead code - interface `internal/metarepos.(StorageNodeManagementClientFactory)` and its implementations and package `pkg/rpc/testpb`. (#VARLOG-743/#662)
+- Field `proto/varlogpb.(StorageNodeDescriptor).Storages`, which is type of `proto/varlogpb.(StorageDescriptor)`, is removed since it is mutable. (#VARLOG-745/#664)
 
 
 ## [0.1.8] - 2022-05-04

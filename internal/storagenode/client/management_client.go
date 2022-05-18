@@ -48,7 +48,7 @@ func NewManagementClient(ctx context.Context, clusterID types.ClusterID, address
 	if err != nil {
 		return nil, multierr.Append(err, rpcConn.Close())
 	}
-	storageNodeID := rsp.GetStorageNodeMetadata().GetStorageNode().GetStorageNodeID()
+	storageNodeID := rsp.GetStorageNodeMetadata().StorageNode.StorageNodeID
 
 	return &ManagementClient{
 		rpcConn:   rpcConn,

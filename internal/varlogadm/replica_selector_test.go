@@ -30,21 +30,13 @@ func TestRandomSelector(t *testing.T) {
 						StorageNode: varlogpb.StorageNode{
 							StorageNodeID: types.StorageNodeID(1),
 						},
-						Storages: []*varlogpb.StorageDescriptor{
-							{
-								Path: "/tmp",
-							},
-						},
+						Paths: []string{"/tmp"},
 					},
 					{
 						StorageNode: varlogpb.StorageNode{
 							StorageNodeID: types.StorageNodeID(2),
 						},
-						Storages: []*varlogpb.StorageDescriptor{
-							{
-								Path: "/tmp",
-							},
-						},
+						Paths: []string{"/tmp"},
 					},
 				},
 				LogStreams: []*varlogpb.LogStreamDescriptor{
@@ -123,10 +115,8 @@ func TestVictimSelector(t *testing.T) {
 			snMgr.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
 					return &snpb.StorageNodeMetadataDescriptor{
-						StorageNode: &varlogpb.StorageNodeDescriptor{
-							StorageNode: varlogpb.StorageNode{
-								StorageNodeID: snid,
-							},
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
 						},
 						LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
 							{
@@ -157,10 +147,8 @@ func TestVictimSelector(t *testing.T) {
 			snMgr.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
 					return &snpb.StorageNodeMetadataDescriptor{
-						StorageNode: &varlogpb.StorageNodeDescriptor{
-							StorageNode: varlogpb.StorageNode{
-								StorageNodeID: snid,
-							},
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
 						},
 						LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
 							{
@@ -198,10 +186,8 @@ func TestVictimSelector(t *testing.T) {
 						status = varlogpb.LogStreamStatusSealing
 					}
 					return &snpb.StorageNodeMetadataDescriptor{
-						StorageNode: &varlogpb.StorageNodeDescriptor{
-							StorageNode: varlogpb.StorageNode{
-								StorageNodeID: snid,
-							},
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
 						},
 						LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
 							{
@@ -251,11 +237,9 @@ func TestBalancedReplicaSelector(t *testing.T) {
 				for j := 0; j < cnt; j++ {
 					snd := &varlogpb.StorageNodeDescriptor{}
 					snd.StorageNodeID = types.StorageNodeID(j + 1)
-					snd.Storages = make([]*varlogpb.StorageDescriptor, c.Intn(maxStoragesPerNode+1-minStoragesPerNode)+minStoragesPerNode)
-					for k := 0; k < len(snd.Storages); k++ {
-						snd.Storages[k] = &varlogpb.StorageDescriptor{
-							Path: fmt.Sprintf("/data%d", k+1),
-						}
+					snd.Paths = make([]string, c.Intn(maxStoragesPerNode+1-minStoragesPerNode)+minStoragesPerNode)
+					for k := 0; k < len(snd.Paths); k++ {
+						snd.Paths[k] = fmt.Sprintf("/data%d", k+1)
 					}
 					(*snds)[j] = snd
 				}
@@ -288,9 +272,9 @@ func TestBalancedReplicaSelector(t *testing.T) {
 		// Very generous tolerance
 		tolerance := float64(numLogStreams * replicationFactor / len(md.StorageNodes))
 		equalNumStorages := true
-		numStorages := len(md.StorageNodes[0].Storages)
+		numPaths := len(md.StorageNodes[0].Paths)
 		for _, snd := range md.StorageNodes[1:] {
-			if numStorages != len(snd.Storages) {
+			if numPaths != len(snd.Paths) {
 				equalNumStorages = false
 				break
 			}
@@ -317,7 +301,7 @@ func testVerifyLogStreamDescriptors(t *testing.T, md *varlogpb.MetadataDescripto
 	}
 	for _, snd := range md.StorageNodes {
 		storageNodeID := snd.StorageNodeID
-		paths[storageNodeID] = len(snd.Storages)
+		paths[storageNodeID] = len(snd.Paths)
 	}
 
 	testUtilizationBalance(t, paths, replicas, tolerance)

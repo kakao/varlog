@@ -653,7 +653,7 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types
 	require.Contains(t, clus.snMCLs, newsn)
 	snmd, err := clus.snMCLs[newsn].GetMetadata(context.TODO())
 	require.NoError(t, err)
-	path := snmd.GetStorageNode().GetStorages()[0].GetPath()
+	path := snmd.Storages[0].Path
 
 	newReplica := &varlogpb.ReplicaDescriptor{
 		StorageNodeID: newsn,
@@ -702,7 +702,7 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T, topicID types.TopicID) t
 
 		snmd, err := clus.storageNodeManagementClientOf(t, snID).GetMetadata(context.Background())
 		require.NoError(t, err)
-		path := snmd.GetStorageNode().GetStorages()[0].GetPath()
+		path := snmd.Storages[0].Path
 		rds = append(rds, &varlogpb.ReplicaDescriptor{
 			StorageNodeID: snID,
 			Path:          path,
@@ -766,7 +766,7 @@ func (clus *VarlogCluster) AddLSIncomplete(t *testing.T, topicID types.TopicID) 
 		snID := replica.StorageNode.StorageNodeID
 		snmd, err := clus.storageNodeManagementClientOf(t, snID).GetMetadata(context.Background())
 		require.NoError(t, err)
-		path := snmd.GetStorageNode().GetStorages()[0].GetPath()
+		path := snmd.Storages[0].Path
 
 		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStreamReplica(
 			context.Background(),
@@ -821,7 +821,7 @@ func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, topicID types.TopicID
 	meta, err := clus.snMCLs[storageNodeID].GetMetadata(context.Background())
 	require.NoError(t, err)
 
-	path := meta.GetStorageNode().GetStorages()[0].GetPath()
+	path := meta.Storages[0].Path
 
 	require.NoError(t, clus.snMCLs[storageNodeID].AddLogStreamReplica(context.Background(), topicID, logStreamID, path))
 

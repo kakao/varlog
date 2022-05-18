@@ -101,11 +101,9 @@ func TestStorageNode(t *testing.T) {
 
 	admin.EXPECT().GetStorageNodes(gomock.Any()).Return(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor{
 		types.StorageNodeID(1): {
-			StorageNode: &varlogpb.StorageNodeDescriptor{
-				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: types.StorageNodeID(1),
-					Address:       "sn1",
-				},
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: types.StorageNodeID(1),
+				Address:       "sn1",
 			},
 		},
 	}, nil)
@@ -124,16 +122,14 @@ func TestStorageNode(t *testing.T) {
 	admin.EXPECT().AddStorageNode(gomock.Any(), gomock.Any()).Return(
 		&snpb.StorageNodeMetadataDescriptor{
 			ClusterID: types.ClusterID(1),
-			StorageNode: &varlogpb.StorageNodeDescriptor{
-				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: types.StorageNodeID(1),
-					Address:       "sn1",
-				},
-				Status: varlogpb.StorageNodeStatusRunning,
-				Storages: []*varlogpb.StorageDescriptor{
-					{
-						Path: "/tmp/data1",
-					},
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: types.StorageNodeID(1),
+				Address:       "sn1",
+			},
+			Status: varlogpb.StorageNodeStatusRunning,
+			Storages: []varlogpb.StorageDescriptor{
+				{
+					Path: "/tmp/data1",
 				},
 			},
 		}, nil)

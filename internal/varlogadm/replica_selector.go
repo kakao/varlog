@@ -86,7 +86,7 @@ func (rs *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Replic
 		// TODO (jun): choose proper path
 		ret = append(ret, &varlogpb.ReplicaDescriptor{
 			StorageNodeID: allowlist[idx].snd.GetStorageNodeID(),
-			Path:          allowlist[idx].snd.GetStorages()[0].Path,
+			Path:          allowlist[idx].snd.Paths[0],
 		})
 	}
 
@@ -173,11 +173,11 @@ func (sel *balancedReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Rep
 		storageNodeID := snd.StorageNodeID
 		st := storageNodeStat{
 			storageNodeID: storageNodeID,
-			paths:         make(map[string]struct{}, len(snd.Storages)),
-			assignedPaths: make(map[string]struct{}, len(snd.Storages)),
+			paths:         make(map[string]struct{}, len(snd.Paths)),
+			assignedPaths: make(map[string]struct{}, len(snd.Paths)),
 		}
-		for _, sd := range snd.Storages {
-			st.paths[sd.Path] = struct{}{}
+		for _, path := range snd.Paths {
+			st.paths[path] = struct{}{}
 		}
 		stats[storageNodeID] = st
 	}
@@ -229,8 +229,7 @@ func (sel *balancedReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Rep
 		snd := md.GetStorageNode(st.storageNodeID)
 		var path string
 		if len(st.paths) == len(st.assignedPaths) {
-			sd := snd.Storages[sel.rng.Intn(len(snd.Storages))]
-			path = sd.Path
+			path = snd.Paths[sel.rng.Intn(len(snd.Paths))]
 		} else {
 			for p := range st.paths {
 				if _, ok := st.assignedPaths[path]; ok {

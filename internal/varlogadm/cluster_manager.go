@@ -287,11 +287,10 @@ func (cm *clusterManager) StorageNodes(ctx context.Context) (ret map[types.Stora
 		g.Go(func() error {
 			snmd, err := cm.snMgr.GetMetadata(ctx, snd.StorageNodeID)
 			if err != nil {
-				copied := proto.Clone(snd).(*varlogpb.StorageNodeDescriptor)
-				copied.Status = varlogpb.StorageNodeStatusUnavailable
 				snmd = &snpb.StorageNodeMetadataDescriptor{
 					ClusterID:   cm.clusterID,
-					StorageNode: copied,
+					StorageNode: snd.StorageNode,
+					Status:      varlogpb.StorageNodeStatusUnavailable,
 				}
 			}
 			mu.Lock()
@@ -362,8 +361,9 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (snme
 	}
 
 	var (
+		snd           *varlogpb.StorageNodeDescriptor
 		clusmeta      *varlogpb.MetadataDescriptor
-		storageNodeID = snmeta.GetStorageNode().GetStorageNodeID()
+		storageNodeID = snmeta.StorageNode.StorageNodeID
 	)
 
 	if cm.snMgr.Contains(storageNodeID) {
@@ -380,7 +380,9 @@ func (cm *clusterManager) AddStorageNode(ctx context.Context, addr string) (snme
 		goto errOut
 	}
 
-	if err = cm.mrMgr.RegisterStorageNode(ctx, snmeta.GetStorageNode()); err != nil {
+	snd = snmeta.ToStorageNodeDescriptor()
+	snd.Status = varlogpb.StorageNodeStatusRunning
+	if err = cm.mrMgr.RegisterStorageNode(ctx, snd); err != nil {
 		goto errOut
 	}
 

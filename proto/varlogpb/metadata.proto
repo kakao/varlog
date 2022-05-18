@@ -28,8 +28,11 @@ message MetadataDescriptor {
       [(gogoproto.nullable) = true, (gogoproto.jsontag) = "topics"];
 }
 
-// StorageNodeDescriptor is metadata to persist information of a storage node in
-// the metadata repository.
+// StorageNodeDescriptor is immutable metadata to persist information of a
+// storage node in the metadata repository.
+// It is also used to compare two storage nodes to decide if they are the same.
+//
+// Note that only immutable fields should be added.
 message StorageNodeDescriptor {
   option (gogoproto.equal) = true;
 
@@ -39,7 +42,7 @@ message StorageNodeDescriptor {
     (gogoproto.jsontag) = ""
   ];
   StorageNodeStatus status = 2;
-  repeated StorageDescriptor storages = 3 [(gogoproto.nullable) = true];
+  repeated string paths = 3;
 }
 
 enum StorageNodeStatus {
