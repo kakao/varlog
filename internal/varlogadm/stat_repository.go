@@ -165,17 +165,15 @@ func (s *statRepository) Report(ctx context.Context, r *snpb.StorageNodeMetadata
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sn := r.GetStorageNode()
-	if sn == nil {
-		return
-	}
-
+	sn := r.StorageNode
 	snID := sn.StorageNodeID
 	if _, ok := s.storageNodes[snID]; !ok {
 		return
 	}
 
-	s.storageNodes[snID] = sn
+	snd := r.ToStorageNodeDescriptor()
+	snd.Status = varlogpb.StorageNodeStatusRunning
+	s.storageNodes[snID] = snd
 
 	for _, ls := range r.GetLogStreamReplicas() {
 		lsStat, ok := s.logStreams[ls.LogStreamID]

@@ -93,18 +93,18 @@ func TestStorageNode(t *testing.T) {
 	// sn1: get path
 	snmd1 := TestGetStorageNodeMetadataDescriptor(t, cid, sn1.snid, sn1.advertise)
 	assert.Equal(t, snid1, snmd1.StorageNode.StorageNodeID)
-	assert.NotEmpty(t, snmd1.StorageNode.Storages)
-	assert.NotEmpty(t, snmd1.StorageNode.Storages[0].Path)
+	assert.NotEmpty(t, snmd1.Storages)
+	assert.NotEmpty(t, snmd1.Storages[0].Path)
 	// sn1: add ls
-	TestAddLogStreamReplica(t, cid, sn1.snid, tpid, lsid, snmd1.StorageNode.Storages[0].Path, sn1.advertise)
+	TestAddLogStreamReplica(t, cid, sn1.snid, tpid, lsid, snmd1.Storages[0].Path, sn1.advertise)
 
 	// sn2: get path
 	snmd2 := TestGetStorageNodeMetadataDescriptor(t, cid, sn2.snid, sn2.advertise)
 	assert.Equal(t, snid2, snmd2.StorageNode.StorageNodeID)
-	assert.NotEmpty(t, snmd2.StorageNode.Storages)
-	assert.NotEmpty(t, snmd2.StorageNode.Storages[0].Path)
+	assert.NotEmpty(t, snmd2.Storages)
+	assert.NotEmpty(t, snmd2.Storages[0].Path)
 	// sn2: add ls
-	TestAddLogStreamReplica(t, cid, sn2.snid, tpid, lsid, snmd2.StorageNode.Storages[0].Path, sn2.advertise)
+	TestAddLogStreamReplica(t, cid, sn2.snid, tpid, lsid, snmd2.Storages[0].Path, sn2.advertise)
 
 	// sn1: seal & unseal
 	lss, lastCommittedGLSN := TestSealLogStreamReplica(t, cid, sn1.snid, tpid, lsid, types.InvalidGLSN, sn1.advertise)

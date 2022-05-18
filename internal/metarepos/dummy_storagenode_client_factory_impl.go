@@ -438,10 +438,8 @@ func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*snpb.StorageNode
 	}
 
 	meta := &snpb.StorageNodeMetadataDescriptor{
-		StorageNode: &varlogpb.StorageNodeDescriptor{
-			StorageNode: r.Target(),
-			Status:      status,
-		},
+		StorageNode:       r.Target(),
+		Status:            status,
 		LogStreamReplicas: logStreams,
 	}
 

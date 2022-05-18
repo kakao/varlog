@@ -52,13 +52,11 @@ func TestAdmin_StorageNodes(t *testing.T) {
 	snmgr.EXPECT().GetMetadata(gomock.Any(), gomock.Eq(types.StorageNodeID(1))).Return(nil, errors.New("error")).AnyTimes()
 	snmgr.EXPECT().GetMetadata(gomock.Any(), gomock.Eq(types.StorageNodeID(2))).Return(&snpb.StorageNodeMetadataDescriptor{
 		ClusterID: cid,
-		StorageNode: &varlogpb.StorageNodeDescriptor{
-			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: types.StorageNodeID(2),
-				Address:       "sn2",
-			},
-			Status: varlogpb.StorageNodeStatusRunning,
+		StorageNode: varlogpb.StorageNode{
+			StorageNodeID: types.StorageNodeID(2),
+			Address:       "sn2",
 		},
+		Status: varlogpb.StorageNodeStatusRunning,
 	}, nil).AnyTimes()
 
 	var cm = &clusterManager{
@@ -71,10 +69,10 @@ func TestAdmin_StorageNodes(t *testing.T) {
 	assert.Len(t, snmds, 2)
 
 	assert.Contains(t, snmds, types.StorageNodeID(1))
-	assert.Equal(t, varlogpb.StorageNodeStatusUnavailable, snmds[types.StorageNodeID(1)].StorageNode.Status)
+	assert.Equal(t, varlogpb.StorageNodeStatusUnavailable, snmds[types.StorageNodeID(1)].Status)
 
 	assert.Contains(t, snmds, types.StorageNodeID(2))
-	assert.Equal(t, varlogpb.StorageNodeStatusRunning, snmds[types.StorageNodeID(2)].StorageNode.Status)
+	assert.Equal(t, varlogpb.StorageNodeStatusRunning, snmds[types.StorageNodeID(2)].Status)
 }
 
 func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
@@ -161,7 +159,7 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 		lsrmd := lsstat.replicas[snid]
 
 		return &snpb.StorageNodeMetadataDescriptor{
-			StorageNode:       proto.Clone(snd).(*varlogpb.StorageNodeDescriptor),
+			StorageNode:       snd.StorageNode,
 			LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{lsrmd},
 		}, nil
 	}).AnyTimes()

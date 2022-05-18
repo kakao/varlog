@@ -122,11 +122,9 @@ func TestManager_ServerRestart(t *testing.T) {
 	tls.MockManagementServer.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
 		&snpb.GetMetadataResponse{
 			StorageNodeMetadata: &snpb.StorageNodeMetadataDescriptor{
-				StorageNode: &varlogpb.StorageNodeDescriptor{
-					StorageNode: varlogpb.StorageNode{
-						StorageNodeID: tls.StorageNodeID(),
-						Address:       tls.Address(),
-					},
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: tls.StorageNodeID(),
+					Address:       tls.Address(),
 				},
 			},
 		},
@@ -154,7 +152,7 @@ func TestManager_ServerRestart(t *testing.T) {
 
 	snmd, err := mc.GetMetadata(context.Background())
 	assert.NoError(t, err)
-	assert.Equal(t, mc.Target(), snmd.StorageNode.StorageNode)
+	assert.Equal(t, mc.Target(), snmd.StorageNode)
 
 	tls.Close()
 	_, err = mc.GetMetadata(context.Background())
@@ -164,11 +162,9 @@ func TestManager_ServerRestart(t *testing.T) {
 	tls.MockManagementServer.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
 		&snpb.GetMetadataResponse{
 			StorageNodeMetadata: &snpb.StorageNodeMetadataDescriptor{
-				StorageNode: &varlogpb.StorageNodeDescriptor{
-					StorageNode: varlogpb.StorageNode{
-						StorageNodeID: tls.StorageNodeID(),
-						Address:       tls.Address(),
-					},
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: tls.StorageNodeID(),
+					Address:       tls.Address(),
 				},
 			},
 		},
@@ -179,6 +175,6 @@ func TestManager_ServerRestart(t *testing.T) {
 
 	assert.Eventually(t, func() bool {
 		snmd, err := mc.GetMetadata(context.Background())
-		return err == nil && mc.Target() == snmd.StorageNode.StorageNode
+		return err == nil && mc.Target() == snmd.StorageNode
 	}, connectParams.Backoff.MaxDelay*2, 100*time.Millisecond)
 }
