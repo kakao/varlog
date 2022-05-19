@@ -9,6 +9,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
+	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
+	"github.com/kakao/varlog/internal/varlogadm/snmanager"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -25,12 +27,12 @@ type ReplicaSelector interface {
 // TODO: randomReplicaSelector does not consider the capacities and load of each SNs.
 type randomReplicaSelector struct {
 	r        *rand.Rand
-	cmView   ClusterMetadataView
+	cmView   mrmanager.ClusterMetadataView
 	count    uint
 	denylist set.Set // set[types.StorageNodeID]
 }
 
-func newRandomReplicaSelector(cmView ClusterMetadataView, count uint, denylist ...types.StorageNodeID) (ReplicaSelector, error) {
+func newRandomReplicaSelector(cmView mrmanager.ClusterMetadataView, count uint, denylist ...types.StorageNodeID) (ReplicaSelector, error) {
 	if count == 0 {
 		return nil, errors.New("replicaselector: zero replication factor")
 	}
@@ -94,12 +96,12 @@ func (rs *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Replic
 }
 
 type victimSelector struct {
-	snMgr       StorageNodeManager
+	snMgr       snmanager.StorageNodeManager
 	replicas    []*varlogpb.ReplicaDescriptor
 	logStreamID types.LogStreamID
 }
 
-func newVictimSelector(snMgr StorageNodeManager, logStreamID types.LogStreamID, replicas []*varlogpb.ReplicaDescriptor) ReplicaSelector {
+func newVictimSelector(snMgr snmanager.StorageNodeManager, logStreamID types.LogStreamID, replicas []*varlogpb.ReplicaDescriptor) ReplicaSelector {
 	clone := make([]*varlogpb.ReplicaDescriptor, len(replicas))
 	for i, replica := range replicas {
 		clone[i] = proto.Clone(replica).(*varlogpb.ReplicaDescriptor)
@@ -139,13 +141,13 @@ func (vs *victimSelector) Select(ctx context.Context) ([]*varlogpb.ReplicaDescri
 // Note that it does not consider loads of storage nodes.
 type balancedReplicaSelector struct {
 	rng               *rand.Rand
-	cmView            ClusterMetadataView
+	cmView            mrmanager.ClusterMetadataView
 	replicationFactor int
 }
 
 var _ ReplicaSelector = (*balancedReplicaSelector)(nil)
 
-func newBalancedReplicaSelector(cmView ClusterMetadataView, replicationFactor int) (*balancedReplicaSelector, error) {
+func newBalancedReplicaSelector(cmView mrmanager.ClusterMetadataView, replicationFactor int) (*balancedReplicaSelector, error) {
 	if replicationFactor < 1 {
 		return nil, errors.Wrap(verrors.ErrInvalid, "replica selector: negative replication factor")
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
+	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -26,7 +27,7 @@ type StatRepository interface {
 }
 
 type statRepository struct {
-	cmView       ClusterMetadataView
+	cmView       mrmanager.ClusterMetadataView
 	meta         *varlogpb.MetadataDescriptor
 	appliedIndex uint64
 	logStreams   map[types.LogStreamID]*LogStreamStat
@@ -78,7 +79,7 @@ func (lss *LogStreamStat) replicasInternal() map[types.StorageNodeID]snpb.LogStr
 
 var _ StatRepository = (*statRepository)(nil)
 
-func NewStatRepository(ctx context.Context, cmView ClusterMetadataView) StatRepository {
+func NewStatRepository(ctx context.Context, cmView mrmanager.ClusterMetadataView) StatRepository {
 	s := &statRepository{
 		cmView:       cmView,
 		logStreams:   make(map[types.LogStreamID]*LogStreamStat),

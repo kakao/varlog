@@ -1,4 +1,4 @@
-package varlogadm
+package snmanager
 
 import (
 	"context"
@@ -8,22 +8,41 @@ import (
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
+func TestStorageNodeManager_InvalidOptions(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
+
+	_, err := New(context.Background())
+	assert.Error(t, err)
+
+	_, err = New(context.Background(),
+		WithClusterMetadataView(cmView),
+		WithLogger(nil),
+	)
+	assert.Error(t, err)
+}
+
 func TestStorageNodeManager_RegisterUnregister(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
 
-	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	snmgr, err := New(context.Background(),
+		WithClusterID(1),
+		WithClusterMetadataView(cmView),
+	)
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, snmgr.Close())
@@ -58,10 +77,13 @@ func TestStorageNodeManager_RegisterStorageNodeEventually(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
 
-	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	snmgr, err := New(context.Background(),
+		WithClusterID(1),
+		WithClusterMetadataView(cmView),
+	)
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, snmgr.Close())
@@ -92,10 +114,13 @@ func TestStorageNodeManager_AddLogStreamReplica(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
 
-	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	snmgr, err := New(context.Background(),
+		WithClusterID(1),
+		WithClusterMetadataView(cmView),
+	)
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, snmgr.Close())
@@ -121,10 +146,13 @@ func TestStorageNodeManager_AddLogStream(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
 
-	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	snmgr, err := New(context.Background(),
+		WithClusterID(1),
+		WithClusterMetadataView(cmView),
+	)
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, snmgr.Close())
@@ -211,10 +239,13 @@ func TestStorageNodeManager_Seal(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
 
-	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	snmgr, err := New(context.Background(),
+		WithClusterID(1),
+		WithClusterMetadataView(cmView),
+	)
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, snmgr.Close())
@@ -286,10 +317,13 @@ func TestStorageNodeManager_Unseal(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
 
-	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	snmgr, err := New(context.Background(),
+		WithClusterID(1),
+		WithClusterMetadataView(cmView),
+	)
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, snmgr.Close())
@@ -362,10 +396,13 @@ func TestStorageNodeManager_Trim(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
 
-	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	snmgr, err := New(context.Background(),
+		WithClusterID(1),
+		WithClusterMetadataView(cmView),
+	)
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, snmgr.Close())
@@ -506,10 +543,13 @@ func TestStorageNodeManager_Sync(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil)
 
-	snmgr, err := NewStorageNodeManager(context.Background(), 1, cmView, zap.NewNop())
+	snmgr, err := New(context.Background(),
+		WithClusterID(1),
+		WithClusterMetadataView(cmView),
+	)
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, snmgr.Close())

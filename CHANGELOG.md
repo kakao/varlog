@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The type of field `proto/varlogpb.(StorageNodeMetadataDescriptor).StorageNode` is changed from `varlogpb.StorageNodeDescriptor` to `varlogpb.StorageNode`. (#VARLOG-745/#664)
 - The `proto/vmspb.(AddStorageNodeRequest)` now takes the ID as well as the address of the storage node. (#VARLOG-737/#665)
 - The RPC `proto/vmspb.(ClusterManagerClient).AddStorageNode` is now idempotent - adding already added storage node is okay. (#VARLOG-737/#665)
+- `internal/varlogadm.(StorageNodeManager)` is moved to `internal/varlogadm/snmanager.(StorageNodeManager)`. (#VARLOG-658/#666)
+- `internal/varlogadm.(MetadataRepositoryManager)` is moved to `internal/varlogadm/mrmanager.(MetadataRepositoryManager)`. (#VARLOG-658/#666)
+- `internal/varlogadm/snmanager.(StorageNodeManager)` and `internal/varlogadm/mrmanager.(MetadataRepositoryManager)` are injected to `internal/varlogadm.(ClusterManager)` rather than instantiating in the constructor of `internal/varlogadm.(ClusterManager)` to improve testability of varlog admin server. (#VARLOG-658/#666)
 
 ### Removed
 - Removed structs for options in varlogadm, for instance, `internal/varlogadm.(Options)`, `internal/varlogadm.(MRManagerOptions)` and `internal/varlogadm.(WatcherOptions)`. (#VARLOG-740/#654)

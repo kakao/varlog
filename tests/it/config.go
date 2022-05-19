@@ -9,6 +9,7 @@ import (
 
 	"github.com/kakao/varlog/internal/metarepos"
 	"github.com/kakao/varlog/internal/varlogadm"
+	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
 )
@@ -43,8 +44,9 @@ type config struct {
 	numCL    int
 	numTopic int
 
-	VMSOpts []varlogadm.Option
-	logger  *zap.Logger
+	mrMgrOpts []mrmanager.Option
+	VMSOpts   []varlogadm.Option
+	logger    *zap.Logger
 
 	portBase      int
 	vmsPortOffset int
@@ -130,7 +132,13 @@ func WithReporterClientFactory(fac metarepos.ReporterClientFactory) Option {
 	}
 }
 
-func WithVMSOptions(vmsOpts []varlogadm.Option) Option {
+func WithMetadataRepositoryManagerOptions(opts ...mrmanager.Option) Option {
+	return func(c *config) {
+		c.mrMgrOpts = opts
+	}
+}
+
+func WithVMSOptions(vmsOpts ...varlogadm.Option) Option {
 	return func(c *config) {
 		c.VMSOpts = vmsOpts
 	}

@@ -16,8 +16,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 
+	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
+	"github.com/kakao/varlog/internal/varlogadm/snmanager"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/runner/stopwaiter"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -32,7 +33,7 @@ func TestAdmin_StorageNodes(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmview := NewMockClusterMetadataView(ctrl)
+	cmview := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
 		StorageNodes: []*varlogpb.StorageNodeDescriptor{
 			{
@@ -48,7 +49,7 @@ func TestAdmin_StorageNodes(t *testing.T) {
 		},
 	}, nil).AnyTimes()
 
-	snmgr := NewMockStorageNodeManager(ctrl)
+	snmgr := snmanager.NewMockStorageNodeManager(ctrl)
 	snmgr.EXPECT().GetMetadata(gomock.Any(), gomock.Eq(types.StorageNodeID(1))).Return(nil, errors.New("error")).AnyTimes()
 	snmgr.EXPECT().GetMetadata(gomock.Any(), gomock.Eq(types.StorageNodeID(2))).Return(&snpb.StorageNodeMetadataDescriptor{
 		ClusterID: cid,
@@ -59,10 +60,12 @@ func TestAdmin_StorageNodes(t *testing.T) {
 		Status: varlogpb.StorageNodeStatusRunning,
 	}, nil).AnyTimes()
 
-	var cm = &clusterManager{
-		cmView: cmview,
-		snMgr:  snmgr,
-	}
+	mrmgr := mrmanager.NewMockMetadataRepositoryManager(ctrl)
+	mrmgr.EXPECT().ClusterMetadataView().Return(cmview).AnyTimes()
+
+	var cm = &ClusterManager{}
+	cm.snMgr = snmgr
+	cm.mrMgr = mrmgr
 	cm.clusterID = cid
 	snmds, err := cm.StorageNodes(context.Background())
 	assert.NoError(t, err)
@@ -99,8 +102,8 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 		}
 	)
 
-	cmview := NewMockClusterMetadataView(ctrl)
-	mrmgr := NewMockMetadataRepositoryManager(ctrl)
+	cmview := mrmanager.NewMockClusterMetadataView(ctrl)
+	mrmgr := mrmanager.NewMockMetadataRepositoryManager(ctrl)
 	mrmgr.EXPECT().Close().Return(nil).AnyTimes()
 	mrmgr.EXPECT().ClusterMetadataView().Return(cmview).AnyTimes()
 	mrmgr.EXPECT().Seal(gomock.Any(), gomock.Any()).Return(types.GLSN(5), nil).AnyTimes()
@@ -142,7 +145,7 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 		statreposQueryCounts = 0
 	)
 
-	snmgr := NewMockStorageNodeManager(ctrl)
+	snmgr := snmanager.NewMockStorageNodeManager(ctrl)
 	snmgr.EXPECT().Close().Return(nil).AnyTimes()
 	snmgr.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
 		mu.Lock()
@@ -184,16 +187,13 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 	grpcServer := grpc.NewServer()
 	defer grpcServer.Stop()
 
-	mgr := &clusterManager{
-		cmState:        clusterManagerReady,
-		mrMgr:          mrmgr,
-		snMgr:          snmgr,
-		cmView:         cmview,
+	mgr := &ClusterManager{
 		statRepository: statrepos,
 		server:         grpcServer,
 		healthServer:   health.NewServer(),
-		sw:             stopwaiter.New(),
 	}
+	mgr.mrMgr = mrmgr
+	mgr.snMgr = snmgr
 	mgr.listenAddress = "127.0.0.1:0"
 	mgr.logger = zap.NewNop()
 
@@ -206,10 +206,16 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 
 	snwatcher := NewStorageNodeWatcher(snwatcherOpts, cmview, snmgr, mgr, zap.NewNop())
 	mgr.snWatcher = snwatcher
-	assert.NoError(t, mgr.Run())
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		assert.NoError(t, mgr.Serve())
+	}()
 	defer func() {
 		assert.NoError(t, mgr.Close())
+		wg.Wait()
 	}()
 
 	assert.Eventually(t, func() bool {

@@ -32,7 +32,7 @@ func TestMRConnectorWithoutRemoveMRPeer(t *testing.T) {
 
 	env := it.NewVarlogCluster(t,
 		it.WithMRCount(3),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 	)
 	defer env.Close(t)
 
@@ -136,7 +136,7 @@ func TestMRConnector(t *testing.T) {
 		const clusterInfoFetchInterval = 1 * time.Second
 		env := it.NewVarlogCluster(t,
 			it.WithMRCount(3),
-			it.WithVMSOptions(it.NewTestVMSOptions()),
+			it.WithVMSOptions(it.NewTestVMSOptions()...),
 		)
 
 		Reset(func() {

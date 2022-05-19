@@ -132,7 +132,7 @@ func TestVarlogFailoverSNBackupInitialFault(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 		it.WithNumberOfTopics(1),
 	)
 
@@ -188,7 +188,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(5),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 		it.WithNumberOfTopics(1),
 		it.WithLogger(logger),
 	}

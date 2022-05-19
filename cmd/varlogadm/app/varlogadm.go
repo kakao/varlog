@@ -2,12 +2,15 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/varlogadm"
 )
@@ -23,19 +26,22 @@ func Main(opts []varlogadm.Option, logger *zap.Logger) error {
 		return err
 	}
 
-	if err = cm.Run(); err != nil {
-		logger.Error("could not run cluster manager server", zap.Error(err))
-		return err
-	}
-
-	// TODO (jun): handle SIGQUIT (it should be able to produce core dump)
+	var g errgroup.Group
+	quit := make(chan struct{})
 	sigC := make(chan os.Signal, 1)
 	signal.Notify(sigC, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigC
-		cm.Close()
-	}()
 
-	cm.Wait()
-	return nil
+	g.Go(func() error {
+		defer close(quit)
+		return cm.Serve()
+	})
+	g.Go(func() error {
+		select {
+		case sig := <-sigC:
+			return multierr.Append(fmt.Errorf("caught signal %s", sig), cm.Close())
+		case <-quit:
+			return nil
+		}
+	})
+	return g.Wait()
 }

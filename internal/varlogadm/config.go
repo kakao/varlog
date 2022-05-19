@@ -6,6 +6,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
+	"github.com/kakao/varlog/internal/varlogadm/snmanager"
 	"github.com/kakao/varlog/pkg/types"
 )
 
@@ -13,12 +15,8 @@ const (
 	DefaultListenAddress     = "127.0.0.1:9090"
 	DefaultWatcherRPCTimeout = 3 * time.Second
 
-	DefaultClusterID                    = types.ClusterID(1)
-	DefaultReplicationFactor            = 1
-	DefaultInitialMRConnectRetryCount   = -1
-	DefaultInitialMRConnectRetryBackoff = 100 * time.Millisecond
-	DefaultMRConnTimeout                = 1 * time.Second
-	DefaultMRCallTimeout                = 3 * time.Second
+	DefaultClusterID         = types.ClusterID(1)
+	DefaultReplicationFactor = 1
 
 	DefaultTick             = 100 * time.Millisecond
 	DefaultReportInterval   = 10
@@ -32,8 +30,10 @@ type config struct {
 	replicationFactor uint
 	logger            *zap.Logger
 
-	mrManagerOptions []MRManagerOption
-	watcherOptions   []WatcherOption
+	mrMgr mrmanager.MetadataRepositoryManager
+	snMgr snmanager.StorageNodeManager
+
+	watcherOptions []WatcherOption
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -55,6 +55,12 @@ func (cfg config) validate() error {
 	}
 	if cfg.replicationFactor < 1 {
 		return errors.New("non-positive replication factor")
+	}
+	if cfg.mrMgr == nil {
+		return errors.New("mr manager is nil")
+	}
+	if cfg.snMgr == nil {
+		return errors.New("sn manager is nil")
 	}
 	if cfg.logger == nil {
 		return errors.New("logger is nil")
@@ -102,89 +108,21 @@ func WithLogger(logger *zap.Logger) Option {
 	})
 }
 
-func WithMRManagerOptions(opts ...MRManagerOption) Option {
+func WithMetadataRepositoryManager(mrMgr mrmanager.MetadataRepositoryManager) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.mrManagerOptions = opts
+		cfg.mrMgr = mrMgr
+	})
+}
+
+func WithStorageNodeManager(snMgr snmanager.StorageNodeManager) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.snMgr = snMgr
 	})
 }
 
 func WithWatcherOptions(opts ...WatcherOption) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.watcherOptions = opts
-	})
-}
-
-type mrManagerConfig struct {
-	metadataRepositoryAddresses []string
-	initialMRConnRetryCount     int
-	initialMRConnRetryBackoff   time.Duration
-	connTimeout                 time.Duration
-	callTimeout                 time.Duration
-}
-
-func newMRManagerConfig(opts []MRManagerOption) (mrManagerConfig, error) {
-	cfg := mrManagerConfig{
-		initialMRConnRetryCount:   DefaultInitialMRConnectRetryCount,
-		initialMRConnRetryBackoff: DefaultInitialMRConnectRetryBackoff,
-		connTimeout:               DefaultMRConnTimeout,
-		callTimeout:               DefaultMRCallTimeout,
-	}
-	for _, opt := range opts {
-		opt.applyMRManager(&cfg)
-	}
-	return cfg, cfg.validate()
-}
-
-func (cfg *mrManagerConfig) validate() error {
-	if len(cfg.metadataRepositoryAddresses) == 0 {
-		return errors.New("no metadata repository address")
-	}
-	return nil
-}
-
-type MRManagerOption interface {
-	applyMRManager(*mrManagerConfig)
-}
-
-type funcMRManagerOption struct {
-	f func(*mrManagerConfig)
-}
-
-func newFuncMRManagerOption(f func(*mrManagerConfig)) *funcMRManagerOption {
-	return &funcMRManagerOption{f: f}
-}
-
-func (fmo *funcMRManagerOption) applyMRManager(cfg *mrManagerConfig) {
-	fmo.f(cfg)
-}
-
-func WithMetadataRepositoryAddress(addrs ...string) MRManagerOption {
-	return newFuncMRManagerOption(func(cfg *mrManagerConfig) {
-		cfg.metadataRepositoryAddresses = addrs
-	})
-}
-
-func WithInitialMRConnRetryCount(retry int) MRManagerOption {
-	return newFuncMRManagerOption(func(cfg *mrManagerConfig) {
-		cfg.initialMRConnRetryCount = retry
-	})
-}
-
-func WithInitialMRConnRetryBackoff(backoff time.Duration) MRManagerOption {
-	return newFuncMRManagerOption(func(cfg *mrManagerConfig) {
-		cfg.initialMRConnRetryBackoff = backoff
-	})
-}
-
-func WithMRManagerConnTimeout(connTimeout time.Duration) MRManagerOption {
-	return newFuncMRManagerOption(func(cfg *mrManagerConfig) {
-		cfg.connTimeout = connTimeout
-	})
-}
-
-func WithMRManagerCallTimeout(callTimeout time.Duration) MRManagerOption {
-	return newFuncMRManagerOption(func(cfg *mrManagerConfig) {
-		cfg.callTimeout = callTimeout
 	})
 }
 
