@@ -1,4 +1,6 @@
-package varlogadm
+package snmanager
+
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager -package snmanager -destination manager_mock.go . StorageNodeManager
 
 import (
 	"context"
@@ -59,20 +61,17 @@ type StorageNodeManager interface {
 var _ StorageNodeManager = (*snManager)(nil)
 
 type snManager struct {
-	clusterID types.ClusterID
+	config
 
-	cmView  ClusterMetadataView
 	mu      sync.RWMutex
 	clients *client.Manager[*client.ManagementClient]
-
-	logger *zap.Logger
 }
 
-func NewStorageNodeManager(ctx context.Context, clusterID types.ClusterID, cmView ClusterMetadataView, logger *zap.Logger) (StorageNodeManager, error) {
-	if logger == nil {
-		logger = zap.NewNop()
+func New(ctx context.Context, opts ...Option) (StorageNodeManager, error) {
+	cfg, err := newConfig(opts)
+	if err != nil {
+		return nil, err
 	}
-	logger = logger.Named("snmanager")
 
 	clients, err := client.NewManager[*client.ManagementClient]()
 	if err != nil {
@@ -80,10 +79,8 @@ func NewStorageNodeManager(ctx context.Context, clusterID types.ClusterID, cmVie
 	}
 
 	sm := &snManager{
-		clusterID: clusterID,
-		cmView:    cmView,
-		logger:    logger,
-		clients:   clients,
+		config:  cfg,
+		clients: clients,
 	}
 
 	sm.refresh(ctx)
@@ -91,7 +88,7 @@ func NewStorageNodeManager(ctx context.Context, clusterID types.ClusterID, cmVie
 }
 
 func (sm *snManager) refresh(ctx context.Context) error {
-	md, err := sm.cmView.ClusterMetadata(ctx)
+	md, err := sm.cmview.ClusterMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -349,7 +346,7 @@ func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN type
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	clusmeta, err := sm.cmView.ClusterMetadata(ctx)
+	clusmeta, err := sm.cmview.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +409,7 @@ func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN type
 }
 
 func (sm *snManager) replicaDescriptors(ctx context.Context, lsid types.LogStreamID) ([]*varlogpb.ReplicaDescriptor, error) {
-	clusmeta, err := sm.cmView.ClusterMetadata(ctx)
+	clusmeta, err := sm.cmview.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}

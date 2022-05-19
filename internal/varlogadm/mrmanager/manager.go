@@ -1,4 +1,6 @@
-package varlogadm
+package mrmanager
+
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager -package mrmanager -destination manager_mock.go . ClusterMetadataView,MetadataRepositoryManager
 
 import (
 	"context"
@@ -9,7 +11,6 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
-	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc/mrconnector"
@@ -84,9 +85,7 @@ var (
 )
 
 type mrManager struct {
-	mrManagerConfig
-
-	clusterID types.ClusterID
+	config
 
 	mu        sync.RWMutex
 	connector mrconnector.Connector
@@ -94,32 +93,25 @@ type mrManager struct {
 	dirty   bool
 	updated time.Time
 	meta    *varlogpb.MetadataDescriptor
-
-	logger *zap.Logger
 }
 
 const (
 	RPCAddrsFetchRetryInterval = 100 * time.Millisecond
 )
 
-func NewMRManager(ctx context.Context, clusterID types.ClusterID, opts []MRManagerOption, logger *zap.Logger) (MetadataRepositoryManager, error) {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
-	logger = logger.Named("mrmanager")
-
-	cfg, err := newMRManagerConfig(opts)
+func New(ctx context.Context, opts ...Option) (MetadataRepositoryManager, error) {
+	cfg, err := newConfig(opts)
 	if err != nil {
 		return nil, err
 	}
 
 	mrConnOpts := []mrconnector.Option{
-		mrconnector.WithClusterID(clusterID),
+		mrconnector.WithClusterID(cfg.cid),
 		mrconnector.WithInitRetryInterval(RPCAddrsFetchRetryInterval),
 		mrconnector.WithConnectTimeout(cfg.connTimeout),
 		mrconnector.WithRPCTimeout(cfg.callTimeout),
 		mrconnector.WithSeed(cfg.metadataRepositoryAddresses),
-		mrconnector.WithLogger(logger),
+		mrconnector.WithLogger(cfg.logger),
 	}
 	tryCnt := cfg.initialMRConnRetryCount + 1
 	if tryCnt <= 0 {
@@ -134,10 +126,8 @@ func NewMRManager(ctx context.Context, clusterID types.ClusterID, opts []MRManag
 			continue
 		}
 		return &mrManager{
-			clusterID: clusterID,
 			dirty:     true,
 			connector: connector,
-			logger:    logger,
 		}, nil
 	}
 	err = errors.WithMessagef(err, "mrmanager: tries = %d", tryCnt)
@@ -356,7 +346,7 @@ func (mrm *mrManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, er
 		return nil, errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	rsp, err := cli.GetClusterInfo(ctx, mrm.clusterID)
+	rsp, err := cli.GetClusterInfo(ctx, mrm.cid)
 	if err != nil {
 		return nil, multierr.Append(err, cli.Close())
 	}
@@ -372,7 +362,7 @@ func (mrm *mrManager) AddPeer(ctx context.Context, nodeID types.NodeID, peerURL,
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.AddPeer(ctx, mrm.clusterID, nodeID, peerURL); err != nil {
+	if err := cli.AddPeer(ctx, mrm.cid, nodeID, peerURL); err != nil {
 		if !errors.Is(err, verrors.ErrAlreadyExists) {
 			return multierr.Append(err, cli.Close())
 		}
@@ -392,7 +382,7 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.RemovePeer(ctx, mrm.clusterID, nodeID); err != nil {
+	if err := cli.RemovePeer(ctx, mrm.cid, nodeID); err != nil {
 		return multierr.Append(err, cli.Close())
 	}
 	mrm.connector.DelRPCAddr(nodeID)

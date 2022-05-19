@@ -15,7 +15,7 @@ import (
 )
 
 type Benchmark interface {
-	Run() error
+	Serve() error
 	io.Closer
 }
 
@@ -65,7 +65,7 @@ func New(ctx context.Context, opts ...Option) (Benchmark, error) {
 	return b, nil
 }
 
-func (b *benchmarkImpl) Run() (err error) {
+func (b *benchmarkImpl) Serve() (err error) {
 	b.once.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), b.maxDuration)
 		b.cancel = cancel

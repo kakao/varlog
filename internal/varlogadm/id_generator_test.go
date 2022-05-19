@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
@@ -23,7 +24,7 @@ func TestTopicIDGenerator(t *testing.T) {
 		},
 	}
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(md, nil)
 
 	gen, err := NewTopicIDGenerator(context.Background(), cmView)
@@ -35,7 +36,7 @@ func TestTopicIDGenerator_MetadataError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, errors.New("fail"))
 
 	// could not fetch cluster metadata
@@ -70,7 +71,7 @@ func TestLogStreamIDGenerator(t *testing.T) {
 		},
 	}
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(md, nil)
 
 	gen, err := NewLogStreamIDGenerator(context.Background(), cmView)
@@ -82,7 +83,7 @@ func TestLogStreamIDGenerator_MetadataError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	cmView := NewMockClusterMetadataView(ctrl)
+	cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, errors.New("fail"))
 
 	// could not fetch cluster metadata

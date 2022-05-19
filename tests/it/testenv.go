@@ -21,6 +21,8 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -71,7 +73,8 @@ type VarlogCluster struct {
 	logClientManager *client.Manager[*client.LogClient]
 
 	muVMS     sync.Mutex
-	vmsServer varlogadm.ClusterManager
+	vmsServer *varlogadm.ClusterManager
+	wgVms     sync.WaitGroup
 	vmsCL     varlog.Admin
 
 	portLease *ports.Lease
@@ -378,6 +381,7 @@ func (clus *VarlogCluster) Close(t *testing.T) {
 	// FIXME: add method for closing vmsServer
 	if clus.vmsServer != nil {
 		require.NoError(t, clus.vmsServer.Close())
+		clus.wgVms.Wait()
 	}
 
 	// mr
@@ -1058,7 +1062,7 @@ func (clus *VarlogCluster) LookupMR(nodeID types.NodeID) (*metarepos.RaftMetadat
 	return nil, false
 }
 
-func (clus *VarlogCluster) GetVMS() varlogadm.ClusterManager {
+func (clus *VarlogCluster) GetVMS() *varlogadm.ClusterManager {
 	clus.muVMS.Lock()
 	defer clus.muVMS.Unlock()
 
@@ -1125,21 +1129,38 @@ func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) 
 */
 
 func (clus *VarlogCluster) initVMS(t *testing.T) {
+	mrMgrOpts := append(clus.mrMgrOpts,
+		mrmanager.WithAddresses(clus.mrRPCEndpoints...),
+		mrmanager.WithLogger(clus.logger),
+	)
+	mrMgr, err := mrmanager.New(context.TODO(), mrMgrOpts...)
+	require.NoError(t, err)
+
+	snMgr, err := snmanager.New(context.TODO(),
+		snmanager.WithClusterID(clus.clusterID),
+		snmanager.WithClusterMetadataView(mrMgr.ClusterMetadataView()),
+		snmanager.WithLogger(clus.logger),
+	)
+	require.NoError(t, err)
+
 	listenAddress := fmt.Sprintf("127.0.0.1:%d", clus.portLease.Base()+clus.vmsPortOffset)
 	opts := append(clus.VMSOpts,
 		varlogadm.WithListenAddress(listenAddress),
 		varlogadm.WithClusterID(clus.clusterID),
 		varlogadm.WithReplicationFactor(uint(clus.nrRep)),
 		varlogadm.WithLogger(clus.logger.Named("admin")),
-		varlogadm.WithMRManagerOptions(
-			varlogadm.WithMetadataRepositoryAddress(clus.mrRPCEndpoints...),
-		),
+		varlogadm.WithMetadataRepositoryManager(mrMgr),
+		varlogadm.WithStorageNodeManager(snMgr),
 	)
 
 	cm, err := varlogadm.NewClusterManager(context.Background(), opts...)
 	require.NoError(t, err)
 
-	require.NoError(t, cm.Run())
+	clus.wgVms.Add(1)
+	go func() {
+		defer clus.wgVms.Done()
+		require.NoError(t, cm.Serve())
+	}()
 
 	require.Eventually(t, func() bool {
 		rpcConn, err := rpc.NewConn(context.Background(), listenAddress)
@@ -1553,7 +1574,7 @@ func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
 	require.Eventually(t, func() bool {
 		vmsMeta, err := clus.vmsServer.Metadata(context.Background())
 		return err == nil && vmsMeta.GetLogStream(lsID) != nil
-	}, varlogadm.ReloadInterval*10, 100*time.Millisecond)
+	}, mrmanager.ReloadInterval*10, 100*time.Millisecond)
 
 	require.Eventually(t, func() bool {
 		snMCLs := clus.StorageNodesManagementClients()

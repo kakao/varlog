@@ -31,7 +31,7 @@ func TestClientNoLogStream(t *testing.T) {
 		it.WithNumberOfStorageNodes(3),
 		it.WithNumberOfClients(1),
 		it.WithNumberOfTopics(1),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 	)
 
 	defer func() {
@@ -52,7 +52,7 @@ func TestClientAppendToSubscribeTo(t *testing.T) {
 		it.WithNumberOfStorageNodes(1),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 		it.WithNumberOfTopics(1),
 	)
 
@@ -118,7 +118,7 @@ func TestClientAppendTo(t *testing.T) {
 		it.WithNumberOfStorageNodes(3),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 		it.WithNumberOfTopics(1),
 	)
 
@@ -151,7 +151,7 @@ func TestClientAppend(t *testing.T) {
 		it.WithNumberOfStorageNodes(3),
 		it.WithNumberOfLogStreams(3),
 		it.WithNumberOfClients(1),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 		it.WithNumberOfTopics(1),
 	)
 
@@ -227,7 +227,7 @@ func TestClientAppendCancel(t *testing.T) {
 		it.WithNumberOfStorageNodes(1),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(1),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 		it.WithNumberOfTopics(1),
 	)
 
@@ -280,7 +280,7 @@ func TestClientSubscribe(t *testing.T) {
 		it.WithNumberOfStorageNodes(3),
 		it.WithNumberOfLogStreams(3),
 		it.WithNumberOfClients(1),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 		it.WithNumberOfTopics(1),
 	)
 
@@ -346,7 +346,7 @@ func TestClientTrim(t *testing.T) {
 		it.WithNumberOfStorageNodes(3),
 		it.WithNumberOfLogStreams(3),
 		it.WithNumberOfClients(1),
-		it.WithVMSOptions(it.NewTestVMSOptions()),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
 		it.WithNumberOfTopics(1),
 	)
 

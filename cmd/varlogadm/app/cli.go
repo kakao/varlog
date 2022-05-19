@@ -1,12 +1,15 @@
 package app
 
 import (
+	"context"
 	"path/filepath"
 
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/log"
 )
@@ -33,11 +36,11 @@ func initStartCommand() *cli.Command {
 			flagListen.StringFlag(false, varlogadm.DefaultListenAddress),
 			flagReplicationFactor.UintFlag(false, varlogadm.DefaultReplicationFactor),
 			flagMetadataRepository.StringSliceFlag(true, nil),
-			flagInitMRConnRetryCount.IntFlag(false, varlogadm.DefaultInitialMRConnectRetryCount),
-			flagInitMRConnRetryBackoff.DurationFlag(false, varlogadm.DefaultInitialMRConnectRetryBackoff),
+			flagInitMRConnRetryCount.IntFlag(false, mrmanager.DefaultInitialMRConnectRetryCount),
+			flagInitMRConnRetryBackoff.DurationFlag(false, mrmanager.DefaultInitialMRConnectRetryBackoff),
 			flagSNWatcherRPCTimeout.DurationFlag(false, varlogadm.DefaultWatcherRPCTimeout),
-			flagMRConnTimeout.DurationFlag(false, varlogadm.DefaultMRConnTimeout),
-			flagMRCallTimeout.DurationFlag(false, varlogadm.DefaultMRCallTimeout),
+			flagMRConnTimeout.DurationFlag(false, mrmanager.DefaultMRConnTimeout),
+			flagMRCallTimeout.DurationFlag(false, mrmanager.DefaultMRCallTimeout),
 			flagLogDir.StringFlag(false, ""),
 			flagLogToStderr.BoolFlag(),
 		},
@@ -58,17 +61,34 @@ func start(c *cli.Context) error {
 		_ = logger.Sync()
 	}()
 
+	mrMgr, err := mrmanager.New(context.TODO(),
+		mrmanager.WithAddresses(c.StringSlice(flagMetadataRepository.Name)...),
+		mrmanager.WithInitialMRConnRetryCount(c.Int(flagInitMRConnRetryCount.Name)),
+		mrmanager.WithInitialMRConnRetryBackoff(c.Duration(flagInitMRConnRetryBackoff.Name)),
+		mrmanager.WithMRManagerConnTimeout(c.Duration(flagMRConnTimeout.Name)),
+		mrmanager.WithMRManagerCallTimeout(c.Duration(flagMRCallTimeout.Name)),
+		mrmanager.WithClusterID(clusterID),
+		mrmanager.WithLogger(logger),
+	)
+	if err != nil {
+		return err
+	}
+
+	snMgr, err := snmanager.New(context.TODO(),
+		snmanager.WithClusterID(clusterID),
+		snmanager.WithClusterMetadataView(mrMgr.ClusterMetadataView()),
+		snmanager.WithLogger(logger),
+	)
+	if err != nil {
+		return err
+	}
+
 	opts := []varlogadm.Option{
 		varlogadm.WithLogger(logger),
 		varlogadm.WithListenAddress(c.String(flagListen.Name)),
 		varlogadm.WithReplicationFactor(c.Uint(flagReplicationFactor.Name)),
-		varlogadm.WithMRManagerOptions(
-			varlogadm.WithMetadataRepositoryAddress(c.StringSlice(flagMetadataRepository.Name)...),
-			varlogadm.WithInitialMRConnRetryCount(c.Int(flagInitMRConnRetryCount.Name)),
-			varlogadm.WithInitialMRConnRetryBackoff(c.Duration(flagInitMRConnRetryBackoff.Name)),
-			varlogadm.WithMRManagerConnTimeout(c.Duration(flagMRConnTimeout.Name)),
-			varlogadm.WithMRManagerCallTimeout(c.Duration(flagMRCallTimeout.Name)),
-		),
+		varlogadm.WithMetadataRepositoryManager(mrMgr),
+		varlogadm.WithStorageNodeManager(snMgr),
 		varlogadm.WithWatcherOptions(
 			varlogadm.WithWatcherRPCTimeout(c.Duration(flagSNWatcherRPCTimeout.Name)),
 		),

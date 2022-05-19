@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
@@ -22,7 +24,7 @@ func TestRandomSelector(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		cmView := NewMockClusterMetadataView(ctrl)
+		cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 		cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(
 			&varlogpb.MetadataDescriptor{
 				StorageNodes: []*varlogpb.StorageNodeDescriptor{
@@ -99,7 +101,7 @@ func TestVictimSelector(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		snMgr := NewMockStorageNodeManager(ctrl)
+		snMgr := snmanager.NewMockStorageNodeManager(ctrl)
 		replicas := []*varlogpb.ReplicaDescriptor{
 			{
 				StorageNodeID: types.StorageNodeID(1),
@@ -251,7 +253,7 @@ func TestBalancedReplicaSelector(t *testing.T) {
 		md := &varlogpb.MetadataDescriptor{}
 		f.Fuzz(md)
 
-		cmView := NewMockClusterMetadataView(ctrl)
+		cmView := mrmanager.NewMockClusterMetadataView(ctrl)
 		cmView.EXPECT().ClusterMetadata(gomock.Any()).Return(md, nil).AnyTimes()
 
 		sel, err := newBalancedReplicaSelector(cmView, replicationFactor)

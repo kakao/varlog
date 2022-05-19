@@ -57,5 +57,5 @@ func main(c *cli.Context) error {
 		_ = b.Close()
 	}()
 
-	return b.Run()
+	return b.Serve()
 }

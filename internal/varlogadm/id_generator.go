@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"sync"
 
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
 // TopicIDGenerator generates TopicID.
 type TopicIDGenerator struct {
-	cmView ClusterMetadataView
+	cmView mrmanager.ClusterMetadataView
 
 	last types.TopicID
 	mu   sync.Mutex
@@ -18,7 +19,7 @@ type TopicIDGenerator struct {
 
 // NewTopicIDGenerator creates a TopicIDGenerator.
 // Admin should create a single TopicIDGenerator to avoid conflict of TopicID.
-func NewTopicIDGenerator(ctx context.Context, cmView ClusterMetadataView) (*TopicIDGenerator, error) {
+func NewTopicIDGenerator(ctx context.Context, cmView mrmanager.ClusterMetadataView) (*TopicIDGenerator, error) {
 	gen := &TopicIDGenerator{
 		cmView: cmView,
 		last:   0,
@@ -65,25 +66,9 @@ func (gen *TopicIDGenerator) Refresh(ctx context.Context) error {
 	return nil
 }
 
-func (gen *TopicIDGenerator) getMaxTopicID(ctx context.Context) (maxID types.TopicID, err error) {
-	clusmeta, err := gen.cmView.ClusterMetadata(ctx)
-	if err != nil {
-		return maxID, err
-	}
-
-	topicDescs := clusmeta.GetTopics()
-	for _, topicDesc := range topicDescs {
-		if maxID < topicDesc.TopicID {
-			maxID = topicDesc.TopicID
-		}
-	}
-
-	return maxID, nil
-}
-
 // LogStreamIDGenerator generates LogStreamID.
 type LogStreamIDGenerator struct {
-	cmView ClusterMetadataView
+	cmView mrmanager.ClusterMetadataView
 
 	last types.LogStreamID
 	mu   sync.Mutex
@@ -92,7 +77,7 @@ type LogStreamIDGenerator struct {
 // NewLogStreamIDGenerator creates a LogStreamIDGenerator.
 // Admin should create a single LogStreamIDGenerator to avoid conflict of
 // LogStreamID.
-func NewLogStreamIDGenerator(ctx context.Context, cmView ClusterMetadataView) (*LogStreamIDGenerator, error) {
+func NewLogStreamIDGenerator(ctx context.Context, cmView mrmanager.ClusterMetadataView) (*LogStreamIDGenerator, error) {
 	gen := &LogStreamIDGenerator{
 		cmView: cmView,
 		last:   types.LogStreamID(0),

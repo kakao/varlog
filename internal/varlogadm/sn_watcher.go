@@ -8,13 +8,15 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/runner"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )
 
 type StorageNodeWatcher interface {
-	Run() error
+	Serve() error
 	Close() error
 }
 
@@ -23,8 +25,8 @@ var _ StorageNodeWatcher = (*snWatcher)(nil)
 type snWatcher struct {
 	watcherConfig
 
-	cmView    ClusterMetadataView
-	snMgr     StorageNodeManager
+	cmView    mrmanager.ClusterMetadataView
+	snMgr     snmanager.StorageNodeManager
 	snHandler StorageNodeEventHandler
 
 	hb map[types.StorageNodeID]time.Time
@@ -36,7 +38,7 @@ type snWatcher struct {
 	logger *zap.Logger
 }
 
-func NewStorageNodeWatcher(opts []WatcherOption, cmView ClusterMetadataView, snMgr StorageNodeManager, snHandler StorageNodeEventHandler, logger *zap.Logger) StorageNodeWatcher {
+func NewStorageNodeWatcher(opts []WatcherOption, cmView mrmanager.ClusterMetadataView, snMgr snmanager.StorageNodeManager, snHandler StorageNodeEventHandler, logger *zap.Logger) StorageNodeWatcher {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -56,7 +58,7 @@ func NewStorageNodeWatcher(opts []WatcherOption, cmView ClusterMetadataView, snM
 	}
 }
 
-func (w *snWatcher) Run() error {
+func (w *snWatcher) Serve() error {
 	cancel, err := w.runner.Run(w.run)
 	if err != nil {
 		return err

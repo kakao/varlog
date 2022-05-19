@@ -460,7 +460,7 @@ func TestGCZombieLogStream(t *testing.T) {
 	opts := []it.Option{
 		it.WithNumberOfStorageNodes(1),
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		it.WithVMSOptions(vmsOpts),
+		it.WithVMSOptions(vmsOpts...),
 		it.WithNumberOfTopics(1),
 	}
 
