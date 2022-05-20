@@ -10,6 +10,7 @@ import (
 	"github.com/kakao/varlog/internal/varlogadm"
 	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
 	"github.com/kakao/varlog/internal/varlogadm/snmanager"
+	"github.com/kakao/varlog/internal/varlogadm/snwatcher"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
 )
@@ -35,12 +36,18 @@ func initStartCommand() *cli.Command {
 			flagClusterID.StringFlag(false, types.ClusterID(1).String()),
 			flagListen.StringFlag(false, varlogadm.DefaultListenAddress),
 			flagReplicationFactor.UintFlag(false, varlogadm.DefaultReplicationFactor),
+			flagLogStreamGCTimeout.DurationFlag(false, varlogadm.DefaultLogStreamGCTimeout),
+			flagDisableAutoLogStreamSync.BoolFlag(),
+
 			flagMetadataRepository.StringSliceFlag(true, nil),
 			flagInitMRConnRetryCount.IntFlag(false, mrmanager.DefaultInitialMRConnectRetryCount),
 			flagInitMRConnRetryBackoff.DurationFlag(false, mrmanager.DefaultInitialMRConnectRetryBackoff),
-			flagSNWatcherRPCTimeout.DurationFlag(false, varlogadm.DefaultWatcherRPCTimeout),
 			flagMRConnTimeout.DurationFlag(false, mrmanager.DefaultMRConnTimeout),
 			flagMRCallTimeout.DurationFlag(false, mrmanager.DefaultMRCallTimeout),
+
+			flagSNWatcherHeartbeatCheckDeadline.DurationFlag(false, snwatcher.DefaultHeartbeatDeadline),
+			flagSNWatcherReportDeadline.DurationFlag(false, snwatcher.DefaultReportDeadline),
+
 			flagLogDir.StringFlag(false, ""),
 			flagLogToStderr.BoolFlag(),
 		},
@@ -87,11 +94,16 @@ func start(c *cli.Context) error {
 		varlogadm.WithLogger(logger),
 		varlogadm.WithListenAddress(c.String(flagListen.Name)),
 		varlogadm.WithReplicationFactor(c.Uint(flagReplicationFactor.Name)),
+		varlogadm.WithLogStreamGCTimeout(c.Duration(flagLogStreamGCTimeout.Name)),
 		varlogadm.WithMetadataRepositoryManager(mrMgr),
 		varlogadm.WithStorageNodeManager(snMgr),
-		varlogadm.WithWatcherOptions(
-			varlogadm.WithWatcherRPCTimeout(c.Duration(flagSNWatcherRPCTimeout.Name)),
+		varlogadm.WithStorageNodeWatcherOptions(
+			snwatcher.WithHeartbeatCheckDeadline(c.Duration(flagSNWatcherHeartbeatCheckDeadline.Name)),
+			snwatcher.WithReportDeadline(c.Duration(flagSNWatcherReportDeadline.Name)),
 		),
+	}
+	if c.Bool(flagDisableAutoLogStreamSync.Name) {
+		opts = append(opts, varlogadm.WithoutAutoLogStreamSync())
 	}
 	return Main(opts, logger)
 }

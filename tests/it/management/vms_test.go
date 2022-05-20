@@ -11,6 +11,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/metarepos"
@@ -18,6 +19,7 @@ import (
 	"github.com/kakao/varlog/internal/varlogadm"
 	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
 	"github.com/kakao/varlog/internal/varlogadm/snmanager"
+	"github.com/kakao/varlog/internal/varlogadm/snwatcher"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
@@ -265,7 +267,7 @@ func (sh *testSnHandler) HandleHeartbeatTimeout(ctx context.Context, snID types.
 	}
 }
 
-func (sh *testSnHandler) HandleReport(ctx context.Context, sn *snpb.StorageNodeMetadataDescriptor, _ time.Duration) {
+func (sh *testSnHandler) HandleReport(ctx context.Context, sn *snpb.StorageNodeMetadataDescriptor) {
 	select {
 	case sh.reportC <- sn:
 	default:
@@ -308,22 +310,25 @@ func TestVarlogSNWatcher(t *testing.T) {
 
 			snHandler := newTestSnHandler()
 
-			wopts := []varlogadm.WatcherOption{
-				varlogadm.WithWatcherTick(varlogadm.DefaultTick),
-				varlogadm.WithWatcherReportInterval(varlogadm.DefaultReportInterval),
-				varlogadm.WithWatcherHeartbeatTimeout(varlogadm.DefaultHeartbeatTimeout),
-				varlogadm.WithWatcherRPCTimeout(varlogadm.DefaultWatcherRPCTimeout),
+			wopts := []snwatcher.Option{
+				snwatcher.WithTick(snwatcher.DefaultTick),
+				snwatcher.WithReportInterval(snwatcher.DefaultReportInterval),
+				snwatcher.WithHeartbeatTimeout(snwatcher.DefaultHeartbeatTimeout),
+				snwatcher.WithClusterMetadataView(cmView),
+				snwatcher.WithStorageNodeManager(snMgr),
+				snwatcher.WithStorageNodeWatcherHandler(snHandler),
 			}
 
 			var wg sync.WaitGroup
-			snWatcher := varlogadm.NewStorageNodeWatcher(wopts, cmView, snMgr, snHandler, zap.NewNop())
+			snWatcher, err := snwatcher.New(wopts...)
+			require.NoError(t, err)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				snWatcher.Serve()
+				snWatcher.Start()
 			}()
 			defer func() {
-				snWatcher.Close()
+				snWatcher.Stop()
 				wg.Wait()
 			}()
 
@@ -338,7 +343,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 						case meta := <-snHandler.reportC:
 							replica, exist := meta.FindLogStream(lsID)
 							return exist && replica.GetStatus().Sealed()
-						case <-time.After(varlogadm.DefaultTick * time.Duration(2*varlogadm.DefaultReportInterval)):
+						case <-time.After(snwatcher.DefaultTick * time.Duration(2*snwatcher.DefaultReportInterval)):
 						}
 
 						return false
@@ -355,7 +360,7 @@ func TestVarlogSNWatcher(t *testing.T) {
 						select {
 						case hsnid := <-snHandler.hbC:
 							return hsnid == snID
-						case <-time.After(varlogadm.DefaultTick * time.Duration(2*varlogadm.DefaultHeartbeatTimeout)):
+						case <-time.After(snwatcher.DefaultTick * time.Duration(2*snwatcher.DefaultHeartbeatTimeout)):
 						}
 
 						return false

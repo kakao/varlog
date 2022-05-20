@@ -17,6 +17,15 @@ var (
 		Usage: "replication factor",
 		Envs:  []string{"REPLICATION_FACTOR"},
 	}
+	flagLogStreamGCTimeout = flags.FlagDesc{
+		Name: "log-stream-gc-timeout",
+		Envs: []string{"LOG_STREAM_GC_TIMEOUT"},
+	}
+	flagDisableAutoLogStreamSync = flags.FlagDesc{
+		Name: "disable-auto-log-stream-sync",
+		Envs: []string{"DISABLE_AUTO_LOG_STREAM_SYNC"},
+	}
+
 	flagInitMRConnRetryCount = flags.FlagDesc{
 		Name:  "init-mr-conn-retry-count",
 		Usage: "the number of retry of initial metadata repository connect",
@@ -26,11 +35,6 @@ var (
 		Name:  "init-mr-conn-retry-backoff",
 		Usage: "backoff duration between retries of initial metadata repository connect",
 		Envs:  []string{"INIT_MR_CONN_RETRY_BACKOFF"},
-	}
-	flagSNWatcherRPCTimeout = flags.FlagDesc{
-		Name:  "sn-watcher-rpc-timeout",
-		Usage: "sn watcher rpc timeout",
-		Envs:  []string{"SN_WATCHER_RPC_TIMEOUT"},
 	}
 	flagMRConnTimeout = flags.FlagDesc{
 		Name:  "mr-conn-timeout",
@@ -42,6 +46,16 @@ var (
 		Usage: "mr call timeout",
 		Envs:  []string{"MR_CALL_TIMEOUT"},
 	}
+
+	flagSNWatcherHeartbeatCheckDeadline = flags.FlagDesc{
+		Name: "sn-watcher-heartbeat-check-deadline",
+		Envs: []string{"SN_WATCHER_HEARTBEAT_CHECK_DEADLINE"},
+	}
+	flagSNWatcherReportDeadline = flags.FlagDesc{
+		Name: "sn-watcher-report-deadline",
+		Envs: []string{"SN_WATCHER_REPORT_DEADLINE"},
+	}
+
 	flagLogDir = flags.FlagDesc{
 		Name:    "logdir",
 		Aliases: []string{"log-dir"},

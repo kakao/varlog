@@ -5,13 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
-
-## [0.1.9] - 2022-05-11
 ### Added
-- Added interface types for functional options in varlogadm, for instance, `internal/varlogadm.(Option)`, `internal/varlogadm.(MRManagerOption)` and `internal/varlogadm.(WatcherOption)`. (#VARLOG-740/#654)
 - Added `pkg/rpc.(*Manager)` to manage gRPC connections. (#VARLOG-739/#660)
 - Field `proto/varlogpb.(StorageNodeDescriptor).Paths` is added to `proto.varlogpb.(StorageNodeDescriptor)` since it is immutable properties of the storage node. (#VARLOG-745/#664)
+- New flag `--log-stream-gc-timeout`, which specifies the expiration duration of garbage log streams, is added to the varlogadm CLI. (#VARLOG-746/#667)
+- New flag `--disable-auto-log-stream-sync`, which disables automatic sync between log stream replicas, is added to the varlogadm CLI. (#VARLOG-746/#667)
+- New flag `--sn-watcher-heartbeat-check-deadline`, which sets the deadline for checking heartbeats of storage nodes, is added to the varlogadm CLI. (#VARLOG-746/#667)
+- New flag `--sn-watcher-report-deadline`, which sets the deadline for reporting metadata of storage nodes, is added to the varlogadm CLI. (#VARLOG-746/#667)
 
 ### Changed
 - Moved package `pkg/logclient` and `pkg/snc` to `internal/storagenode/client` to prevent exposing the package. (#VARLOG-743/#662)
@@ -24,9 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `internal/varlogadm/snmanager.(StorageNodeManager)` and `internal/varlogadm/mrmanager.(MetadataRepositoryManager)` are injected to `internal/varlogadm.(ClusterManager)` rather than instantiating in the constructor of `internal/varlogadm.(ClusterManager)` to improve testability of varlog admin server. (#VARLOG-658/#666)
 
 ### Removed
-- Removed structs for options in varlogadm, for instance, `internal/varlogadm.(Options)`, `internal/varlogadm.(MRManagerOptions)` and `internal/varlogadm.(WatcherOptions)`. (#VARLOG-740/#654)
 - Removed dead code - interface `internal/metarepos.(StorageNodeManagementClientFactory)` and its implementations and package `pkg/rpc/testpb`. (#VARLOG-743/#662)
 - Field `proto/varlogpb.(StorageNodeDescriptor).Storages`, which is type of `proto/varlogpb.(StorageDescriptor)`, is removed since it is mutable. (#VARLOG-745/#664)
+
+
+## [0.1.9] - 2022-05-11
+### Added
+- Added interface types for functional options in varlogadm, for instance, `internal/varlogadm.(Option)`, `internal/varlogadm.(MRManagerOption)` and `internal/varlogadm.(WatcherOption)`. (#VARLOG-740/#654)
+
+### Removed
+- Removed structs for options in varlogadm, for instance, `internal/varlogadm.(Options)`, `internal/varlogadm.(MRManagerOptions)` and `internal/varlogadm.(WatcherOptions)`. (#VARLOG-740/#654)
 
 
 ## [0.1.8] - 2022-05-04

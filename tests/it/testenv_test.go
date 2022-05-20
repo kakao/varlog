@@ -5,16 +5,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/mrc"
 )
 
 func TestVarlogRegisterStorageNode(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	assert.NoError(t, err)
+	defer logger.Sync()
 	env := NewVarlogCluster(t,
 		WithNumberOfStorageNodes(1),
 		WithNumberOfLogStreams(1),
 		WithNumberOfTopics(1),
+		WithLogger(logger),
 	)
 	defer env.Close(t)
 

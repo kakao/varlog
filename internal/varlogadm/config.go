@@ -8,40 +8,36 @@ import (
 
 	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
 	"github.com/kakao/varlog/internal/varlogadm/snmanager"
+	"github.com/kakao/varlog/internal/varlogadm/snwatcher"
 	"github.com/kakao/varlog/pkg/types"
 )
 
 const (
-	DefaultListenAddress     = "127.0.0.1:9090"
-	DefaultWatcherRPCTimeout = 3 * time.Second
-
-	DefaultClusterID         = types.ClusterID(1)
-	DefaultReplicationFactor = 1
-
-	DefaultTick             = 100 * time.Millisecond
-	DefaultReportInterval   = 10
-	DefaultHeartbeatTimeout = 10
-	DefaultGCTimeout        = 24 * time.Hour
+	DefaultClusterID          = types.ClusterID(1)
+	DefaultListenAddress      = "127.0.0.1:9090"
+	DefaultReplicationFactor  = 1
+	DefaultLogStreamGCTimeout = 24 * time.Hour
 )
 
 type config struct {
-	clusterID         types.ClusterID
-	listenAddress     string
-	replicationFactor uint
-	logger            *zap.Logger
-
-	mrMgr mrmanager.MetadataRepositoryManager
-	snMgr snmanager.StorageNodeManager
-
-	watcherOptions []WatcherOption
+	cid                      types.ClusterID
+	listenAddress            string
+	replicationFactor        uint
+	logStreamGCTimeout       time.Duration
+	disableAutoLogStreamSync bool
+	mrmgr                    mrmanager.MetadataRepositoryManager
+	snmgr                    snmanager.StorageNodeManager
+	snwatcherOpts            []snwatcher.Option
+	logger                   *zap.Logger
 }
 
 func newConfig(opts []Option) (config, error) {
 	cfg := config{
-		clusterID:         DefaultClusterID,
-		listenAddress:     DefaultListenAddress,
-		replicationFactor: DefaultReplicationFactor,
-		logger:            zap.NewNop(),
+		cid:                DefaultClusterID,
+		listenAddress:      DefaultListenAddress,
+		replicationFactor:  DefaultReplicationFactor,
+		logStreamGCTimeout: DefaultLogStreamGCTimeout,
+		logger:             zap.NewNop(),
 	}
 	for _, opt := range opts {
 		opt.apply(&cfg)
@@ -56,10 +52,10 @@ func (cfg config) validate() error {
 	if cfg.replicationFactor < 1 {
 		return errors.New("non-positive replication factor")
 	}
-	if cfg.mrMgr == nil {
+	if cfg.mrmgr == nil {
 		return errors.New("mr manager is nil")
 	}
-	if cfg.snMgr == nil {
+	if cfg.snmgr == nil {
 		return errors.New("sn manager is nil")
 	}
 	if cfg.logger == nil {
@@ -86,7 +82,7 @@ func (fo *funcOption) apply(cfg *config) {
 
 func WithClusterID(cid types.ClusterID) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.clusterID = cid
+		cfg.cid = cid
 	})
 }
 
@@ -102,6 +98,21 @@ func WithReplicationFactor(replicationFactor uint) Option {
 	})
 }
 
+// WithLogStreamGCTimeout sets expiration duration for garbage log streams.
+// To turn off log stream GC, a very large value can be set.
+func WithLogStreamGCTimeout(logStreamGCTimeout time.Duration) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.logStreamGCTimeout = logStreamGCTimeout
+	})
+}
+
+// WithoutAutoLogStreamSync disables automatic sync job between replicas in the log stream.
+func WithoutAutoLogStreamSync() Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.disableAutoLogStreamSync = true
+	})
+}
+
 func WithLogger(logger *zap.Logger) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.logger = logger
@@ -110,91 +121,18 @@ func WithLogger(logger *zap.Logger) Option {
 
 func WithMetadataRepositoryManager(mrMgr mrmanager.MetadataRepositoryManager) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.mrMgr = mrMgr
+		cfg.mrmgr = mrMgr
 	})
 }
 
 func WithStorageNodeManager(snMgr snmanager.StorageNodeManager) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.snMgr = snMgr
+		cfg.snmgr = snMgr
 	})
 }
 
-func WithWatcherOptions(opts ...WatcherOption) Option {
+func WithStorageNodeWatcherOptions(opts ...snwatcher.Option) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.watcherOptions = opts
-	})
-}
-
-type watcherConfig struct {
-	tick             time.Duration
-	reportInterval   int
-	heartbeatTimeout int
-	gcTimeout        time.Duration
-	// timeout for heartbeat and report
-	rpcTimeout time.Duration
-}
-
-func newWatcherConfig(opts []WatcherOption) (watcherConfig, error) {
-	cfg := watcherConfig{
-		tick:             DefaultTick,
-		reportInterval:   DefaultReportInterval,
-		heartbeatTimeout: DefaultHeartbeatTimeout,
-		gcTimeout:        DefaultGCTimeout,
-		rpcTimeout:       DefaultWatcherRPCTimeout,
-	}
-	for _, opt := range opts {
-		opt.applyWatcher(&cfg)
-	}
-	return cfg, cfg.validate()
-}
-
-func (cfg *watcherConfig) validate() error {
-	return nil
-}
-
-type WatcherOption interface {
-	applyWatcher(*watcherConfig)
-}
-
-type funcWatcherOption struct {
-	f func(*watcherConfig)
-}
-
-func newFuncWatcherOption(f func(*watcherConfig)) *funcWatcherOption {
-	return &funcWatcherOption{f: f}
-}
-
-func (fmo *funcWatcherOption) applyWatcher(cfg *watcherConfig) {
-	fmo.f(cfg)
-}
-
-func WithWatcherTick(tick time.Duration) WatcherOption {
-	return newFuncWatcherOption(func(cfg *watcherConfig) {
-		cfg.tick = tick
-	})
-}
-
-func WithWatcherReportInterval(reportInterval int) WatcherOption {
-	return newFuncWatcherOption(func(cfg *watcherConfig) {
-		cfg.reportInterval = reportInterval
-	})
-}
-
-func WithWatcherHeartbeatTimeout(heartbeatTimeout int) WatcherOption {
-	return newFuncWatcherOption(func(cfg *watcherConfig) {
-		cfg.heartbeatTimeout = heartbeatTimeout
-	})
-}
-
-func WithWatcherGCTimeout(gcTimeout time.Duration) WatcherOption {
-	return newFuncWatcherOption(func(cfg *watcherConfig) {
-		cfg.gcTimeout = gcTimeout
-	})
-}
-
-func WithWatcherRPCTimeout(rpcTimeout time.Duration) WatcherOption {
-	return newFuncWatcherOption(func(cfg *watcherConfig) {
-		cfg.rpcTimeout = rpcTimeout
+		cfg.snwatcherOpts = opts
 	})
 }
