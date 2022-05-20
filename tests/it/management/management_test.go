@@ -13,6 +13,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/metarepos"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snwatcher"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
 	"github.daumkakao.com/varlog/varlog/pkg/varlog"
@@ -450,12 +451,12 @@ func TestGCZombieLogStream(t *testing.T) {
 		gcTimeout        = 6 * reportInterval * tick
 	)
 	vmsOpts := it.NewTestVMSOptions(
-		varlogadm.WithWatcherOptions(
-			varlogadm.WithWatcherTick(tick),
-			varlogadm.WithWatcherHeartbeatTimeout(heartbeatTimeout),
-			varlogadm.WithWatcherReportInterval(reportInterval),
-			varlogadm.WithWatcherGCTimeout(gcTimeout),
+		varlogadm.WithStorageNodeWatcherOptions(
+			snwatcher.WithTick(tick),
+			snwatcher.WithHeartbeatTimeout(heartbeatTimeout),
+			snwatcher.WithReportInterval(reportInterval),
 		),
+		varlogadm.WithLogStreamGCTimeout(gcTimeout),
 	)
 	opts := []it.Option{
 		it.WithNumberOfStorageNodes(1),

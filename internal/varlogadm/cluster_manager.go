@@ -1,6 +1,6 @@
 package varlogadm
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/varlogadm -package varlogadm -destination varlogadm_mock.go . StorageNodeWatcher,StatRepository
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/varlogadm -package varlogadm -destination varlogadm_mock.go . StatRepository
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snwatcher"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -27,11 +28,6 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
-
-type StorageNodeEventHandler interface {
-	HandleHeartbeatTimeout(context.Context, types.StorageNodeID)
-	HandleReport(context.Context, *snpb.StorageNodeMetadataDescriptor, time.Duration)
-}
 
 const numLogStreamMutex = 512
 
@@ -49,7 +45,7 @@ type ClusterManager struct {
 	muLogStreamStatus [numLogStreamMutex]sync.Mutex
 
 	snSelector     ReplicaSelector
-	snWatcher      StorageNodeWatcher
+	snWatcher      *snwatcher.StorageNodeWatcher
 	statRepository StatRepository
 	logStreamIDGen *LogStreamIDGenerator
 	topicIDGen     *TopicIDGenerator
@@ -61,7 +57,7 @@ func NewClusterManager(ctx context.Context, opts ...Option) (*ClusterManager, er
 		return nil, err
 	}
 
-	cmView := cfg.mrMgr.ClusterMetadataView()
+	cmView := cfg.mrmgr.ClusterMetadataView()
 
 	logStreamIDGen, err := NewLogStreamIDGenerator(ctx, cmView)
 	if err != nil {
@@ -77,20 +73,23 @@ func NewClusterManager(ctx context.Context, opts ...Option) (*ClusterManager, er
 	if err != nil {
 		return nil, err
 	}
-
 	cm := &ClusterManager{
 		config:         cfg,
 		snSelector:     snSelector,
 		statRepository: NewStatRepository(ctx, cmView),
 		logStreamIDGen: logStreamIDGen,
 		topicIDGen:     topicIDGen,
+		server:         grpc.NewServer(),
+		healthServer:   health.NewServer(),
 	}
-
-	cm.snWatcher = NewStorageNodeWatcher(cfg.watcherOptions, cmView, cfg.snMgr, cm, cm.logger)
-	cm.server = grpc.NewServer()
-	cm.healthServer = health.NewServer()
-
-	return cm, nil
+	cm.snWatcher, err = snwatcher.New(append(
+		cfg.snwatcherOpts,
+		snwatcher.WithClusterMetadataView(cmView),
+		snwatcher.WithStorageNodeManager(cfg.snmgr),
+		snwatcher.WithStorageNodeWatcherHandler(cm),
+		snwatcher.WithLogger(cfg.logger),
+	)...)
+	return cm, err
 }
 
 func (cm *ClusterManager) Address() string {
@@ -119,7 +118,7 @@ func (cm *ClusterManager) Serve() error {
 	cm.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
 	// SN Watcher
-	if err := cm.snWatcher.Serve(); err != nil {
+	if err := cm.snWatcher.Start(); err != nil {
 		cm.mu.Unlock()
 		return err
 	}
@@ -139,8 +138,8 @@ func (cm *ClusterManager) Close() (err error) {
 	cm.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 
 	// SN Watcher
-	err = cm.snWatcher.Close()
-	err = multierr.Combine(err, cm.snMgr.Close(), cm.mrMgr.Close())
+	err = cm.snWatcher.Stop()
+	err = multierr.Combine(err, cm.snmgr.Close(), cm.mrmgr.Close())
 	cm.server.Stop()
 	return err
 }
@@ -148,13 +147,13 @@ func (cm *ClusterManager) Close() (err error) {
 func (cm *ClusterManager) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	return cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	return cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 }
 
 func (cm *ClusterManager) StorageNodes(ctx context.Context) (ret map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, err error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	metadata, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	metadata, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -164,10 +163,10 @@ func (cm *ClusterManager) StorageNodes(ctx context.Context) (ret map[types.Stora
 	for i := range metadata.StorageNodes {
 		snd := metadata.StorageNodes[i]
 		g.Go(func() error {
-			snmd, err := cm.snMgr.GetMetadata(ctx, snd.StorageNodeID)
+			snmd, err := cm.snmgr.GetMetadata(ctx, snd.StorageNodeID)
 			if err != nil {
 				snmd = &snpb.StorageNodeMetadataDescriptor{
-					ClusterID:   cm.clusterID,
+					ClusterID:   cm.cid,
 					StorageNode: snd.StorageNode,
 					Status:      varlogpb.StorageNodeStatusUnavailable,
 				}
@@ -185,7 +184,7 @@ func (cm *ClusterManager) StorageNodes(ctx context.Context) (ret map[types.Stora
 func (cm *ClusterManager) MRInfos(ctx context.Context) (*mrpb.ClusterInfo, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	return cm.mrMgr.GetClusterInfo(ctx)
+	return cm.mrmgr.GetClusterInfo(ctx)
 }
 
 func (cm *ClusterManager) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error) {
@@ -197,7 +196,7 @@ func (cm *ClusterManager) AddMRPeer(ctx context.Context, raftURL, rpcAddr string
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
-	err := cm.mrMgr.AddPeer(ctx, nodeID, raftURL, rpcAddr)
+	err := cm.mrmgr.AddPeer(ctx, nodeID, raftURL, rpcAddr)
 	if err != nil {
 		if !errors.Is(err, verrors.ErrAlreadyExists) {
 			return types.InvalidNodeID, err
@@ -216,7 +215,7 @@ func (cm *ClusterManager) RemoveMRPeer(ctx context.Context, raftURL string) erro
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
-	err := cm.mrMgr.RemovePeer(ctx, nodeID)
+	err := cm.mrmgr.RemovePeer(ctx, nodeID)
 	if err != nil {
 		if !errors.Is(err, verrors.ErrAlreadyExists) {
 			return err
@@ -239,11 +238,11 @@ func (cm *ClusterManager) AddStorageNode(ctx context.Context, snid types.Storage
 
 	snd := snmd.ToStorageNodeDescriptor()
 	snd.Status = varlogpb.StorageNodeStatusRunning
-	if err = cm.mrMgr.RegisterStorageNode(ctx, snd); err != nil {
+	if err = cm.mrmgr.RegisterStorageNode(ctx, snd); err != nil {
 		return nil, err
 	}
 
-	cm.snMgr.AddStorageNode(ctx, snmd.StorageNode.StorageNodeID, addr)
+	cm.snmgr.AddStorageNode(ctx, snmd.StorageNode.StorageNodeID, addr)
 	return snmd, err
 }
 
@@ -251,7 +250,7 @@ func (cm *ClusterManager) UnregisterStorageNode(ctx context.Context, snid types.
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	clusmeta, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	clusmeta, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -270,11 +269,11 @@ func (cm *ClusterManager) UnregisterStorageNode(ctx context.Context, snid types.
 		}
 	}
 
-	if err := cm.mrMgr.UnregisterStorageNode(ctx, snid); err != nil {
+	if err := cm.mrmgr.UnregisterStorageNode(ctx, snid); err != nil {
 		return err
 	}
 
-	cm.snMgr.RemoveStorageNode(snid)
+	cm.snmgr.RemoveStorageNode(snid)
 	return nil
 }
 
@@ -283,7 +282,7 @@ func (cm *ClusterManager) AddTopic(ctx context.Context) (varlogpb.TopicDescripto
 	defer cm.mu.Unlock()
 
 	topicID := cm.topicIDGen.Generate()
-	if err := cm.mrMgr.RegisterTopic(ctx, topicID); err != nil {
+	if err := cm.mrmgr.RegisterTopic(ctx, topicID); err != nil {
 		return varlogpb.TopicDescriptor{}, err
 	}
 
@@ -294,7 +293,7 @@ func (cm *ClusterManager) Topics(ctx context.Context) ([]varlogpb.TopicDescripto
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	md, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	md, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil || len(md.Topics) == 0 {
 		return nil, err
 	}
@@ -310,7 +309,7 @@ func (cm *ClusterManager) DescribeTopic(ctx context.Context, tpid types.TopicID)
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	md, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	md, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil || len(md.Topics) == 0 {
 		return
 	}
@@ -338,7 +337,7 @@ func (cm *ClusterManager) UnregisterTopic(ctx context.Context, tpid types.TopicI
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	clusmeta, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	clusmeta, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -355,7 +354,7 @@ func (cm *ClusterManager) UnregisterTopic(ctx context.Context, tpid types.TopicI
 
 	//TODO:: seal logStreams and refresh metadata
 
-	return cm.mrMgr.UnregisterTopic(ctx, tpid)
+	return cm.mrmgr.UnregisterTopic(ctx, tpid)
 }
 
 func (cm *ClusterManager) AddLogStream(ctx context.Context, tpid types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
@@ -385,7 +384,7 @@ func (cm *ClusterManager) addLogStreamInternal(ctx context.Context, tpid types.T
 		}
 	}
 
-	clusmeta, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	clusmeta, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +438,7 @@ func (cm *ClusterManager) UnregisterLogStream(ctx context.Context, tpid types.To
 	cm.lockLogStreamStatus(lsid)
 	defer cm.unlockLogStreamStatus(lsid)
 
-	clusmeta, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	clusmeta, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -458,7 +457,7 @@ func (cm *ClusterManager) UnregisterLogStream(ctx context.Context, tpid types.To
 
 	// TODO (jun): test if the log stream has no logs
 
-	return cm.mrMgr.UnregisterLogStream(ctx, lsid)
+	return cm.mrmgr.UnregisterLogStream(ctx, lsid)
 }
 
 func (cm *ClusterManager) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor, lsdesc *varlogpb.LogStreamDescriptor) error {
@@ -478,12 +477,12 @@ func (cm *ClusterManager) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor,
 }
 
 func (cm *ClusterManager) addLogStream(ctx context.Context, lsdesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
-	if err := cm.snMgr.AddLogStream(ctx, lsdesc); err != nil {
+	if err := cm.snmgr.AddLogStream(ctx, lsdesc); err != nil {
 		return nil, err
 	}
 
 	// NB: RegisterLogStream returns nil if the logstream already exists.
-	return lsdesc, cm.mrMgr.RegisterLogStream(ctx, lsdesc)
+	return lsdesc, cm.mrmgr.RegisterLogStream(ctx, lsdesc)
 }
 
 func (cm *ClusterManager) RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error {
@@ -493,7 +492,7 @@ func (cm *ClusterManager) RemoveLogStreamReplica(ctx context.Context, snid types
 	cm.lockLogStreamStatus(lsid)
 	defer cm.unlockLogStreamStatus(lsid)
 
-	clusmeta, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	clusmeta, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -502,7 +501,7 @@ func (cm *ClusterManager) RemoveLogStreamReplica(ctx context.Context, snid types
 		return err
 	}
 
-	return cm.snMgr.RemoveLogStreamReplica(ctx, snid, tpid, lsid)
+	return cm.snmgr.RemoveLogStreamReplica(ctx, snid, tpid, lsid)
 }
 
 func (cm *ClusterManager) UpdateLogStream(ctx context.Context, lsid types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
@@ -514,7 +513,7 @@ func (cm *ClusterManager) UpdateLogStream(ctx context.Context, lsid types.LogStr
 	cm.lockLogStreamStatus(lsid)
 	defer cm.unlockLogStreamStatus(lsid)
 
-	clusmeta, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	clusmeta, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -531,7 +530,7 @@ func (cm *ClusterManager) UpdateLogStream(ctx context.Context, lsid types.LogStr
 
 	if poppedReplica == nil {
 		// TODO: Choose laggy replica
-		selector := newVictimSelector(cm.snMgr, lsid, oldLSDesc.GetReplicas())
+		selector := newVictimSelector(cm.snmgr, lsid, oldLSDesc.GetReplicas())
 		victims, err := selector.Select(ctx)
 		if err != nil {
 			return nil, err
@@ -546,7 +545,7 @@ func (cm *ClusterManager) UpdateLogStream(ctx context.Context, lsid types.LogStr
 			denylist[i] = replica.GetStorageNodeID()
 		}
 
-		selector, err := newRandomReplicaSelector(cm.mrMgr.ClusterMetadataView(), 1, denylist...)
+		selector, err := newRandomReplicaSelector(cm.mrmgr.ClusterMetadataView(), 1, denylist...)
 		if err != nil {
 			return nil, err
 		}
@@ -571,7 +570,7 @@ func (cm *ClusterManager) UpdateLogStream(ctx context.Context, lsid types.LogStr
 		cm.logger.Panic("logstream push/pop error")
 	}
 
-	if err := cm.snMgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetPath()); err != nil {
+	if err := cm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetPath()); err != nil {
 		return nil, err
 	}
 
@@ -580,7 +579,7 @@ func (cm *ClusterManager) UpdateLogStream(ctx context.Context, lsid types.LogStr
 		cm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
 	}()
 
-	if err := cm.mrMgr.UpdateLogStream(ctx, newLSDesc); err != nil {
+	if err := cm.mrmgr.UpdateLogStream(ctx, newLSDesc); err != nil {
 		return nil, err
 	}
 
@@ -622,13 +621,13 @@ func (cm *ClusterManager) Seal(ctx context.Context, tpid types.TopicID, lsid typ
 func (cm *ClusterManager) seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) ([]snpb.LogStreamReplicaMetadataDescriptor, types.GLSN, error) {
 	cm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusSealing)
 
-	lastGLSN, err := cm.mrMgr.Seal(ctx, lsid)
+	lastGLSN, err := cm.mrmgr.Seal(ctx, lsid)
 	if err != nil {
 		cm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
 		return nil, types.InvalidGLSN, err
 	}
 
-	result, err := cm.snMgr.Seal(ctx, tpid, lsid, lastGLSN)
+	result, err := cm.snmgr.Seal(ctx, tpid, lsid, lastGLSN)
 	if err != nil {
 		cm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
 	}
@@ -654,11 +653,11 @@ func (cm *ClusterManager) Sync(ctx context.Context, tpid types.TopicID, lsid typ
 }
 
 func (cm *ClusterManager) sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
-	lastGLSN, err := cm.mrMgr.Seal(ctx, lsid)
+	lastGLSN, err := cm.mrmgr.Seal(ctx, lsid)
 	if err != nil {
 		return nil, err
 	}
-	return cm.snMgr.Sync(ctx, tpid, lsid, srcID, dstID, lastGLSN)
+	return cm.snmgr.Sync(ctx, tpid, lsid, srcID, dstID, lastGLSN)
 }
 
 // Unseal unseals the log stream replicas corresponded with the given logStreamID.
@@ -674,15 +673,15 @@ func (cm *ClusterManager) unseal(ctx context.Context, tpid types.TopicID, lsid t
 	var clusmeta *varlogpb.MetadataDescriptor
 	cm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusUnsealing)
 
-	if err = cm.snMgr.Unseal(ctx, tpid, lsid); err != nil {
+	if err = cm.snmgr.Unseal(ctx, tpid, lsid); err != nil {
 		goto errOut
 	}
 
-	if err = cm.mrMgr.Unseal(ctx, lsid); err != nil {
+	if err = cm.mrmgr.Unseal(ctx, lsid); err != nil {
 		goto errOut
 	}
 
-	if clusmeta, err = cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx); err != nil {
+	if clusmeta, err = cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx); err != nil {
 		goto errOut
 	}
 
@@ -694,7 +693,7 @@ errOut:
 }
 
 func (cm *ClusterManager) HandleHeartbeatTimeout(ctx context.Context, snid types.StorageNodeID) {
-	meta, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+	meta, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return
 	}
@@ -808,8 +807,8 @@ func (cm *ClusterManager) syncLogStream(ctx context.Context, topicID types.Topic
 	}
 }
 
-func (cm *ClusterManager) HandleReport(ctx context.Context, snm *snpb.StorageNodeMetadataDescriptor, gcTimeout time.Duration) {
-	meta, err := cm.mrMgr.ClusterMetadataView().ClusterMetadata(ctx)
+func (cm *ClusterManager) HandleReport(ctx context.Context, snm *snpb.StorageNodeMetadataDescriptor) {
+	meta, err := cm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return
 	}
@@ -823,12 +822,15 @@ func (cm *ClusterManager) HandleReport(ctx context.Context, snm *snpb.StorageNod
 			cm.checkLogStreamStatus(ctx, ls.TopicID, ls.LogStreamID, mls.Status, ls.Status)
 			continue
 		}
-		if time.Since(ls.CreatedTime) > gcTimeout {
+		if time.Since(ls.CreatedTime) > cm.logStreamGCTimeout {
 			cm.RemoveLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.TopicID, ls.LogStreamID)
 		}
 	}
 
 	// Sync LogStream
+	if cm.disableAutoLogStreamSync {
+		return
+	}
 	for _, ls := range snm.GetLogStreamReplicas() {
 		if ls.Status.Sealed() {
 			cm.syncLogStream(ctx, ls.TopicID, ls.LogStreamID)
@@ -839,7 +841,7 @@ func (cm *ClusterManager) HandleReport(ctx context.Context, snm *snpb.StorageNod
 func (cm *ClusterManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	return cm.snMgr.Trim(ctx, tpid, lastGLSN)
+	return cm.snmgr.Trim(ctx, tpid, lastGLSN)
 }
 
 func getMetadataByAddr(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {

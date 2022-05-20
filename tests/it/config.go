@@ -10,6 +10,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/metarepos"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snwatcher"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
 )
@@ -188,10 +189,10 @@ func WithoutVMS() Option {
 
 func NewTestVMSOptions(opts ...varlogadm.Option) []varlogadm.Option {
 	ret := []varlogadm.Option{
-		varlogadm.WithWatcherOptions(
-			varlogadm.WithWatcherTick(100*time.Millisecond),
-			varlogadm.WithWatcherHeartbeatTimeout(30),
-			varlogadm.WithWatcherReportInterval(10),
+		varlogadm.WithStorageNodeWatcherOptions(
+			snwatcher.WithTick(100*time.Millisecond),
+			snwatcher.WithHeartbeatTimeout(30),
+			snwatcher.WithReportInterval(10),
 		),
 		varlogadm.WithLogger(zap.L()),
 	}
