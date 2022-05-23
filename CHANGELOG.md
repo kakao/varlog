@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `internal/varlogadm.(StorageNodeManager)` is moved to `internal/varlogadm/snmanager.(StorageNodeManager)`. (#VARLOG-658/#666)
 - `internal/varlogadm.(MetadataRepositoryManager)` is moved to `internal/varlogadm/mrmanager.(MetadataRepositoryManager)`. (#VARLOG-658/#666)
 - `internal/varlogadm/snmanager.(StorageNodeManager)` and `internal/varlogadm/mrmanager.(MetadataRepositoryManager)` are injected to `internal/varlogadm.(ClusterManager)` rather than instantiating in the constructor of `internal/varlogadm.(ClusterManager)` to improve testability of varlog admin server. (#VARLOG-658/#666)
+- Renamed `internal/varlogadm.(StatRepository)` to `internal/varlogadm/stats.(Repository)`. (#VARLOG-748/#668)
+- Renamed `internal/varlogadm.(LogStreamStat)` to `internal/varlogadm/stats.(LogStreamStat)`. (#VARLOG-748/#668)
 
 ### Removed
 - Removed dead code - interface `internal/metarepos.(StorageNodeManagementClientFactory)` and its implementations and package `pkg/rpc/testpb`. (#VARLOG-743/#662)

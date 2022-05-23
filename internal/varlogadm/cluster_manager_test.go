@@ -16,6 +16,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snwatcher"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/stats"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
@@ -128,13 +129,20 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 			GlobalHighWatermark: 20,
 		}
 		getMetadataCounts = make(map[types.StorageNodeID]int64)
-		lsstat            = &LogStreamStat{
-			status: varlogpb.LogStreamStatusSealed,
-			replicas: map[types.StorageNodeID]snpb.LogStreamReplicaMetadataDescriptor{
+		lsstat            = stats.NewLogStreamStat(
+			varlogpb.LogStreamStatusSealed,
+			map[types.StorageNodeID]snpb.LogStreamReplicaMetadataDescriptor{
 				types.StorageNodeID(1): lsrmd1,
 				types.StorageNodeID(2): lsrmd2,
 			},
-		}
+		)
+		//lsstat = &statrepos.LogStreamStat{
+		//	status: varlogpb.LogStreamStatusSealed,
+		//	replicas: map[types.StorageNodeID]snpb.LogStreamReplicaMetadataDescriptor{
+		//		types.StorageNodeID(1): lsrmd1,
+		//		types.StorageNodeID(2): lsrmd2,
+		//	},
+		//}
 		statreposQueryCounts = 0
 	)
 
@@ -152,7 +160,9 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 		}()
 
 		assert.Contains(t, []types.StorageNodeID{1, 2}, snid)
-		lsrmd := lsstat.replicas[snid]
+		lsrmd, ok := lsstat.Replica(snid)
+		assert.True(t, ok)
+		//lsrmd := lsstat.replicas[snid]
 
 		return &snpb.StorageNodeMetadataDescriptor{
 			StorageNode:       snd.StorageNode,
@@ -166,10 +176,10 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 		},
 	).AnyTimes()
 
-	statrepos := NewMockStatRepository(ctrl)
-	statrepos.EXPECT().Report(gomock.Any(), gomock.Any()).Return().AnyTimes()
-	statrepos.EXPECT().GetLogStream(gomock.Any()).DoAndReturn(
-		func(types.LogStreamID) *LogStreamStat {
+	sp := stats.NewMockRepository(ctrl)
+	sp.EXPECT().Report(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	sp.EXPECT().GetLogStream(gomock.Any()).DoAndReturn(
+		func(types.LogStreamID) *stats.LogStreamStat {
 			mu.Lock()
 			defer mu.Unlock()
 			statreposQueryCounts++
@@ -188,7 +198,7 @@ func TestAdmin_DoNotSyncSealedReplicas(t *testing.T) {
 		),
 	)
 	assert.NoError(t, err)
-	mgr.statRepository = statrepos
+	mgr.statRepository = sp
 
 	var wg sync.WaitGroup
 	wg.Add(1)

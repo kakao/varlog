@@ -1,7 +1,5 @@
 package varlogadm
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/varlogadm -package varlogadm -destination varlogadm_mock.go . StatRepository
-
 import (
 	"context"
 	"net"
@@ -20,6 +18,7 @@ import (
 
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
 	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snwatcher"
+	"github.daumkakao.com/varlog/varlog/internal/varlogadm/stats"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"
@@ -46,7 +45,7 @@ type ClusterManager struct {
 
 	snSelector     ReplicaSelector
 	snWatcher      *snwatcher.StorageNodeWatcher
-	statRepository StatRepository
+	statRepository stats.Repository
 	logStreamIDGen *LogStreamIDGenerator
 	topicIDGen     *TopicIDGenerator
 }
@@ -76,7 +75,7 @@ func NewClusterManager(ctx context.Context, opts ...Option) (*ClusterManager, er
 	cm := &ClusterManager{
 		config:         cfg,
 		snSelector:     snSelector,
-		statRepository: NewStatRepository(ctx, cmView),
+		statRepository: stats.NewRepository(ctx, cmView),
 		logStreamIDGen: logStreamIDGen,
 		topicIDGen:     topicIDGen,
 		server:         grpc.NewServer(),
@@ -424,7 +423,7 @@ func (cm *ClusterManager) waitSealed(ctx context.Context, lsid types.LogStreamID
 			return ctx.Err()
 		case <-ticker.C:
 			lsStat := cm.statRepository.GetLogStream(lsid).Copy()
-			if lsStat.status == varlogpb.LogStreamStatusSealed {
+			if lsStat.Status() == varlogpb.LogStreamStatusSealed {
 				return nil
 			}
 		}
