@@ -5,28 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/metarepos"
-	"github.com/kakao/varlog/internal/storagenode"
-	"github.com/kakao/varlog/internal/varlogadm"
 	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
-	"github.com/kakao/varlog/internal/varlogadm/snmanager"
-	"github.com/kakao/varlog/internal/varlogadm/snwatcher"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
 	"github.com/kakao/varlog/pkg/verrors"
-	"github.com/kakao/varlog/proto/snpb"
-	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/tests/it"
 	"github.com/kakao/varlog/vtesting"
 )
@@ -248,160 +239,7 @@ func TestVarlogMRManagerWithLeavedNode(t *testing.T) {
 	})
 }
 
-type testSnHandler struct {
-	hbC     chan types.StorageNodeID
-	reportC chan *snpb.StorageNodeMetadataDescriptor
-}
-
-func newTestSnHandler() *testSnHandler {
-	return &testSnHandler{
-		hbC:     make(chan types.StorageNodeID),
-		reportC: make(chan *snpb.StorageNodeMetadataDescriptor),
-	}
-}
-
-func (sh *testSnHandler) HandleHeartbeatTimeout(ctx context.Context, snID types.StorageNodeID) {
-	select {
-	case sh.hbC <- snID:
-	default:
-	}
-}
-
-func (sh *testSnHandler) HandleReport(ctx context.Context, sn *snpb.StorageNodeMetadataDescriptor) {
-	select {
-	case sh.reportC <- sn:
-	default:
-	}
-}
-
-func TestVarlogSNWatcher(t *testing.T) {
-	t.Skip("Tests for MRManager and SNWatcher")
-
-	Convey("Given MR cluster", t, func(ctx C) {
-		opts := []it.Option{
-			it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
-		}
-
-		Convey("cluster", it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
-			mr := env.GetMR(t)
-
-			So(testutil.CompareWaitN(50, func() bool {
-				return mr.GetServerAddr() != ""
-			}), ShouldBeTrue)
-			mrAddr := mr.GetServerAddr()
-
-			snID := env.AddSN(t)
-			topicID := env.AddTopic(t)
-			lsID := env.AddLS(t, topicID)
-
-			mrMgr, err := mrmanager.New(context.TODO(),
-				mrmanager.WithAddresses(mrAddr),
-				mrmanager.WithClusterID(env.ClusterID()),
-				mrmanager.WithLogger(env.Logger()),
-			)
-			So(err, ShouldBeNil)
-
-			cmView := mrMgr.ClusterMetadataView()
-			snMgr, err := snmanager.New(context.TODO(),
-				snmanager.WithClusterID(env.ClusterID()),
-				snmanager.WithClusterMetadataView(cmView),
-			)
-			So(err, ShouldBeNil)
-
-			snHandler := newTestSnHandler()
-
-			wopts := []snwatcher.Option{
-				snwatcher.WithTick(snwatcher.DefaultTick),
-				snwatcher.WithReportInterval(snwatcher.DefaultReportInterval),
-				snwatcher.WithHeartbeatTimeout(snwatcher.DefaultHeartbeatTimeout),
-				snwatcher.WithClusterMetadataView(cmView),
-				snwatcher.WithStorageNodeManager(snMgr),
-				snwatcher.WithStorageNodeWatcherHandler(snHandler),
-			}
-
-			var wg sync.WaitGroup
-			snWatcher, err := snwatcher.New(wopts...)
-			require.NoError(t, err)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				snWatcher.Start()
-			}()
-			defer func() {
-				snWatcher.Stop()
-				wg.Wait()
-			}()
-
-			Convey("When seal LS", func(ctx C) {
-				snID := env.PrimaryStorageNodeIDOf(t, lsID)
-				_, _, err := env.SNClientOf(t, snID).Seal(context.TODO(), topicID, lsID, types.InvalidGLSN)
-				So(err, ShouldBeNil)
-
-				Convey("Then it should be reported by watcher", func(ctx C) {
-					So(testutil.CompareWaitN(100, func() bool {
-						select {
-						case meta := <-snHandler.reportC:
-							replica, exist := meta.FindLogStream(lsID)
-							return exist && replica.GetStatus().Sealed()
-						case <-time.After(snwatcher.DefaultTick * time.Duration(2*snwatcher.DefaultReportInterval)):
-						}
-
-						return false
-					}), ShouldBeTrue)
-				})
-			})
-
-			Convey("When close SN", func(ctx C) {
-				sn := env.PrimaryStorageNodeIDOf(t, lsID)
-				env.CloseSN(t, sn)
-
-				Convey("Then it should be heartbeat timeout", func(ctx C) {
-					So(testutil.CompareWaitN(50, func() bool {
-						select {
-						case hsnid := <-snHandler.hbC:
-							return hsnid == snID
-						case <-time.After(snwatcher.DefaultTick * time.Duration(2*snwatcher.DefaultHeartbeatTimeout)):
-						}
-
-						return false
-					}), ShouldBeTrue)
-				})
-			})
-		}))
-	})
-}
-
-type dummyCMView struct {
-	clusterID types.ClusterID
-	addr      string
-}
-
-func (cmView *dummyCMView) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
-	cli, err := mrc.NewMetadataRepositoryClient(ctx, cmView.addr)
-	if err != nil {
-		return nil, err
-	}
-	defer cli.Close()
-
-	meta, err := cli.GetMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return meta, nil
-}
-
-func (cmView *dummyCMView) StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error) {
-	meta, err := cmView.ClusterMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if sndesc := meta.GetStorageNode(storageNodeID); sndesc != nil {
-		return sndesc, nil
-	}
-	return nil, errors.New("cmview: no such storage node")
-}
-
+/*
 func TestVarlogStatRepositoryRefresh(t *testing.T) {
 	t.Skip("Tests for StatRepository")
 
@@ -601,3 +439,4 @@ func TestVarlogStatRepositoryReport(t *testing.T) {
 		}))
 	})
 }
+*/

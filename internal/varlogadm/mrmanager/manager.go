@@ -30,7 +30,7 @@ type ClusterMetadataView interface {
 	// StorageNode returns the storage node corresponded with the storageNodeID.
 	StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error)
 
-	// LogStreamReplicas returns all of the latest LogStreamReplicaMetas for the given
+	// LogStreamReplicas returns all the latest LogStreamReplicaMetas for the given
 	// logStreamID. The first element of the returned LogStreamReplicaMeta list is the primary
 	// LogStreamReplica.
 	// LogStreamReplicas(ctx context.Context, logStreamID types.LogStreamID) ([]*vpb.LogStreamMetadataDescriptor, error)
