@@ -7,10 +7,10 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/internal/varlogadm"
-	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
-	"github.com/kakao/varlog/internal/varlogadm/snmanager"
-	"github.com/kakao/varlog/internal/varlogadm/snwatcher"
+	"github.com/kakao/varlog/internal/admin"
+	"github.com/kakao/varlog/internal/admin/mrmanager"
+	"github.com/kakao/varlog/internal/admin/snmanager"
+	"github.com/kakao/varlog/internal/admin/snwatcher"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
 )
@@ -34,9 +34,9 @@ func initStartCommand() *cli.Command {
 		Action:  start,
 		Flags: []cli.Flag{
 			flagClusterID.StringFlag(false, types.ClusterID(1).String()),
-			flagListen.StringFlag(false, varlogadm.DefaultListenAddress),
-			flagReplicationFactor.UintFlag(false, varlogadm.DefaultReplicationFactor),
-			flagLogStreamGCTimeout.DurationFlag(false, varlogadm.DefaultLogStreamGCTimeout),
+			flagListen.StringFlag(false, admin.DefaultListenAddress),
+			flagReplicationFactor.UintFlag(false, admin.DefaultReplicationFactor),
+			flagLogStreamGCTimeout.DurationFlag(false, admin.DefaultLogStreamGCTimeout),
 			flagDisableAutoLogStreamSync.BoolFlag(),
 
 			flagMetadataRepository.StringSliceFlag(true, nil),
@@ -90,20 +90,20 @@ func start(c *cli.Context) error {
 		return err
 	}
 
-	opts := []varlogadm.Option{
-		varlogadm.WithLogger(logger),
-		varlogadm.WithListenAddress(c.String(flagListen.Name)),
-		varlogadm.WithReplicationFactor(c.Uint(flagReplicationFactor.Name)),
-		varlogadm.WithLogStreamGCTimeout(c.Duration(flagLogStreamGCTimeout.Name)),
-		varlogadm.WithMetadataRepositoryManager(mrMgr),
-		varlogadm.WithStorageNodeManager(snMgr),
-		varlogadm.WithStorageNodeWatcherOptions(
+	opts := []admin.Option{
+		admin.WithLogger(logger),
+		admin.WithListenAddress(c.String(flagListen.Name)),
+		admin.WithReplicationFactor(c.Uint(flagReplicationFactor.Name)),
+		admin.WithLogStreamGCTimeout(c.Duration(flagLogStreamGCTimeout.Name)),
+		admin.WithMetadataRepositoryManager(mrMgr),
+		admin.WithStorageNodeManager(snMgr),
+		admin.WithStorageNodeWatcherOptions(
 			snwatcher.WithHeartbeatCheckDeadline(c.Duration(flagSNWatcherHeartbeatCheckDeadline.Name)),
 			snwatcher.WithReportDeadline(c.Duration(flagSNWatcherReportDeadline.Name)),
 		),
 	}
 	if c.Bool(flagDisableAutoLogStreamSync.Name) {
-		opts = append(opts, varlogadm.WithoutAutoLogStreamSync())
+		opts = append(opts, admin.WithoutAutoLogStreamSync())
 	}
 	return Main(opts, logger)
 }

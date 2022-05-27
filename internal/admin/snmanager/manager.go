@@ -1,6 +1,6 @@
 package snmanager
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/varlogadm/snmanager -package snmanager -destination manager_mock.go . StorageNodeManager
+//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin/snmanager -package snmanager -destination manager_mock.go . StorageNodeManager
 
 import (
 	"context"
@@ -23,6 +23,8 @@ type StorageNodeManager interface {
 	Contains(storageNodeID types.StorageNodeID) bool
 
 	ContainsAddress(addr string) bool
+
+	GetMetadataByAddress(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error)
 
 	// GetMetadata returns metadata for the storage node identified by the argument snid.
 	GetMetadata(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error)
@@ -129,6 +131,23 @@ func (sm *snManager) ContainsAddress(addr string) bool {
 
 	_, err := sm.clients.GetByAddress(addr)
 	return err == nil
+}
+
+func (sm *snManager) GetMetadataByAddress(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
+	mgr, err := client.NewManager[*client.ManagementClient]()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = mgr.Close()
+	}()
+
+	mc, err := mgr.GetOrConnect(ctx, snid, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	return mc.GetMetadata(ctx)
 }
 
 func (sm *snManager) GetMetadata(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {

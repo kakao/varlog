@@ -12,15 +12,15 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kakao/varlog/internal/varlogadm"
+	"github.com/kakao/varlog/internal/admin"
 )
 
-func Main(opts []varlogadm.Option, logger *zap.Logger) error {
+func Main(opts []admin.Option, logger *zap.Logger) error {
 	// TODO: add VMSInitTimeout to options
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	cm, err := varlogadm.NewClusterManager(ctx, opts...)
+	cm, err := admin.New(ctx, opts...)
 	if err != nil {
 		logger.Error("could not create cluster manager server", zap.Error(err))
 		return err

@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/metarepos"
@@ -30,17 +29,12 @@ func TestMain(m *testing.M) {
 func TestAppendLogs(t *testing.T) {
 	const numAppend = 100
 
-	logger, err := zap.NewDevelopment()
-	assert.NoError(t, err)
-	defer logger.Sync()
-
 	clus := it.NewVarlogCluster(t,
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
 		it.WithNumberOfLogStreams(10),
 		it.WithNumberOfClients(10),
 		it.WithNumberOfTopics(1),
-		it.WithLogger(logger),
 	)
 	defer clus.Close(t)
 
@@ -101,16 +95,11 @@ func TestAppendLogs(t *testing.T) {
 func TestReadSealedLogStream(t *testing.T) {
 	const boundary = types.GLSN(10)
 
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
-	defer logger.Sync()
-
 	clus := it.NewVarlogCluster(t,
 		it.WithNumberOfStorageNodes(1),
 		it.WithNumberOfLogStreams(1),
 		it.WithNumberOfClients(5),
 		it.WithNumberOfTopics(1),
-		it.WithLogger(logger),
 	)
 	defer clus.Close(t)
 

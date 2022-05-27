@@ -1893,6 +1893,8 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ClusterManagerClient interface {
+	// AddStorageNode adds a new storage node to the cluster.
+	// It is idempotent, that is, adding an already added storage node is okay.
 	AddStorageNode(ctx context.Context, in *AddStorageNodeRequest, opts ...grpc.CallOption) (*AddStorageNodeResponse, error)
 	UnregisterStorageNode(ctx context.Context, in *UnregisterStorageNodeRequest, opts ...grpc.CallOption) (*UnregisterStorageNodeResponse, error)
 	AddTopic(ctx context.Context, in *AddTopicRequest, opts ...grpc.CallOption) (*AddTopicResponse, error)
@@ -2085,6 +2087,8 @@ func (c *clusterManagerClient) Trim(ctx context.Context, in *TrimRequest, opts .
 
 // ClusterManagerServer is the server API for ClusterManager service.
 type ClusterManagerServer interface {
+	// AddStorageNode adds a new storage node to the cluster.
+	// It is idempotent, that is, adding an already added storage node is okay.
 	AddStorageNode(context.Context, *AddStorageNodeRequest) (*AddStorageNodeResponse, error)
 	UnregisterStorageNode(context.Context, *UnregisterStorageNodeRequest) (*UnregisterStorageNodeResponse, error)
 	AddTopic(context.Context, *AddTopicRequest) (*AddTopicResponse, error)

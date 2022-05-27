@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/internal/varlogadm/mrmanager"
+	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/pkg/types"
 )
 

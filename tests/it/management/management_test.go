@@ -11,9 +11,9 @@ import (
 	"go.uber.org/goleak"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kakao/varlog/internal/admin"
+	"github.com/kakao/varlog/internal/admin/snwatcher"
 	"github.com/kakao/varlog/internal/metarepos"
-	"github.com/kakao/varlog/internal/varlogadm"
-	"github.com/kakao/varlog/internal/varlogadm/snwatcher"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -451,12 +451,12 @@ func TestGCZombieLogStream(t *testing.T) {
 		gcTimeout        = 6 * reportInterval * tick
 	)
 	vmsOpts := it.NewTestVMSOptions(
-		varlogadm.WithStorageNodeWatcherOptions(
+		admin.WithStorageNodeWatcherOptions(
 			snwatcher.WithTick(tick),
 			snwatcher.WithHeartbeatTimeout(heartbeatTimeout),
 			snwatcher.WithReportInterval(reportInterval),
 		),
-		varlogadm.WithLogStreamGCTimeout(gcTimeout),
+		admin.WithLogStreamGCTimeout(gcTimeout),
 	)
 	opts := []it.Option{
 		it.WithNumberOfStorageNodes(1),

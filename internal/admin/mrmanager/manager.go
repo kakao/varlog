@@ -1,6 +1,6 @@
 package mrmanager
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/varlogadm/mrmanager -package mrmanager -destination manager_mock.go . ClusterMetadataView,MetadataRepositoryManager
+//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin/mrmanager -package mrmanager -destination manager_mock.go . ClusterMetadataView,MetadataRepositoryManager
 
 import (
 	"context"
