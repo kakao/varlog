@@ -16,13 +16,13 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.daumkakao.com/varlog/varlog/internal/admin"
+	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/snmanager"
 	"github.daumkakao.com/varlog/varlog/internal/metarepos"
 	"github.daumkakao.com/varlog/varlog/internal/reportcommitter"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/client"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/rpc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
@@ -73,7 +73,7 @@ type VarlogCluster struct {
 	logClientManager *client.Manager[*client.LogClient]
 
 	muVMS     sync.Mutex
-	vmsServer *varlogadm.ClusterManager
+	vmsServer *admin.Admin
 	wgVms     sync.WaitGroup
 	vmsCL     varlog.Admin
 
@@ -1062,7 +1062,7 @@ func (clus *VarlogCluster) LookupMR(nodeID types.NodeID) (*metarepos.RaftMetadat
 	return nil, false
 }
 
-func (clus *VarlogCluster) GetVMS() *varlogadm.ClusterManager {
+func (clus *VarlogCluster) GetVMS() *admin.Admin {
 	clus.muVMS.Lock()
 	defer clus.muVMS.Unlock()
 
@@ -1145,15 +1145,15 @@ func (clus *VarlogCluster) initVMS(t *testing.T) {
 
 	listenAddress := fmt.Sprintf("127.0.0.1:%d", clus.portLease.Base()+clus.vmsPortOffset)
 	opts := append(clus.VMSOpts,
-		varlogadm.WithListenAddress(listenAddress),
-		varlogadm.WithClusterID(clus.clusterID),
-		varlogadm.WithReplicationFactor(uint(clus.nrRep)),
-		varlogadm.WithLogger(clus.logger.Named("admin")),
-		varlogadm.WithMetadataRepositoryManager(mrMgr),
-		varlogadm.WithStorageNodeManager(snMgr),
+		admin.WithListenAddress(listenAddress),
+		admin.WithClusterID(clus.clusterID),
+		admin.WithReplicationFactor(uint(clus.nrRep)),
+		admin.WithLogger(clus.logger.Named("admin")),
+		admin.WithMetadataRepositoryManager(mrMgr),
+		admin.WithStorageNodeManager(snMgr),
 	)
 
-	cm, err := varlogadm.NewClusterManager(context.Background(), opts...)
+	cm, err := admin.New(context.Background(), opts...)
 	require.NoError(t, err)
 
 	clus.wgVms.Add(1)

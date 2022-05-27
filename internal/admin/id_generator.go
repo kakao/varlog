@@ -1,11 +1,11 @@
-package varlogadm
+package admin
 
 import (
 	"context"
 	"fmt"
 	"sync"
 
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 

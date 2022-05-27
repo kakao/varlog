@@ -1,4 +1,6 @@
-package varlogadm
+package admin
+
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/admin -package admin -destination replica_selector_mock.go . ReplicaSelector
 
 import (
 	"context"
@@ -9,8 +11,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/snmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/container/set"
 	"github.daumkakao.com/varlog/varlog/pkg/verrors"

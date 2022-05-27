@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/goleak"
 
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/snmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"

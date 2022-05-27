@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"
@@ -179,10 +178,6 @@ func TestVarlogFailoverSNBackupInitialFault(t *testing.T) {
 
 // FIXME (jun): Flaky test: https://jira.daumkakao.com/browse/VARLOG-494
 func TestVarlogFailoverSNBackupFail(t *testing.T) {
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
-	defer logger.Sync()
-
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
@@ -190,7 +185,6 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 		it.WithNumberOfClients(5),
 		it.WithVMSOptions(it.NewTestVMSOptions()...),
 		it.WithNumberOfTopics(1),
-		it.WithLogger(logger),
 	}
 
 	Convey("Given Varlog cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
@@ -220,14 +214,11 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					default:
 					}
 
-					logger.Info("trying to append", zap.Int("cidx", idx))
 					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
 					if res.Err != nil {
-						logger.Info("failed to append", zap.Int("cidx", idx), zap.String("error", res.Err.Error()))
 						errC <- res.Err
 						return
 					}
-					logger.Info("succeeded to append", zap.Int("cidx", idx), zap.Any("glsn", res.Metadata[0].GLSN))
 					glsnC <- res.Metadata[0].GLSN
 				}
 			}(i)
@@ -244,7 +235,6 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 			for {
 				select {
 				case glsn := <-glsnC:
-					logger.Info("collected glsn", zap.Any("glsn", glsn), zap.Any("maxGLSN", maxGLSN))
 					if maxGLSN < glsn {
 						maxGLSN = glsn
 					}
@@ -254,7 +244,6 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 						break Loop
 					}
 				case err := <-errC:
-					logger.Info("collected error", zap.Error(err))
 					require.NoError(t, err)
 				}
 			}

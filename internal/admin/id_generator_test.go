@@ -1,4 +1,4 @@
-package varlogadm
+package admin
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
 )

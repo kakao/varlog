@@ -1,6 +1,6 @@
 package snwatcher
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/varlogadm/snwatcher -package snwatcher -destination snwatcher_mock.go . EventHandler
+//go:generate mockgen -build_flags -mod=vendor -self_package github.daumkakao.com/varlog/varlog/internal/admin/snwatcher -package snwatcher -destination snwatcher_mock.go . EventHandler
 
 import (
 	"context"

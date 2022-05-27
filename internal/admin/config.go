@@ -1,14 +1,16 @@
-package varlogadm
+package admin
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"go.uber.org/zap"
 
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snmanager"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snwatcher"
+	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/snmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/snwatcher"
+	"github.daumkakao.com/varlog/varlog/internal/admin/stats"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 )
 
@@ -27,6 +29,8 @@ type config struct {
 	disableAutoLogStreamSync bool
 	mrmgr                    mrmanager.MetadataRepositoryManager
 	snmgr                    snmanager.StorageNodeManager
+	snSelector               ReplicaSelector
+	statRepository           stats.Repository
 	snwatcherOpts            []snwatcher.Option
 	logger                   *zap.Logger
 }
@@ -39,10 +43,20 @@ func newConfig(opts []Option) (config, error) {
 		logStreamGCTimeout: DefaultLogStreamGCTimeout,
 		logger:             zap.NewNop(),
 	}
+
 	for _, opt := range opts {
 		opt.apply(&cfg)
 	}
-	return cfg, cfg.validate()
+
+	if err := cfg.validate(); err != nil {
+		return cfg, err
+	}
+
+	if err := cfg.ensureDefault(); err != nil {
+		return cfg, err
+	}
+
+	return cfg, nil
 }
 
 func (cfg config) validate() error {
@@ -61,6 +75,22 @@ func (cfg config) validate() error {
 	if cfg.logger == nil {
 		return errors.New("logger is nil")
 	}
+	return nil
+}
+
+func (cfg *config) ensureDefault() error {
+	if cfg.snSelector == nil {
+		rs, err := newBalancedReplicaSelector(cfg.mrmgr.ClusterMetadataView(), int(cfg.replicationFactor))
+		if err != nil {
+			return err
+		}
+		cfg.snSelector = rs
+	}
+
+	if cfg.statRepository == nil {
+		cfg.statRepository = stats.NewRepository(context.TODO(), cfg.mrmgr.ClusterMetadataView())
+	}
+
 	return nil
 }
 
@@ -128,6 +158,18 @@ func WithMetadataRepositoryManager(mrMgr mrmanager.MetadataRepositoryManager) Op
 func WithStorageNodeManager(snMgr snmanager.StorageNodeManager) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.snmgr = snMgr
+	})
+}
+
+func WithReplicaSelector(replicaSelector ReplicaSelector) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.snSelector = replicaSelector
+	})
+}
+
+func WithStatisticsRepository(statsRepos stats.Repository) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.statRepository = statsRepos
 	})
 }
 

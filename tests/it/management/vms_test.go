@@ -11,8 +11,8 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/zap"
 
+	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
 	"github.daumkakao.com/varlog/varlog/internal/metarepos"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
 	"github.daumkakao.com/varlog/varlog/pkg/mrc"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil"

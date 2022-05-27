@@ -8,8 +8,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/stats"
+	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/stats"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"

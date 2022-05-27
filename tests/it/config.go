@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.daumkakao.com/varlog/varlog/internal/admin"
+	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
+	"github.daumkakao.com/varlog/varlog/internal/admin/snwatcher"
 	"github.daumkakao.com/varlog/varlog/internal/metarepos"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/mrmanager"
-	"github.daumkakao.com/varlog/varlog/internal/varlogadm/snwatcher"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/testutil/ports"
 )
@@ -46,7 +46,7 @@ type config struct {
 	numTopic int
 
 	mrMgrOpts []mrmanager.Option
-	VMSOpts   []varlogadm.Option
+	VMSOpts   []admin.Option
 	logger    *zap.Logger
 
 	portBase      int
@@ -139,7 +139,7 @@ func WithMetadataRepositoryManagerOptions(opts ...mrmanager.Option) Option {
 	}
 }
 
-func WithVMSOptions(vmsOpts ...varlogadm.Option) Option {
+func WithVMSOptions(vmsOpts ...admin.Option) Option {
 	return func(c *config) {
 		c.VMSOpts = vmsOpts
 	}
@@ -187,14 +187,14 @@ func WithoutVMS() Option {
 	}
 }
 
-func NewTestVMSOptions(opts ...varlogadm.Option) []varlogadm.Option {
-	ret := []varlogadm.Option{
-		varlogadm.WithStorageNodeWatcherOptions(
+func NewTestVMSOptions(opts ...admin.Option) []admin.Option {
+	ret := []admin.Option{
+		admin.WithStorageNodeWatcherOptions(
 			snwatcher.WithTick(100*time.Millisecond),
 			snwatcher.WithHeartbeatTimeout(30),
 			snwatcher.WithReportInterval(10),
 		),
-		varlogadm.WithLogger(zap.L()),
+		admin.WithLogger(zap.L()),
 	}
 	ret = append(ret, opts...)
 	return ret
