@@ -300,6 +300,7 @@ func (sm *snManager) Sync(ctx context.Context, tpid types.TopicID, lsid types.Lo
 	}
 
 	if !storageNodeIDs.Contains(srcID) || !storageNodeIDs.Contains(dstID) {
+		sm.refresh(ctx)
 		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 

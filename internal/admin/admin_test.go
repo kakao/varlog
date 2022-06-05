@@ -18,6 +18,8 @@ import (
 	"github.com/kakao/varlog/internal/admin/stats"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -118,10 +120,9 @@ func newTestClient(t *testing.T, addr string) (varlog.Admin, func()) {
 	return client, closer
 }
 
-func TestAdmin_AddStorageNode(t *testing.T) {
+func TestAdmin_GetStorageNode(t *testing.T) {
 	const (
 		snid = types.StorageNodeID(1)
-		addr = "127.0.0.1:10000"
 	)
 
 	tcs := []struct {
@@ -130,43 +131,31 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 		prepare func(mock *testMock)
 	}{
 		{
-			name:    "GetMetadataError",
+			name:    "RejectedByStorageNodeManager",
 			success: false,
 			prepare: func(mock *testMock) {
-				mock.MockStorageNodeManager.EXPECT().GetMetadataByAddress(gomock.Any(), snid, addr).Return(nil, errors.New("error"))
-			},
-		},
-		{
-			name:    "RejectedByMetadataRepository",
-			success: false,
-			prepare: func(mock *testMock) {
-				mock.MockStorageNodeManager.EXPECT().GetMetadataByAddress(gomock.Any(), snid, addr).Return(
-					&snpb.StorageNodeMetadataDescriptor{
-						StorageNode: varlogpb.StorageNode{
-							StorageNodeID: snid,
-							Address:       addr,
-						},
-						Storages: []varlogpb.StorageDescriptor{{Path: "/tmp"}},
-					}, nil,
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
+					nil, errors.New("error"),
 				)
-				mock.MockMetadataRepositoryManager.EXPECT().RegisterStorageNode(gomock.Any(), gomock.Any()).Return(errors.New("error"))
 			},
 		},
 		{
 			name:    "Success",
 			success: true,
 			prepare: func(mock *testMock) {
-				mock.MockStorageNodeManager.EXPECT().GetMetadataByAddress(gomock.Any(), snid, addr).Return(
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
 					&snpb.StorageNodeMetadataDescriptor{
 						StorageNode: varlogpb.StorageNode{
 							StorageNodeID: snid,
-							Address:       addr,
 						},
-						Storages: []varlogpb.StorageDescriptor{{Path: "/tmp"}},
 					}, nil,
 				)
-				mock.MockMetadataRepositoryManager.EXPECT().RegisterStorageNode(gomock.Any(), gomock.Any()).Return(nil)
-				mock.MockStorageNodeManager.EXPECT().AddStorageNode(gomock.Any(), snid, addr)
 			},
 		},
 	}
@@ -177,12 +166,15 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 			defer ctrl.Finish()
 
 			mock := newTestMock(ctrl)
-			mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
+			tc.prepare(mock)
 
 			tadm := admin.TestNewClusterManager(t,
 				admin.WithListenAddress("127.0.0.1:0"),
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithTick(time.Hour), // no heartbeat checking
+				),
 			)
 			tadm.Serve(t)
 			defer tadm.Close(t)
@@ -190,13 +182,13 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 			client, closer := newTestClient(t, tadm.Address())
 			defer closer()
 
-			tc.prepare(mock)
-			_, err := client.AddStorageNode(context.Background(), snid, addr)
+			_, err := client.GetStorageNode(context.Background(), snid)
 			if tc.success {
 				assert.NoError(t, err)
 			} else {
 				assert.Error(t, err)
 			}
+
 		})
 	}
 }
@@ -302,7 +294,7 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 			client, closer := newTestClient(t, tadm.Address())
 			defer closer()
 
-			rsp, err := client.GetStorageNodes(context.Background())
+			rsp, err := client.ListStorageNodes(context.Background())
 			if tc.success {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.status, rsp[snid].Status)
@@ -311,6 +303,252 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAdmin_AddStorageNode(t *testing.T) {
+	const (
+		snid = types.StorageNodeID(1)
+		addr = "127.0.0.1:10000"
+	)
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "GetMetadataError",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockStorageNodeManager.EXPECT().GetMetadataByAddress(gomock.Any(), snid, addr).Return(nil, errors.New("error"))
+			},
+		},
+		{
+			name:    "RejectedByMetadataRepository",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockStorageNodeManager.EXPECT().GetMetadataByAddress(gomock.Any(), snid, addr).Return(
+					&snpb.StorageNodeMetadataDescriptor{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+							Address:       addr,
+						},
+						Storages: []varlogpb.StorageDescriptor{{Path: "/tmp"}},
+					}, nil,
+				)
+				mock.MockMetadataRepositoryManager.EXPECT().RegisterStorageNode(gomock.Any(), gomock.Any()).Return(errors.New("error"))
+			},
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockStorageNodeManager.EXPECT().GetMetadataByAddress(gomock.Any(), snid, addr).Return(
+					&snpb.StorageNodeMetadataDescriptor{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+							Address:       addr,
+						},
+						Storages: []varlogpb.StorageDescriptor{{Path: "/tmp"}},
+					}, nil,
+				)
+				mock.MockMetadataRepositoryManager.EXPECT().RegisterStorageNode(gomock.Any(), gomock.Any()).Return(nil)
+				mock.MockStorageNodeManager.EXPECT().AddStorageNode(gomock.Any(), snid, addr)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			tc.prepare(mock)
+			_, err := client.AddStorageNode(context.Background(), snid, addr)
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_UnregisterStorageNode(t *testing.T) {
+	t.Skip()
+}
+
+func TestAdmin_GetTopic(t *testing.T) {
+	const tpid = types.TopicID(1)
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "ClusterMetadataFetchError",
+			success: false,
+			prepare: func(mock *testMock) {
+				// To create a new admin, ClusterMetadata should be called 3 times.
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).Times(3)
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					nil, errors.New("error"),
+				)
+			},
+		},
+		{
+			name:    "NoSuchTopicID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid + 1,
+								Status:  varlogpb.TopicStatusRunning,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								Status:  varlogpb.TopicStatusRunning,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithTick(time.Hour), // no heartbeat checking
+				),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			_, err := client.GetTopic(context.Background(), tpid)
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_ListTopics(t *testing.T) {
+	const tpid = types.TopicID(1)
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "ClusterMetadataFetchError",
+			success: false,
+			prepare: func(mock *testMock) {
+				// To create a new admin, ClusterMetadata should be called 3 times.
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).Times(3)
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					nil, errors.New("error"),
+				)
+			},
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								Status:  varlogpb.TopicStatusRunning,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithTick(time.Hour), // no heartbeat checking
+				),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			_, err := client.ListTopics(context.Background())
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+
 }
 
 func TestAdmin_AddTopic(t *testing.T) {
@@ -358,6 +596,450 @@ func TestAdmin_AddTopic(t *testing.T) {
 
 			tc.prepare(mock)
 			_, err := client.AddTopic(context.Background())
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_UnregisterTopic(t *testing.T) {
+	const tpid = types.TopicID(1)
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "ClusterMetadataFetchError",
+			success: false,
+			prepare: func(mock *testMock) {
+				// To create a new admin, ClusterMetadata should be called 3 times.
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).Times(3)
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					nil, errors.New("error"),
+				)
+			},
+		},
+		{
+			name:    "NoSuchTopicID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid + 1,
+								Status:  varlogpb.TopicStatusRunning,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "AlreadyDeleted",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								Status:  varlogpb.TopicStatusDeleted,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "RejectedByMetadataRepository",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								Status:  varlogpb.TopicStatusRunning,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().UnregisterTopic(gomock.Any(), tpid).Return(errors.New("error"))
+			},
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								Status:  varlogpb.TopicStatusRunning,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().UnregisterTopic(gomock.Any(), tpid).Return(nil)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			_, err := client.UnregisterTopic(context.Background(), tpid)
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_GetLogStream(t *testing.T) {
+	const (
+		tpid = types.TopicID(1)
+		lsid = types.LogStreamID(1)
+	)
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "ClusterMetadataFetchError",
+			success: false,
+			prepare: func(mock *testMock) {
+				// To create a new admin, ClusterMetadata should be called 3 times.
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).Times(3)
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					nil, errors.New("error"),
+				)
+			},
+		},
+		{
+			name:    "NoSuchTopicID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid + 1,
+								LogStreams: []types.LogStreamID{
+									lsid,
+								},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "NoSuchLogStreamIDInTopic",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								LogStreams: []types.LogStreamID{
+									lsid + 1,
+								},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "NoSuchLogStreamID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								LogStreams: []types.LogStreamID{
+									lsid,
+								},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid + 1,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "DifferentTopicID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								LogStreams: []types.LogStreamID{
+									lsid,
+								},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid + 1,
+								LogStreamID: lsid,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								LogStreams: []types.LogStreamID{
+									lsid,
+								},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			_, err := client.GetLogStream(context.Background(), tpid, lsid)
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_ListLogStreams(t *testing.T) {
+	const (
+		tpid = types.TopicID(1)
+		lsid = types.LogStreamID(1)
+	)
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "ClusterMetadataFetchError",
+			success: false,
+			prepare: func(mock *testMock) {
+				// To create a new admin, ClusterMetadata should be called 3 times.
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).Times(3)
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					nil, errors.New("error"),
+				)
+			},
+		},
+		{
+			name:    "NoSuchTopicID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid + 1,
+								LogStreams: []types.LogStreamID{
+									lsid,
+								},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid + 1,
+								LogStreamID: lsid,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "UnexpectedTopidID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								LogStreams: []types.LogStreamID{
+									lsid,
+								},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid + 1,
+								LogStreamID: lsid,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "IgnoreMissingLogStreams",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								LogStreams: []types.LogStreamID{
+									lsid,
+								},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid + 1,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								LogStreams: []types.LogStreamID{
+									lsid,
+								},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			_, err := client.ListLogStreams(context.Background(), tpid)
 			if tc.success {
 				assert.NoError(t, err)
 			} else {
@@ -555,6 +1237,346 @@ func TestAdmin_AddLogStream(t *testing.T) {
 			defer closer()
 
 			_, err := client.AddLogStream(context.Background(), tpid, tc.replicas)
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_UpdateLogStream(t *testing.T) {
+	const (
+		replicationFactor = 2
+		tpid              = types.TopicID(1)
+		lsid              = types.LogStreamID(1)
+		snid1             = types.StorageNodeID(1)
+		snid2             = types.StorageNodeID(2)
+		path              = "/tmp"
+	)
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "ClusterMetadataFetchError",
+			success: false,
+			prepare: func(mock *testMock) {
+				// To create a new admin, ClusterMetadata should be called 2 times - LogStreamIDGenerator and TopicIDGenerator.
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).Times(2)
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					nil, errors.New("error"),
+				)
+			},
+		},
+		{
+			name: "NoSuchLogStreamID",
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid + 1,
+								Status:      varlogpb.LogStreamStatusSealed,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name: "LogStreamUnexpectedStatus",
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+								Status:      varlogpb.LogStreamStatusRunning,
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name: "AddLogStreamReplicaError",
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+								Status:      varlogpb.LogStreamStatusSealed,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID: snid1,
+										Path:          path,
+									},
+								},
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().AddLogStreamReplica(
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				).Return(errors.New("error"))
+			},
+		},
+		{
+			name: "RejectedByMetadataRepository",
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+								Status:      varlogpb.LogStreamStatusSealed,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID: snid1,
+										Path:          path,
+									},
+								},
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().AddLogStreamReplica(
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				).Return(nil)
+				mock.MockMetadataRepositoryManager.EXPECT().UpdateLogStream(
+					gomock.Any(), gomock.Any(),
+				).Return(errors.New("error"))
+				mock.MockRepository.EXPECT().SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
+			},
+		},
+		// TODO: Add more test cases, for instance, choosing the best replica automatically, ...
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+								Status:      varlogpb.LogStreamStatusSealed,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID: snid1,
+										Path:          path,
+									},
+								},
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().AddLogStreamReplica(
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				).Return(nil)
+				mock.MockMetadataRepositoryManager.EXPECT().UpdateLogStream(
+					gomock.Any(), gomock.Any(),
+				).Return(nil)
+				mock.MockRepository.EXPECT().SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithReplicationFactor(replicationFactor),
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStatisticsRepository(mock.MockRepository),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithTick(time.Hour), // no heartbeat checking
+				),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			_, err := client.UpdateLogStream(context.Background(), tpid, lsid,
+				&varlogpb.ReplicaDescriptor{ // pop (old)
+					StorageNodeID: snid1,
+					Path:          path,
+				},
+				&varlogpb.ReplicaDescriptor{ // push (new)
+					StorageNodeID: snid2,
+					Path:          path,
+				},
+			)
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_UnregisterLogStream(t *testing.T) {
+	t.Skip()
+}
+
+func TestAdmin_RemoveLogStreamReplica(t *testing.T) {
+	const (
+		snid = types.StorageNodeID(1)
+		tpid = types.TopicID(1)
+		lsid = types.LogStreamID(1)
+		path = "/tmp"
+	)
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "ClusterMetadataFetchError",
+			success: false,
+			prepare: func(mock *testMock) {
+				// To create a new admin, ClusterMetadata should be called 3 times.
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).Times(3)
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					nil, errors.New("error"),
+				)
+			},
+		},
+		{
+			name:    "UnexpectedStatus",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+								Status:      varlogpb.LogStreamStatusRunning,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID: snid,
+										Path:          path,
+									},
+								},
+							},
+						},
+					}, nil,
+				).AnyTimes()
+			},
+		},
+		{
+			name:    "RejectedByStorageNodeManager",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+								Status:      varlogpb.LogStreamStatusRunning,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID: snid + 1,
+										Path:          path,
+									},
+								},
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().RemoveLogStreamReplica(
+					gomock.Any(), snid, tpid, lsid,
+				).Return(errors.New("error"))
+			},
+		},
+		{
+			name:    "AlreadyRemovedOrNotExisted",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{},
+					}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().RemoveLogStreamReplica(
+					gomock.Any(), snid, tpid, lsid,
+				).Return(nil)
+			},
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+								Status:      varlogpb.LogStreamStatusRunning,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID: snid + 1,
+										Path:          path,
+									},
+								},
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().RemoveLogStreamReplica(
+					gomock.Any(), snid, tpid, lsid,
+				).Return(nil)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			err := client.RemoveLogStreamReplica(context.Background(), snid, tpid, lsid)
 			if tc.success {
 				assert.NoError(t, err)
 			} else {
@@ -982,6 +2004,353 @@ func TestAdmin_Trim(t *testing.T) {
 			defer closer()
 
 			_, err := client.Trim(context.Background(), tpid, types.GLSN(10))
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_GetMetadataRepositoryNode(t *testing.T) {
+	nid := types.NewNodeID("127.0.0.1:10000")
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "GetClusterInfoError",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().GetClusterInfo(gomock.Any()).Return(
+					nil, errors.New("error"),
+				)
+			},
+		},
+		{
+			name:    "NoSuchNodeID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().GetClusterInfo(gomock.Any()).Return(
+					&mrpb.ClusterInfo{
+						NodeID: nid + 1,
+						Leader: nid + 1,
+						Members: map[types.NodeID]*mrpb.ClusterInfo_Member{
+							nid + 1: {
+								Peer:     "http://127.0.0.1:20000",
+								Endpoint: "127.0.0.1:20001",
+								Learner:  false,
+							},
+						},
+					}, nil,
+				)
+			},
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().GetClusterInfo(gomock.Any()).Return(
+					&mrpb.ClusterInfo{
+						NodeID: nid,
+						Leader: nid,
+						Members: map[types.NodeID]*mrpb.ClusterInfo_Member{
+							nid: {
+								Peer:     "http://127.0.0.1:10000",
+								Endpoint: "127.0.0.1:10001",
+								Learner:  false,
+							},
+						},
+					}, nil,
+				)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithTick(time.Hour), // no heartbeat checking
+				),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			_, err := client.GetMetadataRepositoryNode(context.Background(), nid)
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_ListMetadataRepositoryNodes(t *testing.T) {
+	nid := types.NewNodeID("127.0.0.1:10000")
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+	}{
+		{
+			name:    "GetClusterInfoError",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().GetClusterInfo(gomock.Any()).Return(
+					nil, errors.New("error"),
+				)
+			},
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().GetClusterInfo(gomock.Any()).Return(
+					&mrpb.ClusterInfo{
+						NodeID: nid,
+						Leader: nid,
+						Members: map[types.NodeID]*mrpb.ClusterInfo_Member{
+							nid: {
+								Peer:     "http://127.0.0.1:10000",
+								Endpoint: "127.0.0.1:10001",
+								Learner:  false,
+							},
+						},
+					}, nil,
+				)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithTick(time.Hour), // no heartbeat checking
+				),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			_, err := client.ListMetadataRepositoryNodes(context.Background())
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestAdmin_AddMetadataRepositoryNode(t *testing.T) {
+	const (
+		raftURL = "https://127.0.0.1:10000"
+		rpcAddr = "127.0.0.1:10001"
+	)
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+		raftURL string
+	}{
+		{
+			name:    "InvalidNodeID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+			},
+			raftURL: "https://" + types.InvalidNodeID.Reverse(),
+		},
+		{
+			name:    "RejectedByMetadataRepository",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().AddPeer(
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				).Return(errors.New("error"))
+			},
+			raftURL: raftURL,
+		},
+		{
+			name:    "AlreadyExistedNode",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().AddPeer(
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				).Return(verrors.ErrAlreadyExists)
+			},
+			raftURL: raftURL,
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().AddPeer(
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				).Return(nil)
+			},
+			raftURL: raftURL,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithTick(time.Hour), // no heartbeat checking
+				),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			_, err := client.AddMetadataRepositoryNode(context.Background(), tc.raftURL, rpcAddr)
+			if tc.success {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+func TestAdmin_DeleteMetadataRepositoryNode(t *testing.T) {
+	nid := types.NewNodeID("127.0.0.1:10000")
+
+	tcs := []struct {
+		name    string
+		success bool
+		prepare func(mock *testMock)
+		nid     types.NodeID
+	}{
+		{
+			name:    "InvalidNodeID",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+			},
+			nid: types.InvalidNodeID,
+		},
+		{
+			name:    "RejectedByMetadataRepository",
+			success: false,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().RemovePeer(
+					gomock.Any(), gomock.Any(),
+				).Return(errors.New("error"))
+			},
+			nid: nid,
+		},
+		{
+			name:    "Success",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{}, nil,
+				).AnyTimes()
+				mock.MockMetadataRepositoryManager.EXPECT().RemovePeer(
+					gomock.Any(), gomock.Any(),
+				).Return(nil)
+			},
+			nid: nid,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			tc.prepare(mock)
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithTick(time.Hour), // no heartbeat checking
+				),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			err := client.DeleteMetadataRepositoryNode(context.Background(), tc.nid)
 			if tc.success {
 				assert.NoError(t, err)
 			} else {

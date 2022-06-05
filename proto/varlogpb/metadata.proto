@@ -260,3 +260,18 @@ message CommitContext {
     (gogoproto.customname) = "CommittedLLSNBegin"
   ];
 }
+
+message MetadataRepositoryNode {
+  uint64 node_id = 1 [
+    (gogoproto.casttype) =
+        "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.jsontag) = "nodeId"
+  ];
+  string raft_url = 2
+      [(gogoproto.customname) = "RaftURL", (gogoproto.jsontag) = "raftUrl"];
+  string rpc_addr = 3
+      [(gogoproto.customname) = "RPCAddr", (gogoproto.jsontag) = "rpcAddr"];
+  bool leader = 4;
+  bool learner = 5;
+}

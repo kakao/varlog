@@ -31,6 +31,16 @@ func (s *server) withTelemetry(ctx context.Context, spanName string, req interfa
 	return rsp, err
 }
 
+func (s *server) GetStorageNode(ctx context.Context, req *vmspb.GetStorageNodeRequest) (*vmspb.GetStorageNodeResponse, error) {
+	snmd, err := s.admin.getStorageNode(ctx, req.StorageNodeID)
+	return &vmspb.GetStorageNodeResponse{StorageNode: snmd}, err
+}
+
+func (s *server) ListStorageNodes(ctx context.Context, _ *vmspb.ListStorageNodesRequest) (*vmspb.ListStorageNodesResponse, error) {
+	snmds, err := s.admin.listStorageNodes(ctx)
+	return &vmspb.ListStorageNodesResponse{StorageNodes: snmds}, err
+}
+
 func (s *server) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/AddStorageNode", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
@@ -51,26 +61,10 @@ func (s *server) UnregisterStorageNode(ctx context.Context, req *vmspb.Unregiste
 	return rspI.(*vmspb.UnregisterStorageNodeResponse), verrors.ToStatusError(err)
 }
 
-func (s *server) AddTopic(ctx context.Context, req *vmspb.AddTopicRequest) (*vmspb.AddTopicResponse, error) {
-	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/AddTopic", req,
-		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			topicDesc, err := s.admin.addTopic(ctx)
-			return &vmspb.AddTopicResponse{Topic: topicDesc}, err
-		},
-	)
-	return rspI.(*vmspb.AddTopicResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
+func (s *server) GetTopic(ctx context.Context, req *vmspb.GetTopicRequest) (*vmspb.GetTopicResponse, error) {
+	td, err := s.admin.getTopic(ctx, req.TopicID)
+	return &vmspb.GetTopicResponse{Topic: td}, err
 }
-
-func (s *server) Topics(ctx context.Context, req *vmspb.TopicsRequest) (*vmspb.TopicsResponse, error) {
-	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/Topics", req,
-		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			tds, err := s.admin.topics(ctx)
-			return &vmspb.TopicsResponse{Topics: tds}, err
-		},
-	)
-	return rspI.(*vmspb.TopicsResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
-}
-
 func (s *server) DescribeTopic(ctx context.Context, req *vmspb.DescribeTopicRequest) (*vmspb.DescribeTopicResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/DescribeTopic", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
@@ -84,6 +78,26 @@ func (s *server) DescribeTopic(ctx context.Context, req *vmspb.DescribeTopicRequ
 	return rspI.(*vmspb.DescribeTopicResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
 }
 
+func (s *server) ListTopics(ctx context.Context, req *vmspb.ListTopicsRequest) (*vmspb.ListTopicsResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/Topics", req,
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			tds, err := s.admin.listTopics(ctx)
+			return &vmspb.ListTopicsResponse{Topics: tds}, err
+		},
+	)
+	return rspI.(*vmspb.ListTopicsResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
+}
+
+func (s *server) AddTopic(ctx context.Context, req *vmspb.AddTopicRequest) (*vmspb.AddTopicResponse, error) {
+	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/AddTopic", req,
+		func(ctx context.Context, _ interface{}) (interface{}, error) {
+			topicDesc, err := s.admin.addTopic(ctx)
+			return &vmspb.AddTopicResponse{Topic: topicDesc}, err
+		},
+	)
+	return rspI.(*vmspb.AddTopicResponse), verrors.ToStatusErrorWithCode(err, codes.Unavailable)
+}
+
 func (s *server) UnregisterTopic(ctx context.Context, req *vmspb.UnregisterTopicRequest) (*vmspb.UnregisterTopicResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/UnregisterTopic", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
@@ -92,6 +106,16 @@ func (s *server) UnregisterTopic(ctx context.Context, req *vmspb.UnregisterTopic
 		},
 	)
 	return rspI.(*vmspb.UnregisterTopicResponse), verrors.ToStatusError(err)
+}
+
+func (s *server) GetLogStream(ctx context.Context, req *vmspb.GetLogStreamRequest) (*vmspb.GetLogStreamResponse, error) {
+	lsd, err := s.admin.getLogStream(ctx, req.TopicID, req.LogStreamID)
+	return &vmspb.GetLogStreamResponse{LogStream: lsd}, err
+}
+
+func (s *server) ListLogStreams(ctx context.Context, req *vmspb.ListLogStreamsRequest) (*vmspb.ListLogStreamsResponse, error) {
+	lsds, err := s.admin.listLogStreams(ctx, req.TopicID)
+	return &vmspb.ListLogStreamsResponse{LogStreams: lsds}, err
 }
 
 func (s *server) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
@@ -167,6 +191,16 @@ func (s *server) Unseal(ctx context.Context, req *vmspb.UnsealRequest) (*vmspb.U
 	return rspI.(*vmspb.UnsealResponse), verrors.ToStatusError(err)
 }
 
+func (s *server) GetMetadataRepositoryNode(ctx context.Context, req *vmspb.GetMetadataRepositoryNodeRequest) (*vmspb.GetMetadataRepositoryNodeResponse, error) {
+	node, err := s.admin.getMetadataRepositoryNode(ctx, req.NodeID)
+	return &vmspb.GetMetadataRepositoryNodeResponse{Node: node}, err
+}
+
+func (s *server) ListMetadataRepositoryNodes(ctx context.Context, _ *vmspb.ListMetadataRepositoryNodesRequest) (*vmspb.ListMetadataRepositoryNodesResponse, error) {
+	nodes, err := s.admin.listMetadataRepositoryNodes(ctx)
+	return &vmspb.ListMetadataRepositoryNodesResponse{Nodes: nodes}, err
+}
+
 func (s *server) GetMRMembers(ctx context.Context, req *pbtypes.Empty) (*vmspb.GetMRMembersResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/GetMRMembers", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
@@ -189,6 +223,11 @@ func (s *server) GetMRMembers(ctx context.Context, req *pbtypes.Empty) (*vmspb.G
 	return rspI.(*vmspb.GetMRMembersResponse), verrors.ToStatusError(err)
 }
 
+func (s *server) AddMetadataRepositoryNode(ctx context.Context, req *vmspb.AddMetadataRepositoryNodeRequest) (*vmspb.AddMetadataRepositoryNodeResponse, error) {
+	node, err := s.admin.addMetadataRepositoryNode(ctx, req.RaftURL, req.RPCAddr)
+	return &vmspb.AddMetadataRepositoryNodeResponse{Node: node}, err
+}
+
 func (s *server) AddMRPeer(ctx context.Context, req *vmspb.AddMRPeerRequest) (*vmspb.AddMRPeerResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/AddMRPeer", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
@@ -199,6 +238,11 @@ func (s *server) AddMRPeer(ctx context.Context, req *vmspb.AddMRPeerRequest) (*v
 	return rspI.(*vmspb.AddMRPeerResponse), verrors.ToStatusError(err)
 }
 
+func (s *server) DeleteMetadataRepositoryNode(ctx context.Context, req *vmspb.DeleteMetadataRepositoryNodeRequest) (*vmspb.DeleteMetadataRepositoryNodeResponse, error) {
+	err := s.admin.deleteMetadataRepositoryNode(ctx, req.NodeID)
+	return &vmspb.DeleteMetadataRepositoryNodeResponse{}, err
+}
+
 func (s *server) RemoveMRPeer(ctx context.Context, req *vmspb.RemoveMRPeerRequest) (*vmspb.RemoveMRPeerResponse, error) {
 	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/RemoveMRPeer", req,
 		func(ctx context.Context, _ interface{}) (interface{}, error) {
@@ -207,16 +251,6 @@ func (s *server) RemoveMRPeer(ctx context.Context, req *vmspb.RemoveMRPeerReques
 		},
 	)
 	return rspI.(*vmspb.RemoveMRPeerResponse), verrors.ToStatusError(err)
-}
-
-func (s *server) GetStorageNodes(ctx context.Context, req *vmspb.GetStorageNodesRequest) (*vmspb.GetStorageNodesResponse, error) {
-	rspI, err := s.withTelemetry(ctx, "varlog.vmspb.ClusterManagerDeprecated/GetStorageNodes", req,
-		func(ctx context.Context, _ interface{}) (interface{}, error) {
-			snmds, err := s.admin.storageNodes(ctx)
-			return &vmspb.GetStorageNodesResponse{StorageNodes: snmds}, err
-		},
-	)
-	return rspI.(*vmspb.GetStorageNodesResponse), verrors.ToStatusError(err)
 }
 
 func (s *server) Trim(ctx context.Context, req *vmspb.TrimRequest) (*vmspb.TrimResponse, error) {

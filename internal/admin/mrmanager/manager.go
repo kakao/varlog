@@ -4,6 +4,7 @@ package mrmanager
 
 import (
 	"context"
+	stderrors "errors"
 	"io"
 	"math"
 	"sync"
@@ -19,6 +20,8 @@ import (
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
+
+var ErrClusterMetadataNotFetched = stderrors.New("cluster metadata: not fetched")
 
 // ClusterMetadataView provides the latest metadata about the cluster.
 // TODO: It should have a way to guarantee that ClusterMetadata is the latest.
@@ -397,7 +400,7 @@ func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 	if mrm.dirty || time.Since(mrm.updated) > ReloadInterval {
 		meta, err := mrm.clusterMetadata(ctx)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(ErrClusterMetadataNotFetched, err.Error())
 		}
 		mrm.meta = meta
 		mrm.dirty = false

@@ -1,8 +1,10 @@
 package types
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -87,4 +89,93 @@ func TestLLSN(t *testing.T) {
 			So(llsn.Load(), ShouldEqual, LLSN(21))
 		})
 	})
+}
+
+func TestNodeID(t *testing.T) {
+	tcs := []struct {
+		input   string
+		invalid bool
+	}{
+		{input: "127.0.0.1", invalid: true},
+		{input: ":10000", invalid: true},
+		{input: "0:0", invalid: true},
+		{input: "0:10000", invalid: true},
+		// FIXME: Handle host name.
+		{input: "example.com:80", invalid: true},
+		// FIXME: Should the wild-card port be valid?
+		{input: "127.0.0.1:0", invalid: false},
+		{input: "127.0.0.1:10000", invalid: false},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			nid := NewNodeID(tc.input)
+			if tc.invalid {
+				assert.Equal(t, InvalidNodeID, nid)
+				return
+			}
+			assert.NotEqual(t, InvalidNodeID, nid)
+			assert.Equal(t, tc.input, nid.Reverse())
+		})
+	}
+}
+
+func TestNodeIDFromURL(t *testing.T) {
+	tcs := []struct {
+		scheme  string
+		addr    string
+		invalid bool
+	}{
+		// Without scheme
+		{addr: "127.0.0.1", invalid: true},
+		{addr: ":10000", invalid: true},
+		{addr: "0:0", invalid: true},
+		{addr: "0:10000", invalid: true},
+		// FIXME: Handle host name.
+		{addr: "example.com:80", invalid: true},
+		// FIXME: Should the wild-card port be valid?
+		{addr: "127.0.0.1:0", invalid: true},
+		{addr: "127.0.0.1:10000", invalid: true},
+
+		// http://
+		{scheme: "http", addr: "127.0.0.1", invalid: true},
+		{scheme: "http", addr: ":10000", invalid: true},
+		{scheme: "http", addr: "0:0", invalid: true},
+		{scheme: "http", addr: "0:10000", invalid: true},
+		// FIXME: Handle host name.
+		{scheme: "http", addr: "example.com:80", invalid: true},
+		// FIXME: Should the wild-card port be valid?
+		{scheme: "http", addr: "127.0.0.1:0", invalid: false},
+		{scheme: "http", addr: "127.0.0.1:10000", invalid: false},
+
+		// https://
+		{scheme: "https", addr: "127.0.0.1", invalid: true},
+		{scheme: "https", addr: ":10000", invalid: true},
+		{scheme: "https", addr: "0:0", invalid: true},
+		{scheme: "https", addr: "0:10000", invalid: true},
+		// FIXME: Handle host name.
+		{scheme: "https", addr: "example.com:80", invalid: true},
+		// FIXME: Should the wild-card port be valid?
+		{scheme: "https", addr: "127.0.0.1:0", invalid: false},
+		{scheme: "https", addr: "127.0.0.1:10000", invalid: false},
+	}
+
+	for _, tc := range tcs {
+		var sb strings.Builder
+		if len(tc.scheme) > 0 {
+			fmt.Fprintf(&sb, "%s://", tc.scheme)
+		}
+		fmt.Fprintf(&sb, "%s", tc.addr)
+		url := sb.String()
+
+		t.Run(url, func(t *testing.T) {
+			nid := NewNodeIDFromURL(url)
+			if tc.invalid {
+				assert.Equal(t, InvalidNodeID, nid)
+				return
+			}
+			assert.NotEqual(t, InvalidNodeID, nid)
+			assert.Equal(t, tc.addr, nid.Reverse())
+		})
+	}
 }
