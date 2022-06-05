@@ -149,7 +149,11 @@ func (adm *Admin) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, e
 	return adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 }
 
-func (adm *Admin) storageNodes(ctx context.Context) (ret map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, err error) {
+func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+	return adm.snmgr.GetMetadata(ctx, snid)
+}
+
+func (adm *Admin) listStorageNodes(ctx context.Context) (ret map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, err error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
 	metadata, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
@@ -181,70 +185,6 @@ func (adm *Admin) storageNodes(ctx context.Context) (ret map[types.StorageNodeID
 	}
 	wg.Wait()
 	return ret, nil
-	//g, ctx := errgroup.WithContext(ctx)
-	//for i := range metadata.StorageNodes {
-	//	snd := metadata.StorageNodes[i]
-	//	g.Go(func() error {
-	//		snmd, err := adm.snmgr.GetMetadata(ctx, snd.StorageNodeID)
-	//		if err != nil {
-	//			snmd = &snpb.StorageNodeMetadataDescriptor{
-	//				ClusterID:   adm.cid,
-	//				StorageNode: snd.StorageNode,
-	//				Status:      varlogpb.StorageNodeStatusUnavailable,
-	//			}
-	//		}
-	//		mu.Lock()
-	//		defer mu.Unlock()
-	//		ret[snd.StorageNodeID] = snmd
-	//		return nil
-	//	})
-	//}
-	//_ = g.Wait()
-	//return ret, nil
-}
-
-func (adm *Admin) mrInfos(ctx context.Context) (*mrpb.ClusterInfo, error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-	return adm.mrmgr.GetClusterInfo(ctx)
-}
-
-func (adm *Admin) addMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error) {
-	nodeID := types.NewNodeIDFromURL(raftURL)
-	if nodeID == types.InvalidNodeID {
-		return nodeID, errors.Wrap(verrors.ErrInvalid, "raft address")
-	}
-
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
-	err := adm.mrmgr.AddPeer(ctx, nodeID, raftURL, rpcAddr)
-	if err != nil {
-		if !errors.Is(err, verrors.ErrAlreadyExists) {
-			return types.InvalidNodeID, err
-		}
-	}
-
-	return nodeID, nil
-}
-
-func (adm *Admin) removeMRPeer(ctx context.Context, raftURL string) error {
-	nodeID := types.NewNodeIDFromURL(raftURL)
-	if nodeID == types.InvalidNodeID {
-		return errors.Wrap(verrors.ErrInvalid, "raft address")
-	}
-
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
-	err := adm.mrmgr.RemovePeer(ctx, nodeID)
-	if err != nil {
-		if !errors.Is(err, verrors.ErrAlreadyExists) {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // addStorageNode adds a new storage node to the cluster.
@@ -303,6 +243,34 @@ func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageN
 	return nil
 }
 
+func (adm *Admin) getTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error) {
+	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	td := md.GetTopic(tpid)
+	if td == nil {
+		return nil, errors.New("admin: no such topic")
+	}
+	return td, nil
+}
+
+func (adm *Admin) listTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
+	adm.mu.Lock()
+	defer adm.mu.Unlock()
+
+	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil || len(md.Topics) == 0 {
+		return nil, err
+	}
+
+	tds := make([]varlogpb.TopicDescriptor, len(md.Topics))
+	for idx := range md.Topics {
+		tds[idx] = *md.Topics[idx]
+	}
+	return tds, nil
+}
+
 // addTopic adds a new topic.
 // It returns an error if rejected by the metadata repository.
 //
@@ -320,20 +288,76 @@ func (adm *Admin) addTopic(ctx context.Context) (varlogpb.TopicDescriptor, error
 	return varlogpb.TopicDescriptor{TopicID: topicID}, nil
 }
 
-func (adm *Admin) topics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
+func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
 
-	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
-	if err != nil || len(md.Topics) == 0 {
-		return nil, err
+	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil {
+		return err
 	}
 
-	tds := make([]varlogpb.TopicDescriptor, len(md.Topics))
-	for idx := range md.Topics {
-		tds[idx] = *md.Topics[idx]
+	// TODO: Should it returns an error when removing the topic that has already been deleted or does not exist?
+	topicdesc, err := clusmeta.MustHaveTopic(tpid)
+	if err != nil {
+		return err
 	}
-	return tds, nil
+
+	// TODO: Should it returns an error when removing the topic that has already been deleted or does not exist?
+	status := topicdesc.GetStatus()
+	if status.Deleted() {
+		return errors.Errorf("invalid topic status: %s", status)
+	}
+
+	// TODO: Can we remove the topic that has active log streams?
+	// TODO:: seal logStreams and refresh metadata
+	return adm.mrmgr.UnregisterTopic(ctx, tpid)
+}
+
+func (adm *Admin) getLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	td := md.GetTopic(tpid)
+	if td == nil {
+		return nil, errors.New("admin: no such topic")
+	}
+	if !td.HasLogStream(lsid) {
+		return nil, errors.New("admin: no such log stream")
+	}
+	lsd := md.GetLogStream(lsid)
+	if lsd == nil {
+		return nil, errors.New("admin: no such log stream")
+	}
+	if lsd.TopicID != tpid {
+		return nil, errors.New("admin: unexpected topic")
+	}
+	return lsd, nil
+}
+
+func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]*varlogpb.LogStreamDescriptor, error) {
+	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	td := md.GetTopic(tpid)
+	if td == nil {
+		return nil, errors.New("admin: no such topic")
+	}
+	lsds := make([]*varlogpb.LogStreamDescriptor, 0, len(td.LogStreams))
+	for _, lsid := range td.LogStreams {
+		lsd := md.GetLogStream(lsid)
+		if lsd == nil {
+			continue
+		}
+		if lsd.TopicID != tpid {
+			// error: unexpected topic
+			return nil, errors.New("admin: unexpected topid")
+		}
+		lsds = append(lsds, lsd)
+	}
+	return lsds, nil
 }
 
 func (adm *Admin) describeTopic(ctx context.Context, tpid types.TopicID) (td varlogpb.TopicDescriptor, lsds []varlogpb.LogStreamDescriptor, err error) {
@@ -362,30 +386,6 @@ func (adm *Admin) describeTopic(ctx context.Context, tpid types.TopicID) (td var
 	}
 
 	return td, lsds, nil
-}
-
-func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
-	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
-	if err != nil {
-		return err
-	}
-
-	topicdesc, err := clusmeta.MustHaveTopic(tpid)
-	if err != nil {
-		return err
-	}
-
-	status := topicdesc.GetStatus()
-	if status.Deleted() {
-		return errors.Errorf("invalid topic status: %s", status)
-	}
-
-	//TODO:: seal logStreams and refresh metadata
-
-	return adm.mrmgr.UnregisterTopic(ctx, tpid)
 }
 
 // AddLogStream adds a new log stream in the topic specified by the argument
@@ -457,50 +457,13 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 	return adm.addLogStream(ctx, logStreamDesc)
 }
 
-func (adm *Admin) waitSealed(ctx context.Context, lsid types.LogStreamID) error {
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			lsStat := adm.statRepository.GetLogStream(lsid).Copy()
-			if lsStat.Status() == varlogpb.LogStreamStatusSealed {
-				return nil
-			}
-		}
-	}
-}
-
-func (adm *Admin) unregisterLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
-	adm.lockLogStreamStatus(lsid)
-	defer adm.unlockLogStreamStatus(lsid)
-
-	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
-	if err != nil {
-		return err
+func (adm *Admin) addLogStream(ctx context.Context, lsdesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+	if err := adm.snmgr.AddLogStream(ctx, lsdesc); err != nil {
+		return nil, err
 	}
 
-	lsdesc, err := clusmeta.MustHaveLogStream(lsid)
-	if err != nil {
-		return err
-	}
-
-	status := lsdesc.GetStatus()
-	// TODO (jun): Check whether status.Deleted means unregistered.
-	// If so, is status.Deleted okay or not?
-	if status.Running() || status.Deleted() {
-		return errors.Errorf("invalid log stream status: %s", status)
-	}
-
-	// TODO (jun): test if the log stream has no logs
-
-	return adm.mrmgr.UnregisterLogStream(ctx, lsid)
+	// NB: RegisterLogStream returns nil if the logstream already exists.
+	return lsdesc, adm.mrmgr.RegisterLogStream(ctx, lsdesc)
 }
 
 func (adm *Admin) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor, lsdesc *varlogpb.LogStreamDescriptor) error {
@@ -523,32 +486,21 @@ func (adm *Admin) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor, lsdesc 
 	return nil
 }
 
-func (adm *Admin) addLogStream(ctx context.Context, lsdesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
-	if err := adm.snmgr.AddLogStream(ctx, lsdesc); err != nil {
-		return nil, err
+func (adm *Admin) waitSealed(ctx context.Context, lsid types.LogStreamID) error {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			lsStat := adm.statRepository.GetLogStream(lsid).Copy()
+			if lsStat.Status() == varlogpb.LogStreamStatusSealed {
+				return nil
+			}
+		}
 	}
-
-	// NB: RegisterLogStream returns nil if the logstream already exists.
-	return lsdesc, adm.mrmgr.RegisterLogStream(ctx, lsdesc)
-}
-
-func (adm *Admin) removeLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
-	adm.lockLogStreamStatus(lsid)
-	defer adm.unlockLogStreamStatus(lsid)
-
-	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
-	if err != nil {
-		return err
-	}
-
-	if err := adm.removableLogStreamReplica(clusmeta, snid, lsid); err != nil {
-		return err
-	}
-
-	return adm.snmgr.RemoveLogStreamReplica(ctx, snid, tpid, lsid)
 }
 
 func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
@@ -633,6 +585,54 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	return newLSDesc, nil
 }
 
+func (adm *Admin) unregisterLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
+	adm.mu.Lock()
+	defer adm.mu.Unlock()
+
+	adm.lockLogStreamStatus(lsid)
+	defer adm.unlockLogStreamStatus(lsid)
+
+	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	lsdesc, err := clusmeta.MustHaveLogStream(lsid)
+	if err != nil {
+		return err
+	}
+
+	status := lsdesc.GetStatus()
+	// TODO (jun): Check whether status.Deleted means unregistered.
+	// If so, is status.Deleted okay or not?
+	if status.Running() || status.Deleted() {
+		return errors.Errorf("invalid log stream status: %s", status)
+	}
+
+	// TODO (jun): test if the log stream has no logs
+
+	return adm.mrmgr.UnregisterLogStream(ctx, lsid)
+}
+
+func (adm *Admin) removeLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error {
+	adm.mu.Lock()
+	defer adm.mu.Unlock()
+
+	adm.lockLogStreamStatus(lsid)
+	defer adm.unlockLogStreamStatus(lsid)
+
+	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := adm.removableLogStreamReplica(clusmeta, snid, lsid); err != nil {
+		return err
+	}
+
+	return adm.snmgr.RemoveLogStreamReplica(ctx, snid, tpid, lsid)
+}
+
 func (adm *Admin) removableLogStreamReplica(clusmeta *varlogpb.MetadataDescriptor, snid types.StorageNodeID, lsid types.LogStreamID) error {
 	lsdesc := clusmeta.GetLogStream(lsid)
 	if lsdesc == nil {
@@ -683,31 +683,6 @@ func (adm *Admin) seal(ctx context.Context, tpid types.TopicID, lsid types.LogSt
 	return result, lastGLSN, err
 }
 
-// Sync copies the log entries of the src to the dst. Sync may be long-running, thus it
-// returns immediately without waiting for the completion of sync. Callers of Sync
-// periodically can call Sync, and get the current state of the sync progress.
-// SyncState is one of SyncStateError, SyncStateInProgress, or SyncStateComplete. If Sync
-// returns SyncStateComplete, all the log entries were copied well. If it returns
-// SyncStateInProgress, it is still progressing. Otherwise, if it returns SyncStateError,
-// it is stopped by an error.
-// To start sync, the log stream status of the src must be LogStreamStatusSealed and the log
-// stream status of the dst must be LogStreamStatusSealing. If either of the statuses is not
-// correct, Sync returns ErrSyncInvalidStatus.
-func (adm *Admin) Sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
-	adm.lockLogStreamStatus(lsid)
-	defer adm.unlockLogStreamStatus(lsid)
-
-	return adm.sync(ctx, tpid, lsid, srcID, dstID)
-}
-
-func (adm *Admin) sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
-	lastGLSN, err := adm.mrmgr.Seal(ctx, lsid)
-	if err != nil {
-		return nil, err
-	}
-	return adm.snmgr.Sync(ctx, tpid, lsid, srcID, dstID, lastGLSN)
-}
-
 // Unseal unseals the log stream replicas corresponded with the given logStreamID.
 func (adm *Admin) Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
 	adm.lockLogStreamStatus(lsid)
@@ -738,6 +713,157 @@ func (adm *Admin) unseal(ctx context.Context, tpid types.TopicID, lsid types.Log
 errOut:
 	adm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
 	return nil, err
+}
+
+// Sync copies the log entries of the src to the dst. Sync may be long-running, thus it
+// returns immediately without waiting for the completion of sync. Callers of Sync
+// periodically can call Sync, and get the current state of the sync progress.
+// SyncState is one of SyncStateError, SyncStateInProgress, or SyncStateComplete. If Sync
+// returns SyncStateComplete, all the log entries were copied well. If it returns
+// SyncStateInProgress, it is still progressing. Otherwise, if it returns SyncStateError,
+// it is stopped by an error.
+// To start sync, the log stream status of the src must be LogStreamStatusSealed and the log
+// stream status of the dst must be LogStreamStatusSealing. If either of the statuses is not
+// correct, Sync returns ErrSyncInvalidStatus.
+func (adm *Admin) Sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
+	adm.lockLogStreamStatus(lsid)
+	defer adm.unlockLogStreamStatus(lsid)
+
+	return adm.sync(ctx, tpid, lsid, srcID, dstID)
+}
+
+func (adm *Admin) sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
+	lastGLSN, err := adm.mrmgr.Seal(ctx, lsid)
+	if err != nil {
+		return nil, err
+	}
+	return adm.snmgr.Sync(ctx, tpid, lsid, srcID, dstID, lastGLSN)
+}
+
+// trim removes log entries from the log streams in a topic.
+// The argument tpid is the topic ID of the topic to be trimmed.
+// The argument lastGLSN is the last global sequence number of the log stream to be trimmed.
+func (adm *Admin) trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
+	adm.mu.Lock()
+	defer adm.mu.Unlock()
+	return adm.snmgr.Trim(ctx, tpid, lastGLSN)
+}
+
+func (adm *Admin) getMetadataRepositoryNode(ctx context.Context, nid types.NodeID) (*varlogpb.MetadataRepositoryNode, error) {
+	ci, err := adm.mrmgr.GetClusterInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	member, ok := ci.GetMembers()[nid]
+	if !ok {
+		return nil, errors.New("admin: no such mr")
+	}
+	return &varlogpb.MetadataRepositoryNode{
+		NodeID:  nid,
+		RaftURL: member.Peer,
+		RPCAddr: member.Endpoint,
+		Leader:  ci.Leader == nid,
+		Learner: member.Learner,
+	}, nil
+}
+
+func (adm *Admin) listMetadataRepositoryNodes(ctx context.Context) ([]*varlogpb.MetadataRepositoryNode, error) {
+	ci, err := adm.mrmgr.GetClusterInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nodes := make([]*varlogpb.MetadataRepositoryNode, 0, len(ci.GetMembers()))
+	for nid, member := range ci.GetMembers() {
+		nodes = append(nodes, &varlogpb.MetadataRepositoryNode{
+			NodeID:  nid,
+			RaftURL: member.Peer,
+			RPCAddr: member.Endpoint,
+			Leader:  ci.Leader == nid,
+			Learner: member.Learner,
+		})
+	}
+	return nodes, nil
+}
+
+func (adm *Admin) mrInfos(ctx context.Context) (*mrpb.ClusterInfo, error) {
+	adm.mu.RLock()
+	defer adm.mu.RUnlock()
+	return adm.mrmgr.GetClusterInfo(ctx)
+}
+
+func (adm *Admin) addMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr string) (*varlogpb.MetadataRepositoryNode, error) {
+	nid := types.NewNodeIDFromURL(raftURL)
+	if nid == types.InvalidNodeID {
+		return nil, errors.Wrap(verrors.ErrInvalid, "raft address")
+	}
+
+	if err := adm.mrmgr.AddPeer(ctx, nid, raftURL, rpcAddr); err != nil {
+		if !errors.Is(err, verrors.ErrAlreadyExists) {
+			return nil, err
+		}
+	}
+
+	return &varlogpb.MetadataRepositoryNode{
+		NodeID:  nid,
+		RaftURL: raftURL,
+		RPCAddr: rpcAddr,
+		// TODO: Fill these fields.
+		// Leader:
+		// Learner:
+	}, nil
+}
+
+func (adm *Admin) addMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error) {
+	nodeID := types.NewNodeIDFromURL(raftURL)
+	if nodeID == types.InvalidNodeID {
+		return nodeID, errors.Wrap(verrors.ErrInvalid, "raft address")
+	}
+
+	adm.mu.RLock()
+	defer adm.mu.RUnlock()
+
+	err := adm.mrmgr.AddPeer(ctx, nodeID, raftURL, rpcAddr)
+	if err != nil {
+		if !errors.Is(err, verrors.ErrAlreadyExists) {
+			return types.InvalidNodeID, err
+		}
+	}
+
+	return nodeID, nil
+}
+
+func (adm *Admin) deleteMetadataRepositoryNode(ctx context.Context, nid types.NodeID) error {
+	if nid == types.InvalidNodeID {
+		return errors.Wrap(verrors.ErrInvalid, "raft address")
+	}
+
+	if err := adm.mrmgr.RemovePeer(ctx, nid); err != nil {
+		// TODO: What does it mean that RemovePeer returns an error of verrors.ErrAlreadyExists?
+		if !errors.Is(err, verrors.ErrAlreadyExists) {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (adm *Admin) removeMRPeer(ctx context.Context, raftURL string) error {
+	nodeID := types.NewNodeIDFromURL(raftURL)
+	if nodeID == types.InvalidNodeID {
+		return errors.Wrap(verrors.ErrInvalid, "raft address")
+	}
+
+	adm.mu.RLock()
+	defer adm.mu.RUnlock()
+
+	err := adm.mrmgr.RemovePeer(ctx, nodeID)
+	if err != nil {
+		if !errors.Is(err, verrors.ErrAlreadyExists) {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (adm *Admin) HandleHeartbeatTimeout(ctx context.Context, snid types.StorageNodeID) {
@@ -884,13 +1010,4 @@ func (adm *Admin) HandleReport(ctx context.Context, snm *snpb.StorageNodeMetadat
 			adm.syncLogStream(ctx, ls.TopicID, ls.LogStreamID)
 		}
 	}
-}
-
-// trim removes log entries from the log streams in a topic.
-// The argument tpid is the topic ID of the topic to be trimmed.
-// The argument lastGLSN is the last global sequence number of the log stream to be trimmed.
-func (adm *Admin) trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-	return adm.snmgr.Trim(ctx, tpid, lastGLSN)
 }

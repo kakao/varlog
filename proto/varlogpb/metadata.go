@@ -255,6 +255,8 @@ func (m *MetadataDescriptor) DeleteStorageNode(id types.StorageNodeID) error {
 	return nil
 }
 
+// GetStorageNode finds the storage node specified by the argument id.
+// It returns nil if the storage node does not exist.
 func (m *MetadataDescriptor) GetStorageNode(id types.StorageNodeID) *StorageNodeDescriptor {
 	if m == nil {
 		return nil

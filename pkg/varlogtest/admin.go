@@ -34,6 +34,27 @@ func (c testAdmin) unlock() {
 	c.vt.cond.L.Unlock()
 }
 
+func (c *testAdmin) GetStorageNode(context.Context, types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+	panic("not implemented")
+}
+
+func (c *testAdmin) ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	ret := make(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor)
+	for snID := range c.vt.storageNodes {
+		snmd := c.vt.storageNodes[snID]
+		ret[snID] = &snmd
+	}
+	return ret, nil
+}
+func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
+	return c.ListStorageNodes(ctx)
+}
+
 // FIXME: Argument snid
 func (c *testAdmin) AddStorageNode(ctx context.Context, _ types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
 	if err := c.lock(); err != nil {
@@ -67,6 +88,28 @@ func (c *testAdmin) UnregisterStorageNode(ctx context.Context, storageNodeID typ
 	panic("not implemented")
 }
 
+func (c *testAdmin) GetTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error) {
+	panic("not implemented")
+}
+
+func (c *testAdmin) ListTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
+	panic("not implemented")
+}
+
+func (c *testAdmin) Topics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	ret := make([]varlogpb.TopicDescriptor, 0, len(c.vt.topics))
+	for topicID := range c.vt.topics {
+		topicDesc := c.vt.topics[topicID]
+		ret = append(ret, *proto.Clone(&topicDesc).(*varlogpb.TopicDescriptor))
+	}
+	return ret, nil
+}
+
 func (c *testAdmin) AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, error) {
 	if err := c.lock(); err != nil {
 		return varlogpb.TopicDescriptor{}, err
@@ -88,18 +131,16 @@ func (c *testAdmin) AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, err
 	return *proto.Clone(&topicDesc).(*varlogpb.TopicDescriptor), nil
 }
 
-func (c *testAdmin) Topics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
-	if err := c.lock(); err != nil {
-		return nil, err
-	}
-	defer c.unlock()
+func (c *testAdmin) UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error) {
+	panic("not implemented")
+}
 
-	ret := make([]varlogpb.TopicDescriptor, 0, len(c.vt.topics))
-	for topicID := range c.vt.topics {
-		topicDesc := c.vt.topics[topicID]
-		ret = append(ret, *proto.Clone(&topicDesc).(*varlogpb.TopicDescriptor))
-	}
-	return ret, nil
+func (c *testAdmin) GetLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+	panic("not implemented")
+}
+
+func (c *testAdmin) ListLogStreams(ctx context.Context, tpid types.TopicID) ([]*varlogpb.LogStreamDescriptor, error) {
+	panic("not implemented")
 }
 
 func (c *testAdmin) DescribeTopic(ctx context.Context, topicID types.TopicID) (*vmspb.DescribeTopicResponse, error) {
@@ -125,10 +166,6 @@ func (c *testAdmin) DescribeTopic(ctx context.Context, topicID types.TopicID) (*
 		rsp.LogStreams[i] = *proto.Clone(&lsDesc).(*varlogpb.LogStreamDescriptor)
 	}
 	return rsp, nil
-}
-
-func (c *testAdmin) UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error) {
-	panic("not implemented")
 }
 
 func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
@@ -173,15 +210,15 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 	return proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor), nil
 }
 
+func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+	panic("not implemented")
+}
+
 func (c *testAdmin) UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {
 	panic("not implemented")
 }
 
 func (c *testAdmin) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) error {
-	panic("not implemented")
-}
-
-func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	panic("not implemented")
 }
 
@@ -250,32 +287,6 @@ func (c *testAdmin) Sync(ctx context.Context, topicID types.TopicID, logStreamID
 	panic("not implemented")
 }
 
-func (c *testAdmin) GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error) {
-	panic("not implemented")
-}
-
-func (c *testAdmin) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error) {
-	panic("not implemented")
-}
-
-func (c *testAdmin) RemoveMRPeer(ctx context.Context, raftURL string) error {
-	panic("not implemented")
-}
-
-func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
-	if err := c.lock(); err != nil {
-		return nil, err
-	}
-	defer c.unlock()
-
-	ret := make(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor)
-	for snID := range c.vt.storageNodes {
-		snmd := c.vt.storageNodes[snID]
-		ret[snID] = &snmd
-	}
-	return ret, nil
-}
-
 func (c *testAdmin) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
@@ -303,6 +314,34 @@ func (c *testAdmin) Trim(ctx context.Context, topicID types.TopicID, lastGLSN ty
 	}
 	c.vt.trimGLSNs[topicID] = lastGLSN
 	return ret, nil
+}
+
+func (c *testAdmin) GetMetadataRepositoryNode(ctx context.Context, nid types.NodeID) (*varlogpb.MetadataRepositoryNode, error) {
+	panic("not implemented")
+}
+
+func (c *testAdmin) ListMetadataRepositoryNodes(ctx context.Context) ([]*varlogpb.MetadataRepositoryNode, error) {
+	panic("not implemented")
+}
+
+func (c *testAdmin) GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error) {
+	panic("not implemented")
+}
+
+func (c *testAdmin) AddMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr string) (*varlogpb.MetadataRepositoryNode, error) {
+	panic("not implemented")
+}
+
+func (c *testAdmin) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error) {
+	panic("not implemented")
+}
+
+func (c *testAdmin) DeleteMetadataRepositoryNode(ctx context.Context, nid types.NodeID) error {
+	panic("not implemented")
+}
+
+func (c *testAdmin) RemoveMRPeer(ctx context.Context, raftURL string) error {
+	panic("not implemented")
 }
 
 func (c *testAdmin) Close() error {

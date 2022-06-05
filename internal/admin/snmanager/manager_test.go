@@ -574,7 +574,7 @@ func TestStorageNodeManager_Sync(t *testing.T) {
 				},
 			},
 		},
-	}, nil)
+	}, nil).Times(2)
 	_, err = snmgr.Sync(context.Background(), tpid, lsid, snid1, snid2, lastGLSN)
 	assert.Error(t, err)
 

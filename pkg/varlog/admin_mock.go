@@ -69,6 +69,21 @@ func (mr *MockAdminMockRecorder) AddMRPeer(arg0, arg1, arg2 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMRPeer", reflect.TypeOf((*MockAdmin)(nil).AddMRPeer), arg0, arg1, arg2)
 }
 
+// AddMetadataRepositoryNode mocks base method.
+func (m *MockAdmin) AddMetadataRepositoryNode(arg0 context.Context, arg1, arg2 string) (*varlogpb.MetadataRepositoryNode, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddMetadataRepositoryNode", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*varlogpb.MetadataRepositoryNode)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddMetadataRepositoryNode indicates an expected call of AddMetadataRepositoryNode.
+func (mr *MockAdminMockRecorder) AddMetadataRepositoryNode(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMetadataRepositoryNode", reflect.TypeOf((*MockAdmin)(nil).AddMetadataRepositoryNode), arg0, arg1, arg2)
+}
+
 // AddStorageNode mocks base method.
 func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string) (*snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
@@ -113,6 +128,20 @@ func (mr *MockAdminMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockAdmin)(nil).Close))
 }
 
+// DeleteMetadataRepositoryNode mocks base method.
+func (m *MockAdmin) DeleteMetadataRepositoryNode(arg0 context.Context, arg1 types.NodeID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteMetadataRepositoryNode", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteMetadataRepositoryNode indicates an expected call of DeleteMetadataRepositoryNode.
+func (mr *MockAdminMockRecorder) DeleteMetadataRepositoryNode(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMetadataRepositoryNode", reflect.TypeOf((*MockAdmin)(nil).DeleteMetadataRepositoryNode), arg0, arg1)
+}
+
 // DescribeTopic mocks base method.
 func (m *MockAdmin) DescribeTopic(arg0 context.Context, arg1 types.TopicID) (*vmspb.DescribeTopicResponse, error) {
 	m.ctrl.T.Helper()
@@ -126,6 +155,21 @@ func (m *MockAdmin) DescribeTopic(arg0 context.Context, arg1 types.TopicID) (*vm
 func (mr *MockAdminMockRecorder) DescribeTopic(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTopic", reflect.TypeOf((*MockAdmin)(nil).DescribeTopic), arg0, arg1)
+}
+
+// GetLogStream mocks base method.
+func (m *MockAdmin) GetLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLogStream", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*varlogpb.LogStreamDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLogStream indicates an expected call of GetLogStream.
+func (mr *MockAdminMockRecorder) GetLogStream(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogStream", reflect.TypeOf((*MockAdmin)(nil).GetLogStream), arg0, arg1, arg2)
 }
 
 // GetMRMembers mocks base method.
@@ -143,6 +187,36 @@ func (mr *MockAdminMockRecorder) GetMRMembers(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMRMembers", reflect.TypeOf((*MockAdmin)(nil).GetMRMembers), arg0)
 }
 
+// GetMetadataRepositoryNode mocks base method.
+func (m *MockAdmin) GetMetadataRepositoryNode(arg0 context.Context, arg1 types.NodeID) (*varlogpb.MetadataRepositoryNode, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMetadataRepositoryNode", arg0, arg1)
+	ret0, _ := ret[0].(*varlogpb.MetadataRepositoryNode)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMetadataRepositoryNode indicates an expected call of GetMetadataRepositoryNode.
+func (mr *MockAdminMockRecorder) GetMetadataRepositoryNode(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadataRepositoryNode", reflect.TypeOf((*MockAdmin)(nil).GetMetadataRepositoryNode), arg0, arg1)
+}
+
+// GetStorageNode mocks base method.
+func (m *MockAdmin) GetStorageNode(arg0 context.Context, arg1 types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStorageNode", arg0, arg1)
+	ret0, _ := ret[0].(*snpb.StorageNodeMetadataDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStorageNode indicates an expected call of GetStorageNode.
+func (mr *MockAdminMockRecorder) GetStorageNode(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNode", reflect.TypeOf((*MockAdmin)(nil).GetStorageNode), arg0, arg1)
+}
+
 // GetStorageNodes mocks base method.
 func (m *MockAdmin) GetStorageNodes(arg0 context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
@@ -156,6 +230,81 @@ func (m *MockAdmin) GetStorageNodes(arg0 context.Context) (map[types.StorageNode
 func (mr *MockAdminMockRecorder) GetStorageNodes(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNodes", reflect.TypeOf((*MockAdmin)(nil).GetStorageNodes), arg0)
+}
+
+// GetTopic mocks base method.
+func (m *MockAdmin) GetTopic(arg0 context.Context, arg1 types.TopicID) (*varlogpb.TopicDescriptor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTopic", arg0, arg1)
+	ret0, _ := ret[0].(*varlogpb.TopicDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTopic indicates an expected call of GetTopic.
+func (mr *MockAdminMockRecorder) GetTopic(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopic", reflect.TypeOf((*MockAdmin)(nil).GetTopic), arg0, arg1)
+}
+
+// ListLogStreams mocks base method.
+func (m *MockAdmin) ListLogStreams(arg0 context.Context, arg1 types.TopicID) ([]*varlogpb.LogStreamDescriptor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListLogStreams", arg0, arg1)
+	ret0, _ := ret[0].([]*varlogpb.LogStreamDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListLogStreams indicates an expected call of ListLogStreams.
+func (mr *MockAdminMockRecorder) ListLogStreams(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLogStreams", reflect.TypeOf((*MockAdmin)(nil).ListLogStreams), arg0, arg1)
+}
+
+// ListMetadataRepositoryNodes mocks base method.
+func (m *MockAdmin) ListMetadataRepositoryNodes(arg0 context.Context) ([]*varlogpb.MetadataRepositoryNode, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMetadataRepositoryNodes", arg0)
+	ret0, _ := ret[0].([]*varlogpb.MetadataRepositoryNode)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMetadataRepositoryNodes indicates an expected call of ListMetadataRepositoryNodes.
+func (mr *MockAdminMockRecorder) ListMetadataRepositoryNodes(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMetadataRepositoryNodes", reflect.TypeOf((*MockAdmin)(nil).ListMetadataRepositoryNodes), arg0)
+}
+
+// ListStorageNodes mocks base method.
+func (m *MockAdmin) ListStorageNodes(arg0 context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListStorageNodes", arg0)
+	ret0, _ := ret[0].(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListStorageNodes indicates an expected call of ListStorageNodes.
+func (mr *MockAdminMockRecorder) ListStorageNodes(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStorageNodes", reflect.TypeOf((*MockAdmin)(nil).ListStorageNodes), arg0)
+}
+
+// ListTopics mocks base method.
+func (m *MockAdmin) ListTopics(arg0 context.Context) ([]varlogpb.TopicDescriptor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTopics", arg0)
+	ret0, _ := ret[0].([]varlogpb.TopicDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTopics indicates an expected call of ListTopics.
+func (mr *MockAdminMockRecorder) ListTopics(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTopics", reflect.TypeOf((*MockAdmin)(nil).ListTopics), arg0)
 }
 
 // RemoveLogStreamReplica mocks base method.
