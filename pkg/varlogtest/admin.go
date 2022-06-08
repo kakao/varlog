@@ -85,7 +85,19 @@ func (c *testAdmin) AddStorageNode(ctx context.Context, _ types.StorageNodeID, a
 }
 
 func (c *testAdmin) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
-	panic("not implemented")
+	if err := c.lock(); err != nil {
+		return err
+	}
+	defer c.unlock()
+
+	storageNodeMetaDesc := c.vt.storageNodes[storageNodeID]
+	if len(storageNodeMetaDesc.LogStreamReplicas) != 0 {
+		return errors.New("not empty")
+	}
+
+	delete(c.vt.storageNodes, storageNodeID)
+
+	return nil
 }
 
 func (c *testAdmin) GetTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error) {
