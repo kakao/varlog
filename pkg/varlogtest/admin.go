@@ -49,14 +49,37 @@ func (c *testAdmin) ListStorageNodes(ctx context.Context) (map[types.StorageNode
 		snmd := c.vt.storageNodes[snID]
 		ret[snID] = &snmd
 	}
+
 	return ret, nil
 }
 func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
-	return c.ListStorageNodes(ctx)
+	sns, err := c.ListStorageNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for snID, snmd := range sns {
+		for _, ls := range c.vt.logStreams {
+			for _, r := range ls.Replicas {
+				if r.StorageNodeID == snID {
+					snmd.LogStreamReplicas = append(snmd.LogStreamReplicas, snpb.LogStreamReplicaMetadataDescriptor{
+						LogStreamReplica: varlogpb.LogStreamReplica{
+							StorageNode: snmd.StorageNode,
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     ls.TopicID,
+								LogStreamID: ls.LogStreamID,
+							},
+						},
+					})
+				}
+			}
+		}
+	}
+	return sns, nil
 }
 
 // FIXME: Argument snid
-func (c *testAdmin) AddStorageNode(ctx context.Context, _ types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (c *testAdmin) AddStorageNode(ctx context.Context, storageNodeID types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -64,7 +87,10 @@ func (c *testAdmin) AddStorageNode(ctx context.Context, _ types.StorageNodeID, a
 
 	// NOTE: Use UTC rather than local to use gogoproto's non-nullable stdtime.
 	now := time.Now().UTC()
-	storageNodeID := c.vt.generateStorageNodeID()
+	if storageNodeID.Invalid() {
+		storageNodeID = c.vt.generateStorageNodeID()
+	}
+
 	storageNodeMetaDesc := snpb.StorageNodeMetadataDescriptor{
 		ClusterID: c.vt.clusterID,
 		StorageNode: varlogpb.StorageNode{
@@ -203,14 +229,19 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 		Replicas:    make([]*varlogpb.ReplicaDescriptor, c.vt.replicationFactor),
 	}
 
-	snIDs := c.vt.storageNodeIDs()
-	for i, j := range c.vt.rng.Perm(len(snIDs))[:c.vt.replicationFactor] {
-		snID := snIDs[j]
-		logStreamDesc.Replicas[i] = &varlogpb.ReplicaDescriptor{
-			StorageNodeID: c.vt.storageNodes[snID].StorageNode.StorageNodeID,
-			Path:          c.vt.storageNodes[snID].Storages[0].Path,
+	if logStreamReplicas == nil {
+		snIDs := c.vt.storageNodeIDs()
+		for i, j := range c.vt.rng.Perm(len(snIDs))[:c.vt.replicationFactor] {
+			snID := snIDs[j]
+			logStreamDesc.Replicas[i] = &varlogpb.ReplicaDescriptor{
+				StorageNodeID: c.vt.storageNodes[snID].StorageNode.StorageNodeID,
+				Path:          c.vt.storageNodes[snID].Storages[0].Path,
+			}
 		}
+	} else {
+		logStreamDesc.Replicas = logStreamReplicas
 	}
+
 	c.vt.logStreams[logStreamID] = logStreamDesc
 
 	invalidLogEntry := varlogpb.InvalidLogEntry()
@@ -223,7 +254,37 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 }
 
 func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
-	panic("not implemented")
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	topicDesc, ok := c.vt.topics[topicID]
+	if !ok || topicDesc.Status.Deleted() {
+		return nil, errors.New("no such topic")
+	}
+
+	logStreamDesc, ok := c.vt.logStreams[logStreamID]
+	if !ok {
+		return nil, errors.New("no such logstream")
+	}
+
+	found := false
+	for i, r := range logStreamDesc.Replicas {
+		if r.StorageNodeID == poppedReplica.StorageNodeID {
+			logStreamDesc.Replicas[i] = pushedReplica
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, errors.New("no such replica")
+	}
+
+	c.vt.logStreams[logStreamID] = logStreamDesc
+
+	return proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor), nil
 }
 
 func (c *testAdmin) UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {
@@ -231,7 +292,42 @@ func (c *testAdmin) UnregisterLogStream(ctx context.Context, topicID types.Topic
 }
 
 func (c *testAdmin) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) error {
-	panic("not implemented")
+	if err := c.lock(); err != nil {
+		return err
+	}
+	defer c.unlock()
+
+	_, ok := c.vt.storageNodes[storageNodeID]
+	if !ok {
+		return errors.New("no such storage node")
+	}
+
+	topicDesc, ok := c.vt.topics[topicID]
+	if !ok || topicDesc.Status.Deleted() {
+		return errors.New("no such topic")
+	}
+
+	logStreamDesc, ok := c.vt.logStreams[logStreamID]
+	if !ok {
+		return errors.New("no such logstream")
+	}
+
+	found := false
+	for i, r := range logStreamDesc.Replicas {
+		if r.StorageNodeID == storageNodeID {
+			logStreamDesc.Replicas = append(logStreamDesc.Replicas[:i], logStreamDesc.Replicas[i+1:]...)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil
+	}
+
+	c.vt.logStreams[logStreamID] = logStreamDesc
+
+	return nil
 }
 
 func (c *testAdmin) Seal(_ context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
