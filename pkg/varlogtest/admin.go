@@ -58,6 +58,11 @@ func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeI
 		return nil, err
 	}
 
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
 	for snID, snmd := range sns {
 		for _, ls := range c.vt.logStreams {
 			for _, r := range ls.Replicas {
