@@ -64,9 +64,21 @@ func (s *repository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataD
 
 	for i := range snmd.LogStreamReplicas {
 		snid := snmd.LogStreamReplicas[i].StorageNodeID
-		if lss, ok := s.logStreamStats[snmd.LogStreamReplicas[i].LogStreamID]; ok {
+		lsid := snmd.LogStreamReplicas[i].LogStreamID
+
+		lsd := s.meta.GetLogStream(lsid)
+		if lsd == nil {
+			// It may be zomebie log stream.
+			continue
+		}
+		if !lsd.IsReplica(snid) {
+			// It seems to be not registered yet or unregistered.
+			continue
+		}
+
+		if lss, ok := s.logStreamStats[lsid]; ok {
 			lss.setReplica(snid, snmd.LogStreamReplicas[i])
-			s.logStreamStats[snmd.LogStreamReplicas[i].LogStreamID] = lss
+			s.logStreamStats[lsid] = lss
 		}
 	}
 }
