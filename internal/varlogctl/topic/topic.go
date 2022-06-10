@@ -86,7 +86,7 @@ func Remove(id types.TopicID) varlogctl.ExecuteFunc {
 func Describe(id ...types.TopicID) varlogctl.ExecuteFunc {
 	return func(ctx context.Context, adm varlog.Admin) *result.Result {
 		res := result.New(resourceType)
-		tds, err := adm.Topics(ctx)
+		tds, err := adm.ListTopics(ctx)
 		if err != nil {
 			res.AddErrors(err)
 			return res

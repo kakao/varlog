@@ -4,7 +4,6 @@ package mrmanager
 
 import (
 	"context"
-	stderrors "errors"
 	"io"
 	"math"
 	"sync"
@@ -13,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
+	"github.com/kakao/varlog/internal/admin/admerrors"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
 	"github.com/kakao/varlog/pkg/types"
@@ -20,8 +20,6 @@ import (
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
-
-var ErrClusterMetadataNotFetched = stderrors.New("cluster metadata: not fetched")
 
 // ClusterMetadataView provides the latest metadata about the cluster.
 // TODO: It should have a way to guarantee that ClusterMetadata is the latest.
@@ -400,7 +398,7 @@ func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 	if mrm.dirty || time.Since(mrm.updated) > ReloadInterval {
 		meta, err := mrm.clusterMetadata(ctx)
 		if err != nil {
-			return nil, errors.Wrap(ErrClusterMetadataNotFetched, err.Error())
+			return nil, errors.Wrap(admerrors.ErrClusterMetadataNotFetched, err.Error())
 		}
 		mrm.meta = meta
 		mrm.dirty = false

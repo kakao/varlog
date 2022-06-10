@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kakao/varlog/internal/admin/admerrors"
 	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
@@ -156,10 +157,14 @@ func (sm *snManager) GetMetadata(ctx context.Context, snid types.StorageNodeID) 
 
 	mc, err := sm.clients.Get(snid)
 	if err != nil {
-		sm.refresh(ctx)
-		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
+		if !errors.Is(err, verrors.ErrClosed) {
+			_ = sm.refresh(ctx)
+			err = admerrors.ErrNoSuchStorageNode
+		}
+		return nil, errors.WithMessagef(err, "snmanager")
 	}
-	return mc.GetMetadata(ctx)
+	snmd, err := mc.GetMetadata(ctx)
+	return snmd, errors.WithMessagef(err, "snmanager")
 }
 
 func (sm *snManager) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) {

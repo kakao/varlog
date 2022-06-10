@@ -715,13 +715,6 @@ func (m *ListTopicsResponse) GetTopics() []varlogpb.TopicDescriptor {
 	return nil
 }
 
-// TopicsRequest represents a request to get a list of topics in the cluster.
-// message TopicsRequest {}
-// TopicsResponse represents a response of TopicsRequest.
-// message TopicsResponse {
-//   repeated varlogpb.TopicDescriptor topics = 1 [(gogoproto.nullable) =
-//   false];
-// }
 // AddTopicRequest represents a request to add a topic to the cluster.
 type AddTopicRequest struct {
 }
@@ -2728,7 +2721,8 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ClusterManagerClient interface {
-	// GetStorageNode returns the storage node specified by the request.
+	// GetStorageNode returns the metadata of storage node requested.
+	// It returns NotFound if the storage node does not exist.
 	GetStorageNode(ctx context.Context, in *GetStorageNodeRequest, opts ...grpc.CallOption) (*GetStorageNodeResponse, error)
 	// ListStorageNodes returns a list of storage nodes in the cluster.
 	ListStorageNodes(ctx context.Context, in *ListStorageNodesRequest, opts ...grpc.CallOption) (*ListStorageNodesResponse, error)
@@ -2745,9 +2739,6 @@ type ClusterManagerClient interface {
 	DescribeTopic(ctx context.Context, in *DescribeTopicRequest, opts ...grpc.CallOption) (*DescribeTopicResponse, error)
 	// ListTopics returns a list of topics in the cluster.
 	ListTopics(ctx context.Context, in *ListTopicsRequest, opts ...grpc.CallOption) (*ListTopicsResponse, error)
-	// Topics returns a list of topics in the cluster.
-	// Deprecated: Use ListTopics.
-	// rpc Topics(TopicsRequest) returns (TopicsResponse) {}
 	// AddTopic adds a new topic and returns its metadata.
 	AddTopic(ctx context.Context, in *AddTopicRequest, opts ...grpc.CallOption) (*AddTopicResponse, error)
 	UnregisterTopic(ctx context.Context, in *UnregisterTopicRequest, opts ...grpc.CallOption) (*UnregisterTopicResponse, error)
@@ -3014,7 +3005,8 @@ func (c *clusterManagerClient) RemoveMRPeer(ctx context.Context, in *RemoveMRPee
 
 // ClusterManagerServer is the server API for ClusterManager service.
 type ClusterManagerServer interface {
-	// GetStorageNode returns the storage node specified by the request.
+	// GetStorageNode returns the metadata of storage node requested.
+	// It returns NotFound if the storage node does not exist.
 	GetStorageNode(context.Context, *GetStorageNodeRequest) (*GetStorageNodeResponse, error)
 	// ListStorageNodes returns a list of storage nodes in the cluster.
 	ListStorageNodes(context.Context, *ListStorageNodesRequest) (*ListStorageNodesResponse, error)
@@ -3031,9 +3023,6 @@ type ClusterManagerServer interface {
 	DescribeTopic(context.Context, *DescribeTopicRequest) (*DescribeTopicResponse, error)
 	// ListTopics returns a list of topics in the cluster.
 	ListTopics(context.Context, *ListTopicsRequest) (*ListTopicsResponse, error)
-	// Topics returns a list of topics in the cluster.
-	// Deprecated: Use ListTopics.
-	// rpc Topics(TopicsRequest) returns (TopicsResponse) {}
 	// AddTopic adds a new topic and returns its metadata.
 	AddTopic(context.Context, *AddTopicRequest) (*AddTopicResponse, error)
 	UnregisterTopic(context.Context, *UnregisterTopicRequest) (*UnregisterTopicResponse, error)

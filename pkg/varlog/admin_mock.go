@@ -365,21 +365,6 @@ func (mr *MockAdminMockRecorder) Sync(arg0, arg1, arg2, arg3, arg4 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockAdmin)(nil).Sync), arg0, arg1, arg2, arg3, arg4)
 }
 
-// Topics mocks base method.
-func (m *MockAdmin) Topics(arg0 context.Context) ([]varlogpb.TopicDescriptor, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Topics", arg0)
-	ret0, _ := ret[0].([]varlogpb.TopicDescriptor)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Topics indicates an expected call of Topics.
-func (mr *MockAdminMockRecorder) Topics(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Topics", reflect.TypeOf((*MockAdmin)(nil).Topics), arg0)
-}
-
 // Trim mocks base method.
 func (m *MockAdmin) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error) {
 	m.ctrl.T.Helper()

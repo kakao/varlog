@@ -77,7 +77,10 @@ func (c *ManagementClient) GetMetadata(ctx context.Context) (*snpb.StorageNodeMe
 	rsp, err := c.rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
 		ClusterID: c.cid,
 	})
-	return rsp.GetStorageNodeMetadata(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
+	return rsp.GetStorageNodeMetadata(), errors.WithMessagef(
+		verrors.FromStatusError(err),
+		"storage node (%v): get metadata", c.target,
+	)
 }
 
 func (c *ManagementClient) AddLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, path string) error {

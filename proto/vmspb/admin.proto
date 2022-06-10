@@ -89,13 +89,6 @@ message ListTopicsResponse {
   repeated varlogpb.TopicDescriptor topics = 1
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "topics"];
 }
-// TopicsRequest represents a request to get a list of topics in the cluster.
-// message TopicsRequest {}
-// TopicsResponse represents a response of TopicsRequest.
-// message TopicsResponse {
-//   repeated varlogpb.TopicDescriptor topics = 1 [(gogoproto.nullable) =
-//   false];
-// }
 // AddTopicRequest represents a request to add a topic to the cluster.
 message AddTopicRequest {}
 // AddTopicResponse represents a response of AddTopicRequest.
@@ -362,7 +355,8 @@ message RemoveMRPeerRequest {
 message RemoveMRPeerResponse {}
 
 service ClusterManager {
-  // GetStorageNode returns the storage node specified by the request.
+  // GetStorageNode returns the metadata of storage node requested.
+  // It returns NotFound if the storage node does not exist.
   rpc GetStorageNode(GetStorageNodeRequest) returns (GetStorageNodeResponse) {}
   // ListStorageNodes returns a list of storage nodes in the cluster.
   rpc ListStorageNodes(ListStorageNodesRequest)
@@ -382,9 +376,6 @@ service ClusterManager {
   rpc DescribeTopic(DescribeTopicRequest) returns (DescribeTopicResponse) {}
   // ListTopics returns a list of topics in the cluster.
   rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse) {}
-  // Topics returns a list of topics in the cluster.
-  // Deprecated: Use ListTopics.
-  // rpc Topics(TopicsRequest) returns (TopicsResponse) {}
   // AddTopic adds a new topic and returns its metadata.
   rpc AddTopic(AddTopicRequest) returns (AddTopicResponse) {}
   rpc UnregisterTopic(UnregisterTopicRequest)
