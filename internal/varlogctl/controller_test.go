@@ -155,7 +155,7 @@ func TestTopic(t *testing.T) {
 	admin := varlog.NewMockAdmin(ctrl)
 
 	// Describe: list
-	admin.EXPECT().Topics(gomock.Any()).Return(nil, nil)
+	admin.EXPECT().ListTopics(gomock.Any()).Return(nil, nil)
 	testController(t, admin, topic.Describe(), func(res result.Result) {
 		require.NoError(t, res.Err())
 		require.Equal(t, 0, res.NumberOfDataItem())
@@ -170,7 +170,7 @@ func TestTopic(t *testing.T) {
 			types.LogStreamID(2),
 		},
 	}
-	admin.EXPECT().Topics(gomock.Any()).Return([]varlogpb.TopicDescriptor{td}, nil).Times(2)
+	admin.EXPECT().ListTopics(gomock.Any()).Return([]varlogpb.TopicDescriptor{td}, nil).Times(2)
 	testController(t, admin, topic.Describe(), func(res result.Result) {
 		require.NoError(t, res.Err())
 		require.Equal(t, 1, res.NumberOfDataItem())

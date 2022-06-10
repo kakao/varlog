@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sort"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.daumkakao.com/varlog/varlog/internal/admin/admerrors"
 	"github.daumkakao.com/varlog/varlog/internal/admin/snwatcher"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
@@ -153,21 +155,20 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 	return adm.snmgr.GetMetadata(ctx, snid)
 }
 
-func (adm *Admin) listStorageNodes(ctx context.Context) (ret map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, err error) {
+func (adm *Admin) listStorageNodes(ctx context.Context) (snmds map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, err error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
-	metadata, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	ret = make(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, len(metadata.StorageNodes))
-
-	wg.Add(len(metadata.StorageNodes))
-	for i := range metadata.StorageNodes {
-		snd := metadata.StorageNodes[i]
+	snmds = make(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, len(md.StorageNodes))
+	wg.Add(len(md.StorageNodes))
+	for i := range md.StorageNodes {
+		snd := md.StorageNodes[i]
 		go func() {
 			defer wg.Done()
 			snmd, err := adm.snmgr.GetMetadata(ctx, snd.StorageNodeID)
@@ -180,11 +181,11 @@ func (adm *Admin) listStorageNodes(ctx context.Context) (ret map[types.StorageNo
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			ret[snd.StorageNodeID] = snmd
+			snmds[snd.StorageNodeID] = snmd
 		}()
 	}
 	wg.Wait()
-	return ret, nil
+	return snmds, nil
 }
 
 // addStorageNode adds a new storage node to the cluster.
@@ -221,16 +222,15 @@ func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageN
 		return err
 	}
 
-	if _, err := clusmeta.MustHaveStorageNode(snid); err != nil {
-		return err
+	if clusmeta.GetStorageNode(snid) == nil {
+		return nil
 	}
 
 	// TODO (jun): Use helper function
 	for _, lsdesc := range clusmeta.GetLogStreams() {
 		for _, replica := range lsdesc.GetReplicas() {
 			if replica.GetStorageNodeID() == snid {
-				return errors.New("active log stream")
-				// return errors.Wrap(errRunningLogStream, "vms")
+				return errors.WithMessagef(admerrors.ErrNotIdleReplicas, "unregister storage node")
 			}
 		}
 	}
@@ -250,7 +250,7 @@ func (adm *Admin) getTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.T
 	}
 	td := md.GetTopic(tpid)
 	if td == nil {
-		return nil, errors.New("admin: no such topic")
+		return nil, errors.WithMessagef(admerrors.ErrNoSuchTopic, "get topic %d", int32(tpid))
 	}
 	return td, nil
 }
@@ -271,16 +271,13 @@ func (adm *Admin) listTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, e
 	return tds, nil
 }
 
-// addTopic adds a new topic.
-// It returns an error if rejected by the metadata repository.
-//
-// Note that the metadata repository accepts redundant RegisterTopic RPC only
-// if the topic has no log streams.
 func (adm *Admin) addTopic(ctx context.Context) (varlogpb.TopicDescriptor, error) {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
 
 	topicID := adm.tpidGen.Generate()
+	// Note that the metadata repository accepts redundant RegisterTopic
+	// RPC only if the topic has no log streams.
 	if err := adm.mrmgr.RegisterTopic(ctx, topicID); err != nil {
 		return varlogpb.TopicDescriptor{}, err
 	}
@@ -317,21 +314,21 @@ func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error
 func (adm *Admin) getLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessage(err, "get log stream")
 	}
 	td := md.GetTopic(tpid)
 	if td == nil {
-		return nil, errors.New("admin: no such topic")
+		return nil, errors.WithMessagef(admerrors.ErrNoSuchTopic, "get log stream: tpid %d", int32(tpid))
 	}
 	if !td.HasLogStream(lsid) {
-		return nil, errors.New("admin: no such log stream")
+		return nil, errors.WithMessagef(admerrors.ErrNoSuchLogStream, "get log stream: no log stream in topic: lsid %d", int32(lsid))
 	}
 	lsd := md.GetLogStream(lsid)
 	if lsd == nil {
-		return nil, errors.New("admin: no such log stream")
+		return nil, errors.WithMessagef(admerrors.ErrNoSuchLogStream, "get log stream: lsid %d", int32(lsid))
 	}
 	if lsd.TopicID != tpid {
-		return nil, errors.New("admin: unexpected topic")
+		return nil, fmt.Errorf("get log stream: unexpected topic: expected %d, actual %d", int32(tpid), int32(lsd.TopicID))
 	}
 	return lsd, nil
 }
@@ -339,11 +336,11 @@ func (adm *Admin) getLogStream(ctx context.Context, tpid types.TopicID, lsid typ
 func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]*varlogpb.LogStreamDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessage(err, "list log streams")
 	}
 	td := md.GetTopic(tpid)
 	if td == nil {
-		return nil, errors.New("admin: no such topic")
+		return nil, errors.WithMessagef(admerrors.ErrNoSuchTopic, "list log streams: tpid %d", int32(tpid))
 	}
 	lsds := make([]*varlogpb.LogStreamDescriptor, 0, len(td.LogStreams))
 	for _, lsid := range td.LogStreams {
@@ -352,8 +349,7 @@ func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]*va
 			continue
 		}
 		if lsd.TopicID != tpid {
-			// error: unexpected topic
-			return nil, errors.New("admin: unexpected topid")
+			return nil, fmt.Errorf("list log streams: unexpected topic: expected %d, actual %d", int32(tpid), int32(lsd.TopicID))
 		}
 		lsds = append(lsds, lsd)
 	}
@@ -388,14 +384,14 @@ func (adm *Admin) describeTopic(ctx context.Context, tpid types.TopicID) (td var
 	return td, lsds, nil
 }
 
-// AddLogStream adds a new log stream in the topic specified by the argument
+// addLogStream adds a new log stream in the topic specified by the argument
 // tpid.
 // It returns an error if the topic does not exist.
 // The argument replicas can be empty, then, this method selects proper
 // replicas.
 // If the argument replicas are defined, each storage node for the replica must
 // exist.
-func (adm *Admin) AddLogStream(ctx context.Context, tpid types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (adm *Admin) addLogStream(ctx context.Context, tpid types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	lsdesc, err := adm.addLogStreamInternal(ctx, tpid, replicas)
 	if err != nil {
 		return lsdesc, err
@@ -408,7 +404,7 @@ func (adm *Admin) AddLogStream(ctx context.Context, tpid types.TopicID, replicas
 	}
 
 	// FIXME: Failure of Unseal does not mean failure of AddLogStream.
-	return adm.Unseal(ctx, tpid, lsdesc.LogStreamID)
+	return adm.unseal(ctx, tpid, lsdesc.LogStreamID)
 }
 
 func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
@@ -454,16 +450,12 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 	}
 
 	// TODO: Choose the primary - e.g., shuffle logStreamReplicaMetas
-	return adm.addLogStream(ctx, logStreamDesc)
-}
-
-func (adm *Admin) addLogStream(ctx context.Context, lsdesc *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
-	if err := adm.snmgr.AddLogStream(ctx, lsdesc); err != nil {
+	if err := adm.snmgr.AddLogStream(ctx, logStreamDesc); err != nil {
 		return nil, err
 	}
 
 	// NB: RegisterLogStream returns nil if the logstream already exists.
-	return lsdesc, adm.mrmgr.RegisterLogStream(ctx, lsdesc)
+	return logStreamDesc, adm.mrmgr.RegisterLogStream(ctx, logStreamDesc)
 }
 
 func (adm *Admin) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor, lsdesc *varlogpb.LogStreamDescriptor) error {
@@ -657,16 +649,16 @@ func (adm *Admin) unlockLogStreamStatus(lsid types.LogStreamID) {
 	adm.muLogStreamStatus[lsid%numLogStreamMutex].Unlock()
 }
 
-// Seal seals the log stream identified by the argument tpid and lsid.
-// FIXME (jun): Define the specification of the Seal more concretely.
-func (adm *Admin) Seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) ([]snpb.LogStreamReplicaMetadataDescriptor, types.GLSN, error) {
+// seal seals the log stream identified by the argument tpid and lsid.
+// FIXME (jun): Define the specification of the seal more concretely.
+func (adm *Admin) seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) ([]snpb.LogStreamReplicaMetadataDescriptor, types.GLSN, error) {
 	adm.lockLogStreamStatus(lsid)
 	defer adm.unlockLogStreamStatus(lsid)
 
-	return adm.seal(ctx, tpid, lsid)
+	return adm.sealInternal(ctx, tpid, lsid)
 }
 
-func (adm *Admin) seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) ([]snpb.LogStreamReplicaMetadataDescriptor, types.GLSN, error) {
+func (adm *Admin) sealInternal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) ([]snpb.LogStreamReplicaMetadataDescriptor, types.GLSN, error) {
 	adm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusSealing)
 
 	lastGLSN, err := adm.mrmgr.Seal(ctx, lsid)
@@ -683,15 +675,15 @@ func (adm *Admin) seal(ctx context.Context, tpid types.TopicID, lsid types.LogSt
 	return result, lastGLSN, err
 }
 
-// Unseal unseals the log stream replicas corresponded with the given logStreamID.
-func (adm *Admin) Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+// unseal unseals the log stream replicas corresponded with the given logStreamID.
+func (adm *Admin) unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
 	adm.lockLogStreamStatus(lsid)
 	defer adm.unlockLogStreamStatus(lsid)
 
-	return adm.unseal(ctx, tpid, lsid)
+	return adm.unsealInternal(ctx, tpid, lsid)
 }
 
-func (adm *Admin) unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+func (adm *Admin) unsealInternal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
 	var err error
 	var clusmeta *varlogpb.MetadataDescriptor
 	adm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusUnsealing)
@@ -715,24 +707,24 @@ errOut:
 	return nil, err
 }
 
-// Sync copies the log entries of the src to the dst. Sync may be long-running, thus it
-// returns immediately without waiting for the completion of sync. Callers of Sync
-// periodically can call Sync, and get the current state of the sync progress.
-// SyncState is one of SyncStateError, SyncStateInProgress, or SyncStateComplete. If Sync
+// sync copies the log entries of the src to the dst. sync may be long-running, thus it
+// returns immediately without waiting for the completion of sync. Callers of sync
+// periodically can call sync, and get the current state of the sync progress.
+// SyncState is one of SyncStateError, SyncStateInProgress, or SyncStateComplete. If sync
 // returns SyncStateComplete, all the log entries were copied well. If it returns
 // SyncStateInProgress, it is still progressing. Otherwise, if it returns SyncStateError,
 // it is stopped by an error.
 // To start sync, the log stream status of the src must be LogStreamStatusSealed and the log
 // stream status of the dst must be LogStreamStatusSealing. If either of the statuses is not
-// correct, Sync returns ErrSyncInvalidStatus.
-func (adm *Admin) Sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
+// correct, sync returns ErrSyncInvalidStatus.
+func (adm *Admin) sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
 	adm.lockLogStreamStatus(lsid)
 	defer adm.unlockLogStreamStatus(lsid)
 
-	return adm.sync(ctx, tpid, lsid, srcID, dstID)
+	return adm.syncInternal(ctx, tpid, lsid, srcID, dstID)
 }
 
-func (adm *Admin) sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
+func (adm *Admin) syncInternal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID) (*snpb.SyncStatus, error) {
 	lastGLSN, err := adm.mrmgr.Seal(ctx, lsid)
 	if err != nil {
 		return nil, err
@@ -876,7 +868,7 @@ func (adm *Admin) HandleHeartbeatTimeout(ctx context.Context, snid types.Storage
 	for _, ls := range meta.GetLogStreams() {
 		if ls.IsReplica(snid) {
 			adm.logger.Debug("seal due to heartbeat timeout", zap.Any("snid", snid), zap.Any("lsid", ls.LogStreamID))
-			adm.Seal(ctx, ls.TopicID, ls.LogStreamID)
+			adm.seal(ctx, ls.TopicID, ls.LogStreamID)
 		}
 	}
 }
@@ -891,14 +883,14 @@ func (adm *Admin) checkLogStreamStatus(ctx context.Context, tpid types.TopicID, 
 	case varlogpb.LogStreamStatusRunning:
 		if mrStatus.Sealed() || replicaStatus.Sealed() {
 			adm.logger.Info("seal due to status mismatch", zap.Any("lsid", lsid))
-			adm.seal(ctx, tpid, lsid)
+			adm.sealInternal(ctx, tpid, lsid)
 		}
 
 	case varlogpb.LogStreamStatusSealing:
 		for _, r := range lsStat.Replicas() {
 			if r.Status != varlogpb.LogStreamStatusSealed {
 				adm.logger.Info("seal due to status", zap.Any("lsid", lsid))
-				adm.seal(ctx, tpid, lsid)
+				adm.sealInternal(ctx, tpid, lsid)
 				return
 			}
 		}
@@ -921,7 +913,7 @@ func (adm *Admin) checkLogStreamStatus(ctx context.Context, tpid types.TopicID, 
 				return
 			} else if r.Status == varlogpb.LogStreamStatusSealing {
 				adm.logger.Info("seal due to unexpected status", zap.Any("lsid", lsid))
-				adm.seal(ctx, tpid, lsid)
+				adm.sealInternal(ctx, tpid, lsid)
 				return
 			}
 		}
@@ -970,7 +962,7 @@ func (adm *Admin) syncLogStream(ctx context.Context, topicID types.TopicID, logS
 	// node, it cannot check whether a source or target is selected. It
 	// thus checks that min and max are in a valid range.
 	if src != tgt && !max.Invalid() && min != types.MaxVersion {
-		status, err := adm.sync(ctx, topicID, logStreamID, src, tgt)
+		status, err := adm.syncInternal(ctx, topicID, logStreamID, src, tgt)
 		adm.logger.Debug("sync", zap.Any("lsid", logStreamID), zap.Any("src", src), zap.Any("dst", tgt), zap.String("status", status.String()), zap.Error(err))
 
 		//TODO: Unseal

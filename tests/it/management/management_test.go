@@ -673,7 +673,7 @@ func TestAddTopic(t *testing.T) {
 
 			addTopicID := topicDesc.TopicID
 
-			tds, err := vmsCL.Topics(context.TODO())
+			tds, err := vmsCL.ListTopics(context.TODO())
 			So(err, ShouldBeNil)
 			So(tds, ShouldHaveLength, 4)
 

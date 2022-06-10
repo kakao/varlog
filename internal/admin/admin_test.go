@@ -12,6 +12,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.daumkakao.com/varlog/varlog/internal/admin"
+	"github.daumkakao.com/varlog/varlog/internal/admin/admerrors"
 	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
 	"github.daumkakao.com/varlog/varlog/internal/admin/snmanager"
 	"github.daumkakao.com/varlog/varlog/internal/admin/snwatcher"
@@ -214,7 +215,7 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 					&varlogpb.MetadataDescriptor{}, nil,
 				).Times(3)
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
-					nil, errors.New("error"),
+					nil, admerrors.ErrClusterMetadataNotFetched,
 				)
 			},
 		},
