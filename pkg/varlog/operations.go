@@ -107,7 +107,7 @@ func (v *logImpl) logStreamMetadata(ctx context.Context, tpID types.TopicID, lsI
 			err = multierr.Append(err, cerr)
 			continue
 		}
-		if !lsd.Status.Running() {
+		if lsd.Status.Deleted() {
 			err = multierr.Append(err, errors.Errorf("invalid status: %s", lsd.Status.String()))
 			continue
 		}
