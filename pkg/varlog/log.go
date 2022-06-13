@@ -36,8 +36,16 @@ type Log interface {
 
 	Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error
 
-	// LogStreamMetadata returns a metadata of log stream identified with the topicID and logStreamID.
-	LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error)
+	// LogStreamMetadata returns metadata of log stream specified by the
+	// arguments tpid and lsid.
+	// It returns the first metadata that is fetched successfully from all
+	// replicas in the log stream.
+	// It returns an error if the log stream does not exist or fails to
+	// fetch metadata from all replicas.
+	//
+	// FIXME (jun): Change the return type of this method to
+	// snpb.LogStreamMetadataDescriptor.
+	LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error)
 }
 
 type AppendResult struct {
@@ -173,8 +181,8 @@ func (v *logImpl) Trim(ctx context.Context, topicID types.TopicID, until types.G
 	return v.trim(ctx, topicID, until, opts)
 }
 
-func (v *logImpl) LogStreamMetadata(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
-	return v.logStreamMetadata(ctx, topicID, logStreamID)
+func (v *logImpl) LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
+	return v.logStreamMetadata(ctx, tpid, lsid)
 }
 
 func (v *logImpl) Close() (err error) {

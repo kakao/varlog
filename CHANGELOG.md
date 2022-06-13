@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - Fixed to ignore zombie or not registered replicas in `internal/admin/stats.Repository`. (#VARLOG-756/#674)
+- RPC `proto/snpb.(LogIOClient).LogStreamMetadata` returns metadata of log stream even if the log stream is sealed. (#VARLOG-754/#676)
 
 
 ## [0.1.10] - 2022-06-09
