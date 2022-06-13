@@ -7,6 +7,7 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"golang.org/x/sync/errgroup"
@@ -184,6 +185,37 @@ func TestRemoveLogStreamReplica(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestAddLogStreamWithAutoUnseal(t *testing.T) {
+	clus := it.NewVarlogCluster(t,
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfLogStreams(1),
+		it.WithNumberOfClients(1),
+		it.WithNumberOfTopics(1),
+		it.WithVMSOptions(
+			admin.WithAutoUnseal(),
+		),
+	)
+	defer clus.Close(t)
+
+	tpid := clus.TopicIDs()[0]
+	client := clus.GetVMSClient(t)
+
+	lsds, err := client.ListLogStreams(context.Background(), tpid)
+	assert.NoError(t, err)
+	assert.Len(t, lsds, 1)
+
+	_, err = client.AddLogStream(context.Background(), tpid, nil)
+	assert.NoError(t, err)
+
+	lsds, err = client.ListLogStreams(context.Background(), tpid)
+	assert.NoError(t, err)
+
+	for _, lsd := range lsds {
+		assert.Equal(t, varlogpb.LogStreamStatusRunning, lsd.Status)
+	}
+}
+
 func TestSealUnseal(t *testing.T) {
 	clus := it.NewVarlogCluster(t,
 		it.WithReplicationFactor(2),
@@ -323,6 +355,73 @@ func TestSyncLogStream(t *testing.T) {
 			})
 		})
 	}))
+}
+
+func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
+	const numLogs = 10
+
+	clus := it.NewVarlogCluster(t,
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfLogStreams(1),
+		it.WithNumberOfClients(1),
+		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
+		it.WithNumberOfTopics(1),
+		it.WithVMSOptions(
+			admin.WithAutoUnseal(),
+		),
+	)
+	defer clus.Close(t)
+
+	tpid := clus.TopicIDs()[0]
+	lsid := clus.LogStreamID(t, tpid, 0)
+
+	client := clus.ClientAtIndex(t, 0)
+	adm := clus.GetVMSClient(t)
+
+	for i := 0; i < numLogs; i++ {
+		res := client.Append(context.Background(), tpid, [][]byte{[]byte("foo")})
+		assert.NoError(t, res.Err)
+	}
+
+	{
+		rsp, err := adm.Seal(context.Background(), tpid, lsid)
+		assert.NoError(t, err)
+		assert.EqualValues(t, numLogs, rsp.SealedGLSN)
+	}
+
+	newsnid := clus.AddSN(t)
+	replicas := clus.ReplicasOf(t, lsid)
+	oldsnid := replicas[len(replicas)-1].StorageNodeID
+
+	// test if oldsnid exists in the logstream and newsnid does not exist
+	// in the log stream.
+	lsd, err := adm.GetLogStream(context.Background(), tpid, lsid)
+	assert.NoError(t, err)
+	assert.False(t, lsd.IsReplica(newsnid))
+	assert.True(t, lsd.IsReplica(oldsnid))
+
+	// update log stream
+	clus.UpdateLS(t, tpid, lsid, oldsnid, newsnid)
+
+	// test if oldsnid does not exist in the logstream and newsnid exists
+	// in the log stream.
+	lsd, err = adm.GetLogStream(context.Background(), tpid, lsid)
+	assert.NoError(t, err)
+	assert.True(t, lsd.IsReplica(newsnid))
+	assert.False(t, lsd.IsReplica(oldsnid))
+
+	// Wait for synchronization of logs and unsealing new replica.
+	assert.Eventually(t, func() bool {
+		snmd, err := adm.GetStorageNode(context.Background(), newsnid)
+		assert.NoError(t, err)
+
+		lsrmd, ok := snmd.GetLogStream(lsid)
+		assert.True(t, ok)
+		return lsrmd.LocalHighWatermark.GLSN == types.GLSN(numLogs) &&
+			lsrmd.Status == varlogpb.LogStreamStatusRunning
+
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func TestSealLogStreamSealedIncompletely(t *testing.T) {

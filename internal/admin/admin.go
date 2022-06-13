@@ -397,6 +397,18 @@ func (adm *Admin) addLogStream(ctx context.Context, tpid types.TopicID, replicas
 		return lsdesc, err
 	}
 
+	if adm.enableAutoUnseal {
+		if err := adm.waitUnsealed(ctx, lsdesc.LogStreamID); err != nil {
+			return nil, err
+		}
+		// FIXME: Failure of Seal does not mean failure of AddLogStream.
+		clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return clusmeta.GetLogStream(lsdesc.LogStreamID), nil
+	}
+
 	// FIXME: Failure of Seal does not mean failure of AddLogStream.
 	err = adm.waitSealed(ctx, lsdesc.LogStreamID)
 	if err != nil {
@@ -489,6 +501,23 @@ func (adm *Admin) waitSealed(ctx context.Context, lsid types.LogStreamID) error 
 		case <-ticker.C:
 			lsStat := adm.statRepository.GetLogStream(lsid).Copy()
 			if lsStat.Status() == varlogpb.LogStreamStatusSealed {
+				return nil
+			}
+		}
+	}
+}
+
+func (adm *Admin) waitUnsealed(ctx context.Context, lsid types.LogStreamID) error {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			lsStat := adm.statRepository.GetLogStream(lsid).Copy()
+			if lsStat.Status() == varlogpb.LogStreamStatusRunning {
 				return nil
 			}
 		}
@@ -940,11 +969,16 @@ func (adm *Admin) syncLogStream(ctx context.Context, topicID types.TopicID, logS
 	}
 	sort.Slice(snIDs, func(i, j int) bool { return snIDs[i] < snIDs[j] })
 
+	sealed := true
 	for i, snID := range snIDs {
 		r, _ := lsStat.Replica(snID)
 
 		if !r.Status.Sealed() {
 			return
+		}
+
+		if r.Status != varlogpb.LogStreamStatusSealed {
+			sealed = false
 		}
 
 		if r.Status == varlogpb.LogStreamStatusSealing && (i == 0 || r.Version < min) {
@@ -958,18 +992,41 @@ func (adm *Admin) syncLogStream(ctx context.Context, topicID types.TopicID, logS
 		}
 	}
 
+	// TODO (jun): Extract this block to separate method.
+	if sealed && adm.enableAutoUnseal {
+		lsd, err := adm.unsealInternal(context.Background(), topicID, logStreamID)
+		if err != nil {
+			adm.logger.Error("could not unseal",
+				zap.Int32("tpid", int32(topicID)),
+				zap.Int32("lsid", int32(logStreamID)),
+				zap.Error(err),
+			)
+			return
+		}
+		adm.logger.Debug("unseal",
+			zap.Int32("tpid", int32(topicID)),
+			zap.Int32("lsid", int32(logStreamID)),
+			zap.String("lsd", lsd.String()),
+		)
+		return
+	}
+
 	// FIXME (jun): Since there is no invalid identifier for the storage
 	// node, it cannot check whether a source or target is selected. It
 	// thus checks that min and max are in a valid range.
 	if src != tgt && !max.Invalid() && min != types.MaxVersion {
+		logger := adm.logger.With(
+			zap.Int32("tpid", int32(topicID)),
+			zap.Int32("lsid", int32(logStreamID)),
+			zap.Int32("src", int32(src)),
+			zap.Int32("dst", int32(tgt)),
+		)
 		status, err := adm.syncInternal(ctx, topicID, logStreamID, src, tgt)
-		adm.logger.Debug("sync", zap.Any("lsid", logStreamID), zap.Any("src", src), zap.Any("dst", tgt), zap.String("status", status.String()), zap.Error(err))
-
-		//TODO: Unseal
-		//status, _ := adm.Sync(context.TODO(), ls.LogStreamID, src, tgt)
-		//if status.GetState() == snpb.SyncStateComplete {
-		//adm.Unseal(context.TODO(), ls.LogStreamID)
-		//}
+		if err != nil {
+			logger.Error("could not sync", zap.Error(err))
+			return
+		}
+		logger.Debug("sync", zap.String("status", status.String()))
 	}
 }
 
