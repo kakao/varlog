@@ -1059,10 +1059,11 @@ func TestAdmin_AddLogStream(t *testing.T) {
 	)
 
 	tcs := []struct {
-		name     string
-		success  bool
-		replicas []*varlogpb.ReplicaDescriptor
-		prepare  func(mock *testMock)
+		name       string
+		success    bool
+		replicas   []*varlogpb.ReplicaDescriptor
+		autoUnseal bool
+		prepare    func(mock *testMock)
 	}{
 		{
 			name:    "ReplicaSelectionError",
@@ -1210,6 +1211,44 @@ func TestAdmin_AddLogStream(t *testing.T) {
 				mock.MockMetadataRepositoryManager.EXPECT().Unseal(gomock.Any(), gomock.Any()).Return(nil)
 			},
 		},
+		{
+			name:    "SuccessWithAutoUnseal",
+			success: true,
+			replicas: []*varlogpb.ReplicaDescriptor{
+				{StorageNodeID: snid1, Path: "/tmp"},
+				{StorageNodeID: snid2, Path: "/tmp"},
+			},
+			autoUnseal: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						StorageNodes: []*varlogpb.StorageNodeDescriptor{
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: snid1,
+									Address:       "127.0.0.1:10000",
+								},
+								Paths: []string{"/tmp"},
+							},
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: snid2,
+									Address:       "127.0.0.1:10001",
+								},
+								Paths: []string{"/tmp"},
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(nil)
+				mock.MockMetadataRepositoryManager.EXPECT().RegisterLogStream(gomock.Any(), gomock.Any()).Return(nil)
+
+				// for sealed
+				mock.MockRepository.EXPECT().GetLogStream(gomock.Any()).Return(
+					stats.NewLogStreamStat(varlogpb.LogStreamStatusRunning, nil),
+				)
+			},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -1220,7 +1259,7 @@ func TestAdmin_AddLogStream(t *testing.T) {
 			mock := newTestMock(ctrl)
 			tc.prepare(mock)
 
-			tadm := admin.TestNewClusterManager(t,
+			opts := []admin.Option{
 				admin.WithReplicationFactor(replicationFactor),
 				admin.WithListenAddress("127.0.0.1:0"),
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
@@ -1230,7 +1269,12 @@ func TestAdmin_AddLogStream(t *testing.T) {
 				admin.WithStorageNodeWatcherOptions(
 					snwatcher.WithTick(time.Hour), // no heartbeat checking
 				),
-			)
+			}
+			if tc.autoUnseal {
+				opts = append(opts, admin.WithAutoUnseal())
+			}
+
+			tadm := admin.TestNewClusterManager(t, opts...)
 			tadm.Serve(t)
 			defer tadm.Close(t)
 

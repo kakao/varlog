@@ -27,6 +27,7 @@ type config struct {
 	replicationFactor        uint
 	logStreamGCTimeout       time.Duration
 	disableAutoLogStreamSync bool
+	enableAutoUnseal         bool
 	mrmgr                    mrmanager.MetadataRepositoryManager
 	snmgr                    snmanager.StorageNodeManager
 	snSelector               ReplicaSelector
@@ -140,6 +141,12 @@ func WithLogStreamGCTimeout(logStreamGCTimeout time.Duration) Option {
 func WithoutAutoLogStreamSync() Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.disableAutoLogStreamSync = true
+	})
+}
+
+func WithAutoUnseal() Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.enableAutoUnseal = true
 	})
 }
 

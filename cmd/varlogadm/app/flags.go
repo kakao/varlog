@@ -25,6 +25,11 @@ var (
 		Name: "disable-auto-log-stream-sync",
 		Envs: []string{"DISABLE_AUTO_LOG_STREAM_SYNC"},
 	}
+	flagAutoUnseal = flags.FlagDesc{
+		Name:    "auto-unseal",
+		Aliases: []string{"enable-auto-unseal", "with-auto-unseal"},
+		Envs:    []string{"AUTO_UNSEAL", "ENABLE_AUTO_UNSEAL", "WITH_AUTO_UNSEAL"},
+	}
 
 	flagInitMRConnRetryCount = flags.FlagDesc{
 		Name:  "init-mr-conn-retry-count",

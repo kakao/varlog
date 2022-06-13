@@ -38,6 +38,7 @@ func initStartCommand() *cli.Command {
 			flagReplicationFactor.UintFlag(false, admin.DefaultReplicationFactor),
 			flagLogStreamGCTimeout.DurationFlag(false, admin.DefaultLogStreamGCTimeout),
 			flagDisableAutoLogStreamSync.BoolFlag(),
+			flagAutoUnseal.BoolFlag(),
 
 			flagMetadataRepository.StringSliceFlag(true, nil),
 			flagInitMRConnRetryCount.IntFlag(false, mrmanager.DefaultInitialMRConnectRetryCount),
@@ -104,6 +105,9 @@ func start(c *cli.Context) error {
 	}
 	if c.Bool(flagDisableAutoLogStreamSync.Name) {
 		opts = append(opts, admin.WithoutAutoLogStreamSync())
+	}
+	if c.Bool(flagAutoUnseal.Name) {
+		opts = append(opts, admin.WithAutoUnseal())
 	}
 	return Main(opts, logger)
 }

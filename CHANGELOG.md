@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Added a new flag `--auto-unseal`, which enables auto unsealing for the sealed log stream, to the varlogadm CLI. (#VARLOG-757/#678)
+
 ### Changed
 - Fixed to ignore zombie or not registered replicas in `internal/admin/stats.Repository`. (#VARLOG-756/#674)
 - RPC `proto/snpb.(LogIOClient).LogStreamMetadata` returns metadata of log stream even if the log stream is sealed. (#VARLOG-754/#676)
