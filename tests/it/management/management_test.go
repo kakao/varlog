@@ -417,7 +417,6 @@ func TestSyncLogStream(t *testing.T) {
 }
 
 func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
-	t.Skip("Unable to update log streams since some replicas are automatically unsealed.")
 	const numLogs = 10
 
 	clus := it.NewVarlogCluster(t,
@@ -444,15 +443,16 @@ func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
 		assert.NoError(t, res.Err)
 	}
 
-	{
-		rsp, err := adm.Seal(context.Background(), tpid, lsid)
-		assert.NoError(t, err)
-		assert.EqualValues(t, numLogs, rsp.SealedGLSN)
-	}
-
 	newsnid := clus.AddSN(t)
 	replicas := clus.ReplicasOf(t, lsid)
 	oldsnid := replicas[len(replicas)-1].StorageNodeID
+
+	clus.CloseSN(t, oldsnid)
+	assert.Eventually(t, func() bool {
+		lsd, err := adm.GetLogStream(context.Background(), tpid, lsid)
+		assert.NoError(t, err)
+		return lsd.Status.Sealed()
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// test if oldsnid exists in the logstream and newsnid does not exist
 	// in the log stream.

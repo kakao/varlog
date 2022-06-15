@@ -90,10 +90,10 @@ func (s *repository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataD
 	snm, ok := s.storageNodes[snid]
 	if !ok {
 		snm = &vmspb.StorageNodeMetadata{
-			StorageNodeMetadataDescriptor: snmd,
-			CreateTime:                    snd.CreateTime,
+			CreateTime: snd.CreateTime,
 		}
 	}
+	snm.StorageNodeMetadataDescriptor = snmd
 	snm.LastHeartbeatTime = ts
 	s.storageNodes[snid] = snm
 
