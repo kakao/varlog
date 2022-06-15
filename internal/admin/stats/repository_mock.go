@@ -7,12 +7,14 @@ package stats
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 
 	types "github.daumkakao.com/varlog/varlog/pkg/types"
 	snpb "github.daumkakao.com/varlog/varlog/proto/snpb"
 	varlogpb "github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	vmspb "github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
 // MockRepository is a mock of Repository interface.
@@ -52,16 +54,57 @@ func (mr *MockRepositoryMockRecorder) GetLogStream(arg0 interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogStream", reflect.TypeOf((*MockRepository)(nil).GetLogStream), arg0)
 }
 
-// Report mocks base method.
-func (m *MockRepository) Report(arg0 context.Context, arg1 *snpb.StorageNodeMetadataDescriptor) {
+// GetStorageNode mocks base method.
+func (m *MockRepository) GetStorageNode(arg0 types.StorageNodeID) (*vmspb.StorageNodeMetadata, bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Report", arg0, arg1)
+	ret := m.ctrl.Call(m, "GetStorageNode", arg0)
+	ret0, _ := ret[0].(*vmspb.StorageNodeMetadata)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetStorageNode indicates an expected call of GetStorageNode.
+func (mr *MockRepositoryMockRecorder) GetStorageNode(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNode", reflect.TypeOf((*MockRepository)(nil).GetStorageNode), arg0)
+}
+
+// ListStorageNodes mocks base method.
+func (m *MockRepository) ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListStorageNodes")
+	ret0, _ := ret[0].(map[types.StorageNodeID]*vmspb.StorageNodeMetadata)
+	return ret0
+}
+
+// ListStorageNodes indicates an expected call of ListStorageNodes.
+func (mr *MockRepositoryMockRecorder) ListStorageNodes() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStorageNodes", reflect.TypeOf((*MockRepository)(nil).ListStorageNodes))
+}
+
+// RemoveStorageNode mocks base method.
+func (m *MockRepository) RemoveStorageNode(arg0 types.StorageNodeID) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RemoveStorageNode", arg0)
+}
+
+// RemoveStorageNode indicates an expected call of RemoveStorageNode.
+func (mr *MockRepositoryMockRecorder) RemoveStorageNode(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveStorageNode", reflect.TypeOf((*MockRepository)(nil).RemoveStorageNode), arg0)
+}
+
+// Report mocks base method.
+func (m *MockRepository) Report(arg0 context.Context, arg1 *snpb.StorageNodeMetadataDescriptor, arg2 time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Report", arg0, arg1, arg2)
 }
 
 // Report indicates an expected call of Report.
-func (mr *MockRepositoryMockRecorder) Report(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) Report(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Report", reflect.TypeOf((*MockRepository)(nil).Report), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Report", reflect.TypeOf((*MockRepository)(nil).Report), arg0, arg1, arg2)
 }
 
 // SetLogStreamStatus mocks base method.

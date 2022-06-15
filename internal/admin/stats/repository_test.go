@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -46,7 +47,7 @@ func TestStats_BadClusterMetadataView(t *testing.T) {
 				Status: varlogpb.LogStreamStatusRunning,
 			},
 		},
-	})
+	}, time.Now())
 	lss = repos.GetLogStream(lsid)
 	assert.Equal(t, varlogpb.LogStreamStatusDeleted, lss.Status())
 }
@@ -107,7 +108,7 @@ func TestStats_Report(t *testing.T) {
 				Status: varlogpb.LogStreamStatusRunning,
 			},
 		},
-	})
+	}, time.Now())
 	lss = repos.GetLogStream(lsid)
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, lss.Status())
 	lsrmd, ok := lss.Replica(snid)
@@ -167,12 +168,19 @@ func TestStats_UpdatedClusterMetadata(t *testing.T) {
 				Status: varlogpb.LogStreamStatusRunning,
 			},
 		},
-	})
+	}, time.Now())
 	lss = repos.GetLogStream(lsid)
 	assert.Equal(t, varlogpb.LogStreamStatusRunning, lss.Status())
 
 	// Updated cluster metadata does not affect the status of LogStreamStat.
 	cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+		StorageNodes: []*varlogpb.StorageNodeDescriptor{
+			{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snid,
+				},
+			},
+		},
 		LogStreams: []*varlogpb.LogStreamDescriptor{
 			{
 				TopicID:     tpid,
@@ -187,7 +195,11 @@ func TestStats_UpdatedClusterMetadata(t *testing.T) {
 			},
 		},
 	}, nil)
+	now := time.Now().UTC()
 	repos.Report(context.Background(), &snpb.StorageNodeMetadataDescriptor{
+		StorageNode: varlogpb.StorageNode{
+			StorageNodeID: snid,
+		},
 		LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
 			{
 				LogStreamReplica: varlogpb.LogStreamReplica{
@@ -203,20 +215,30 @@ func TestStats_UpdatedClusterMetadata(t *testing.T) {
 				Status: varlogpb.LogStreamStatusSealing,
 			},
 		},
-	})
+	}, now)
 	lss = repos.GetLogStream(lsid)
 	assert.Equal(t, varlogpb.LogStreamStatusRunning, lss.Status())
 	lsrmd, ok := lss.Replica(snid)
 	assert.True(t, ok)
 	assert.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+	snm, ok := repos.GetStorageNode(snid)
+	assert.True(t, ok)
+	assert.Equal(t, now, snm.LastHeartbeatTime)
 
 	repos.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusSealed)
 	lss = repos.GetLogStream(lsid)
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, lss.Status())
 
-	// Updated cluster metadata, which is changes replica, resets replica
+	// Updated cluster metadata that is changed replica resets replica
 	// status to LogStreamStatusRunning.
 	cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{
+		StorageNodes: []*varlogpb.StorageNodeDescriptor{
+			{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snid + 1,
+				},
+			},
+		},
 		LogStreams: []*varlogpb.LogStreamDescriptor{
 			{
 				TopicID:     tpid,
@@ -231,7 +253,11 @@ func TestStats_UpdatedClusterMetadata(t *testing.T) {
 			},
 		},
 	}, nil)
+	now = time.Now().UTC()
 	repos.Report(context.Background(), &snpb.StorageNodeMetadataDescriptor{
+		StorageNode: varlogpb.StorageNode{
+			StorageNodeID: snid + 1,
+		},
 		LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
 			{
 				LogStreamReplica: varlogpb.LogStreamReplica{
@@ -247,10 +273,13 @@ func TestStats_UpdatedClusterMetadata(t *testing.T) {
 				Status: varlogpb.LogStreamStatusRunning,
 			},
 		},
-	})
+	}, now)
 	lss = repos.GetLogStream(lsid)
 	assert.Equal(t, varlogpb.LogStreamStatusRunning, lss.Status())
 	replicas := lss.Replicas()
 	assert.Contains(t, replicas, snid+1)
 	assert.NotContains(t, replicas, snid)
+	snm, ok = repos.GetStorageNode(snid + 1)
+	assert.True(t, ok)
+	assert.Equal(t, now, snm.LastHeartbeatTime)
 }

@@ -25,7 +25,7 @@ type Admin interface {
 
 	// GetStorageNode returns the metadata of the storage node specified by the argument snid.
 	// It returns the ErrNotExist error if the storage node does not exist.
-	GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error)
+	GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error)
 	// ListStorageNodes returns a map of StorageNodeIDs and their metadata.
 	// It returns a nil map if no storage nodes exist in the cluster.
 	// It is okay if it could not fetch metadata of storage nodes, however,
@@ -33,10 +33,10 @@ type Admin interface {
 	// StorageNodeStatusUnavailable.
 	// If the admin could not fetch cluster metadata, it returns an error,
 	// and users can retry this RPC.
-	ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error)
+	ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error)
 	// GetStorageNodes returns a map of StorageNodeIDs and their addresses.
 	// Deprecated: Use ListStorageNodes.
-	GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error)
+	GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error)
 	// AddStorageNode registers a storage node, whose ID and address are
 	// the argument snid and addr respectively, to the cluster.
 	// It is okay to call AddStorageNode more than one time to add the same
@@ -166,7 +166,7 @@ func (c *admin) Close() error {
 	return c.rpcConn.Close()
 }
 
-func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error) {
 	rsp, err := c.rpcClient.GetStorageNode(ctx, &vmspb.GetStorageNodeRequest{
 		StorageNodeID: snid,
 	})
@@ -179,12 +179,12 @@ func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*
 	return rsp.GetStorageNode(), nil
 }
 
-func (c *admin) ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
+func (c *admin) ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
 	rsp, err := c.rpcClient.ListStorageNodes(ctx, &vmspb.ListStorageNodesRequest{})
 	return rsp.GetStorageNodes(), errors.WithMessage(err, "admin: list storage nodes") //verrors.FromStatusError(err)
 }
 
-func (c *admin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
+func (c *admin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
 	return c.ListStorageNodes(ctx)
 }
 

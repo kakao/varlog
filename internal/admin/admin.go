@@ -76,11 +76,12 @@ func New(ctx context.Context, opts ...Option) (*Admin, error) {
 		healthServer: health.NewServer(),
 	}
 	cm.snw, err = snwatcher.New(append(
-		cfg.snwatcherOpts,
+		cm.snwatcherOpts,
 		snwatcher.WithClusterMetadataView(cmView),
-		snwatcher.WithStorageNodeManager(cfg.snmgr),
+		snwatcher.WithStorageNodeManager(cm.snmgr),
+		snwatcher.WithStatisticsRepository(cm.statRepository),
 		snwatcher.WithStorageNodeWatcherHandler(cm),
-		snwatcher.WithLogger(cfg.logger),
+		snwatcher.WithLogger(cm.logger),
 	)...)
 	return cm, err
 }
@@ -151,41 +152,18 @@ func (adm *Admin) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, e
 	return adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 }
 
-func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
-	return adm.snmgr.GetMetadata(ctx, snid)
+func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error) {
+	snm, ok := adm.statRepository.GetStorageNode(snid)
+	if !ok {
+		return nil, errors.WithMessagef(admerrors.ErrNoSuchStorageNode, "get storage node %d", int32(snid))
+	}
+	return snm, nil
 }
 
-func (adm *Admin) listStorageNodes(ctx context.Context) (snmds map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, err error) {
+func (adm *Admin) listStorageNodes(ctx context.Context) (snmds map[types.StorageNodeID]*vmspb.StorageNodeMetadata, err error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
-	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	snmds = make(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, len(md.StorageNodes))
-	wg.Add(len(md.StorageNodes))
-	for i := range md.StorageNodes {
-		snd := md.StorageNodes[i]
-		go func() {
-			defer wg.Done()
-			snmd, err := adm.snmgr.GetMetadata(ctx, snd.StorageNodeID)
-			if err != nil {
-				snmd = &snpb.StorageNodeMetadataDescriptor{
-					ClusterID:   adm.cid,
-					StorageNode: snd.StorageNode,
-					Status:      varlogpb.StorageNodeStatusUnavailable,
-				}
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			snmds[snd.StorageNodeID] = snmd
-		}()
-	}
-	wg.Wait()
-	return snmds, nil
+	return adm.statRepository.ListStorageNodes(), nil
 }
 
 // addStorageNode adds a new storage node to the cluster.
@@ -203,13 +181,27 @@ func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, 
 		return nil, err
 	}
 
+	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// If there is a storage node whose ID and address are the same as the
+	// arguments snid and addr, it will succeed. If only one of them is the
+	// same, it will fail by the metadata repository.
+	if snd := md.GetStorageNode(snid); snd != nil && snd.Address == addr {
+		return snmd, nil
+	}
+
+	now := time.Now().UTC()
 	snd := snmd.ToStorageNodeDescriptor()
 	snd.Status = varlogpb.StorageNodeStatusRunning
+	snd.CreateTime = now
 	if err = adm.mrmgr.RegisterStorageNode(ctx, snd); err != nil {
 		return nil, err
 	}
 
 	adm.snmgr.AddStorageNode(ctx, snmd.StorageNode.StorageNodeID, addr)
+	adm.statRepository.Report(ctx, snmd, now)
 	return snmd, err
 }
 
@@ -240,6 +232,7 @@ func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageN
 	}
 
 	adm.snmgr.RemoveStorageNode(snid)
+	adm.statRepository.RemoveStorageNode(snid)
 	return nil
 }
 
@@ -516,6 +509,13 @@ func (adm *Admin) waitUnsealed(ctx context.Context, lsid types.LogStreamID) erro
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+			if err != nil {
+				return err
+			}
+			if md.GetLogStream(lsid).Status != varlogpb.LogStreamStatusRunning {
+				continue
+			}
 			lsStat := adm.statRepository.GetLogStream(lsid).Copy()
 			if lsStat.Status() == varlogpb.LogStreamStatusRunning {
 				return nil
@@ -1035,8 +1035,6 @@ func (adm *Admin) HandleReport(ctx context.Context, snm *snpb.StorageNodeMetadat
 	if err != nil {
 		return
 	}
-
-	adm.statRepository.Report(ctx, snm)
 
 	// Sync LogStreamStatus
 	for _, ls := range snm.GetLogStreamReplicas() {

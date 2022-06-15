@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Added a new type `proto/vmspb.(StorageNodeMetadata)` to represent status and metadata for the storage node. (#VARLOG-758/#680)
+- Added a new field `StartTime` to `proto/snpb.(StorageNodeMetadataDescriptor)` to represent start time of storage node process. (#VARLOG-758/#680)
+- Added a new field `CreateTime` to `proto/varlogpb.(StorageNodeDescriptor)` to represent the time when the storage node is registered to the metadata repository. (#VARLOG-758/#680)
+
+### Removed 
+- Removed fields `CreatedTime` and `UpdatedTime` from `proto/snpb.(StorageNodeMetadataDescriptor)`. (#VARLOG-758/#680)
 
 ## [0.1.11] - 2022-06-13
 ### Added

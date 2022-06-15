@@ -28,6 +28,65 @@ func TestMain(m *testing.M) {
 	))
 }
 
+func TestStorageNode_Heartbeat(t *testing.T) {
+	const tick = 100 * time.Millisecond
+
+	clus := it.NewVarlogCluster(t,
+		it.WithNumberOfStorageNodes(1),
+		it.WithVMSOptions(
+			admin.WithStorageNodeWatcherOptions(
+				snwatcher.WithTick(tick),
+			),
+		),
+	)
+	defer clus.Close(t)
+
+	adm := clus.GetVMSClient(t)
+	snid := clus.StorageNodeIDAtIndex(t, 0)
+
+	snms, err := adm.ListStorageNodes(context.Background())
+	assert.NoError(t, err)
+	assert.Len(t, snms, 1)
+	assert.False(t, snms[snid].LastHeartbeatTime.IsZero())
+
+	assert.Eventually(t, func() bool {
+		snm, err := adm.GetStorageNode(context.Background(), snid)
+		assert.NoError(t, err)
+		return snm.LastHeartbeatTime.After(snms[snid].LastHeartbeatTime)
+	}, 10*tick, tick)
+}
+
+func TestStorageNode_HeartbeatFailure(t *testing.T) {
+	const tick = 100 * time.Millisecond
+
+	clus := it.NewVarlogCluster(t,
+		it.WithNumberOfStorageNodes(1),
+		it.WithVMSOptions(
+			admin.WithStorageNodeWatcherOptions(
+				snwatcher.WithTick(tick),
+			),
+		),
+	)
+	defer clus.Close(t)
+
+	adm := clus.GetVMSClient(t)
+	snid := clus.StorageNodeIDAtIndex(t, 0)
+
+	clus.CloseSN(t, snid)
+
+	snm, err := adm.GetStorageNode(context.Background(), snid)
+	assert.NoError(t, err)
+	oldts := snm.LastHeartbeatTime
+
+	time.Sleep(10 * tick)
+
+	snm, err = adm.GetStorageNode(context.Background(), snid)
+	assert.NoError(t, err)
+	newts := snm.LastHeartbeatTime
+
+	assert.Equal(t, oldts, newts)
+}
+
 func TestUnregisterInactiveStorageNode(t *testing.T) {
 	clus := it.NewVarlogCluster(t, it.WithNumberOfStorageNodes(1))
 	defer clus.Close(t)
@@ -358,6 +417,7 @@ func TestSyncLogStream(t *testing.T) {
 }
 
 func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
+	t.Skip("Unable to update log streams since some replicas are automatically unsealed.")
 	const numLogs = 10
 
 	clus := it.NewVarlogCluster(t,

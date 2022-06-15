@@ -12,7 +12,6 @@ import (
 	"go.uber.org/goleak"
 
 	"github.daumkakao.com/varlog/varlog/internal/admin"
-	"github.daumkakao.com/varlog/varlog/internal/admin/admerrors"
 	"github.daumkakao.com/varlog/varlog/internal/admin/mrmanager"
 	"github.daumkakao.com/varlog/varlog/internal/admin/snmanager"
 	"github.daumkakao.com/varlog/varlog/internal/admin/snwatcher"
@@ -23,6 +22,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/proto/mrpb"
 	"github.daumkakao.com/varlog/varlog/proto/snpb"
 	"github.daumkakao.com/varlog/varlog/proto/varlogpb"
+	"github.daumkakao.com/varlog/varlog/proto/vmspb"
 )
 
 func TestAdmin_InvalidConfig(t *testing.T) {
@@ -132,15 +132,13 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 		prepare func(mock *testMock)
 	}{
 		{
-			name:    "RejectedByStorageNodeManager",
+			name:    "NoSuchStorageNode",
 			success: false,
 			prepare: func(mock *testMock) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
 					&varlogpb.MetadataDescriptor{}, nil,
 				).AnyTimes()
-				mock.MockStorageNodeManager.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
-					nil, errors.New("error"),
-				)
+				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(nil, false)
 			},
 		},
 		{
@@ -150,13 +148,13 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
 					&varlogpb.MetadataDescriptor{}, nil,
 				).AnyTimes()
-				mock.MockStorageNodeManager.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
-					&snpb.StorageNodeMetadataDescriptor{
+				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(&vmspb.StorageNodeMetadata{
+					StorageNodeMetadataDescriptor: &snpb.StorageNodeMetadataDescriptor{
 						StorageNode: varlogpb.StorageNode{
 							StorageNodeID: snid,
 						},
-					}, nil,
-				)
+					},
+				}, true)
 			},
 		},
 	}
@@ -175,7 +173,9 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
 					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithStatisticsRepository(mock.MockRepository),
 				),
+				admin.WithStatisticsRepository(mock.MockRepository),
 			)
 			tadm.Serve(t)
 			defer tadm.Close(t)
@@ -207,42 +207,6 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 		prepare func(mock *testMock)
 	}{
 		{
-			name:    "ClusterMetadataFetchError",
-			success: false,
-			prepare: func(mock *testMock) {
-				// To create a new admin, ClusterMetadata should be called 3 times.
-				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
-					&varlogpb.MetadataDescriptor{}, nil,
-				).Times(3)
-				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
-					nil, admerrors.ErrClusterMetadataNotFetched,
-				)
-			},
-		},
-		{
-			name:    "UnreachableStorageNode",
-			success: true,
-			status:  varlogpb.StorageNodeStatusUnavailable,
-			prepare: func(mock *testMock) {
-				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
-					&varlogpb.MetadataDescriptor{
-						StorageNodes: []*varlogpb.StorageNodeDescriptor{
-							{
-								StorageNode: varlogpb.StorageNode{
-									StorageNodeID: snid,
-									Address:       addr,
-								},
-								Status: varlogpb.StorageNodeStatusRunning,
-							},
-						},
-					}, nil,
-				).AnyTimes()
-				mock.MockStorageNodeManager.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
-					nil, errors.New("error"),
-				)
-			},
-		},
-		{
 			name:    "Success",
 			success: true,
 			status:  varlogpb.StorageNodeStatusRunning,
@@ -260,14 +224,18 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 						},
 					}, nil,
 				).AnyTimes()
-				mock.MockStorageNodeManager.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).Return(
-					&snpb.StorageNodeMetadataDescriptor{
-						StorageNode: varlogpb.StorageNode{
-							StorageNodeID: snid,
-							Address:       addr,
+				mock.MockRepository.EXPECT().ListStorageNodes().Return(
+					map[types.StorageNodeID]*vmspb.StorageNodeMetadata{
+						snid: {
+							StorageNodeMetadataDescriptor: &snpb.StorageNodeMetadataDescriptor{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: snid,
+									Address:       addr,
+								},
+								Status: varlogpb.StorageNodeStatusRunning,
+							},
 						},
-						Status: varlogpb.StorageNodeStatusRunning,
-					}, nil,
+					},
 				)
 			},
 		},
@@ -287,7 +255,9 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
 					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithStatisticsRepository(mock.MockRepository),
 				),
+				admin.WithStatisticsRepository(mock.MockRepository),
 			)
 			tadm.Serve(t)
 			defer tadm.Close(t)
@@ -371,6 +341,9 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 				admin.WithListenAddress("127.0.0.1:0"),
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithStatisticsRepository(mock.MockRepository),
+				),
 			)
 			tadm.Serve(t)
 			defer tadm.Close(t)
@@ -462,6 +435,7 @@ func TestAdmin_GetTopic(t *testing.T) {
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
 					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithStatisticsRepository(mock.MockRepository),
 				),
 			)
 			tadm.Serve(t)
@@ -533,6 +507,7 @@ func TestAdmin_ListTopics(t *testing.T) {
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
 					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithStatisticsRepository(mock.MockRepository),
 				),
 			)
 			tadm.Serve(t)
@@ -1239,11 +1214,36 @@ func TestAdmin_AddLogStream(t *testing.T) {
 							},
 						},
 					}, nil,
-				).AnyTimes()
+				).Times(3)
 				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(nil)
 				mock.MockMetadataRepositoryManager.EXPECT().RegisterLogStream(gomock.Any(), gomock.Any()).Return(nil)
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						StorageNodes: []*varlogpb.StorageNodeDescriptor{
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: snid1,
+									Address:       "127.0.0.1:10000",
+								},
+								Paths: []string{"/tmp"},
+							},
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: snid2,
+									Address:       "127.0.0.1:10001",
+								},
+								Paths: []string{"/tmp"},
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								LogStreamID: types.MinLogStreamID,
+								Status:      varlogpb.LogStreamStatusRunning,
+							},
+						},
+					}, nil,
+				).AnyTimes()
 
-				// for sealed
 				mock.MockRepository.EXPECT().GetLogStream(gomock.Any()).Return(
 					stats.NewLogStreamStat(varlogpb.LogStreamStatusRunning, nil),
 				)
@@ -1975,7 +1975,7 @@ func TestAdmin_DoNotSyncSealedReplicas_(t *testing.T) {
 		},
 	).MinTimes(1)
 
-	mock.MockRepository.EXPECT().Report(gomock.Any(), gomock.Any()).Return().AnyTimes()
+	mock.MockRepository.EXPECT().Report(gomock.Any(), gomock.Any(), gomock.Any()).Return().AnyTimes()
 	mock.MockRepository.EXPECT().GetLogStream(gomock.Any()).Return(lss).AnyTimes()
 
 	tadm := admin.TestNewClusterManager(t,

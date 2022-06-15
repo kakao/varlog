@@ -3,6 +3,7 @@ syntax = "proto3";
 package varlog.vmspb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 import "varlogpb/metadata.proto";
 import "snpb/replicator.proto";
@@ -17,6 +18,24 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
+message StorageNodeMetadata {
+  snpb.StorageNodeMetadataDescriptor storage_node = 1 [
+    // (gogoproto.nullable) = false,
+    (gogoproto.embed) = true,
+    (gogoproto.jsontag) = "logStreams"
+  ];
+  google.protobuf.Timestamp create_time = 2 [
+    (gogoproto.stdtime) = true,
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "createTime"
+  ];
+  google.protobuf.Timestamp last_heartbeat_time = 3 [
+    (gogoproto.stdtime) = true,
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "lastHeartbeatTime"
+  ];
+}
+
 message GetStorageNodeRequest {
   int32 storage_node_id = 1 [
     (gogoproto.casttype) =
@@ -25,22 +44,13 @@ message GetStorageNodeRequest {
   ];
 }
 message GetStorageNodeResponse {
-  // StorageNodes registered to the cluster.
-  snpb.StorageNodeMetadataDescriptor storage_node = 1
-      [(gogoproto.jsontag) = "storageNode"];
+  // StorageNode registered to the cluster.
+  StorageNodeMetadata storage_node = 1 [(gogoproto.jsontag) = "storageNode"];
 }
 message ListStorageNodesRequest {}
 message ListStorageNodesResponse {
   // StorageNodes registered to the cluster.
-  map<int32, snpb.StorageNodeMetadataDescriptor> storage_nodes = 1 [
-    (gogoproto.castkey) =
-        "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
-    (gogoproto.jsontag) = "storageNodes"
-  ];
-}
-message GetStorageNodesRequest {}
-message GetStorageNodesResponse {
-  map<int32, snpb.StorageNodeMetadataDescriptor> storage_nodes = 1 [
+  map<int32, StorageNodeMetadata> storage_nodes = 1 [
     (gogoproto.castkey) =
         "github.daumkakao.com/varlog/varlog/pkg/types.StorageNodeID",
     (gogoproto.jsontag) = "storageNodes"

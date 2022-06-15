@@ -34,53 +34,48 @@ func (c testAdmin) unlock() {
 	c.vt.cond.L.Unlock()
 }
 
-func (c *testAdmin) GetStorageNode(context.Context, types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (c *testAdmin) GetStorageNode(context.Context, types.StorageNodeID) (*vmspb.StorageNodeMetadata, error) {
 	panic("not implemented")
 }
 
-func (c *testAdmin) ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
+func (c *testAdmin) ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
 	defer c.unlock()
 
-	ret := make(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor)
+	ret := make(map[types.StorageNodeID]*vmspb.StorageNodeMetadata)
 	for snID := range c.vt.storageNodes {
 		snmd := c.vt.storageNodes[snID]
-		ret[snID] = &snmd
+
+		for _, lsd := range c.vt.logStreams {
+			for _, rd := range lsd.Replicas {
+				if rd.StorageNodeID == snID {
+					snmd.LogStreamReplicas = append(snmd.LogStreamReplicas,
+						snpb.LogStreamReplicaMetadataDescriptor{
+							LogStreamReplica: varlogpb.LogStreamReplica{
+								StorageNode: snmd.StorageNode,
+								TopicLogStream: varlogpb.TopicLogStream{
+									TopicID:     lsd.TopicID,
+									LogStreamID: lsd.LogStreamID,
+								},
+							},
+						},
+					)
+				}
+			}
+		}
+
+		ret[snID] = &vmspb.StorageNodeMetadata{
+			StorageNodeMetadataDescriptor: &snmd,
+			LastHeartbeatTime:             time.Now().UTC(),
+		}
 	}
 
 	return ret, nil
 }
-func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
-	sns, err := c.ListStorageNodes(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := c.lock(); err != nil {
-		return nil, err
-	}
-	defer c.unlock()
-
-	for snID, snmd := range sns {
-		for _, ls := range c.vt.logStreams {
-			for _, r := range ls.Replicas {
-				if r.StorageNodeID == snID {
-					snmd.LogStreamReplicas = append(snmd.LogStreamReplicas, snpb.LogStreamReplicaMetadataDescriptor{
-						LogStreamReplica: varlogpb.LogStreamReplica{
-							StorageNode: snmd.StorageNode,
-							TopicLogStream: varlogpb.TopicLogStream{
-								TopicID:     ls.TopicID,
-								LogStreamID: ls.LogStreamID,
-							},
-						},
-					})
-				}
-			}
-		}
-	}
-	return sns, nil
+func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
+	return c.ListStorageNodes(ctx)
 }
 
 // FIXME: Argument snid
@@ -107,8 +102,7 @@ func (c *testAdmin) AddStorageNode(ctx context.Context, storageNodeID types.Stor
 			{Path: "/tmp"},
 		},
 		LogStreamReplicas: nil,
-		CreatedTime:       now,
-		UpdatedTime:       now,
+		StartTime:         now,
 	}
 	c.vt.storageNodes[storageNodeID] = storageNodeMetaDesc
 

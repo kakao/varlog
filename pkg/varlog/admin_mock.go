@@ -203,10 +203,10 @@ func (mr *MockAdminMockRecorder) GetMetadataRepositoryNode(arg0, arg1 interface{
 }
 
 // GetStorageNode mocks base method.
-func (m *MockAdmin) GetStorageNode(arg0 context.Context, arg1 types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockAdmin) GetStorageNode(arg0 context.Context, arg1 types.StorageNodeID) (*vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStorageNode", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.StorageNodeMetadataDescriptor)
+	ret0, _ := ret[0].(*vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -218,10 +218,10 @@ func (mr *MockAdminMockRecorder) GetStorageNode(arg0, arg1 interface{}) *gomock.
 }
 
 // GetStorageNodes mocks base method.
-func (m *MockAdmin) GetStorageNodes(arg0 context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockAdmin) GetStorageNodes(arg0 context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStorageNodes", arg0)
-	ret0, _ := ret[0].(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor)
+	ret0, _ := ret[0].(map[types.StorageNodeID]*vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -278,10 +278,10 @@ func (mr *MockAdminMockRecorder) ListMetadataRepositoryNodes(arg0 interface{}) *
 }
 
 // ListStorageNodes mocks base method.
-func (m *MockAdmin) ListStorageNodes(arg0 context.Context) (map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockAdmin) ListStorageNodes(arg0 context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListStorageNodes", arg0)
-	ret0, _ := ret[0].(map[types.StorageNodeID]*snpb.StorageNodeMetadataDescriptor)
+	ret0, _ := ret[0].(map[types.StorageNodeID]*vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
