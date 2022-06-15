@@ -5,6 +5,7 @@ package stats
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -12,16 +13,18 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
+	"github.com/kakao/varlog/proto/vmspb"
 )
 
 // Repository is a repository to maintain statistics of log streams to manage
 // the cluster.
 type Repository interface {
-	// Report receives metadata of the storage node denoted by the argument
-	// snmd and updates statistics using it.
-	// If a log stream metadata not included in the cluster metadata is
-	// reported, it is ignored.
-	Report(ctx context.Context, snmd *snpb.StorageNodeMetadataDescriptor)
+	// Report reports metadata of the storage node with timestamp when the
+	// metadata is fetched. It updates the statistics of the storage nodes
+	// and log streams by using the arguments snmd and ts. If a storage
+	// node or log streams are not included in the cluster metadata, they
+	// are ignored.
+	Report(ctx context.Context, snmd *snpb.StorageNodeMetadataDescriptor, ts time.Time)
 
 	// SetLogStreamStatus sets status of the log stream specified by the
 	// argument lsid.
@@ -30,6 +33,20 @@ type Repository interface {
 	// GetLogStream returns statistics of the log stream specified by the
 	// argument lsid.
 	GetLogStream(lsid types.LogStreamID) *LogStreamStat
+
+	// GetStorageNode returns a metadata of storage node specified by the
+	// argument snid. The snm result contains the last heartbeat time
+	// collected by the repository. The ok result indicates whether the
+	// metadata is found in the repository.
+	GetStorageNode(snid types.StorageNodeID) (snm *vmspb.StorageNodeMetadata, ok bool)
+
+	// ListStorageNodes returns a map that maps storage node ID to the
+	// metadata for each storage node.
+	ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata
+
+	// RemoveStorageNode removes the metadata for the storage node
+	// specified by the snid.
+	RemoveStorageNode(snid types.StorageNodeID)
 }
 
 type repository struct {
@@ -37,6 +54,7 @@ type repository struct {
 
 	meta           *varlogpb.MetadataDescriptor
 	logStreamStats map[types.LogStreamID]*LogStreamStat
+	storageNodes   map[types.StorageNodeID]*vmspb.StorageNodeMetadata
 	mu             sync.RWMutex
 }
 
@@ -46,6 +64,7 @@ func NewRepository(ctx context.Context, cmview mrmanager.ClusterMetadataView) Re
 	s := &repository{
 		cmview:         cmview,
 		logStreamStats: make(map[types.LogStreamID]*LogStreamStat),
+		storageNodes:   make(map[types.StorageNodeID]*vmspb.StorageNodeMetadata),
 	}
 
 	// TODO: Initializing stats repository only by using cluster metadata
@@ -56,14 +75,29 @@ func NewRepository(ctx context.Context, cmview mrmanager.ClusterMetadataView) Re
 	return s
 }
 
-func (s *repository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataDescriptor) {
+func (s *repository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataDescriptor, ts time.Time) {
 	s.refresh(ctx)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	snid := snmd.StorageNode.StorageNodeID
+	snd := s.meta.GetStorageNode(snid)
+	if snd == nil {
+		// It may be an unregistered storage node.
+		return
+	}
+	snm, ok := s.storageNodes[snid]
+	if !ok {
+		snm = &vmspb.StorageNodeMetadata{
+			StorageNodeMetadataDescriptor: snmd,
+			CreateTime:                    snd.CreateTime,
+		}
+	}
+	snm.LastHeartbeatTime = ts
+	s.storageNodes[snid] = snm
+
 	for i := range snmd.LogStreamReplicas {
-		snid := snmd.LogStreamReplicas[i].StorageNodeID
 		lsid := snmd.LogStreamReplicas[i].LogStreamID
 
 		lsd := s.meta.GetLogStream(lsid)
@@ -81,6 +115,33 @@ func (s *repository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataD
 			s.logStreamStats[lsid] = lss
 		}
 	}
+}
+
+func (s *repository) GetStorageNode(snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	snm, ok := s.storageNodes[snid]
+	if !ok {
+		return nil, false
+	}
+	return proto.Clone(snm).(*vmspb.StorageNodeMetadata), true
+}
+
+func (s *repository) ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ret := make(map[types.StorageNodeID]*vmspb.StorageNodeMetadata, len(s.storageNodes))
+	for snid, snm := range s.storageNodes {
+		copied := proto.Clone(snm).(*vmspb.StorageNodeMetadata)
+		ret[snid] = copied
+	}
+	return ret
+}
+
+func (s *repository) RemoveStorageNode(snid types.StorageNodeID) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	delete(s.storageNodes, snid)
 }
 
 func (s *repository) GetLogStream(lsid types.LogStreamID) *LogStreamStat {

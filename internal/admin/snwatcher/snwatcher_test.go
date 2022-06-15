@@ -13,6 +13,7 @@ import (
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snmanager"
+	"github.com/kakao/varlog/internal/admin/stats"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -25,47 +26,76 @@ func TestStorageNodeWatcher_InvalidConfig(t *testing.T) {
 	eventHandler := NewMockEventHandler(ctrl)
 	cmview := mrmanager.NewMockClusterMetadataView(ctrl)
 	snmgr := snmanager.NewMockStorageNodeManager(ctrl)
+	statsRepos := stats.NewMockRepository(ctrl)
 
 	// no event handler
-	_, err := New(WithClusterMetadataView(cmview), WithStorageNodeManager(snmgr))
+	_, err := New(
+		WithClusterMetadataView(cmview),
+		WithStorageNodeManager(snmgr),
+		WithStatisticsRepository(statsRepos),
+	)
 	assert.Error(t, err)
 
 	// no cmview
-	_, err = New(WithStorageNodeWatcherHandler(eventHandler), WithStorageNodeManager(snmgr))
+	_, err = New(
+		WithStorageNodeWatcherHandler(eventHandler),
+		WithStorageNodeManager(snmgr),
+		WithStatisticsRepository(statsRepos),
+	)
 	assert.Error(t, err)
 
 	// no snmgr
-	_, err = New(WithStorageNodeWatcherHandler(eventHandler), WithClusterMetadataView(cmview))
+	_, err = New(
+		WithStorageNodeWatcherHandler(eventHandler),
+		WithClusterMetadataView(cmview),
+		WithStatisticsRepository(statsRepos),
+	)
+	assert.Error(t, err)
+
+	// no stats repository
+	_, err = New(
+		WithStorageNodeWatcherHandler(eventHandler),
+		WithClusterMetadataView(cmview),
+		WithStorageNodeManager(snmgr),
+	)
 	assert.Error(t, err)
 
 	// bad heartbeat timeout
-	_, err = New(WithStorageNodeWatcherHandler(eventHandler),
+	_, err = New(
+		WithStorageNodeWatcherHandler(eventHandler),
 		WithClusterMetadataView(cmview),
 		WithStorageNodeManager(snmgr),
+		WithStatisticsRepository(statsRepos),
 		WithHeartbeatTimeout(0),
 	)
 	assert.Error(t, err)
 
 	// bad tick
-	_, err = New(WithStorageNodeWatcherHandler(eventHandler),
+	_, err = New(
+		WithStorageNodeWatcherHandler(eventHandler),
 		WithClusterMetadataView(cmview),
 		WithStorageNodeManager(snmgr),
+		WithStatisticsRepository(statsRepos),
 		WithTick(0),
 	)
 	assert.Error(t, err)
 
 	// bad report interval
-	_, err = New(WithStorageNodeWatcherHandler(eventHandler),
+	_, err = New(
+		WithStorageNodeWatcherHandler(eventHandler),
 		WithClusterMetadataView(cmview),
 		WithStorageNodeManager(snmgr),
+		WithStatisticsRepository(statsRepos),
 		WithReportInterval(0),
 	)
 	assert.Error(t, err)
 
 	// no logger
-	_, err = New(WithStorageNodeWatcherHandler(eventHandler),
+	_, err = New(
+		WithStorageNodeWatcherHandler(eventHandler),
 		WithClusterMetadataView(cmview),
 		WithStorageNodeManager(snmgr),
+		WithStatisticsRepository(statsRepos),
 		WithLogger(nil),
 	)
 	assert.Error(t, err)
@@ -81,12 +111,14 @@ func TestStorageNodeWatcher_BadClusterMetadataView(t *testing.T) {
 	eventHandler := NewMockEventHandler(ctrl)
 	cmview := mrmanager.NewMockClusterMetadataView(ctrl)
 	snmgr := snmanager.NewMockStorageNodeManager(ctrl)
+	statsRepos := stats.NewMockRepository(ctrl)
 
 	cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(nil, errors.New("error")).AnyTimes()
 
 	sw, err := New(WithStorageNodeWatcherHandler(eventHandler),
 		WithClusterMetadataView(cmview),
 		WithStorageNodeManager(snmgr),
+		WithStatisticsRepository(statsRepos),
 		WithTick(tick),
 		WithHeartbeatTimeout(interval),
 		WithReportInterval(interval),
@@ -107,6 +139,7 @@ func TestStorageNodeWatcher(t *testing.T) {
 	eventHandler := NewMockEventHandler(ctrl)
 	cmview := mrmanager.NewMockClusterMetadataView(ctrl)
 	snmgr := snmanager.NewMockStorageNodeManager(ctrl)
+	statsRepos := stats.NewMockRepository(ctrl)
 
 	cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(
 		&varlogpb.MetadataDescriptor{
@@ -140,7 +173,7 @@ func TestStorageNodeWatcher(t *testing.T) {
 
 	numHeartbeatHandlerCalled, numReportHandlerCalled := int64(0), int64(0)
 	eventHandler.EXPECT().HandleReport(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, snmd *snpb.StorageNodeMetadataDescriptor) {
+		func(_ context.Context, snmd *snpb.StorageNodeMetadataDescriptor) {
 			assert.Equal(t, types.StorageNodeID(1), snmd.StorageNode.StorageNodeID)
 			atomic.AddInt64(&numReportHandlerCalled, 1)
 		},
@@ -151,9 +184,12 @@ func TestStorageNodeWatcher(t *testing.T) {
 		},
 	).MinTimes(1)
 
+	statsRepos.EXPECT().Report(gomock.Any(), gomock.Any(), gomock.Any()).Return().AnyTimes()
+
 	snw, err := New(WithStorageNodeWatcherHandler(eventHandler),
 		WithClusterMetadataView(cmview),
 		WithStorageNodeManager(snmgr),
+		WithStatisticsRepository(statsRepos),
 		WithTick(tick),
 		WithHeartbeatTimeout(interval),
 		WithReportInterval(interval),

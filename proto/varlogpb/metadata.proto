@@ -43,6 +43,11 @@ message StorageNodeDescriptor {
   ];
   StorageNodeStatus status = 2;
   repeated string paths = 3;
+  google.protobuf.Timestamp create_time = 4 [
+    (gogoproto.stdtime) = true,
+    (gogoproto.nullable) = false,
+    (gogoproto.jsontag) = "createTime"
+  ];
 }
 
 enum StorageNodeStatus {
@@ -52,8 +57,6 @@ enum StorageNodeStatus {
       [(gogoproto.enumvalue_customname) = "StorageNodeStatusRunning"];
   STORAGE_NODE_STATUS_DELETED = 1
       [(gogoproto.enumvalue_customname) = "StorageNodeStatusDeleted"];
-  STORAGE_NODE_STATUS_UNAVAILABLE = 2
-      [(gogoproto.enumvalue_customname) = "StorageNodeStatusUnavailable"];
 }
 
 message StorageDescriptor {

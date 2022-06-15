@@ -18,7 +18,10 @@ import (
 )
 
 type EventHandler interface {
+	// HandleHeartbeatTimeout handles the storage node that is timed out heartbeat deadline.
 	HandleHeartbeatTimeout(context.Context, types.StorageNodeID)
+
+	// HandleReport reports the metadata of storage node collected by the repository.
 	HandleReport(context.Context, *snpb.StorageNodeMetadataDescriptor)
 }
 
@@ -34,7 +37,7 @@ type EventHandler interface {
 type StorageNodeWatcher struct {
 	config
 
-	hb map[types.StorageNodeID]time.Time
+	hb map[types.StorageNodeID]time.Time // last heartbeat times
 	mu sync.RWMutex
 
 	runner *runner.Runner
@@ -77,9 +80,11 @@ func (snw *StorageNodeWatcher) run(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			if err := snw.heartbeat(ctx); err != nil {
-				snw.logger.Warn("heartbeat", zap.Error(err))
+			now := time.Now().UTC()
+			if err := snw.checkHeartbeat(ctx, now); err != nil {
+				snw.logger.Warn("check heartbeat", zap.Error(err))
 			}
+			snw.handleHeartbeatTimeout(ctx, now)
 
 			reportInterval--
 			if reportInterval > 0 {
@@ -95,74 +100,75 @@ func (snw *StorageNodeWatcher) run(ctx context.Context) {
 	}
 }
 
-func (snw *StorageNodeWatcher) heartbeat(ctx context.Context) error {
+func (snw *StorageNodeWatcher) checkHeartbeat(ctx context.Context, now time.Time) error {
 	ctx, cancel := context.WithTimeout(ctx, snw.heartbeatCheckDeadline)
 	defer cancel()
 
-	meta, err := snw.cmview.ClusterMetadata(ctx)
+	md, err := snw.cmview.ClusterMetadata(ctx)
 	if err != nil {
-		return fmt.Errorf("snwatcher: could not get cluster metadata: %w", err)
+		return fmt.Errorf("snwatcher: heartbeat: %w", err)
 	}
 
-	snw.reload(meta.GetStorageNodes())
+	snw.reload(md.StorageNodes, now)
 
 	var (
 		wg   sync.WaitGroup
-		n    = len(meta.StorageNodes)
+		n    = len(md.StorageNodes)
 		errs = make([]error, n)
 	)
 	wg.Add(n)
 	for i := 0; i < n; i++ {
 		go func(idx int) {
 			defer wg.Done()
-			snid := meta.StorageNodes[idx].StorageNodeID
-			if _, err := snw.snmgr.GetMetadata(ctx, snid); err != nil {
+			snid := md.StorageNodes[idx].StorageNodeID
+			snmd, err := snw.snmgr.GetMetadata(ctx, snid)
+			if err != nil {
 				errs[idx] = err
 				return
 			}
-			snw.set(snid)
+			snw.set(snid, now)
+			snw.statsRepos.Report(ctx, snmd, now)
 		}(i)
 	}
 	wg.Wait()
-	snw.handleHeartbeat(ctx)
 	return multierr.Combine(errs...)
 }
 
-func (snw *StorageNodeWatcher) set(snID types.StorageNodeID) {
+func (snw *StorageNodeWatcher) set(snid types.StorageNodeID, ts time.Time) {
 	snw.mu.Lock()
 	defer snw.mu.Unlock()
-
-	snw.hb[snID] = time.Now()
+	snw.hb[snid] = ts
 }
 
-func (snw *StorageNodeWatcher) reload(ss []*varlogpb.StorageNodeDescriptor) {
+// reload resets the map lastTimes.
+// The timestamp for pre-existing storage node is retained, on the other hand,
+// the timestamp for a new one is set to the argument ts.
+// If the storage node is not in the argument snds, it is removed from the
+// lastTimes.
+func (snw *StorageNodeWatcher) reload(snds []*varlogpb.StorageNodeDescriptor, ts time.Time) {
 	snw.mu.Lock()
 	defer snw.mu.Unlock()
 
-	hb := make(map[types.StorageNodeID]time.Time)
-
-	for _, s := range ss {
-		hb[s.StorageNodeID] = time.Now()
-	}
-
-	for snID, t := range snw.hb {
-		if _, ok := hb[snID]; ok {
-			hb[snID] = t
+	lastTimes := make(map[types.StorageNodeID]time.Time, len(snds))
+	for _, snd := range snds {
+		snid := snd.StorageNodeID
+		oldts, ok := snw.hb[snid]
+		if ok {
+			lastTimes[snid] = oldts
+			continue
 		}
+		lastTimes[snid] = ts
 	}
-
-	snw.hb = hb
+	snw.hb = lastTimes
 }
 
-func (snw *StorageNodeWatcher) handleHeartbeat(ctx context.Context) {
+func (snw *StorageNodeWatcher) handleHeartbeatTimeout(ctx context.Context, now time.Time) {
 	snw.mu.Lock()
 	defer snw.mu.Unlock()
 
-	cur := time.Now()
 	for snid, ts := range snw.hb {
-		if cur.Sub(ts) > snw.tick*time.Duration(snw.heartbeatTimeout) {
+		if now.Sub(ts) > snw.tick*time.Duration(snw.heartbeatTimeout) {
 			snw.eventHandler.HandleHeartbeatTimeout(ctx, snid)
-			snw.hb[snid] = time.Now()
 		}
 	}
 }

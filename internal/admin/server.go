@@ -32,19 +32,19 @@ func (s *server) withTelemetry(ctx context.Context, spanName string, req interfa
 }
 
 func (s *server) GetStorageNode(ctx context.Context, req *vmspb.GetStorageNodeRequest) (*vmspb.GetStorageNodeResponse, error) {
-	snmd, err := s.admin.getStorageNode(ctx, req.StorageNodeID)
+	snm, err := s.admin.getStorageNode(ctx, req.StorageNodeID)
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.GetStorageNodeResponse{StorageNode: snmd}, nil
+	return &vmspb.GetStorageNodeResponse{StorageNode: snm}, nil
 }
 
 func (s *server) ListStorageNodes(ctx context.Context, _ *vmspb.ListStorageNodesRequest) (*vmspb.ListStorageNodesResponse, error) {
-	snmds, err := s.admin.listStorageNodes(ctx)
+	snms, err := s.admin.listStorageNodes(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.ListStorageNodesResponse{StorageNodes: snmds}, nil
+	return &vmspb.ListStorageNodesResponse{StorageNodes: snms}, nil
 }
 
 func (s *server) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {

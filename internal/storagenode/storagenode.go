@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/soheilhy/cmux"
 	"go.opentelemetry.io/otel/metric/global"
@@ -59,6 +60,8 @@ type StorageNode struct {
 	metrics *telemetry.Metrics
 
 	sf singleflight.Group
+
+	startTime time.Time
 }
 
 func NewStorageNode(opts ...Option) (*StorageNode, error) {
@@ -93,6 +96,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		snPaths:      snPaths,
 		pprofServer:  pprof.New(cfg.pprofOpts...),
 		metrics:      metrics,
+		startTime:    time.Now().UTC(),
 	}
 	if sn.ballastSize > 0 {
 		sn.ballast = make([]byte, sn.ballastSize)
@@ -217,7 +221,8 @@ func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadata
 				StorageNodeID: sn.snid,
 				Address:       sn.advertise,
 			},
-			Status: varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
+			Status:    varlogpb.StorageNodeStatusRunning, // TODO (jun), Ready, Running, Stopping,
+			StartTime: sn.startTime,
 		}
 
 		for _, path := range sn.snPaths {

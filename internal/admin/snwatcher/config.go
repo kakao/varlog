@@ -9,6 +9,7 @@ import (
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snmanager"
+	"github.com/kakao/varlog/internal/admin/stats"
 )
 
 const (
@@ -23,6 +24,7 @@ type config struct {
 	eventHandler           EventHandler
 	cmview                 mrmanager.ClusterMetadataView
 	snmgr                  snmanager.StorageNodeManager
+	statsRepos             stats.Repository
 	tick                   time.Duration
 	reportInterval         int
 	heartbeatTimeout       int
@@ -60,6 +62,9 @@ func (cfg *config) validate() error {
 	}
 	if cfg.eventHandler == nil {
 		return errors.New("snwatcher: event handler is nil")
+	}
+	if cfg.statsRepos == nil {
+		return errors.New("snwatcher: stats repository is nil")
 	}
 	if cfg.tick == 0 {
 		return fmt.Errorf("snwatcher: invalid tick %v", cfg.tick)
@@ -107,6 +112,12 @@ func WithClusterMetadataView(cmview mrmanager.ClusterMetadataView) Option {
 func WithStorageNodeManager(snmgr snmanager.StorageNodeManager) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.snmgr = snmgr
+	})
+}
+
+func WithStatisticsRepository(statsRepos stats.Repository) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.statsRepos = statsRepos
 	})
 }
 

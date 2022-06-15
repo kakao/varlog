@@ -41,31 +41,11 @@ message StorageNodeMetadataDescriptor {
 
   varlogpb.StorageNodeStatus status = 5;
 
-  // CreatedTime is the creation time of the storage node.
-  // Note that the CreatedTime is immutable after the metadata repository sets.
-  // TODO: Currently the storage node has no responsibility to persist
-  // CreatedTime. How can we tell a recovered storage node the CreatedTime?
-  //
-  // Deprecated:
-  google.protobuf.Timestamp created_time = 6 [
+  google.protobuf.Timestamp start_time = 6 [
     (gogoproto.stdtime) = true,
     (gogoproto.nullable) = false,
-    (gogoproto.jsontag) = "createdTime"
+    (gogoproto.jsontag) = "startTime"
   ];
-
-  // UpdatedTime
-  //
-  // Deprecated:
-  google.protobuf.Timestamp updated_time = 7 [
-    (gogoproto.stdtime) = true,
-    (gogoproto.nullable) = false,
-    (gogoproto.jsontag) = "updatedTime"
-  ];
-
-  // TODO: Consider these fields:
-  // - UpTime (or StartTime, then compute UpTime)
-  // - RegisteredTime (instead of CreatedTime)
-  // - Volumes
 }
 
 // LogStreamReplicaMetadataDescriptor represents the metadata of log stream
