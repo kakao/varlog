@@ -22,7 +22,7 @@ message StorageNodeMetadata {
   snpb.StorageNodeMetadataDescriptor storage_node = 1 [
     // (gogoproto.nullable) = false,
     (gogoproto.embed) = true,
-    (gogoproto.jsontag) = "logStreams"
+    (gogoproto.jsontag) = ""
   ];
   google.protobuf.Timestamp create_time = 2 [
     (gogoproto.stdtime) = true,
