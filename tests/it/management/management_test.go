@@ -47,12 +47,12 @@ func TestStorageNode_Heartbeat(t *testing.T) {
 	snms, err := adm.ListStorageNodes(context.Background())
 	assert.NoError(t, err)
 	assert.Len(t, snms, 1)
-	assert.False(t, snms[snid].LastHeartbeatTime.IsZero())
+	assert.False(t, snms[0].LastHeartbeatTime.IsZero())
 
 	assert.Eventually(t, func() bool {
 		snm, err := adm.GetStorageNode(context.Background(), snid)
 		assert.NoError(t, err)
-		return snm.LastHeartbeatTime.After(snms[snid].LastHeartbeatTime)
+		return snm.LastHeartbeatTime.After(snms[0].LastHeartbeatTime)
 	}, 10*tick, tick)
 }
 
@@ -756,7 +756,7 @@ func TestRemoveTopic(t *testing.T) {
 		Convey("When RemoveTopic", func(ctx C) {
 			vmsCL := env.GetVMSClient(t)
 			rmTopicID := env.TopicIDs()[0]
-			_, err := vmsCL.UnregisterTopic(context.TODO(), rmTopicID)
+			err := vmsCL.UnregisterTopic(context.TODO(), rmTopicID)
 			So(err, ShouldBeNil)
 
 			meta := env.GetMetadata(t)

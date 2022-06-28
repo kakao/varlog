@@ -21,6 +21,8 @@ option (gogoproto.goproto_sizecache_all) = false;
 // It contains mutable properties, for instance, usage of storage, log streams,
 // etc.
 message StorageNodeMetadataDescriptor {
+  option (gogoproto.equal) = true;
+
   // ClusterID is the identifier of the cluster.
   uint32 cluster_id = 1 [
     (gogoproto.casttype) =
@@ -29,8 +31,11 @@ message StorageNodeMetadataDescriptor {
     (gogoproto.jsontag) = "clusterId"
   ];
 
-  varlogpb.StorageNode storage_node = 2
-      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "storageNode"];
+  varlogpb.StorageNode storage_node = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.embed) = true,
+    (gogoproto.jsontag) = ""
+  ];
 
   repeated varlogpb.StorageDescriptor storages = 3
       [(gogoproto.nullable) = false];

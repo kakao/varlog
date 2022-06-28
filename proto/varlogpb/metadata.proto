@@ -272,9 +272,9 @@ message MetadataRepositoryNode {
     (gogoproto.jsontag) = "nodeId"
   ];
   string raft_url = 2
-      [(gogoproto.customname) = "RaftURL", (gogoproto.jsontag) = "raftUrl"];
+      [(gogoproto.customname) = "RaftURL", (gogoproto.jsontag) = "raftURL"];
   string rpc_addr = 3
       [(gogoproto.customname) = "RPCAddr", (gogoproto.jsontag) = "rpcAddr"];
-  bool leader = 4;
-  bool learner = 5;
+  bool leader = 4 [(gogoproto.jsontag) = "leader"];
+  bool learner = 5 [(gogoproto.jsontag) = "learner"];
 }

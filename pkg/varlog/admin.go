@@ -26,24 +26,21 @@ type Admin interface {
 	// GetStorageNode returns the metadata of the storage node specified by the argument snid.
 	// It returns the ErrNotExist error if the storage node does not exist.
 	GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error)
-	// ListStorageNodes returns a map of StorageNodeIDs and their metadata.
-	// It returns a nil map if no storage nodes exist in the cluster.
-	// It is okay if it could not fetch metadata of storage nodes, however,
-	// the status of the failed storage node is
-	// StorageNodeStatusUnavailable.
-	// If the admin could not fetch cluster metadata, it returns an error,
-	// and users can retry this RPC.
-	ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error)
+	// ListStorageNodes returns a list of storage node metadata.
+	//
+	// Note that it should return an empty slice rather than nil to encode
+	// to an empty array in JSON if no storage node exists in the cluster.
+	ListStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error)
 	// GetStorageNodes returns a map of StorageNodeIDs and their addresses.
 	// Deprecated: Use ListStorageNodes.
-	GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error)
+	GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error)
 	// AddStorageNode registers a storage node, whose ID and address are
 	// the argument snid and addr respectively, to the cluster.
 	// It is okay to call AddStorageNode more than one time to add the same
 	// storage node.
 	// Once the storage node is registered, the pair of snid and addr
 	// should not be changed.
-	AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error)
+	AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*vmspb.StorageNodeMetadata, error)
 	// UnregisterStorageNode unregisters a storage node identified by the
 	// argument snid from the cluster.
 	// It is okay to unregister not existed storage node.
@@ -58,14 +55,15 @@ type Admin interface {
 	// and users can retry this RPC.
 	GetTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error)
 	// ListTopics returns a list of all topics in the cluster.
-	// If the admin could not fetch cluster metadata, it returns an error,
-	// and users can retry this RPC.
+	//
+	// Note that it should return an empty slice rather than nil to encode
+	// to an empty array in JSON if no topic exists in the cluster.
 	ListTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, error)
 	// AddTopic adds a new topic and returns its metadata including a
 	// unique topid ID.
 	// It returns an error if rejected by the metadata repository due to
 	// redundant topic ID or something else, and users can retry this RPC.
-	AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, error)
+	AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error)
 	// UnregisterTopic removes a topic identified by the argument tpid from
 	// the cluster.
 	// It is okay to delete not existed topic.
@@ -73,14 +71,17 @@ type Admin interface {
 	// log streams.
 	// If the admin could not fetch cluster metadata, it returns an error,
 	// and users can retry this RPC.
-	UnregisterTopic(ctx context.Context, tpid types.TopicID) (*vmspb.UnregisterTopicResponse, error)
+	UnregisterTopic(ctx context.Context, tpid types.TopicID) error
 
 	// GetLogStream returns metadata of log stream specified by the argument tpid and lsid.
 	// It returns an error if there is no topic or log stream.
 	GetLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error)
 	// ListLogStreams returns a list of log streams belonging to the topic
 	// tpid.
-	ListLogStreams(ctx context.Context, tpid types.TopicID) ([]*varlogpb.LogStreamDescriptor, error)
+	//
+	// Note that it should return an empty slice rather than nil to encode
+	// to an empty array in JSON if no log stream exists in the topic.
+	ListLogStreams(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error)
 	// DescribeTopic returns detailed metadata of the topic.
 	// Deprecated: Use ListLogStreams.
 	DescribeTopic(ctx context.Context, topicID types.TopicID) (*vmspb.DescribeTopicResponse, error)
@@ -127,7 +128,7 @@ type Admin interface {
 	Trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error)
 
 	GetMetadataRepositoryNode(ctx context.Context, nid types.NodeID) (*varlogpb.MetadataRepositoryNode, error)
-	ListMetadataRepositoryNodes(ctx context.Context) ([]*varlogpb.MetadataRepositoryNode, error)
+	ListMetadataRepositoryNodes(ctx context.Context) ([]varlogpb.MetadataRepositoryNode, error)
 	// GetMRMembers returns metadata repositories of the cluster.
 	GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error)
 	AddMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr string) (*varlogpb.MetadataRepositoryNode, error)
@@ -176,19 +177,34 @@ func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*
 		}
 		return nil, errors.WithMessage(err, "admin: get storage node")
 	}
-	return rsp.GetStorageNode(), nil
+	return rsp.StorageNode, nil
 }
 
-func (c *admin) ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
+func (c *admin) ListStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error) {
 	rsp, err := c.rpcClient.ListStorageNodes(ctx, &vmspb.ListStorageNodesRequest{})
-	return rsp.GetStorageNodes(), errors.WithMessage(err, "admin: list storage nodes") //verrors.FromStatusError(err)
+	if err != nil {
+		return nil, errors.WithMessage(err, "admin: list storage nodes") //verrors.FromStatusError(err)
+	}
+
+	if len(rsp.StorageNodes) > 0 {
+		return rsp.StorageNodes, nil
+	}
+	return []vmspb.StorageNodeMetadata{}, nil
 }
 
-func (c *admin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
-	return c.ListStorageNodes(ctx)
+func (c *admin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error) {
+	snms, err := c.ListStorageNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ret := make(map[types.StorageNodeID]vmspb.StorageNodeMetadata, len(snms))
+	for _, snm := range snms {
+		ret[snm.StorageNode.StorageNodeID] = snm
+	}
+	return ret, nil
 }
 
-func (c *admin) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (c *admin) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*vmspb.StorageNodeMetadata, error) {
 	rsp, err := c.rpcClient.AddStorageNode(ctx, &vmspb.AddStorageNodeRequest{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: snid,
@@ -218,20 +234,27 @@ func (c *admin) GetTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.Top
 
 func (c *admin) ListTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
 	rsp, err := c.rpcClient.ListTopics(ctx, &vmspb.ListTopicsRequest{})
-	return rsp.GetTopics(), err
+	if err != nil {
+		return nil, errors.WithMessage(err, "admin: list topics")
+	}
+
+	if len(rsp.Topics) > 0 {
+		return rsp.Topics, nil
+	}
+	return []varlogpb.TopicDescriptor{}, nil
 }
 
-func (c *admin) AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, error) {
+func (c *admin) AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error) {
 	rsp, err := c.rpcClient.AddTopic(ctx, &vmspb.AddTopicRequest{})
 	if err != nil {
-		return varlogpb.TopicDescriptor{}, err
+		return nil, err
 	}
 	return rsp.Topic, nil
 }
 
-func (c *admin) UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error) {
-	rsp, err := c.rpcClient.UnregisterTopic(ctx, &vmspb.UnregisterTopicRequest{TopicID: topicID})
-	return rsp, err
+func (c *admin) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {
+	_, err := c.rpcClient.UnregisterTopic(ctx, &vmspb.UnregisterTopicRequest{TopicID: topicID})
+	return err
 }
 
 func (c *admin) GetLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
@@ -248,11 +271,18 @@ func (c *admin) GetLogStream(ctx context.Context, tpid types.TopicID, lsid types
 	return rsp.GetLogStream(), nil
 }
 
-func (c *admin) ListLogStreams(ctx context.Context, tpid types.TopicID) ([]*varlogpb.LogStreamDescriptor, error) {
+func (c *admin) ListLogStreams(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
 	rsp, err := c.rpcClient.ListLogStreams(ctx, &vmspb.ListLogStreamsRequest{
 		TopicID: tpid,
 	})
-	return rsp.GetLogStreams(), err
+	if err != nil {
+		return nil, errors.WithMessage(err, "admin: list log streams")
+	}
+
+	if len(rsp.LogStreams) > 0 {
+		return rsp.LogStreams, nil
+	}
+	return []varlogpb.LogStreamDescriptor{}, nil
 }
 
 func (c *admin) DescribeTopic(ctx context.Context, topicID types.TopicID) (*vmspb.DescribeTopicResponse, error) {
@@ -351,9 +381,16 @@ func (c *admin) GetMetadataRepositoryNode(ctx context.Context, nid types.NodeID)
 	return rsp.GetNode(), err
 }
 
-func (c *admin) ListMetadataRepositoryNodes(ctx context.Context) ([]*varlogpb.MetadataRepositoryNode, error) {
+func (c *admin) ListMetadataRepositoryNodes(ctx context.Context) ([]varlogpb.MetadataRepositoryNode, error) {
 	rsp, err := c.rpcClient.ListMetadataRepositoryNodes(ctx, &vmspb.ListMetadataRepositoryNodesRequest{})
-	return rsp.GetNodes(), err
+	if err != nil {
+		return nil, errors.WithMessage(err, "admin: list metadata repositories")
+	}
+
+	if len(rsp.Nodes) > 0 {
+		return rsp.Nodes, nil
+	}
+	return []varlogpb.MetadataRepositoryNode{}, nil
 }
 
 func (c *admin) GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error) {

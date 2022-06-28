@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/urfave/cli/v2"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.daumkakao.com/varlog/varlog/internal/varlogctl"
@@ -19,6 +19,7 @@ func main() {
 func run() int {
 	app := newVarlogControllerApp()
 	if err := app.Run(os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return -1
 	}
 	return 0
@@ -61,6 +62,13 @@ func execute(c *cli.Context, f varlogctl.ExecuteFunc) (err error) {
 	if err != nil {
 		return err
 	}
-	res := ctl.Execute(ctx)
-	return multierr.Append(res.Err(), ctl.Print(res, os.Stdout))
+	data, err := ctl.Execute(ctx)
+	if err != nil {
+		return err
+	}
+	buf, err := ctl.Decode(data)
+	if err != nil {
+		return err
+	}
+	return ctl.Print(buf, os.Stdout)
 }

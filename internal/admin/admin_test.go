@@ -149,7 +149,7 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 					&varlogpb.MetadataDescriptor{}, nil,
 				).AnyTimes()
 				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(&vmspb.StorageNodeMetadata{
-					StorageNodeMetadataDescriptor: &snpb.StorageNodeMetadataDescriptor{
+					StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 						StorageNode: varlogpb.StorageNode{
 							StorageNodeID: snid,
 						},
@@ -225,9 +225,9 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 					}, nil,
 				).AnyTimes()
 				mock.MockRepository.EXPECT().ListStorageNodes().Return(
-					map[types.StorageNodeID]*vmspb.StorageNodeMetadata{
-						snid: {
-							StorageNodeMetadataDescriptor: &snpb.StorageNodeMetadataDescriptor{
+					[]vmspb.StorageNodeMetadata{
+						{
+							StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 								StorageNode: varlogpb.StorageNode{
 									StorageNodeID: snid,
 									Address:       addr,
@@ -268,7 +268,7 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 			rsp, err := client.ListStorageNodes(context.Background())
 			if tc.success {
 				assert.NoError(t, err)
-				assert.Equal(t, tc.status, rsp[snid].Status)
+				assert.Equal(t, tc.status, rsp[0].Status)
 			} else {
 				assert.Error(t, err)
 			}
@@ -288,9 +288,26 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 		prepare func(mock *testMock)
 	}{
 		{
+			name:    "AlreadyExistedNode",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(
+					&vmspb.StorageNodeMetadata{
+						StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+								Address:       addr,
+							},
+						},
+					}, true,
+				)
+			},
+		},
+		{
 			name:    "GetMetadataError",
 			success: false,
 			prepare: func(mock *testMock) {
+				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(nil, false)
 				mock.MockStorageNodeManager.EXPECT().GetMetadataByAddress(gomock.Any(), snid, addr).Return(nil, errors.New("error"))
 			},
 		},
@@ -298,6 +315,7 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 			name:    "RejectedByMetadataRepository",
 			success: false,
 			prepare: func(mock *testMock) {
+				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(nil, false)
 				mock.MockStorageNodeManager.EXPECT().GetMetadataByAddress(gomock.Any(), snid, addr).Return(
 					&snpb.StorageNodeMetadataDescriptor{
 						StorageNode: varlogpb.StorageNode{
@@ -325,6 +343,18 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 				)
 				mock.MockMetadataRepositoryManager.EXPECT().RegisterStorageNode(gomock.Any(), gomock.Any()).Return(nil)
 				mock.MockStorageNodeManager.EXPECT().AddStorageNode(gomock.Any(), snid, addr)
+				mock.MockRepository.EXPECT().Report(gomock.Any(), gomock.Any(), gomock.Any())
+				f := mock.MockRepository.EXPECT().GetStorageNode(snid).Return(nil, false)
+				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(
+					&vmspb.StorageNodeMetadata{
+						StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+								Address:       addr,
+							},
+						},
+					}, true,
+				).After(f)
 			},
 		},
 	}
@@ -344,6 +374,7 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 				admin.WithStorageNodeWatcherOptions(
 					snwatcher.WithStatisticsRepository(mock.MockRepository),
 				),
+				admin.WithStatisticsRepository(mock.MockRepository),
 			)
 			tadm.Serve(t)
 			defer tadm.Close(t)
@@ -689,7 +720,7 @@ func TestAdmin_UnregisterTopic(t *testing.T) {
 			client, closer := newTestClient(t, tadm.Address())
 			defer closer()
 
-			_, err := client.UnregisterTopic(context.Background(), tpid)
+			err := client.UnregisterTopic(context.Background(), tpid)
 			if tc.success {
 				assert.NoError(t, err)
 			} else {

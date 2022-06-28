@@ -160,7 +160,7 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 	return snm, nil
 }
 
-func (adm *Admin) listStorageNodes(ctx context.Context) (snmds map[types.StorageNodeID]*vmspb.StorageNodeMetadata, err error) {
+func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
 	return adm.statRepository.ListStorageNodes(), nil
@@ -172,24 +172,20 @@ func (adm *Admin) listStorageNodes(ctx context.Context) (snmds map[types.Storage
 // It could not add a storage node under the following conditions:
 //  - It could not fetch metadata from the storage node.
 //  - It is rejected by the metadata repository.
-func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*vmspb.StorageNodeMetadata, error) {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
+
+	// If there is a storage node whose ID and address are the same as the
+	// arguments snid and addr, it will succeed. If only one of them is the
+	// same, it will fail by the metadata repository.
+	if snm, ok := adm.statRepository.GetStorageNode(snid); ok && snm.StorageNode.Address == addr {
+		return snm, nil
+	}
 
 	snmd, err := adm.snmgr.GetMetadataByAddress(ctx, snid, addr)
 	if err != nil {
 		return nil, err
-	}
-
-	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// If there is a storage node whose ID and address are the same as the
-	// arguments snid and addr, it will succeed. If only one of them is the
-	// same, it will fail by the metadata repository.
-	if snd := md.GetStorageNode(snid); snd != nil && snd.Address == addr {
-		return snmd, nil
 	}
 
 	now := time.Now().UTC()
@@ -202,7 +198,11 @@ func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, 
 
 	adm.snmgr.AddStorageNode(ctx, snmd.StorageNode.StorageNodeID, addr)
 	adm.statRepository.Report(ctx, snmd, now)
-	return snmd, err
+	snm, ok := adm.statRepository.GetStorageNode(snid)
+	if !ok {
+		return nil, fmt.Errorf("add storage node: temporal failure")
+	}
+	return snm, err
 }
 
 func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageNodeID) error {
@@ -264,7 +264,7 @@ func (adm *Admin) listTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, e
 	return tds, nil
 }
 
-func (adm *Admin) addTopic(ctx context.Context) (varlogpb.TopicDescriptor, error) {
+func (adm *Admin) addTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error) {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
 
@@ -272,10 +272,10 @@ func (adm *Admin) addTopic(ctx context.Context) (varlogpb.TopicDescriptor, error
 	// Note that the metadata repository accepts redundant RegisterTopic
 	// RPC only if the topic has no log streams.
 	if err := adm.mrmgr.RegisterTopic(ctx, topicID); err != nil {
-		return varlogpb.TopicDescriptor{}, err
+		return nil, err
 	}
 
-	return varlogpb.TopicDescriptor{TopicID: topicID}, nil
+	return &varlogpb.TopicDescriptor{TopicID: topicID}, nil
 }
 
 func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error {
@@ -326,7 +326,7 @@ func (adm *Admin) getLogStream(ctx context.Context, tpid types.TopicID, lsid typ
 	return lsd, nil
 }
 
-func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]*varlogpb.LogStreamDescriptor, error) {
+func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, errors.WithMessage(err, "list log streams")
@@ -335,7 +335,7 @@ func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]*va
 	if td == nil {
 		return nil, errors.WithMessagef(admerrors.ErrNoSuchTopic, "list log streams: tpid %d", int32(tpid))
 	}
-	lsds := make([]*varlogpb.LogStreamDescriptor, 0, len(td.LogStreams))
+	lsds := make([]varlogpb.LogStreamDescriptor, 0, len(td.LogStreams))
 	for _, lsid := range td.LogStreams {
 		lsd := md.GetLogStream(lsid)
 		if lsd == nil {
@@ -344,7 +344,7 @@ func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]*va
 		if lsd.TopicID != tpid {
 			return nil, fmt.Errorf("list log streams: unexpected topic: expected %d, actual %d", int32(tpid), int32(lsd.TopicID))
 		}
-		lsds = append(lsds, lsd)
+		lsds = append(lsds, *lsd)
 	}
 	return lsds, nil
 }
@@ -788,14 +788,14 @@ func (adm *Admin) getMetadataRepositoryNode(ctx context.Context, nid types.NodeI
 	}, nil
 }
 
-func (adm *Admin) listMetadataRepositoryNodes(ctx context.Context) ([]*varlogpb.MetadataRepositoryNode, error) {
+func (adm *Admin) listMetadataRepositoryNodes(ctx context.Context) ([]varlogpb.MetadataRepositoryNode, error) {
 	ci, err := adm.mrmgr.GetClusterInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	nodes := make([]*varlogpb.MetadataRepositoryNode, 0, len(ci.GetMembers()))
+	nodes := make([]varlogpb.MetadataRepositoryNode, 0, len(ci.GetMembers()))
 	for nid, member := range ci.GetMembers() {
-		nodes = append(nodes, &varlogpb.MetadataRepositoryNode{
+		nodes = append(nodes, varlogpb.MetadataRepositoryNode{
 			NodeID:  nid,
 			RaftURL: member.Peer,
 			RPCAddr: member.Endpoint,

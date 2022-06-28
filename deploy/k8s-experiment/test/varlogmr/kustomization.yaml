@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: busybox
+  newName: mdock.daumkakao.io/busybox
+  newTag: stable
+- name: idock.daumkakao.io/varlog/varlog-test
+  newName: idock.daumkakao.io/varlog/varlog-test
+  newTag: varlog-762-550fd4d6-dirty
+
+patchesStrategicMerge:
+- varlogmr-patch.yaml
+resources:
+- ../../base/varlogmr
+
+configMapGenerator:
+- literals:
+  - cluster_id="1"
+  - replication_factor="3"
+  name: varlog-conf
+  options:
+    disableNameSuffixHash: true
+    labels:
+      app.kubernetes.io/component: varlog-conf
+      app.kubernetes.io/name: varlog
+      app.kubernetes.io/part-of: varlog

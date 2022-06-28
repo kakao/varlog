@@ -22,6 +22,12 @@ pipeline {
       }
     } // end of stage("test")
 
+    stage("test: python") {
+      steps {
+        sh "make test_py"
+      }
+    }
+
     stage("e2e") {
       when {
         // skip PR branch

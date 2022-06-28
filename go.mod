@@ -8,6 +8,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.6.0
+	github.com/golang/protobuf v1.5.2
 	github.com/google/gofuzz v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/smartystreets/assertions v1.13.0
@@ -63,7 +64,6 @@ require (
 	github.com/go-logr/stdr v1.2.0 // indirect
 	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/gogo/googleapis v0.0.0-20180223154316-0cd9801be74a // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/googleapis/gnostic v0.5.5 // indirect
