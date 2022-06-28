@@ -64,10 +64,8 @@ def add_raft_peer(admin: str, raft_addr: str, rpc_addr: str) -> bool:
         ]
         logger.info(f"add_raft_peer: {cmd}")
         out = subprocess.check_output(cmd)
-        result = json.loads(out)
-        data = result.get("data", dict())
-        items = data.get("items", list())
-        node_id = items[0].get("nodeId", 0)
+        mrnode = json.loads(out)
+        node_id = mrnode.get("nodeId", 0)
         return node_id != 0
     except subprocess.CalledProcessError:
         return False

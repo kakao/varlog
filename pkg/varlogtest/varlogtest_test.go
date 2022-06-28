@@ -74,7 +74,7 @@ func TestVarlogTest(t *testing.T) {
 
 		rsp, err := adm.DescribeTopic(context.Background(), topicDesc.TopicID)
 		require.NoError(t, err)
-		require.Equal(t, topicDesc, rsp.Topic)
+		require.Equal(t, *topicDesc, rsp.Topic)
 		require.Empty(t, rsp.LogStreams)
 	}
 

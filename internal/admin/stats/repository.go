@@ -4,6 +4,7 @@ package stats
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -42,7 +43,7 @@ type Repository interface {
 
 	// ListStorageNodes returns a map that maps storage node ID to the
 	// metadata for each storage node.
-	ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata
+	ListStorageNodes() []vmspb.StorageNodeMetadata
 
 	// RemoveStorageNode removes the metadata for the storage node
 	// specified by the snid.
@@ -54,8 +55,10 @@ type repository struct {
 
 	meta           *varlogpb.MetadataDescriptor
 	logStreamStats map[types.LogStreamID]*LogStreamStat
-	storageNodes   map[types.StorageNodeID]*vmspb.StorageNodeMetadata
-	mu             sync.RWMutex
+
+	// TODO: Use sorted list for effiecient lookup and pagination.
+	storageNodes map[types.StorageNodeID]*vmspb.StorageNodeMetadata
+	mu           sync.RWMutex
 }
 
 var _ Repository = (*repository)(nil)
@@ -93,7 +96,7 @@ func (s *repository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataD
 			CreateTime: snd.CreateTime,
 		}
 	}
-	snm.StorageNodeMetadataDescriptor = snmd
+	snm.StorageNodeMetadataDescriptor = *snmd
 	snm.LastHeartbeatTime = ts
 	s.storageNodes[snid] = snm
 
@@ -127,15 +130,18 @@ func (s *repository) GetStorageNode(snid types.StorageNodeID) (*vmspb.StorageNod
 	return proto.Clone(snm).(*vmspb.StorageNodeMetadata), true
 }
 
-func (s *repository) ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata {
+func (s *repository) ListStorageNodes() []vmspb.StorageNodeMetadata {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	ret := make(map[types.StorageNodeID]*vmspb.StorageNodeMetadata, len(s.storageNodes))
-	for snid, snm := range s.storageNodes {
-		copied := proto.Clone(snm).(*vmspb.StorageNodeMetadata)
-		ret[snid] = copied
+	snms := make([]vmspb.StorageNodeMetadata, 0, len(s.storageNodes))
+	for _, snm := range s.storageNodes {
+		copied := *proto.Clone(snm).(*vmspb.StorageNodeMetadata)
+		snms = append(snms, copied)
 	}
-	return ret
+	sort.Slice(snms, func(i, j int) bool {
+		return snms[i].StorageNode.StorageNodeID < snms[j].StorageNode.StorageNodeID
+	})
+	return snms
 }
 
 func (s *repository) RemoveStorageNode(snid types.StorageNodeID) {

@@ -38,13 +38,13 @@ func (c *testAdmin) GetStorageNode(context.Context, types.StorageNodeID) (*vmspb
 	panic("not implemented")
 }
 
-func (c *testAdmin) ListStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
+func (c *testAdmin) ListStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
 	defer c.unlock()
 
-	ret := make(map[types.StorageNodeID]*vmspb.StorageNodeMetadata)
+	ret := make([]vmspb.StorageNodeMetadata, 0, len(c.vt.storageNodes))
 	for snID := range c.vt.storageNodes {
 		snmd := c.vt.storageNodes[snID]
 
@@ -66,20 +66,28 @@ func (c *testAdmin) ListStorageNodes(ctx context.Context) (map[types.StorageNode
 			}
 		}
 
-		ret[snID] = &vmspb.StorageNodeMetadata{
-			StorageNodeMetadataDescriptor: &snmd,
+		ret = append(ret, vmspb.StorageNodeMetadata{
+			StorageNodeMetadataDescriptor: snmd,
 			LastHeartbeatTime:             time.Now().UTC(),
-		}
+		})
 	}
 
 	return ret, nil
 }
-func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
-	return c.ListStorageNodes(ctx)
+func (c *testAdmin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error) {
+	snms, err := c.ListStorageNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ret := make(map[types.StorageNodeID]vmspb.StorageNodeMetadata, len(snms))
+	for _, snm := range snms {
+		ret[snm.StorageNode.StorageNodeID] = snm
+	}
+	return ret, nil
 }
 
 // FIXME: Argument snid
-func (c *testAdmin) AddStorageNode(ctx context.Context, storageNodeID types.StorageNodeID, addr string) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (c *testAdmin) AddStorageNode(ctx context.Context, storageNodeID types.StorageNodeID, addr string) (*vmspb.StorageNodeMetadata, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -106,7 +114,11 @@ func (c *testAdmin) AddStorageNode(ctx context.Context, storageNodeID types.Stor
 	}
 	c.vt.storageNodes[storageNodeID] = storageNodeMetaDesc
 
-	return proto.Clone(&storageNodeMetaDesc).(*snpb.StorageNodeMetadataDescriptor), nil
+	return &vmspb.StorageNodeMetadata{
+		StorageNodeMetadataDescriptor: *proto.Clone(&storageNodeMetaDesc).(*snpb.StorageNodeMetadataDescriptor),
+		CreateTime:                    now,
+		LastHeartbeatTime:             now,
+	}, nil
 }
 
 func (c *testAdmin) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
@@ -147,9 +159,9 @@ func (c *testAdmin) Topics(ctx context.Context) ([]varlogpb.TopicDescriptor, err
 	return ret, nil
 }
 
-func (c *testAdmin) AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, error) {
+func (c *testAdmin) AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error) {
 	if err := c.lock(); err != nil {
-		return varlogpb.TopicDescriptor{}, err
+		return nil, err
 	}
 	defer c.unlock()
 
@@ -165,10 +177,10 @@ func (c *testAdmin) AddTopic(ctx context.Context) (varlogpb.TopicDescriptor, err
 	invalidLogEntry := varlogpb.InvalidLogEntry()
 	c.vt.globalLogEntries[topicID] = []*varlogpb.LogEntry{&invalidLogEntry}
 
-	return *proto.Clone(&topicDesc).(*varlogpb.TopicDescriptor), nil
+	return proto.Clone(&topicDesc).(*varlogpb.TopicDescriptor), nil
 }
 
-func (c *testAdmin) UnregisterTopic(ctx context.Context, topicID types.TopicID) (*vmspb.UnregisterTopicResponse, error) {
+func (c *testAdmin) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {
 	panic("not implemented")
 }
 
@@ -176,7 +188,7 @@ func (c *testAdmin) GetLogStream(ctx context.Context, tpid types.TopicID, lsid t
 	panic("not implemented")
 }
 
-func (c *testAdmin) ListLogStreams(ctx context.Context, tpid types.TopicID) ([]*varlogpb.LogStreamDescriptor, error) {
+func (c *testAdmin) ListLogStreams(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
 	panic("not implemented")
 }
 
@@ -427,7 +439,7 @@ func (c *testAdmin) GetMetadataRepositoryNode(ctx context.Context, nid types.Nod
 	panic("not implemented")
 }
 
-func (c *testAdmin) ListMetadataRepositoryNodes(ctx context.Context) ([]*varlogpb.MetadataRepositoryNode, error) {
+func (c *testAdmin) ListMetadataRepositoryNodes(ctx context.Context) ([]varlogpb.MetadataRepositoryNode, error) {
 	panic("not implemented")
 }
 

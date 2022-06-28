@@ -49,12 +49,10 @@ def fetch_storage_node_id(admin: str, advertise: str) -> Tuple[int, bool]:
     cmd = [f"{binpath}/varlogctl", "sn", "describe", f"--admin={admin}"]
     logger.info(f"fetch_storage_node_id: cmd={cmd}")
     out = subprocess.check_output(cmd)
-    meta = json.loads(out)
-    data = meta.get("data", dict())
-    items = data.get("items", list())
-    for item in items:
-        if item["address"] == advertise:
-            return item["storageNodeId"], True
+    snms = json.loads(out)
+    for snm in snms:
+        if snm["address"] == advertise:
+            return snm["storageNodeId"], True
     return random.randint(1, 2 ** 10), False
 
 
@@ -161,19 +159,26 @@ def start(args: argparse.Namespace) -> None:
             if args.storage_no_sync:
                 cmd.append("--storage-no-sync")
             if args.storage_l0_compaction_threshold:
-                cmd.append(f"--storage-l0-compaction-threshold={args.storage_l0_compaction_threshold}")
+                cmd.append(
+                    f"--storage-l0-compaction-threshold={args.storage_l0_compaction_threshold}")
             if args.storage_l0_stop_writes_threshold:
-                cmd.append(f"--storage-l0-stop-writes-threshold={args.storage_l0_stop_writes_threshold}")
+                cmd.append(
+                    f"--storage-l0-stop-writes-threshold={args.storage_l0_stop_writes_threshold}")
             if args.storage_lbase_max_bytes:
-                cmd.append(f"--storage-lbase-max-bytes={args.storage_lbase_max_bytes}")
+                cmd.append(
+                    f"--storage-lbase-max-bytes={args.storage_lbase_max_bytes}")
             if args.storage_max_open_files:
-                cmd.append(f"--storage-max-open-files={args.storage_max_open_files}")
+                cmd.append(
+                    f"--storage-max-open-files={args.storage_max_open_files}")
             if args.storage_mem_table_size:
-                cmd.append(f"--storage-mem-table-size={args.storage_mem_table_size}")
+                cmd.append(
+                    f"--storage-mem-table-size={args.storage_mem_table_size}")
             if args.storage_mem_table_stop_writes_threshold:
-                cmd.append(f"--storage-mem-table-stop-writes-threshold={args.storage_mem_table_stop_writes_threshold}")
+                cmd.append(
+                    f"--storage-mem-table-stop-writes-threshold={args.storage_mem_table_stop_writes_threshold}")
             if args.storage_max_concurrent_compaction:
-                cmd.append(f"--storage-max-concurrent-compaction={args.storage_max_concurrent_compaction}")
+                cmd.append(
+                    f"--storage-max-concurrent-compaction={args.storage_max_concurrent_compaction}")
             if args.storage_verbose:
                 cmd.append("--storage-verbose")
 
@@ -188,7 +193,8 @@ def start(args: argparse.Namespace) -> None:
 
             time.sleep(args.add_after_seconds)
             if not registered:
-                register_storage_node(args.admin, snid, args.advertise, args.retry_register,
+                register_storage_node(args.admin, snid, args.advertise,
+                                      args.retry_register,
                                       args.retry_interval_seconds)
                 logger.info("registered storage node to cluster")
             ok = True

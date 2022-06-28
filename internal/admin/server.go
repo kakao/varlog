@@ -48,11 +48,11 @@ func (s *server) ListStorageNodes(ctx context.Context, _ *vmspb.ListStorageNodes
 }
 
 func (s *server) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
-	snmeta, err := s.admin.addStorageNode(ctx, req.StorageNode.StorageNodeID, req.StorageNode.Address)
+	snm, err := s.admin.addStorageNode(ctx, req.StorageNode.StorageNodeID, req.StorageNode.Address)
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.AddStorageNodeResponse{StorageNode: snmeta}, nil
+	return &vmspb.AddStorageNodeResponse{StorageNode: snm}, nil
 }
 
 func (s *server) UnregisterStorageNode(ctx context.Context, req *vmspb.UnregisterStorageNodeRequest) (*vmspb.UnregisterStorageNodeResponse, error) {

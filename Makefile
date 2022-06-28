@@ -13,6 +13,7 @@ ifneq ($(shell echo $$OSTYPE | egrep "darwin"),)
 	export CGO_CFLAGS=-Wno-undef-prefix
 endif
 
+PYTHON := python3
 
 .DEFAULT_GOAL := all
 .PHONY: all
@@ -21,8 +22,8 @@ all: generate precommit build
 
 # precommit
 .PHONY: precommit precommit_lint
-precommit: fmt tidy vet test
-precommit_lint: fmt tidy vet lint test
+precommit: fmt tidy vet test test_py
+precommit_lint: fmt tidy vet lint test test_py
 
 
 # build
@@ -65,7 +66,7 @@ BENCH_REPORT := $(REPORTS_DIR)/bench.xml
 
 TEST_FLAGS := -v -race -failfast -count=1
 
-.PHONY: test test_ci test_report coverage_report
+.PHONY: test test_ci test_report coverage_report test_py
 test:
 	tmpfile=$$(mktemp); \
 	(TERM=xterm $(GO) test $(TEST_FLAGS) ./... 2>&1; echo $$? > $$tmpfile) | \
@@ -107,6 +108,9 @@ test_e2e:
 	ret=$$(cat $$tmpfile); \
 	rm -f $$tmpfile; \
 	exit $$ret
+
+test_py:
+	$(PYTHON) -m unittest discover bin/tests
 
 
 # testing on k8s

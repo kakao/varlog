@@ -4,54 +4,39 @@ import (
 	"context"
 
 	"github.com/kakao/varlog/internal/varlogctl"
-	"github.com/kakao/varlog/internal/varlogctl/result"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 )
 
-const resourceType = "logstream"
-
-func Add(topicID types.TopicID) varlogctl.ExecuteFunc {
-	return func(ctx context.Context, adm varlog.Admin) *result.Result {
-		res := result.New(resourceType)
-		if lsd, err := adm.AddLogStream(ctx, topicID, nil); err != nil {
-			res.AddErrors(err)
-		} else {
-			res.AddDataItems(lsd)
+func Describe(tpid types.TopicID, lsid ...types.LogStreamID) varlogctl.ExecuteFunc {
+	return func(ctx context.Context, adm varlog.Admin) (any, error) {
+		if len(lsid) > 0 {
+			return adm.GetLogStream(ctx, tpid, lsid[0])
 		}
-		return res
+		return adm.ListLogStreams(ctx, tpid)
 	}
 }
 
-func Seal(topicID types.TopicID, logStreamID types.LogStreamID) varlogctl.ExecuteFunc {
-	return func(ctx context.Context, adm varlog.Admin) *result.Result {
-		res := result.New(resourceType)
-		rsp, err := adm.Seal(ctx, topicID, logStreamID)
-		if err != nil {
-			res.AddErrors(err)
-			return res
-		}
-		res.AddDataItems(rsp)
-		return res
+func Add(tpid types.TopicID) varlogctl.ExecuteFunc {
+	return func(ctx context.Context, adm varlog.Admin) (any, error) {
+		return adm.AddLogStream(ctx, tpid, nil)
 	}
 }
 
-func Unseal(topicID types.TopicID, logStreamID types.LogStreamID) varlogctl.ExecuteFunc {
-	return func(ctx context.Context, adm varlog.Admin) *result.Result {
-		res := result.New(resourceType)
-		if lsd, err := adm.Unseal(ctx, topicID, logStreamID); err != nil {
-			res.AddErrors(err)
-		} else {
-			res.AddDataItems(lsd)
-		}
-		return res
+func Seal(tpid types.TopicID, lsid types.LogStreamID) varlogctl.ExecuteFunc {
+	return func(ctx context.Context, adm varlog.Admin) (any, error) {
+		return adm.Seal(ctx, tpid, lsid)
 	}
 }
 
-func Sync(topicID types.TopicID, logStreamID types.LogStreamID, src, dst types.StorageNodeID) varlogctl.ExecuteFunc {
-	panic("not implemented")
+func Unseal(tpid types.TopicID, lsid types.LogStreamID) varlogctl.ExecuteFunc {
+	return func(ctx context.Context, adm varlog.Admin) (any, error) {
+		return adm.Unseal(ctx, tpid, lsid)
+	}
 }
 
-func Describe(topicID types.TopicID, logStreamID ...types.LogStreamID) varlogctl.ExecuteFunc {
-	panic("not implemented")
+func Sync(tpid types.TopicID, lsid types.LogStreamID, src, dst types.StorageNodeID) varlogctl.ExecuteFunc {
+	return func(ctx context.Context, adm varlog.Admin) (any, error) {
+		return adm.Sync(ctx, tpid, lsid, src, dst)
+	}
 }

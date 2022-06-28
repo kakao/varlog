@@ -69,22 +69,22 @@ def get_log_dir():
 
 
 def get_info():
+    rep_factor = get_replication_factor()
     try:
-        out = subprocess.check_output([f"{binpath}/varlogctl", "mr", "describe", f"--admin={get_vms_addr()}"])
-        info = json.loads(out)
+        out = subprocess.check_output([
+            f"{binpath}/varlogctl",
+            "mr",
+            "describe",
+            f"--admin={get_vms_addr()}",
+        ])
 
-        members = None
-        rep_factor = get_replication_factor()
-        if "error" not in info:
-            data = info.get("data", dict())
-            items = data.get("items", list())
-            if len(items) > 0:
-                rep_factor = items[0].get("replicationFactor", rep_factor)
-            members = [item["raftURL"] for item in items if "raftURL" in item]
+        nodes = json.loads(out)
+        members = [node["raftURL"] for node in nodes]
         return rep_factor, members
     except Exception:
         logger.exception("could not get peers")
-        return get_replication_factor(), None
+        return rep_factor, None
+
 
 def get_replication_factor():
     return int(os.getenv("REP_FACTOR", DEFAULT_REP_FACTOR))
@@ -103,8 +103,8 @@ def add_raft_peer():
             f"--rpc-addr={rpc_addr}",
             f"--admin={get_vms_addr()}"
         ])
-        info = json.loads(out)
-        node_id = info["data"]["items"][0]["nodeId"]
+        mrnode = json.loads(out)
+        node_id = mrnode.get("nodeId", 0)
         return node_id != "0"
     except Exception:
         logger.exception("could not add peer")
@@ -130,7 +130,6 @@ def remove_raft_peer():
         ])
         logger.info("remove raft:" + str(out))
         json.loads(out)
-
         return True
     except Exception:
         logger.exception("")

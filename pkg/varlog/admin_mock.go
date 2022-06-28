@@ -85,10 +85,10 @@ func (mr *MockAdminMockRecorder) AddMetadataRepositoryNode(arg0, arg1, arg2 inte
 }
 
 // AddStorageNode mocks base method.
-func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string) (*vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddStorageNode", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*snpb.StorageNodeMetadataDescriptor)
+	ret0, _ := ret[0].(*vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -100,10 +100,10 @@ func (mr *MockAdminMockRecorder) AddStorageNode(arg0, arg1, arg2 interface{}) *g
 }
 
 // AddTopic mocks base method.
-func (m *MockAdmin) AddTopic(arg0 context.Context) (varlogpb.TopicDescriptor, error) {
+func (m *MockAdmin) AddTopic(arg0 context.Context) (*varlogpb.TopicDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddTopic", arg0)
-	ret0, _ := ret[0].(varlogpb.TopicDescriptor)
+	ret0, _ := ret[0].(*varlogpb.TopicDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -218,10 +218,10 @@ func (mr *MockAdminMockRecorder) GetStorageNode(arg0, arg1 interface{}) *gomock.
 }
 
 // GetStorageNodes mocks base method.
-func (m *MockAdmin) GetStorageNodes(arg0 context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) GetStorageNodes(arg0 context.Context) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStorageNodes", arg0)
-	ret0, _ := ret[0].(map[types.StorageNodeID]*vmspb.StorageNodeMetadata)
+	ret0, _ := ret[0].(map[types.StorageNodeID]vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -248,10 +248,10 @@ func (mr *MockAdminMockRecorder) GetTopic(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // ListLogStreams mocks base method.
-func (m *MockAdmin) ListLogStreams(arg0 context.Context, arg1 types.TopicID) ([]*varlogpb.LogStreamDescriptor, error) {
+func (m *MockAdmin) ListLogStreams(arg0 context.Context, arg1 types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListLogStreams", arg0, arg1)
-	ret0, _ := ret[0].([]*varlogpb.LogStreamDescriptor)
+	ret0, _ := ret[0].([]varlogpb.LogStreamDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -263,10 +263,10 @@ func (mr *MockAdminMockRecorder) ListLogStreams(arg0, arg1 interface{}) *gomock.
 }
 
 // ListMetadataRepositoryNodes mocks base method.
-func (m *MockAdmin) ListMetadataRepositoryNodes(arg0 context.Context) ([]*varlogpb.MetadataRepositoryNode, error) {
+func (m *MockAdmin) ListMetadataRepositoryNodes(arg0 context.Context) ([]varlogpb.MetadataRepositoryNode, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListMetadataRepositoryNodes", arg0)
-	ret0, _ := ret[0].([]*varlogpb.MetadataRepositoryNode)
+	ret0, _ := ret[0].([]varlogpb.MetadataRepositoryNode)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -278,10 +278,10 @@ func (mr *MockAdminMockRecorder) ListMetadataRepositoryNodes(arg0 interface{}) *
 }
 
 // ListStorageNodes mocks base method.
-func (m *MockAdmin) ListStorageNodes(arg0 context.Context) (map[types.StorageNodeID]*vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) ListStorageNodes(arg0 context.Context) ([]vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListStorageNodes", arg0)
-	ret0, _ := ret[0].(map[types.StorageNodeID]*vmspb.StorageNodeMetadata)
+	ret0, _ := ret[0].([]vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -409,12 +409,11 @@ func (mr *MockAdminMockRecorder) UnregisterStorageNode(arg0, arg1 interface{}) *
 }
 
 // UnregisterTopic mocks base method.
-func (m *MockAdmin) UnregisterTopic(arg0 context.Context, arg1 types.TopicID) (*vmspb.UnregisterTopicResponse, error) {
+func (m *MockAdmin) UnregisterTopic(arg0 context.Context, arg1 types.TopicID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UnregisterTopic", arg0, arg1)
-	ret0, _ := ret[0].(*vmspb.UnregisterTopicResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // UnregisterTopic indicates an expected call of UnregisterTopic.

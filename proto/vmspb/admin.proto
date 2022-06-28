@@ -19,8 +19,10 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message StorageNodeMetadata {
+  option (gogoproto.equal) = true;
+
   snpb.StorageNodeMetadataDescriptor storage_node = 1 [
-    // (gogoproto.nullable) = false,
+    (gogoproto.nullable) = false,
     (gogoproto.embed) = true,
     (gogoproto.jsontag) = ""
   ];
@@ -50,18 +52,14 @@ message GetStorageNodeResponse {
 message ListStorageNodesRequest {}
 message ListStorageNodesResponse {
   // StorageNodes registered to the cluster.
-  map<int32, StorageNodeMetadata> storage_nodes = 1 [
-    (gogoproto.castkey) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
-    (gogoproto.jsontag) = "storageNodes"
-  ];
+  repeated StorageNodeMetadata storage_nodes = 1
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "storageNodes"];
 }
 message AddStorageNodeRequest {
   varlogpb.StorageNode storage_node = 1 [(gogoproto.nullable) = false];
 }
 message AddStorageNodeResponse {
-  snpb.StorageNodeMetadataDescriptor storage_node = 1
-      [(gogoproto.jsontag) = "storageNode"];
+  StorageNodeMetadata storage_node = 1 [(gogoproto.jsontag) = "storageNode"];
 }
 message UnregisterStorageNodeRequest {
   int32 storage_node_id = 1 [
@@ -103,7 +101,7 @@ message ListTopicsResponse {
 message AddTopicRequest {}
 // AddTopicResponse represents a response of AddTopicRequest.
 message AddTopicResponse {
-  varlogpb.TopicDescriptor topic = 1 [(gogoproto.nullable) = false];
+  varlogpb.TopicDescriptor topic = 1 [(gogoproto.jsontag) = "topic"];
 }
 message UnregisterTopicRequest {
   int32 topic_id = 1 [
@@ -139,7 +137,7 @@ message ListLogStreamsRequest {
 }
 message ListLogStreamsResponse {
   repeated varlogpb.LogStreamDescriptor log_streams = 1
-      [(gogoproto.jsontag) = "logStreams"];
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
 }
 message AddLogStreamRequest {
   int32 topic_id = 1 [
@@ -225,6 +223,7 @@ message SealRequest {
     (gogoproto.customname) = "LogStreamID"
   ];
 }
+
 message SealResponse {
   repeated snpb.LogStreamReplicaMetadataDescriptor log_streams = 1
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
@@ -234,6 +233,7 @@ message SealResponse {
     (gogoproto.jsontag) = "sealedGLSN"
   ];
 }
+
 message UnsealRequest {
   int32 topic_id = 1 [
     (gogoproto.casttype) =
@@ -246,9 +246,12 @@ message UnsealRequest {
     (gogoproto.customname) = "LogStreamID"
   ];
 }
+
 message UnsealResponse {
-  varlogpb.LogStreamDescriptor log_stream = 1;
+  varlogpb.LogStreamDescriptor log_stream = 1
+      [(gogoproto.jsontag) = "logStream"];
 }
+
 message SyncRequest {
   int32 topic_id = 1 [
     (gogoproto.casttype) =
@@ -318,7 +321,8 @@ message GetMetadataRepositoryNodeResponse {
 }
 message ListMetadataRepositoryNodesRequest {}
 message ListMetadataRepositoryNodesResponse {
-  repeated varlogpb.MetadataRepositoryNode nodes = 1;
+  repeated varlogpb.MetadataRepositoryNode nodes = 1
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "nodes"];
 }
 message GetMRMembersResponse {
   uint64 leader = 1 [(gogoproto.casttype) =

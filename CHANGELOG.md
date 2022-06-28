@@ -5,7 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Added initial tests for responses of admin protocols. (#VARLOG-747/#685)
 
+## Changed
+- Changed signatures of methods `pkg/varlog.(Admin).UnregisterTopic`, `pkg/varlog.(Admin).ListLogStreams` and `pkg/varlog.(Admin).ListMetadataRepositoryNodes`. (#VARLOG-761/#687)
+- Changed output of varlogctl to show the results of RPCs directly. (#VARLOG-762/#688)
 
 ## [0.1.13] - 2022-06-15
 ### Changed
