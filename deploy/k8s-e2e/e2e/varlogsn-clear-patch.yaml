@@ -1,26 +1,15 @@
----
+kind: DaemonSet
 apiVersion: apps/v1
-kind: StatefulSet
 metadata:
-  name: varlogmr
+  name: varlogsn-clear
   namespace: default
   labels:
     app.kubernetes.io/name: varlog
-    app.kubernetes.io/component: varlogmr
+    app.kubernetes.io/component: varlogsn-clear
     app.kubernetes.io/part-of: varlog
 spec:
-  replicas: 0
   template:
     spec:
-      containers:
-        - name: varlogmr
-          resources:
-            requests:
-              cpu: 1000m
-              memory: 1Gi
-            limits:
-              cpu: 4000m
-              memory: 6Gi
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -29,8 +18,8 @@ spec:
                   - key: dkosv3.9rum.cc/node-group
                     operator: In
                     values:
-                      - varlogmr
-                  - key: varlogmr-status
+                      - varlogsn
+                  - key: varlogsn-status
                     operator: In
                     values:
-                      - started
+                      - cleared

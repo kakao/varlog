@@ -10,9 +10,11 @@ images:
   newTag: stable
 - name: idock.daumkakao.io/varlog/varlog-test
   newName: idock.daumkakao.io/varlog/varlog-test
-  newTag: v0.1.6-9b13d96d
+  newTag: varlog-763-9c8298f2
 
 patchesStrategicMerge:
+- varlogadm-patch.yaml
 - varlogmr-patch.yaml
 - varlogmr-clear-patch.yaml
 - varlogsn-patch.yaml
+- varlogsn-clear-patch.yaml

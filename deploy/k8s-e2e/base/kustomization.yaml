@@ -4,10 +4,9 @@ resources:
   - varlogmr.yaml
   - varlogmr-clear.yaml
   - varlogsn.yaml
+  - varlogsn-clear.yaml
   - varlogadm.yaml
   - ingress-nginx-configmap.yaml
-  - varlogmr-vip-service.yaml
-  - varlogadm-vip-service.yaml
 
 configMapGenerator:
   - literals:

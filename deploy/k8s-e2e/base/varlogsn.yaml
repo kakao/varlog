@@ -4,17 +4,21 @@ metadata:
   name: varlogsn
   namespace: default
   labels:
-    app: varlogsn
-    name: varlogsn
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: varlogsn
+    app.kubernetes.io/part-of: varlog
 spec:
   selector:
     matchLabels:
-      name: varlogsn
+      app.kubernetes.io/name: varlog
+      app.kubernetes.io/component: varlogsn
+      app.kubernetes.io/part-of: varlog
   template:
     metadata:
       labels:
-        app: varlogsn
-        name: varlogsn
+        app.kubernetes.io/name: varlog
+        app.kubernetes.io/component: varlogsn
+        app.kubernetes.io/part-of: varlog
     spec:
       volumes:
         - name: varlogsn-data
@@ -22,6 +26,12 @@ spec:
             path: /varlog/sn
             type: DirectoryOrCreate
       initContainers:
+        - name: init-admin
+          image: idock.daumkakao.io/varlog/varlog-test:latest
+          command:
+            - "sh"
+            - "-c"
+            - "until /varlog/tools/grpc_health_probe -addr=${VARLOGADM_RPC_SERVICE_HOST}:${VARLOGADM_RPC_SERVICE_PORT}; do echo waiting for admin; sleep 2; done"
         - name: volume-perm
           image: mdock.daumkakao.io/busybox:stable
           command:
@@ -98,16 +108,6 @@ spec:
       terminationGracePeriodSeconds: 60
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: varlog-type
-                    operator: In
-                    values:
-                      - varlogsn
-      schedulerName: default-scheduler
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:

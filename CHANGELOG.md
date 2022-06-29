@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Changed
 - Changed signatures of methods `pkg/varlog.(Admin).UnregisterTopic`, `pkg/varlog.(Admin).ListLogStreams` and `pkg/varlog.(Admin).ListMetadataRepositoryNodes`. (#VARLOG-761/#687)
 - Changed output of varlogctl to show the results of RPCs directly. (#VARLOG-762/#688)
+- The metadata repository of end-to-end tests running on k8s now uses StatefulSet rather than DaemonSet. (#VARLOG-763/#689)
 
 ## [0.1.13] - 2022-06-15
 ### Changed

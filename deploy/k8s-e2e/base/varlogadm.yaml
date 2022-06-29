@@ -1,13 +1,36 @@
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: varlogadm-rpc
   namespace: default
+  labels:
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: varlogadm
+    app.kubernetes.io/part-of: varlog
 spec:
   selector:
-    app: varlogadm
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: varlogadm
+    app.kubernetes.io/part-of: varlog
   ports:
     - name: rpc
+      port: 9093
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: varlogadm-rpc-vip
+  namespace: ingress-nginx
+  annotations:
+    service.beta.kubernetes.io/openstack-internal-load-balancer: "true"
+spec:
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+  type: LoadBalancer
+  ports:
+    - name: varlogadm-rpc
       port: 9093
 ---
 apiVersion: apps/v1
@@ -16,16 +39,22 @@ metadata:
   name: varlogadm
   namespace: default
   labels:
-    app: varlogadm
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: varlogadm
+    app.kubernetes.io/part-of: varlog
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: varlogadm
+      app.kubernetes.io/name: varlog
+      app.kubernetes.io/component: varlogadm
+      app.kubernetes.io/part-of: varlog
   template:
     metadata:
       labels:
-        app: varlogadm
+        app.kubernetes.io/name: varlog
+        app.kubernetes.io/component: varlogadm
+        app.kubernetes.io/part-of: varlog
     spec:
       volumes:
         - name: varlogadm-data

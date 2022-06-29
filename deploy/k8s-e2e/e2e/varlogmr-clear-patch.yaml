@@ -4,13 +4,22 @@ metadata:
   name: varlogmr-clear
   namespace: default
   labels:
-    app: varlogmr-clear
-    name: varlogmr-clear
+    app.kubernetes.io/name: varlog
+    app.kubernetes.io/component: varlogmr-clear
+    app.kubernetes.io/part-of: varlog
 spec:
   template:
     spec:
-      volumes:
-        - name: varlogmr-home
-          hostPath:
-            path: /varlog/mr
-            type: DirectoryOrCreate
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: dkosv3.9rum.cc/node-group
+                    operator: In
+                    values:
+                      - varlogmr
+                  - key: varlogmr-status
+                    operator: In
+                    values:
+                      - cleared
