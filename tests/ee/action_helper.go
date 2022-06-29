@@ -1,67 +1,142 @@
-package e2e
+package ee
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"math/rand"
+	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"github.com/stretchr/testify/assert"
 
-	"github.com/kakao/varlog/internal/storagenode/client"
-	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/proto/varlogpb"
+	"github.com/kakao/varlog/tests/ee/k8s/cluster"
 )
 
-func anySNFail(k8s *K8sVarlogCluster, primary bool) error {
-	mrseed, err := k8s.MRAddress()
-	if err != nil {
-		return err
-	}
+func selectStorageNode(ctx context.Context, t *testing.T, tc *cluster.TestCluster, primary bool) types.StorageNodeID {
+	adminAddr := tc.AdminServerAddress(ctx, t)
+	adm, err := varlog.NewAdmin(ctx, adminAddr)
+	assert.NoError(t, err)
+	defer func() {
+		err := adm.Close()
+		assert.NoError(t, err)
+	}()
 
-	connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
-	defer connCancel()
-	mrcli, err := mrc.NewMetadataRepositoryClient(connCtx, mrseed)
-	if err != nil {
-		return err
-	}
-	defer mrcli.Close()
+	tds, err := adm.ListTopics(ctx)
+	assert.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
-	defer cancel()
-	meta, err := mrcli.GetMetadata(ctx)
-	if err != nil {
-		return err
+	tdsTmp := make([]varlogpb.TopicDescriptor, 0, len(tds))
+	for idx := range tds {
+		if len(tds[idx].LogStreams) > 0 {
+			tdsTmp = append(tdsTmp, tds[idx])
+		}
 	}
-	lsdescs := meta.GetLogStreams()
-	if len(lsdescs) == 0 {
-		return errors.New("no logstream")
-	}
+	td := tdsTmp[rand.Intn(len(tdsTmp))]
 
-	idx := rand.Intn(len(lsdescs))
-	lsdesc := lsdescs[idx]
-	var snID types.StorageNodeID
+	lsds, err := adm.ListLogStreams(ctx, td.TopicID)
+	assert.NoError(t, err)
+	lsd := lsds[rand.Intn(len(lsds))]
+
+	var snid types.StorageNodeID
 	if primary {
-		snID = lsdesc.GetReplicas()[0].GetStorageNodeID()
+		snid = lsd.Replicas[0].StorageNodeID
 	} else {
-		snID = lsdesc.Replicas[len(lsdesc.GetReplicas())-1].GetStorageNodeID()
+		assert.Greater(t, len(lsd.Replicas), 1)
+		idx := rand.Intn(len(lsd.Replicas)-1) + 1
+		snid = lsd.Replicas[idx].StorageNodeID
 	}
-	log.Printf("SNFAIL: snid=%d, lsid=%d\n", snID, lsdesc.GetLogStreamID())
-	return k8s.StopSN(snID)
+	return snid
 }
 
-func AnyBackupSNFail(k8s *K8sVarlogCluster) func() error {
-	return func() error {
-		return anySNFail(k8s, false)
+func FailStorageNode(ctx context.Context, t *testing.T, tc *cluster.TestCluster, snid types.StorageNodeID) func() {
+	return func() {
+		tc.StopStorageNode(ctx, t, snid)
 	}
 }
 
+func WaitStorageNodeFail(tc *cluster.TestCluster, nodeNameGetter func() string) func(context.Context, *testing.T) bool {
+	return func(ctx context.Context, t *testing.T) bool {
+		return assert.Eventually(t, func() bool {
+			pods := tc.ListStorageNodePods(ctx, t)
+			for _, pod := range pods {
+				if pod.Spec.NodeName == nodeNameGetter() {
+					return false
+				}
+			}
+			return true
+		}, 10*time.Minute, 10*time.Second)
+	}
+}
+
+func anySNFail(ctx context.Context, t *testing.T, tc *cluster.TestCluster, primary bool, snid *types.StorageNodeID, nodeName *string) bool {
+	t.Helper()
+
+	adminAddr := tc.AdminServerAddress(ctx, t)
+	adm, err := varlog.NewAdmin(ctx, adminAddr)
+	if !assert.NoError(t, err) {
+		return false
+	}
+
+	tds, err := adm.ListTopics(ctx)
+	if !assert.NoError(t, err) {
+		return false
+	}
+	td := tds[rand.Intn(len(tds))]
+
+	lsds, err := adm.ListLogStreams(ctx, td.TopicID)
+	if !assert.NoError(t, err) {
+		return false
+	}
+	lsd := lsds[rand.Intn(len(lsds))]
+
+	if primary {
+		*snid = lsd.Replicas[0].StorageNodeID
+	} else {
+		if !assert.Greater(t, len(lsd.Replicas), 1) {
+			return false
+		}
+		idx := rand.Intn(len(lsd.Replicas)-1) + 1
+		*snid = lsd.Replicas[idx].StorageNodeID
+	}
+	*nodeName = tc.StopStorageNode(ctx, t, *snid)
+	return true
+}
+
+func AnyBackupSNFail(tc *cluster.TestCluster, snid *types.StorageNodeID, nodeName *string) func(context.Context, *testing.T) bool {
+	return func(ctx context.Context, t *testing.T) bool {
+		return anySNFail(ctx, t, tc, false, snid, nodeName)
+	}
+}
+
+func InitLogStream(ctx context.Context, tc *cluster.TestCluster, num int) func(*testing.T, *Action) {
+	return func(t *testing.T, act *Action) {
+		t.Helper()
+
+		addr := tc.AdminServerAddress(ctx, t)
+		adm, err := varlog.NewAdmin(ctx, addr)
+		assert.NoError(t, err)
+
+		td, err := adm.AddTopic(ctx)
+		assert.NoError(t, err)
+		act.AddTopic(td.TopicID)
+
+		for i := 0; i < num; i++ {
+			lsd, err := adm.AddLogStream(ctx, td.TopicID, nil)
+			assert.NoError(t, err)
+			act.AddLogStream(td.TopicID, lsd.LogStreamID)
+		}
+	}
+}
+
+func StartStorageNode(tc *cluster.TestCluster, nodeNameGetter func() string) func(context.Context, *testing.T) bool {
+	return func(ctx context.Context, t *testing.T) bool {
+		t.Helper()
+		return tc.StartStorageNode(ctx, t, nodeNameGetter())
+	}
+}
+
+/*
 func AnyPrimarySNFail(k8s *K8sVarlogCluster) func() error {
 	return func() error {
 		return anySNFail(k8s, true)
@@ -88,7 +163,7 @@ func WaitSNFail(k8s *K8sVarlogCluster) func() error {
 			return nil
 		}
 		if err == nil {
-			err = errors.New("change check timeout")
+			err = errors.New("changeFunc checkFunc timeout")
 		}
 		return errors.WithMessagef(err, "tries = %d, n = %d", tries, n)
 	}
@@ -118,17 +193,14 @@ func RecoverSNCheck(k8s *K8sVarlogCluster) func() error {
 			return nil
 		}
 		if err == nil {
-			err = errors.New("recover check timeout")
+			err = errors.New("recover checkFunc timeout")
 		}
 		return errors.WithMessagef(err, "tries = %d, n = %d", tries, n)
 	}
 }
 
-func mrFail(k8s *K8sVarlogCluster, leader bool) error {
-	vmsaddr, err := k8s.VMSAddress()
-	if err != nil {
-		return err
-	}
+func mrFail(t *testing.T, k8s *K8sVarlogCluster, leader bool) error {
+	vmsaddr := k8s.tc.AdminServerAddress(context.Background(), t)
 
 	connCtx, connCancel := context.WithTimeout(context.Background(), k8s.timeout)
 	defer connCancel()
@@ -158,15 +230,15 @@ func mrFail(k8s *K8sVarlogCluster, leader bool) error {
 	return errors.New("no target mr")
 }
 
-func FollowerMRFail(k8s *K8sVarlogCluster) func() error {
+func FollowerMRFail(t *testing.T, k8s *K8sVarlogCluster) func() error {
 	return func() error {
-		return mrFail(k8s, false)
+		return mrFail(t, k8s, false)
 	}
 }
 
-func LeaderMRFail(k8s *K8sVarlogCluster) func() error {
+func LeaderMRFail(t *testing.T, k8s *K8sVarlogCluster) func() error {
 	return func() error {
-		return mrFail(k8s, true)
+		return mrFail(t, k8s, true)
 	}
 }
 
@@ -190,7 +262,7 @@ func WaitMRFail(k8s *K8sVarlogCluster) func() error {
 			return nil
 		}
 		if err == nil {
-			err = errors.New("change check timeout")
+			err = errors.New("changeFunc checkFunc timeout")
 		}
 		return errors.WithMessagef(err, "tries = %d, n = %d", tries, n)
 	}
@@ -220,7 +292,7 @@ func RecoverMRCheck(k8s *K8sVarlogCluster) func() error {
 			return nil
 		}
 		if err == nil {
-			err = errors.New("recover check timeout")
+			err = errors.New("recover checkFunc timeout")
 		}
 		return errors.WithMessagef(err, "tries = %d, n = %d", tries, n)
 	}
@@ -247,7 +319,7 @@ func InitLogStream(k8s *K8sVarlogCluster) func() error {
 		if err != nil {
 			return err
 		}
-		topicID := topic.TopicID
+		 := topic.TopicID
 
 		for i := 0; i < k8s.NrLS; i++ {
 			ctx, cancel := context.WithTimeout(context.Background(), k8s.timeout)
@@ -543,7 +615,7 @@ func WaitSealed(k8s *K8sVarlogCluster) func() error {
 			return nil
 		}
 		if err == nil {
-			err = errors.New("change check timeout")
+			err = errors.New("changeFunc checkFunc timeout")
 		}
 		return errors.WithMessagef(err, "tries = %d, dur = %v", tries, time.Since(dur))
 	}
@@ -630,3 +702,4 @@ func isReplicaSealed(k8s *K8sVarlogCluster, addr string, lsID types.LogStreamID)
 
 	return lsdesc.Status == varlogpb.LogStreamStatusSealed, nil
 }
+*/

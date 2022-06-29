@@ -103,7 +103,7 @@ bench_report:
 
 test_e2e:
 	tmpfile=$$(mktemp); \
-	(TERM=xterm $(GO) test $(TEST_FLAGS) ./tests/e2e -tags=e2e 2>&1; echo $$? > $$tmpfile) | \
+	(TERM=xterm $(GO) test $(TEST_FLAGS) ./tests/ee -tags=e2e 2>&1; echo $$? > $$tmpfile) | \
 	tee $(TEST_OUTPUT); \
 	ret=$$(cat $$tmpfile); \
 	rm -f $$tmpfile; \
