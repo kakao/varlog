@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Added initial tests for responses of admin protocols. (#VARLOG-747/#685)
+- Added `--logfile-retention-days` flags to the varlogadm to set retention of log files in a unit of days. (#VARLOG-764/#690)
+- Added `--logfile-compression` flags to the varlogadm to compress log files. (#VARLOG-764/#690)
 
 ## Changed
 - Changed signatures of methods `pkg/varlog.(Admin).UnregisterTopic`, `pkg/varlog.(Admin).ListLogStreams` and `pkg/varlog.(Admin).ListMetadataRepositoryNodes`. (#VARLOG-761/#687)
 - Changed output of varlogctl to show the results of RPCs directly. (#VARLOG-762/#688)
 - The metadata repository of end-to-end tests running on k8s now uses StatefulSet rather than DaemonSet. (#VARLOG-763/#689)
+- The file name of log files in the varlogadm is formatted by local time rather than UTC. (#VARLOG-764/#690)
 
 ## [0.1.13] - 2022-06-15
 ### Changed

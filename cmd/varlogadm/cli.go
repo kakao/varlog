@@ -1,4 +1,4 @@
-package app
+package main
 
 import (
 	"context"
@@ -15,18 +15,18 @@ import (
 	"github.daumkakao.com/varlog/varlog/pkg/util/log"
 )
 
-func InitCLI() *cli.App {
-	app := &cli.App{
+func newAdminApp() *cli.App {
+	return &cli.App{
 		Name:    "varlogadm",
 		Usage:   "run varlog admin server",
-		Version: "v0.0.1",
+		Version: "0.0.1",
+		Commands: []*cli.Command{
+			newStartCommand(),
+		},
 	}
-	cli.VersionFlag = &cli.BoolFlag{Name: "version"}
-	app.Commands = append(app.Commands, initStartCommand())
-	return app
 }
 
-func initStartCommand() *cli.Command {
+func newStartCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "start",
 		Aliases: []string{"s"},
@@ -51,6 +51,8 @@ func initStartCommand() *cli.Command {
 
 			flagLogDir.StringFlag(false, ""),
 			flagLogToStderr.BoolFlag(),
+			flagLogFileRetentionDays.IntFlag(false, 0),
+			flagLogFileCompression.BoolFlag(),
 		},
 	}
 }
@@ -113,25 +115,26 @@ func start(c *cli.Context) error {
 }
 
 func newLogger(c *cli.Context) (*zap.Logger, error) {
-	logtostderr := c.Bool(flagLogToStderr.Name)
-	logdir := c.String(flagLogDir.Name)
-	if !logtostderr && len(logdir) == 0 {
-		return zap.NewNop(), nil
-	}
-
-	logOpts := []log.Option{
+	opts := []log.Option{
 		log.WithHumanFriendly(),
+		log.WithLocalTime(),
 		log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)),
 	}
-	if !logtostderr {
-		logOpts = append(logOpts, log.WithoutLogToStderr())
+	if !c.Bool(flagLogToStderr.Name) {
+		opts = append(opts, log.WithoutLogToStderr())
 	}
-	if len(logdir) != 0 {
+	if logdir := c.String(flagLogDir.Name); len(logdir) != 0 {
 		absDir, err := filepath.Abs(logdir)
 		if err != nil {
 			return nil, err
 		}
-		logOpts = append(logOpts, log.WithPath(filepath.Join(absDir, "varlogadm.log")))
+		opts = append(opts, log.WithPath(filepath.Join(absDir, "varlogadm.log")))
 	}
-	return log.New(logOpts...)
+	if c.Bool(flagLogFileCompression.Name) {
+		opts = append(opts, log.WithCompression())
+	}
+	if retention := c.Int(flagLogFileRetentionDays.Name); retention > 0 {
+		opts = append(opts, log.WithAgeDays(retention))
+	}
+	return log.New(opts...)
 }
