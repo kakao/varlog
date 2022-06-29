@@ -40,6 +40,8 @@ def start(cluster_id: int, listen: str, replication_factor: int,
         f"--mr-address={mr_address}",
         f"--rpc-bind-address={listen}",
         "--logtostderr",
+        "--logfile-retention-days=7",
+        "--logfile-compression"
     ]
 
     if logdir:

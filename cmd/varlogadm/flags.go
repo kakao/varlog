@@ -1,4 +1,4 @@
-package app
+package main
 
 import (
 	"github.com/kakao/varlog/internal/flags"
@@ -70,5 +70,15 @@ var (
 		Name:    "logtostderr",
 		Aliases: []string{"log-to-stderr"},
 		Envs:    []string{"LOGTOSTDERR", "LOG_TO_STDERR"},
+	}
+	flagLogFileRetentionDays = flags.FlagDesc{
+		Name:    "logfile-retention-days",
+		Aliases: []string{"log-file-retention-days"},
+		Envs:    []string{"LOGFILE_RETENTION_DAYS", "LOG_FILE_RETENTION_DAYS"},
+	}
+	flagLogFileCompression = flags.FlagDesc{
+		Name:    "logfile-compression",
+		Aliases: []string{"log-file-compression"},
+		Envs:    []string{"LOGFILE_COMPRESSION", "LOG_FILE_COMPRESSION"},
 	}
 )
