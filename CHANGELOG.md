@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+
+## [0.1.14] - 2022-06-30
 ### Added
 - Added initial tests for responses of admin protocols. (#VARLOG-747/#685)
 - Added `--logfile-retention-days` flags to the varlogadm to set retention of log files in a unit of days. (#VARLOG-764/#690)
@@ -15,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed output of varlogctl to show the results of RPCs directly. (#VARLOG-762/#688)
 - The metadata repository of end-to-end tests running on k8s now uses StatefulSet rather than DaemonSet. (#VARLOG-763/#689)
 - The file name of log files in the varlogadm is formatted by local time rather than UTC. (#VARLOG-764/#690)
+
 
 ## [0.1.13] - 2022-06-15
 ### Changed
@@ -214,7 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2021-12-15
 
 
-[Unreleased]: https://github.daumkakao.com/varlog/varlog/compare/v0.1.13...HEAD
+[Unreleased]: https://github.daumkakao.com/varlog/varlog/compare/v0.1.14...HEAD
+[0.1.14]: https://github.daumkakao.com/varlog/varlog/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.daumkakao.com/varlog/varlog/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.daumkakao.com/varlog/varlog/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.daumkakao.com/varlog/varlog/compare/v0.1.10...v0.1.11
