@@ -1,0 +1,36 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: varlogmr
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlogmr
+    app.kubernetes.io/component: metadata-repository
+    app.kubernetes.io/part-of: varlog
+spec:
+  replicas: 0
+  template:
+    spec:
+      containers:
+        - name: varlogmr
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 1Gi
+            limits:
+              cpu: 4000m
+              memory: 6Gi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: dkosv3.9rum.cc/node-group
+                    operator: In
+                    values:
+                      - varlogmr
+                  - key: varlogmr-status
+                    operator: In
+                    values:
+                      - started

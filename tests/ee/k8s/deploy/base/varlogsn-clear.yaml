@@ -1,0 +1,52 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: varlogsn-clear
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlogsn-clear
+    app.kubernetes.io/component: storage-node
+    app.kubernetes.io/part-of: varlog
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: varlogsn-clear
+      app.kubernetes.io/component: storage-node
+      app.kubernetes.io/part-of: varlog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: varlogsn-clear
+        app.kubernetes.io/component: storage-node
+        app.kubernetes.io/part-of: varlog
+    spec:
+      volumes:
+        - name: varlogsn-data
+          hostPath:
+            path: /varlog/sn
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-sn-clear
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "rm -rf /varlog/sn/data/*"
+          volumeMounts:
+            - name: varlogsn-data
+              mountPath: /varlog/sn
+      containers:
+        - name: varlogsn-clear
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "ls -alh /varlog/sn; echo The app is running! && sleep 3600"
+          volumeMounts:
+            - name: varlogsn-data
+              mountPath: /varlog/sn
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 10
+  revisionHistoryLimit: 10

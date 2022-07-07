@@ -136,7 +136,7 @@ test_e2e_docker:
 		--env="VAULT_ADDR=$(VAULT_ADDR)" \
 		--env="VAULT_TOKEN=$(VAULT_TOKEN)" \
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
-		--command -- sh -c "cd /varlog/build && $(GO) test ./tests/e2e -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1"
+		--command -- sh -c "cd /varlog/build && $(GO) test ./tests/ee -tags=e2e -v -timeout 30m -failfast -count 1 -race -p 1"
 
 test_e2e_docker_long:
 	kubectl run --rm -it $(TEST_POD_NAME) \
@@ -147,7 +147,7 @@ test_e2e_docker_long:
 		--env="VAULT_ADDR=$(VAULT_ADDR)" \
 		--env="VAULT_TOKEN=$(VAULT_TOKEN)" \
 		--env="VAULT_SECRET_PATH=$(VAULT_SECRET_PATH)" \
-		--command -- sh -c "cd /varlog/build && $(GO) test ./tests/e2e -tags=long_e2e -v -timeout 30m -failfast -count 1 -p 1"
+		--command -- sh -c "cd /varlog/build && $(GO) test ./tests/ee -tags=long_e2e -v -timeout 30m -failfast -count 1 -p 1"
 
 
 # docker
@@ -166,11 +166,10 @@ docker:
 		-t $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG) . && \
 	docker push $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG)
 
-KUSTOMIZE_ENV := e2e
-kustomize:
-	@cd $(CURDIR)/deploy/k8s-e2e/$(KUSTOMIZE_ENV) && \
+kustomize_e2e:
+	@cd $(CURDIR)/tests/ee/k8s/deploy/overlays/dkos && \
 		kustomize edit set image "$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS)=$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG)"
-	@echo "Run this command to apply: kubectl apply -k $(CURDIR)/deploy/k8s-e2e/$(KUSTOMIZE_ENV)/"
+	@echo "Run this command to apply: kubectl apply -k $(CURDIR)/tests/ee/k8s/deploy/overlays/dkos/"
 
 
 # proto

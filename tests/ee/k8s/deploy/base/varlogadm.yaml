@@ -1,0 +1,123 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: varlogadm-rpc
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlogadm
+    app.kubernetes.io/component: admin
+    app.kubernetes.io/part-of: varlog
+spec:
+  selector:
+    app.kubernetes.io/name: varlogadm
+    app.kubernetes.io/component: admin
+    app.kubernetes.io/part-of: varlog
+  ports:
+    - protocol: TCP
+      name: rpc
+      port: 9093
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: varlogadm-rpc-vip
+  namespace: ingress-nginx
+  annotations:
+    service.beta.kubernetes.io/openstack-internal-load-balancer: "true"
+spec:
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      name: varlogadm-rpc
+      port: 9093
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: varlogadm
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlogadm
+    app.kubernetes.io/component: admin
+    app.kubernetes.io/part-of: varlog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: varlogadm
+      app.kubernetes.io/component: admin
+      app.kubernetes.io/part-of: varlog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: varlogadm
+        app.kubernetes.io/component: admin
+        app.kubernetes.io/part-of: varlog
+    spec:
+      volumes:
+        - name: varlogadm-data
+          hostPath:
+            path: /varlog/adm
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-perm
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "chmod -R 777 /varlog/adm"
+          volumeMounts:
+            - name: varlogadm-data
+              mountPath: /varlog/adm
+      containers:
+        - name: varlogadm
+          image: idock.daumkakao.io/varlog/varlog-test:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - "python3"
+          args:
+            - "/varlog/bin/start_varlogadm.py"
+            - "--cluster-id=$(CLUSTER_ID)"
+            - "--listen=0.0.0.0:9093"
+            - "--replication-factor=$(REPLICATION_FACTOR)"
+            - "--mr-address=$(VARLOGMR_RPC_SERVICE_HOST):$(VARLOGMR_RPC_SERVICE_PORT)"
+            - "--logdir=/varlog/adm/logs"
+          env:
+            - name: TZ
+              value: Asia/Seoul
+            - name: CLUSTER_ID
+              valueFrom:
+                configMapKeyRef:
+                  key: cluster_id
+                  name: varlog-conf
+            - name: REPLICATION_FACTOR
+              valueFrom:
+                configMapKeyRef:
+                  key: replication_factor
+                  name: varlog-conf
+          volumeMounts:
+            - name: varlogadm-data
+              mountPath: /varlog/adm
+          ports:
+            - protocol: TCP
+              name: rpc
+              containerPort: 9093
+          readinessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "/varlog/tools/grpc_health_probe -addr=${HOST_IP}:9093"
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - "/varlog/tools/grpc_health_probe -addr=${HOST_IP}:9093"
+            periodSeconds: 10
+      dnsPolicy: ClusterFirst

@@ -59,8 +59,8 @@ pipeline {
             sh 'kubectl config set-cluster varlog-ci-e2e-01-cluster --insecure-skip-tls-verify=true --server https://dkosv3-varlog-ci-e2e-01-master-1.ay1.krane.9rum.cc:6443'
             sh 'kubectl config set-context varlog-ci-e2e-01-context --cluster=varlog-ci-e2e-01-cluster --user=${E2E_ACCOUNT_USR}'
             sh 'kubectl config use-context varlog-ci-e2e-01-context'
-            sh 'make kustomize DOCKER_TAG=$(build/e2e/d2hub-image-tag.sh) KUSTOMIZE_ENV=e2e'
-            sh 'kubectl apply -k deploy/k8s-e2e/e2e/'
+            sh 'make kustomize_e2e DOCKER_TAG=$(build/e2e/d2hub-image-tag.sh)'
+            sh 'kubectl apply -k tests/ee/k8s/deploy/overlays/dkos/'
             sh 'make test_e2e TEST_FLAGS="-v -race -failfast -count=1 -timeout=30m"'
           } // end of lock
         } // end of withCredentials

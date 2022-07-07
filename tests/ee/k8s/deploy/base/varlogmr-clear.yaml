@@ -1,0 +1,63 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: varlogmr-clear
+  namespace: default
+  labels:
+    app.kubernetes.io/name: varlogmr-clear
+    app.kubernetes.io/component: metadata-repository
+    app.kubernetes.io/part-of: varlog
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: varlogmr-clear
+      app.kubernetes.io/component: metadata-repository
+      app.kubernetes.io/part-of: varlog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: varlogmr-clear
+        app.kubernetes.io/component: metadata-repository
+        app.kubernetes.io/part-of: varlog
+    spec:
+      volumes:
+        - name: varlogmr-home
+          hostPath:
+            path: /varlog/mr
+            type: DirectoryOrCreate
+      initContainers:
+        - name: volume-mr-clear
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "rm -rf /varlog/mr/raftdata"
+          volumeMounts:
+            - name: varlogmr-home
+              mountPath: /varlog/mr
+        - name: volume-set-standalone
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "touch /varlog/mr/.standalone"
+          volumeMounts:
+            - name: varlogmr-home
+              mountPath: /varlog/mr
+      containers:
+        - name: varlogmr-clear
+          image: mdock.daumkakao.io/busybox:stable
+          command:
+            - "sh"
+            - "-c"
+            - "ls -alh /varlog/mr; echo The app is running! && sleep 3600"
+          volumeMounts:
+            - name: varlogmr-home
+              mountPath: /varlog/mr
+      terminationGracePeriodSeconds: 1
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 10
+  revisionHistoryLimit: 10
+
