@@ -3,7 +3,6 @@ package storagenode
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"go.uber.org/zap"
@@ -11,8 +10,8 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storage"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/logstream"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/pprof"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/volume"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
-	"github.daumkakao.com/varlog/varlog/pkg/util/fputil"
 )
 
 const (
@@ -35,6 +34,8 @@ type config struct {
 	replicateClientReadBufferSize   int64
 	replicateClientWriteBufferSize  int64
 	volumes                         []string
+	dataDirs                        []string
+	volumeStrictCheck               bool
 	defaultLogStreamExecutorOptions []logstream.ExecutorOption
 	pprofOpts                       []pprof.Option
 	defaultStorageOptions           []storage.Option
@@ -53,10 +54,12 @@ func newConfig(opts []Option) (config, error) {
 	for _, opt := range opts {
 		opt.apply(&cfg)
 	}
-	if err := cfg.ensureVolumes(); err != nil {
+
+	if err := cfg.validate(); err != nil {
 		return cfg, err
 	}
-	return cfg, cfg.validate()
+
+	return cfg, nil
 }
 
 func (cfg config) validate() error {
@@ -70,43 +73,55 @@ func (cfg config) validate() error {
 		return errors.New("storage node: no logger")
 	}
 	if err := cfg.validateVolumes(); err != nil {
-		return fmt.Errorf("storage node: invalid volumes: %w", err)
+		return fmt.Errorf("storage node: invalid volume: %w", err)
+	}
+	if err := cfg.validateDataDirs(); err != nil {
+		return fmt.Errorf("storage node: invalid data directory: %w", err)
 	}
 	return nil
 }
 
 func (cfg config) validateVolumes() error {
-	volumes := make(map[string]struct{}, len(cfg.volumes))
-	for _, v := range cfg.volumes {
-		fi, err := os.Stat(v)
+	volumes := make([]string, 0, len(cfg.volumes))
+	visited := make(map[string]bool, len(cfg.volumes))
+	for _, vol := range cfg.volumes {
+		norm, err := filepath.Abs(vol)
 		if err != nil {
-			return err
-		}
-		if !fi.IsDir() {
-			return fmt.Errorf("storage node: not directory %s", v)
-		}
-		if err := fputil.IsWritableDir(v); err != nil {
-			return err
+			return fmt.Errorf("storage node: invalid volume: %w", err)
 		}
 
-		volumes[v] = struct{}{}
+		if err := volume.WritableDirectory(norm); err != nil {
+			return fmt.Errorf("storage node: invalid volume: %w", err)
+		}
+
+		if visited[norm] {
+			return fmt.Errorf("storage node: duplicated volume %s", vol)
+		}
+
+		visited[norm] = true
+		volumes = append(volumes, norm)
 	}
-	if len(cfg.volumes) != len(volumes) {
-		return fmt.Errorf("storage node: duplicated volumes %+v", cfg.volumes)
-	}
+	cfg.volumes = volumes
 	return nil
 }
 
-func (cfg *config) ensureVolumes() error {
-	volumes := make([]string, len(cfg.volumes))
-	for i := range cfg.volumes {
-		absVol, err := filepath.Abs(cfg.volumes[i])
+func (cfg *config) validateDataDirs() error {
+	volumes := make(map[string]bool, len(cfg.volumes))
+	for _, vol := range cfg.volumes {
+		volumes[vol] = true
+	}
+	for _, dir := range cfg.dataDirs {
+		dd, err := volume.ParseDataDir(dir)
 		if err != nil {
 			return err
 		}
-		volumes[i] = absVol
+		if err := dd.Valid(cfg.cid, cfg.snid); err != nil {
+			return err
+		}
+		if !volumes[dd.Volume] {
+			return fmt.Errorf("unexpected volume %s", dir)
+		}
 	}
-	cfg.volumes = volumes
 	return nil
 }
 
@@ -195,6 +210,18 @@ func WithDefaultLogStreamExecutorOptions(defaultLSEOptions ...logstream.Executor
 func WithVolumes(volumes ...string) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.volumes = volumes
+	})
+}
+
+func WithDataDirs(dataDirs ...string) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.dataDirs = dataDirs
+	})
+}
+
+func WithVolumeStrictCheck(strict bool) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.volumeStrictCheck = strict
 	})
 }
 

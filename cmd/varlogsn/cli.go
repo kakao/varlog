@@ -38,8 +38,13 @@ func newStartCommand() *cli.Command {
 			flagStorageNodeID.StringFlag(false, types.StorageNodeID(1).String()),
 			flagListen.StringFlag(false, "127.0.0.1:9091"),
 			flagAdvertise.StringFlag(false, ""),
-			flagVolumes.StringSliceFlag(true, nil),
 			flagBallastSize.StringFlag(false, "1G"),
+
+			// volumes
+			flagVolumes.StringSliceFlag(true, nil),
+			flagDataDirs.StringSliceFlag(false, nil),
+			flagVolumeStrictCheck.BoolFlag(),
+
 			flagServerReadBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerReadBufferSize)),
 			flagServerWriteBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerWriteBufferSize)),
 			flagServerMaxRecvMsgSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerMaxRecvSize)),

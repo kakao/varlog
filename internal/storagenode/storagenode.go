@@ -25,6 +25,7 @@ import (
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/logstream"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/pprof"
 	"github.daumkakao.com/varlog/varlog/internal/storagenode/telemetry"
+	"github.daumkakao.com/varlog/varlog/internal/storagenode/volume"
 	"github.daumkakao.com/varlog/varlog/pkg/types"
 	"github.daumkakao.com/varlog/varlog/pkg/util/fputil"
 	"github.daumkakao.com/varlog/varlog/pkg/util/netutil"
@@ -75,12 +76,22 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		return nil, err
 	}
 
-	snPaths, err := createStorageNodePaths(cfg.volumes, cfg.cid, cfg.snid)
+	snPaths, err := volume.CreateStorageNodePaths(cfg.volumes, cfg.cid, cfg.snid)
 	if err != nil {
 		return nil, err
 	}
 	if len(snPaths) == 0 {
 		return nil, errors.New("storage node: no valid storage node path")
+	}
+
+	dataDirs, err := volume.ReadVolumes(cfg.volumes)
+	if err != nil {
+		return nil, err
+	}
+
+	dataDirs, err = volume.GetValidDataDirectories(dataDirs, cfg.dataDirs, cfg.volumeStrictCheck, cfg.cid, cfg.snid)
+	if err != nil {
+		return nil, err
 	}
 
 	sn := &StorageNode{
@@ -101,21 +112,16 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 	if sn.ballastSize > 0 {
 		sn.ballast = make([]byte, sn.ballastSize)
 	}
-	if err := sn.loadLogStreamReplicas(); err != nil {
+	if err := sn.loadLogStreamReplicas(dataDirs); err != nil {
 		return nil, err
 	}
 
 	return sn, nil
 }
 
-func (sn *StorageNode) loadLogStreamReplicas() error {
-	lsPaths := readLogStreamPaths(sn.snPaths)
-	for _, lsPath := range lsPaths {
-		_, _, tpid, lsid, err := parseLogStreamPath(lsPath)
-		if err != nil {
-			return err
-		}
-		if err := sn.runLogStreamReplica(context.Background(), tpid, lsid, lsPath); err != nil {
+func (sn *StorageNode) loadLogStreamReplicas(dataDirs []volume.DataDir) error {
+	for _, dataDir := range dataDirs {
+		if err := sn.runLogStreamReplica(context.Background(), dataDir.TopicID, dataDir.LogStreamID, dataDir.String()); err != nil {
 			return err
 		}
 	}
@@ -255,7 +261,7 @@ func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.Topic
 		return "", errors.New("storage node: closed")
 	}
 
-	lsDirName := logStreamDirName(tpid, lsid)
+	lsDirName := volume.LogStreamDirName(tpid, lsid)
 	lsPath := path.Join(snPath, lsDirName)
 
 	return lsPath, sn.runLogStreamReplica(ctx, tpid, lsid, lsPath)
