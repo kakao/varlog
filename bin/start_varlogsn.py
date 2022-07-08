@@ -56,6 +56,14 @@ def fetch_storage_node_id(admin: str, advertise: str) -> Tuple[int, bool]:
     return random.randint(1, 2 ** 10), False
 
 
+def get_data_dirs(admin: str, snid: int):
+    cmd = [f"{binpath}/varlogctl", "sn", "describe", f"--admin={admin}",
+           f"--snid={snid}"]
+    out = subprocess.check_output(cmd)
+    snm = json.loads(out)
+    return [logstream["path"] for logstream in snm["logStreams"]]
+
+
 def truncate(path: str) -> None:
     """Truncate directory.
 
@@ -125,6 +133,13 @@ def start(args: argparse.Namespace) -> None:
             snid, registered = fetch_storage_node_id(args.admin, args.advertise)
             logger.info(
                 f"storage node id: {snid}, already registered: {registered}")
+
+            if registered:
+                datadirs = get_data_dirs(args.admin, snid)
+                for datadir in datadirs:
+                    if not os.path.isdir(datadir):
+                        logger.info(f"no data directory: {datadir}")
+                        sys.exit(1)
 
             cmd = [
                 f"{binpath}/varlogsn",
