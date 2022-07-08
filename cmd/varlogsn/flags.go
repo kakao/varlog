@@ -17,15 +17,23 @@ var (
 		Aliases: []string{"advertise-address"},
 		Envs:    []string{"ADVERTISE", "ADVERTISE_ADDRESS"},
 	}
+	flagBallastSize = flags.FlagDesc{
+		Name:  "ballast-size",
+		Envs:  []string{"BALLAST_SIZE"},
+		Usage: "B, KiB, MiB, GiB",
+	}
 	flagVolumes = flags.FlagDesc{
 		Name:    "volumes",
 		Aliases: []string{"volume"},
 		Envs:    []string{"VOLUMES", "VOLUME"},
 	}
-	flagBallastSize = flags.FlagDesc{
-		Name:  "ballast-size",
-		Envs:  []string{"BALLAST_SIZE"},
-		Usage: "B, KiB, MiB, GiB",
+	flagDataDirs = flags.FlagDesc{
+		Name:    "datadirs",
+		Aliases: []string{"datadir", "data-dirs", "data-dir"},
+		Envs:    []string{"DATADIRS", "DATA_DIRS"},
+	}
+	flagVolumeStrictCheck = flags.FlagDesc{
+		Name: "volume-strict-check",
 	}
 
 	// grpc options

@@ -154,6 +154,10 @@ def start(args: argparse.Namespace) -> None:
                     truncate(volume)
                 cmd.append(f"--volumes={volume}")
 
+            if registered:
+                for datadir in datadirs:
+                    cmd.append(f"--datadirs={datadir}")
+
             # grpc options
             if args.server_read_buffer_size:
                 cmd.append(
