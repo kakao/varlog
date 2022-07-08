@@ -393,7 +393,7 @@ func (m *MetadataDescriptor) MustNotHaveLogStream(id types.LogStreamID) error {
 	return m.Must().NotHaveLogStream(id)
 }
 
-func (m *MetadataDescriptor) GetLogStreamsByStorageNodeID(id types.StorageNodeID) []*ReplicaDescriptor {
+func (m *MetadataDescriptor) GetReplicasByStorageNodeID(id types.StorageNodeID) []*ReplicaDescriptor {
 	if m == nil {
 		return nil
 	}

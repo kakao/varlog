@@ -84,12 +84,12 @@ func (s *repository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataD
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	snid := snmd.StorageNode.StorageNodeID
-	snd := s.meta.GetStorageNode(snid)
-	if snd == nil {
-		// It may be an unregistered storage node.
+	if !s.validStorageNodeMetadata(snmd) {
 		return
 	}
+
+	snid := snmd.StorageNodeID
+	snd := s.meta.GetStorageNode(snid)
 	snm, ok := s.storageNodes[snid]
 	if !ok {
 		snm = &vmspb.StorageNodeMetadata{
@@ -316,4 +316,31 @@ func (lss *LogStreamStat) copyReplicas() map[types.StorageNodeID]snpb.LogStreamR
 		replicas[snid] = lsrmd
 	}
 	return replicas
+}
+
+func (s *repository) validStorageNodeMetadata(snmd *snpb.StorageNodeMetadataDescriptor) bool {
+	const halfBits = 32
+	snid := snmd.StorageNodeID
+
+	// It may be an unregistered storage node.
+	if s.meta.GetStorageNode(snid) == nil {
+		return false
+	}
+
+	// lack of metadata
+	registered := make(map[int64]struct{})
+	for _, lsd := range s.meta.LogStreams {
+		if !lsd.IsReplica(snid) {
+			continue
+		}
+		id := int64(lsd.LogStreamID)<<halfBits | int64(lsd.TopicID)
+		registered[id] = struct{}{}
+	}
+
+	for _, lsrmd := range snmd.LogStreamReplicas {
+		id := int64(lsrmd.LogStreamID)<<halfBits | int64(lsrmd.TopicID)
+		delete(registered, id)
+	}
+
+	return len(registered) == 0
 }

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"math"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/goleak"
@@ -189,9 +191,125 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 			} else {
 				assert.Error(t, err)
 			}
-
 		})
 	}
+}
+
+func TestAdmin_GetStorageNode_FailedStorageNode(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(1)
+		tpid = types.TopicID(1)
+		lsid = types.LogStreamID(1)
+
+		tick             = 10 * time.Millisecond
+		heartbeatTimeout = int(24 * time.Hour / tick)
+		reportInterval   = int(24 * time.Hour / tick)
+	)
+
+	createTime := time.Now().UTC()
+	failed := int32(0)
+	failReported := int32(0)
+
+	storageNodeMetadata := &snpb.StorageNodeMetadataDescriptor{
+		ClusterID: cid,
+		StorageNode: varlogpb.StorageNode{
+			StorageNodeID: snid,
+		},
+		LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
+			{
+				LogStreamReplica: varlogpb.LogStreamReplica{
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: snid,
+					},
+					TopicLogStream: varlogpb.TopicLogStream{
+						TopicID:     tpid,
+						LogStreamID: lsid,
+					},
+				},
+			},
+		},
+		StartTime: createTime,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := newTestMock(ctrl)
+	mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+		&varlogpb.MetadataDescriptor{
+			StorageNodes: []*varlogpb.StorageNodeDescriptor{
+				{
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: snid,
+					},
+					CreateTime: createTime,
+				},
+			},
+			LogStreams: []*varlogpb.LogStreamDescriptor{
+				{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					Status:      varlogpb.LogStreamStatusRunning,
+					Replicas: []*varlogpb.ReplicaDescriptor{
+						{
+							StorageNodeID: snid,
+							Path:          "/tmp",
+						},
+					},
+				},
+			},
+			Topics: []*varlogpb.TopicDescriptor{
+				{
+					TopicID:    tpid,
+					LogStreams: []types.LogStreamID{lsid},
+				},
+			},
+		}, nil,
+	).AnyTimes()
+	mock.MockStorageNodeManager.EXPECT().GetMetadata(gomock.Any(), snid).DoAndReturn(
+		func(context.Context, types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+			if atomic.LoadInt32(&failed) == 0 {
+				return storageNodeMetadata, nil
+			}
+			atomic.CompareAndSwapInt32(&failReported, 0, 1)
+			snm := proto.Clone(storageNodeMetadata).(*snpb.StorageNodeMetadataDescriptor)
+			snm.LogStreamReplicas = nil
+			return snm, nil
+		},
+	).AnyTimes()
+
+	tadm := admin.TestNewClusterManager(t,
+		admin.WithListenAddress("127.0.0.1:0"),
+		admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+		admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+		admin.WithStorageNodeWatcherOptions(
+			snwatcher.WithTick(tick),
+			snwatcher.WithHeartbeatTimeout(heartbeatTimeout),
+			snwatcher.WithReportInterval(reportInterval),
+			snwatcher.WithStatisticsRepository(mock.MockRepository),
+		),
+	)
+	tadm.Serve(t)
+	defer tadm.Close(t)
+
+	client, closer := newTestClient(t, tadm.Address())
+	defer closer()
+
+	snm, err := client.GetStorageNode(context.Background(), snid)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, snm.LogStreamReplicas)
+
+	time.Sleep(10 * tick)
+	atomic.StoreInt32(&failed, 1)
+	assert.Eventually(t, func() bool {
+		return atomic.LoadInt32(&failReported) > 0
+	}, 10*tick, tick)
+	time.Sleep(10 * tick)
+
+	snm, err = client.GetStorageNode(context.Background(), snid)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, snm.LogStreamReplicas)
 }
 
 func TestAdmin_ListStorageNodes(t *testing.T) {
@@ -555,7 +673,6 @@ func TestAdmin_ListTopics(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestAdmin_AddTopic(t *testing.T) {

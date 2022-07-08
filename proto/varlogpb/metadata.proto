@@ -189,10 +189,16 @@ message TopicLogStream {
 message LogStreamReplica {
   option (gogoproto.equal) = true;
 
-  StorageNode storage_node = 1
-      [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  TopicLogStream topic_log_stream = 2
-      [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  StorageNode storage_node = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.embed) = true,
+    (gogoproto.jsontag) = ""
+  ];
+  TopicLogStream topic_log_stream = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.embed) = true,
+    (gogoproto.jsontag) = ""
+  ];
 }
 
 // LogSequenceNumber wraps LLSN and GLSN.

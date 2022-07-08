@@ -58,8 +58,11 @@ message StorageNodeMetadataDescriptor {
 message LogStreamReplicaMetadataDescriptor {
   option (gogoproto.equal) = true;
 
-  varlogpb.LogStreamReplica log_stream_replica = 1
-      [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  varlogpb.LogStreamReplica log_stream_replica = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.embed) = true,
+    (gogoproto.jsontag) = ""
+  ];
 
   // Status is the status of the log stream replica.
   //

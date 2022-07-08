@@ -66,7 +66,7 @@ func (rs *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Replic
 		if !rs.denylist.Contains(storageNodeID) {
 			// TODO (jun): This is very inefficient functions. Make map<storage_node,
 			// log_streams> first.
-			rds := clusmeta.GetLogStreamsByStorageNodeID(storageNodeID)
+			rds := clusmeta.GetReplicasByStorageNodeID(storageNodeID)
 			allowlist = append(allowlist, struct {
 				snd      *varlogpb.StorageNodeDescriptor
 				priority int
