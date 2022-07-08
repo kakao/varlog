@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,15 +42,9 @@ func (tc *TestCluster) Setup(ctx context.Context, t *testing.T) {
 
 	tc.logger.Info("setup cluster")
 
-	now := time.Now()
-	tc.StopAdminServer(ctx, t)
-	tc.StopMetadataRepositoryNodes(ctx, t)
-	tc.StopStorageNodes(ctx, t)
-	tc.ClearMetadataRepositoryNodeData(ctx, t)
-	tc.ClearStorageNodeData(ctx, t)
-	stopDuration := time.Since(now)
+	stopDuration := tc.reset(ctx, t)
 
-	now = time.Now()
+	now := time.Now()
 	tc.StartMetadataRepositoryNodes(ctx, t, 1)
 	tc.StartAdminServer(ctx, t)
 	tc.StartMetadataRepositoryNodes(ctx, t, tc.numMetaRepos)
@@ -60,6 +55,32 @@ func (tc *TestCluster) Setup(ctx context.Context, t *testing.T) {
 		zap.Duration("stopDuration", stopDuration),
 		zap.Duration("startDuration", startDuration),
 	)
+}
+
+func (tc *TestCluster) reset(ctx context.Context, t *testing.T) (duration time.Duration) {
+	now := time.Now()
+	defer func() {
+		duration = time.Since(now)
+	}()
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		tc.StopAdminServer(ctx, t)
+	}()
+	go func() {
+		defer wg.Done()
+		tc.StopMetadataRepositoryNodes(ctx, t)
+		tc.ClearMetadataRepositoryNodeData(ctx, t)
+	}()
+	go func() {
+		defer wg.Done()
+		tc.StopStorageNodes(ctx, t)
+		tc.ClearStorageNodeData(ctx, t)
+	}()
+	wg.Wait()
+	return duration
 }
 
 // StartAdminServer starts the admin server on the node group varlogadm of the
