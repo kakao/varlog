@@ -22,8 +22,6 @@ import (
 )
 
 // ClusterMetadataView provides the latest metadata about the cluster.
-// TODO: It should have a way to guarantee that ClusterMetadata is the latest.
-// TODO: See https://github.daumkakao.com/varlog/varlog/pull/198#discussion_r215542
 type ClusterMetadataView interface {
 	// ClusterMetadata returns the latest metadata of the cluster.
 	ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error)

@@ -153,7 +153,7 @@ func (cm *committer) commit(_ context.Context, ct *commitTask) error {
 	_, _, uncommittedLLSNBegin := cm.lse.lsc.reportCommitBase()
 	if uncommittedLLSNBegin != ct.committedLLSNBegin {
 		// skip this commit
-		// See #VARLOG-453 (https://jira.daumkakao.com/browse/VARLOG-453).
+		// See #VARLOG-453
 		return nil
 	}
 
@@ -179,7 +179,7 @@ func (cm *committer) commit(_ context.Context, ct *commitTask) error {
 	// increased whenever each log entry is written to the storage, it doesn't represent the
 	// size of commitWaitQueue. For instance, a batch of log entries could be written to the
 	// storage, however, it is failed to push them into the commitWaitQueue.
-	// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
+	// See #VARLOG-444.
 	if cm.commitWaitQ.size() < numCommits {
 		return nil
 	}
@@ -208,7 +208,7 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 	// increased whenever each log entry is written to the storage, it doesn't represent the
 	// size of commitWaitQueue. For instance, a batch of log entries could be written to the
 	// storage, however, it is failed to push them into the commitWaitQueue.
-	// See [#VARLOG-444](https://jira.daumkakao.com/browse/VARLOG-444).
+	// See #VARLOG-444.
 	if requireCommitWaitTasks && cm.commitWaitQ.size() < numCommits {
 		return nil
 	}

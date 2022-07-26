@@ -2024,7 +2024,7 @@ func TestAdmin_Sync(t *testing.T) {
 	}
 }
 
-// See VARLOG-716 (https://github.daumkakao.com/varlog/varlog/tree/varlog-716).
+// See VARLOG-716.
 func TestAdmin_DoNotSyncSealedReplicas_(t *testing.T) {
 	const (
 		sealedGLSN = types.GLSN(5)

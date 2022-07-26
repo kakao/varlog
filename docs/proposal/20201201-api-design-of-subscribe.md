@@ -3,8 +3,8 @@
 - Status: accepted
 - Date: 2020-11-26
 - Deciders: Jun.Song, Pharrell.Jang
-- PR: [VARLOG-299](https://jira.daumkakao.com/browse/VARLOG-299), [#258](https://github.daumkakao.com/varlog/varlog/pull/258)
-- Issue: [VARLOG-281](https://jira.daumkakao.com/browse/VARLOG-281), [#259](https://github.daumkakao.com/varlog/varlog/pull/259)
+- PR: VARLOG-299
+- Issue: VARLOG-281
 
 ## Summary
 

@@ -176,7 +176,7 @@ func TestVarlogFailoverSNBackupInitialFault(t *testing.T) {
 	require.NoError(t, res.Err)
 }
 
-// FIXME (jun): Flaky test: https://jira.daumkakao.com/browse/VARLOG-494
+// FIXME (jun): Flaky test: VARLOG-494
 func TestVarlogFailoverSNBackupFail(t *testing.T) {
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
