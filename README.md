@@ -1,5 +1,3 @@
-[![Build Status](/buildStatus/icon?job=varlog%2Fmain)](/job/varlog/job/main/)
-
 # Varlog 
 
 Varlog is a strongly-consistent distributed log storage. It enables many 

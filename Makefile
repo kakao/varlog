@@ -153,22 +153,34 @@ test_e2e_docker_long:
 # docker
 BUILD_DIR := $(CURDIR)/build
 DOCKERFILE := $(BUILD_DIR)/e2e/Dockerfile
-IMAGE_REGISTRY := ***REMOVED***
+IMAGE_REGISTRY :=
 IMAGE_NAMESPACE := varlog
 IMAGE_REPOS := varlog-test
+BASE_IMAGE_NAME := python
 DOCKER_TAG := $(shell git branch --show-current)-$(shell git describe --always --broken)
 
 .PHONY: docker kustomize
-docker: 
+docker:
+ifeq ($(IMAGE_REGISTRY),)
+	@echo "No image registry"
+	@echo "Example: make docker IMAGE_REGISTRY=\"YOUR_DOCKER_IMAGE_REGISTRY\""
+	@exit 1
+endif
 	docker build \
 		--target varlog-test \
 		-f $(DOCKERFILE) \
+		--build-arg BASE_IMAGE_NAME=$(BASE_IMAGE_NAME) \
 		-t $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG) . && \
 	docker push $(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG)
 
 kustomize_e2e:
+ifeq ($(IMAGE_REGISTRY),)
+	@echo "No image registry"
+	@echo "Example: make docker IMAGE_REGISTRY=\"YOUR_DOCKER_IMAGE_REGISTRY\""
+	@exit 1
+endif
 	@cd $(CURDIR)/tests/ee/k8s/deploy/overlays/dkos && \
-		kustomize edit set image "$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS)=$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG)"
+		kustomize edit set image "$(IMAGE_NAMESPACE)/$(IMAGE_REPOS)=$(IMAGE_REGISTRY)/$(IMAGE_NAMESPACE)/$(IMAGE_REPOS):$(DOCKER_TAG)"
 	@echo "Run this command to apply: kubectl apply -k $(CURDIR)/tests/ee/k8s/deploy/overlays/dkos/"
 
 

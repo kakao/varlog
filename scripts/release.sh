@@ -4,11 +4,18 @@ set -e -o pipefail
 
 scriptdir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null && pwd )"
 
-IMAGE_REGISTRY=***REMOVED***
+IMAGE_REGISTRY="${IMAGE_REGISTRY:=""}"
 IMAGE_NAMESPACE=varlog
 DOCKER_CONTEXT="${scriptdir}/.."
 DOCKERFILE="${scriptdir}/../build/Dockerfile"
 VERSION=$(cat "${scriptdir}/../VERSION")
+
+
+if [ "${IMAGE_REGISTRY}" = "" ]; then
+    echo "no image registry"
+    exit 1
+fi
+
 
 function build_push() {
     local action=$1
