@@ -425,7 +425,6 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 		}
 	}
 
-	// See https://github.com/kakao/varlog/pull/198#discussion_r215602
 	logStreamID := adm.lsidGen.Generate()
 
 	// duplicated by verifyLogStream
