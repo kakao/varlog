@@ -1,5 +1,3 @@
-[![Build Status](https://varlog-jenkins.devel.kakao.com/buildStatus/icon?job=varlog%2Fmain)](https://varlog-jenkins.devel.kakao.com/job/varlog/job/main/)
-
 # Varlog 
 
 Varlog is a strongly-consistent distributed log storage. It enables many 

@@ -66,7 +66,7 @@ spec:
             type: DirectoryOrCreate
       initContainers:
         - name: volume-perm
-          image: mdock.daumkakao.io/busybox:stable
+          image: busybox:stable
           command:
             - "sh"
             - "-c"
@@ -76,7 +76,7 @@ spec:
               mountPath: /varlog/mr
       containers:
         - name: varlogmr
-          image: idock.daumkakao.io/varlog/varlog-test:latest
+          image: varlog/varlog-test:latest
           imagePullPolicy: IfNotPresent
           command:
             - "python3"

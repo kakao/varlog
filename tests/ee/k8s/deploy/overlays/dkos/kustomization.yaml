@@ -6,10 +6,10 @@ resources:
 
 images:
 - name: busybox
-  newName: mdock.daumkakao.io/busybox
+  newName: busybox
   newTag: stable
-- name: idock.daumkakao.io/varlog/varlog-test
-  newName: idock.daumkakao.io/varlog/varlog-test
+- name: varlog/varlog-test
+  newName: varlog/varlog-test
   newTag: varlog-763-9c8298f2
 
 patchesStrategicMerge:

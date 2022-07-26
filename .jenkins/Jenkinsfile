@@ -36,7 +36,6 @@ pipeline {
       environment {
         D2HUB = credentials("d2hub-account")
         E2E_ACCOUNT = credentials("varlog-ci-e2e-01-account")
-        VAULT_ADDR = "https://vault.daumkakao.io"
         VAULT_SECRET_PATH= "secret/varlog/dkosv3/ci-e2e/01"
       }
       steps {
@@ -45,7 +44,7 @@ pipeline {
             echo "precondition: varlog/varlog-test image"
             script {
               def ret = sh([
-                script: 'D2HUB_ID=${D2HUB_USR} D2HUB_PW=${D2HUB_PSW} build/e2e/d2hub-check-image.sh',
+                script: 'D2HUB_ID=${D2HUB_USR} D2HUB_PW=${D2HUB_PSW} /scripts/d2hub-check-image.sh',
                 returnStatus: true
               ])
               return (ret == 0)
@@ -56,10 +55,10 @@ pipeline {
         withCredentials([string(credentialsId: 'varlog_vault_token', variable: 'VAULT_TOKEN')]) {
           lock("varlog-ci-e2e-01") {
             sh 'kubectl config set-credentials ${E2E_ACCOUNT_USR} --token=${E2E_ACCOUNT_PSW}'
-            sh 'kubectl config set-cluster varlog-ci-e2e-01-cluster --insecure-skip-tls-verify=true --server https://dkosv3-varlog-ci-e2e-01-master-1.ay1.krane.9rum.cc:6443'
+            sh 'kubectl config set-cluster varlog-ci-e2e-01-cluster --insecure-skip-tls-verify=true --server ${VARLOG_CI_E2E_01_MASTER_URL}'
             sh 'kubectl config set-context varlog-ci-e2e-01-context --cluster=varlog-ci-e2e-01-cluster --user=${E2E_ACCOUNT_USR}'
             sh 'kubectl config use-context varlog-ci-e2e-01-context'
-            sh 'make kustomize_e2e DOCKER_TAG=$(build/e2e/d2hub-image-tag.sh)'
+            sh 'make kustomize_e2e DOCKER_TAG=$(build/e2e/d2hub-image-tag.sh) IMAGE_REGISTRY=${IMAGE_REGISTRY}'
             sh 'kubectl apply -k tests/ee/k8s/deploy/overlays/dkos/'
             sh 'make test_e2e TEST_FLAGS="-v -race -failfast -count=1 -timeout=30m"'
           } // end of lock

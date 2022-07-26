@@ -27,7 +27,7 @@ spec:
             type: DirectoryOrCreate
       initContainers:
         - name: volume-sn-clear
-          image: mdock.daumkakao.io/busybox:stable
+          image: busybox:stable
           command:
             - "sh"
             - "-c"
@@ -37,7 +37,7 @@ spec:
               mountPath: /varlog/sn
       containers:
         - name: varlogsn-clear
-          image: mdock.daumkakao.io/busybox:stable
+          image: busybox:stable
           command:
             - "sh"
             - "-c"

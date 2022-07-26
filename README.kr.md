@@ -1,5 +1,3 @@
-[![Build Status](https://varlog-jenkins.devel.kakao.com/buildStatus/icon?job=varlog%2Fmain)](https://varlog-jenkins.devel.kakao.com/job/varlog/job/main/)
-
 # Varlog 
 
 Varlog는 일관성을 제공하는 분산 로그 저장소이다. Varlog를 활용해서 고성능으로

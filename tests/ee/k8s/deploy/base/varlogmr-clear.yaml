@@ -27,7 +27,7 @@ spec:
             type: DirectoryOrCreate
       initContainers:
         - name: volume-mr-clear
-          image: mdock.daumkakao.io/busybox:stable
+          image: busybox:stable
           command:
             - "sh"
             - "-c"
@@ -36,7 +36,7 @@ spec:
             - name: varlogmr-home
               mountPath: /varlog/mr
         - name: volume-set-standalone
-          image: mdock.daumkakao.io/busybox:stable
+          image: busybox:stable
           command:
             - "sh"
             - "-c"
@@ -46,7 +46,7 @@ spec:
               mountPath: /varlog/mr
       containers:
         - name: varlogmr-clear
-          image: mdock.daumkakao.io/busybox:stable
+          image: busybox:stable
           command:
             - "sh"
             - "-c"
