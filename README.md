@@ -1,5 +1,7 @@
 # Varlog 
 
+[![ci](https://github.com/kakao/varlog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kakao/varlog/actions?query=workflow%3Aci+branch%3Amain)
+
 Varlog is a strongly consistent distributed log storage. It enables many
 distributed systems to leverage total-ordered logs to support transactional
 event processing with high performance, and simplify the building the complex

@@ -1,0 +1,40 @@
+name: ci
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+      - name: Build
+        run: make build
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+      - name: Test
+        run: make test TEST_FLAGS='-v -race -failfast -count=1 -timeout=20m'
+
+  test_py:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+      - name: Python Test
+        run: make test_py
