@@ -185,7 +185,7 @@ endif
 
 
 # proto
-DOCKER_PROTOBUF = $(IMAGE_REGISTRY)/varlog/protobuf:0.0.3
+DOCKER_PROTOBUF = ghcr.io/kakao/varlog-protobuf:0.1.0
 PROTOC := docker run --rm -u $(shell id -u) -v$(PWD):$(PWD) -w$(PWD) $(DOCKER_PROTOBUF) --proto_path=$(PWD)
 PROTO_SRCS := $(shell find . -name "*.proto" -not -path "./vendor/*")
 PROTO_PBS := $(PROTO_SRCS:.proto=.pb.go)
