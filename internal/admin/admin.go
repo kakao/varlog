@@ -170,8 +170,8 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 // It is idempotent, that is, adding an already added storage node is okay.
 //
 // It could not add a storage node under the following conditions:
-//  - It could not fetch metadata from the storage node.
-//  - It is rejected by the metadata repository.
+//   - It could not fetch metadata from the storage node.
+//   - It is rejected by the metadata repository.
 func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*vmspb.StorageNodeMetadata, error) {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
