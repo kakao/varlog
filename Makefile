@@ -56,19 +56,20 @@ stress:
 
 # testing
 TEST_FLAGS := -v -race -failfast -count=1
-COVERAGE_OUTPUT := coverage.out
+GO_COVERAGE_OUTPUT := coverage.out
+PYTEST := pytest
+PYTHON_COVERAGE_OUTPUT := coverage.xml
 .PHONY: test test_coverage test_ci test_report coverage_report test_py
 test:
 	$(GO) test $(TEST_FLAGS) ./...
+	$(PYTEST)
 
 test_coverage:
-	$(GO) test -coverprofile=$(COVERAGE_OUTPUT) -covermode=atomic -race ./...
+	$(GO) test $(TEST_FLAGS) -coverprofile=$(GO_COVERAGE_OUTPUT) -covermode=atomic ./...
+	$(PYTEST) --cov=./ --cov-report=xml:$(PYTHON_COVERAGE_OUTPUT)
 
 test_e2e:
 	$(GO) test $(TEST_FLAGS) ./tests/ee/... -tags=e2e
-
-test_py:
-	$(PYTHON) -m unittest discover bin/tests
 
 
 # proto
@@ -118,7 +119,7 @@ tidy:
 .PHONY: clean clean_mock
 clean:
 	$(GO) clean
-	$(RM) $(COVERAGE_OUTPUT)
+	$(RM) $(GO_COVERAGE_OUTPUT) $(PYTHON_COVERAGE_OUTPUT)
 	$(RM) $(VMR) $(VARLOGADM) $(VARLOGSN) $(VARLOGCTL) $(VARLOGCLI) $(MRTOOL) $(STRESS)
 
 clean_mock:
