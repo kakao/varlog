@@ -733,6 +733,8 @@ func TestAddLogStreamTopic(t *testing.T) {
 }
 
 func TestRemoveTopic(t *testing.T) {
+	t.Skip()
+
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
