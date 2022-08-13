@@ -273,7 +273,7 @@ func (mr *RaftMetadataRepository) runDebugServer(ctx context.Context) {
 	}
 }
 
-//TODO:: handle pendding msg
+// TODO:: handle pendding msg
 func (mr *RaftMetadataRepository) Close() error {
 	mr.logger.Info("metadata repository closing")
 	defer func() {

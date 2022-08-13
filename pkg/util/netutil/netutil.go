@@ -1,5 +1,4 @@
 // Package netutil provides helper functions for network.
-//
 package netutil
 
 import (

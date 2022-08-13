@@ -29,8 +29,8 @@ var (
 )
 
 var (
-//ErrStorageNodeNotExist = errors.New("storagenode does not exist")
-//ErrStorageNodeAlreadyExists = errors.New("storagenode already exists")
+// ErrStorageNodeNotExist = errors.New("storagenode does not exist")
+// ErrStorageNodeAlreadyExists = errors.New("storagenode already exists")
 )
 
 var (
