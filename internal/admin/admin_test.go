@@ -11,6 +11,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
 	"github.com/kakao/varlog/internal/admin"
@@ -295,6 +296,12 @@ func TestAdmin_GetStorageNode_FailedStorageNode(t *testing.T) {
 
 	client, closer := newTestClient(t, tadm.Address())
 	defer closer()
+
+	//  Wait for registering a storage node. (#12)
+	require.Eventually(t, func() bool {
+		_, err := client.GetStorageNode(context.Background(), snid)
+		return err == nil
+	}, time.Second, 10*time.Millisecond)
 
 	snm, err := client.GetStorageNode(context.Background(), snid)
 	assert.NoError(t, err)
