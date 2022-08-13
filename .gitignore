@@ -70,4 +70,6 @@ deploy/k8s-experiment/pm/kustomization.yaml
 deploy/k8s-experiment/e2e/kustomization.yaml
 
 # temporary files
-build/reports/test_output.txt
+coverage.xml
+coverage.out
+.coverage

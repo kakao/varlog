@@ -6,6 +6,10 @@ on:
       - main
   pull_request:
 
+env:
+  GO_VERSION: 1.18
+  PYTHON_VERSION: 3.9
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,7 +19,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.18
+          go-version: ${{ env.GO_VERSION }}
       - name: Build
         run: make build
 
@@ -27,18 +31,38 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.18
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Test
-        run: make test TEST_FLAGS='-v -race -failfast -count=1 -timeout=30m'
+        run: |
+          pip install pytest
+          pip install pytest-cov
+          make test TEST_FLAGS='-v -race -failfast -count=1 -timeout=20m'
 
-  test_py:
+  coverage:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
       - name: Install Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
-      - name: Python Test
-        run: make test_py
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Coverage test
+        run: |
+          pip install pytest
+          pip install pytest-cov
+          make test_coverage TEST_FLAGS='-v -race -failfast -count=1 -timeout=20m'
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3.1.0
+        with:
+          files: ./coverage.out,./coverage.xml
+          fail_ci_if_error: true
+          verbose: true
