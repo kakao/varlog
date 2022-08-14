@@ -13,3 +13,4 @@ jobs:
         with:
           release-type: go
           package-name: varlog
+          bootstrap-sha: 829a258bc10cc4ad63ad40e3baefeeeff6d0c3dc
