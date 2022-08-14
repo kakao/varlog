@@ -57,6 +57,7 @@ stress:
 # testing
 TEST_FLAGS := -v -race -failfast -count=1
 GO_COVERAGE_OUTPUT := coverage.out
+GO_COVERAGE_OUTPUT_TMP := $(GO_COVERAGE_OUTPUT).tmp
 PYTEST := pytest
 PYTHON_COVERAGE_OUTPUT := coverage.xml
 .PHONY: test test_coverage test_ci test_report coverage_report test_py
@@ -65,7 +66,9 @@ test:
 	$(PYTEST)
 
 test_coverage:
-	$(GO) test $(TEST_FLAGS) -coverprofile=$(GO_COVERAGE_OUTPUT) -covermode=atomic ./...
+	$(GO) test $(TEST_FLAGS) -coverprofile=$(GO_COVERAGE_OUTPUT_TMP) -covermode=atomic ./...
+	cat $(GO_COVERAGE_OUTPUT_TMP) | grep -v "_mock.go" | grep -v ".pb.go" > $(GO_COVERAGE_OUTPUT)
+	$(RM) $(GO_COVERAGE_OUTPUT_TMP)
 	$(PYTEST) --cov=./ --cov-report=xml:$(PYTHON_COVERAGE_OUTPUT)
 
 test_e2e:
