@@ -1,0 +1,13 @@
+{
+  "bootstrap-sha": "829a258bc10cc4ad63ad40e3baefeeeff6d0c3dc",
+  "packages": {
+    ".": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "go",
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    }
+  }
+}
