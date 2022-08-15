@@ -107,8 +107,7 @@ fmt:
 	@$(foreach path,$(PKGS),gofmt -w -s ./$(path);)
 
 lint:
-	@echo golint
-	@$(foreach path,$(PKGS),golint -set_exit_status ./$(path);)
+	docker run --rm -v $$(pwd):/app -w /app golangci/golangci-lint:latest-alpine golangci-lint run
 
 vet:
 	@echo govet
