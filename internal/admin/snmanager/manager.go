@@ -66,7 +66,6 @@ var _ StorageNodeManager = (*snManager)(nil)
 type snManager struct {
 	config
 
-	mu      sync.RWMutex
 	clients *client.Manager[*client.ManagementClient]
 }
 
@@ -113,23 +112,15 @@ func (sm *snManager) refresh(ctx context.Context) error {
 }
 
 func (sm *snManager) Close() (err error) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	return sm.clients.Close()
 }
 
 func (sm *snManager) Contains(storageNodeID types.StorageNodeID) bool {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
 	_, err := sm.clients.Get(storageNodeID)
 	return err == nil
 }
 
 func (sm *snManager) ContainsAddress(addr string) bool {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
 	_, err := sm.clients.GetByAddress(addr)
 	return err == nil
 }
@@ -152,9 +143,6 @@ func (sm *snManager) GetMetadataByAddress(ctx context.Context, snid types.Storag
 }
 
 func (sm *snManager) GetMetadata(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	mc, err := sm.clients.Get(snid)
 	if err != nil {
 		if !errors.Is(err, verrors.ErrClosed) {
@@ -168,9 +156,6 @@ func (sm *snManager) GetMetadata(ctx context.Context, snid types.StorageNodeID) 
 }
 
 func (sm *snManager) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	if _, err := sm.clients.GetOrConnect(ctx, snid, addr); err != nil {
 		sm.logger.Warn("could not register storage node",
 			zap.Int32("snid", int32(snid)),
@@ -181,9 +166,6 @@ func (sm *snManager) AddStorageNode(ctx context.Context, snid types.StorageNodeI
 }
 
 func (sm *snManager) RemoveStorageNode(snid types.StorageNodeID) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	if err := sm.clients.CloseClient(snid); err != nil {
 		sm.logger.Warn("close client",
 			zap.Int32("snid", int32(snid)),
@@ -193,9 +175,6 @@ func (sm *snManager) RemoveStorageNode(snid types.StorageNodeID) {
 }
 
 func (sm *snManager) AddLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	return sm.addLogStreamReplica(ctx, snid, tpid, lsid, path)
 }
 
@@ -209,9 +188,6 @@ func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.Storage
 }
 
 func (sm *snManager) AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDescriptor) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	tpid := lsd.GetTopicID()
 	lsid := lsd.GetLogStreamID()
 	g, ctx := errgroup.WithContext(ctx)
@@ -225,9 +201,6 @@ func (sm *snManager) AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDe
 }
 
 func (sm *snManager) RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	mc, err := sm.clients.Get(snid)
 	if err != nil {
 		sm.refresh(ctx)
@@ -237,9 +210,6 @@ func (sm *snManager) RemoveLogStreamReplica(ctx context.Context, snid types.Stor
 }
 
 func (sm *snManager) Seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) ([]snpb.LogStreamReplicaMetadataDescriptor, error) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	var err error
 
 	replicas, err := sm.replicaDescriptors(ctx, lsid)
@@ -290,9 +260,6 @@ func (sm *snManager) Seal(ctx context.Context, tpid types.TopicID, lsid types.Lo
 }
 
 func (sm *snManager) Sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcID, dstID types.StorageNodeID, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	replicas, err := sm.replicaDescriptors(ctx, lsid)
 	if err != nil {
 		return nil, err
@@ -325,9 +292,6 @@ func (sm *snManager) Sync(ctx context.Context, tpid types.TopicID, lsid types.Lo
 }
 
 func (sm *snManager) Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	rds, err := sm.replicaDescriptors(ctx, lsid)
 	if err != nil {
 		return err
@@ -368,9 +332,6 @@ func (sm *snManager) Unseal(ctx context.Context, tpid types.TopicID, lsid types.
 }
 
 func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	clusmeta, err := sm.cmview.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
