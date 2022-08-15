@@ -1,0 +1,63 @@
+run:
+  timeout: 5m
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*_mock\\.go$"
+
+
+linters:
+  disable-all: true
+  enable:
+    - deadcode
+    - depguard
+    - errcheck
+    - godot
+    - gofmt
+    - goimports
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - revive
+    - staticcheck
+    - structcheck
+    - typecheck
+    - unused
+    - varcheck
+
+
+linters-settings:
+  depguard:
+    list-type: denylist
+    packages:
+      - golang.org/x/net/context
+  godot:
+    exclude:
+      - '^[ ]*[-•]'
+      - ':$'
+  goimports:
+    local-prefixes: github.com/kakao/varlog
+  misspell:
+    locale: US
+  revive:
+    confidence: 0.1
+    rules:
+      - name: unhandled-error
+        disabled: false
+        arguments:
+          - "fmt.Fprint"
+          - "fmt.Fprintf"
+          - "fmt.Fprintln"
+          - "fmt.Print"
+          - "fmt.Printf"
+          - "fmt.Println"
+
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gomnd
+
