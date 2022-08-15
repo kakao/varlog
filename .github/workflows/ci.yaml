@@ -11,7 +11,43 @@ env:
   PYTHON_VERSION: 3.9
 
 jobs:
+  gomod:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check go mod
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3.2.0
+        with:
+          version: latest
+          only-new-issues: true
+          skip-cache: true
+          skip-pkg-cache: true
+
   build:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,6 +60,7 @@ jobs:
         run: make build
 
   test:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -43,6 +80,7 @@ jobs:
           make test TEST_FLAGS='-v -race -failfast -count=1 -timeout=20m'
 
   coverage:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
