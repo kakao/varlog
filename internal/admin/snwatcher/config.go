@@ -13,11 +13,12 @@ import (
 )
 
 const (
-	DefaultTick              = 100 * time.Millisecond
-	DefaultReportInterval    = 10
-	DefaultHeartbeatTimeout  = 10
-	DefaultHeartbeatDeadline = 3 * time.Second
-	DefaultReportDeadline    = 3 * time.Second
+	DefaultTick                  = 100 * time.Millisecond
+	DefaultReportInterval        = 10
+	DefaultHeartbeatTimeout      = 10
+	DefaultHeartbeatDeadline     = 3 * time.Second
+	DefaultFailureHandlerTimeout = 1 * time.Second
+	DefaultReportDeadline        = 3 * time.Second
 )
 
 type config struct {
@@ -29,6 +30,7 @@ type config struct {
 	reportInterval         int
 	heartbeatTimeout       int
 	heartbeatCheckDeadline time.Duration
+	failureHandlerTimeout  time.Duration
 	reportDeadline         time.Duration
 
 	logger *zap.Logger
@@ -41,6 +43,7 @@ func newConfig(opts []Option) (config, error) {
 		reportDeadline:         DefaultReportDeadline,
 		heartbeatTimeout:       DefaultHeartbeatTimeout,
 		heartbeatCheckDeadline: DefaultHeartbeatDeadline,
+		failureHandlerTimeout:  DefaultFailureHandlerTimeout,
 		logger:                 zap.NewNop(),
 	}
 	for _, opt := range opts {
@@ -160,6 +163,14 @@ func WithHeartbeatTimeout(heartbeatTimeout int) Option {
 func WithHeartbeatCheckDeadline(heartbeatCheckTimeout time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.heartbeatCheckDeadline = heartbeatCheckTimeout
+	})
+}
+
+// WithFailureHandlerTimeout sets a timeout to handle the heartbeat timeout of
+// the storage node.
+func WithFailureHandlerTimeout(failureHandlerTimeout time.Duration) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.failureHandlerTimeout = failureHandlerTimeout
 	})
 }
 
