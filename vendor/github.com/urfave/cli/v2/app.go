@@ -7,9 +7,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"time"
 )
+
+const suggestDidYouMeanTemplate = "Did you mean %q?"
 
 var (
 	changeLogURL            = "https://github.com/urfave/cli/blob/main/docs/CHANGELOG.md"
@@ -18,6 +21,10 @@ var (
 	errInvalidActionType    = NewExitError("ERROR invalid Action type. "+
 		fmt.Sprintf("Must be `func(*Context`)` or `func(*Context) error).  %s", contactSysadmin)+
 		fmt.Sprintf("See %s", appActionDeprecationURL), 2)
+
+	SuggestFlag               SuggestFlagFunc    = suggestFlag
+	SuggestCommand            SuggestCommandFunc = suggestCommand
+	SuggestDidYouMeanTemplate string             = suggestDidYouMeanTemplate
 )
 
 // App is the main structure of a cli application. It is recommended that
@@ -37,6 +44,9 @@ type App struct {
 	Version string
 	// Description of the program
 	Description string
+	// DefaultCommand is the (optional) name of a command
+	// to run if no command names are passed as CLI arguments.
+	DefaultCommand string
 	// List of commands to execute
 	Commands []*Command
 	// List of flags to parse
@@ -52,6 +62,8 @@ type App struct {
 	HideVersion bool
 	// categories contains the categorized commands and is populated on app startup
 	categories CommandCategories
+	// flagCategories contains the categorized flags and is populated on app startup
+	flagCategories FlagCategories
 	// An action to execute when the shell completion flag is set
 	BashComplete BashCompleteFunc
 	// An action to execute before any subcommands are run, but after the context is ready
@@ -94,9 +106,15 @@ type App struct {
 	// single-character bool arguments into one
 	// i.e. foobar -o -v -> foobar -ov
 	UseShortOptionHandling bool
+	// Enable suggestions for commands and flags
+	Suggest bool
 
 	didSetup bool
 }
+
+type SuggestFlagFunc func(flags []Flag, provided string, hideHelp bool) string
+
+type SuggestCommandFunc func(commands []*Command, provided string) string
 
 // Tries to find out when this binary was compiled.
 // Returns the current time if it fails to find it.
@@ -181,6 +199,8 @@ func (a *App) Setup() {
 		if c.HelpName == "" {
 			c.HelpName = fmt.Sprintf("%s %s", a.HelpName, c.Name)
 		}
+
+		c.flagCategories = newFlagCategoriesFromFlags(c.Flags)
 		newCommands = append(newCommands, c)
 	}
 	a.Commands = newCommands
@@ -204,6 +224,13 @@ func (a *App) Setup() {
 		a.categories.AddCommand(command.Category, command)
 	}
 	sort.Sort(a.categories.(*commandCategories))
+
+	a.flagCategories = newFlagCategories()
+	for _, fl := range a.Flags {
+		if cf, ok := fl.(CategorizableFlag); ok {
+			a.flagCategories.AddFlag(cf.GetCategory(), cf)
+		}
+	}
 
 	if a.Metadata == nil {
 		a.Metadata = make(map[string]interface{})
@@ -248,7 +275,9 @@ func (a *App) RunContext(ctx context.Context, arguments []string) (err error) {
 	cCtx := NewContext(a, set, &Context{Context: ctx})
 	if nerr != nil {
 		_, _ = fmt.Fprintln(a.Writer, nerr)
-		_ = ShowAppHelp(cCtx)
+		if !a.HideHelp {
+			_ = ShowAppHelp(cCtx)
+		}
 		return nerr
 	}
 	cCtx.shellComplete = shellComplete
@@ -264,8 +293,27 @@ func (a *App) RunContext(ctx context.Context, arguments []string) (err error) {
 			return err
 		}
 		_, _ = fmt.Fprintf(a.Writer, "%s %s\n\n", "Incorrect Usage.", err.Error())
-		_ = ShowAppHelp(cCtx)
+		if a.Suggest {
+			if suggestion, err := a.suggestFlagFromError(err, ""); err == nil {
+				fmt.Fprintf(a.Writer, suggestion)
+			}
+		}
+		if !a.HideHelp {
+			_ = ShowAppHelp(cCtx)
+		}
 		return err
+	}
+
+	if a.After != nil {
+		defer func() {
+			if afterErr := a.After(cCtx); afterErr != nil {
+				if err != nil {
+					err = newMultiError(err, afterErr)
+				} else {
+					err = afterErr
+				}
+			}
+		}()
 	}
 
 	if !a.HideHelp && checkHelp(cCtx) {
@@ -284,18 +332,6 @@ func (a *App) RunContext(ctx context.Context, arguments []string) (err error) {
 		return cerr
 	}
 
-	if a.After != nil {
-		defer func() {
-			if afterErr := a.After(cCtx); afterErr != nil {
-				if err != nil {
-					err = newMultiError(err, afterErr)
-				} else {
-					err = afterErr
-				}
-			}
-		}()
-	}
-
 	if a.Before != nil {
 		beforeErr := a.Before(cCtx)
 		if beforeErr != nil {
@@ -305,13 +341,45 @@ func (a *App) RunContext(ctx context.Context, arguments []string) (err error) {
 		}
 	}
 
+	var c *Command
 	args := cCtx.Args()
 	if args.Present() {
 		name := args.First()
-		c := a.Command(name)
-		if c != nil {
-			return c.Run(cCtx)
+		if a.validCommandName(name) {
+			c = a.Command(name)
+		} else {
+			hasDefault := a.DefaultCommand != ""
+			isFlagName := checkStringSliceIncludes(name, cCtx.FlagNames())
+
+			var (
+				isDefaultSubcommand   = false
+				defaultHasSubcommands = false
+			)
+
+			if hasDefault {
+				dc := a.Command(a.DefaultCommand)
+				defaultHasSubcommands = len(dc.Subcommands) > 0
+				for _, dcSub := range dc.Subcommands {
+					if checkStringSliceIncludes(name, dcSub.Names()) {
+						isDefaultSubcommand = true
+						break
+					}
+				}
+			}
+
+			if isFlagName || (hasDefault && (defaultHasSubcommands && isDefaultSubcommand)) {
+				argsWithDefault := a.argsWithDefaultCommand(args)
+				if !reflect.DeepEqual(args, argsWithDefault) {
+					c = a.Command(argsWithDefault.First())
+				}
+			}
 		}
+	} else if a.DefaultCommand != "" {
+		c = a.Command(a.DefaultCommand)
+	}
+
+	if c != nil {
+		return c.Run(cCtx)
 	}
 
 	if a.Action == nil {
@@ -323,6 +391,29 @@ func (a *App) RunContext(ctx context.Context, arguments []string) (err error) {
 
 	a.handleExitCoder(cCtx, err)
 	return err
+}
+
+func (a *App) suggestFlagFromError(err error, command string) (string, error) {
+	flag, parseErr := flagFromError(err)
+	if parseErr != nil {
+		return "", err
+	}
+
+	flags := a.Flags
+	if command != "" {
+		cmd := a.Command(command)
+		if cmd == nil {
+			return "", err
+		}
+		flags = cmd.Flags
+	}
+
+	suggestion := SuggestFlag(flags, flag, a.HideHelp)
+	if len(suggestion) == 0 {
+		return "", err
+	}
+
+	return fmt.Sprintf(SuggestDidYouMeanTemplate+"\n\n", suggestion), nil
 }
 
 // RunAndExitOnError calls .Run() and exits non-zero if an error was returned
@@ -383,6 +474,11 @@ func (a *App) RunAsSubcommand(ctx *Context) (err error) {
 			return err
 		}
 		_, _ = fmt.Fprintf(a.Writer, "%s %s\n\n", "Incorrect Usage.", err.Error())
+		if a.Suggest {
+			if suggestion, err := a.suggestFlagFromError(err, cCtx.Command.Name); err == nil {
+				fmt.Fprintf(a.Writer, suggestion)
+			}
+		}
 		_ = ShowSubcommandHelp(cCtx)
 		return err
 	}
@@ -481,6 +577,14 @@ func (a *App) VisibleCommands() []*Command {
 	return ret
 }
 
+// VisibleFlagCategories returns a slice containing all the categories with the flags they contain
+func (a *App) VisibleFlagCategories() []VisibleFlagCategory {
+	if a.flagCategories == nil {
+		return []VisibleFlagCategory{}
+	}
+	return a.flagCategories.VisibleCategories()
+}
+
 // VisibleFlags returns a slice of the Flags with Hidden=false
 func (a *App) VisibleFlags() []Flag {
 	return visibleFlags(a.Flags)
@@ -504,6 +608,41 @@ func (a *App) handleExitCoder(cCtx *Context, err error) {
 	} else {
 		HandleExitCoder(err)
 	}
+}
+
+func (a *App) commandNames() []string {
+	var cmdNames []string
+
+	for _, cmd := range a.Commands {
+		cmdNames = append(cmdNames, cmd.Names()...)
+	}
+
+	return cmdNames
+}
+
+func (a *App) validCommandName(checkCmdName string) bool {
+	valid := false
+	allCommandNames := a.commandNames()
+
+	for _, cmdName := range allCommandNames {
+		if checkCmdName == cmdName {
+			valid = true
+			break
+		}
+	}
+
+	return valid
+}
+
+func (a *App) argsWithDefaultCommand(oldArgs Args) Args {
+	if a.DefaultCommand != "" {
+		rawArgs := append([]string{a.DefaultCommand}, oldArgs.Slice()...)
+		newArgs := args(rawArgs)
+
+		return &newArgs
+	}
+
+	return oldArgs
 }
 
 // Author represents someone who has contributed to a cli project.
@@ -537,4 +676,16 @@ func HandleAction(action interface{}, cCtx *Context) (err error) {
 	}
 
 	return errInvalidActionType
+}
+
+func checkStringSliceIncludes(want string, sSlice []string) bool {
+	found := false
+	for _, s := range sSlice {
+		if want == s {
+			found = true
+			break
+		}
+	}
+
+	return found
 }

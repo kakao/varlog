@@ -15,7 +15,7 @@ require (
 	github.com/smartystreets/goconvey v1.7.2
 	github.com/soheilhy/cmux v0.1.5
 	github.com/stretchr/testify v1.8.0
-	github.com/urfave/cli/v2 v2.5.1
+	github.com/urfave/cli/v2 v2.11.2
 	go.etcd.io/etcd v0.0.0-20211015134708-72d3e382e73c
 	go.opentelemetry.io/contrib/instrumentation/host v0.27.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.27.0
@@ -57,7 +57,7 @@ require (
 	github.com/coreos/go-semver v0.2.0 // indirect
 	github.com/coreos/go-systemd v0.0.0-20180511133405-39ca1b05acc7 // indirect
 	github.com/coreos/pkg v0.0.0-20160727233714-3ac0863d7acf // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.1 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/go-logr/logr v1.2.1 // indirect
@@ -89,6 +89,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tklauser/numcpus v0.3.0 // indirect
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
+	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0 // indirect
 	go.opentelemetry.io/otel/internal/metric v0.26.0 // indirect
 	go.opentelemetry.io/otel/trace v1.3.0 // indirect
