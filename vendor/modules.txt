@@ -81,7 +81,7 @@ github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20160727233714-3ac0863d7acf
 ## explicit
 github.com/coreos/pkg/capnslog
-# github.com/cpuguy83/go-md2man/v2 v2.0.1
+# github.com/cpuguy83/go-md2man/v2 v2.0.2
 ## explicit; go 1.11
 github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1
@@ -252,12 +252,15 @@ github.com/tklauser/go-sysconf
 # github.com/tklauser/numcpus v0.3.0
 ## explicit; go 1.11
 github.com/tklauser/numcpus
-# github.com/urfave/cli/v2 v2.5.1
+# github.com/urfave/cli/v2 v2.11.2
 ## explicit; go 1.18
 github.com/urfave/cli/v2
 # github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2
 ## explicit
 github.com/xiang90/probing
+# github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673
+## explicit
+github.com/xrash/smetrics
 # go.etcd.io/etcd v0.0.0-20211015134708-72d3e382e73c
 ## explicit; go 1.12
 go.etcd.io/etcd/etcdserver/api/rafthttp

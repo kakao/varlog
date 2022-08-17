@@ -38,7 +38,8 @@ type Command struct {
 	// List of child commands
 	Subcommands []*Command
 	// List of flags to parse
-	Flags []Flag
+	Flags          []Flag
+	flagCategories FlagCategories
 	// Treat all flags as normal arguments if true
 	SkipFlagParsing bool
 	// Boolean to hide built-in help command and help flag
@@ -119,7 +120,14 @@ func (c *Command) Run(ctx *Context) (err error) {
 		}
 		_, _ = fmt.Fprintln(cCtx.App.Writer, "Incorrect Usage:", err.Error())
 		_, _ = fmt.Fprintln(cCtx.App.Writer)
-		_ = ShowCommandHelp(cCtx, c.Name)
+		if ctx.App.Suggest {
+			if suggestion, err := ctx.App.suggestFlagFromError(err, c.Name); err == nil {
+				fmt.Fprintf(cCtx.App.Writer, suggestion)
+			}
+		}
+		if !c.HideHelp {
+			_ = ShowCommandHelp(cCtx, c.Name)
+		}
 		return err
 	}
 
@@ -129,7 +137,9 @@ func (c *Command) Run(ctx *Context) (err error) {
 
 	cerr := cCtx.checkRequiredFlags(c.Flags)
 	if cerr != nil {
-		_ = ShowCommandHelp(cCtx, c.Name)
+		if !c.HideHelp {
+			_ = ShowCommandHelp(cCtx, c.Name)
+		}
 		return cerr
 	}
 
@@ -249,6 +259,7 @@ func (c *Command) startApp(ctx *Context) error {
 	app.ErrWriter = ctx.App.ErrWriter
 	app.ExitErrHandler = ctx.App.ExitErrHandler
 	app.UseShortOptionHandling = ctx.App.UseShortOptionHandling
+	app.Suggest = ctx.App.Suggest
 
 	app.categories = newCommandCategories()
 	for _, command := range c.Subcommands {
@@ -278,6 +289,14 @@ func (c *Command) startApp(ctx *Context) error {
 	}
 
 	return app.RunAsSubcommand(ctx)
+}
+
+// VisibleFlagCategories returns a slice containing all the visible flag categories with the flags they contain
+func (c *Command) VisibleFlagCategories() []VisibleFlagCategory {
+	if c.flagCategories == nil {
+		return []VisibleFlagCategory{}
+	}
+	return c.flagCategories.VisibleCategories()
 }
 
 // VisibleFlags returns a slice of the Flags with Hidden=false
