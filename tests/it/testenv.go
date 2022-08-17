@@ -1097,7 +1097,7 @@ func (clus *VarlogCluster) getSN(t *testing.T, lsID types.LogStreamID, idx int) 
 }
 
 func (clus *VarlogCluster) newClient(t *testing.T) varlog.Log {
-	cl, err := varlog.Open(context.Background(), clus.clusterID, clus.mrRPCEndpoints)
+	cl, err := varlog.Open(context.Background(), clus.clusterID, clus.mrRPCEndpoints, varlog.WithLogger(clus.logger))
 	require.NoError(t, err)
 	return cl
 }

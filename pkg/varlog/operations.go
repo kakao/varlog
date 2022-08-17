@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -72,8 +73,23 @@ func (v *logImpl) appendTo(ctx context.Context, tpid types.TopicID, lsid types.L
 		backup[i].Address = replicas[i+1].Address
 	}
 
+	v.logger.Warn("trying to call Append RPC",
+		zap.Any("tpid", tpid),
+		zap.Any("lsid", lsid),
+		zap.Any("primary", snid),
+		zap.Any("backup", backup),
+	)
+
 	res, err := cl.Append(ctx, tpid, lsid, data, backup...)
 	if err != nil {
+		v.logger.Warn("could not call Append RPC",
+			zap.Any("tpid", tpid),
+			zap.Any("lsid", lsid),
+			zap.Any("primary", snid),
+			zap.Any("backup", backup),
+			zap.Error(err),
+		)
+
 		if strings.Contains(err.Error(), "sealed") {
 			err = fmt.Errorf("append: %s: %w", err.Error(), verrors.ErrSealed)
 		}
@@ -86,6 +102,13 @@ func (v *logImpl) appendTo(ctx context.Context, tpid types.TopicID, lsid types.L
 
 		return nil, err
 	}
+
+	v.logger.Warn("succeeded to Append RPC",
+		zap.Any("tpid", tpid),
+		zap.Any("lsid", lsid),
+		zap.Any("primary", snid),
+		zap.Any("backup", backup),
+	)
 
 	return res, nil
 }

@@ -220,6 +220,8 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		return
 	}
 
+	lse.logger.Warn("trying to seal", zap.Any("snid", lse.snid), zap.Any("lsid", lse.lsid))
+
 	lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 	if lse.esm.load() == executorStateSealed {
 		return varlogpb.LogStreamStatusSealed, lastCommittedGLSN, nil
@@ -274,6 +276,8 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamRepl
 		return errors.New("no replica")
 	}
 
+	lse.logger.Warn("trying to unseal", zap.Any("snid", lse.snid), zap.Any("lsid", lse.lsid))
+
 	primary := replicas[0].StorageNodeID == lse.snid && replicas[0].LogStreamID == lse.lsid
 	if primary {
 		if lse.rcs != nil {
@@ -283,6 +287,11 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamRepl
 		for i := 1; i < len(replicas); i++ {
 			rpcConn, cerr := rpc.NewConn(context.Background(), replicas[i].Address, lse.replicateClientGRPCOptions...)
 			if cerr != nil {
+				lse.logger.Warn("could not unseal",
+					zap.Any("snid", lse.snid),
+					zap.Any("lsid", lse.lsid),
+					zap.Error(cerr),
+				)
 				return cerr
 			}
 			client, cerr := newReplicateClient(context.Background(), replicateClientConfig{
@@ -294,6 +303,11 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamRepl
 				logger: lse.logger.Named("replicate client"),
 			})
 			if cerr != nil {
+				lse.logger.Warn("could not unseal",
+					zap.Any("snid", lse.snid),
+					zap.Any("lsid", lse.lsid),
+					zap.Error(cerr),
+				)
 				return cerr
 			}
 			lse.rcs.add(client)

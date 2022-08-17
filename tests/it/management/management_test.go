@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/admin"
@@ -667,6 +669,13 @@ func TestGCZombieLogStream(t *testing.T) {
 }
 
 func TestAddLogStreamTopic(t *testing.T) {
+	logger, err := zap.NewDevelopment(
+		zap.IncreaseLevel(zapcore.WarnLevel),
+		zap.AddStacktrace(zap.DPanicLevel),
+	)
+	require.NoError(t, err)
+	defer logger.Sync()
+
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(2),
@@ -674,6 +683,7 @@ func TestAddLogStreamTopic(t *testing.T) {
 		it.WithReporterClientFactory(metarepos.NewReporterClientFactory()),
 		it.WithNumberOfTopics(10),
 		it.WithNumberOfClients(1),
+		it.WithLogger(logger),
 	}
 
 	Convey("Given Topic", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
@@ -704,8 +714,9 @@ func TestAddLogStreamTopic(t *testing.T) {
 		Convey("When AddLogStream", func(ctx C) {
 			vmsCL := env.GetVMSClient(t)
 			for _, topicID := range env.TopicIDs() {
-				_, err := vmsCL.AddLogStream(context.TODO(), topicID, nil)
+				lsd, err := vmsCL.AddLogStream(context.TODO(), topicID, nil)
 				So(err, ShouldBeNil)
+				logger.Warn("added a new log stream", zap.Any("tpid", topicID), zap.Any("lsid", lsd.LogStreamID), zap.Any("replicas", lsd.Replicas))
 			}
 
 			for _, topicID := range env.TopicIDs() {
