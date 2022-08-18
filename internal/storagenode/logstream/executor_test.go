@@ -1041,7 +1041,7 @@ func TestExecutor_Subscribe(t *testing.T) {
 	assert.NoError(t, sr.Err())
 
 	// SubscribeWithGLSN [1, max): Scan 1, 2, ..., 10, wait...
-	// Stop -> Error (cancelled)
+	// Stop -> Error (canceled)
 	sr, err = lse.SubscribeWithGLSN(types.MinGLSN, types.MaxGLSN)
 	assert.NoError(t, err)
 	for i := 0; i < numLogs; i++ {
@@ -1066,7 +1066,7 @@ func TestExecutor_Subscribe(t *testing.T) {
 	assert.Error(t, sr.Err())
 
 	// SubscribeWithLLSN [1, max): Scan 1, 2, ..., 10, wait...
-	// Stop -> Error (cancelled)
+	// Stop -> Error (canceled)
 	sr, err = lse.SubscribeWithLLSN(types.MinLLSN, types.MaxLLSN)
 	assert.NoError(t, err)
 	for i := 0; i < numLogs; i++ {
@@ -1114,7 +1114,7 @@ func TestExecutor_Subscribe(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	// SubscribeWithGLSN [1, 12): Scan 1, 2, ..., 10, wait...
-	// Stop -> Error (cancelled)
+	// Stop -> Error (canceled)
 	sr, err = lse.SubscribeWithGLSN(types.MinGLSN, types.GLSN(numLogs+2))
 	assert.NoError(t, err)
 	for i := 0; i < numLogs; i++ {
@@ -1139,7 +1139,7 @@ func TestExecutor_Subscribe(t *testing.T) {
 	assert.Error(t, sr.Err())
 
 	// SubscribeWithLLSN [1, 12): Scan 1, 2, ..., 10, wait...
-	// Stop -> Error (cancelled)
+	// Stop -> Error (canceled)
 	sr, err = lse.SubscribeWithLLSN(types.MinLLSN, types.LLSN(numLogs+2))
 	assert.NoError(t, err)
 	for i := 0; i < numLogs; i++ {

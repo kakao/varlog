@@ -30,7 +30,8 @@ type replicateClient struct {
 }
 
 // newReplicateClient creates a new client to replicate logs to backup replica.
-// The argument ctx is used for the client's context. If the client is long-running, it should not be cancelled during its lifetime.
+// The argument ctx is used for the client's context. If the client is
+// long-running, it should not be canceled during its lifetime.
 func newReplicateClient(ctx context.Context, cfg replicateClientConfig) (*replicateClient, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
