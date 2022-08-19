@@ -166,16 +166,20 @@ func (snw *StorageNodeWatcher) handleHeartbeatTimeout(ctx context.Context, now t
 	snw.mu.Lock()
 	defer snw.mu.Unlock()
 
+	var wg sync.WaitGroup
 	for snid, ts := range snw.hb {
 		if now.Sub(ts) > snw.tick*time.Duration(snw.heartbeatTimeout) {
-			// TODO: Handle unresponsive heartbeat concurrently.
-			func(ctx context.Context, snid types.StorageNodeID) {
+			wg.Add(1)
+			go func(ctx context.Context, snid types.StorageNodeID) {
+				defer wg.Done()
+
 				ctx, cancel := context.WithTimeout(ctx, snw.failureHandlerTimeout)
 				defer cancel()
 				snw.eventHandler.HandleHeartbeatTimeout(ctx, snid)
 			}(ctx, snid)
 		}
 	}
+	wg.Wait()
 }
 
 func (snw *StorageNodeWatcher) report(ctx context.Context) error {
