@@ -50,7 +50,7 @@ func (dd *DataDir) Valid(cid types.ClusterID, snid types.StorageNodeID) error {
 		return fmt.Errorf("unexpected storage node id %d", int32(dd.StorageNodeID))
 	}
 	if !filepath.IsAbs(dd.Volume) {
-		return fmt.Errorf("volume %s not aboslute", dd.Volume)
+		return fmt.Errorf("volume %s not absolute", dd.Volume)
 	}
 	return WritableDirectory(dd.String())
 }
