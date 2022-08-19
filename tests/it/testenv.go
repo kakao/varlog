@@ -628,7 +628,7 @@ func (clus *VarlogCluster) AddLS(t *testing.T, topicID types.TopicID) types.LogS
 	logStreamID := logStreamDesc.GetLogStreamID()
 
 	// FIXME: use map to store logstream and its replicas
-	logStreamIDs, _ := clus.topicLogStreamIDs[topicID]
+	logStreamIDs := clus.topicLogStreamIDs[topicID]
 	clus.topicLogStreamIDs[topicID] = append(logStreamIDs, logStreamID)
 	clus.replicas[logStreamID] = logStreamDesc.GetReplicas()
 
@@ -731,7 +731,7 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T, topicID types.TopicID) t
 	}
 
 	// FIXME: use map to store logstream and its replicas
-	logStreamIDs, _ := clus.topicLogStreamIDs[topicID]
+	logStreamIDs := clus.topicLogStreamIDs[topicID]
 	clus.topicLogStreamIDs[topicID] = append(logStreamIDs, lsID)
 	clus.replicas[lsID] = rds
 	t.Logf("AddLS without MR: lsid=%d, replicas=%+v", lsID, replicas)
@@ -1241,7 +1241,7 @@ func (clus *VarlogCluster) LogStreamID(t *testing.T, topicID types.TopicID, idx 
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
 
-	logStreamIDs, _ := clus.topicLogStreamIDs[topicID]
+	logStreamIDs := clus.topicLogStreamIDs[topicID]
 	require.Greater(t, len(logStreamIDs), idx)
 
 	return logStreamIDs[idx]
@@ -1357,7 +1357,7 @@ func (clus *VarlogCluster) NumberOfStorageNodes() int {
 }
 
 func (clus *VarlogCluster) NumberOfLogStreams(topicID types.TopicID) int {
-	logStreamIDs, _ := clus.topicLogStreamIDs[topicID]
+	logStreamIDs := clus.topicLogStreamIDs[topicID]
 	return len(logStreamIDs)
 }
 
