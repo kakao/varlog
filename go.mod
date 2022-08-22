@@ -36,7 +36,7 @@ require (
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158
 	golang.org/x/tools v0.1.5
 	google.golang.org/grpc v1.48.0
-	google.golang.org/protobuf v1.28.0
+	google.golang.org/protobuf v1.28.1
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.24.4
 	k8s.io/apimachinery v0.24.4
