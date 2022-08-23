@@ -33,8 +33,10 @@ linters-settings:
       - golang.org/x/net/context
   godot:
     exclude:
-      - '^[ ]*[-•]'
-      - ':$'
+      - "^ TODO"
+      - "^ FIXME"
+      - "^ NOTE"
+      - "^ NB"
   goimports:
     local-prefixes: github.com/kakao/varlog
   misspell:

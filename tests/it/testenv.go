@@ -356,7 +356,7 @@ func (clus *VarlogCluster) CloseMRAllForRestart(t *testing.T) {
 	}
 }
 
-// Close closes all cluster MRs
+// Close closes all cluster MRs.
 func (clus *VarlogCluster) Close(t *testing.T) {
 	clus.muMR.Lock()
 	defer clus.muMR.Unlock()

@@ -36,7 +36,7 @@ var (
 		Name: "volume-strict-check",
 	}
 
-	// grpc options
+	// flags for grpc options.
 	flagServerReadBufferSize = flags.FlagDesc{
 		Name:  "server-read-buffer-size",
 		Envs:  []string{"SERVER_READ_BUFFER_SIZE"},
@@ -64,7 +64,7 @@ var (
 		Usage: "B, KiB, MiB, GiB",
 	}
 
-	// logstream executor options
+	// flags for logstream executor options.
 	flagLogStreamExecutorSequenceQueueCapacity = flags.FlagDesc{
 		Name:    "logstream-executor-sequence-queue-capacity",
 		Aliases: []string{"lse-sequence-queue-capacity"},
@@ -82,7 +82,7 @@ var (
 		Aliases: []string{"lse-replicate-client-queue-capacity"},
 	}
 
-	// storage
+	// flags for storage.
 	flagStorageDisableWAL = flags.FlagDesc{
 		Name: "storage-disable-wal",
 		Envs: []string{"STORAGE_DISABLE_WAL"},
@@ -126,7 +126,7 @@ var (
 		Envs: []string{"STORAGE_VERBOSE"},
 	}
 
-	// logging
+	// flags for logging.
 	flagLogDir = flags.FlagDesc{
 		Name:    "log-dir",
 		Aliases: []string{"logdir"},
@@ -137,7 +137,7 @@ var (
 		Envs: []string{"LOGTOSTDERR"},
 	}
 
-	// telemetry
+	// flags for telemetry.
 	flagExporterType = flags.FlagDesc{
 		Name:  "exporter-type",
 		Usage: "exporter type: stdout, otlp or noop",
