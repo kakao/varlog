@@ -19,13 +19,13 @@ func TestFromByteSizeString(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 0, size)
 
-	size, err = FromByteSizeString("-1G")
+	_, err = FromByteSizeString("-1G")
 	require.Error(t, err)
 
-	size, err = FromByteSizeString("1G", 0, 1<<10)
+	_, err = FromByteSizeString("1G", 0, 1<<10)
 	require.Error(t, err)
 
-	size, err = FromByteSizeString("1KB", 1<<20)
+	_, err = FromByteSizeString("1KB", 1<<20)
 	require.Error(t, err)
 }
 

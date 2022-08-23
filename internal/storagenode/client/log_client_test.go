@@ -176,7 +176,6 @@ func TestBasicOperations(t *testing.T) {
 		currGLSN = res[0].Meta.GLSN
 		So(err, ShouldBeNil)
 		So(currGLSN, ShouldBeGreaterThan, prevGLSN)
-		prevGLSN = currGLSN
 
 		ch, err := client.Subscribe(context.TODO(), topicID, logStreamID, types.GLSN(0), types.GLSN(10))
 		So(err, ShouldBeNil)
@@ -197,6 +196,6 @@ func TestBasicOperations(t *testing.T) {
 		}
 
 		err = client.TrimDeprecated(context.TODO(), topicID, types.GLSN(0))
-		So(subRes.Error, ShouldBeNil)
+		So(err, ShouldBeNil)
 	})
 }

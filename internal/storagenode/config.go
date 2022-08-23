@@ -81,7 +81,7 @@ func (cfg config) validate() error {
 	return nil
 }
 
-func (cfg config) validateVolumes() error {
+func (cfg *config) validateVolumes() error {
 	volumes := make([]string, 0, len(cfg.volumes))
 	visited := make(map[string]bool, len(cfg.volumes))
 	for _, vol := range cfg.volumes {

@@ -1610,10 +1610,10 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			time.Sleep(10 * time.Second)
 
 			Convey("Then it should not have member info", func(ctx C) {
-				cinfo, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), types.ClusterID(0))
+				_, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), types.ClusterID(0))
 				So(err, ShouldResemble, verrors.ErrNotMember)
 
-				cinfo, err = clus.nodes[0].GetClusterInfo(context.TODO(), types.ClusterID(0))
+				cinfo, err := clus.nodes[0].GetClusterInfo(context.TODO(), types.ClusterID(0))
 				So(err, ShouldBeNil)
 				So(len(cinfo.Members), ShouldBeLessThan, nrNode)
 
