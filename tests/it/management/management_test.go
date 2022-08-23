@@ -3,6 +3,7 @@ package management
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -328,6 +329,82 @@ func TestSealUnseal(t *testing.T) {
 	require.Equal(t, topicID, rsp.LogStreams[0].TopicID)
 	require.Equal(t, rsp.Topic.LogStreams[0], rsp.LogStreams[0].LogStreamID)
 	require.Equal(t, varlogpb.LogStreamStatusRunning, rsp.LogStreams[0].Status)
+}
+
+func TestSyncAndAppend(t *testing.T) {
+	const (
+		adminSNWatcherTick           = 100 * time.Millisecond
+		adminSNWatcherReportInterval = 10
+
+		testDuration = adminSNWatcherTick * adminSNWatcherReportInterval * 5
+		testTick     = adminSNWatcherTick
+
+		numAppends = 10
+	)
+
+	clus := it.NewVarlogCluster(t,
+		it.WithReplicationFactor(2),
+		it.WithNumberOfStorageNodes(2),
+		it.WithNumberOfTopics(1),
+		it.WithNumberOfLogStreams(1),
+		it.WithNumberOfClients(1),
+		it.WithVMSOptions(it.NewTestVMSOptions(
+			admin.WithStorageNodeWatcherOptions(
+				snwatcher.WithTick(adminSNWatcherTick),
+				snwatcher.WithReportInterval(adminSNWatcherReportInterval),
+			),
+		)...),
+	)
+	defer clus.Close(t)
+
+	tpid := clus.TopicIDs()[0]
+	lsid := clus.LogStreamID(t, tpid, 0)
+	latencies := make([]int, numAppends*2)
+
+	for i := 0; i < numAppends; i++ {
+		client := clus.ClientAtIndex(t, 0)
+		ts := time.Now()
+		res := client.Append(context.Background(), tpid, [][]byte{[]byte("foo")})
+		require.NoError(t, res.Err)
+		latencies[i] = int(time.Since(ts).Microseconds())
+	}
+
+	failedSNID := clus.StorageNodeIDAtIndex(t, 0)
+	clus.CloseSN(t, failedSNID)
+
+	assert.Eventually(t, func() bool {
+		lsd, err := clus.GetVMSClient(t).GetLogStream(context.Background(), tpid, lsid)
+		require.NoError(t, err)
+		return lsd.Status.Sealed()
+	}, testDuration, testTick)
+
+	newSNID := clus.AddSN(t)
+	clus.UpdateLS(t, tpid, lsid, failedSNID, newSNID)
+
+	assert.Eventually(t, func() bool {
+		snm, err := clus.GetVMSClient(t).GetStorageNode(context.Background(), newSNID)
+		require.NoError(t, err)
+		lsrmd, ok := snm.GetLogStream(lsid)
+		if !ok {
+			return false
+		}
+		return lsrmd.LocalHighWatermark.LLSN == types.LLSN(numAppends) && lsrmd.Status == varlogpb.LogStreamStatusSealed
+	}, 2*testDuration, testTick)
+
+	_, err := clus.GetVMSClient(t).Unseal(context.Background(), tpid, lsid)
+	require.NoError(t, err)
+
+	clus.ClientRefresh(t)
+	for i := 0; i < numAppends; i++ {
+		client := clus.ClientAtIndex(t, 0)
+		ts := time.Now()
+		res := client.Append(context.Background(), tpid, [][]byte{[]byte("foo")})
+		require.NoError(t, res.Err)
+		latencies[i+numAppends] = int(time.Since(ts).Microseconds())
+	}
+
+	sort.Ints(latencies)
+	require.InEpsilon(t, latencies[0], latencies[numAppends*2-1], float64(time.Second.Microseconds()))
 }
 
 func TestSyncLogStream(t *testing.T) {
