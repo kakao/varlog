@@ -293,7 +293,9 @@ func TestNewbieLogStream(t *testing.T) {
 				client := env.ClientAtIndex(t, 0)
 
 				for i := 0; i < 32; i++ {
-					lsid := lsIDs[i%env.NumberOfLogStreams(topicID)]
+					// AppendTo Newbie first
+					numLS := env.NumberOfLogStreams(topicID)
+					lsid := lsIDs[(numLS-1)-(i%numLS)]
 					res := client.AppendTo(context.Background(), topicID, lsid, [][]byte{[]byte("foo")})
 					So(res.Err, ShouldBeNil)
 					So(res.Metadata[0].GLSN, ShouldNotEqual, types.InvalidGLSN)

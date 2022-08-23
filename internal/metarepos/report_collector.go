@@ -887,6 +887,10 @@ func (lc *logStreamCommitter) getCatchupVersion(resetCatchupHelper bool) (types.
 	}
 
 	if beginVer > ver {
+		if ver.Invalid() {
+			// let newbie logStream know version
+			return beginVer - 1, true
+		}
 		return beginVer, true
 	}
 
@@ -956,20 +960,28 @@ CatchupLoop:
 
 			cr.Version = crs.Version
 			cr.HighWatermark, lc.catchupHelper.expectedEndPos = crs.LastHighWatermark(lc.topicID, lc.catchupHelper.expectedEndPos)
+		} else {
+			// let newbie LogStream know Version
+			cr.Version = crs.Version
+			cr.TopicID = lc.topicID
+			cr.LogStreamID = lc.lsID
+			cr.CommittedGLSNOffset = types.MinGLSN
+			cr.CommittedLLSNOffset = types.MinLLSN
+			cr.CommittedGLSNLength = 0
+		}
 
-			err := lc.helper.commit(ctx, cr)
-			if err != nil {
-				return
-			}
+		err := lc.helper.commit(ctx, cr)
+		if err != nil {
+			return
+		}
 
-			min, max, recordable := lc.sampleTracer.commit(lc.lsID, cr.CommittedLLSNOffset, cr.CommittedLLSNOffset+types.LLSN(cr.CommittedGLSNLength))
-			if recordable {
-				lc.tmStub.mb.Records("mr.report_commit.delay").Record(ctx,
-					float64(time.Since(min).Nanoseconds())/float64(time.Millisecond))
+		min, max, recordable := lc.sampleTracer.commit(lc.lsID, cr.CommittedLLSNOffset, cr.CommittedLLSNOffset+types.LLSN(cr.CommittedGLSNLength))
+		if recordable {
+			lc.tmStub.mb.Records("mr.report_commit.delay").Record(ctx,
+				float64(time.Since(min).Nanoseconds())/float64(time.Millisecond))
 
-				lc.tmStub.mb.Records("mr.replicate.delay").Record(ctx,
-					float64(max.Sub(min).Nanoseconds())/float64(time.Millisecond))
-			}
+			lc.tmStub.mb.Records("mr.replicate.delay").Record(ctx,
+				float64(max.Sub(min).Nanoseconds())/float64(time.Millisecond))
 		}
 
 		lc.setSentVersion(crs.Version)

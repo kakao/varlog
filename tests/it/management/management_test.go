@@ -721,7 +721,15 @@ func TestAddLogStreamTopic(t *testing.T) {
 			}
 
 			Convey("Then it should Appendable", func(ctx C) {
+				env.ClientRefresh(t)
+				client = env.ClientAtIndex(t, 0)
+
 				for _, topicID := range env.TopicIDs() {
+					rsp, _ := env.GetVMSClient(t).DescribeTopic(context.Background(), topicID)
+					// AppendTo newbie LogStream
+					res := client.AppendTo(context.Background(), topicID, rsp.LogStreams[1].LogStreamID, [][]byte{[]byte("foo")})
+					So(res.Err, ShouldBeNil)
+
 					for i := 0; i < numLogs; i++ {
 						res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
 						So(res.Err, ShouldBeNil)
