@@ -189,10 +189,8 @@ func (sq *sequencer) waitForDrainage(cause error, forceDrain bool) {
 
 	for atomic.LoadInt64(&sq.inflight) > 0 {
 		if !forceDrain {
-			select {
-			case <-timer.C:
-				timer.Reset(tick)
-			}
+			<-timer.C
+			timer.Reset(tick)
 			continue
 		}
 

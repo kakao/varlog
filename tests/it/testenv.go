@@ -958,9 +958,7 @@ func (clus *VarlogCluster) MetadataRepositories() []*metarepos.RaftMetadataRepos
 	defer clus.muMR.Unlock()
 
 	ret := make([]*metarepos.RaftMetadataRepository, len(clus.metadataRepositories))
-	for i, mr := range clus.metadataRepositories {
-		ret[i] = mr
-	}
+	copy(ret, clus.metadataRepositories)
 	return ret
 }
 

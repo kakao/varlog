@@ -138,10 +138,8 @@ func (w *writer) waitForDrainage(cause error, forceDrain bool) {
 
 	for atomic.LoadInt64(&w.inflight) > 0 {
 		if !forceDrain {
-			select {
-			case <-timer.C:
-				timer.Reset(tick)
-			}
+			<-timer.C
+			timer.Reset(tick)
 			continue
 		}
 
