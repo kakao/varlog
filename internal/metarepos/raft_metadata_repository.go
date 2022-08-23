@@ -1158,20 +1158,6 @@ func (mr *RaftMetadataRepository) getLastCommitVersion(topicID types.TopicID, ls
 	return crs.Version
 }
 
-func (mr *RaftMetadataRepository) getLastCommittedLength(topicID types.TopicID, lsID types.LogStreamID) uint64 {
-	crs := mr.storage.GetLastCommitResults()
-	if crs == nil {
-		return 0
-	}
-
-	r, _, ok := crs.LookupCommitResult(topicID, lsID, -1)
-	if !ok {
-		return 0
-	}
-
-	return r.GetCommittedGLSNLength()
-}
-
 func (mr *RaftMetadataRepository) proposeCommit() {
 	if !mr.isLeader() {
 		return

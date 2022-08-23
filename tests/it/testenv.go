@@ -1425,13 +1425,6 @@ func (clus *VarlogCluster) storageNodeAddr(t *testing.T, snID types.StorageNodeI
 	return clus.snAddrs[snID]
 }
 
-func (clus *VarlogCluster) getCachedMetadata() *varlogpb.MetadataDescriptor {
-	clus.muMR.Lock()
-	defer clus.muMR.Unlock()
-
-	return clus.cachedMetadata
-}
-
 func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, topicID types.TopicID, lsID types.LogStreamID, data []byte) {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()

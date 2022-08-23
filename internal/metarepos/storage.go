@@ -126,7 +126,6 @@ type MetadataStorage struct {
 
 	runner  *runner.Runner
 	running atomicutil.AtomicBool
-	cancel  context.CancelFunc
 
 	logger *zap.Logger
 }

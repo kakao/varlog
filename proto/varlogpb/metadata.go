@@ -88,10 +88,6 @@ func (s TopicStatus) Deleted() bool {
 	return s == TopicStatusDeleted
 }
 
-func (s *StorageDescriptor) valid() bool {
-	return s != nil && len(s.Path) != 0 && s.Used <= s.Total
-}
-
 func (l *LogStreamDescriptor) Valid() bool {
 	if l == nil || len(l.Replicas) == 0 {
 		return false

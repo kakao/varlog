@@ -992,15 +992,6 @@ func (rm *raftMembership) getMembers() []types.ID {
 	return m
 }
 
-func (rm *raftMembership) reset() {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	rm.peers = make(map[vtypes.NodeID]string)
-	rm.members = make(map[vtypes.NodeID]string)
-	rm.learners = make(map[vtypes.NodeID]string)
-}
-
 func (rm *raftMembership) removeAllMembers() {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()

@@ -367,20 +367,6 @@ func (fac *DummyStorageNodeClientFactory) crashRPC(snID types.StorageNodeID) {
 	cli.status = DummyStorageNodeClientStatusCrash
 }
 
-func (r *DummyStorageNodeClient) numLogStreams() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	return len(r.logStreamIDs)
-}
-
-func (r *DummyStorageNodeClient) logStreamID(idx int) types.LogStreamID {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	return r.logStreamIDs[idx]
-}
-
 func (fac *DummyStorageNodeClientFactory) recoverRPC(snID types.StorageNodeID) {
 	f, ok := fac.m.Load(snID)
 	if !ok {

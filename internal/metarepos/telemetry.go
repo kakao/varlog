@@ -80,10 +80,6 @@ func (ts *telemetryStub) close(ctx context.Context) {
 	ts.stop(ctx)
 }
 
-func (ts *telemetryStub) metrics() *metricsBag {
-	return ts.mb
-}
-
 func newNopTelmetryStub() *telemetryStub {
 	ts, _ := newTelemetryStub(context.Background(), "nop", types.InvalidNodeID, "")
 	return ts
