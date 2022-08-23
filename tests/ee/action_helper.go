@@ -10,44 +10,8 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/tests/ee/k8s/cluster"
 )
-
-func selectStorageNode(ctx context.Context, t *testing.T, tc *cluster.TestCluster, primary bool) types.StorageNodeID {
-	adminAddr := tc.AdminServerAddress(ctx, t)
-	adm, err := varlog.NewAdmin(ctx, adminAddr)
-	assert.NoError(t, err)
-	defer func() {
-		err := adm.Close()
-		assert.NoError(t, err)
-	}()
-
-	tds, err := adm.ListTopics(ctx)
-	assert.NoError(t, err)
-
-	tdsTmp := make([]varlogpb.TopicDescriptor, 0, len(tds))
-	for idx := range tds {
-		if len(tds[idx].LogStreams) > 0 {
-			tdsTmp = append(tdsTmp, tds[idx])
-		}
-	}
-	td := tdsTmp[rand.Intn(len(tdsTmp))]
-
-	lsds, err := adm.ListLogStreams(ctx, td.TopicID)
-	assert.NoError(t, err)
-	lsd := lsds[rand.Intn(len(lsds))]
-
-	var snid types.StorageNodeID
-	if primary {
-		snid = lsd.Replicas[0].StorageNodeID
-	} else {
-		assert.Greater(t, len(lsd.Replicas), 1)
-		idx := rand.Intn(len(lsd.Replicas)-1) + 1
-		snid = lsd.Replicas[idx].StorageNodeID
-	}
-	return snid
-}
 
 func FailStorageNode(ctx context.Context, t *testing.T, tc *cluster.TestCluster, snid types.StorageNodeID) func() {
 	return func() {

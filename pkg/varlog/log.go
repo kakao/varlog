@@ -53,10 +53,6 @@ type AppendResult struct {
 	Err      error
 }
 
-func newAppendResultWithError(err error) AppendResult {
-	return AppendResult{Err: err}
-}
-
 type OnNext func(logEntry varlogpb.LogEntry, err error)
 
 type logImpl struct {

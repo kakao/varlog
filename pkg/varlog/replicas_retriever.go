@@ -3,15 +3,10 @@ package varlog
 //go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/varlog -package varlog -destination replicas_retriever_mock.go . ReplicasRetriever,RenewableReplicasRetriever
 
 import (
-	"errors"
 	"sync/atomic"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
-)
-
-var (
-	errNoLogIOClient = errors.New("no such log client")
 )
 
 // ReplicasRetriever is the interface that wraps the Retrieve method.
