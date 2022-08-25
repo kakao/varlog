@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	defaultClusterID         = types.ClusterID(1)
 	defaultReplicationFactor = 1
 	defaultMRCount           = 1
 	defaultSnapCount         = 0
