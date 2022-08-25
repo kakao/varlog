@@ -244,7 +244,6 @@ func TestDemo(t *testing.T) {
 	nextPort++
 
 	vmsAddr := fmt.Sprintf("127.0.0.1:%d", nextPort)
-	nextPort++
 
 	cleanup := getClearDir(t, mrRAFTAddr)
 	cleanup()

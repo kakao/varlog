@@ -78,7 +78,6 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 		batchletEndIdx := begin + batchletLen
 		if batchletEndIdx > end {
 			batchletEndIdx = end
-			batchletLen = batchletEndIdx - begin
 		}
 
 		lse.prepareAppendContextInternal(dataBatch, begin, batchletEndIdx, batchletClassIdx, apc)

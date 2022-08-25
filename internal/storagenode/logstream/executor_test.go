@@ -246,6 +246,7 @@ func testUnsealInitialExecutor(t *testing.T, lse *Executor, replicas []varlogpb.
 	status, localHWM, err := lse.Seal(context.Background(), lastGLSN)
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, status)
 	assert.Equal(t, lastGLSN, localHWM)
+	assert.NoError(t, err)
 
 	err = lse.Unseal(context.Background(), replicas)
 	assert.NoError(t, err)

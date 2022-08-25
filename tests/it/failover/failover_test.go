@@ -258,6 +258,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 
 					primarySNID := env.PrimaryStorageNodeIDOf(t, lsID)
 					snmd, err := env.SNClientOf(t, primarySNID).GetMetadata(context.Background())
+					assert.NoError(t, err)
 					lsmd, ok := snmd.GetLogStream(lsID)
 					assert.True(t, ok)
 					return lsmd.GetStatus() == varlogpb.LogStreamStatusSealed
