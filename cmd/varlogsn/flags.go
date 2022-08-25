@@ -136,6 +136,21 @@ var (
 		Name: "logtostderr",
 		Envs: []string{"LOGTOSTDERR"},
 	}
+	flagLogFileRetentionDays = flags.FlagDesc{
+		Name:    "logfile-retention-days",
+		Aliases: []string{"log-file-retention-days"},
+		Envs:    []string{"LOGFILE_RETENTION_DAYS", "LOG_FILE_RETENTION_DAYS"},
+	}
+	flagLogFileCompression = flags.FlagDesc{
+		Name:    "logfile-compression",
+		Aliases: []string{"log-file-compression"},
+		Envs:    []string{"LOGFILE_COMPRESSION", "LOG_FILE_COMPRESSION"},
+	}
+	flagLogLevel = flags.FlagDesc{
+		Name:    "loglevel",
+		Aliases: []string{"log-level"},
+		Envs:    []string{"LOGLEVEL", "LOG_LEVEL"},
+	}
 
 	// flags for telemetry.
 	flagExporterType = flags.FlagDesc{

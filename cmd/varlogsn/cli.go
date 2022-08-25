@@ -71,6 +71,9 @@ func newStartCommand() *cli.Command {
 
 			flagLogDir.StringFlag(false, ""),
 			flagLogToStderr.BoolFlag(),
+			flagLogFileRetentionDays.IntFlag(false, 0),
+			flagLogFileCompression.BoolFlag(),
+			flagLogLevel.StringFlag(false, "info"),
 
 			flagExporterType.StringFlag(false, "noop"),
 			flagExporterStopTimeout.DurationFlag(false, 5*time.Second),
