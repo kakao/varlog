@@ -526,7 +526,7 @@ func TestSealLogStreamSealedIncompletely(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(100, func() bool {
-					meta, err := env.GetVMS().Metadata(context.TODO())
+					meta, err := env.GetVMS().Metadata(context.TODO()) //nolint:staticcheck
 					if err != nil {
 						return false
 					}

@@ -292,7 +292,7 @@ func (c *testLog) LogStreamMetadata(_ context.Context, topicID types.TopicID, lo
 
 	logStreamDesc = *proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor)
 	head, tail := c.vt.peek(topicID, logStreamID)
-	logStreamDesc.Head = head
+	logStreamDesc.Head = head //nolint:staticcheck
 	logStreamDesc.Tail = tail
 	return logStreamDesc, nil
 }

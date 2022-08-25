@@ -208,10 +208,10 @@ func TestClientAppend(t *testing.T) {
 		require.Equal(t, topicID, lsd.TopicID)
 		require.Equal(t, logStreamID, lsd.LogStreamID)
 
-		require.Equal(t, types.MinLLSN, lsd.Head.LLSN)
-		require.GreaterOrEqual(t, lsd.Head.GLSN, types.MinGLSN)
-		require.Equal(t, topicID, lsd.Head.TopicID)
-		require.Equal(t, logStreamID, lsd.Head.LogStreamID)
+		require.Equal(t, types.MinLLSN, lsd.Head.LLSN)          //nolint:staticcheck
+		require.GreaterOrEqual(t, lsd.Head.GLSN, types.MinGLSN) //nolint:staticcheck
+		require.Equal(t, topicID, lsd.Head.TopicID)             //nolint:staticcheck
+		require.Equal(t, logStreamID, lsd.Head.LogStreamID)     //nolint:staticcheck
 
 		require.GreaterOrEqual(t, lsd.Tail.LLSN, types.MinLLSN)
 		require.GreaterOrEqual(t, lsd.Tail.GLSN, types.MinGLSN)

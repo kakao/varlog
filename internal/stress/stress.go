@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -124,7 +125,7 @@ func Append(config Config) error {
 		go func() {
 			defer wg.Done()
 			vlog, err := varlog.Open(ctx, config.ClusterID, config.MRAddrs, varlog.WithGRPCDialOptions(
-				grpc.WithInsecure(),
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithReadBufferSize(1<<20),
 				grpc.WithWriteBufferSize(32<<20),
 			))

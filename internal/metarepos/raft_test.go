@@ -10,6 +10,7 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 	"go.etcd.io/etcd/raft/raftpb"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -129,13 +130,13 @@ func (clus *cluster) close(i int) (err error) {
 func (clus *cluster) Close() (err error) {
 	for i := range clus.peers {
 		if erri := clus.close(i); erri != nil {
-			err = erri
+			err = multierr.Append(err, erri)
 		}
 	}
 
 	os.RemoveAll("raftdata") //nolint:errcheck,revive // TODO:: Handle an error returned.
 
-	return clus.portLease.Release()
+	return multierr.Append(err, clus.portLease.Release())
 }
 
 func (clus *cluster) closeNoErrors(t *testing.T) {

@@ -3,7 +3,7 @@ package vault
 import (
 	"encoding/json"
 	"flag"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"testing"
@@ -51,7 +51,7 @@ func GetClusterConnectionInfo(t *testing.T) ClusterConnectionInfo {
 		assert.NoError(t, err)
 	}()
 
-	body, err := ioutil.ReadAll(rsp.Body)
+	body, err := io.ReadAll(rsp.Body)
 	require.NoError(t, err)
 
 	var response Response

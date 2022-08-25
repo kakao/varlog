@@ -3,7 +3,6 @@ package varlogctl_test
 import (
 	"context"
 	"flag"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -416,7 +415,7 @@ func TestController(t *testing.T) {
 				return
 			}
 
-			want, err := ioutil.ReadFile(path)
+			want, err := os.ReadFile(path)
 			assert.NoError(t, err)
 
 			if len(got) > 0 || len(want) > 0 {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/smartystreets/goconvey/convey"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/kakao/varlog/pkg/util/netutil"
 )
@@ -35,7 +36,11 @@ func WithServiceServer(s service, testf func(server *grpc.Server, addr string)) 
 		// addr := testutil.GetLocalAddress(lis)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
+		conn, err := grpc.DialContext(ctx, addr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+			grpc.FailOnNonTempDialError(true),
+		)
 		convey.So(err, convey.ShouldBeNil)
 		convey.So(conn.Close(), convey.ShouldBeNil)
 

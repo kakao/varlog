@@ -1563,7 +1563,7 @@ func (clus *VarlogCluster) WaitCommit(t *testing.T, lsID types.LogStreamID, vers
 func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
 	// FIXME: do not use vms.RELOAD_INTERVAL
 	require.Eventually(t, func() bool {
-		vmsMeta, err := clus.vmsServer.Metadata(context.Background())
+		vmsMeta, err := clus.vmsServer.Metadata(context.Background()) //nolint:staticcheck
 		return err == nil && vmsMeta.GetLogStream(lsID) != nil
 	}, mrmanager.ReloadInterval*10, 100*time.Millisecond)
 
