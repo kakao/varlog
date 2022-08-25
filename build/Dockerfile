@@ -58,30 +58,35 @@ ENV PATH=/varlog/bin:$PATH
 
 
 FROM busybox:${BUSYBOX_VERSION}-glibc AS varlogctl-debug
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
 COPY --from=builder-debug /varlog/bin/varlogctl /varlog/bin/varlogctl
 CMD ["/varlog/bin/varlogctl"]
 
 
 FROM scratch AS varlogctl-noncgo
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
 COPY --from=builder-noncgo /varlog/bin/varlogctl /varlog/bin/varlogctl
 CMD ["/varlog/bin/varlogctl"]
 
 
 FROM busybox:${BUSYBOX_VERSION}-glibc AS varlogcli-debug
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
 COPY --from=builder-debug /varlog/bin/varlogcli /varlog/bin/varlogcli
 CMD ["/varlog/bin/varlogcli"]
 
 
 FROM scratch AS varlogcli-noncgo
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
 COPY --from=builder-noncgo /varlog/bin/varlogcli /varlog/bin/varlogcli
 CMD ["/varlog/bin/varlogcli"]
 
 
 FROM base-cgo AS varlogmr-debug
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGMR_RPC_PORT}
 EXPOSE ${VARLOGMR_RAFT_PORT}
 USER varlog
@@ -95,6 +100,7 @@ COPY --from=builder-debug /varlog/pylib /varlog/pylib
 
 
 FROM base-cgo AS varlogmr-cgo
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGMR_RPC_PORT}
 EXPOSE ${VARLOGMR_RAFT_PORT}
 USER varlog
@@ -108,6 +114,7 @@ COPY --from=builder-cgo /varlog/pylib /varlog/pylib
 
 
 FROM base-noncgo AS varlogmr-noncgo
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGMR_RPC_PORT}
 EXPOSE ${VARLOGMR_RAFT_PORT}
 USER varlog
@@ -121,6 +128,7 @@ COPY --from=builder-noncgo /varlog/pylib /varlog/pylib
 
 
 FROM base-cgo AS varlogadm-debug
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGADM_RPC_PORT}
 USER varlog
 WORKDIR /varlog
@@ -131,6 +139,7 @@ COPY --from=builder-debug /varlog/pylib /varlog/pylib
 
 
 FROM base-cgo AS varlogadm-cgo
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGADM_RPC_PORT}
 USER varlog
 WORKDIR /varlog
@@ -141,6 +150,7 @@ COPY --from=builder-cgo /varlog/pylib /varlog/pylib
 
 
 FROM base-noncgo AS varlogadm-noncgo
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGADM_RPC_PORT}
 USER varlog
 WORKDIR /varlog
@@ -151,6 +161,7 @@ COPY --from=builder-noncgo /varlog/pylib /varlog/pylib
 
 
 FROM base-cgo AS varlogsn-debug
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGSN_RPC_PORT}
 USER varlog
 WORKDIR /varlog
@@ -162,6 +173,7 @@ COPY --from=builder-debug /varlog/pylib /varlog/pylib
 
 
 FROM base-cgo AS varlogsn-cgo
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGSN_RPC_PORT}
 USER varlog
 WORKDIR /varlog
@@ -173,6 +185,7 @@ COPY --from=builder-cgo /varlog/pylib /varlog/pylib
 
 
 FROM base-noncgo AS varlogsn-noncgo
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGSN_RPC_PORT}
 USER varlog
 WORKDIR /varlog
