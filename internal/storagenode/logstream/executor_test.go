@@ -1285,9 +1285,7 @@ func TestExecutor_Recover(t *testing.T) {
 		ticker := time.NewTicker(time.Millisecond)
 		defer ticker.Stop()
 		for {
-			select {
-			case <-ticker.C:
-			}
+			<-ticker.C
 			assert.Eventually(t, func() bool {
 				_ = lse.Commit(context.Background(), snpb.LogStreamCommitResult{
 					TopicID:             lse.tpid,
