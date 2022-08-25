@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+	grpcctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -68,11 +71,18 @@ func New(ctx context.Context, opts ...Option) (*Admin, error) {
 		return nil, err
 	}
 
+	grpcServer := grpc.NewServer(
+		grpcmiddleware.WithUnaryServerChain(
+			grpcctxtags.UnaryServerInterceptor(),
+			grpczap.UnaryServerInterceptor(cfg.logger),
+		),
+	)
+
 	cm := &Admin{
 		config:       cfg,
 		lsidGen:      logStreamIDGen,
 		tpidGen:      topicIDGen,
-		server:       grpc.NewServer(),
+		server:       grpcServer,
 		healthServer: health.NewServer(),
 	}
 	cm.snw, err = snwatcher.New(append(
