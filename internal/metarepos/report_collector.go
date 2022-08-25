@@ -237,7 +237,7 @@ func (rc *reportCollector) Close() {
 }
 
 func (rc *reportCollector) Recover(sns []*varlogpb.StorageNodeDescriptor, lss []*varlogpb.LogStreamDescriptor, ver types.Version) error {
-	rc.Run()
+	rc.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	for _, sn := range sns {
 		if sn.Status.Deleted() {
@@ -351,7 +351,7 @@ func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		return err
 	}
 
-	rc.insertExecutor(executor)
+	rc.insertExecutor(executor) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	return nil
 }
 
@@ -372,7 +372,7 @@ func (rc *reportCollector) UnregisterStorageNode(snID types.StorageNodeID) error
 		return verrors.ErrNotEmpty
 	}
 
-	rc.deleteExecutor(snID)
+	rc.deleteExecutor(snID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	executor.stopNoWait()
 
 	return nil
@@ -571,7 +571,7 @@ func (rce *reportCollectExecutor) registerLogStream(topicID types.TopicID, lsID 
 		return err
 	}
 
-	rce.insertCommitter(c)
+	rce.insertCommitter(c) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	return nil
 }
 
@@ -584,7 +584,7 @@ func (rce *reportCollectExecutor) unregisterLogStream(lsID types.LogStreamID) er
 		return verrors.ErrNotExist
 	}
 
-	rce.deleteCommitter(lsID)
+	rce.deleteCommitter(lsID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	c.stopNoWait()
 
 	return nil
@@ -741,7 +741,7 @@ func (rce *reportCollectExecutor) closeClient(cli reportcommitter.Client) {
 
 	if rce.snConnector.cli != nil &&
 		(rce.snConnector.cli == cli || cli == nil) {
-		rce.snConnector.cli.Close()
+		rce.snConnector.cli.Close() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		rce.snConnector.cli = nil
 	}
 }

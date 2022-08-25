@@ -407,7 +407,7 @@ func TestVarlogFailoverSyncLogStream(t *testing.T) {
 
 					recoveredGLSN := types.InvalidGLSN
 					So(testutil.CompareWaitN(10, func() bool {
-						cmCli.Unseal(context.TODO(), topicID, addedLSID)
+						cmCli.Unseal(context.TODO(), topicID, addedLSID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 						rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(10))
 						defer cancel()
@@ -644,7 +644,7 @@ func TestVarlogFailoverSyncLogStreamError(t *testing.T) {
 			snID := env.StorageNodeIDAtIndex(t, 0)
 
 			snMCL := env.SNClientOf(t, snID)
-			snMCL.RemoveLogStream(context.Background(), topicID, lsID)
+			snMCL.RemoveLogStream(context.Background(), topicID, lsID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			env.RecoverMR(t)
 
@@ -673,7 +673,7 @@ func TestVarlogFailoverSyncLogStreamError(t *testing.T) {
 			snID := env.StorageNodeIDAtIndex(t, 0)
 
 			snMCL := env.SNClientOf(t, snID)
-			snMCL.RemoveLogStream(context.Background(), topicID, addedLSID)
+			snMCL.RemoveLogStream(context.Background(), topicID, addedLSID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			env.RecoverMR(t)
 

@@ -20,7 +20,7 @@ func TestOnlyOnce(t *testing.T) {
 			wg.Add(repeat)
 			for i := 0; i < repeat; i++ {
 				go func(o *OnlyOnce, cnt *int) {
-					o.Do(func() error {
+					_ = o.Do(func() error {
 						*cnt++
 						return nil
 					})
@@ -33,13 +33,13 @@ func TestOnlyOnce(t *testing.T) {
 
 		Convey("should be called only once with panic", func() {
 			f := func() {
-				onlyonce.Do(func() error {
+				_ = onlyonce.Do(func() error {
 					panic("panic")
 				})
 			}
 			So(f, ShouldPanic)
 			i := 0
-			onlyonce.Do(func() error {
+			_ = onlyonce.Do(func() error {
 				i++
 				return nil
 			})

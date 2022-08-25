@@ -860,7 +860,7 @@ func TestStorageTrim(t *testing.T) {
 
 		Convey("When operate trim, trimmed gls should not be found", func(ctx C) {
 			for trim := types.InvalidVersion; trim < types.Version(1024); trim++ {
-				ms.TrimLogStreamCommitHistory(trim)
+				ms.TrimLogStreamCommitHistory(trim) //nolint:errcheck,revive // TODO:: Handle an error returned.
 				ms.trimLogStreamCommitHistory()
 
 				if trim > types.MinVersion {
@@ -909,7 +909,7 @@ func TestStorageReport(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			ls := makeLogStream(types.TopicID(1), lsID, snIDs)
-			ms.registerLogStream(ls)
+			ms.registerLogStream(ls) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			r := snpb.LogStreamUncommitReport{
 				UncommittedLLSNOffset: types.MinLLSN,
@@ -1091,7 +1091,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
-		ms.registerLogStream(ls)
+		ms.registerLogStream(ls) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 		r := snpb.LogStreamUncommitReport{
 			UncommittedLLSNOffset: types.MinLLSN,

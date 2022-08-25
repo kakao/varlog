@@ -82,9 +82,9 @@ func (clus *metadataRepoCluster) clear(idx int) {
 		return
 	}
 	nodeID := types.NewNodeIDFromURL(clus.peers[idx])
-	os.RemoveAll(fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID))
-	os.RemoveAll(fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID))
-	os.RemoveAll(fmt.Sprintf("%s/sml/%d", vtesting.TestRaftDir(), nodeID))
+	os.RemoveAll(fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID))  //nolint:errcheck,revive // TODO:: Handle an error returned.
+	os.RemoveAll(fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID)) //nolint:errcheck,revive // TODO:: Handle an error returned.
+	os.RemoveAll(fmt.Sprintf("%s/sml/%d", vtesting.TestRaftDir(), nodeID))  //nolint:errcheck,revive // TODO:: Handle an error returned.
 }
 
 func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
@@ -258,7 +258,7 @@ func (clus *metadataRepoCluster) healthCheck(idx int) bool {
 	if err != nil {
 		return false
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	healthClient := grpc_health_v1.NewHealthClient(conn.Conn)
 	if _, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{}); err != nil {
@@ -296,7 +296,7 @@ func (clus *metadataRepoCluster) leaderFail() bool {
 		return false
 	}
 
-	clus.stop(leader)
+	clus.stop(leader) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	return true
 }
 
@@ -430,7 +430,7 @@ func TestMRApplyReport(t *testing.T) {
 		notExistSnID := types.StorageNodeID(rep)
 
 		report := makeUncommitReport(snIDs[0], types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 2)
-		mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+		mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 		for _, snID := range snIDs {
 			_, ok := mr.storage.LookupUncommitReport(lsID, snID)
@@ -452,7 +452,7 @@ func TestMRApplyReport(t *testing.T) {
 
 			Convey("Report should not apply if snID is not exist in UncommitReport", func(ctx C) {
 				report := makeUncommitReport(notExistSnID, types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 2)
-				mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+				mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 				_, ok := mr.storage.LookupUncommitReport(lsID, notExistSnID)
 				So(ok, ShouldBeFalse)
@@ -461,7 +461,7 @@ func TestMRApplyReport(t *testing.T) {
 			Convey("Report should apply if snID is exist in UncommitReport", func(ctx C) {
 				snID := snIDs[0]
 				report := makeUncommitReport(snID, types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 2)
-				mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+				mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 				r, ok := mr.storage.LookupUncommitReport(lsID, snID)
 				So(ok, ShouldBeTrue)
@@ -469,7 +469,7 @@ func TestMRApplyReport(t *testing.T) {
 
 				Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
 					report := makeUncommitReport(snID, types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 3)
-					mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+					mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 					r, ok := mr.storage.LookupUncommitReport(lsID, snID)
 					So(ok, ShouldBeTrue)
@@ -478,7 +478,7 @@ func TestMRApplyReport(t *testing.T) {
 
 				Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
 					report := makeUncommitReport(snID, types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 1)
-					mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+					mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 					r, ok := mr.storage.LookupUncommitReport(lsID, snID)
 					So(ok, ShouldBeTrue)
@@ -520,7 +520,7 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream which all reports have not arrived cannot be commit", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 2)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			replicas := mr.storage.LookupUncommitReports(lsID)
 			_, minVer, _, nrCommit := mr.calculateCommit(replicas)
@@ -530,10 +530,10 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream which all reports are disjoint cannot be commit", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.Version(10), types.GLSN(10), lsID, types.MinLLSN+types.LLSN(5), 1)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			report = makeUncommitReport(snIDs[1], types.Version(7), types.GLSN(7), lsID, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			replicas := mr.storage.LookupUncommitReports(lsID)
 			knownVer, minVer, _, nrCommit := mr.calculateCommit(replicas)
@@ -544,10 +544,10 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream Should be commit where replication is completed", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.Version(10), types.GLSN(10), lsID, types.MinLLSN+types.LLSN(3), 3)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			report = makeUncommitReport(snIDs[1], types.Version(9), types.GLSN(9), lsID, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}})
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			replicas := mr.storage.LookupUncommitReports(lsID)
 			knownVer, minVer, _, nrCommit := mr.calculateCommit(replicas)
@@ -829,7 +829,7 @@ func TestMRRequestMap(t *testing.T) {
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(1))
 			defer cancel()
 			st.Done()
-			mr.RegisterStorageNode(rctx, sn)
+			mr.RegisterStorageNode(rctx, sn) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}()
 
 		st.Wait()
@@ -1642,7 +1642,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 				return len(cinfo.Members) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(leaveNode)
+			clus.stop(leaveNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			info, err := clus.nodes[checkNode].GetClusterInfo(context.Background(), types.ClusterID(0))
 			So(err, ShouldBeNil)
@@ -1672,7 +1672,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 				return len(cinfo.Members) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(leaveNode)
+			clus.stop(leaveNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			info, err := clus.nodes[checkNode].GetClusterInfo(context.Background(), types.ClusterID(0))
 			So(err, ShouldBeNil)
@@ -1720,7 +1720,7 @@ func TestMRFailoverRestart(t *testing.T) {
 				return len(peers) > 0
 			}), ShouldBeTrue)
 
-			clus.restart(restartNode)
+			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			newNode := nrNode
 			nrNode += 1
@@ -1759,8 +1759,8 @@ func TestMRFailoverRestart(t *testing.T) {
 				return len(peers) > 0
 			}), ShouldBeTrue)
 
-			clus.stop(restartNode)
-			clus.stop(leaveNode)
+			clus.stop(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.stop(leaveNode)   //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
@@ -1771,7 +1771,7 @@ func TestMRFailoverRestart(t *testing.T) {
 
 			nrNode -= 1
 
-			clus.restart(restartNode)
+			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
@@ -1973,8 +1973,8 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(restartNode)
-			clus.stop(leaveNode)
+			clus.stop(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.stop(leaveNode)   //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
@@ -1985,7 +1985,7 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 
 			nrNode -= 1
 
-			clus.restart(restartNode)
+			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
@@ -2031,7 +2031,7 @@ func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(restartNode)
+			clus.stop(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			appliedIdx := clus.nodes[restartNode].raftNode.appliedIndex
 
@@ -2040,7 +2040,7 @@ func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
 				return snapshot.Metadata.Index > appliedIdx+testSnapCount+1
 			}), ShouldBeTrue)
 
-			clus.restart(restartNode)
+			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			Convey("Then node which is restarted should serve", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
@@ -2082,7 +2082,7 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(restartNode)
+			clus.stop(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
@@ -2098,7 +2098,7 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.restart(restartNode)
+			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			Convey("Then the node should not serve", func(ctx C) {
 				time.Sleep(10 * time.Second)
@@ -2179,7 +2179,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.restart(restartNode)
+			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			So(testutil.CompareWaitN(50, func() bool {
 				if !clus.healthCheck(restartNode) {
@@ -2239,7 +2239,7 @@ func TestMRProposeRetry(t *testing.T) {
 
 		Convey("When cli register SN & transfer leader for dropping propose", func(ctx C) {
 			leader := clus.leader()
-			clus.nodes[leader].raftNode.transferLeadership(false)
+			clus.nodes[leader].raftNode.transferLeadership(false) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			snID := types.StorageNodeID(time.Now().UnixNano())
 			sn := &varlogpb.StorageNodeDescriptor{
@@ -2551,7 +2551,7 @@ func TestMRTopicCatchup(t *testing.T) {
 		nrSN := nrTopic * nrLSPerTopic
 
 		clus := newMetadataRepoCluster(nrNode, nrRep, false, true)
-		clus.Start()
+		clus.Start() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})

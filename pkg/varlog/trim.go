@@ -34,7 +34,7 @@ func (v *logImpl) trim(ctx context.Context, topicID types.TopicID, until types.G
 	wg.Add(len(trimArgs))
 	for _, trimArg := range trimArgs {
 		trimmer := v.makeTrimmer(trimArg, topicID, until, wg)
-		v.runner.RunC(mctx, trimmer)
+		v.runner.RunC(mctx, trimmer) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	}
 	wg.Wait()
 

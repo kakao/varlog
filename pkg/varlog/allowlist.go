@@ -116,7 +116,7 @@ func (adl *transientAllowlist) expireDenyTTL(ctx context.Context) {
 }
 
 func (adl *transientAllowlist) warmup() {
-	adl.group.Do("warmup", func() (interface{}, error) {
+	_, _, _ = adl.group.Do("warmup", func() (interface{}, error) {
 		adl.allowlist.Range(func(k, v interface{}) bool {
 			topicID := k.(types.TopicID)
 			lsMap := v.(*sync.Map)

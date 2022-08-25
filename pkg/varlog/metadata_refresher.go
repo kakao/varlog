@@ -92,7 +92,7 @@ func (mr *metadataRefresher) refresher(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			mr.refresh(ctx)
+			_ = mr.refresh(ctx)
 		case <-ctx.Done():
 			return
 		}
@@ -146,7 +146,7 @@ func (mr *metadataRefresher) getAppliedIndex() uint64 {
 
 // TODO:: compare appliedIndex of metadata
 func (mr *metadataRefresher) Refresh(ctx context.Context) {
-	mr.refresh(ctx)
+	_ = mr.refresh(ctx)
 }
 
 func (mr *metadataRefresher) Metadata() *varlogpb.MetadataDescriptor {

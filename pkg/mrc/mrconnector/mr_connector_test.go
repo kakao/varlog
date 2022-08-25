@@ -147,7 +147,9 @@ func TestConnectorUnreachableMR(t *testing.T) {
 
 	portLease, err := ports.ReserveWeaklyWithRetry(basePort)
 	require.NoError(t, err)
-	defer portLease.Release()
+	defer func() {
+		_ = portLease.Release()
+	}()
 
 	mrs := newTestMR(t, portLease, 1, 1)
 
@@ -188,7 +190,9 @@ func TestConnectorRemovePeer(t *testing.T) {
 
 	portLease, err := ports.ReserveWeaklyWithRetry(basePort)
 	require.NoError(t, err)
-	defer portLease.Release()
+	defer func() {
+		_ = portLease.Release()
+	}()
 
 	mrs := newTestMR(t, portLease, clusterID, numMRs)
 	defer func() {
