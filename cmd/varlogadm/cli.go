@@ -6,6 +6,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/admin/mrmanager"
@@ -53,6 +54,7 @@ func newStartCommand() *cli.Command {
 			flagLogToStderr.BoolFlag(),
 			flagLogFileRetentionDays.IntFlag(false, 0),
 			flagLogFileCompression.BoolFlag(),
+			flagLogLevel.StringFlag(false, "info"),
 		},
 	}
 }
@@ -115,10 +117,16 @@ func start(c *cli.Context) error {
 }
 
 func newLogger(c *cli.Context) (*zap.Logger, error) {
+	level, err := zapcore.ParseLevel(c.String(flagLogLevel.Name))
+	if err != nil {
+		return nil, err
+	}
+
 	opts := []log.Option{
 		log.WithHumanFriendly(),
 		log.WithLocalTime(),
 		log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)),
+		log.WithLogLevel(level),
 	}
 	if !c.Bool(flagLogToStderr.Name) {
 		opts = append(opts, log.WithoutLogToStderr())
