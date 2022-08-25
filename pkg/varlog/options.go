@@ -5,6 +5,7 @@ import (
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -36,7 +37,7 @@ func defaultOptions() options {
 		expireDenyInterval: defaultExpireDenyInterval,
 		logger:             zap.NewNop(),
 		grpcDialOptions: []grpc.DialOption{
-			grpc.WithInsecure(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithReadBufferSize(1 << 20),
 			grpc.WithWriteBufferSize(1 << 20),
 		},

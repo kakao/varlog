@@ -145,7 +145,7 @@ func TestVarlogTest(t *testing.T) {
 		require.Equal(t, varlogpb.LogEntryMeta{
 			TopicID:     topicID,
 			LogStreamID: logStreamID,
-		}, logStreamDesc.Head)
+		}, logStreamDesc.Head) //nolint:staticcheck
 		require.Equal(t, varlogpb.LogEntryMeta{
 			TopicID:     topicID,
 			LogStreamID: logStreamID,
@@ -326,8 +326,8 @@ func TestVarlogTest(t *testing.T) {
 		for _, lsID := range topicLogStreamsMap[tpID] {
 			lsDesc, err := vlg.LogStreamMetadata(context.Background(), tpID, lsID)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, lsDesc.Tail.LLSN, lsDesc.Head.LLSN)
-			subscribeTo(tpID, lsID, lsDesc.Head.LLSN, lsDesc.Tail.LLSN+1)
+			require.GreaterOrEqual(t, lsDesc.Tail.LLSN, lsDesc.Head.LLSN) //nolint:staticcheck
+			subscribeTo(tpID, lsID, lsDesc.Head.LLSN, lsDesc.Tail.LLSN+1) //nolint:staticcheck
 
 			lsd, err := adm.Unseal(context.Background(), tpID, lsID)
 			require.NoError(t, err)
@@ -345,8 +345,8 @@ func TestVarlogTest(t *testing.T) {
 		for _, lsID := range lsIDs {
 			lsDesc, err := vlg.LogStreamMetadata(context.Background(), tpID, lsID)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, lsDesc.Tail.LLSN, lsDesc.Head.LLSN)
-			subscribeTo(tpID, lsID, lsDesc.Head.LLSN, lsDesc.Tail.LLSN+1)
+			require.GreaterOrEqual(t, lsDesc.Tail.LLSN, lsDesc.Head.LLSN) //nolint:staticcheck
+			subscribeTo(tpID, lsID, lsDesc.Head.LLSN, lsDesc.Tail.LLSN+1) //nolint:staticcheck
 		}
 	}
 
@@ -356,7 +356,7 @@ func TestVarlogTest(t *testing.T) {
 
 	lsDesc, err := vlg.LogStreamMetadata(context.Background(), tpID, lsID)
 	require.NoError(t, err)
-	require.Equal(t, types.MinLLSN, lsDesc.Head.LLSN)
+	require.Equal(t, types.MinLLSN, lsDesc.Head.LLSN) //nolint:staticcheck
 	require.GreaterOrEqual(t, lsDesc.Tail.LLSN, types.LLSN(minLogsPerTopic))
 
 	ctx1, cancel1 := context.WithCancel(context.Background())
@@ -523,15 +523,15 @@ func TestVarlogTest_Trim(t *testing.T) {
 
 	lsd, err := vlg.LogStreamMetadata(context.Background(), td.TopicID, lsds[0].LogStreamID)
 	assert.NoError(t, err)
-	assert.Equal(t, types.LLSN(3), lsd.Head.LLSN)
-	assert.Equal(t, types.GLSN(5), lsd.Head.GLSN)
+	assert.Equal(t, types.LLSN(3), lsd.Head.LLSN) //nolint:staticcheck
+	assert.Equal(t, types.GLSN(5), lsd.Head.GLSN) //nolint:staticcheck
 	assert.Equal(t, types.LLSN(5), lsd.Tail.LLSN)
 	assert.Equal(t, types.GLSN(9), lsd.Tail.GLSN)
 
 	lsd, err = vlg.LogStreamMetadata(context.Background(), td.TopicID, lsds[1].LogStreamID)
 	assert.NoError(t, err)
-	assert.Equal(t, types.LLSN(2), lsd.Head.LLSN)
-	assert.Equal(t, types.GLSN(4), lsd.Head.GLSN)
+	assert.Equal(t, types.LLSN(2), lsd.Head.LLSN) //nolint:staticcheck
+	assert.Equal(t, types.GLSN(4), lsd.Head.GLSN) //nolint:staticcheck
 	assert.Equal(t, types.LLSN(5), lsd.Tail.LLSN)
 	assert.Equal(t, types.GLSN(10), lsd.Tail.GLSN)
 

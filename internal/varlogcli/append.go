@@ -82,7 +82,6 @@ func appendInternal(mrAddrs []string, clusterID types.ClusterID, batchSize int, 
 				batch = batch[0:0]
 			case <-ctx.Done():
 				return ctx.Err()
-			default:
 			}
 		}
 		if len(batch) > 0 {

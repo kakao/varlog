@@ -108,6 +108,7 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 			// NOTE: Use "append" since the length of st.rts is not enough to use index. Its capacity is enough because it is created to be reused.
 			st.rts[replicaIdx].llsnList = append(st.rts[replicaIdx].llsnList, sq.llsn)
 		}
+		//nolint:staticcheck
 		if err := st.wb.Set(sq.llsn, st.dataBatch[dataIdx]); err != nil {
 			// TODO: handle error
 		}

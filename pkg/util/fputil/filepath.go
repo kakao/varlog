@@ -1,7 +1,6 @@
 package fputil
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -19,7 +18,7 @@ func IsWritableDir(dir string) error {
 		return errors.WithStack(err)
 	}
 	filename := filepath.Join(dir, touchFileName)
-	if err := ioutil.WriteFile(filename, []byte(""), touchFileMode); err != nil {
+	if err := os.WriteFile(filename, []byte(""), touchFileMode); err != nil {
 		return errors.WithStack(err)
 	}
 	err = os.Remove(filename)

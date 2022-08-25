@@ -2,7 +2,7 @@ package fputil
 
 import (
 	"io/fs"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -18,7 +18,7 @@ func TestDirectorySize(t *testing.T) {
 	path := t.TempDir()
 	assert.Zero(t, DirectorySize(path))
 
-	assert.NoError(t, ioutil.WriteFile(filepath.Join(path, "foo"), []byte{'a'}, fs.FileMode(777)))
+	assert.NoError(t, os.WriteFile(filepath.Join(path, "foo"), []byte{'a'}, fs.FileMode(0777)))
 	assert.EqualValues(t, 1, DirectorySize(path))
 }
 

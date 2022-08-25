@@ -91,5 +91,5 @@ func newReplicateTaskSlice() []*replicateTask {
 
 func releaseReplicateTaskSlice(rts []*replicateTask) {
 	rts = rts[0:0]
-	replicateTaskSlicePool.Put(rts)
+	replicateTaskSlicePool.Put(rts) //nolint:staticcheck
 }

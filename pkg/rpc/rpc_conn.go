@@ -6,10 +6,11 @@ import (
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
-	defaultDialOption = []grpc.DialOption{grpc.WithInsecure()}
+	defaultDialOption = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 )
 
 type Conn struct {
