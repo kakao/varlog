@@ -20,6 +20,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/storage"
@@ -45,9 +46,21 @@ func run() int {
 }
 
 func start(c *cli.Context) error {
+	level, err := zapcore.ParseLevel(c.String(flagLogLevel.Name))
+	if err != nil {
+		return err
+	}
+
 	logOpts := []log.Option{
 		log.WithHumanFriendly(),
 		log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)),
+		log.WithLogLevel(level),
+	}
+	if c.Bool(flagLogFileCompression.Name) {
+		logOpts = append(logOpts, log.WithCompression())
+	}
+	if retention := c.Int(flagLogFileRetentionDays.Name); retention > 0 {
+		logOpts = append(logOpts, log.WithAgeDays(retention))
 	}
 	if logDir := c.String(flagLogDir.Name); len(logDir) != 0 {
 		absDir, err := filepath.Abs(logDir)
