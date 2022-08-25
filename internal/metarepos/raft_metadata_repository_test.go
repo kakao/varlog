@@ -12,7 +12,6 @@ import (
 
 	"github.com/pkg/errors"
 	. "github.com/smartystreets/goconvey/convey"
-	"go.etcd.io/etcd/pkg/fileutil"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/goleak"
 	"go.uber.org/multierr"
@@ -187,14 +186,6 @@ func (clus *metadataRepoCluster) close(idx int) error {
 	return err
 }
 
-func (clus *metadataRepoCluster) hasSnapshot(idx int) (bool, error) {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return false, errors.New("out or range")
-	}
-
-	return clus.nodes[idx].raftNode.loadSnapshot() != nil, nil
-}
-
 func (clus *metadataRepoCluster) getSnapshot(idx int) *raftpb.Snapshot {
 	if idx < 0 || idx >= len(clus.nodes) {
 		return nil
@@ -238,17 +229,6 @@ func (clus *metadataRepoCluster) getMetadataFromSnapshot(idx int) *varlogpb.Meta
 	}
 
 	return stateMachine.Metadata
-}
-
-func (clus *metadataRepoCluster) numWalFile(idx int) int {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return 0
-	}
-	nodeID := types.NewNodeIDFromURL(clus.peers[idx])
-	waldir := fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID)
-
-	names, _ := fileutil.ReadDir(waldir, fileutil.WithExt(".wal"))
-	return len(names)
 }
 
 // Close closes all cluster nodes.
@@ -310,18 +290,6 @@ func (clus *metadataRepoCluster) leader() int {
 	return leader
 }
 
-func (clus *metadataRepoCluster) leaderElected() bool {
-	//return clus.leader() >= 0
-
-	for _, n := range clus.nodes {
-		if !n.hasLeader() {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (clus *metadataRepoCluster) leaderFail() bool {
 	leader := clus.leader()
 	if leader < 0 {
@@ -379,20 +347,6 @@ func (clus *metadataRepoCluster) initDummyStorageNode(nrSN, nrTopic int) error {
 
 func (clus *metadataRepoCluster) getSNIDs() []types.StorageNodeID {
 	return clus.reporterClientFac.(*DummyStorageNodeClientFactory).getClientIDs()
-}
-
-func (clus *metadataRepoCluster) incrSNRefAll() {
-	for _, snID := range clus.getSNIDs() {
-		snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-		snCli.incrRef()
-	}
-}
-
-func (clus *metadataRepoCluster) descSNRefAll() {
-	for _, snID := range clus.getSNIDs() {
-		snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
-		snCli.descRef()
-	}
 }
 
 func makeUncommitReport(snID types.StorageNodeID, ver types.Version, hwm types.GLSN, lsID types.LogStreamID, offset types.LLSN, length uint64) *mrpb.Report {
