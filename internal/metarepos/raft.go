@@ -330,7 +330,7 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 		if err != nil {
 			rc.logger.Panic("create wal error", zap.String("err", err.Error()))
 		}
-		w.Close()
+		w.Close() //nolint:errcheck,revive // TODO:: Handle an error returned.
 	}
 
 	walsnap := walpb.Snapshot{}
@@ -368,15 +368,15 @@ func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 
 	rc.raftStorage = raft.NewMemoryStorage()
 	if snapshot != nil {
-		rc.raftStorage.ApplySnapshot(*snapshot)
+		rc.raftStorage.ApplySnapshot(*snapshot) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		rc.publishSnapshot(*snapshot)
 	}
-	rc.raftStorage.SetHardState(st)
+	rc.raftStorage.SetHardState(st) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	//TODO:: WAL replay to state machine
 
 	// append to storage so raft starts at the right place in log
-	rc.raftStorage.Append(ents)
+	rc.raftStorage.Append(ents) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	// send nil once lastIndex is published so client knows commit channel is current
 	if len(ents) > 0 {
@@ -461,7 +461,7 @@ func (rc *raftNode) start() {
 		ErrorC:      make(chan error),
 	}
 
-	rc.transport.Start()
+	rc.transport.Start() //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	for i, peer := range rpeers {
 		if peer.ID == uint64(rc.id) {
@@ -571,7 +571,7 @@ func (rc *raftNode) stop(transfer bool) {
 	rc.runner.Stop()
 
 	if rc.wal != nil {
-		rc.wal.Close()
+		rc.wal.Close() //nolint:errcheck,revive // TODO:: Handle an error returned.
 	}
 
 	close(rc.commitC)
@@ -589,7 +589,7 @@ func (rc *raftNode) stopHTTP() {
 	rc.transport.Stop()
 	rc.httprunner.Stop()
 	// TODO: use context or shutdown timeout
-	rc.httpserver.Shutdown(context.TODO())
+	rc.httpserver.Shutdown(context.TODO()) //nolint:errcheck,revive // TODO: Handle an error returned.
 }
 
 type snapReaderCloser struct{ *bytes.Reader }
@@ -621,7 +621,7 @@ func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 				)
 
 				//TODO:: concurrency limit
-				rc.runner.Run(func(context.Context) {
+				rc.runner.Run(func(context.Context) { //nolint:errcheck,revive // TODO:: Handle an error returned.
 					rc.transport.SendSnapshot(*sm)
 				})
 
@@ -747,7 +747,7 @@ Loop:
 
 			confChangeCount++
 			cc.ID = confChangeCount
-			rc.node.ProposeConfChange(context.TODO(), cc)
+			rc.node.ProposeConfChange(context.TODO(), cc) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		case <-ctx.Done():
 			break Loop
 		}
@@ -776,17 +776,17 @@ func (rc *raftNode) processRaftEvent(ctx context.Context) {
 			rc.membership.updateState(rd.SoftState)
 			rc.publishLeader(ctx, rd.SoftState)
 
-			rc.saveWal(rd.HardState, rd.Entries)
+			rc.saveWal(rd.HardState, rd.Entries) //nolint:errcheck,revive // TODO: Handle an error returned.
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
-				rc.saveSnap(rd.Snapshot)
-				rc.raftStorage.ApplySnapshot(rd.Snapshot)
+				rc.saveSnap(rd.Snapshot)                  //nolint:errcheck, revive // TODO: Handle an error returned.
+				rc.raftStorage.ApplySnapshot(rd.Snapshot) //nolint:errcheck,revive // TODO:: Handle an error returned.
 				rc.publishSnapshot(rd.Snapshot)
 
 				rc.recoverMembership(rd.Snapshot)
 			}
 
-			rc.raftStorage.Append(rd.Entries)
+			rc.raftStorage.Append(rd.Entries) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			rc.transport.Send(rc.processMessages(rd.Messages))
 			if ok := rc.publishEntries(ctx, rc.entriesToApply(rd.CommittedEntries)); ok {

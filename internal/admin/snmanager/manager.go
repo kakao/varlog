@@ -85,7 +85,7 @@ func New(ctx context.Context, opts ...Option) (StorageNodeManager, error) {
 		clients: clients,
 	}
 
-	sm.refresh(ctx)
+	sm.refresh(ctx) //nolint:errcheck,revive // TODO: Handle an error returned.
 	return sm, nil
 }
 
@@ -104,7 +104,7 @@ func (sm *snManager) refresh(ctx context.Context) error {
 			defer wg.Done()
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
-			sm.clients.GetOrConnect(ctx, snd.StorageNodeID, snd.Address)
+			sm.clients.GetOrConnect(ctx, snd.StorageNodeID, snd.Address) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}()
 	}
 	wg.Wait()
@@ -181,7 +181,7 @@ func (sm *snManager) AddLogStreamReplica(ctx context.Context, snid types.Storage
 func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) error {
 	mc, err := sm.clients.Get(snid)
 	if err != nil {
-		sm.refresh(ctx)
+		sm.refresh(ctx) //nolint:errcheck,revive // TODO: Handle an error returned.
 		return errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 	return mc.AddLogStreamReplica(ctx, tpid, lsid, path)
@@ -203,7 +203,7 @@ func (sm *snManager) AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDe
 func (sm *snManager) RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error {
 	mc, err := sm.clients.Get(snid)
 	if err != nil {
-		sm.refresh(ctx)
+		sm.refresh(ctx) //nolint:errcheck,revive // TODO: Handle an error returned.
 		return errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 	return mc.RemoveLogStream(ctx, tpid, lsid)
@@ -221,7 +221,7 @@ func (sm *snManager) Seal(ctx context.Context, tpid types.TopicID, lsid types.Lo
 		storageNodeID := replica.GetStorageNodeID()
 		cli, err := sm.clients.Get(storageNodeID)
 		if err != nil {
-			sm.refresh(ctx)
+			sm.refresh(ctx) //nolint:errcheck,revive // TODO: Handle an error returned.
 			return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 		}
 		status, highWatermark, errSeal := cli.Seal(ctx, tpid, lsid, lastCommittedGLSN)
@@ -272,18 +272,18 @@ func (sm *snManager) Sync(ctx context.Context, tpid types.TopicID, lsid types.Lo
 	}
 
 	if !storageNodeIDs.Contains(srcID) || !storageNodeIDs.Contains(dstID) {
-		sm.refresh(ctx)
+		sm.refresh(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 
 	srcCli, err := sm.clients.Get(srcID)
 	if err != nil {
-		sm.refresh(ctx)
+		sm.refresh(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 	dstCli, err := sm.clients.Get(dstID)
 	if err != nil {
-		sm.refresh(ctx)
+		sm.refresh(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 
@@ -321,7 +321,7 @@ func (sm *snManager) Unseal(ctx context.Context, tpid types.TopicID, lsid types.
 		storageNodeID := replica.GetStorageNodeID()
 		cli, err := sm.clients.Get(storageNodeID)
 		if err != nil {
-			sm.refresh(ctx)
+			sm.refresh(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
 			return errors.Wrap(verrors.ErrNotExist, "storage node")
 		}
 		if err := cli.Unseal(ctx, tpid, lsid, replicas); err != nil {
@@ -354,7 +354,7 @@ func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN type
 
 			cli, err := sm.clients.Get(rd.StorageNodeID)
 			if err != nil {
-				sm.refresh(ctx)
+				sm.refresh(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
 				return nil, err
 			}
 			clients[rd.StorageNodeID] = cli

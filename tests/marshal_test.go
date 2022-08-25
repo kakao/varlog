@@ -7,6 +7,8 @@ import (
 
 	"go.uber.org/goleak"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
@@ -34,7 +36,8 @@ func TestSnapshotMarshal(t *testing.T) {
 
 	st := time.Now()
 
-	smr.Marshal()
+	_, err := smr.Marshal()
+	require.NoError(t, err)
 
 	log.Println(time.Since(st))
 }
@@ -53,7 +56,8 @@ func TestGlobalLogStreamMarshal(t *testing.T) {
 	}
 	st := time.Now()
 
-	gls.Marshal()
+	_, err := gls.Marshal()
+	require.NoError(t, err)
 
 	log.Println(time.Since(st))
 }

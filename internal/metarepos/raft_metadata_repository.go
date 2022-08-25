@@ -177,7 +177,7 @@ func (mr *RaftMetadataRepository) Run() {
 	mr.logger.Info("starting metadata repository")
 
 	mr.storage.Run()
-	mr.reportCollector.Run()
+	mr.reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	mctx, cancel := mr.runner.WithManagedCancel(context.Background())
 
@@ -250,7 +250,7 @@ func (mr *RaftMetadataRepository) runDebugServer(ctx context.Context) {
 		IdleTimeout:  30 * time.Second,
 	}
 
-	defer mr.debugServer.Close()
+	defer mr.debugServer.Close() //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	httpMux.HandleFunc("/debug/pprof/", pprof.Index)
 	httpMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
@@ -382,7 +382,7 @@ func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
 			mr.muReportQueue.Unlock()
 
 			if reports != nil {
-				mr.propose(context.TODO(), reports, false)
+				mr.propose(context.TODO(), reports, false) //nolint:errcheck,revive // TODO:: Handle an error returned.
 			}
 		}
 	}
@@ -575,7 +575,7 @@ func (mr *RaftMetadataRepository) sendAck(nodeIndex uint64, requestNum uint64, e
 }
 
 func (mr *RaftMetadataRepository) apply(c *committedEntry) {
-	mr.withTelemetry(context.TODO(), "apply", func(ctx context.Context) (interface{}, error) {
+	mr.withTelemetry(context.TODO(), "apply", func(ctx context.Context) (interface{}, error) { //nolint:errcheck,revive // TODO:: Handle an error returned.
 		if c == nil || c.entry == nil {
 			return nil, nil
 		}
@@ -583,6 +583,7 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 		e := c.entry
 		f := e.Request.GetValue()
 
+		//nolint:errcheck,revive // TODO:: Handle an error returned.
 		switch r := f.(type) {
 		case *mrpb.RegisterStorageNode:
 			mr.applyRegisterStorageNode(r, e.NodeIndex, e.RequestIndex)
@@ -626,7 +627,7 @@ func (mr *RaftMetadataRepository) applyRegisterStorageNode(r *mrpb.RegisterStora
 		return err
 	}
 
-	mr.reportCollector.RegisterStorageNode(r.StorageNode)
+	mr.reportCollector.RegisterStorageNode(r.StorageNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	return nil
 }
@@ -637,7 +638,7 @@ func (mr *RaftMetadataRepository) applyUnregisterStorageNode(r *mrpb.UnregisterS
 		return err
 	}
 
-	mr.reportCollector.UnregisterStorageNode(r.StorageNodeID)
+	mr.reportCollector.UnregisterStorageNode(r.StorageNodeID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	return nil
 }
@@ -986,7 +987,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 		}
 
 		if trimVer != 0 && trimVer != math.MaxUint64 {
-			mr.storage.TrimLogStreamCommitHistory(trimVer)
+			mr.storage.TrimLogStreamCommitHistory(trimVer) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}
 
 		mr.reportCollector.Commit()
@@ -1008,7 +1009,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 }
 
 func (mr *RaftMetadataRepository) applySeal(r *mrpb.Seal, nodeIndex, requestIndex, appliedIndex uint64) error {
-	mr.applyCommit(nil, appliedIndex)
+	mr.applyCommit(nil, appliedIndex) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	err := mr.storage.SealingLogStream(r.LogStreamID, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -1167,7 +1168,7 @@ func (mr *RaftMetadataRepository) proposeCommit() {
 		NodeID:      mr.nodeID,
 		CreatedTime: time.Now(),
 	}
-	mr.propose(context.TODO(), r, false)
+	mr.propose(context.TODO(), r, false) //nolint:errcheck,revive // TODO:: Handle an error returned.
 }
 
 func (mr *RaftMetadataRepository) proposeReport(snID types.StorageNodeID, ur []snpb.LogStreamUncommitReport) error {
@@ -1438,7 +1439,7 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 		Url:    endpoint.(string),
 	}
 
-	mr.propose(ctx, r, true)
+	mr.propose(ctx, r, true) //nolint:errcheck,revive // TODO:: Handle an error returned.
 }
 
 func (mr *RaftMetadataRepository) GetClusterInfo(context.Context, types.ClusterID) (*mrpb.ClusterInfo, error) {

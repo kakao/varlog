@@ -376,7 +376,7 @@ func (p *transmitter) handleTimeout(ctx context.Context) {
 		}
 	}
 
-	p.refreshSubscriber(ctx)
+	p.refreshSubscriber(ctx) //nolint:errcheck,revive // TODO: Handle an error returned.
 }
 
 func (p *transmitter) handleError(r transmitResult) error {
@@ -436,7 +436,7 @@ func (p *transmitter) transmitLoop(ctx context.Context) bool {
 	}
 
 	if needRefresh {
-		p.refreshSubscriber(ctx)
+		p.refreshSubscriber(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	}
 
 	return true

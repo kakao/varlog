@@ -29,7 +29,9 @@ func Main(opts *metarepos.MetadataRepositoryOptions) error {
 		return err
 	}
 
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 
 	opts.Logger = logger
 	opts.ReporterClientFac = metarepos.NewReporterClientFactory(

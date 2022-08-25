@@ -117,7 +117,7 @@ func TestRegisterStorageNode(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
 		err := reportCollector.RegisterStorageNode(nil)
@@ -130,7 +130,7 @@ func TestRegisterStorageNode(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -160,7 +160,7 @@ func TestRegisterLogStream(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
 		snID := types.StorageNodeID(0)
@@ -202,7 +202,7 @@ func TestUnregisterStorageNode(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -258,7 +258,7 @@ func TestUnregisterLogStream(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
 		snID := types.StorageNodeID(0)
@@ -300,7 +300,7 @@ func TestRecoverStorageNode(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
 		nrSN := 5
@@ -367,7 +367,7 @@ func TestRecoverStorageNode(t *testing.T) {
 				}
 
 				Convey("When ReportCollector Recover", func(ctx C) {
-					reportCollector.Recover(SNs, LSs, ver)
+					reportCollector.Recover(SNs, LSs, ver) //nolint:errcheck,revive // TODO:: Handle an error returned.
 					Convey("Then there should be ReportCollectExecutor", func(ctx C) {
 						sealing := false
 						sealed := false
@@ -416,7 +416,7 @@ func TestRecoverStorageNode(t *testing.T) {
 				}
 
 				Convey("When ReportCollector Recover", func(ctx C) {
-					reportCollector.Recover(SNs, LSs, ver)
+					reportCollector.Recover(SNs, LSs, ver) //nolint:errcheck,revive // TODO:: Handle an error returned.
 					Convey("Then there should be no ReportCollectExecutor", func(ctx C) {
 						for i := 0; i < nrSN; i++ {
 							reportCollector.mu.RLock()
@@ -440,7 +440,7 @@ func TestReport(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
 		var wg sync.WaitGroup
@@ -501,7 +501,7 @@ func TestReportDedup(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -568,7 +568,7 @@ func TestReportCollectorSeal(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		Reset(func() {
 			reportCollector.Close()
 		})
@@ -750,7 +750,7 @@ func TestCommit(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		Reset(func() {
 			reportCollector.Close()
 		})
@@ -892,7 +892,7 @@ func TestCommitWithDelay(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, time.Second, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		Reset(func() {
 			reportCollector.Close()
 		})
@@ -1005,7 +1005,7 @@ func TestRPCFail(t *testing.T) {
 
 		logger, _ := zap.NewDevelopment()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
-		reportCollector.Run()
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		Reset(func() {
 			reportCollector.Close()
 		})

@@ -170,7 +170,7 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger
 func (ms *MetadataStorage) Run() {
 	if !ms.running.Load() {
 		ms.runner = runner.New("mr-storage", zap.NewNop())
-		ms.runner.Run(ms.processSnapshot)
+		ms.runner.Run(ms.processSnapshot) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		ms.running.Store(true)
 	}
 }
@@ -344,7 +344,7 @@ func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	cur.Metadata.DeleteStorageNode(snID)
+	cur.Metadata.DeleteStorageNode(snID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	if pre != cur {
 		deleted := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
@@ -353,7 +353,7 @@ func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error
 			Status: varlogpb.StorageNodeStatusDeleted,
 		}
 
-		cur.Metadata.InsertStorageNode(deleted)
+		cur.Metadata.InsertStorageNode(deleted) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	}
 
 	ms.metaAppliedIndex++
@@ -496,7 +496,7 @@ func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	cur.Metadata.DeleteLogStream(lsID)
+	cur.Metadata.DeleteLogStream(lsID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	delete(cur.LogStream.UncommitReports, lsID)
 
 	if pre != cur {
@@ -505,7 +505,7 @@ func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
 			Status:      varlogpb.LogStreamStatusDeleted,
 		}
 
-		cur.Metadata.InsertLogStream(deleted)
+		cur.Metadata.InsertLogStream(deleted) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 		lm := &mrpb.LogStreamUncommitReports{
 			Status: varlogpb.LogStreamStatusDeleted,
@@ -629,7 +629,7 @@ func (ms *MetadataStorage) unregisterTopic(topicID types.TopicID) error {
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	cur.Metadata.DeleteTopic(topicID)
+	cur.Metadata.DeleteTopic(topicID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	if pre != cur {
 		deleted := &varlogpb.TopicDescriptor{
@@ -637,7 +637,7 @@ func (ms *MetadataStorage) unregisterTopic(topicID types.TopicID) error {
 			Status:  varlogpb.TopicStatusDeleted,
 		}
 
-		cur.Metadata.InsertTopic(deleted)
+		cur.Metadata.InsertTopic(deleted) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	}
 
 	ms.metaAppliedIndex++
@@ -725,7 +725,7 @@ func (ms *MetadataStorage) updateLogStreamDescStatus(lsID types.LogStreamID, sta
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
 
-	cur.Metadata.UpsertLogStream(ls)
+	cur.Metadata.UpsertLogStream(ls) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	ms.metaAppliedIndex++
 
@@ -1572,25 +1572,25 @@ func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
 		//TODO:: UpdateStorageNode
 		if sn.Status.Deleted() {
-			cache.DeleteStorageNode(sn.StorageNodeID)
+			cache.DeleteStorageNode(sn.StorageNodeID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		} else {
-			cache.InsertStorageNode(sn)
+			cache.InsertStorageNode(sn) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}
 	}
 
 	for _, topic := range ms.diffStateMachine.Metadata.Topics {
 		if topic.Status.Deleted() {
-			cache.DeleteTopic(topic.TopicID)
+			cache.DeleteTopic(topic.TopicID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		} else if cache.InsertTopic(topic) != nil {
-			cache.UpdateTopic(topic)
+			cache.UpdateTopic(topic) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}
 	}
 
 	for _, ls := range ms.diffStateMachine.Metadata.LogStreams {
 		if ls.Status.Deleted() {
-			cache.DeleteLogStream(ls.LogStreamID)
+			cache.DeleteLogStream(ls.LogStreamID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		} else if cache.InsertLogStream(ls) != nil {
-			cache.UpdateLogStream(ls)
+			cache.UpdateLogStream(ls) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}
 	}
 
@@ -1614,25 +1614,25 @@ func (ms *MetadataStorage) mergeMetadata() {
 	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
 		//TODO:: UpdateStorageNode
 		if sn.Status.Deleted() {
-			ms.origStateMachine.Metadata.DeleteStorageNode(sn.StorageNodeID)
+			ms.origStateMachine.Metadata.DeleteStorageNode(sn.StorageNodeID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		} else {
-			ms.origStateMachine.Metadata.InsertStorageNode(sn)
+			ms.origStateMachine.Metadata.InsertStorageNode(sn) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}
 	}
 
 	for _, topic := range ms.diffStateMachine.Metadata.Topics {
 		if topic.Status.Deleted() {
-			ms.origStateMachine.Metadata.DeleteTopic(topic.TopicID)
+			ms.origStateMachine.Metadata.DeleteTopic(topic.TopicID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		} else if ms.origStateMachine.Metadata.InsertTopic(topic) != nil {
-			ms.origStateMachine.Metadata.UpdateTopic(topic)
+			ms.origStateMachine.Metadata.UpdateTopic(topic) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}
 	}
 
 	for _, ls := range ms.diffStateMachine.Metadata.LogStreams {
 		if ls.Status.Deleted() {
-			ms.origStateMachine.Metadata.DeleteLogStream(ls.LogStreamID)
+			ms.origStateMachine.Metadata.DeleteLogStream(ls.LogStreamID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		} else if ms.origStateMachine.Metadata.InsertLogStream(ls) != nil {
-			ms.origStateMachine.Metadata.UpdateLogStream(ls)
+			ms.origStateMachine.Metadata.UpdateLogStream(ls) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}
 	}
 

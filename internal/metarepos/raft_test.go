@@ -63,8 +63,8 @@ func newCluster(n int) *cluster {
 		}
 		nodeID := types.NewNodeID(url.Host)
 
-		os.RemoveAll(fmt.Sprintf("raftdata/wal/%d", nodeID))
-		os.RemoveAll(fmt.Sprintf("raftdata/snap/%d", nodeID))
+		os.RemoveAll(fmt.Sprintf("raftdata/wal/%d", nodeID))  //nolint:errcheck,revive // TODO:: Handle an error returned.
+		os.RemoveAll(fmt.Sprintf("raftdata/snap/%d", nodeID)) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		clus.proposeC[i] = make(chan string, 1)
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
 		//logger, _ := zap.NewDevelopment()
@@ -117,8 +117,8 @@ func (clus *cluster) close(i int) (err error) {
 	url, _ := url.Parse(clus.peers[i])
 	nodeID := types.NewNodeID(url.Host)
 
-	os.RemoveAll(fmt.Sprintf("raftdata/wal/%d", nodeID))
-	os.RemoveAll(fmt.Sprintf("raftdata/snap/%d", nodeID))
+	os.RemoveAll(fmt.Sprintf("raftdata/wal/%d", nodeID))  //nolint:errcheck,revive // TODO:: Handle an error returned.
+	os.RemoveAll(fmt.Sprintf("raftdata/snap/%d", nodeID)) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	clus.running[i] = false
 
@@ -133,7 +133,7 @@ func (clus *cluster) Close() (err error) {
 		}
 	}
 
-	os.RemoveAll("raftdata")
+	os.RemoveAll("raftdata") //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 	return clus.portLease.Release()
 }
@@ -209,7 +209,7 @@ func TestFailoverLeaderElection(t *testing.T) {
 
 		Convey("When leader crash", func(ctx C) {
 			cancels[leader]()
-			clus.close(leader)
+			clus.close(leader) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			Convey("Then raft should elect", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {

@@ -374,7 +374,7 @@ func TestMRConnector(t *testing.T) {
 				badCL, err := mrConn.Client(context.TODO())
 				So(err, ShouldBeNil)
 
-				badCL.GetMetadata(context.TODO())
+				_, err = badCL.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 
 				badNodeID := mrConn.ConnectedNodeID()

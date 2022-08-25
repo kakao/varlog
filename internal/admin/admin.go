@@ -896,7 +896,7 @@ func (adm *Admin) HandleHeartbeatTimeout(ctx context.Context, snid types.Storage
 	for _, ls := range meta.GetLogStreams() {
 		if ls.IsReplica(snid) {
 			adm.logger.Debug("seal due to heartbeat timeout", zap.Any("snid", snid), zap.Any("lsid", ls.LogStreamID))
-			adm.seal(ctx, ls.TopicID, ls.LogStreamID)
+			_, _, _ = adm.seal(ctx, ls.TopicID, ls.LogStreamID)
 		}
 	}
 }
@@ -911,14 +911,14 @@ func (adm *Admin) checkLogStreamStatus(ctx context.Context, tpid types.TopicID, 
 	case varlogpb.LogStreamStatusRunning:
 		if mrStatus.Sealed() || replicaStatus.Sealed() {
 			adm.logger.Info("seal due to status mismatch", zap.Any("lsid", lsid))
-			adm.sealInternal(ctx, tpid, lsid)
+			_, _, _ = adm.sealInternal(ctx, tpid, lsid)
 		}
 
 	case varlogpb.LogStreamStatusSealing:
 		for _, r := range lsStat.Replicas() {
 			if r.Status != varlogpb.LogStreamStatusSealed {
 				adm.logger.Info("seal due to status", zap.Any("lsid", lsid))
-				adm.sealInternal(ctx, tpid, lsid)
+				_, _, _ = adm.sealInternal(ctx, tpid, lsid)
 				return
 			}
 		}
@@ -941,7 +941,7 @@ func (adm *Admin) checkLogStreamStatus(ctx context.Context, tpid types.TopicID, 
 				return
 			} else if r.Status == varlogpb.LogStreamStatusSealing {
 				adm.logger.Info("seal due to unexpected status", zap.Any("lsid", lsid))
-				adm.sealInternal(ctx, tpid, lsid)
+				_, _, _ = adm.sealInternal(ctx, tpid, lsid)
 				return
 			}
 		}
@@ -1043,7 +1043,7 @@ func (adm *Admin) HandleReport(ctx context.Context, snm *snpb.StorageNodeMetadat
 			continue
 		}
 		if time.Since(ls.CreatedTime) > adm.logStreamGCTimeout {
-			adm.removeLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.TopicID, ls.LogStreamID)
+			_ = adm.removeLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.TopicID, ls.LogStreamID)
 		}
 	}
 

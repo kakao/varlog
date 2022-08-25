@@ -12,7 +12,9 @@ func ExampleLogger() {
 	if err != nil {
 		panic(err)
 	}
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 
 	logger.Info("this is log", zap.String("example", "first"))
 }
