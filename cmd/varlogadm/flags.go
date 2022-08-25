@@ -81,4 +81,9 @@ var (
 		Aliases: []string{"log-file-compression"},
 		Envs:    []string{"LOGFILE_COMPRESSION", "LOG_FILE_COMPRESSION"},
 	}
+	flagLogLevel = flags.FlagDesc{
+		Name:    "loglevel",
+		Aliases: []string{"log-level"},
+		Envs:    []string{"LOGLEVEL", "LOG_LEVEL"},
+	}
 )
