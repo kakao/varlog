@@ -33,7 +33,7 @@ type cluster struct {
 	portLease   *ports.Lease
 }
 
-// newCluster creates a cluster of n nodes
+// newCluster creates a cluster of n nodes.
 func newCluster(n int) *cluster {
 	portLease, err := ports.ReserveWeaklyWithRetry(10000)
 	if err != nil {

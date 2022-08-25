@@ -251,7 +251,7 @@ func (clus *metadataRepoCluster) numWalFile(idx int) int {
 	return len(names)
 }
 
-// Close closes all cluster nodes
+// Close closes all cluster nodes.
 func (clus *metadataRepoCluster) Close() error {
 	var err error
 	for i := range clus.peers {

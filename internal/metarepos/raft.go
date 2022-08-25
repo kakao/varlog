@@ -30,7 +30,7 @@ import (
 	"github.com/kakao/varlog/proto/mrpb"
 )
 
-// A key-value stream backed by raft
+// TODO: comments (old: A key-value stream backed by raft)
 type raftNode struct {
 	proposeC    chan string              // proposed messages from app
 	confChangeC chan raftpb.ConfChange   // proposed cluster config changes
@@ -75,7 +75,7 @@ type raftNode struct {
 	tmStub *telemetryStub
 }
 
-// committed entry to app
+// TODO: comments (old: committed entry to app)
 type raftCommittedEntry struct {
 	entryType raftpb.EntryType
 	leader    uint64
