@@ -38,6 +38,7 @@ bin/benchmark
 bin/varlogcli
 bin/stress
 bin/varlogsn
+bin/varlogadm
 
 # Python
 *.pyc
@@ -61,7 +62,7 @@ cmake-build-debug/
 .DS_Store
 
 # ctags
-tags
+/tags
 
 # k8s
 deploy/k8s-experiment/dev/kustomization.yaml
