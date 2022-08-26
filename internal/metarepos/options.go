@@ -94,18 +94,12 @@ func (options *MetadataRepositoryOptions) validate() error {
 	if err != nil {
 		return err
 	}
-	raftHost, _, err := net.SplitHostPort(raftURL.Host)
-	if err != nil {
+	if _, _, err := net.SplitHostPort(raftURL.Host); err != nil {
 		return err
 	}
 
 	if options.Logger == nil {
 		return errors.New("logger should not be nil")
-	}
-
-	raftIP := net.ParseIP(raftHost)
-	if !raftIP.IsGlobalUnicast() || raftIP.IsLoopback() {
-		options.Logger.Warn("bad RAFT address", zap.Any("addr", options.RaftAddress))
 	}
 
 	if options.NodeID == types.InvalidNodeID {
