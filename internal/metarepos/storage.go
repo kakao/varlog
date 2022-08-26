@@ -431,6 +431,11 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 		return verrors.ErrAlreadyExists
 	}
 
+	if equal {
+		// To ensure that it is applied to the meta cache
+		return nil
+	}
+
 	_, cur := ms.getStateMachine()
 
 	ms.mtMu.Lock()
