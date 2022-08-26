@@ -135,6 +135,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 		sw:                stopwaiter.New(),
 		tmStub:            tmStub,
 		topicEndPos:       make(map[types.TopicID]int),
+		requestNum:        uint64(time.Now().UnixNano()),
 	}
 
 	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
