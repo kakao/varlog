@@ -61,7 +61,9 @@ def get_data_dirs(admin: str, snid: int):
            f"--snid={snid}"]
     out = subprocess.check_output(cmd)
     snm = json.loads(out)
-    logstreams = snm.get("logStreams", [])
+    logstreams = snm.get("logStreams")
+    if not logstreams:
+        logstreams = []
     return [logstream["path"] for logstream in logstreams]
 
 
