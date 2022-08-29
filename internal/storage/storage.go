@@ -74,7 +74,7 @@ func New(opts ...Option) (*Storage, error) {
 	return &Storage{
 		config:    cfg,
 		db:        db,
-		writeOpts: &pebble.WriteOptions{Sync: false},
+		writeOpts: &pebble.WriteOptions{Sync: cfg.sync},
 	}, nil
 }
 
