@@ -61,7 +61,8 @@ def get_data_dirs(admin: str, snid: int):
            f"--snid={snid}"]
     out = subprocess.check_output(cmd)
     snm = json.loads(out)
-    return [logstream["path"] for logstream in snm["logStreams"]]
+    logstreams = snm.get("logStreams", [])
+    return [logstream["path"] for logstream in logstreams]
 
 
 def truncate(path: str) -> None:

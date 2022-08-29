@@ -122,6 +122,32 @@ var (
 		LastHeartbeatTime: time.Date(2022, time.November, 1, 11, 37, 19, 0, time.UTC),
 	}
 
+	snm2 = &vmspb.StorageNodeMetadata{
+		StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
+			ClusterID: cid,
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snid1,
+				Address:       addr1,
+			},
+			Storages: []varlogpb.StorageDescriptor{
+				{
+					Path:  "/tmp1",
+					Used:  32 << 10,
+					Total: 1 << 20,
+				},
+				{
+					Path:  "/tmp2",
+					Used:  64 << 10,
+					Total: 2 << 20,
+				},
+			},
+			LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{},
+			StartTime:         time.Date(2022, time.October, 1, 3, 23, 21, 0, time.UTC),
+		},
+		CreateTime:        time.Date(2022, time.September, 27, 17, 46, 40, 0, time.UTC),
+		LastHeartbeatTime: time.Date(2022, time.November, 1, 11, 37, 19, 0, time.UTC),
+	}
+
 	td1 = &varlogpb.TopicDescriptor{
 		TopicID: tpid1,
 		Status:  varlogpb.TopicStatusRunning,
@@ -174,6 +200,14 @@ func TestController(t *testing.T) {
 			executeFunc: storagenode.Describe(snm1.StorageNode.StorageNodeID),
 			initMock: func(adm *varlog.MockAdmin) {
 				adm.EXPECT().GetStorageNode(gomock.Any(), snm1.StorageNode.StorageNodeID).Return(snm1, nil)
+			},
+		},
+		{
+			name:        "GetStorageNode1",
+			golden:      "varlogctl/getstoragenode.1.golden.json",
+			executeFunc: storagenode.Describe(snm2.StorageNode.StorageNodeID),
+			initMock: func(adm *varlog.MockAdmin) {
+				adm.EXPECT().GetStorageNode(gomock.Any(), snm2.StorageNode.StorageNodeID).Return(snm2, nil)
 			},
 		},
 		{

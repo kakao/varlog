@@ -1,0 +1,1 @@
+{"clusterId":1,"storageNodeId":1,"address":"127.0.0.1:10000","storages":[{"path":"/tmp1","used":32768,"total":1048576},{"path":"/tmp2","used":65536,"total":2097152}],"logStreams":[],"startTime":"2022-10-01T03:23:21Z","createTime":"2022-09-27T17:46:40Z","lastHeartbeatTime":"2022-11-01T11:37:19Z"}
