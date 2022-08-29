@@ -41,7 +41,7 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.25.0
 	k8s.io/apimachinery v0.25.0
-	k8s.io/client-go v0.24.4
+	k8s.io/client-go v0.25.0
 )
 
 require (
@@ -75,7 +75,7 @@ require (
 	github.com/google/gnostic v0.5.7-v3refs // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
-	github.com/imdario/mergo v0.3.5 // indirect
+	github.com/imdario/mergo v0.3.6 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jtolds/gls v4.20.0+incompatible // indirect
