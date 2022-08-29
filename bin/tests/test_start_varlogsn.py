@@ -22,6 +22,14 @@ class StartVarlogsnTestCase(unittest.TestCase):
             self.assertIn("storageNodeId", snms[0])
             self.assertIn("address", snms[0])
 
+    def test_parse_get_storagenode_without_logstreams_response(self):
+        with open(TESTDATA.joinpath('getstoragenode.1.golden.json')) as f:
+            snm = json.load(f)
+            self.assertIn("storageNodeId", snm)
+            self.assertIn("address", snm)
+            self.assertIn("logStreams", snm)
+            self.assertIsInstance(snm["logStreams"], list)
+
 
 if __name__ == '__main__':
     unittest.main()

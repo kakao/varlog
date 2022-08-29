@@ -127,7 +127,11 @@ func (s *repository) GetStorageNode(snid types.StorageNodeID) (*vmspb.StorageNod
 	if !ok {
 		return nil, false
 	}
-	return proto.Clone(snm).(*vmspb.StorageNodeMetadata), true
+	copied := proto.Clone(snm).(*vmspb.StorageNodeMetadata)
+	if len(copied.LogStreamReplicas) == 0 {
+		copied.LogStreamReplicas = []snpb.LogStreamReplicaMetadataDescriptor{}
+	}
+	return copied, true
 }
 
 func (s *repository) ListStorageNodes() []vmspb.StorageNodeMetadata {
@@ -136,6 +140,9 @@ func (s *repository) ListStorageNodes() []vmspb.StorageNodeMetadata {
 	snms := make([]vmspb.StorageNodeMetadata, 0, len(s.storageNodes))
 	for _, snm := range s.storageNodes {
 		copied := *proto.Clone(snm).(*vmspb.StorageNodeMetadata)
+		if len(copied.LogStreamReplicas) == 0 {
+			copied.LogStreamReplicas = []snpb.LogStreamReplicaMetadataDescriptor{}
+		}
 		snms = append(snms, copied)
 	}
 	sort.Slice(snms, func(i, j int) bool {
