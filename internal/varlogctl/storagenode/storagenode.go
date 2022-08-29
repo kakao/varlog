@@ -8,14 +8,35 @@ import (
 	"github.com/kakao/varlog/internal/varlogctl"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/vmspb"
 )
 
 func Describe(snid ...types.StorageNodeID) varlogctl.ExecuteFunc {
 	return func(ctx context.Context, adm varlog.Admin) (any, error) {
 		if len(snid) > 0 {
-			return adm.GetStorageNode(ctx, snid[0])
+			snm, err := adm.GetStorageNode(ctx, snid[0])
+			if err != nil {
+				return nil, err
+			}
+			ensureEmptyFields(snm)
+			return snm, nil
+
 		}
-		return adm.ListStorageNodes(ctx)
+		snms, err := adm.ListStorageNodes(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for idx := range snms {
+			ensureEmptyFields(&snms[idx])
+		}
+		return snms, nil
+	}
+}
+
+func ensureEmptyFields(snm *vmspb.StorageNodeMetadata) {
+	if len(snm.LogStreamReplicas) == 0 {
+		snm.LogStreamReplicas = []snpb.LogStreamReplicaMetadataDescriptor{}
 	}
 }
 
