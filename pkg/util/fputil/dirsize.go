@@ -8,7 +8,10 @@ import (
 
 func DirectorySize(path string) int64 {
 	var size int64
-	_ = filepath.Walk(path, func(_ string, info fs.FileInfo, _ error) error {
+	_ = filepath.Walk(path, func(_ string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return filepath.SkipDir
+		}
 		if info.Mode().IsRegular() {
 			size += info.Size()
 		}
