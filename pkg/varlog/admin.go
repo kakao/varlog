@@ -105,7 +105,7 @@ type Admin interface {
 	// pushedReplica. The poppedReplica is the old replica that belonged to
 	// the log stream, however, pushedReplica is the new replica to be
 	// added to the log stream.
-	UpdateLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
+	UpdateLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, poppedReplica varlogpb.ReplicaDescriptor, pushedReplica varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
 	// UnregisterLogStream unregisters a log stream from the cluster.
 	UnregisterLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error
 
@@ -298,7 +298,7 @@ func (c *admin) AddLogStream(ctx context.Context, topicID types.TopicID, logStre
 	return rsp.GetLogStream(), err
 }
 
-func (c *admin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (c *admin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica, pushedReplica varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	rsp, err := c.rpcClient.UpdateLogStream(ctx, &vmspb.UpdateLogStreamRequest{
 		TopicID:       topicID,
 		LogStreamID:   logStreamID,

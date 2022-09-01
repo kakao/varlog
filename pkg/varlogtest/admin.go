@@ -264,7 +264,7 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 	return proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor), nil
 }
 
-func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica *varlogpb.ReplicaDescriptor, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica varlogpb.ReplicaDescriptor, pushedReplica varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, 
 	found := false
 	for i, r := range logStreamDesc.Replicas {
 		if r.StorageNodeID == poppedReplica.StorageNodeID {
-			logStreamDesc.Replicas[i] = pushedReplica
+			logStreamDesc.Replicas[i] = &pushedReplica
 			found = true
 			break
 		}

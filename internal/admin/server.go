@@ -121,7 +121,7 @@ func (s *server) RemoveLogStreamReplica(ctx context.Context, req *vmspb.RemoveLo
 }
 
 func (s *server) UpdateLogStream(ctx context.Context, req *vmspb.UpdateLogStreamRequest) (*vmspb.UpdateLogStreamResponse, error) {
-	lsdesc, err := s.admin.updateLogStream(ctx, req.GetLogStreamID(), req.GetPoppedReplica(), req.GetPushedReplica())
+	lsdesc, err := s.admin.updateLogStream(ctx, req.GetLogStreamID(), req.PoppedReplica, req.PushedReplica)
 	return &vmspb.UpdateLogStreamResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
 }
 

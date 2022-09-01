@@ -1618,11 +1618,11 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 			defer closer()
 
 			_, err := client.UpdateLogStream(context.Background(), tpid, lsid,
-				&varlogpb.ReplicaDescriptor{ // pop (old)
+				varlogpb.ReplicaDescriptor{ // pop (old)
 					StorageNodeID: snid1,
 					Path:          path,
 				},
-				&varlogpb.ReplicaDescriptor{ // push (new)
+				varlogpb.ReplicaDescriptor{ // push (new)
 					StorageNodeID: snid2,
 					Path:          path,
 				},

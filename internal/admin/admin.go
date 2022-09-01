@@ -533,7 +533,7 @@ func (adm *Admin) waitUnsealed(ctx context.Context, lsid types.LogStreamID) erro
 	}
 }
 
-func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, poppedReplica, pushedReplica *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, poppedReplica, pushedReplica varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	// NOTE (jun): Name of the method - updateLogStream can be confused.
 	// updateLogStream can change only replicas. To update status, use Seal or Unseal.
 	adm.mu.Lock()
@@ -557,40 +557,12 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 		return nil, errors.Errorf("invalid log stream status: %s", status)
 	}
 
-	if poppedReplica == nil {
-		// TODO: Choose laggy replica
-		selector := newVictimSelector(adm.snmgr, lsid, oldLSDesc.GetReplicas())
-		victims, err := selector.Select(ctx)
-		if err != nil {
-			return nil, err
-		}
-		poppedReplica = victims[0]
-	}
-
-	if pushedReplica == nil {
-		oldReplicas := oldLSDesc.GetReplicas()
-		denylist := make([]types.StorageNodeID, len(oldReplicas))
-		for i, replica := range oldReplicas {
-			denylist[i] = replica.GetStorageNodeID()
-		}
-
-		selector, err := newRandomReplicaSelector(adm.mrmgr.ClusterMetadataView(), 1, denylist...)
-		if err != nil {
-			return nil, err
-		}
-		candidates, err := selector.Select(ctx)
-		if err != nil {
-			return nil, err
-		}
-		pushedReplica = candidates[0]
-	}
-
 	replace := false
 	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
 	for i := range newLSDesc.Replicas {
 		// TODO - fix? poppedReplica can ignore path.
 		if newLSDesc.Replicas[i].GetStorageNodeID() == poppedReplica.GetStorageNodeID() {
-			newLSDesc.Replicas[i] = pushedReplica
+			newLSDesc.Replicas[i] = &pushedReplica
 			replace = true
 			break
 		}
