@@ -659,11 +659,11 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types
 	require.NoError(t, err)
 	path := snmd.Storages[0].Path
 
-	newReplica := &varlogpb.ReplicaDescriptor{
+	newReplica := varlogpb.ReplicaDescriptor{
 		StorageNodeID: newsn,
 		Path:          path,
 	}
-	oldReplica := &varlogpb.ReplicaDescriptor{
+	oldReplica := varlogpb.ReplicaDescriptor{
 		StorageNodeID: oldsn,
 	}
 
@@ -673,7 +673,7 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types
 	// update replicas
 	for i := range rds {
 		if rds[i].GetStorageNodeID() == oldsn {
-			rds[i] = newReplica
+			rds[i] = &newReplica
 		}
 	}
 }

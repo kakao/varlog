@@ -438,7 +438,7 @@ func (mr *MockAdminMockRecorder) Unseal(arg0, arg1, arg2 interface{}) *gomock.Ca
 }
 
 // UpdateLogStream mocks base method.
-func (m *MockAdmin) UpdateLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 *varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (m *MockAdmin) UpdateLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLogStream", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(*varlogpb.LogStreamDescriptor)
