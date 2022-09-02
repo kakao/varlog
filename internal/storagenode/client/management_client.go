@@ -85,7 +85,7 @@ func (c *ManagementClient) GetMetadata(ctx context.Context) (*snpb.StorageNodeMe
 
 func (c *ManagementClient) AddLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, path string) error {
 	if stringsutil.Empty(path) {
-		return errors.New("snmcl: invalid argument")
+		return errors.New("snmcl: empty path")
 	}
 	// FIXME(jun): Does the return value of AddLogStream need?
 	_, err := c.rpcClient.AddLogStreamReplica(ctx, &snpb.AddLogStreamReplicaRequest{

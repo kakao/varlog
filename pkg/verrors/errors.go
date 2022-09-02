@@ -118,7 +118,7 @@ func ToStatusError(err error) error {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return ToStatusErrorWithCode(err, codes.DeadlineExceeded)
 	}
-	return ToStatusErrorWithCode(err, codes.Unknown)
+	return ToStatusErrorWithCode(err, status.Code(err))
 }
 
 func ToStatusErrorWithCode(err error, code codes.Code) error {

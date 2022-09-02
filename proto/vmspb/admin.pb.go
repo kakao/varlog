@@ -2752,6 +2752,21 @@ type ClusterManagerClient interface {
 	GetLogStream(ctx context.Context, in *GetLogStreamRequest, opts ...grpc.CallOption) (*GetLogStreamResponse, error)
 	ListLogStreams(ctx context.Context, in *ListLogStreamsRequest, opts ...grpc.CallOption) (*ListLogStreamsResponse, error)
 	AddLogStream(ctx context.Context, in *AddLogStreamRequest, opts ...grpc.CallOption) (*AddLogStreamResponse, error)
+	// UpdateLogStream changes the configuration of replicas in a log stream.
+	// Its codes are defines as followings:
+	// - InvalidArgument: The client tries to swap the same replica.
+	// - Unavailable: The cluster metadata cannot be fetched from the metadata
+	// repository transiently.
+	// - NotFound: The target log stream does not exist.
+	// - FailedPrecondition: Either the target log stream is not sealed, the
+	// target log stream doesn't have a victim replica, or the target log stream
+	// already has both victim and new replica. Note that clients should not retry
+	// without any action.
+	// - Unknown: Either storage node or metadata repository returns an error.
+	//
+	// TODO: Moving the data directory within the same node is not supported yet.
+	// TODO: We will define codes for errors returned from storage nodes and
+	// metadata repository soon.
 	UpdateLogStream(ctx context.Context, in *UpdateLogStreamRequest, opts ...grpc.CallOption) (*UpdateLogStreamResponse, error)
 	UnregisterLogStream(ctx context.Context, in *UnregisterLogStreamRequest, opts ...grpc.CallOption) (*UnregisterLogStreamResponse, error)
 	RemoveLogStreamReplica(ctx context.Context, in *RemoveLogStreamReplicaRequest, opts ...grpc.CallOption) (*RemoveLogStreamReplicaResponse, error)
@@ -3036,6 +3051,21 @@ type ClusterManagerServer interface {
 	GetLogStream(context.Context, *GetLogStreamRequest) (*GetLogStreamResponse, error)
 	ListLogStreams(context.Context, *ListLogStreamsRequest) (*ListLogStreamsResponse, error)
 	AddLogStream(context.Context, *AddLogStreamRequest) (*AddLogStreamResponse, error)
+	// UpdateLogStream changes the configuration of replicas in a log stream.
+	// Its codes are defines as followings:
+	// - InvalidArgument: The client tries to swap the same replica.
+	// - Unavailable: The cluster metadata cannot be fetched from the metadata
+	// repository transiently.
+	// - NotFound: The target log stream does not exist.
+	// - FailedPrecondition: Either the target log stream is not sealed, the
+	// target log stream doesn't have a victim replica, or the target log stream
+	// already has both victim and new replica. Note that clients should not retry
+	// without any action.
+	// - Unknown: Either storage node or metadata repository returns an error.
+	//
+	// TODO: Moving the data directory within the same node is not supported yet.
+	// TODO: We will define codes for errors returned from storage nodes and
+	// metadata repository soon.
 	UpdateLogStream(context.Context, *UpdateLogStreamRequest) (*UpdateLogStreamResponse, error)
 	UnregisterLogStream(context.Context, *UnregisterLogStreamRequest) (*UnregisterLogStreamResponse, error)
 	RemoveLogStreamReplica(context.Context, *RemoveLogStreamReplicaRequest) (*RemoveLogStreamReplicaResponse, error)
