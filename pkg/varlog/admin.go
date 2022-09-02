@@ -305,7 +305,11 @@ func (c *admin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logS
 		PoppedReplica: poppedReplica,
 		PushedReplica: pushedReplica,
 	})
-	return rsp.GetLogStream(), err
+	if err == nil {
+		return rsp.LogStream, nil
+	}
+	// TODO: Use gRPC's code to decide if the error is retriable or not.
+	return nil, err
 }
 
 func (c *admin) UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {

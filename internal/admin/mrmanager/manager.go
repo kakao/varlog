@@ -4,6 +4,7 @@ package mrmanager
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"sync"
@@ -12,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
-	"github.com/kakao/varlog/internal/admin/admerrors"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
 	"github.com/kakao/varlog/pkg/types"
@@ -396,7 +396,7 @@ func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 	if mrm.dirty || time.Since(mrm.updated) > ReloadInterval {
 		meta, err := mrm.clusterMetadata(ctx)
 		if err != nil {
-			return nil, errors.Wrap(admerrors.ErrClusterMetadataNotFetched, err.Error())
+			return nil, fmt.Errorf("cluster metadata: %w", err)
 		}
 		mrm.meta = meta
 		mrm.dirty = false

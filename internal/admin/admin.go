@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/status"
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	grpcctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
@@ -16,6 +17,7 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
@@ -544,35 +546,50 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 
 	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Unavailable, "update log stream: %s", err.Error())
 	}
 
 	oldLSDesc, err := clusmeta.MustHaveLogStream(lsid)
-	if err != nil {
-		return nil, err
+	if err != nil || oldLSDesc.Status.Deleted() {
+		return nil, status.Errorf(codes.NotFound, "update log stream: no such log stream %d", lsid)
 	}
 
-	status := oldLSDesc.GetStatus()
-	if status.Running() || status.Deleted() {
-		return nil, errors.Errorf("invalid log stream status: %s", status)
+	if oldLSDesc.Status.Running() {
+		return nil, status.Errorf(codes.FailedPrecondition, "update log stream: invalid log stream status %s", oldLSDesc.Status)
 	}
-
-	replace := false
-	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
-	for i := range newLSDesc.Replicas {
-		// TODO - fix? poppedReplica can ignore path.
-		if newLSDesc.Replicas[i].GetStorageNodeID() == poppedReplica.GetStorageNodeID() {
-			newLSDesc.Replicas[i] = &pushedReplica
-			replace = true
-			break
+	popIdx, pushIdx := -1, -1
+	for idx := range oldLSDesc.Replicas {
+		snid := oldLSDesc.Replicas[idx].StorageNodeID
+		if snid == poppedReplica.StorageNodeID {
+			popIdx = idx
+		} else if snid == pushedReplica.StorageNodeID {
+			pushIdx = idx
 		}
 	}
-	if !replace {
-		adm.logger.Panic("logstream push/pop error")
+	if popIdx < 0 && pushIdx >= 0 { // already updated
+		return oldLSDesc, nil
+	}
+	if popIdx < 0 && pushIdx < 0 {
+		return nil, status.Errorf(
+			codes.FailedPrecondition,
+			"update log stream: no victim replica (snid=%v) in log stream %+v",
+			poppedReplica.StorageNodeID,
+			oldLSDesc.Replicas,
+		)
+	}
+	if popIdx >= 0 && pushIdx >= 0 {
+		return nil, status.Errorf(
+			codes.FailedPrecondition,
+			"update log stream: victim replica and new replica already exist in log stream %+v",
+			oldLSDesc.Replicas,
+		)
 	}
 
+	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
+	newLSDesc.Replicas[popIdx] = &pushedReplica
+
 	if err := adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetPath()); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "update log stream")
 	}
 
 	// To reset the status of the log stream, set it as LogStreamStatusRunning
@@ -581,7 +598,7 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	}()
 
 	if err := adm.mrmgr.UpdateLogStream(ctx, newLSDesc); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("update log stream: %w", err)
 	}
 
 	return newLSDesc, nil

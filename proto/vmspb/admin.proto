@@ -367,6 +367,19 @@ service ClusterManager {
   rpc GetLogStream(GetLogStreamRequest) returns (GetLogStreamResponse) {}
   rpc ListLogStreams(ListLogStreamsRequest) returns (ListLogStreamsResponse) {}
   rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
+  // UpdateLogStream changes the configuration of replicas in a log stream.
+  // Its codes are defines as followings:
+  // - Unavailable: The cluster metadata cannot be fetched from the metadata
+  // repository transiently.
+  // - NotFound: The target log stream does not exist.
+  // - FailedPrecondition: Either the target log stream is not sealed, the
+  // target log stream doesn't have a victim replica, or the target log stream
+  // already has both victim and new replica. Note that clients should not retry
+  // without any action.
+  // - Unknown: Either storage node or metadata repository returns an error.
+  //
+  // TODO: We will define codes for errors returned from storage nodes and
+  // metadata repository soon.
   rpc UpdateLogStream(UpdateLogStreamRequest)
       returns (UpdateLogStreamResponse) {}
   rpc UnregisterLogStream(UnregisterLogStreamRequest)
