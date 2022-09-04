@@ -141,7 +141,6 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
 					&varlogpb.MetadataDescriptor{}, nil,
 				).AnyTimes()
-				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(nil, false)
 			},
 		},
 		{
@@ -149,7 +148,15 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 			success: true,
 			prepare: func(mock *testMock) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
-					&varlogpb.MetadataDescriptor{}, nil,
+					&varlogpb.MetadataDescriptor{
+						StorageNodes: []*varlogpb.StorageNodeDescriptor{
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: snid,
+								},
+							},
+						},
+					}, nil,
 				).AnyTimes()
 				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(&vmspb.StorageNodeMetadata{
 					StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
@@ -158,6 +165,24 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 						},
 					},
 				}, true)
+			},
+		},
+		{
+			name:    "Success without exact status",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						StorageNodes: []*varlogpb.StorageNodeDescriptor{
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: snid,
+								},
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(nil, false)
 			},
 		},
 	}
@@ -350,8 +375,8 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 					}, nil,
 				).AnyTimes()
 				mock.MockRepository.EXPECT().ListStorageNodes().Return(
-					[]vmspb.StorageNodeMetadata{
-						{
+					map[types.StorageNodeID]*vmspb.StorageNodeMetadata{
+						snid: {
 							StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 								StorageNode: varlogpb.StorageNode{
 									StorageNodeID: snid,

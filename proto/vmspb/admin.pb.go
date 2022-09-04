@@ -37,10 +37,18 @@ var _ = time.Kitchen
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+// StorageNodeMetadata represents the current status of the storage node.
 type StorageNodeMetadata struct {
 	snpb.StorageNodeMetadataDescriptor `protobuf:"bytes,1,opt,name=storage_node,json=storageNode,proto3,embedded=storage_node" json:""`
-	CreateTime                         time.Time `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3,stdtime" json:"createTime"`
-	LastHeartbeatTime                  time.Time `protobuf:"bytes,3,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3,stdtime" json:"lastHeartbeatTime"`
+	// CreateTime is the time when the storage node is created and registered to
+	// the metadata repository.
+	CreateTime time.Time `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3,stdtime" json:"createTime"`
+	// LastHeartbeatTime is the time when the admin server checked the liveness of
+	// the storage node. A zero value indicates that the admin server does not
+	// check the storage node. Typically, since the storage node is just
+	// registered, the admin server does not know the field. It is also possible
+	// that the admin server is just restarted.
+	LastHeartbeatTime time.Time `protobuf:"bytes,3,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3,stdtime" json:"lastHeartbeatTime"`
 }
 
 func (m *StorageNodeMetadata) Reset()         { *m = StorageNodeMetadata{} }

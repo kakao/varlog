@@ -165,17 +165,57 @@ func (adm *Admin) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, e
 }
 
 func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error) {
-	snm, ok := adm.statRepository.GetStorageNode(snid)
-	if !ok {
-		return nil, errors.WithMessagef(admerrors.ErrNoSuchStorageNode, "get storage node %d", int32(snid))
+	adm.mu.RLock()
+	defer adm.mu.RUnlock()
+
+	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "get storage node: cluster metadata not fetched")
 	}
-	return snm, nil
+	snd := md.GetStorageNode(snid)
+	if snd == nil {
+		return nil, status.Errorf(codes.NotFound, "get storage node: %d", int32(snid))
+	}
+	if snm, ok := adm.statRepository.GetStorageNode(snid); ok {
+		return snm, nil
+	}
+	return &vmspb.StorageNodeMetadata{
+		StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
+			ClusterID:   adm.cid,
+			StorageNode: snd.StorageNode,
+		},
+		CreateTime: snd.CreateTime,
+	}, nil
 }
 
 func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
-	return adm.statRepository.ListStorageNodes(), nil
+
+	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "list storage nodes: cluster metadata not fetched")
+	}
+
+	snms := make([]vmspb.StorageNodeMetadata, 0, len(md.StorageNodes))
+	snmsMap := adm.statRepository.ListStorageNodes()
+	for _, snd := range md.StorageNodes {
+		if snm, ok := snmsMap[snd.StorageNodeID]; ok {
+			snms = append(snms, *snm)
+			continue
+		}
+		snms = append(snms, vmspb.StorageNodeMetadata{
+			StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
+				ClusterID:   adm.cid,
+				StorageNode: snd.StorageNode,
+			},
+			CreateTime: snd.CreateTime,
+		})
+	}
+	sort.Slice(snms, func(i, j int) bool {
+		return snms[i].StorageNode.StorageNodeID < snms[j].StorageNode.StorageNodeID
+	})
+	return snms, nil
 }
 
 // addStorageNode adds a new storage node to the cluster.

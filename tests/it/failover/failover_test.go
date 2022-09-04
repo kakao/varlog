@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
+	"github.com/kakao/varlog/internal/admin"
+	"github.com/kakao/varlog/internal/admin/snwatcher"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -774,4 +776,63 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 			})
 		})
 	}))
+}
+
+func TestAdmin_ListStorageNodes(t *testing.T) {
+	const numStorageNodes = 1
+	const tick = 100 * time.Millisecond
+
+	clus := it.NewVarlogCluster(t,
+		it.WithNumberOfStorageNodes(numStorageNodes),
+		it.WithVMSOptions(
+			admin.WithStorageNodeWatcherOptions(
+				snwatcher.WithTick(tick),
+			),
+		),
+	)
+	defer clus.Close(t)
+
+	old, err := clus.GetVMSClient(t).ListStorageNodes(context.Background())
+	require.NoError(t, err)
+	require.Len(t, old, 1)
+
+	clus.RestartVMS(t)
+
+	require.Eventually(t, func() bool {
+		snms, err := clus.GetVMSClient(t).ListStorageNodes(context.Background())
+		if !assert.NoError(t, err) || !assert.Len(t, snms, len(old)) {
+			return false
+		}
+		return snms[0].LastHeartbeatTime.After(old[0].LastHeartbeatTime)
+	}, 10*tick, tick)
+}
+
+func TestAdmin_GetStorageNode(t *testing.T) {
+	const numStorageNodes = 1
+	const tick = 100 * time.Millisecond
+
+	clus := it.NewVarlogCluster(t,
+		it.WithNumberOfStorageNodes(numStorageNodes),
+		it.WithVMSOptions(
+			admin.WithStorageNodeWatcherOptions(
+				snwatcher.WithTick(tick),
+			),
+		),
+	)
+	defer clus.Close(t)
+
+	snid := clus.StorageNodeIDAtIndex(t, 0)
+
+	old, err := clus.GetVMSClient(t).GetStorageNode(context.Background(), snid)
+	require.NoError(t, err)
+
+	clus.RestartVMS(t)
+
+	require.Eventually(t, func() bool {
+		snm, err := clus.GetVMSClient(t).GetStorageNode(context.Background(), snid)
+		if !assert.NoError(t, err) {
+			return false
+		}
+		return snm.LastHeartbeatTime.After(old.LastHeartbeatTime)
+	}, 10*tick, tick)
 }

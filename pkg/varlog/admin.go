@@ -24,14 +24,30 @@ type Admin interface {
 	// TODO (jun): Specify types of errors, for instance, retriable, bad request, server's internal error.
 
 	// GetStorageNode returns the metadata of the storage node specified by the argument snid.
-	// It returns the ErrNotExist error if the storage node does not exist.
+	// If the admin server does not check the heartbeat of the storage node
+	// yet, some fields are zero values, for instance,
+	// LastHeartbeatTime, and Storages, LogStreamReplicas, Status, and
+	// StartTime of StorageNodeMetadataDescriptor.
+	// It returns the ErrNotExist if the storage node does not exist.
+	// It returns the ErrUnavailable if the cluster metadata cannot be fetched from the metadata repository.
 	GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error)
 	// ListStorageNodes returns a list of storage node metadata.
+	// If the admin server does not check the heartbeat of the storage node
+	// yet, some fields are zero values, for instance,
+	// LastHeartbeatTime, and Storages, LogStreamReplicas, Status, and
+	// StartTime of StorageNodeMetadataDescriptor.
+	// It returns the ErrUnavailable if the cluster metadata cannot be fetched from the metadata repository.
 	//
 	// Note that it should return an empty slice rather than nil to encode
 	// to an empty array in JSON if no storage node exists in the cluster.
 	ListStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error)
 	// GetStorageNodes returns a map of StorageNodeIDs and their addresses.
+	// If the admin server does not check the heartbeat of the storage node
+	// yet, some fields are zero values, for instance,
+	// LastHeartbeatTime, and Storages, LogStreamReplicas, Status, and
+	// StartTime of StorageNodeMetadataDescriptor.
+	// It returns the ErrUnavailable if the cluster metadata cannot be fetched from the metadata repository.
+	//
 	// Deprecated: Use ListStorageNodes.
 	GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error)
 	// AddStorageNode registers a storage node, whose ID and address are
@@ -172,8 +188,11 @@ func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*
 		StorageNodeID: snid,
 	})
 	if err != nil {
-		if st := status.Convert(err); st.Code() == codes.NotFound {
+		code := status.Convert(err).Code()
+		if code == codes.NotFound {
 			err = verrors.ErrNotExist
+		} else if code == codes.Unavailable {
+			err = verrors.ErrUnavailable
 		}
 		return nil, errors.WithMessage(err, "admin: get storage node")
 	}
@@ -183,7 +202,13 @@ func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*
 func (c *admin) ListStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error) {
 	rsp, err := c.rpcClient.ListStorageNodes(ctx, &vmspb.ListStorageNodesRequest{})
 	if err != nil {
-		return nil, errors.WithMessage(err, "admin: list storage nodes") //verrors.FromStatusError(err)
+		code := status.Convert(err).Code()
+		if code == codes.NotFound {
+			err = verrors.ErrNotExist
+		} else if code == codes.Unavailable {
+			err = verrors.ErrUnavailable
+		}
+		return nil, errors.WithMessage(err, "admin: list storage nodes")
 	}
 
 	if len(rsp.StorageNodes) > 0 {

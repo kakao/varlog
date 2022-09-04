@@ -70,10 +70,10 @@ func (mr *MockRepositoryMockRecorder) GetStorageNode(arg0 interface{}) *gomock.C
 }
 
 // ListStorageNodes mocks base method.
-func (m *MockRepository) ListStorageNodes() []vmspb.StorageNodeMetadata {
+func (m *MockRepository) ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListStorageNodes")
-	ret0, _ := ret[0].([]vmspb.StorageNodeMetadata)
+	ret0, _ := ret[0].(map[types.StorageNodeID]*vmspb.StorageNodeMetadata)
 	return ret0
 }
 
