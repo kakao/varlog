@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/status"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -265,6 +267,13 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 }
 
 func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica varlogpb.ReplicaDescriptor, pushedReplica varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+	if poppedReplica.StorageNodeID == pushedReplica.StorageNodeID {
+		if poppedReplica.Path != pushedReplica.Path {
+			return nil, status.Errorf(codes.Unimplemented, "update log stream: moving data directory")
+		}
+		return nil, status.Errorf(codes.InvalidArgument, "update log stream: the same replica")
+	}
+
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -272,27 +281,43 @@ func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, 
 
 	topicDesc, ok := c.vt.topics[topicID]
 	if !ok || topicDesc.Status.Deleted() {
-		return nil, errors.New("no such topic")
+		return nil, status.Errorf(codes.NotFound, "update log stream: no such topic %d", topicID)
 	}
 
 	logStreamDesc, ok := c.vt.logStreams[logStreamID]
 	if !ok {
-		return nil, errors.New("no such logstream")
+		return nil, status.Errorf(codes.NotFound, "update log stream: no such log stream %d", logStreamID)
 	}
 
-	found := false
-	for i, r := range logStreamDesc.Replicas {
-		if r.StorageNodeID == poppedReplica.StorageNodeID {
-			logStreamDesc.Replicas[i] = &pushedReplica
-			found = true
-			break
+	popIdx, pushIdx := -1, -1
+	for idx := range logStreamDesc.Replicas {
+		snid := logStreamDesc.Replicas[idx].StorageNodeID
+		if snid == poppedReplica.StorageNodeID {
+			popIdx = idx
+		} else if snid == pushedReplica.StorageNodeID {
+			pushIdx = idx
 		}
 	}
-
-	if !found {
-		return nil, errors.New("no such replica")
+	if popIdx < 0 && pushIdx >= 0 { // already updated
+		return proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor), nil
+	}
+	if popIdx < 0 && pushIdx < 0 {
+		return nil, status.Errorf(
+			codes.FailedPrecondition,
+			"update log stream: no victim replica (snid=%v) in log stream %+v",
+			poppedReplica.StorageNodeID,
+			logStreamDesc.Replicas,
+		)
+	}
+	if popIdx >= 0 && pushIdx >= 0 {
+		return nil, status.Errorf(
+			codes.FailedPrecondition,
+			"update log stream: victim replica and new replica already exist in log stream %+v",
+			logStreamDesc.Replicas,
+		)
 	}
 
+	logStreamDesc.Replicas[popIdx] = &pushedReplica
 	c.vt.logStreams[logStreamID] = logStreamDesc
 
 	return proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor), nil
