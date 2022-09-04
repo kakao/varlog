@@ -95,7 +95,7 @@ func TestUnregisterInactiveStorageNode(t *testing.T) {
 	err := clus.GetVMSClient(t).UnregisterStorageNode(context.Background(), snID)
 	require.NoError(t, err)
 
-	snMap, err := clus.GetVMSClient(t).GetStorageNodes(context.Background())
+	snMap, err := clus.GetVMSClient(t).ListStorageNodes(context.Background())
 	require.NoError(t, err)
 	require.Len(t, snMap, 0)
 }
