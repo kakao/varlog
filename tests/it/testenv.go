@@ -1193,6 +1193,22 @@ func (clus *VarlogCluster) StartVMS(t *testing.T) {
 	clus.initVMS(t)
 }
 
+func (clus *VarlogCluster) RestartVMS(t *testing.T) {
+	clus.muVMS.Lock()
+	defer clus.muVMS.Unlock()
+
+	require.NotNil(t, clus.vmsServer)
+	require.NoError(t, clus.vmsServer.Close())
+	clus.wgVms.Wait()
+
+	clus.initVMS(t)
+
+	if clus.vmsCL != nil {
+		require.NoError(t, clus.vmsCL.Close())
+	}
+	clus.initVMSClient(t)
+}
+
 func (clus *VarlogCluster) GetVMSClient(t *testing.T) varlog.Admin {
 	clus.muVMS.Lock()
 	defer clus.muVMS.Unlock()

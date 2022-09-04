@@ -34,11 +34,12 @@ var (
 )
 
 var (
-	ErrInvalid  = errors.New("invalid argument")
-	ErrExist    = errors.New("already exists")
-	ErrNotExist = errors.New("not exist")
-	ErrState    = errors.New("invalid state")
-	ErrClosed   = errors.New("closed")
+	ErrInvalid     = errors.New("invalid argument")
+	ErrExist       = errors.New("already exists")
+	ErrNotExist    = errors.New("not exist")
+	ErrUnavailable = errors.New("unavailable")
+	ErrState       = errors.New("invalid state")
+	ErrClosed      = errors.New("closed")
 
 	ErrIgnore     = errors.New("ignore")
 	ErrInprogress = errors.New("inprogress")

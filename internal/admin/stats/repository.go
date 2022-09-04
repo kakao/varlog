@@ -4,7 +4,6 @@ package stats
 
 import (
 	"context"
-	"sort"
 	"sync"
 	"time"
 
@@ -43,7 +42,7 @@ type Repository interface {
 
 	// ListStorageNodes returns a map that maps storage node ID to the
 	// metadata for each storage node.
-	ListStorageNodes() []vmspb.StorageNodeMetadata
+	ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata
 
 	// RemoveStorageNode removes the metadata for the storage node
 	// specified by the snid.
@@ -130,17 +129,14 @@ func (s *repository) GetStorageNode(snid types.StorageNodeID) (*vmspb.StorageNod
 	return proto.Clone(snm).(*vmspb.StorageNodeMetadata), true
 }
 
-func (s *repository) ListStorageNodes() []vmspb.StorageNodeMetadata {
+func (s *repository) ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	snms := make([]vmspb.StorageNodeMetadata, 0, len(s.storageNodes))
+	snms := make(map[types.StorageNodeID]*vmspb.StorageNodeMetadata, len(s.storageNodes))
 	for _, snm := range s.storageNodes {
-		copied := *proto.Clone(snm).(*vmspb.StorageNodeMetadata)
-		snms = append(snms, copied)
+		copied := proto.Clone(snm).(*vmspb.StorageNodeMetadata)
+		snms[snm.StorageNodeID] = copied
 	}
-	sort.Slice(snms, func(i, j int) bool {
-		return snms[i].StorageNode.StorageNodeID < snms[j].StorageNode.StorageNodeID
-	})
 	return snms
 }
 
