@@ -25,17 +25,16 @@ type Admin interface {
 
 	// GetStorageNode returns the metadata of the storage node specified by the argument snid.
 	// If the admin server does not check the heartbeat of the storage node
-	// yet, some fields are zero values, for instance,
-	// LastHeartbeatTime, and Storages, LogStreamReplicas, Status, and
-	// StartTime of StorageNodeMetadataDescriptor.
+	// yet, some fields are zero values, for instance, LastHeartbeatTime,
+	// and Storages, Status, and StartTime of StorageNodeMetadataDescriptor.
 	// It returns the ErrNotExist if the storage node does not exist.
-	// It returns the ErrUnavailable if the cluster metadata cannot be fetched from the metadata repository.
+	// It returns the ErrUnavailable if the cluster metadata cannot be
+	// fetched from the metadata repository.
 	GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error)
 	// ListStorageNodes returns a list of storage node metadata.
 	// If the admin server does not check the heartbeat of the storage node
-	// yet, some fields are zero values, for instance,
-	// LastHeartbeatTime, and Storages, LogStreamReplicas, Status, and
-	// StartTime of StorageNodeMetadataDescriptor.
+	// yet, some fields are zero values, for instance, LastHeartbeatTime,
+	// and Storages, Status, and StartTime of StorageNodeMetadataDescriptor.
 	// It returns the ErrUnavailable if the cluster metadata cannot be fetched from the metadata repository.
 	//
 	// Note that it should return an empty slice rather than nil to encode
@@ -43,9 +42,8 @@ type Admin interface {
 	ListStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error)
 	// GetStorageNodes returns a map of StorageNodeIDs and their addresses.
 	// If the admin server does not check the heartbeat of the storage node
-	// yet, some fields are zero values, for instance,
-	// LastHeartbeatTime, and Storages, LogStreamReplicas, Status, and
-	// StartTime of StorageNodeMetadataDescriptor.
+	// yet, some fields are zero values, for instance, LastHeartbeatTime,
+	// and Storages, Status, and StartTime of StorageNodeMetadataDescriptor.
 	// It returns the ErrUnavailable if the cluster metadata cannot be fetched from the metadata repository.
 	//
 	// Deprecated: Use ListStorageNodes.
