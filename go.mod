@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/cockroachdb/pebble v0.0.0-20220426173801-b33d6e173cae
-	github.com/docker/go-units v0.4.0
+	github.com/docker/go-units v0.5.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.1
 	github.com/golang/mock v1.6.0
