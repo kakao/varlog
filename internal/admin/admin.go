@@ -179,13 +179,35 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 	if snm, ok := adm.statRepository.GetStorageNode(snid); ok {
 		return snm, nil
 	}
-	return &vmspb.StorageNodeMetadata{
+	snm := &vmspb.StorageNodeMetadata{
 		StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 			ClusterID:   adm.cid,
 			StorageNode: snd.StorageNode,
 		},
 		CreateTime: snd.CreateTime,
-	}, nil
+	}
+	for _, lsd := range md.LogStreams {
+		for _, rd := range lsd.Replicas {
+			if rd.StorageNodeID != snid {
+				continue
+			}
+			snm.LogStreamReplicas = append(snm.LogStreamReplicas, snpb.LogStreamReplicaMetadataDescriptor{
+				LogStreamReplica: varlogpb.LogStreamReplica{
+					StorageNode: snd.StorageNode,
+					TopicLogStream: varlogpb.TopicLogStream{
+						TopicID:     lsd.TopicID,
+						LogStreamID: lsd.LogStreamID,
+					},
+				},
+				Path: rd.Path,
+			})
+		}
+	}
+	sort.Slice(snm.LogStreamReplicas, func(i, j int) bool {
+		return snm.LogStreamReplicas[i].LogStreamID < snm.LogStreamReplicas[j].LogStreamID
+	})
+
+	return snm, nil
 }
 
 func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error) {
@@ -197,6 +219,36 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 		return nil, status.Errorf(codes.Unavailable, "list storage nodes: cluster metadata not fetched")
 	}
 
+	lazyInit := false
+	lazyReplicasMap := make(map[types.StorageNodeID][]snpb.LogStreamReplicaMetadataDescriptor, len(md.StorageNodes))
+	getLazyReplicasMap := func() (map[types.StorageNodeID][]snpb.LogStreamReplicaMetadataDescriptor, error) {
+		if !lazyInit {
+			for _, lsd := range md.LogStreams {
+				for _, rd := range lsd.Replicas {
+					snid := rd.StorageNodeID
+					snd := md.GetStorageNode(snid)
+					if snd == nil {
+						return nil, status.Errorf(codes.Internal, "list storage node: inconsistent cluster metadata")
+					}
+					lazyReplicasMap[snid] = append(lazyReplicasMap[snid],
+						snpb.LogStreamReplicaMetadataDescriptor{
+							LogStreamReplica: varlogpb.LogStreamReplica{
+								StorageNode: snd.StorageNode,
+								TopicLogStream: varlogpb.TopicLogStream{
+									TopicID:     lsd.TopicID,
+									LogStreamID: lsd.LogStreamID,
+								},
+							},
+							Path: rd.Path,
+						},
+					)
+				}
+			}
+			lazyInit = true
+		}
+		return lazyReplicasMap, nil
+	}
+
 	snms := make([]vmspb.StorageNodeMetadata, 0, len(md.StorageNodes))
 	snmsMap := adm.statRepository.ListStorageNodes()
 	for _, snd := range md.StorageNodes {
@@ -204,10 +256,15 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 			snms = append(snms, *snm)
 			continue
 		}
+		replicasMap, err := getLazyReplicasMap()
+		if err != nil {
+			return nil, err
+		}
 		snms = append(snms, vmspb.StorageNodeMetadata{
 			StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
-				ClusterID:   adm.cid,
-				StorageNode: snd.StorageNode,
+				ClusterID:         adm.cid,
+				StorageNode:       snd.StorageNode,
+				LogStreamReplicas: replicasMap[snd.StorageNodeID],
 			},
 			CreateTime: snd.CreateTime,
 		})

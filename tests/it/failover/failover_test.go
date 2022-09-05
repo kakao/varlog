@@ -779,11 +779,17 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 }
 
 func TestAdmin_ListStorageNodes(t *testing.T) {
-	const numStorageNodes = 1
+	const replicationFactor = 3
+	const numStorageNodes = replicationFactor
+	const numTopics = 1
+	const numLogStreams = 2
 	const tick = 100 * time.Millisecond
 
 	clus := it.NewVarlogCluster(t,
+		it.WithReplicationFactor(replicationFactor),
 		it.WithNumberOfStorageNodes(numStorageNodes),
+		it.WithNumberOfTopics(numTopics),
+		it.WithNumberOfLogStreams(numLogStreams),
 		it.WithVMSOptions(
 			admin.WithStorageNodeWatcherOptions(
 				snwatcher.WithTick(tick),
@@ -794,14 +800,33 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 
 	old, err := clus.GetVMSClient(t).ListStorageNodes(context.Background())
 	require.NoError(t, err)
-	require.Len(t, old, 1)
+	require.Len(t, old, numStorageNodes)
+	for i := 0; i < numStorageNodes; i++ {
+		require.Len(t, old[i].LogStreamReplicas, numLogStreams)
+	}
 
 	clus.RestartVMS(t)
 
 	require.Eventually(t, func() bool {
 		snms, err := clus.GetVMSClient(t).ListStorageNodes(context.Background())
-		if !assert.NoError(t, err) || !assert.Len(t, snms, len(old)) {
+		if !assert.NoError(t, err) {
 			return false
+		}
+		if !assert.Len(t, snms, len(old)) {
+			return false
+		}
+		for i := 0; i < numStorageNodes; i++ {
+			if !assert.Equal(t, old[i].StorageNodeID, snms[i].StorageNodeID) {
+				return false
+			}
+			if !assert.Len(t, snms[i].LogStreamReplicas, len(old[i].LogStreamReplicas)) {
+				return false
+			}
+			for j := range old[i].LogStreamReplicas {
+				if !assert.Equal(t, old[i].LogStreamReplicas[j].Path, snms[i].LogStreamReplicas[j].Path) {
+					return false
+				}
+			}
 		}
 		return snms[0].LastHeartbeatTime.After(old[0].LastHeartbeatTime)
 	}, 10*tick, tick)
