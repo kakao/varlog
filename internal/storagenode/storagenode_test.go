@@ -3,6 +3,7 @@ package storagenode
 import (
 	"math/rand"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"testing"
@@ -405,4 +406,24 @@ func TestStorageNode_InvalidConfig(t *testing.T) {
 		WithVolumes(badVolume, badVolume),
 	)
 	assert.Error(t, err)
+}
+
+func TestStorageNode_MakeVolumesAbsolute(t *testing.T) {
+	sn, err := NewStorageNode(
+		WithStorageNodeID(1),
+		WithListenAddress("127.0.0.1:0"),
+		WithVolumes("./testdata/relative_volume"),
+	)
+	assert.NoError(t, err)
+	defer func() {
+		ps, err := filepath.Glob("./testdata/relative_volume/*")
+		assert.NoError(t, err)
+		for _, p := range ps {
+			_ = os.RemoveAll(p)
+		}
+	}()
+
+	for _, volume := range sn.volumes {
+		assert.True(t, filepath.IsAbs(volume))
+	}
 }
