@@ -62,7 +62,7 @@ func newConfig(opts []Option) (config, error) {
 	return cfg, nil
 }
 
-func (cfg config) validate() error {
+func (cfg *config) validate() error {
 	if cfg.snid.Invalid() {
 		return fmt.Errorf("storage node: invalid id %d", int32(cfg.snid))
 	}
