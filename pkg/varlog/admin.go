@@ -30,7 +30,7 @@ type Admin interface {
 	// It returns the ErrNotExist if the storage node does not exist.
 	// It returns the ErrUnavailable if the cluster metadata cannot be
 	// fetched from the metadata repository.
-	GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error)
+	GetStorageNode(ctx context.Context, snid types.StorageNodeID, opts ...AdminCallOption) (*vmspb.StorageNodeMetadata, error)
 	// ListStorageNodes returns a list of storage node metadata.
 	// If the admin server does not check the heartbeat of the storage node
 	// yet, some fields are zero values, for instance, LastHeartbeatTime,
@@ -39,7 +39,7 @@ type Admin interface {
 	//
 	// Note that it should return an empty slice rather than nil to encode
 	// to an empty array in JSON if no storage node exists in the cluster.
-	ListStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error)
+	ListStorageNodes(ctx context.Context, opts ...AdminCallOption) ([]vmspb.StorageNodeMetadata, error)
 	// GetStorageNodes returns a map of StorageNodeIDs and their addresses.
 	// If the admin server does not check the heartbeat of the storage node
 	// yet, some fields are zero values, for instance, LastHeartbeatTime,
@@ -47,37 +47,37 @@ type Admin interface {
 	// It returns the ErrUnavailable if the cluster metadata cannot be fetched from the metadata repository.
 	//
 	// Deprecated: Use ListStorageNodes.
-	GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error)
+	GetStorageNodes(ctx context.Context, opts ...AdminCallOption) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error)
 	// AddStorageNode registers a storage node, whose ID and address are
 	// the argument snid and addr respectively, to the cluster.
 	// It is okay to call AddStorageNode more than one time to add the same
 	// storage node.
 	// Once the storage node is registered, the pair of snid and addr
 	// should not be changed.
-	AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*vmspb.StorageNodeMetadata, error)
+	AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string, opts ...AdminCallOption) (*vmspb.StorageNodeMetadata, error)
 	// UnregisterStorageNode unregisters a storage node identified by the
 	// argument snid from the cluster.
 	// It is okay to unregister not existed storage node.
 	// If the storage node still has running log stream replicas, it
 	// returns an error.
-	UnregisterStorageNode(ctx context.Context, snid types.StorageNodeID) error
+	UnregisterStorageNode(ctx context.Context, snid types.StorageNodeID, opts ...AdminCallOption) error
 
 	// GetTopic returns the metadata of the topic specified by the argument
 	// tpid.
 	// It returns the ErrNotExist error if the topic does not exist.
 	// If the admin could not fetch cluster metadata, it returns an error,
 	// and users can retry this RPC.
-	GetTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error)
+	GetTopic(ctx context.Context, tpid types.TopicID, opts ...AdminCallOption) (*varlogpb.TopicDescriptor, error)
 	// ListTopics returns a list of all topics in the cluster.
 	//
 	// Note that it should return an empty slice rather than nil to encode
 	// to an empty array in JSON if no topic exists in the cluster.
-	ListTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, error)
+	ListTopics(ctx context.Context, opts ...AdminCallOption) ([]varlogpb.TopicDescriptor, error)
 	// AddTopic adds a new topic and returns its metadata including a
 	// unique topid ID.
 	// It returns an error if rejected by the metadata repository due to
 	// redundant topic ID or something else, and users can retry this RPC.
-	AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error)
+	AddTopic(ctx context.Context, opts ...AdminCallOption) (*varlogpb.TopicDescriptor, error)
 	// UnregisterTopic removes a topic identified by the argument tpid from
 	// the cluster.
 	// It is okay to delete not existed topic.
@@ -85,20 +85,20 @@ type Admin interface {
 	// log streams.
 	// If the admin could not fetch cluster metadata, it returns an error,
 	// and users can retry this RPC.
-	UnregisterTopic(ctx context.Context, tpid types.TopicID) error
+	UnregisterTopic(ctx context.Context, tpid types.TopicID, opts ...AdminCallOption) error
 
 	// GetLogStream returns metadata of log stream specified by the argument tpid and lsid.
 	// It returns an error if there is no topic or log stream.
-	GetLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error)
+	GetLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error)
 	// ListLogStreams returns a list of log streams belonging to the topic
 	// tpid.
 	//
 	// Note that it should return an empty slice rather than nil to encode
 	// to an empty array in JSON if no log stream exists in the topic.
-	ListLogStreams(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error)
+	ListLogStreams(ctx context.Context, tpid types.TopicID, opts ...AdminCallOption) ([]varlogpb.LogStreamDescriptor, error)
 	// DescribeTopic returns detailed metadata of the topic.
 	// Deprecated: Use ListLogStreams.
-	DescribeTopic(ctx context.Context, topicID types.TopicID) (*vmspb.DescribeTopicResponse, error)
+	DescribeTopic(ctx context.Context, topicID types.TopicID, opts ...AdminCallOption) (*vmspb.DescribeTopicResponse, error)
 	// AddLogStream adds a new log stream to the topic identified by the
 	// argument tpid.
 	// AddLogStream adds a new log stream to the topic tpid.
@@ -113,44 +113,44 @@ type Admin interface {
 	//
 	// Internally, it waits for the log stream for being sealed and
 	// unsealed.
-	AddLogStream(ctx context.Context, tpid types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
+	AddLogStream(ctx context.Context, tpid types.TopicID, replicas []*varlogpb.ReplicaDescriptor, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error)
 	// UpdateLogStream changes replicas of the log stream.
 	// This method swaps two replicas - the argument poppedReplica and
 	// pushedReplica. The poppedReplica is the old replica that belonged to
 	// the log stream, however, pushedReplica is the new replica to be
 	// added to the log stream.
-	UpdateLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, poppedReplica varlogpb.ReplicaDescriptor, pushedReplica varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error)
+	UpdateLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, poppedReplica varlogpb.ReplicaDescriptor, pushedReplica varlogpb.ReplicaDescriptor, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error)
 	// UnregisterLogStream unregisters a log stream from the cluster.
-	UnregisterLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error
+	UnregisterLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, opts ...AdminCallOption) error
 
 	// RemoveLogStreamReplica removes a log stream replica from the storage
 	// node.
-	RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error
+	RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, opts ...AdminCallOption) error
 
 	// Seal seals the log stream identified by the argument tpid and lsid.
-	Seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*vmspb.SealResponse, error)
+	Seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, opts ...AdminCallOption) (*vmspb.SealResponse, error)
 	// Unseal unseals the log stream identified by the argument tpid and
 	// lsid.
-	Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error)
+	Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error)
 	// Sync copies logs of the log stream identified by the argument tpid
 	// and lsid from the source storage node to the destination storage
 	// node.
-	Sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcid, dstid types.StorageNodeID) (*snpb.SyncStatus, error)
+	Sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, srcid, dstid types.StorageNodeID, opts ...AdminCallOption) (*snpb.SyncStatus, error)
 	// Trim deletes logs whose GLSNs are less than or equal to the argument
 	// lastGLSN.
 	// Note that the return type of this method can be changed soon.
-	Trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error)
+	Trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN, opts ...AdminCallOption) (map[types.LogStreamID]map[types.StorageNodeID]error, error)
 
-	GetMetadataRepositoryNode(ctx context.Context, nid types.NodeID) (*varlogpb.MetadataRepositoryNode, error)
-	ListMetadataRepositoryNodes(ctx context.Context) ([]varlogpb.MetadataRepositoryNode, error)
+	GetMetadataRepositoryNode(ctx context.Context, nid types.NodeID, opts ...AdminCallOption) (*varlogpb.MetadataRepositoryNode, error)
+	ListMetadataRepositoryNodes(ctx context.Context, opts ...AdminCallOption) ([]varlogpb.MetadataRepositoryNode, error)
 	// GetMRMembers returns metadata repositories of the cluster.
-	GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error)
-	AddMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr string) (*varlogpb.MetadataRepositoryNode, error)
+	GetMRMembers(ctx context.Context, opts ...AdminCallOption) (*vmspb.GetMRMembersResponse, error)
+	AddMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr string, opts ...AdminCallOption) (*varlogpb.MetadataRepositoryNode, error)
 	// AddMRPeer registers a new metadata repository to the cluster.
-	AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error)
-	DeleteMetadataRepositoryNode(ctx context.Context, nid types.NodeID) error
+	AddMRPeer(ctx context.Context, raftURL, rpcAddr string, opts ...AdminCallOption) (types.NodeID, error)
+	DeleteMetadataRepositoryNode(ctx context.Context, nid types.NodeID, opts ...AdminCallOption) error
 	// RemoveMRPeer unregisters the metadata repository from the cluster.
-	RemoveMRPeer(ctx context.Context, raftURL string) error
+	RemoveMRPeer(ctx context.Context, raftURL string, opts ...AdminCallOption) error
 
 	// Close closes a connection to the admin server.
 	// Once this method is called, the Client can't be used anymore.
@@ -160,19 +160,23 @@ type Admin interface {
 var _ Admin = (*admin)(nil)
 
 type admin struct {
+	adminConfig
+	address   string
 	rpcConn   *rpc.Conn
 	rpcClient vmspb.ClusterManagerClient
 }
 
 // NewAdmin creates Admin that connects to admin server by using the argument addr.
-func NewAdmin(ctx context.Context, addr string) (Admin, error) {
+func NewAdmin(ctx context.Context, addr string, opts ...AdminOption) (Admin, error) {
 	rpcConn, err := rpc.NewConn(ctx, addr)
 	if err != nil {
 		return nil, err
 	}
 	cli := &admin{
-		rpcConn:   rpcConn,
-		rpcClient: vmspb.NewClusterManagerClient(rpcConn.Conn),
+		adminConfig: newAdminConfig(opts),
+		address:     addr,
+		rpcConn:     rpcConn,
+		rpcClient:   vmspb.NewClusterManagerClient(rpcConn.Conn),
 	}
 	return cli, nil
 }
@@ -181,7 +185,11 @@ func (c *admin) Close() error {
 	return c.rpcConn.Close()
 }
 
-func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error) {
+func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID, opts ...AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.GetStorageNode(ctx, &vmspb.GetStorageNodeRequest{
 		StorageNodeID: snid,
 	})
@@ -197,7 +205,11 @@ func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID) (*
 	return rsp.StorageNode, nil
 }
 
-func (c *admin) ListStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error) {
+func (c *admin) ListStorageNodes(ctx context.Context, opts ...AdminCallOption) ([]vmspb.StorageNodeMetadata, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.ListStorageNodes(ctx, &vmspb.ListStorageNodesRequest{})
 	if err != nil {
 		code := status.Convert(err).Code()
@@ -215,8 +227,8 @@ func (c *admin) ListStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetada
 	return []vmspb.StorageNodeMetadata{}, nil
 }
 
-func (c *admin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error) {
-	snms, err := c.ListStorageNodes(ctx)
+func (c *admin) GetStorageNodes(ctx context.Context, opts ...AdminCallOption) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error) {
+	snms, err := c.ListStorageNodes(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +239,11 @@ func (c *admin) GetStorageNodes(ctx context.Context) (map[types.StorageNodeID]vm
 	return ret, nil
 }
 
-func (c *admin) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*vmspb.StorageNodeMetadata, error) {
+func (c *admin) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string, opts ...AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.AddStorageNode(ctx, &vmspb.AddStorageNodeRequest{
 		StorageNode: varlogpb.StorageNode{
 			StorageNodeID: snid,
@@ -237,12 +253,20 @@ func (c *admin) AddStorageNode(ctx context.Context, snid types.StorageNodeID, ad
 	return rsp.GetStorageNode(), err
 }
 
-func (c *admin) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
+func (c *admin) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID, opts ...AdminCallOption) error {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	_, err := c.rpcClient.UnregisterStorageNode(ctx, &vmspb.UnregisterStorageNodeRequest{StorageNodeID: storageNodeID})
 	return err
 }
 
-func (c *admin) GetTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error) {
+func (c *admin) GetTopic(ctx context.Context, tpid types.TopicID, opts ...AdminCallOption) (*varlogpb.TopicDescriptor, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.GetTopic(ctx, &vmspb.GetTopicRequest{
 		TopicID: tpid,
 	})
@@ -255,7 +279,11 @@ func (c *admin) GetTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.Top
 	return rsp.GetTopic(), nil
 }
 
-func (c *admin) ListTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
+func (c *admin) ListTopics(ctx context.Context, opts ...AdminCallOption) ([]varlogpb.TopicDescriptor, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.ListTopics(ctx, &vmspb.ListTopicsRequest{})
 	if err != nil {
 		return nil, errors.WithMessage(err, "admin: list topics")
@@ -267,7 +295,11 @@ func (c *admin) ListTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, err
 	return []varlogpb.TopicDescriptor{}, nil
 }
 
-func (c *admin) AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error) {
+func (c *admin) AddTopic(ctx context.Context, opts ...AdminCallOption) (*varlogpb.TopicDescriptor, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.AddTopic(ctx, &vmspb.AddTopicRequest{})
 	if err != nil {
 		return nil, err
@@ -275,12 +307,20 @@ func (c *admin) AddTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error)
 	return rsp.Topic, nil
 }
 
-func (c *admin) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {
+func (c *admin) UnregisterTopic(ctx context.Context, topicID types.TopicID, opts ...AdminCallOption) error {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	_, err := c.rpcClient.UnregisterTopic(ctx, &vmspb.UnregisterTopicRequest{TopicID: topicID})
 	return err
 }
 
-func (c *admin) GetLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+func (c *admin) GetLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.GetLogStream(ctx, &vmspb.GetLogStreamRequest{
 		TopicID:     tpid,
 		LogStreamID: lsid,
@@ -294,7 +334,11 @@ func (c *admin) GetLogStream(ctx context.Context, tpid types.TopicID, lsid types
 	return rsp.GetLogStream(), nil
 }
 
-func (c *admin) ListLogStreams(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
+func (c *admin) ListLogStreams(ctx context.Context, tpid types.TopicID, opts ...AdminCallOption) ([]varlogpb.LogStreamDescriptor, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.ListLogStreams(ctx, &vmspb.ListLogStreamsRequest{
 		TopicID: tpid,
 	})
@@ -308,12 +352,20 @@ func (c *admin) ListLogStreams(ctx context.Context, tpid types.TopicID) ([]varlo
 	return []varlogpb.LogStreamDescriptor{}, nil
 }
 
-func (c *admin) DescribeTopic(ctx context.Context, topicID types.TopicID) (*vmspb.DescribeTopicResponse, error) {
+func (c *admin) DescribeTopic(ctx context.Context, topicID types.TopicID, opts ...AdminCallOption) (*vmspb.DescribeTopicResponse, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.DescribeTopic(ctx, &vmspb.DescribeTopicRequest{TopicID: topicID})
 	return rsp, err
 }
 
-func (c *admin) AddLogStream(ctx context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (c *admin) AddLogStream(ctx context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.AddLogStream(ctx, &vmspb.AddLogStreamRequest{
 		TopicID:  topicID,
 		Replicas: logStreamReplicas,
@@ -321,7 +373,11 @@ func (c *admin) AddLogStream(ctx context.Context, topicID types.TopicID, logStre
 	return rsp.GetLogStream(), err
 }
 
-func (c *admin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica, pushedReplica varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (c *admin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica, pushedReplica varlogpb.ReplicaDescriptor, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.UpdateLogStream(ctx, &vmspb.UpdateLogStreamRequest{
 		TopicID:       topicID,
 		LogStreamID:   logStreamID,
@@ -335,7 +391,11 @@ func (c *admin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logS
 	return nil, err
 }
 
-func (c *admin) UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {
+func (c *admin) UnregisterLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, opts ...AdminCallOption) error {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	_, err := c.rpcClient.UnregisterLogStream(ctx, &vmspb.UnregisterLogStreamRequest{
 		TopicID:     topicID,
 		LogStreamID: logStreamID,
@@ -343,7 +403,11 @@ func (c *admin) UnregisterLogStream(ctx context.Context, topicID types.TopicID, 
 	return err
 }
 
-func (c *admin) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID) error {
+func (c *admin) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.StorageNodeID, topicID types.TopicID, logStreamID types.LogStreamID, opts ...AdminCallOption) error {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	_, err := c.rpcClient.RemoveLogStreamReplica(ctx, &vmspb.RemoveLogStreamReplicaRequest{
 		StorageNodeID: storageNodeID,
 		TopicID:       topicID,
@@ -352,7 +416,11 @@ func (c *admin) RemoveLogStreamReplica(ctx context.Context, storageNodeID types.
 	return err
 }
 
-func (c *admin) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*vmspb.SealResponse, error) {
+func (c *admin) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, opts ...AdminCallOption) (*vmspb.SealResponse, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.Seal(ctx, &vmspb.SealRequest{
 		TopicID:     topicID,
 		LogStreamID: logStreamID,
@@ -360,7 +428,11 @@ func (c *admin) Seal(ctx context.Context, topicID types.TopicID, logStreamID typ
 	return rsp, err
 }
 
-func (c *admin) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+func (c *admin) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.Unseal(ctx, &vmspb.UnsealRequest{
 		TopicID:     topicID,
 		LogStreamID: logStreamID,
@@ -368,7 +440,11 @@ func (c *admin) Unseal(ctx context.Context, topicID types.TopicID, logStreamID t
 	return rsp.GetLogStream(), err
 }
 
-func (c *admin) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID) (*snpb.SyncStatus, error) {
+func (c *admin) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, srcStorageNodeID, dstStorageNodeID types.StorageNodeID, opts ...AdminCallOption) (*snpb.SyncStatus, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.Sync(ctx, &vmspb.SyncRequest{
 		TopicID:          topicID,
 		LogStreamID:      logStreamID,
@@ -378,7 +454,11 @@ func (c *admin) Sync(ctx context.Context, topicID types.TopicID, logStreamID typ
 	return rsp.GetStatus(), err
 }
 
-func (c *admin) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error) {
+func (c *admin) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN, opts ...AdminCallOption) (map[types.LogStreamID]map[types.StorageNodeID]error, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.Trim(ctx, &vmspb.TrimRequest{
 		TopicID:  topicID,
 		LastGLSN: lastGLSN,
@@ -401,14 +481,22 @@ func (c *admin) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.
 	return ret, nil
 }
 
-func (c *admin) GetMetadataRepositoryNode(ctx context.Context, nid types.NodeID) (*varlogpb.MetadataRepositoryNode, error) {
+func (c *admin) GetMetadataRepositoryNode(ctx context.Context, nid types.NodeID, opts ...AdminCallOption) (*varlogpb.MetadataRepositoryNode, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.GetMetadataRepositoryNode(ctx, &vmspb.GetMetadataRepositoryNodeRequest{
 		NodeID: nid,
 	})
 	return rsp.GetNode(), err
 }
 
-func (c *admin) ListMetadataRepositoryNodes(ctx context.Context) ([]varlogpb.MetadataRepositoryNode, error) {
+func (c *admin) ListMetadataRepositoryNodes(ctx context.Context, opts ...AdminCallOption) ([]varlogpb.MetadataRepositoryNode, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.ListMetadataRepositoryNodes(ctx, &vmspb.ListMetadataRepositoryNodesRequest{})
 	if err != nil {
 		return nil, errors.WithMessage(err, "admin: list metadata repositories")
@@ -420,12 +508,20 @@ func (c *admin) ListMetadataRepositoryNodes(ctx context.Context) ([]varlogpb.Met
 	return []varlogpb.MetadataRepositoryNode{}, nil
 }
 
-func (c *admin) GetMRMembers(ctx context.Context) (*vmspb.GetMRMembersResponse, error) {
+func (c *admin) GetMRMembers(ctx context.Context, opts ...AdminCallOption) (*vmspb.GetMRMembersResponse, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.GetMRMembers(ctx, &pbtypes.Empty{})
 	return rsp, err
 }
 
-func (c *admin) AddMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr string) (*varlogpb.MetadataRepositoryNode, error) {
+func (c *admin) AddMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr string, opts ...AdminCallOption) (*varlogpb.MetadataRepositoryNode, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.AddMetadataRepositoryNode(ctx, &vmspb.AddMetadataRepositoryNodeRequest{
 		RaftURL: raftURL,
 		RPCAddr: rpcAddr,
@@ -433,19 +529,31 @@ func (c *admin) AddMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr 
 	return rsp.GetNode(), err
 }
 
-func (c *admin) AddMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error) {
+func (c *admin) AddMRPeer(ctx context.Context, raftURL, rpcAddr string, opts ...AdminCallOption) (types.NodeID, error) {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	rsp, err := c.rpcClient.AddMRPeer(ctx, &vmspb.AddMRPeerRequest{RaftURL: raftURL, RPCAddr: rpcAddr})
 	return rsp.GetNodeID(), err
 }
 
-func (c *admin) DeleteMetadataRepositoryNode(ctx context.Context, nid types.NodeID) error {
+func (c *admin) DeleteMetadataRepositoryNode(ctx context.Context, nid types.NodeID, opts ...AdminCallOption) error {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	_, err := c.rpcClient.DeleteMetadataRepositoryNode(ctx, &vmspb.DeleteMetadataRepositoryNodeRequest{
 		NodeID: nid,
 	})
 	return err
 }
 
-func (c *admin) RemoveMRPeer(ctx context.Context, raftURL string) error {
+func (c *admin) RemoveMRPeer(ctx context.Context, raftURL string, opts ...AdminCallOption) error {
+	cfg := newAdminCallConfig(c.adminCallOptions, opts)
+	ctx, cancel := cfg.withTimeoutContext(ctx)
+	defer cancel()
+
 	_, err := c.rpcClient.RemoveMRPeer(ctx, &vmspb.RemoveMRPeerRequest{RaftURL: raftURL})
 	return err
 }

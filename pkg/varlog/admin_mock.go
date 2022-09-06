@@ -40,78 +40,103 @@ func (m *MockAdmin) EXPECT() *MockAdminMockRecorder {
 }
 
 // AddLogStream mocks base method.
-func (m *MockAdmin) AddLogStream(arg0 context.Context, arg1 types.TopicID, arg2 []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (m *MockAdmin) AddLogStream(arg0 context.Context, arg1 types.TopicID, arg2 []*varlogpb.ReplicaDescriptor, arg3 ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddLogStream", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddLogStream", varargs...)
 	ret0, _ := ret[0].(*varlogpb.LogStreamDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddLogStream indicates an expected call of AddLogStream.
-func (mr *MockAdminMockRecorder) AddLogStream(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) AddLogStream(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockAdmin)(nil).AddLogStream), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockAdmin)(nil).AddLogStream), varargs...)
 }
 
 // AddMRPeer mocks base method.
-func (m *MockAdmin) AddMRPeer(arg0 context.Context, arg1, arg2 string) (types.NodeID, error) {
+func (m *MockAdmin) AddMRPeer(arg0 context.Context, arg1, arg2 string, arg3 ...AdminCallOption) (types.NodeID, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddMRPeer", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddMRPeer", varargs...)
 	ret0, _ := ret[0].(types.NodeID)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddMRPeer indicates an expected call of AddMRPeer.
-func (mr *MockAdminMockRecorder) AddMRPeer(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) AddMRPeer(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMRPeer", reflect.TypeOf((*MockAdmin)(nil).AddMRPeer), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMRPeer", reflect.TypeOf((*MockAdmin)(nil).AddMRPeer), varargs...)
 }
 
 // AddMetadataRepositoryNode mocks base method.
-func (m *MockAdmin) AddMetadataRepositoryNode(arg0 context.Context, arg1, arg2 string) (*varlogpb.MetadataRepositoryNode, error) {
+func (m *MockAdmin) AddMetadataRepositoryNode(arg0 context.Context, arg1, arg2 string, arg3 ...AdminCallOption) (*varlogpb.MetadataRepositoryNode, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddMetadataRepositoryNode", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddMetadataRepositoryNode", varargs...)
 	ret0, _ := ret[0].(*varlogpb.MetadataRepositoryNode)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddMetadataRepositoryNode indicates an expected call of AddMetadataRepositoryNode.
-func (mr *MockAdminMockRecorder) AddMetadataRepositoryNode(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) AddMetadataRepositoryNode(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMetadataRepositoryNode", reflect.TypeOf((*MockAdmin)(nil).AddMetadataRepositoryNode), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMetadataRepositoryNode", reflect.TypeOf((*MockAdmin)(nil).AddMetadataRepositoryNode), varargs...)
 }
 
 // AddStorageNode mocks base method.
-func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string) (*vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string, arg3 ...AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddStorageNode", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddStorageNode", varargs...)
 	ret0, _ := ret[0].(*vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddStorageNode indicates an expected call of AddStorageNode.
-func (mr *MockAdminMockRecorder) AddStorageNode(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) AddStorageNode(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStorageNode", reflect.TypeOf((*MockAdmin)(nil).AddStorageNode), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStorageNode", reflect.TypeOf((*MockAdmin)(nil).AddStorageNode), varargs...)
 }
 
 // AddTopic mocks base method.
-func (m *MockAdmin) AddTopic(arg0 context.Context) (*varlogpb.TopicDescriptor, error) {
+func (m *MockAdmin) AddTopic(arg0 context.Context, arg1 ...AdminCallOption) (*varlogpb.TopicDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddTopic", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddTopic", varargs...)
 	ret0, _ := ret[0].(*varlogpb.TopicDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddTopic indicates an expected call of AddTopic.
-func (mr *MockAdminMockRecorder) AddTopic(arg0 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) AddTopic(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTopic", reflect.TypeOf((*MockAdmin)(nil).AddTopic), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTopic", reflect.TypeOf((*MockAdmin)(nil).AddTopic), varargs...)
 }
 
 // Close mocks base method.
@@ -129,325 +154,435 @@ func (mr *MockAdminMockRecorder) Close() *gomock.Call {
 }
 
 // DeleteMetadataRepositoryNode mocks base method.
-func (m *MockAdmin) DeleteMetadataRepositoryNode(arg0 context.Context, arg1 types.NodeID) error {
+func (m *MockAdmin) DeleteMetadataRepositoryNode(arg0 context.Context, arg1 types.NodeID, arg2 ...AdminCallOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteMetadataRepositoryNode", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteMetadataRepositoryNode", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteMetadataRepositoryNode indicates an expected call of DeleteMetadataRepositoryNode.
-func (mr *MockAdminMockRecorder) DeleteMetadataRepositoryNode(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) DeleteMetadataRepositoryNode(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMetadataRepositoryNode", reflect.TypeOf((*MockAdmin)(nil).DeleteMetadataRepositoryNode), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMetadataRepositoryNode", reflect.TypeOf((*MockAdmin)(nil).DeleteMetadataRepositoryNode), varargs...)
 }
 
 // DescribeTopic mocks base method.
-func (m *MockAdmin) DescribeTopic(arg0 context.Context, arg1 types.TopicID) (*vmspb.DescribeTopicResponse, error) {
+func (m *MockAdmin) DescribeTopic(arg0 context.Context, arg1 types.TopicID, arg2 ...AdminCallOption) (*vmspb.DescribeTopicResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeTopic", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeTopic", varargs...)
 	ret0, _ := ret[0].(*vmspb.DescribeTopicResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeTopic indicates an expected call of DescribeTopic.
-func (mr *MockAdminMockRecorder) DescribeTopic(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) DescribeTopic(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTopic", reflect.TypeOf((*MockAdmin)(nil).DescribeTopic), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTopic", reflect.TypeOf((*MockAdmin)(nil).DescribeTopic), varargs...)
 }
 
 // GetLogStream mocks base method.
-func (m *MockAdmin) GetLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+func (m *MockAdmin) GetLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLogStream", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetLogStream", varargs...)
 	ret0, _ := ret[0].(*varlogpb.LogStreamDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLogStream indicates an expected call of GetLogStream.
-func (mr *MockAdminMockRecorder) GetLogStream(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) GetLogStream(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogStream", reflect.TypeOf((*MockAdmin)(nil).GetLogStream), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogStream", reflect.TypeOf((*MockAdmin)(nil).GetLogStream), varargs...)
 }
 
 // GetMRMembers mocks base method.
-func (m *MockAdmin) GetMRMembers(arg0 context.Context) (*vmspb.GetMRMembersResponse, error) {
+func (m *MockAdmin) GetMRMembers(arg0 context.Context, arg1 ...AdminCallOption) (*vmspb.GetMRMembersResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMRMembers", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetMRMembers", varargs...)
 	ret0, _ := ret[0].(*vmspb.GetMRMembersResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMRMembers indicates an expected call of GetMRMembers.
-func (mr *MockAdminMockRecorder) GetMRMembers(arg0 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) GetMRMembers(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMRMembers", reflect.TypeOf((*MockAdmin)(nil).GetMRMembers), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMRMembers", reflect.TypeOf((*MockAdmin)(nil).GetMRMembers), varargs...)
 }
 
 // GetMetadataRepositoryNode mocks base method.
-func (m *MockAdmin) GetMetadataRepositoryNode(arg0 context.Context, arg1 types.NodeID) (*varlogpb.MetadataRepositoryNode, error) {
+func (m *MockAdmin) GetMetadataRepositoryNode(arg0 context.Context, arg1 types.NodeID, arg2 ...AdminCallOption) (*varlogpb.MetadataRepositoryNode, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetadataRepositoryNode", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetMetadataRepositoryNode", varargs...)
 	ret0, _ := ret[0].(*varlogpb.MetadataRepositoryNode)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMetadataRepositoryNode indicates an expected call of GetMetadataRepositoryNode.
-func (mr *MockAdminMockRecorder) GetMetadataRepositoryNode(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) GetMetadataRepositoryNode(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadataRepositoryNode", reflect.TypeOf((*MockAdmin)(nil).GetMetadataRepositoryNode), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadataRepositoryNode", reflect.TypeOf((*MockAdmin)(nil).GetMetadataRepositoryNode), varargs...)
 }
 
 // GetStorageNode mocks base method.
-func (m *MockAdmin) GetStorageNode(arg0 context.Context, arg1 types.StorageNodeID) (*vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) GetStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 ...AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStorageNode", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetStorageNode", varargs...)
 	ret0, _ := ret[0].(*vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetStorageNode indicates an expected call of GetStorageNode.
-func (mr *MockAdminMockRecorder) GetStorageNode(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) GetStorageNode(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNode", reflect.TypeOf((*MockAdmin)(nil).GetStorageNode), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNode", reflect.TypeOf((*MockAdmin)(nil).GetStorageNode), varargs...)
 }
 
 // GetStorageNodes mocks base method.
-func (m *MockAdmin) GetStorageNodes(arg0 context.Context) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) GetStorageNodes(arg0 context.Context, arg1 ...AdminCallOption) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStorageNodes", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetStorageNodes", varargs...)
 	ret0, _ := ret[0].(map[types.StorageNodeID]vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetStorageNodes indicates an expected call of GetStorageNodes.
-func (mr *MockAdminMockRecorder) GetStorageNodes(arg0 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) GetStorageNodes(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNodes", reflect.TypeOf((*MockAdmin)(nil).GetStorageNodes), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNodes", reflect.TypeOf((*MockAdmin)(nil).GetStorageNodes), varargs...)
 }
 
 // GetTopic mocks base method.
-func (m *MockAdmin) GetTopic(arg0 context.Context, arg1 types.TopicID) (*varlogpb.TopicDescriptor, error) {
+func (m *MockAdmin) GetTopic(arg0 context.Context, arg1 types.TopicID, arg2 ...AdminCallOption) (*varlogpb.TopicDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTopic", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetTopic", varargs...)
 	ret0, _ := ret[0].(*varlogpb.TopicDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetTopic indicates an expected call of GetTopic.
-func (mr *MockAdminMockRecorder) GetTopic(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) GetTopic(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopic", reflect.TypeOf((*MockAdmin)(nil).GetTopic), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopic", reflect.TypeOf((*MockAdmin)(nil).GetTopic), varargs...)
 }
 
 // ListLogStreams mocks base method.
-func (m *MockAdmin) ListLogStreams(arg0 context.Context, arg1 types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
+func (m *MockAdmin) ListLogStreams(arg0 context.Context, arg1 types.TopicID, arg2 ...AdminCallOption) ([]varlogpb.LogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListLogStreams", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListLogStreams", varargs...)
 	ret0, _ := ret[0].([]varlogpb.LogStreamDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListLogStreams indicates an expected call of ListLogStreams.
-func (mr *MockAdminMockRecorder) ListLogStreams(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) ListLogStreams(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLogStreams", reflect.TypeOf((*MockAdmin)(nil).ListLogStreams), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLogStreams", reflect.TypeOf((*MockAdmin)(nil).ListLogStreams), varargs...)
 }
 
 // ListMetadataRepositoryNodes mocks base method.
-func (m *MockAdmin) ListMetadataRepositoryNodes(arg0 context.Context) ([]varlogpb.MetadataRepositoryNode, error) {
+func (m *MockAdmin) ListMetadataRepositoryNodes(arg0 context.Context, arg1 ...AdminCallOption) ([]varlogpb.MetadataRepositoryNode, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListMetadataRepositoryNodes", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListMetadataRepositoryNodes", varargs...)
 	ret0, _ := ret[0].([]varlogpb.MetadataRepositoryNode)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListMetadataRepositoryNodes indicates an expected call of ListMetadataRepositoryNodes.
-func (mr *MockAdminMockRecorder) ListMetadataRepositoryNodes(arg0 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) ListMetadataRepositoryNodes(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMetadataRepositoryNodes", reflect.TypeOf((*MockAdmin)(nil).ListMetadataRepositoryNodes), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMetadataRepositoryNodes", reflect.TypeOf((*MockAdmin)(nil).ListMetadataRepositoryNodes), varargs...)
 }
 
 // ListStorageNodes mocks base method.
-func (m *MockAdmin) ListStorageNodes(arg0 context.Context) ([]vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) ListStorageNodes(arg0 context.Context, arg1 ...AdminCallOption) ([]vmspb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListStorageNodes", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListStorageNodes", varargs...)
 	ret0, _ := ret[0].([]vmspb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListStorageNodes indicates an expected call of ListStorageNodes.
-func (mr *MockAdminMockRecorder) ListStorageNodes(arg0 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) ListStorageNodes(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStorageNodes", reflect.TypeOf((*MockAdmin)(nil).ListStorageNodes), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStorageNodes", reflect.TypeOf((*MockAdmin)(nil).ListStorageNodes), varargs...)
 }
 
 // ListTopics mocks base method.
-func (m *MockAdmin) ListTopics(arg0 context.Context) ([]varlogpb.TopicDescriptor, error) {
+func (m *MockAdmin) ListTopics(arg0 context.Context, arg1 ...AdminCallOption) ([]varlogpb.TopicDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListTopics", arg0)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListTopics", varargs...)
 	ret0, _ := ret[0].([]varlogpb.TopicDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListTopics indicates an expected call of ListTopics.
-func (mr *MockAdminMockRecorder) ListTopics(arg0 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) ListTopics(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTopics", reflect.TypeOf((*MockAdmin)(nil).ListTopics), arg0)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTopics", reflect.TypeOf((*MockAdmin)(nil).ListTopics), varargs...)
 }
 
 // RemoveLogStreamReplica mocks base method.
-func (m *MockAdmin) RemoveLogStreamReplica(arg0 context.Context, arg1 types.StorageNodeID, arg2 types.TopicID, arg3 types.LogStreamID) error {
+func (m *MockAdmin) RemoveLogStreamReplica(arg0 context.Context, arg1 types.StorageNodeID, arg2 types.TopicID, arg3 types.LogStreamID, arg4 ...AdminCallOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveLogStreamReplica", arg0, arg1, arg2, arg3)
+	varargs := []interface{}{arg0, arg1, arg2, arg3}
+	for _, a := range arg4 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RemoveLogStreamReplica", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RemoveLogStreamReplica indicates an expected call of RemoveLogStreamReplica.
-func (mr *MockAdminMockRecorder) RemoveLogStreamReplica(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) RemoveLogStreamReplica(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStreamReplica", reflect.TypeOf((*MockAdmin)(nil).RemoveLogStreamReplica), arg0, arg1, arg2, arg3)
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStreamReplica", reflect.TypeOf((*MockAdmin)(nil).RemoveLogStreamReplica), varargs...)
 }
 
 // RemoveMRPeer mocks base method.
-func (m *MockAdmin) RemoveMRPeer(arg0 context.Context, arg1 string) error {
+func (m *MockAdmin) RemoveMRPeer(arg0 context.Context, arg1 string, arg2 ...AdminCallOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveMRPeer", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RemoveMRPeer", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RemoveMRPeer indicates an expected call of RemoveMRPeer.
-func (mr *MockAdminMockRecorder) RemoveMRPeer(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) RemoveMRPeer(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveMRPeer", reflect.TypeOf((*MockAdmin)(nil).RemoveMRPeer), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveMRPeer", reflect.TypeOf((*MockAdmin)(nil).RemoveMRPeer), varargs...)
 }
 
 // Seal mocks base method.
-func (m *MockAdmin) Seal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (*vmspb.SealResponse, error) {
+func (m *MockAdmin) Seal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 ...AdminCallOption) (*vmspb.SealResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Seal", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Seal", varargs...)
 	ret0, _ := ret[0].(*vmspb.SealResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Seal indicates an expected call of Seal.
-func (mr *MockAdminMockRecorder) Seal(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) Seal(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockAdmin)(nil).Seal), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockAdmin)(nil).Seal), varargs...)
 }
 
 // Sync mocks base method.
-func (m *MockAdmin) Sync(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 types.StorageNodeID) (*snpb.SyncStatus, error) {
+func (m *MockAdmin) Sync(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 types.StorageNodeID, arg5 ...AdminCallOption) (*snpb.SyncStatus, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Sync", arg0, arg1, arg2, arg3, arg4)
+	varargs := []interface{}{arg0, arg1, arg2, arg3, arg4}
+	for _, a := range arg5 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Sync", varargs...)
 	ret0, _ := ret[0].(*snpb.SyncStatus)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Sync indicates an expected call of Sync.
-func (mr *MockAdminMockRecorder) Sync(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) Sync(arg0, arg1, arg2, arg3, arg4 interface{}, arg5 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockAdmin)(nil).Sync), arg0, arg1, arg2, arg3, arg4)
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3, arg4}, arg5...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockAdmin)(nil).Sync), varargs...)
 }
 
 // Trim mocks base method.
-func (m *MockAdmin) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) (map[types.LogStreamID]map[types.StorageNodeID]error, error) {
+func (m *MockAdmin) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN, arg3 ...AdminCallOption) (map[types.LogStreamID]map[types.StorageNodeID]error, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Trim", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Trim", varargs...)
 	ret0, _ := ret[0].(map[types.LogStreamID]map[types.StorageNodeID]error)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Trim indicates an expected call of Trim.
-func (mr *MockAdminMockRecorder) Trim(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) Trim(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockAdmin)(nil).Trim), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockAdmin)(nil).Trim), varargs...)
 }
 
 // UnregisterLogStream mocks base method.
-func (m *MockAdmin) UnregisterLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) error {
+func (m *MockAdmin) UnregisterLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 ...AdminCallOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnregisterLogStream", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnregisterLogStream", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UnregisterLogStream indicates an expected call of UnregisterLogStream.
-func (mr *MockAdminMockRecorder) UnregisterLogStream(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) UnregisterLogStream(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterLogStream", reflect.TypeOf((*MockAdmin)(nil).UnregisterLogStream), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterLogStream", reflect.TypeOf((*MockAdmin)(nil).UnregisterLogStream), varargs...)
 }
 
 // UnregisterStorageNode mocks base method.
-func (m *MockAdmin) UnregisterStorageNode(arg0 context.Context, arg1 types.StorageNodeID) error {
+func (m *MockAdmin) UnregisterStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 ...AdminCallOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnregisterStorageNode", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnregisterStorageNode", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UnregisterStorageNode indicates an expected call of UnregisterStorageNode.
-func (mr *MockAdminMockRecorder) UnregisterStorageNode(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) UnregisterStorageNode(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockAdmin)(nil).UnregisterStorageNode), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockAdmin)(nil).UnregisterStorageNode), varargs...)
 }
 
 // UnregisterTopic mocks base method.
-func (m *MockAdmin) UnregisterTopic(arg0 context.Context, arg1 types.TopicID) error {
+func (m *MockAdmin) UnregisterTopic(arg0 context.Context, arg1 types.TopicID, arg2 ...AdminCallOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnregisterTopic", arg0, arg1)
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnregisterTopic", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UnregisterTopic indicates an expected call of UnregisterTopic.
-func (mr *MockAdminMockRecorder) UnregisterTopic(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) UnregisterTopic(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterTopic", reflect.TypeOf((*MockAdmin)(nil).UnregisterTopic), arg0, arg1)
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterTopic", reflect.TypeOf((*MockAdmin)(nil).UnregisterTopic), varargs...)
 }
 
 // Unseal mocks base method.
-func (m *MockAdmin) Unseal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+func (m *MockAdmin) Unseal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Unseal", arg0, arg1, arg2)
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Unseal", varargs...)
 	ret0, _ := ret[0].(*varlogpb.LogStreamDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Unseal indicates an expected call of Unseal.
-func (mr *MockAdminMockRecorder) Unseal(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) Unseal(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockAdmin)(nil).Unseal), arg0, arg1, arg2)
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockAdmin)(nil).Unseal), varargs...)
 }
 
 // UpdateLogStream mocks base method.
-func (m *MockAdmin) UpdateLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
+func (m *MockAdmin) UpdateLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 varlogpb.ReplicaDescriptor, arg5 ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateLogStream", arg0, arg1, arg2, arg3, arg4)
+	varargs := []interface{}{arg0, arg1, arg2, arg3, arg4}
+	for _, a := range arg5 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateLogStream", varargs...)
 	ret0, _ := ret[0].(*varlogpb.LogStreamDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateLogStream indicates an expected call of UpdateLogStream.
-func (mr *MockAdminMockRecorder) UpdateLogStream(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *MockAdminMockRecorder) UpdateLogStream(arg0, arg1, arg2, arg3, arg4 interface{}, arg5 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLogStream", reflect.TypeOf((*MockAdmin)(nil).UpdateLogStream), arg0, arg1, arg2, arg3, arg4)
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3, arg4}, arg5...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLogStream", reflect.TypeOf((*MockAdmin)(nil).UpdateLogStream), varargs...)
 }
