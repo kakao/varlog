@@ -10,6 +10,9 @@ import (
 	"sync"
 	"time"
 
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+	grpcctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/soheilhy/cmux"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.uber.org/multierr"
@@ -94,14 +97,47 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		return nil, err
 	}
 
-	sn := &StorageNode{
-		config:    cfg,
-		executors: executorsmap.New(hintNumExecutors),
-		server: grpc.NewServer(
-			grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
-			grpc.WriteBufferSize(int(cfg.grpcServerWriteBufferSize)),
-			grpc.MaxRecvMsgSize(int(cfg.grpcServerMaxRecvMsgSize)),
+	grpcServer := grpc.NewServer(
+		grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
+		grpc.WriteBufferSize(int(cfg.grpcServerWriteBufferSize)),
+		grpc.MaxRecvMsgSize(int(cfg.grpcServerMaxRecvMsgSize)),
+		grpcmiddleware.WithUnaryServerChain(
+			grpcctxtags.UnaryServerInterceptor(),
+			grpczap.UnaryServerInterceptor(cfg.logger, grpczap.WithDecider(
+				func(fullMethodName string, err error) bool {
+					switch fullMethodName {
+					case "/varlog.snpb.Management/GetMetadata",
+						"/varlog.snpb.LogIO/Append",
+						"/varlog.snpb.LogIO/LogStreamMetadata",
+						"/varlog.snpb.Replicator/ReplicateDeprecated",
+						"/varlog.snpb.Replicator/Replicate",
+						"/varlog.snpb.Replicator/SyncReplicate":
+						return false
+					default:
+					}
+					return true
+				},
+			)),
+			grpczap.PayloadUnaryServerInterceptor(cfg.logger, func(ctx context.Context, fullMethodName string, servingObject interface{}) bool {
+				switch fullMethodName {
+				case "/varlog.snpb.Management/Trim",
+					"/varlog.snpb.Management/AddLogStreamReplica",
+					"/varlog.snpb.Management/RemoveLogStream",
+					"/varlog.snpb.Management/Seal",
+					"/varlog.snpb.Management/Unseal",
+					"/varlog.snpb.Replicator/SyncInit":
+					return true
+				default:
+				}
+				return false
+			}),
 		),
+	)
+
+	sn := &StorageNode{
+		config:       cfg,
+		executors:    executorsmap.New(hintNumExecutors),
+		server:       grpcServer,
 		healthServer: health.NewServer(),
 		closedC:      make(chan struct{}),
 		snPaths:      snPaths,
@@ -267,21 +303,38 @@ func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.Topic
 	return lsPath, sn.runLogStreamReplica(ctx, tpid, lsid, lsPath)
 }
 
-func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID, lsPath string) error {
+func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID, lsPath string) (err error) {
 	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, lsid)
 	if err != nil {
 		return err
 	}
 
+	var (
+		initStorageDuration  time.Duration
+		initExecutorDuration time.Duration
+	)
+
+	defer func() {
+		if err == nil {
+			sn.logger.Info("init log stream duration",
+				zap.Duration("initStorage", initStorageDuration),
+				zap.Duration("initExecutor", initExecutorDuration),
+			)
+		}
+	}()
+
+	start := time.Now()
 	stg, err := storage.New(append(
 		sn.defaultStorageOptions,
 		storage.WithPath(lsPath),
 		storage.WithLogger(sn.logger.Named("storage").With(zap.String("path", lsPath))),
 	)...)
+	initStorageDuration = time.Since(start)
 	if err != nil {
 		return err
 	}
 
+	start = time.Now()
 	lse, err := logstream.NewExecutor(append(
 		sn.defaultLogStreamExecutorOptions,
 		logstream.WithStorageNodeID(sn.snid),
@@ -295,15 +348,16 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 		),
 		logstream.WithLogStreamMetrics(lsm),
 	)...)
+	initExecutorDuration = time.Since(start)
 	if err != nil {
 		return err
 	}
 
 	if _, loaded := sn.executors.LoadOrStore(tpid, lsid, lse); loaded {
 		_ = lse.Close()
-		return errors.New("storage node: logstream already exists")
+		err = errors.New("storage node: logstream already exists")
 	}
-	return nil
+	return err
 }
 
 func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
