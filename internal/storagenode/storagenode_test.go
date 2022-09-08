@@ -419,6 +419,9 @@ func TestStorageNode_MakeVolumesAbsolute(t *testing.T) {
 		ps, err := filepath.Glob("./testdata/relative_volume/*")
 		assert.NoError(t, err)
 		for _, p := range ps {
+			if filepath.Base(p) == ".keep" {
+				continue
+			}
 			_ = os.RemoveAll(p)
 		}
 	}()
