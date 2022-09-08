@@ -16,6 +16,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.com/kakao/varlog/internal/storagenode/volume"
+
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snmanager"
@@ -716,12 +718,15 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T, topicID types.TopicID) t
 	for _, rd := range rds {
 		snID := rd.StorageNodeID
 		path := rd.StorageNodePath
-		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStreamReplica(
+		lsrmd, err := clus.storageNodeManagementClientOf(t, snID).AddLogStreamReplica(
 			context.Background(),
 			topicID,
 			lsID,
 			path,
-		))
+		)
+		require.NoError(t, err)
+		_, err = volume.ParseDataDir(lsrmd.Path)
+		require.NoError(t, err)
 
 		status, _, err := clus.storageNodeManagementClientOf(t, snID).Seal(context.Background(), topicID, lsID, types.InvalidGLSN)
 		require.NoError(t, err)
@@ -772,12 +777,13 @@ func (clus *VarlogCluster) AddLSIncomplete(t *testing.T, topicID types.TopicID) 
 		require.NoError(t, err)
 		path := snmd.Storages[0].Path
 
-		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStreamReplica(
+		_, err = clus.storageNodeManagementClientOf(t, snID).AddLogStreamReplica(
 			context.Background(),
 			topicID,
 			lsID,
 			path,
-		))
+		)
+		require.NoError(t, err)
 	}
 	t.Logf("AddLS incompletely: lsid=%d, replicas=%+v", lsID, replicas)
 	return lsID
@@ -827,7 +833,8 @@ func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, topicID types.TopicID
 
 	path := meta.Storages[0].Path
 
-	require.NoError(t, clus.snMCLs[storageNodeID].AddLogStreamReplica(context.Background(), topicID, logStreamID, path))
+	_, err = clus.snMCLs[storageNodeID].AddLogStreamReplica(context.Background(), topicID, logStreamID, path)
+	require.NoError(t, err)
 
 	replicas[0] = &varlogpb.ReplicaDescriptor{
 		StorageNodeID:   storageNodeID,

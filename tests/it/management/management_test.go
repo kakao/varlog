@@ -193,7 +193,7 @@ func TestAddLogStreamPartiallyRegistered(t *testing.T) {
 	require.NoError(t, err)
 
 	topicID := clus.TopicIDs()[0]
-	err = sn1.AddLogStreamReplica(context.Background(), topicID, lsID, snmd1.GetStorages()[0].GetPath())
+	_, err = sn1.AddLogStreamReplica(context.Background(), topicID, lsID, snmd1.GetStorages()[0].GetPath())
 	require.NoError(t, err)
 
 	snid2 := clus.StorageNodeIDAtIndex(t, 1)
@@ -237,7 +237,7 @@ func TestRemoveLogStreamReplica(t *testing.T) {
 	snmd, err := sn.GetMetadata(context.Background())
 	require.NoError(t, err)
 	topicID := clus.TopicIDs()[0]
-	err = sn.AddLogStreamReplica(context.Background(), topicID, lsID, snmd.GetStorages()[0].GetPath())
+	_, err = sn.AddLogStreamReplica(context.Background(), topicID, lsID, snmd.GetStorages()[0].GetPath())
 	require.NoError(t, err)
 
 	err = clus.GetVMSClient(t).RemoveLogStreamReplica(context.TODO(), snid, topicID, lsID)
@@ -522,7 +522,7 @@ func TestSealLogStreamSealedIncompletely(t *testing.T) {
 				path := snmeta.GetStorages()[0].GetPath()
 				So(len(path), ShouldBeGreaterThan, 0)
 
-				err = failedSN.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
+				_, err = failedSN.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(100, func() bool {
@@ -582,7 +582,7 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 				path := snmeta.GetStorages()[0].GetPath()
 				So(len(path), ShouldBeGreaterThan, 0)
 
-				err = failedSN.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
+				_, err = failedSN.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(100, func() bool {
@@ -636,7 +636,7 @@ func TestGCZombieLogStream(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			path := meta.GetStorages()[0].GetPath()
-			err = snMCL.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
+			_, err = snMCL.AddLogStreamReplica(context.TODO(), topicID, lsID, path)
 			So(err, ShouldBeNil)
 
 			meta, err = snMCL.GetMetadata(context.TODO())

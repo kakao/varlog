@@ -21,23 +21,12 @@ func (as *adminServer) GetMetadata(ctx context.Context, _ *snpb.GetMetadataReque
 }
 
 func (as *adminServer) AddLogStreamReplica(ctx context.Context, req *snpb.AddLogStreamReplicaRequest) (*snpb.AddLogStreamReplicaResponse, error) {
-	// FIXME: Why does caller need lsPath?
-	lsPath, err := as.sn.addLogStreamReplica(ctx, req.TopicID, req.LogStreamID, req.Storage.Path)
+	lsrmd, err := as.sn.addLogStreamReplica(ctx, req.TopicID, req.LogStreamID, req.StorageNodePath)
 	if err != nil {
 		return nil, err
 	}
 	rsp := &snpb.AddLogStreamReplicaResponse{
-		LogStream: &varlogpb.LogStreamDescriptor{
-			TopicID:     req.TopicID,
-			LogStreamID: req.LogStreamID,
-			Status:      varlogpb.LogStreamStatusRunning,
-			Replicas: []*varlogpb.ReplicaDescriptor{
-				{
-					StorageNodeID:   as.sn.snid,
-					StorageNodePath: lsPath,
-				},
-			},
-		},
+		LogStreamReplica: lsrmd,
 	}
 	return rsp, err
 }

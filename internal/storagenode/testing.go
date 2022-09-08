@@ -96,7 +96,7 @@ func TestGetStorageNodeMetadataDescriptor(t *testing.T, cid types.ClusterID, sni
 func TestAddLogStreamReplica(t *testing.T, cid types.ClusterID, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path, addr string) {
 	snmc, closer := TestNewManagementClient(t, cid, snid, addr)
 	defer closer()
-	err := snmc.AddLogStreamReplica(context.Background(), tpid, lsid, path)
+	_, err := snmc.AddLogStreamReplica(context.Background(), tpid, lsid, path)
 	assert.NoError(t, err)
 }
 

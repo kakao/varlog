@@ -54,11 +54,12 @@ func (mr *MockStorageNodeManagerMockRecorder) AddLogStream(arg0, arg1 interface{
 }
 
 // AddLogStreamReplica mocks base method.
-func (m *MockStorageNodeManager) AddLogStreamReplica(arg0 context.Context, arg1 types.StorageNodeID, arg2 types.TopicID, arg3 types.LogStreamID, arg4 string) error {
+func (m *MockStorageNodeManager) AddLogStreamReplica(arg0 context.Context, arg1 types.StorageNodeID, arg2 types.TopicID, arg3 types.LogStreamID, arg4 string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddLogStreamReplica", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(snpb.LogStreamReplicaMetadataDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // AddLogStreamReplica indicates an expected call of AddLogStreamReplica.

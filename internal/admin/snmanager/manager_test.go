@@ -134,11 +134,11 @@ func TestStorageNodeManager_AddLogStreamReplica(t *testing.T) {
 	)
 
 	// Not registered yet.
-	err = snmgr.AddLogStreamReplica(context.Background(), ts.StorageNodeID(), 1, 1, "/tmp")
+	_, err = snmgr.AddLogStreamReplica(context.Background(), ts.StorageNodeID(), 1, 1, "/tmp")
 	assert.Error(t, err)
 
 	snmgr.AddStorageNode(context.Background(), ts.StorageNodeID(), ts.Address())
-	err = snmgr.AddLogStreamReplica(context.Background(), ts.StorageNodeID(), 1, 1, "/tmp")
+	_, err = snmgr.AddLogStreamReplica(context.Background(), ts.StorageNodeID(), 1, 1, "/tmp")
 	assert.NoError(t, err)
 }
 

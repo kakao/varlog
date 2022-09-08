@@ -1566,7 +1566,7 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 				).AnyTimes()
 				mock.MockStorageNodeManager.EXPECT().AddLogStreamReplica(
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-				).Return(errors.New("error"))
+				).Return(snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("error"))
 			},
 		},
 		{
@@ -1591,7 +1591,7 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 				).AnyTimes()
 				mock.MockStorageNodeManager.EXPECT().AddLogStreamReplica(
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-				).Return(nil)
+				).Return(snpb.LogStreamReplicaMetadataDescriptor{}, nil)
 				mock.MockMetadataRepositoryManager.EXPECT().UpdateLogStream(
 					gomock.Any(), gomock.Any(),
 				).Return(errors.New("error"))
@@ -1622,7 +1622,7 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 				).AnyTimes()
 				mock.MockStorageNodeManager.EXPECT().AddLogStreamReplica(
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-				).Return(nil)
+				).Return(snpb.LogStreamReplicaMetadataDescriptor{}, nil)
 				mock.MockMetadataRepositoryManager.EXPECT().UpdateLogStream(
 					gomock.Any(), gomock.Any(),
 				).Return(nil)

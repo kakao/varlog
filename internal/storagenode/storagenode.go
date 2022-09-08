@@ -121,7 +121,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 
 func (sn *StorageNode) loadLogStreamReplicas(dataDirs []volume.DataDir) error {
 	for _, dataDir := range dataDirs {
-		if err := sn.runLogStreamReplica(context.Background(), dataDir.TopicID, dataDir.LogStreamID, dataDir.String()); err != nil {
+		if _, err := sn.runLogStreamReplica(context.Background(), dataDir.TopicID, dataDir.LogStreamID, dataDir.String()); err != nil {
 			return err
 		}
 	}
@@ -254,23 +254,28 @@ func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadata
 	return ret.(*snpb.StorageNodeMetadataDescriptor), nil
 }
 
-func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, snPath string) (string, error) {
+func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, snPath string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {
-		return "", errors.New("storage node: closed")
+		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("storage node: closed")
 	}
 
 	lsDirName := volume.LogStreamDirName(tpid, lsid)
 	lsPath := path.Join(snPath, lsDirName)
 
-	return lsPath, sn.runLogStreamReplica(ctx, tpid, lsid, lsPath)
+	lse, err := sn.runLogStreamReplica(ctx, tpid, lsid, lsPath)
+	if err != nil {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, err
+	}
+
+	return lse.Metadata()
 }
 
-func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID, lsPath string) error {
+func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID, lsPath string) (*logstream.Executor, error) {
 	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, lsid)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	stg, err := storage.New(append(
@@ -279,7 +284,7 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 		storage.WithLogger(sn.logger.Named("storage").With(zap.String("path", lsPath))),
 	)...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	lse, err := logstream.NewExecutor(append(
@@ -296,14 +301,14 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 		logstream.WithLogStreamMetrics(lsm),
 	)...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if _, loaded := sn.executors.LoadOrStore(tpid, lsid, lse); loaded {
 		_ = lse.Close()
-		return errors.New("storage node: logstream already exists")
+		return nil, errors.New("storage node: logstream already exists")
 	}
-	return nil
+	return lse, nil
 }
 
 func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
