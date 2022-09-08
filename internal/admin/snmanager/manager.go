@@ -194,7 +194,7 @@ func (sm *snManager) AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDe
 	for i := range lsd.GetReplicas() {
 		rd := lsd.Replicas[i]
 		g.Go(func() error {
-			return sm.addLogStreamReplica(ctx, rd.StorageNodeID, tpid, lsid, rd.Path)
+			return sm.addLogStreamReplica(ctx, rd.StorageNodeID, tpid, lsid, rd.StorageNodePath)
 		})
 	}
 	return g.Wait()
@@ -252,7 +252,7 @@ func (sm *snManager) Seal(ctx context.Context, tpid types.TopicID, lsid types.Lo
 			LocalHighWatermark: varlogpb.LogSequenceNumber{
 				GLSN: highWatermark,
 			},
-			Path: replica.GetPath(),
+			Path: replica.GetStorageNodePath(),
 		})
 	}
 	sm.logger.Info("seal result", zap.Reflect("logstream_meta", lsmetaDesc))

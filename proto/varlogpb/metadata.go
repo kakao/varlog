@@ -113,7 +113,7 @@ func (l *LogStreamDescriptor) IsReplica(snID types.StorageNodeID) bool {
 }
 
 func (r *ReplicaDescriptor) valid() bool {
-	return r != nil && len(r.Path) != 0
+	return r != nil && len(r.StorageNodePath) != 0
 }
 
 func DiffReplicaDescriptorSet(xs []*ReplicaDescriptor, ys []*ReplicaDescriptor) []*ReplicaDescriptor {

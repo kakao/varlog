@@ -176,12 +176,12 @@ func TestStorageNodeManager_AddLogStream(t *testing.T) {
 		LogStreamID: 1,
 		Replicas: []*varlogpb.ReplicaDescriptor{
 			{
-				StorageNodeID: ts1.StorageNodeID(),
-				Path:          "/tmp",
+				StorageNodeID:   ts1.StorageNodeID(),
+				StorageNodePath: "/tmp",
 			},
 			{
-				StorageNodeID: ts2.StorageNodeID(),
-				Path:          "/tmp",
+				StorageNodeID:   ts2.StorageNodeID(),
+				StorageNodePath: "/tmp",
 			},
 		},
 	})
@@ -197,12 +197,12 @@ func TestStorageNodeManager_AddLogStream(t *testing.T) {
 		LogStreamID: 1,
 		Replicas: []*varlogpb.ReplicaDescriptor{
 			{
-				StorageNodeID: ts1.StorageNodeID(),
-				Path:          "/tmp",
+				StorageNodeID:   ts1.StorageNodeID(),
+				StorageNodePath: "/tmp",
 			},
 			{
-				StorageNodeID: ts2.StorageNodeID(),
-				Path:          "/tmp",
+				StorageNodeID:   ts2.StorageNodeID(),
+				StorageNodePath: "/tmp",
 			},
 		},
 	})
@@ -217,12 +217,12 @@ func TestStorageNodeManager_AddLogStream(t *testing.T) {
 		LogStreamID: 1,
 		Replicas: []*varlogpb.ReplicaDescriptor{
 			{
-				StorageNodeID: ts1.StorageNodeID(),
-				Path:          "/tmp",
+				StorageNodeID:   ts1.StorageNodeID(),
+				StorageNodePath: "/tmp",
 			},
 			{
-				StorageNodeID: ts2.StorageNodeID(),
-				Path:          "/tmp",
+				StorageNodeID:   ts2.StorageNodeID(),
+				StorageNodePath: "/tmp",
 			},
 		},
 	})
@@ -271,12 +271,12 @@ func TestStorageNodeManager_Seal(t *testing.T) {
 				LogStreamID: lsid,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: ts1.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts1.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 					{
-						StorageNodeID: ts2.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts2.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 				},
 			},
@@ -349,12 +349,12 @@ func TestStorageNodeManager_Unseal(t *testing.T) {
 				LogStreamID: lsid,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: ts1.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts1.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 					{
-						StorageNodeID: ts2.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts2.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 				},
 			},
@@ -434,12 +434,12 @@ func TestStorageNodeManager_Trim(t *testing.T) {
 				LogStreamID: lsid1,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: ts1.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts1.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 					{
-						StorageNodeID: ts2.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts2.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 				},
 			},
@@ -461,12 +461,12 @@ func TestStorageNodeManager_Trim(t *testing.T) {
 				LogStreamID: lsid1,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: ts1.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts1.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 					{
-						StorageNodeID: ts2.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts2.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 				},
 			},
@@ -475,12 +475,12 @@ func TestStorageNodeManager_Trim(t *testing.T) {
 				LogStreamID: lsid2,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: ts1.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts1.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 					{
-						StorageNodeID: ts2.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts2.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 				},
 			},
@@ -568,8 +568,8 @@ func TestStorageNodeManager_Sync(t *testing.T) {
 				LogStreamID: lsid,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: snid1,
-						Path:          "/tmp",
+						StorageNodeID:   snid1,
+						StorageNodePath: "/tmp",
 					},
 				},
 			},
@@ -593,12 +593,12 @@ func TestStorageNodeManager_Sync(t *testing.T) {
 				LogStreamID: lsid,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: ts1.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts1.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 					{
-						StorageNodeID: ts2.StorageNodeID(),
-						Path:          "/tmp",
+						StorageNodeID:   ts2.StorageNodeID(),
+						StorageNodePath: "/tmp",
 					},
 				},
 			},

@@ -99,26 +99,28 @@ type Admin interface {
 	// DescribeTopic returns detailed metadata of the topic.
 	// Deprecated: Use ListLogStreams.
 	DescribeTopic(ctx context.Context, topicID types.TopicID, opts ...AdminCallOption) (*vmspb.DescribeTopicResponse, error)
-	// AddLogStream adds a new log stream to the topic identified by the
-	// argument tpid.
 	// AddLogStream adds a new log stream to the topic tpid.
-	// The admin chooses proper replicas if the argument replicas are
-	// empty.
-	// Otherwise, if the argument replicas are defined, the following
-	// conditions should be satisfied:
 	//
-	//  - The number of replicas should be equal to the replication factor.
-	//  - Each storage node for each replica should exist.
-	//  - The log stream, which tries to add,  should not exist.
+	// The admin server chooses proper replicas if the argument replicas are empty.
+	// Otherwise, if the argument replicas are defined, the admin server
+	// creates a new log stream with the given configuration by the
+	// argument replicas. Each
+	// `proto/varlogpb.(ReplicaDescriptor).StorageNodePath` in the argument
+	// replicas should be set. In this case, the following conditions
+	// should be satisfied:
+	// - The number of replicas should be equal to the replication factor.
+	// - Each storage node for each replica should exist.
+	// - The log stream, which tries to add,  should not exist.
 	//
-	// Internally, it waits for the log stream for being sealed and
-	// unsealed.
+	// Internally, it waits for the log stream for being sealed and unsealed.
 	AddLogStream(ctx context.Context, tpid types.TopicID, replicas []*varlogpb.ReplicaDescriptor, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error)
 	// UpdateLogStream changes replicas of the log stream.
 	// This method swaps two replicas - the argument poppedReplica and
 	// pushedReplica. The poppedReplica is the old replica that belonged to
 	// the log stream, however, pushedReplica is the new replica to be
-	// added to the log stream.
+	// added to the log stream. Note that
+	// `proto/varlogpb.(ReplicaDescriptor).StorageNodePath` in the
+	// poppedReplica and pushedReplica should be set.
 	UpdateLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, poppedReplica varlogpb.ReplicaDescriptor, pushedReplica varlogpb.ReplicaDescriptor, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error)
 	// UnregisterLogStream unregisters a log stream from the cluster.
 	UnregisterLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, opts ...AdminCallOption) error
@@ -361,14 +363,14 @@ func (c *admin) DescribeTopic(ctx context.Context, topicID types.TopicID, opts .
 	return rsp, err
 }
 
-func (c *admin) AddLogStream(ctx context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
+func (c *admin) AddLogStream(ctx context.Context, topicID types.TopicID, replicas []*varlogpb.ReplicaDescriptor, opts ...AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
 	cfg := newAdminCallConfig(c.adminCallOptions, opts)
 	ctx, cancel := cfg.withTimeoutContext(ctx)
 	defer cancel()
 
 	rsp, err := c.rpcClient.AddLogStream(ctx, &vmspb.AddLogStreamRequest{
 		TopicID:  topicID,
-		Replicas: logStreamReplicas,
+		Replicas: replicas,
 	})
 	return rsp.GetLogStream(), err
 }

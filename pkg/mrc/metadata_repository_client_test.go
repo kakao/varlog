@@ -89,7 +89,7 @@ func TestMRClientRegisterStorageNode(t *testing.T) {
 			})
 		})
 
-		Convey("When passed Path in StorageDescriptor is empty", func() {
+		Convey("When passed StorageNodePath in StorageDescriptor is empty", func() {
 			Convey("Then the MRClient should return an ErrInvalid", func() {
 				sn := &varlogpb.StorageNodeDescriptor{
 					StorageNode: varlogpb.StorageNode{
@@ -190,7 +190,7 @@ func TestMRClientRegisterLogStream(t *testing.T) {
 			})
 		})
 
-		Convey("When passed Path in Replica is empty", func() {
+		Convey("When passed StorageNodePath in Replica is empty", func() {
 			Convey("Then the MRClient should return an ErrInvalid", func() {
 				ls := &varlogpb.LogStreamDescriptor{
 					LogStreamID: types.LogStreamID(1),
@@ -214,8 +214,8 @@ func TestMRClientRegisterLogStream(t *testing.T) {
 					LogStreamID: types.LogStreamID(1),
 					Replicas: []*varlogpb.ReplicaDescriptor{
 						{
-							StorageNodeID: types.StorageNodeID(0),
-							Path:          "path",
+							StorageNodeID:   types.StorageNodeID(0),
+							StorageNodePath: "path",
 						},
 					},
 				}
@@ -233,8 +233,8 @@ func TestMRClientRegisterLogStream(t *testing.T) {
 					LogStreamID: types.LogStreamID(1),
 					Replicas: []*varlogpb.ReplicaDescriptor{
 						{
-							StorageNodeID: types.StorageNodeID(0),
-							Path:          "path",
+							StorageNodeID:   types.StorageNodeID(0),
+							StorageNodePath: "path",
 						},
 					},
 				}

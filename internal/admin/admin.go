@@ -199,7 +199,7 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 						LogStreamID: lsd.LogStreamID,
 					},
 				},
-				Path: rd.Path,
+				Path: rd.StorageNodePath,
 			})
 		}
 	}
@@ -239,7 +239,7 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 									LogStreamID: lsd.LogStreamID,
 								},
 							},
-							Path: rd.Path,
+							Path: rd.StorageNodePath,
 						},
 					)
 				}
@@ -636,7 +636,7 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	// NOTE (jun): Name of the method - updateLogStream can be confused.
 	// updateLogStream can change only replicas. To update status, use Seal or Unseal.
 	if poppedReplica.StorageNodeID == pushedReplica.StorageNodeID {
-		if poppedReplica.Path != pushedReplica.Path {
+		if poppedReplica.StorageNodePath != pushedReplica.StorageNodePath {
 			return nil, status.Errorf(codes.Unimplemented, "update log stream: moving data directory")
 		}
 		return nil, status.Errorf(codes.InvalidArgument, "update log stream: the same replica")
@@ -691,7 +691,7 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
 	newLSDesc.Replicas[popIdx] = &pushedReplica
 
-	if err := adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetPath()); err != nil {
+	if err := adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetStorageNodePath()); err != nil {
 		return nil, errors.Wrap(err, "update log stream")
 	}
 

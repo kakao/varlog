@@ -247,8 +247,8 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 		for i, j := range c.vt.rng.Perm(len(snIDs))[:c.vt.replicationFactor] {
 			snID := snIDs[j]
 			logStreamDesc.Replicas[i] = &varlogpb.ReplicaDescriptor{
-				StorageNodeID: c.vt.storageNodes[snID].StorageNode.StorageNodeID,
-				Path:          c.vt.storageNodes[snID].Storages[0].Path,
+				StorageNodeID:   c.vt.storageNodes[snID].StorageNode.StorageNodeID,
+				StorageNodePath: c.vt.storageNodes[snID].Storages[0].Path,
 			}
 		}
 	} else {
@@ -268,7 +268,7 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 
 func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica varlogpb.ReplicaDescriptor, pushedReplica varlogpb.ReplicaDescriptor, opts ...varlog.AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
 	if poppedReplica.StorageNodeID == pushedReplica.StorageNodeID {
-		if poppedReplica.Path != pushedReplica.Path {
+		if poppedReplica.StorageNodePath != pushedReplica.StorageNodePath {
 			return nil, status.Errorf(codes.Unimplemented, "update log stream: moving data directory")
 		}
 		return nil, status.Errorf(codes.InvalidArgument, "update log stream: the same replica")
@@ -403,7 +403,7 @@ func (c *testAdmin) Seal(_ context.Context, topicID types.TopicID, logStreamID t
 			LocalHighWatermark: varlogpb.LogSequenceNumber{
 				GLSN: c.vt.globalHighWatermark(topicID),
 			},
-			Path: replica.Path,
+			Path: replica.StorageNodePath,
 		}
 	}
 

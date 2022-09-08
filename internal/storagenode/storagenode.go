@@ -320,7 +320,7 @@ func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.Topi
 	_ = lse.Close()
 	telemetry.UnregisterLogStreamMetrics(sn.metrics, lsid)
 	// TODO (jun): Is removing data path optional or default behavior?
-	// if err := os.RemoveAll(lse.Path()); err != nil {
+	// if err := os.RemoveAll(lse.StorageNodePath()); err != nil {
 	//	sn.logger.Warn("error while removing log stream path")
 	// }
 	return nil

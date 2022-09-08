@@ -204,7 +204,7 @@ func (s *repository) refresh(ctx context.Context) {
 							LogStreamID: lsd.LogStreamID,
 						},
 					},
-					Path: rd.Path,
+					Path: rd.StorageNodePath,
 				}
 			}
 			continue
@@ -223,7 +223,7 @@ func (s *repository) refresh(ctx context.Context) {
 						LogStreamID: lsd.LogStreamID,
 					},
 				},
-				Path: rd.Path,
+				Path: rd.StorageNodePath,
 			}
 			// To reset the status of the log stream, set it as
 			// LogStreamStatusRunning

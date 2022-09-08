@@ -163,12 +163,12 @@ var (
 		Status:      varlogpb.LogStreamStatusRunning,
 		Replicas: []*varlogpb.ReplicaDescriptor{
 			{
-				StorageNodeID: snid1,
-				Path:          "/tmp",
+				StorageNodeID:   snid1,
+				StorageNodePath: "/tmp",
 			},
 			{
-				StorageNodeID: snid2,
-				Path:          "/tmp",
+				StorageNodeID:   snid2,
+				StorageNodePath: "/tmp",
 			},
 		},
 	}
@@ -563,7 +563,7 @@ func TestStorageNode(t *testing.T) {
 			Status: varlogpb.StorageNodeStatusRunning,
 			Storages: []varlogpb.StorageDescriptor{
 				{
-					Path: "/tmp/data1",
+					StorageNodePath: "/tmp/data1",
 				},
 			},
 		}, nil)
@@ -654,7 +654,7 @@ func TestLogStream(t *testing.T) {
 			Replicas: []*varlogpb.ReplicaDescriptor{
 				{
 					StorageNodeID: types.StorageNodeID(1),
-					Path:          "/tmp/data1",
+					StorageNodePath:          "/tmp/data1",
 				},
 			},
 		}, nil,

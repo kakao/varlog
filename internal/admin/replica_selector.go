@@ -83,7 +83,7 @@ func (sel *balancedReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Rep
 			if i == 0 {
 				st.primaryReplicas++
 			}
-			st.assignedPaths[rd.Path] = struct{}{}
+			st.assignedPaths[rd.StorageNodePath] = struct{}{}
 			stats[storageNodeID] = st
 		}
 	}
@@ -129,8 +129,8 @@ func (sel *balancedReplicaSelector) Select(ctx context.Context) ([]*varlogpb.Rep
 			}
 		}
 		rds = append(rds, &varlogpb.ReplicaDescriptor{
-			StorageNodeID: st.storageNodeID,
-			Path:          path,
+			StorageNodeID:   st.storageNodeID,
+			StorageNodePath: path,
 		})
 	}
 
