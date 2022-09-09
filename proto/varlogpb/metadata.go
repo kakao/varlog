@@ -116,30 +116,6 @@ func (r *ReplicaDescriptor) valid() bool {
 	return r != nil && len(r.StorageNodePath) != 0
 }
 
-func DiffReplicaDescriptorSet(xs []*ReplicaDescriptor, ys []*ReplicaDescriptor) []*ReplicaDescriptor {
-	xss := makeReplicaDescriptorDiffSet(xs)
-	yss := makeReplicaDescriptorDiffSet(ys)
-	for s := range yss {
-		delete(xss, s)
-	}
-	if len(xss) == 0 {
-		return nil
-	}
-	ret := make([]*ReplicaDescriptor, 0, len(xss))
-	for _, x := range xss {
-		ret = append(ret, x)
-	}
-	return ret
-}
-
-func makeReplicaDescriptorDiffSet(replicas []*ReplicaDescriptor) map[string]*ReplicaDescriptor {
-	set := make(map[string]*ReplicaDescriptor, len(replicas))
-	for _, replica := range replicas {
-		set[replica.String()] = replica
-	}
-	return set
-}
-
 func (m *MetadataDescriptor) Must() *MetadataDescriptor {
 	if m == nil {
 		panic("MetadataDescriptor is nil")

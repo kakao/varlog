@@ -1,8 +1,6 @@
 package varlogpb
 
 import (
-	"sort"
-	"strconv"
 	"testing"
 )
 
@@ -38,35 +36,4 @@ func TestLogStreamStatus(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestDiffReplicaDescriptorSet(t *testing.T) {
-	var tests []struct {
-		xs       []*ReplicaDescriptor
-		ys       []*ReplicaDescriptor
-		expected []*ReplicaDescriptor
-	}
-
-	for i := range tests {
-		test := tests[i]
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			actual := DiffReplicaDescriptorSet(test.xs, test.ys)
-			if len(actual) != len(test.expected) {
-				t.Error("size mismatch")
-			}
-			sort.Slice(actual, func(i, j int) bool {
-				return actual[i].String() < actual[j].String()
-			})
-			sort.Slice(test.expected, func(i, j int) bool {
-				return test.expected[i].String() < test.expected[j].String()
-			})
-			for i := 0; i < len(actual); i++ {
-				x, y := actual[i], test.expected[i]
-				if !x.Equal(y) {
-					t.Errorf("inequal element: actual=%v expected=%v", x.String(), y.String())
-				}
-			}
-		})
-	}
-
 }
