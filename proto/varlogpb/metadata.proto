@@ -124,6 +124,9 @@ message ReplicaDescriptor {
   // StorageNodePath is a parent directory where the data path for the replica
   // exists.
   string storage_node_path = 2 [(gogoproto.jsontag) = "storageNodePath"];
+  // DataPath is a directory where the log stream replica stores its data, for
+  // instance, logs appended, commit history, etc.
+  string data_path = 3 [(gogoproto.jsontag) = "dataPath"];
 }
 
 // TopicDescriptor is metadata to persist information of a topic in the metadata

@@ -1213,6 +1213,7 @@ func TestAdmin_AddLogStream(t *testing.T) {
 		replicationFactor = 2
 		cid               = types.ClusterID(1)
 		tpid              = types.TopicID(1)
+		lsid              = types.LogStreamID(1)
 		snid1             = types.StorageNodeID(1)
 		snid2             = types.StorageNodeID(2)
 	)
@@ -1297,7 +1298,7 @@ func TestAdmin_AddLogStream(t *testing.T) {
 						},
 					}, nil,
 				).AnyTimes()
-				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(errors.New("error"))
+				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(nil, errors.New("error"))
 			},
 		},
 		{
@@ -1328,7 +1329,7 @@ func TestAdmin_AddLogStream(t *testing.T) {
 						},
 					}, nil,
 				).AnyTimes()
-				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(nil)
+				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(&varlogpb.LogStreamDescriptor{}, nil)
 				mock.MockMetadataRepositoryManager.EXPECT().RegisterLogStream(gomock.Any(), gomock.Any()).Return(errors.New("error"))
 			},
 		},
@@ -1360,7 +1361,7 @@ func TestAdmin_AddLogStream(t *testing.T) {
 						},
 					}, nil,
 				).AnyTimes()
-				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(nil)
+				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(&varlogpb.LogStreamDescriptor{}, nil)
 				mock.MockMetadataRepositoryManager.EXPECT().RegisterLogStream(gomock.Any(), gomock.Any()).Return(nil)
 
 				// for sealed
@@ -1403,7 +1404,20 @@ func TestAdmin_AddLogStream(t *testing.T) {
 						},
 					}, nil,
 				).Times(3)
-				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(nil)
+				mock.MockStorageNodeManager.EXPECT().AddLogStream(gomock.Any(), gomock.Any()).Return(&varlogpb.LogStreamDescriptor{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					Replicas: []*varlogpb.ReplicaDescriptor{
+						{
+							StorageNodeID:   snid1,
+							StorageNodePath: snpath1,
+						},
+						{
+							StorageNodeID:   snid2,
+							StorageNodePath: snpath2,
+						},
+					},
+				}, nil)
 				mock.MockMetadataRepositoryManager.EXPECT().RegisterLogStream(gomock.Any(), gomock.Any()).Return(nil)
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
 					&varlogpb.MetadataDescriptor{
@@ -1425,7 +1439,7 @@ func TestAdmin_AddLogStream(t *testing.T) {
 						},
 						LogStreams: []*varlogpb.LogStreamDescriptor{
 							{
-								LogStreamID: types.MinLogStreamID,
+								LogStreamID: lsid,
 								Status:      varlogpb.LogStreamStatusRunning,
 							},
 						},

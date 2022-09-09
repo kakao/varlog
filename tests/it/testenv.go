@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"testing"
@@ -625,6 +626,15 @@ func (clus *VarlogCluster) AddLS(t *testing.T, topicID types.TopicID) types.LogS
 
 	logStreamDesc, err := clus.vmsCL.AddLogStream(context.Background(), topicID, nil)
 	require.NoError(t, err)
+	require.Len(t, logStreamDesc.Replicas, clus.nrRep)
+	for _, replica := range logStreamDesc.Replicas {
+		// Verify the data path and storage node path for each ReplicaDescriptor.
+		dataDir, err := volume.ParseDataDir(replica.DataPath)
+		require.NoError(t, err)
+		snpath := filepath.Join(dataDir.Volume, volume.StorageNodeDirName(dataDir.ClusterID, dataDir.StorageNodeID))
+		require.Equal(t, replica.StorageNodePath, snpath)
+	}
+
 	log.Printf("AddLS: AddLogStream: %+v", logStreamDesc)
 
 	logStreamID := logStreamDesc.GetLogStreamID()
@@ -644,12 +654,14 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
 
+	var oldSNPath string
 	// check replicas
 	require.Contains(t, clus.replicas, lsID)
 	rds := clus.replicas[lsID]
 	require.Condition(t, func() bool {
 		for _, rd := range rds {
 			if rd.GetStorageNodeID() == oldsn {
+				oldSNPath = rd.StorageNodePath
 				return true
 			}
 		}
@@ -666,11 +678,20 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types
 		StorageNodePath: path,
 	}
 	oldReplica := varlogpb.ReplicaDescriptor{
-		StorageNodeID: oldsn,
+		StorageNodeID:   oldsn,
+		StorageNodePath: oldSNPath,
 	}
 
-	_, err = clus.vmsCL.UpdateLogStream(context.Background(), tpID, lsID, oldReplica, newReplica)
+	lsd, err := clus.vmsCL.UpdateLogStream(context.Background(), tpID, lsID, oldReplica, newReplica)
 	require.NoError(t, err)
+	require.Len(t, lsd.Replicas, clus.nrRep)
+	for _, replica := range lsd.Replicas {
+		// Verify the data path and storage node path for each ReplicaDescriptor.
+		dataDir, err := volume.ParseDataDir(replica.DataPath)
+		require.NoError(t, err)
+		snpath := filepath.Join(dataDir.Volume, volume.StorageNodeDirName(dataDir.ClusterID, dataDir.StorageNodeID))
+		require.Equal(t, replica.StorageNodePath, snpath)
+	}
 
 	// update replicas
 	for i := range rds {

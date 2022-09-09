@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+
+	"github.com/kakao/varlog/internal/storagenode/volume"
 
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
@@ -779,11 +782,13 @@ func TestVarlogFailoverUpdateLS(t *testing.T) {
 }
 
 func TestAdmin_ListStorageNodes(t *testing.T) {
-	const replicationFactor = 3
-	const numStorageNodes = replicationFactor
-	const numTopics = 1
-	const numLogStreams = 2
-	const tick = 100 * time.Millisecond
+	const (
+		replicationFactor = 3
+		numStorageNodes   = replicationFactor
+		numTopics         = 1
+		numLogStreams     = 2
+		tick              = 100 * time.Millisecond
+	)
 
 	clus := it.NewVarlogCluster(t,
 		it.WithReplicationFactor(replicationFactor),
@@ -798,11 +803,21 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 	)
 	defer clus.Close(t)
 
-	old, err := clus.GetVMSClient(t).ListStorageNodes(context.Background())
+	olds, err := clus.GetVMSClient(t).ListStorageNodes(context.Background())
 	require.NoError(t, err)
-	require.Len(t, old, numStorageNodes)
-	for i := 0; i < numStorageNodes; i++ {
-		require.Len(t, old[i].LogStreamReplicas, numLogStreams)
+	require.Len(t, olds, numStorageNodes)
+	for _, old := range olds {
+		require.Len(t, old.LogStreamReplicas, numLogStreams)
+		// Verify storage node paths.
+		for _, storage := range old.Storages {
+			snpathName := filepath.Base(storage.Path)
+			assert.Equal(t, volume.StorageNodeDirName(old.ClusterID, old.StorageNodeID), snpathName)
+		}
+		// Verify data paths.
+		for _, replica := range old.LogStreamReplicas {
+			_, err := volume.ParseDataDir(replica.Path)
+			assert.NoError(t, err)
+		}
 	}
 
 	clus.RestartVMS(t)
@@ -812,32 +827,42 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return false
 		}
-		if !assert.Len(t, snms, len(old)) {
+		if !assert.Len(t, snms, len(olds)) {
 			return false
 		}
 		for i := 0; i < numStorageNodes; i++ {
-			if !assert.Equal(t, old[i].StorageNodeID, snms[i].StorageNodeID) {
+			snm := snms[i]
+			old := olds[i]
+			if !assert.Equal(t, old.StorageNodeID, snm.StorageNodeID) {
 				return false
 			}
-			if !assert.Len(t, snms[i].LogStreamReplicas, len(old[i].LogStreamReplicas)) {
+			if !assert.Len(t, snm.LogStreamReplicas, len(old.LogStreamReplicas)) {
 				return false
 			}
-			for j := range old[i].LogStreamReplicas {
-				if !assert.Equal(t, old[i].LogStreamReplicas[j].Path, snms[i].LogStreamReplicas[j].Path) {
+			for j := range old.LogStreamReplicas {
+				_, err := volume.ParseDataDir(snm.LogStreamReplicas[j].Path)
+				assert.NoError(t, err)
+				if !assert.Equal(t, old.LogStreamReplicas[j].Path, snm.LogStreamReplicas[j].Path) {
 					return false
 				}
 			}
 		}
-		return snms[0].LastHeartbeatTime.After(old[0].LastHeartbeatTime)
-	}, 10*tick, tick)
+		return snms[0].LastHeartbeatTime.After(olds[0].LastHeartbeatTime)
+	}, 10*tick, tick/10)
 }
 
 func TestAdmin_GetStorageNode(t *testing.T) {
-	const numStorageNodes = 1
-	const tick = 100 * time.Millisecond
+	const (
+		replicationFactor = 1
+		numStorageNodes   = replicationFactor
+		tick              = 100 * time.Millisecond
+	)
 
 	clus := it.NewVarlogCluster(t,
+		it.WithReplicationFactor(replicationFactor),
 		it.WithNumberOfStorageNodes(numStorageNodes),
+		it.WithNumberOfTopics(1),
+		it.WithNumberOfLogStreams(1),
 		it.WithVMSOptions(
 			admin.WithStorageNodeWatcherOptions(
 				snwatcher.WithTick(tick),
@@ -850,14 +875,26 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 
 	old, err := clus.GetVMSClient(t).GetStorageNode(context.Background(), snid)
 	require.NoError(t, err)
+	// Verify storage node paths.
+	for _, storage := range old.Storages {
+		snpathName := filepath.Base(storage.Path)
+		assert.Equal(t, volume.StorageNodeDirName(old.ClusterID, old.StorageNodeID), snpathName)
+	}
+	// Verify data paths.
+	for _, replica := range old.LogStreamReplicas {
+		_, err := volume.ParseDataDir(replica.Path)
+		assert.NoError(t, err)
+	}
 
 	clus.RestartVMS(t)
 
 	require.Eventually(t, func() bool {
 		snm, err := clus.GetVMSClient(t).GetStorageNode(context.Background(), snid)
-		if !assert.NoError(t, err) {
-			return false
+		require.NoError(t, err)
+		require.Equal(t, len(old.LogStreamReplicas), len(snm.LogStreamReplicas))
+		for i := range snm.LogStreamReplicas {
+			require.Equal(t, old.LogStreamReplicas[i].Path, snm.LogStreamReplicas[i].Path)
 		}
 		return snm.LastHeartbeatTime.After(old.LastHeartbeatTime)
-	}, 10*tick, tick)
+	}, 10*tick, tick/10)
 }

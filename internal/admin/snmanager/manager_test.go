@@ -171,7 +171,7 @@ func TestStorageNodeManager_AddLogStream(t *testing.T) {
 	ts1.MockManagementServer.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any()).Return(
 		&snpb.AddLogStreamReplicaResponse{}, nil,
 	).AnyTimes()
-	err = snmgr.AddLogStream(context.Background(), &varlogpb.LogStreamDescriptor{
+	_, err = snmgr.AddLogStream(context.Background(), &varlogpb.LogStreamDescriptor{
 		TopicID:     1,
 		LogStreamID: 1,
 		Replicas: []*varlogpb.ReplicaDescriptor{
@@ -192,7 +192,7 @@ func TestStorageNodeManager_AddLogStream(t *testing.T) {
 	ts2.MockManagementServer.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any()).Return(
 		nil, errors.New("error"),
 	).Times(1)
-	err = snmgr.AddLogStream(context.Background(), &varlogpb.LogStreamDescriptor{
+	_, err = snmgr.AddLogStream(context.Background(), &varlogpb.LogStreamDescriptor{
 		TopicID:     1,
 		LogStreamID: 1,
 		Replicas: []*varlogpb.ReplicaDescriptor{
@@ -212,7 +212,7 @@ func TestStorageNodeManager_AddLogStream(t *testing.T) {
 	ts2.MockManagementServer.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any()).Return(
 		&snpb.AddLogStreamReplicaResponse{}, nil,
 	).AnyTimes()
-	err = snmgr.AddLogStream(context.Background(), &varlogpb.LogStreamDescriptor{
+	_, err = snmgr.AddLogStream(context.Background(), &varlogpb.LogStreamDescriptor{
 		TopicID:     1,
 		LogStreamID: 1,
 		Replicas: []*varlogpb.ReplicaDescriptor{

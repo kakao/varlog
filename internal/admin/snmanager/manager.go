@@ -40,10 +40,10 @@ type StorageNodeManager interface {
 	RemoveStorageNode(snid types.StorageNodeID)
 
 	// AddLogStream adds a new log stream to storage nodes.
-	AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDescriptor) error
+	AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error)
 
 	// AddLogStreamReplica adds a new log stream replica to the storage node whose ID is the argument snid.
-	// The new log stream replica is identified by the argument tpid and lsid.
+	// The new log stream replica is identified by the argument tpid and lsid. The argument path is storage node path, for example `/data/cid_1_snid_1`.
 	AddLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) (snpb.LogStreamReplicaMetadataDescriptor, error)
 
 	RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error
@@ -187,18 +187,23 @@ func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.Storage
 	return mc.AddLogStreamReplica(ctx, tpid, lsid, path)
 }
 
-func (sm *snManager) AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDescriptor) error {
+func (sm *snManager) AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	tpid := lsd.GetTopicID()
 	lsid := lsd.GetLogStreamID()
 	g, ctx := errgroup.WithContext(ctx)
 	for i := range lsd.GetReplicas() {
-		rd := lsd.Replicas[i]
+		rdIdx := i
 		g.Go(func() error {
-			_, err := sm.addLogStreamReplica(ctx, rd.StorageNodeID, tpid, lsid, rd.StorageNodePath)
-			return err
+			rd := lsd.Replicas[rdIdx]
+			lsrmd, err := sm.addLogStreamReplica(ctx, rd.StorageNodeID, tpid, lsid, rd.StorageNodePath)
+			if err != nil {
+				return err
+			}
+			lsd.Replicas[rdIdx].DataPath = lsrmd.Path
+			return nil
 		})
 	}
-	return g.Wait()
+	return lsd, g.Wait()
 }
 
 func (sm *snManager) RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error {
