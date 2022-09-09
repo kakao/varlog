@@ -40,11 +40,12 @@ func (m *MockStorageNodeManager) EXPECT() *MockStorageNodeManagerMockRecorder {
 }
 
 // AddLogStream mocks base method.
-func (m *MockStorageNodeManager) AddLogStream(arg0 context.Context, arg1 *varlogpb.LogStreamDescriptor) error {
+func (m *MockStorageNodeManager) AddLogStream(arg0 context.Context, arg1 *varlogpb.LogStreamDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddLogStream", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*varlogpb.LogStreamDescriptor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // AddLogStream indicates an expected call of AddLogStream.

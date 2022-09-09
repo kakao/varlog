@@ -199,7 +199,7 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 						LogStreamID: lsd.LogStreamID,
 					},
 				},
-				Path: rd.StorageNodePath,
+				Path: rd.DataPath,
 			})
 		}
 	}
@@ -239,7 +239,7 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 									LogStreamID: lsd.LogStreamID,
 								},
 							},
-							Path: rd.StorageNodePath,
+							Path: rd.DataPath,
 						},
 					)
 				}
@@ -496,7 +496,7 @@ func (adm *Admin) describeTopic(ctx context.Context, tpid types.TopicID) (td var
 func (adm *Admin) addLogStream(ctx context.Context, tpid types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
 	lsdesc, err := adm.addLogStreamInternal(ctx, tpid, replicas)
 	if err != nil {
-		return lsdesc, err
+		return nil, err
 	}
 
 	if adm.enableAutoUnseal {
@@ -534,7 +534,7 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 		}
 	}
 
-	logStreamID := adm.lsidGen.Generate()
+	lsid := adm.lsidGen.Generate()
 
 	// duplicated by verifyLogStream
 	/*
@@ -547,9 +547,9 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 		}
 	*/
 
-	logStreamDesc := &varlogpb.LogStreamDescriptor{
+	lsd := &varlogpb.LogStreamDescriptor{
 		TopicID:     tpid,
-		LogStreamID: logStreamID,
+		LogStreamID: lsid,
 		Status:      varlogpb.LogStreamStatusSealing,
 		Replicas:    replicas,
 	}
@@ -558,17 +558,18 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 	if err != nil {
 		return nil, err
 	}
-	if err := adm.verifyLogStream(clusmeta, logStreamDesc); err != nil {
+	if err := adm.verifyLogStream(clusmeta, lsd); err != nil {
 		return nil, err
 	}
 
 	// TODO: Choose the primary - e.g., shuffle logStreamReplicaMetas
-	if err := adm.snmgr.AddLogStream(ctx, logStreamDesc); err != nil {
+	lsd, err = adm.snmgr.AddLogStream(ctx, lsd)
+	if err != nil {
 		return nil, err
 	}
 
 	// NB: RegisterLogStream returns nil if the logstream already exists.
-	return logStreamDesc, adm.mrmgr.RegisterLogStream(ctx, logStreamDesc)
+	return lsd, adm.mrmgr.RegisterLogStream(ctx, lsd)
 }
 
 func (adm *Admin) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor, lsdesc *varlogpb.LogStreamDescriptor) error {
@@ -691,9 +692,12 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
 	newLSDesc.Replicas[popIdx] = &pushedReplica
 
-	if _, err = adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetStorageNodePath()); err != nil {
+	lsrmd, err := adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetStorageNodePath())
+	if err != nil {
 		return nil, errors.Wrap(err, "update log stream")
 	}
+
+	newLSDesc.Replicas[popIdx].DataPath = lsrmd.Path
 
 	// To reset the status of the log stream, set it as LogStreamStatusRunning
 	defer func() {

@@ -1,1 +1,1 @@
-{"topicId":1,"logStreamId":1,"replicas":[{"storageNodeId":1,"storageNodePath":"/tmp"},{"storageNodeId":2,"storageNodePath":"/tmp"}],"head":{},"tail":{}}
+{"topicId":1,"logStreamId":1,"replicas":[{"storageNodeId":1,"storageNodePath":"/tmp","dataPath":""},{"storageNodeId":2,"storageNodePath":"/tmp","dataPath":""}],"head":{},"tail":{}}
