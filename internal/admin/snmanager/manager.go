@@ -44,7 +44,7 @@ type StorageNodeManager interface {
 
 	// AddLogStreamReplica adds a new log stream replica to the storage node whose ID is the argument snid.
 	// The new log stream replica is identified by the argument tpid and lsid.
-	AddLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) error
+	AddLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) (snpb.LogStreamReplicaMetadataDescriptor, error)
 
 	RemoveLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error
 
@@ -174,15 +174,15 @@ func (sm *snManager) RemoveStorageNode(snid types.StorageNodeID) {
 	}
 }
 
-func (sm *snManager) AddLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) error {
+func (sm *snManager) AddLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	return sm.addLogStreamReplica(ctx, snid, tpid, lsid, path)
 }
 
-func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) error {
+func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID, path string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	mc, err := sm.clients.Get(snid)
 	if err != nil {
 		sm.refresh(ctx) //nolint:errcheck,revive // TODO: Handle an error returned.
-		return errors.Wrap(verrors.ErrNotExist, "storage node")
+		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.Wrap(verrors.ErrNotExist, "storage node")
 	}
 	return mc.AddLogStreamReplica(ctx, tpid, lsid, path)
 }
@@ -194,7 +194,8 @@ func (sm *snManager) AddLogStream(ctx context.Context, lsd *varlogpb.LogStreamDe
 	for i := range lsd.GetReplicas() {
 		rd := lsd.Replicas[i]
 		g.Go(func() error {
-			return sm.addLogStreamReplica(ctx, rd.StorageNodeID, tpid, lsid, rd.StorageNodePath)
+			_, err := sm.addLogStreamReplica(ctx, rd.StorageNodeID, tpid, lsid, rd.StorageNodePath)
+			return err
 		})
 	}
 	return g.Wait()

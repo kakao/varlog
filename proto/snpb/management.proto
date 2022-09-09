@@ -20,8 +20,7 @@ option (gogoproto.goproto_sizecache_all) = false;
 
 message GetMetadataRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
 }
@@ -32,74 +31,62 @@ message GetMetadataResponse {
 
 message AddLogStreamReplicaRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
   int32 storage_node_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID"
   ];
   int32 topic_id = 3 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 4 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
-  varlogpb.StorageDescriptor storage = 5;
+  string storage_node_path = 5;
 }
 message AddLogStreamReplicaResponse {
-  // TODO (jun): Use LogStreamMetadataDescriptor
-  varlogpb.LogStreamDescriptor log_stream = 1;
+  LogStreamReplicaMetadataDescriptor log_stream_replica = 1
+      [(gogoproto.nullable) = false];
 }
 
 message RemoveLogStreamRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
   int32 storage_node_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID"
   ];
   int32 topic_id = 3 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 4 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
 }
 
 message SealRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
   int32 storage_node_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID"
   ];
   int32 topic_id = 3 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 4 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
   uint64 last_committed_glsn = 5 [
@@ -118,56 +105,48 @@ message SealResponse {
 
 message UnsealRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
   int32 storage_node_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID"
   ];
   int32 topic_id = 3 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 4 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
-  repeated varlogpb.LogStreamReplica replicas = 5 [(gogoproto.nullable) = false];
+  repeated varlogpb.LogStreamReplica replicas = 5
+      [(gogoproto.nullable) = false];
 }
 
 message SyncRequest {
   // FIXME: Use Replica instead of BackupNode
   message BackupNode {
     int32 storage_node_id = 1 [
-      (gogoproto.casttype) =
-          "github.com/kakao/varlog/pkg/types.StorageNodeID",
+      (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
       (gogoproto.customname) = "StorageNodeID"
     ];
     string address = 2;
   }
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
   int32 storage_node_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID"
   ];
   int32 topic_id = 3 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 4 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
   BackupNode backup = 5 [(gogoproto.nullable) = true];
@@ -179,8 +158,7 @@ message SyncResponse {
 
 message TrimRequest {
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   uint64 last_glsn = 2 [
@@ -191,15 +169,14 @@ message TrimRequest {
 
 message TrimResponse {
   map<int32, string> results = 1
-      [(gogoproto.castkey) =
-           "github.com/kakao/varlog/pkg/types.LogStreamID"];
+      [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.LogStreamID"];
 }
 
 // Management defines the public APIs for managing StorageNode.
 service Management {
   // GetMetadata returns metadata of StorageNode.
   rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
-  // AddLogStream adds a new LogStream to StorageNode.
+  // AddLogStreamReplica adds a new log stream replica to a storage node.
   rpc AddLogStreamReplica(AddLogStreamReplicaRequest)
       returns (AddLogStreamReplicaResponse) {}
   // RemoveLogStream removes a LogStream from StorageNode.

@@ -42,7 +42,7 @@ func (rc *EmptyStorageNodeClient) GetMetadata(context.Context) (*snpb.StorageNod
 	panic("not implemented")
 }
 
-func (rc *EmptyStorageNodeClient) AddLogStreamReplica(context.Context, types.TopicID, types.LogStreamID, string) error {
+func (rc *EmptyStorageNodeClient) AddLogStreamReplica(context.Context, types.TopicID, types.LogStreamID, string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	panic("not implemented")
 }
 
@@ -432,7 +432,7 @@ func (r *DummyStorageNodeClient) GetMetadata(context.Context) (*snpb.StorageNode
 	return meta, nil
 }
 
-func (r *DummyStorageNodeClient) AddLogStreamReplica(context.Context, types.TopicID, types.LogStreamID, string) error {
+func (r *DummyStorageNodeClient) AddLogStreamReplica(context.Context, types.TopicID, types.LogStreamID, string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	panic("not implemented")
 }
 

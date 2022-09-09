@@ -691,7 +691,7 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
 	newLSDesc.Replicas[popIdx] = &pushedReplica
 
-	if err := adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetStorageNodePath()); err != nil {
+	if _, err = adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetStorageNodePath()); err != nil {
 		return nil, errors.Wrap(err, "update log stream")
 	}
 

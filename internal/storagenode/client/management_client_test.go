@@ -62,7 +62,7 @@ func TestManagementClientAddLogStream(t *testing.T) {
 
 		Convey("When the length of passed path is zero", func() {
 			Convey("Then the ManagementClient should return an error", func() {
-				err := mc.AddLogStreamReplica(context.TODO(), types.TopicID(1), types.LogStreamID(1), "")
+				_, err := mc.AddLogStreamReplica(context.TODO(), types.TopicID(1), types.LogStreamID(1), "")
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -70,7 +70,7 @@ func TestManagementClientAddLogStream(t *testing.T) {
 		Convey("When the ManagementService returns an error", func() {
 			mockClient.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, verrors.ErrInternal)
 			Convey("Then the ManagementClient should return the error", func() {
-				err := mc.AddLogStreamReplica(context.TODO(), types.TopicID(1), types.LogStreamID(1), "/tmp")
+				_, err := mc.AddLogStreamReplica(context.TODO(), types.TopicID(1), types.LogStreamID(1), "/tmp")
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -78,7 +78,7 @@ func TestManagementClientAddLogStream(t *testing.T) {
 		Convey("When the ManagementService succeeds to add the LogStream", func() {
 			mockClient.EXPECT().AddLogStreamReplica(gomock.Any(), gomock.Any(), gomock.Any()).Return(&snpb.AddLogStreamReplicaResponse{}, nil)
 			Convey("Then the ManagementClient should return the path of the LogStream", func() {
-				err := mc.AddLogStreamReplica(context.TODO(), types.TopicID(1), types.LogStreamID(1), "/tmp")
+				_, err := mc.AddLogStreamReplica(context.TODO(), types.TopicID(1), types.LogStreamID(1), "/tmp")
 				So(err, ShouldBeNil)
 				// TODO(jun)
 				// Check returned path

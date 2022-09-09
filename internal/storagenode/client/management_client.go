@@ -20,7 +20,7 @@ import (
 type StorageNodeManagementClient interface {
 	Target() varlogpb.StorageNode
 	GetMetadata(ctx context.Context) (*snpb.StorageNodeMetadataDescriptor, error)
-	AddLogStreamReplica(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, path string) error
+	AddLogStreamReplica(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, snpath string) (snpb.LogStreamReplicaMetadataDescriptor, error)
 	RemoveLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error
 	Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error)
 	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.LogStreamReplica) error
@@ -83,21 +83,22 @@ func (c *ManagementClient) GetMetadata(ctx context.Context) (*snpb.StorageNodeMe
 	)
 }
 
-func (c *ManagementClient) AddLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, path string) error {
-	if stringsutil.Empty(path) {
-		return errors.New("snmcl: empty path")
+func (c *ManagementClient) AddLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, snpath string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
+	if stringsutil.Empty(snpath) {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("snmcl: empty path")
 	}
 	// FIXME(jun): Does the return value of AddLogStream need?
-	_, err := c.rpcClient.AddLogStreamReplica(ctx, &snpb.AddLogStreamReplicaRequest{
-		ClusterID:     c.cid,
-		StorageNodeID: c.target.StorageNodeID,
-		TopicID:       tpid,
-		LogStreamID:   lsid,
-		Storage: &varlogpb.StorageDescriptor{
-			Path: path,
-		},
+	rsp, err := c.rpcClient.AddLogStreamReplica(ctx, &snpb.AddLogStreamReplicaRequest{
+		ClusterID:       c.cid,
+		StorageNodeID:   c.target.StorageNodeID,
+		TopicID:         tpid,
+		LogStreamID:     lsid,
+		StorageNodePath: snpath,
 	})
-	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
+	if err != nil {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.Wrap(verrors.FromStatusError(err), "snmcl")
+	}
+	return rsp.LogStreamReplica, nil
 }
 
 func (c *ManagementClient) RemoveLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
