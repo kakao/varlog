@@ -482,7 +482,7 @@ func getPushPopReplicas(k8s *K8sVarlogCluster, meta *varlogpb.MetadataDescriptor
 		if !lsdesc.IsReplica(sndesc.StorageNodeID) {
 			push = &varlogpb.ReplicaDescriptor{
 				StorageNodeID: sndesc.StorageNodeID,
-				Path:          sndesc.Paths[0],
+				StorageNodePath:          sndesc.Paths[0],
 			}
 		}
 	}

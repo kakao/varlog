@@ -33,8 +33,8 @@ func (as *adminServer) AddLogStreamReplica(ctx context.Context, req *snpb.AddLog
 			Status:      varlogpb.LogStreamStatusRunning,
 			Replicas: []*varlogpb.ReplicaDescriptor{
 				{
-					StorageNodeID: as.sn.snid,
-					Path:          lsPath,
+					StorageNodeID:   as.sn.snid,
+					StorageNodePath: lsPath,
 				},
 			},
 		},

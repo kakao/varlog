@@ -115,7 +115,7 @@ func TestVarlogTest(t *testing.T) {
 		snIDSet := set.New(replicationFactor)
 		for _, replicaDesc := range lsDesc.Replicas {
 			require.NotContains(t, snIDSet, replicaDesc.StorageNodeID)
-			require.NotEmpty(t, replicaDesc.Path)
+			require.NotEmpty(t, replicaDesc.StorageNodePath)
 			snIDSet.Add(replicaDesc.StorageNodeID)
 		}
 		require.Len(t, snIDSet, replicationFactor)

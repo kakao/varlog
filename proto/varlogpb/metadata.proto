@@ -73,14 +73,12 @@ message LogStreamDescriptor {
   option (gogoproto.equal) = true;
 
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID",
     (gogoproto.jsontag) = "topicId"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID",
     (gogoproto.jsontag) = "logStreamId"
   ];
@@ -112,16 +110,20 @@ enum LogStreamStatus {
       [(gogoproto.enumvalue_customname) = "LogStreamStatusUnsealing"];
 }
 
+// ReplicaDescriptor represents a storage node and directory where a log stream
+// replica exists.
 message ReplicaDescriptor {
   option (gogoproto.equal) = true;
 
+  // StorageNodeID for a storage node where the replica is served.
   int32 storage_node_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID",
     (gogoproto.jsontag) = "storageNodeId"
   ];
-  string path = 2;
+  // StorageNodePath is a parent directory where the data path for the replica
+  // exists.
+  string storage_node_path = 2 [(gogoproto.jsontag) = "storageNodePath"];
 }
 
 // TopicDescriptor is metadata to persist information of a topic in the metadata
@@ -130,15 +132,13 @@ message TopicDescriptor {
   option (gogoproto.equal) = true;
 
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID",
     (gogoproto.jsontag) = "topicId"
   ];
   TopicStatus status = 2 [(gogoproto.jsontag) = "status"];
   repeated int32 log_streams = 3 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.nullable) = true,
     (gogoproto.jsontag) = "logStreams,omitempty"
   ];
@@ -159,8 +159,7 @@ message StorageNode {
   option (gogoproto.equal) = true;
 
   int32 storage_node_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID",
     (gogoproto.jsontag) = "storageNodeId"
   ];
@@ -172,14 +171,12 @@ message TopicLogStream {
   option (gogoproto.equal) = true;
 
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID",
     (gogoproto.jsontag) = "topicId"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID",
     (gogoproto.jsontag) = "logStreamId"
   ];
@@ -221,13 +218,11 @@ message LogEntryMeta {
   option (gogoproto.equal) = true;
 
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
   uint64 glsn = 3 [
@@ -250,8 +245,7 @@ message LogEntry {
 
 message CommitContext {
   uint64 version = 1
-      [(gogoproto.casttype) =
-           "github.com/kakao/varlog/pkg/types.Version"];
+      [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
   uint64 high_watermark = 2 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
     (gogoproto.customname) = "HighWatermark"
@@ -272,8 +266,7 @@ message CommitContext {
 
 message MetadataRepositoryNode {
   uint64 node_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID",
     (gogoproto.customname) = "NodeID",
     (gogoproto.jsontag) = "nodeId"
   ];

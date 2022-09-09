@@ -71,8 +71,8 @@ func TestStats_Report(t *testing.T) {
 				Status:      varlogpb.LogStreamStatusRunning,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: snid,
-						Path:          "/tmp",
+						StorageNodeID:   snid,
+						StorageNodePath: "/tmp",
 					},
 				},
 			},
@@ -145,8 +145,8 @@ func TestStats_UpdatedClusterMetadata(t *testing.T) {
 				Status:      varlogpb.LogStreamStatusRunning,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: snid,
-						Path:          "/tmp",
+						StorageNodeID:   snid,
+						StorageNodePath: "/tmp",
 					},
 				},
 			},
@@ -188,8 +188,8 @@ func TestStats_UpdatedClusterMetadata(t *testing.T) {
 				Status:      varlogpb.LogStreamStatusSealed,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: snid,
-						Path:          "/tmp",
+						StorageNodeID:   snid,
+						StorageNodePath: "/tmp",
 					},
 				},
 			},
@@ -246,8 +246,8 @@ func TestStats_UpdatedClusterMetadata(t *testing.T) {
 				Status:      varlogpb.LogStreamStatusRunning,
 				Replicas: []*varlogpb.ReplicaDescriptor{
 					{
-						StorageNodeID: snid + 1,
-						Path:          "/tmp",
+						StorageNodeID:   snid + 1,
+						StorageNodePath: "/tmp",
 					},
 				},
 			},

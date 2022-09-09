@@ -95,9 +95,9 @@ func TestAdminUpdateLogStream(t *testing.T) {
 				lsd, err := adm.GetLogStream(context.Background(), tpid, lsid)
 				require.NoError(t, err)
 				oldReplica.StorageNodeID = lsd.Replicas[0].StorageNodeID
-				oldReplica.Path = lsd.Replicas[0].Path
+				oldReplica.StorageNodePath = lsd.Replicas[0].StorageNodePath
 				newReplica.StorageNodeID = lsd.Replicas[1].StorageNodeID
-				newReplica.Path = lsd.Replicas[1].Path
+				newReplica.StorageNodePath = lsd.Replicas[1].StorageNodePath
 
 				_, err = adm.Seal(context.Background(), tpid, lsid)
 				require.NoError(t, err)
@@ -126,16 +126,16 @@ func TestAdminUpdateLogStream(t *testing.T) {
 			lsd, err := adm.GetLogStream(context.Background(), tpid, lsid)
 			require.NoError(t, err)
 			oldReplica := varlogpb.ReplicaDescriptor{
-				StorageNodeID: lsd.Replicas[replicationFactor-1].StorageNodeID,
-				Path:          lsd.Replicas[replicationFactor-1].Path,
+				StorageNodeID:   lsd.Replicas[replicationFactor-1].StorageNodeID,
+				StorageNodePath: lsd.Replicas[replicationFactor-1].StorageNodePath,
 			}
 
 			newsnid := clus.AddSN(t)
 			snm, err := adm.GetStorageNode(context.Background(), newsnid)
 			require.NoError(t, err)
 			newReplica := varlogpb.ReplicaDescriptor{
-				StorageNodeID: newsnid,
-				Path:          snm.Storages[0].Path,
+				StorageNodeID:   newsnid,
+				StorageNodePath: snm.Storages[0].Path,
 			}
 
 			tc.testf(t, clus, adm, tpid, lsid, oldReplica, newReplica)

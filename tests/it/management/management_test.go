@@ -141,8 +141,8 @@ func TestAddLogStreamWithNotExistedNode(t *testing.T) {
 
 	replicas := []*varlogpb.ReplicaDescriptor{
 		{
-			StorageNodeID: types.StorageNodeID(1),
-			Path:          "/fake",
+			StorageNodeID:   types.StorageNodeID(1),
+			StorageNodePath: "/fake",
 		},
 	}
 	topicID := clus.TopicIDs()[0]
@@ -164,8 +164,8 @@ func TestAddLogStreamManually(t *testing.T) {
 		require.NoError(t, err)
 
 		replicas = append(replicas, &varlogpb.ReplicaDescriptor{
-			StorageNodeID: snID,
-			Path:          snmd.Storages[0].Path,
+			StorageNodeID:   snID,
+			StorageNodePath: snmd.Storages[0].Path,
 		})
 	}
 
@@ -205,12 +205,12 @@ func TestAddLogStreamPartiallyRegistered(t *testing.T) {
 	// But the log stream was generated partially.
 	replicas := []*varlogpb.ReplicaDescriptor{
 		{
-			StorageNodeID: snid1,
-			Path:          snmd1.GetStorages()[0].GetPath(),
+			StorageNodeID:   snid1,
+			StorageNodePath: snmd1.GetStorages()[0].GetPath(),
 		},
 		{
-			StorageNodeID: snid2,
-			Path:          snmd2.GetStorages()[0].GetPath(),
+			StorageNodeID:   snid2,
+			StorageNodePath: snmd2.GetStorages()[0].GetPath(),
 		},
 	}
 	_, err = clus.GetVMSClient(t).AddLogStream(context.Background(), topicID, replicas)

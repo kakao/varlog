@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/kakao/varlog/internal/admin/snmanager"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
 	"github.com/kakao/varlog/internal/admin/stats"
+	"github.com/kakao/varlog/internal/storagenode/volume"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -233,6 +235,7 @@ func TestAdmin_GetStorageNode_FailedStorageNode(t *testing.T) {
 		reportInterval   = int(24 * time.Hour / tick)
 	)
 
+	snpath := filepath.Join("/tmp", volume.StorageNodeDirName(cid, snid))
 	createTime := time.Now().UTC()
 	failed := int32(0)
 	failReported := int32(0)
@@ -279,8 +282,8 @@ func TestAdmin_GetStorageNode_FailedStorageNode(t *testing.T) {
 					Status:      varlogpb.LogStreamStatusRunning,
 					Replicas: []*varlogpb.ReplicaDescriptor{
 						{
-							StorageNodeID: snid,
-							Path:          "/tmp",
+							StorageNodeID:   snid,
+							StorageNodePath: snpath,
 						},
 					},
 				},
@@ -1208,9 +1211,14 @@ func TestAdmin_ListLogStreams(t *testing.T) {
 func TestAdmin_AddLogStream(t *testing.T) {
 	const (
 		replicationFactor = 2
+		cid               = types.ClusterID(1)
 		tpid              = types.TopicID(1)
 		snid1             = types.StorageNodeID(1)
 		snid2             = types.StorageNodeID(2)
+	)
+	var (
+		snpath1 = filepath.Join("/tmp", volume.StorageNodeDirName(cid, snid1))
+		snpath2 = filepath.Join("/tmp", volume.StorageNodeDirName(cid, snid2))
 	)
 
 	tcs := []struct {
@@ -1232,7 +1240,7 @@ func TestAdmin_AddLogStream(t *testing.T) {
 			name:    "WrongReplicationFactor",
 			success: false,
 			replicas: []*varlogpb.ReplicaDescriptor{
-				{StorageNodeID: snid1, Path: "/tmp"},
+				{StorageNodeID: snid1, StorageNodePath: snpath1},
 			},
 			prepare: func(mock *testMock) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
@@ -1242,8 +1250,8 @@ func TestAdmin_AddLogStream(t *testing.T) {
 			name:    "NoSuchStorageNode",
 			success: false,
 			replicas: []*varlogpb.ReplicaDescriptor{
-				{StorageNodeID: snid1, Path: "/tmp"},
-				{StorageNodeID: snid2, Path: "/tmp"},
+				{StorageNodeID: snid1, StorageNodePath: snpath1},
+				{StorageNodeID: snid2, StorageNodePath: snpath2},
 			},
 			prepare: func(mock *testMock) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
@@ -1254,7 +1262,7 @@ func TestAdmin_AddLogStream(t *testing.T) {
 									StorageNodeID: snid1,
 									Address:       "127.0.0.1:10000",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath1},
 							},
 						},
 					}, nil,
@@ -1265,8 +1273,8 @@ func TestAdmin_AddLogStream(t *testing.T) {
 			name:    "RejectedByStorageNodeManager",
 			success: false,
 			replicas: []*varlogpb.ReplicaDescriptor{
-				{StorageNodeID: snid1, Path: "/tmp"},
-				{StorageNodeID: snid2, Path: "/tmp"},
+				{StorageNodeID: snid1, StorageNodePath: snpath1},
+				{StorageNodeID: snid2, StorageNodePath: snpath2},
 			},
 			prepare: func(mock *testMock) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
@@ -1277,14 +1285,14 @@ func TestAdmin_AddLogStream(t *testing.T) {
 									StorageNodeID: snid1,
 									Address:       "127.0.0.1:10000",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath1},
 							},
 							{
 								StorageNode: varlogpb.StorageNode{
 									StorageNodeID: snid2,
 									Address:       "127.0.0.1:10001",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath2},
 							},
 						},
 					}, nil,
@@ -1296,8 +1304,8 @@ func TestAdmin_AddLogStream(t *testing.T) {
 			name:    "RejectedByMetadataRepository",
 			success: false,
 			replicas: []*varlogpb.ReplicaDescriptor{
-				{StorageNodeID: snid1, Path: "/tmp"},
-				{StorageNodeID: snid2, Path: "/tmp"},
+				{StorageNodeID: snid1, StorageNodePath: snpath1},
+				{StorageNodeID: snid2, StorageNodePath: snpath2},
 			},
 			prepare: func(mock *testMock) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
@@ -1308,14 +1316,14 @@ func TestAdmin_AddLogStream(t *testing.T) {
 									StorageNodeID: snid1,
 									Address:       "127.0.0.1:10000",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath1},
 							},
 							{
 								StorageNode: varlogpb.StorageNode{
 									StorageNodeID: snid2,
 									Address:       "127.0.0.1:10001",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath2},
 							},
 						},
 					}, nil,
@@ -1328,8 +1336,8 @@ func TestAdmin_AddLogStream(t *testing.T) {
 			name:    "Success",
 			success: true,
 			replicas: []*varlogpb.ReplicaDescriptor{
-				{StorageNodeID: snid1, Path: "/tmp"},
-				{StorageNodeID: snid2, Path: "/tmp"},
+				{StorageNodeID: snid1, StorageNodePath: snpath1},
+				{StorageNodeID: snid2, StorageNodePath: snpath2},
 			},
 			prepare: func(mock *testMock) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
@@ -1340,14 +1348,14 @@ func TestAdmin_AddLogStream(t *testing.T) {
 									StorageNodeID: snid1,
 									Address:       "127.0.0.1:10000",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath1},
 							},
 							{
 								StorageNode: varlogpb.StorageNode{
 									StorageNodeID: snid2,
 									Address:       "127.0.0.1:10001",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath2},
 							},
 						},
 					}, nil,
@@ -1370,8 +1378,8 @@ func TestAdmin_AddLogStream(t *testing.T) {
 			name:    "SuccessWithAutoUnseal",
 			success: true,
 			replicas: []*varlogpb.ReplicaDescriptor{
-				{StorageNodeID: snid1, Path: "/tmp"},
-				{StorageNodeID: snid2, Path: "/tmp"},
+				{StorageNodeID: snid1, StorageNodePath: snpath1},
+				{StorageNodeID: snid2, StorageNodePath: snpath2},
 			},
 			autoUnseal: true,
 			prepare: func(mock *testMock) {
@@ -1383,14 +1391,14 @@ func TestAdmin_AddLogStream(t *testing.T) {
 									StorageNodeID: snid1,
 									Address:       "127.0.0.1:10000",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath1},
 							},
 							{
 								StorageNode: varlogpb.StorageNode{
 									StorageNodeID: snid2,
 									Address:       "127.0.0.1:10001",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath2},
 							},
 						},
 					}, nil,
@@ -1405,14 +1413,14 @@ func TestAdmin_AddLogStream(t *testing.T) {
 									StorageNodeID: snid1,
 									Address:       "127.0.0.1:10000",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath1},
 							},
 							{
 								StorageNode: varlogpb.StorageNode{
 									StorageNodeID: snid2,
 									Address:       "127.0.0.1:10001",
 								},
-								Paths: []string{"/tmp"},
+								Paths: []string{snpath2},
 							},
 						},
 						LogStreams: []*varlogpb.LogStreamDescriptor{
@@ -1474,11 +1482,16 @@ func TestAdmin_AddLogStream(t *testing.T) {
 func TestAdmin_UpdateLogStream(t *testing.T) {
 	const (
 		replicationFactor = 2
+		cid               = types.ClusterID(1)
 		tpid              = types.TopicID(1)
 		lsid              = types.LogStreamID(1)
 		snid1             = types.StorageNodeID(1)
 		snid2             = types.StorageNodeID(2)
-		path              = "/tmp"
+	)
+
+	var (
+		snpath1 = filepath.Join("/tmp", volume.StorageNodeDirName(cid, snid1))
+		snpath2 = filepath.Join("/tmp", volume.StorageNodeDirName(cid, snid2))
 	)
 
 	tcs := []struct {
@@ -1543,8 +1556,8 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 								Status:      varlogpb.LogStreamStatusSealed,
 								Replicas: []*varlogpb.ReplicaDescriptor{
 									{
-										StorageNodeID: snid1,
-										Path:          path,
+										StorageNodeID:   snid1,
+										StorageNodePath: snpath1,
 									},
 								},
 							},
@@ -1568,8 +1581,8 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 								Status:      varlogpb.LogStreamStatusSealed,
 								Replicas: []*varlogpb.ReplicaDescriptor{
 									{
-										StorageNodeID: snid1,
-										Path:          path,
+										StorageNodeID:   snid1,
+										StorageNodePath: snpath1,
 									},
 								},
 							},
@@ -1599,8 +1612,8 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 								Status:      varlogpb.LogStreamStatusSealed,
 								Replicas: []*varlogpb.ReplicaDescriptor{
 									{
-										StorageNodeID: snid1,
-										Path:          path,
+										StorageNodeID:   snid1,
+										StorageNodePath: snpath1,
 									},
 								},
 							},
@@ -1644,12 +1657,12 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 
 			_, err := client.UpdateLogStream(context.Background(), tpid, lsid,
 				varlogpb.ReplicaDescriptor{ // pop (old)
-					StorageNodeID: snid1,
-					Path:          path,
+					StorageNodeID:   snid1,
+					StorageNodePath: snpath1,
 				},
 				varlogpb.ReplicaDescriptor{ // push (new)
-					StorageNodeID: snid2,
-					Path:          path,
+					StorageNodeID:   snid2,
+					StorageNodePath: snpath2,
 				},
 			)
 			if tc.success {
@@ -1704,8 +1717,8 @@ func TestAdmin_RemoveLogStreamReplica(t *testing.T) {
 								Status:      varlogpb.LogStreamStatusRunning,
 								Replicas: []*varlogpb.ReplicaDescriptor{
 									{
-										StorageNodeID: snid,
-										Path:          path,
+										StorageNodeID:   snid,
+										StorageNodePath: path,
 									},
 								},
 							},
@@ -1727,8 +1740,8 @@ func TestAdmin_RemoveLogStreamReplica(t *testing.T) {
 								Status:      varlogpb.LogStreamStatusRunning,
 								Replicas: []*varlogpb.ReplicaDescriptor{
 									{
-										StorageNodeID: snid + 1,
-										Path:          path,
+										StorageNodeID:   snid + 1,
+										StorageNodePath: path,
 									},
 								},
 							},
@@ -1767,8 +1780,8 @@ func TestAdmin_RemoveLogStreamReplica(t *testing.T) {
 								Status:      varlogpb.LogStreamStatusRunning,
 								Replicas: []*varlogpb.ReplicaDescriptor{
 									{
-										StorageNodeID: snid + 1,
-										Path:          path,
+										StorageNodeID:   snid + 1,
+										StorageNodePath: path,
 									},
 								},
 							},

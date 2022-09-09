@@ -660,8 +660,8 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types
 	path := snmd.Storages[0].Path
 
 	newReplica := varlogpb.ReplicaDescriptor{
-		StorageNodeID: newsn,
-		Path:          path,
+		StorageNodeID:   newsn,
+		StorageNodePath: path,
 	}
 	oldReplica := varlogpb.ReplicaDescriptor{
 		StorageNodeID: oldsn,
@@ -708,14 +708,14 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T, topicID types.TopicID) t
 		require.NoError(t, err)
 		path := snmd.Storages[0].Path
 		rds = append(rds, &varlogpb.ReplicaDescriptor{
-			StorageNodeID: snID,
-			Path:          path,
+			StorageNodeID:   snID,
+			StorageNodePath: path,
 		})
 	}
 
 	for _, rd := range rds {
 		snID := rd.StorageNodeID
-		path := rd.Path
+		path := rd.StorageNodePath
 		require.NoError(t, clus.storageNodeManagementClientOf(t, snID).AddLogStreamReplica(
 			context.Background(),
 			topicID,
@@ -830,8 +830,8 @@ func (clus *VarlogCluster) UpdateLSWithoutMR(t *testing.T, topicID types.TopicID
 	require.NoError(t, clus.snMCLs[storageNodeID].AddLogStreamReplica(context.Background(), topicID, logStreamID, path))
 
 	replicas[0] = &varlogpb.ReplicaDescriptor{
-		StorageNodeID: storageNodeID,
-		Path:          path,
+		StorageNodeID:   storageNodeID,
+		StorageNodePath: path,
 	}
 
 	clus.replicas[logStreamID] = replicas
