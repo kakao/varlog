@@ -367,18 +367,32 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		)
 	}
 
-	syncRange = snpb.SyncRange{
-		FirstLLSN: uncommittedLLSNBegin,
-		LastLLSN:  srcRange.LastLLSN,
-	}
-
 	// NOTE: When the replica has all log entries, it returns its range of logs and non-error results.
 	// In this case, this replica remains executorStateSealing.
 	// Breaking change: previously it returns ErrExist when the replica has all log entries to replicate.
-	if lastCommittedLLSN == syncRange.LastLLSN {
+	if lastCommittedLLSN == srcRange.LastLLSN {
 		return snpb.SyncRange{FirstLLSN: types.InvalidLLSN, LastLLSN: types.InvalidLLSN}, nil
-		//err = fmt.Errorf("log stream: sync init: already enough logs: %w", verrors.ErrExist)
-		//return
+	}
+
+	if uncommittedLLSNBegin < srcRange.FirstLLSN { // The source replica may have been trimmed.
+		lastCommittedLLSN = srcRange.FirstLLSN - 1
+		uncommittedLLSNBegin = lastCommittedLLSN + 1
+		// NOTE: The version and high watermark are not correct.
+		lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, uncommittedLLSNBegin) // new uncommittedLLSNBegin
+		// NOTE: Since prefix logs has been trimmed, the local low and
+		// high watermarks are invalid. It will be reset by a commit
+		// triggered by SyncReplicate.
+		// It means that metadata of replica in the status of
+		// `LEARNING` is not credible because learning replica, which
+		// is the destination of synchronization, has invalid low and
+		// high watermarks.
+		lse.lsc.setLocalLowWatermark(varlogpb.InvalidLogEntryMeta())
+		lse.lsc.setLocalHighWatermark(varlogpb.InvalidLogEntryMeta())
+	}
+
+	syncRange = snpb.SyncRange{
+		FirstLLSN: uncommittedLLSNBegin,
+		LastLLSN:  srcRange.LastLLSN,
 	}
 
 	// FIXME(jun): It should be necessary to have a mechanism to expire long-time sync init state.
