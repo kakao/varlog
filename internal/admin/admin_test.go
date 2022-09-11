@@ -1612,7 +1612,6 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 				mock.MockRepository.EXPECT().SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
 			},
 		},
-		// TODO: Add more test cases, for instance, choosing the best replica automatically, ...
 		{
 			name:    "Success",
 			success: true,
@@ -1641,6 +1640,29 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 					gomock.Any(), gomock.Any(),
 				).Return(nil)
 				mock.MockRepository.EXPECT().SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
+			},
+		},
+		{
+			name:    "AlreadyUpdated",
+			success: true,
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+								Status:      varlogpb.LogStreamStatusSealed,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID:   snid2,
+										StorageNodePath: snpath2,
+									},
+								},
+							},
+						},
+					}, nil,
+				).AnyTimes()
 			},
 		},
 	}

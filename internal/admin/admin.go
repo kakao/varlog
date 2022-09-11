@@ -658,9 +658,6 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 		return nil, status.Errorf(codes.NotFound, "update log stream: no such log stream %d", lsid)
 	}
 
-	if oldLSDesc.Status.Running() {
-		return nil, status.Errorf(codes.FailedPrecondition, "update log stream: invalid log stream status %s", oldLSDesc.Status)
-	}
 	popIdx, pushIdx := -1, -1
 	for idx := range oldLSDesc.Replicas {
 		snid := oldLSDesc.Replicas[idx].StorageNodeID
@@ -687,6 +684,10 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 			"update log stream: victim replica and new replica already exist in log stream %+v",
 			oldLSDesc.Replicas,
 		)
+	}
+
+	if oldLSDesc.Status.Running() {
+		return nil, status.Errorf(codes.FailedPrecondition, "update log stream: invalid log stream status %s", oldLSDesc.Status)
 	}
 
 	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
