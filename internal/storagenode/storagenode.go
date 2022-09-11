@@ -120,12 +120,15 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 }
 
 func (sn *StorageNode) loadLogStreamReplicas(dataDirs []volume.DataDir) error {
-	for _, dataDir := range dataDirs {
-		if _, err := sn.runLogStreamReplica(context.Background(), dataDir.TopicID, dataDir.LogStreamID, dataDir.String()); err != nil {
+	var g errgroup.Group
+	for i := range dataDirs {
+		dataDir := dataDirs[i]
+		g.Go(func() error {
+			_, err := sn.runLogStreamReplica(context.Background(), dataDir.TopicID, dataDir.LogStreamID, dataDir.String())
 			return err
-		}
+		})
 	}
-	return nil
+	return g.Wait()
 }
 
 func (sn *StorageNode) Serve() error {
