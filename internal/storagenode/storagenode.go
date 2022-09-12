@@ -10,6 +10,9 @@ import (
 	"sync"
 	"time"
 
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+	grpcctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/soheilhy/cmux"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.uber.org/multierr"
@@ -94,14 +97,27 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		return nil, err
 	}
 
-	sn := &StorageNode{
-		config:    cfg,
-		executors: executorsmap.New(hintNumExecutors),
-		server: grpc.NewServer(
-			grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
-			grpc.WriteBufferSize(int(cfg.grpcServerWriteBufferSize)),
-			grpc.MaxRecvMsgSize(int(cfg.grpcServerMaxRecvMsgSize)),
+	grpcServer := grpc.NewServer(
+		grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
+		grpc.WriteBufferSize(int(cfg.grpcServerWriteBufferSize)),
+		grpc.MaxRecvMsgSize(int(cfg.grpcServerMaxRecvMsgSize)),
+		grpcmiddleware.WithUnaryServerChain(
+			grpcctxtags.UnaryServerInterceptor(),
+			grpczap.UnaryServerInterceptor(cfg.logger, grpczap.WithDecider(
+				func(fullMethodName string, err error) bool {
+					return err != nil || grpcHandlerLogAllowList[fullMethodName]
+				},
+			)),
+			grpczap.PayloadUnaryServerInterceptor(cfg.logger, func(_ context.Context, fullMethodName string, _ any) bool {
+				return grpcPayloadLogAllowList[fullMethodName]
+			}),
 		),
+	)
+
+	sn := &StorageNode{
+		config:       cfg,
+		executors:    executorsmap.New(hintNumExecutors),
+		server:       grpcServer,
 		healthServer: health.NewServer(),
 		closedC:      make(chan struct{}),
 		snPaths:      snPaths,
