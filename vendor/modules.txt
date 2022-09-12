@@ -396,8 +396,8 @@ go.uber.org/automaxprocs
 go.uber.org/automaxprocs/internal/cgroups
 go.uber.org/automaxprocs/internal/runtime
 go.uber.org/automaxprocs/maxprocs
-# go.uber.org/goleak v1.1.12
-## explicit; go 1.13
+# go.uber.org/goleak v1.2.0
+## explicit; go 1.18
 go.uber.org/goleak
 go.uber.org/goleak/internal/stack
 # go.uber.org/multierr v1.8.0
