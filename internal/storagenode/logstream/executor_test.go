@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
 	"github.com/kakao/varlog/internal/batchlet"
@@ -1381,109 +1383,197 @@ func TestExecutorSyncInit_InvalidRange(t *testing.T) {
 
 func TestExecutorSyncInit(t *testing.T) {
 	const (
-		numLogs         = 10
 		syncInitTimeout = time.Second
+		numLogs         = 10
+		dstFirst        = types.LLSN(1)
+		dstLast         = types.LLSN(numLogs)
 	)
 
-	lse := testNewPrimaryExecutor(t, WithSyncInitTimeout(syncInitTimeout))
-	defer func() {
-		assert.NoError(t, lse.Close())
-	}()
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica)
+	}{
+		{
+			name: "DestinationReplicaHasTooManyLogs",
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				assert.Panics(t, func() {
+					_, _ = dst.SyncInit(context.Background(), src, snpb.SyncRange{
+						FirstLLSN: dstFirst,
+						LastLLSN:  dstLast - 1,
+					})
+				})
 
-	srcReplica := varlogpb.LogStreamReplica{
-		StorageNode: varlogpb.StorageNode{
-			StorageNodeID: lse.snid + 1,
-			Address:       "fake-addr",
+			},
 		},
-		TopicLogStream: varlogpb.TopicLogStream{
-			TopicID:     lse.tpid,
-			LogStreamID: lse.lsid,
+		{
+			name: "AlreadySynchornized",
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
+					FirstLLSN: dstFirst,
+					LastLLSN:  dstLast,
+				})
+				assert.NoError(t, err)
+				assert.True(t, syncRange.FirstLLSN.Invalid())
+				assert.True(t, syncRange.LastLLSN.Invalid())
+			},
+		},
+		{
+			name: "SynchronizeNext",
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
+					FirstLLSN: dstFirst,
+					LastLLSN:  dstLast + 10,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, snpb.SyncRange{
+					FirstLLSN: dstLast + 1,
+					LastLLSN:  dstLast + 10,
+				}, syncRange)
+			},
+		},
+		{
+			name: "SychronizeFarFromNext",
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				_, _, uncommittedLLSNBegin := dst.lsc.reportCommitBase()
+				uncommittedLLSNEnd := dst.lsc.uncommittedLLSNEnd.Load()
+				assert.Equal(t, dstLast+1, uncommittedLLSNBegin)
+				assert.Equal(t, dstLast+1, uncommittedLLSNEnd)
+
+				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
+					FirstLLSN: dstLast + 5,
+					LastLLSN:  dstLast + 10,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, snpb.SyncRange{
+					FirstLLSN: dstLast + 5,
+					LastLLSN:  dstLast + 10,
+				}, syncRange)
+
+				_, _, uncommittedLLSNBegin = dst.lsc.reportCommitBase()
+				uncommittedLLSNEnd = dst.lsc.uncommittedLLSNEnd.Load()
+
+				assert.Equal(t, dstLast+5, uncommittedLLSNBegin)
+				assert.Equal(t, dstLast+5, uncommittedLLSNEnd)
+
+				lsrmd, err := dst.Metadata()
+				assert.NoError(t, err)
+				assert.True(t, lsrmd.LocalLowWatermark.LLSN.Invalid())
+				assert.True(t, lsrmd.LocalLowWatermark.GLSN.Invalid())
+				assert.True(t, lsrmd.LocalHighWatermark.LLSN.Invalid())
+				assert.True(t, lsrmd.LocalHighWatermark.GLSN.Invalid())
+
+				lsd, err := dst.LogStreamMetadata()
+				assert.NoError(t, err)
+				assert.True(t, lsd.Head.LLSN.Invalid()) //nolint:staticcheck
+				assert.True(t, lsd.Head.GLSN.Invalid()) //nolint:staticcheck
+				assert.True(t, lsd.Tail.LLSN.Invalid()) //nolint:staticcheck
+				assert.True(t, lsd.Tail.GLSN.Invalid()) //nolint:staticcheck
+			},
+		},
+		{
+			name: "SyncInitTimeout",
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				newSrcPtr, ok := proto.Clone(&src).(*varlogpb.LogStreamReplica)
+				require.True(t, ok)
+				newSrcPtr.StorageNodeID++
+				newSrc := *newSrcPtr
+
+				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
+					FirstLLSN: dstFirst,
+					LastLLSN:  dstLast + 10,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, snpb.SyncRange{
+					FirstLLSN: dstLast + 1,
+					LastLLSN:  dstLast + 10,
+				}, syncRange)
+
+				newSrc.StorageNodeID++
+				assert.Eventually(t, func() bool {
+					_, err := dst.SyncInit(context.Background(), newSrc, snpb.SyncRange{
+						FirstLLSN: dstFirst,
+						LastLLSN:  dstLast + 10,
+					})
+					return err == nil && dst.srb.srcReplica.Equal(newSrc)
+				}, syncInitTimeout*3, syncInitTimeout)
+			},
 		},
 	}
 
-	var wg sync.WaitGroup
-	for i := 0; i < numLogs; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, err := lse.Append(context.Background(), [][]byte{nil})
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set up destination replica.
+			lse := testNewPrimaryExecutor(t, WithSyncInitTimeout(syncInitTimeout))
+			defer func() {
+				assert.NoError(t, lse.Close())
+			}()
+
+			// Destination replica has `numLogs` logs from MinLLSN to `numLogs` LLSN.
+			var wg sync.WaitGroup
+			for i := 0; i < numLogs; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_, err := lse.Append(context.Background(), [][]byte{nil})
+					assert.NoError(t, err)
+				}()
+			}
+
+			var (
+				lastLLSN    = types.InvalidLLSN
+				lastGLSN    = types.InvalidGLSN
+				lastVersion = types.InvalidVersion
+			)
+			assert.Eventually(t, func() bool {
+				_ = lse.Commit(context.Background(), snpb.LogStreamCommitResult{
+					TopicID:             lse.tpid,
+					LogStreamID:         lse.lsid,
+					CommittedLLSNOffset: lastLLSN + 1,
+					CommittedGLSNOffset: lastGLSN + 1,
+					CommittedGLSNLength: uint64(numLogs),
+					Version:             lastVersion + 1,
+					HighWatermark:       lastGLSN + types.GLSN(numLogs),
+				})
+
+				rpt, err := lse.Report(context.Background())
+				assert.NoError(t, err)
+				if rpt.Version != lastVersion+1 {
+					return false
+				}
+
+				lastVersion++
+				lastLLSN += types.LLSN(numLogs)
+				lastGLSN += types.GLSN(numLogs)
+				return true
+			}, time.Second, 10*time.Millisecond)
+			wg.Wait()
+
+			assert.Equal(t, lastLLSN, lse.lsc.localHighWatermark().LLSN)
+
+			// The destination replica is sealed.
+			status, localHWM, err := lse.Seal(context.Background(), lastGLSN+1)
 			assert.NoError(t, err)
-		}()
+			assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
+			assert.Equal(t, lastGLSN, localHWM)
+
+			// Range of destination replica
+			require.Equal(t, dstFirst, lse.lsc.localLowWatermark().LLSN)
+			require.Equal(t, dstLast, lse.lsc.localHighWatermark().LLSN)
+
+			srcReplica := varlogpb.LogStreamReplica{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: lse.snid + 1,
+					Address:       "fake-addr",
+				},
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     lse.tpid,
+					LogStreamID: lse.lsid,
+				},
+			}
+
+			tc.testf(t, lse, srcReplica)
+		})
 	}
-
-	// Commit
-	var (
-		lastLLSN    = types.InvalidLLSN
-		lastGLSN    = types.InvalidGLSN
-		lastVersion = types.InvalidVersion
-	)
-	assert.Eventually(t, func() bool {
-		_ = lse.Commit(context.Background(), snpb.LogStreamCommitResult{
-			TopicID:             lse.tpid,
-			LogStreamID:         lse.lsid,
-			CommittedLLSNOffset: lastLLSN + 1,
-			CommittedGLSNOffset: lastGLSN + 1,
-			CommittedGLSNLength: uint64(numLogs),
-			Version:             lastVersion + 1,
-			HighWatermark:       lastGLSN + types.GLSN(numLogs),
-		})
-
-		rpt, err := lse.Report(context.Background())
-		assert.NoError(t, err)
-		if rpt.Version != lastVersion+1 {
-			return false
-		}
-
-		lastVersion++
-		lastLLSN += types.LLSN(numLogs)
-		lastGLSN += types.GLSN(numLogs)
-		return true
-	}, time.Second, 10*time.Millisecond)
-
-	wg.Wait()
-
-	// sealing
-	status, localHWM, err := lse.Seal(context.Background(), lastGLSN+1)
-	assert.NoError(t, err)
-	assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
-	assert.Equal(t, lastGLSN, localHWM)
-
-	assert.Panics(t, func() {
-		_, _ = lse.SyncInit(context.Background(), srcReplica, snpb.SyncRange{
-			FirstLLSN: 1,
-			LastLLSN:  lastLLSN - 1,
-		})
-	})
-
-	// no need to sync
-	syncRange, err := lse.SyncInit(context.Background(), srcReplica, snpb.SyncRange{
-		FirstLLSN: 1,
-		LastLLSN:  lastLLSN,
-	})
-	assert.NoError(t, err)
-	assert.True(t, syncRange.FirstLLSN.Invalid())
-	assert.True(t, syncRange.LastLLSN.Invalid())
-
-	// need to sync
-	syncRange, err = lse.SyncInit(context.Background(), srcReplica, snpb.SyncRange{
-		FirstLLSN: 1,
-		LastLLSN:  20,
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, snpb.SyncRange{
-		FirstLLSN: lastLLSN + 1,
-		LastLLSN:  20,
-	}, syncRange)
-
-	newSrcReplica := srcReplica
-	newSrcReplica.StorageNodeID++
-	assert.Eventually(t, func() bool {
-		_, err := lse.SyncInit(context.Background(), newSrcReplica, snpb.SyncRange{
-			FirstLLSN: 1,
-			LastLLSN:  20,
-		})
-		return err == nil && lse.srb.srcReplica.Equal(newSrcReplica)
-	}, syncInitTimeout*3, syncInitTimeout)
 }
 
 func TestExecutorSyncReplicate(t *testing.T) {
