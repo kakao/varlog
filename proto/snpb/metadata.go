@@ -37,3 +37,27 @@ func (snmd StorageNodeMetadataDescriptor) FindLogStream(logStreamID types.LogStr
 	}
 	return LogStreamReplicaMetadataDescriptor{}, false
 }
+
+func (lsrmd *LogStreamReplicaMetadataDescriptor) Head() varlogpb.LogEntryMeta {
+	if lsrmd == nil {
+		return varlogpb.LogEntryMeta{}
+	}
+	return varlogpb.LogEntryMeta{
+		TopicID:     lsrmd.TopicID,
+		LogStreamID: lsrmd.LogStreamID,
+		GLSN:        lsrmd.LocalLowWatermark.GLSN,
+		LLSN:        lsrmd.LocalLowWatermark.LLSN,
+	}
+}
+
+func (lsrmd *LogStreamReplicaMetadataDescriptor) Tail() varlogpb.LogEntryMeta {
+	if lsrmd == nil {
+		return varlogpb.LogEntryMeta{}
+	}
+	return varlogpb.LogEntryMeta{
+		TopicID:     lsrmd.TopicID,
+		LogStreamID: lsrmd.LogStreamID,
+		GLSN:        lsrmd.LocalHighWatermark.GLSN,
+		LLSN:        lsrmd.LocalHighWatermark.LLSN,
+	}
+}

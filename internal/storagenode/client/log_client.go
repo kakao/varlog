@@ -168,6 +168,17 @@ func (c *LogClient) LogStreamMetadata(ctx context.Context, tpid types.TopicID, l
 	return rsp.GetLogStreamDescriptor(), nil
 }
 
+func (c *LogClient) LogStreamReplicaMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
+	rsp, err := c.rpcClient.LogStreamReplicaMetadata(ctx, &snpb.LogStreamReplicaMetadataRequest{
+		TopicID:     tpid,
+		LogStreamID: lsid,
+	})
+	if err != nil {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, fmt.Errorf("logclient: %w", verrors.FromStatusError(err))
+	}
+	return rsp.LogStreamReplica, nil
+}
+
 // Target returns connected storage node.
 func (c *LogClient) Target() varlogpb.StorageNode {
 	return c.target

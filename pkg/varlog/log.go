@@ -13,6 +13,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
+	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -43,9 +44,13 @@ type Log interface {
 	// It returns an error if the log stream does not exist or fails to
 	// fetch metadata from all replicas.
 	//
-	// FIXME (jun): Change the return type of this method to
-	// snpb.LogStreamMetadataDescriptor.
+	// Deprecated: Use LogStreamReplicaMetdata.
 	LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error)
+
+	// LogStreamReplicaMetadata returns metadata of log stream replica
+	// specified by the arguments tpid and lsid. It returns the first
+	// successful result among all replicas.
+	LogStreamReplicaMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error)
 }
 
 type AppendResult struct {
@@ -179,6 +184,10 @@ func (v *logImpl) Trim(ctx context.Context, topicID types.TopicID, until types.G
 
 func (v *logImpl) LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
 	return v.logStreamMetadata(ctx, tpid, lsid)
+}
+
+func (v *logImpl) LogStreamReplicaMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
+	return v.logStreamReplicaMetadata(ctx, tpid, lsid)
 }
 
 func (v *logImpl) Close() (err error) {

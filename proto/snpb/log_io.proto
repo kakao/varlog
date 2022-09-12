@@ -6,6 +6,7 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
 
 import "varlogpb/metadata.proto";
+import "snpb/metadata.proto";
 
 option go_package = "github.com/kakao/varlog/proto/snpb";
 
@@ -20,13 +21,11 @@ option (gogoproto.goproto_sizecache_all) = false;
 // a vector of storage nodes to replicate the payload.
 message AppendRequest {
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
   repeated bytes payload = 3;
@@ -50,13 +49,11 @@ message ReadRequest {
     (gogoproto.customname) = "GLSN"
   ];
   int32 topic_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 3 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
 }
@@ -87,13 +84,11 @@ message SubscribeRequest {
     (gogoproto.customname) = "GLSNEnd"
   ];
   int32 topic_id = 3 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 4 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
 }
@@ -113,13 +108,11 @@ message SubscribeResponse {
 
 message SubscribeToRequest {
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
   uint64 llsn_begin = 3 [
@@ -141,8 +134,7 @@ message SubscribeToResponse {
 // storage node removes its log entry in the background.
 message TrimDeprecatedRequest {
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   uint64 glsn = 2 [
@@ -153,13 +145,11 @@ message TrimDeprecatedRequest {
 
 message LogStreamMetadataRequest {
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
 }
@@ -169,12 +159,30 @@ message LogStreamMetadataResponse {
       [(gogoproto.nullable) = false];
 }
 
+message LogStreamReplicaMetadataRequest {
+  int32 topic_id = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+}
+
+message LogStreamReplicaMetadataResponse {
+  LogStreamReplicaMetadataDescriptor log_stream_replica = 1
+      [(gogoproto.nullable) = false];
+}
+
 service LogIO {
   rpc Append(AppendRequest) returns (AppendResponse) {}
   rpc Read(ReadRequest) returns (ReadResponse) {}
   rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
   rpc SubscribeTo(SubscribeToRequest) returns (stream SubscribeToResponse) {}
   rpc TrimDeprecated(TrimDeprecatedRequest) returns (google.protobuf.Empty) {}
+  rpc LogStreamReplicaMetadata(LogStreamReplicaMetadataRequest)
+      returns (LogStreamReplicaMetadataResponse) {}
   rpc LogStreamMetadata(LogStreamMetadataRequest)
       returns (LogStreamMetadataResponse) {}
 }
