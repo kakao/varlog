@@ -1102,13 +1102,15 @@ func (ms *MetadataStorage) UpdateUncommitReport(lsID types.LogStreamID, snID typ
 	}
 
 	if !ms.verifyUncommitReport(s) {
-		ms.logger.Warn("could not apply report: invalid ver",
-			zap.Int32("lsid", int32(lsID)),
-			zap.Int32("snid", int32(snID)),
-			zap.Uint64("ver", uint64(s.Version)),
-			zap.Uint64("first", uint64(ms.getFirstCommitResultsNoLock().GetVersion())),
-			zap.Uint64("last", uint64(ms.getLastCommitResultsNoLock().GetVersion())),
-		)
+		if !lm.Status.Sealed() {
+			ms.logger.Warn("could not apply report: invalid ver",
+				zap.Int32("lsid", int32(lsID)),
+				zap.Int32("snid", int32(snID)),
+				zap.Uint64("ver", uint64(s.Version)),
+				zap.Uint64("first", uint64(ms.getFirstCommitResultsNoLock().GetVersion())),
+				zap.Uint64("last", uint64(ms.getLastCommitResultsNoLock().GetVersion())),
+			)
+		}
 		return
 	}
 
