@@ -2,6 +2,7 @@ package varlogtest
 
 import (
 	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -9,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 
+	"github.com/kakao/varlog/internal/storagenode/volume"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -88,8 +90,7 @@ func (c *testAdmin) GetStorageNodes(ctx context.Context, opts ...varlog.AdminCal
 	return ret, nil
 }
 
-// FIXME: Argument snid
-func (c *testAdmin) AddStorageNode(ctx context.Context, storageNodeID types.StorageNodeID, addr string, opts ...varlog.AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
+func (c *testAdmin) AddStorageNode(_ context.Context, snid types.StorageNodeID, addr string, _ ...varlog.AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -97,24 +98,25 @@ func (c *testAdmin) AddStorageNode(ctx context.Context, storageNodeID types.Stor
 
 	// NOTE: Use UTC rather than local to use gogoproto's non-nullable stdtime.
 	now := time.Now().UTC()
-	if storageNodeID.Invalid() {
-		storageNodeID = c.vt.generateStorageNodeID()
+	if snid.Invalid() {
+		snid = c.vt.generateStorageNodeID()
 	}
 
+	snpath := filepath.Join("/tmp", volume.StorageNodeDirName(c.vt.clusterID, snid))
 	storageNodeMetaDesc := snpb.StorageNodeMetadataDescriptor{
 		ClusterID: c.vt.clusterID,
 		StorageNode: varlogpb.StorageNode{
-			StorageNodeID: storageNodeID,
+			StorageNodeID: snid,
 			Address:       addr,
 		},
 		Status: varlogpb.StorageNodeStatusRunning,
 		Storages: []varlogpb.StorageDescriptor{
-			{Path: "/tmp"},
+			{Path: snpath},
 		},
 		LogStreamReplicas: nil,
 		StartTime:         now,
 	}
-	c.vt.storageNodes[storageNodeID] = storageNodeMetaDesc
+	c.vt.storageNodes[snid] = storageNodeMetaDesc
 
 	return &vmspb.StorageNodeMetadata{
 		StorageNodeMetadataDescriptor: *proto.Clone(&storageNodeMetaDesc).(*snpb.StorageNodeMetadataDescriptor),
@@ -219,7 +221,7 @@ func (c *testAdmin) DescribeTopic(ctx context.Context, topicID types.TopicID, op
 	return rsp, nil
 }
 
-func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor, opts ...varlog.AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
+func (c *testAdmin) AddLogStream(_ context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor, opts ...varlog.AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -235,7 +237,7 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 	}
 
 	logStreamID := c.vt.generateLogStreamID()
-	logStreamDesc := varlogpb.LogStreamDescriptor{
+	lsd := varlogpb.LogStreamDescriptor{
 		LogStreamID: logStreamID,
 		TopicID:     topicID,
 		Status:      varlogpb.LogStreamStatusRunning,
@@ -243,19 +245,22 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 	}
 
 	if logStreamReplicas == nil {
-		snIDs := c.vt.storageNodeIDs()
-		for i, j := range c.vt.rng.Perm(len(snIDs))[:c.vt.replicationFactor] {
-			snID := snIDs[j]
-			logStreamDesc.Replicas[i] = &varlogpb.ReplicaDescriptor{
-				StorageNodeID:   c.vt.storageNodes[snID].StorageNode.StorageNodeID,
-				StorageNodePath: c.vt.storageNodes[snID].Storages[0].Path,
+		snids := c.vt.storageNodeIDs()
+		for i, j := range c.vt.rng.Perm(len(snids))[:c.vt.replicationFactor] {
+			snid := snids[j]
+			snpath := c.vt.storageNodes[snid].Storages[0].Path
+			dataPath := filepath.Join(snpath, volume.LogStreamDirName(topicID, logStreamID))
+			lsd.Replicas[i] = &varlogpb.ReplicaDescriptor{
+				StorageNodeID:   c.vt.storageNodes[snid].StorageNode.StorageNodeID,
+				StorageNodePath: c.vt.storageNodes[snid].Storages[0].Path,
+				DataPath:        dataPath,
 			}
 		}
 	} else {
-		logStreamDesc.Replicas = logStreamReplicas
+		lsd.Replicas = logStreamReplicas
 	}
 
-	c.vt.logStreams[logStreamID] = logStreamDesc
+	c.vt.logStreams[logStreamID] = lsd
 
 	invalidLogEntry := varlogpb.InvalidLogEntry()
 	c.vt.localLogEntries[logStreamID] = []*varlogpb.LogEntry{&invalidLogEntry}
@@ -263,7 +268,7 @@ func (c *testAdmin) AddLogStream(ctx context.Context, topicID types.TopicID, log
 	topicDesc.LogStreams = append(topicDesc.LogStreams, logStreamID)
 	c.vt.topics[topicID] = topicDesc
 
-	return proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor), nil
+	return proto.Clone(&lsd).(*varlogpb.LogStreamDescriptor), nil
 }
 
 func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, poppedReplica varlogpb.ReplicaDescriptor, pushedReplica varlogpb.ReplicaDescriptor, opts ...varlog.AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {

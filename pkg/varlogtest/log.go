@@ -3,14 +3,17 @@ package varlogtest
 import (
 	"context"
 	"io"
+	"path/filepath"
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
+	"github.com/kakao/varlog/internal/storagenode/volume"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -295,6 +298,63 @@ func (c *testLog) LogStreamMetadata(_ context.Context, topicID types.TopicID, lo
 	logStreamDesc.Head = head //nolint:staticcheck
 	logStreamDesc.Tail = tail
 	return logStreamDesc, nil
+}
+
+func (c *testLog) LogStreamReplicaMetadata(_ context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
+	if err := c.lock(); err != nil {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, err
+	}
+	defer c.unlock()
+
+	topicDesc, ok := c.vt.topics[tpid]
+	if !ok {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("no such topic")
+	}
+
+	if !topicDesc.HasLogStream(lsid) {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("no such log stream")
+	}
+
+	lsd, ok := c.vt.logStreams[lsid]
+	if !ok {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("no such log stream")
+	}
+
+	snid := lsd.Replicas[0].StorageNodeID
+	snmd, ok := c.vt.storageNodes[snid]
+	if !ok {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("no such storage node")
+	}
+
+	snpath := snmd.Storages[0].Path
+	dataPath := filepath.Join(snpath, volume.LogStreamDirName(tpid, lsid))
+
+	n := len(c.vt.globalLogEntries[tpid])
+	lastGLSN := c.vt.globalLogEntries[tpid][n-1].GLSN
+	head, tail := c.vt.peek(tpid, lsid)
+	return snpb.LogStreamReplicaMetadataDescriptor{
+		LogStreamReplica: varlogpb.LogStreamReplica{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snid,
+			},
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+			},
+		},
+		Status:              varlogpb.LogStreamStatusRunning,
+		Version:             c.vt.version,
+		GlobalHighWatermark: lastGLSN,
+		LocalLowWatermark: varlogpb.LogSequenceNumber{
+			GLSN: head.GLSN,
+			LLSN: head.LLSN,
+		},
+		LocalHighWatermark: varlogpb.LogSequenceNumber{
+			GLSN: tail.GLSN,
+			LLSN: tail.LLSN,
+		},
+		Path: dataPath,
+	}, nil
 }
 
 type errSubscriber struct {

@@ -671,6 +671,26 @@ func (mr *MockLogIOClientMockRecorder) LogStreamMetadata(arg0, arg1 interface{},
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamMetadata", reflect.TypeOf((*MockLogIOClient)(nil).LogStreamMetadata), varargs...)
 }
 
+// LogStreamReplicaMetadata mocks base method.
+func (m *MockLogIOClient) LogStreamReplicaMetadata(arg0 context.Context, arg1 *snpb.LogStreamReplicaMetadataRequest, arg2 ...grpc.CallOption) (*snpb.LogStreamReplicaMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "LogStreamReplicaMetadata", varargs...)
+	ret0, _ := ret[0].(*snpb.LogStreamReplicaMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LogStreamReplicaMetadata indicates an expected call of LogStreamReplicaMetadata.
+func (mr *MockLogIOClientMockRecorder) LogStreamReplicaMetadata(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamReplicaMetadata", reflect.TypeOf((*MockLogIOClient)(nil).LogStreamReplicaMetadata), varargs...)
+}
+
 // Read mocks base method.
 func (m *MockLogIOClient) Read(arg0 context.Context, arg1 *snpb.ReadRequest, arg2 ...grpc.CallOption) (*snpb.ReadResponse, error) {
 	m.ctrl.T.Helper()
@@ -802,6 +822,21 @@ func (m *MockLogIOServer) LogStreamMetadata(arg0 context.Context, arg1 *snpb.Log
 func (mr *MockLogIOServerMockRecorder) LogStreamMetadata(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamMetadata", reflect.TypeOf((*MockLogIOServer)(nil).LogStreamMetadata), arg0, arg1)
+}
+
+// LogStreamReplicaMetadata mocks base method.
+func (m *MockLogIOServer) LogStreamReplicaMetadata(arg0 context.Context, arg1 *snpb.LogStreamReplicaMetadataRequest) (*snpb.LogStreamReplicaMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LogStreamReplicaMetadata", arg0, arg1)
+	ret0, _ := ret[0].(*snpb.LogStreamReplicaMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LogStreamReplicaMetadata indicates an expected call of LogStreamReplicaMetadata.
+func (mr *MockLogIOServerMockRecorder) LogStreamReplicaMetadata(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamReplicaMetadata", reflect.TypeOf((*MockLogIOServer)(nil).LogStreamReplicaMetadata), arg0, arg1)
 }
 
 // Read mocks base method.

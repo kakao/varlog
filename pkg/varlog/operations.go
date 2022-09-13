@@ -115,3 +115,27 @@ func (v *logImpl) logStreamMetadata(ctx context.Context, tpID types.TopicID, lsI
 	}
 	return lsd, err
 }
+
+func (v *logImpl) logStreamReplicaMetadata(ctx context.Context, tpID types.TopicID, lsID types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
+	replicas, ok := v.replicasRetriever.Retrieve(tpID, lsID)
+	if !ok {
+		return snpb.LogStreamReplicaMetadataDescriptor{}, errNoLogStream
+	}
+
+	var err error
+	for _, replica := range replicas {
+		cl, cerr := v.logCLManager.GetOrConnect(ctx, replica.StorageNodeID, replica.Address)
+		if cerr != nil {
+			err = multierr.Append(err, cerr)
+			continue
+		}
+
+		lsrmd, cerr := cl.LogStreamReplicaMetadata(ctx, tpID, lsID)
+		if cerr != nil {
+			err = multierr.Append(err, cerr)
+			continue
+		}
+		return lsrmd, nil
+	}
+	return snpb.LogStreamReplicaMetadataDescriptor{}, err
+}

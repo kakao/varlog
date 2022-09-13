@@ -120,6 +120,19 @@ func (ls logServer) TrimDeprecated(ctx context.Context, req *snpb.TrimDeprecated
 	return &pbtypes.Empty{}, nil
 }
 
+func (ls logServer) LogStreamReplicaMetadata(_ context.Context, req *snpb.LogStreamReplicaMetadataRequest) (*snpb.LogStreamReplicaMetadataResponse, error) {
+	lse, loaded := ls.sn.executors.Load(req.TopicID, req.LogStreamID)
+	if !loaded {
+		return nil, errors.New("storage: no such logstream")
+	}
+
+	lsrmd, err := lse.Metadata()
+	if err != nil {
+		return nil, err
+	}
+	return &snpb.LogStreamReplicaMetadataResponse{LogStreamReplica: lsrmd}, nil
+}
+
 func (ls logServer) LogStreamMetadata(_ context.Context, req *snpb.LogStreamMetadataRequest) (*snpb.LogStreamMetadataResponse, error) {
 	lse, loaded := ls.sn.executors.Load(req.TopicID, req.LogStreamID)
 	if !loaded {

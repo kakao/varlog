@@ -203,7 +203,7 @@ func TestClientAppend(t *testing.T) {
 	// })
 
 	for _, logStreamID := range clus.LogStreamIDs(topicID) {
-		lsd, err := client.LogStreamMetadata(context.Background(), topicID, logStreamID)
+		lsd, err := client.LogStreamMetadata(context.Background(), topicID, logStreamID) //nolint:staticcheck
 		require.NoError(t, err)
 		require.Equal(t, topicID, lsd.TopicID)
 		require.Equal(t, logStreamID, lsd.LogStreamID)
@@ -217,6 +217,21 @@ func TestClientAppend(t *testing.T) {
 		require.GreaterOrEqual(t, lsd.Tail.GLSN, types.MinGLSN)
 		require.Equal(t, topicID, lsd.Tail.TopicID)
 		require.Equal(t, logStreamID, lsd.Tail.LogStreamID)
+
+		lsrmd, err := client.LogStreamReplicaMetadata(context.Background(), topicID, logStreamID)
+		require.NoError(t, err)
+		require.Equal(t, topicID, lsrmd.TopicID)
+		require.Equal(t, logStreamID, lsrmd.LogStreamID)
+
+		require.Equal(t, types.MinLLSN, lsrmd.Head().LLSN)
+		require.GreaterOrEqual(t, lsrmd.Head().GLSN, types.MinGLSN)
+		require.Equal(t, topicID, lsrmd.Head().TopicID)
+		require.Equal(t, logStreamID, lsrmd.Head().LogStreamID)
+
+		require.GreaterOrEqual(t, lsrmd.Tail().LLSN, types.MinLLSN)
+		require.GreaterOrEqual(t, lsrmd.Tail().GLSN, types.MinGLSN)
+		require.Equal(t, topicID, lsrmd.Tail().TopicID)
+		require.Equal(t, logStreamID, lsrmd.Tail().LogStreamID)
 	}
 }
 
