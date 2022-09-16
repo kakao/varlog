@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -187,7 +186,7 @@ func (fac *DummyStorageNodeClientFactory) GetReporterClient(ctx context.Context,
 
 func (fac *DummyStorageNodeClientFactory) GetManagementClient(ctx context.Context, _ types.ClusterID, address string, _ *zap.Logger) (client.StorageNodeManagementClient, error) {
 	// cheating for test
-	snID, err := strconv.Atoi(address)
+	snID, err := types.ParseStorageNodeID(address)
 	if err != nil {
 		return nil, err
 	}
