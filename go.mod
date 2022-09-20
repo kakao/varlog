@@ -41,7 +41,7 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	k8s.io/api v0.25.1
 	k8s.io/apimachinery v0.25.1
-	k8s.io/client-go v0.25.0
+	k8s.io/client-go v0.25.1
 )
 
 require (
