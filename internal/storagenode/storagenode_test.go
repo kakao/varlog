@@ -1,6 +1,8 @@
 package storagenode
 
 import (
+	"context"
+	"io/fs"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -10,9 +12,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
+	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -428,5 +433,63 @@ func TestStorageNode_MakeVolumesAbsolute(t *testing.T) {
 
 	for _, volume := range sn.volumes {
 		assert.True(t, filepath.IsAbs(volume))
+	}
+}
+
+func TestStorageNode_RemoveLogStreamReplica(t *testing.T) {
+	const (
+		tpid = types.TopicID(1)
+		lsid = types.LogStreamID(1)
+	)
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, snpath string, mc *client.ManagementClient)
+	}{
+		{
+			name: "Succeed",
+			testf: func(t *testing.T, snpath string, mc *client.ManagementClient) {
+				ctx := context.Background()
+				lsrmd, err := mc.AddLogStreamReplica(ctx, tpid, lsid, snpath)
+				require.NoError(t, err)
+				_, err = os.ReadDir(lsrmd.Path)
+				require.NoError(t, err)
+
+				err = mc.RemoveLogStream(ctx, tpid, lsid)
+				require.NoError(t, err)
+				_, err = os.ReadDir(lsrmd.Path)
+				require.ErrorIs(t, err, fs.ErrNotExist)
+			},
+		},
+		{
+			name: "NotFound",
+			testf: func(t *testing.T, _ string, mc *client.ManagementClient) {
+				ctx := context.Background()
+				err := mc.RemoveLogStream(ctx, tpid, lsid)
+				require.ErrorIs(t, err, verrors.ErrNotExist)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t)
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			defer func() {
+				assert.NoError(t, sn.Close())
+				wg.Wait()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+			mc, mcClose := TestNewManagementClient(t, sn.cid, sn.snid, addr)
+			defer mcClose()
+
+			tc.testf(t, sn.snPaths[0], mc)
+		})
 	}
 }
