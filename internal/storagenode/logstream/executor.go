@@ -348,8 +348,11 @@ func (lse *Executor) Report(_ context.Context) (snpb.LogStreamUncommitReport, er
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)
 
-	if lse.esm.load() == executorStateClosed {
+	switch lse.esm.load() {
+	case executorStateClosed:
 		return snpb.LogStreamUncommitReport{}, verrors.ErrClosed
+	case executorStateLearning:
+		return snpb.LogStreamUncommitReport{}, errors.New("log stream: learning state")
 	}
 
 	version, highWatermark, uncommittedLLSNBegin := lse.lsc.reportCommitBase()
