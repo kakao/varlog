@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -341,12 +342,13 @@ func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.Topi
 	if !loaded {
 		return verrors.ErrNotExist
 	}
-	_ = lse.Close()
+	if err := lse.Close(); err != nil {
+		sn.logger.Warn("error while closing log stream replica")
+	}
 	telemetry.UnregisterLogStreamMetrics(sn.metrics, lsid)
-	// TODO (jun): Is removing data path optional or default behavior?
-	// if err := os.RemoveAll(lse.StorageNodePath()); err != nil {
-	//	sn.logger.Warn("error while removing log stream path")
-	// }
+	if err := os.RemoveAll(lse.Path()); err != nil {
+		sn.logger.Warn("error while removing log stream path")
+	}
 	return nil
 }
 

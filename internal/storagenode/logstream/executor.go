@@ -557,6 +557,11 @@ func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
 	return nil
 }
 
+// Path returns the data directory where the replica stores its data.
+func (lse *Executor) Path() string {
+	return lse.stg.Path()
+}
+
 func (lse *Executor) Metrics() *telemetry.LogStreamMetrics {
 	return lse.lsm
 }
