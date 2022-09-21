@@ -86,6 +86,10 @@ func (s *Storage) NewWriteBatch() *WriteBatch {
 // NewCommitBatch creates a batch for commit operations.
 func (s *Storage) NewCommitBatch(cc CommitContext) (*CommitBatch, error) {
 	cb := newCommitBatch(s.db.NewBatch(), s.writeOpts)
+	if err := cb.batch.Set(commitContextKey, encodeCommitContext(cc, cb.cc), nil); err != nil {
+		_ = cb.Close()
+		return nil, err
+	}
 	if err := cb.batch.Set(encodeCommitContextKeyInternal(cc, cb.cck), nil, nil); err != nil {
 		_ = cb.Close()
 		return nil, err
@@ -158,6 +162,17 @@ func (s *Storage) readLLSN(llsn types.LLSN) (le varlogpb.LogEntry, err error) {
 		it.SeekGE(encodeCommitKeyInternal(glsnGuess, ck))
 	}
 	return le, ErrNoLogEntry
+}
+
+func (s *Storage) ReadCommitContext() (cc CommitContext, err error) {
+	buf, closer, err := s.db.Get(commitContextKey)
+	if err != nil {
+		return
+	}
+	defer func() {
+		_ = closer.Close()
+	}()
+	return decodeCommitContext(buf), nil
 }
 
 // CommitContextOf looks up a commit context that contains the log entry for the argument glsn.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
@@ -109,6 +110,42 @@ func testStorage(t *testing.T, f func(testing.TB, *Storage)) {
 func TestStorage(t *testing.T) {
 	testStorage(t, func(t testing.TB, stg *Storage) {
 		assert.NotEmpty(t, stg.Path())
+	})
+}
+
+func TestStorage_CommitContext(t *testing.T) {
+	testStorage(t, func(t testing.TB, stg *Storage) {
+		expected := CommitContext{
+			Version:            1,
+			HighWatermark:      1,
+			CommittedGLSNBegin: 1,
+			CommittedGLSNEnd:   2,
+			CommittedLLSNBegin: 1,
+		}
+		cb, err := stg.NewCommitBatch(expected)
+		require.NoError(t, err)
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		actual, err := stg.ReadCommitContext()
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
+
+		expected = CommitContext{
+			Version:            2,
+			HighWatermark:      3,
+			CommittedGLSNBegin: 2,
+			CommittedGLSNEnd:   4,
+			CommittedLLSNBegin: 2,
+		}
+		cb, err = stg.NewCommitBatch(expected)
+		require.NoError(t, err)
+		require.NoError(t, cb.Apply())
+		require.NoError(t, cb.Close())
+
+		actual, err = stg.ReadCommitContext()
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
 	})
 }
 
