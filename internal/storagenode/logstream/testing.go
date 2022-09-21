@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/pkg/rpc"
@@ -73,4 +74,13 @@ func TestNewBatchData(tb testing.TB, batchLen int, msgSize int) [][]byte {
 		}
 	}
 	return batch
+}
+
+func TestNewReplicatorClient(t *testing.T, addr string) (snpb.ReplicatorClient, func()) {
+	cc, err := rpc.NewConn(context.Background(), addr)
+	require.NoError(t, err)
+	client := snpb.NewReplicatorClient(cc.Conn)
+	return client, func() {
+		assert.NoError(t, cc.Close())
+	}
 }
