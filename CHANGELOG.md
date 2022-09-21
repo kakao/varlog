@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/kakao/varlog/compare/v0.4.1...v0.4.2) (2022-09-21)
+
+
+### Bug Fixes
+
+* **storagenode:** remove data directory in removing log stream replica ([27fb13f](https://github.com/kakao/varlog/commit/27fb13f6c3310a79ad2b8e2990ab738fe8c15224)), closes [#157](https://github.com/kakao/varlog/issues/157)
+
 ## [0.4.1](https://github.com/kakao/varlog/compare/v0.4.0...v0.4.1) (2022-09-13)
 
 
