@@ -401,7 +401,14 @@ func TestSyncLogStream(t *testing.T) {
 						if err != nil {
 							return false
 						}
-						rpt := rsp.GetUncommitReports()[0]
+
+						// Log stream replica does not send a report in the learning state.
+						rpts := rsp.GetUncommitReports()
+						if len(rpts) < 1 {
+							return false
+						}
+
+						rpt := rpts[0]
 						return rpt.GetVersion() == types.Version(numLogs) &&
 							rpt.GetUncommittedLLSNOffset() == types.LLSN(numLogs+1) &&
 							rpt.GetUncommittedLLSNLength() == 0 &&

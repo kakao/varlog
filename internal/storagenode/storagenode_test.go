@@ -16,6 +16,7 @@ import (
 
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode/client"
+	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
@@ -490,6 +491,93 @@ func TestStorageNode_RemoveLogStreamReplica(t *testing.T) {
 			defer mcClose()
 
 			tc.testf(t, sn.snPaths[0], mc)
+		})
+	}
+}
+
+func TestStorageNode_Report(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		tpid = types.TopicID(1)
+		lsid = types.LogStreamID(1)
+		snid = types.StorageNodeID(1)
+	)
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, addr string)
+	}{
+		{
+			name: "Succeed",
+			testf: func(t *testing.T, addr string) {
+				reports := reportcommitter.TestGetReport(t, addr)
+				require.Len(t, reports, 1)
+				require.Equal(t, lsid, reports[0].LogStreamID)
+				require.EqualValues(t, 1, reports[0].UncommittedLLSNOffset)
+				require.Zero(t, reports[0].UncommittedLLSNLength)
+			},
+		},
+		{
+			name: "Learning",
+			testf: func(t *testing.T, addr string) {
+				rc, rcClose := logstream.TestNewReplicatorClient(t, addr)
+				defer rcClose()
+
+				_, err := rc.SyncInit(context.Background(), &snpb.SyncInitRequest{
+					ClusterID: cid,
+					Source: varlogpb.LogStreamReplica{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid + 1,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+					Destination: varlogpb.LogStreamReplica{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+					Range: snpb.SyncRange{
+						FirstLLSN: 1,
+						LastLLSN:  10,
+					},
+				})
+				require.NoError(t, err)
+
+				reports := reportcommitter.TestGetReport(t, addr)
+				require.Empty(t, reports)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t,
+				WithDefaultLogStreamExecutorOptions(
+					logstream.WithSyncInitTimeout(time.Minute),
+				),
+			)
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+
+			mc, mcClose := TestNewManagementClient(t, sn.cid, sn.snid, addr)
+			defer mcClose()
+
+			_, err := mc.AddLogStreamReplica(context.Background(), tpid, lsid, sn.snPaths[0])
+			require.NoError(t, err)
 		})
 	}
 }
