@@ -698,11 +698,13 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 		cur := report.UncommitReports[i]
 		prev := prevReport.UncommitReports[j]
 
-		if cur.LogStreamID < prev.LogStreamID {
+		if cur.Invalid() {
+			i++
+		} else if prev.Invalid() || prev.LogStreamID < cur.LogStreamID {
+			j++
+		} else if cur.LogStreamID < prev.LogStreamID {
 			diff.UncommitReports = append(diff.UncommitReports, cur)
 			i++
-		} else if prev.LogStreamID < cur.LogStreamID {
-			j++
 		} else {
 			if cur.Version < prev.Version {
 				fmt.Printf("invalid report prev:%v, cur:%v\n",
@@ -721,8 +723,11 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 		}
 	}
 
-	if i < report.Len() {
-		diff.UncommitReports = append(diff.UncommitReports, report.UncommitReports[i:]...)
+	for ; i < report.Len(); i++ {
+		cur := report.UncommitReports[i]
+		if !cur.Invalid() {
+			diff.UncommitReports = append(diff.UncommitReports, cur)
+		}
 	}
 
 	for _, r := range diff.UncommitReports {
