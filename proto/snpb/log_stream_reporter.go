@@ -8,6 +8,13 @@ import (
 var InvalidLogStreamUncommitReport = LogStreamUncommitReport{}
 var InvalidLogStreamCommitResult = LogStreamCommitResult{}
 
+// Invalid returns whether the LogStreamUncommitReport is acceptable.
+// LogStreamUncommitReport with invalid logStream or invalid uncommittedLLSNOffset
+// is not acceptable. MetadataRepository ignores these reports.
+func (m *LogStreamUncommitReport) Invalid() bool {
+	return m.GetLogStreamID().Invalid() || m.GetUncommittedLLSNOffset().Invalid()
+}
+
 func (m *LogStreamUncommitReport) UncommittedLLSNEnd() types.LLSN {
 	if m == nil {
 		return types.InvalidLLSN

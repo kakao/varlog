@@ -163,9 +163,9 @@ func TestRegisterLogStream(t *testing.T) {
 		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
-		snID := types.StorageNodeID(0)
-		lsID := types.LogStreamID(0)
-		topicID := types.TopicID(0)
+		snID := types.MinStorageNodeID
+		lsID := types.MinLogStreamID
+		topicID := types.MinTopicID
 
 		Convey("registeration LogStream with not existing storageNodeID should be failed", func() {
 			err := reportCollector.RegisterLogStream(topicID, snID, lsID, types.InvalidVersion, varlogpb.LogStreamStatusRunning)
@@ -206,8 +206,8 @@ func TestUnregisterStorageNode(t *testing.T) {
 		defer reportCollector.Close()
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
-		lsID := types.LogStreamID(0)
-		topicID := types.TopicID(0)
+		lsID := types.MinLogStreamID
+		topicID := types.MinTopicID
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
@@ -261,9 +261,9 @@ func TestUnregisterLogStream(t *testing.T) {
 		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
-		snID := types.StorageNodeID(0)
-		lsID := types.LogStreamID(0)
-		topicID := types.TopicID(0)
+		snID := types.MinStorageNodeID
+		lsID := types.MinLogStreamID
+		topicID := types.MinTopicID
 
 		Convey("unregisteration LogStream with not existing storageNodeID should be failed", func() {
 			err := reportCollector.UnregisterLogStream(snID, lsID)
@@ -478,9 +478,10 @@ func TestReport(t *testing.T) {
 		}(nrStorage)
 
 		for i := 0; i < nrStorage; i++ {
+			snID := types.MinStorageNodeID + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
 				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: types.StorageNodeID(i),
+					StorageNodeID: snID,
 				},
 			}
 
@@ -491,6 +492,54 @@ func TestReport(t *testing.T) {
 		}
 
 		wg.Wait()
+	})
+}
+
+func TestReportIgnore(t *testing.T) {
+	Convey("ReportCollector should collect report from registered storage node", t, func() {
+		a := NewDummyStorageNodeClientFactory(1, true)
+		mr := NewDummyMetadataRepository(a)
+
+		logger, _ := zap.NewDevelopment()
+		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
+		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
+		defer reportCollector.Close()
+
+		snID := types.MinStorageNodeID
+		sn := &varlogpb.StorageNodeDescriptor{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snID,
+			},
+		}
+
+		err := reportCollector.RegisterStorageNode(sn)
+		So(err, ShouldBeNil)
+
+		<-mr.reportC
+
+		reporterClient := a.lookupClient(sn.StorageNodeID)
+		reporterClient.makeInvalid(0)
+
+		r := <-mr.reportC
+		for _, ur := range r.UncommitReports {
+			So(ur.Invalid(), ShouldBeTrue)
+		}
+
+		after := time.After(DefaultReportRefreshTime / 2)
+
+	Loop:
+		for {
+			select {
+			case <-after:
+				break Loop
+			case r := <-mr.reportC:
+				for _, ur := range r.UncommitReports {
+					So(ur.LogStreamID.Invalid(), ShouldBeFalse)
+					So(ur.Invalid(), ShouldBeFalse)
+				}
+			}
+		}
+
 	})
 }
 
@@ -506,7 +555,7 @@ func TestReportDedup(t *testing.T) {
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: types.StorageNodeID(0),
+				StorageNodeID: types.MinStorageNodeID,
 			},
 		}
 
@@ -520,26 +569,26 @@ func TestReportDedup(t *testing.T) {
 			reporterClient := a.lookupClient(sn.StorageNodeID)
 			reporterClient.increaseUncommitted(0)
 
-			Convey("Then report should include logStream[0]", func() {
+			Convey("Then report should include logStream[1]", func() {
 				r = <-mr.reportC
 				So(r.Len(), ShouldEqual, 1)
-				So(r.UncommitReports[0].LogStreamID, ShouldEqual, types.LogStreamID(0))
+				So(r.UncommitReports[0].LogStreamID, ShouldEqual, types.MinLogStreamID)
 
-				Convey("When logStream[1] increase uncommitted", func() {
+				Convey("When logStream[2] increase uncommitted", func() {
 					reporterClient.increaseUncommitted(1)
 
-					Convey("Then report should include logStream[1]", func() {
+					Convey("Then report should include logStream[2]", func() {
 						r = <-mr.reportC
 						So(r.Len(), ShouldEqual, 1)
-						So(r.UncommitReports[0].LogStreamID, ShouldEqual, types.LogStreamID(1))
+						So(r.UncommitReports[0].LogStreamID, ShouldEqual, types.MinLogStreamID+types.LogStreamID(1))
 
-						Convey("When logStream[2] increase uncommitted", func() {
+						Convey("When logStream[3] increase uncommitted", func() {
 							reporterClient.increaseUncommitted(2)
 
-							Convey("Then report should include logStream[2]", func() {
+							Convey("Then report should include logStream[3]", func() {
 								r = <-mr.reportC
 								So(r.Len(), ShouldEqual, 1)
-								So(r.UncommitReports[0].LogStreamID, ShouldEqual, types.LogStreamID(2))
+								So(r.UncommitReports[0].LogStreamID, ShouldEqual, types.MinLogStreamID+types.LogStreamID(2))
 
 								Convey("After reportAll interval, report should include all", func() {
 									r = <-mr.reportC
@@ -574,9 +623,10 @@ func TestReportCollectorSeal(t *testing.T) {
 		})
 
 		for i := 0; i < nrStorage; i++ {
+			snID := types.MinStorageNodeID + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
 				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: types.StorageNodeID(i),
+					StorageNodeID: snID,
 				},
 			}
 
@@ -593,12 +643,14 @@ func TestReportCollectorSeal(t *testing.T) {
 		var sealedLSID types.LogStreamID
 
 		for i := 0; i < nrLogStream; i++ {
-			err := reportCollector.RegisterLogStream(topicID, types.StorageNodeID(i%nrStorage), types.LogStreamID(i), types.InvalidVersion, varlogpb.LogStreamStatusRunning)
+			snID := types.MinStorageNodeID + types.StorageNodeID(i%nrStorage)
+			lsID := types.MinLogStreamID + types.LogStreamID(i)
+			err := reportCollector.RegisterLogStream(topicID, snID, lsID, types.InvalidVersion, varlogpb.LogStreamStatusRunning)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			sealedLSID = types.LogStreamID(i)
+			sealedLSID = lsID
 		}
 
 		gls := cc.newDummyCommitResults(knownVer+1, glsn, nrStorage)
@@ -717,12 +769,13 @@ func (cc *dummyCommitContext) newDummyCommitResults(ver types.Version, baseGLSN 
 	glsn := baseGLSN
 	for i := 0; i < nrLogStream; i++ {
 		numUncommitLen := 0
-		if !cc.sealed(types.LogStreamID(i)) {
+		lsID := types.MinLogStreamID + types.LogStreamID(i)
+		if !cc.sealed(lsID) {
 			numUncommitLen = 1
 		}
 
 		r := snpb.LogStreamCommitResult{
-			LogStreamID:         types.LogStreamID(i),
+			LogStreamID:         lsID,
 			CommittedGLSNOffset: glsn,
 			CommittedLLSNOffset: cc.committedLLSNBeginOffset[i],
 			CommittedGLSNLength: uint64(numUncommitLen),
@@ -756,9 +809,10 @@ func TestCommit(t *testing.T) {
 		})
 
 		for i := 0; i < nrStorage; i++ {
+			snID := types.MinStorageNodeID + types.StorageNodeID(i)
 			sn := &varlogpb.StorageNodeDescriptor{
 				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: types.StorageNodeID(i),
+					StorageNodeID: snID,
 				},
 			}
 
@@ -773,7 +827,9 @@ func TestCommit(t *testing.T) {
 		}
 
 		for i := 0; i < nrLogStream; i++ {
-			err := reportCollector.RegisterLogStream(topicID, types.StorageNodeID(i%nrStorage), types.LogStreamID(i), types.InvalidVersion, varlogpb.LogStreamStatusRunning)
+			snID := types.MinStorageNodeID + types.StorageNodeID(i%nrStorage)
+			lsID := types.MinLogStreamID + types.LogStreamID(i)
+			err := reportCollector.RegisterLogStream(topicID, snID, lsID, types.InvalidVersion, varlogpb.LogStreamStatusRunning)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -838,9 +894,11 @@ func TestCommit(t *testing.T) {
 				logger.Debug("trimGLS", zap.Any("knowVer", knownVer), zap.Any("trimVer", trimVer), zap.Any("result", len(mr.m)))
 
 				Convey("ReportCollector should send proper commit against new StorageNode", func() {
+					snID := types.MinStorageNodeID + types.StorageNodeID(nrStorage)
+					lsID := types.MinLogStreamID + types.LogStreamID(nrLogStream)
 					sn := &varlogpb.StorageNodeDescriptor{
 						StorageNode: varlogpb.StorageNode{
-							StorageNodeID: types.StorageNodeID(nrStorage),
+							StorageNodeID: snID,
 						},
 					}
 
@@ -849,7 +907,7 @@ func TestCommit(t *testing.T) {
 
 					nrStorage += 1
 
-					err = reportCollector.RegisterLogStream(topicID, sn.StorageNodeID, types.LogStreamID(nrLogStream), knownVer, varlogpb.LogStreamStatusRunning)
+					err = reportCollector.RegisterLogStream(topicID, sn.StorageNodeID, lsID, knownVer, varlogpb.LogStreamStatusRunning)
 					So(err, ShouldBeNil)
 
 					nrLogStream += 1
@@ -899,7 +957,7 @@ func TestCommitWithDelay(t *testing.T) {
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: types.StorageNodeID(0),
+				StorageNodeID: types.MinStorageNodeID,
 			},
 		}
 
@@ -912,7 +970,7 @@ func TestCommitWithDelay(t *testing.T) {
 			return a.lookupClient(sn.StorageNodeID) != nil
 		}), ShouldBeTrue)
 
-		err = reportCollector.RegisterLogStream(topicID, types.StorageNodeID(0), types.LogStreamID(0), types.InvalidVersion, varlogpb.LogStreamStatusRunning)
+		err = reportCollector.RegisterLogStream(topicID, types.MinStorageNodeID, types.MinLogStreamID, types.InvalidVersion, varlogpb.LogStreamStatusRunning)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1012,7 +1070,7 @@ func TestRPCFail(t *testing.T) {
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: types.StorageNodeID(0),
+				StorageNodeID: types.MinStorageNodeID,
 			},
 		}
 
@@ -1073,7 +1131,7 @@ func TestReporterClientReconnect(t *testing.T) {
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: types.StorageNodeID(0),
+				StorageNodeID: types.MinStorageNodeID,
 			},
 		}
 

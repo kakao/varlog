@@ -798,6 +798,10 @@ func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
 		snID := r.StorageNodeID
 	LS:
 		for _, u := range r.UncommitReport {
+			if u.Invalid() {
+				continue LS
+			}
+
 			s, ok := mr.storage.LookupUncommitReport(u.LogStreamID, snID)
 			if !ok {
 				continue LS
