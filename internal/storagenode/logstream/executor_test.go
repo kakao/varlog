@@ -1449,10 +1449,12 @@ func TestExecutorSyncInit(t *testing.T) {
 					LastLLSN:  dstLast + 10,
 				}, syncRange)
 
-				_, _, uncommittedLLSNBegin = dst.lsc.reportCommitBase()
-				uncommittedLLSNEnd = dst.lsc.uncommittedLLSNEnd.Load()
+				ver, hwm, uncommittedLLSNBegin := dst.lsc.reportCommitBase()
+				assert.Zero(t, ver)
+				assert.Zero(t, hwm)
+				assert.Zero(t, uncommittedLLSNBegin)
 
-				assert.Equal(t, dstLast+5, uncommittedLLSNBegin)
+				uncommittedLLSNEnd = dst.lsc.uncommittedLLSNEnd.Load()
 				assert.Equal(t, dstLast+5, uncommittedLLSNEnd)
 
 				lsrmd, err := dst.Metadata()

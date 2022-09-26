@@ -374,11 +374,34 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		return snpb.SyncRange{FirstLLSN: types.InvalidLLSN, LastLLSN: types.InvalidLLSN}, nil
 	}
 
-	if uncommittedLLSNBegin < srcRange.FirstLLSN { // The source replica may have been trimmed.
+	// The log stream replica will not send a report to the metadata
+	// repository after changing its state to learning.
+	// FIXME(jun): It should be necessary to have a mechanism to expire long-time sync init state.
+	if !lse.esm.compareAndSwap(executorStateSealing, executorStateLearning) {
+		err = fmt.Errorf("log stream: sync init: invalid state %d: %w", lse.esm.load(), verrors.ErrInvalid)
+		return
+	}
+
+	trimmed := uncommittedLLSNBegin < srcRange.FirstLLSN
+	if trimmed {
 		lastCommittedLLSN = srcRange.FirstLLSN - 1
-		uncommittedLLSNBegin = lastCommittedLLSN + 1
-		// NOTE: The version and high watermark are not correct.
-		lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, uncommittedLLSNBegin) // new uncommittedLLSNBegin
+	}
+
+	syncRange = snpb.SyncRange{
+		FirstLLSN: lastCommittedLLSN + 1,
+		LastLLSN:  srcRange.LastLLSN,
+	}
+
+	srb, err := newSyncReplicateBuffer(srcReplica, syncRange)
+	if err != nil {
+		lse.esm.store(executorStateSealing)
+		return syncRange, err
+	}
+
+	if trimmed {
+		// NOTE: All zero of Version, HighWatermark, and Offset makes the report of the log stream replica meaningless.
+		lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, types.InvalidLLSN)
+
 		// NOTE: Since prefix logs has been trimmed, the local low and
 		// high watermarks are invalid. It will be reset by a commit
 		// triggered by SyncReplicate.
@@ -390,24 +413,8 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		lse.lsc.setLocalHighWatermark(varlogpb.InvalidLogEntryMeta())
 	}
 
-	syncRange = snpb.SyncRange{
-		FirstLLSN: uncommittedLLSNBegin,
-		LastLLSN:  srcRange.LastLLSN,
-	}
-
-	// FIXME(jun): It should be necessary to have a mechanism to expire long-time sync init state.
-	if !lse.esm.compareAndSwap(executorStateSealing, executorStateLearning) {
-		err = fmt.Errorf("log stream: sync init: invalid state %d: %w", lse.esm.load(), verrors.ErrInvalid)
-		return
-	}
-
 	// learning
 	lse.resetInternalState(lastCommittedLLSN, !lse.isPrimary())
-	srb, err := newSyncReplicateBuffer(srcReplica, syncRange)
-	if err != nil {
-		lse.esm.store(executorStateSealing)
-		return syncRange, err
-	}
 	lse.srb = srb
 	return syncRange, nil
 }
