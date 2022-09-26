@@ -519,8 +519,6 @@ func TestMRApplyInvalidReport(t *testing.T) {
 			err := mr.storage.registerStorageNode(sn)
 			So(err, ShouldBeNil)
 		}
-		err = mr.storage.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
-		So(err, ShouldBeNil)
 
 		lsID := types.MinLogStreamID
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)

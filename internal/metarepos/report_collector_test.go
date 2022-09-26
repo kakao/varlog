@@ -505,7 +505,6 @@ func TestReportIgnore(t *testing.T) {
 		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		defer reportCollector.Close()
 
-		// Register Invalid StorageNodeID to set InvalidLogStreamID
 		snID := types.MinStorageNodeID
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
