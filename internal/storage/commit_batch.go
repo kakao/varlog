@@ -12,6 +12,7 @@ var commitBatchPool = sync.Pool{
 	New: func() interface{} {
 		return &CommitBatch{
 			cck: make([]byte, commitContextKeyLength),
+			cc:  make([]byte, commitContextLength),
 			ck:  make([]byte, commitKeyLength),
 			dk:  make([]byte, dataKeyLength),
 		}
@@ -22,6 +23,7 @@ type CommitBatch struct {
 	batch     *pebble.Batch
 	writeOpts *pebble.WriteOptions
 	cck       []byte
+	cc        []byte
 	ck        []byte
 	dk        []byte
 }
