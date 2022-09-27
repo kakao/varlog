@@ -718,99 +718,163 @@ func TestStorage_CommitContextOf(t *testing.T) {
 	})
 }
 
+func TestStorage_TrimWhenNoLogEntry(t *testing.T) {
+	tcs := []struct {
+		name  string
+		testf func(t testing.TB, stg *Storage)
+	}{
+		{
+			name: "MinGLSN",
+			testf: func(t testing.TB, stg *Storage) {
+				err := stg.Trim(types.MinGLSN)
+				assert.ErrorIs(t, err, ErrNoLogEntry)
+			},
+		},
+		{
+			name: "MaxGLSN",
+			testf: func(t testing.TB, stg *Storage) {
+				err := stg.Trim(types.MaxGLSN)
+				assert.ErrorIs(t, err, ErrNoLogEntry)
+			},
+		},
+		{
+			name: "InvalidGLSN",
+			testf: func(t testing.TB, stg *Storage) {
+				err := stg.Trim(types.InvalidGLSN)
+				assert.ErrorIs(t, err, ErrNoLogEntry)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			testStorage(t, func(t testing.TB, stg *Storage) {
+				tc.testf(t, stg)
+			})
+		})
+	}
+}
+
 func TestStorage_Trim(t *testing.T) {
-	testStorage(t, func(t testing.TB, stg *Storage) {
-		err := stg.Trim(1)
-		assert.ErrorIs(t, err, ErrNoLogEntry)
+	expectedCC := CommitContext{
+		Version:            1,
+		HighWatermark:      3,
+		CommittedGLSNBegin: 1,
+		CommittedGLSNEnd:   4,
+		CommittedLLSNBegin: 1,
+	}
 
-		// CC  : +-1-+
-		// LLSN: 1 2 3
-		// GLSN: 1 2 3
-		wb := stg.NewWriteBatch()
-		assert.NoError(t, wb.Set(1, nil))
-		assert.NoError(t, wb.Set(2, nil))
-		assert.NoError(t, wb.Set(3, nil))
-		assert.NoError(t, wb.Apply())
-		assert.NoError(t, wb.Close())
+	tcs := []struct {
+		name  string
+		testf func(t testing.TB, stg *Storage)
+	}{
+		{
+			name: "MinGLSN",
+			testf: func(t testing.TB, stg *Storage) {
+				err := stg.Trim(types.MinGLSN)
+				assert.NoError(t, err)
 
-		cb, err := stg.NewCommitBatch(CommitContext{
-			Version:            1,
-			HighWatermark:      5,
-			CommittedGLSNBegin: 1,
-			CommittedGLSNEnd:   4,
-			CommittedLLSNBegin: 1,
-		})
-		assert.NoError(t, err)
-		assert.NoError(t, cb.Set(1, 1))
-		assert.NoError(t, cb.Set(2, 2))
-		assert.NoError(t, cb.Set(3, 3))
-		assert.NoError(t, cb.Apply())
-		assert.NoError(t, cb.Close())
+				it := stg.db.NewIter(&pebble.IterOptions{
+					LowerBound: []byte{dataKeyPrefix},
+					UpperBound: []byte{dataKeySentinelPrefix},
+				})
+				assert.True(t, it.First())
+				assert.Equal(t, types.LLSN(2), decodeDataKey(it.Key()))
+				assert.True(t, it.Next())
+				assert.Equal(t, types.LLSN(3), decodeDataKey(it.Key()))
+				assert.NoError(t, it.Close())
 
-		// CC  : +-1-+
-		// LLSN: _ 2 3
-		// GLSN: _ 2 3
-		err = stg.Trim(1)
-		assert.NoError(t, err)
-		it := stg.db.NewIter(&pebble.IterOptions{
-			LowerBound: []byte{dataKeyPrefix},
-			UpperBound: []byte{dataKeySentinelPrefix},
-		})
-		assert.True(t, it.First())
-		assert.Equal(t, types.LLSN(2), decodeDataKey(it.Key()))
-		assert.True(t, it.Next())
-		assert.Equal(t, types.LLSN(3), decodeDataKey(it.Key()))
-		assert.NoError(t, it.Close())
-		it = stg.db.NewIter(&pebble.IterOptions{
-			LowerBound: []byte{commitKeyPrefix},
-			UpperBound: []byte{commitKeySentinelPrefix},
-		})
-		assert.True(t, it.First())
-		assert.Equal(t, types.GLSN(2), decodeCommitKey(it.Key()))
-		assert.True(t, it.Next())
-		assert.Equal(t, types.GLSN(3), decodeCommitKey(it.Key()))
-		assert.NoError(t, it.Close())
-		it = stg.db.NewIter(&pebble.IterOptions{
-			LowerBound: []byte{commitContextKeyPrefix},
-			UpperBound: []byte{commitContextKeySentinelPrefix},
-		})
-		assert.True(t, it.First())
-		assert.Equal(t, CommitContext{
-			Version:            1,
-			HighWatermark:      5,
-			CommittedGLSNBegin: 1,
-			CommittedGLSNEnd:   4,
-			CommittedLLSNBegin: 1,
-		}, decodeCommitContextKey(it.Key()))
-		assert.NoError(t, it.Close())
+				it = stg.db.NewIter(&pebble.IterOptions{
+					LowerBound: []byte{commitKeyPrefix},
+					UpperBound: []byte{commitKeySentinelPrefix},
+				})
+				assert.True(t, it.First())
+				assert.Equal(t, types.GLSN(2), decodeCommitKey(it.Key()))
+				assert.True(t, it.Next())
+				assert.Equal(t, types.GLSN(3), decodeCommitKey(it.Key()))
+				assert.NoError(t, it.Close())
 
-		// CC  : +-_-+
-		// LLSN: _ _ _
-		// GLSN: _ _ _
-		err = stg.Trim(3)
-		assert.NoError(t, err)
-		it = stg.db.NewIter(&pebble.IterOptions{
-			LowerBound: []byte{dataKeyPrefix},
-			UpperBound: []byte{dataKeySentinelPrefix},
-		})
-		assert.False(t, it.First())
-		assert.NoError(t, it.Close())
-		it = stg.db.NewIter(&pebble.IterOptions{
-			LowerBound: []byte{commitKeyPrefix},
-			UpperBound: []byte{commitKeySentinelPrefix},
-		})
-		assert.False(t, it.First())
-		assert.NoError(t, it.Close())
-		it = stg.db.NewIter(&pebble.IterOptions{
-			LowerBound: []byte{commitContextKeyPrefix},
-			UpperBound: []byte{commitContextKeySentinelPrefix},
-		})
-		assert.False(t, it.First())
-		assert.NoError(t, it.Close())
+				cc, err := stg.ReadCommitContext()
+				assert.NoError(t, err)
+				assert.Equal(t, expectedCC, cc)
+			},
+		},
+		{
+			name: "LastCommittedGLSN",
+			testf: func(t testing.TB, stg *Storage) {
+				err := stg.Trim(3)
+				assert.NoError(t, err)
+				assert.NoError(t, err)
 
-		for glsn := types.MinGLSN; glsn < types.GLSN(5); glsn++ {
-			err = stg.Trim(glsn)
-			assert.ErrorIs(t, err, ErrNoLogEntry)
-		}
-	})
+				it := stg.db.NewIter(&pebble.IterOptions{
+					LowerBound: []byte{dataKeyPrefix},
+					UpperBound: []byte{dataKeySentinelPrefix},
+				})
+				assert.False(t, it.First())
+				assert.NoError(t, it.Close())
+
+				it = stg.db.NewIter(&pebble.IterOptions{
+					LowerBound: []byte{commitKeyPrefix},
+					UpperBound: []byte{commitKeySentinelPrefix},
+				})
+				assert.False(t, it.First())
+				assert.NoError(t, it.Close())
+
+				cc, err := stg.ReadCommitContext()
+				assert.NoError(t, err)
+				assert.Equal(t, expectedCC, cc)
+			},
+		},
+		{
+			name: "MaxGLSN",
+			testf: func(t testing.TB, stg *Storage) {
+				err := stg.Trim(types.MaxGLSN)
+				assert.NoError(t, err)
+
+				it := stg.db.NewIter(&pebble.IterOptions{
+					LowerBound: []byte{dataKeyPrefix},
+					UpperBound: []byte{dataKeySentinelPrefix},
+				})
+				assert.False(t, it.First())
+				assert.NoError(t, it.Close())
+
+				it = stg.db.NewIter(&pebble.IterOptions{
+					LowerBound: []byte{commitKeyPrefix},
+					UpperBound: []byte{commitKeySentinelPrefix},
+				})
+				assert.False(t, it.First())
+				assert.NoError(t, it.Close())
+
+				cc, err := stg.ReadCommitContext()
+				assert.NoError(t, err)
+				assert.Equal(t, expectedCC, cc)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			testStorage(t, func(t testing.TB, stg *Storage) {
+				// CC  : +---+
+				// LLSN: 1 2 3
+				// GLSN: 1 2 3
+				wb := stg.NewWriteBatch()
+				assert.NoError(t, wb.Set(1, nil))
+				assert.NoError(t, wb.Set(2, nil))
+				assert.NoError(t, wb.Set(3, nil))
+				assert.NoError(t, wb.Apply())
+				assert.NoError(t, wb.Close())
+
+				cb, err := stg.NewCommitBatch(expectedCC)
+				assert.NoError(t, err)
+				assert.NoError(t, cb.Set(1, 1))
+				assert.NoError(t, cb.Set(2, 2))
+				assert.NoError(t, cb.Set(3, 3))
+				assert.NoError(t, cb.Apply())
+				assert.NoError(t, cb.Close())
+
+				tc.testf(t, stg)
+			})
+		})
+	}
 }
