@@ -212,8 +212,10 @@ func (s *Storage) NextCommitContextOf(cc CommitContext) (next CommitContext, err
 	return decodeCommitContextKey(it.Key()), nil
 }
 
-// Trim deletes log entries whose GLSNs are less than or equal to the argument glsn.
-// It returns the ErrNoCommitContext if there are no logs to delete.
+// Trim deletes log entries whose GLSNs are less than or equal to the argument
+// glsn. Internally, it removes records for both data and commits but does not
+// remove the commit context.
+// It returns the ErrNoLogEntry if there are no logs to delete.
 func (s *Storage) Trim(glsn types.GLSN) error {
 	lem, err := s.findLTE(glsn)
 	if err != nil {
@@ -227,50 +229,35 @@ func (s *Storage) Trim(glsn types.GLSN) error {
 		_ = batch.Close()
 	}()
 
-	// commit context
-	cc, err := s.CommitContextOf(trimGLSN)
-	if err != nil {
-		return err
-	}
-	cckBegin := make([]byte, commitContextKeyLength)
-	cckBegin = encodeCommitContextKeyInternal(CommitContext{}, cckBegin)
-	cckEnd := make([]byte, commitContextKeyLength)
-	cckEnd = encodeCommitContextKeyInternal(cc, cckEnd)
-	if cc.CommittedGLSNEnd-1 == trimGLSN {
-		// cc is deletable.
-		cc.Version++
-		cckEnd = encodeCommitContextKeyInternal(cc, cckEnd)
-	}
-	if err := batch.DeleteRange(cckBegin, cckEnd, nil); err != nil {
-		return err
-	}
-
 	// commit
 	ckBegin := make([]byte, commitKeyLength)
 	ckBegin = encodeCommitKeyInternal(types.MinGLSN, ckBegin)
 	ckEnd := make([]byte, commitKeyLength)
 	ckEnd = encodeCommitKeyInternal(trimGLSN+1, ckEnd)
-	if err := batch.DeleteRange(ckBegin, ckEnd, nil); err != nil {
-		return err
-	}
+	_ = batch.DeleteRange(ckBegin, ckEnd, nil)
 
 	// data
 	dkBegin := make([]byte, dataKeyLength)
 	dkBegin = encodeDataKeyInternal(types.MinLLSN, dkBegin)
 	dkEnd := make([]byte, dataKeyLength)
 	dkEnd = encodeDataKeyInternal(trimLLSN+1, dkEnd)
-	if err := batch.DeleteRange(dkBegin, dkEnd, nil); err != nil {
-		return err
-	}
+	_ = batch.DeleteRange(dkBegin, dkEnd, nil)
 
 	return batch.Commit(s.writeOpts)
 }
 
 func (s *Storage) findLTE(glsn types.GLSN) (lem varlogpb.LogEntryMeta, err error) {
-	ck := make([]byte, commitKeyLength)
+	var upper []byte
+	if glsn < types.MaxGLSN {
+		upper = make([]byte, commitKeyLength)
+		upper = encodeCommitKeyInternal(glsn+1, upper)
+	} else {
+		upper = []byte{commitKeySentinelPrefix}
+	}
+
 	it := s.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
-		UpperBound: encodeCommitKeyInternal(glsn+1, ck),
+		UpperBound: upper,
 	})
 	defer func() {
 		_ = it.Close()
