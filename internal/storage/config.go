@@ -32,6 +32,8 @@ type config struct {
 	maxConcurrentCompaction     int
 	verbose                     bool
 	logger                      *zap.Logger
+
+	readOnly bool
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -154,6 +156,14 @@ func WithVerboseLogging() Option {
 func WithLogger(logger *zap.Logger) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.logger = logger
+	})
+}
+
+// ReadOnly makes storage read-only. It is helpful only for testing. Usually,
+// users do not have to call it.
+func ReadOnly() Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.readOnly = true
 	})
 }
 
