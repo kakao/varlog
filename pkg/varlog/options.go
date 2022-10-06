@@ -6,6 +6,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/kakao/varlog/pkg/types"
 )
 
 const (
@@ -152,6 +154,7 @@ func defaultAppendOptions() appendOptions {
 type appendOptions struct {
 	retryCount      int
 	selectLogStream bool
+	allowLogStreams map[types.LogStreamID]struct{}
 }
 
 type AppendOption interface {
@@ -179,6 +182,12 @@ func WithRetryCount(retryCount int) AppendOption {
 func withoutSelectLogStream() AppendOption {
 	return newAppendOption(func(opts *appendOptions) {
 		opts.selectLogStream = false
+	})
+}
+
+func WithAllowLogStreams(logStreams map[types.LogStreamID]struct{}) AppendOption {
+	return newAppendOption(func(opts *appendOptions) {
+		opts.allowLogStreams = logStreams
 	})
 }
 
