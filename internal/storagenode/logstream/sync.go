@@ -358,7 +358,7 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		return
 	}
 
-	_, _, uncommittedLLSNBegin := lse.lsc.reportCommitBase()
+	_, _, uncommittedLLSNBegin, _ := lse.lsc.reportCommitBase()
 	lastCommittedLLSN := uncommittedLLSNBegin - 1
 	if lastCommittedLLSN > srcRange.LastLLSN {
 		lse.logger.Panic("sync init: destination of sync has too many logs",
@@ -400,7 +400,7 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 
 	if trimmed {
 		// NOTE: All zero of Version, HighWatermark, and Offset makes the report of the log stream replica meaningless.
-		lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, types.InvalidLLSN)
+		lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, lastCommittedLLSN+1, true)
 
 		// NOTE: Since prefix logs has been trimmed, the local low and
 		// high watermarks are invalid. It will be reset by a commit

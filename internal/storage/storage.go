@@ -67,6 +67,10 @@ func New(opts ...Option) (*Storage, error) {
 		pebbleOpts.EventListener.WALDeleted = nil
 	}
 
+	if cfg.readOnly {
+		pebbleOpts.ReadOnly = true
+	}
+
 	db, err := pebble.Open(cfg.path, pebbleOpts)
 	if err != nil {
 		return nil, err
@@ -280,6 +284,9 @@ func (s *Storage) DiskUsage() int64 {
 }
 
 // Close closes the storage.
-func (s *Storage) Close() error {
-	return multierr.Append(s.db.Flush(), s.db.Close())
+func (s *Storage) Close() (err error) {
+	if !s.readOnly {
+		err = s.db.Flush()
+	}
+	return multierr.Append(err, s.db.Close())
 }

@@ -344,7 +344,7 @@ func (lse *Executor) resetInternalState(lastCommittedLLSN types.LLSN, discardCom
 	lse.lsc.uncommittedLLSNEnd.Store(lastCommittedLLSN + 1)
 }
 
-func (lse *Executor) Report(_ context.Context) (snpb.LogStreamUncommitReport, error) {
+func (lse *Executor) Report(_ context.Context) (report snpb.LogStreamUncommitReport, err error) {
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)
 
@@ -352,9 +352,19 @@ func (lse *Executor) Report(_ context.Context) (snpb.LogStreamUncommitReport, er
 		return snpb.LogStreamUncommitReport{}, verrors.ErrClosed
 	}
 
-	version, highWatermark, uncommittedLLSNBegin := lse.lsc.reportCommitBase()
+	version, highWatermark, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+	if invalid {
+		// If it is invalid, incompatibility between the commit context
+		// and the last log entry happens. The report must contain an
+		// invalid version, an invalid high watermark, and an invalid
+		// uncommittedLLSNOffset, and the metadata repository ignores
+		// invalid reports.
+		report.LogStreamID = lse.lsid
+		return report, nil
+	}
+
 	uncommittedLLSNEnd := lse.lsc.uncommittedLLSNEnd.Load()
-	report := snpb.LogStreamUncommitReport{
+	report = snpb.LogStreamUncommitReport{
 		LogStreamID:           lse.lsid,
 		Version:               version,
 		HighWatermark:         highWatermark,
@@ -381,9 +391,12 @@ func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamComm
 		return verrors.ErrClosed
 	}
 
-	version, _, _ := lse.lsc.reportCommitBase()
+	version, _, _, invalid := lse.lsc.reportCommitBase()
 	if commitResult.Version <= version {
 		return errors.New("too old commit result")
+	}
+	if invalid {
+		return errors.New("invalid replica status")
 	}
 
 	if types.Version(atomic.LoadUint64(&lse.prevCommitVersion)) != commitResult.Version {
@@ -434,7 +447,7 @@ func (lse *Executor) metadataDescriptor(state executorState) snpb.LogStreamRepli
 
 	localLowWatermark := lse.lsc.localLowWatermark()
 	localHighWatermark := lse.lsc.localHighWatermark()
-	version, globalHighWatermark, _ := lse.lsc.reportCommitBase()
+	version, globalHighWatermark, _, _ := lse.lsc.reportCommitBase()
 	return snpb.LogStreamReplicaMetadataDescriptor{
 		LogStreamReplica: varlogpb.LogStreamReplica{
 			StorageNode: varlogpb.StorageNode{
@@ -515,7 +528,7 @@ func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
 	// NB: When a replica is started just ago, it may not know the global high watermark.
 	// It means that it can return an error accidentally.
 	// It can fix by allowing TrimDeprecated RPC only when the replica is executorStateAppendable.
-	_, globalHWM, _ := lse.lsc.reportCommitBase()
+	_, globalHWM, _, _ := lse.lsc.reportCommitBase()
 	if glsn > globalHWM {
 		// not appended yet
 		return fmt.Errorf("log stream: trim: %d not appended, global high watermark %d", glsn, globalHWM)
@@ -615,28 +628,41 @@ func (lse *Executor) isPrimary() bool {
 	return len(lse.primaryBackups) > 0 && lse.primaryBackups[0].StorageNodeID == lse.snid && lse.primaryBackups[0].LogStreamID == lse.lsid
 }
 
-func (lse *Executor) restoreLogStreamContext(recoveryPoints storage.RecoveryPoints) *logStreamContext {
+func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStreamContext {
+	cc := rp.LastCommitContext
+	first := rp.CommittedLogEntry.First
+	last := rp.CommittedLogEntry.Last
+
 	lsc := newLogStreamContext()
-	commitVersion, globalHighWatermark, uncommittedLLSNBegin := lsc.reportCommitBase()
-	uncommittedLLSNEnd := lsc.uncommittedLLSNEnd.Load()
-	localLowWatermark := lsc.localLowWatermark()
-	localHighWatermark := lsc.localHighWatermark()
+	restoreMode := "init"
+	defer func() {
+		lse.logger.Info("restore log stream context", zap.String("mode", restoreMode))
+	}()
 
-	if lastCC := recoveryPoints.LastCommitContext; lastCC != nil {
-		commitVersion = lastCC.Version
-		globalHighWatermark = lastCC.HighWatermark
-	}
-	if boundaries := recoveryPoints.CommittedLogEntry; boundaries.First != nil {
-		lastLLSN := boundaries.Last.LLSN
-		uncommittedLLSNBegin = lastLLSN + 1
-		uncommittedLLSNEnd = lastLLSN + 1
-		localLowWatermark = *boundaries.First
-		localHighWatermark = *boundaries.Last
+	if cc == nil && last == nil { // new log stream replica
+		return lsc
 	}
 
-	lsc.storeReportCommitBase(commitVersion, globalHighWatermark, uncommittedLLSNBegin)
-	lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
-	lsc.setLocalLowWatermark(localLowWatermark)
-	lsc.setLocalHighWatermark(localHighWatermark)
+	if cc != nil && last != nil { // recovery
+		restoreMode = "recovered"
+		uncommittedLLSNBegin := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
+		if uncommittedLLSNBegin-1 == last.LLSN {
+			lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedLLSNBegin, false)
+			lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
+			lsc.setLocalLowWatermark(*first)
+			lsc.setLocalHighWatermark(*last)
+			return lsc
+		}
+	}
+
+	// something wrong
+	restoreMode = "invalid"
+	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, types.InvalidLLSN, true)
+	if last != nil {
+		lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, last.LLSN+1, true)
+		lsc.uncommittedLLSNEnd.Store(last.LLSN + 1)
+		lsc.setLocalLowWatermark(*first)
+		lsc.setLocalHighWatermark(*last)
+	}
 	return lsc
 }

@@ -403,9 +403,8 @@ func TestStorageRead(t *testing.T) {
 func TestStorageReadLastCommitContext(t *testing.T) {
 	testStorage(t, func(t testing.TB, stg *Storage) {
 		// no cc
-		lastCC, lastNonemptyCC := stg.readLastCommitContext()
+		lastCC := stg.readLastCommitContext()
 		assert.Nil(t, lastCC)
-		assert.Nil(t, lastNonemptyCC)
 
 		// empty cc
 		expectedLastCC := CommitContext{
@@ -420,13 +419,11 @@ func TestStorageReadLastCommitContext(t *testing.T) {
 		assert.NoError(t, cb.Apply())
 		assert.NoError(t, cb.Close())
 
-		lastCC, lastNonemptyCC = stg.readLastCommitContext()
+		lastCC = stg.readLastCommitContext()
 		// lastCC
 		assert.NotNil(t, lastCC)
 		assert.True(t, lastCC.Empty())
 		assert.Equal(t, expectedLastCC, *lastCC)
-		// lastNonemptyCC
-		assert.Nil(t, lastNonemptyCC)
 
 		// empty cc
 		expectedLastCC = CommitContext{
@@ -441,13 +438,11 @@ func TestStorageReadLastCommitContext(t *testing.T) {
 		assert.NoError(t, cb.Apply())
 		assert.NoError(t, cb.Close())
 
-		lastCC, lastNonemptyCC = stg.readLastCommitContext()
+		lastCC = stg.readLastCommitContext()
 		// lastCC
 		assert.NotNil(t, lastCC)
 		assert.True(t, lastCC.Empty())
 		assert.Equal(t, expectedLastCC, *lastCC)
-		// lastNonemptyCC
-		assert.Nil(t, lastNonemptyCC)
 
 		// nonempty cc
 		expectedLastCC = CommitContext{
@@ -457,21 +452,16 @@ func TestStorageReadLastCommitContext(t *testing.T) {
 			CommittedGLSNEnd:   2,
 			CommittedLLSNBegin: 1,
 		}
-		expectedLastNonempyCC := expectedLastCC
 		cb, err = stg.NewCommitBatch(expectedLastCC)
 		assert.NoError(t, err)
 		assert.NoError(t, cb.Apply())
 		assert.NoError(t, cb.Close())
 
-		lastCC, lastNonemptyCC = stg.readLastCommitContext()
+		lastCC = stg.readLastCommitContext()
 		// lastCC
 		assert.NotNil(t, lastCC)
 		assert.False(t, lastCC.Empty())
 		assert.Equal(t, expectedLastCC, *lastCC)
-		// lastNonemptyCC
-		assert.NotNil(t, lastNonemptyCC)
-		assert.False(t, lastNonemptyCC.Empty())
-		assert.Equal(t, expectedLastNonempyCC, *lastNonemptyCC)
 
 		// empty cc
 		expectedLastCC = CommitContext{
@@ -486,15 +476,11 @@ func TestStorageReadLastCommitContext(t *testing.T) {
 		assert.NoError(t, cb.Apply())
 		assert.NoError(t, cb.Close())
 
-		lastCC, lastNonemptyCC = stg.readLastCommitContext()
+		lastCC = stg.readLastCommitContext()
 		// lastCC
 		assert.NotNil(t, lastCC)
 		assert.True(t, lastCC.Empty())
 		assert.Equal(t, expectedLastCC, *lastCC)
-		// lastNonemptyCC
-		assert.NotNil(t, lastNonemptyCC)
-		assert.False(t, lastNonemptyCC.Empty())
-		assert.Equal(t, expectedLastNonempyCC, *lastNonemptyCC)
 	})
 }
 
@@ -631,6 +617,7 @@ func TestStorageReadRecoveryPoints(t *testing.T) {
 }
 
 func TestStorageReadRecoveryPoints_InconsistentWriteCommit(t *testing.T) {
+	t.Skip("Storage will not consider the consistency of committed logs.")
 	testStorage(t, func(t testing.TB, stg *Storage) {
 		ck := make([]byte, commitKeyLength)
 		dk := make([]byte, dataKeyLength)

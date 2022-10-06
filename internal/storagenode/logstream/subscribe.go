@@ -122,7 +122,7 @@ func (lse *Executor) scanWithGLSN(ctx context.Context, begin, end types.GLSN, sr
 		default:
 		}
 
-		_, globalHWM, _ := lse.lsc.reportCommitBase()
+		_, globalHWM, _, _ := lse.lsc.reportCommitBase()
 
 		lastGLSN := types.InvalidGLSN
 		scanner := lse.stg.NewScanner(storage.WithGLSN(scanBegin, end))
@@ -167,7 +167,7 @@ func (lse *Executor) scanWithLLSN(ctx context.Context, begin, end types.LLSN, sr
 		default:
 		}
 
-		_, globalHWM, _ := lse.lsc.reportCommitBase()
+		_, globalHWM, _, _ := lse.lsc.reportCommitBase()
 		localHWM := lse.lsc.localHighWatermark()
 		scanEnd := end
 		if localHWM.LLSN+1 < scanEnd {

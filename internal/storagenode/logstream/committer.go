@@ -139,10 +139,24 @@ func (cm *committer) commitLoopInternal(ctx context.Context, ct *commitTask) {
 		ct.release()
 		atomic.AddInt64(&cm.inflightCommit, -1)
 	}()
-	commitVersion, _, _ := cm.lse.lsc.reportCommitBase()
+
+	// TODO: Move these condition expressions to `internal/storagenode/logstream.(*committer).commit` method.
+	commitVersion, _, _, invalid := cm.lse.lsc.reportCommitBase()
 	if ct.stale(commitVersion) {
+		cm.logger.Debug("discard a stale commit message",
+			zap.Any("replica", commitVersion),
+			zap.Any("commit", ct.version),
+		)
 		return
 	}
+	if invalid {
+		// Synchronization should fix this invalid replica status
+		// caused by the inconsistency between the commit context and
+		// the last log entry.
+		cm.logger.Debug("discard a commit message due to invalid replica status")
+		return
+	}
+
 	if err := cm.commit(ctx, ct); err != nil {
 		cm.logger.Error("could not commit", zap.Error(err))
 		cm.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
@@ -150,7 +164,7 @@ func (cm *committer) commitLoopInternal(ctx context.Context, ct *commitTask) {
 }
 
 func (cm *committer) commit(_ context.Context, ct *commitTask) error {
-	_, _, uncommittedLLSNBegin := cm.lse.lsc.reportCommitBase()
+	_, _, uncommittedLLSNBegin, _ := cm.lse.lsc.reportCommitBase()
 	if uncommittedLLSNBegin != ct.committedLLSNBegin {
 		// skip this commit
 		// See #VARLOG-453
@@ -197,7 +211,8 @@ func (cm *committer) commit(_ context.Context, ct *commitTask) error {
 }
 
 func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitTasks bool) (err error) {
-	_, _, uncommittedLLSNBegin := cm.lse.lsc.reportCommitBase()
+	_, _, uncommittedLLSNBegin, _ := cm.lse.lsc.reportCommitBase()
+
 	numCommits := int(cc.CommittedGLSNEnd - cc.CommittedGLSNBegin)
 
 	// NOTE: It seems to be similar to the above condition. The actual purpose of this
@@ -293,7 +308,7 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 	uncommittedLLSNBegin += types.LLSN(numCommits)
 
 	cm.lse.decider.change(func() {
-		cm.lse.lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedLLSNBegin)
+		cm.lse.lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedLLSNBegin, false)
 	})
 
 	for _, cwt := range committedTasks {
