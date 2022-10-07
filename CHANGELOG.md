@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0](https://github.com/kakao/varlog/compare/v0.4.1...v0.5.0) (2022-10-07)
+
+
+### Features
+
+* **client:** add allowed logstream list option to varlog client ([1ce80e7](https://github.com/kakao/varlog/commit/1ce80e773dfc1cf77acc0e312afb303dd6abb1b4))
+* **metarepos:** ignore invalid report ([de83a08](https://github.com/kakao/varlog/commit/de83a0869b5f43bf84b27e0b6f0df7fc81a77c76))
+* **storage:** change the trim not to remove the commit context ([b80964b](https://github.com/kakao/varlog/commit/b80964b5c27c95f99a2a747b2620b91ba2fdb8b5)), closes [#125](https://github.com/kakao/varlog/issues/125)
+* **storagenode:** replica in the learning state does not report to a metadata repository ([ca4c184](https://github.com/kakao/varlog/commit/ca4c184bd1a84088e63f4369e29126cd10ddbd15)), closes [#125](https://github.com/kakao/varlog/issues/125)
+* **storagenode:** restore the status of a log stream replica by using the latest commit context ([9e042d2](https://github.com/kakao/varlog/commit/9e042d2f1ded63400f7f1e13322c2bfe65bfcd5b)), closes [#125](https://github.com/kakao/varlog/issues/125)
+* **storagenode:** store only the latest commit context for every commit ([ecf3a12](https://github.com/kakao/varlog/commit/ecf3a120ed6a5a7112676afc0ec322a69d5caacb)), closes [#125](https://github.com/kakao/varlog/issues/125)
+
+
+### Bug Fixes
+
+* **storagenode:** fix error-prone state management of SyncInit and Report ([c7366c5](https://github.com/kakao/varlog/commit/c7366c5fe98175922a91b83eab3c1ac8ef155fdf))
+* **storagenode:** remove data directory in removing log stream replica ([27fb13f](https://github.com/kakao/varlog/commit/27fb13f6c3310a79ad2b8e2990ab738fe8c15224)), closes [#157](https://github.com/kakao/varlog/issues/157)
+
 ## [0.4.1](https://github.com/kakao/varlog/compare/v0.4.0...v0.4.1) (2022-09-13)
 
 
