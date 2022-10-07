@@ -152,9 +152,9 @@ func defaultAppendOptions() appendOptions {
 }
 
 type appendOptions struct {
-	retryCount      int
-	selectLogStream bool
-	allowLogStreams map[types.LogStreamID]struct{}
+	retryCount        int
+	selectLogStream   bool
+	allowedLogStreams map[types.LogStreamID]struct{}
 }
 
 type AppendOption interface {
@@ -185,9 +185,9 @@ func withoutSelectLogStream() AppendOption {
 	})
 }
 
-func WithAllowLogStreams(logStreams map[types.LogStreamID]struct{}) AppendOption {
+func WithAllowedLogStreams(logStreams map[types.LogStreamID]struct{}) AppendOption {
 	return newAppendOption(func(opts *appendOptions) {
-		opts.allowLogStreams = logStreams
+		opts.allowedLogStreams = logStreams
 	})
 }
 
