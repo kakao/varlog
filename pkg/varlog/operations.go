@@ -32,6 +32,9 @@ func (v *logImpl) append(ctx context.Context, tpid types.TopicID, lsid types.Log
 			if _, ok = appendOpts.allowedLogStreams[lsid]; appendOpts.allowedLogStreams != nil && !ok {
 				err := fmt.Errorf("append: not allowed lsid %d", lsid)
 				result.Err = multierr.Append(result.Err, err)
+
+				v.allowlist.Deny(tpid, lsid)
+				i--
 				continue
 			}
 		}
