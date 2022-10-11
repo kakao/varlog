@@ -88,3 +88,32 @@ func (rcs reportCommitServer) Commit(stream snpb.LogStreamReporter_CommitServer)
 		_ = lse.Commit(ctx, req.CommitResult)
 	}
 }
+
+func (rcs reportCommitServer) CommitBatch(stream snpb.LogStreamReporter_CommitBatchServer) (err error) {
+	defer func() {
+		err = multierr.Append(err, stream.SendAndClose(&snpb.CommitResponse{}))
+		rcs.sn.logger.Info("report commit server: closed commit stream", zap.Error(err))
+	}()
+
+	req := &snpb.CommitBatchRequest{}
+	ctx := stream.Context()
+	for {
+		err = stream.RecvMsg(req)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		for _, cr := range req.CommitResults {
+			tpid, lsid := cr.TopicID, cr.LogStreamID
+
+			lse, loaded := rcs.sn.executors.Load(tpid, lsid)
+			if !loaded {
+				return fmt.Errorf("storage node: no such log stream executor %d, %d", cr.TopicID, cr.LogStreamID)
+			}
+			_ = lse.Commit(ctx, cr)
+		}
+	}
+}
