@@ -1042,11 +1042,11 @@ func (rce *reportCollectExecutor) makeCommitResults(ctx context.Context, reset b
 	return crs
 }
 
-func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) error {
+func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) {
 	for {
 		cli, err := rce.getClient(ctx)
 		if err != nil {
-			return err
+			return
 		}
 
 		reset := cli != rce.knownCli
@@ -1064,11 +1064,11 @@ func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) error {
 
 		if err := cli.CommitBatch(commitBatchRequest); err != nil {
 			rce.closeClient(cli)
-			return err
+			return
 		}
 	}
 
-	return nil
+	return
 }
 
 func (rce *reportCollectExecutor) runCommit(ctx context.Context) {
