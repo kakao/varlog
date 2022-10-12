@@ -1046,6 +1046,7 @@ func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) {
 	for {
 		cli, err := rce.getClient(ctx)
 		if err != nil {
+			rce.logger.Debug("getClient", zap.Error(err))
 			return
 		}
 
@@ -1063,6 +1064,7 @@ func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) {
 		}
 
 		if err := cli.CommitBatch(commitBatchRequest); err != nil {
+			rce.logger.Debug("commitBatch", zap.Error(err))
 			rce.closeClient(cli)
 			return
 		}
