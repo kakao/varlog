@@ -1055,7 +1055,7 @@ func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) {
 
 		commits := rce.makeCommitResults(ctx, reset)
 		if len(commits) == 0 {
-			break
+			return
 		}
 
 		commitBatchRequest := snpb.CommitBatchRequest{
@@ -1069,8 +1069,6 @@ func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) {
 			return
 		}
 	}
-
-	return
 }
 
 func (rce *reportCollectExecutor) runCommit(ctx context.Context) {
