@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/kakao/varlog/compare/v0.5.0...v0.6.0) (2022-10-12)
+
+
+### Features
+
+* **client:** deny lsid if not allowed ([c8ad568](https://github.com/kakao/varlog/commit/c8ad568979db3cd5db525071dc6bffa0f99396ec))
+
 ## [0.5.0](https://github.com/kakao/varlog/compare/v0.4.1...v0.5.0) (2022-10-07)
 
 
