@@ -746,26 +746,6 @@ func (rce *reportCollectExecutor) getClient(ctx context.Context) (reportcommitte
 	return rce.snConnector.cli, err
 }
 
-func (rce *reportCollectExecutor) commit(ctx context.Context, cr snpb.LogStreamCommitResult) error {
-	cli, err := rce.getClient(ctx)
-	if err != nil {
-		return err
-	}
-
-	r := snpb.CommitRequest{
-		StorageNodeID: rce.storageNodeID,
-		CommitResult:  cr,
-	}
-
-	err = cli.Commit(r)
-	if err != nil {
-		rce.closeClient(cli)
-		return err
-	}
-
-	return nil
-}
-
 func (rce *reportCollectExecutor) getReportedVersion(lsID types.LogStreamID) (types.Version, bool) {
 	report := rce.reportCtx.getReport()
 	if report == nil {
@@ -1074,7 +1054,7 @@ func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) error {
 
 		commits := rce.makeCommitResults(ctx, reset)
 		if len(commits) == 0 {
-			return nil
+			break
 		}
 
 		commitBatchRequest := snpb.CommitBatchRequest{
@@ -1087,6 +1067,8 @@ func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) error {
 			return err
 		}
 	}
+
+	return nil
 }
 
 func (rce *reportCollectExecutor) runCommit(ctx context.Context) {
