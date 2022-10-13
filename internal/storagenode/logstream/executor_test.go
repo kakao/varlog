@@ -160,41 +160,95 @@ func TestExecutor_Sealing(t *testing.T) {
 		lsid = types.LogStreamID(3)
 	)
 
-	lse := testNewExecutor(t,
-		[]varlogpb.LogStreamReplica{
-			{
-				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: snid,
-				},
-				TopicLogStream: varlogpb.TopicLogStream{
-					TopicID:     tpid,
-					LogStreamID: lsid,
-				},
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, lse *Executor)
+	}{
+		{
+			name: "CouldNotAppend",
+			testf: func(t *testing.T, lse *Executor) {
+				status, localHWM, err := lse.Seal(context.Background(), types.MaxGLSN)
+				assert.NoError(t, err)
+				assert.Equal(t, types.InvalidGLSN, localHWM)
+				assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				assert.Equal(t, executorStateSealing, lse.esm.load())
+
+				_, err = lse.Append(context.Background(), TestNewBatchData(t, 1, 0))
+				assert.ErrorIs(t, err, verrors.ErrSealed)
 			},
 		},
-		WithStorageNodeID(snid),
-		WithTopicID(tpid),
-		WithLogStreamID(lsid),
-		WithSequenceQueueCapacity(0),
-		WithWriteQueueCapacity(0),
-		WithCommitQueueCapacity(0),
-	)
-	defer func() {
-		err := lse.Close()
-		assert.NoError(t, err)
-	}()
+		{
+			name: "CouldNotReplicate",
+			testf: func(t *testing.T, lse *Executor) {
+				status, localHWM, err := lse.Seal(context.Background(), types.MaxGLSN)
+				assert.NoError(t, err)
+				assert.Equal(t, types.InvalidGLSN, localHWM)
+				assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				assert.Equal(t, executorStateSealing, lse.esm.load())
 
-	status, localHWM, err := lse.Seal(context.Background(), types.MaxGLSN)
-	assert.NoError(t, err)
-	assert.Equal(t, types.InvalidGLSN, localHWM)
-	assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
-	assert.Equal(t, executorStateSealing, lse.esm.load())
+				err = lse.Replicate(context.Background(), []types.LLSN{1}, TestNewBatchData(t, 1, 0))
+				assert.ErrorIs(t, err, verrors.ErrSealed)
+			},
+		},
+		{
+			name: "PanicNewLogStreamWithInvalidReportCommitBase",
+			testf: func(t *testing.T, lse *Executor) {
+				ver, hwm, offset, _ := lse.lsc.reportCommitBase()
+				lse.lsc.storeReportCommitBase(ver, hwm, offset, true)
 
-	_, err = lse.Append(context.Background(), TestNewBatchData(t, 1, 0))
-	assert.ErrorIs(t, err, verrors.ErrSealed)
+				require.Panics(t, func() {
+					_, _, _ = lse.Seal(context.Background(), types.InvalidGLSN)
+				})
+			},
+		},
+		{
+			name: "TheSameLastCommittedGLSNWithInvalidReportCommitBase",
+			testf: func(t *testing.T, lse *Executor) {
+				const lastLSN = 1
+				lse.lsc.storeReportCommitBase(types.Version(1), types.GLSN(lastLSN), types.LLSN(lastLSN+1), true)
+				lse.lsc.setLocalHighWatermark(varlogpb.LogEntryMeta{
+					LLSN: types.LLSN(lastLSN),
+					GLSN: types.GLSN(lastLSN),
+				})
 
-	err = lse.Replicate(context.Background(), []types.LLSN{1}, TestNewBatchData(t, 1, 0))
-	assert.ErrorIs(t, err, verrors.ErrSealed)
+				status, localHWM, err := lse.Seal(context.Background(), types.GLSN(lastLSN))
+				assert.NoError(t, err)
+				assert.Equal(t, types.GLSN(lastLSN), localHWM)
+				assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				assert.Equal(t, executorStateSealing, lse.esm.load())
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			lse := testNewExecutor(t,
+				[]varlogpb.LogStreamReplica{
+					{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+				},
+				WithStorageNodeID(snid),
+				WithTopicID(tpid),
+				WithLogStreamID(lsid),
+				WithSequenceQueueCapacity(0),
+				WithWriteQueueCapacity(0),
+				WithCommitQueueCapacity(0),
+			)
+			defer func() {
+				err := lse.Close()
+				assert.NoError(t, err)
+			}()
+
+			tc.testf(t, lse)
+		})
+	}
 }
 
 func TestExecutor_Sealed(t *testing.T) {
