@@ -86,6 +86,10 @@ message CommitRequest {
   LogStreamCommitResult commit_result = 2 [(gogoproto.nullable) = false];
 }
 
+message CommitResponse {
+  // TODO:
+}
+
 message CommitBatchRequest {
   int32 storage_node_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
@@ -95,12 +99,12 @@ message CommitBatchRequest {
       [(gogoproto.nullable) = false];
 }
 
-message CommitResponse {
+message CommitBatchResponse {
   // TODO:
 }
 
 service LogStreamReporter {
   rpc GetReport(stream GetReportRequest) returns (stream GetReportResponse) {}
   rpc Commit(stream CommitRequest) returns (CommitResponse) {}
-  rpc CommitBatch(stream CommitBatchRequest) returns (CommitResponse) {}
+  rpc CommitBatch(stream CommitBatchRequest) returns (CommitBatchResponse) {}
 }

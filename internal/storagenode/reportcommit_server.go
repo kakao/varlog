@@ -91,7 +91,7 @@ func (rcs reportCommitServer) Commit(stream snpb.LogStreamReporter_CommitServer)
 
 func (rcs reportCommitServer) CommitBatch(stream snpb.LogStreamReporter_CommitBatchServer) (err error) {
 	defer func() {
-		err = multierr.Append(err, stream.SendAndClose(&snpb.CommitResponse{}))
+		err = multierr.Append(err, stream.SendAndClose(&snpb.CommitBatchResponse{}))
 		rcs.sn.logger.Info("report commit server: closed commit stream", zap.Error(err))
 	}()
 
