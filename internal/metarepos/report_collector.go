@@ -65,15 +65,11 @@ type ReportCollector interface {
 }
 
 type commitHelper interface {
-	getClient(ctx context.Context) (reportcommitter.Client, error)
-
 	getReportedVersion(types.LogStreamID) (types.Version, bool)
 
 	getLastCommitResults() *mrpb.LogStreamCommitResults
 
 	lookupNextCommitResults(types.Version) (*mrpb.LogStreamCommitResults, error)
-
-	commit(context.Context, snpb.LogStreamCommitResult) error
 }
 
 type logStreamCommitter struct {
@@ -88,17 +84,12 @@ type logStreamCommitter struct {
 	}
 
 	catchupHelper struct {
-		cli            reportcommitter.Client
 		sentVersion    types.Version
 		sentAt         time.Time
 		expectedPos    int
 		expectedEndPos int
 	}
 
-	triggerC chan struct{}
-
-	runner *runner.Runner
-	cancel context.CancelFunc
 	logger *zap.Logger
 
 	sampleTracer *sampleTracer
@@ -122,6 +113,7 @@ type reportCollectExecutor struct {
 	helper        ReportCollectorHelper
 
 	snConnector storageNodeConnector
+	knownCli    reportcommitter.Client
 
 	reportCtx *reportContext
 
@@ -132,6 +124,9 @@ type reportCollectExecutor struct {
 
 	runner *runner.Runner
 	cancel context.CancelFunc
+
+	triggerC chan struct{}
+
 	logger *zap.Logger
 
 	sampleTracer *sampleTracer
@@ -144,8 +139,6 @@ type reportCollector struct {
 
 	helper ReportCollectorHelper
 
-	sampleTracer *sampleTracer
-
 	rpcTimeout time.Duration
 	closed     bool
 
@@ -153,8 +146,10 @@ type reportCollector struct {
 	runner  *runner.Runner
 	rnmu    sync.RWMutex
 
-	tmStub *telemetryStub
 	logger *zap.Logger
+
+	sampleTracer *sampleTracer
+	tmStub       *telemetryStub
 }
 
 func NewReportCollector(helper ReportCollectorHelper, rpcTimeout time.Duration, tmStub *telemetryStub, logger *zap.Logger) *reportCollector {
@@ -341,6 +336,7 @@ func (rc *reportCollector) RegisterStorageNode(sn *varlogpb.StorageNodeDescripto
 		snConnector:   storageNodeConnector{sn: sn},
 		reportCtx:     &reportContext{},
 		rpcTimeout:    rc.rpcTimeout,
+		triggerC:      make(chan struct{}, 1),
 		runner:        runner.New("excutor", logger),
 		logger:        logger,
 		sampleTracer:  rc.sampleTracer,
@@ -481,30 +477,21 @@ func (rce *reportCollectExecutor) run() error {
 	if err := rce.runner.RunC(ctx, rce.runReport); err != nil {
 		return err
 	}
+	if err := rce.runner.RunC(ctx, rce.runCommit); err != nil {
+		return err
+	}
 	rce.cancel = cancel
 
 	return nil
 }
 
 func (rce *reportCollectExecutor) stop() {
-	rce.cmmu.RLock()
-	for _, c := range rce.committers {
-		c.stop()
-	}
-	rce.cmmu.RUnlock()
-
 	rce.runner.Stop()
 
 	rce.closeClient(nil)
 }
 
 func (rce *reportCollectExecutor) stopNoWait() {
-	rce.cmmu.RLock()
-	for _, c := range rce.committers {
-		c.stopNoWait()
-	}
-	rce.cmmu.RUnlock()
-
 	rce.cancel()
 
 	go rce.stop()
@@ -566,11 +553,6 @@ func (rce *reportCollectExecutor) registerLogStream(topicID types.TopicID, lsID 
 	}
 
 	c := newLogStreamCommitter(topicID, lsID, rce, ver, status, rce.sampleTracer, rce.tmStub, rce.logger)
-	err := c.run()
-	if err != nil {
-		return err
-	}
-
 	rce.insertCommitter(c) //nolint:errcheck,revive // TODO:: Handle an error returned.
 	return nil
 }
@@ -585,17 +567,13 @@ func (rce *reportCollectExecutor) unregisterLogStream(lsID types.LogStreamID) er
 	}
 
 	rce.deleteCommitter(lsID) //nolint:errcheck,revive // TODO:: Handle an error returned.
-	c.stopNoWait()
-
 	return nil
 }
 
 func (rce *reportCollectExecutor) addCommitC() {
-	rce.cmmu.RLock()
-	defer rce.cmmu.RUnlock()
-
-	for _, c := range rce.committers {
-		c.addCommitC()
+	select {
+	case rce.triggerC <- struct{}{}:
+	default:
 	}
 }
 
@@ -637,8 +615,6 @@ Loop:
 			}
 		}
 	}
-
-	rce.closeClient(nil)
 }
 
 func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
@@ -770,26 +746,6 @@ func (rce *reportCollectExecutor) getClient(ctx context.Context) (reportcommitte
 	return rce.snConnector.cli, err
 }
 
-func (rce *reportCollectExecutor) commit(ctx context.Context, cr snpb.LogStreamCommitResult) error {
-	cli, err := rce.getClient(ctx)
-	if err != nil {
-		return err
-	}
-
-	r := snpb.CommitRequest{
-		StorageNodeID: rce.storageNodeID,
-		CommitResult:  cr,
-	}
-
-	err = cli.Commit(r)
-	if err != nil {
-		rce.closeClient(cli)
-		return err
-	}
-
-	return nil
-}
-
 func (rce *reportCollectExecutor) getReportedVersion(lsID types.LogStreamID) (types.Version, bool) {
 	report := rce.reportCtx.getReport()
 	if report == nil {
@@ -813,14 +769,11 @@ func (rce *reportCollectExecutor) lookupNextCommitResults(ver types.Version) (*m
 }
 
 func newLogStreamCommitter(topicID types.TopicID, lsID types.LogStreamID, helper commitHelper, ver types.Version, status varlogpb.LogStreamStatus, sampleTracer *sampleTracer, tmStub *telemetryStub, logger *zap.Logger) *logStreamCommitter {
-	triggerC := make(chan struct{}, 1)
 
 	c := &logStreamCommitter{
 		topicID:      topicID,
 		lsID:         lsID,
 		helper:       helper,
-		triggerC:     triggerC,
-		runner:       runner.New("lscommitter", logger),
 		logger:       logger,
 		sampleTracer: sampleTracer,
 		tmStub:       tmStub,
@@ -830,45 +783,6 @@ func newLogStreamCommitter(topicID types.TopicID, lsID types.LogStreamID, helper
 	c.commitStatus.beginVersion = ver
 
 	return c
-}
-
-func (lc *logStreamCommitter) run() error {
-	ctx, cancel := lc.runner.WithManagedCancel(context.Background())
-	if err := lc.runner.RunC(ctx, lc.runCommit); err != nil {
-		return err
-	}
-	lc.cancel = cancel
-
-	return nil
-}
-
-func (lc *logStreamCommitter) stop() {
-	lc.runner.Stop()
-}
-
-func (lc *logStreamCommitter) stopNoWait() {
-	lc.cancel()
-}
-
-func (lc *logStreamCommitter) addCommitC() {
-	select {
-	case lc.triggerC <- struct{}{}:
-	default:
-	}
-}
-
-func (lc *logStreamCommitter) runCommit(ctx context.Context) {
-Loop:
-	for {
-		select {
-		case <-ctx.Done():
-			break Loop
-		case <-lc.triggerC:
-			lc.catchup(ctx)
-		}
-	}
-
-	close(lc.triggerC)
 }
 
 func (lc *logStreamCommitter) getCatchupVersion(resetCatchupHelper bool) (types.Version, bool) {
@@ -902,36 +816,16 @@ func (lc *logStreamCommitter) getCatchupVersion(resetCatchupHelper bool) (types.
 	return ver, true
 }
 
-func (lc *logStreamCommitter) catchup(ctx context.Context) {
-	cli, err := lc.helper.getClient(ctx)
-	if err != nil {
-		return
-	}
-
-	resetCatchupHelper := false
-	if lc.getKnownClient() != cli {
-		lc.setKnownClient(cli)
-		resetCatchupHelper = true
-	}
-
+func (lc *logStreamCommitter) commitResult(ctx context.Context, reset bool) snpb.LogStreamCommitResult {
 	crs := lc.helper.getLastCommitResults()
 	if crs == nil {
-		return
+		return snpb.InvalidLogStreamCommitResult
 	}
 
-	ver, ok := lc.getCatchupVersion(resetCatchupHelper)
+	ver, ok := lc.getCatchupVersion(reset)
 	if !ok || ver >= crs.Version {
-		return
+		return snpb.InvalidLogStreamCommitResult
 	}
-
-	catchupStart := time.Now()
-	numCatchups := 0
-
-	defer func() {
-		dur := float64(time.Since(catchupStart).Nanoseconds()) / float64(time.Millisecond)
-		lc.tmStub.mb.Records("mr.log_stream_committer.catchup.duration").Record(ctx, dur)
-		lc.tmStub.mb.Records("mr.log_stream_committer.catchup.counts").Record(ctx, float64(numCatchups))
-	}()
 
 CatchupLoop:
 	for ctx.Err() == nil {
@@ -940,7 +834,7 @@ CatchupLoop:
 			if err != nil {
 				latestVersion, ok := lc.getCatchupVersion(false)
 				if !ok {
-					return
+					return snpb.InvalidLogStreamCommitResult
 				}
 
 				if latestVersion > ver {
@@ -948,12 +842,11 @@ CatchupLoop:
 					continue CatchupLoop
 				}
 
-				lc.logger.Warn(fmt.Sprintf("lsid:%v latest:%v err:%v", lc.lsID, latestVersion, err.Error()))
-				return
+				return snpb.InvalidLogStreamCommitResult
 			}
 
 			if tmp == nil {
-				return
+				return snpb.InvalidLogStreamCommitResult
 			}
 
 			crs = tmp
@@ -975,11 +868,6 @@ CatchupLoop:
 			cr.CommittedGLSNLength = 0
 		}
 
-		err := lc.helper.commit(ctx, cr)
-		if err != nil {
-			return
-		}
-
 		min, max, recordable := lc.sampleTracer.commit(lc.lsID, cr.CommittedLLSNOffset, cr.CommittedLLSNOffset+types.LLSN(cr.CommittedGLSNLength))
 		if recordable {
 			lc.tmStub.mb.Records("mr.report_commit.delay").Record(ctx,
@@ -990,10 +878,10 @@ CatchupLoop:
 		}
 
 		lc.setSentVersion(crs.Version)
-		ver = crs.Version
-
-		numCatchups++
+		return cr
 	}
+
+	return snpb.InvalidLogStreamCommitResult
 }
 
 func (lc *logStreamCommitter) seal() {
@@ -1028,14 +916,6 @@ func (lc *logStreamCommitter) getSentVersion() types.Version {
 func (lc *logStreamCommitter) setSentVersion(ver types.Version) {
 	lc.catchupHelper.sentVersion = ver
 	lc.catchupHelper.sentAt = time.Now()
-}
-
-func (lc *logStreamCommitter) getKnownClient() reportcommitter.Client {
-	return lc.catchupHelper.cli
-}
-
-func (lc *logStreamCommitter) setKnownClient(cli reportcommitter.Client) {
-	lc.catchupHelper.cli = cli
 }
 
 func (rc *reportContext) saveReport(report *mrpb.StorageNodeUncommitReport) {
@@ -1145,4 +1025,62 @@ func (sr *sampleReports) minmax() (time.Time, time.Time) {
 	}
 
 	return min, max
+}
+
+func (rce *reportCollectExecutor) makeCommitResults(ctx context.Context, reset bool) []snpb.LogStreamCommitResult {
+	rce.cmmu.RLock()
+	defer rce.cmmu.RUnlock()
+
+	crs := make([]snpb.LogStreamCommitResult, 0, len(rce.committers))
+	for _, lc := range rce.committers {
+		cr := lc.commitResult(ctx, reset)
+		if !cr.LogStreamID.Invalid() {
+			crs = append(crs, cr)
+		}
+	}
+
+	return crs
+}
+
+func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) {
+	for {
+		cli, err := rce.getClient(ctx)
+		if err != nil {
+			rce.logger.Debug("getClient", zap.Error(err))
+			return
+		}
+
+		reset := cli != rce.knownCli
+		rce.knownCli = cli
+
+		commits := rce.makeCommitResults(ctx, reset)
+		if len(commits) == 0 {
+			return
+		}
+
+		commitBatchRequest := snpb.CommitBatchRequest{
+			StorageNodeID: rce.storageNodeID,
+			CommitResults: commits,
+		}
+
+		if err := cli.CommitBatch(commitBatchRequest); err != nil {
+			rce.logger.Debug("commitBatch", zap.Error(err))
+			rce.closeClient(cli)
+			return
+		}
+	}
+}
+
+func (rce *reportCollectExecutor) runCommit(ctx context.Context) {
+Loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break Loop
+		case <-rce.triggerC:
+			rce.catchupBatch(ctx)
+		}
+	}
+
+	close(rce.triggerC)
 }

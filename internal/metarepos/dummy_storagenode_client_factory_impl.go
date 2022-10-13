@@ -29,6 +29,10 @@ func (rc *EmptyStorageNodeClient) Commit(snpb.CommitRequest) error {
 	return nil
 }
 
+func (rc *EmptyStorageNodeClient) CommitBatch(snpb.CommitBatchRequest) error {
+	return nil
+}
+
 func (rc *EmptyStorageNodeClient) Close() error {
 	return nil
 }
@@ -282,6 +286,16 @@ func (r *DummyStorageNodeClient) Commit(cr snpb.CommitRequest) error {
 
 	r.uncommittedLLSNOffset[idx] += types.LLSN(cr.CommitResult.CommittedGLSNLength)
 	r.uncommittedLLSNLength[idx] -= cr.CommitResult.CommittedGLSNLength
+
+	return nil
+}
+
+func (r *DummyStorageNodeClient) CommitBatch(cbr snpb.CommitBatchRequest) error {
+	for _, cr := range cbr.CommitResults {
+		if err := r.Commit(snpb.CommitRequest{StorageNodeID: cbr.StorageNodeID, CommitResult: cr}); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

@@ -19,8 +19,7 @@ message LogStreamUncommitReport {
   option (gogoproto.equal) = true;
 
   int32 log_stream_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
   uint64 uncommitted_llsn_offset = 2 [
@@ -30,18 +29,15 @@ message LogStreamUncommitReport {
   uint64 uncommitted_llsn_length = 3
       [(gogoproto.customname) = "UncommittedLLSNLength"];
   uint64 version = 4
-      [(gogoproto.casttype) =
-           "github.com/kakao/varlog/pkg/types.Version"];
+      [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
   uint64 high_watermark = 5
-      [(gogoproto.casttype) =
-           "github.com/kakao/varlog/pkg/types.GLSN"];
+      [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN"];
 }
 
 message GetReportRequest {}
 message GetReportResponse {
   int32 storage_node_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID"
   ];
   repeated LogStreamUncommitReport uncommit_reports = 2
@@ -57,13 +53,11 @@ message LogStreamCommitResult {
   option (gogoproto.equal) = true;
 
   int32 log_stream_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
   int32 topic_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   uint64 committed_llsn_offset = 3 [
@@ -77,8 +71,7 @@ message LogStreamCommitResult {
   uint64 committed_glsn_length = 5
       [(gogoproto.customname) = "CommittedGLSNLength"];
   uint64 version = 6
-      [(gogoproto.casttype) =
-           "github.com/kakao/varlog/pkg/types.Version"];
+      [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
   uint64 high_watermark = 7 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
     (gogoproto.customname) = "HighWatermark"
@@ -87,8 +80,7 @@ message LogStreamCommitResult {
 
 message CommitRequest {
   int32 storage_node_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
     (gogoproto.customname) = "StorageNodeID"
   ];
   LogStreamCommitResult commit_result = 2 [(gogoproto.nullable) = false];
@@ -98,7 +90,21 @@ message CommitResponse {
   // TODO:
 }
 
+message CommitBatchRequest {
+  int32 storage_node_id = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.StorageNodeID",
+    (gogoproto.customname) = "StorageNodeID"
+  ];
+  repeated LogStreamCommitResult commit_results = 2
+      [(gogoproto.nullable) = false];
+}
+
+message CommitBatchResponse {
+  // TODO:
+}
+
 service LogStreamReporter {
   rpc GetReport(stream GetReportRequest) returns (stream GetReportResponse) {}
   rpc Commit(stream CommitRequest) returns (CommitResponse) {}
+  rpc CommitBatch(stream CommitBatchRequest) returns (CommitBatchResponse) {}
 }

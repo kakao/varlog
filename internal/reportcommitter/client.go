@@ -19,6 +19,7 @@ import (
 type Client interface {
 	GetReport() (*snpb.GetReportResponse, error)
 	Commit(snpb.CommitRequest) error
+	CommitBatch(snpb.CommitBatchRequest) error
 	Close() error
 }
 
@@ -33,8 +34,9 @@ type client struct {
 	muReportStream sync.Mutex
 	getReportReq   snpb.GetReportRequest
 
-	commitStream   snpb.LogStreamReporter_CommitClient
-	muCommitStream sync.Mutex
+	commitStream      snpb.LogStreamReporter_CommitClient
+	commitBatchStream snpb.LogStreamReporter_CommitBatchClient
+	muCommitStream    sync.Mutex
 }
 
 func NewClient(ctx context.Context, address string, grpcDialOptions ...grpc.DialOption) (cl Client, err error) {
@@ -68,11 +70,17 @@ func NewClientWithConn(ctx context.Context, rpcConn *rpc.Conn) (Client, error) {
 		return nil, err
 	}
 
+	commitBatchStream, err := rpcClient.CommitBatch(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	cl := &client{
-		rpcConn:      rpcConn,
-		rpcClient:    rpcClient,
-		reportStream: reportStream,
-		commitStream: commitStream,
+		rpcConn:           rpcConn,
+		rpcClient:         rpcClient,
+		reportStream:      reportStream,
+		commitStream:      commitStream,
+		commitBatchStream: commitBatchStream,
 	}
 
 	return cl, nil
@@ -105,6 +113,18 @@ func (c *client) Commit(cr snpb.CommitRequest) (err error) {
 	err = c.commitStream.Send(&cr)
 	if err != nil {
 		return c.commitStream.CloseSend()
+	}
+	return nil
+}
+
+func (c *client) CommitBatch(cr snpb.CommitBatchRequest) (err error) {
+	c.muCommitStream.Lock()
+	defer c.muCommitStream.Unlock()
+
+	// Do not handle io.EOF
+	err = c.commitBatchStream.Send(&cr)
+	if err != nil {
+		return c.commitBatchStream.CloseSend()
 	}
 	return nil
 }
