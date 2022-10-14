@@ -483,17 +483,17 @@ func TestExecutor_Append(t *testing.T) {
 			wg.Wait()
 
 			// FIXME: Use lse.Report to check local high watermark and low watermark
-			version, globalHWM, uncommittedLLSNBegin, _ := lse.lsc.reportCommitBase()
+			version, globalHWM, uncommittedBegin, _ := lse.lsc.reportCommitBase()
 			assert.Equal(t, lastVersion, version)
 			assert.Equal(t, lastGLSN, globalHWM)
-			assert.Equal(t, lastLLSN+1, uncommittedLLSNBegin)
+			assert.Equal(t, lastLLSN+1, uncommittedBegin.LLSN)
 
 			// FIXME: Fields TopicID and LogStreamID in varlogpb.LogEntryMeta should be filled.
-			assert.Equal(t, varlogpb.LogEntryMeta{
+			assert.Equal(t, varlogpb.LogSequenceNumber{
 				LLSN: types.MinLLSN,
 				GLSN: types.MinGLSN,
 			}, lse.lsc.localLowWatermark())
-			assert.Equal(t, varlogpb.LogEntryMeta{
+			assert.Equal(t, varlogpb.LogSequenceNumber{
 				LLSN: lastLLSN,
 				GLSN: lastGLSN,
 			}, lse.lsc.localHighWatermark())
@@ -605,17 +605,17 @@ func TestExecutor_Replicate(t *testing.T) {
 				}, time.Second, 10*time.Millisecond)
 			}
 
-			version, globalHWM, uncommittedLLSNBegin, _ := lse.lsc.reportCommitBase()
+			version, globalHWM, uncommittedBegin, _ := lse.lsc.reportCommitBase()
 			assert.Equal(t, lastVersion, version)
 			assert.Equal(t, lastGLSN, globalHWM)
-			assert.Equal(t, lastLLSN+1, uncommittedLLSNBegin)
+			assert.Equal(t, lastLLSN+1, uncommittedBegin.LLSN)
 
 			// FIXME: Fields TopicID and LogStreamID in varlogpb.LogEntryMeta should be filled.
-			assert.Equal(t, varlogpb.LogEntryMeta{
+			assert.Equal(t, varlogpb.LogSequenceNumber{
 				LLSN: types.MinLLSN,
 				GLSN: types.MinGLSN,
 			}, lse.lsc.localLowWatermark())
-			assert.Equal(t, varlogpb.LogEntryMeta{
+			assert.Equal(t, varlogpb.LogSequenceNumber{
 				LLSN: lastLLSN,
 				GLSN: lastGLSN,
 			}, lse.lsc.localHighWatermark())
@@ -939,7 +939,7 @@ func TestExecutor_SubscribeWithInvalidRange(t *testing.T) {
 
 	// FIXME: Use TrimDeprecated rather than modifying localLowWatermark manually.
 	lse.globalLowWatermark.glsn = 3
-	lse.lsc.setLocalLowWatermark(varlogpb.LogEntryMeta{LLSN: 3, GLSN: 3})
+	lse.lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{LLSN: 3, GLSN: 3})
 
 	_, err = lse.SubscribeWithGLSN(1, 4)
 	assert.ErrorIs(t, err, verrors.ErrTrimmed)
@@ -1333,11 +1333,11 @@ func TestExecutor_Recover(t *testing.T) {
 	assert.Equal(t, lastGLSN, rpt.HighWatermark)
 	assert.Equal(t, lastLLSN+1, rpt.UncommittedLLSNOffset)
 
-	assert.Equal(t, varlogpb.LogEntryMeta{
+	assert.Equal(t, varlogpb.LogSequenceNumber{
 		GLSN: types.MinGLSN,
 		LLSN: types.MinLLSN,
 	}, lse.lsc.localLowWatermark())
-	assert.Equal(t, varlogpb.LogEntryMeta{
+	assert.Equal(t, varlogpb.LogSequenceNumber{
 		GLSN: lastGLSN,
 		LLSN: lastLLSN,
 	}, lse.lsc.localHighWatermark())
@@ -1438,9 +1438,9 @@ func TestExecutorSyncInit(t *testing.T) {
 		{
 			name: "SychronizeFarFromNext",
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
-				_, _, uncommittedLLSNBegin, _ := dst.lsc.reportCommitBase()
+				_, _, uncommittedBegin, _ := dst.lsc.reportCommitBase()
 				uncommittedLLSNEnd := dst.lsc.uncommittedLLSNEnd.Load()
-				assert.Equal(t, dstLast+1, uncommittedLLSNBegin)
+				assert.Equal(t, dstLast+1, uncommittedBegin.LLSN)
 				assert.Equal(t, dstLast+1, uncommittedLLSNEnd)
 
 				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
@@ -1453,10 +1453,10 @@ func TestExecutorSyncInit(t *testing.T) {
 					LastLLSN:  dstLast + 10,
 				}, syncRange)
 
-				ver, hwm, uncommittedLLSNBegin, _ := dst.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, _ := dst.lsc.reportCommitBase()
 				assert.Zero(t, ver)
 				assert.Zero(t, hwm)
-				assert.Equal(t, dstLast+5, uncommittedLLSNBegin)
+				assert.Equal(t, dstLast+5, uncommittedBegin.LLSN)
 
 				uncommittedLLSNEnd = dst.lsc.uncommittedLLSNEnd.Load()
 				assert.Equal(t, dstLast+5, uncommittedLLSNEnd)
@@ -1886,10 +1886,10 @@ func TestExecutorRestore(t *testing.T) {
 					HighWatermark:         0,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.InvalidVersion, ver)
 				require.Equal(t, types.InvalidGLSN, hwm)
-				require.Equal(t, types.MinLLSN, uncommittedLLSNBegin)
+				require.Equal(t, types.MinLLSN, uncommittedBegin.LLSN)
 				require.False(t, invalid)
 				require.Equal(t, types.MinLLSN, lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -1914,10 +1914,10 @@ func TestExecutorRestore(t *testing.T) {
 					HighWatermark:         10,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.Version(10), ver)
 				require.Equal(t, types.GLSN(10), hwm)
-				require.Equal(t, types.LLSN(11), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(11), uncommittedBegin.LLSN)
 				require.False(t, invalid)
 				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -1942,10 +1942,10 @@ func TestExecutorRestore(t *testing.T) {
 					HighWatermark:         20,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.Version(20), ver)
 				require.Equal(t, types.GLSN(20), hwm)
-				require.Equal(t, types.LLSN(11), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(11), uncommittedBegin.LLSN)
 				require.False(t, invalid)
 				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -1970,10 +1970,10 @@ func TestExecutorRestore(t *testing.T) {
 					HighWatermark:         20,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.Version(20), ver)
 				require.Equal(t, types.GLSN(20), hwm)
-				require.Equal(t, types.LLSN(11), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(11), uncommittedBegin.LLSN)
 				require.False(t, invalid)
 				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -1998,10 +1998,10 @@ func TestExecutorRestore(t *testing.T) {
 					HighWatermark:         0,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.Version(0), ver)
 				require.Equal(t, types.GLSN(0), hwm)
-				require.Equal(t, types.LLSN(1), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(1), uncommittedBegin.LLSN)
 				require.False(t, invalid)
 				require.Equal(t, types.LLSN(1), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -2026,10 +2026,10 @@ func TestExecutorRestore(t *testing.T) {
 					HighWatermark:         1,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.Version(1), ver)
 				require.Equal(t, types.GLSN(1), hwm)
-				require.Equal(t, types.LLSN(2), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(2), uncommittedBegin.LLSN)
 				require.False(t, invalid)
 				require.Equal(t, types.LLSN(2), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -2054,10 +2054,10 @@ func TestExecutorRestore(t *testing.T) {
 					HighWatermark:         10,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.Version(10), ver)
 				require.Equal(t, types.GLSN(10), hwm)
-				require.Equal(t, types.LLSN(11), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(11), uncommittedBegin.LLSN)
 				require.False(t, invalid)
 				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -2082,10 +2082,10 @@ func TestExecutorRestore(t *testing.T) {
 					HighWatermark:         20,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.Version(20), ver)
 				require.Equal(t, types.GLSN(20), hwm)
-				require.Equal(t, types.LLSN(11), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(11), uncommittedBegin.LLSN)
 				require.False(t, invalid)
 				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -2157,10 +2157,10 @@ func TestExecutorResotre_Invalid(t *testing.T) {
 					HighWatermark:         0,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.InvalidVersion, ver)
 				require.Equal(t, types.InvalidGLSN, hwm)
-				require.Equal(t, types.LLSN(4), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(4), uncommittedBegin.LLSN)
 				require.True(t, invalid)
 				require.Equal(t, types.LLSN(4), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -2199,10 +2199,10 @@ func TestExecutorResotre_Invalid(t *testing.T) {
 					HighWatermark:         0,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.InvalidVersion, ver)
 				require.Equal(t, types.InvalidGLSN, hwm)
-				require.Equal(t, types.LLSN(4), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(4), uncommittedBegin.LLSN)
 				require.True(t, invalid)
 				require.Equal(t, types.LLSN(4), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()
@@ -2241,10 +2241,10 @@ func TestExecutorResotre_Invalid(t *testing.T) {
 					HighWatermark:         0,
 				}, rpt)
 
-				ver, hwm, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 				require.Equal(t, types.InvalidVersion, ver)
 				require.Equal(t, types.InvalidGLSN, hwm)
-				require.Equal(t, types.LLSN(4), uncommittedLLSNBegin)
+				require.Equal(t, types.LLSN(4), uncommittedBegin.LLSN)
 				require.True(t, invalid)
 				require.Equal(t, types.LLSN(4), lse.lsc.uncommittedLLSNEnd.Load())
 				localLWM := lse.lsc.localLowWatermark()

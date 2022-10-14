@@ -12,8 +12,8 @@ import (
 )
 
 func TestExecutor_SyncTracker(t *testing.T) {
-	first := varlogpb.LogEntryMeta{LLSN: 1, GLSN: 1}
-	last := varlogpb.LogEntryMeta{LLSN: 10, GLSN: 10}
+	first := varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}
+	last := varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}
 	st := newSyncTracker(first, last)
 
 	current := st.toSyncStatus().Current

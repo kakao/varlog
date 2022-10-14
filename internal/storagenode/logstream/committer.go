@@ -164,7 +164,8 @@ func (cm *committer) commitLoopInternal(ctx context.Context, ct *commitTask) {
 }
 
 func (cm *committer) commit(_ context.Context, ct *commitTask) error {
-	_, _, uncommittedLLSNBegin, _ := cm.lse.lsc.reportCommitBase()
+	_, _, uncommittedBegin, _ := cm.lse.lsc.reportCommitBase()
+	uncommittedLLSNBegin := uncommittedBegin.LLSN
 	if uncommittedLLSNBegin != ct.committedLLSNBegin {
 		// skip this commit
 		// See #VARLOG-453
@@ -211,7 +212,8 @@ func (cm *committer) commit(_ context.Context, ct *commitTask) error {
 }
 
 func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitTasks bool) (err error) {
-	_, _, uncommittedLLSNBegin, _ := cm.lse.lsc.reportCommitBase()
+	_, _, uncommittedBegin, _ := cm.lse.lsc.reportCommitBase()
+	uncommttedLLSNBegin := uncommittedBegin.LLSN
 
 	numCommits := int(cc.CommittedGLSNEnd - cc.CommittedGLSNBegin)
 
@@ -252,7 +254,7 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 		llsn := cc.CommittedLLSNBegin + types.LLSN(i)
 		glsn := cc.CommittedGLSNBegin + types.GLSN(i)
 
-		if uncommittedLLSNBegin+types.LLSN(i) != llsn {
+		if uncommttedLLSNBegin+types.LLSN(i) != llsn {
 			err = errors.New("log stream: committer: llsn mismatch")
 			return err
 		}
@@ -293,22 +295,17 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 
 	if numCommits > 0 {
 		// only the first commit changes local low watermark
-		localLWM := varlogpb.LogEntryMeta{
+		cm.lse.lsc.localLWM.CompareAndSwap(varlogpb.LogSequenceNumber{}, varlogpb.LogSequenceNumber{
 			LLSN: cc.CommittedLLSNBegin,
 			GLSN: cc.CommittedGLSNBegin,
-		}
-		cm.lse.lsc.localWatermarks.low.CompareAndSwap(varlogpb.InvalidLogEntryMeta(), localLWM)
-
-		localHWM := varlogpb.LogEntryMeta{
-			LLSN: cc.CommittedLLSNBegin + types.LLSN(numCommits) - 1,
-			GLSN: cc.CommittedGLSNBegin + types.GLSN(numCommits) - 1,
-		}
-		cm.lse.lsc.setLocalHighWatermark(localHWM)
+		})
 	}
-	uncommittedLLSNBegin += types.LLSN(numCommits)
-
+	uncommittedBegin = varlogpb.LogSequenceNumber{
+		LLSN: cc.CommittedLLSNBegin + types.LLSN(numCommits),
+		GLSN: cc.CommittedGLSNBegin + types.GLSN(numCommits),
+	}
 	cm.lse.decider.change(func() {
-		cm.lse.lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedLLSNBegin, false)
+		cm.lse.lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false)
 	})
 
 	for _, cwt := range committedTasks {

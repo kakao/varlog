@@ -19,11 +19,23 @@ import (
 //
 // Internally, it reflects the last commit message sent from the metadata
 // repository.
+//
 // The commitVersion is the version of the commit message.
+//
 // The highWatermark is the global high watermark, the maximum GLSN included in
 // the commit message.
-// The uncommittedLLSNBegin is the first LLSN that the replica will commit,
-// computed by both offset and length of committed logs in the commit message.
+//
+// The uncommittedBegin is the log sequence number at which a log stream
+// replica will commit the following log entry. Typically, its LLSN and GLSN
+// are next to the local high watermark; thus, uncommittedBegin.LLSN -1 is the
+// LLSN of the local high watermark. Similarly, uncommittedBegin.GLSN - 1 is
+// the GLSN of the local high watermark. Note that the actual GLSN of the
+// following log entry can be different, although uncommittedBegin.GLSN is a
+// candidate GLSN of the next log entry.
+// If the GLSN of uncommittedBegin is invalid, it has particular intent. Its
+// LLSN indicates the following log entry sequence number; however, it cannot
+// infer the local high watermark because no log entries are committed.
+//
 // If the reportCommitBase is invalid, it cannot reflect the last commit
 // message. Usually, it happens since the replica failed during
 // synchronization.
@@ -32,11 +44,11 @@ type reportCommitBase struct {
 	// https://github.com/golang/go/issues/16241.
 	// It is not difficult to be used with sync.Pool, since putting the object into the pool is guarded
 	// against to the atomic.Load. For these reasons, the shared mutex is used.
-	mu                   sync.RWMutex
-	commitVersion        types.Version
-	highWatermark        types.GLSN
-	uncommittedLLSNBegin types.LLSN
-	invalid              bool
+	mu               sync.RWMutex
+	commitVersion    types.Version
+	highWatermark    types.GLSN
+	uncommittedBegin varlogpb.LogSequenceNumber
+	invalid          bool
 }
 
 // logStreamContext represents the context of a log stream replica - the last
@@ -44,22 +56,18 @@ type reportCommitBase struct {
 type logStreamContext struct {
 	base               reportCommitBase // base of report and commit in the log stream
 	uncommittedLLSNEnd types.AtomicLLSN // expected LLSN to be written
-	localWatermarks    struct {
-		low  atomic.Value // local low watermark; varlogpb.LogEntryMeta
-		high atomic.Value // local high watermark; varlogpb.LogEntryMeta
-	}
+	localLWM           atomic.Value     // varlogpb.LogSequenceNumber
 }
 
 // newLogStreamContext creates a new log stream context.
 func newLogStreamContext() *logStreamContext {
 	lsc := &logStreamContext{}
-	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, types.MinLLSN, false)
+	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{
+		LLSN: types.MinLLSN,
+		GLSN: types.MinGLSN,
+	}, false)
 	lsc.uncommittedLLSNEnd.Store(types.MinLLSN)
-	lsc.localWatermarks.low.Store(varlogpb.LogEntryMeta{
-		LLSN: types.InvalidLLSN,
-		GLSN: types.InvalidGLSN,
-	})
-	lsc.localWatermarks.high.Store(varlogpb.LogEntryMeta{
+	lsc.localLWM.Store(varlogpb.LogSequenceNumber{
 		LLSN: types.InvalidLLSN,
 		GLSN: types.InvalidGLSN,
 	})
@@ -67,44 +75,48 @@ func newLogStreamContext() *logStreamContext {
 }
 
 // reportCommitBase returns the base of report and commit in the log stream.
-func (lsc *logStreamContext) reportCommitBase() (commitVersion types.Version, highWatermark types.GLSN, uncommittedLLSNBegin types.LLSN, invalid bool) {
+func (lsc *logStreamContext) reportCommitBase() (commitVersion types.Version, highWatermark types.GLSN, uncommittedBegin varlogpb.LogSequenceNumber, invalid bool) {
 	lsc.base.mu.RLock()
 	commitVersion = lsc.base.commitVersion
 	highWatermark = lsc.base.highWatermark
-	uncommittedLLSNBegin = lsc.base.uncommittedLLSNBegin
+	uncommittedBegin = lsc.base.uncommittedBegin
 	invalid = lsc.base.invalid
 	lsc.base.mu.RUnlock()
 	return
 }
 
 // storeReportCommitBase stores the base of report and commit in the log stream.
-func (lsc *logStreamContext) storeReportCommitBase(commitVersion types.Version, highWatermark types.GLSN, uncommittedLLSNBegin types.LLSN, invalid bool) {
+func (lsc *logStreamContext) storeReportCommitBase(commitVersion types.Version, highWatermark types.GLSN, uncommittedBegin varlogpb.LogSequenceNumber, invalid bool) {
 	lsc.base.mu.Lock()
 	lsc.base.commitVersion = commitVersion
 	lsc.base.highWatermark = highWatermark
-	lsc.base.uncommittedLLSNBegin = uncommittedLLSNBegin
+	lsc.base.uncommittedBegin = uncommittedBegin
 	lsc.base.invalid = invalid
 	lsc.base.mu.Unlock()
 }
 
 // localLowWatermark returns the local low watermark.
-func (lsc *logStreamContext) localLowWatermark() varlogpb.LogEntryMeta {
-	return lsc.localWatermarks.low.Load().(varlogpb.LogEntryMeta)
+func (lsc *logStreamContext) localLowWatermark() varlogpb.LogSequenceNumber {
+	if lsn := lsc.localLWM.Load().(varlogpb.LogSequenceNumber); !lsn.Invalid() {
+		return lsn
+	}
+	return varlogpb.LogSequenceNumber{}
 }
 
 // localHighWatermark returns the local high watermark.
-func (lsc *logStreamContext) localHighWatermark() varlogpb.LogEntryMeta {
-	return lsc.localWatermarks.high.Load().(varlogpb.LogEntryMeta)
+func (lsc *logStreamContext) localHighWatermark() varlogpb.LogSequenceNumber {
+	if _, _, uncommittedBegin, _ := lsc.reportCommitBase(); !uncommittedBegin.Invalid() {
+		return varlogpb.LogSequenceNumber{
+			LLSN: uncommittedBegin.LLSN - 1,
+			GLSN: uncommittedBegin.GLSN - 1,
+		}
+	}
+	return varlogpb.LogSequenceNumber{}
 }
 
 // setLocalLowWatermark sets the local low watermark.
-func (lsc *logStreamContext) setLocalLowWatermark(localLWM varlogpb.LogEntryMeta) {
-	lsc.localWatermarks.low.Store(localLWM)
-}
-
-// setLocalHighWatermark sets the local high watermark.
-func (lsc *logStreamContext) setLocalHighWatermark(localHWM varlogpb.LogEntryMeta) {
-	lsc.localWatermarks.high.Store(localHWM)
+func (lsc *logStreamContext) setLocalLowWatermark(localLWM varlogpb.LogSequenceNumber) {
+	lsc.localLWM.Store(localLWM)
 }
 
 // decidableCondition is a wrapper of condition variable to wait for new logs committed.

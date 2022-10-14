@@ -543,3 +543,7 @@ func (t *TopicDescriptor) HasLogStream(lsID types.LogStreamID) bool {
 	_, match := t.searchLogStream(lsID)
 	return match
 }
+
+func (lsn LogSequenceNumber) Invalid() bool {
+	return lsn.LLSN.Invalid() || lsn.GLSN.Invalid()
+}
