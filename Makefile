@@ -71,8 +71,17 @@ test_coverage:
 	$(RM) $(GO_COVERAGE_OUTPUT_TMP)
 	$(PYTEST) --cov=./ --cov-report=xml:$(PYTHON_COVERAGE_OUTPUT)
 
-test_e2e:
-	$(GO) test $(TEST_FLAGS) ./tests/ee/... -tags=e2e
+# If you want to specify a directory for grpc_health_probe, enter following:
+#   make test_e2e_local TEST_ARGS="-args -grpc-health-probe-executable=<path>"
+#
+# If you have installed the grpc_health_probe and can look it up by PATH, it is
+# unnecessary to enter TEST_ARGS.
+TEST_ARGS :=
+test_e2e_local: build
+	$(GO) test $(TEST_FLAGS) ./tests/ee/... -tags=e2e $(TEST_ARGS)
+
+test_e2e_k8s: build
+	$(GO) test $(TEST_FLAGS) ./tests/ee/... -tags=e2e,k8s
 
 
 # proto

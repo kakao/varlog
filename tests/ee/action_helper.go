@@ -2,78 +2,15 @@ package ee
 
 import (
 	"context"
-	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/tests/ee/k8s/cluster"
+	"github.com/kakao/varlog/tests/ee/cluster"
 )
 
-func FailStorageNode(ctx context.Context, t *testing.T, tc *cluster.TestCluster, snid types.StorageNodeID) func() {
-	return func() {
-		tc.StopStorageNode(ctx, t, snid)
-	}
-}
-
-func WaitStorageNodeFail(tc *cluster.TestCluster, nodeNameGetter func() string) func(context.Context, *testing.T) bool {
-	return func(ctx context.Context, t *testing.T) bool {
-		return assert.Eventually(t, func() bool {
-			pods := tc.ListStorageNodePods(ctx, t)
-			for _, pod := range pods {
-				if pod.Spec.NodeName == nodeNameGetter() {
-					return false
-				}
-			}
-			return true
-		}, 10*time.Minute, 10*time.Second)
-	}
-}
-
-func anySNFail(ctx context.Context, t *testing.T, tc *cluster.TestCluster, primary bool, snid *types.StorageNodeID, nodeName *string) bool {
-	t.Helper()
-
-	adminAddr := tc.AdminServerAddress(ctx, t)
-	adm, err := varlog.NewAdmin(ctx, adminAddr)
-	if !assert.NoError(t, err) {
-		return false
-	}
-
-	tds, err := adm.ListTopics(ctx)
-	if !assert.NoError(t, err) {
-		return false
-	}
-	td := tds[rand.Intn(len(tds))]
-
-	lsds, err := adm.ListLogStreams(ctx, td.TopicID)
-	if !assert.NoError(t, err) {
-		return false
-	}
-	lsd := lsds[rand.Intn(len(lsds))]
-
-	if primary {
-		*snid = lsd.Replicas[0].StorageNodeID
-	} else {
-		if !assert.Greater(t, len(lsd.Replicas), 1) {
-			return false
-		}
-		idx := rand.Intn(len(lsd.Replicas)-1) + 1
-		*snid = lsd.Replicas[idx].StorageNodeID
-	}
-	*nodeName = tc.StopStorageNode(ctx, t, *snid)
-	return true
-}
-
-func AnyBackupSNFail(tc *cluster.TestCluster, snid *types.StorageNodeID, nodeName *string) func(context.Context, *testing.T) bool {
-	return func(ctx context.Context, t *testing.T) bool {
-		return anySNFail(ctx, t, tc, false, snid, nodeName)
-	}
-}
-
-func InitLogStream(ctx context.Context, tc *cluster.TestCluster, num int) func(*testing.T, *Action) {
+func InitLogStream(ctx context.Context, tc cluster.Cluster, num int) func(*testing.T, *Action) {
 	return func(t *testing.T, act *Action) {
 		t.Helper()
 
@@ -90,13 +27,6 @@ func InitLogStream(ctx context.Context, tc *cluster.TestCluster, num int) func(*
 			assert.NoError(t, err)
 			act.AddLogStream(td.TopicID, lsd.LogStreamID)
 		}
-	}
-}
-
-func StartStorageNode(tc *cluster.TestCluster, nodeNameGetter func() string) func(context.Context, *testing.T) bool {
-	return func(ctx context.Context, t *testing.T) bool {
-		t.Helper()
-		return tc.StartStorageNode(ctx, t, nodeNameGetter())
 	}
 }
 
