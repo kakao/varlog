@@ -225,12 +225,23 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		return varlogpb.LogStreamStatusSealed, lastCommittedGLSN, nil
 	}
 
+	// TODO: We can deduplicate uncommittedLLSNBegin and local high
+	// watermark.
+	_, _, _, invalid := lse.lsc.reportCommitBase()
 	localHighWatermark := lse.lsc.localHighWatermark()
 	localHWM = localHighWatermark.GLSN
 	if localHighWatermark.GLSN > lastCommittedGLSN {
 		panic("log stream: seal: metadata repository may be behind of log stream")
 	}
-	if localHighWatermark.GLSN < lastCommittedGLSN {
+	if lastCommittedGLSN.Invalid() && invalid {
+		// NOTE: Invalid last committed GLSN means this log stream just
+		// joined into the cluster. However, an invalid
+		// reportCommitBase means this replica has inconsistent commit
+		// context and log entries; that can never happen for the new
+		// log stream.
+		lse.logger.Panic("log stream: seal: unexpected last committed GLSN")
+	}
+	if localHighWatermark.GLSN < lastCommittedGLSN || invalid {
 		status = varlogpb.LogStreamStatusSealing
 		return status, localHWM, nil
 	}
