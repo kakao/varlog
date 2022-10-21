@@ -31,25 +31,16 @@ func TestGetUnderlyingDB(tb testing.TB, stg *Storage) *pebble.DB {
 // TestAppendLogEntryWithoutCommitContext stores log entries without commit
 // context.
 func TestAppendLogEntryWithoutCommitContext(tb testing.TB, stg *Storage, llsn types.LLSN, glsn types.GLSN, data []byte) {
-	db := TestGetUnderlyingDB(tb, stg)
-
-	ck := make([]byte, commitKeyLength)
-	ck = encodeCommitKeyInternal(glsn, ck)
-
-	dk := make([]byte, dataKeyLength)
-	dk = encodeDataKeyInternal(llsn, dk)
-
-	batch := db.NewBatch()
-	require.NoError(tb, batch.Set(dk, data, nil))
-	require.NoError(tb, batch.Set(ck, dk, nil))
-	require.NoError(tb, batch.Commit(pebble.Sync))
+	batch := stg.NewAppendBatch()
+	require.NoError(tb, batch.SetLogEntry(llsn, glsn, data))
+	require.NoError(tb, batch.Apply())
 	require.NoError(tb, batch.Close())
 }
 
 // TestSetCommitContext stores only commit context.
 func TestSetCommitContext(tb testing.TB, stg *Storage, cc CommitContext) {
-	db := TestGetUnderlyingDB(tb, stg)
-	value := make([]byte, commitContextLength)
-	value = encodeCommitContext(cc, value)
-	require.NoError(tb, db.Set(commitContextKey, value, pebble.Sync))
+	batch := stg.NewAppendBatch()
+	require.NoError(tb, batch.SetCommitContext(cc))
+	require.NoError(tb, batch.Apply())
+	require.NoError(tb, batch.Close())
 }

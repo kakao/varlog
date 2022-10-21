@@ -206,6 +206,78 @@ func TestStorage_EmptyWriteBatch(t *testing.T) {
 	})
 }
 
+func TestStorage_AppendBatch(t *testing.T) {
+	cc := CommitContext{
+		Version:            1,
+		HighWatermark:      2,
+		CommittedGLSNBegin: 3,
+		CommittedGLSNEnd:   4,
+		CommittedLLSNBegin: 5,
+	}
+
+	tcs := []struct {
+		name  string
+		testf func(t testing.TB, stg *Storage)
+	}{
+		{
+			name: "LogEntry",
+			testf: func(t testing.TB, stg *Storage) {
+				batch := stg.NewAppendBatch()
+				require.NoError(t, batch.SetLogEntry(1, 1, []byte("one")))
+				require.NoError(t, batch.Apply())
+				require.NoError(t, batch.Close())
+
+				entry, err := stg.Read(AtGLSN(1))
+				require.NoError(t, err)
+				require.Equal(t, types.LLSN(1), entry.LLSN)
+				require.Equal(t, types.GLSN(1), entry.GLSN)
+				require.Equal(t, []byte("one"), entry.Data)
+			},
+		},
+		{
+			name: "CommitContext",
+			testf: func(t testing.TB, stg *Storage) {
+				batch := stg.NewAppendBatch()
+				require.NoError(t, batch.SetCommitContext(cc))
+				require.NoError(t, batch.Apply())
+				require.NoError(t, batch.Close())
+
+				actual, err := stg.ReadCommitContext()
+				require.NoError(t, err)
+				require.Equal(t, cc, actual)
+			},
+		},
+		{
+			name: "Combined",
+			testf: func(t testing.TB, stg *Storage) {
+				batch := stg.NewAppendBatch()
+				require.NoError(t, batch.SetLogEntry(1, 1, []byte("one")))
+				require.NoError(t, batch.SetCommitContext(cc))
+				require.NoError(t, batch.Apply())
+				require.NoError(t, batch.Close())
+
+				entry, err := stg.Read(AtGLSN(1))
+				require.NoError(t, err)
+				require.Equal(t, types.LLSN(1), entry.LLSN)
+				require.Equal(t, types.GLSN(1), entry.GLSN)
+				require.Equal(t, []byte("one"), entry.Data)
+
+				actual, err := stg.ReadCommitContext()
+				require.NoError(t, err)
+				require.Equal(t, cc, actual)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			testStorage(t, func(t testing.TB, stg *Storage) {
+				tc.testf(t, stg)
+			})
+		})
+	}
+}
+
 func TestStorage_InconsistentWriteCommit(t *testing.T) {
 	testStorage(t, func(t testing.TB, stg *Storage) {
 		cb, err := stg.NewCommitBatch(CommitContext{

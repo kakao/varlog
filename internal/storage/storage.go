@@ -101,6 +101,12 @@ func (s *Storage) NewCommitBatch(cc CommitContext) (*CommitBatch, error) {
 	return cb, nil
 }
 
+// NewAppendBatch creates a batch for appending log entries. It does not put
+// commit context.
+func (s *Storage) NewAppendBatch() *AppendBatch {
+	return newAppendBatch(s.db.NewBatch(), s.writeOpts)
+}
+
 // NewScanner creates a scanner for the given key range.
 func (s *Storage) NewScanner(opts ...ScanOption) *Scanner {
 	scanner := newScanner()
