@@ -22,15 +22,15 @@ import (
 
 type syncTracker struct {
 	syncRange struct {
-		first varlogpb.LogEntryMeta
-		last  varlogpb.LogEntryMeta
+		first varlogpb.LogSequenceNumber
+		last  varlogpb.LogSequenceNumber
 	}
 
 	mu     sync.Mutex
 	cursor varlogpb.LogEntryMeta
 }
 
-func newSyncTracker(first varlogpb.LogEntryMeta, last varlogpb.LogEntryMeta) *syncTracker {
+func newSyncTracker(first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber) *syncTracker {
 	st := &syncTracker{}
 	st.syncRange.first = first
 	st.syncRange.last = last
@@ -136,7 +136,10 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 	}
 
 	// make tracker
-	st := newSyncTracker(first.LogEntryMeta, localHWM)
+	st := newSyncTracker(varlogpb.LogSequenceNumber{
+		LLSN: first.LogEntryMeta.LLSN,
+		GLSN: first.LogEntryMeta.GLSN,
+	}, localHWM)
 	lse.sts[dstReplica.StorageNodeID] = st
 	_, _ = lse.syncRunner.Run(func(ctx context.Context) {
 		snid := sc.dstReplica.StorageNodeID
@@ -358,7 +361,8 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		return
 	}
 
-	_, _, uncommittedLLSNBegin, _ := lse.lsc.reportCommitBase()
+	_, _, uncommittedBegin, _ := lse.lsc.reportCommitBase()
+	uncommittedLLSNBegin := uncommittedBegin.LLSN
 	lastCommittedLLSN := uncommittedLLSNBegin - 1
 	if lastCommittedLLSN > srcRange.LastLLSN {
 		lse.logger.Panic("sync init: destination of sync has too many logs",
@@ -399,8 +403,16 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 	}
 
 	if trimmed {
-		// NOTE: All zero of Version, HighWatermark, and Offset makes the report of the log stream replica meaningless.
-		lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, lastCommittedLLSN+1, true)
+		// NOTE: Invalid reportCommitBase makes the report of the log
+		// stream replica meaningless.
+		// The LLSN of uncommittedBegin indicates a sequence number of
+		// the following log entry copied from a source replica.
+		// Invalid GLSN of uncommittedBegin makes the local high
+		// watermark of the replica invalid.
+		lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{
+			LLSN: lastCommittedLLSN + 1,
+			GLSN: types.InvalidGLSN, // FIXME: Use correct GLSN.
+		}, true)
 
 		// NOTE: Since prefix logs has been trimmed, the local low and
 		// high watermarks are invalid. It will be reset by a commit
@@ -409,8 +421,9 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		// `LEARNING` is not credible because learning replica, which
 		// is the destination of synchronization, has invalid low and
 		// high watermarks.
-		lse.lsc.setLocalLowWatermark(varlogpb.InvalidLogEntryMeta())
-		lse.lsc.setLocalHighWatermark(varlogpb.InvalidLogEntryMeta())
+		lse.lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{})
+
+		// TODO: Remove old log entries
 	}
 
 	// learning

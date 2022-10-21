@@ -363,7 +363,7 @@ func (lse *Executor) Report(_ context.Context) (report snpb.LogStreamUncommitRep
 		return snpb.LogStreamUncommitReport{}, verrors.ErrClosed
 	}
 
-	version, highWatermark, uncommittedLLSNBegin, invalid := lse.lsc.reportCommitBase()
+	version, highWatermark, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
 	if invalid {
 		// If it is invalid, incompatibility between the commit context
 		// and the last log entry happens. The report must contain an
@@ -374,6 +374,7 @@ func (lse *Executor) Report(_ context.Context) (report snpb.LogStreamUncommitRep
 		return report, nil
 	}
 
+	uncommittedLLSNBegin := uncommittedBegin.LLSN
 	uncommittedLLSNEnd := lse.lsc.uncommittedLLSNEnd.Load()
 	report = snpb.LogStreamUncommitReport{
 		LogStreamID:           lse.lsid,
@@ -505,19 +506,23 @@ func (lse *Executor) LogStreamMetadata() (lsd varlogpb.LogStreamDescriptor, err 
 	}
 
 	localLWM := lse.lsc.localLowWatermark()
-	localLWM.TopicID = lse.tpid
-	localLWM.LogStreamID = lse.lsid
-
 	localHWM := lse.lsc.localHighWatermark()
-	localHWM.TopicID = lse.tpid
-	localHWM.LogStreamID = lse.lsid
-
 	lsd = varlogpb.LogStreamDescriptor{
 		TopicID:     lse.tpid,
 		LogStreamID: lse.lsid,
 		Status:      status,
-		Head:        localLWM,
-		Tail:        localHWM,
+		Head: varlogpb.LogEntryMeta{
+			TopicID:     lse.tpid,
+			LogStreamID: lse.lsid,
+			LLSN:        localLWM.LLSN,
+			GLSN:        localLWM.GLSN,
+		},
+		Tail: varlogpb.LogEntryMeta{
+			TopicID:     lse.tpid,
+			LogStreamID: lse.lsid,
+			LLSN:        localHWM.LLSN,
+			GLSN:        localHWM.GLSN,
+		},
 	}
 	return lsd, nil
 }
@@ -581,7 +586,10 @@ func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
 	lse.globalLowWatermark.glsn = glsn + 1
 
 	// update local low watermark
-	lse.lsc.setLocalLowWatermark(nextLowWatermark.LogEntryMeta)
+	lse.lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
+		LLSN: nextLowWatermark.LLSN,
+		GLSN: nextLowWatermark.GLSN,
+	})
 	return nil
 }
 
@@ -658,22 +666,34 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 		restoreMode = "recovered"
 		uncommittedLLSNBegin := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
 		if uncommittedLLSNBegin-1 == last.LLSN {
-			lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedLLSNBegin, false)
+			uncommittedBegin := varlogpb.LogSequenceNumber{
+				LLSN: last.LLSN + 1,
+				GLSN: last.GLSN + 1,
+			}
+			lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false)
 			lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
-			lsc.setLocalLowWatermark(*first)
-			lsc.setLocalHighWatermark(*last)
+			lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
+				LLSN: first.LLSN,
+				GLSN: first.GLSN,
+			})
 			return lsc
 		}
 	}
 
 	// something wrong
 	restoreMode = "invalid"
-	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, types.InvalidLLSN, true)
+	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{}, true)
 	if last != nil {
-		lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, last.LLSN+1, true)
+		uncommittedBegin := varlogpb.LogSequenceNumber{
+			LLSN: last.LLSN + 1,
+			GLSN: last.GLSN + 1,
+		}
+		lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, uncommittedBegin, true)
 		lsc.uncommittedLLSNEnd.Store(last.LLSN + 1)
-		lsc.setLocalLowWatermark(*first)
-		lsc.setLocalHighWatermark(*last)
+		lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
+			LLSN: first.LLSN,
+			GLSN: first.GLSN,
+		})
 	}
 	return lsc
 }

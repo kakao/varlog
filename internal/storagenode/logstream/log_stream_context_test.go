@@ -16,19 +16,20 @@ import (
 func TestLogStreamContext(t *testing.T) {
 	lsc := newLogStreamContext()
 
-	version, highWatermark, uncommittedLLSNBegin, invalid := lsc.reportCommitBase()
+	version, highWatermark, uncommittedBegin, invalid := lsc.reportCommitBase()
 	require.Equal(t, types.InvalidVersion, version)
 	require.Equal(t, types.InvalidGLSN, highWatermark)
-	require.Equal(t, types.MinLLSN, uncommittedLLSNBegin)
+	require.Equal(t, types.MinLLSN, uncommittedBegin.LLSN)
 	require.False(t, invalid)
 
-	expected := varlogpb.LogEntryMeta{
-		TopicID:     1,
-		LogStreamID: 2,
-		LLSN:        3,
-		GLSN:        4,
+	expected := varlogpb.LogSequenceNumber{
+		LLSN: 3,
+		GLSN: 4,
 	}
-	lsc.setLocalHighWatermark(expected)
+	uncommittedBegin = expected
+	uncommittedBegin.LLSN++
+	uncommittedBegin.GLSN++
+	lsc.storeReportCommitBase(version, highWatermark, uncommittedBegin, invalid)
 	assert.Equal(t, expected, lsc.localHighWatermark())
 
 	lsc.setLocalLowWatermark(expected)
@@ -43,7 +44,10 @@ func TestDecidableCondition(t *testing.T) {
 	assert.False(t, dc.decidable(1))
 
 	dc.change(func() {
-		lsc.storeReportCommitBase(1, 1, 2, false)
+		lsc.storeReportCommitBase(1, 1, varlogpb.LogSequenceNumber{
+			LLSN: 2,
+			GLSN: 2,
+		}, false)
 	})
 
 	assert.True(t, dc.decidable(1))
@@ -61,11 +65,19 @@ func TestDecidableCondition_InterruptWaiters(t *testing.T) {
 		assert.NoError(t, err)
 	}()
 	dc.change(func() {
-		lsc.storeReportCommitBase(1, 1, 2, false)
+		lsc.storeReportCommitBase(1, 1,
+			varlogpb.LogSequenceNumber{
+				LLSN: 2,
+				GLSN: 2,
+			},
+			false)
 	})
 	runtime.Gosched()
 	dc.change(func() {
-		lsc.storeReportCommitBase(2, 2, 3, false)
+		lsc.storeReportCommitBase(2, 2, varlogpb.LogSequenceNumber{
+			LLSN: 3,
+			GLSN: 3,
+		}, false)
 	})
 	wg.Wait()
 
