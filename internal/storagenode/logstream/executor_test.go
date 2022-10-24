@@ -205,12 +205,10 @@ func TestExecutor_Sealing(t *testing.T) {
 			name: "TheSameLastCommittedGLSNWithInvalidReportCommitBase",
 			testf: func(t *testing.T, lse *Executor) {
 				const lastLSN = 1
-				lse.lsc.storeReportCommitBase(types.Version(1), types.GLSN(lastLSN), types.LLSN(lastLSN+1), true)
-				lse.lsc.setLocalHighWatermark(varlogpb.LogEntryMeta{
-					LLSN: types.LLSN(lastLSN),
-					GLSN: types.GLSN(lastLSN),
-				})
-
+				lse.lsc.storeReportCommitBase(types.Version(1), types.GLSN(lastLSN), varlogpb.LogSequenceNumber{
+					LLSN: types.LLSN(lastLSN + 1),
+					GLSN: types.GLSN(lastLSN + 1),
+				}, true)
 				status, localHWM, err := lse.Seal(context.Background(), types.GLSN(lastLSN))
 				assert.NoError(t, err)
 				assert.Equal(t, types.GLSN(lastLSN), localHWM)
