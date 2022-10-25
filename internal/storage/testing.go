@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 func TestNewStorage(tb testing.TB, opts ...Option) *Storage {
@@ -43,4 +44,28 @@ func TestSetCommitContext(tb testing.TB, stg *Storage, cc CommitContext) {
 	require.NoError(tb, batch.SetCommitContext(cc))
 	require.NoError(tb, batch.Apply())
 	require.NoError(tb, batch.Close())
+}
+
+func TestDeleteCommitContext(tb testing.TB, stg *Storage) {
+	err := stg.db.Delete(commitContextKey, pebble.Sync)
+	require.NoError(tb, err)
+}
+
+func TestDeleteLogEntry(tb testing.TB, stg *Storage, lsn varlogpb.LogSequenceNumber) {
+	batch := stg.db.NewBatch()
+	defer func() {
+		err := batch.Close()
+		require.NoError(tb, err)
+	}()
+
+	dk := make([]byte, dataKeyLength)
+	err := batch.Delete(encodeDataKeyInternal(lsn.LLSN, dk), nil)
+	require.NoError(tb, err)
+
+	ck := make([]byte, commitKeyLength)
+	err = batch.Delete(encodeCommitKeyInternal(lsn.GLSN, ck), nil)
+	require.NoError(tb, err)
+
+	err = batch.Commit(pebble.Sync)
+	require.NoError(tb, err)
 }

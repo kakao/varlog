@@ -53,8 +53,14 @@ type Executor struct {
 	// primaryBackups is a slice of replicas of a log stream.
 	// It is updated by Unseal and is read by many codes.
 	primaryBackups []varlogpb.LogStreamReplica
-	// sync replicate buffer
-	srb        *syncReplicateBuffer
+	dstSyncInfo    struct {
+		// lastSyncTime is when the replica handles SyncInit or SyncReplicate
+		// successfully. If the elapsed time since the last RPC is greater than
+		// configured syncDurationTimeout, the synchronization process can be
+		// canceled by another SyncInit.
+		lastSyncTime time.Time
+		srcReplica   types.StorageNodeID
+	}
 	sts        map[types.StorageNodeID]*syncTracker
 	syncRunner *runner.Runner
 
@@ -241,6 +247,10 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		// log stream.
 		lse.logger.Panic("log stream: seal: unexpected last committed GLSN")
 	}
+	if lse.esm.load() == executorStateLearning {
+		return varlogpb.LogStreamStatusSealing, localHWM, nil
+	}
+
 	if localHighWatermark.GLSN < lastCommittedGLSN || invalid {
 		status = varlogpb.LogStreamStatusSealing
 		return status, localHWM, nil

@@ -14,7 +14,6 @@ import (
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/mathutil"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -61,12 +60,6 @@ func (st *syncTracker) setCursor(cursor varlogpb.LogEntryMeta) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.cursor = cursor
-}
-
-func (st *syncTracker) end() bool {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	return st.syncRange.last.LLSN == st.cursor.LLSN
 }
 
 func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
@@ -130,9 +123,14 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 		}, nil
 	}
 
-	first, err := lse.stg.Read(storage.AtLLSN(syncRange.FirstLLSN))
-	if err != nil {
-		return nil, err
+	// If the FirstLLSN of the sync range is greater than the LastLLSN of
+	// it, the destination has all log entries but commit context.
+	var first varlogpb.LogEntry
+	if syncRange.FirstLLSN <= syncRange.LastLLSN {
+		first, err = lse.stg.Read(storage.AtLLSN(syncRange.FirstLLSN))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// make tracker
@@ -153,7 +151,7 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 	return st.toSyncStatus(), nil
 }
 
-func (lse *Executor) syncLoop(ctx context.Context, sc *syncClient, st *syncTracker) {
+func (lse *Executor) syncLoop(_ context.Context, sc *syncClient, st *syncTracker) {
 	var (
 		err error
 		cc  storage.CommitContext
@@ -168,44 +166,20 @@ func (lse *Executor) syncLoop(ctx context.Context, sc *syncClient, st *syncTrack
 		_ = sc.close()
 	}()
 
-	cc, err = lse.stg.CommitContextOf(st.syncRange.first.GLSN)
-	if err != nil {
-		return
-	}
-
-	for ctx.Err() == nil && lse.esm.load() == executorStateSealed {
-		// Configure syncReplicate timeout
-		err = sc.syncReplicate(context.TODO(), snpb.SyncPayload{
-			CommitContext: &varlogpb.CommitContext{
-				Version:            cc.Version,
-				HighWatermark:      cc.HighWatermark,
-				CommittedGLSNBegin: cc.CommittedGLSNBegin,
-				CommittedGLSNEnd:   cc.CommittedGLSNEnd,
-				CommittedLLSNBegin: cc.CommittedLLSNBegin,
-			},
-		})
+	// NOTE: When the destination has all log entries but a commit context,
+	// the syncRange.first is invalid because Sync does not look at the
+	// syncRange.first.
+	if !st.syncRange.first.Invalid() && st.syncRange.first.GLSN <= st.syncRange.last.GLSN {
+		sr, err = lse.SubscribeWithGLSN(st.syncRange.first.GLSN, st.syncRange.last.GLSN+1)
 		if err != nil {
-			return
-		}
-
-		if cc.Empty() {
-			cc, err = lse.stg.NextCommitContextOf(cc)
-			if err != nil {
-				return
-			}
-			continue
-		}
-
-		// The first commit context may not have full log entries due to trim.
-		beginGLSN := types.GLSN(mathutil.MaxUint64(uint64(cc.CommittedGLSNBegin), uint64(st.syncRange.first.GLSN)))
-		sr, err = lse.SubscribeWithGLSN(beginGLSN, cc.CommittedGLSNEnd)
-		if err != nil {
+			err = fmt.Errorf("scan: %w", err)
 			return
 		}
 		for le := range sr.Result() {
-			// Configure syncReplicate timeout
+			// TODO: Configure syncReplicate timeout
 			err = sc.syncReplicate(context.TODO(), snpb.SyncPayload{LogEntry: &le})
 			if err != nil {
+				err = fmt.Errorf("sync replicate: log entry %+v: %w", le.LogEntryMeta, err)
 				sr.Stop()
 				return
 			}
@@ -214,125 +188,34 @@ func (lse *Executor) syncLoop(ctx context.Context, sc *syncClient, st *syncTrack
 		sr.Stop()
 		err = sr.Err()
 		if err != nil {
-			return
-		}
-
-		if st.end() {
-			return
-		}
-
-		cc, err = lse.stg.NextCommitContextOf(cc)
-		if err != nil {
+			err = fmt.Errorf("scan: %w", err)
 			return
 		}
 	}
-}
 
-// syncReplicateBuffer represents the progress of sync replication.
-type syncReplicateBuffer struct {
-	srcReplica varlogpb.LogStreamReplica
-	// syncRange is a range of overall sync replication, which is set for the first time.
-	syncRange snpb.SyncRange
-
-	cc           *varlogpb.CommitContext
-	les          []varlogpb.LogEntry
-	prevCC       *varlogpb.CommitContext
-	expectedLLSN types.LLSN
-
-	updatedAt time.Time
-}
-
-func newSyncReplicateBuffer(srcReplica varlogpb.LogStreamReplica, syncRange snpb.SyncRange) (*syncReplicateBuffer, error) {
-	if syncRange.Invalid() {
-		return nil, fmt.Errorf("sync replicate: invalid sync range %s", syncRange.String())
+	cc, err = lse.stg.ReadCommitContext()
+	if err != nil {
+		err = fmt.Errorf("commit context: %w", err)
+		return
 	}
-	return &syncReplicateBuffer{
-		srcReplica:   srcReplica,
-		syncRange:    syncRange,
-		expectedLLSN: syncRange.FirstLLSN,
-	}, nil
-}
-
-// add inserts either a commit context or a log entry.
-// If the srb already has a commit context, the payload should be a log entry.
-// If the srb does not have a commit context, the payload should be a commit context.
-func (srb *syncReplicateBuffer) add(srcReplica varlogpb.LogStreamReplica, payload snpb.SyncPayload, updatedAt time.Time) (err error) {
-	if !srb.srcReplica.Equal(srcReplica) {
-		return fmt.Errorf("log stream: sync replicate: invalid source replica %s", srcReplica)
+	if cc.CommittedLLSNBegin+types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)-1 != st.syncRange.last.LLSN {
+		err = fmt.Errorf("commit context: invalid LLSN: %+v", cc)
 	}
-	defer func() {
-		if err == nil {
-			srb.updatedAt = updatedAt
-		}
-	}()
-	if payload.CommitContext != nil {
-		err = srb.addCommitContext(payload.CommitContext)
-	} else if payload.LogEntry != nil {
-		err = srb.addLogEntry(payload.LogEntry)
-	} else {
-		err = errors.New("log stream: sync replicate: invalid payload")
+	if cc.CommittedGLSNEnd-1 != st.syncRange.last.GLSN {
+		err = fmt.Errorf("commit context: invalid GLSN: %+v", cc)
 	}
-	return err
-}
-
-func (srb *syncReplicateBuffer) addCommitContext(cc *varlogpb.CommitContext) error {
-	if srb.cc != nil || len(srb.les) > 0 {
-		return errors.New("log stream: sync replicate: previous sync replication is not completed")
+	if err != nil {
+		return
 	}
-	if cc.CommittedGLSNBegin > cc.CommittedGLSNEnd {
-		return errors.New("log stream: sync replicate: invalid commit context")
-	}
-	if srb.prevCC != nil && cc.CommittedLLSNBegin != srb.prevCC.CommittedLLSNBegin+types.LLSN(srb.prevCC.CommittedGLSNEnd-srb.prevCC.CommittedGLSNBegin) {
-		return errors.New("log stream: sync replicate: not sequential sync replication")
-	}
-	srb.cc = cc
-	srb.les = make([]varlogpb.LogEntry, 0, cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
-	return nil
-}
-
-func (srb *syncReplicateBuffer) addLogEntry(le *varlogpb.LogEntry) error {
-	if srb.cc == nil {
-		return errors.New("log stream: sync replicate: no commit context")
-	}
-	if srb.cc.CommittedGLSNEnd <= le.GLSN {
-		return fmt.Errorf("log stream: sync replicate: unexpected log entry %s, commit context %s", le.String(), srb.cc.String())
-	}
-	if srb.expectedLLSN != le.LLSN {
-		return fmt.Errorf("log stream: sync replicate: unexpected log entry %s, expected llsn %d", le.String(), srb.expectedLLSN)
-
-	}
-	if length := len(srb.les); length > 0 {
-		expectedGLSN := srb.les[length-1].GLSN + 1
-		if expectedGLSN != le.GLSN {
-			return fmt.Errorf("log stream: sync replicate: unexpected log entry %s, expected glsn %d", le.String(), expectedGLSN)
-		}
-	}
-	srb.les = append(srb.les, *le)
-	srb.expectedLLSN++
-	return nil
-}
-
-// committable decides whether the commit context and log entries in the srb can be committed.
-func (srb *syncReplicateBuffer) committable() bool {
-	ccLen := uint64(srb.cc.CommittedGLSNEnd - srb.cc.CommittedGLSNBegin)
-	if ccLen == 0 {
-		return true
-	}
-	lesLen := uint64(len(srb.les))
-	return srb.les[lesLen-1].GLSN == srb.cc.CommittedGLSNEnd-1
-}
-
-// end decides whether the sync replication is done.
-func (srb *syncReplicateBuffer) end() bool {
-	length := len(srb.les)
-	return length > 0 && srb.les[length-1].LLSN == srb.syncRange.LastLLSN
-}
-
-// reset clears current commit context and log entries.
-func (srb *syncReplicateBuffer) reset() {
-	srb.prevCC = srb.cc
-	srb.cc = nil
-	srb.les = nil
+	err = sc.syncReplicate(context.TODO(), snpb.SyncPayload{
+		CommitContext: &varlogpb.CommitContext{
+			Version:            cc.Version,
+			HighWatermark:      cc.HighWatermark,
+			CommittedGLSNBegin: cc.CommittedGLSNBegin,
+			CommittedGLSNEnd:   cc.CommittedGLSNEnd,
+			CommittedLLSNBegin: cc.CommittedLLSNBegin,
+		},
+	})
 }
 
 func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamReplica, srcRange snpb.SyncRange) (syncRange snpb.SyncRange, err error) {
@@ -347,13 +230,12 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 			err = fmt.Errorf("log stream: sync init: %w", verrors.ErrClosed)
 			return
 		}
-		if state != executorStateLearning || (lse.srb != nil && time.Since(lse.srb.updatedAt) < lse.syncInitTimeout) {
+		if state != executorStateLearning || (time.Since(lse.dstSyncInfo.lastSyncTime) < lse.syncTimeout) {
 			err = fmt.Errorf("log stream: sync init: invalid state %d: %w", state, verrors.ErrInvalid)
 			return
 		}
-		// expire timed-out srb
+		// syncTimeout is expired.
 		lse.esm.store(executorStateSealing)
-		lse.srb = nil
 	}
 
 	if srcRange.Invalid() {
@@ -361,8 +243,8 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		return
 	}
 
-	_, _, uncommittedBegin, _ := lse.lsc.reportCommitBase()
-	uncommittedLLSNBegin := uncommittedBegin.LLSN
+	_, _, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+	uncommittedLLSNBegin, uncommittedGLSNBegin := uncommittedBegin.LLSN, uncommittedBegin.GLSN
 	lastCommittedLLSN := uncommittedLLSNBegin - 1
 	if lastCommittedLLSN > srcRange.LastLLSN {
 		lse.logger.Panic("sync init: destination of sync has too many logs",
@@ -374,7 +256,7 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 	// NOTE: When the replica has all log entries, it returns its range of logs and non-error results.
 	// In this case, this replica remains executorStateSealing.
 	// Breaking change: previously it returns ErrExist when the replica has all log entries to replicate.
-	if lastCommittedLLSN == srcRange.LastLLSN {
+	if lastCommittedLLSN == srcRange.LastLLSN && !invalid {
 		return snpb.SyncRange{FirstLLSN: types.InvalidLLSN, LastLLSN: types.InvalidLLSN}, nil
 	}
 
@@ -386,9 +268,62 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		return
 	}
 
-	trimmed := uncommittedLLSNBegin < srcRange.FirstLLSN
-	if trimmed {
+	trimGLSN := types.InvalidGLSN
+	lwm := lse.lsc.localLowWatermark()
+
+	if lwm.LLSN < srcRange.FirstLLSN && srcRange.FirstLLSN <= lastCommittedLLSN {
+		// The source replica has already trimmed some prefix log
+		// entries; thus, the destination replica should remove prefix
+		// log entries to be the same as the source.
+
+		// TODO: There are two things to do to avoid finding log
+		// entries here:
+		// - The source replica should propose a range of
+		// synchronization denoted by GLSN and LLSN.
+		// - Methods related to trim in the storage and log stream
+		// should accept exclusive boundaries rather than inclusive.
+		var entry varlogpb.LogEntry
+		entry, err = lse.stg.Read(storage.AtLLSN(srcRange.FirstLLSN - 1))
+		if err != nil {
+			err = fmt.Errorf("log stream: sync init: cannot find trim position: %w", err)
+			lse.esm.store(executorStateSealing)
+			return
+		}
+		trimGLSN = entry.GLSN
+
+		entry, err = lse.stg.Read(storage.AtLLSN(srcRange.FirstLLSN))
+		if err != nil {
+			err = fmt.Errorf("log stream: sync init: cannot find new lwm after trim: %w", err)
+			lse.esm.store(executorStateSealing)
+			return
+		}
+
+		// The local low watermark of the destination replica after
+		// trimming the prefix log entries should be the same as the
+		// first entry of the sync range.
+		lwm = varlogpb.LogSequenceNumber{
+			LLSN: entry.LLSN,
+			GLSN: entry.GLSN,
+		}
+	} else if srcRange.FirstLLSN < lwm.LLSN || lastCommittedLLSN < srcRange.FirstLLSN {
+		// The destination replica that has been trimmed prefix log
+		// entries as opposed to the source replica is unusual. In this
+		// case, the destination replica deletes all log entries to fix
+		// it. Similarly, if the source replica has already trimmed log
+		// entries that the destination has, the destination should
+		// delete all log entries.
+		trimGLSN = types.MaxGLSN
 		lastCommittedLLSN = srcRange.FirstLLSN - 1
+
+		// Since the destination replica will trim all log entries, the
+		// local low and high watermarks will be invalid.
+		// The destination replica should invalidate its local high
+		// watermark by setting the GLSN of uncommittedBegin to
+		// invalid.
+		uncommittedGLSNBegin = types.InvalidGLSN
+		// Setting an invalid log sequence number to the local low
+		// watermark is necessary to invalidate it.
+		lwm = varlogpb.LogSequenceNumber{}
 	}
 
 	syncRange = snpb.SyncRange{
@@ -396,39 +331,32 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		LastLLSN:  srcRange.LastLLSN,
 	}
 
-	srb, err := newSyncReplicateBuffer(srcReplica, syncRange)
-	if err != nil {
-		lse.esm.store(executorStateSealing)
-		return syncRange, err
+	if !trimGLSN.Invalid() {
+		err = lse.stg.Trim(trimGLSN)
+		if err != nil && !errors.Is(err, storage.ErrNoLogEntry) {
+			err = fmt.Errorf("log stream: sync init: remove trimmed log entries: %w", err)
+			lse.esm.store(executorStateSealing)
+			return
+		}
+
+		lse.lsc.setLocalLowWatermark(lwm)
 	}
 
-	if trimmed {
-		// NOTE: Invalid reportCommitBase makes the report of the log
-		// stream replica meaningless.
-		// The LLSN of uncommittedBegin indicates a sequence number of
-		// the following log entry copied from a source replica.
-		// Invalid GLSN of uncommittedBegin makes the local high
-		// watermark of the replica invalid.
-		lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{
-			LLSN: lastCommittedLLSN + 1,
-			GLSN: types.InvalidGLSN, // FIXME: Use correct GLSN.
-		}, true)
-
-		// NOTE: Since prefix logs has been trimmed, the local low and
-		// high watermarks are invalid. It will be reset by a commit
-		// triggered by SyncReplicate.
-		// It means that metadata of replica in the status of
-		// `LEARNING` is not credible because learning replica, which
-		// is the destination of synchronization, has invalid low and
-		// high watermarks.
-		lse.lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{})
-
-		// TODO: Remove old log entries
-	}
+	// NOTE: Invalid reportCommitBase makes the report of the log
+	// stream replica meaningless.
+	// The LLSN of uncommittedBegin indicates a sequence number of
+	// the following log entry copied from a source replica.
+	// Invalid GLSN of uncommittedBegin makes the local high
+	// watermark of the replica invalid.
+	lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{
+		LLSN: lastCommittedLLSN + 1,
+		GLSN: uncommittedGLSNBegin,
+	}, true)
 
 	// learning
 	lse.resetInternalState(lastCommittedLLSN, !lse.isPrimary())
-	lse.srb = srb
+	lse.dstSyncInfo.lastSyncTime = time.Now()
+	lse.dstSyncInfo.srcReplica = srcReplica.StorageNodeID
 	return syncRange, nil
 }
 
@@ -446,59 +374,89 @@ func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStr
 		return fmt.Errorf("log stream: sync replicate: invalid state %d: %w", state, verrors.ErrInvalid)
 	}
 
+	if lse.dstSyncInfo.srcReplica != srcReplica.StorageNodeID {
+		return fmt.Errorf("log stream: sync replicate: incorrect source replica: %s", srcReplica.String())
+	}
+
+	if payload.LogEntry == nil && payload.CommitContext == nil {
+		lse.esm.store(executorStateSealing)
+		return fmt.Errorf("log stream: sync replicate: empty payload")
+	}
+
+	done := false
+	batch := lse.stg.NewAppendBatch()
 	defer func() {
-		if err != nil {
-			lse.srb = nil
+		_ = batch.Close()
+		if err != nil || done {
 			lse.esm.store(executorStateSealing)
 		}
 	}()
 
-	err = lse.srb.add(srcReplica, payload, time.Now())
-	if err != nil {
-		return err
-	}
+	var lem *varlogpb.LogEntryMeta
+	ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+	uncommittedLLSNBegin := uncommittedBegin.LLSN
+	uncommittedGLSNBegin := uncommittedBegin.GLSN
 
-	ccLen := int(lse.srb.cc.CommittedGLSNEnd - lse.srb.cc.CommittedGLSNBegin)
-	if leCnt := len(lse.srb.les); ccLen < leCnt {
-		lse.logger.Panic("sync replicate: too many log entries", zap.Any("srb", lse.srb))
-	}
-	if ccLen > len(lse.srb.les) {
-		return nil
-	}
+	if entry := payload.LogEntry; entry != nil {
+		if entry.LLSN != uncommittedLLSNBegin {
+			err = fmt.Errorf("log stream: sync replicate: unexpected log entry: expected_llsn=%v, actual_llsn=%v", uncommittedLLSNBegin, entry.LLSN)
+			return err
+		}
 
-	wb := lse.stg.NewWriteBatch()
-	defer func() {
-		_ = wb.Close()
-	}()
-	for _, le := range lse.srb.les {
-		err = wb.Set(le.LLSN, le.Data)
+		err = batch.SetLogEntry(entry.LLSN, entry.GLSN, entry.Data)
 		if err != nil {
 			return err
 		}
+		lse.logger.Info("log stream: sync replicate: copy", zap.String("log entry", entry.String()))
+		uncommittedLLSNBegin = entry.LLSN + 1
+		uncommittedGLSNBegin = entry.GLSN + 1
+		lem = &varlogpb.LogEntryMeta{
+			TopicID:     lse.tpid,
+			LogStreamID: lse.lsid,
+			LLSN:        entry.LLSN,
+			GLSN:        entry.GLSN,
+		}
 	}
-	err = wb.Apply()
+	if cc := payload.CommitContext; cc != nil {
+		lastLLSN := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin) - 1
+		if lastLLSN != uncommittedLLSNBegin-1 {
+			err = fmt.Errorf("log stream: sync replicate: unexpected commit context: expected_last_llsn=%v, actual_last_llsn=%v", uncommittedLLSNBegin-1, lastLLSN)
+			return err
+		}
+
+		err = batch.SetCommitContext(storage.CommitContext{
+			Version:            cc.Version,
+			HighWatermark:      cc.HighWatermark,
+			CommittedGLSNBegin: cc.CommittedGLSNBegin,
+			CommittedGLSNEnd:   cc.CommittedGLSNEnd,
+			CommittedLLSNBegin: cc.CommittedLLSNBegin,
+		})
+		if err != nil {
+			return err
+		}
+		lse.logger.Info("log stream: sync replicate: copy", zap.String("commit context", cc.String()))
+
+		ver = cc.Version
+		hwm = cc.HighWatermark
+		invalid = false
+		done = true
+	}
+	err = batch.Apply()
 	if err != nil {
 		return err
 	}
-	lse.lsc.uncommittedLLSNEnd.Add(uint64(ccLen))
 
-	err = lse.cm.commitInternal(storage.CommitContext{
-		Version:            lse.srb.cc.Version,
-		HighWatermark:      lse.srb.cc.HighWatermark,
-		CommittedGLSNBegin: lse.srb.cc.CommittedGLSNBegin,
-		CommittedGLSNEnd:   lse.srb.cc.CommittedGLSNEnd,
-		CommittedLLSNBegin: lse.srb.cc.CommittedLLSNBegin,
-	}, false)
-	if err != nil {
-		return err
+	if lem != nil {
+		lse.lsc.localLWM.CompareAndSwap(varlogpb.LogSequenceNumber{}, varlogpb.LogSequenceNumber{
+			LLSN: lem.LLSN,
+			GLSN: lem.GLSN,
+		})
 	}
-
-	if end := lse.srb.end(); !end {
-		lse.srb.reset()
-		return nil
-	}
-
-	lse.esm.store(executorStateSealing)
-	lse.srb = nil
+	lse.lsc.storeReportCommitBase(ver, hwm, varlogpb.LogSequenceNumber{
+		LLSN: uncommittedLLSNBegin,
+		GLSN: uncommittedGLSNBegin,
+	}, invalid)
+	lse.lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
+	lse.dstSyncInfo.lastSyncTime = time.Now()
 	return nil
 }
