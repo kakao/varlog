@@ -76,7 +76,11 @@ func New(ctx context.Context, opts ...Option) (*Admin, error) {
 	grpcServer := grpc.NewServer(
 		grpcmiddleware.WithUnaryServerChain(
 			grpcctxtags.UnaryServerInterceptor(),
-			grpczap.UnaryServerInterceptor(cfg.logger),
+			grpczap.UnaryServerInterceptor(cfg.logger, grpczap.WithDecider(
+				func(fullMethodName string, err error) bool {
+					return err != nil || !grpcHandlerLogDenyList[fullMethodName]
+				},
+			)),
 		),
 	)
 
