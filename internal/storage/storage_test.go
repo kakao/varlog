@@ -723,60 +723,6 @@ func TestStorageReadRecoveryPoints_InconsistentWriteCommit(t *testing.T) {
 	})
 }
 
-func TestStorage_CommitContextOf(t *testing.T) {
-	testStorage(t, func(t testing.TB, stg *Storage) {
-		cc1 := CommitContext{
-			Version:            1,
-			HighWatermark:      10,
-			CommittedGLSNBegin: 8,
-			CommittedGLSNEnd:   11,
-			CommittedLLSNBegin: 1,
-		}
-		cc2 := CommitContext{
-			Version:            2,
-			HighWatermark:      22,
-			CommittedGLSNBegin: 21,
-			CommittedGLSNEnd:   23,
-			CommittedLLSNBegin: 4,
-		}
-		cb, err := stg.NewCommitBatch(cc1)
-		assert.NoError(t, err)
-		assert.NoError(t, cb.Apply())
-		assert.NoError(t, cb.Close())
-
-		cb, err = stg.NewCommitBatch(cc2)
-		assert.NoError(t, err)
-		assert.NoError(t, cb.Apply())
-		assert.NoError(t, cb.Close())
-
-		for glsn := types.GLSN(0); glsn < cc1.CommittedGLSNBegin; glsn++ {
-			_, err := stg.CommitContextOf(glsn)
-			assert.ErrorIs(t, err, ErrNoCommitContext)
-		}
-		for glsn := cc1.CommittedGLSNBegin; glsn < cc1.CommittedGLSNEnd; glsn++ {
-			cc, err := stg.CommitContextOf(glsn)
-			assert.NoError(t, err)
-			assert.Equal(t, cc1, cc)
-
-			cc, err = stg.NextCommitContextOf(cc)
-			assert.NoError(t, err)
-			assert.Equal(t, cc2, cc)
-		}
-		for glsn := cc1.CommittedGLSNEnd; glsn < cc2.CommittedGLSNBegin; glsn++ {
-			_, err := stg.CommitContextOf(glsn)
-			assert.ErrorIs(t, err, ErrNoCommitContext)
-		}
-		for glsn := cc2.CommittedGLSNBegin; glsn < cc2.CommittedGLSNEnd; glsn++ {
-			cc, err := stg.CommitContextOf(glsn)
-			assert.NoError(t, err)
-			assert.Equal(t, cc2, cc)
-
-			_, err = stg.NextCommitContextOf(cc)
-			assert.ErrorIs(t, err, ErrNoCommitContext)
-		}
-	})
-}
-
 func TestStorage_TrimWhenNoLogEntry(t *testing.T) {
 	tcs := []struct {
 		name  string

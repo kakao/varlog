@@ -93,10 +93,6 @@ func (s *Storage) NewCommitBatch(cc CommitContext) (*CommitBatch, error) {
 		_ = cb.Close()
 		return nil, err
 	}
-	if err := cb.batch.Set(encodeCommitContextKeyInternal(cc, cb.cck), nil, nil); err != nil {
-		_ = cb.Close()
-		return nil, err
-	}
 	return cb, nil
 }
 
@@ -182,43 +178,6 @@ func (s *Storage) ReadCommitContext() (cc CommitContext, err error) {
 		_ = closer.Close()
 	}()
 	return decodeCommitContext(buf), nil
-}
-
-// CommitContextOf looks up a commit context that contains the log entry for the argument glsn.
-func (s *Storage) CommitContextOf(glsn types.GLSN) (cc CommitContext, err error) {
-	cck := make([]byte, commitContextKeyLength)
-	cck = encodeCommitContextKeyInternal(CommitContext{HighWatermark: glsn}, cck)
-	it := s.db.NewIter(&pebble.IterOptions{
-		LowerBound: cck,
-		UpperBound: []byte{commitContextKeySentinelPrefix},
-	})
-	defer func() {
-		_ = it.Close()
-	}()
-	if it.First() {
-		cc = decodeCommitContextKey(it.Key())
-		if cc.CommittedGLSNBegin <= glsn && glsn < cc.CommittedGLSNEnd {
-			return cc, nil
-		}
-	}
-	return cc, ErrNoCommitContext
-}
-
-// NextCommitContextOf returns the next commit context after the argument cc if exists.
-func (s *Storage) NextCommitContextOf(cc CommitContext) (next CommitContext, err error) {
-	cck := make([]byte, commitContextKeyLength)
-	cck = encodeCommitContextKeyInternal(cc, cck)
-	it := s.db.NewIter(&pebble.IterOptions{
-		LowerBound: cck,
-		UpperBound: []byte{commitContextKeySentinelPrefix},
-	})
-	defer func() {
-		_ = it.Close()
-	}()
-	if !it.First() || !decodeCommitContextKey(it.Key()).Equal(cc) || !it.Next() {
-		return next, ErrNoCommitContext
-	}
-	return decodeCommitContextKey(it.Key()), nil
 }
 
 // Trim deletes log entries whose GLSNs are less than or equal to the argument
