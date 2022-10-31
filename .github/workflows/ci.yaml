@@ -9,6 +9,7 @@ on:
 env:
   GO_VERSION: 1.18
   PYTHON_VERSION: 3.9
+  GRPC_HEALTH_PROBE_VERSION: v0.4.13
 
 jobs:
   gomod:
@@ -77,6 +78,26 @@ jobs:
           pip install pytest
           pip install pytest-cov
           make test TEST_FLAGS='-v -race -failfast -count=1 -timeout=20m'
+
+  e2e_test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install grpc_health_probe
+        run: |
+          wget -qO${PWD}/bin/grpc-health-probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${{ env.GRPC_HEALTH_PROBE_VERSION }}/grpc_health_probe-linux-amd64
+          chmod +x ${PWD}/bin/grpc-health-probe
+          echo "${PWD}/bin" >> $GITHUB_PATH
+      - name: Test
+        run: |
+          whereis grpc-health-probe
+          make test_e2e_local TEST_FLAGS='-v -race -failfast -count=1 -timeout=20m'
 
   coverage:
     needs: lint

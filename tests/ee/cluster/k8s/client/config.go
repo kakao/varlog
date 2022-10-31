@@ -3,7 +3,7 @@ package client
 import (
 	"errors"
 
-	"github.com/kakao/varlog/tests/ee/k8s/vault"
+	"github.com/kakao/varlog/tests/ee/cluster/k8s/vault"
 )
 
 type config struct {

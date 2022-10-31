@@ -1,17 +1,19 @@
-package cluster
+package k8s
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
-	"go.uber.org/zap"
-
-	"github.com/kakao/varlog/tests/ee/k8s/client"
-	"github.com/kakao/varlog/tests/ee/k8s/cluster/nodelabel"
-	"github.com/kakao/varlog/tests/ee/k8s/cluster/podlabel"
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/tests/ee/cluster"
+	"github.com/kakao/varlog/tests/ee/cluster/k8s/nodelabel"
+	"github.com/kakao/varlog/tests/ee/cluster/k8s/podlabel"
 )
 
 const (
+	clusterID = types.ClusterID(1)
+
 	defaultVarlogNamespace          = "default"
 	defaultDeploymentNameAdmin      = "varlogadm"
 	defaultStatefulSetNameMetaRepos = "varlogmr"
@@ -28,7 +30,7 @@ const (
 )
 
 type config struct {
-	c *client.Client
+	cluster.Config
 
 	nodeGroupLabel       string
 	nodeGroupAdmin       string
@@ -55,13 +57,8 @@ type config struct {
 	serviceNameAdmin     string
 	serviceNameMetaRepos string
 
-	numMetaRepos    int32
-	numStorageNodes int32
-
 	asyncTestWaitDuration  time.Duration
 	asyncTestCheckInterval time.Duration
-
-	logger *zap.Logger
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -91,10 +88,8 @@ func newConfig(opts []Option) (config, error) {
 		serviceNameAdmin:     defaultServiceNameAdmin,
 		serviceNameMetaRepos: defaultServiceNameMetaRepos,
 
-		numMetaRepos:           defaultNumMetaRepos,
 		asyncTestWaitDuration:  defaultAsyncTestWaitDuration,
 		asyncTestCheckInterval: defaultAsyncTestCheckInterval,
-		logger:                 zap.NewNop(),
 	}
 	for _, opt := range opts {
 		opt.apply(&cfg)
@@ -106,22 +101,23 @@ func newConfig(opts []Option) (config, error) {
 }
 
 func (cfg *config) validate() error {
-	if cfg.c == nil {
-		return errors.New("k8s cluster: invalid client")
+	if cfg.ClusterID() != clusterID {
+		return fmt.Errorf("k8s cluster: wrong cluster ID %v", cfg.ClusterID())
 	}
+
 	if len(cfg.varlogNamespace) == 0 {
 		return errors.New("k8s cluster: no varlog namespace")
 	}
 	if len(cfg.ingressNamespace) == 0 {
 		return errors.New("k8s cluster: no ingress namespace")
 	}
-	if cfg.numMetaRepos < 1 {
+	if cfg.NumMetaRepos() < 1 {
 		return errors.New("k8s cluster: no metadata repository node")
 	}
-	if cfg.numStorageNodes < 0 {
+	if cfg.NumStorageNodes() < 0 {
 		return errors.New("k8s cluster: invalid number of storage nodes")
 	}
-	if cfg.logger == nil {
+	if cfg.Logger() == nil {
 		return errors.New("k8s cluster: no logger")
 	}
 	return nil
@@ -143,9 +139,9 @@ func (fo *funcOption) apply(cfg *config) {
 	fo.f(cfg)
 }
 
-func WithClient(c *client.Client) Option {
+func WithCommonConfig(commonConfig cluster.Config) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.c = c
+		cfg.Config = commonConfig
 	})
 }
 
@@ -173,18 +169,6 @@ func WithMetadataRepositoryServiceResourceName(serviceName string) Option {
 	})
 }
 
-func NumMetadataRepositoryNodes(numMetaReposNodes int32) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.numMetaRepos = numMetaReposNodes
-	})
-}
-
-func NumStorageNodes(numStorageNodes int32) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.numStorageNodes = numStorageNodes
-	})
-}
-
 func WithAsyncTestWaitDuration(asyncTestWaitDuration time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.asyncTestWaitDuration = asyncTestWaitDuration
@@ -194,11 +178,5 @@ func WithAsyncTestWaitDuration(asyncTestWaitDuration time.Duration) Option {
 func WithAsyncTestCheckInterval(asyncTestCheckInterval time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.asyncTestCheckInterval = asyncTestCheckInterval
-	})
-}
-
-func WithLogger(logger *zap.Logger) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.logger = logger
 	})
 }

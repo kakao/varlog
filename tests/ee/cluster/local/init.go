@@ -12,3 +12,7 @@ func init() {
 	_, currentFile, _, _ := runtime.Caller(0)
 	basepath = filepath.Dir(currentFile)
 }
+
+func binDir() string {
+	return filepath.Join(basepath, "../../../../bin")
+}
