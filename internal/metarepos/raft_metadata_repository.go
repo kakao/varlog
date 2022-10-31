@@ -48,14 +48,11 @@ type ReportCollectorHelper interface {
 }
 
 type RaftMetadataRepository struct {
-	clusterID         types.ClusterID
-	nodeID            types.NodeID
-	nrReplica         int
-	reportCollector   ReportCollector
-	raftNode          *raftNode
-	reporterClientFac ReporterClientFactory
+	config
 
-	storage *MetadataStorage
+	reportCollector ReportCollector
+	raftNode        *raftNode
+	storage         *MetadataStorage
 
 	// for ack
 	requestNum uint64
@@ -73,9 +70,6 @@ type RaftMetadataRepository struct {
 	muReportQueue sync.Mutex
 
 	listenNotifyC chan struct{}
-
-	options *MetadataRepositoryOptions
-	logger  *zap.Logger
 
 	sw     *stopwaiter.StopWaiter
 	runner *runner.Runner
@@ -98,62 +92,39 @@ type RaftMetadataRepository struct {
 	tmStub *telemetryStub
 }
 
-func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadataRepository {
-	options.NodeID = types.NewNodeIDFromURL(options.RaftAddress)
-
-	// FIXME(pharrell): Is this good or not? - add the missing local address in peers
-	found := false
-	for _, peer := range options.Peers {
-		if peer == options.RaftAddress {
-			found = true
-			break
-		}
-	}
-	if !found {
-		options.Peers = append(options.Peers, options.RaftAddress)
-	}
-
-	if err := options.validate(); err != nil {
+func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
+	cfg, err := newConfig(opts)
+	if err != nil {
 		panic(err)
 	}
 
-	logger := options.Logger.Named("vmr").With(zap.Any("nodeid", options.NodeID))
-
-	tmStub, err := newTelemetryStub(context.Background(), options.TelemetryOptions.CollectorName, options.NodeID, options.TelemetryOptions.CollectorEndpoint)
+	tmStub, err := newTelemetryStub(context.Background(), cfg.telemetryCollectorName, cfg.nodeID, cfg.telemetryCollectorEndpoint)
 	if err != nil {
-		logger.Panic("telemetry", zap.Error(err))
+		cfg.logger.Panic("telemetry", zap.Error(err))
 	}
 
 	mr := &RaftMetadataRepository{
-		clusterID:         options.ClusterID,
-		nodeID:            options.NodeID,
-		nrReplica:         options.NumRep,
-		logger:            logger,
-		reporterClientFac: options.ReporterClientFac,
-		options:           options,
-		runner:            runner.New("mr", options.Logger),
-		sw:                stopwaiter.New(),
-		tmStub:            tmStub,
-		topicEndPos:       make(map[types.TopicID]int),
-		requestNum:        uint64(time.Now().UnixNano()),
+		config:        cfg,
+		requestNum:    uint64(time.Now().UnixNano()),
+		proposeC:      make(chan *mrpb.RaftEntry, 4096),
+		commitC:       make(chan *committedEntry, 4096),
+		rnConfChangeC: make(chan raftpb.ConfChange, 1),
+		rnProposeC:    make(chan string),
+		reportQueue:   make([]*mrpb.Report, 0, 1024),
+		runner:        runner.New("mr", cfg.logger),
+		sw:            stopwaiter.New(),
+		tmStub:        tmStub,
+		topicEndPos:   make(map[types.TopicID]int),
 	}
 
-	mr.storage = NewMetadataStorage(mr.sendAck, options.SnapCount, mr.logger.Named("storage"))
+	mr.storage = NewMetadataStorage(mr.sendAck, cfg.snapCount, mr.logger.Named("storage"))
 	mr.membership = mr.storage
 
 	mr.listenNotifyC = make(chan struct{})
 
-	mr.proposeC = make(chan *mrpb.RaftEntry, 4096)
-	mr.commitC = make(chan *committedEntry, 4096)
-
-	mr.rnConfChangeC = make(chan raftpb.ConfChange, 1)
-	mr.rnProposeC = make(chan string)
-
-	mr.reportQueue = make([]*mrpb.Report, 0, 1024)
-
-	options.SnapCount = 1
+	mr.snapCount = 1
 	mr.raftNode = newRaftNode(
-		options.RaftOptions,
+		mr.raftConfig,
 		mr.storage,
 		mr.rnProposeC,
 		mr.rnConfChangeC,
@@ -162,8 +133,7 @@ func NewRaftMetadataRepository(options *MetadataRepositoryOptions) *RaftMetadata
 	)
 	mr.rnCommitC = mr.raftNode.commitC
 
-	mr.reportCollector = NewReportCollector(mr, mr.options.RPCTimeout, mr.tmStub,
-		mr.logger.Named("report"))
+	mr.reportCollector = NewReportCollector(mr, mr.rpcTimeout, mr.tmStub, mr.logger.Named("report"))
 
 	mr.server = grpc.NewServer()
 	mr.healthServer = health.NewServer()
@@ -198,7 +168,7 @@ func (mr *RaftMetadataRepository) Run() {
 	if err := mr.runner.RunC(mctx, mr.processPurge); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
-	if mr.options.DebugAddress != "" {
+	if mr.debugAddr != "" {
 		if err := mr.runner.RunC(mctx, mr.runDebugServer); err != nil {
 			mr.logger.Panic("could not run", zap.Error(err))
 		}
@@ -218,8 +188,8 @@ func (mr *RaftMetadataRepository) Run() {
 			mr.logger.Panic("could not run", zap.Error(err))
 		}
 
-		mr.logger.Info("listening", zap.String("address", mr.options.RPCBindAddress))
-		lis, err := netutil.NewStoppableListener(mctx, mr.options.RPCBindAddress)
+		mr.logger.Info("listening", zap.String("address", mr.rpcAddr))
+		lis, err := netutil.NewStoppableListener(mctx, mr.rpcAddr)
 		if err != nil {
 			mr.logger.Panic("could not listen", zap.Error(err))
 		}
@@ -245,7 +215,7 @@ func (mr *RaftMetadataRepository) Run() {
 
 func (mr *RaftMetadataRepository) runDebugServer(ctx context.Context) {
 	httpMux := http.NewServeMux()
-	mr.debugServer = &http.Server{Addr: mr.options.DebugAddress, Handler: httpMux,
+	mr.debugServer = &http.Server{Addr: mr.debugAddr, Handler: httpMux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 		IdleTimeout:  30 * time.Second,
@@ -264,7 +234,7 @@ func (mr *RaftMetadataRepository) runDebugServer(ctx context.Context) {
 	httpMux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 	httpMux.Handle("/debug/pprof/block", pprof.Handler("block"))
 
-	lis, err := netutil.NewStoppableListener(ctx, mr.options.DebugAddress)
+	lis, err := netutil.NewStoppableListener(ctx, mr.debugAddr)
 	if err != nil {
 		mr.logger.Panic("could not listen", zap.Error(err))
 	}
@@ -345,7 +315,7 @@ Loop:
 }
 
 func (mr *RaftMetadataRepository) runCommitTrigger(ctx context.Context) {
-	ticker := time.NewTicker(mr.options.CommitTick)
+	ticker := time.NewTicker(mr.commitTick)
 Loop:
 	for {
 		select {
@@ -360,7 +330,7 @@ Loop:
 }
 
 func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
-	ticker := time.NewTicker(mr.options.CommitTick)
+	ticker := time.NewTicker(mr.commitTick)
 	defer ticker.Stop()
 
 	for {
@@ -499,23 +469,23 @@ func (mr *RaftMetadataRepository) processPurge(ctx context.Context) {
 	var ddonec, sdonec, wdonec, mdonec <-chan struct{}
 	var derrc, serrc, werrc, merrc <-chan error
 
-	waldir := fmt.Sprintf("%s/wal/%d", mr.options.RaftDir, mr.nodeID)
-	smldir := fmt.Sprintf("%s/sml/%d", mr.options.RaftDir, mr.nodeID)
-	snapdir := fmt.Sprintf("%s/snap/%d", mr.options.RaftDir, mr.nodeID)
+	waldir := fmt.Sprintf("%s/wal/%d", mr.raftDir, mr.nodeID)
+	smldir := fmt.Sprintf("%s/sml/%d", mr.raftDir, mr.nodeID)
+	snapdir := fmt.Sprintf("%s/snap/%d", mr.raftDir, mr.nodeID)
 
-	if mr.options.MaxSnapPurgeCount > 0 {
+	if mr.maxSnapPurgeCount > 0 {
 		ddonec, derrc = fileutil.PurgeFileWithDoneNotify(mr.logger, snapdir, "snap.db",
-			mr.options.MaxSnapPurgeCount, purgeInterval, ctx.Done())
+			mr.maxSnapPurgeCount, purgeInterval, ctx.Done())
 		sdonec, serrc = fileutil.PurgeFileWithDoneNotify(mr.logger, snapdir, "snap",
-			mr.options.MaxSnapPurgeCount, purgeInterval, ctx.Done())
+			mr.maxSnapPurgeCount, purgeInterval, ctx.Done())
 	}
 
-	if mr.options.MaxWalPurgeCount > 0 {
+	if mr.maxWalPurgeCount > 0 {
 		wdonec, werrc = fileutil.PurgeFileWithDoneNotify(mr.logger, waldir, "wal",
-			mr.options.MaxWalPurgeCount, purgeInterval, ctx.Done())
+			mr.maxWalPurgeCount, purgeInterval, ctx.Done())
 
 		mdonec, merrc = fileutil.PurgeFileWithDoneNotify(mr.logger, smldir, "sml",
-			mr.options.MaxWalPurgeCount, purgeInterval, ctx.Done())
+			mr.maxWalPurgeCount, purgeInterval, ctx.Done())
 	}
 
 	for {
@@ -1094,7 +1064,7 @@ func (mr *RaftMetadataRepository) calculateCommit(reports *mrpb.LogStreamUncommi
 		return types.InvalidVersion, types.InvalidVersion, types.InvalidGLSN, 0
 	}
 
-	if len(reports.Replicas) < mr.nrReplica {
+	if len(reports.Replicas) < mr.replicationFactor {
 		return types.InvalidVersion, types.InvalidVersion, types.InvalidGLSN, 0
 	}
 
@@ -1204,14 +1174,14 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 		mr.requestMap.Store(rIdx, c)
 		defer mr.requestMap.Delete(rIdx)
 
-		t := time.NewTimer(mr.options.RaftProposeTimeout)
+		t := time.NewTimer(mr.raftProposeTimeout)
 		defer t.Stop()
 
 	PROPOSE:
 		select {
 		case mr.proposeC <- e:
 		case <-t.C:
-			t.Reset(mr.options.RaftProposeTimeout)
+			t.Reset(mr.raftProposeTimeout)
 			goto PROPOSE
 		case <-ctx.Done():
 			return ctx.Err()
@@ -1221,7 +1191,7 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 		case err := <-c:
 			return err
 		case <-t.C:
-			t.Reset(mr.options.RaftProposeTimeout)
+			t.Reset(mr.raftProposeTimeout)
 			goto PROPOSE
 		case <-ctx.Done():
 			return ctx.Err()
@@ -1455,10 +1425,10 @@ func (mr *RaftMetadataRepository) GetClusterInfo(context.Context, types.ClusterI
 	peerMap := mr.membership.GetPeers()
 
 	clusterInfo := &mrpb.ClusterInfo{
-		ClusterID:         mr.options.ClusterID,
+		ClusterID:         mr.clusterID,
 		NodeID:            mr.nodeID,
 		Leader:            mr.membership.Leader(),
-		ReplicationFactor: int32(mr.nrReplica),
+		ReplicationFactor: int32(mr.replicationFactor),
 		AppliedIndex:      peerMap.AppliedIndex,
 	}
 

@@ -77,25 +77,18 @@ func TestVarlogNewMRManager(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 
 			// mr
-			mrOpts := &metarepos.MetadataRepositoryOptions{
-				RaftOptions: metarepos.RaftOptions{
-					Join:      false,
-					SnapCount: uint64(10),
-					RaftTick:  vtesting.TestRaftTick(),
-					RaftDir:   filepath.Join(t.TempDir(), "raftdir"),
-					Peers:     []string{mrRAFTAddr},
-				},
-
-				ClusterID:         clusterID,
-				RaftAddress:       mrRAFTAddr,
-				LogDir:            filepath.Join(t.TempDir(), "log"),
-				RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout),
-				NumRep:            1,
-				RPCBindAddress:    mrRPCAddr,
-				ReporterClientFac: metarepos.NewReporterClientFactory(),
-				Logger:            zap.L(),
-			}
-			mr := metarepos.NewRaftMetadataRepository(mrOpts)
+			mr := metarepos.NewRaftMetadataRepository(
+				metarepos.WithClusterID(clusterID),
+				metarepos.WithRPCAddress(mrRPCAddr),
+				metarepos.WithRaftAddress(mrRAFTAddr),
+				metarepos.WithReplicationFactor(1),
+				metarepos.WithSnapshotCount(uint64(10)),
+				metarepos.WithPeers(mrRAFTAddr),
+				metarepos.WithRPCTimeout(vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout)),
+				metarepos.WithRaftDirectory(filepath.Join(t.TempDir(), "raftdir")),
+				metarepos.WithRaftTick(vtesting.TestRaftTick()),
+				metarepos.WithLogger(zap.L()),
+			)
 			mr.Run()
 
 			Reset(func() {

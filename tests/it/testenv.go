@@ -17,8 +17,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/kakao/varlog/internal/storagenode/volume"
-
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snmanager"
@@ -26,6 +24,7 @@ import (
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/client"
+	"github.com/kakao/varlog/internal/storagenode/volume"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -226,33 +225,30 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal boo
 
 	peers := clus.mrPeers
 
-	opts := &metarepos.MetadataRepositoryOptions{
-		RaftOptions: metarepos.RaftOptions{
-			Join:        join,
-			UnsafeNoWal: unsafeNoWal,
-			SnapCount:   uint64(clus.snapCount),
-			RaftTick:    vtesting.TestRaftTick(),
-			RaftDir:     vtesting.TestRaftDir(),
-			Peers:       peers,
-		},
-
-		ClusterID:         clus.clusterID,
-		RaftAddress:       clus.mrPeers[idx],
-		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout),
-		NumRep:            clus.nrRep,
-		RPCBindAddress:    clus.mrRPCEndpoints[idx],
-		ReporterClientFac: clus.reporterClientFac,
-		Logger:            clus.logger,
+	opts := []metarepos.Option{
+		metarepos.WithClusterID(clus.clusterID),
+		metarepos.WithReplicationFactor(clus.nrRep),
+		metarepos.WithRPCAddress(clus.mrRPCEndpoints[idx]),
+		metarepos.WithRaftAddress(clus.mrPeers[idx]),
+		metarepos.WithReporterClientFactory(clus.reporterClientFac),
+		metarepos.WithLogger(clus.logger),
+		metarepos.WithSnapshotCount(uint64(clus.snapCount)),
+		metarepos.WithRaftTick(vtesting.TestRaftTick()),
+		metarepos.WithRaftDirectory(vtesting.TestRaftDir()),
+		metarepos.WithPeers(peers...),
+		metarepos.WithRPCTimeout(vtesting.TimeoutAccordingToProcCnt(metarepos.DefaultRPCTimeout)),
 	}
-
-	opts.CollectorName = "nop"
+	if join {
+		opts = append(opts, metarepos.JoinCluster())
+	}
 	if clus.collectorName != "" {
-		opts.CollectorName = clus.collectorName
+		opts = append(opts,
+			metarepos.WithTelemetryCollectorName(clus.collectorName),
+			metarepos.WithTelemetryCollectorEndpoint("localhost:55680"),
+		)
 	}
-	opts.CollectorEndpoint = "localhost:55680"
-
 	clus.mrIDs[idx] = nodeID
-	clus.metadataRepositories[idx] = metarepos.NewRaftMetadataRepository(opts)
+	clus.metadataRepositories[idx] = metarepos.NewRaftMetadataRepository(opts...)
 
 	t.Logf("MetadataRepository was created: idx=%d, nid=%v", idx, nodeID)
 }
