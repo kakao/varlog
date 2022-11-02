@@ -7,7 +7,7 @@ on:
   pull_request:
 
 env:
-  GO_VERSION: 1.18
+  GO_VERSION: 1.19
   PYTHON_VERSION: 3.9
   GRPC_HEALTH_PROBE_VERSION: v0.4.13
 
