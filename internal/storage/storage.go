@@ -8,7 +8,6 @@ import (
 	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/fputil"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -285,8 +284,8 @@ func (s *Storage) Path() string {
 	return s.path
 }
 
-func (s *Storage) DiskUsage() int64 {
-	return fputil.DirectorySize(s.path)
+func (s *Storage) DiskUsage() uint64 {
+	return s.db.Metrics().DiskSpaceUsage()
 }
 
 // Close closes the storage.

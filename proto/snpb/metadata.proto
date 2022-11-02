@@ -25,8 +25,7 @@ message StorageNodeMetadataDescriptor {
 
   // ClusterID is the identifier of the cluster.
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID",
     (gogoproto.jsontag) = "clusterId"
   ];
@@ -74,8 +73,7 @@ message LogStreamReplicaMetadataDescriptor {
   // Version is the latest version of the commit received from the metadata
   // repository.
   uint64 version = 3
-      [(gogoproto.casttype) =
-           "github.com/kakao/varlog/pkg/types.Version"];
+      [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
 
   // GlobalHighWatermark is the latest high watermark received from the metadata
   // repository.
@@ -100,7 +98,7 @@ message LogStreamReplicaMetadataDescriptor {
 
   // Path is the directory where the data for the log stream replica is stored.
   string path = 7;
-  int64 storage_size_bytes = 8;
+  uint64 storage_size_bytes = 8;
 
   // CreatedTime
   //
