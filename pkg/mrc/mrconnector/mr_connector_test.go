@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/internal/metarepos"
@@ -93,25 +92,17 @@ func newTestMR(t *testing.T, portLease *ports.Lease, clusterID types.ClusterID, 
 
 		testMRs[i].clusterID = clusterID
 		testMRs[i].nodeID = nodeID
-
-		opts := &metarepos.MetadataRepositoryOptions{
-			RaftOptions: metarepos.RaftOptions{
-				Join:        false,
-				UnsafeNoWal: false,
-				SnapCount:   10,
-				RaftTick:    vtesting.TestRaftTick(),
-				RaftDir:     raftDir,
-				Peers:       raftAddrs,
-			},
-			ClusterID:         clusterID,
-			RaftAddress:       raftAddr,
-			RPCTimeout:        time.Second,
-			NumRep:            1,
-			RPCBindAddress:    rpcAddr,
-			ReporterClientFac: metarepos.NewReporterClientFactory(),
-			Logger:            zap.NewNop(),
-		}
-		testMRs[i].mr = metarepos.NewRaftMetadataRepository(opts)
+		testMRs[i].mr = metarepos.NewRaftMetadataRepository(
+			metarepos.WithClusterID(clusterID),
+			metarepos.WithReplicationFactor(1),
+			metarepos.WithRPCTimeout(time.Second),
+			metarepos.WithRPCAddress(rpcAddr),
+			metarepos.WithRaftAddress(raftAddr),
+			metarepos.WithRaftDirectory(raftDir),
+			metarepos.WithPeers(raftAddrs...),
+			metarepos.WithRaftTick(vtesting.TestRaftTick()),
+			metarepos.WithSnapshotCount(10),
+		)
 	}
 
 	for i := 0; i < cnt; i++ {

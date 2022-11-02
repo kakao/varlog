@@ -33,7 +33,6 @@ const rpcTimeout = 3 * time.Second
 
 type metadataRepoCluster struct {
 	nrRep             int
-	unsafeNoWal       bool
 	peers             []string
 	nodes             []*RaftMetadataRepository
 	reporterClientFac ReporterClientFactory
@@ -44,7 +43,7 @@ type metadataRepoCluster struct {
 
 var testSnapCount uint64
 
-func newMetadataRepoCluster(n, nrRep int, increseUncommit bool, unsafeNoWal bool) *metadataRepoCluster {
+func newMetadataRepoCluster(n, nrRep int, increseUncommit bool) *metadataRepoCluster {
 	portLease, err := ports.ReserveWeaklyWithRetry(10000)
 	if err != nil {
 		panic(err)
@@ -60,7 +59,6 @@ func newMetadataRepoCluster(n, nrRep int, increseUncommit bool, unsafeNoWal bool
 	sncf := NewDummyStorageNodeClientFactory(1, !increseUncommit)
 	clus := &metadataRepoCluster{
 		nrRep:             nrRep,
-		unsafeNoWal:       unsafeNoWal,
 		peers:             peers,
 		nodes:             nodes,
 		reporterClientFac: sncf,
@@ -94,31 +92,29 @@ func (clus *metadataRepoCluster) createMetadataRepo(idx int, join bool) error {
 
 	peers := make([]string, len(clus.peers))
 	copy(peers, clus.peers)
-	options := &MetadataRepositoryOptions{
-		RaftOptions: RaftOptions{
-			Join:             join,
-			SnapCount:        testSnapCount,
-			SnapCatchUpCount: testSnapCount,
-			RaftTick:         vtesting.TestRaftTick(),
-			RaftDir:          vtesting.TestRaftDir(),
-			Peers:            peers,
-			UnsafeNoWal:      clus.unsafeNoWal,
-		},
 
-		ClusterID:         types.ClusterID(1),
-		RaftAddress:       clus.peers[idx],
-		CommitTick:        vtesting.TestCommitTick(),
-		RPCTimeout:        vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout),
-		NumRep:            clus.nrRep,
-		RPCBindAddress:    ":0",
-		ReporterClientFac: clus.reporterClientFac,
-		Logger:            clus.logger,
+	opts := []Option{
+		WithClusterID(1),
+		WithReplicationFactor(clus.nrRep),
+		WithRaftAddress(clus.peers[idx]),
+		WithRPCAddress(":0"),
+		WithRPCTimeout(vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout)),
+		WithTelemetryCollectorName("nop"),
+		WithTelemetryCollectorEndpoint("localhost:55680"),
+		WithLogger(clus.logger),
+		WithSnapshotCount(testSnapCount),
+		WithSnapshotCatchUpCount(testSnapCount),
+		WithPeers(peers...),
+		WithRaftDirectory(vtesting.TestRaftDir()),
+		WithRaftTick(vtesting.TestRaftTick()),
+		WithReporterClientFactory(clus.reporterClientFac),
+		WithCommitTick(vtesting.TestCommitTick()),
+	}
+	if join {
+		opts = append(opts, JoinCluster())
 	}
 
-	options.CollectorName = "nop"
-	options.CollectorEndpoint = "localhost:55680"
-
-	clus.nodes[idx] = NewRaftMetadataRepository(options)
+	clus.nodes[idx] = NewRaftMetadataRepository(opts...)
 	return nil
 }
 
@@ -399,7 +395,7 @@ func makeLogStream(topicID types.TopicID, lsID types.LogStreamID, snIDs []types.
 func TestMRApplyReport(t *testing.T) {
 	Convey("Report Should not be applied if not register LogStream", t, func(ctx C) {
 		rep := 2
-		clus := newMetadataRepoCluster(1, rep, false, false)
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -492,7 +488,7 @@ func TestMRApplyReport(t *testing.T) {
 func TestMRApplyInvalidReport(t *testing.T) {
 	Convey("Given LogStream", t, func(ctx C) {
 		rep := 2
-		clus := newMetadataRepoCluster(1, rep, false, false)
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -547,7 +543,7 @@ func TestMRApplyInvalidReport(t *testing.T) {
 
 func TestMRCalculateCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 2, false, false)
+		clus := newMetadataRepoCluster(1, 2, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -618,7 +614,7 @@ func TestMRGlobalCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
 		topicID := types.TopicID(1)
 		rep := 2
-		clus := newMetadataRepoCluster(1, rep, false, false)
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -734,7 +730,7 @@ func TestMRGlobalCommitConsistency(t *testing.T) {
 		nrLS := 5
 		topicID := types.TopicID(1)
 
-		clus := newMetadataRepoCluster(nrNodes, rep, false, false)
+		clus := newMetadataRepoCluster(nrNodes, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -809,7 +805,7 @@ func TestMRGlobalCommitConsistency(t *testing.T) {
 
 func TestMRSimpleReportNCommit(t *testing.T) {
 	Convey("UncommitReport should be committed", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1, false, false)
+		clus := newMetadataRepoCluster(1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -861,7 +857,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 
 func TestMRRequestMap(t *testing.T) {
 	Convey("requestMap should have request when wait ack", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1, false, false)
+		clus := newMetadataRepoCluster(1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -898,7 +894,7 @@ func TestMRRequestMap(t *testing.T) {
 	})
 
 	Convey("requestMap should ignore request that have different nodeIndex", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1, false, false)
+		clus := newMetadataRepoCluster(1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -942,7 +938,7 @@ func TestMRRequestMap(t *testing.T) {
 	})
 
 	Convey("requestMap should delete request when context timeout", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1, false, false)
+		clus := newMetadataRepoCluster(1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -966,7 +962,7 @@ func TestMRRequestMap(t *testing.T) {
 	})
 
 	Convey("requestMap should delete after ack", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1, false, false)
+		clus := newMetadataRepoCluster(1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1000,7 +996,7 @@ func TestMRGetLastCommitted(t *testing.T) {
 	Convey("getLastCommitted", t, func(ctx C) {
 		rep := 2
 		topicID := types.TopicID(1)
-		clus := newMetadataRepoCluster(1, rep, false, false)
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1155,7 +1151,7 @@ func TestMRSeal(t *testing.T) {
 		rep := 2
 		topicID := types.TopicID(1)
 
-		clus := newMetadataRepoCluster(1, rep, false, false)
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1243,7 +1239,7 @@ func TestMRUnseal(t *testing.T) {
 		rep := 2
 		topicID := types.TopicID(1)
 
-		clus := newMetadataRepoCluster(1, rep, false, false)
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1376,7 +1372,7 @@ func TestMRUpdateLogStream(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		nrStorageNode := 2
 		rep := 1
-		clus := newMetadataRepoCluster(1, rep, false, false)
+		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1452,7 +1448,7 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, true, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, true)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1520,7 +1516,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1677,7 +1673,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1756,7 +1752,7 @@ func TestMRFailoverRestart(t *testing.T) {
 		nrRep := 1
 		nrNode := 5
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1853,7 +1849,7 @@ func TestMRLoadSnapshot(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		So(clus.Start(), ShouldBeNil)
 		Reset(func() {
 			clus.closeNoErrors(t)
@@ -1930,7 +1926,7 @@ func TestMRRemoteSnapshot(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		So(clus.Start(), ShouldBeNil)
 		Reset(func() {
 			clus.closeNoErrors(t)
@@ -2008,7 +2004,7 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2067,7 +2063,7 @@ func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2118,7 +2114,7 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2172,7 +2168,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 		nrLogStream := 2
 		testSnapCount = 10
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 			testSnapCount = 0
@@ -2257,7 +2253,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 
 func TestMRProposeTimeout(t *testing.T) {
 	Convey("Given MR which is not running", t, func(ctx C) {
-		clus := newMetadataRepoCluster(1, 1, false, false)
+		clus := newMetadataRepoCluster(1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2283,7 +2279,7 @@ func TestMRProposeTimeout(t *testing.T) {
 
 func TestMRProposeRetry(t *testing.T) {
 	Convey("Given MR", t, func(ctx C) {
-		clus := newMetadataRepoCluster(3, 1, false, false)
+		clus := newMetadataRepoCluster(3, 1, false)
 		So(clus.Start(), ShouldBeNil)
 		Reset(func() {
 			clus.closeNoErrors(t)
@@ -2321,7 +2317,7 @@ func TestMRScaleOutJoin(t *testing.T) {
 		nrRep := 1
 		nrNode := 1
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, false)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2394,7 +2390,7 @@ func TestMRUnregisterTopic(t *testing.T) {
 		nrLS := 5
 		topicID := types.TopicID(1)
 
-		clus := newMetadataRepoCluster(nrNodes, rep, false, false)
+		clus := newMetadataRepoCluster(nrNodes, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2448,7 +2444,7 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 		nrTopics := 3
 		nrLS := 2
 		rep := 2
-		clus := newMetadataRepoCluster(1, rep, false, false)
+		clus := newMetadataRepoCluster(1, rep, false)
 		mr := clus.nodes[0]
 
 		snIDs := make([]types.StorageNodeID, rep)
@@ -2606,7 +2602,7 @@ func TestMRTopicCatchup(t *testing.T) {
 		nrLSPerTopic := 2
 		nrSN := nrTopic * nrLSPerTopic
 
-		clus := newMetadataRepoCluster(nrNode, nrRep, false, true)
+		clus := newMetadataRepoCluster(nrNode, nrRep, false)
 		clus.Start() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		Reset(func() {
 			clus.closeNoErrors(t)

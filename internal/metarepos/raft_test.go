@@ -71,16 +71,16 @@ func newCluster(n int) *cluster {
 		//logger, _ := zap.NewDevelopment()
 		logger := zap.NewNop()
 
-		options := RaftOptions{
-			NodeID:            nodeID,
-			Join:              false,
-			Peers:             clus.peers,
-			SnapCount:         DefaultSnapshotCount,
-			SnapCatchUpCount:  DefaultSnapshotCatchUpCount,
-			MaxSnapPurgeCount: 0,
-			MaxWalPurgeCount:  0,
-			RaftTick:          vtesting.TestRaftTick(),
-			RaftDir:           "raftdata",
+		options := raftConfig{
+			nodeID:            nodeID,
+			join:              false,
+			peers:             clus.peers,
+			snapCount:         DefaultSnapshotCount,
+			snapCatchUpCount:  DefaultSnapshotCatchUpCount,
+			maxSnapPurgeCount: 0,
+			maxWalPurgeCount:  0,
+			raftTick:          vtesting.TestRaftTick(),
+			raftDir:           "raftdata",
 		}
 
 		rc := newRaftNode(
