@@ -474,6 +474,11 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 
 	ms.metaAppliedIndex++
 
+	ms.logger.Info("register log stream",
+		zap.Any("lsid", ls.GetLogStreamID()),
+		zap.Any("reports", fmt.Sprintf("%+v", lm)),
+	)
+
 	return nil
 }
 
@@ -681,6 +686,7 @@ func (ms *MetadataStorage) updateUncommitReport(ls *varlogpb.LogStreamDescriptor
 	newReports.Status = ls.Status
 
 	ms.logger.Info("reconfigure uncommit report",
+		zap.Any("lsid", ls.GetLogStreamID()),
 		zap.Any("as-is", fmt.Sprintf("%+v", oldReports)),
 		zap.Any("to-be", fmt.Sprintf("%+v", newReports)))
 
@@ -734,7 +740,10 @@ func (ms *MetadataStorage) updateLogStreamDescStatus(lsID types.LogStreamID, sta
 
 	ms.metaAppliedIndex++
 
-	ms.logger.Info("update log stream status", zap.Any("lsid", lsID), zap.Any("status", status))
+	ms.logger.Info("update log stream status",
+		zap.Any("lsid", lsID),
+		zap.Any("status", status),
+	)
 
 	return nil
 }
@@ -746,6 +755,10 @@ func (ms *MetadataStorage) updateUncommitReportStatus(lsID types.LogStreamID, st
 	if !ok {
 		o, ok := pre.LogStream.UncommitReports[lsID]
 		if !ok {
+			ms.logger.Error("update uncommit report status. not exist lsid",
+				zap.Any("lsid", lsID),
+				zap.Any("status", status),
+			)
 			return verrors.ErrInternal
 		}
 
@@ -768,6 +781,14 @@ func (ms *MetadataStorage) updateUncommitReportStatus(lsID types.LogStreamID, st
 
 		for storageNodeID, r := range lls.Replicas {
 			if r.Seal(min) == types.InvalidLLSN {
+				ms.logger.Error("update uncommit report status. replica seal fail",
+					zap.Any("lsid", lsID),
+					zap.Any("snid", storageNodeID),
+					zap.Any("status", status),
+					zap.Any("min", min),
+					zap.Any("begin", r.UncommittedLLSNOffset),
+					zap.Any("end", r.UncommittedLLSNEnd()),
+				)
 				return verrors.ErrInternal
 			}
 			lls.Replicas[storageNodeID] = r
@@ -781,6 +802,11 @@ func (ms *MetadataStorage) updateUncommitReportStatus(lsID types.LogStreamID, st
 	}
 
 	lls.Status = status
+
+	ms.logger.Info("update uncommit report status",
+		zap.Any("lsid", lsID),
+		zap.Any("status", status),
+	)
 
 	return nil
 }
@@ -1390,6 +1416,11 @@ func (ms *MetadataStorage) recoverLogStreams(stateMachine *mrpb.MetadataReposito
 			r.UncommittedLLSNLength = uncommittedLLSNLength
 			lm.Replicas[storageNodeID] = r
 		}
+
+		ms.logger.Info("recover log stream",
+			zap.Any("lsid", ls.GetLogStreamID()),
+			zap.Any("reports", fmt.Sprintf("%+v", lm)),
+		)
 	}
 }
 
