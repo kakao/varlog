@@ -16,7 +16,7 @@ const (
 	DefaultWriteQueueCapacity           = 1024
 	DefaultCommitQueueCapacity          = 1024
 	DefaultReplicateClientQueueCapacity = 1024
-	DefaultSyncInitTimeout              = 10 * time.Second
+	DefaultSyncTimeout                  = 10 * time.Second
 )
 
 type executorConfig struct {
@@ -33,7 +33,7 @@ type executorConfig struct {
 	replicateClientGRPCOptions   []grpc.DialOption
 	logger                       *zap.Logger
 	lsm                          *telemetry.LogStreamMetrics
-	syncInitTimeout              time.Duration
+	syncTimeout                  time.Duration
 }
 
 func newExecutorConfig(opts []ExecutorOption) (executorConfig, error) {
@@ -43,7 +43,7 @@ func newExecutorConfig(opts []ExecutorOption) (executorConfig, error) {
 		commitQueueCapacity:          DefaultCommitQueueCapacity,
 		replicateClientQueueCapacity: DefaultReplicateClientQueueCapacity,
 		logger:                       zap.NewNop(),
-		syncInitTimeout:              DefaultSyncInitTimeout,
+		syncTimeout:                  DefaultSyncTimeout,
 	}
 	for _, opt := range opts {
 		opt.applyExecutor(&cfg)
@@ -174,8 +174,11 @@ func WithLogStreamMetrics(lsm *telemetry.LogStreamMetrics) ExecutorOption {
 	})
 }
 
-func WithSyncInitTimeout(syncInitTimeout time.Duration) ExecutorOption {
+// WithSyncTimeout sets timeout for synchronization in the destination replica.
+// If the destination replica doesn't receive the SyncReplicate RPC within
+// syncTimeout, other SyncInit RPC can cancel the synchronization.
+func WithSyncTimeout(syncTimeout time.Duration) ExecutorOption {
 	return newFuncExecutorOption(func(cfg *executorConfig) {
-		cfg.syncInitTimeout = syncInitTimeout
+		cfg.syncTimeout = syncTimeout
 	})
 }

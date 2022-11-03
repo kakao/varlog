@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/snpb/mock"
@@ -83,4 +84,10 @@ func TestNewReplicatorClient(t *testing.T, addr string) (snpb.ReplicatorClient, 
 	return client, func() {
 		assert.NoError(t, cc.Close())
 	}
+}
+
+func TestGetStorage(t *testing.T, lse *Executor) *storage.Storage {
+	require.NotNil(t, lse)
+	require.NotNil(t, lse.stg)
+	return lse.stg
 }
