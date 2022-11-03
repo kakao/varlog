@@ -20,13 +20,11 @@ option (gogoproto.goproto_sizecache_all) = false;
 // a log position in the local log stream of the primary storage node.
 message ReplicationRequest {
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
   uint64 llsn = 3 [
@@ -48,13 +46,11 @@ message ReplicationResponse {
 
 message ReplicateRequest {
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
   repeated uint64 llsn = 3 [
@@ -114,8 +110,7 @@ message SyncPayload {
 
 message SyncInitRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
   varlogpb.LogStreamReplica source = 2 [(gogoproto.nullable) = false];
@@ -129,8 +124,7 @@ message SyncInitResponse {
 
 message SyncReplicateRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
   varlogpb.LogStreamReplica source = 2 [(gogoproto.nullable) = false];
@@ -144,7 +138,7 @@ message SyncReplicateResponse {
 
 service Replicator {
   rpc ReplicateDeprecated(stream ReplicationRequest)
-      returns (stream ReplicationResponse) {}
+    returns (stream ReplicationResponse) {}
   rpc Replicate(stream ReplicateRequest) returns (ReplicateResponse) {}
   rpc SyncInit(SyncInitRequest) returns (SyncInitResponse) {}
   rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}

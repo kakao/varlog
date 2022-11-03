@@ -16,14 +16,12 @@ option (gogoproto.goproto_sizecache_all) = false;
 
 message AddPeerRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
 
   uint64 node_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID",
     (gogoproto.customname) = "NodeID"
   ];
 
@@ -32,22 +30,19 @@ message AddPeerRequest {
 
 message RemovePeerRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
 
   uint64 node_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID",
     (gogoproto.customname) = "NodeID"
   ];
 }
 
 message GetClusterInfoRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
 }
@@ -60,27 +55,24 @@ message ClusterInfo {
   }
 
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID",
     (gogoproto.jsontag) = "clusterId"
   ];
 
   uint64 node_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID",
     (gogoproto.customname) = "NodeID",
     (gogoproto.jsontag) = "nodeId"
   ];
 
-  uint64 leader = 3 [(gogoproto.casttype) =
-                         "github.com/kakao/varlog/pkg/types.NodeID"];
+  uint64 leader = 3
+  [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID"];
 
   int32 replication_factor = 4 [(gogoproto.jsontag) = "replicationFactor"];
 
   map<uint64, Member> members = 5
-      [(gogoproto.castkey) =
-           "github.com/kakao/varlog/pkg/types.NodeID"];
+  [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.NodeID"];
 
   // applied_index is the AppliedIndex of RAFT that is updated by changing
   // configuration of members. For example, AddPeer and RemovePeer result in

@@ -396,7 +396,7 @@ func (p *transmitter) handleResult(r transmitResult) error {
 	var err error
 
 	/* NOTE Ignore transmitResult with GLSN less than p.wanted.
-	They can be delivered by subscribers that have not yet closed.
+	   They can be delivered by subscribers that have not yet closed.
 	*/
 	if r.result.GLSN == types.InvalidGLSN {
 		err = p.handleError(r)
