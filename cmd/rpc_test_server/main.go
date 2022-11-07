@@ -1,3 +1,4 @@
+//go:build rpc_e2e
 // +build rpc_e2e
 
 package main

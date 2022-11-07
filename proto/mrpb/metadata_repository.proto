@@ -31,13 +31,11 @@ message LogStreamRequest {
 
 message SealRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
 }
@@ -52,13 +50,11 @@ message SealResponse {
 
 message UnsealRequest {
   uint32 cluster_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
   int32 log_stream_id = 2 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
 }
@@ -69,8 +65,7 @@ message UnsealResponse {
 
 message TopicRequest {
   int32 topic_id = 1 [
-    (gogoproto.casttype) =
-        "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
 }
@@ -78,7 +73,7 @@ message TopicRequest {
 service MetadataRepositoryService {
   rpc RegisterStorageNode(StorageNodeRequest) returns (google.protobuf.Empty) {}
   rpc UnregisterStorageNode(StorageNodeRequest)
-      returns (google.protobuf.Empty) {}
+    returns (google.protobuf.Empty) {}
   rpc RegisterTopic(TopicRequest) returns (google.protobuf.Empty) {}
   rpc UnregisterTopic(TopicRequest) returns (google.protobuf.Empty) {}
   rpc RegisterLogStream(LogStreamRequest) returns (google.protobuf.Empty) {}

@@ -156,7 +156,7 @@ message LogStreamMetadataRequest {
 
 message LogStreamMetadataResponse {
   varlogpb.LogStreamDescriptor log_stream_descriptor = 1
-      [(gogoproto.nullable) = false];
+  [(gogoproto.nullable) = false];
 }
 
 message LogStreamReplicaMetadataRequest {
@@ -172,7 +172,7 @@ message LogStreamReplicaMetadataRequest {
 
 message LogStreamReplicaMetadataResponse {
   LogStreamReplicaMetadataDescriptor log_stream_replica = 1
-      [(gogoproto.nullable) = false];
+  [(gogoproto.nullable) = false];
 }
 
 service LogIO {
@@ -182,7 +182,7 @@ service LogIO {
   rpc SubscribeTo(SubscribeToRequest) returns (stream SubscribeToResponse) {}
   rpc TrimDeprecated(TrimDeprecatedRequest) returns (google.protobuf.Empty) {}
   rpc LogStreamReplicaMetadata(LogStreamReplicaMetadataRequest)
-      returns (LogStreamReplicaMetadataResponse) {}
+    returns (LogStreamReplicaMetadataResponse) {}
   rpc LogStreamMetadata(LogStreamMetadataRequest)
-      returns (LogStreamMetadataResponse) {}
+    returns (LogStreamMetadataResponse) {}
 }
