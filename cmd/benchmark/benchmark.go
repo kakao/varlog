@@ -7,8 +7,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/kakao/varlog/internal/benchmark"
 	"github.com/kakao/varlog/internal/flags"
-	"github.com/kakao/varlog/internal/stress"
 	"github.com/kakao/varlog/pkg/types"
 )
 
@@ -27,8 +27,7 @@ func run() int {
 
 func newApp() *cli.App {
 	app := &cli.App{
-		Name:  "stress",
-		Usage: "stress client",
+		Name: "benchmark",
 		Flags: []cli.Flag{
 			flagClusterID.StringFlag(false, types.ClusterID(1).String()),
 			flagTopicID.StringFlag(false, types.TopicID(1).String()),
@@ -96,7 +95,7 @@ func start(c *cli.Context) error {
 
 	reportInterval := c.Duration(flagReportInterval.Name)
 
-	return stress.Append(stress.Config{
+	return benchmark.Append(benchmark.Config{
 		MRAddrs:        c.StringSlice(flagMRAddrs.Name),
 		ClusterID:      clusterID,
 		TopicID:        topicID,
