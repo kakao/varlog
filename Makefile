@@ -34,10 +34,10 @@ VARLOGSN := $(BIN_DIR)/varlogsn
 VARLOGCTL := $(BIN_DIR)/varlogctl
 VARLOGCLI := $(BIN_DIR)/varlogcli
 MRTOOL := $(BIN_DIR)/mrtool
-STRESS := $(BIN_DIR)/stress
+BENCHMARK := $(BIN_DIR)/benchmark
 
-.PHONY: build vmr varlogadm varlogsn varlogctl varlogcli mrtool stress
-build: vmr varlogadm varlogsn varlogctl varlogcli mrtool stress
+.PHONY: build vmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
+build: vmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
 vmr:
 	$(GO) build $(GCFLAGS) -o $(VMR) $(CURDIR)/cmd/varlogmr
 varlogadm:
@@ -50,8 +50,8 @@ varlogcli:
 	$(GO) build $(GCFLAGS) -o $(VARLOGCLI) $(CURDIR)/cmd/varlogcli
 mrtool:
 	$(GO) build $(GCFLAGS) -o $(MRTOOL) $(CURDIR)/cmd/mrtool
-stress:
-	$(GO) build $(GCFLAGS) -o $(STRESS) $(CURDIR)/cmd/stress
+benchmark:
+	$(GO) build $(GCFLAGS) -o $(BENCHMARK) $(CURDIR)/cmd/benchmark
 
 
 # testing
@@ -131,7 +131,7 @@ tidy:
 clean:
 	$(GO) clean
 	$(RM) $(GO_COVERAGE_OUTPUT) $(PYTHON_COVERAGE_OUTPUT)
-	$(RM) $(VMR) $(VARLOGADM) $(VARLOGSN) $(VARLOGCTL) $(VARLOGCLI) $(MRTOOL) $(STRESS)
+	$(RM) $(VMR) $(VARLOGADM) $(VARLOGSN) $(VARLOGCTL) $(VARLOGCLI) $(MRTOOL) $(BENCHMARK)
 
 clean_mock:
 	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.com/kakao/varlog/##),$(RM) -f $(path)/*_mock.go;)
