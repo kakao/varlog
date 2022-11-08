@@ -9,13 +9,16 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/internal/rangekey"
 )
 
 // RewriteKeySuffixes copies the content of the passed SSTable bytes to a new
 // sstable, written to `out`, in which the suffix `from` has is replaced with
-// `to` in every key. The input sstable must consist of only Sets and every key
-// must have `from` as its suffix as determined by the Split function of the
-// Comparer in the passed WriterOptions.
+// `to` in every key. The input sstable must consist of only Sets or RangeKeySets
+// and every key must have `from` as its suffix as determined by the Split
+// function of the Comparer in the passed WriterOptions. Range deletes must not
+// exist in this sstable, as they will be ignored.
 //
 // Data blocks are rewritten in parallel by `concurrency` workers and then
 // assembled into a final SST. Filters are copied from the original SST without
@@ -73,12 +76,14 @@ func rewriteKeySuffixesInBlocks(
 		return nil, errors.Wrap(err, "rewriting data blocks")
 	}
 
+	// Copy over the range key block and replace suffixes in it if it exists.
+	if err := rewriteRangeKeyBlockToWriter(r, w, from, to); err != nil {
+		return nil, errors.Wrap(err, "rewriting range key blocks")
+	}
+
 	// Copy over the filter block if it exists (rewriteDataBlocksToWriter will
 	// already have ensured this is valid if it exists).
-	if w.filter != nil {
-		if l.Filter.Length == 0 {
-			return nil, errors.New("input table has no filter")
-		}
+	if w.filter != nil && l.Filter.Length > 0 {
 		filterBlock, _, err := readBlockBuf(r, l.Filter, nil)
 		if err != nil {
 			return nil, errors.Wrap(err, "reading filter")
@@ -173,7 +178,8 @@ func rewriteBlocks(
 			copy(scratch.UserKey, key.UserKey[:si])
 			copy(scratch.UserKey[si:], to)
 
-			bw.add(scratch, val)
+			v := val.InPlaceValue()
+			bw.add(scratch, v)
 			if output[i].start.UserKey == nil {
 				keyAlloc, output[i].start = cloneKeyWithBuf(scratch, keyAlloc)
 			}
@@ -205,6 +211,10 @@ func rewriteDataBlocksToWriter(
 	split Split,
 	concurrency int,
 ) error {
+	if r.Properties.NumEntries == 0 {
+		// No point keys.
+		return nil
+	}
 	blocks := make([]blockWithSpan, len(data))
 
 	if w.filter != nil {
@@ -313,8 +323,47 @@ func rewriteDataBlocksToWriter(
 	w.props.NumEntries = r.Properties.NumEntries
 	w.props.RawKeySize = r.Properties.RawKeySize
 	w.props.RawValueSize = r.Properties.RawValueSize
-	w.meta.SmallestPoint, w.meta.LargestPoint = blocks[0].start, blocks[len(blocks)-1].end
-	w.meta.HasPointKeys = true
+	w.meta.SetSmallestPointKey(blocks[0].start)
+	w.meta.SetLargestPointKey(blocks[len(blocks)-1].end)
+	return nil
+}
+
+func rewriteRangeKeyBlockToWriter(r *Reader, w *Writer, from, to []byte) error {
+	iter, err := r.NewRawRangeKeyIter()
+	if err != nil {
+		return err
+	}
+	if iter == nil {
+		// No range keys.
+		return nil
+	}
+	defer iter.Close()
+
+	for s := iter.First(); s != nil; s = iter.Next() {
+		if !s.Valid() {
+			break
+		}
+		for i := range s.Keys {
+			if s.Keys[i].Kind() != base.InternalKeyKindRangeKeySet {
+				return errBadKind
+			}
+			if !bytes.Equal(s.Keys[i].Suffix, from) {
+				return errors.Errorf("key has suffix %q, expected %q", s.Keys[i].Suffix, from)
+			}
+			s.Keys[i].Suffix = to
+		}
+
+		err := rangekey.Encode(s, func(k base.InternalKey, v []byte) error {
+			// Calling AddRangeKey instead of addRangeKeySpan bypasses the fragmenter.
+			// This is okay because the raw fragments off of `iter` are already
+			// fragmented, and suffix replacement should not affect fragmentation.
+			return w.AddRangeKey(k, v)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -362,10 +411,17 @@ func RewriteKeySuffixesViaWriter(
 		scratch.UserKey = append(scratch.UserKey, to...)
 		scratch.Trailer = k.Trailer
 
-		if w.addPoint(scratch, v); err != nil {
+		val, _, err := v.Value(nil)
+		if err != nil {
+			return nil, err
+		}
+		if w.addPoint(scratch, val); err != nil {
 			return nil, err
 		}
 		k, v = i.Next()
+	}
+	if err := rewriteRangeKeyBlockToWriter(r, w, from, to); err != nil {
+		return nil, err
 	}
 	if err := w.Close(); err != nil {
 		return nil, err

@@ -47,13 +47,13 @@ import (
 
 // The per-level structure used by simpleMergingIter.
 type simpleMergingIterLevel struct {
-	iter            internalIterator
-	rangeDelIter    keyspan.FragmentIterator
-	smallestUserKey []byte
+	iter         internalIterator
+	rangeDelIter keyspan.FragmentIterator
+	levelIterBoundaryContext
 
 	iterKey   *InternalKey
-	iterValue []byte
-	tombstone keyspan.Span
+	iterValue base.LazyValue
+	tombstone *keyspan.Span
 }
 
 type simpleMergingIter struct {
@@ -117,7 +117,7 @@ func (m *simpleMergingIter) positionRangeDels() {
 		if l.rangeDelIter == nil {
 			continue
 		}
-		l.tombstone = keyspan.SeekGE(m.heap.cmp, l.rangeDelIter, item.key.UserKey, m.snapshot)
+		l.tombstone = keyspan.SeekGE(m.heap.cmp, l.rangeDelIter, item.key.UserKey)
 	}
 }
 
@@ -129,7 +129,7 @@ func (m *simpleMergingIter) step() bool {
 	item := &m.heap.items[0]
 	l := &m.levels[item.index]
 	// Sentinels are not relevant for this point checking.
-	if !item.key.IsExclusiveSentinel() && item.key.Visible(m.snapshot) {
+	if !item.key.IsExclusiveSentinel() && item.key.Visible(m.snapshot, base.InternalKeySeqNumMax) {
 		m.numPoints++
 		keyChanged := m.heap.cmp(item.key.UserKey, m.lastKey.UserKey) != 0
 		if !keyChanged {
@@ -157,6 +157,11 @@ func (m *simpleMergingIter) step() bool {
 			}
 			m.valueMerger = nil
 		}
+		itemValue, _, err := item.value.Value(nil)
+		if err != nil {
+			m.err = err
+			return false
+		}
 		if m.valueMerger != nil {
 			// Ongoing series of MERGE records.
 			switch item.key.Kind() {
@@ -168,7 +173,7 @@ func (m *simpleMergingIter) step() bool {
 				}
 				m.valueMerger = nil
 			case InternalKeyKindSet, InternalKeyKindSetWithDelete:
-				m.err = m.valueMerger.MergeOlder(item.value)
+				m.err = m.valueMerger.MergeOlder(itemValue)
 				if m.err == nil {
 					var closer io.Closer
 					_, closer, m.err = m.valueMerger.Finish(true /* includesBase */)
@@ -178,7 +183,7 @@ func (m *simpleMergingIter) step() bool {
 				}
 				m.valueMerger = nil
 			case InternalKeyKindMerge:
-				m.err = m.valueMerger.MergeOlder(item.value)
+				m.err = m.valueMerger.MergeOlder(itemValue)
 			default:
 				m.err = errors.Errorf("pebble: invalid internal key kind %s in %s",
 					item.key.Pretty(m.formatKey),
@@ -187,7 +192,7 @@ func (m *simpleMergingIter) step() bool {
 			}
 		} else if item.key.Kind() == InternalKeyKindMerge && m.err == nil {
 			// New series of MERGE records.
-			m.valueMerger, m.err = m.merge(item.key.UserKey, item.value)
+			m.valueMerger, m.err = m.merge(item.key.UserKey, itemValue)
 		}
 		if m.err != nil {
 			m.err = errors.Wrapf(m.err, "merge processing error on key %s in %s",
@@ -207,7 +212,7 @@ func (m *simpleMergingIter) step() bool {
 			}
 			if (lvl.smallestUserKey == nil || m.heap.cmp(lvl.smallestUserKey, item.key.UserKey) <= 0) &&
 				lvl.tombstone.Contains(m.heap.cmp, item.key.UserKey) {
-				if lvl.tombstone.Covers(item.key.SeqNum()) {
+				if lvl.tombstone.CoversAt(m.snapshot, item.key.SeqNum()) {
 					m.err = errors.Errorf("tombstone %s in %s deletes key %s in %s",
 						lvl.tombstone.Pretty(m.formatKey), lvl.iter, item.key.Pretty(m.formatKey),
 						l.iter)
@@ -373,7 +378,7 @@ func checkRangeTombstones(c *checkConfig) error {
 			lf := files.Take()
 			atomicUnit, _ := expandToAtomicUnit(c.cmp, lf.Slice(), true /* disableIsCompacting */)
 			lower, upper := manifest.KeyRange(c.cmp, atomicUnit.Iter())
-			iterToClose, iter, err := c.newIters(lf.FileMetadata, nil, nil)
+			iterToClose, iter, err := c.newIters(lf.FileMetadata, nil, internalIterOpts{})
 			if err != nil {
 				return err
 			}
@@ -452,8 +457,8 @@ func addTombstonesFromIter(
 	}()
 
 	var prevTombstone keyspan.Span
-	for t := iter.First(); t.Valid(); t = iter.Next() {
-		t = t.Visible(seqNum)
+	for tomb := iter.First(); tomb != nil; tomb = iter.Next() {
+		t := tomb.Visible(seqNum)
 		if t.Empty() {
 			continue
 		}
@@ -634,9 +639,9 @@ func checkLevelsInternal(c *checkConfig) (err error) {
 		iterOpts := IterOptions{logger: c.logger}
 		li := &levelIter{}
 		li.init(iterOpts, c.cmp, nil /* split */, c.newIters, manifestIter,
-			manifest.L0Sublevel(sublevel), nil)
+			manifest.L0Sublevel(sublevel), internalIterOpts{})
 		li.initRangeDel(&mlevelAlloc[0].rangeDelIter)
-		li.initSmallestLargestUserKey(&mlevelAlloc[0].smallestUserKey, nil, nil)
+		li.initBoundaryContext(&mlevelAlloc[0].levelIterBoundaryContext)
 		mlevelAlloc[0].iter = li
 		mlevelAlloc = mlevelAlloc[1:]
 	}
@@ -648,9 +653,9 @@ func checkLevelsInternal(c *checkConfig) (err error) {
 		iterOpts := IterOptions{logger: c.logger}
 		li := &levelIter{}
 		li.init(iterOpts, c.cmp, nil /* split */, c.newIters,
-			current.Levels[level].Iter(), manifest.Level(level), nil)
+			current.Levels[level].Iter(), manifest.Level(level), internalIterOpts{})
 		li.initRangeDel(&mlevelAlloc[0].rangeDelIter)
-		li.initSmallestLargestUserKey(&mlevelAlloc[0].smallestUserKey, nil, nil)
+		li.initBoundaryContext(&mlevelAlloc[0].levelIterBoundaryContext)
 		mlevelAlloc[0].iter = li
 		mlevelAlloc = mlevelAlloc[1:]
 	}

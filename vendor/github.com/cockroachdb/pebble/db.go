@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -140,22 +141,12 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after Set returns.
 	Set(key, value []byte, o *WriteOptions) error
 
-	// Experimental returns the experimental write API.
-	Experimental() ExperimentalWriter
-}
-
-// ExperimentalWriter provides access to experimental features of a Batch.
-type ExperimentalWriter interface {
-	Writer
-
 	// RangeKeySet sets a range key mapping the key range [start, end) at the MVCC
 	// timestamp suffix to value. The suffix is optional. If any portion of the key
 	// range [start, end) is already set by a range key with the same suffix value,
 	// RangeKeySet overrides it.
 	//
 	// It is safe to modify the contents of the arguments after RangeKeySet returns.
-	//
-	// WARNING: This is an experimental feature with limited functionality.
 	RangeKeySet(start, end, suffix, value []byte, opts *WriteOptions) error
 
 	// RangeKeyUnset removes a range key mapping the key range [start, end) at the
@@ -166,8 +157,6 @@ type ExperimentalWriter interface {
 	//
 	// It is safe to modify the contents of the arguments after RangeKeyUnset
 	// returns.
-	//
-	// WARNING: This is an experimental feature with limited functionality.
 	RangeKeyUnset(start, end, suffix []byte, opts *WriteOptions) error
 
 	// RangeKeyDelete deletes all of the range keys in the range [start,end)
@@ -177,10 +166,42 @@ type ExperimentalWriter interface {
 	//
 	// It is safe to modify the contents of the arguments after RangeKeyDelete
 	// returns.
-	//
-	// WARNING: This is an experimental feature with limited functionality.
 	RangeKeyDelete(start, end []byte, opts *WriteOptions) error
 }
+
+// CPUWorkHandle represents a handle used by the CPUWorkPermissionGranter API.
+type CPUWorkHandle interface {
+	// Permitted indicates whether Pebble can use additional CPU resources.
+	Permitted() bool
+}
+
+// CPUWorkPermissionGranter is used to request permission to opportunistically
+// use additional CPUs to speed up internal background work.
+type CPUWorkPermissionGranter interface {
+	// GetPermission returns a handle regardless of whether permission is granted
+	// or not. In the latter case, the handle is only useful for recording
+	// the CPU time actually spent on this calling goroutine.
+	GetPermission(time.Duration) CPUWorkHandle
+	// CPUWorkDone must be called regardless of whether CPUWorkHandle.Permitted
+	// returns true or false.
+	CPUWorkDone(CPUWorkHandle)
+}
+
+// Use a default implementation for the CPU work granter to avoid excessive nil
+// checks in the code.
+type defaultCPUWorkHandle struct{}
+
+func (d defaultCPUWorkHandle) Permitted() bool {
+	return false
+}
+
+type defaultCPUWorkGranter struct{}
+
+func (d defaultCPUWorkGranter) GetPermission(_ time.Duration) CPUWorkHandle {
+	return defaultCPUWorkHandle{}
+}
+
+func (d defaultCPUWorkGranter) CPUWorkDone(_ CPUWorkHandle) {}
 
 // DB provides a concurrent, persistent ordered key/value store.
 //
@@ -222,16 +243,6 @@ type DB struct {
 		memTableCount    int64
 		memTableReserved int64 // number of bytes reserved in the cache for memtables
 
-		// bytesFlushed is the number of bytes flushed in the current flush. This
-		// must be read/written atomically since it is accessed by both the flush
-		// and compaction routines.
-		bytesFlushed uint64
-
-		// bytesCompacted is the number of bytes compacted in the current compaction.
-		// This is used as a dummy variable to increment during compaction, and the
-		// value is not used anywhere.
-		bytesCompacted uint64
-
 		// The size of the current log file (i.e. db.mu.log.queue[len(queue)-1].
 		logSize uint64
 
@@ -262,7 +273,7 @@ type DB struct {
 
 	tableCache           *tableCacheContainer
 	newIters             tableNewIters
-	tableNewRangeKeyIter keyspan.TableNewRangeKeyIter
+	tableNewRangeKeyIter keyspan.TableNewSpanIter
 
 	commit *commitPipeline
 
@@ -281,9 +292,7 @@ type DB struct {
 	closed   *atomic.Value
 	closedCh chan struct{}
 
-	compactionLimiter limiter
-	flushLimiter      limiter
-	deletionLimiter   limiter
+	deletionLimiter limiter
 
 	// Async deletion jobs spawned by cleaners increment this WaitGroup, and
 	// call Done when completed. Once `d.mu.cleaning` is false, the db.Close()
@@ -355,7 +364,10 @@ type DB struct {
 			// (i.e. makeRoomForWrite).
 			*record.LogWriter
 			// Can be nil.
-			metrics *record.LogWriterMetrics
+			metrics struct {
+				fsyncLatency prometheus.Histogram
+				record.LogWriterMetrics
+			}
 		}
 
 		mem struct {
@@ -461,11 +473,6 @@ type DB struct {
 		}
 	}
 
-	// rangeKeys is a temporary field so that Pebble can provide a non-durable
-	// implementation of range keys in advance of the real implementation.
-	// TODO(jackson): Remove this.
-	rangeKeys *RangeKeysArena
-
 	// Normally equal to time.Now() but may be overridden in tests.
 	timeNow func() time.Time
 }
@@ -542,15 +549,13 @@ func (d *DB) getInternal(key []byte, b *Batch, s *Snapshot) ([]byte, io.Closer, 
 	}
 
 	i := &buf.dbi
-	pointIter := base.WrapIterWithStats(get)
+	pointIter := get
 	*i = Iterator{
 		getIterAlloc: buf,
-		cmp:          d.cmp,
-		equal:        d.equal,
 		iter:         pointIter,
 		pointIter:    pointIter,
 		merge:        d.merge,
-		split:        d.split,
+		comparer:     *d.opts.Comparer,
 		readState:    readState,
 		keyBuf:       buf.keyBuf,
 	}
@@ -658,21 +663,16 @@ func (d *DB) LogData(data []byte, opts *WriteOptions) error {
 	return nil
 }
 
-// Experimental returns the experimental write API.
-func (d *DB) Experimental() ExperimentalWriter {
-	return experimentalDB{d}
-}
-
-type experimentalDB struct {
-	*DB
-}
-
-// RangeKeySet implements the ExperimentalWriter interface.
-func (e experimentalDB) RangeKeySet(start, end, suffix, value []byte, opts *WriteOptions) error {
-	b := newBatch(e.DB)
-	eb := b.Experimental()
-	_ = eb.RangeKeySet(start, end, suffix, value, opts)
-	if err := e.Apply(b, opts); err != nil {
+// RangeKeySet sets a range key mapping the key range [start, end) at the MVCC
+// timestamp suffix to value. The suffix is optional. If any portion of the key
+// range [start, end) is already set by a range key with the same suffix value,
+// RangeKeySet overrides it.
+//
+// It is safe to modify the contents of the arguments after RangeKeySet returns.
+func (d *DB) RangeKeySet(start, end, suffix, value []byte, opts *WriteOptions) error {
+	b := newBatch(d)
+	_ = b.RangeKeySet(start, end, suffix, value, opts)
+	if err := d.Apply(b, opts); err != nil {
 		return err
 	}
 	// Only release the batch on success.
@@ -680,12 +680,18 @@ func (e experimentalDB) RangeKeySet(start, end, suffix, value []byte, opts *Writ
 	return nil
 }
 
-// RangeKeyUnset implements the ExperimentalWriter interface.
-func (e experimentalDB) RangeKeyUnset(start, end, suffix []byte, opts *WriteOptions) error {
-	b := newBatch(e.DB)
-	eb := b.Experimental()
-	_ = eb.RangeKeyUnset(start, end, suffix, opts)
-	if err := e.Apply(b, opts); err != nil {
+// RangeKeyUnset removes a range key mapping the key range [start, end) at the
+// MVCC timestamp suffix. The suffix may be omitted to remove an unsuffixed
+// range key. RangeKeyUnset only removes portions of range keys that fall within
+// the [start, end) key span, and only range keys with suffixes that exactly
+// match the unset suffix.
+//
+// It is safe to modify the contents of the arguments after RangeKeyUnset
+// returns.
+func (d *DB) RangeKeyUnset(start, end, suffix []byte, opts *WriteOptions) error {
+	b := newBatch(d)
+	_ = b.RangeKeyUnset(start, end, suffix, opts)
+	if err := d.Apply(b, opts); err != nil {
 		return err
 	}
 	// Only release the batch on success.
@@ -693,12 +699,17 @@ func (e experimentalDB) RangeKeyUnset(start, end, suffix []byte, opts *WriteOpti
 	return nil
 }
 
-// RangeKeyDelete implements the ExperimentalWriter interface.
-func (e experimentalDB) RangeKeyDelete(start, end []byte, opts *WriteOptions) error {
-	b := newBatch(e.DB)
-	eb := b.Experimental()
-	_ = eb.RangeKeyDelete(start, end, opts)
-	if err := e.Apply(b, opts); err != nil {
+// RangeKeyDelete deletes all of the range keys in the range [start,end)
+// (inclusive on start, exclusive on end). It does not delete point keys (for
+// that use DeleteRange). RangeKeyDelete removes all range keys within the
+// bounds, including those with or without suffixes.
+//
+// It is safe to modify the contents of the arguments after RangeKeyDelete
+// returns.
+func (d *DB) RangeKeyDelete(start, end []byte, opts *WriteOptions) error {
+	b := newBatch(d)
+	_ = b.RangeKeyDelete(start, end, opts)
+	if err := d.Apply(b, opts); err != nil {
 		return err
 	}
 	// Only release the batch on success.
@@ -734,9 +745,6 @@ func (d *DB) Apply(batch *Batch, opts *WriteOptions) error {
 	if batch.countRangeKeys > 0 {
 		if d.split == nil {
 			return errNoSplit
-		}
-		if d.opts.Experimental.RangeKeys == nil {
-			panic("pebble: range keys require the Experimental.RangeKeys option")
 		}
 		if d.FormatMajorVersion() < FormatRangeKeys {
 			panic(fmt.Sprintf(
@@ -785,9 +793,18 @@ func (d *DB) commitApply(b *Batch, mem *memTable) error {
 	// If the batch contains range tombstones and the database is configured
 	// to flush range deletions, schedule a delayed flush so that disk space
 	// may be reclaimed without additional writes or an explicit flush.
-	if b.countRangeDels > 0 && d.opts.Experimental.DeleteRangeFlushDelay > 0 {
+	if b.countRangeDels > 0 && d.opts.FlushDelayDeleteRange > 0 {
 		d.mu.Lock()
-		d.maybeScheduleDelayedFlush(mem)
+		d.maybeScheduleDelayedFlush(mem, d.opts.FlushDelayDeleteRange)
+		d.mu.Unlock()
+	}
+
+	// If the batch contains range keys and the database is configured to flush
+	// range keys, schedule a delayed flush so that the range keys are cleared
+	// from the memtable.
+	if b.countRangeKeys > 0 && d.opts.FlushDelayRangeKey > 0 {
+		d.mu.Lock()
+		d.maybeScheduleDelayedFlush(mem, d.opts.FlushDelayRangeKey)
 		d.mu.Unlock()
 	}
 
@@ -861,6 +878,7 @@ func (d *DB) commitWrite(b *Batch, syncWG *sync.WaitGroup, syncErr *error) (*mem
 type iterAlloc struct {
 	dbi                 Iterator
 	keyBuf              []byte
+	boundsBuf           [2][]byte
 	prefixOrFullSeekKey []byte
 	merging             mergingIter
 	mlevels             [3 + numLevels]mergingIterLevel
@@ -880,9 +898,6 @@ func (d *DB) newIterInternal(batch *Batch, s *Snapshot, o *IterOptions) *Iterato
 		panic(err)
 	}
 	if o.rangeKeys() {
-		if d.opts.Experimental.RangeKeys == nil {
-			panic("pebble: range keys require the Experimental.RangeKeys option")
-		}
 		if d.FormatMajorVersion() < FormatRangeKeys {
 			panic(fmt.Sprintf(
 				"pebble: range keys require at least format major version %d (current: %d)",
@@ -920,24 +935,28 @@ func (d *DB) newIterInternal(batch *Batch, s *Snapshot, o *IterOptions) *Iterato
 	dbi := &buf.dbi
 	*dbi = Iterator{
 		alloc:               buf,
-		cmp:                 d.cmp,
-		equal:               d.equal,
 		merge:               d.merge,
-		split:               d.split,
+		comparer:            *d.opts.Comparer,
 		readState:           readState,
 		keyBuf:              buf.keyBuf,
 		prefixOrFullSeekKey: buf.prefixOrFullSeekKey,
+		boundsBuf:           buf.boundsBuf,
 		batch:               batch,
 		newIters:            d.newIters,
+		newIterRangeKey:     d.tableNewRangeKeyIter,
 		seqNum:              seqNum,
-		newRangeKeyIter: func(it *iteratorRangeKeyState) keyspan.FragmentIterator {
-			return d.newRangeKeyIter(it, seqNum, batch, readState, &dbi.opts)
-		},
 	}
 	if o != nil {
 		dbi.opts = *o
+		dbi.saveBounds(o.LowerBound, o.UpperBound)
 	}
 	dbi.opts.logger = d.opts.Logger
+	if d.opts.private.disableLazyCombinedIteration {
+		dbi.opts.disableLazyCombinedIteration = true
+	}
+	if batch != nil {
+		dbi.batchSeqNum = dbi.batch.nextSeqNum()
+	}
 	return finishInitializingIter(buf)
 }
 
@@ -955,59 +974,102 @@ func finishInitializingIter(buf *iterAlloc) *Iterator {
 		// We only need to read from memtables which contain sequence numbers older
 		// than seqNum. Trim off newer memtables.
 		for i := len(memtables) - 1; i >= 0; i-- {
-			if logSeqNum := memtables[i].logSeqNum; logSeqNum >= dbi.seqNum {
-				continue
+			if logSeqNum := memtables[i].logSeqNum; logSeqNum < dbi.seqNum {
+				break
 			}
-			memtables = memtables[:i+1]
-			break
+			memtables = memtables[:i]
 		}
 	}
 
-	// Construct the point iterator. This function either returns a pointer to
-	// dbi.merging (if points are enabled) or an emptyIter. If this is called
-	// during a SetOptions call and this Iterator has already initialized
-	// dbi.merging, constructPointIter returns the existing, unmodified point
-	// iterator which is stored in dbi.pointIter.
-	dbi.iter = constructPointIter(dbi, dbi.batch, memtables, buf)
+	if dbi.opts.pointKeys() {
+		// Construct the point iterator, initializing dbi.pointIter to point to
+		// dbi.merging. If this is called during a SetOptions call and this
+		// Iterator has already initialized dbi.merging, constructPointIter is a
+		// noop and an initialized pointIter already exists in dbi.pointIter.
+		dbi.constructPointIter(memtables, buf)
+		dbi.iter = dbi.pointIter
+	} else {
+		dbi.iter = emptyIter
+	}
 
-	// If range keys are enabled, construct the range key iterator stack too.
 	if dbi.opts.rangeKeys() {
-		if dbi.rangeKey == nil {
-			dbi.rangeKey = iterRangeKeyStateAllocPool.Get().(*iteratorRangeKeyState)
-			dbi.rangeKey.keys.cmp = dbi.cmp
-			dbi.rangeKey.rangeKeyIter = dbi.newRangeKeyIter(dbi.rangeKey)
+		dbi.rangeKeyMasking.init(dbi, dbi.comparer.Compare, dbi.comparer.Split)
+
+		// When iterating over both point and range keys, don't create the
+		// range-key iterator stack immediately if we can avoid it. This
+		// optimization takes advantage of the expected sparseness of range
+		// keys, and configures the point-key iterator to dynamically switch to
+		// combined iteration when it observes a file containing range keys.
+		//
+		// Lazy combined iteration is not possible if a batch or a memtable
+		// contains any range keys.
+		useLazyCombinedIteration := dbi.rangeKey == nil &&
+			dbi.opts.KeyTypes == IterKeyTypePointsAndRanges &&
+			(dbi.batch == nil || dbi.batch.countRangeKeys == 0) &&
+			!dbi.opts.disableLazyCombinedIteration
+		if useLazyCombinedIteration {
+			// The user requested combined iteration, and there's no indexed
+			// batch currently containing range keys that would prevent lazy
+			// combined iteration. Check the memtables to see if they contain
+			// any range keys.
+			for i := range memtables {
+				if memtables[i].containsRangeKeys() {
+					useLazyCombinedIteration = false
+					break
+				}
+			}
 		}
 
-		// Wrap the point iterator (currently dbi.iter) with an interleaving
-		// iterator that interleaves range keys pulled from
-		// dbi.rangeKey.rangeKeyIter.
+		if useLazyCombinedIteration {
+			dbi.lazyCombinedIter = lazyCombinedIter{
+				parent:    dbi,
+				pointIter: dbi.pointIter,
+				combinedIterState: combinedIterState{
+					initialized: false,
+				},
+			}
+			dbi.iter = &dbi.lazyCombinedIter
+		} else {
+			dbi.lazyCombinedIter.combinedIterState = combinedIterState{
+				initialized: true,
+			}
+			if dbi.rangeKey == nil {
+				dbi.rangeKey = iterRangeKeyStateAllocPool.Get().(*iteratorRangeKeyState)
+				dbi.rangeKey.init(dbi.comparer.Compare, dbi.comparer.Split, &dbi.opts)
+				dbi.constructRangeKeyIter()
+			} else {
+				dbi.rangeKey.iterConfig.SetBounds(dbi.opts.LowerBound, dbi.opts.UpperBound)
+			}
+
+			// Wrap the point iterator (currently dbi.iter) with an interleaving
+			// iterator that interleaves range keys pulled from
+			// dbi.rangeKey.rangeKeyIter.
+			//
+			// NB: The interleaving iterator is always reinitialized, even if
+			// dbi already had an initialized range key iterator, in case the point
+			// iterator changed or the range key masking suffix changed.
+			dbi.rangeKey.iiter.Init(&dbi.comparer, dbi.iter, dbi.rangeKey.rangeKeyIter,
+				&dbi.rangeKeyMasking, dbi.opts.LowerBound, dbi.opts.UpperBound)
+			dbi.iter = &dbi.rangeKey.iiter
+		}
+	} else {
+		// !dbi.opts.rangeKeys()
 		//
-		// NB: The interleaving iterator is always reinitialized, even if
-		// dbi already had an initialized range key iterator, in case the point
-		// iterator changed or the range key masking suffix changed.
-		dbi.rangeKey.iter.Init(dbi.cmp, dbi.iter, dbi.rangeKey.rangeKeyIter, keyspan.Hooks{
-			SpanChanged: dbi.rangeKeySpanChanged,
-			SkipPoint:   dbi.rangeKeySkipPoint,
-		})
-		dbi.iter = &dbi.rangeKey.iter
-		dbi.iter.SetBounds(dbi.opts.LowerBound, dbi.opts.UpperBound)
-		dbi.rangeKey.activeMaskSuffix = dbi.rangeKey.activeMaskSuffix[:0]
+		// Reset the combined iterator state. The initialized=true ensures the
+		// iterator doesn't unnecessarily try to switch to combined iteration.
+		dbi.lazyCombinedIter.combinedIterState = combinedIterState{initialized: true}
 	}
 	return dbi
 }
 
-func constructPointIter(
-	dbi *Iterator, batch *Batch, memtables flushableList, buf *iterAlloc,
-) internalIteratorWithStats {
-	if !dbi.opts.pointKeys() {
-		return emptyIter
+func (i *Iterator) constructPointIter(memtables flushableList, buf *iterAlloc) {
+	if i.pointIter != nil {
+		// Already have one.
+		return
 	}
-	if dbi.pointIter != nil {
-		// The point iterator has already been constructed. This may be the case
-		// when an Iterator is being re-initialized during a call to SetOptions.
-		// Set the current bounds.
-		dbi.pointIter.SetBounds(dbi.opts.LowerBound, dbi.opts.UpperBound)
-		return dbi.pointIter
+	internalOpts := internalIterOpts{stats: &i.stats.InternalStats}
+	if i.opts.RangeKeyMasking.Filter != nil {
+		internalOpts.boundLimitedFilter = &i.rangeKeyMasking
 	}
 
 	// Merging levels and levels from iterAlloc.
@@ -1019,12 +1081,12 @@ func constructPointIter(
 	// should improve the performance.
 	numMergingLevels := 0
 	numLevelIters := 0
-	if batch != nil {
+	if i.batch != nil {
 		numMergingLevels++
 	}
 	numMergingLevels += len(memtables)
 
-	current := dbi.readState.current
+	current := i.readState.current
 	numMergingLevels += len(current.L0SublevelFiles)
 	numLevelIters += len(current.L0SublevelFiles)
 	for level := 1; level < len(current.Levels); level++ {
@@ -1043,19 +1105,39 @@ func constructPointIter(
 	}
 
 	// Top-level is the batch, if any.
-	if batch != nil {
-		mlevels = append(mlevels, mergingIterLevel{
-			iter:         base.WrapIterWithStats(batch.newInternalIter(&dbi.opts)),
-			rangeDelIter: batch.newRangeDelIter(&dbi.opts),
-		})
+	if i.batch != nil {
+		if i.batch.index == nil {
+			// This isn't an indexed batch. Include an error iterator so that
+			// the resulting iterator correctly surfaces ErrIndexed.
+			mlevels = append(mlevels, mergingIterLevel{
+				iter:         newErrorIter(ErrNotIndexed),
+				rangeDelIter: newErrorKeyspanIter(ErrNotIndexed),
+			})
+		} else {
+			i.batch.initInternalIter(&i.opts, &i.batchPointIter)
+			i.batch.initRangeDelIter(&i.opts, &i.batchRangeDelIter, i.batchSeqNum)
+			// Only include the batch's rangedel iterator if it's non-empty.
+			// This requires some subtle logic in the case a rangedel is later
+			// written to the batch and the view of the batch is refreshed
+			// during a call to SetOptions—in this case, we need to reconstruct
+			// the point iterator to add the batch rangedel iterator.
+			var rangeDelIter keyspan.FragmentIterator
+			if i.batchRangeDelIter.Count() > 0 {
+				rangeDelIter = &i.batchRangeDelIter
+			}
+			mlevels = append(mlevels, mergingIterLevel{
+				iter:         &i.batchPointIter,
+				rangeDelIter: rangeDelIter,
+			})
+		}
 	}
 
 	// Next are the memtables.
-	for i := len(memtables) - 1; i >= 0; i-- {
-		mem := memtables[i]
+	for j := len(memtables) - 1; j >= 0; j-- {
+		mem := memtables[j]
 		mlevels = append(mlevels, mergingIterLevel{
-			iter:         base.WrapIterWithStats(mem.newIter(&dbi.opts)),
-			rangeDelIter: mem.newRangeDelIter(&dbi.opts),
+			iter:         mem.newIter(&i.opts),
+			rangeDelIter: mem.newRangeDelIter(&i.opts),
 		})
 	}
 
@@ -1064,16 +1146,13 @@ func constructPointIter(
 	levelsIndex := len(levels)
 	mlevels = mlevels[:numMergingLevels]
 	levels = levels[:numLevelIters]
-
 	addLevelIterForFiles := func(files manifest.LevelIterator, level manifest.Level) {
 		li := &levels[levelsIndex]
 
-		li.init(dbi.opts, dbi.cmp, dbi.split, dbi.newIters, files, level, nil)
+		li.init(i.opts, i.comparer.Compare, i.comparer.Split, i.newIters, files, level, internalOpts)
 		li.initRangeDel(&mlevels[mlevelsIndex].rangeDelIter)
-		li.initSmallestLargestUserKey(&mlevels[mlevelsIndex].smallestUserKey,
-			&mlevels[mlevelsIndex].largestUserKey,
-			&mlevels[mlevelsIndex].isLargestUserKeyRangeDelSentinel)
-		li.initIsSyntheticIterBoundsKey(&mlevels[mlevelsIndex].isSyntheticIterBoundsKey)
+		li.initBoundaryContext(&mlevels[mlevelsIndex].levelIterBoundaryContext)
+		li.initCombinedIterState(&i.lazyCombinedIter.combinedIterState)
 		mlevels[mlevelsIndex].iter = li
 
 		levelsIndex++
@@ -1093,11 +1172,13 @@ func constructPointIter(
 		}
 		addLevelIterForFiles(current.Levels[level].Iter(), manifest.Level(level))
 	}
-	buf.merging.init(&dbi.opts, dbi.cmp, dbi.split, mlevels...)
-	buf.merging.snapshot = dbi.seqNum
+	buf.merging.init(&i.opts, &i.stats.InternalStats, i.comparer.Compare, i.comparer.Split, mlevels...)
+	buf.merging.snapshot = i.seqNum
+	buf.merging.batchSnapshot = i.batchSeqNum
 	buf.merging.elideRangeTombstones = true
-	dbi.pointIter = &buf.merging
-	return &buf.merging
+	buf.merging.combinedIterState = &i.lazyCombinedIter.combinedIterState
+	i.pointIter = &buf.merging
+	i.merging = &buf.merging
 }
 
 // NewBatch returns a new empty write-only batch. Any reads on the batch will
@@ -1156,6 +1237,18 @@ func (d *DB) NewSnapshot() *Snapshot {
 // or to call Close concurrently with any other DB method. It is not valid
 // to call any of a DB's methods after the DB has been closed.
 func (d *DB) Close() error {
+	// Lock the commit pipeline for the duration of Close. This prevents a race
+	// with makeRoomForWrite. Rotating the WAL in makeRoomForWrite requires
+	// dropping d.mu several times for I/O. If Close only holds d.mu, an
+	// in-progress WAL rotation may re-acquire d.mu only once the database is
+	// closed.
+	//
+	// Additionally, locking the commit pipeline makes it more likely that
+	// (illegal) concurrent writes will observe d.closed.Load() != nil, creating
+	// more understable panics if the database is improperly used concurrently
+	// during Close.
+	d.commit.mu.Lock()
+	defer d.commit.mu.Unlock()
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if err := d.closed.Load(); err != nil {
@@ -1244,6 +1337,23 @@ func (d *DB) Close() error {
 	d.deleters.Wait()
 	d.compactionSchedulers.Wait()
 	d.mu.Lock()
+
+	// As a sanity check, ensure that there are no zombie tables. A non-zero count
+	// hints at a reference count leak.
+	if ztbls := len(d.mu.versions.zombieTables); ztbls > 0 {
+		err = firstError(err, errors.Errorf("non-zero zombie file count: %d", ztbls))
+	}
+
+	// If the options include a closer to 'close' the filesystem, close it.
+	if d.opts.private.fsCloser != nil {
+		d.opts.private.fsCloser.Close()
+	}
+
+	// Return an error if the user failed to close all open snapshots.
+	if v := d.mu.snapshots.count(); v > 0 {
+		err = firstError(err, errors.Errorf("leaked snapshots: %d open snapshots on DB %p", v, d))
+	}
+
 	return err
 }
 
@@ -1316,20 +1426,8 @@ func (d *DB) Compact(start, end []byte, parallelize bool) error {
 	}
 
 	for level := 0; level < maxLevelWithFiles; {
-		par := parallelize
-		if level == 0 {
-			// TODO(bananabrick): Get rid of this special casing once
-			// we start to always add sublevels to the merging iter for
-			// L0 -> Lbase compactions.
-			//
-			// Avoid trying to parallelize l0 manual compactions because in
-			// practice it's difficult to split l0 into non-overlapping key
-			// ranges, and not splitting l0 allows us to add level iters
-			// instead of file iters into the merging iter, which results
-			// in a faster compaction.
-			par = false
-		}
-		if err := d.manualCompact(iStart.UserKey, iEnd.UserKey, level, par); err != nil {
+		if err := d.manualCompact(
+			iStart.UserKey, iEnd.UserKey, level, parallelize); err != nil {
 			return err
 		}
 		level++
@@ -1439,36 +1537,18 @@ func (d *DB) AsyncFlush() (<-chan struct{}, error) {
 	return flushed, nil
 }
 
-// InternalIntervalMetrics returns the InternalIntervalMetrics and resets for
-// the next interval (which is until the next call to this method).
-func (d *DB) InternalIntervalMetrics() *InternalIntervalMetrics {
-	m := &InternalIntervalMetrics{}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.mu.log.metrics != nil {
-		m.LogWriter.WriteThroughput = d.mu.log.metrics.WriteThroughput
-		m.LogWriter.PendingBufferUtilization =
-			d.mu.log.metrics.PendingBufferLen.Mean() / record.CapAllocatedBlocks
-		m.LogWriter.SyncQueueUtilization = d.mu.log.metrics.SyncQueueLen.Mean() / record.SyncConcurrency
-		m.LogWriter.SyncLatencyMicros = d.mu.log.metrics.SyncLatencyMicros
-		d.mu.log.metrics = nil
-	}
-	m.Flush.WriteThroughput = d.mu.compact.flushWriteThroughput
-	d.mu.compact.flushWriteThroughput = ThroughputMetric{}
-	return m
-}
-
 // Metrics returns metrics about the database.
 func (d *DB) Metrics() *Metrics {
 	metrics := &Metrics{}
 	recycledLogsCount, recycledLogSize := d.logRecycler.stats()
 
 	d.mu.Lock()
+	vers := d.mu.versions.currentVersion()
 	*metrics = d.mu.versions.metrics
 	metrics.Compact.EstimatedDebt = d.mu.versions.picker.estimatedCompactionDebt(0)
 	metrics.Compact.InProgressBytes = atomic.LoadInt64(&d.mu.versions.atomic.atomicInProgressBytes)
 	metrics.Compact.NumInProgress = int64(d.mu.compact.compactingCount)
-	metrics.Compact.MarkedFiles = d.mu.versions.currentVersion().Stats.MarkedForCompaction
+	metrics.Compact.MarkedFiles = vers.Stats.MarkedForCompaction
 	for _, m := range d.mu.mem.queue {
 		metrics.MemTable.Size += m.totalBytes()
 	}
@@ -1512,9 +1592,18 @@ func (d *DB) Metrics() *Metrics {
 	}
 	metrics.private.optionsFileSize = d.optionsFileSize
 
+	metrics.Keys.RangeKeySetsCount = countRangeKeySetFragments(vers)
+
 	d.mu.versions.logLock()
 	metrics.private.manifestFileSize = uint64(d.mu.versions.manifest.Size())
 	d.mu.versions.logUnlock()
+
+	metrics.LogWriter.FsyncLatency = d.mu.log.metrics.fsyncLatency
+	if err := metrics.LogWriter.Merge(&d.mu.log.metrics.LogWriterMetrics); err != nil {
+		d.opts.Logger.Infof("metrics error: %s", err)
+	}
+	metrics.Flush.WriteThroughput = d.mu.compact.flushWriteThroughput
+
 	d.mu.Unlock()
 
 	metrics.BlockCache = d.opts.Cache.Metrics()
@@ -1804,12 +1893,8 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 			err = d.mu.log.LogWriter.Close()
 			metrics := d.mu.log.LogWriter.Metrics()
 			d.mu.Lock()
-			if d.mu.log.metrics == nil {
-				d.mu.log.metrics = metrics
-			} else {
-				if err := d.mu.log.metrics.Merge(metrics); err != nil {
-					d.opts.Logger.Infof("metrics error: %s", err)
-				}
+			if err := d.mu.log.metrics.Merge(metrics); err != nil {
+				d.opts.Logger.Infof("metrics error: %s", err)
 			}
 			d.mu.Unlock()
 
@@ -1861,6 +1946,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 				newLogFile.Close()
 			} else if err == nil {
 				newLogFile = vfs.NewSyncingFile(newLogFile, vfs.SyncingFileOptions{
+					NoSyncOnClose:   d.opts.NoSyncOnClose,
 					BytesPerSync:    d.opts.WALBytesPerSync,
 					PreallocateSize: d.walPreallocateSize(),
 				})
@@ -1896,8 +1982,10 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 
 		if !d.opts.DisableWAL {
 			d.mu.log.queue = append(d.mu.log.queue, fileInfo{fileNum: newLogNum, fileSize: newLogSize})
-			d.mu.log.LogWriter = record.NewLogWriter(newLogFile, newLogNum)
-			d.mu.log.LogWriter.SetMinSyncInterval(d.opts.WALMinSyncInterval)
+			d.mu.log.LogWriter = record.NewLogWriter(newLogFile, newLogNum, record.LogWriterConfig{
+				WALFsyncLatency:    d.mu.log.metrics.fsyncLatency,
+				WALMinSyncInterval: d.opts.WALMinSyncInterval,
+			})
 		}
 
 		immMem := d.mu.mem.mutable
@@ -1959,7 +2047,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 		var entry *flushableEntry
 		d.mu.mem.mutable, entry = d.newMemTable(newLogNum, logSeqNum)
 		d.mu.mem.queue = append(d.mu.mem.queue, entry)
-		d.updateReadStateLocked(nil, nil)
+		d.updateReadStateLocked(nil)
 		if immMem.writerUnref() {
 			d.maybeScheduleFlush()
 		}

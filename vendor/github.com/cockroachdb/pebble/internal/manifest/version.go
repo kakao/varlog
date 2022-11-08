@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/internal/invariants"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -43,15 +44,12 @@ type TableInfo struct {
 
 // TableStats contains statistics on a table used for compaction heuristics.
 type TableStats struct {
-	// Valid true if stats have been loaded for the table. The rest of the
-	// structure is populated only if true.
-	Valid bool
 	// The total number of entries in the table.
 	NumEntries uint64
 	// The number of point and range deletion entries in the table.
 	NumDeletions uint64
-	// NumRangeKeys is the total number of range keys in the table.
-	NumRangeKeys uint64
+	// NumRangeKeySets is the total number of range key sets in the table.
+	NumRangeKeySets uint64
 	// Estimate of the total disk space that may be dropped by this table's
 	// point deletions by compacting them.
 	PointDeletionsBytesEstimate uint64
@@ -77,6 +75,48 @@ const (
 	boundTypeRangeKey
 )
 
+// CompactionState is the compaction state of a file.
+//
+// The following shows the valid state transitions:
+//
+//    NotCompacting --> Compacting --> Compacted
+//          ^               |
+//          |               |
+//          +-------<-------+
+//
+// Input files to a compaction transition to Compacting when a compaction is
+// picked. A file that has finished compacting typically transitions into the
+// Compacted state, at which point it is effectively obsolete ("zombied") and
+// will eventually be removed from the LSM. A file that has been move-compacted
+// will transition from Compacting back into the NotCompacting state, signaling
+// that the file may be selected for a subsequent compaction. A failed
+// compaction will result in all input tables transitioning from Compacting to
+// NotCompacting.
+//
+// This state is in-memory only. It is not persisted to the manifest.
+type CompactionState uint8
+
+// CompactionStates.
+const (
+	CompactionStateNotCompacting CompactionState = iota
+	CompactionStateCompacting
+	CompactionStateCompacted
+)
+
+// String implements fmt.Stringer.
+func (s CompactionState) String() string {
+	switch s {
+	case CompactionStateNotCompacting:
+		return "NotCompacting"
+	case CompactionStateCompacting:
+		return "Compacting"
+	case CompactionStateCompacted:
+		return "Compacted"
+	default:
+		panic(fmt.Sprintf("pebble: unknown compaction state %d", s))
+	}
+}
+
 // FileMetadata holds the metadata for an on-disk table.
 type FileMetadata struct {
 	// Atomic contains fields which are accessed atomically. Go allocations
@@ -90,6 +130,10 @@ type FileMetadata struct {
 		// in pebble.Iterator after every after every positioning operation
 		// that returns a user key (eg. Next, Prev, SeekGE, SeekLT, etc).
 		AllowedSeeks int64
+
+		// statsValid is 1 if stats have been loaded for the table. The
+		// TableStats structure is populated only if valid is 1.
+		statsValid uint32
 	}
 
 	// InitAllowedSeeks is the inital value of allowed seeks. This is used
@@ -134,7 +178,7 @@ type FileMetadata struct {
 	// Stats describe table statistics. Protected by DB.mu.
 	Stats TableStats
 
-	subLevel         int
+	SubLevel         int
 	L0Index          int
 	minIntervalIndex int
 	maxIntervalIndex int
@@ -146,12 +190,11 @@ type FileMetadata struct {
 	// pick L0 compactions. Only accurate for the most recent Version.
 	//
 	// IsIntraL0Compacting is set to True if this file is part of an intra-L0
-	// compaction. When it's true, Compacting must also be true. If Compacting
-	// is true and IsIntraL0Compacting is false for an L0 file, the file must
-	// be part of a compaction to Lbase.
+	// compaction. When it's true, IsCompacting must also return true. If
+	// Compacting is true and IsIntraL0Compacting is false for an L0 file, the
+	// file must be part of a compaction to Lbase.
 	IsIntraL0Compacting bool
-	// True if the file is actively being compacted. Protected by DB.mu.
-	Compacting bool
+	CompactionState     CompactionState
 	// True if compaction of this file has been explicitly requested.
 	// Previously, RocksDB and earlier versions of Pebble allowed this
 	// flag to be set by a user table property collector. Some earlier
@@ -169,9 +212,11 @@ type FileMetadata struct {
 	//
 	// Protected by DB.mu.
 	MarkedForCompaction bool
-	// HasPointKeys and HasRangeKeys track whether the table contains point and
-	// range keys, respectively.
+	// HasPointKeys tracks whether the table contains point keys (including
+	// RANGEDELs). If a table contains only range deletions, HasPointsKeys is
+	// still true.
 	HasPointKeys bool
+	// HasRangeKeys tracks whether the table contains any range keys.
 	HasRangeKeys bool
 	// smallestSet and largestSet track whether the overall bounds have been set.
 	boundsSet bool
@@ -179,6 +224,59 @@ type FileMetadata struct {
 	// key type (point or range) corresponds to the smallest and largest overall
 	// table bounds.
 	boundTypeSmallest, boundTypeLargest boundType
+}
+
+// SetCompactionState transitions this file's compaction state to the given
+// state. Protected by DB.mu.
+func (m *FileMetadata) SetCompactionState(to CompactionState) {
+	if invariants.Enabled {
+		transitionErr := func() error {
+			return errors.Newf("pebble: invalid compaction state transition: %s -> %s", m.CompactionState, to)
+		}
+		switch m.CompactionState {
+		case CompactionStateNotCompacting:
+			if to != CompactionStateCompacting {
+				panic(transitionErr())
+			}
+		case CompactionStateCompacting:
+			if to != CompactionStateCompacted && to != CompactionStateNotCompacting {
+				panic(transitionErr())
+			}
+		case CompactionStateCompacted:
+			panic(transitionErr())
+		default:
+			panic(fmt.Sprintf("pebble: unknown compaction state: %d", m.CompactionState))
+		}
+	}
+	m.CompactionState = to
+}
+
+// IsCompacting returns true if this file's compaction state is
+// CompactionStateCompacting. Protected by DB.mu.
+func (m *FileMetadata) IsCompacting() bool {
+	return m.CompactionState == CompactionStateCompacting
+}
+
+// StatsValid returns true if the table stats have been populated. If StatValid
+// returns true, the Stats field may be read (with or without holding the
+// database mutex).
+func (m *FileMetadata) StatsValid() bool {
+	return atomic.LoadUint32(&m.Atomic.statsValid) == 1
+}
+
+// StatsValidLocked returns true if the table stats have been populated.
+// StatsValidLocked requires DB.mu is held when it's invoked, and it avoids the
+// overhead of an atomic load. This is possible because table stats validity is
+// only set while DB.mu is held.
+func (m *FileMetadata) StatsValidLocked() bool {
+	return m.Atomic.statsValid == 1
+}
+
+// StatsMarkValid marks the TableStats as valid. The caller must hold DB.mu
+// while populating TableStats and calling StatsMarkValud. Once stats are
+// populated, they must not be mutated.
+func (m *FileMetadata) StatsMarkValid() {
+	atomic.StoreUint32(&m.Atomic.statsValid, 1)
 }
 
 // ExtendPointKeyBounds attempts to extend the lower and upper point key bounds
@@ -654,6 +752,11 @@ type Version struct {
 
 	Levels [NumLevels]LevelMetadata
 
+	// RangeKeyLevels holds a subset of the same files as Levels that contain range
+	// keys (i.e. fileMeta.HasRangeKeys == true). The memory amplification of this
+	// duplication should be minimal, as range keys are expected to be rare.
+	RangeKeyLevels [NumLevels]LevelMetadata
+
 	// The callback to invoke when the last reference to a version is
 	// removed. Will be called with list.mu held.
 	Deleted func(obsolete []*FileMetadata)
@@ -785,6 +888,9 @@ func (v *Version) UnrefLocked() {
 func (v *Version) unrefFiles() []*FileMetadata {
 	var obsolete []*FileMetadata
 	for _, lm := range v.Levels {
+		obsolete = append(obsolete, lm.release()...)
+	}
+	for _, lm := range v.RangeKeyLevels {
 		obsolete = append(obsolete, lm.release()...)
 	}
 	return obsolete

@@ -39,7 +39,7 @@ func New(opts ...Option) (*Storage, error) {
 		MaxOpenFiles:                cfg.maxOpenFiles,
 		MemTableSize:                cfg.memTableSize,
 		MemTableStopWritesThreshold: cfg.memTableStopWritesThreshold,
-		MaxConcurrentCompactions:    cfg.maxConcurrentCompaction,
+		MaxConcurrentCompactions:    func() int { return cfg.maxConcurrentCompaction },
 		Levels:                      make([]pebble.LevelOptions, 7),
 		ErrorIfExists:               false,
 	}

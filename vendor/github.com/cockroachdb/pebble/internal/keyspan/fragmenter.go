@@ -183,9 +183,13 @@ func (f *Fragmenter) checkInvariants(buf []Span) {
 // deletion and range key blocks, so these keys are stable. Because of this key
 // stability, typically callers only need to perform a shallow clone of the Span
 // before Add-ing it to the fragmenter.
+//
+// Add requires the provided span's keys are sorted in Trailer descending order.
 func (f *Fragmenter) Add(s Span) {
 	if f.finished {
 		panic("pebble: span fragmenter already finished")
+	} else if s.KeysOrder != ByTrailerDesc {
+		panic("pebble: span keys unexpectedly not in trailer descending order")
 	}
 	if f.flushedKey != nil {
 		switch c := f.Cmp(s.Start, f.flushedKey); {
@@ -248,7 +252,7 @@ func (f *Fragmenter) Covers(key base.InternalKey, snapshot uint64) bool {
 			// NB: A range deletion tombstone does not delete a point operation
 			// at the same sequence number, and broadly a span is not considered
 			// to cover a point operation at the same sequence number.
-			if s.Visible(snapshot).Covers(seqNum) {
+			if s.CoversAt(snapshot, seqNum) {
 				return true
 			}
 		}
