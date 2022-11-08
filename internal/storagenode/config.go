@@ -34,8 +34,6 @@ type config struct {
 	replicateClientReadBufferSize   int64
 	replicateClientWriteBufferSize  int64
 	volumes                         []string
-	dataDirs                        []string
-	volumeStrictCheck               bool
 	defaultLogStreamExecutorOptions []logstream.ExecutorOption
 	pprofOpts                       []pprof.Option
 	defaultStorageOptions           []storage.Option
@@ -75,9 +73,6 @@ func (cfg *config) validate() error {
 	if err := cfg.validateVolumes(); err != nil {
 		return fmt.Errorf("storage node: invalid volume: %w", err)
 	}
-	if err := cfg.validateDataDirs(); err != nil {
-		return fmt.Errorf("storage node: invalid data directory: %w", err)
-	}
 	return nil
 }
 
@@ -102,26 +97,6 @@ func (cfg *config) validateVolumes() error {
 		volumes = append(volumes, norm)
 	}
 	cfg.volumes = volumes
-	return nil
-}
-
-func (cfg *config) validateDataDirs() error {
-	volumes := make(map[string]bool, len(cfg.volumes))
-	for _, vol := range cfg.volumes {
-		volumes[vol] = true
-	}
-	for _, dir := range cfg.dataDirs {
-		dd, err := volume.ParseDataDir(dir)
-		if err != nil {
-			return err
-		}
-		if err := dd.Valid(cfg.cid, cfg.snid); err != nil {
-			return err
-		}
-		if !volumes[dd.Volume] {
-			return fmt.Errorf("unexpected volume %s", dir)
-		}
-	}
 	return nil
 }
 
@@ -210,18 +185,6 @@ func WithDefaultLogStreamExecutorOptions(defaultLSEOptions ...logstream.Executor
 func WithVolumes(volumes ...string) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.volumes = volumes
-	})
-}
-
-func WithDataDirs(dataDirs ...string) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.dataDirs = dataDirs
-	})
-}
-
-func WithVolumeStrictCheck(strict bool) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.volumeStrictCheck = strict
 	})
 }
 

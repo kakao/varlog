@@ -160,8 +160,6 @@ func start(c *cli.Context) error {
 		storagenode.WithAdvertiseAddress(c.String(flagAdvertise.Name)),
 		storagenode.WithBallastSize(ballastSize),
 		storagenode.WithVolumes(c.StringSlice(flagVolumes.Name)...),
-		storagenode.WithDataDirs(c.StringSlice(flagDataDirs.Name)...),
-		storagenode.WithVolumeStrictCheck(c.Bool(flagVolumeStrictCheck.Name)),
 		storagenode.WithGRPCServerReadBufferSize(readBufferSize),
 		storagenode.WithGRPCServerWriteBufferSize(writeBufferSize),
 		storagenode.WithGRPCServerMaxRecvMsgSize(maxRecvMsgSize),
