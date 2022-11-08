@@ -14,40 +14,40 @@ type errorIter struct {
 }
 
 // errorIter implements the base.InternalIterator interface.
-var _ internalIteratorWithStats = (*errorIter)(nil)
+var _ internalIterator = (*errorIter)(nil)
 
 func newErrorIter(err error) *errorIter {
 	return &errorIter{err: err}
 }
 
-func (c *errorIter) SeekGE(key []byte, trySeekUsingNext bool) (*InternalKey, []byte) {
-	return nil, nil
+func (c *errorIter) SeekGE(key []byte, flags base.SeekGEFlags) (*InternalKey, base.LazyValue) {
+	return nil, base.LazyValue{}
 }
 
 func (c *errorIter) SeekPrefixGE(
-	prefix, key []byte, trySeekUsingNext bool,
-) (*base.InternalKey, []byte) {
-	return nil, nil
+	prefix, key []byte, flags base.SeekGEFlags,
+) (*base.InternalKey, base.LazyValue) {
+	return nil, base.LazyValue{}
 }
 
-func (c *errorIter) SeekLT(key []byte) (*InternalKey, []byte) {
-	return nil, nil
+func (c *errorIter) SeekLT(key []byte, flags base.SeekLTFlags) (*InternalKey, base.LazyValue) {
+	return nil, base.LazyValue{}
 }
 
-func (c *errorIter) First() (*InternalKey, []byte) {
-	return nil, nil
+func (c *errorIter) First() (*InternalKey, base.LazyValue) {
+	return nil, base.LazyValue{}
 }
 
-func (c *errorIter) Last() (*InternalKey, []byte) {
-	return nil, nil
+func (c *errorIter) Last() (*InternalKey, base.LazyValue) {
+	return nil, base.LazyValue{}
 }
 
-func (c *errorIter) Next() (*InternalKey, []byte) {
-	return nil, nil
+func (c *errorIter) Next() (*InternalKey, base.LazyValue) {
+	return nil, base.LazyValue{}
 }
 
-func (c *errorIter) Prev() (*InternalKey, []byte) {
-	return nil, nil
+func (c *errorIter) Prev() (*InternalKey, base.LazyValue) {
+	return nil, base.LazyValue{}
 }
 
 func (c *errorIter) Error() error {
@@ -63,8 +63,6 @@ func (c *errorIter) String() string {
 }
 
 func (c *errorIter) SetBounds(lower, upper []byte) {}
-func (c *errorIter) Stats() InternalIteratorStats  { return InternalIteratorStats{} }
-func (c *errorIter) ResetStats()                   {}
 
 type errorKeyspanIter struct {
 	err error
@@ -77,12 +75,12 @@ func newErrorKeyspanIter(err error) *errorKeyspanIter {
 	return &errorKeyspanIter{err: err}
 }
 
-func (*errorKeyspanIter) SeekGE(key []byte) keyspan.Span { return keyspan.Span{} }
-func (*errorKeyspanIter) SeekLT(key []byte) keyspan.Span { return keyspan.Span{} }
-func (*errorKeyspanIter) First() keyspan.Span            { return keyspan.Span{} }
-func (*errorKeyspanIter) Last() keyspan.Span             { return keyspan.Span{} }
-func (*errorKeyspanIter) Next() keyspan.Span             { return keyspan.Span{} }
-func (*errorKeyspanIter) Prev() keyspan.Span             { return keyspan.Span{} }
-func (i *errorKeyspanIter) Error() error                 { return i.err }
-func (i *errorKeyspanIter) Close() error                 { return i.err }
-func (*errorKeyspanIter) String() string                 { return "error" }
+func (*errorKeyspanIter) SeekGE(key []byte) *keyspan.Span { return nil }
+func (*errorKeyspanIter) SeekLT(key []byte) *keyspan.Span { return nil }
+func (*errorKeyspanIter) First() *keyspan.Span            { return nil }
+func (*errorKeyspanIter) Last() *keyspan.Span             { return nil }
+func (*errorKeyspanIter) Next() *keyspan.Span             { return nil }
+func (*errorKeyspanIter) Prev() *keyspan.Span             { return nil }
+func (i *errorKeyspanIter) Error() error                  { return i.err }
+func (i *errorKeyspanIter) Close() error                  { return i.err }
+func (*errorKeyspanIter) String() string                  { return "error" }

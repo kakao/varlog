@@ -110,6 +110,9 @@ type versionSet struct {
 
 	writing    bool
 	writerCond sync.Cond
+	// State for deciding when to write a snapshot. Protected by mu.
+	lastSnapshotFileCount           int64
+	editsSinceLastSnapshotFileCount int64
 }
 
 func (vs *versionSet) init(
@@ -391,13 +394,76 @@ func (vs *versionSet) logAndApply(
 	currentVersion := vs.currentVersion()
 	var newVersion *version
 
-	// Generate a new manifest if we don't currently have one, or the current one
-	// is too large.
+	// Generate a new manifest if we don't currently have one, or forceRotation
+	// is true, or the current one is too large.
+	//
+	// For largeness, we do not exclusively use MaxManifestFileSize size
+	// threshold since we have had incidents where due to either large keys or
+	// large numbers of files, each edit results in a snapshot + write of the
+	// edit. This slows the system down since each flush or compaction is
+	// writing a new manifest snapshot. The primary goal of the size-based
+	// rollover logic is to ensure that when reopening a DB, the number of edits
+	// that need to be replayed on top of the snapshot is "sane". Rolling over
+	// to a new manifest after each edit is not relevant to that goal.
+	//
+	// Consider the following cases:
+	// - The number of live files F in the DB is roughly stable: after writing
+	//   the snapshot (with F files), say we require that there be enough edits
+	//   such that the cumulative number of files in those edits, E, be greater
+	//   than F. This will ensure that the total amount of time in logAndApply
+	//   that is spent in snapshot writing is ~50%.
+	//
+	// - The number of live files F in the DB is shrinking drastically, say from
+	//   F to F/10: This can happen for various reasons, like wide range
+	//   tombstones, or large numbers of smaller than usual files that are being
+	//   merged together into larger files. And say the new files generated
+	//   during this shrinkage is insignificant compared to F/10, and so for
+	//   this example we will assume it is effectively 0. After this shrinking,
+	//   E = 0.9F, and so if we used the previous snapshot file count, F, as the
+	//   threshold that needs to be exceeded, we will further delay the snapshot
+	//   writing. Which means on DB reopen we will need to replay 0.9F edits to
+	//   get to a version with 0.1F files. It would be better to create a new
+	//   snapshot when E exceeds the number of files in the current version.
+	//
+	// - The number of live files F in the DB is growing via perfect ingests
+	//   into L6: Say we wrote the snapshot when there were F files and now we
+	//   have 10F files, so E = 9F. We will further delay writing a new
+	//   snapshot. This case can be critiqued as contrived, but we consider it
+	//   nonetheless.
+	//
+	// The logic below uses the min of the last snapshot file count and the file
+	// count in the current version.
+	editCount := int64(len(ve.DeletedFiles) + len(ve.NewFiles))
+	vs.editsSinceLastSnapshotFileCount += editCount
+	sizeExceeded := vs.manifest.Size() >= vs.opts.MaxManifestFileSize
+	requireRotation := forceRotation || vs.manifest == nil
+	computeNextSnapshotFileCount := func() int64 {
+		var count int64
+		for i := range vs.metrics.Levels {
+			count += vs.metrics.Levels[i].NumFiles
+		}
+		return count
+	}
+	var nextSnapshotFileCount int64
+	if sizeExceeded && !requireRotation {
+		if vs.editsSinceLastSnapshotFileCount > vs.lastSnapshotFileCount {
+			requireRotation = true
+		} else {
+			nextSnapshotFileCount = computeNextSnapshotFileCount()
+			if vs.editsSinceLastSnapshotFileCount > nextSnapshotFileCount {
+				requireRotation = true
+			}
+		}
+	}
 	var newManifestFileNum FileNum
 	var prevManifestFileSize uint64
-	if forceRotation || vs.manifest == nil || vs.manifest.Size() >= vs.opts.MaxManifestFileSize {
+	if requireRotation {
 		newManifestFileNum = vs.getNextFileNum()
 		prevManifestFileSize = uint64(vs.manifest.Size())
+		if nextSnapshotFileCount == 0 {
+			// Haven't computed it, or happens to be 0.
+			nextSnapshotFileCount = computeNextSnapshotFileCount()
+		}
 	}
 
 	// Grab certain values before releasing vs.mu, in case createManifest() needs
@@ -418,7 +484,7 @@ func (vs *versionSet) logAndApply(
 		var err error
 		newVersion, zombies, err = bve.Apply(currentVersion, vs.cmp, vs.opts.Comparer.FormatKey, vs.opts.FlushSplitBytes, vs.opts.Experimental.ReadCompactionRate)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "MANIFEST apply failed")
 		}
 
 		if newManifestFileNum != 0 {
@@ -429,13 +495,13 @@ func (vs *versionSet) logAndApply(
 					FileNum: newManifestFileNum,
 					Err:     err,
 				})
-				return err
+				return errors.Wrap(err, "MANIFEST create failed")
 			}
 		}
 
 		w, err := vs.manifest.Next()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "MANIFEST next record write failed")
 		}
 		// NB: Any error from this point on is considered fatal as we don't now if
 		// the MANIFEST write occurred or not. Trying to determine that is
@@ -443,22 +509,18 @@ func (vs *versionSet) logAndApply(
 		// database is open. In particular, that mechanism generates a new MANIFEST
 		// and ensures it is synced.
 		if err := ve.Encode(w); err != nil {
-			vs.opts.Logger.Fatalf("MANIFEST write failed: %v", err)
-			return err
+			return errors.Wrap(err, "MANIFEST write failed")
 		}
 		if err := vs.manifest.Flush(); err != nil {
-			vs.opts.Logger.Fatalf("MANIFEST flush failed: %v", err)
-			return err
+			return errors.Wrap(err, "MANIFEST flush failed")
 		}
 		if err := vs.manifestFile.Sync(); err != nil {
-			vs.opts.Logger.Fatalf("MANIFEST sync failed: %v", err)
-			return err
+			return errors.Wrap(err, "MANIFEST sync failed")
 		}
 		if newManifestFileNum != 0 {
 			// NB: setCurrent is responsible for syncing the data directory.
 			if err := vs.setCurrent(newManifestFileNum); err != nil {
-				vs.opts.Logger.Fatalf("MANIFEST set current failed: %v", err)
-				return err
+				return errors.Wrap(err, "MANIFEST set current failed")
 			}
 			vs.opts.EventListener.ManifestCreated(ManifestCreateInfo{
 				JobID:   jobID,
@@ -468,9 +530,21 @@ func (vs *versionSet) logAndApply(
 		}
 		return nil
 	}(); err != nil {
+		// Any error encountered during any of the operations in the previous
+		// closure are considered fatal. Treating such errors as fatal is preferred
+		// to attempting to unwind various file and b-tree reference counts, and
+		// re-generating L0 sublevel metadata. This may change in the future, if
+		// certain manifest / WAL operations become retryable. For more context, see
+		// #1159 and #1792.
+		vs.opts.Logger.Fatalf("%s", err)
 		return err
 	}
 
+	if requireRotation {
+		// Successfully rotated.
+		vs.lastSnapshotFileCount = nextSnapshotFileCount
+		vs.editsSinceLastSnapshotFileCount = editCount
+	}
 	// Now that DB.mu is held again, initialize compacting file info in
 	// L0Sublevels.
 	inProgress := inProgressCompactions()
@@ -527,7 +601,7 @@ func (vs *versionSet) logAndApply(
 	return nil
 }
 
-func (vs *versionSet) incrementCompactions(kind compactionKind) {
+func (vs *versionSet) incrementCompactions(kind compactionKind, extraLevels []*compactionLevel) {
 	switch kind {
 	case compactionKindDefault:
 		vs.metrics.Compact.Count++
@@ -555,6 +629,9 @@ func (vs *versionSet) incrementCompactions(kind compactionKind) {
 	case compactionKindRewrite:
 		vs.metrics.Compact.Count++
 		vs.metrics.Compact.RewriteCount++
+	}
+	if len(extraLevels) > 0 {
+		vs.metrics.Compact.MultiLevelCount++
 	}
 }
 

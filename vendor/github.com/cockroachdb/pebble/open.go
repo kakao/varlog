@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"sort"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/pebble/internal/rate"
 	"github.com/cockroachdb/pebble/record"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -75,7 +75,6 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		merge:               opts.Merger.Merge,
 		split:               opts.Comparer.Split,
 		abbreviatedKey:      opts.Comparer.AbbreviatedKey,
-		rangeKeys:           opts.Experimental.RangeKeys,
 		largeBatchThreshold: (opts.MemTableSize - int(memTableEmptySize)) / 2,
 		logRecycler:         logRecycler{limit: opts.MemTableStopWritesThreshold + 1},
 		closed:              new(atomic.Value),
@@ -125,12 +124,6 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		apply:         d.commitApply,
 		write:         d.commitWrite,
 	})
-	d.compactionLimiter = rate.NewLimiter(
-		rate.Limit(d.opts.private.minCompactionRate),
-		d.opts.private.minCompactionRate)
-	d.flushLimiter = rate.NewLimiter(
-		rate.Limit(d.opts.private.minFlushRate),
-		d.opts.private.minFlushRate)
 	d.deletionLimiter = rate.NewLimiter(
 		rate.Limit(d.opts.Experimental.MinDeletionRate),
 		d.opts.Experimental.MinDeletionRate)
@@ -160,6 +153,24 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 			return nil, err
 		}
 	}
+
+	// Ensure we close resources if we error out early. If the database is
+	// successfully opened, the named return value `db` will be set to `d`.
+	defer func() {
+		if db != nil {
+			// The database was successfully opened.
+			return
+		}
+		if d.dataDir != nil {
+			d.dataDir.Close()
+		}
+		if d.walDirname != d.dirname && d.walDir != nil {
+			d.walDir.Close()
+		}
+		if d.mu.formatVers.marker != nil {
+			d.mu.formatVers.marker.Close()
+		}
+	}()
 
 	// Open the database and WAL directories first in order to check for their
 	// existence.
@@ -220,6 +231,15 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	// Find the currently active manifest, if there is one.
 	manifestMarker, manifestFileNum, exists, err := findCurrentManifest(d.mu.formatVers.vers, opts.FS, dirname)
 	setCurrent := setCurrentFunc(d.mu.formatVers.vers, manifestMarker, opts.FS, dirname, d.dataDir)
+	defer func() {
+		// Ensure we close the manifest marker if we error out for any reason.
+		// If the database is successfully opened, the *versionSet will take
+		// ownership over the manifest marker, ensuring it's closed when the DB
+		// is closed.
+		if db == nil {
+			manifestMarker.Close()
+		}
+	}()
 	if err != nil {
 		return nil, errors.Wrapf(err, "pebble: database %q", dirname)
 	} else if !exists && !d.opts.ReadOnly && !d.opts.ErrorIfNotExists {
@@ -395,14 +415,22 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		d.mu.mem.queue[len(d.mu.mem.queue)-1].logNum = newLogNum
 
 		logFile = vfs.NewSyncingFile(logFile, vfs.SyncingFileOptions{
+			NoSyncOnClose:   d.opts.NoSyncOnClose,
 			BytesPerSync:    d.opts.WALBytesPerSync,
 			PreallocateSize: d.walPreallocateSize(),
 		})
-		d.mu.log.LogWriter = record.NewLogWriter(logFile, newLogNum)
-		d.mu.log.LogWriter.SetMinSyncInterval(d.opts.WALMinSyncInterval)
+		d.mu.log.metrics.fsyncLatency = prometheus.NewHistogram(prometheus.HistogramOpts{
+			Buckets: FsyncLatencyBuckets,
+		})
+
+		logWriterConfig := record.LogWriterConfig{
+			WALMinSyncInterval: d.opts.WALMinSyncInterval,
+			WALFsyncLatency:    d.mu.log.metrics.fsyncLatency,
+		}
+		d.mu.log.LogWriter = record.NewLogWriter(logFile, newLogNum, logWriterConfig)
 		d.mu.versions.metrics.WAL.Files++
 	}
-	d.updateReadStateLocked(d.opts.DebugCheck, nil)
+	d.updateReadStateLocked(d.opts.DebugCheck)
 
 	if !d.opts.ReadOnly {
 		// Write the current options to disk.
@@ -517,7 +545,7 @@ func GetVersion(dir string, fs vfs.FS) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			data, err := ioutil.ReadAll(f)
+			data, err := io.ReadAll(f)
 			f.Close()
 
 			if err != nil {
@@ -679,14 +707,8 @@ func (d *DB) replayWAL(
 	// mem is nil here.
 	if !d.opts.ReadOnly {
 		c := newFlush(d.opts, d.mu.versions.currentVersion(),
-			1 /* base level */, toFlush, &d.atomic.bytesFlushed)
-		newVE, _, err := d.runCompaction(jobID, c, nilPacer)
-		if err != nil {
-			return 0, err
-		}
-		// TODO(jackson): Remove the below call to applyFlushedRangeKeys once
-		// flushes actually persist range keys to sstables.
-		err = d.applyFlushedRangeKeys(toFlush)
+			1 /* base level */, toFlush)
+		newVE, _, err := d.runCompaction(jobID, c)
 		if err != nil {
 			return 0, err
 		}
@@ -705,7 +727,7 @@ func checkOptions(opts *Options, path string) (strictWALTail bool, err error) {
 	}
 	defer f.Close()
 
-	data, err := ioutil.ReadAll(f)
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return false, err
 	}

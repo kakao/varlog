@@ -277,6 +277,52 @@ const (
 	KeyTypeRange
 )
 
+type keyTypeAnnotator struct{}
+
+var _ Annotator = keyTypeAnnotator{}
+
+func (k keyTypeAnnotator) Zero(dst interface{}) interface{} {
+	var val *KeyType
+	if dst != nil {
+		val = dst.(*KeyType)
+	} else {
+		val = new(KeyType)
+	}
+	*val = KeyTypePoint
+	return val
+}
+
+func (k keyTypeAnnotator) Accumulate(m *FileMetadata, dst interface{}) (interface{}, bool) {
+	v := dst.(*KeyType)
+	switch *v {
+	case KeyTypePoint:
+		if m.HasRangeKeys {
+			*v = KeyTypePointAndRange
+		}
+	case KeyTypePointAndRange:
+		// Do nothing.
+	default:
+		panic("unexpected key type")
+	}
+	return v, true
+}
+
+func (k keyTypeAnnotator) Merge(src interface{}, dst interface{}) interface{} {
+	v := dst.(*KeyType)
+	srcVal := src.(*KeyType)
+	switch *v {
+	case KeyTypePoint:
+		if *srcVal == KeyTypePointAndRange {
+			*v = KeyTypePointAndRange
+		}
+	case KeyTypePointAndRange:
+		// Do nothing.
+	default:
+		panic("unexpected key type")
+	}
+	return v
+}
+
 // LevelIterator iterates over a set of files' metadata. Its zero value is an
 // empty iterator.
 type LevelIterator struct {
@@ -435,6 +481,21 @@ func (i *LevelIterator) SeekGE(cmp Compare, userKey []byte) *FileMetadata {
 	meta := i.seek(func(m *FileMetadata) bool {
 		return cmp(m.Largest.UserKey, userKey) >= 0
 	})
+	for meta != nil {
+		switch i.filter {
+		case KeyTypePointAndRange:
+			return meta
+		case KeyTypePoint:
+			if meta.HasPointKeys && cmp(meta.LargestPointKey.UserKey, userKey) >= 0 {
+				return meta
+			}
+		case KeyTypeRange:
+			if meta.HasRangeKeys && cmp(meta.LargestRangeKey.UserKey, userKey) >= 0 {
+				return meta
+			}
+		}
+		meta = i.Next()
+	}
 	return i.filteredNextFile(meta)
 }
 
@@ -451,6 +512,21 @@ func (i *LevelIterator) SeekLT(cmp Compare, userKey []byte) *FileMetadata {
 		return cmp(m.Smallest.UserKey, userKey) >= 0
 	})
 	meta := i.Prev()
+	for meta != nil {
+		switch i.filter {
+		case KeyTypePointAndRange:
+			return meta
+		case KeyTypePoint:
+			if meta.HasPointKeys && cmp(meta.SmallestPointKey.UserKey, userKey) < 0 {
+				return meta
+			}
+		case KeyTypeRange:
+			if meta.HasRangeKeys && cmp(meta.SmallestRangeKey.UserKey, userKey) < 0 {
+				return meta
+			}
+		}
+		meta = i.Prev()
+	}
 	return i.filteredPrevFile(meta)
 }
 

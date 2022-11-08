@@ -20,17 +20,17 @@ import (
 type FragmentIterator interface {
 	// SeekGE moves the iterator to the first span whose start key is greater
 	// than or equal to the given key.
-	SeekGE(key []byte) Span
+	SeekGE(key []byte) *Span
 
 	// SeekLT moves the iterator to the last span whose start key is less than
 	// the given key.
-	SeekLT(key []byte) Span
+	SeekLT(key []byte) *Span
 
 	// First moves the iterator to the first span.
-	First() Span
+	First() *Span
 
 	// Last moves the iterator to the last span.
-	Last() Span
+	Last() *Span
 
 	// Next moves the iterator to the next span.
 	//
@@ -38,7 +38,7 @@ type FragmentIterator interface {
 	// key/value pair due to either a prior call to SeekLT or Prev which
 	// returned an invalid span. It is not allowed to call Next when the
 	// previous call to SeekGE, SeekPrefixGE or Next returned an invalid span.
-	Next() Span
+	Next() *Span
 
 	// Prev moves the iterator to the previous span.
 	//
@@ -46,7 +46,7 @@ type FragmentIterator interface {
 	// key/value pair due to either a prior call to SeekGE or Next which
 	// returned an invalid span. It is not allowed to call Prev when the
 	// previous call to SeekLT or Prev returned an invalid span.
-	Prev() Span
+	Prev() *Span
 
 	// Error returns any accumulated error.
 	Error() error
@@ -58,15 +58,15 @@ type FragmentIterator interface {
 	Close() error
 }
 
-// TableNewRangeKeyIter creates a new range key iterator for the given file.
-type TableNewRangeKeyIter func(file *manifest.FileMetadata, iterOptions *RangeIterOptions) (FragmentIterator, error)
+// TableNewSpanIter creates a new iterator for spans for the given file.
+type TableNewSpanIter func(file *manifest.FileMetadata, iterOptions *SpanIterOptions) (FragmentIterator, error)
 
-// RangeIterOptions is a subset of IterOptions that are necessary to instantiate
-// per-sstable range key iterators.
-type RangeIterOptions struct {
-	// Filters can be used to avoid scanning tables and blocks in tables
+// SpanIterOptions is a subset of IterOptions that are necessary to instantiate
+// per-sstable span iterators.
+type SpanIterOptions struct {
+	// RangeKeyFilters can be used to avoid scanning tables and blocks in tables
 	// when iterating over range keys.
-	Filters []base.BlockPropertyFilter
+	RangeKeyFilters []base.BlockPropertyFilter
 }
 
 // Iter is an iterator over a set of fragmented spans.
@@ -81,7 +81,19 @@ var _ FragmentIterator = (*Iter)(nil)
 
 // NewIter returns a new iterator over a set of fragmented spans.
 func NewIter(cmp base.Compare, spans []Span) *Iter {
-	return &Iter{
+	i := &Iter{}
+	i.Init(cmp, spans)
+	return i
+}
+
+// Count returns the number of spans contained by Iter.
+func (i *Iter) Count() int {
+	return len(i.spans)
+}
+
+// Init initializes an Iter with the provided spans.
+func (i *Iter) Init(cmp base.Compare, spans []Span) {
+	*i = Iter{
 		cmp:   cmp,
 		spans: spans,
 		index: -1,
@@ -89,7 +101,7 @@ func NewIter(cmp base.Compare, spans []Span) *Iter {
 }
 
 // SeekGE implements FragmentIterator.SeekGE.
-func (i *Iter) SeekGE(key []byte) Span {
+func (i *Iter) SeekGE(key []byte) *Span {
 	// NB: manually inlined sort.Search is ~5% faster.
 	//
 	// Define f(-1) == false and f(n) == true.
@@ -108,13 +120,13 @@ func (i *Iter) SeekGE(key []byte) Span {
 	// i.index == upper, f(i.index-1) == false, and f(upper) (= f(i.index)) ==
 	// true => answer is i.index.
 	if i.index >= len(i.spans) {
-		return Span{}
+		return nil
 	}
-	return i.spans[i.index]
+	return &i.spans[i.index]
 }
 
 // SeekLT implements FragmentIterator.SeekLT.
-func (i *Iter) SeekLT(key []byte) Span {
+func (i *Iter) SeekLT(key []byte) *Span {
 	// NB: manually inlined sort.Search is ~5% faster.
 	//
 	// Define f(-1) == false and f(n) == true.
@@ -137,51 +149,51 @@ func (i *Iter) SeekLT(key []byte) Span {
 	// the largest whose key is < the key sought.
 	i.index--
 	if i.index < 0 {
-		return Span{}
+		return nil
 	}
-	return i.spans[i.index]
+	return &i.spans[i.index]
 }
 
 // First implements FragmentIterator.First.
-func (i *Iter) First() Span {
+func (i *Iter) First() *Span {
 	if len(i.spans) == 0 {
-		return Span{}
+		return nil
 	}
 	i.index = 0
-	return i.spans[i.index]
+	return &i.spans[i.index]
 }
 
 // Last implements FragmentIterator.Last.
-func (i *Iter) Last() Span {
+func (i *Iter) Last() *Span {
 	if len(i.spans) == 0 {
-		return Span{}
+		return nil
 	}
 	i.index = len(i.spans) - 1
-	return i.spans[i.index]
+	return &i.spans[i.index]
 }
 
 // Next implements FragmentIterator.Next.
-func (i *Iter) Next() Span {
+func (i *Iter) Next() *Span {
 	if i.index >= len(i.spans) {
-		return Span{}
+		return nil
 	}
 	i.index++
 	if i.index >= len(i.spans) {
-		return Span{}
+		return nil
 	}
-	return i.spans[i.index]
+	return &i.spans[i.index]
 }
 
 // Prev implements FragmentIterator.Prev.
-func (i *Iter) Prev() Span {
+func (i *Iter) Prev() *Span {
 	if i.index < 0 {
-		return Span{}
+		return nil
 	}
 	i.index--
 	if i.index < 0 {
-		return Span{}
+		return nil
 	}
-	return i.spans[i.index]
+	return &i.spans[i.index]
 }
 
 // Error implements FragmentIterator.Error.

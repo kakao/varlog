@@ -12,7 +12,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/internal/bytealloc"
+	"github.com/cockroachdb/pebble/internal/invariants"
 	"github.com/cockroachdb/pebble/internal/keyspan"
+	"github.com/cockroachdb/pebble/internal/rangekey"
 )
 
 // compactionIter provides a forward-only iterator that encapsulates the logic
@@ -155,7 +158,11 @@ type compactionIter struct {
 	// Additionally, it is the internal state when the code is moving to the
 	// next key so it can determine whether the user key has changed from
 	// the previous key.
-	key         InternalKey
+	key InternalKey
+	// keyTrailer is updated when `i.key` is updated and holds the key's
+	// original trailer (eg, before any sequence-number zeroing or changes to
+	// key kind).
+	keyTrailer  uint64
 	value       []byte
 	valueCloser io.Closer
 	// Temporary buffer used for storing the previous user key in order to
@@ -197,8 +204,13 @@ type compactionIter struct {
 	// Reference to the range deletion tombstone fragmenter (e.g.,
 	// `compaction.rangeDelFrag`).
 	rangeDelFrag *keyspan.Fragmenter
+	rangeKeyFrag *keyspan.Fragmenter
 	// The fragmented tombstones.
-	tombstones          []keyspan.Span
+	tombstones []keyspan.Span
+	// The fragmented range keys.
+	rangeKeys []keyspan.Span
+	// Byte allocator for the tombstone keys.
+	alloc               bytealloc.A
 	allowZeroSeqNum     bool
 	elideTombstone      func(key []byte) bool
 	elideRangeTombstone func(start, end []byte) bool
@@ -215,6 +227,7 @@ func newCompactionIter(
 	iter internalIterator,
 	snapshots []uint64,
 	rangeDelFrag *keyspan.Fragmenter,
+	rangeKeyFrag *keyspan.Fragmenter,
 	allowZeroSeqNum bool,
 	elideTombstone func(key []byte) bool,
 	elideRangeTombstone func(start, end []byte) bool,
@@ -226,6 +239,7 @@ func newCompactionIter(
 		iter:                iter,
 		snapshots:           snapshots,
 		rangeDelFrag:        rangeDelFrag,
+		rangeKeyFrag:        rangeKeyFrag,
 		allowZeroSeqNum:     allowZeroSeqNum,
 		elideTombstone:      elideTombstone,
 		elideRangeTombstone: elideRangeTombstone,
@@ -234,6 +248,9 @@ func newCompactionIter(
 	i.rangeDelFrag.Cmp = cmp
 	i.rangeDelFrag.Format = formatKey
 	i.rangeDelFrag.Emit = i.emitRangeDelChunk
+	i.rangeKeyFrag.Cmp = cmp
+	i.rangeKeyFrag.Format = formatKey
+	i.rangeKeyFrag.Emit = i.emitRangeKeyChunk
 	return i
 }
 
@@ -241,7 +258,12 @@ func (i *compactionIter) First() (*InternalKey, []byte) {
 	if i.err != nil {
 		return nil, nil
 	}
-	i.iterKey, i.iterValue = i.iter.First()
+	var iterValue LazyValue
+	i.iterKey, iterValue = i.iter.First()
+	i.iterValue, _, i.err = iterValue.Value(nil)
+	if i.err != nil {
+		return nil, nil
+	}
 	if i.iterKey != nil {
 		i.curSnapshotIdx, i.curSnapshotSeqNum = snapshotIndex(i.iterKey.SeqNum(), i.snapshots)
 	}
@@ -279,13 +301,13 @@ func (i *compactionIter) Next() (*InternalKey, []byte) {
 	i.pos = iterPosCurForward
 	i.valid = false
 	for i.iterKey != nil {
-		if i.iterKey.Kind() == InternalKeyKindRangeDelete {
-			// Return the range tombstone so the compaction can use it for
-			// file truncation and add it to the fragmenter. We do not set `skip`
-			// to true before returning as there may be a forthcoming point key
-			// with the same user key and sequence number. Such a point key must be
-			// visible (i.e., not skipped over) since we promise point keys are
-			// not deleted by range tombstones at the same sequence number.
+		if i.iterKey.Kind() == InternalKeyKindRangeDelete || rangekey.IsRangeKey(i.iterKey.Kind()) {
+			// Return the span so the compaction can use it for file truncation and add
+			// it to the relevant fragmenter. We do not set `skip` to true before
+			// returning as there may be a forthcoming point key with the same user key
+			// and sequence number. Such a point key must be visible (i.e., not skipped
+			// over) since we promise point keys are not deleted by range tombstones at
+			// the same sequence number.
 			//
 			// Although, note that `skip` may already be true before reaching here
 			// due to an earlier key in the stripe. Then it is fine to leave it set
@@ -453,10 +475,11 @@ func (i *compactionIter) skipInStripe() {
 }
 
 func (i *compactionIter) iterNext() bool {
-	i.iterKey, i.iterValue = i.iter.Next()
-	// We should never see an exclusive sentinel in the compaction input.
-	if i.iterKey != nil && i.iterKey.IsExclusiveSentinel() {
-		panic(fmt.Sprintf("pebble: unexpected exclusive sentinel in compaction input, trailer = %x", i.iterKey.Trailer))
+	var iterValue LazyValue
+	i.iterKey, iterValue = i.iter.Next()
+	i.iterValue, _, i.err = iterValue.Value(nil)
+	if i.err != nil {
+		i.iterKey = nil
 	}
 	return i.iterKey != nil
 }
@@ -484,7 +507,26 @@ func (i *compactionIter) nextInStripe() stripeChangeType {
 		return newStripe
 	}
 	key := i.iterKey
-	if !i.equal(i.key.UserKey, key.UserKey) {
+
+	// NB: The below conditional is an optimization to avoid a user key
+	// comparison in many cases. Internal keys with the same user key are
+	// ordered in (strictly) descending order by trailer. If the new key has a
+	// greater or equal trailer, or the previous key had a zero sequence number,
+	// the new key must have a new user key.
+	//
+	// A couple things make these cases common:
+	// - Sequence-number zeroing ensures ~all of the keys in L6 have a zero
+	//   sequence number.
+	// - Ingested sstables' keys all adopt the same sequence number.
+	if i.keyTrailer <= base.InternalKeyZeroSeqnumMaxTrailer || key.Trailer >= i.keyTrailer {
+		if invariants.Enabled && i.equal(i.key.UserKey, key.UserKey) {
+			prevKey := i.key
+			prevKey.Trailer = i.keyTrailer
+			panic(fmt.Sprintf("pebble: invariant violation: %s and %s out of order", key, prevKey))
+		}
+		i.curSnapshotIdx, i.curSnapshotSeqNum = snapshotIndex(key.SeqNum(), i.snapshots)
+		return newStripe
+	} else if !i.equal(i.key.UserKey, key.UserKey) {
 		i.curSnapshotIdx, i.curSnapshotSeqNum = snapshotIndex(key.SeqNum(), i.snapshots)
 		return newStripe
 	}
@@ -499,6 +541,10 @@ func (i *compactionIter) nextInStripe() stripeChangeType {
 			return sameStripeNonSkippable
 		}
 		return newStripe
+	case InternalKeyKindRangeKeySet, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeyDelete:
+		// Range keys are interleaved at the max sequence number for a given user
+		// key, so we should not see any more range keys in this stripe.
+		panic("unreachable")
 	case InternalKeyKindInvalid:
 		if i.curSnapshotIdx == origSnapshotIdx {
 			return sameStripeNonSkippable
@@ -723,6 +769,12 @@ func (i *compactionIter) saveKey() {
 	i.keyBuf = append(i.keyBuf[:0], i.iterKey.UserKey...)
 	i.key.UserKey = i.keyBuf
 	i.key.Trailer = i.iterKey.Trailer
+	i.keyTrailer = i.iterKey.Trailer
+}
+
+func (i *compactionIter) cloneKey(key []byte) []byte {
+	i.alloc, key = i.alloc.Copy(key)
+	return key
 }
 
 func (i *compactionIter) Key() InternalKey {
@@ -758,9 +810,6 @@ func (i *compactionIter) Close() error {
 
 // Tombstones returns a list of pending range tombstones in the fragmenter
 // up to the specified key, or all pending range tombstones if key = nil.
-// exclude specifies if the specified key is exclusive or inclusive.
-// When exclude = true, all returned range tombstones are truncated to the
-// specified key.
 func (i *compactionIter) Tombstones(key []byte) []keyspan.Span {
 	if key == nil {
 		i.rangeDelFrag.Finish()
@@ -773,6 +822,22 @@ func (i *compactionIter) Tombstones(key []byte) []keyspan.Span {
 	tombstones := i.tombstones
 	i.tombstones = nil
 	return tombstones
+}
+
+// RangeKeys returns a list of pending fragmented range keys up to the specified
+// key, or all pending range keys if key = nil.
+func (i *compactionIter) RangeKeys(key []byte) []keyspan.Span {
+	if key == nil {
+		i.rangeKeyFrag.Finish()
+	} else {
+		// The specified end key is exclusive; no versions of the specified
+		// user key (including range tombstones covering that key) should
+		// be flushed yet.
+		i.rangeKeyFrag.TruncateAndFlushTo(key)
+	}
+	rangeKeys := i.rangeKeys
+	i.rangeKeys = nil
+	return rangeKeys
 }
 
 func (i *compactionIter) emitRangeDelChunk(fragmented keyspan.Span) {
@@ -804,6 +869,14 @@ func (i *compactionIter) emitRangeDelChunk(fragmented keyspan.Span) {
 			End:   fragmented.End,
 			Keys:  keys,
 		})
+	}
+}
+
+func (i *compactionIter) emitRangeKeyChunk(fragmented keyspan.Span) {
+	// Elision of snapshot stripes happens in rangeKeyCompactionTransform, so no need to
+	// do that here.
+	if len(fragmented.Keys) > 0 {
+		i.rangeKeys = append(i.rangeKeys, fragmented)
 	}
 }
 
