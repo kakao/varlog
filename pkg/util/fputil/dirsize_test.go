@@ -23,7 +23,6 @@ func TestDirectorySize(t *testing.T) {
 }
 
 func TestDiskSize(t *testing.T) {
-	all, used, err := DiskSize("/")
+	_, _, err := DiskSize("/")
 	assert.NoError(t, err)
-	t.Logf("all=%d, free=%d, used=%d", all, all-used, used)
 }

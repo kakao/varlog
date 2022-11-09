@@ -259,7 +259,6 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 					assert.NoError(t, err)
 					sealedGLSN := rsp.GetSealedGLSN()
 					assert.GreaterOrEqual(t, sealedGLSN, maxGLSN)
-					t.Logf("SealedGLSN=%d", sealedGLSN)
 
 					primarySNID := env.PrimaryStorageNodeIDOf(t, lsID)
 					snmd, err := env.SNClientOf(t, primarySNID).GetMetadata(context.Background())

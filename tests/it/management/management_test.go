@@ -827,17 +827,13 @@ func TestAddTopic(t *testing.T) {
 				}
 				defer cl.Close()
 
-				var glsn types.GLSN
 				for gctx.Err() == nil {
 					res := cl.Append(context.Background(), tid, [][]byte{[]byte("foo")})
 					if res.Err != nil {
 						err = fmt.Errorf("topic=%v,err=%v", tid, res.Err)
 						break
 					}
-					glsn = res.Metadata[0].GLSN
 				}
-
-				t.Logf("topic=%v, glsn:%v\n", tid, glsn)
 				return
 			})
 		}
@@ -863,17 +859,13 @@ func TestAddTopic(t *testing.T) {
 				}
 				defer cl.Close()
 
-				var glsn types.GLSN
 				for gctx.Err() == nil {
 					res := cl.Append(context.Background(), addTopicID, [][]byte{[]byte("foo")})
 					if res.Err != nil {
 						err = fmt.Errorf("topic=%v,err=%v", addTopicID, res.Err)
 						break
 					}
-					glsn = res.Metadata[0].GLSN
 				}
-
-				t.Logf("topic=%v, glsn:%v\n", addTopicID, glsn)
 				return
 			})
 

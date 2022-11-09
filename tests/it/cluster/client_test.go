@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"sync"
 	"testing"
 	"time"
@@ -320,7 +319,6 @@ func TestClientSubscribe(t *testing.T) {
 		}
 		res := client.Append(context.TODO(), topicID, batch)
 		require.NoError(t, res.Err)
-		log.Printf("append: %+v", res)
 		require.Len(t, res.Metadata, batchSize)
 		require.Equal(t, issuedGLSN, res.Metadata[len(res.Metadata)-1].GLSN)
 		require.Equal(t, issuedGLSN-types.GLSN(batchSize)+1, res.Metadata[0].GLSN)

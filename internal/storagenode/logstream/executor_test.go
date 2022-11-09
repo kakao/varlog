@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/batchlet"
 	"github.com/kakao/varlog/internal/storage"
@@ -1312,7 +1311,6 @@ func TestExecutor_Recover(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer func() {
-				// t.Logf("stopping clients %d", i)
 				wg.Done()
 			}()
 			for {
@@ -1336,7 +1334,6 @@ func TestExecutor_Recover(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer func() {
-			// t.Logf("stopping mr simulator")
 			wg.Done()
 		}()
 
@@ -2489,16 +2486,9 @@ func TestExecutorRestore(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			logger, err := zap.NewDevelopment()
-			assert.NoError(t, err)
-			defer func() {
-				_ = logger.Sync()
-			}()
-
 			stg := storage.TestNewStorage(t, storage.WithPath(tc.golden), storage.ReadOnly())
 			lse, err := NewExecutor(
 				WithStorage(stg),
-				WithLogger(logger),
 			)
 			require.NoError(t, err)
 			defer func() {
@@ -2648,12 +2638,6 @@ func TestExecutorResotre_Invalid(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			logger, err := zap.NewDevelopment()
-			assert.NoError(t, err)
-			defer func() {
-				_ = logger.Sync()
-			}()
-
 			stgOpts := []storage.Option{storage.WithPath(tc.golden)}
 
 			if *update {
@@ -2669,7 +2653,6 @@ func TestExecutorResotre_Invalid(t *testing.T) {
 			stg := storage.TestNewStorage(t, stgOpts...)
 			lse, err := NewExecutor(
 				WithStorage(stg),
-				WithLogger(logger),
 			)
 			require.NoError(t, err)
 			defer func() {

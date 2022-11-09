@@ -54,7 +54,6 @@ func TestMRConnectorWithoutRemoveMRPeer(t *testing.T) {
 	for i := 1; i < env.NumberOfMetadataRepositories(); i++ {
 		require.NoError(t, env.GetMRByIndex(t, i).Close())
 		env.CloseMRClientAt(t, i)
-		t.Logf("close MR[%d]", i)
 	}
 
 	// NOTE: The number of active MRs should be three because there were no RemoveMRPeer RPCs.
@@ -85,7 +84,6 @@ func TestMRConnectorWithoutRemoveMRPeer(t *testing.T) {
 		}
 		return true
 	}, 5*time.Second, 100*time.Millisecond)
-	t.Logf("restart MR[0]")
 
 	// Close MR: MR[0]
 	require.NoError(t, env.GetMRByIndex(t, 0).Close())

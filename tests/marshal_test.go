@@ -1,13 +1,10 @@
 package tests
 
 import (
-	"log"
 	"testing"
-	"time"
-
-	"go.uber.org/goleak"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/mrpb"
@@ -34,12 +31,8 @@ func TestSnapshotMarshal(t *testing.T) {
 		smr.LogStream.CommitHistory = append(smr.LogStream.CommitHistory, gls)
 	}
 
-	st := time.Now()
-
 	_, err := smr.Marshal()
 	require.NoError(t, err)
-
-	log.Println(time.Since(st))
 }
 
 func TestGlobalLogStreamMarshal(t *testing.T) {
@@ -54,12 +47,9 @@ func TestGlobalLogStreamMarshal(t *testing.T) {
 
 		gls.CommitResults = append(gls.CommitResults, lls)
 	}
-	st := time.Now()
 
 	_, err := gls.Marshal()
 	require.NoError(t, err)
-
-	log.Println(time.Since(st))
 }
 
 func TestMain(m *testing.M) {
