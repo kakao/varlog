@@ -63,6 +63,20 @@ func (mr *MockClientMockRecorder) Commit(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockClient)(nil).Commit), arg0)
 }
 
+// CommitBatch mocks base method.
+func (m *MockClient) CommitBatch(arg0 snpb.CommitBatchRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitBatch", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CommitBatch indicates an expected call of CommitBatch.
+func (mr *MockClientMockRecorder) CommitBatch(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitBatch", reflect.TypeOf((*MockClient)(nil).CommitBatch), arg0)
+}
+
 // GetReport mocks base method.
 func (m *MockClient) GetReport() (*snpb.GetReportResponse, error) {
 	m.ctrl.T.Helper()

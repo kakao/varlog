@@ -34,10 +34,6 @@ func (rs *replicationServer) Replicate(stream snpb.Replicator_ReplicateServer) e
 	return err
 }
 
-func (rs *replicationServer) ReplicateDeprecated(stream snpb.Replicator_ReplicateDeprecatedServer) error {
-	panic("not implemented")
-}
-
 func (rs *replicationServer) SyncInit(ctx context.Context, req *snpb.SyncInitRequest) (*snpb.SyncInitResponse, error) {
 	lse, loaded := rs.sn.executors.Load(req.Destination.TopicID, req.Destination.LogStreamID)
 	if !loaded {
