@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/urfave/cli/v2"
 
@@ -29,15 +28,15 @@ func newApp() *cli.App {
 	app := &cli.App{
 		Name: "benchmark",
 		Flags: []cli.Flag{
-			flagClusterID.StringFlag(false, types.ClusterID(1).String()),
-			flagTopicID.StringFlag(false, types.TopicID(1).String()),
-			flagLogStreamID.StringFlag(false, types.LogStreamID(1).String()),
+			flagClusterID.StringFlag(false, benchmark.DefaultClusterID.String()),
+			flagTopicID.StringFlag(true, ""),
+			flagLogStreamID.StringFlag(true, ""),
 			flagMRAddrs.StringSliceFlag(true, nil),
-			flagMsgSize.IntFlag(false, 1024),
-			flagBatchSize.IntFlag(false, 128),
-			flagConcurrency.IntFlag(false, 10),
-			flagDuration.DurationFlag(false, 10*time.Minute),
-			flagReportInterval.DurationFlag(false, 3*time.Second),
+			flagMsgSize.IntFlag(true, 0),
+			flagBatchSize.IntFlag(false, benchmark.DefaultBatchSize),
+			flagConcurrency.IntFlag(false, benchmark.DefaultConcurrency),
+			flagDuration.DurationFlag(false, benchmark.DefaultDuration),
+			flagReportInterval.DurationFlag(false, benchmark.DefaultReportInterval),
 		},
 		Action: start,
 	}
@@ -95,15 +94,15 @@ func start(c *cli.Context) error {
 
 	reportInterval := c.Duration(flagReportInterval.Name)
 
-	return benchmark.Append(benchmark.Config{
-		MRAddrs:        c.StringSlice(flagMRAddrs.Name),
-		ClusterID:      clusterID,
-		TopicID:        topicID,
-		LogStreamID:    logStreamID,
-		MessageSize:    msgSize,
-		BatchSize:      batchSize,
-		Concurrency:    concurrency,
-		Duration:       duration,
-		ReportInterval: reportInterval,
-	})
+	return benchmark.Append(
+		benchmark.WithClusterID(clusterID),
+		benchmark.WithTopicID(topicID),
+		benchmark.WithLogStreamID(logStreamID),
+		benchmark.WithMetadataRepository(c.StringSlice(flagMRAddrs.Name)),
+		benchmark.WithMessageSize(msgSize),
+		benchmark.WithBatchSize(batchSize),
+		benchmark.WithConcurrency(concurrency),
+		benchmark.WithDuration(duration),
+		benchmark.WithReportInterval(reportInterval),
+	)
 }
