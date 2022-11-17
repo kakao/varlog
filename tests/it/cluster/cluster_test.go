@@ -167,6 +167,8 @@ func TestReadSealedLogStream(t *testing.T) {
 }
 
 func TestTrimGLS(t *testing.T) {
+	t.Skip()
+
 	opts := []it.Option{
 		it.WithSnapCount(10),
 		it.WithNumberOfStorageNodes(1),
@@ -209,6 +211,8 @@ func TestTrimGLS(t *testing.T) {
 }
 
 func TestTrimGLSWithSealedLS(t *testing.T) {
+	t.Skip()
+
 	Convey("Given cluster", t, func(ctx C) {
 		opts := []it.Option{
 			it.WithSnapCount(10),

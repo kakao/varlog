@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -426,7 +425,7 @@ func TestMRApplyReport(t *testing.T) {
 		notExistSnID := types.MinStorageNodeID + types.StorageNodeID(rep)
 
 		report := makeUncommitReport(snIDs[0], types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 2)
-		mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+		mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 		for _, snID := range snIDs {
 			_, ok := mr.storage.LookupUncommitReport(lsID, snID)
@@ -448,7 +447,7 @@ func TestMRApplyReport(t *testing.T) {
 
 			Convey("Report should not apply if snID is not exist in UncommitReport", func(ctx C) {
 				report := makeUncommitReport(notExistSnID, types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 2)
-				mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+				mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 				_, ok := mr.storage.LookupUncommitReport(lsID, notExistSnID)
 				So(ok, ShouldBeFalse)
@@ -457,7 +456,7 @@ func TestMRApplyReport(t *testing.T) {
 			Convey("Report should apply if snID is exist in UncommitReport", func(ctx C) {
 				snID := snIDs[0]
 				report := makeUncommitReport(snID, types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 2)
-				mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+				mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 				r, ok := mr.storage.LookupUncommitReport(lsID, snID)
 				So(ok, ShouldBeTrue)
@@ -465,7 +464,7 @@ func TestMRApplyReport(t *testing.T) {
 
 				Convey("Report which have bigger END LLSN Should be applied", func(ctx C) {
 					report := makeUncommitReport(snID, types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 3)
-					mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+					mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 					r, ok := mr.storage.LookupUncommitReport(lsID, snID)
 					So(ok, ShouldBeTrue)
@@ -474,7 +473,7 @@ func TestMRApplyReport(t *testing.T) {
 
 				Convey("Report which have smaller END LLSN Should Not be applied", func(ctx C) {
 					report := makeUncommitReport(snID, types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 1)
-					mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+					mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 					r, ok := mr.storage.LookupUncommitReport(lsID, snID)
 					So(ok, ShouldBeTrue)
@@ -523,7 +522,7 @@ func TestMRApplyInvalidReport(t *testing.T) {
 
 		for _, snID := range snIDs {
 			report := makeUncommitReport(snID, types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 1)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			r, ok := mr.storage.LookupUncommitReport(lsID, snID)
 			So(ok, ShouldBeTrue)
@@ -532,7 +531,7 @@ func TestMRApplyInvalidReport(t *testing.T) {
 
 		Convey("When Some LogStream reports invalid report", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.InvalidVersion, types.InvalidGLSN, lsID, types.InvalidLLSN, 2)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			r, ok := mr.storage.LookupUncommitReport(lsID, snIDs[0])
 			So(ok, ShouldBeTrue)
@@ -572,7 +571,7 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream which all reports have not arrived cannot be commit", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.InvalidVersion, types.InvalidGLSN, lsID, types.MinLLSN, 2)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			replicas := mr.storage.LookupUncommitReports(lsID)
 			_, minVer, _, nrCommit := mr.calculateCommit(replicas)
@@ -582,10 +581,10 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream which all reports are disjoint cannot be commit", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.Version(10), types.GLSN(10), lsID, types.MinLLSN+types.LLSN(5), 1)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			report = makeUncommitReport(snIDs[1], types.Version(7), types.GLSN(7), lsID, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			replicas := mr.storage.LookupUncommitReports(lsID)
 			knownVer, minVer, _, nrCommit := mr.calculateCommit(replicas)
@@ -596,10 +595,10 @@ func TestMRCalculateCommit(t *testing.T) {
 
 		Convey("LogStream Should be commit where replication is completed", func(ctx C) {
 			report := makeUncommitReport(snIDs[0], types.Version(10), types.GLSN(10), lsID, types.MinLLSN+types.LLSN(3), 3)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			report = makeUncommitReport(snIDs[1], types.Version(9), types.GLSN(9), lsID, types.MinLLSN+types.LLSN(3), 2)
-			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			mr.applyReport(report) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
 			replicas := mr.storage.LookupUncommitReports(lsID)
 			knownVer, minVer, _, nrCommit := mr.calculateCommit(replicas)
@@ -861,6 +860,7 @@ func TestMRRequestMap(t *testing.T) {
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
+		So(clus.Start(), ShouldBeNil)
 		mr := clus.nodes[0]
 
 		sn := &varlogpb.StorageNodeDescriptor{
@@ -871,26 +871,10 @@ func TestMRRequestMap(t *testing.T) {
 
 		requestNum := atomic.LoadUint64(&mr.requestNum)
 
-		var wg sync.WaitGroup
-		var st sync.WaitGroup
-
-		st.Add(1)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(1))
-			defer cancel()
-			st.Done()
-			mr.RegisterStorageNode(rctx, sn) //nolint:errcheck,revive // TODO:: Handle an error returned.
-		}()
-
-		st.Wait()
-		So(testutil.CompareWaitN(1, func() bool {
-			_, ok := mr.requestMap.Load(requestNum + 1)
-			return ok
-		}), ShouldBeTrue)
-
-		wg.Wait()
+		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(5))
+		defer cancel()
+		So(mr.RegisterStorageNode(rctx, sn), ShouldBeNil)
+		So(atomic.LoadUint64(&mr.requestNum), ShouldBeGreaterThan, requestNum)
 	})
 
 	Convey("requestMap should ignore request that have different nodeIndex", t, func(ctx C) {
@@ -900,41 +884,22 @@ func TestMRRequestMap(t *testing.T) {
 		})
 		mr := clus.nodes[0]
 
-		sn := &varlogpb.StorageNodeDescriptor{
-			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: types.StorageNodeID(0),
-			},
+		requestNum := atomic.LoadUint64(&mr.requestNum)
+		c := make(chan error, 1)
+		defer close(c)
+
+		mr.requestMap.Store(requestNum+1, c)
+
+		mr.sendAck(2, requestNum+1, nil)
+
+		acked := false
+		select {
+		case <-c:
+			acked = true
+		default:
 		}
 
-		var st sync.WaitGroup
-		var wg sync.WaitGroup
-		st.Add(1)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			st.Done()
-
-			testutil.CompareWaitN(50, func() bool {
-				_, ok := mr.requestMap.Load(uint64(1))
-				return ok
-			})
-
-			dummy := &committedEntry{
-				entry: &mrpb.RaftEntry{
-					NodeIndex:    2,
-					RequestIndex: uint64(1),
-				},
-			}
-			mr.commitC <- dummy
-		}()
-
-		st.Wait()
-		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(2))
-		defer cancel()
-		err := mr.RegisterStorageNode(rctx, sn)
-
-		wg.Wait()
-		So(err, ShouldNotBeNil)
+		So(acked, ShouldBeFalse)
 	})
 
 	Convey("requestMap should delete request when context timeout", t, func(ctx C) {
@@ -1068,8 +1033,8 @@ func TestMRGetLastCommitted(t *testing.T) {
 				return hwm == types.GLSN(5)
 			}), ShouldBeTrue)
 
-			latest := mr.storage.getLastCommitResultsNoLock()
-			base := mr.storage.lookupNextCommitResultsNoLock(preVersion)
+			latest := mr.storage.GetLastCommitResults()
+			base, _ := mr.storage.LookupNextCommitResults(preVersion)
 
 			So(mr.numCommitSince(topicID, lsIds[0], base, latest, -1), ShouldEqual, 2)
 			So(mr.numCommitSince(topicID, lsIds[1], base, latest, -1), ShouldEqual, 3)
@@ -1093,8 +1058,8 @@ func TestMRGetLastCommitted(t *testing.T) {
 						return hwm == types.GLSN(6+i)
 					}), ShouldBeTrue)
 
-					latest := mr.storage.getLastCommitResultsNoLock()
-					base := mr.storage.lookupNextCommitResultsNoLock(preVersion)
+					latest := mr.storage.GetLastCommitResults()
+					base, _ := mr.storage.LookupNextCommitResults(preVersion)
 
 					So(mr.numCommitSince(topicID, lsIds[0], base, latest, -1), ShouldEqual, 0)
 					So(mr.numCommitSince(topicID, lsIds[1], base, latest, -1), ShouldEqual, 1)
@@ -1135,8 +1100,8 @@ func TestMRGetLastCommitted(t *testing.T) {
 						return hwm == types.GLSN(6+i)
 					}), ShouldBeTrue)
 
-					latest := mr.storage.getLastCommitResultsNoLock()
-					base := mr.storage.lookupNextCommitResultsNoLock(preVersion)
+					latest := mr.storage.GetLastCommitResults()
+					base, _ := mr.storage.LookupNextCommitResults(preVersion)
 
 					So(mr.numCommitSince(topicID, lsIds[0], base, latest, -1), ShouldEqual, 1)
 					So(mr.numCommitSince(topicID, lsIds[1], base, latest, -1), ShouldEqual, 0)
@@ -1359,8 +1324,8 @@ func TestMRUnseal(t *testing.T) {
 					return hwm == types.GLSN(5+i)
 				}), ShouldBeTrue)
 
-				latest := mr.storage.getLastCommitResultsNoLock()
-				base := mr.storage.lookupNextCommitResultsNoLock(preVersion)
+				latest := mr.storage.GetLastCommitResults()
+				base, _ := mr.storage.LookupNextCommitResults(preVersion)
 
 				So(mr.numCommitSince(topicID, lsIDs[1], base, latest, -1), ShouldEqual, 1)
 			}
@@ -1843,6 +1808,7 @@ func TestMRFailoverRestart(t *testing.T) {
 }
 
 func TestMRLoadSnapshot(t *testing.T) {
+	t.Skip()
 	Convey("Given MR cluster which have snapshot", t, func(ctx C) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
@@ -2057,6 +2023,7 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 }
 
 func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
+	t.Skip()
 	Convey("Given MR cluster with 3 peers", t, func(ctx C) {
 		nrRep := 1
 		nrNode := 3
@@ -2509,8 +2476,8 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 					return hwm == types.GLSN(4)
 				}), ShouldBeTrue)
 
-				latest := mr.storage.getLastCommitResultsNoLock()
-				base := mr.storage.lookupNextCommitResultsNoLock(preVersion)
+				latest := mr.storage.GetLastCommitResults()
+				base, _ := mr.storage.LookupNextCommitResults(preVersion)
 
 				for _, lsID := range lsIds {
 					So(mr.numCommitSince(topicID, lsID, base, latest, -1), ShouldEqual, 2)
@@ -2557,8 +2524,8 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 					return hwm == types.GLSN(6)
 				}), ShouldBeTrue)
 
-				latest := mr.storage.getLastCommitResultsNoLock()
-				base := mr.storage.lookupNextCommitResultsNoLock(preVersion)
+				latest := mr.storage.GetLastCommitResults()
+				base, _ := mr.storage.LookupNextCommitResults(preVersion)
 
 				for _, lsID := range lsIds {
 					So(mr.numCommitSince(topicID, lsID, base, latest, -1), ShouldEqual, 2)
@@ -2583,8 +2550,8 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 					return hwm == types.GLSN(15)
 				}), ShouldBeTrue)
 
-				latest := mr.storage.getLastCommitResultsNoLock()
-				base := mr.storage.lookupNextCommitResultsNoLock(preVersion)
+				latest := mr.storage.GetLastCommitResults()
+				base, _ := mr.storage.LookupNextCommitResults(preVersion)
 
 				for _, lsID := range lsIds {
 					So(mr.numCommitSince(topicID, lsID, base, latest, -1), ShouldEqual, 3)

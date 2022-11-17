@@ -27,7 +27,7 @@ const (
 	DefaultProposeTimeout                   = 100 * time.Millisecond
 	DefaultRaftTick                         = 100 * time.Millisecond
 	DefaultRPCTimeout                       = 100 * time.Millisecond
-	DefaultCommitTick                       = 1 * time.Millisecond
+	DefaultCommitTick                       = 100 * time.Microsecond
 	DefaultPromoteTick                      = 100 * time.Millisecond
 	DefaultRaftDir                   string = "raftdata"
 	DefaultLogDir                    string = "log"

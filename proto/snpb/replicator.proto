@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package varlog.snpb;
 
-import "google/protobuf/timestamp.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 import "varlogpb/metadata.proto";
@@ -138,7 +137,7 @@ message SyncReplicateResponse {
 
 service Replicator {
   rpc ReplicateDeprecated(stream ReplicationRequest)
-    returns (stream ReplicationResponse) {}
+      returns (stream ReplicationResponse) {}
   rpc Replicate(stream ReplicateRequest) returns (ReplicateResponse) {}
   rpc SyncInit(SyncInitRequest) returns (SyncInitResponse) {}
   rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}

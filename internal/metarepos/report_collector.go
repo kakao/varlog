@@ -22,6 +22,7 @@ import (
 const DefaultReportRefreshTime = time.Second
 const DefaultCatchupRefreshTime = 3 * time.Millisecond
 const DefaultSampleReportsRate = 1000
+const DefaultCatchupTick = 10 * time.Millisecond
 
 type sampleTracer struct {
 	m          sync.Map
@@ -1072,12 +1073,17 @@ func (rce *reportCollectExecutor) catchupBatch(ctx context.Context) {
 }
 
 func (rce *reportCollectExecutor) runCommit(ctx context.Context) {
+	ticker := time.NewTicker(DefaultCatchupTick)
+	defer ticker.Stop()
+
 Loop:
 	for {
 		select {
 		case <-ctx.Done():
 			break Loop
 		case <-rce.triggerC:
+			rce.catchupBatch(ctx)
+		case <-ticker.C:
 			rce.catchupBatch(ctx)
 		}
 	}

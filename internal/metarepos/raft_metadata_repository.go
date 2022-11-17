@@ -59,15 +59,18 @@ type RaftMetadataRepository struct {
 	requestMap sync.Map
 
 	// for raft
-	proposeC      chan *mrpb.RaftEntry
-	commitC       chan *committedEntry
+	raftProposeC  chan *mrpb.RaftEntry
+	raftApplyC    chan *committedEntry
 	rnConfChangeC chan raftpb.ConfChange
 	rnProposeC    chan string
 	rnCommitC     chan *raftCommittedEntry
 
+	// for commit
+	commitTrigger *time.Timer
+	commitResultC chan *mrpb.LogStreamCommitResults
+
 	// for report
-	reportQueue   []*mrpb.Report
-	muReportQueue sync.Mutex
+	reportC chan *mrpb.Report
 
 	listenNotifyC chan struct{}
 
@@ -106,11 +109,12 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 	mr := &RaftMetadataRepository{
 		config:        cfg,
 		requestNum:    uint64(time.Now().UnixNano()),
-		proposeC:      make(chan *mrpb.RaftEntry, 4096),
-		commitC:       make(chan *committedEntry, 4096),
+		raftProposeC:  make(chan *mrpb.RaftEntry, 4096),
+		raftApplyC:    make(chan *committedEntry, 4096),
+		reportC:       make(chan *mrpb.Report, 4096),
 		rnConfChangeC: make(chan raftpb.ConfChange, 1),
 		rnProposeC:    make(chan string),
-		reportQueue:   make([]*mrpb.Report, 0, 1024),
+		commitResultC: make(chan *mrpb.LogStreamCommitResults, 1),
 		runner:        runner.New("mr", cfg.logger),
 		sw:            stopwaiter.New(),
 		tmStub:        tmStub,
@@ -159,7 +163,7 @@ func (mr *RaftMetadataRepository) Run() {
 	if err := mr.runner.RunC(mctx, mr.processCommit); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
-	if err := mr.runner.RunC(mctx, mr.processReport); err != nil {
+	if err := mr.runner.RunC(mctx, mr.processCommitResult); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
 	}
 	if err := mr.runner.RunC(mctx, mr.processRNCommit); err != nil {
@@ -184,9 +188,7 @@ func (mr *RaftMetadataRepository) Run() {
 		}
 
 		// commit trigger should run after recover complete
-		if err := mr.runner.RunC(mctx, mr.runCommitTrigger); err != nil {
-			mr.logger.Panic("could not run", zap.Error(err))
-		}
+		mr.commitTrigger.Reset(mr.commitTick)
 
 		mr.logger.Info("listening", zap.String("address", mr.rpcAddr))
 		lis, err := netutil.NewStoppableListener(mctx, mr.rpcAddr)
@@ -261,9 +263,10 @@ func (mr *RaftMetadataRepository) Close() error {
 		mr.runner.Stop()
 		mr.storage.Close()
 
-		close(mr.proposeC)
+		close(mr.raftProposeC)
 		close(mr.rnProposeC)
 		close(mr.rnConfChangeC)
+		close(mr.reportC)
 
 		mr.cancel = nil
 	}
@@ -296,7 +299,7 @@ func (mr *RaftMetadataRepository) runReplication(ctx context.Context) {
 Loop:
 	for {
 		select {
-		case e := <-mr.proposeC:
+		case e := <-mr.raftProposeC:
 			b, err := e.Marshal()
 			if err != nil {
 				mr.logger.Error(err.Error())
@@ -314,86 +317,64 @@ Loop:
 	}
 }
 
-func (mr *RaftMetadataRepository) runCommitTrigger(ctx context.Context) {
-	ticker := time.NewTicker(mr.commitTick)
+func (mr *RaftMetadataRepository) processCommit(ctx context.Context) {
+	mr.commitTrigger = time.NewTimer(mr.commitTick)
+	defer mr.commitTrigger.Stop()
+
+	mr.commitTrigger.Stop()
+
+	listenNoti := false
+
 Loop:
 	for {
 		select {
-		case <-ticker.C:
-			mr.proposeCommit()
 		case <-ctx.Done():
 			break Loop
-		}
-	}
-
-	ticker.Stop()
-}
-
-func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
-	ticker := time.NewTicker(mr.commitTick)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			var reports *mrpb.Reports
-
-			mr.muReportQueue.Lock()
-			num := len(mr.reportQueue)
-			if num > 0 {
-				reports = &mrpb.Reports{
-					NodeID:      mr.nodeID,
-					CreatedTime: time.Now(),
-				}
-				reports.Reports = mr.reportQueue
-				mr.reportQueue = make([]*mrpb.Report, 0, 1024)
+		case <-mr.commitTrigger.C:
+			mr.commit()
+		case r := <-mr.reportC:
+			mr.applyReport(r)
+		case c, ok := <-mr.raftApplyC:
+			if !ok {
+				break Loop
 			}
-			mr.muReportQueue.Unlock()
 
-			if reports != nil {
-				mr.propose(context.TODO(), reports, false) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			mr.processRaftEntry(c)
+
+			if !listenNoti && mr.IsMember() {
+				close(mr.listenNotifyC)
+				listenNoti = true
 			}
 		}
 	}
 }
 
-func (mr *RaftMetadataRepository) processCommit(context.Context) {
-	listenNoti := false
+func (mr *RaftMetadataRepository) processRaftEntry(c *committedEntry) {
+	if c == nil {
+		snap := mr.raftNode.loadSnapshot()
+		if snap != nil {
+			mr.reportCollector.Reset()
 
-	for c := range mr.commitC {
-		if c == nil {
-			snap := mr.raftNode.loadSnapshot()
-			if snap != nil {
-				mr.reportCollector.Reset()
-
-				err := mr.storage.ApplySnapshot(snap.Data, &snap.Metadata.ConfState, snap.Metadata.Index)
-				if err != nil {
-					mr.logger.Panic("load snapshot fail")
-				}
-
-				err = mr.reportCollector.Recover(
-					mr.storage.GetStorageNodes(),
-					mr.storage.GetLogStreams(),
-					mr.storage.GetFirstCommitResults().GetVersion(),
-				)
-				if err != nil &&
-					err != verrors.ErrStopped {
-					mr.logger.Panic("recover report collector fail")
-				}
+			err := mr.storage.ApplySnapshot(snap.Data, &snap.Metadata.ConfState, snap.Metadata.Index)
+			if err != nil {
+				mr.logger.Panic("load snapshot fail")
 			}
-		} else if c.leader != raft.None {
-			mr.membership.SetLeader(types.NodeID(c.leader))
-		}
 
-		if !listenNoti && mr.IsMember() {
-			close(mr.listenNotifyC)
-			listenNoti = true
+			err = mr.reportCollector.Recover(
+				mr.storage.GetStorageNodes(),
+				mr.storage.GetLogStreams(),
+				mr.storage.GetFirstCommitResults().GetVersion(),
+			)
+			if err != nil &&
+				err != verrors.ErrStopped {
+				mr.logger.Panic("recover report collector fail")
+			}
 		}
-
-		mr.apply(c)
+	} else if c.leader != raft.None {
+		mr.membership.SetLeader(types.NodeID(c.leader))
 	}
+
+	mr.apply(c)
 }
 
 func (mr *RaftMetadataRepository) processRNCommit(context.Context) {
@@ -459,10 +440,28 @@ func (mr *RaftMetadataRepository) processRNCommit(context.Context) {
 			e.AppliedIndex = d.index
 		}
 
-		mr.commitC <- c
+		mr.raftApplyC <- c
 	}
 
-	close(mr.commitC)
+	close(mr.raftApplyC)
+}
+
+func (mr *RaftMetadataRepository) processCommitResult(ctx context.Context) {
+Loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break Loop
+		case cr, ok := <-mr.commitResultC:
+			if !ok {
+				break Loop
+			}
+
+			if err := mr.proposeCommitResult(ctx, cr); err != nil {
+				mr.commitTrigger.Reset(mr.commitTick)
+			}
+		}
+	}
 }
 
 func (mr *RaftMetadataRepository) processPurge(ctx context.Context) {
@@ -570,10 +569,6 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 			mr.applyUnregisterLogStream(r, e.NodeIndex, e.RequestIndex)
 		case *mrpb.UpdateLogStream:
 			mr.applyUpdateLogStream(r, e.NodeIndex, e.RequestIndex)
-		case *mrpb.Reports:
-			mr.applyReport(r)
-		case *mrpb.Commit:
-			mr.applyCommit(r, e.AppliedIndex)
 		case *mrpb.Seal:
 			mr.applySeal(r, e.NodeIndex, e.RequestIndex, e.AppliedIndex)
 		case *mrpb.Unseal:
@@ -584,6 +579,8 @@ func (mr *RaftMetadataRepository) apply(c *committedEntry) {
 			mr.applyRemovePeer(r, c.confState, e.AppliedIndex)
 		case *mrpb.Endpoint:
 			mr.applyEndpoint(r, e.NodeIndex, e.RequestIndex)
+		case *mrpb.CommitResult:
+			mr.applyCommitResult(r, e.NodeIndex, e.RequestIndex)
 		}
 
 		mr.storage.UpdateAppliedIndex(e.AppliedIndex)
@@ -753,35 +750,25 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, 
 	return nil
 }
 
-func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
+func (mr *RaftMetadataRepository) applyReport(r *mrpb.Report) error {
 	atomic.AddUint64(&mr.nrReport, 1)
 	mr.nrReportSinceCommit++
 
-	mr.tmStub.mb.Records("mr.raft.reports.delay").Record(context.TODO(),
-		float64(time.Since(reports.CreatedTime).Nanoseconds())/float64(time.Millisecond),
-		attribute.KeyValue{
-			Key:   "nodeid",
-			Value: attribute.StringValue(mr.nodeID.String()),
-		})
+	snID := r.StorageNodeID
+	for _, u := range r.UncommitReport {
+		if u.Invalid() {
+			continue
+		}
 
-	for _, r := range reports.Reports {
-		snID := r.StorageNodeID
-	LS:
-		for _, u := range r.UncommitReport {
-			if u.Invalid() {
-				continue LS
-			}
+		s, ok := mr.storage.LookupUncommitReport(u.LogStreamID, snID)
+		if !ok {
+			continue
+		}
 
-			s, ok := mr.storage.LookupUncommitReport(u.LogStreamID, snID)
-			if !ok {
-				continue LS
-			}
-
-			if (s.Version == u.Version &&
-				s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd()) ||
-				s.Version < u.Version {
-				mr.storage.UpdateUncommitReport(u.LogStreamID, snID, u)
-			}
+		if (s.Version == u.Version &&
+			s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd()) ||
+			s.Version < u.Version {
+			mr.storage.UpdateUncommitReport(u.LogStreamID, snID, u)
 		}
 	}
 
@@ -804,18 +791,13 @@ func topicBoundary(topicLSIDs []TopicLSID, idx int) (begin bool, end bool) {
 	return
 }
 
-func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint64) error {
-	if r != nil {
-		mr.tmStub.mb.Records("mr.raft.commit.delay").Record(context.TODO(),
-			float64(time.Since(r.CreatedTime).Nanoseconds())/float64(time.Millisecond),
-			attribute.KeyValue{
-				Key:   "nodeid",
-				Value: attribute.StringValue(mr.nodeID.String()),
-			})
+func (mr *RaftMetadataRepository) commit() error {
+	if !mr.isLeader() {
+		mr.commitTrigger.Reset(mr.commitTick)
+		return nil
 	}
 
-	startTime := time.Now()
-	_, err := mr.withTelemetry(context.TODO(), "mr.build_commit_results.duration", func(ctx context.Context) (interface{}, error) {
+	_, err := mr.withTelemetry(context.Background(), "mr.build_commit_results.duration", func(ctx context.Context) (interface{}, error) {
 		defer mr.storage.ResetUpdateSinceCommit()
 
 		prevCommitResults := mr.storage.getLastCommitResultsNoLock()
@@ -955,36 +937,32 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 					Value: attribute.StringValue(mr.nodeID.String()),
 				})
 		}
+
 		crs.Version = curVer + 1
-
-		if totalCommitted > 0 {
-			mr.storage.AppendLogStreamCommitHistory(crs)
-		}
-
 		if trimVer != 0 && trimVer != math.MaxUint64 {
-			mr.storage.TrimLogStreamCommitHistory(trimVer) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			crs.TrimVersion = trimVer
 		}
 
-		mr.reportCollector.Commit()
+		if totalCommitted == 0 {
+			mr.commitTrigger.Reset(mr.commitTick)
+			return nil, nil
+		}
 
-		//TODO:: trigger next commit
+		// propose commit result
+		select {
+		case mr.commitResultC <- crs:
+		default:
+			mr.commitTrigger.Reset(mr.commitTick)
+		}
 
 		return nil, nil
 	})
-
-	mr.tmStub.mb.Records("mr.build_commit_results.duration").Record(context.Background(),
-		float64(time.Since(startTime).Nanoseconds())/float64(time.Millisecond),
-		attribute.KeyValue{
-			Key:   "nodeid",
-			Value: attribute.StringValue(mr.nodeID.String()),
-		},
-	)
 
 	return err
 }
 
 func (mr *RaftMetadataRepository) applySeal(r *mrpb.Seal, nodeIndex, requestIndex, appliedIndex uint64) error {
-	mr.applyCommit(nil, appliedIndex) //nolint:errcheck,revive // TODO:: Handle an error returned.
+	// TODO:: wait proposed CommitResult
 	err := mr.storage.SealingLogStream(r.LogStreamID, nodeIndex, requestIndex)
 	if err != nil {
 		return err
@@ -1027,6 +1005,41 @@ func (mr *RaftMetadataRepository) applyEndpoint(r *mrpb.Endpoint, nodeIndex, req
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (mr *RaftMetadataRepository) applyCommitResult(r *mrpb.CommitResult, nodeIndex, requestIndex uint64) error {
+	if mr.nodeID == r.NodeID {
+		mr.tmStub.mb.Records("mr.raft.commit.delay").Record(context.TODO(),
+			float64(time.Since(r.CreatedTime).Nanoseconds())/float64(time.Millisecond),
+			attribute.KeyValue{
+				Key:   "nodeid",
+				Value: attribute.StringValue(mr.nodeID.String()),
+			})
+	}
+
+	mr.sendAck(nodeIndex, requestIndex, nil)
+
+	if mr.membership.Leader() != r.NodeID {
+		return nil
+	}
+
+	if mr.storage.GetFirstCommitResults() != nil &&
+		mr.storage.GetLastCommitResults().Version+1 != r.CommitResult.Version {
+		return nil
+	}
+
+	mr.storage.AppendLogStreamCommitHistory(r.CommitResult)
+	if !r.CommitResult.TrimVersion.Invalid() {
+		mr.storage.TrimLogStreamCommitHistory(r.CommitResult.TrimVersion)
+	}
+
+	mr.reportCollector.Commit()
+
+	//TODO: handle pending seal
+
+	mr.commit()
 
 	return nil
 }
@@ -1134,28 +1147,16 @@ func (mr *RaftMetadataRepository) getLastCommitVersion(topicID types.TopicID, ls
 	return crs.Version
 }
 
-func (mr *RaftMetadataRepository) proposeCommit() {
-	if !mr.isLeader() {
-		return
-	}
-
-	r := &mrpb.Commit{
-		NodeID:      mr.nodeID,
-		CreatedTime: time.Now(),
-	}
-	mr.propose(context.TODO(), r, false) //nolint:errcheck,revive // TODO:: Handle an error returned.
-}
-
 func (mr *RaftMetadataRepository) proposeReport(snID types.StorageNodeID, ur []snpb.LogStreamUncommitReport) error {
 	r := &mrpb.Report{
 		StorageNodeID:  snID,
 		UncommitReport: ur,
 	}
 
-	mr.muReportQueue.Lock()
-	defer mr.muReportQueue.Unlock()
-
-	mr.reportQueue = append(mr.reportQueue, r)
+	select {
+	case mr.reportC <- r:
+	default:
+	}
 
 	return nil
 }
@@ -1179,7 +1180,7 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 
 	PROPOSE:
 		select {
-		case mr.proposeC <- e:
+		case mr.raftProposeC <- e:
 		case <-t.C:
 			t.Reset(mr.raftProposeTimeout)
 			goto PROPOSE
@@ -1200,7 +1201,7 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case mr.proposeC <- e:
+		case mr.raftProposeC <- e:
 		default:
 			return verrors.ErrIgnore
 		}
@@ -1217,6 +1218,19 @@ func (mr *RaftMetadataRepository) proposeConfChange(ctx context.Context, r raftp
 	}
 
 	return nil
+}
+
+func (mr *RaftMetadataRepository) proposeCommitResult(ctx context.Context, cr *mrpb.LogStreamCommitResults) error {
+	r := &mrpb.CommitResult{
+		NodeID:       mr.nodeID,
+		CreatedTime:  time.Now(),
+		CommitResult: cr,
+	}
+
+	mctx, cancel := context.WithTimeout(ctx, mr.rpcTimeout)
+	defer cancel()
+
+	return mr.propose(mctx, r, true)
 }
 
 func (mr *RaftMetadataRepository) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {
