@@ -3,12 +3,60 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/benchmark"
-	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
+)
+
+var (
+	flagClusterID = &cli.StringFlag{
+		Name:  "cluster",
+		Usage: "Cluster ID",
+		Value: benchmark.DefaultClusterID.String(),
+	}
+	flagTarget = &cli.StringSliceFlag{
+		Name:     "target",
+		Required: true,
+		Usage:    "The target of the benchmark load formatted by \"topic1:logstream1,topic2:logstream2,...<topic_id:logstream_id>\"",
+	}
+	flagMRAddrs = &cli.StringSliceFlag{
+		Name:     "address",
+		Required: true,
+	}
+	flagMsgSize = &cli.UintSliceFlag{
+		Name:    "message-size",
+		Aliases: []string{"msg-size"},
+		Value:   cli.NewUintSlice(benchmark.DefaultMessageSize),
+		Usage:   "Message sizes for each load target",
+	}
+	flagBatchSize = &cli.UintSliceFlag{
+		Name:  "batch-size",
+		Value: cli.NewUintSlice(benchmark.DefaultBatchSize),
+		Usage: "Batch sizes for each load target",
+	}
+	flagAppenders = &cli.UintSliceFlag{
+		Name:    "appenders",
+		Aliases: []string{"appenders-count"},
+		Value:   cli.NewUintSlice(benchmark.DefaultConcurrency),
+		Usage:   "The number of appenders for each load target",
+	}
+	flagSubscribers = &cli.UintSliceFlag{
+		Name:    "subscribers",
+		Aliases: []string{"subscribers-count"},
+		Value:   cli.NewUintSlice(benchmark.DefaultConcurrency),
+		Usage:   "The number of subscribers for each load target",
+	}
+	flagDuration = &cli.DurationFlag{
+		Name:  "duration",
+		Value: benchmark.DefaultDuration,
+	}
+	flagReportInterval = &cli.DurationFlag{
+		Name:  "report-interval",
+		Value: benchmark.DefaultReportInterval,
+	}
 )
 
 func main() {
@@ -28,32 +76,20 @@ func newApp() *cli.App {
 	app := &cli.App{
 		Name: "benchmark",
 		Flags: []cli.Flag{
-			flagClusterID.StringFlag(false, benchmark.DefaultClusterID.String()),
-			flagTopicID.StringFlag(true, ""),
-			flagLogStreamID.StringFlag(true, ""),
-			flagMRAddrs.StringSliceFlag(true, nil),
-			flagMsgSize.IntFlag(true, 0),
-			flagBatchSize.IntFlag(false, benchmark.DefaultBatchSize),
-			flagConcurrency.IntFlag(false, benchmark.DefaultConcurrency),
-			flagDuration.DurationFlag(false, benchmark.DefaultDuration),
-			flagReportInterval.DurationFlag(false, benchmark.DefaultReportInterval),
+			flagClusterID,
+			flagTarget,
+			flagMRAddrs,
+			flagMsgSize,
+			flagBatchSize,
+			flagAppenders,
+			flagSubscribers,
+			flagDuration,
+			flagReportInterval,
 		},
 		Action: start,
 	}
 	return app
 }
-
-var (
-	flagClusterID      = flags.ClusterID()
-	flagTopicID        = flags.TopicID()
-	flagLogStreamID    = flags.LogStreamID()
-	flagMRAddrs        = flags.FlagDesc{Name: "address"}
-	flagMsgSize        = flags.FlagDesc{Name: "msg-size"}
-	flagBatchSize      = flags.FlagDesc{Name: "batch-size"}
-	flagConcurrency    = flags.FlagDesc{Name: "concurrency"}
-	flagDuration       = flags.FlagDesc{Name: "duration"}
-	flagReportInterval = flags.FlagDesc{Name: "report-interval"}
-)
 
 func start(c *cli.Context) error {
 	if c.NArg() > 0 {
@@ -65,44 +101,70 @@ func start(c *cli.Context) error {
 		return err
 	}
 
-	topicID, err := types.ParseTopicID(c.String(flagTopicID.Name))
-	if err != nil {
-		return err
+	targets := make([]benchmark.Target, len(c.StringSlice(flagTarget.Name)))
+	for idx, str := range c.StringSlice(flagTarget.Name) {
+		toks := strings.Split(str, ":")
+		if len(toks) != 2 {
+			return fmt.Errorf("malformed target %s", str)
+		}
+		var target benchmark.Target
+		target.TopicID, err = types.ParseTopicID(toks[0])
+		if err != nil {
+			return fmt.Errorf("malformed target %s: invalid topic %s", str, toks[0])
+		}
+		if toks[1] != "*" {
+			target.LogStreamID, err = types.ParseLogStreamID(toks[1])
+			if err != nil {
+				return fmt.Errorf("malformed target %s: invalid log stream %s", str, toks[1])
+			}
+		}
+		targets[idx] = target
 	}
 
-	logStreamID, err := types.ParseLogStreamID(c.String(flagLogStreamID.Name))
-	if err != nil {
-		return err
-	}
+	targets = setSizes(targets, c.UintSlice(flagMsgSize.Name), func(idx int, size uint) {
+		targets[idx].MessageSize = size
+	})
 
-	msgSize := c.Int(flagMsgSize.Name)
-	if msgSize < 0 {
-		return fmt.Errorf("stress: invalid msg size %d", msgSize)
-	}
+	targets = setSizes(targets, c.UintSlice(flagBatchSize.Name), func(idx int, size uint) {
+		targets[idx].BatchSize = size
+	})
 
-	batchSize := c.Int(flagBatchSize.Name)
-	if batchSize <= 0 {
-		return fmt.Errorf("stress: invalid batch size %d", batchSize)
-	}
-
-	concurrency := c.Int(flagConcurrency.Name)
-	if concurrency < 1 {
-		return fmt.Errorf("stress: invalid concurrency %d", concurrency)
-	}
+	targets = setSizes(targets, c.UintSlice(flagAppenders.Name), func(idx int, size uint) {
+		targets[idx].AppendersCount = size
+	})
+	targets = setSizes(targets, c.UintSlice(flagSubscribers.Name), func(idx int, size uint) {
+		targets[idx].SubscribersCount = size
+	})
 
 	duration := c.Duration(flagDuration.Name)
 
 	reportInterval := c.Duration(flagReportInterval.Name)
 
-	return benchmark.Append(
+	bm, err := benchmark.New(
 		benchmark.WithClusterID(clusterID),
-		benchmark.WithTopicID(topicID),
-		benchmark.WithLogStreamID(logStreamID),
+		benchmark.WithTargets(targets...),
 		benchmark.WithMetadataRepository(c.StringSlice(flagMRAddrs.Name)),
-		benchmark.WithMessageSize(msgSize),
-		benchmark.WithBatchSize(batchSize),
-		benchmark.WithConcurrency(concurrency),
 		benchmark.WithDuration(duration),
 		benchmark.WithReportInterval(reportInterval),
 	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = bm.Close()
+	}()
+	return bm.Run()
+}
+
+func setSizes(targets []benchmark.Target, sizes []uint, setter func(idx int, size uint)) []benchmark.Target {
+	for idx := range targets {
+		var size uint
+		if idx < len(sizes) {
+			size = sizes[idx]
+		} else {
+			size = sizes[len(sizes)-1]
+		}
+		setter(idx, size)
+	}
+	return targets
 }

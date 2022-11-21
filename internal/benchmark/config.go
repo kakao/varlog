@@ -2,7 +2,6 @@ package benchmark
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -10,20 +9,17 @@ import (
 
 const (
 	DefaultClusterID      = types.ClusterID(1)
+	DefaultMessageSize    = 0
 	DefaultBatchSize      = 1
-	DefaultConcurrency    = 1
+	DefaultConcurrency    = 0
 	DefaultDuration       = 1 * time.Minute
-	DefaultReportInterval = 5 * time.Second
+	DefaultReportInterval = 3 * time.Second
 )
 
 type config struct {
 	cid            types.ClusterID
-	tpid           types.TopicID
-	lsid           types.LogStreamID
+	targets        []Target
 	mraddrs        []string
-	msgSize        int
-	batchSize      int
-	concurrency    int
 	duration       time.Duration
 	reportInterval time.Duration
 }
@@ -31,8 +27,6 @@ type config struct {
 func newConfig(opts []Option) (config, error) {
 	cfg := config{
 		cid:            DefaultClusterID,
-		batchSize:      DefaultBatchSize,
-		concurrency:    DefaultConcurrency,
 		duration:       DefaultDuration,
 		reportInterval: DefaultReportInterval,
 	}
@@ -46,14 +40,16 @@ func newConfig(opts []Option) (config, error) {
 }
 
 func (cfg *config) validate() error {
-	if cfg.tpid.Invalid() {
-		return fmt.Errorf("invalid topic %v", cfg.tpid)
-	}
 	if len(cfg.mraddrs) == 0 {
 		return errors.New("no metadata repository address")
 	}
-	if cfg.batchSize < 1 {
-		return fmt.Errorf("non-positive batch size %d", cfg.batchSize)
+	if len(cfg.targets) == 0 {
+		return errors.New("no load target")
+	}
+	for _, target := range cfg.targets {
+		if err := target.Valid(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -80,38 +76,15 @@ func WithClusterID(cid types.ClusterID) Option {
 	})
 }
 
-func WithTopicID(tpid types.TopicID) Option {
+func WithTargets(targets ...Target) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.tpid = tpid
-	})
-}
-
-func WithLogStreamID(lsid types.LogStreamID) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.lsid = lsid
+		cfg.targets = targets
 	})
 }
 
 func WithMetadataRepository(addrs []string) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.mraddrs = addrs
-	})
-}
-
-func WithMessageSize(msgSize int) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.msgSize = msgSize
-	})
-}
-
-func WithBatchSize(batchSize int) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.batchSize = batchSize
-	})
-}
-func WithConcurrency(concurrency int) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.concurrency = concurrency
 	})
 }
 
