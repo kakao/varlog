@@ -56,7 +56,6 @@ func TestAppendLogs(t *testing.T) {
 				}
 				max = res.Metadata[0].GLSN
 			}
-			t.Logf("[%d] Append completed", idx)
 
 			muMaxGLSN.Lock()
 			defer muMaxGLSN.Unlock()
@@ -115,10 +114,8 @@ func TestReadSealedLogStream(t *testing.T) {
 			topicID := clus.TopicIDs()[0]
 			client := clus.ClientAtIndex(t, idx)
 			for {
-				t.Logf("[%d] appending", idx)
 				res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
 				if res.Err != nil {
-					t.Logf("[%d] append error: %+v", idx, res.Err)
 					assert.ErrorIs(t, res.Err, verrors.ErrSealed)
 					errC <- res.Err
 					break
@@ -141,11 +138,9 @@ func TestReadSealedLogStream(t *testing.T) {
 				rsp, err := clus.GetVMSClient(t).Seal(context.Background(), topicID, lsID)
 				require.NoError(t, err)
 				sealedGLSN = rsp.GetSealedGLSN()
-				t.Logf("SealedGLSN: %v", sealedGLSN)
 			}
 		case err := <-errC:
 			numSealedErr++
-			t.Logf("%d sealed errors", numSealedErr)
 			require.ErrorIs(t, err, verrors.ErrSealed)
 		}
 	}

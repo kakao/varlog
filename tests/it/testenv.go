@@ -213,7 +213,12 @@ func (clus *VarlogCluster) clearMR(t *testing.T, idx int) {
 	require.NoError(t, os.RemoveAll(walPath))
 	require.NoError(t, os.RemoveAll(snapPath))
 
-	t.Logf("MetadataRepository was cleared: idx=%d, nid=%v, wal=%s, snap=%s", idx, nodeID, walPath, snapPath)
+	clus.logger.Info("metadata repository was cleared",
+		zap.Any("idx", idx),
+		zap.Any("nid", nodeID),
+		zap.Any("wal", walPath),
+		zap.Any("snap", snapPath),
+	)
 }
 
 func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal bool) {
@@ -250,7 +255,7 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal boo
 	clus.mrIDs[idx] = nodeID
 	clus.metadataRepositories[idx] = metarepos.NewRaftMetadataRepository(opts...)
 
-	t.Logf("MetadataRepository was created: idx=%d, nid=%v", idx, nodeID)
+	clus.logger.Info("metadata repository was created", zap.Any("idx", idx), zap.Any("nid", nodeID))
 }
 
 func (clus *VarlogCluster) NewMRClient(t *testing.T, idx int) {
@@ -490,8 +495,6 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 		_ = sn.Serve()
 	}()
 
-	log.Printf("SN.New: %v", snID)
-
 	var addr string
 	require.Eventually(t, func() bool {
 		meta := storagenode.TestGetStorageNodeMetadataDescriptorWithoutAddr(t, sn)
@@ -499,17 +502,11 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 		return len(addr) > 0
 	}, time.Second, 10*time.Millisecond)
 
-	log.Printf("SN(%v) GetMetadata: %s", snID, addr)
-
 	_, err := clus.vmsCL.AddStorageNode(context.Background(), snID, addr)
 	require.NoError(t, err)
 
-	log.Printf("SN(%v) AddStorageNode", snID)
-
 	mcl, err := client.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger)
 	require.NoError(t, err)
-
-	log.Printf("SN(%v) MCL", snID)
 
 	clus.storageNodes[snID] = sn
 	clus.volumes[snID] = volume
@@ -597,11 +594,8 @@ func (clus *VarlogCluster) AddTopic(t *testing.T) types.TopicID {
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
 
-	log.Println("AddTopic")
-
 	topicDesc, err := clus.vmsCL.AddTopic(context.Background())
 	require.NoError(t, err)
-	log.Printf("AddTopic: %+v", topicDesc)
 
 	topicID := topicDesc.GetTopicID()
 
@@ -616,8 +610,6 @@ func (clus *VarlogCluster) AddLS(t *testing.T, topicID types.TopicID) types.LogS
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
 
-	log.Printf("AddLS[topidID:%v]\n", topicID)
-
 	require.GreaterOrEqual(t, len(clus.storageNodes), clus.nrRep)
 
 	logStreamDesc, err := clus.vmsCL.AddLogStream(context.Background(), topicID, nil)
@@ -630,8 +622,6 @@ func (clus *VarlogCluster) AddLS(t *testing.T, topicID types.TopicID) types.LogS
 		snpath := filepath.Join(dataDir.Volume, volume.StorageNodeDirName(dataDir.ClusterID, dataDir.StorageNodeID))
 		require.Equal(t, replica.StorageNodePath, snpath)
 	}
-
-	log.Printf("AddLS: AddLogStream: %+v", logStreamDesc)
 
 	logStreamID := logStreamDesc.GetLogStreamID()
 
@@ -756,7 +746,7 @@ func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T, topicID types.TopicID) t
 	logStreamIDs := clus.topicLogStreamIDs[topicID]
 	clus.topicLogStreamIDs[topicID] = append(logStreamIDs, lsID)
 	clus.replicas[lsID] = rds
-	t.Logf("AddLS without MR: lsid=%d, replicas=%+v", lsID, replicas)
+	clus.logger.Info("AddLS without MR", zap.Any("lsid", lsID), zap.Any("replicas", replicas))
 	return lsID
 }
 
@@ -766,8 +756,6 @@ func (clus *VarlogCluster) AddLSIncomplete(t *testing.T, topicID types.TopicID) 
 
 	clus.muLS.Lock()
 	defer clus.muLS.Unlock()
-
-	log.Println("AddLS Incomplete")
 
 	require.GreaterOrEqual(t, len(clus.storageNodes), clus.nrRep)
 
@@ -802,7 +790,7 @@ func (clus *VarlogCluster) AddLSIncomplete(t *testing.T, topicID types.TopicID) 
 		)
 		require.NoError(t, err)
 	}
-	t.Logf("AddLS incompletely: lsid=%d, replicas=%+v", lsID, replicas)
+	clus.logger.Info("AddLS incompletely", zap.Any("lsid", lsID), zap.Any("replicas", replicas))
 	return lsID
 }
 

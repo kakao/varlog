@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/admin/mrmanager"
@@ -62,7 +63,7 @@ func newConfig(t *testing.T, opts []Option) config {
 		unsafeNoWAL:       defaultUnsafeNoWAL,
 		reporterClientFac: defaultReportClientFactory(),
 		VMSOpts:           NewTestVMSOptions(),
-		logger:            zap.NewNop(),
+		logger:            zaptest.NewLogger(t),
 		portBase:          defaultPortBase,
 		vmsPortOffset:     defaultVMSPortOffset,
 		startVMS:          defaultStartVMS,

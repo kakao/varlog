@@ -615,7 +615,7 @@ func TestReportCollectorSeal(t *testing.T) {
 		mr := NewDummyMetadataRepository(a)
 		cc := newDummyCommitContext()
 
-		logger, _ := zap.NewDevelopment()
+		logger := zap.NewNop()
 		reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
 		reportCollector.Run() //nolint:errcheck,revive // TODO:: Handle an error returned.
 		Reset(func() {
@@ -891,7 +891,6 @@ func TestCommit(t *testing.T) {
 				// wait for prev catchup job to finish
 				time.Sleep(time.Second)
 				mr.trimGLS(trimVer)
-				logger.Debug("trimGLS", zap.Any("knowVer", knownVer), zap.Any("trimVer", trimVer), zap.Any("result", len(mr.m)))
 
 				Convey("ReportCollector should send proper commit against new StorageNode", func() {
 					snID := types.MinStorageNodeID + types.StorageNodeID(nrStorage)

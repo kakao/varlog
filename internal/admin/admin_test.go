@@ -546,10 +546,6 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 	}
 }
 
-func TestAdmin_UnregisterStorageNode(t *testing.T) {
-	t.Skip()
-}
-
 func TestAdmin_GetTopic(t *testing.T) {
 	const tpid = types.TopicID(1)
 

@@ -1,7 +1,6 @@
 package varlog
 
 import (
-	"log"
 	"testing"
 	"time"
 
@@ -170,7 +169,6 @@ func TestAllowlistExpire(t *testing.T) {
 		So(picked, ShouldBeFalse)
 
 		// wait for some expiration loops
-		log.Println("after deny")
 		time.Sleep(3 * time.Second)
 
 		_, picked = allowlist.Pick(topicID)

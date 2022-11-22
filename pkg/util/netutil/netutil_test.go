@@ -53,27 +53,23 @@ func TestGetListenerAddr(t *testing.T) {
 				t.Error(err)
 			}
 			if len(tt.out) == 0 {
-				t.Logf("-> %v", addrs)
-				if len(addrs) < tt.minOutLen {
-					t.Errorf("%s error: %v", tt.in, addrs)
+				require.GreaterOrEqual(t, len(addrs), tt.minOutLen)
+				return
+			}
+
+			if tt.minOutLen <= len(addrs) {
+				if len(addrs) == 0 {
+					return
 				}
-			} else {
-				if tt.minOutLen <= len(addrs) {
-					if len(addrs) == 0 {
-						t.Logf("%s expected_minoutlen=%d actual_outlen=%d",
-							tt.in, tt.minOutLen, len(addrs))
+
+				for _, addr := range addrs {
+					if addr == tt.out {
 						return
 					}
-
-					for _, addr := range addrs {
-						if addr == tt.out {
-							return
-						}
-					}
 				}
-
-				t.Errorf("%s expected=%s actual=%s", tt.in, tt.out, addrs)
 			}
+
+			t.Errorf("%s expected=%s actual=%s", tt.in, tt.out, addrs)
 		})
 	}
 }
@@ -97,25 +93,20 @@ func TestIPs(t *testing.T) {
 }
 
 func TestAdvertisableIPs(t *testing.T) {
-	uniIps, err := AdvertisableIPs()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(uniIps)
+	_, err := AdvertisableIPs()
+	require.NoError(t, err)
 }
 
 func TestNodeIDGen(t *testing.T) {
 	const port = 10000
 
 	ips, err := IPs()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	for _, ip := range ips {
 		addr := ip.String() + ":" + strconv.Itoa(port)
 		nodeID := types.NewNodeID(addr)
-		t.Logf("addr=%v nodeid=%v", addr, nodeID)
+		require.NotEqual(t, types.InvalidNodeID, nodeID)
 	}
 }
 

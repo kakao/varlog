@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/internal/storage"
@@ -28,13 +27,6 @@ import (
 func TestStorageNode(t *testing.T) {
 	// TODO: uncomment it
 	// defer goleak.VerifyNone(t)
-
-	logger, err := zap.NewProduction()
-	require.NoError(t, err)
-	defer func() {
-		_ = logger.Sync()
-	}()
-
 	const (
 		cid       = types.ClusterID(1)
 		snid1     = types.StorageNodeID(1)
@@ -70,7 +62,6 @@ func TestStorageNode(t *testing.T) {
 		WithClusterID(cid),
 		WithStorageNodeID(snid2),
 		WithVolumes(path2),
-		WithLogger(logger),
 	)
 	wg.Add(1)
 	go func() {
@@ -787,7 +778,6 @@ func TestStorageNode_Sync(t *testing.T) {
 						StorageNodeID: dst.snid,
 						Address:       dst.advertise,
 					})
-					t.Logf("syncStatus: %s", syncStatus.String())
 					return syncStatus.State == snpb.SyncStateComplete
 				}, 10*time.Second, 100*time.Millisecond)
 
@@ -829,7 +819,6 @@ func TestStorageNode_Sync(t *testing.T) {
 						StorageNodeID: dst.snid,
 						Address:       dst.advertise,
 					})
-					t.Logf("syncStatus: %s", syncStatus.String())
 					return syncStatus.State == snpb.SyncStateComplete
 				}, 10*time.Second, 100*time.Millisecond)
 
@@ -909,7 +898,6 @@ func TestStorageNode_Sync(t *testing.T) {
 						StorageNodeID: dst.snid,
 						Address:       dst.advertise,
 					})
-					t.Logf("syncStatus: %s", syncStatus.String())
 					return syncStatus.State == snpb.SyncStateComplete
 				}, 3*time.Second, 100*time.Millisecond)
 
@@ -952,7 +940,6 @@ func TestStorageNode_Sync(t *testing.T) {
 						StorageNodeID: dst.snid,
 						Address:       dst.advertise,
 					})
-					t.Logf("syncStatus: %s", syncStatus.String())
 					return syncStatus.State == snpb.SyncStateComplete
 				}, 10*time.Second, 100*time.Millisecond)
 
@@ -995,7 +982,6 @@ func TestStorageNode_Sync(t *testing.T) {
 						StorageNodeID: dst.snid,
 						Address:       dst.advertise,
 					})
-					t.Logf("syncStatus: %s", syncStatus.String())
 					return syncStatus.State == snpb.SyncStateComplete
 				}, 10*time.Second, 100*time.Millisecond)
 
@@ -1039,7 +1025,6 @@ func TestStorageNode_Sync(t *testing.T) {
 						StorageNodeID: dst.snid,
 						Address:       dst.advertise,
 					})
-					t.Logf("syncStatus: %s", syncStatus.String())
 					return syncStatus.State == snpb.SyncStateComplete
 				}, 10*time.Second, 100*time.Millisecond)
 
@@ -1083,7 +1068,6 @@ func TestStorageNode_Sync(t *testing.T) {
 						StorageNodeID: dst.snid,
 						Address:       dst.advertise,
 					})
-					t.Logf("syncStatus: %s", syncStatus.String())
 					return syncStatus.State == snpb.SyncStateComplete
 				}, 10*time.Second, 100*time.Millisecond)
 

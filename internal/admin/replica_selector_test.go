@@ -120,10 +120,7 @@ func testUtilizationBalance(t *testing.T, paths, replicas map[types.StorageNodeI
 	}
 	sort.Float64s(us)
 	min, max := us[0], us[len(us)-1]
-	if !assert.LessOrEqual(t, max/min, tolerance) {
-		t.Logf("paths: %+v", paths)
-		t.Logf("replicas: %+v", replicas)
-	}
+	require.LessOrEqual(t, max/min, tolerance)
 }
 
 func testPrimariesBalance(t *testing.T, primaries map[types.StorageNodeID]int, tolerance float64) {
