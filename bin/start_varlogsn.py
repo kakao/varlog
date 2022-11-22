@@ -11,6 +11,8 @@ import subprocess
 import sys
 import time
 from typing import Tuple
+from typing import List
+from pathlib import Path
 
 cwd = os.path.dirname(os.path.realpath(__file__))  # noqa
 binpath = os.path.join(cwd, "..", "bin")  # noqa
@@ -56,7 +58,7 @@ def fetch_storage_node_id(admin: str, advertise: str) -> Tuple[int, bool]:
     return random.randint(1, 2 ** 10), False
 
 
-def get_data_dirs(admin: str, snid: int):
+def get_data_dirs(admin: str, snid: int) -> List[str]:
     cmd = [f"{binpath}/varlogctl", "sn", "describe", f"--admin={admin}",
            f"--snid={snid}"]
     out = subprocess.check_output(cmd)
@@ -124,6 +126,8 @@ def start(args: argparse.Namespace) -> None:
     if args.log_dir:
         os.makedirs(args.log_dir, exist_ok=True)
 
+    volumes = [str(Path(volume).resolve()) for volume in args.volumes]
+
     killer = Killer()
     ok = False
     while not killer.kill_now:
@@ -137,12 +141,22 @@ def start(args: argparse.Namespace) -> None:
             logger.info(
                 f"storage node id: {snid}, already registered: {registered}")
 
+            datadirs = set()
             if registered:
-                datadirs = get_data_dirs(args.admin, snid)
-                for datadir in datadirs:
+                for datadir in get_data_dirs(args.admin, snid):
                     if not os.path.isdir(datadir):
                         logger.info(f"no data directory: {datadir}")
                         sys.exit(1)
+                    datadirs.add(datadir)
+
+            for volume in volumes:
+                sndir = f"cid_{args.cluster_id}_snid_{snid}/*"
+                for datadir in Path(volume).glob(sndir):
+                    if not datadir.is_dir():
+                        continue
+                    if str(datadir) not in datadirs:
+                        logger.info(f"remove garbage data directory {datadir}")
+                        shutil.rmtree(datadir, ignore_errors=True)
 
             cmd = [
                 f"{binpath}/varlogsn",
@@ -152,14 +166,8 @@ def start(args: argparse.Namespace) -> None:
                 f"--listen-address={args.listen}",
                 f"--advertise-address={args.advertise}"
             ]
-            for volume in args.volumes:
-                if not registered:
-                    truncate(volume)
+            for volume in volumes:
                 cmd.append(f"--volumes={volume}")
-
-            if registered:
-                for datadir in datadirs:
-                    cmd.append(f"--datadirs={datadir}")
 
             # grpc options
             if args.server_read_buffer_size:

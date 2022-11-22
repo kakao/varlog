@@ -92,11 +92,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	dataDirs, err = volume.GetValidDataDirectories(dataDirs, cfg.dataDirs, cfg.volumeStrictCheck, cfg.cid, cfg.snid)
-	if err != nil {
-		return nil, err
-	}
+	dataDirs = filterValidDataDirectories(dataDirs, cfg.cid, cfg.snid, cfg.logger)
 
 	grpcServer := grpc.NewServer(
 		grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
@@ -134,6 +130,18 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 	}
 
 	return sn, nil
+}
+
+func filterValidDataDirectories(dataDirs []volume.DataDir, cid types.ClusterID, snid types.StorageNodeID, logger *zap.Logger) []volume.DataDir {
+	ret := make([]volume.DataDir, 0, len(dataDirs))
+	for _, dd := range dataDirs {
+		if err := dd.Valid(cid, snid); err != nil {
+			logger.Info("ignore incorrect data directory", zap.String("dir", dd.String()))
+			continue
+		}
+		ret = append(ret, dd)
+	}
+	return ret
 }
 
 func (sn *StorageNode) loadLogStreamReplicas(dataDirs []volume.DataDir) error {

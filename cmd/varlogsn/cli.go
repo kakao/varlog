@@ -42,8 +42,6 @@ func newStartCommand() *cli.Command {
 
 			// volumes
 			flagVolumes.StringSliceFlag(true, nil),
-			flagDataDirs.StringSliceFlag(false, nil),
-			flagVolumeStrictCheck.BoolFlag(),
 
 			flagServerReadBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerReadBufferSize)),
 			flagServerWriteBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerWriteBufferSize)),

@@ -27,14 +27,6 @@ var (
 		Aliases: []string{"volume"},
 		Envs:    []string{"VOLUMES", "VOLUME"},
 	}
-	flagDataDirs = flags.FlagDesc{
-		Name:    "datadirs",
-		Aliases: []string{"datadir", "data-dirs", "data-dir"},
-		Envs:    []string{"DATADIRS", "DATA_DIRS"},
-	}
-	flagVolumeStrictCheck = flags.FlagDesc{
-		Name: "volume-strict-check",
-	}
 
 	// flags for grpc options.
 	flagServerReadBufferSize = flags.FlagDesc{
