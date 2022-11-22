@@ -16,34 +16,6 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
-// ReplicationRequest contains LLSN (Local Log Sequence Number) that indicates
-// a log position in the local log stream of the primary storage node.
-message ReplicationRequest {
-  int32 topic_id = 1 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
-    (gogoproto.customname) = "TopicID"
-  ];
-  int32 log_stream_id = 2 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
-    (gogoproto.customname) = "LogStreamID"
-  ];
-  uint64 llsn = 3 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
-    (gogoproto.customname) = "LLSN"
-  ];
-  int64 created_time = 4;
-  bytes payload = 5;
-}
-
-// ReplicationResponse indicates that a log entry at given LLSN is replicated.
-message ReplicationResponse {
-  uint64 llsn = 1 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
-    (gogoproto.customname) = "LLSN"
-  ];
-  int64 created_time = 2;
-}
-
 message ReplicateRequest {
   int32 topic_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
@@ -137,8 +109,6 @@ message SyncReplicateResponse {
 }
 
 service Replicator {
-  rpc ReplicateDeprecated(stream ReplicationRequest)
-    returns (stream ReplicationResponse) {}
   rpc Replicate(stream ReplicateRequest) returns (ReplicateResponse) {}
   rpc SyncInit(SyncInitRequest) returns (SyncInitResponse) {}
   rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}
