@@ -3,147 +3,128 @@ package benchmark
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
+	"os/signal"
 	"sync"
-	"sync/atomic"
+	"syscall"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/kakao/varlog/pkg/varlog"
+	"go.uber.org/multierr"
+	"golang.org/x/exp/slog"
+	"golang.org/x/sync/errgroup"
 )
 
-type appendStat struct {
-	success    int64
-	failure    int64
-	totalBytes int64
-	startTime  time.Time
-	durations  int64
+type Benchmark struct {
+	config
+	loaders []*Loader
+	metrics Metrics
 }
 
-func newAppendStat() *appendStat {
-	return &appendStat{
-		startTime: time.Now(),
-	}
-}
-
-func (as *appendStat) addSuccess(success int64) {
-	atomic.AddInt64(&as.success, success)
-}
-
-func (as *appendStat) addFailure(failure int64) {
-	atomic.AddInt64(&as.failure, failure)
-}
-
-func (as *appendStat) elapsedTime() float64 {
-	return time.Since(as.startTime).Seconds()
-}
-
-func (as *appendStat) addResponseTime(responseTime time.Duration) {
-	atomic.AddInt64(&as.durations, responseTime.Milliseconds())
-}
-
-func (as *appendStat) throughput() float64 {
-	duration := as.elapsedTime()
-	if duration == 0 {
-		return 0
-	}
-	return float64(as.totalBytes) / duration / 1024.0 / 1024.0
-}
-
-func (as *appendStat) responseTime() float64 {
-	return float64(as.durations) / float64(as.success)
-}
-
-func (as *appendStat) addBytes(byteSize int64) {
-	as.totalBytes += byteSize
-}
-
-func (as *appendStat) printHeader(w io.Writer) {
-	fmt.Fprintln(w, "success\tfailure\tMB\telapsed_time(s)\tthroughput(MB/s)\tresponse_time(ms)")
-}
-
-func (as *appendStat) printStat(w io.Writer) {
-	fmt.Fprintf(w, "%d\t%d\t%f\t%f\t%f\t%f\n", as.success, as.failure, float64(as.totalBytes)/float64(1<<20), as.elapsedTime(), as.throughput(), as.responseTime())
-}
-
-func Append(opts ...Option) error {
+// New creates a new Benchmark and returns it. Users must call Close to release resources if it returns successfully.
+func New(opts ...Option) (bm *Benchmark, err error) {
 	cfg, err := newConfig(opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	batch := make([][]byte, cfg.batchSize)
-	for i := 0; i < cfg.batchSize; i++ {
-		msg := make([]byte, cfg.msgSize)
-		for j := 0; j < cfg.msgSize; j++ {
-			msg[j] = '.'
-		}
-		batch[i] = msg
+	logger := slog.New(slog.HandlerOptions{
+		Level: slog.InfoLevel.Level(),
+	}.NewTextHandler(os.Stdout))
+	slog.SetDefault(logger)
+
+	bm = &Benchmark{
+		config: cfg,
 	}
-	payloadBytes := int64(cfg.msgSize * cfg.batchSize)
 
-	newAppendStat().printHeader(os.Stderr)
-
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.duration)
-	defer cancel()
-
-	var reportWg sync.WaitGroup
-	stat := newAppendStat()
-	reportWg.Add(1)
-	go func() {
-		timer := time.NewTimer(cfg.reportInterval)
-		defer func() {
-			timer.Stop()
-			reportWg.Done()
-		}()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-				stat.printStat(os.Stderr)
-				timer.Reset(cfg.reportInterval)
-			}
+	defer func() {
+		if err != nil {
+			_ = bm.Close()
 		}
 	}()
 
-	var wg sync.WaitGroup
-	wg.Add(cfg.concurrency)
-	for i := 0; i < cfg.concurrency; i++ {
-		go func() {
-			defer wg.Done()
-			vlog, err := varlog.Open(ctx, cfg.cid, cfg.mraddrs, varlog.WithGRPCDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithReadBufferSize(1<<20),
-				grpc.WithWriteBufferSize(32<<20),
-			))
-			if err != nil {
-				panic(err)
-			}
-			defer func() {
-				_ = vlog.Close()
-			}()
-			for ctx.Err() == nil {
-				before := time.Now()
-				res := vlog.AppendTo(ctx, cfg.tpid, cfg.lsid, batch)
-				if res.Err != nil {
-					stat.addFailure(1)
-					continue
-				}
-				stat.addResponseTime(time.Since(before))
-				stat.addSuccess(1)
-				stat.addBytes(payloadBytes)
-			}
-		}()
+	for idx, target := range bm.targets {
+		var loader *Loader
+		loaderMetrics := &LoaderMetrics{idx: idx}
+		loader, err = NewLoader(loaderConfig{
+			Target:  target,
+			cid:     bm.cid,
+			mraddrs: bm.mraddrs,
+			metrics: loaderMetrics,
+		})
+		if err != nil {
+			return bm, err
+		}
+		bm.loaders = append(bm.loaders, loader)
+		bm.metrics.loaderMetrics = append(bm.metrics.loaderMetrics, loaderMetrics)
 	}
-	wg.Wait()
-	cancel()
-	reportWg.Wait()
 
-	stat.printStat(os.Stderr)
-	return nil
+	return bm, nil
+}
+
+// Run starts Loaders and metric reporter. It blocks until the loaders are finished.
+func (bm *Benchmark) Run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
+
+	benchmarkTimer := time.NewTimer(bm.duration)
+
+	sigC := make(chan os.Signal, 1)
+	signal.Notify(sigC, os.Interrupt, syscall.SIGTERM)
+
+	reportTick := time.NewTicker(bm.reportInterval)
+	defer reportTick.Stop()
+
+	var finished bool
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer func() {
+			cancel()
+			wg.Done()
+			fmt.Println(bm.metrics.String())
+		}()
+		for {
+			select {
+			case <-benchmarkTimer.C:
+				finished = true
+				slog.Debug("benchmark is finished")
+				return
+			case sig := <-sigC:
+				finished = true
+				slog.Debug("caught signal", slog.String("signal", sig.String()))
+				return
+			case <-ctx.Done():
+				slog.Debug("loader failed")
+				return
+			case <-reportTick.C:
+				s := bm.metrics.String()
+				fmt.Println(s)
+			}
+		}
+
+	}()
+
+	for _, tw := range bm.loaders {
+		tw := tw
+		g.Go(func() error {
+			return tw.Run(ctx)
+		})
+	}
+	err := g.Wait()
+	wg.Wait()
+
+	slog.Debug("stopped benchmark")
+	if finished {
+		return nil
+	}
+	return err
+}
+
+// Close releases resources acquired by Benchmark and Loader.
+func (bm *Benchmark) Close() error {
+	var err error
+	for _, loader := range bm.loaders {
+		err = multierr.Append(err, loader.Close())
+	}
+	return err
 }
