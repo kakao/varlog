@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/kakao/varlog/compare/v0.7.0...v0.7.1) (2022-11-23)
+
+
+### Bug Fixes
+
+* **dockerfile:** use go 1.19 ([923f35f](https://github.com/kakao/varlog/commit/923f35f0e00d90ea436ec3ae57df4fb9edf1cd3e))
+
 ## [0.7.0](https://github.com/kakao/varlog/compare/v0.6.0...v0.7.0) (2022-11-22)
 
 
