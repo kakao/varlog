@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.0](https://github.com/kakao/varlog/compare/v0.6.0...v0.7.0) (2022-11-22)
+
+
+### Features
+
+* **benchmark:** rework benchmark ([9c3f84a](https://github.com/kakao/varlog/commit/9c3f84a4780f2295de4b3d430a278d62fc62ed8f)), closes [#209](https://github.com/kakao/varlog/issues/209)
+* define CommitBatchResponse ([6046c99](https://github.com/kakao/varlog/commit/6046c9941f6cfaa3d0aec870b0c19e5a8c41b405))
+* **storage:** introduce append batch ([0534ad0](https://github.com/kakao/varlog/commit/0534ad0a754fa0e728b1e9571ac121db8d8ad557)), closes [#125](https://github.com/kakao/varlog/issues/125)
+* **storagenode:** change the synchronization method to accept only the last commit context ([8d331f6](https://github.com/kakao/varlog/commit/8d331f6a938d0422456ce746ba8eaba05457ac2c)), closes [#125](https://github.com/kakao/varlog/issues/125)
+* **storagenode:** make log stream executor sealing when reportCommitBase is invalid ([6f90720](https://github.com/kakao/varlog/commit/6f907209382904ea3a50bb819c0a5e1eb6aee2dd)), closes [#125](https://github.com/kakao/varlog/issues/125)
+* **storagenode:** remove bad data dirs and deprecate `--data-dirs` and `--volume-strict-check` ([1972c94](https://github.com/kakao/varlog/commit/1972c94b9831d07ff3c83d1f62f2c6621efc267b)), closes [#215](https://github.com/kakao/varlog/issues/215)
+* unify uncommittedLLSNBegin and localHighWatermark in logStreamContext ([de88bcf](https://github.com/kakao/varlog/commit/de88bcfa0442034b7295b7f5b5e4d11b22128242))
+
+
+### Performance Improvements
+
+* **storage:** use a lightweight method to get the data size of the storage ([0965fd9](https://github.com/kakao/varlog/commit/0965fd9e1d300449ce44f4bb95601d7ef4efb549)), closes [#210](https://github.com/kakao/varlog/issues/210)
+
 ## [0.6.0](https://github.com/kakao/varlog/compare/v0.5.0...v0.6.0) (2022-10-12)
 
 
