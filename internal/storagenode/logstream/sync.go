@@ -153,11 +153,18 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 
 func (lse *Executor) syncLoop(_ context.Context, sc *syncClient, st *syncTracker) {
 	var (
-		err error
-		cc  storage.CommitContext
-		sr  *SubscribeResult
+		err    error
+		stream snpb.Replicator_SyncReplicateStreamClient
+		cc     storage.CommitContext
+		sr     *SubscribeResult
 	)
+
 	defer func() {
+		if stream != nil {
+			_, errStream := stream.CloseAndRecv()
+			err = multierr.Append(err, errStream)
+		}
+
 		if err == nil {
 			lse.logger.Info("sync completed", zap.String("status", st.toSyncStatus().String()))
 		} else {
@@ -166,6 +173,16 @@ func (lse *Executor) syncLoop(_ context.Context, sc *syncClient, st *syncTracker
 		_ = sc.close()
 	}()
 
+	stream, err = sc.rpcClient.SyncReplicateStream(context.Background())
+	if err != nil {
+		return
+	}
+
+	req := &snpb.SyncReplicateRequest{
+		ClusterID:   sc.lse.cid,
+		Source:      sc.srcReplica,
+		Destination: sc.dstReplica,
+	}
 	// NOTE: When the destination has all log entries but a commit context,
 	// the syncRange.first is invalid because Sync does not look at the
 	// syncRange.first.
@@ -176,8 +193,9 @@ func (lse *Executor) syncLoop(_ context.Context, sc *syncClient, st *syncTracker
 			return
 		}
 		for le := range sr.Result() {
+			req.Payload.LogEntry = &le
 			// TODO: Configure syncReplicate timeout
-			err = sc.syncReplicate(context.TODO(), snpb.SyncPayload{LogEntry: &le})
+			err = stream.SendMsg(req)
 			if err != nil {
 				err = fmt.Errorf("sync replicate: log entry %+v: %w", le.LogEntryMeta, err)
 				sr.Stop()
@@ -207,15 +225,15 @@ func (lse *Executor) syncLoop(_ context.Context, sc *syncClient, st *syncTracker
 	if err != nil {
 		return
 	}
-	err = sc.syncReplicate(context.TODO(), snpb.SyncPayload{
-		CommitContext: &varlogpb.CommitContext{
-			Version:            cc.Version,
-			HighWatermark:      cc.HighWatermark,
-			CommittedGLSNBegin: cc.CommittedGLSNBegin,
-			CommittedGLSNEnd:   cc.CommittedGLSNEnd,
-			CommittedLLSNBegin: cc.CommittedLLSNBegin,
-		},
-	})
+	req.Payload.LogEntry = nil
+	req.Payload.CommitContext = &varlogpb.CommitContext{
+		Version:            cc.Version,
+		HighWatermark:      cc.HighWatermark,
+		CommittedGLSNBegin: cc.CommittedGLSNBegin,
+		CommittedGLSNEnd:   cc.CommittedGLSNEnd,
+		CommittedLLSNBegin: cc.CommittedLLSNBegin,
+	}
+	err = stream.SendMsg(req)
 }
 
 func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamReplica, srcRange snpb.SyncRange) (syncRange snpb.SyncRange, err error) {

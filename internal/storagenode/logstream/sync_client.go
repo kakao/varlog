@@ -42,16 +42,6 @@ func (sc *syncClient) syncInit(ctx context.Context, srcRange snpb.SyncRange) (sy
 	return rsp.GetRange(), err
 }
 
-func (sc *syncClient) syncReplicate(ctx context.Context, payload snpb.SyncPayload) error {
-	_, err := sc.rpcClient.SyncReplicate(ctx, &snpb.SyncReplicateRequest{
-		ClusterID:   sc.lse.cid,
-		Source:      sc.srcReplica,
-		Destination: sc.dstReplica,
-		Payload:     payload,
-	})
-	return err
-}
-
 func (sc *syncClient) close() error {
 	return sc.rpcConn.Close()
 }

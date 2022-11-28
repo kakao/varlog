@@ -3,6 +3,7 @@ package storagenode
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 
@@ -50,6 +51,34 @@ func (rs *replicationServer) SyncReplicate(ctx context.Context, req *snpb.SyncRe
 	}
 	err := lse.SyncReplicate(ctx, req.Source, req.Payload)
 	return &snpb.SyncReplicateResponse{}, err
+}
+
+func (rs *replicationServer) SyncReplicateStream(stream snpb.Replicator_SyncReplicateStreamServer) error {
+	var err error
+	req := new(snpb.SyncReplicateRequest)
+	for {
+		err = stream.RecvMsg(req)
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			err = fmt.Errorf("replication server: sync replicate stream: %w", err)
+			break
+		}
+
+		lse, loaded := rs.sn.executors.Load(req.Destination.TopicID, req.Destination.LogStreamID)
+		if !loaded {
+			err = fmt.Errorf("replication server: sync replicate stream: no log stream %v", req.Destination.LogStreamID)
+			break
+		}
+
+		err = lse.SyncReplicate(stream.Context(), req.Source, req.Payload)
+		if err != nil {
+			err = fmt.Errorf("replication server: sync replicate stream: %w", err)
+			break
+		}
+	}
+	return multierr.Append(err, stream.SendAndClose(&snpb.SyncReplicateResponse{}))
 }
 
 var replicationServerTaskPool = sync.Pool{
