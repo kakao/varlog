@@ -42,9 +42,10 @@ func New(opts ...Option) (bm *Benchmark, err error) {
 		}
 	}()
 
-	for idx, target := range bm.targets {
+	for idx := range bm.targets {
 		var loader *Loader
-		loaderMetrics := &LoaderMetrics{idx: idx}
+		target := bm.targets[idx]
+		loaderMetrics := &LoaderMetrics{tgt: target}
 		loader, err = NewLoader(loaderConfig{
 			Target:  target,
 			cid:     bm.cid,

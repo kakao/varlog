@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kakao/varlog/pkg/util/units"
 )
 
 type Metrics struct {
@@ -12,28 +14,80 @@ type Metrics struct {
 }
 
 func (m Metrics) String() string {
-	// __idx__: target index
-	// _arps__: appended requests per second
-	// _ambps_: appended megabytes per second
-	// _adurs_: mean/min/max append duration in milliseconds
-	// _slps__: subscribed logs per second
-	// _smbps_: subscribed megabytes per second
-	// _eelat_: end-to-end latency in milliseconds
-
+	//  arps: appended requests per second
+	//  abps: appended megabytes per second
+	//  adur: mean/min/max append duration in milliseconds
+	//  slps: subscribed logs per second
+	//  sbps: subscribed megabytes per second
+	// eelat: end-to-end latency in milliseconds
 	var sb strings.Builder
-	for _, tm := range m.loaderMetrics {
-		tm.Flush(&sb)
+	fmt.Fprintf(&sb, "___tgt")  //  6 spaces
+	fmt.Fprintf(&sb, "__arpsR") //  7 spaces
+	fmt.Fprintf(&sb, "__arpsT") //  7 spaces
+
+	fmt.Fprintf(&sb, "_______abpsR") // 12 spaces
+	fmt.Fprintf(&sb, "_______abpsT") // 12 spaces
+
+	fmt.Fprintf(&sb, "__adurR") //  7 spaces
+	fmt.Fprintf(&sb, "__adurT") //  7 spaces
+
+	fmt.Fprintf(&sb, "__slpsR") //  7 spaces
+	fmt.Fprintf(&sb, "__slpsT") //  7 spaces
+
+	fmt.Fprintf(&sb, "_______sbpsR") // 12 spaces
+	fmt.Fprintf(&sb, "_______sbpsT") // 12 spaces
+
+	fmt.Fprintf(&sb, "__eelatR")   //  8 spaces
+	fmt.Fprintf(&sb, "__eelatT\n") //  8 spaces
+	for idx, lm := range m.loaderMetrics {
+		recent, total := lm.Flush()
+		fmt.Fprintf(&sb, "%6s", lm.tgt)
+
+		// arps
+		fmt.Fprintf(&sb, "%7.1f", recent.AppendReport.RequestsPerSecond)
+		fmt.Fprintf(&sb, "%7.1f", total.AppendReport.RequestsPerSecond)
+
+		// abps
+		fmt.Fprintf(&sb, "%10s/s", units.ToByteSizeString(recent.AppendReport.BytesPerSecond))
+		fmt.Fprintf(&sb, "%10s/s", units.ToByteSizeString(total.AppendReport.BytesPerSecond))
+
+		// adur
+		fmt.Fprintf(&sb, "%7.1f", recent.AppendReport.Duration)
+		fmt.Fprintf(&sb, "%7.1f", total.AppendReport.Duration)
+
+		// slps
+		fmt.Fprintf(&sb, "%7.1f", recent.SubscribeReport.LogsPerSecond)
+		fmt.Fprintf(&sb, "%7.1f", total.SubscribeReport.LogsPerSecond)
+
+		// sbps
+		fmt.Fprintf(&sb, "%10s/s", units.ToByteSizeString(recent.SubscribeReport.BytesPerSecond))
+		fmt.Fprintf(&sb, "%10s/s", units.ToByteSizeString(total.SubscribeReport.BytesPerSecond))
+
+		// eelat
+		fmt.Fprintf(&sb, "%8.1f", recent.EndToEndReport.Latency)
+		fmt.Fprintf(&sb, "%8.1f", total.EndToEndReport.Latency)
+
+		if idx < len(m.loaderMetrics)-1 {
+			fmt.Fprint(&sb, "\n")
+		}
 	}
 	return sb.String()
 }
 
 type LoaderMetrics struct {
-	idx int
+	tgt Target
 
-	mu               sync.Mutex
-	lastTime         time.Time
-	appendMetrics    AppendMetrics
-	subscribeMetrics SubscribeMetrics
+	mu            sync.Mutex
+	initTime      time.Time
+	lastTime      time.Time
+	appendMetrics struct {
+		total  AppendMetrics
+		recent AppendMetrics
+	}
+	subscribeMetrics struct {
+		total  SubscribeMetrics
+		recent SubscribeMetrics
+	}
 }
 
 type AppendMetrics struct {
@@ -47,60 +101,58 @@ type SubscribeMetrics struct {
 	bytes int64
 }
 
-func (twm *LoaderMetrics) Reset(now time.Time) {
-	twm.appendMetrics = AppendMetrics{}
-	twm.subscribeMetrics = SubscribeMetrics{}
-	twm.lastTime = now
+func (lm *LoaderMetrics) Reset(now time.Time) {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+	lm.appendMetrics.total = AppendMetrics{}
+	lm.appendMetrics.recent = AppendMetrics{}
+	lm.subscribeMetrics.total = SubscribeMetrics{}
+	lm.subscribeMetrics.recent = SubscribeMetrics{}
+	lm.initTime = now
+	lm.lastTime = now
 }
 
-func (twm *LoaderMetrics) ReportAppendMetrics(m AppendMetrics) bool {
-	if !twm.mu.TryLock() {
+func (lm *LoaderMetrics) ReportAppendMetrics(m AppendMetrics) bool {
+	if !lm.mu.TryLock() {
 		return false
 	}
-	defer twm.mu.Unlock()
-	twm.appendMetrics.requests += m.requests
-	twm.appendMetrics.bytes += m.bytes
-	twm.appendMetrics.durationMS += m.durationMS
+	defer lm.mu.Unlock()
+	lm.appendMetrics.recent.requests += m.requests
+	lm.appendMetrics.recent.bytes += m.bytes
+	lm.appendMetrics.recent.durationMS += m.durationMS
+	lm.appendMetrics.total.requests += m.requests
+	lm.appendMetrics.total.bytes += m.bytes
+	lm.appendMetrics.total.durationMS += m.durationMS
 	return true
 }
 
-func (twm *LoaderMetrics) ReportSubscribeMetrics(m SubscribeMetrics) bool {
-	if !twm.mu.TryLock() {
+func (lm *LoaderMetrics) ReportSubscribeMetrics(m SubscribeMetrics) bool {
+	if !lm.mu.TryLock() {
 		return false
 	}
-	defer twm.mu.Unlock()
-	twm.subscribeMetrics.logs += m.logs
-	twm.subscribeMetrics.bytes += m.bytes
+	defer lm.mu.Unlock()
+	lm.subscribeMetrics.recent.logs += m.logs
+	lm.subscribeMetrics.recent.bytes += m.bytes
+	lm.subscribeMetrics.total.logs += m.logs
+	lm.subscribeMetrics.total.bytes += m.bytes
 	return true
 }
 
-func (twm *LoaderMetrics) Flush(sb *strings.Builder) {
-	const mib = 1 << 20
-
-	twm.mu.Lock()
-	defer twm.mu.Unlock()
+func (lm *LoaderMetrics) Flush() (recent, total Report) {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
 
 	now := time.Now()
-	interval := now.Sub(twm.lastTime).Seconds()
 
-	// _arps__: appended requests per second
-	// _ambps_: appended megabytes per second
-	// _adurs_: mean/min/max append duration in milliseconds
-	// _slps__: subscribed logs per second
-	// _smbps_: subscribed megabytes per second
-	// _eelat_: end-to-end latency in milliseconds
+	total.AppendReport = NewAppendReportFromMetrics(lm.appendMetrics.total, now.Sub(lm.initTime))
+	total.SubscribeReport = NewSubscribeReportFromMetrics(lm.subscribeMetrics.total, now.Sub(lm.initTime))
 
-	fmt.Fprintf(sb, "idx=%2d\t", twm.idx)
+	recent.AppendReport = NewAppendReportFromMetrics(lm.appendMetrics.recent, now.Sub(lm.lastTime))
+	recent.SubscribeReport = NewSubscribeReportFromMetrics(lm.subscribeMetrics.recent, now.Sub(lm.lastTime))
 
-	ap := &twm.appendMetrics
-	fmt.Fprintf(sb, "arps=%2.1f\t", float64(ap.requests)/interval)
-	fmt.Fprintf(sb, "abps=%7.1f\t", float64(ap.bytes)/interval/mib)
+	lm.appendMetrics.recent = AppendMetrics{}
+	lm.subscribeMetrics.recent = SubscribeMetrics{}
+	lm.lastTime = now
 
-	sm := &twm.subscribeMetrics
-	fmt.Fprintf(sb, "slps=%2.1f\t", float64(sm.logs)/interval)
-	fmt.Fprintf(sb, "sbps=%7.1f", float64(sm.bytes)/interval/mib)
-
-	twm.appendMetrics = AppendMetrics{}
-	twm.subscribeMetrics = SubscribeMetrics{}
-	twm.lastTime = now
+	return recent, total
 }
