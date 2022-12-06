@@ -32,7 +32,11 @@ func (trs *testReplicateServer) SyncInit(ctx context.Context, req *snpb.SyncInit
 }
 
 func (trs *testReplicateServer) SyncReplicate(ctx context.Context, req *snpb.SyncReplicateRequest) (*snpb.SyncReplicateResponse, error) {
-	return trs.mock.SyncReplicate(ctx, req)
+	panic("not implemented")
+}
+
+func (trs *testReplicateServer) SyncReplicateStream(snpb.Replicator_SyncReplicateStreamServer) error {
+	panic("not implemented")
 }
 
 func TestNewReplicateServer(t *testing.T, mock *mock.MockReplicatorServer) (server snpb.ReplicatorServer, rpcConn *rpc.Conn, closer func()) {
