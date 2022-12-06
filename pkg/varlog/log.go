@@ -44,13 +44,22 @@ type Log interface {
 	// It returns an error if the log stream does not exist or fails to
 	// fetch metadata from all replicas.
 	//
-	// Deprecated: Use LogStreamReplicaMetdata.
+	// Deprecated: Use PeekLogStream
 	LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error)
 
 	// LogStreamReplicaMetadata returns metadata of log stream replica
 	// specified by the arguments tpid and lsid. It returns the first
 	// successful result among all replicas.
+	//
+	// Deprecated: Use PeekLogStream
 	LogStreamReplicaMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error)
+
+	// PeekLogStream returns the log sequence numbers at the first and the
+	// last. It fetches the metadata for each replica of a log stream lsid
+	// concurrently and takes a result from either appendable or sealed
+	// replica. If none of the replicas' statuses is either appendable or
+	// sealed, it returns an error.
+	PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error)
 }
 
 type AppendResult struct {
@@ -188,6 +197,10 @@ func (v *logImpl) LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsi
 
 func (v *logImpl) LogStreamReplicaMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	return v.logStreamReplicaMetadata(ctx, tpid, lsid)
+}
+
+func (v *logImpl) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {
+	return v.peekLogStream(ctx, tpid, lsid)
 }
 
 func (v *logImpl) Close() (err error) {

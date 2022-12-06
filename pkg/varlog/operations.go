@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -146,4 +147,62 @@ func (v *logImpl) logStreamReplicaMetadata(ctx context.Context, tpID types.Topic
 		return lsrmd, nil
 	}
 	return snpb.LogStreamReplicaMetadataDescriptor{}, err
+}
+
+func (v *logImpl) peekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {
+	replicas, ok := v.replicasRetriever.Retrieve(tpid, lsid)
+	if !ok {
+		err = errNoLogStream
+		return
+	}
+
+	var (
+		errs  = make([]error, len(replicas))
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		found bool
+	)
+	for idx := range replicas {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+
+			client, erri := v.logCLManager.GetOrConnect(ctx, replicas[idx].StorageNodeID, replicas[idx].Address)
+			if erri != nil {
+				errs[idx] = erri
+				return
+			}
+			lsrmd, erri := client.LogStreamReplicaMetadata(ctx, tpid, lsid)
+			if erri != nil {
+				errs[idx] = erri
+				return
+			}
+			switch lsrmd.Status {
+			case varlogpb.LogStreamStatusRunning, varlogpb.LogStreamStatusSealed:
+				mu.Lock()
+				defer mu.Unlock()
+				if first.LLSN < lsrmd.LocalLowWatermark.LLSN {
+					first = lsrmd.LocalLowWatermark
+				}
+				if last.LLSN < lsrmd.LocalHighWatermark.LLSN {
+					last = lsrmd.LocalHighWatermark
+				}
+				found = true
+			default:
+				errs[idx] = fmt.Errorf("logstream replica snid=%v: invalid status: %s",
+					replicas[idx].StorageNodeID, lsrmd.Status,
+				)
+			}
+		}(idx)
+	}
+	wg.Wait()
+
+	if found {
+		return first, last, nil
+	}
+	err = multierr.Combine(errs...)
+	return first, last, err
 }

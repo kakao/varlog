@@ -217,20 +217,12 @@ func TestClientAppend(t *testing.T) {
 		require.Equal(t, topicID, lsd.Tail.TopicID)
 		require.Equal(t, logStreamID, lsd.Tail.LogStreamID)
 
-		lsrmd, err := client.LogStreamReplicaMetadata(context.Background(), topicID, logStreamID)
+		first, last, err := client.PeekLogStream(context.Background(), topicID, logStreamID)
 		require.NoError(t, err)
-		require.Equal(t, topicID, lsrmd.TopicID)
-		require.Equal(t, logStreamID, lsrmd.LogStreamID)
-
-		require.Equal(t, types.MinLLSN, lsrmd.Head().LLSN)
-		require.GreaterOrEqual(t, lsrmd.Head().GLSN, types.MinGLSN)
-		require.Equal(t, topicID, lsrmd.Head().TopicID)
-		require.Equal(t, logStreamID, lsrmd.Head().LogStreamID)
-
-		require.GreaterOrEqual(t, lsrmd.Tail().LLSN, types.MinLLSN)
-		require.GreaterOrEqual(t, lsrmd.Tail().GLSN, types.MinGLSN)
-		require.Equal(t, topicID, lsrmd.Tail().TopicID)
-		require.Equal(t, logStreamID, lsrmd.Tail().LogStreamID)
+		require.Equal(t, types.MinLLSN, first.LLSN)
+		require.GreaterOrEqual(t, first.GLSN, types.MinGLSN)
+		require.GreaterOrEqual(t, last.LLSN, types.MinLLSN)
+		require.GreaterOrEqual(t, last.GLSN, types.MinGLSN)
 	}
 }
 
@@ -613,4 +605,55 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 			})
 		})
 	}))
+}
+
+func TestClientPeekLogStream(t *testing.T) {
+	clus := it.NewVarlogCluster(t,
+		it.WithNumberOfStorageNodes(2),
+		it.WithReplicationFactor(2),
+		it.WithNumberOfTopics(1),
+		it.WithNumberOfLogStreams(1),
+		it.WithNumberOfClients(1),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
+	)
+	defer clus.Close(t)
+
+	tpid := clus.TopicIDs()[0]
+	lsid := clus.LogStreamIDs(tpid)[0]
+	client := clus.ClientAtIndex(t, 0)
+
+	first, last, err := client.PeekLogStream(context.Background(), tpid, lsid)
+	require.NoError(t, err)
+	require.True(t, first.Invalid())
+	require.True(t, last.Invalid())
+
+	res := client.Append(context.Background(), tpid, [][]byte{nil})
+	require.NoError(t, res.Err)
+
+	first, last, err = client.PeekLogStream(context.Background(), tpid, lsid)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogSequenceNumber{
+		LLSN: 1, GLSN: 1,
+	}, first)
+	require.Equal(t, varlogpb.LogSequenceNumber{
+		LLSN: 1, GLSN: 1,
+	}, last)
+
+	idx := int(time.Now().UnixNano() % 2)
+	clus.CloseSN(t, clus.StorageNodeIDAtIndex(t, idx))
+
+	first, last, err = client.PeekLogStream(context.Background(), tpid, lsid)
+	require.NoError(t, err)
+	require.Equal(t, varlogpb.LogSequenceNumber{
+		LLSN: 1, GLSN: 1,
+	}, first)
+	require.Equal(t, varlogpb.LogSequenceNumber{
+		LLSN: 1, GLSN: 1,
+	}, last)
+
+	idx = (idx + 1) % 2
+	clus.CloseSN(t, clus.StorageNodeIDAtIndex(t, idx))
+
+	_, _, err = client.PeekLogStream(context.Background(), tpid, lsid)
+	require.Error(t, err)
 }

@@ -357,6 +357,34 @@ func (c *testLog) LogStreamReplicaMetadata(_ context.Context, tpid types.TopicID
 	}, nil
 }
 
+func (c *testLog) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {
+	if err = c.lock(); err != nil {
+		return first, last, err
+	}
+	defer c.unlock()
+
+	topicDesc, ok := c.vt.topics[tpid]
+	if !ok {
+		return first, last, errors.New("no such topic")
+	}
+
+	if !topicDesc.HasLogStream(lsid) {
+		return first, last, errors.New("no such log stream")
+	}
+
+	head, tail := c.vt.peek(tpid, lsid)
+	first = varlogpb.LogSequenceNumber{
+		LLSN: head.LLSN,
+		GLSN: head.GLSN,
+	}
+	last = varlogpb.LogSequenceNumber{
+		LLSN: tail.LLSN,
+		GLSN: tail.GLSN,
+	}
+	return first, last, nil
+
+}
+
 type errSubscriber struct {
 	err error
 }
