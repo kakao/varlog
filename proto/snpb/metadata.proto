@@ -37,11 +37,11 @@ message StorageNodeMetadataDescriptor {
   ];
 
   repeated varlogpb.StorageDescriptor storages = 3
-  [(gogoproto.nullable) = false];
+    [(gogoproto.nullable) = false];
 
   // LogStreams are the list of metadata for log stream replicas.
   repeated LogStreamReplicaMetadataDescriptor log_stream_replicas = 4
-  [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
 
   varlogpb.StorageNodeStatus status = 5;
 
@@ -73,7 +73,7 @@ message LogStreamReplicaMetadataDescriptor {
   // Version is the latest version of the commit received from the metadata
   // repository.
   uint64 version = 3
-  [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
+    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
 
   // GlobalHighWatermark is the latest high watermark received from the metadata
   // repository.
@@ -87,14 +87,12 @@ message LogStreamReplicaMetadataDescriptor {
   // The LocalLowWatermark becomes higher when the log is truncated by prefix
   // trimming.
   varlogpb.LogSequenceNumber local_low_watermark = 5
-  [(gogoproto.nullable) = false, (gogoproto.jsontag) = "localLowWatermark"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "localLowWatermark"];
 
   // LocalHighWatermark is the last log sequence number in the log stream
   // replica.
-  varlogpb.LogSequenceNumber local_high_watermark = 6 [
-    (gogoproto.nullable) = false,
-    (gogoproto.jsontag) = "localHighWatermark"
-  ];
+  varlogpb.LogSequenceNumber local_high_watermark = 6
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "localHighWatermark"];
 
   // Path is the directory where the data for the log stream replica is stored.
   string path = 7;

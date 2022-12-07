@@ -117,5 +117,5 @@ service Replicator {
   rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}
   // SyncReplicateStream copies log entries between replicas in a log stream.
   rpc SyncReplicateStream(stream SyncReplicateRequest)
-      returns (SyncReplicateResponse) {}
+    returns (SyncReplicateResponse) {}
 }

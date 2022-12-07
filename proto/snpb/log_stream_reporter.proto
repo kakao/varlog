@@ -27,11 +27,11 @@ message LogStreamUncommitReport {
     (gogoproto.customname) = "UncommittedLLSNOffset"
   ];
   uint64 uncommitted_llsn_length = 3
-  [(gogoproto.customname) = "UncommittedLLSNLength"];
+    [(gogoproto.customname) = "UncommittedLLSNLength"];
   uint64 version = 4
-  [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
+    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
   uint64 high_watermark = 5
-  [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN"];
+    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN"];
 }
 
 message GetReportRequest {}
@@ -41,7 +41,7 @@ message GetReportResponse {
     (gogoproto.customname) = "StorageNodeID"
   ];
   repeated LogStreamUncommitReport uncommit_reports = 2
-  [(gogoproto.nullable) = false];
+    [(gogoproto.nullable) = false];
 }
 
 // GlobalLogStreamDescriptor is a committing result against with
@@ -69,9 +69,9 @@ message LogStreamCommitResult {
     (gogoproto.customname) = "CommittedGLSNOffset"
   ];
   uint64 committed_glsn_length = 5
-  [(gogoproto.customname) = "CommittedGLSNLength"];
+    [(gogoproto.customname) = "CommittedGLSNLength"];
   uint64 version = 6
-  [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
+    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
   uint64 high_watermark = 7 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
     (gogoproto.customname) = "HighWatermark"
@@ -96,7 +96,7 @@ message CommitBatchRequest {
     (gogoproto.customname) = "StorageNodeID"
   ];
   repeated LogStreamCommitResult commit_results = 2
-  [(gogoproto.nullable) = false];
+    [(gogoproto.nullable) = false];
 }
 
 message CommitBatchResponse {

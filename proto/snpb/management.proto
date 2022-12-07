@@ -50,7 +50,7 @@ message AddLogStreamReplicaRequest {
 }
 message AddLogStreamReplicaResponse {
   LogStreamReplicaMetadataDescriptor log_stream_replica = 1
-  [(gogoproto.nullable) = false];
+    [(gogoproto.nullable) = false];
 }
 
 message RemoveLogStreamRequest {
@@ -121,7 +121,7 @@ message UnsealRequest {
     (gogoproto.customname) = "LogStreamID"
   ];
   repeated varlogpb.LogStreamReplica replicas = 5
-  [(gogoproto.nullable) = false];
+    [(gogoproto.nullable) = false];
 }
 
 message SyncRequest {
@@ -169,7 +169,7 @@ message TrimRequest {
 
 message TrimResponse {
   map<int32, string> results = 1
-  [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.LogStreamID"];
+    [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.LogStreamID"];
 }
 
 // Management defines the public APIs for managing StorageNode.

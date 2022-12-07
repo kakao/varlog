@@ -20,9 +20,9 @@ message LogStreamCommitResults {
   option (gogoproto.equal) = true;
 
   uint64 version = 1
-  [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
+    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
   repeated snpb.LogStreamCommitResult commit_results = 3
-  [(gogoproto.nullable) = false];
+    [(gogoproto.nullable) = false];
 }
 
 message StorageNodeUncommitReport {
@@ -31,7 +31,7 @@ message StorageNodeUncommitReport {
     (gogoproto.customname) = "StorageNodeID"
   ];
   repeated snpb.LogStreamUncommitReport uncommit_reports = 2
-  [(gogoproto.nullable) = false];
+    [(gogoproto.nullable) = false];
 }
 
 message LogStreamUncommitReports {
@@ -47,11 +47,11 @@ message LogStreamUncommitReports {
 message MetadataRepositoryDescriptor {
   message LogStreamDescriptor {
     uint64 trim_version = 1
-    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
+      [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
     repeated LogStreamCommitResults commit_history = 2
-    [(gogoproto.nullable) = true];
+      [(gogoproto.nullable) = true];
     map<int32, LogStreamUncommitReports> uncommit_reports = 3
-    [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.LogStreamID"];
+      [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.LogStreamID"];
   }
 
   message PeerDescriptor {
@@ -61,7 +61,7 @@ message MetadataRepositoryDescriptor {
 
   message PeerDescriptorMap {
     map<uint64, PeerDescriptor> peers = 1
-    [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.NodeID"];
+      [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.NodeID"];
     // applied_index is the AppliedIndex of RAFT that is updated by changing
     // configuration of members. For example, AddPeer and RemovePeer result
     // in increasing applied_index.
@@ -72,5 +72,5 @@ message MetadataRepositoryDescriptor {
   LogStreamDescriptor log_stream = 2 [(gogoproto.nullable) = true];
   PeerDescriptorMap peers_map = 3 [(gogoproto.nullable) = false];
   map<uint64, string> endpoints = 4
-  [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.NodeID"];
+    [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.NodeID"];
 }

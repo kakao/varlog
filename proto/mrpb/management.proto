@@ -67,12 +67,12 @@ message ClusterInfo {
   ];
 
   uint64 leader = 3
-  [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID"];
+    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID"];
 
   int32 replication_factor = 4 [(gogoproto.jsontag) = "replicationFactor"];
 
   map<uint64, Member> members = 5
-  [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.NodeID"];
+    [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.NodeID"];
 
   // applied_index is the AppliedIndex of RAFT that is updated by changing
   // configuration of members. For example, AddPeer and RemovePeer result in
