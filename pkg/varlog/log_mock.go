@@ -120,6 +120,22 @@ func (mr *MockLogMockRecorder) LogStreamReplicaMetadata(arg0, arg1, arg2 interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamReplicaMetadata", reflect.TypeOf((*MockLog)(nil).LogStreamReplicaMetadata), arg0, arg1, arg2)
 }
 
+// PeekLogStream mocks base method.
+func (m *MockLog) PeekLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (varlogpb.LogSequenceNumber, varlogpb.LogSequenceNumber, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PeekLogStream", arg0, arg1, arg2)
+	ret0, _ := ret[0].(varlogpb.LogSequenceNumber)
+	ret1, _ := ret[1].(varlogpb.LogSequenceNumber)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// PeekLogStream indicates an expected call of PeekLogStream.
+func (mr *MockLogMockRecorder) PeekLogStream(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekLogStream", reflect.TypeOf((*MockLog)(nil).PeekLogStream), arg0, arg1, arg2)
+}
+
 // Subscribe mocks base method.
 func (m *MockLog) Subscribe(arg0 context.Context, arg1 types.TopicID, arg2, arg3 types.GLSN, arg4 OnNext, arg5 ...SubscribeOption) (SubscribeCloser, error) {
 	m.ctrl.T.Helper()
