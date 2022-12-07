@@ -28,3 +28,13 @@ func (tgt *Target) Valid() error {
 	}
 	return nil
 }
+
+func (tgt Target) String() string {
+	ret := tgt.TopicID.String()
+	if tgt.LogStreamID.Invalid() {
+		ret += ":*"
+	} else {
+		ret += ":" + tgt.LogStreamID.String()
+	}
+	return ret
+}
