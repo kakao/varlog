@@ -60,7 +60,7 @@ message ListStorageNodesRequest {}
 message ListStorageNodesResponse {
   // StorageNodes registered to the cluster.
   repeated StorageNodeMetadata storage_nodes = 1
-  [(gogoproto.nullable) = false, (gogoproto.jsontag) = "storageNodes"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "storageNodes"];
 }
 message AddStorageNodeRequest {
   varlogpb.StorageNode storage_node = 1 [(gogoproto.nullable) = false];
@@ -94,12 +94,12 @@ message DescribeTopicRequest {
 message DescribeTopicResponse {
   varlogpb.TopicDescriptor topic = 1 [(gogoproto.nullable) = false];
   repeated varlogpb.LogStreamDescriptor log_streams = 2
-  [(gogoproto.nullable) = false];
+    [(gogoproto.nullable) = false];
 }
 message ListTopicsRequest {}
 message ListTopicsResponse {
   repeated varlogpb.TopicDescriptor topics = 1
-  [(gogoproto.nullable) = false, (gogoproto.jsontag) = "topics"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "topics"];
 }
 // AddTopicRequest represents a request to add a topic to the cluster.
 message AddTopicRequest {}
@@ -127,7 +127,7 @@ message GetLogStreamRequest {
 }
 message GetLogStreamResponse {
   varlogpb.LogStreamDescriptor log_stream = 1
-  [(gogoproto.jsontag) = "logStream"];
+    [(gogoproto.jsontag) = "logStream"];
 }
 message ListLogStreamsRequest {
   int32 topic_id = 1 [
@@ -137,7 +137,7 @@ message ListLogStreamsRequest {
 }
 message ListLogStreamsResponse {
   repeated varlogpb.LogStreamDescriptor log_streams = 1
-  [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
 }
 message AddLogStreamRequest {
   int32 topic_id = 1 [
@@ -146,7 +146,7 @@ message AddLogStreamRequest {
   ];
   // TODO: nullable = false
   repeated varlogpb.ReplicaDescriptor replicas = 2
-  [(gogoproto.nullable) = true];
+    [(gogoproto.nullable) = true];
 }
 message AddLogStreamResponse {
   varlogpb.LogStreamDescriptor log_stream = 1;
@@ -216,7 +216,7 @@ message SealRequest {
 
 message SealResponse {
   repeated snpb.LogStreamReplicaMetadataDescriptor log_streams = 1
-  [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
   uint64 sealed_glsn = 2 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
     (gogoproto.customname) = "SealedGLSN",
@@ -237,7 +237,7 @@ message UnsealRequest {
 
 message UnsealResponse {
   varlogpb.LogStreamDescriptor log_stream = 1
-  [(gogoproto.jsontag) = "logStream"];
+    [(gogoproto.jsontag) = "logStream"];
 }
 
 message SyncRequest {
@@ -302,17 +302,17 @@ message GetMetadataRepositoryNodeResponse {
 message ListMetadataRepositoryNodesRequest {}
 message ListMetadataRepositoryNodesResponse {
   repeated varlogpb.MetadataRepositoryNode nodes = 1
-  [(gogoproto.nullable) = false, (gogoproto.jsontag) = "nodes"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "nodes"];
 }
 message GetMRMembersResponse {
   uint64 leader = 1
-  [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID"];
+    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID"];
 
   int32 replication_factor = 2
-  [(gogoproto.jsontag) = "replicationFactor,omitempty"];
+    [(gogoproto.jsontag) = "replicationFactor,omitempty"];
 
   map<uint64, string> members = 3
-  [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.NodeID"];
+    [(gogoproto.castkey) = "github.com/kakao/varlog/pkg/types.NodeID"];
 }
 message AddMetadataRepositoryNodeRequest {
   string raft_url = 1 [(gogoproto.customname) = "RaftURL"];

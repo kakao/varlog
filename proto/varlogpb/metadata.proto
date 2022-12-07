@@ -21,11 +21,11 @@ message MetadataDescriptor {
 
   uint64 applied_index = 1 [(gogoproto.jsontag) = "appliedIndex"];
   repeated StorageNodeDescriptor storage_nodes = 2
-  [(gogoproto.nullable) = true, (gogoproto.jsontag) = "storageNodes"];
+    [(gogoproto.nullable) = true, (gogoproto.jsontag) = "storageNodes"];
   repeated LogStreamDescriptor log_streams = 3
-  [(gogoproto.nullable) = true, (gogoproto.jsontag) = "logStreams"];
+    [(gogoproto.nullable) = true, (gogoproto.jsontag) = "logStreams"];
   repeated TopicDescriptor topics = 4
-  [(gogoproto.nullable) = true, (gogoproto.jsontag) = "topics"];
+    [(gogoproto.nullable) = true, (gogoproto.jsontag) = "topics"];
 }
 
 // StorageNodeDescriptor is immutable metadata to persist information of a
@@ -54,9 +54,9 @@ enum StorageNodeStatus {
   option (gogoproto.goproto_enum_prefix) = false;
 
   STORAGE_NODE_STATUS_RUNNING = 0
-  [(gogoproto.enumvalue_customname) = "StorageNodeStatusRunning"];
+    [(gogoproto.enumvalue_customname) = "StorageNodeStatusRunning"];
   STORAGE_NODE_STATUS_DELETED = 1
-  [(gogoproto.enumvalue_customname) = "StorageNodeStatusDeleted"];
+    [(gogoproto.enumvalue_customname) = "StorageNodeStatusDeleted"];
 }
 
 message StorageDescriptor {
@@ -90,24 +90,24 @@ message LogStreamDescriptor {
   // elsewhere other than the metadata repository. It leads to misusing the
   // LogStreamDescriptor.
   LogEntryMeta head = 5
-  [(gogoproto.nullable) = false, (gogoproto.jsontag) = "head,omitempty"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "head,omitempty"];
   LogEntryMeta tail = 6
-  [(gogoproto.nullable) = false, (gogoproto.jsontag) = "tail,omitempty"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "tail,omitempty"];
 }
 
 enum LogStreamStatus {
   option (gogoproto.goproto_enum_prefix) = false;
 
   LS_STATUS_RUNNING = 0
-  [(gogoproto.enumvalue_customname) = "LogStreamStatusRunning"];
+    [(gogoproto.enumvalue_customname) = "LogStreamStatusRunning"];
   LS_STATUS_SEALING = 1
-  [(gogoproto.enumvalue_customname) = "LogStreamStatusSealing"];
+    [(gogoproto.enumvalue_customname) = "LogStreamStatusSealing"];
   LS_STATUS_SEALED = 2
-  [(gogoproto.enumvalue_customname) = "LogStreamStatusSealed"];
+    [(gogoproto.enumvalue_customname) = "LogStreamStatusSealed"];
   LS_STATUS_DELETED = 3
-  [(gogoproto.enumvalue_customname) = "LogStreamStatusDeleted"];
+    [(gogoproto.enumvalue_customname) = "LogStreamStatusDeleted"];
   LS_STATUS_UNSEALING = 4
-  [(gogoproto.enumvalue_customname) = "LogStreamStatusUnsealing"];
+    [(gogoproto.enumvalue_customname) = "LogStreamStatusUnsealing"];
 }
 
 // ReplicaDescriptor represents a storage node and directory where a log stream
@@ -151,9 +151,9 @@ enum TopicStatus {
   option (gogoproto.goproto_enum_prefix) = false;
 
   TOPIC_STATUS_RUNNING = 0
-  [(gogoproto.enumvalue_customname) = "TopicStatusRunning"];
+    [(gogoproto.enumvalue_customname) = "TopicStatusRunning"];
   TOPIC_STATUS_DELETED = 1
-  [(gogoproto.enumvalue_customname) = "TopicStatusDeleted"];
+    [(gogoproto.enumvalue_customname) = "TopicStatusDeleted"];
 }
 
 // StorageNode is a structure to represent identifier and address of storage
@@ -242,13 +242,13 @@ message LogEntry {
   option (gogoproto.equal) = true;
 
   LogEntryMeta meta = 1
-  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+    [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes data = 2;
 }
 
 message CommitContext {
   uint64 version = 1
-  [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
+    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
   uint64 high_watermark = 2 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
     (gogoproto.customname) = "HighWatermark"
@@ -274,9 +274,9 @@ message MetadataRepositoryNode {
     (gogoproto.jsontag) = "nodeId"
   ];
   string raft_url = 2
-  [(gogoproto.customname) = "RaftURL", (gogoproto.jsontag) = "raftURL"];
+    [(gogoproto.customname) = "RaftURL", (gogoproto.jsontag) = "raftURL"];
   string rpc_addr = 3
-  [(gogoproto.customname) = "RPCAddr", (gogoproto.jsontag) = "rpcAddr"];
+    [(gogoproto.customname) = "RPCAddr", (gogoproto.jsontag) = "rpcAddr"];
   bool leader = 4 [(gogoproto.jsontag) = "leader"];
   bool learner = 5 [(gogoproto.jsontag) = "learner"];
 }
