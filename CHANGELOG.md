@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/kakao/varlog/compare/v0.7.1...v0.8.0) (2022-12-06)
+
+
+### Features
+
+* **client:** add PeekLogStream to the client ([e872677](https://github.com/kakao/varlog/commit/e8726770ce2c7e0ae465f88a16a9bc4a98cb31d0)), closes [#239](https://github.com/kakao/varlog/issues/239)
+* **storagenode:** add SyncReplicateStream to synchronize replicas by using stream gRPC ([d8d7888](https://github.com/kakao/varlog/commit/d8d788877976bdb0bb5e022068084fb674555f4a)), closes [#241](https://github.com/kakao/varlog/issues/241)
+
 ## [0.7.1](https://github.com/kakao/varlog/compare/v0.7.0...v0.7.1) (2022-11-23)
 
 
