@@ -99,6 +99,26 @@ func (mr *MockReplicatorClientMockRecorder) SyncReplicate(arg0, arg1 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicatorClient)(nil).SyncReplicate), varargs...)
 }
 
+// SyncReplicateStream mocks base method.
+func (m *MockReplicatorClient) SyncReplicateStream(arg0 context.Context, arg1 ...grpc.CallOption) (snpb.Replicator_SyncReplicateStreamClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncReplicateStream", varargs...)
+	ret0, _ := ret[0].(snpb.Replicator_SyncReplicateStreamClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncReplicateStream indicates an expected call of SyncReplicateStream.
+func (mr *MockReplicatorClientMockRecorder) SyncReplicateStream(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicateStream", reflect.TypeOf((*MockReplicatorClient)(nil).SyncReplicateStream), varargs...)
+}
+
 // MockReplicatorServer is a mock of ReplicatorServer interface.
 type MockReplicatorServer struct {
 	ctrl     *gomock.Controller
@@ -164,6 +184,20 @@ func (m *MockReplicatorServer) SyncReplicate(arg0 context.Context, arg1 *snpb.Sy
 func (mr *MockReplicatorServerMockRecorder) SyncReplicate(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicatorServer)(nil).SyncReplicate), arg0, arg1)
+}
+
+// SyncReplicateStream mocks base method.
+func (m *MockReplicatorServer) SyncReplicateStream(arg0 snpb.Replicator_SyncReplicateStreamServer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncReplicateStream", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SyncReplicateStream indicates an expected call of SyncReplicateStream.
+func (mr *MockReplicatorServerMockRecorder) SyncReplicateStream(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicateStream", reflect.TypeOf((*MockReplicatorServer)(nil).SyncReplicateStream), arg0)
 }
 
 // MockReplicator_ReplicateClient is a mock of Replicator_ReplicateClient interface.
