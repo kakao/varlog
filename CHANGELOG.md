@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/kakao/varlog/compare/v0.8.0...v0.8.1) (2022-12-07)
+
+
+### Bug Fixes
+
+* **storagenode,client:** add missing mock files ([436f0d9](https://github.com/kakao/varlog/commit/436f0d9ba5fbfe00beda982ea54b646876654351))
+
 ## [0.8.0](https://github.com/kakao/varlog/compare/v0.7.1...v0.8.0) (2022-12-06)
 
 
