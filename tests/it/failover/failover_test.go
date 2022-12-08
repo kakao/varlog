@@ -295,7 +295,7 @@ func TestVarlogFailoverSNBackupFail(t *testing.T) {
 						// are running.
 						rsp, err := env.GetVMSClient(t).DescribeTopic(context.TODO(), topicID)
 						require.NoError(t, err)
-						require.Condition(t, func() bool {
+						require.Eventually(t, func() bool {
 							ret := true
 							for _, lsd := range rsp.LogStreams {
 								ret = ret && lsd.Status.Running()
