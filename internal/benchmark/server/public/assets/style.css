@@ -1,0 +1,19 @@
+body {
+    font-family: 'Open Sans';
+    font-style: normal;
+    font-size: 0.9em;
+}
+
+header {
+    margin-bottom: 50px;
+}
+
+.workload-container {
+    margin-bottom: 20px;
+}
+
+.chart-container {
+    position: relative;
+    height: 30vh;
+    width: 80vw;
+}

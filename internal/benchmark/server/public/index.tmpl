@@ -1,0 +1,38 @@
+{{define "index"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>varlog - Are We Fast Yet</title>
+    <link href="https://fonts.googleapis.com/css?family=Open Sans" rel="stylesheet">
+    <link href="/assets/style.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<header>
+    <h1>varlog: are we fast yet?</h1>
+</header>
+<main>
+    {{range .}}
+        <div class="workload-container">
+        <section>
+        <h2>Workload: {{.Name}}</h2>
+            {{range .MetricResults}}
+                <section>
+                    <div class="chart-container">
+                        <canvas id="{{.ChartID}}"></canvas>
+                        {{template "chart" .}}
+                    </div>
+                </section>
+            {{end}}
+        </section>
+        </div>
+    {{end}}
+</main>
+<footer>
+</footer>
+</body>
+</html>
+{{end}}
+

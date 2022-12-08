@@ -1,0 +1,36 @@
+{{define "chart"}}
+<script>
+    var ctx = document.getElementById('{{.ChartID}}');
+    var data = {
+        labels: {{.XValues}},
+        datasets: [{
+            label: {{.ChartName}},
+            data: {{.YValues}}
+        }]
+    };
+    var options = {
+        maintainAspectRatio: false,
+        events: ['mousemove', 'mouseout', 'touchstart', 'touchmove'],
+        scales: {
+            x: {
+                title: {
+                    text: '{{.XTitle}}',
+                    display: true
+                },
+            },
+            y: {
+                title: {
+                    text: '{{.YTitle}}',
+                    display: true
+                },
+            },
+        }
+    };
+    var config = {
+        type: 'line',
+        data: data,
+        options: options
+    };
+    new Chart(ctx, config);
+</script>
+{{end}}
