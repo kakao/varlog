@@ -75,6 +75,17 @@ func run() int {
 func newApp() *cli.App {
 	app := &cli.App{
 		Name: "benchmark",
+		Commands: []*cli.Command{
+			newCommandTest(),
+		},
+	}
+	return app
+}
+
+func newCommandTest() *cli.Command {
+	return &cli.Command{
+		Name:  "test",
+		Usage: "run benchmark test",
 		Flags: []cli.Flag{
 			flagClusterID,
 			flagTarget,
@@ -86,12 +97,11 @@ func newApp() *cli.App {
 			flagDuration,
 			flagReportInterval,
 		},
-		Action: start,
+		Action: runCommandTest,
 	}
-	return app
 }
 
-func start(c *cli.Context) error {
+func runCommandTest(c *cli.Context) error {
 	if c.NArg() > 0 {
 		return fmt.Errorf("unexpected args: %v", c.Args().Slice())
 	}
