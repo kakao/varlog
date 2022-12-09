@@ -3,17 +3,13 @@ package varlogtest
 import (
 	"context"
 	"io"
-	"path/filepath"
 	"sync"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
-	"github.com/kakao/varlog/internal/storagenode/volume"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
-	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -271,90 +267,6 @@ func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStr
 
 func (c *testLog) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts varlog.TrimOption) error {
 	panic("not implemented")
-}
-
-func (c *testLog) LogStreamMetadata(_ context.Context, topicID types.TopicID, logStreamID types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
-	if err := c.lock(); err != nil {
-		return varlogpb.LogStreamDescriptor{}, err
-	}
-	defer c.unlock()
-
-	topicDesc, ok := c.vt.topics[topicID]
-	if !ok {
-		return varlogpb.LogStreamDescriptor{}, errors.New("no such topic")
-	}
-
-	if !topicDesc.HasLogStream(logStreamID) {
-		return varlogpb.LogStreamDescriptor{}, errors.New("no such log stream")
-	}
-
-	logStreamDesc, ok := c.vt.logStreams[logStreamID]
-	if !ok {
-		return varlogpb.LogStreamDescriptor{}, errors.New("no such log stream")
-	}
-
-	logStreamDesc = *proto.Clone(&logStreamDesc).(*varlogpb.LogStreamDescriptor)
-	head, tail := c.vt.peek(topicID, logStreamID)
-	logStreamDesc.Head = head //nolint:staticcheck
-	logStreamDesc.Tail = tail
-	return logStreamDesc, nil
-}
-
-func (c *testLog) LogStreamReplicaMetadata(_ context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
-	if err := c.lock(); err != nil {
-		return snpb.LogStreamReplicaMetadataDescriptor{}, err
-	}
-	defer c.unlock()
-
-	topicDesc, ok := c.vt.topics[tpid]
-	if !ok {
-		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("no such topic")
-	}
-
-	if !topicDesc.HasLogStream(lsid) {
-		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("no such log stream")
-	}
-
-	lsd, ok := c.vt.logStreams[lsid]
-	if !ok {
-		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("no such log stream")
-	}
-
-	snid := lsd.Replicas[0].StorageNodeID
-	snmd, ok := c.vt.storageNodes[snid]
-	if !ok {
-		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("no such storage node")
-	}
-
-	snpath := snmd.Storages[0].Path
-	dataPath := filepath.Join(snpath, volume.LogStreamDirName(tpid, lsid))
-
-	n := len(c.vt.globalLogEntries[tpid])
-	lastGLSN := c.vt.globalLogEntries[tpid][n-1].GLSN
-	head, tail := c.vt.peek(tpid, lsid)
-	return snpb.LogStreamReplicaMetadataDescriptor{
-		LogStreamReplica: varlogpb.LogStreamReplica{
-			StorageNode: varlogpb.StorageNode{
-				StorageNodeID: snid,
-			},
-			TopicLogStream: varlogpb.TopicLogStream{
-				TopicID:     tpid,
-				LogStreamID: lsid,
-			},
-		},
-		Status:              varlogpb.LogStreamStatusRunning,
-		Version:             c.vt.version,
-		GlobalHighWatermark: lastGLSN,
-		LocalLowWatermark: varlogpb.LogSequenceNumber{
-			GLSN: head.GLSN,
-			LLSN: head.LLSN,
-		},
-		LocalHighWatermark: varlogpb.LogSequenceNumber{
-			GLSN: tail.GLSN,
-			LLSN: tail.LLSN,
-		},
-		Path: dataPath,
-	}, nil
 }
 
 func (c *testLog) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {

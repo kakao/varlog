@@ -157,17 +157,6 @@ func (c *LogClient) TrimDeprecated(ctx context.Context, tpid types.TopicID, glsn
 	return nil
 }
 
-func (c *LogClient) LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
-	rsp, err := c.rpcClient.LogStreamMetadata(ctx, &snpb.LogStreamMetadataRequest{
-		TopicID:     tpid,
-		LogStreamID: lsid,
-	})
-	if err != nil {
-		return rsp.GetLogStreamDescriptor(), fmt.Errorf("logclient: %w", verrors.FromStatusError(err))
-	}
-	return rsp.GetLogStreamDescriptor(), nil
-}
-
 func (c *LogClient) LogStreamReplicaMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	rsp, err := c.rpcClient.LogStreamReplicaMetadata(ctx, &snpb.LogStreamReplicaMetadataRequest{
 		TopicID:     tpid,

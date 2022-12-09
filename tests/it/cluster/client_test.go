@@ -202,21 +202,6 @@ func TestClientAppend(t *testing.T) {
 	// })
 
 	for _, logStreamID := range clus.LogStreamIDs(topicID) {
-		lsd, err := client.LogStreamMetadata(context.Background(), topicID, logStreamID) //nolint:staticcheck
-		require.NoError(t, err)
-		require.Equal(t, topicID, lsd.TopicID)
-		require.Equal(t, logStreamID, lsd.LogStreamID)
-
-		require.Equal(t, types.MinLLSN, lsd.Head.LLSN)          //nolint:staticcheck
-		require.GreaterOrEqual(t, lsd.Head.GLSN, types.MinGLSN) //nolint:staticcheck
-		require.Equal(t, topicID, lsd.Head.TopicID)             //nolint:staticcheck
-		require.Equal(t, logStreamID, lsd.Head.LogStreamID)     //nolint:staticcheck
-
-		require.GreaterOrEqual(t, lsd.Tail.LLSN, types.MinLLSN)
-		require.GreaterOrEqual(t, lsd.Tail.GLSN, types.MinGLSN)
-		require.Equal(t, topicID, lsd.Tail.TopicID)
-		require.Equal(t, logStreamID, lsd.Tail.LogStreamID)
-
 		first, last, err := client.PeekLogStream(context.Background(), topicID, logStreamID)
 		require.NoError(t, err)
 		require.Equal(t, types.MinLLSN, first.LLSN)

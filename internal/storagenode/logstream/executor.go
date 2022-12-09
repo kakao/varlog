@@ -497,46 +497,6 @@ func (lse *Executor) metadataDescriptor(state executorState) snpb.LogStreamRepli
 	}
 }
 
-func (lse *Executor) LogStreamMetadata() (lsd varlogpb.LogStreamDescriptor, err error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
-
-	if lse.esm.load() == executorStateClosed {
-		return lsd, verrors.ErrClosed
-	}
-
-	var status varlogpb.LogStreamStatus
-	switch lse.esm.load() {
-	case executorStateAppendable:
-		status = varlogpb.LogStreamStatusRunning
-	case executorStateSealing, executorStateLearning:
-		status = varlogpb.LogStreamStatusSealing
-	case executorStateSealed:
-		status = varlogpb.LogStreamStatusSealed
-	}
-
-	localLWM := lse.lsc.localLowWatermark()
-	localHWM := lse.lsc.localHighWatermark()
-	lsd = varlogpb.LogStreamDescriptor{
-		TopicID:     lse.tpid,
-		LogStreamID: lse.lsid,
-		Status:      status,
-		Head: varlogpb.LogEntryMeta{
-			TopicID:     lse.tpid,
-			LogStreamID: lse.lsid,
-			LLSN:        localLWM.LLSN,
-			GLSN:        localLWM.GLSN,
-		},
-		Tail: varlogpb.LogEntryMeta{
-			TopicID:     lse.tpid,
-			LogStreamID: lse.lsid,
-			LLSN:        localHWM.LLSN,
-			GLSN:        localHWM.GLSN,
-		},
-	}
-	return lsd, nil
-}
-
 func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)

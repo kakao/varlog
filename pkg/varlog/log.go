@@ -13,7 +13,6 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
-	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -36,23 +35,6 @@ type Log interface {
 	SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...SubscribeOption) Subscriber
 
 	Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error
-
-	// LogStreamMetadata returns metadata of log stream specified by the
-	// arguments tpid and lsid.
-	// It returns the first metadata that is fetched successfully from all
-	// replicas in the log stream.
-	// It returns an error if the log stream does not exist or fails to
-	// fetch metadata from all replicas.
-	//
-	// Deprecated: Use PeekLogStream
-	LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error)
-
-	// LogStreamReplicaMetadata returns metadata of log stream replica
-	// specified by the arguments tpid and lsid. It returns the first
-	// successful result among all replicas.
-	//
-	// Deprecated: Use PeekLogStream
-	LogStreamReplicaMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error)
 
 	// PeekLogStream returns the log sequence numbers at the first and the
 	// last. It fetches the metadata for each replica of a log stream lsid
@@ -189,14 +171,6 @@ func (v *logImpl) SubscribeTo(ctx context.Context, topicID types.TopicID, logStr
 
 func (v *logImpl) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
 	return v.trim(ctx, topicID, until, opts)
-}
-
-func (v *logImpl) LogStreamMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
-	return v.logStreamMetadata(ctx, tpid, lsid)
-}
-
-func (v *logImpl) LogStreamReplicaMetadata(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
-	return v.logStreamReplicaMetadata(ctx, tpid, lsid)
 }
 
 func (v *logImpl) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {
