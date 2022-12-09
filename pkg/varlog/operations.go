@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -97,56 +96,6 @@ func (v *logImpl) appendTo(ctx context.Context, tpid types.TopicID, lsid types.L
 	}
 
 	return res, nil
-}
-
-func (v *logImpl) logStreamMetadata(ctx context.Context, tpID types.TopicID, lsID types.LogStreamID) (lsd varlogpb.LogStreamDescriptor, err error) {
-	replicas, ok := v.replicasRetriever.Retrieve(tpID, lsID)
-	if !ok {
-		return varlogpb.LogStreamDescriptor{}, errNoLogStream
-	}
-
-	for _, replica := range replicas {
-		cl, cerr := v.logCLManager.GetOrConnect(ctx, replica.StorageNodeID, replica.Address)
-		if cerr != nil {
-			err = multierr.Append(err, cerr)
-			continue
-		}
-		lsd, cerr = cl.LogStreamMetadata(ctx, tpID, lsID)
-		if cerr != nil {
-			err = multierr.Append(err, cerr)
-			continue
-		}
-		if lsd.Status.Deleted() {
-			err = multierr.Append(err, errors.Errorf("invalid status: %s", lsd.Status.String()))
-			continue
-		}
-		return lsd, nil
-	}
-	return lsd, err
-}
-
-func (v *logImpl) logStreamReplicaMetadata(ctx context.Context, tpID types.TopicID, lsID types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
-	replicas, ok := v.replicasRetriever.Retrieve(tpID, lsID)
-	if !ok {
-		return snpb.LogStreamReplicaMetadataDescriptor{}, errNoLogStream
-	}
-
-	var err error
-	for _, replica := range replicas {
-		cl, cerr := v.logCLManager.GetOrConnect(ctx, replica.StorageNodeID, replica.Address)
-		if cerr != nil {
-			err = multierr.Append(err, cerr)
-			continue
-		}
-
-		lsrmd, cerr := cl.LogStreamReplicaMetadata(ctx, tpID, lsID)
-		if cerr != nil {
-			err = multierr.Append(err, cerr)
-			continue
-		}
-		return lsrmd, nil
-	}
-	return snpb.LogStreamReplicaMetadataDescriptor{}, err
 }
 
 func (v *logImpl) peekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {

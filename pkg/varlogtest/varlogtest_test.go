@@ -141,17 +141,6 @@ func TestVarlogTest(t *testing.T) {
 		topicID := topicIDs[i]
 		logStreamID := addLogStream(topicID)
 
-		logStreamDesc, err := vlg.LogStreamMetadata(context.Background(), topicID, logStreamID) //nolint:staticcheck
-		require.NoError(t, err)
-		require.Equal(t, varlogpb.LogEntryMeta{
-			TopicID:     topicID,
-			LogStreamID: logStreamID,
-		}, logStreamDesc.Head) //nolint:staticcheck
-		require.Equal(t, varlogpb.LogEntryMeta{
-			TopicID:     topicID,
-			LogStreamID: logStreamID,
-		}, logStreamDesc.Tail)
-
 		first, last, err := vlg.PeekLogStream(context.Background(), topicID, logStreamID)
 		require.NoError(t, err)
 		require.True(t, first.Invalid())

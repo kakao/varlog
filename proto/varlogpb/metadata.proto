@@ -84,15 +84,6 @@ message LogStreamDescriptor {
   ];
   LogStreamStatus status = 3;
   repeated ReplicaDescriptor replicas = 4 [(gogoproto.nullable) = true];
-
-  // Deprecated: The members - head and tail are not used by the metadata
-  // repository. It exists here just since the LogStreamDescriptor is used
-  // elsewhere other than the metadata repository. It leads to misusing the
-  // LogStreamDescriptor.
-  LogEntryMeta head = 5
-    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "head,omitempty"];
-  LogEntryMeta tail = 6
-    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "tail,omitempty"];
 }
 
 enum LogStreamStatus {

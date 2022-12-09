@@ -113,9 +113,6 @@ func TestExecutor_Closed(t *testing.T) {
 	_, err = lse.Metadata()
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
-	_, err = lse.LogStreamMetadata()
-	assert.ErrorIs(t, err, verrors.ErrClosed)
-
 	_, err = lse.SubscribeWithGLSN(types.MinGLSN, types.MinGLSN)
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 

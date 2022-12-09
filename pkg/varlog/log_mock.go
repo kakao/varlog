@@ -11,7 +11,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	types "github.com/kakao/varlog/pkg/types"
-	snpb "github.com/kakao/varlog/proto/snpb"
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -88,36 +87,6 @@ func (m *MockLog) Close() error {
 func (mr *MockLogMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockLog)(nil).Close))
-}
-
-// LogStreamMetadata mocks base method.
-func (m *MockLog) LogStreamMetadata(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (varlogpb.LogStreamDescriptor, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LogStreamMetadata", arg0, arg1, arg2)
-	ret0, _ := ret[0].(varlogpb.LogStreamDescriptor)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// LogStreamMetadata indicates an expected call of LogStreamMetadata.
-func (mr *MockLogMockRecorder) LogStreamMetadata(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamMetadata", reflect.TypeOf((*MockLog)(nil).LogStreamMetadata), arg0, arg1, arg2)
-}
-
-// LogStreamReplicaMetadata mocks base method.
-func (m *MockLog) LogStreamReplicaMetadata(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (snpb.LogStreamReplicaMetadataDescriptor, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LogStreamReplicaMetadata", arg0, arg1, arg2)
-	ret0, _ := ret[0].(snpb.LogStreamReplicaMetadataDescriptor)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// LogStreamReplicaMetadata indicates an expected call of LogStreamReplicaMetadata.
-func (mr *MockLogMockRecorder) LogStreamReplicaMetadata(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamReplicaMetadata", reflect.TypeOf((*MockLog)(nil).LogStreamReplicaMetadata), arg0, arg1, arg2)
 }
 
 // PeekLogStream mocks base method.

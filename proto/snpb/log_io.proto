@@ -183,6 +183,4 @@ service LogIO {
   rpc TrimDeprecated(TrimDeprecatedRequest) returns (google.protobuf.Empty) {}
   rpc LogStreamReplicaMetadata(LogStreamReplicaMetadataRequest)
     returns (LogStreamReplicaMetadataResponse) {}
-  rpc LogStreamMetadata(LogStreamMetadataRequest)
-    returns (LogStreamMetadataResponse) {}
 }
