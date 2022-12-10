@@ -306,17 +306,20 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 		return nil, err
 	}
 
-	stg, err := storage.New(append(
-		sn.defaultStorageOptions,
+	stgOpts := make([]storage.Option, len(sn.defaultStorageOptions))
+	copy(stgOpts, sn.defaultStorageOptions)
+	stgOpts = append(stgOpts,
 		storage.WithPath(lsPath),
 		storage.WithLogger(sn.logger.Named("storage").With(zap.String("path", lsPath))),
-	)...)
+	)
+	stg, err := storage.New(stgOpts...)
 	if err != nil {
 		return nil, err
 	}
 
-	lse, err := logstream.NewExecutor(append(
-		sn.defaultLogStreamExecutorOptions,
+	lseOpts := make([]logstream.ExecutorOption, len(sn.defaultLogStreamExecutorOptions))
+	copy(lseOpts, sn.defaultLogStreamExecutorOptions)
+	lseOpts = append(lseOpts,
 		logstream.WithStorageNodeID(sn.snid),
 		logstream.WithTopicID(tpid),
 		logstream.WithLogStreamID(lsid),
@@ -327,7 +330,9 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 			grpc.WithWriteBufferSize(int(sn.replicateClientWriteBufferSize)),
 		),
 		logstream.WithLogStreamMetrics(lsm),
-	)...)
+	)
+
+	lse, err := logstream.NewExecutor(lseOpts...)
 	if err != nil {
 		return nil, err
 	}
