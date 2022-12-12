@@ -8,15 +8,15 @@ import (
 )
 
 type Target struct {
-	TopicID          types.TopicID
-	LogStreamID      types.LogStreamID
+	TopicID          types.TopicID     `json:"topicId"`
+	LogStreamID      types.LogStreamID `json:"logStreamId"`
 	MessageSize      uint
 	BatchSize        uint
 	AppendersCount   uint
 	SubscribersCount uint
 }
 
-func (tgt *Target) Valid() error {
+func (tgt Target) Valid() error {
 	if tgt.TopicID.Invalid() {
 		return fmt.Errorf("invalid topic %v", tgt.TopicID)
 	}
