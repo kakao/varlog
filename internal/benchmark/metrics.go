@@ -1,77 +1,22 @@
 package benchmark
 
 import (
-	"fmt"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/kakao/varlog/pkg/util/units"
 )
 
 type Metrics struct {
 	loaderMetrics []*LoaderMetrics
 }
 
-func (m Metrics) String() string {
-	//  arps: appended requests per second
-	//  abps: appended megabytes per second
-	//  adur: mean/min/max append duration in milliseconds
-	//  slps: subscribed logs per second
-	//  sbps: subscribed megabytes per second
-	// eelat: end-to-end latency in milliseconds
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "___tgt")  //  6 spaces
-	fmt.Fprintf(&sb, "__arpsR") //  7 spaces
-	fmt.Fprintf(&sb, "__arpsT") //  7 spaces
-
-	fmt.Fprintf(&sb, "_______abpsR") // 12 spaces
-	fmt.Fprintf(&sb, "_______abpsT") // 12 spaces
-
-	fmt.Fprintf(&sb, "__adurR") //  7 spaces
-	fmt.Fprintf(&sb, "__adurT") //  7 spaces
-
-	fmt.Fprintf(&sb, "__slpsR") //  7 spaces
-	fmt.Fprintf(&sb, "__slpsT") //  7 spaces
-
-	fmt.Fprintf(&sb, "_______sbpsR") // 12 spaces
-	fmt.Fprintf(&sb, "_______sbpsT") // 12 spaces
-
-	fmt.Fprintf(&sb, "__eelatR")   //  8 spaces
-	fmt.Fprintf(&sb, "__eelatT\n") //  8 spaces
-	for idx, lm := range m.loaderMetrics {
-		recent, total := lm.Flush()
-		fmt.Fprintf(&sb, "%6s", lm.tgt)
-
-		// arps
-		fmt.Fprintf(&sb, "%7.1f", recent.AppendReport.RequestsPerSecond)
-		fmt.Fprintf(&sb, "%7.1f", total.AppendReport.RequestsPerSecond)
-
-		// abps
-		fmt.Fprintf(&sb, "%10s/s", units.ToByteSizeString(recent.AppendReport.BytesPerSecond))
-		fmt.Fprintf(&sb, "%10s/s", units.ToByteSizeString(total.AppendReport.BytesPerSecond))
-
-		// adur
-		fmt.Fprintf(&sb, "%7.1f", recent.AppendReport.Duration)
-		fmt.Fprintf(&sb, "%7.1f", total.AppendReport.Duration)
-
-		// slps
-		fmt.Fprintf(&sb, "%7.1f", recent.SubscribeReport.LogsPerSecond)
-		fmt.Fprintf(&sb, "%7.1f", total.SubscribeReport.LogsPerSecond)
-
-		// sbps
-		fmt.Fprintf(&sb, "%10s/s", units.ToByteSizeString(recent.SubscribeReport.BytesPerSecond))
-		fmt.Fprintf(&sb, "%10s/s", units.ToByteSizeString(total.SubscribeReport.BytesPerSecond))
-
-		// eelat
-		fmt.Fprintf(&sb, "%8.1f", recent.EndToEndReport.Latency)
-		fmt.Fprintf(&sb, "%8.1f", total.EndToEndReport.Latency)
-
-		if idx < len(m.loaderMetrics)-1 {
-			fmt.Fprint(&sb, "\n")
-		}
+func (m Metrics) Flush() TargetReports {
+	trs := TargetReports{
+		Reports: make([]TargetReport, len(m.loaderMetrics)),
 	}
-	return sb.String()
+	for idx, lm := range m.loaderMetrics {
+		trs.Reports[idx] = lm.Flush()
+	}
+	return trs
 }
 
 type LoaderMetrics struct {
@@ -138,11 +83,12 @@ func (lm *LoaderMetrics) ReportSubscribeMetrics(m SubscribeMetrics) bool {
 	return true
 }
 
-func (lm *LoaderMetrics) Flush() (recent, total Report) {
+func (lm *LoaderMetrics) Flush() TargetReport {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
 	now := time.Now()
+	var recent, total Report
 
 	total.AppendReport = NewAppendReportFromMetrics(lm.appendMetrics.total, now.Sub(lm.initTime))
 	total.SubscribeReport = NewSubscribeReportFromMetrics(lm.subscribeMetrics.total, now.Sub(lm.initTime))
@@ -154,5 +100,9 @@ func (lm *LoaderMetrics) Flush() (recent, total Report) {
 	lm.subscribeMetrics.recent = SubscribeMetrics{}
 	lm.lastTime = now
 
-	return recent, total
+	return TargetReport{
+		Target: lm.tgt.String(),
+		Recent: recent,
+		Total:  total,
+	}
 }

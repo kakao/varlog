@@ -22,6 +22,7 @@ type config struct {
 	mraddrs        []string
 	duration       time.Duration
 	reportInterval time.Duration
+	reportEncoder  ReportEncoder
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -97,5 +98,11 @@ func WithDuration(duration time.Duration) Option {
 func WithReportInterval(reportInterval time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.reportInterval = reportInterval
+	})
+}
+
+func WithReportEncoder(enc ReportEncoder) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.reportEncoder = enc
 	})
 }
