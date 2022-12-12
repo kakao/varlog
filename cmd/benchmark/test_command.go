@@ -56,6 +56,10 @@ var (
 		Name:  "report-interval",
 		Value: benchmark.DefaultReportInterval,
 	}
+	flagPrintJSON = &cli.BoolFlag{
+		Name:  "print-json",
+		Usage: "Print json output if it is set",
+	}
 )
 
 func newCommandTest() *cli.Command {
@@ -72,6 +76,7 @@ func newCommandTest() *cli.Command {
 			flagSubscribers,
 			flagDuration,
 			flagReportInterval,
+			flagPrintJSON,
 		},
 		Action: runCommandTest,
 	}
@@ -126,12 +131,20 @@ func runCommandTest(c *cli.Context) error {
 
 	reportInterval := c.Duration(flagReportInterval.Name)
 
+	var enc benchmark.ReportEncoder
+	if c.Bool(flagPrintJSON.Name) {
+		enc = benchmark.JsonEncoder{}
+	} else {
+		enc = benchmark.StringEncoder{}
+	}
+
 	bm, err := benchmark.New(
 		benchmark.WithClusterID(clusterID),
 		benchmark.WithTargets(targets...),
 		benchmark.WithMetadataRepository(c.StringSlice(flagMRAddrs.Name)),
 		benchmark.WithDuration(duration),
 		benchmark.WithReportInterval(reportInterval),
+		benchmark.WithReportEncoder(enc),
 	)
 	if err != nil {
 		return err

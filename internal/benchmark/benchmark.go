@@ -82,7 +82,7 @@ func (bm *Benchmark) Run() error {
 		defer func() {
 			cancel()
 			wg.Done()
-			fmt.Println(bm.metrics.String())
+			fmt.Println(MustEncode(bm.reportEncoder, bm.metrics.Flush()))
 		}()
 		for {
 			select {
@@ -98,8 +98,7 @@ func (bm *Benchmark) Run() error {
 				slog.Debug("loader failed")
 				return
 			case <-reportTick.C:
-				s := bm.metrics.String()
-				fmt.Println(s)
+				fmt.Println(MustEncode(bm.reportEncoder, bm.metrics.Flush()))
 			}
 		}
 
