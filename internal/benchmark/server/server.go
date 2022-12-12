@@ -14,7 +14,7 @@ import (
 	_ "github.com/lib/pq"
 	"golang.org/x/exp/slog"
 
-	"github.com/kakao/varlog/internal/benchmark/server/model"
+	"github.com/kakao/varlog/internal/benchmark/model/macrobenchmark"
 )
 
 // basepath is the root directory of this package.
@@ -124,7 +124,7 @@ func (s *Server) handler(w http.ResponseWriter, req *http.Request) {
 			Name: workloadName,
 		}
 		for _, metricName := range []string{"append_bytes_per_second", "subscribe_bytes_per_second"} {
-			results, err := model.ListMacrobenchmarkResults(s.db, workloadName, metricName, limit)
+			results, err := macrobenchmark.ListMacrobenchmarkResults(s.db, workloadName, metricName, limit)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
