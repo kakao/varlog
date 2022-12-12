@@ -6,7 +6,7 @@ const (
 	databaseDriver = "postgres"
 
 	DefaultAddress      = ":0"
-	DefaultDatabaseHost = "0.0.0.0"
+	DefaultDatabaseHost = "localhost"
 	DefaultDatabasePort = 5432
 	DefaultDatabaseUser = "varlog_benchmark"
 	DefaultDatabaseName = "varlog_benchmark"

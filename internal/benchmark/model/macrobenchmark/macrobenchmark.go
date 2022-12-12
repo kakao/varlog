@@ -1,15 +1,15 @@
-package model
+package macrobenchmark
 
 import (
 	"database/sql"
 )
 
-type MacrobenchmarkResult struct {
+type Result struct {
 	CommitHash string
 	Values     float64
 }
 
-func ListMacrobenchmarkResults(db *sql.DB, workload string, metric string, limit int) ([]MacrobenchmarkResult, error) {
+func ListMacrobenchmarkResults(db *sql.DB, workload string, metric string, limit int) ([]Result, error) {
 	stmt, err := db.Prepare(`
         SELECT e.commit_hash, mr.value
         FROM execution e
@@ -35,9 +35,9 @@ func ListMacrobenchmarkResults(db *sql.DB, workload string, metric string, limit
 		_ = rows.Close()
 	}()
 
-	var macrobenchmarks []MacrobenchmarkResult
+	var macrobenchmarks []Result
 	for rows.Next() {
-		m := MacrobenchmarkResult{}
+		m := Result{}
 		if err := rows.Scan(&m.CommitHash, &m.Values); err != nil {
 			return nil, err
 		}
