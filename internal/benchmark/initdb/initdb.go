@@ -7,7 +7,7 @@ import (
 	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/internal/benchmark/model/executiontrigger"
-	"github.com/kakao/varlog/internal/benchmark/model/macrobenchmarkmetric"
+	"github.com/kakao/varlog/internal/benchmark/model/macro/metric"
 )
 
 const (
@@ -23,9 +23,7 @@ const (
         create table if not exists execution (
             id          serial primary key,
             commit_hash varchar(40) unique not null,
-            trigger_id  integer     not null references execution_trigger (id),
-            start_time  timestamptz not null,
-            finish_time timestamptz not null
+            trigger_id  integer     not null references execution_trigger (id)
         )
     `
 	dropTableExecution = "drop table if exists execution cascade"
@@ -34,7 +32,7 @@ const (
         create table if not exists macrobenchmark_workload (
             id          serial primary key,
             name        varchar(128) unique not null,
-            description text
+            description text not null default ''
         )
     `
 	dropTableMacrobenchmarkWorkload = "drop table if exists macrobenchmark_workload"
@@ -50,7 +48,8 @@ const (
 			execution_id integer     not null references execution (id) on delete cascade,
 			workload_id  integer     not null references macrobenchmark_workload (id),
 			start_time   timestamptz not null,
-			finish_time  timestamptz not null
+			finish_time  timestamptz not null,
+		    unique (execution_id, workload_id)
 		)
     `
 	dropTableMacrobenchmark = "drop table if exists macrobenchmark cascade"
@@ -67,7 +66,7 @@ const (
 		create table if not exists macrobenchmark_metric (
 			id          serial primary key,
 			name        varchar(64) unique not null,
-			description text
+			description text not null default ''
 		)
     `
 	dropTableMacrobenchmarkMetric = "drop table if exists macrobenchmark_metric"
@@ -82,36 +81,6 @@ const (
 		)
     `
 	dropTableMacrobenchmarkResult = "drop table if exists macrobenchmark_result"
-
-	createTableMicrobenchmark = `
-		create table if not exists microbenchmark (
-			id           serial primary key,
-			execution_id integer     not null references execution (id),
-			start_time   timestamptz not null,
-			finish_time  timestamptz not null
-		)
-    `
-	dropTableMicrobenchmark = "drop table if exists microbenchmark"
-
-	createTableMicrobenchmarkPackage = `
-		create table if not exists microbenchmark_package (
-			id   serial primary key,
-			name varchar(256) unique not null
-		)
-    `
-	dropTableMicrobenchmarkPackage = "drop table if exists microbenchmark_package"
-
-	createTableMicrobenchmarkResult = `
-		create table if not exists microbenchmark_result (
-			id                serial primary key,
-			microbenchmark_id integer      not null references microbenchmark (id),
-			package_id        integer      not null references microbenchmark_package (id),
-			function_name     varchar(128) not null,
-			ns_per_op         float,
-			allocs_per_op     float
-		)
-    `
-	dropTableMicrobenchmarkResult = "drop table if exists microbenchmark_result"
 )
 
 func CreateTables(ctx context.Context, db *sql.DB) error {
@@ -123,9 +92,6 @@ func CreateTables(ctx context.Context, db *sql.DB) error {
 		createTableMacrobenchmarkTarget,
 		createTableMacrobenchmarkMetric,
 		createTableMacrobenchmarkResult,
-		createTableMicrobenchmark,
-		createTableMicrobenchmarkPackage,
-		createTableMicrobenchmarkResult,
 	)
 }
 
@@ -138,16 +104,13 @@ func DropTables(ctx context.Context, db *sql.DB) error {
 		dropTableExecutionTrigger,
 		dropTableMacrobenchmarkTarget,
 		dropTableMacrobenchmarkMetric,
-		dropTableMicrobenchmarkResult,
-		dropTableMicrobenchmark,
-		dropTableMicrobenchmarkPackage,
 	)
 }
 
 func InitTables(ctx context.Context, db *sql.DB) error {
 	return multierr.Combine(
 		executiontrigger.InitTable(ctx, db),
-		macrobenchmarkmetric.InitTable(ctx, db),
+		metric.InitTable(ctx, db),
 	)
 }
 

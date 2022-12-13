@@ -27,6 +27,7 @@ func newApp() *cli.App {
 			newCommandTest(),
 			newCommandServe(),
 			newCommandInitdb(),
+			newCommandSave(),
 		},
 	}
 	return app
