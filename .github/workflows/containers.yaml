@@ -11,7 +11,7 @@ jobs:
 
     strategy:
       matrix:
-        output: [varlogadm, varlogmr, varlogsn, varlogctl, varlogcli]
+        output: [varlogadm, varlogmr, varlogsn, varlogctl, varlogcli, varlogbenchmark]
 
     permissions:
       packages: write
