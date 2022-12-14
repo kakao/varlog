@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - v[0-9]+.[0-9]+.[0-9]+
+    branches:
+      - main
 
 jobs:
   build-and-push-image:
@@ -36,6 +38,9 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: ghcr.io/kakao/${{ matrix.output }}
+          tags: |
+            type=ref,event=tag
+            type=sha,event=branch,prefix=
 
       - name: Build and push ${{ matrix.output }}
         uses: docker/build-push-action@v3
