@@ -2,13 +2,12 @@ package server
 
 import (
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"html/template"
 	"net"
 	"net/http"
-	"path/filepath"
-	"runtime"
 	"strconv"
 
 	_ "github.com/lib/pq"
@@ -17,19 +16,10 @@ import (
 	"github.com/kakao/varlog/internal/benchmark/model/macro/result"
 )
 
-// basepath is the root directory of this package.
-var basepath string
-var tpl *template.Template
+//go:embed public/*
+var content embed.FS
 
-func init() {
-	_, currentFile, _, _ := runtime.Caller(0)
-	basepath = filepath.Dir(currentFile)
-
-	tpl = template.Must(template.ParseFiles(
-		filepath.Join(basepath, "/public/index.tmpl"),
-		filepath.Join(basepath, "/public/chart.tmpl"),
-	))
-}
+var tpl *template.Template = template.Must(template.ParseFS(content, "public/*.tmpl", "public/assets/*"))
 
 type Server struct {
 	config
@@ -59,7 +49,7 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(filepath.Join(basepath, "public", "assets")))))
+	mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(content))))
 	mux.HandleFunc("/", s.handler)
 	s.srv.Handler = mux
 	return s, nil
