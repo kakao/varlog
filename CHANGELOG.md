@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.0](https://github.com/kakao/varlog/compare/v0.8.1...v0.9.0) (2022-12-14)
+
+
+### Features
+
+* **benchmark:** add `--print-json` to print benchmark result as JSON ([abf8a5a](https://github.com/kakao/varlog/commit/abf8a5af53b7ca5f916dc2b23f453279ea9ed443)), closes [#257](https://github.com/kakao/varlog/issues/257)
+* **benchmark:** add `save` command to benchmark ([25ecb80](https://github.com/kakao/varlog/commit/25ecb80a7424ac1805fac76eded5dbd44149a57b)), closes [#257](https://github.com/kakao/varlog/issues/257)
+* **benchmark:** add a `test` command to the benchmark tool ([0e08249](https://github.com/kakao/varlog/commit/0e082492cba29fc83895570e10f2e41d9437be2a)), closes [#257](https://github.com/kakao/varlog/issues/257)
+* **benchmark:** add initdb command to initialize benchmark database ([9d115eb](https://github.com/kakao/varlog/commit/9d115eb93a4182d5b30d4a6315de51b49df1efe3)), closes [#264](https://github.com/kakao/varlog/issues/264)
+* **client,storagenode:** remove Head and Tail from proto/varlogpb.(LogStreamDescriptor) ([57161c8](https://github.com/kakao/varlog/commit/57161c832168957b46960186d33d172304f4330f)), closes [#73](https://github.com/kakao/varlog/issues/73)
+
+
+### Bug Fixes
+
+* **storagenode:** fix concurrency bugs of settings for storage and executor ([fdd1781](https://github.com/kakao/varlog/commit/fdd17814ff91c749e634acca6ff0d4118245594d)), closes [#262](https://github.com/kakao/varlog/issues/262)
+
 ## [0.8.1](https://github.com/kakao/varlog/compare/v0.8.0...v0.8.1) (2022-12-07)
 
 
