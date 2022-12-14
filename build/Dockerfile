@@ -57,6 +57,13 @@ USER varlog
 ENV PATH=/varlog/bin:$PATH
 
 
+FROM scratch AS varlogbenchmark-noncgo
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
+WORKDIR /varlog
+COPY --from=builder-noncgo /varlog/bin/benchmark /varlog/bin/benchmark
+CMD ["/varlog/bin/benchmark"]
+
+
 FROM busybox:${BUSYBOX_VERSION}-glibc AS varlogctl-debug
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
