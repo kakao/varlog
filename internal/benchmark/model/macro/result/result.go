@@ -45,7 +45,7 @@ func ListMacrobenchmarkResults(db *sql.DB, workload string, metric string, limit
             JOIN macrobenchmark_result mr on m.id = mr.macrobenchmark_id
             JOIN macrobenchmark_workload mw on m.workload_id = mw.id AND mw.name = $1
             JOIN macrobenchmark_metric mm on mr.metric_id = mm.id AND mm.name = $2 
-        ORDER BY e.start_time
+        ORDER BY m.start_time
         LIMIT $3
     `)
 	if err != nil {
