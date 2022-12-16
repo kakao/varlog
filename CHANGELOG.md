@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/kakao/varlog/compare/v0.9.1...v0.9.2) (2022-12-16)
+
+
+### Bug Fixes
+
+* **benchmark:** fix sql for target and workload ([cdc1268](https://github.com/kakao/varlog/commit/cdc1268e03a99e6dc104a25c8208a26e351dd713))
+
 ## [0.9.1](https://github.com/kakao/varlog/compare/v0.9.0...v0.9.1) (2022-12-16)
 
 
