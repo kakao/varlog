@@ -23,20 +23,20 @@ func InitTable(ctx context.Context, db *sql.DB) error {
         ON CONFLICT (name) DO NOTHING
     `)
 	if err != nil {
-		return err
+		return fmt.Errorf("execution_trigger: %w", err)
 	}
 	defer func() {
 		_ = stmt.Close()
 	}()
 	_, err = stmt.ExecContext(ctx, Command, Cron)
 	if err != nil {
-		return err
+		return fmt.Errorf("execution_trigger: %w", err)
 	}
 	return nil
 }
 
 func Get(ctx context.Context, db *sql.DB, name string) (ExecutionTrigger, error) {
-	stmt, err := db.Prepare("SELECT id, name FROM execution_trigger WHERE name = $1")
+	stmt, err := db.PrepareContext(ctx, "SELECT id, name FROM execution_trigger WHERE name = $1")
 	if err != nil {
 		return ExecutionTrigger{}, fmt.Errorf("execution_trigger: %w", err)
 	}

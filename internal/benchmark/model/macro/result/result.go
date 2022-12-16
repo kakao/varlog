@@ -21,7 +21,8 @@ type Result struct {
 func Create(ctx context.Context, db *sql.DB, result Result) error {
 	stmt, err := db.PrepareContext(ctx, `
         INSERT INTO macrobenchmark_result (macrobenchmark_id, target_id, metric_id, value)
-        VALUES ($1, $2, $3, $4) ON CONFLICT (macrobenchmark_id, target_id, metric_id) DO NOTHING
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (macrobenchmark_id, target_id, metric_id) DO NOTHING
     `)
 	if err != nil {
 		return fmt.Errorf("macrobenchmark_result: %w", err)
