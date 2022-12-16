@@ -8,18 +8,21 @@ import (
 	"html/template"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 
 	_ "github.com/lib/pq"
 	"golang.org/x/exp/slog"
 
+	"github.com/kakao/varlog/internal/benchmark/model/macro/metric"
 	"github.com/kakao/varlog/internal/benchmark/model/macro/result"
 )
 
 //go:embed public/*
 var content embed.FS
 
-var tpl *template.Template = template.Must(template.ParseFS(content, "public/*.tmpl", "public/assets/*"))
+var tpl = template.Must(template.ParseFS(content, "public/*.tmpl", "public/assets/*"))
 
 type Server struct {
 	config
@@ -87,11 +90,17 @@ func (s *Server) Close() error {
 }
 
 type Workload struct {
-	Name          string
-	MetricResults []MetricResult
+	Name   string
+	Metric []WorkloadMetric
 }
 
-type MetricResult struct {
+type WorkloadMetric struct {
+	MetricName string
+	Targets    []WorkloadTarget
+}
+type WorkloadTarget struct {
+	TargetName string
+
 	ChartID   string
 	ChartName string
 	XValues   []string
@@ -109,28 +118,50 @@ func (s *Server) handler(w http.ResponseWriter, req *http.Request) {
 	const limit = 20
 
 	var workloads []Workload
-	for _, workloadName := range []string{"one_logstream", "all_logstream"} {
+	for _, workloadName := range []string{
+		"tp1_ls1_msg128_batch10_app5_sub0",
+		"tp1_ls4_msg128_batch10_app5_sub0",
+		"tp4_ls1_msg128_batch10_app5_sub0",
+		"tp4_ls4_msg128_batch10_app5_sub0",
+	} {
 		wk := Workload{
 			Name: workloadName,
 		}
-		for _, metricName := range []string{"append_bytes_per_second", "subscribe_bytes_per_second"} {
+		for _, metricName := range []string{
+			metric.AppendRequestsPerSecond,
+			metric.AppendBytesPerSecond,
+			metric.AppendDurationMillis,
+		} {
 			results, err := result.ListMacrobenchmarkResults(s.db, workloadName, metricName, limit)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-
-			chartData := MetricResult{
-				ChartID:   workloadName + "-" + metricName,
-				ChartName: metricName,
-				XTitle:    "commit hash",
-				YTitle:    metricName,
+			var tgts []string
+			wts := make(map[string]WorkloadTarget)
+			for _, r := range results {
+				targetName := r.Target
+				tgts = append(tgts, targetName)
+				wt, ok := wts[targetName]
+				if !ok {
+					wt = WorkloadTarget{
+						TargetName: targetName,
+						ChartID:    strings.Join([]string{workloadName, metricName, targetName}, "-"),
+						ChartName:  metricName + "#" + targetName,
+						XTitle:     "commit hash",
+						YTitle:     metricName,
+					}
+				}
+				wt.XValues = append(wt.XValues, r.CommitHash)
+				wt.YValues = append(wt.YValues, r.Value)
+				wts[targetName] = wt
 			}
-			for _, res := range results {
-				chartData.XValues = append(chartData.XValues, res.CommitHash)
-				chartData.YValues = append(chartData.YValues, res.Value)
+			sort.Strings(tgts)
+			wkm := WorkloadMetric{MetricName: metricName}
+			for _, targetName := range tgts {
+				wkm.Targets = append(wkm.Targets, wts[targetName])
 			}
-			wk.MetricResults = append(wk.MetricResults, chartData)
+			wk.Metric = append(wk.Metric, wkm)
 		}
 		workloads = append(workloads, wk)
 	}

@@ -18,13 +18,15 @@
         <div class="workload-container">
         <section>
         <h2>Workload: {{.Name}}</h2>
-            {{range .MetricResults}}
-                <section>
-                    <div class="chart-container">
+            {{range .Metric}}
+                <h3>Metric: {{.MetricName}}</h3>
+                {{range .Targets}}
+                    <h4>Target: {{.TargetName}}</h4>
+                    <div class="chart=container">
                         <canvas id="{{.ChartID}}"></canvas>
                         {{template "chart" .}}
                     </div>
-                </section>
+                {{end}}
             {{end}}
         </section>
         </div>
