@@ -53,7 +53,7 @@ func Get(ctx context.Context, db *sql.DB, name string) (ret Target, err error) {
 	defer func() {
 		_ = stmt.Close()
 	}()
-	err = stmt.QueryRowContext(ctx, name).Scan(&ret.ID, &ret.ID, &ret.Name)
+	err = stmt.QueryRowContext(ctx, name).Scan(&ret.ID, &ret.Name)
 	if err != nil {
 		return ret, fmt.Errorf("macrobenchmark_target: %w", err)
 	}
