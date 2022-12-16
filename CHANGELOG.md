@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/kakao/varlog/compare/v0.9.0...v0.9.1) (2022-12-16)
+
+
+### Bug Fixes
+
+* **benchmark:** create a new row and get the row from the tables ([760aef4](https://github.com/kakao/varlog/commit/760aef434ce2db3623e8f4b15bb7988f276e996d))
+
 ## [0.9.0](https://github.com/kakao/varlog/compare/v0.8.1...v0.9.0) (2022-12-14)
 
 
