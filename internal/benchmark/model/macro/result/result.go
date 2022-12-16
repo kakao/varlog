@@ -40,14 +40,18 @@ func Create(ctx context.Context, db *sql.DB, result Result) error {
 
 func ListMacrobenchmarkResults(db *sql.DB, workload string, metric string, limit int) ([]ResultPoint, error) {
 	stmt, err := db.Prepare(`
-        SELECT e.commit_hash, mr.value
-        FROM execution e
-            JOIN macrobenchmark m on e.id = m.execution_id
-            JOIN macrobenchmark_result mr on m.id = mr.macrobenchmark_id
-            JOIN macrobenchmark_workload mw on m.workload_id = mw.id AND mw.name = $1
-            JOIN macrobenchmark_metric mm on mr.metric_id = mm.id AND mm.name = $2 
-        ORDER BY m.start_time
-        LIMIT $3
+        SELECT commit_hash, value
+        FROM (
+            SELECT e.commit_hash AS commit_hash, mr.value AS value, m.start_time AS start_time
+            FROM execution e
+                JOIN macrobenchmark m on e.id = m.execution_id
+                JOIN macrobenchmark_result mr on m.id = mr.macrobenchmark_id
+                JOIN macrobenchmark_workload mw on m.workload_id = mw.id AND mw.name = $1
+                JOIN macrobenchmark_metric mm on mr.metric_id = mm.id AND mm.name = $2
+            ORDER BY m.start_time DESC
+            LIMIT $3
+        ) t
+        ORDER BY start_time ASC
     `)
 	if err != nil {
 		return nil, err

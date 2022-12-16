@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"github.com/kakao/varlog/internal/benchmark/model/macro/metric"
 	"html/template"
 	"net"
 	"net/http"
@@ -109,11 +110,20 @@ func (s *Server) handler(w http.ResponseWriter, req *http.Request) {
 	const limit = 20
 
 	var workloads []Workload
-	for _, workloadName := range []string{"one_logstream", "all_logstream"} {
+	for _, workloadName := range []string{
+		"tp1_ls1_msg128_batch10_app5_sub0",
+		"tp1_ls4_msg128_batch10_app5_sub0",
+		"tp4_ls1_msg128_batch10_app5_sub0",
+		"tp4_ls4_msg128_batch10_app5_sub0",
+	} {
 		wk := Workload{
 			Name: workloadName,
 		}
-		for _, metricName := range []string{"append_bytes_per_second", "subscribe_bytes_per_second"} {
+		for _, metricName := range []string{
+			metric.AppendRequestsPerSecond,
+			metric.AppendBytesPerSecond,
+			metric.AppendDurationMillis,
+		} {
 			results, err := result.ListMacrobenchmarkResults(s.db, workloadName, metricName, limit)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
