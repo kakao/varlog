@@ -7,6 +7,7 @@ import (
 )
 
 type ResultPoint struct {
+	Target     string
 	CommitHash string
 	Value      float64
 }
@@ -40,14 +41,19 @@ func Create(ctx context.Context, db *sql.DB, result Result) error {
 
 func ListMacrobenchmarkResults(db *sql.DB, workload string, metric string, limit int) ([]ResultPoint, error) {
 	stmt, err := db.Prepare(`
-        SELECT e.commit_hash, mr.value
-        FROM execution e
-            JOIN macrobenchmark m on e.id = m.execution_id
-            JOIN macrobenchmark_result mr on m.id = mr.macrobenchmark_id
-            JOIN macrobenchmark_workload mw on m.workload_id = mw.id AND mw.name = $1
-            JOIN macrobenchmark_metric mm on mr.metric_id = mm.id AND mm.name = $2 
-        ORDER BY m.start_time
-        LIMIT $3
+        SELECT target, commit_hash, value
+        FROM (
+            SELECT mt.name AS target, e.commit_hash AS commit_hash, mr.value AS value, m.start_time AS start_time
+            FROM execution e
+                JOIN macrobenchmark m on e.id = m.execution_id
+                JOIN macrobenchmark_result mr on m.id = mr.macrobenchmark_id
+                JOIN macrobenchmark_workload mw on m.workload_id = mw.id AND mw.name = $1
+                JOIN macrobenchmark_metric mm on mr.metric_id = mm.id AND mm.name = $2
+                JOIN macrobenchmark_target mt on mr.target_id = mt.id
+            ORDER BY m.start_time DESC
+            LIMIT $3
+        ) t
+        ORDER BY start_time ASC
     `)
 	if err != nil {
 		return nil, err
@@ -67,7 +73,7 @@ func ListMacrobenchmarkResults(db *sql.DB, workload string, metric string, limit
 	var macrobenchmarks []ResultPoint
 	for rows.Next() {
 		m := ResultPoint{}
-		if err := rows.Scan(&m.CommitHash, &m.Value); err != nil {
+		if err := rows.Scan(&m.Target, &m.CommitHash, &m.Value); err != nil {
 			return nil, err
 		}
 		macrobenchmarks = append(macrobenchmarks, m)
