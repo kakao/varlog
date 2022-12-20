@@ -220,7 +220,6 @@ func TestVarlogFailoverSN(t *testing.T) {
 }
 
 func TestVarlogEnduranceExample(t *testing.T) {
-	t.Skip("Skip the flaky test temporarily.")
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 	defer func() {

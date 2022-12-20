@@ -14,7 +14,7 @@ import (
 const (
 	defaultMRPortBase = 10001
 	defaultAdminAddr  = "127.0.0.1:9093"
-	defaultSNPortBase = 50001
+	defaultSNPortBase = 20001
 )
 
 var defaultGrpcHealthProbeExecutable = flag.String("grpc-health-probe-executable", "", "executable path for grpc_health_probe")

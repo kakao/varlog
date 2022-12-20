@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -17,12 +16,14 @@ type Daemon struct {
 
 	executable string
 	cmd        *exec.Cmd
-
-	cancel context.CancelFunc
-	done   <-chan struct{}
+	proc       struct {
+		p  *os.Process
+		mu sync.Mutex
+	}
 
 	stdout io.ReadCloser
 	stderr io.ReadCloser
+	wg     sync.WaitGroup
 }
 
 // New creates the Daemon.
@@ -37,8 +38,7 @@ func New(executable string, opts ...Option) (*Daemon, error) {
 		executable: executable,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	d.cmd = exec.CommandContext(ctx, d.executable, d.args...)
+	d.cmd = exec.Command(d.executable, d.args...)
 	if len(d.envs) > 0 {
 		d.cmd.Env = append(d.cmd.Env, os.Environ()...)
 		var sb strings.Builder
@@ -48,13 +48,6 @@ func New(executable string, opts ...Option) (*Daemon, error) {
 			sb.Reset()
 		}
 	}
-	d.cancel = cancel
-	d.done = ctx.Done()
-	defer func() {
-		if err != nil {
-			cancel()
-		}
-	}()
 
 	if d.outputChan != nil {
 		d.stdout, err = d.cmd.StdoutPipe()
@@ -74,48 +67,41 @@ func (d *Daemon) Run() error {
 	if err := d.cmd.Start(); err != nil {
 		return err
 	}
+	d.proc.mu.Lock()
+	d.proc.p = d.cmd.Process
+	d.proc.mu.Unlock()
 
-	var wg sync.WaitGroup
+	done := make(chan struct{})
+
 	if d.outputChan != nil {
-		wg.Add(1)
+		d.wg.Add(1)
 		go func() {
-			defer func() {
-				defer wg.Done()
-				scanner := bufio.NewScanner(d.stdout)
-				for scanner.Scan() {
-					select {
-					case d.outputChan <- scanner.Text():
-					case <-d.done:
-						return
-					}
+			defer d.wg.Done()
+			scanner := bufio.NewScanner(d.stdout)
+			for scanner.Scan() {
+				select {
+				case d.outputChan <- scanner.Text():
+				case <-done:
+					return
 				}
-			}()
+			}
 		}()
 	}
 	if d.outputChan != nil {
-		wg.Add(1)
+		d.wg.Add(1)
 		go func() {
-			defer func() {
-				defer wg.Done()
-				scanner := bufio.NewScanner(d.stderr)
-				for scanner.Scan() {
-					select {
-					case d.outputChan <- scanner.Text():
-					case <-d.done:
-						return
-					}
+			defer d.wg.Done()
+			scanner := bufio.NewScanner(d.stderr)
+			for scanner.Scan() {
+				select {
+				case d.outputChan <- scanner.Text():
+				case <-done:
+					return
 				}
-			}()
+			}
 		}()
 	}
-	defer func() {
-		d.Stop()
-		wg.Wait()
-		if d.outputChan != nil {
-			close(d.outputChan)
-		}
-	}()
-
+	defer close(done)
 	return d.cmd.Wait()
 }
 
@@ -126,13 +112,19 @@ func (d *Daemon) String() string {
 
 // Stop terminates the daemon.
 func (d *Daemon) Stop() {
-	if d.cancel != nil {
-		d.cancel()
+	d.proc.mu.Lock()
+	if d.proc.p != nil {
+		_ = d.proc.p.Signal(os.Interrupt)
 	}
+	d.proc.mu.Unlock()
 	if d.stdout != nil {
 		_ = d.stdout.Close()
 	}
 	if d.stderr != nil {
 		_ = d.stderr.Close()
+	}
+	d.wg.Wait()
+	if d.outputChan != nil {
+		close(d.outputChan)
 	}
 }
