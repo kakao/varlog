@@ -12,7 +12,7 @@ import (
 )
 
 func NewCluster(t *testing.T, opts ...cluster.Option) cluster.Cluster {
-	cfg, err := cluster.NewConfig(opts...)
+	cfg, err := cluster.NewConfig(t, opts...)
 	require.NoError(t, err)
 	return local.New(t, local.WithCommonConfig(cfg))
 }

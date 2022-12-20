@@ -21,6 +21,7 @@ func newConfig(opts []Option) (config, error) {
 	for _, opt := range opts {
 		opt.apply(&cfg)
 	}
+	cfg.logger = cfg.logger.With(zap.Int32("snid", int32(cfg.snid)))
 	return cfg, nil
 }
 

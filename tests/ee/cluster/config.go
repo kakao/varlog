@@ -1,7 +1,10 @@
 package cluster
 
 import (
+	"testing"
+
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/kakao/varlog/pkg/types"
 )
@@ -20,12 +23,12 @@ type Config struct {
 	logger            *zap.Logger
 }
 
-func NewConfig(opts ...Option) (Config, error) {
+func NewConfig(t *testing.T, opts ...Option) (Config, error) {
 	cfg := Config{
 		cid:               DefaultClusterID,
 		replicationFactor: DefaultReplicationFactor,
 		numMetaRepos:      DefaultNumMetaRepos,
-		logger:            zap.NewNop(),
+		logger:            zaptest.NewLogger(t),
 	}
 	for _, opt := range opts {
 		opt.apply(&cfg)
