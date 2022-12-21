@@ -2249,7 +2249,6 @@ func TestExecutor_Trim(t *testing.T) {
 }
 
 func TestExecutorRestore(t *testing.T) {
-	// *_Old: for compatibility check
 	tcs := []struct {
 		name   string
 		golden string
@@ -2365,118 +2364,6 @@ func TestExecutorRestore(t *testing.T) {
 				localHWM := lse.lsc.localHighWatermark()
 				require.Equal(t, types.LLSN(10), localHWM.LLSN)
 				require.Equal(t, types.GLSN(20), localHWM.GLSN)
-			},
-		},
-		{
-			name:   "NoLogEntry_Old",
-			golden: "./testdata/datadir-91",
-			testf: func(t *testing.T, lse *Executor) {
-				rpt, err := lse.Report(context.Background())
-				require.NoError(t, err)
-				require.Equal(t, snpb.LogStreamUncommitReport{
-					LogStreamID:           lse.lsid,
-					UncommittedLLSNOffset: 1,
-					UncommittedLLSNLength: 0,
-					Version:               0,
-					HighWatermark:         0,
-				}, rpt)
-
-				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
-				require.Equal(t, types.Version(0), ver)
-				require.Equal(t, types.GLSN(0), hwm)
-				require.Equal(t, types.LLSN(1), uncommittedBegin.LLSN)
-				require.False(t, invalid)
-				require.Equal(t, types.LLSN(1), lse.lsc.uncommittedLLSNEnd.Load())
-				localLWM := lse.lsc.localLowWatermark()
-				require.True(t, localLWM.LLSN.Invalid())
-				require.True(t, localLWM.GLSN.Invalid())
-				localHWM := lse.lsc.localHighWatermark()
-				require.True(t, localHWM.LLSN.Invalid())
-				require.True(t, localHWM.GLSN.Invalid())
-			},
-		},
-		{
-			name:   "OneLogEntry_Old",
-			golden: "./testdata/datadir-92",
-			testf: func(t *testing.T, lse *Executor) {
-				rpt, err := lse.Report(context.Background())
-				require.NoError(t, err)
-				require.Equal(t, snpb.LogStreamUncommitReport{
-					LogStreamID:           lse.lsid,
-					UncommittedLLSNOffset: 2,
-					UncommittedLLSNLength: 0,
-					Version:               1,
-					HighWatermark:         1,
-				}, rpt)
-
-				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
-				require.Equal(t, types.Version(1), ver)
-				require.Equal(t, types.GLSN(1), hwm)
-				require.Equal(t, types.LLSN(2), uncommittedBegin.LLSN)
-				require.False(t, invalid)
-				require.Equal(t, types.LLSN(2), lse.lsc.uncommittedLLSNEnd.Load())
-				localLWM := lse.lsc.localLowWatermark()
-				require.Equal(t, types.LLSN(1), localLWM.LLSN)
-				require.Equal(t, types.GLSN(1), localLWM.GLSN)
-				localHWM := lse.lsc.localHighWatermark()
-				require.Equal(t, types.LLSN(1), localHWM.LLSN)
-				require.Equal(t, types.GLSN(1), localHWM.GLSN)
-			},
-		},
-		{
-			name:   "TenLogEntries_Old",
-			golden: "./testdata/datadir-93",
-			testf: func(t *testing.T, lse *Executor) {
-				rpt, err := lse.Report(context.Background())
-				require.NoError(t, err)
-				require.Equal(t, snpb.LogStreamUncommitReport{
-					LogStreamID:           lse.lsid,
-					UncommittedLLSNOffset: 11,
-					UncommittedLLSNLength: 0,
-					Version:               10,
-					HighWatermark:         10,
-				}, rpt)
-
-				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
-				require.Equal(t, types.Version(10), ver)
-				require.Equal(t, types.GLSN(10), hwm)
-				require.Equal(t, types.LLSN(11), uncommittedBegin.LLSN)
-				require.False(t, invalid)
-				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
-				localLWM := lse.lsc.localLowWatermark()
-				require.Equal(t, types.LLSN(1), localLWM.LLSN)
-				require.Equal(t, types.GLSN(1), localLWM.GLSN)
-				localHWM := lse.lsc.localHighWatermark()
-				require.Equal(t, types.LLSN(10), localHWM.LLSN)
-				require.Equal(t, types.GLSN(10), localHWM.GLSN)
-			},
-		},
-		{
-			name:   "TenLogEntriesFollowedByTenEmptyCommitContexts_Old",
-			golden: "./testdata/datadir-94",
-			testf: func(t *testing.T, lse *Executor) {
-				rpt, err := lse.Report(context.Background())
-				require.NoError(t, err)
-				require.Equal(t, snpb.LogStreamUncommitReport{
-					LogStreamID:           lse.lsid,
-					UncommittedLLSNOffset: 11,
-					UncommittedLLSNLength: 0,
-					Version:               20,
-					HighWatermark:         20,
-				}, rpt)
-
-				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
-				require.Equal(t, types.Version(20), ver)
-				require.Equal(t, types.GLSN(20), hwm)
-				require.Equal(t, types.LLSN(11), uncommittedBegin.LLSN)
-				require.False(t, invalid)
-				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
-				localLWM := lse.lsc.localLowWatermark()
-				require.Equal(t, types.LLSN(1), localLWM.LLSN)
-				require.Equal(t, types.GLSN(1), localLWM.GLSN)
-				localHWM := lse.lsc.localHighWatermark()
-				require.Equal(t, types.LLSN(10), localHWM.LLSN)
-				require.Equal(t, types.GLSN(10), localHWM.GLSN)
 			},
 		},
 	}

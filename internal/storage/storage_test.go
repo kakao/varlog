@@ -38,39 +38,11 @@ func TestStorageEncodeDecode(t *testing.T) {
 	ck = encodeCommitKeyInternal(types.MaxGLSN, ck)
 	assert.Equal(t, types.MaxGLSN, decodeCommitKey(ck))
 
-	cck := make([]byte, commitContextKeyLength)
-	cck = encodeCommitContextKeyInternal(CommitContext{
-		Version:            types.MaxVersion,
-		HighWatermark:      types.MaxGLSN - 1,
-		CommittedGLSNBegin: types.MinGLSN,
-		CommittedGLSNEnd:   types.MaxGLSN,
-		CommittedLLSNBegin: types.MinLLSN,
-	}, cck)
-	assert.Equal(t, CommitContext{
-		Version:            types.MaxVersion,
-		HighWatermark:      types.MaxGLSN - 1,
-		CommittedGLSNBegin: types.MinGLSN,
-		CommittedGLSNEnd:   types.MaxGLSN,
-		CommittedLLSNBegin: types.MinLLSN,
-	}, decodeCommitContextKey(cck))
-
 	assert.Panics(t, func() {
 		_ = decodeCommitKey(dk)
 	})
 	assert.Panics(t, func() {
-		_ = decodeCommitContextKey(dk)
-	})
-	assert.Panics(t, func() {
 		_ = decodeDataKey(ck)
-	})
-	assert.Panics(t, func() {
-		_ = decodeCommitContextKey(ck)
-	})
-	assert.Panics(t, func() {
-		_ = decodeDataKey(cck)
-	})
-	assert.Panics(t, func() {
-		_ = decodeCommitKey(cck)
 	})
 }
 
@@ -475,7 +447,8 @@ func TestStorageRead(t *testing.T) {
 func TestStorageReadLastCommitContext(t *testing.T) {
 	testStorage(t, func(t testing.TB, stg *Storage) {
 		// no cc
-		lastCC := stg.readLastCommitContext()
+		lastCC, err := stg.readLastCommitContext()
+		assert.NoError(t, err)
 		assert.Nil(t, lastCC)
 
 		// empty cc
@@ -491,7 +464,8 @@ func TestStorageReadLastCommitContext(t *testing.T) {
 		assert.NoError(t, cb.Apply())
 		assert.NoError(t, cb.Close())
 
-		lastCC = stg.readLastCommitContext()
+		lastCC, err = stg.readLastCommitContext()
+		assert.NoError(t, err)
 		// lastCC
 		assert.NotNil(t, lastCC)
 		assert.True(t, lastCC.Empty())
@@ -510,7 +484,8 @@ func TestStorageReadLastCommitContext(t *testing.T) {
 		assert.NoError(t, cb.Apply())
 		assert.NoError(t, cb.Close())
 
-		lastCC = stg.readLastCommitContext()
+		lastCC, err = stg.readLastCommitContext()
+		assert.NoError(t, err)
 		// lastCC
 		assert.NotNil(t, lastCC)
 		assert.True(t, lastCC.Empty())
@@ -529,7 +504,8 @@ func TestStorageReadLastCommitContext(t *testing.T) {
 		assert.NoError(t, cb.Apply())
 		assert.NoError(t, cb.Close())
 
-		lastCC = stg.readLastCommitContext()
+		lastCC, err = stg.readLastCommitContext()
+		assert.NoError(t, err)
 		// lastCC
 		assert.NotNil(t, lastCC)
 		assert.False(t, lastCC.Empty())
@@ -548,7 +524,8 @@ func TestStorageReadLastCommitContext(t *testing.T) {
 		assert.NoError(t, cb.Apply())
 		assert.NoError(t, cb.Close())
 
-		lastCC = stg.readLastCommitContext()
+		lastCC, err = stg.readLastCommitContext()
+		assert.NoError(t, err)
 		// lastCC
 		assert.NotNil(t, lastCC)
 		assert.True(t, lastCC.Empty())
