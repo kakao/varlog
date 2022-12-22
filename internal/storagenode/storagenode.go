@@ -9,6 +9,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -21,8 +22,10 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode/executorsmap"
@@ -67,6 +70,10 @@ type StorageNode struct {
 	sf singleflight.Group
 
 	startTime time.Time
+
+	limits struct {
+		logStreamReplicasCount atomic.Int32
+	}
 }
 
 func NewStorageNode(opts ...Option) (*StorageNode, error) {
@@ -301,6 +308,11 @@ func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.Topic
 }
 
 func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID, lsPath string) (*logstream.Executor, error) {
+	if added := sn.limits.logStreamReplicasCount.Add(1); sn.maxLogStreamReplicasCount >= 0 && added > sn.maxLogStreamReplicasCount {
+		sn.limits.logStreamReplicasCount.Add(-1)
+		return nil, status.Errorf(codes.ResourceExhausted, "storagenode: too many logstream replicas (tpid=%d, lsid=%d)", tpid, lsid)
+	}
+
 	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, lsid)
 	if err != nil {
 		return nil, err
@@ -362,6 +374,7 @@ func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.Topi
 	if err := os.RemoveAll(lse.Path()); err != nil {
 		sn.logger.Warn("error while removing log stream path")
 	}
+	sn.limits.logStreamReplicasCount.Add(-1)
 	return nil
 }
 

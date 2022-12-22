@@ -54,6 +54,7 @@ func newStartCommand() *cli.Command {
 			flagLogStreamExecutorWriteQueueCapacity.IntFlag(false, logstream.DefaultWriteQueueCapacity),
 			flagLogStreamExecutorCommitQueueCapacity.IntFlag(false, logstream.DefaultCommitQueueCapacity),
 			flagLogStreamExecutorReplicateclientQueueCapacity.IntFlag(false, logstream.DefaultReplicateClientQueueCapacity),
+			flagMaxLogStreamReplicasCount,
 
 			// storage options
 			flagStorageDisableWAL.BoolFlag(),
