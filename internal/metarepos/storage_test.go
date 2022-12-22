@@ -9,8 +9,12 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
@@ -1917,6 +1921,53 @@ func TestStoragUnregisterTopic(t *testing.T) {
 		topic := ms.lookupTopic(types.TopicID(1))
 		So(topic, ShouldBeNil)
 	})
+}
+
+func TestStorage_MaxTopicsCount(t *testing.T) {
+	tcs := []struct {
+		name           string
+		maxTopicsCount int32
+		testf          func(t *testing.T, ms *MetadataStorage)
+	}{
+		{
+			name:           "LimitOne",
+			maxTopicsCount: 1,
+			testf: func(t *testing.T, ms *MetadataStorage) {
+				err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: 1})
+				require.NoError(t, err)
+
+				err = ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: 2})
+				require.Error(t, err)
+				require.Equal(t, codes.ResourceExhausted, status.Code(err))
+
+				err = ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: 1})
+				require.NoError(t, err)
+
+				err = ms.unregisterTopic(1)
+				require.NoError(t, err)
+
+				err = ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: 2})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:           "LimitZero",
+			maxTopicsCount: 0,
+			testf: func(t *testing.T, ms *MetadataStorage) {
+				err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: 1})
+				require.Error(t, err)
+				require.Equal(t, codes.ResourceExhausted, status.Code(err))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ms := NewMetadataStorage(nil, DefaultSnapshotCount, zaptest.NewLogger(t))
+			ms.limits.maxTopicsCount = tc.maxTopicsCount
+			tc.testf(t, ms)
+		})
+	}
 }
 
 func TestStorageSortedTopicLogStreamIDs(t *testing.T) {

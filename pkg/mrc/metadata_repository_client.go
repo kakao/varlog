@@ -7,7 +7,9 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -100,7 +102,13 @@ func (c *metadataRepositoryClient) RegisterTopic(ctx context.Context, topicID ty
 	}
 
 	_, err := c.client.RegisterTopic(ctx, req)
-	return verrors.FromStatusError(errors.WithStack(err))
+	if err != nil {
+		if code := status.Code(err); code == codes.ResourceExhausted {
+			return err
+		}
+		return verrors.FromStatusError(errors.WithStack(err))
+	}
+	return nil
 }
 
 func (c *metadataRepositoryClient) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {

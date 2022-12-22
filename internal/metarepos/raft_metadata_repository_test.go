@@ -16,7 +16,9 @@ import (
 	"go.uber.org/goleak"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -2436,6 +2438,52 @@ func TestMRUnregisterTopic(t *testing.T) {
 
 		meta, _ = clus.nodes[0].GetMetadata(context.TODO())
 		So(len(meta.GetLogStreams()), ShouldEqual, 0)
+	})
+}
+
+func TestMetadataRepository_MaxTopicsCount(t *testing.T) {
+	const numNodes = 1
+	const repFactor = 1
+	const increaseUncommit = false
+
+	Convey("MaxTopicsCount", t, func(C) {
+		clus := newMetadataRepoCluster(numNodes, repFactor, increaseUncommit)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
+		So(clus.Start(), ShouldBeNil)
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.healthCheckAll()
+		}), ShouldBeTrue)
+
+		mr := clus.nodes[0]
+
+		Convey("Limit is zero", func(C) {
+			mr.storage.limits.maxTopicsCount = 0
+			err := mr.RegisterTopic(context.Background(), 1)
+			So(err, ShouldNotBeNil)
+		})
+
+		Convey("Limit is one", func(C) {
+			mr.storage.limits.maxTopicsCount = 1
+
+			err := mr.RegisterTopic(context.Background(), 1)
+			So(err, ShouldBeNil)
+
+			err = mr.RegisterTopic(context.Background(), 2)
+			So(err, ShouldNotBeNil)
+			So(status.Code(err), ShouldEqual, codes.ResourceExhausted)
+
+			err = mr.RegisterTopic(context.Background(), 1)
+			So(err, ShouldBeNil)
+
+			err = mr.UnregisterTopic(context.TODO(), 1)
+			So(err, ShouldBeNil)
+
+			err = mr.RegisterTopic(context.Background(), 2)
+			So(err, ShouldBeNil)
+		})
 	})
 }
 

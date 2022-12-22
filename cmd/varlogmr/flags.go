@@ -1,7 +1,10 @@
 package main
 
 import (
+	"github.com/urfave/cli/v2"
+
 	"github.com/kakao/varlog/internal/flags"
+	"github.com/kakao/varlog/internal/metarepos"
 )
 
 var (
@@ -121,6 +124,12 @@ var (
 	flagReportCommitterWriteBufferSize = flags.FlagDesc{
 		Name: "reportcommitter-write-buffer-size",
 		Envs: []string{"REPORTCOMMITTER_WRITE_BUFFER_SIZE"},
+	}
+
+	flagMaxTopicsCount = &cli.IntFlag{
+		Name:  "max-topics-count",
+		Usage: "Maximum number of topics, infinity if it is negative",
+		Value: metarepos.DefaultMaxTopicsCount,
 	}
 
 	flagTelemetryCollectorName = flags.FlagDesc{
