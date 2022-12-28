@@ -10,9 +10,11 @@ import (
 	"sync/atomic"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/status"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/mathutil"
@@ -127,6 +129,10 @@ type MetadataStorage struct {
 	runner  *runner.Runner
 	running atomicutil.AtomicBool
 
+	limits struct {
+		maxTopicsCount int32
+	}
+
 	logger *zap.Logger
 }
 
@@ -141,6 +147,7 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger
 		logger:          logger,
 	}
 	ms.snapCount = snapCount
+	ms.limits.maxTopicsCount = DefaultMaxTopicsCount
 
 	ms.origStateMachine = &mrpb.MetadataRepositoryDescriptor{}
 	ms.origStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
@@ -603,10 +610,30 @@ func (ms *MetadataStorage) registerTopic(topic *varlogpb.TopicDescriptor) error 
 		return nil
 	}
 
-	_, cur := ms.getStateMachine()
+	tpids := make(map[types.TopicID]struct{})
+	pre, cur := ms.getStateMachine()
 
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
+
+	for _, tp := range pre.Metadata.Topics {
+		if !tp.Status.Deleted() {
+			tpids[tp.TopicID] = struct{}{}
+		}
+	}
+	if pre != cur {
+		for _, tp := range cur.Metadata.Topics {
+			if tp.Status.Deleted() {
+				delete(tpids, tp.TopicID)
+				continue
+			}
+			tpids[tp.TopicID] = struct{}{}
+		}
+	}
+
+	if ms.limits.maxTopicsCount >= 0 && len(tpids) >= int(ms.limits.maxTopicsCount) {
+		return status.Errorf(codes.ResourceExhausted, "too many topics, limits %d", len(tpids))
+	}
 
 	if err := cur.Metadata.UpsertTopic(topic); err != nil {
 		return err
