@@ -96,7 +96,7 @@ func (c *ManagementClient) AddLogStreamReplica(ctx context.Context, tpid types.T
 		StorageNodePath: snpath,
 	})
 	if err != nil {
-		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.Wrap(verrors.FromStatusError(err), "snmcl")
+		return snpb.LogStreamReplicaMetadataDescriptor{}, err
 	}
 	return rsp.LogStreamReplica, nil
 }

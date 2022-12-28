@@ -171,6 +171,7 @@ func start(c *cli.Context) error {
 			logstream.WithCommitQueueCapacity(c.Int(flagLogStreamExecutorCommitQueueCapacity.Name)),
 			logstream.WithReplicateClientQueueCapacity(c.Int(flagLogStreamExecutorReplicateclientQueueCapacity.Name)),
 		),
+		storagenode.WithMaxLogStreamReplicasCount(int32(c.Int(flagMaxLogStreamReplicasCount.Name))),
 		storagenode.WithDefaultStorageOptions(storageOpts...),
 		storagenode.WithLogger(logger),
 	)

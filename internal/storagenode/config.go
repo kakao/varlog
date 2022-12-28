@@ -20,6 +20,7 @@ const (
 	DefaultServerMaxRecvSize              = 4 << 20
 	DefaultReplicateClientReadBufferSize  = 32 << 10
 	DefaultReplicateClientWriteBufferSize = 32 << 10
+	DefaultMaxLogStreamReplicasCount      = -1
 )
 
 type config struct {
@@ -33,6 +34,7 @@ type config struct {
 	grpcServerMaxRecvMsgSize        int64
 	replicateClientReadBufferSize   int64
 	replicateClientWriteBufferSize  int64
+	maxLogStreamReplicasCount       int32
 	volumes                         []string
 	defaultLogStreamExecutorOptions []logstream.ExecutorOption
 	pprofOpts                       []pprof.Option
@@ -47,6 +49,7 @@ func newConfig(opts []Option) (config, error) {
 		grpcServerMaxRecvMsgSize:       DefaultServerMaxRecvSize,
 		replicateClientReadBufferSize:  DefaultReplicateClientReadBufferSize,
 		replicateClientWriteBufferSize: DefaultReplicateClientWriteBufferSize,
+		maxLogStreamReplicasCount:      DefaultMaxLogStreamReplicasCount,
 		logger:                         zap.NewNop(),
 	}
 	for _, opt := range opts {
@@ -179,6 +182,12 @@ func WithReplicateClientWriteBufferSize(replicateClientWriteBufferSize int64) Op
 func WithDefaultLogStreamExecutorOptions(defaultLSEOptions ...logstream.ExecutorOption) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.defaultLogStreamExecutorOptions = defaultLSEOptions
+	})
+}
+
+func WithMaxLogStreamReplicasCount(maxLogStreamReplicasCount int32) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.maxLogStreamReplicasCount = maxLogStreamReplicasCount
 	})
 }
 

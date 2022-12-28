@@ -1,7 +1,10 @@
 package main
 
 import (
+	"github.com/urfave/cli/v2"
+
 	"github.com/kakao/varlog/internal/flags"
+	"github.com/kakao/varlog/internal/storagenode"
 )
 
 var (
@@ -26,6 +29,12 @@ var (
 		Name:    "volumes",
 		Aliases: []string{"volume"},
 		Envs:    []string{"VOLUMES", "VOLUME"},
+	}
+
+	flagMaxLogStreamReplicasCount = &cli.IntFlag{
+		Name:  "max-logstream-replicas-count",
+		Usage: "The maximum number of log stream replicas in a storage node, infinity if a negative value",
+		Value: storagenode.DefaultMaxLogStreamReplicasCount,
 	}
 
 	// flags for grpc options.
