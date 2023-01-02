@@ -682,6 +682,11 @@ func TestStorageNode_Sync(t *testing.T) {
 
 				snmc, closer := TestNewManagementClient(t, cid, src.snid, src.advertise)
 				defer closer()
+
+				st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
+				require.NoError(t, err)
+				require.Equal(t, snpb.SyncStateStart, st.State)
+
 				require.Never(t, func() bool {
 					st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
 					return err == nil && st.State == snpb.SyncStateComplete
@@ -718,6 +723,11 @@ func TestStorageNode_Sync(t *testing.T) {
 
 				snmc, closer := TestNewManagementClient(t, cid, src.snid, src.advertise)
 				defer closer()
+
+				st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
+				require.NoError(t, err)
+				require.Equal(t, snpb.SyncStateStart, st.State)
+
 				require.Never(t, func() bool {
 					st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
 					return err == nil && st.State == snpb.SyncStateComplete
@@ -751,6 +761,11 @@ func TestStorageNode_Sync(t *testing.T) {
 
 				snmc, closer := TestNewManagementClient(t, cid, src.snid, src.advertise)
 				defer closer()
+
+				st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
+				require.NoError(t, err)
+				require.Equal(t, snpb.SyncStateStart, st.State)
+
 				require.Never(t, func() bool {
 					st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
 					return err == nil && st.State == snpb.SyncStateComplete
@@ -774,6 +789,12 @@ func TestStorageNode_Sync(t *testing.T) {
 				status, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
 				require.Equal(t, varlogpb.LogStreamStatusSealing, status)
 				require.Equal(t, types.InvalidGLSN, localHWM)
+
+				syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+					StorageNodeID: dst.snid,
+					Address:       dst.advertise,
+				})
+				require.Equal(t, snpb.SyncStateStart, syncStatus.State)
 
 				require.Eventually(t, func() bool {
 					syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
@@ -815,6 +836,12 @@ func TestStorageNode_Sync(t *testing.T) {
 				status, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
 				require.Equal(t, varlogpb.LogStreamStatusSealing, status)
 				require.Equal(t, types.InvalidGLSN, localHWM)
+
+				syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+					StorageNodeID: dst.snid,
+					Address:       dst.advertise,
+				})
+				require.Equal(t, snpb.SyncStateStart, syncStatus.State)
 
 				require.Eventually(t, func() bool {
 					syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
@@ -895,6 +922,12 @@ func TestStorageNode_Sync(t *testing.T) {
 				require.Equal(t, varlogpb.LogStreamStatusSealing, status)
 				require.Equal(t, lastCommittedGLSN, localHWM)
 
+				syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+					StorageNodeID: dst.snid,
+					Address:       dst.advertise,
+				})
+				require.Equal(t, snpb.SyncStateStart, syncStatus.State)
+
 				require.Eventually(t, func() bool {
 					syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
 						StorageNodeID: dst.snid,
@@ -937,6 +970,12 @@ func TestStorageNode_Sync(t *testing.T) {
 				require.Equal(t, varlogpb.LogStreamStatusSealing, status)
 				require.Equal(t, lastGLSN(1), localHWM)
 
+				syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+					StorageNodeID: dst.snid,
+					Address:       dst.advertise,
+				})
+				require.Equal(t, snpb.SyncStateStart, syncStatus.State)
+
 				require.Eventually(t, func() bool {
 					syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
 						StorageNodeID: dst.snid,
@@ -978,6 +1017,12 @@ func TestStorageNode_Sync(t *testing.T) {
 				status, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
 				require.Equal(t, varlogpb.LogStreamStatusSealing, status)
 				require.Equal(t, lastGLSN(1), localHWM)
+
+				syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+					StorageNodeID: dst.snid,
+					Address:       dst.advertise,
+				})
+				require.Equal(t, snpb.SyncStateStart, syncStatus.State)
 
 				require.Eventually(t, func() bool {
 					syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
@@ -1022,6 +1067,12 @@ func TestStorageNode_Sync(t *testing.T) {
 				require.Equal(t, varlogpb.LogStreamStatusSealing, status)
 				require.Equal(t, lastGLSN(2), localHWM)
 
+				syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+					StorageNodeID: dst.snid,
+					Address:       dst.advertise,
+				})
+				require.Equal(t, snpb.SyncStateStart, syncStatus.State)
+
 				require.Eventually(t, func() bool {
 					syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
 						StorageNodeID: dst.snid,
@@ -1064,6 +1115,12 @@ func TestStorageNode_Sync(t *testing.T) {
 				status, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
 				require.Equal(t, varlogpb.LogStreamStatusSealing, status)
 				require.Equal(t, lastGLSN(2), localHWM)
+
+				syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+					StorageNodeID: dst.snid,
+					Address:       dst.advertise,
+				})
+				require.Equal(t, snpb.SyncStateStart, syncStatus.State)
 
 				require.Eventually(t, func() bool {
 					syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
