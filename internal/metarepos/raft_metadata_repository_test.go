@@ -2487,6 +2487,59 @@ func TestMetadataRepository_MaxTopicsCount(t *testing.T) {
 	})
 }
 
+func TestMetadataRepository_MaxLogStreamsCountPerTopic(t *testing.T) {
+	const (
+		numNodes         = 1
+		repFactor        = 1
+		increaseUncommit = false
+
+		snid = types.StorageNodeID(1)
+		tpid = types.TopicID(1)
+	)
+
+	Convey("MaxLogStreamsCountPerTopic", t, func(C) {
+		clus := newMetadataRepoCluster(numNodes, repFactor, increaseUncommit)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
+		So(clus.Start(), ShouldBeNil)
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.healthCheckAll()
+		}), ShouldBeTrue)
+
+		mr := clus.nodes[0]
+		ctx := context.Background()
+
+		err := mr.RegisterStorageNode(ctx, &varlogpb.StorageNodeDescriptor{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snid,
+			},
+		})
+		So(err, ShouldBeNil)
+
+		err = mr.RegisterTopic(ctx, tpid)
+		So(err, ShouldBeNil)
+
+		Convey("Limit is zero", func(C) {
+			mr.storage.limits.maxLogStreamsCountPerTopic = 0
+			err := mr.RegisterLogStream(ctx, makeLogStream(tpid, types.LogStreamID(1), []types.StorageNodeID{snid}))
+			So(err, ShouldNotBeNil)
+			So(status.Code(err), ShouldEqual, codes.ResourceExhausted)
+		})
+
+		Convey("Limit is one", func(C) {
+			mr.storage.limits.maxLogStreamsCountPerTopic = 1
+			err := mr.RegisterLogStream(ctx, makeLogStream(tpid, types.LogStreamID(1), []types.StorageNodeID{snid}))
+			So(err, ShouldBeNil)
+
+			err = mr.RegisterLogStream(ctx, makeLogStream(tpid, types.LogStreamID(2), []types.StorageNodeID{snid}))
+			So(err, ShouldNotBeNil)
+			So(status.Code(err), ShouldEqual, codes.ResourceExhausted)
+		})
+	})
+}
+
 func TestMRTopicLastHighWatermark(t *testing.T) {
 	Convey("given metadata repository with multiple topics", t, func(ctx C) {
 		nrTopics := 3
