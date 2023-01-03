@@ -243,7 +243,7 @@ func TestStoragGetAllLS(t *testing.T) {
 					err := ms.unregisterLogStream(lsID)
 					So(err, ShouldBeNil)
 
-					Convey("Then it should returns nil", func(ctx C) {
+					Convey("Then it should return nil", func(ctx C) {
 						lss := ms.GetLogStreams()
 						So(len(lss), ShouldEqual, 0)
 
@@ -1942,6 +1942,58 @@ func TestStorage_MaxTopicsCount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ms := NewMetadataStorage(nil, DefaultSnapshotCount, zaptest.NewLogger(t))
 			ms.limits.maxTopicsCount = tc.maxTopicsCount
+			tc.testf(t, ms)
+		})
+	}
+}
+
+func TestStorage_MaxLogStreamsCountPerTopic(t *testing.T) {
+	const snid = types.StorageNodeID(1)
+	const tpid = types.TopicID(1)
+
+	tcs := []struct {
+		name                       string
+		maxLogStreamsCountPerTopic int32
+		testf                      func(t *testing.T, ms *MetadataStorage)
+	}{
+		{
+			name:                       "LimitZero",
+			maxLogStreamsCountPerTopic: 0,
+			testf: func(t *testing.T, ms *MetadataStorage) {
+				err := ms.registerLogStream(makeLogStream(tpid, types.LogStreamID(1), []types.StorageNodeID{snid}))
+				require.Error(t, err)
+				require.Equal(t, codes.ResourceExhausted, status.Code(err))
+			},
+		},
+		{
+			name:                       "LimitOne",
+			maxLogStreamsCountPerTopic: 1,
+			testf: func(t *testing.T, ms *MetadataStorage) {
+				err := ms.registerLogStream(makeLogStream(tpid, types.LogStreamID(1), []types.StorageNodeID{snid}))
+				require.NoError(t, err)
+
+				err = ms.registerLogStream(makeLogStream(tpid, types.LogStreamID(2), []types.StorageNodeID{snid}))
+				require.Error(t, err)
+				require.Equal(t, codes.ResourceExhausted, status.Code(err))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ms := NewMetadataStorage(nil, DefaultSnapshotCount, zaptest.NewLogger(t))
+			ms.limits.maxLogStreamsCountPerTopic = tc.maxLogStreamsCountPerTopic
+
+			err := ms.registerStorageNode(&varlogpb.StorageNodeDescriptor{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snid,
+				},
+			})
+			require.NoError(t, err)
+
+			err = ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: tpid})
+			require.NoError(t, err)
+
 			tc.testf(t, ms)
 		})
 	}
