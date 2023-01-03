@@ -223,18 +223,6 @@ func (fac *DummyStorageNodeClientFactory) registerLogStream(snID types.StorageNo
 	}
 }
 
-func (fac *DummyStorageNodeClientFactory) unregisterLogStream(snID types.StorageNodeID, lsIDs []types.LogStreamID) {
-	f, ok := fac.lsIDs.Load(snID)
-	if !ok {
-		return
-	}
-	m := f.(*sync.Map)
-
-	for _, lsID := range lsIDs {
-		m.Delete(lsID)
-	}
-}
-
 func (r *DummyStorageNodeClient) DisableReport() {
 	r.disableReport.Store(true)
 }
