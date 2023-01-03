@@ -131,6 +131,11 @@ var (
 		Usage: "Maximum number of topics, infinity if it is negative",
 		Value: metarepos.DefaultMaxTopicsCount,
 	}
+	flagMaxLogStreamsCountPerTopic = &cli.IntFlag{
+		Name:  "max-logstreams-count-per-topic",
+		Usage: "Maximum number of log streams per topic, infinity if it is negative",
+		Value: metarepos.DefaultMaxLogStreamsCountPerTopic,
+	}
 
 	flagTelemetryCollectorName = flags.FlagDesc{
 		Name:    "telemetry-collector-name",

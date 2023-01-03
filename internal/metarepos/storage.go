@@ -130,7 +130,8 @@ type MetadataStorage struct {
 	running atomicutil.AtomicBool
 
 	limits struct {
-		maxTopicsCount int32
+		maxTopicsCount             int32
+		maxLogStreamsCountPerTopic int32
 	}
 
 	logger *zap.Logger
@@ -148,6 +149,7 @@ func NewMetadataStorage(cb func(uint64, uint64, error), snapCount uint64, logger
 	}
 	ms.snapCount = snapCount
 	ms.limits.maxTopicsCount = DefaultMaxTopicsCount
+	ms.limits.maxLogStreamsCountPerTopic = DefaultMaxLogStreamsCountPerTopic
 
 	ms.origStateMachine = &mrpb.MetadataRepositoryDescriptor{}
 	ms.origStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
@@ -447,6 +449,10 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 
 	ms.mtMu.Lock()
 	defer ms.mtMu.Unlock()
+
+	if limit, curr := ms.limits.maxLogStreamsCountPerTopic, len(topic.LogStreams); limit >= 0 && curr >= int(limit) {
+		return status.Errorf(codes.ResourceExhausted, "too many log streams in topic %d: limits=%d actual=%d", ls.TopicID, limit, curr)
+	}
 
 	if err := cur.Metadata.UpsertLogStream(ls); err != nil {
 		return err
