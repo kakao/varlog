@@ -608,7 +608,7 @@ func (ms *MetadataStorage) willBeSealed(ls *varlogpb.LogStreamDescriptor) bool {
 
 	lastCommitted := ms.getLastCommittedLLSN(ls.TopicID, ls.LogStreamID)
 	for _, r := range ls.Replicas {
-		o, _ := reports.Replicas[r.StorageNodeID]
+		o := reports.Replicas[r.StorageNodeID]
 		if lastCommitted < o.UncommittedLLSNOffset {
 			return true
 		}
