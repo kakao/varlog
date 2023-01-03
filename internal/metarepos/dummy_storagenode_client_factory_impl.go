@@ -111,6 +111,7 @@ type DummyStorageNodeClient struct {
 	reportDelay   atomicutil.AtomicDuration
 	commitDelay   atomicutil.AtomicDuration
 	disableReport atomicutil.AtomicBool
+	disableCommit atomicutil.AtomicBool
 
 	ref int
 }
@@ -135,6 +136,7 @@ type DummyStorageNodeClientFactory struct {
 	manual       bool
 	nrLogStreams int
 	m            sync.Map
+	lsIDs        sync.Map
 }
 
 func NewDummyStorageNodeClientFactory(nrLogStreams int, manual bool) *DummyStorageNodeClientFactory {
@@ -149,9 +151,20 @@ func NewDummyStorageNodeClientFactory(nrLogStreams int, manual bool) *DummyStora
 func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(_ context.Context, snID types.StorageNodeID) (*DummyStorageNodeClient, error) {
 	status := DummyStorageNodeClientStatusRunning
 
-	LSIDs := make([]types.LogStreamID, fac.nrLogStreams)
-	for i := 0; i < fac.nrLogStreams; i++ {
-		LSIDs[i] = types.LogStreamID(snID) + types.LogStreamID(i)
+	var lsIDs []types.LogStreamID
+
+	f, ok := fac.lsIDs.Load(snID)
+	if ok {
+		m := f.(*sync.Map)
+		m.Range(func(key, _ interface{}) bool {
+			lsIDs = append(lsIDs, key.(types.LogStreamID))
+			return true
+		})
+	} else {
+		lsIDs = make([]types.LogStreamID, fac.nrLogStreams)
+		for i := 0; i < fac.nrLogStreams; i++ {
+			lsIDs[i] = types.LogStreamID(snID) + types.LogStreamID(i)
+		}
 	}
 
 	knownVersion := make([]types.Version, fac.nrLogStreams)
@@ -166,7 +179,7 @@ func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(_ context.Context
 	cli := &DummyStorageNodeClient{
 		manual:                fac.manual,
 		storageNodeID:         snID,
-		logStreamIDs:          LSIDs,
+		logStreamIDs:          lsIDs,
 		knownVersion:          knownVersion,
 		uncommittedLLSNOffset: uncommittedLLSNOffset,
 		uncommittedLLSNLength: uncommittedLLSNLength,
@@ -176,7 +189,7 @@ func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(_ context.Context
 		commitDelay:           atomicutil.AtomicDuration(DefaultDelay),
 	}
 
-	f, _ := fac.m.LoadOrStore(snID, cli)
+	f, _ = fac.m.LoadOrStore(snID, cli)
 
 	cli = f.(*DummyStorageNodeClient)
 	cli.incrRef()
@@ -198,12 +211,32 @@ func (fac *DummyStorageNodeClientFactory) GetManagementClient(ctx context.Contex
 	return fac.getStorageNodeClient(ctx, types.StorageNodeID(snID))
 }
 
+func (fac *DummyStorageNodeClientFactory) registerLogStream(snID types.StorageNodeID, lsIDs []types.LogStreamID) {
+	m := &sync.Map{}
+	f, ok := fac.lsIDs.LoadOrStore(snID, m)
+	if ok {
+		m = f.(*sync.Map)
+	}
+
+	for _, lsID := range lsIDs {
+		m.Store(lsID, nil)
+	}
+}
+
 func (r *DummyStorageNodeClient) DisableReport() {
 	r.disableReport.Store(true)
 }
 
 func (r *DummyStorageNodeClient) EnableReport() {
 	r.disableReport.Store(false)
+}
+
+func (r *DummyStorageNodeClient) DisableCommit() {
+	r.disableCommit.Store(true)
+}
+
+func (r *DummyStorageNodeClient) EnableCommmit() {
+	r.disableCommit.Store(false)
 }
 
 func (r *DummyStorageNodeClient) SetReportDelay(d time.Duration) {
@@ -256,6 +289,10 @@ func (r *DummyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 }
 
 func (r *DummyStorageNodeClient) Commit(cr snpb.CommitRequest) error {
+	if r.disableCommit.Load() {
+		return nil
+	}
+
 	time.Sleep(r.commitDelay.Load())
 
 	r.mu.Lock()
