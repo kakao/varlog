@@ -698,7 +698,7 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	newLSDesc.Replicas[popIdx] = &pushedReplica
 
 	if !adm.hasSealedReplica(ctx, newLSDesc) {
-		return nil, status.Errorf(codes.FailedPrecondition, "update log stream: does not have sealed replica")
+		return nil, status.Errorf(codes.FailedPrecondition, "update log stream: no sealed replica")
 	}
 
 	lsrmd, err := adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetStorageNodePath())
