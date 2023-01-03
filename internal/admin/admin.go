@@ -697,6 +697,10 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	newLSDesc := proto.Clone(oldLSDesc).(*varlogpb.LogStreamDescriptor)
 	newLSDesc.Replicas[popIdx] = &pushedReplica
 
+	if !adm.hasSealedReplica(ctx, newLSDesc) {
+		return nil, status.Errorf(codes.FailedPrecondition, "update log stream: does not have sealed replica")
+	}
+
 	lsrmd, err := adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetStorageNodePath())
 	if err != nil {
 		return nil, errors.Wrap(err, "update log stream")
@@ -714,6 +718,26 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	}
 
 	return newLSDesc, nil
+}
+
+func (adm *Admin) hasSealedReplica(ctx context.Context, lsdesc *varlogpb.LogStreamDescriptor) bool {
+	for _, replica := range lsdesc.Replicas {
+		meta, err := adm.snmgr.GetMetadata(ctx, replica.StorageNodeID)
+		if err != nil {
+			continue
+		}
+
+		lsmeta, ok := meta.FindLogStream(lsdesc.LogStreamID)
+		if !ok {
+			continue
+		}
+
+		if lsmeta.Status == varlogpb.LogStreamStatusSealed {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (adm *Admin) unregisterLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
