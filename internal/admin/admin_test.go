@@ -1555,6 +1555,43 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 			},
 		},
 		{
+			name: "DoesNotHaveSealedReplica",
+			prepare: func(mock *testMock) {
+				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
+					&varlogpb.MetadataDescriptor{
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+								Status:      varlogpb.LogStreamStatusSealed,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID:   snid1,
+										StorageNodePath: snpath1,
+									},
+								},
+							},
+						},
+					}, nil,
+				).AnyTimes()
+				mock.MockStorageNodeManager.EXPECT().GetMetadata(
+					gomock.Any(), gomock.Any(),
+				).Return(&snpb.StorageNodeMetadataDescriptor{
+					LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
+						{
+							LogStreamReplica: varlogpb.LogStreamReplica{
+								TopicLogStream: varlogpb.TopicLogStream{
+									TopicID:     tpid,
+									LogStreamID: lsid,
+								},
+							},
+							Status: varlogpb.LogStreamStatusSealing,
+						},
+					},
+				}, nil).AnyTimes()
+			},
+		},
+		{
 			name: "AddLogStreamReplicaError",
 			prepare: func(mock *testMock) {
 				mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).Return(
@@ -1574,6 +1611,23 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 						},
 					}, nil,
 				).AnyTimes()
+
+				mock.MockStorageNodeManager.EXPECT().GetMetadata(
+					gomock.Any(), gomock.Any(),
+				).Return(&snpb.StorageNodeMetadataDescriptor{
+					LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
+						{
+							LogStreamReplica: varlogpb.LogStreamReplica{
+								TopicLogStream: varlogpb.TopicLogStream{
+									TopicID:     tpid,
+									LogStreamID: lsid,
+								},
+							},
+							Status: varlogpb.LogStreamStatusSealed,
+						},
+					},
+				}, nil).AnyTimes()
+
 				mock.MockStorageNodeManager.EXPECT().AddLogStreamReplica(
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 				).Return(snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("error"))
@@ -1599,12 +1653,31 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 						},
 					}, nil,
 				).AnyTimes()
+
+				mock.MockStorageNodeManager.EXPECT().GetMetadata(
+					gomock.Any(), gomock.Any(),
+				).Return(&snpb.StorageNodeMetadataDescriptor{
+					LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
+						{
+							LogStreamReplica: varlogpb.LogStreamReplica{
+								TopicLogStream: varlogpb.TopicLogStream{
+									TopicID:     tpid,
+									LogStreamID: lsid,
+								},
+							},
+							Status: varlogpb.LogStreamStatusSealed,
+						},
+					},
+				}, nil).AnyTimes()
+
 				mock.MockStorageNodeManager.EXPECT().AddLogStreamReplica(
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 				).Return(snpb.LogStreamReplicaMetadataDescriptor{}, nil)
+
 				mock.MockMetadataRepositoryManager.EXPECT().UpdateLogStream(
 					gomock.Any(), gomock.Any(),
 				).Return(errors.New("error"))
+
 				mock.MockRepository.EXPECT().SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
 			},
 		},
@@ -1629,12 +1702,31 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 						},
 					}, nil,
 				).AnyTimes()
+
+				mock.MockStorageNodeManager.EXPECT().GetMetadata(
+					gomock.Any(), gomock.Any(),
+				).Return(&snpb.StorageNodeMetadataDescriptor{
+					LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
+						{
+							LogStreamReplica: varlogpb.LogStreamReplica{
+								TopicLogStream: varlogpb.TopicLogStream{
+									TopicID:     tpid,
+									LogStreamID: lsid,
+								},
+							},
+							Status: varlogpb.LogStreamStatusSealed,
+						},
+					},
+				}, nil).AnyTimes()
+
 				mock.MockStorageNodeManager.EXPECT().AddLogStreamReplica(
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 				).Return(snpb.LogStreamReplicaMetadataDescriptor{}, nil)
+
 				mock.MockMetadataRepositoryManager.EXPECT().UpdateLogStream(
 					gomock.Any(), gomock.Any(),
 				).Return(nil)
+
 				mock.MockRepository.EXPECT().SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
 			},
 		},
