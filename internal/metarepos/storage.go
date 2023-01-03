@@ -564,6 +564,14 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 		return nil
 	}
 
+	if !old.Status.Sealed() {
+		return verrors.ErrState
+	}
+
+	if !ms.willBeSealed(ls) {
+		return verrors.ErrState
+	}
+
 	_, cur := ms.getStateMachine()
 
 	ms.mtMu.Lock()
@@ -576,6 +584,49 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 
 	ms.metaAppliedIndex++
 	return err
+}
+
+func (ms *MetadataStorage) willBeSealed(ls *varlogpb.LogStreamDescriptor) bool {
+	pre, cur := ms.getStateMachine()
+
+	reports, ok := cur.LogStream.UncommitReports[ls.LogStreamID]
+	if !ok {
+		tmp, ok := pre.LogStream.UncommitReports[ls.LogStreamID]
+		if !ok {
+			return false
+		}
+
+		reports = proto.Clone(tmp).(*mrpb.LogStreamUncommitReports)
+	}
+
+	lastCommitted := ms.getLastCommittedLLSN(ls.TopicID, ls.LogStreamID)
+	for _, r := range ls.Replicas {
+		o, _ := reports.Replicas[r.StorageNodeID]
+		if lastCommitted < o.UncommittedLLSNOffset {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (ms *MetadataStorage) getLastCommittedLLSN(topicID types.TopicID, lsID types.LogStreamID) types.LLSN {
+	crs := ms.GetLastCommitResults()
+	if crs == nil {
+		return types.InvalidLLSN
+	}
+
+	r, _, ok := crs.LookupCommitResult(topicID, lsID, -1)
+	if !ok {
+		// newbie
+		return types.InvalidLLSN
+	}
+
+	if r.CommittedLLSNOffset+types.LLSN(r.CommittedGLSNLength) == types.InvalidLLSN {
+		return types.InvalidLLSN
+	}
+
+	return r.CommittedLLSNOffset + types.LLSN(r.CommittedGLSNLength) - types.MinLLSN
 }
 
 func (ms *MetadataStorage) RegisterTopic(topic *varlogpb.TopicDescriptor, nodeIndex, requestIndex uint64) error {
@@ -1073,6 +1124,8 @@ func (ms *MetadataStorage) LookupUncommitReport(lsID types.LogStreamID, snID typ
 		if s, ok := lm.Replicas[snID]; ok {
 			return s, true
 		}
+
+		return snpb.InvalidLogStreamUncommitReport, false
 	}
 
 	if pre == cur {
