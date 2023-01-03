@@ -100,6 +100,8 @@ type Admin interface {
 	// Deprecated: Use ListLogStreams.
 	DescribeTopic(ctx context.Context, topicID types.TopicID, opts ...AdminCallOption) (*vmspb.DescribeTopicResponse, error)
 	// AddLogStream adds a new log stream to the topic tpid.
+	// It returns the error code ResourceExhausted if the number of log streams
+	// is reached the upper limit.
 	//
 	// The admin server chooses proper replicas if the argument replicas are empty.
 	// Otherwise, if the argument replicas are defined, the admin server

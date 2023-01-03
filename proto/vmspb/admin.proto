@@ -374,6 +374,9 @@ service ClusterManager {
 
   rpc GetLogStream(GetLogStreamRequest) returns (GetLogStreamResponse) {}
   rpc ListLogStreams(ListLogStreamsRequest) returns (ListLogStreamsResponse) {}
+  // AddLogStream adds a new log stream to the cluster.
+  // The error code ResourceExhausted is returned if the number of log streams
+  // is reached the upper limit.
   rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
   // UpdateLogStream changes the configuration of replicas in a log stream.
   // Its codes are defines as followings:
