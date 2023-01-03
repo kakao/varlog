@@ -243,7 +243,7 @@ func TestStoragGetAllLS(t *testing.T) {
 					err := ms.unregisterLogStream(lsID)
 					So(err, ShouldBeNil)
 
-					Convey("Then it should returns nil", func(ctx C) {
+					Convey("Then it should return nil", func(ctx C) {
 						lss := ms.GetLogStreams()
 						So(len(lss), ShouldEqual, 0)
 
