@@ -1,8 +1,8 @@
 - Feature: Commit context
-- Status: draft
+- Status: completed
 - Authors: @ijsong
 - Varlog Issue: #125
-- RFC PR:
+- RFC PR: #149
 
 # Summary
 

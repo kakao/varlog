@@ -37,6 +37,8 @@ const (
 	DefaultReportCommitterReadBufferSize  = 32 * 1024 // 32KB
 	DefaultReportCommitterWriteBufferSize = 32 * 1024 // 32KB
 
+	DefaultMaxTopicsCount = -1
+
 	UnusedRequestIndex uint64 = 0
 )
 
@@ -78,6 +80,7 @@ type config struct {
 	reporterClientFac              ReporterClientFactory
 	reportCommitterReadBufferSize  int
 	reportCommitterWriteBufferSize int
+	maxTopicsCount                 int32
 	telemetryCollectorName         string
 	telemetryCollectorEndpoint     string
 	logger                         *zap.Logger
@@ -104,6 +107,7 @@ func newConfig(opts []Option) (config, error) {
 		promoteTick:                    DefaultPromoteTick,
 		reportCommitterReadBufferSize:  DefaultReportCommitterReadBufferSize,
 		reportCommitterWriteBufferSize: DefaultReportCommitterWriteBufferSize,
+		maxTopicsCount:                 DefaultMaxTopicsCount,
 		telemetryCollectorName:         DefaultTelemetryCollectorName,
 		telemetryCollectorEndpoint:     DefaultTelmetryCollectorEndpoint,
 		logger:                         zap.NewNop(),
@@ -330,6 +334,12 @@ func WithReportCommitterReadBufferSize(readBufferSize int) Option {
 func WithReportCommitterWriteBufferSize(writeBufferSize int) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.reportCommitterWriteBufferSize = writeBufferSize
+	})
+}
+
+func WithMaxTopicsCount(maxTopicsCount int32) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.maxTopicsCount = maxTopicsCount
 	})
 }
 

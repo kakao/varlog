@@ -19,46 +19,6 @@ func TestEncodeCommitContextUnsafe(t *testing.T) {
 	require.Equal(t, expected, actual)
 }
 
-func BenchmarkCommitContext_Encode(b *testing.B) {
-	tcs := []struct {
-		name   string
-		benchf func(*testing.B, CommitContext)
-	}{
-		{
-			name: "Safe",
-			benchf: func(b *testing.B, cc CommitContext) {
-				key := make([]byte, commitContextKeyLength)
-				for i := 0; i < b.N; i++ {
-					_ = encodeCommitContext(cc, key)
-				}
-			},
-		},
-		{
-			name: "Unsafe",
-			benchf: func(b *testing.B, cc CommitContext) {
-				var key []byte
-				for i := 0; i < b.N; i++ {
-					key = encodeCommitContextUnsafe(&cc)
-					_ = key
-				}
-			},
-		},
-	}
-
-	for _, tc := range tcs {
-		b.Run(tc.name, func(b *testing.B) {
-			cc := CommitContext{
-				Version:            1,
-				HighWatermark:      2,
-				CommittedGLSNBegin: 3,
-				CommittedGLSNEnd:   4,
-				CommittedLLSNBegin: 5,
-			}
-			tc.benchf(b, cc)
-		})
-	}
-}
-
 func BenchmarkCommitContext_Decode(b *testing.B) {
 	tcs := []struct {
 		name   string

@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"errors"
+
 	"github.com/cockroachdb/pebble"
 
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -21,7 +23,10 @@ type RecoveryPoints struct {
 // However, if there is a fatal error, such as missing data in a log entry, it
 // returns an error.
 func (s *Storage) ReadRecoveryPoints() (rp RecoveryPoints, err error) {
-	rp.LastCommitContext = s.readLastCommitContext()
+	rp.LastCommitContext, err = s.readLastCommitContext()
+	if err != nil {
+		return
+	}
 	rp.CommittedLogEntry.First, rp.CommittedLogEntry.Last, err = s.readLogEntryBoundaries()
 	if err != nil {
 		return
@@ -31,25 +36,15 @@ func (s *Storage) ReadRecoveryPoints() (rp RecoveryPoints, err error) {
 
 // readLastCommitContext returns the last commit context.
 // It returns nil if not exists.
-func (s *Storage) readLastCommitContext() *CommitContext {
+func (s *Storage) readLastCommitContext() (*CommitContext, error) {
 	cc, err := s.ReadCommitContext()
-	if err == nil {
-		return &cc
+	if err != nil {
+		if errors.Is(err, pebble.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
 	}
-
-	it := s.db.NewIter(&pebble.IterOptions{
-		LowerBound: []byte{commitContextKeyPrefix},
-		UpperBound: []byte{commitContextKeySentinelPrefix},
-	})
-	defer func() {
-		_ = it.Close()
-	}()
-
-	if !it.Last() {
-		return nil
-	}
-	cc = decodeCommitContextKey(it.Key())
-	return &cc
+	return &cc, nil
 }
 
 func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogEntryMeta, err error) {

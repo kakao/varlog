@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/internal/storage"
@@ -1128,6 +1130,66 @@ func TestStorageNode_Sync(t *testing.T) {
 			}
 
 			tc.testf(t, nodes[0], nodes[1])
+		})
+	}
+}
+
+func TestStorageNode_MaxLogStreamReplicasCount(t *testing.T) {
+	ctx := context.Background()
+
+	tcs := []struct {
+		name                      string
+		maxLogStreamReplicasCount int32
+		testf                     func(t *testing.T, snpath string, mc *client.ManagementClient)
+	}{
+		{
+			name:                      "LimitOne",
+			maxLogStreamReplicasCount: 1,
+			testf: func(t *testing.T, snpath string, mc *client.ManagementClient) {
+				_, err := mc.AddLogStreamReplica(ctx, 1, 1, snpath)
+				require.NoError(t, err)
+
+				_, err = mc.AddLogStreamReplica(ctx, 1, 2, snpath)
+				require.Error(t, err)
+				require.Equal(t, codes.ResourceExhausted, status.Code(err))
+
+				err = mc.RemoveLogStream(ctx, 1, 1)
+				require.NoError(t, err)
+
+				_, err = mc.AddLogStreamReplica(ctx, 1, 2, snpath)
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:                      "LimitZero",
+			maxLogStreamReplicasCount: 0,
+			testf: func(t *testing.T, snpath string, mc *client.ManagementClient) {
+				_, err := mc.AddLogStreamReplica(ctx, 1, 1, snpath)
+				require.Error(t, err)
+				require.Equal(t, codes.ResourceExhausted, status.Code(err))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t, WithMaxLogStreamReplicasCount(tc.maxLogStreamReplicasCount))
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			defer func() {
+				assert.NoError(t, sn.Close())
+				wg.Wait()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+			mc, mcClose := TestNewManagementClient(t, sn.cid, sn.snid, addr)
+			defer mcClose()
+
+			tc.testf(t, sn.snPaths[0], mc)
 		})
 	}
 }

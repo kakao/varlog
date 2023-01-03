@@ -118,6 +118,7 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 	}
 
 	mr.storage = NewMetadataStorage(mr.sendAck, cfg.snapCount, mr.logger.Named("storage"))
+	mr.storage.limits.maxTopicsCount = mr.maxTopicsCount
 	mr.membership = mr.storage
 
 	mr.listenNotifyC = make(chan struct{})
