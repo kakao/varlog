@@ -34,6 +34,8 @@ linters-settings:
       - "^ FIXME"
       - "^ NOTE"
       - "^ NB"
+      - ":$"
+      - "^[ ]*[-*]"
   goimports:
     local-prefixes: github.com/kakao/varlog
   misspell:
