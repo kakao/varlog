@@ -84,6 +84,31 @@ type VarlogCluster struct {
 	rng *rand.Rand
 }
 
+// NewVarlogCluster creates a new integration testing environment.
+//
+// The following metadata repository options are set implicitly:
+//
+// - WithClusterID
+// - WithReplicationFactor
+// - WithRPCAddress
+// - WithRaftAddress
+// - WithReporterClientFactory
+// - WithSnapshotCount
+// - WithRaftTick
+// - WithRaftDirectory
+// - WithPeers
+// - WithRPCTimeout
+// - JoinCluster
+// - WithTelemetryCollectorName
+// - WithTelemetryCollectorEndpoint
+// - WithLogger
+//
+// The following storage node options are set implicitly:
+//
+// - WithClusterID
+// - WithStorageNodeID
+// - WithVolumes
+// - WithLogger
 func NewVarlogCluster(t *testing.T, opts ...Option) *VarlogCluster {
 	cfg := newConfig(t, opts)
 	clus := &VarlogCluster{
@@ -252,6 +277,7 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal boo
 			metarepos.WithTelemetryCollectorEndpoint("localhost:55680"),
 		)
 	}
+	opts = append(opts, clus.mrOpts...)
 	clus.mrIDs[idx] = nodeID
 	clus.metadataRepositories[idx] = metarepos.NewRaftMetadataRepository(opts...)
 
@@ -478,13 +504,15 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 
 	volume := t.TempDir()
 
-	sn := storagenode.TestNewSimpleStorageNode(t,
+	opts := []storagenode.Option{
 		storagenode.WithClusterID(clus.clusterID),
 		storagenode.WithStorageNodeID(snID),
 		storagenode.WithVolumes(volume),
 		storagenode.WithLogger(clus.logger.Named("sn").With(zap.Int32("snid", int32(snID)))),
-	)
+	}
+	opts = append(opts, clus.snOpts...)
 
+	sn := storagenode.TestNewSimpleStorageNode(t, opts...)
 	if _, ok := clus.snWGs[snID]; !ok {
 		clus.snWGs[snID] = new(sync.WaitGroup)
 	}

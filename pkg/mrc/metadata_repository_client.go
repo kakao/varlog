@@ -129,7 +129,13 @@ func (c *metadataRepositoryClient) RegisterLogStream(ctx context.Context, ls *va
 		LogStream: ls,
 	}
 	_, err := c.client.RegisterLogStream(ctx, req)
-	return verrors.FromStatusError(errors.WithStack(err))
+	if err != nil {
+		if code := status.Code(err); code == codes.ResourceExhausted {
+			return err
+		}
+		return verrors.FromStatusError(errors.WithStack(err))
+	}
+	return nil
 }
 
 func (c *metadataRepositoryClient) UnregisterLogStream(ctx context.Context, lsID types.LogStreamID) error {
