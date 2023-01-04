@@ -1372,8 +1372,8 @@ func TestMRUnseal(t *testing.T) {
 
 func TestMRUpdateLogStream(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
-		nrStorageNode := 2
-		rep := 1
+		rep := 2
+		nrStorageNode := rep + 1
 		clus := newMetadataRepoCluster(1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
@@ -1386,9 +1386,12 @@ func TestMRUpdateLogStream(t *testing.T) {
 
 		mr := clus.nodes[0]
 
+		lsID := types.MinLogStreamID
 		snIDs := make([]types.StorageNodeID, nrStorageNode)
 		for i := range snIDs {
 			snIDs[i] = types.MinStorageNodeID + types.StorageNodeID(i)
+
+			clus.reporterClientFac.(*DummyStorageNodeClientFactory).registerLogStream(snIDs[i], []types.LogStreamID{lsID})
 
 			sn := &varlogpb.StorageNodeDescriptor{
 				StorageNode: varlogpb.StorageNode{
@@ -1403,12 +1406,11 @@ func TestMRUpdateLogStream(t *testing.T) {
 		err := mr.RegisterTopic(context.TODO(), types.TopicID(1))
 		So(err, ShouldBeNil)
 
-		lsID := types.MinLogStreamID
-		ls := makeLogStream(types.TopicID(1), lsID, snIDs[0:1])
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs[0:rep])
 		err = mr.RegisterLogStream(context.TODO(), ls)
 		So(err, ShouldBeNil)
 		So(testutil.CompareWaitN(1, func() bool {
-			return mr.reportCollector.NumCommitter() == 1
+			return mr.reportCollector.NumCommitter() == rep
 		}), ShouldBeTrue)
 
 		Convey("When Update LogStream", func() {
@@ -1417,13 +1419,13 @@ func TestMRUpdateLogStream(t *testing.T) {
 			_, err = mr.Seal(rctx, lsID)
 			So(err, ShouldBeNil)
 
-			updatedls := makeLogStream(types.TopicID(1), lsID, snIDs[1:2])
+			updatedls := makeLogStream(types.TopicID(1), lsID, snIDs[1:rep+1])
 			err = mr.UpdateLogStream(context.TODO(), updatedls)
 			So(err, ShouldBeNil)
 
 			Convey("Then unused report collector should be closed", func() {
 				So(testutil.CompareWaitN(1, func() bool {
-					return mr.reportCollector.NumCommitter() == 1
+					return mr.reportCollector.NumCommitter() == rep
 				}), ShouldBeTrue)
 
 				err = mr.UnregisterStorageNode(context.TODO(), snIDs[0])
@@ -1435,11 +1437,143 @@ func TestMRUpdateLogStream(t *testing.T) {
 				}), ShouldBeTrue)
 
 				So(testutil.CompareWaitN(1, func() bool {
-					return mr.reportCollector.NumCommitter() == 1
+					return mr.reportCollector.NumCommitter() == rep
 				}), ShouldBeTrue)
 
-				reporterClient := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[1])
-				So(reporterClient == nil, ShouldBeFalse)
+				So(clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[1]) == nil, ShouldBeFalse)
+				So(clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[2]) == nil, ShouldBeFalse)
+			})
+		})
+	})
+}
+
+func TestMRUpdateLogStreamExclusive(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		rep := 2
+		nrStorageNode := rep + 2
+		clus := newMetadataRepoCluster(1, rep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
+		So(clus.Start(), ShouldBeNil)
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.healthCheckAll()
+		}), ShouldBeTrue)
+
+		mr := clus.nodes[0]
+
+		lsID := types.MinLogStreamID
+		snIDs := make([]types.StorageNodeID, nrStorageNode)
+		for i := range snIDs {
+			snIDs[i] = types.MinStorageNodeID + types.StorageNodeID(i)
+
+			clus.reporterClientFac.(*DummyStorageNodeClientFactory).registerLogStream(snIDs[i], []types.LogStreamID{lsID})
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
+			}
+
+			err := mr.RegisterStorageNode(context.TODO(), sn)
+			So(err, ShouldBeNil)
+		}
+
+		err := mr.RegisterTopic(context.TODO(), types.TopicID(1))
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs[0:rep])
+		err = mr.RegisterLogStream(context.TODO(), ls)
+		So(err, ShouldBeNil)
+		So(testutil.CompareWaitN(1, func() bool {
+			return mr.reportCollector.NumCommitter() == rep
+		}), ShouldBeTrue)
+
+		Convey("When Update LogStream with no overlapping SN", func() {
+			rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(50))
+			defer cancel()
+			_, err = mr.Seal(rctx, lsID)
+			So(err, ShouldBeNil)
+
+			updatedls := makeLogStream(types.TopicID(1), lsID, snIDs[2:rep+2])
+			err = mr.UpdateLogStream(context.TODO(), updatedls)
+
+			Convey("Then it should be rejected", func() {
+				So(err, ShouldNotBeNil)
+			})
+		})
+	})
+}
+
+func TestMRUpdateLogStreamUnsafe(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		rep := 2
+		nrStorageNode := rep + 2
+		clus := newMetadataRepoCluster(1, rep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
+		So(clus.Start(), ShouldBeNil)
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.healthCheckAll()
+		}), ShouldBeTrue)
+
+		mr := clus.nodes[0]
+
+		lsID := types.MinLogStreamID
+		snIDs := make([]types.StorageNodeID, nrStorageNode)
+		for i := range snIDs {
+			snIDs[i] = types.MinStorageNodeID + types.StorageNodeID(i)
+
+			clus.reporterClientFac.(*DummyStorageNodeClientFactory).registerLogStream(snIDs[i], []types.LogStreamID{lsID})
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
+			}
+
+			err := mr.RegisterStorageNode(context.TODO(), sn)
+			So(err, ShouldBeNil)
+		}
+
+		err := mr.RegisterTopic(context.TODO(), types.TopicID(1))
+		So(err, ShouldBeNil)
+
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs[0:rep])
+		err = mr.RegisterLogStream(context.TODO(), ls)
+		So(err, ShouldBeNil)
+		So(testutil.CompareWaitN(1, func() bool {
+			return mr.reportCollector.NumCommitter() == rep
+		}), ShouldBeTrue)
+
+		Convey("When Update LogStream with SN not reaching the last commit", func() {
+			disableCommitSNID := snIDs[1]
+			disableCommitSNCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(disableCommitSNID)
+			disableCommitSNCli.DisableCommit()
+
+			for _, snID := range snIDs[0:rep] {
+				snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snID)
+				snCli.increaseUncommitted(0)
+			}
+
+			So(testutil.CompareWaitN(10, func() bool {
+				cr, _, _ := mr.GetLastCommitResults().LookupCommitResult(types.TopicID(1), lsID, -1)
+				return cr.HighWatermark != types.InvalidGLSN
+			}), ShouldBeTrue)
+
+			rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(50))
+			defer cancel()
+			_, err = mr.Seal(rctx, lsID)
+			So(err, ShouldBeNil)
+
+			updatedls := makeLogStream(types.TopicID(1), lsID, snIDs[1:rep+1])
+			err = mr.UpdateLogStream(context.TODO(), updatedls)
+
+			Convey("Then it should be rejected", func() {
+				So(err, ShouldNotBeNil)
 			})
 		})
 	})

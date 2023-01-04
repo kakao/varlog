@@ -12,6 +12,7 @@ import (
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
 	"github.com/kakao/varlog/internal/metarepos"
+	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
 )
@@ -44,6 +45,9 @@ type config struct {
 	numLS    int
 	numCL    int
 	numTopic int
+
+	mrOpts []metarepos.Option
+	snOpts []storagenode.Option
 
 	mrMgrOpts []mrmanager.Option
 	VMSOpts   []admin.Option
@@ -136,6 +140,24 @@ func WithReporterClientFactory(fac metarepos.ReporterClientFactory) Option {
 func WithMetadataRepositoryManagerOptions(opts ...mrmanager.Option) Option {
 	return func(c *config) {
 		c.mrMgrOpts = opts
+	}
+}
+
+// WithCustomizedMetadataRepositoryOptions sets customized options for the
+// metadata repository. Users can override the implicit metadata repository
+// options the integration testing environment sets.
+func WithCustomizedMetadataRepositoryOptions(mrOpts ...metarepos.Option) Option {
+	return func(c *config) {
+		c.mrOpts = mrOpts
+	}
+}
+
+// WithCustomizedStorageNodeOptions sets customized options for the storage
+// node. Users can override the implicit storage node options the integration
+// testing environment sets.
+func WithCustomizedStorageNodeOptions(snOpts ...storagenode.Option) Option {
+	return func(c *config) {
+		c.snOpts = snOpts
 	}
 }
 

@@ -11,10 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
 	"github.com/kakao/varlog/internal/metarepos"
+	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -133,6 +136,60 @@ func TestUnregisterLogStream(t *testing.T) {
 
 	err = clus.GetVMSClient(t).UnregisterLogStream(context.Background(), topicID, lsID)
 	require.NoError(t, err)
+}
+
+func TestAddLogStream_LogStreamsCount(t *testing.T) {
+	const (
+		replicationFactor  = 1
+		storageNodeCount   = 1
+		topicCount         = 1
+		maxLogStreamsCount = 2
+	)
+
+	tcs := []struct {
+		name   string
+		mrOpts []metarepos.Option
+		snOpts []storagenode.Option
+	}{
+		{
+			name: "StorageNodeLimit",
+			snOpts: []storagenode.Option{
+				storagenode.WithMaxLogStreamReplicasCount(maxLogStreamsCount),
+			},
+		},
+		{
+			name: "MetadataRepositoryLimit",
+			mrOpts: []metarepos.Option{
+				metarepos.WithMaxLogStreamsCountPerTopic(maxLogStreamsCount),
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			clus := it.NewVarlogCluster(t,
+				it.WithReplicationFactor(replicationFactor),
+				it.WithNumberOfStorageNodes(storageNodeCount),
+				it.WithNumberOfTopics(topicCount),
+				it.WithCustomizedMetadataRepositoryOptions(tc.mrOpts...),
+				it.WithCustomizedStorageNodeOptions(tc.snOpts...),
+			)
+			defer clus.Close(t)
+
+			ctx := context.Background()
+			tpid := clus.TopicIDs()[0]
+			mc := clus.GetVMSClient(t)
+
+			for i := 0; i < maxLogStreamsCount; i++ {
+				_, err := mc.AddLogStream(ctx, tpid, nil)
+				require.NoError(t, err)
+			}
+
+			_, err := mc.AddLogStream(ctx, tpid, nil)
+			require.Error(t, err)
+			require.Equal(t, codes.ResourceExhausted, status.Code(err))
+		})
+	}
 }
 
 func TestAddLogStreamWithNotExistedNode(t *testing.T) {
