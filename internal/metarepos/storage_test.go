@@ -239,49 +239,22 @@ func TestStoragGetAllLS(t *testing.T) {
 				lss := ms.GetLogStreams()
 				So(len(lss), ShouldEqual, 1)
 
-				Convey("Wnen update LS to diff", func(ctx C) {
-					snID2 := snID + 1
-					sn := &varlogpb.StorageNodeDescriptor{
-						StorageNode: varlogpb.StorageNode{
-							StorageNodeID: snID2,
-						},
-					}
-
-					err := ms.RegisterStorageNode(sn, 0, 0)
+				Convey("When unregister LS", func(ctx C) {
+					err := ms.unregisterLogStream(lsID)
 					So(err, ShouldBeNil)
 
-					ls := &varlogpb.LogStreamDescriptor{
-						LogStreamID: lsID,
-					}
-
-					ls.Replicas = append(ls.Replicas, &varlogpb.ReplicaDescriptor{StorageNodeID: snID2})
-
-					err = ms.UpdateLogStream(ls, 0, 0)
-					So(err, ShouldBeNil)
-
-					Convey("Then it should return 1 LS", func(ctx C) {
+					Convey("Then it should return nil", func(ctx C) {
 						lss := ms.GetLogStreams()
-						So(len(lss), ShouldEqual, 1)
-						So(ls.Replicas[0].StorageNodeID, ShouldEqual, snID2)
+						So(len(lss), ShouldEqual, 0)
 
-						Convey("When unregister LS", func(ctx C) {
-							err := ms.unregisterLogStream(lsID)
-							So(err, ShouldBeNil)
+						Convey("When merge Metadata", func(ctx C) {
+							ms.mergeMetadata()
+
+							ms.releaseCopyOnWrite()
 
 							Convey("Then it should returns nil", func(ctx C) {
 								lss := ms.GetLogStreams()
 								So(len(lss), ShouldEqual, 0)
-
-								Convey("When merge Metadata", func(ctx C) {
-									ms.mergeMetadata()
-
-									ms.releaseCopyOnWrite()
-
-									Convey("Then it should returns nil", func(ctx C) {
-										lss := ms.GetLogStreams()
-										So(len(lss), ShouldEqual, 0)
-									})
-								})
 							})
 						})
 					})
@@ -450,17 +423,22 @@ func TestStorageUpdateLS(t *testing.T) {
 		err = ms.registerLogStream(ls)
 		So(err, ShouldBeNil)
 
+		err = ms.SealLogStream(lsID, 0, 0)
+		So(err, ShouldBeNil)
+
+		victimSNID := snIDs[0]
 		updateSnIDs := make([]types.StorageNodeID, rep)
 		for i := 0; i < rep; i++ {
-			updateSnIDs[i] = snIDs[i] + types.StorageNodeID(rep)
+			updateSnIDs[i] = snIDs[i] + types.StorageNodeID(1)
 		}
+
 		updateLS := makeLogStream(types.TopicID(1), lsID, updateSnIDs)
 
 		err = ms.UpdateLogStream(updateLS, 0, 0)
 		So(err, ShouldResemble, verrors.ErrInvalidArgument)
 
 		Convey("LS should be updated if exist all SN", func(ctx C) {
-			for i := 0; i < rep; i++ {
+			for i := 1; i < rep; i++ {
 				sn := &varlogpb.StorageNodeDescriptor{
 					StorageNode: varlogpb.StorageNode{
 						StorageNodeID: updateSnIDs[i],
@@ -474,10 +452,10 @@ func TestStorageUpdateLS(t *testing.T) {
 			err = ms.UpdateLogStream(updateLS, 0, 0)
 			So(err, ShouldBeNil)
 			Convey("updated LS should be lookuped", func(ctx C) {
-				for i := 0; i < rep; i++ {
-					_, ok := ms.LookupUncommitReport(lsID, snIDs[i])
-					So(ok, ShouldBeFalse)
+				_, ok := ms.LookupUncommitReport(lsID, victimSNID)
+				So(ok, ShouldBeFalse)
 
+				for i := 0; i < rep; i++ {
 					_, ok = ms.LookupUncommitReport(lsID, updateSnIDs[i])
 					So(ok, ShouldBeTrue)
 				}
@@ -493,14 +471,7 @@ func TestStorageUpdateLS(t *testing.T) {
 				So(ls, ShouldNotBeNil)
 
 				for _, r := range ls.Replicas {
-					exist := false
-					for i := 0; i < rep; i++ {
-						So(r.StorageNodeID, ShouldNotEqual, snIDs[i])
-						if !exist {
-							exist = r.StorageNodeID == updateSnIDs[i]
-						}
-					}
-					So(exist, ShouldBeTrue)
+					So(r.StorageNodeID, ShouldNotEqual, victimSNID)
 				}
 			})
 		})
@@ -536,22 +507,28 @@ func TestStorageUpdateLSUnderCOW(t *testing.T) {
 		err = ms.registerLogStream(ls)
 		So(err, ShouldBeNil)
 
+		err = ms.SealLogStream(lsID, 0, 0)
+		So(err, ShouldBeNil)
+
 		// set COW
 		ms.setCopyOnWrite()
 
+		victimSNID := snIDs[0]
 		// update LS
 		updateSnIDs := make([]types.StorageNodeID, rep)
 		for i := 0; i < rep; i++ {
-			updateSnIDs[i] = snIDs[i] + types.StorageNodeID(rep)
+			updateSnIDs[i] = snIDs[i] + types.StorageNodeID(1)
 
-			sn := &varlogpb.StorageNodeDescriptor{
-				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: updateSnIDs[i],
-				},
+			if updateSnIDs[i] != victimSNID {
+				sn := &varlogpb.StorageNodeDescriptor{
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: updateSnIDs[i],
+					},
+				}
+
+				err := ms.registerStorageNode(sn)
+				So(err, ShouldBeNil)
 			}
-
-			err := ms.registerStorageNode(sn)
-			So(err, ShouldBeNil)
 		}
 
 		updateLS := makeLogStream(types.TopicID(1), lsID, updateSnIDs)
