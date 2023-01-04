@@ -5,6 +5,7 @@ import (
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -105,7 +106,11 @@ func (s *server) DescribeTopic(ctx context.Context, req *vmspb.DescribeTopicRequ
 func (s *server) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
 	logStreamDesc, err := s.admin.addLogStream(ctx, req.GetTopicID(), req.GetReplicas())
 	if err != nil {
-		return nil, verrors.ToStatusErrorWithCode(err, codes.Unavailable)
+		code := status.Code(err)
+		if code != codes.ResourceExhausted {
+			code = codes.Unavailable
+		}
+		return nil, verrors.ToStatusErrorWithCode(err, code)
 	}
 	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, nil
 }

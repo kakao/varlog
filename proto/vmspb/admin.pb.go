@@ -2759,6 +2759,9 @@ type ClusterManagerClient interface {
 	UnregisterTopic(ctx context.Context, in *UnregisterTopicRequest, opts ...grpc.CallOption) (*UnregisterTopicResponse, error)
 	GetLogStream(ctx context.Context, in *GetLogStreamRequest, opts ...grpc.CallOption) (*GetLogStreamResponse, error)
 	ListLogStreams(ctx context.Context, in *ListLogStreamsRequest, opts ...grpc.CallOption) (*ListLogStreamsResponse, error)
+	// AddLogStream adds a new log stream to the cluster.
+	// The error code ResourceExhausted is returned if the number of log streams
+	// is reached the upper limit.
 	AddLogStream(ctx context.Context, in *AddLogStreamRequest, opts ...grpc.CallOption) (*AddLogStreamResponse, error)
 	// UpdateLogStream changes the configuration of replicas in a log stream.
 	// Its codes are defines as followings:
@@ -3058,6 +3061,9 @@ type ClusterManagerServer interface {
 	UnregisterTopic(context.Context, *UnregisterTopicRequest) (*UnregisterTopicResponse, error)
 	GetLogStream(context.Context, *GetLogStreamRequest) (*GetLogStreamResponse, error)
 	ListLogStreams(context.Context, *ListLogStreamsRequest) (*ListLogStreamsResponse, error)
+	// AddLogStream adds a new log stream to the cluster.
+	// The error code ResourceExhausted is returned if the number of log streams
+	// is reached the upper limit.
 	AddLogStream(context.Context, *AddLogStreamRequest) (*AddLogStreamResponse, error)
 	// UpdateLogStream changes the configuration of replicas in a log stream.
 	// Its codes are defines as followings:

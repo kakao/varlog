@@ -257,10 +257,10 @@ func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varl
 	}
 
 	if err := cli.RegisterLogStream(ctx, logStreamDesc); err != nil {
-		return multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return err
 	}
-
-	return err
+	return nil
 }
 
 func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
