@@ -148,7 +148,9 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 		}()
 		lse.syncLoop(ctx, sc, st)
 	})
-	return st.toSyncStatus(), nil
+	ss := st.toSyncStatus()
+	ss.State = snpb.SyncStateStart
+	return ss, nil
 }
 
 func (lse *Executor) syncLoop(_ context.Context, sc *syncClient, st *syncTracker) {

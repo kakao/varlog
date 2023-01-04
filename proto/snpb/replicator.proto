@@ -34,14 +34,21 @@ message ReplicateRequest {
 
 message ReplicateResponse {}
 
+// SyncState indicates the state of the synchronization process.
 enum SyncState {
   option (gogoproto.goproto_enum_prefix) = false;
   option (gogoproto.goproto_enum_stringer) = false;
   option (gogoproto.enum_stringer) = true;
 
+  // SyncStateError means that the synchronization job fails.
   ERROR = 0 [(gogoproto.enumvalue_customname) = "SyncStateError"];
+  // SyncStateInProgress means that the synchronization job is still in
+  // progress.
   IN_PROGRESS = 1 [(gogoproto.enumvalue_customname) = "SyncStateInProgress"];
+  // SyncStateComplete means that the synchronization job is done successfully.
   COMPLETE = 2 [(gogoproto.enumvalue_customname) = "SyncStateComplete"];
+  // SyncStateStart means that the synchronization job starts.
+  START = 3 [(gogoproto.enumvalue_customname) = "SyncStateStart"];
 }
 
 message SyncPosition {
