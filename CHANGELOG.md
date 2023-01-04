@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.10.0](https://github.com/kakao/varlog/compare/v0.9.2...v0.10.0) (2023-01-04)
+
+
+### Features
+
+* **admin:** return ResourceExhausted if the log streams count overflows ([b15f29e](https://github.com/kakao/varlog/commit/b15f29e7253c2986050facbe2c3b289d195deb3c))
+* **admin:** Updates are rejected if there is no sealed replica ([25cef3d](https://github.com/kakao/varlog/commit/25cef3d037fb42cf5ab5c456fd4a57716cc438ea))
+* **admin:** Updates are rejected if there is no sealed replica ([eef3b9f](https://github.com/kakao/varlog/commit/eef3b9f2451720511b7aa8ac278142a7c6f9545f))
+* **metarepos:** add an upper limit for the number of log streams in a topic ([ad2a60f](https://github.com/kakao/varlog/commit/ad2a60fb71efff96835e214a4b738a880442642b)), closes [#297](https://github.com/kakao/varlog/issues/297)
+* **metarepos:** add an upper limit for the number of topics in a cluster ([77c6ee4](https://github.com/kakao/varlog/commit/77c6ee4b3e2419d7c273f1130a67bb340a8a689e)), closes [#295](https://github.com/kakao/varlog/issues/295)
+* **metarepos:** Prevent log loss due to UpdateLogStream ([c319333](https://github.com/kakao/varlog/commit/c319333ad93c23c9f25ea33abf347632bf1d8504))
+* **storagenode:** add a new sync state - SyncStateStart ([b44fd55](https://github.com/kakao/varlog/commit/b44fd5508904c2c1431834bb6b6e0a06aaad5c62)), closes [#299](https://github.com/kakao/varlog/issues/299)
+* **storagenode:** add an upper limit of log stream replicas count in a storage node ([2cfc8bf](https://github.com/kakao/varlog/commit/2cfc8bf8364092d3d93c21f49f544431ddde3a7e)), closes [#293](https://github.com/kakao/varlog/issues/293)
+
+
+### Bug Fixes
+
+* **benchmark:** consider multi-target workloads in benchmark webapp ([56f338e](https://github.com/kakao/varlog/commit/56f338e261c38dde049d250107d9e9fe75e79ff6))
+
 ## [0.9.2](https://github.com/kakao/varlog/compare/v0.9.1...v0.9.2) (2022-12-16)
 
 
