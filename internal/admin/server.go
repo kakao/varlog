@@ -9,101 +9,101 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
-	"github.com/kakao/varlog/proto/vmspb"
+	"github.com/kakao/varlog/proto/admpb"
 )
 
 type server struct {
 	admin *Admin
 }
 
-var _ vmspb.ClusterManagerServer = (*server)(nil)
+var _ admpb.ClusterManagerServer = (*server)(nil)
 
-func (s *server) GetStorageNode(ctx context.Context, req *vmspb.GetStorageNodeRequest) (*vmspb.GetStorageNodeResponse, error) {
+func (s *server) GetStorageNode(ctx context.Context, req *admpb.GetStorageNodeRequest) (*admpb.GetStorageNodeResponse, error) {
 	snm, err := s.admin.getStorageNode(ctx, req.StorageNodeID)
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.GetStorageNodeResponse{StorageNode: snm}, nil
+	return &admpb.GetStorageNodeResponse{StorageNode: snm}, nil
 }
 
-func (s *server) ListStorageNodes(ctx context.Context, _ *vmspb.ListStorageNodesRequest) (*vmspb.ListStorageNodesResponse, error) {
+func (s *server) ListStorageNodes(ctx context.Context, _ *admpb.ListStorageNodesRequest) (*admpb.ListStorageNodesResponse, error) {
 	snms, err := s.admin.listStorageNodes(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.ListStorageNodesResponse{StorageNodes: snms}, nil
+	return &admpb.ListStorageNodesResponse{StorageNodes: snms}, nil
 }
 
-func (s *server) AddStorageNode(ctx context.Context, req *vmspb.AddStorageNodeRequest) (*vmspb.AddStorageNodeResponse, error) {
+func (s *server) AddStorageNode(ctx context.Context, req *admpb.AddStorageNodeRequest) (*admpb.AddStorageNodeResponse, error) {
 	snm, err := s.admin.addStorageNode(ctx, req.StorageNode.StorageNodeID, req.StorageNode.Address)
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.AddStorageNodeResponse{StorageNode: snm}, nil
+	return &admpb.AddStorageNodeResponse{StorageNode: snm}, nil
 }
 
-func (s *server) UnregisterStorageNode(ctx context.Context, req *vmspb.UnregisterStorageNodeRequest) (*vmspb.UnregisterStorageNodeResponse, error) {
+func (s *server) UnregisterStorageNode(ctx context.Context, req *admpb.UnregisterStorageNodeRequest) (*admpb.UnregisterStorageNodeResponse, error) {
 	err := s.admin.unregisterStorageNode(ctx, req.GetStorageNodeID())
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.UnregisterStorageNodeResponse{}, nil
+	return &admpb.UnregisterStorageNodeResponse{}, nil
 }
 
-func (s *server) GetTopic(ctx context.Context, req *vmspb.GetTopicRequest) (*vmspb.GetTopicResponse, error) {
+func (s *server) GetTopic(ctx context.Context, req *admpb.GetTopicRequest) (*admpb.GetTopicResponse, error) {
 	td, err := s.admin.getTopic(ctx, req.TopicID)
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.GetTopicResponse{Topic: td}, nil
+	return &admpb.GetTopicResponse{Topic: td}, nil
 }
 
-func (s *server) ListTopics(ctx context.Context, req *vmspb.ListTopicsRequest) (*vmspb.ListTopicsResponse, error) {
+func (s *server) ListTopics(ctx context.Context, req *admpb.ListTopicsRequest) (*admpb.ListTopicsResponse, error) {
 	tds, err := s.admin.listTopics(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.ListTopicsResponse{Topics: tds}, nil
+	return &admpb.ListTopicsResponse{Topics: tds}, nil
 }
 
-func (s *server) AddTopic(ctx context.Context, req *vmspb.AddTopicRequest) (*vmspb.AddTopicResponse, error) {
+func (s *server) AddTopic(ctx context.Context, req *admpb.AddTopicRequest) (*admpb.AddTopicResponse, error) {
 	td, err := s.admin.addTopic(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.AddTopicResponse{Topic: td}, err
+	return &admpb.AddTopicResponse{Topic: td}, err
 }
 
-func (s *server) UnregisterTopic(ctx context.Context, req *vmspb.UnregisterTopicRequest) (*vmspb.UnregisterTopicResponse, error) {
+func (s *server) UnregisterTopic(ctx context.Context, req *admpb.UnregisterTopicRequest) (*admpb.UnregisterTopicResponse, error) {
 	err := s.admin.unregisterTopic(ctx, req.GetTopicID())
 	if err != nil {
 		return nil, err
 	}
-	return &vmspb.UnregisterTopicResponse{}, nil
+	return &admpb.UnregisterTopicResponse{}, nil
 }
 
-func (s *server) GetLogStream(ctx context.Context, req *vmspb.GetLogStreamRequest) (*vmspb.GetLogStreamResponse, error) {
+func (s *server) GetLogStream(ctx context.Context, req *admpb.GetLogStreamRequest) (*admpb.GetLogStreamResponse, error) {
 	lsd, err := s.admin.getLogStream(ctx, req.TopicID, req.LogStreamID)
-	return &vmspb.GetLogStreamResponse{LogStream: lsd}, err
+	return &admpb.GetLogStreamResponse{LogStream: lsd}, err
 }
 
-func (s *server) ListLogStreams(ctx context.Context, req *vmspb.ListLogStreamsRequest) (*vmspb.ListLogStreamsResponse, error) {
+func (s *server) ListLogStreams(ctx context.Context, req *admpb.ListLogStreamsRequest) (*admpb.ListLogStreamsResponse, error) {
 	lsds, err := s.admin.listLogStreams(ctx, req.TopicID)
-	return &vmspb.ListLogStreamsResponse{LogStreams: lsds}, err
+	return &admpb.ListLogStreamsResponse{LogStreams: lsds}, err
 }
 
-func (s *server) DescribeTopic(ctx context.Context, req *vmspb.DescribeTopicRequest) (*vmspb.DescribeTopicResponse, error) {
+func (s *server) DescribeTopic(ctx context.Context, req *admpb.DescribeTopicRequest) (*admpb.DescribeTopicResponse, error) {
 	td, lsds, err := s.admin.describeTopic(ctx, req.TopicID)
 	if err != nil {
 		return nil, verrors.ToStatusErrorWithCode(err, codes.Unavailable)
 	}
-	return &vmspb.DescribeTopicResponse{
+	return &admpb.DescribeTopicResponse{
 		Topic:      td,
 		LogStreams: lsds,
 	}, nil
 }
 
-func (s *server) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamRequest) (*vmspb.AddLogStreamResponse, error) {
+func (s *server) AddLogStream(ctx context.Context, req *admpb.AddLogStreamRequest) (*admpb.AddLogStreamResponse, error) {
 	logStreamDesc, err := s.admin.addLogStream(ctx, req.GetTopicID(), req.GetReplicas())
 	if err != nil {
 		code := status.Code(err)
@@ -112,59 +112,59 @@ func (s *server) AddLogStream(ctx context.Context, req *vmspb.AddLogStreamReques
 		}
 		return nil, verrors.ToStatusErrorWithCode(err, code)
 	}
-	return &vmspb.AddLogStreamResponse{LogStream: logStreamDesc}, nil
+	return &admpb.AddLogStreamResponse{LogStream: logStreamDesc}, nil
 }
 
-func (s *server) UnregisterLogStream(ctx context.Context, req *vmspb.UnregisterLogStreamRequest) (*vmspb.UnregisterLogStreamResponse, error) {
+func (s *server) UnregisterLogStream(ctx context.Context, req *admpb.UnregisterLogStreamRequest) (*admpb.UnregisterLogStreamResponse, error) {
 	err := s.admin.unregisterLogStream(ctx, req.GetTopicID(), req.GetLogStreamID())
-	return &vmspb.UnregisterLogStreamResponse{}, verrors.ToStatusError(err)
+	return &admpb.UnregisterLogStreamResponse{}, verrors.ToStatusError(err)
 }
 
-func (s *server) RemoveLogStreamReplica(ctx context.Context, req *vmspb.RemoveLogStreamReplicaRequest) (*vmspb.RemoveLogStreamReplicaResponse, error) {
+func (s *server) RemoveLogStreamReplica(ctx context.Context, req *admpb.RemoveLogStreamReplicaRequest) (*admpb.RemoveLogStreamReplicaResponse, error) {
 	err := s.admin.removeLogStreamReplica(ctx, req.GetStorageNodeID(), req.GetTopicID(), req.GetLogStreamID())
-	return &vmspb.RemoveLogStreamReplicaResponse{}, verrors.ToStatusError(err)
+	return &admpb.RemoveLogStreamReplicaResponse{}, verrors.ToStatusError(err)
 }
 
-func (s *server) UpdateLogStream(ctx context.Context, req *vmspb.UpdateLogStreamRequest) (*vmspb.UpdateLogStreamResponse, error) {
+func (s *server) UpdateLogStream(ctx context.Context, req *admpb.UpdateLogStreamRequest) (*admpb.UpdateLogStreamResponse, error) {
 	lsdesc, err := s.admin.updateLogStream(ctx, req.GetLogStreamID(), req.PoppedReplica, req.PushedReplica)
-	return &vmspb.UpdateLogStreamResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
+	return &admpb.UpdateLogStreamResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
 }
 
-func (s *server) Seal(ctx context.Context, req *vmspb.SealRequest) (*vmspb.SealResponse, error) {
+func (s *server) Seal(ctx context.Context, req *admpb.SealRequest) (*admpb.SealResponse, error) {
 	lsmetas, sealedGLSN, err := s.admin.seal(ctx, req.GetTopicID(), req.GetLogStreamID())
-	return &vmspb.SealResponse{
+	return &admpb.SealResponse{
 		LogStreams: lsmetas,
 		SealedGLSN: sealedGLSN,
 	}, verrors.ToStatusError(err)
 }
 
-func (s *server) Sync(ctx context.Context, req *vmspb.SyncRequest) (*vmspb.SyncResponse, error) {
+func (s *server) Sync(ctx context.Context, req *admpb.SyncRequest) (*admpb.SyncResponse, error) {
 	status, err := s.admin.sync(ctx, req.GetTopicID(), req.GetLogStreamID(), req.GetSrcStorageNodeID(), req.GetDstStorageNodeID())
-	return &vmspb.SyncResponse{Status: status}, verrors.ToStatusError(err)
+	return &admpb.SyncResponse{Status: status}, verrors.ToStatusError(err)
 }
 
-func (s *server) Unseal(ctx context.Context, req *vmspb.UnsealRequest) (*vmspb.UnsealResponse, error) {
+func (s *server) Unseal(ctx context.Context, req *admpb.UnsealRequest) (*admpb.UnsealResponse, error) {
 	lsdesc, err := s.admin.unseal(ctx, req.GetTopicID(), req.GetLogStreamID())
-	return &vmspb.UnsealResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
+	return &admpb.UnsealResponse{LogStream: lsdesc}, verrors.ToStatusError(err)
 }
 
-func (s *server) GetMetadataRepositoryNode(ctx context.Context, req *vmspb.GetMetadataRepositoryNodeRequest) (*vmspb.GetMetadataRepositoryNodeResponse, error) {
+func (s *server) GetMetadataRepositoryNode(ctx context.Context, req *admpb.GetMetadataRepositoryNodeRequest) (*admpb.GetMetadataRepositoryNodeResponse, error) {
 	node, err := s.admin.getMetadataRepositoryNode(ctx, req.NodeID)
-	return &vmspb.GetMetadataRepositoryNodeResponse{Node: node}, err
+	return &admpb.GetMetadataRepositoryNodeResponse{Node: node}, err
 }
 
-func (s *server) ListMetadataRepositoryNodes(ctx context.Context, _ *vmspb.ListMetadataRepositoryNodesRequest) (*vmspb.ListMetadataRepositoryNodesResponse, error) {
+func (s *server) ListMetadataRepositoryNodes(ctx context.Context, _ *admpb.ListMetadataRepositoryNodesRequest) (*admpb.ListMetadataRepositoryNodesResponse, error) {
 	nodes, err := s.admin.listMetadataRepositoryNodes(ctx)
-	return &vmspb.ListMetadataRepositoryNodesResponse{Nodes: nodes}, err
+	return &admpb.ListMetadataRepositoryNodesResponse{Nodes: nodes}, err
 }
 
-func (s *server) GetMRMembers(ctx context.Context, req *pbtypes.Empty) (*vmspb.GetMRMembersResponse, error) {
-	var rsp *vmspb.GetMRMembersResponse
+func (s *server) GetMRMembers(ctx context.Context, req *pbtypes.Empty) (*admpb.GetMRMembersResponse, error) {
+	var rsp *admpb.GetMRMembersResponse
 	mrInfo, err := s.admin.mrInfos(ctx)
 	if err != nil {
 		return rsp, verrors.ToStatusError(err)
 	}
-	rsp = &vmspb.GetMRMembersResponse{
+	rsp = &admpb.GetMRMembersResponse{
 		Leader:            mrInfo.Leader,
 		ReplicationFactor: mrInfo.ReplicationFactor,
 		Members:           make(map[types.NodeID]string, len(mrInfo.Members)),
@@ -175,27 +175,27 @@ func (s *server) GetMRMembers(ctx context.Context, req *pbtypes.Empty) (*vmspb.G
 	return rsp, nil
 }
 
-func (s *server) AddMetadataRepositoryNode(ctx context.Context, req *vmspb.AddMetadataRepositoryNodeRequest) (*vmspb.AddMetadataRepositoryNodeResponse, error) {
+func (s *server) AddMetadataRepositoryNode(ctx context.Context, req *admpb.AddMetadataRepositoryNodeRequest) (*admpb.AddMetadataRepositoryNodeResponse, error) {
 	node, err := s.admin.addMetadataRepositoryNode(ctx, req.RaftURL, req.RPCAddr)
-	return &vmspb.AddMetadataRepositoryNodeResponse{Node: node}, err
+	return &admpb.AddMetadataRepositoryNodeResponse{Node: node}, err
 }
 
-func (s *server) AddMRPeer(ctx context.Context, req *vmspb.AddMRPeerRequest) (*vmspb.AddMRPeerResponse, error) {
+func (s *server) AddMRPeer(ctx context.Context, req *admpb.AddMRPeerRequest) (*admpb.AddMRPeerResponse, error) {
 	nodeID, err := s.admin.addMRPeer(ctx, req.RaftURL, req.RPCAddr)
-	return &vmspb.AddMRPeerResponse{NodeID: nodeID}, verrors.ToStatusError(err)
+	return &admpb.AddMRPeerResponse{NodeID: nodeID}, verrors.ToStatusError(err)
 }
 
-func (s *server) DeleteMetadataRepositoryNode(ctx context.Context, req *vmspb.DeleteMetadataRepositoryNodeRequest) (*vmspb.DeleteMetadataRepositoryNodeResponse, error) {
+func (s *server) DeleteMetadataRepositoryNode(ctx context.Context, req *admpb.DeleteMetadataRepositoryNodeRequest) (*admpb.DeleteMetadataRepositoryNodeResponse, error) {
 	err := s.admin.deleteMetadataRepositoryNode(ctx, req.NodeID)
-	return &vmspb.DeleteMetadataRepositoryNodeResponse{}, err
+	return &admpb.DeleteMetadataRepositoryNodeResponse{}, err
 }
 
-func (s *server) RemoveMRPeer(ctx context.Context, req *vmspb.RemoveMRPeerRequest) (*vmspb.RemoveMRPeerResponse, error) {
+func (s *server) RemoveMRPeer(ctx context.Context, req *admpb.RemoveMRPeerRequest) (*admpb.RemoveMRPeerResponse, error) {
 	err := s.admin.removeMRPeer(ctx, req.RaftURL)
-	return &vmspb.RemoveMRPeerResponse{}, verrors.ToStatusError(err)
+	return &admpb.RemoveMRPeerResponse{}, verrors.ToStatusError(err)
 }
 
-func (s *server) Trim(ctx context.Context, req *vmspb.TrimRequest) (*vmspb.TrimResponse, error) {
+func (s *server) Trim(ctx context.Context, req *admpb.TrimRequest) (*admpb.TrimResponse, error) {
 	res, err := s.admin.trim(ctx, req.TopicID, req.LastGLSN)
-	return &vmspb.TrimResponse{Results: res}, verrors.ToStatusError(err)
+	return &admpb.TrimResponse{Results: res}, verrors.ToStatusError(err)
 }

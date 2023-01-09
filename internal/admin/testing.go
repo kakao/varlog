@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
-	"github.com/kakao/varlog/proto/vmspb"
+	"github.com/kakao/varlog/proto/admpb"
 )
 
 type TestServer struct {
@@ -54,10 +54,10 @@ type TestMockServer struct {
 	address    string
 	wg         sync.WaitGroup
 
-	*vmspb.MockClusterManagerServer
+	*admpb.MockClusterManagerServer
 }
 
-var _ vmspb.ClusterManagerServer = (*TestMockServer)(nil)
+var _ admpb.ClusterManagerServer = (*TestMockServer)(nil)
 
 func TestNewMockServer(t *testing.T, ctrl *gomock.Controller) *TestMockServer {
 	t.Helper()
@@ -69,9 +69,9 @@ func TestNewMockServer(t *testing.T, ctrl *gomock.Controller) *TestMockServer {
 		listener:                 lis,
 		grpcServer:               grpc.NewServer(),
 		address:                  addr,
-		MockClusterManagerServer: vmspb.NewMockClusterManagerServer(ctrl),
+		MockClusterManagerServer: admpb.NewMockClusterManagerServer(ctrl),
 	}
-	vmspb.RegisterClusterManagerServer(tms.grpcServer, tms.MockClusterManagerServer)
+	admpb.RegisterClusterManagerServer(tms.grpcServer, tms.MockClusterManagerServer)
 	return tms
 }
 

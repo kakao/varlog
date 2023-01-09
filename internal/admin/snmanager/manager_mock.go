@@ -11,9 +11,9 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	types "github.com/kakao/varlog/pkg/types"
+	admpb "github.com/kakao/varlog/proto/admpb"
 	snpb "github.com/kakao/varlog/proto/snpb"
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
-	vmspb "github.com/kakao/varlog/proto/vmspb"
 )
 
 // MockStorageNodeManager is a mock of StorageNodeManager interface.
@@ -210,10 +210,10 @@ func (mr *MockStorageNodeManagerMockRecorder) Sync(arg0, arg1, arg2, arg3, arg4,
 }
 
 // Trim mocks base method.
-func (m *MockStorageNodeManager) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) ([]vmspb.TrimResult, error) {
+func (m *MockStorageNodeManager) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) ([]admpb.TrimResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Trim", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]vmspb.TrimResult)
+	ret0, _ := ret[0].([]admpb.TrimResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -14,9 +14,9 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 )
 
 type testAdmin struct {
@@ -38,17 +38,17 @@ func (c testAdmin) unlock() {
 	c.vt.cond.L.Unlock()
 }
 
-func (c *testAdmin) GetStorageNode(context.Context, types.StorageNodeID, ...varlog.AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
+func (c *testAdmin) GetStorageNode(context.Context, types.StorageNodeID, ...varlog.AdminCallOption) (*admpb.StorageNodeMetadata, error) {
 	panic("not implemented")
 }
 
-func (c *testAdmin) ListStorageNodes(ctx context.Context, opts ...varlog.AdminCallOption) ([]vmspb.StorageNodeMetadata, error) {
+func (c *testAdmin) ListStorageNodes(ctx context.Context, opts ...varlog.AdminCallOption) ([]admpb.StorageNodeMetadata, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
 	defer c.unlock()
 
-	ret := make([]vmspb.StorageNodeMetadata, 0, len(c.vt.storageNodes))
+	ret := make([]admpb.StorageNodeMetadata, 0, len(c.vt.storageNodes))
 	for snID := range c.vt.storageNodes {
 		snmd := c.vt.storageNodes[snID]
 
@@ -70,7 +70,7 @@ func (c *testAdmin) ListStorageNodes(ctx context.Context, opts ...varlog.AdminCa
 			}
 		}
 
-		ret = append(ret, vmspb.StorageNodeMetadata{
+		ret = append(ret, admpb.StorageNodeMetadata{
 			StorageNodeMetadataDescriptor: snmd,
 			LastHeartbeatTime:             time.Now().UTC(),
 		})
@@ -78,19 +78,19 @@ func (c *testAdmin) ListStorageNodes(ctx context.Context, opts ...varlog.AdminCa
 
 	return ret, nil
 }
-func (c *testAdmin) GetStorageNodes(ctx context.Context, opts ...varlog.AdminCallOption) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error) {
+func (c *testAdmin) GetStorageNodes(ctx context.Context, opts ...varlog.AdminCallOption) (map[types.StorageNodeID]admpb.StorageNodeMetadata, error) {
 	snms, err := c.ListStorageNodes(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ret := make(map[types.StorageNodeID]vmspb.StorageNodeMetadata, len(snms))
+	ret := make(map[types.StorageNodeID]admpb.StorageNodeMetadata, len(snms))
 	for _, snm := range snms {
 		ret[snm.StorageNode.StorageNodeID] = snm
 	}
 	return ret, nil
 }
 
-func (c *testAdmin) AddStorageNode(_ context.Context, snid types.StorageNodeID, addr string, _ ...varlog.AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
+func (c *testAdmin) AddStorageNode(_ context.Context, snid types.StorageNodeID, addr string, _ ...varlog.AdminCallOption) (*admpb.StorageNodeMetadata, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (c *testAdmin) AddStorageNode(_ context.Context, snid types.StorageNodeID, 
 	}
 	c.vt.storageNodes[snid] = storageNodeMetaDesc
 
-	return &vmspb.StorageNodeMetadata{
+	return &admpb.StorageNodeMetadata{
 		StorageNodeMetadataDescriptor: *proto.Clone(&storageNodeMetaDesc).(*snpb.StorageNodeMetadataDescriptor),
 		CreateTime:                    now,
 		LastHeartbeatTime:             now,
@@ -196,7 +196,7 @@ func (c *testAdmin) ListLogStreams(ctx context.Context, tpid types.TopicID, opts
 	panic("not implemented")
 }
 
-func (c *testAdmin) DescribeTopic(ctx context.Context, topicID types.TopicID, opts ...varlog.AdminCallOption) (*vmspb.DescribeTopicResponse, error) {
+func (c *testAdmin) DescribeTopic(ctx context.Context, topicID types.TopicID, opts ...varlog.AdminCallOption) (*admpb.DescribeTopicResponse, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (c *testAdmin) DescribeTopic(ctx context.Context, topicID types.TopicID, op
 		return nil, errors.New("no such topic")
 	}
 
-	rsp := &vmspb.DescribeTopicResponse{
+	rsp := &admpb.DescribeTopicResponse{
 		Topic:      *proto.Clone(&topicDesc).(*varlogpb.TopicDescriptor),
 		LogStreams: make([]varlogpb.LogStreamDescriptor, len(topicDesc.LogStreams)),
 	}
@@ -371,7 +371,7 @@ func (c *testAdmin) RemoveLogStreamReplica(ctx context.Context, storageNodeID ty
 	return nil
 }
 
-func (c *testAdmin) Seal(_ context.Context, topicID types.TopicID, logStreamID types.LogStreamID, opts ...varlog.AdminCallOption) (*vmspb.SealResponse, error) {
+func (c *testAdmin) Seal(_ context.Context, topicID types.TopicID, logStreamID types.LogStreamID, opts ...varlog.AdminCallOption) (*admpb.SealResponse, error) {
 	if err := c.lock(); err != nil {
 		return nil, err
 	}
@@ -388,7 +388,7 @@ func (c *testAdmin) Seal(_ context.Context, topicID types.TopicID, logStreamID t
 	logStreamDesc.Status = varlogpb.LogStreamStatusSealed
 	c.vt.logStreams[logStreamID] = logStreamDesc
 
-	rsp := &vmspb.SealResponse{
+	rsp := &admpb.SealResponse{
 		LogStreams: make([]snpb.LogStreamReplicaMetadataDescriptor, len(logStreamDesc.Replicas)),
 		SealedGLSN: sealedGLSN,
 	}
@@ -473,7 +473,7 @@ func (c *testAdmin) ListMetadataRepositoryNodes(ctx context.Context, opts ...var
 	panic("not implemented")
 }
 
-func (c *testAdmin) GetMRMembers(ctx context.Context, opts ...varlog.AdminCallOption) (*vmspb.GetMRMembersResponse, error) {
+func (c *testAdmin) GetMRMembers(ctx context.Context, opts ...varlog.AdminCallOption) (*admpb.GetMRMembersResponse, error) {
 	panic("not implemented")
 }
 
