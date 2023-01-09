@@ -18,9 +18,9 @@ import (
 	"github.com/kakao/varlog/internal/varlogctl/topic"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 	"github.com/kakao/varlog/testdata"
 )
 
@@ -96,7 +96,7 @@ var (
 		StorageSizeBytes: 4096,
 	}
 
-	snm1 = &vmspb.StorageNodeMetadata{
+	snm1 = &admpb.StorageNodeMetadata{
 		StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 			ClusterID: cid,
 			StorageNode: varlogpb.StorageNode{
@@ -122,7 +122,7 @@ var (
 		LastHeartbeatTime: time.Date(2022, time.November, 1, 11, 37, 19, 0, time.UTC),
 	}
 
-	snm2 = &vmspb.StorageNodeMetadata{
+	snm2 = &admpb.StorageNodeMetadata{
 		StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 			ClusterID: cid,
 			StorageNode: varlogpb.StorageNode{
@@ -173,7 +173,7 @@ var (
 		},
 	}
 
-	sealRsp = &vmspb.SealResponse{
+	sealRsp = &admpb.SealResponse{
 		LogStreams: []snpb.LogStreamReplicaMetadataDescriptor{*lsrmd1, *lsrmd2},
 		SealedGLSN: types.GLSN(10),
 	}
@@ -215,7 +215,7 @@ func TestController(t *testing.T) {
 			golden:      "varlogctl/liststoragenodes.0.golden.json",
 			executeFunc: storagenode.Describe(),
 			initMock: func(adm *varlog.MockAdmin) {
-				adm.EXPECT().ListStorageNodes(gomock.Any()).Return([]vmspb.StorageNodeMetadata{}, nil)
+				adm.EXPECT().ListStorageNodes(gomock.Any()).Return([]admpb.StorageNodeMetadata{}, nil)
 			},
 		},
 		{
@@ -224,7 +224,7 @@ func TestController(t *testing.T) {
 			executeFunc: storagenode.Describe(),
 			initMock: func(adm *varlog.MockAdmin) {
 				adm.EXPECT().ListStorageNodes(gomock.Any()).Return(
-					[]vmspb.StorageNodeMetadata{*snm1}, nil,
+					[]admpb.StorageNodeMetadata{*snm1}, nil,
 				)
 			},
 		},
@@ -489,14 +489,14 @@ func TestMetadataRepository(t *testing.T) {
 	admin := varlog.NewMockAdmin(ctrl)
 
 	// Describe
-	admin.EXPECT().GetMRMembers(gomock.Any()).Return(&vmspb.GetMRMembersResponse{}, nil)
+	admin.EXPECT().GetMRMembers(gomock.Any()).Return(&admpb.GetMRMembersResponse{}, nil)
 	testController(t, admin, metarepos.Describe(), func(res result.Result) {
 		require.NoError(t, res.Err())
 		require.Equal(t, 0, res.NumberOfDataItem())
 	})
 
 	// Describe
-	admin.EXPECT().GetMRMembers(gomock.Any()).Return(&vmspb.GetMRMembersResponse{
+	admin.EXPECT().GetMRMembers(gomock.Any()).Return(&admpb.GetMRMembersResponse{
 		Leader:            types.MinNodeID,
 		ReplicationFactor: 3,
 		Members: map[types.NodeID]string{
@@ -531,7 +531,7 @@ func TestStorageNode(t *testing.T) {
 		require.Equal(t, 0, res.NumberOfDataItem())
 	})
 
-	admin.EXPECT().GetStorageNodes(gomock.Any()).Return(map[types.StorageNodeID]vmspb.StorageNodeMetadata{
+	admin.EXPECT().GetStorageNodes(gomock.Any()).Return(map[types.StorageNodeID]admpb.StorageNodeMetadata{
 		types.StorageNodeID(1): {
 			StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 				StorageNode: varlogpb.StorageNode{
