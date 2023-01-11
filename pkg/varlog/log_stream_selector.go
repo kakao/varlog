@@ -13,8 +13,10 @@ var (
 // LogStreamSelector is the interface that wraps the Select method.
 //
 // Select selects a log stream, but if there is no log stream to choose it returns false.
+// GetAll returns all log steams
 type LogStreamSelector interface {
 	Select(topicID types.TopicID) (types.LogStreamID, bool)
+	GetAll(topicID types.TopicID) []types.LogStreamID
 }
 
 // alsSelector implements LogStreamSelector. It uses allowlist to select an appendable log stream.
@@ -31,4 +33,9 @@ func newAppendableLogStreamSelector(allowlist Allowlist) *alsSelector {
 // Select implements (LogStreamSelector).Select method.
 func (als *alsSelector) Select(topicID types.TopicID) (types.LogStreamID, bool) {
 	return als.allowlist.Pick(topicID)
+}
+
+// GetAll implements (LogStreamSelector).GetAll method.
+func (als *alsSelector) GetAll(topicID types.TopicID) []types.LogStreamID {
+	return als.allowlist.GetAll(topicID)
 }
