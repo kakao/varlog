@@ -654,7 +654,7 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 
 	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Unavailable, "update log stream: get cluster metadata %s", err.Error())
+		return nil, status.Errorf(codes.Unavailable, "update log stream: %s", err.Error())
 	}
 
 	oldLSDesc, err := clusmeta.MustHaveLogStream(lsid)
@@ -703,8 +703,11 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 
 	lsrmd, err := adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetStorageNodePath())
 	if err != nil {
-		// TODO:: handle with error code
-		return nil, status.Errorf(codes.Unavailable, "update log stream: add logstream replica %s", err.Error())
+		code := status.Code(err)
+		if code != codes.ResourceExhausted {
+			code = codes.Unavailable
+		}
+		return nil, status.Errorf(code, "add log stream: %s", err.Error())
 	}
 
 	newLSDesc.Replicas[popIdx].DataPath = lsrmd.Path
