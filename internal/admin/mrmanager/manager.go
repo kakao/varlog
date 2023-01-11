@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
@@ -162,7 +161,8 @@ func (mrm *mrManager) clusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 
 	meta, err := cli.GetMetadata(ctx)
 	if err != nil {
-		return nil, multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return nil, err
 	}
 
 	return meta, err
@@ -181,7 +181,8 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 	}
 
 	if err := cli.RegisterStorageNode(ctx, storageNodeMeta); err != nil {
-		return multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return err
 	}
 
 	return err
@@ -200,7 +201,8 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 	}
 
 	if err := cli.UnregisterStorageNode(ctx, storageNodeID); err != nil {
-		return multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return err
 	}
 
 	return err
@@ -219,7 +221,8 @@ func (mrm *mrManager) RegisterTopic(ctx context.Context, topicID types.TopicID) 
 	}
 
 	if err := cli.RegisterTopic(ctx, topicID); err != nil {
-		return multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return err
 	}
 
 	return err
@@ -238,7 +241,8 @@ func (mrm *mrManager) UnregisterTopic(ctx context.Context, topicID types.TopicID
 	}
 
 	if err := cli.UnregisterTopic(ctx, topicID); err != nil {
-		return multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return err
 	}
 
 	return err
@@ -276,7 +280,8 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 	}
 
 	if err := cli.UnregisterLogStream(ctx, logStreamID); err != nil {
-		return multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return err
 	}
 	return err
 }
@@ -294,7 +299,8 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlog
 	}
 
 	if err := cli.UpdateLogStream(ctx, logStreamDesc); err != nil {
-		return multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return err
 	}
 	return err
 }
@@ -313,7 +319,8 @@ func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (
 	}
 
 	if lastCommittedGLSN, err = cli.Seal(ctx, logStreamID); err != nil {
-		return types.InvalidGLSN, multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return types.InvalidGLSN, err
 	}
 	return lastCommittedGLSN, err
 }
@@ -331,7 +338,8 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 	}
 
 	if err := cli.Unseal(ctx, logStreamID); err != nil {
-		return multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return err
 	}
 	return err
 }
@@ -347,7 +355,8 @@ func (mrm *mrManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, er
 
 	rsp, err := cli.GetClusterInfo(ctx, mrm.cid)
 	if err != nil {
-		return nil, multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return nil, err
 	}
 	return rsp.GetClusterInfo(), err
 }
@@ -363,7 +372,8 @@ func (mrm *mrManager) AddPeer(ctx context.Context, nodeID types.NodeID, peerURL,
 
 	if err := cli.AddPeer(ctx, mrm.cid, nodeID, peerURL); err != nil {
 		if !errors.Is(err, verrors.ErrAlreadyExists) {
-			return multierr.Append(err, cli.Close())
+			_ = cli.Close()
+			return err
 		}
 		return err
 	}
@@ -382,7 +392,8 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 	}
 
 	if err := cli.RemovePeer(ctx, mrm.cid, nodeID); err != nil {
-		return multierr.Append(err, cli.Close())
+		_ = cli.Close()
+		return err
 	}
 	mrm.connector.DelRPCAddr(nodeID)
 

@@ -703,7 +703,11 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 
 	lsrmd, err := adm.snmgr.AddLogStreamReplica(ctx, pushedReplica.GetStorageNodeID(), newLSDesc.TopicID, lsid, pushedReplica.GetStorageNodePath())
 	if err != nil {
-		return nil, errors.Wrap(err, "update log stream")
+		code := status.Code(err)
+		if code != codes.ResourceExhausted {
+			code = codes.Unavailable
+		}
+		return nil, status.Errorf(code, "add log stream: %s", err.Error())
 	}
 
 	newLSDesc.Replicas[popIdx].DataPath = lsrmd.Path
@@ -714,7 +718,8 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	}()
 
 	if err := adm.mrmgr.UpdateLogStream(ctx, newLSDesc); err != nil {
-		return nil, fmt.Errorf("update log stream: %w", err)
+		// TODO:: handle with error code
+		return nil, status.Errorf(codes.FailedPrecondition, "update log stream: %s", err.Error())
 	}
 
 	return newLSDesc, nil
