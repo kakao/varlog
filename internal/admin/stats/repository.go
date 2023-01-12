@@ -7,13 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kakao/varlog/proto/admpb"
+
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 )
 
 // Repository is a repository to maintain statistics of log streams to manage
@@ -38,11 +39,11 @@ type Repository interface {
 	// argument snid. The snm result contains the last heartbeat time
 	// collected by the repository. The ok result indicates whether the
 	// metadata is found in the repository.
-	GetStorageNode(snid types.StorageNodeID) (snm *vmspb.StorageNodeMetadata, ok bool)
+	GetStorageNode(snid types.StorageNodeID) (snm *admpb.StorageNodeMetadata, ok bool)
 
 	// ListStorageNodes returns a map that maps storage node ID to the
 	// metadata for each storage node.
-	ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata
+	ListStorageNodes() map[types.StorageNodeID]*admpb.StorageNodeMetadata
 
 	// RemoveStorageNode removes the metadata for the storage node
 	// specified by the snid.
@@ -56,7 +57,7 @@ type repository struct {
 	logStreamStats map[types.LogStreamID]*LogStreamStat
 
 	// TODO: Use sorted list for effiecient lookup and pagination.
-	storageNodes map[types.StorageNodeID]*vmspb.StorageNodeMetadata
+	storageNodes map[types.StorageNodeID]*admpb.StorageNodeMetadata
 	mu           sync.RWMutex
 }
 
@@ -66,7 +67,7 @@ func NewRepository(ctx context.Context, cmview mrmanager.ClusterMetadataView) Re
 	s := &repository{
 		cmview:         cmview,
 		logStreamStats: make(map[types.LogStreamID]*LogStreamStat),
-		storageNodes:   make(map[types.StorageNodeID]*vmspb.StorageNodeMetadata),
+		storageNodes:   make(map[types.StorageNodeID]*admpb.StorageNodeMetadata),
 	}
 
 	// TODO: Initializing stats repository only by using cluster metadata
@@ -91,7 +92,7 @@ func (s *repository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataD
 	snd := s.meta.GetStorageNode(snid)
 	snm, ok := s.storageNodes[snid]
 	if !ok {
-		snm = &vmspb.StorageNodeMetadata{
+		snm = &admpb.StorageNodeMetadata{
 			CreateTime: snd.CreateTime,
 		}
 	}
@@ -119,22 +120,22 @@ func (s *repository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataD
 	}
 }
 
-func (s *repository) GetStorageNode(snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, bool) {
+func (s *repository) GetStorageNode(snid types.StorageNodeID) (*admpb.StorageNodeMetadata, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	snm, ok := s.storageNodes[snid]
 	if !ok {
 		return nil, false
 	}
-	return proto.Clone(snm).(*vmspb.StorageNodeMetadata), true
+	return proto.Clone(snm).(*admpb.StorageNodeMetadata), true
 }
 
-func (s *repository) ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata {
+func (s *repository) ListStorageNodes() map[types.StorageNodeID]*admpb.StorageNodeMetadata {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	snms := make(map[types.StorageNodeID]*vmspb.StorageNodeMetadata, len(s.storageNodes))
+	snms := make(map[types.StorageNodeID]*admpb.StorageNodeMetadata, len(s.storageNodes))
 	for _, snm := range s.storageNodes {
-		copied := proto.Clone(snm).(*vmspb.StorageNodeMetadata)
+		copied := proto.Clone(snm).(*admpb.StorageNodeMetadata)
 		snms[snm.StorageNodeID] = copied
 	}
 	return snms

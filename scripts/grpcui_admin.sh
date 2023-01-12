@@ -7,5 +7,5 @@ grpcui \
     --import-path ${scriptdir}/../vendor \
     --import-path ${scriptdir}/../proto \
     --import-path $GOPATH/src \
-    --proto vmspb/admin.proto \
+    --proto admpb/admin.proto \
     $@

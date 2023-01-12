@@ -10,7 +10,7 @@ import (
 
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/pkg/varlog"
-	"github.com/kakao/varlog/proto/vmspb"
+	"github.com/kakao/varlog/proto/admpb"
 )
 
 func TestAdmin_Timeout(t *testing.T) {
@@ -19,7 +19,7 @@ func TestAdmin_Timeout(t *testing.T) {
 
 	tms := admin.TestNewMockServer(t, ctrl)
 	tms.MockClusterManagerServer.EXPECT().ListStorageNodes(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, _ *vmspb.ListStorageNodesRequest) (*vmspb.ListStorageNodesResponse, error) {
+		func(ctx context.Context, _ *admpb.ListStorageNodesRequest) (*admpb.ListStorageNodesResponse, error) {
 			<-ctx.Done()
 			return nil, ctx.Err()
 		},

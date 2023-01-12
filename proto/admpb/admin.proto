@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package varlog.vmspb;
+package varlog.admpb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
@@ -9,7 +9,7 @@ import "varlogpb/metadata.proto";
 import "snpb/replicator.proto";
 import "snpb/metadata.proto";
 
-option go_package = "github.com/kakao/varlog/proto/vmspb";
+option go_package = "github.com/kakao/varlog/proto/admpb";
 
 option (gogoproto.protosizer_all) = true;
 option (gogoproto.marshaler_all) = true;

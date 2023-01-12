@@ -12,9 +12,9 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	types "github.com/kakao/varlog/pkg/types"
+	admpb "github.com/kakao/varlog/proto/admpb"
 	snpb "github.com/kakao/varlog/proto/snpb"
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
-	vmspb "github.com/kakao/varlog/proto/vmspb"
 )
 
 // MockRepository is a mock of Repository interface.
@@ -55,10 +55,10 @@ func (mr *MockRepositoryMockRecorder) GetLogStream(arg0 interface{}) *gomock.Cal
 }
 
 // GetStorageNode mocks base method.
-func (m *MockRepository) GetStorageNode(arg0 types.StorageNodeID) (*vmspb.StorageNodeMetadata, bool) {
+func (m *MockRepository) GetStorageNode(arg0 types.StorageNodeID) (*admpb.StorageNodeMetadata, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStorageNode", arg0)
-	ret0, _ := ret[0].(*vmspb.StorageNodeMetadata)
+	ret0, _ := ret[0].(*admpb.StorageNodeMetadata)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -70,10 +70,10 @@ func (mr *MockRepositoryMockRecorder) GetStorageNode(arg0 interface{}) *gomock.C
 }
 
 // ListStorageNodes mocks base method.
-func (m *MockRepository) ListStorageNodes() map[types.StorageNodeID]*vmspb.StorageNodeMetadata {
+func (m *MockRepository) ListStorageNodes() map[types.StorageNodeID]*admpb.StorageNodeMetadata {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListStorageNodes")
-	ret0, _ := ret[0].(map[types.StorageNodeID]*vmspb.StorageNodeMetadata)
+	ret0, _ := ret[0].(map[types.StorageNodeID]*admpb.StorageNodeMetadata)
 	return ret0
 }
 

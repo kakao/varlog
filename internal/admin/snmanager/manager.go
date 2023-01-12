@@ -6,6 +6,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/kakao/varlog/proto/admpb"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -17,7 +19,6 @@ import (
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 )
 
 type StorageNodeManager interface {
@@ -56,7 +57,7 @@ type StorageNodeManager interface {
 
 	Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error
 
-	Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error)
+	Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) ([]admpb.TrimResult, error)
 
 	Close() error
 }
@@ -337,7 +338,7 @@ func (sm *snManager) Unseal(ctx context.Context, tpid types.TopicID, lsid types.
 	return nil
 }
 
-func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
+func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]admpb.TrimResult, error) {
 	clusmeta, err := sm.cmview.ClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
@@ -369,7 +370,7 @@ func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN type
 
 	var (
 		mu      sync.Mutex
-		results []vmspb.TrimResult
+		results []admpb.TrimResult
 	)
 	g, ctx := errgroup.WithContext(ctx)
 	for snid, client := range clients {
@@ -387,7 +388,7 @@ func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN type
 				if err != nil {
 					msg = err.Error()
 				}
-				results = append(results, vmspb.TrimResult{
+				results = append(results, admpb.TrimResult{
 					StorageNodeID: snid,
 					LogStreamID:   lsid,
 					Error:         msg,

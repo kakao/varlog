@@ -11,9 +11,9 @@ import (
 	gomock "github.com/golang/mock/gomock"
 
 	types "github.com/kakao/varlog/pkg/types"
+	admpb "github.com/kakao/varlog/proto/admpb"
 	snpb "github.com/kakao/varlog/proto/snpb"
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
-	vmspb "github.com/kakao/varlog/proto/vmspb"
 )
 
 // MockAdmin is a mock of Admin interface.
@@ -100,14 +100,14 @@ func (mr *MockAdminMockRecorder) AddMetadataRepositoryNode(arg0, arg1, arg2 inte
 }
 
 // AddStorageNode mocks base method.
-func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string, arg3 ...AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) AddStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 string, arg3 ...AdminCallOption) (*admpb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddStorageNode", varargs...)
-	ret0, _ := ret[0].(*vmspb.StorageNodeMetadata)
+	ret0, _ := ret[0].(*admpb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -173,14 +173,14 @@ func (mr *MockAdminMockRecorder) DeleteMetadataRepositoryNode(arg0, arg1 interfa
 }
 
 // DescribeTopic mocks base method.
-func (m *MockAdmin) DescribeTopic(arg0 context.Context, arg1 types.TopicID, arg2 ...AdminCallOption) (*vmspb.DescribeTopicResponse, error) {
+func (m *MockAdmin) DescribeTopic(arg0 context.Context, arg1 types.TopicID, arg2 ...AdminCallOption) (*admpb.DescribeTopicResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DescribeTopic", varargs...)
-	ret0, _ := ret[0].(*vmspb.DescribeTopicResponse)
+	ret0, _ := ret[0].(*admpb.DescribeTopicResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -213,14 +213,14 @@ func (mr *MockAdminMockRecorder) GetLogStream(arg0, arg1, arg2 interface{}, arg3
 }
 
 // GetMRMembers mocks base method.
-func (m *MockAdmin) GetMRMembers(arg0 context.Context, arg1 ...AdminCallOption) (*vmspb.GetMRMembersResponse, error) {
+func (m *MockAdmin) GetMRMembers(arg0 context.Context, arg1 ...AdminCallOption) (*admpb.GetMRMembersResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetMRMembers", varargs...)
-	ret0, _ := ret[0].(*vmspb.GetMRMembersResponse)
+	ret0, _ := ret[0].(*admpb.GetMRMembersResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -253,14 +253,14 @@ func (mr *MockAdminMockRecorder) GetMetadataRepositoryNode(arg0, arg1 interface{
 }
 
 // GetStorageNode mocks base method.
-func (m *MockAdmin) GetStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 ...AdminCallOption) (*vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) GetStorageNode(arg0 context.Context, arg1 types.StorageNodeID, arg2 ...AdminCallOption) (*admpb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetStorageNode", varargs...)
-	ret0, _ := ret[0].(*vmspb.StorageNodeMetadata)
+	ret0, _ := ret[0].(*admpb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -273,14 +273,14 @@ func (mr *MockAdminMockRecorder) GetStorageNode(arg0, arg1 interface{}, arg2 ...
 }
 
 // GetStorageNodes mocks base method.
-func (m *MockAdmin) GetStorageNodes(arg0 context.Context, arg1 ...AdminCallOption) (map[types.StorageNodeID]vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) GetStorageNodes(arg0 context.Context, arg1 ...AdminCallOption) (map[types.StorageNodeID]admpb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetStorageNodes", varargs...)
-	ret0, _ := ret[0].(map[types.StorageNodeID]vmspb.StorageNodeMetadata)
+	ret0, _ := ret[0].(map[types.StorageNodeID]admpb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -353,14 +353,14 @@ func (mr *MockAdminMockRecorder) ListMetadataRepositoryNodes(arg0 interface{}, a
 }
 
 // ListStorageNodes mocks base method.
-func (m *MockAdmin) ListStorageNodes(arg0 context.Context, arg1 ...AdminCallOption) ([]vmspb.StorageNodeMetadata, error) {
+func (m *MockAdmin) ListStorageNodes(arg0 context.Context, arg1 ...AdminCallOption) ([]admpb.StorageNodeMetadata, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListStorageNodes", varargs...)
-	ret0, _ := ret[0].([]vmspb.StorageNodeMetadata)
+	ret0, _ := ret[0].([]admpb.StorageNodeMetadata)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -431,14 +431,14 @@ func (mr *MockAdminMockRecorder) RemoveMRPeer(arg0, arg1 interface{}, arg2 ...in
 }
 
 // Seal mocks base method.
-func (m *MockAdmin) Seal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 ...AdminCallOption) (*vmspb.SealResponse, error) {
+func (m *MockAdmin) Seal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 ...AdminCallOption) (*admpb.SealResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Seal", varargs...)
-	ret0, _ := ret[0].(*vmspb.SealResponse)
+	ret0, _ := ret[0].(*admpb.SealResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -26,10 +26,10 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 )
 
 const numLogStreamMutex = 512
@@ -126,7 +126,7 @@ func (adm *Admin) Serve() error {
 	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
 	adm.serverAddr = addrs[0]
 
-	vmspb.RegisterClusterManagerServer(adm.server, &server{admin: adm})
+	admpb.RegisterClusterManagerServer(adm.server, &server{admin: adm})
 	grpc_health_v1.RegisterHealthServer(adm.server, adm.healthServer)
 	adm.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
@@ -168,7 +168,7 @@ func (adm *Admin) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, e
 	return adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 }
 
-func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error) {
+func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) (*admpb.StorageNodeMetadata, error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
 
@@ -183,7 +183,7 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 	if snm, ok := adm.statRepository.GetStorageNode(snid); ok {
 		return snm, nil
 	}
-	snm := &vmspb.StorageNodeMetadata{
+	snm := &admpb.StorageNodeMetadata{
 		StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 			ClusterID:   adm.cid,
 			StorageNode: snd.StorageNode,
@@ -214,7 +214,7 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 	return snm, nil
 }
 
-func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error) {
+func (adm *Admin) listStorageNodes(ctx context.Context) ([]admpb.StorageNodeMetadata, error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
 
@@ -253,7 +253,7 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 		return lazyReplicasMap, nil
 	}
 
-	snms := make([]vmspb.StorageNodeMetadata, 0, len(md.StorageNodes))
+	snms := make([]admpb.StorageNodeMetadata, 0, len(md.StorageNodes))
 	snmsMap := adm.statRepository.ListStorageNodes()
 	for _, snd := range md.StorageNodes {
 		if snm, ok := snmsMap[snd.StorageNodeID]; ok {
@@ -264,7 +264,7 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 		if err != nil {
 			return nil, err
 		}
-		snms = append(snms, vmspb.StorageNodeMetadata{
+		snms = append(snms, admpb.StorageNodeMetadata{
 			StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 				ClusterID:         adm.cid,
 				StorageNode:       snd.StorageNode,
@@ -285,7 +285,7 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 // It could not add a storage node under the following conditions:
 //   - It could not fetch metadata from the storage node.
 //   - It is rejected by the metadata repository.
-func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*vmspb.StorageNodeMetadata, error) {
+func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*admpb.StorageNodeMetadata, error) {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
 
@@ -903,7 +903,7 @@ func (adm *Admin) syncInternal(ctx context.Context, tpid types.TopicID, lsid typ
 // trim removes log entries from the log streams in a topic.
 // The argument tpid is the topic ID of the topic to be trimmed.
 // The argument lastGLSN is the last global sequence number of the log stream to be trimmed.
-func (adm *Admin) trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
+func (adm *Admin) trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]admpb.TrimResult, error) {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
 	return adm.snmgr.Trim(ctx, tpid, lastGLSN)
