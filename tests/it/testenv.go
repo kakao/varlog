@@ -33,6 +33,7 @@ import (
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
+	"github.com/kakao/varlog/proto/vmspb"
 	"github.com/kakao/varlog/vtesting"
 )
 
@@ -713,6 +714,14 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types
 			rds[i] = &newReplica
 		}
 	}
+}
+
+func (clus *VarlogCluster) Seal(t *testing.T, tpID types.TopicID, lsID types.LogStreamID) (*vmspb.SealResponse, error) {
+	return clus.vmsCL.Seal(context.Background(), tpID, lsID)
+}
+
+func (clus *VarlogCluster) Unseal(t *testing.T, tpID types.TopicID, lsID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+	return clus.vmsCL.Unseal(context.Background(), tpID, lsID)
 }
 
 func (clus *VarlogCluster) AddLSWithoutMR(t *testing.T, topicID types.TopicID) types.LogStreamID {
