@@ -346,21 +346,40 @@ message RemoveMRPeerRequest {
 message RemoveMRPeerResponse {}
 
 service ClusterManager {
-  // GetStorageNode returns the metadata of storage node requested.
-  // It returns NotFound if the storage node does not exist.
+  // GetStorageNode returns the metadata of the storage node requested.
+  // It produces a gRPC NotFound error if the storage node does not exist. If
+  // the metadata repository cannot be reachable, it returns a gRPC Unavailable
+  // error. In this case, clients can retry with proper backoff to fix it.
   rpc GetStorageNode(GetStorageNodeRequest) returns (GetStorageNodeResponse) {}
-  // ListStorageNodes returns a list of storage nodes in the cluster.
+  // ListStorageNodes returns a list of storage nodes.
+  // If the metadata repository cannot be reachable, it returns a gRPC
+  // Unavailable error. In this case, clients can retry with proper backoff to
+  // fix it. If the metadata fetched from the metadata repository is
+  // inconsistent, it returns a gRPC Internal error.
   rpc ListStorageNodes(ListStorageNodesRequest)
     returns (ListStorageNodesResponse) {}
-  // AddStorageNode adds a new storage node to the cluster.
-  // It is idempotent, that is, adding an already added storage node is okay.
+  // AddStorageNode adds a new storage node to the cluster. It is idempotent;
+  // adding an already added storage node is okay.
+  // Note that if the admin server cannot refresh the storage node list in the
+  // memory, it returns a gRPC Unavailable error. However, the storage node
+  // could have been added, so users should call this RPC with the same
+  // parameter again.
   rpc AddStorageNode(AddStorageNodeRequest) returns (AddStorageNodeResponse) {}
   // UnregisterStorageNode unregisters the storage node specified by the
-  // request.
+  // argument snid. If users try to unregister an already non-exist node, it
+  // returns okay.
+  //
+  // It returns the following gRPC errors:
+  // - Unavailable: The metadata cannot be fetched from the metadata repository.
+  // - FailedPrecondition: The storage node still has valid log stream replicas.
   rpc UnregisterStorageNode(UnregisterStorageNodeRequest)
     returns (UnregisterStorageNodeResponse) {}
 
   // GetTopic returns the topic specified by the request.
+  //
+  // It returns the following gRPC errors:
+  // - Unavailable: The metadata cannot be fetched from the metadata repository.
+  // - NotFound: The topic doesn't exist.
   rpc GetTopic(GetTopicRequest) returns (GetTopicResponse) {}
   // DescribeTopic returns the topic specified by the request.
   // Deprecated: Use GetTopic.
@@ -368,17 +387,47 @@ service ClusterManager {
   // ListTopics returns a list of topics in the cluster.
   rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse) {}
   // AddTopic adds a new topic and returns its metadata.
+  // It produces a gRPC Internal error if the metadata rejects the request.
   rpc AddTopic(AddTopicRequest) returns (AddTopicResponse) {}
+  // UnregisterTopic unregisters the topic specified by the argument tpid.
+  // It returns a gRPC Unavailable error if the metadata cannot be fetched from
+  // the metadata repository.
+  // TODO: Its behavior is unclear if the topic has already been removed.
+  // FIXME: It overwrites the gRPC errors returned from the metadata repository,
+  // even if some may be important.
   rpc UnregisterTopic(UnregisterTopicRequest)
     returns (UnregisterTopicResponse) {}
 
+  // GetLogStream returns the metadata of the log stream specified by the
+  // arguments tpid and lsid. The metadata is the type stored in the metadata
+  // repository.
+  //
+  // It returns the following gRPC errors:
+  // - Unavailable: The metadata cannot be fetched from the metadata repository.
+  // - NotFound: Either the topic or the log stream does not exist.
+  // - Internal: The TopicID in the log stream metadata doesn't match.
   rpc GetLogStream(GetLogStreamRequest) returns (GetLogStreamResponse) {}
+  // ListLogStreams returns all log streams belonging to the topic specified by
+  // the argument tpid.
+  //
+  // It returns the following gRPC errors:
+  // - Unavailable: The metadata cannot be fetched from the metadata repository.
+  // - NotFound: The topic does not exist.
+  // - Internal: The TopicID in the log stream metadata doesn't match.
   rpc ListLogStreams(ListLogStreamsRequest) returns (ListLogStreamsResponse) {}
   // AddLogStream adds a new log stream to the cluster.
-  // The error code ResourceExhausted is returned if the number of log streams
-  // is reached the upper limit.
+  //
+  // It returns the following gRPC errors:
+  // - Unavailable: The metadata cannot be fetched from the metadata repository.
+  // - ResourceExhausted: The number of log streams is reached the upper limit.
+  // - FailedPrecondition: Replicas information in the request is invalid; for
+  // example, the number of log stream replicas in the request does not equal
+  // the replication factor, or the storage node for the replica does not exist.
+  //
+  // TODO: Not all errors are codified.
   rpc AddLogStream(AddLogStreamRequest) returns (AddLogStreamResponse) {}
   // UpdateLogStream changes the configuration of replicas in a log stream.
+  //
   // Its codes are defines as followings:
   // - InvalidArgument: The client tries to swap the same replica.
   // - Unavailable: The cluster metadata cannot be fetched from the metadata
@@ -395,9 +444,18 @@ service ClusterManager {
   // metadata repository soon.
   rpc UpdateLogStream(UpdateLogStreamRequest)
     returns (UpdateLogStreamResponse) {}
+  // UnregisterLogStream unregisters the log stream specified by the arguments
+  // tpid and lsid.
+  // TODO: It is not tested.
   rpc UnregisterLogStream(UnregisterLogStreamRequest)
     returns (UnregisterLogStreamResponse) {}
-
+  // RemoveLogStreamReplica removes the log stream replica specified by the
+  // arguments snid, tpid, and lsid.
+  //
+  // It returns the following gRPC errors:
+  // - Unavailable: The metadata cannot be fetched from the metadata repository.
+  // - FailedPrecondition: The log stream of the log stream replica can't be
+  // removable, e.g., clients still can append logs to the log stream.
   rpc RemoveLogStreamReplica(RemoveLogStreamReplicaRequest)
     returns (RemoveLogStreamReplicaResponse) {}
 

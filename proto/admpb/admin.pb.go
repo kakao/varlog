@@ -2737,18 +2737,37 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ClusterManagerClient interface {
-	// GetStorageNode returns the metadata of storage node requested.
-	// It returns NotFound if the storage node does not exist.
+	// GetStorageNode returns the metadata of the storage node requested.
+	// It produces a gRPC NotFound error if the storage node does not exist. If
+	// the metadata repository cannot be reachable, it returns a gRPC Unavailable
+	// error. In this case, clients can retry with proper backoff to fix it.
 	GetStorageNode(ctx context.Context, in *GetStorageNodeRequest, opts ...grpc.CallOption) (*GetStorageNodeResponse, error)
-	// ListStorageNodes returns a list of storage nodes in the cluster.
+	// ListStorageNodes returns a list of storage nodes.
+	// If the metadata repository cannot be reachable, it returns a gRPC
+	// Unavailable error. In this case, clients can retry with proper backoff to
+	// fix it. If the metadata fetched from the metadata repository is
+	// inconsistent, it returns a gRPC Internal error.
 	ListStorageNodes(ctx context.Context, in *ListStorageNodesRequest, opts ...grpc.CallOption) (*ListStorageNodesResponse, error)
-	// AddStorageNode adds a new storage node to the cluster.
-	// It is idempotent, that is, adding an already added storage node is okay.
+	// AddStorageNode adds a new storage node to the cluster. It is idempotent;
+	// adding an already added storage node is okay.
+	// Note that if the admin server cannot refresh the storage node list in the
+	// memory, it returns a gRPC Unavailable error. However, the storage node
+	// could have been added, so users should call this RPC with the same
+	// parameter again.
 	AddStorageNode(ctx context.Context, in *AddStorageNodeRequest, opts ...grpc.CallOption) (*AddStorageNodeResponse, error)
 	// UnregisterStorageNode unregisters the storage node specified by the
-	// request.
+	// argument snid. If users try to unregister an already non-exist node, it
+	// returns okay.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - FailedPrecondition: The storage node still has valid log stream replicas.
 	UnregisterStorageNode(ctx context.Context, in *UnregisterStorageNodeRequest, opts ...grpc.CallOption) (*UnregisterStorageNodeResponse, error)
 	// GetTopic returns the topic specified by the request.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - NotFound: The topic doesn't exist.
 	GetTopic(ctx context.Context, in *GetTopicRequest, opts ...grpc.CallOption) (*GetTopicResponse, error)
 	// DescribeTopic returns the topic specified by the request.
 	// Deprecated: Use GetTopic.
@@ -2756,15 +2775,45 @@ type ClusterManagerClient interface {
 	// ListTopics returns a list of topics in the cluster.
 	ListTopics(ctx context.Context, in *ListTopicsRequest, opts ...grpc.CallOption) (*ListTopicsResponse, error)
 	// AddTopic adds a new topic and returns its metadata.
+	// It produces a gRPC Internal error if the metadata rejects the request.
 	AddTopic(ctx context.Context, in *AddTopicRequest, opts ...grpc.CallOption) (*AddTopicResponse, error)
+	// UnregisterTopic unregisters the topic specified by the argument tpid.
+	// It returns a gRPC Unavailable error if the metadata cannot be fetched from
+	// the metadata repository.
+	// TODO: Its behavior is unclear if the topic has already been removed.
+	// FIXME: It overwrites the gRPC errors returned from the metadata repository,
+	// even if some may be important.
 	UnregisterTopic(ctx context.Context, in *UnregisterTopicRequest, opts ...grpc.CallOption) (*UnregisterTopicResponse, error)
+	// GetLogStream returns the metadata of the log stream specified by the
+	// arguments tpid and lsid. The metadata is the type stored in the metadata
+	// repository.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - NotFound: Either the topic or the log stream does not exist.
+	// - Internal: The TopicID in the log stream metadata doesn't match.
 	GetLogStream(ctx context.Context, in *GetLogStreamRequest, opts ...grpc.CallOption) (*GetLogStreamResponse, error)
+	// ListLogStreams returns all log streams belonging to the topic specified by
+	// the argument tpid.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - NotFound: The topic does not exist.
+	// - Internal: The TopicID in the log stream metadata doesn't match.
 	ListLogStreams(ctx context.Context, in *ListLogStreamsRequest, opts ...grpc.CallOption) (*ListLogStreamsResponse, error)
 	// AddLogStream adds a new log stream to the cluster.
-	// The error code ResourceExhausted is returned if the number of log streams
-	// is reached the upper limit.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - ResourceExhausted: The number of log streams is reached the upper limit.
+	// - FailedPrecondition: Replicas information in the request is invalid; for
+	// example, the number of log stream replicas in the request does not equal
+	// the replication factor, or the storage node for the replica does not exist.
+	//
+	// TODO: Not all errors are codified.
 	AddLogStream(ctx context.Context, in *AddLogStreamRequest, opts ...grpc.CallOption) (*AddLogStreamResponse, error)
 	// UpdateLogStream changes the configuration of replicas in a log stream.
+	//
 	// Its codes are defines as followings:
 	// - InvalidArgument: The client tries to swap the same replica.
 	// - Unavailable: The cluster metadata cannot be fetched from the metadata
@@ -2780,7 +2829,17 @@ type ClusterManagerClient interface {
 	// TODO: We will define codes for errors returned from storage nodes and
 	// metadata repository soon.
 	UpdateLogStream(ctx context.Context, in *UpdateLogStreamRequest, opts ...grpc.CallOption) (*UpdateLogStreamResponse, error)
+	// UnregisterLogStream unregisters the log stream specified by the arguments
+	// tpid and lsid.
+	// TODO: It is not tested.
 	UnregisterLogStream(ctx context.Context, in *UnregisterLogStreamRequest, opts ...grpc.CallOption) (*UnregisterLogStreamResponse, error)
+	// RemoveLogStreamReplica removes the log stream replica specified by the
+	// arguments snid, tpid, and lsid.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - FailedPrecondition: The log stream of the log stream replica can't be
+	// removable, e.g., clients still can append logs to the log stream.
 	RemoveLogStreamReplica(ctx context.Context, in *RemoveLogStreamReplicaRequest, opts ...grpc.CallOption) (*RemoveLogStreamReplicaResponse, error)
 	Seal(ctx context.Context, in *SealRequest, opts ...grpc.CallOption) (*SealResponse, error)
 	Unseal(ctx context.Context, in *UnsealRequest, opts ...grpc.CallOption) (*UnsealResponse, error)
@@ -3039,18 +3098,37 @@ func (c *clusterManagerClient) RemoveMRPeer(ctx context.Context, in *RemoveMRPee
 
 // ClusterManagerServer is the server API for ClusterManager service.
 type ClusterManagerServer interface {
-	// GetStorageNode returns the metadata of storage node requested.
-	// It returns NotFound if the storage node does not exist.
+	// GetStorageNode returns the metadata of the storage node requested.
+	// It produces a gRPC NotFound error if the storage node does not exist. If
+	// the metadata repository cannot be reachable, it returns a gRPC Unavailable
+	// error. In this case, clients can retry with proper backoff to fix it.
 	GetStorageNode(context.Context, *GetStorageNodeRequest) (*GetStorageNodeResponse, error)
-	// ListStorageNodes returns a list of storage nodes in the cluster.
+	// ListStorageNodes returns a list of storage nodes.
+	// If the metadata repository cannot be reachable, it returns a gRPC
+	// Unavailable error. In this case, clients can retry with proper backoff to
+	// fix it. If the metadata fetched from the metadata repository is
+	// inconsistent, it returns a gRPC Internal error.
 	ListStorageNodes(context.Context, *ListStorageNodesRequest) (*ListStorageNodesResponse, error)
-	// AddStorageNode adds a new storage node to the cluster.
-	// It is idempotent, that is, adding an already added storage node is okay.
+	// AddStorageNode adds a new storage node to the cluster. It is idempotent;
+	// adding an already added storage node is okay.
+	// Note that if the admin server cannot refresh the storage node list in the
+	// memory, it returns a gRPC Unavailable error. However, the storage node
+	// could have been added, so users should call this RPC with the same
+	// parameter again.
 	AddStorageNode(context.Context, *AddStorageNodeRequest) (*AddStorageNodeResponse, error)
 	// UnregisterStorageNode unregisters the storage node specified by the
-	// request.
+	// argument snid. If users try to unregister an already non-exist node, it
+	// returns okay.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - FailedPrecondition: The storage node still has valid log stream replicas.
 	UnregisterStorageNode(context.Context, *UnregisterStorageNodeRequest) (*UnregisterStorageNodeResponse, error)
 	// GetTopic returns the topic specified by the request.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - NotFound: The topic doesn't exist.
 	GetTopic(context.Context, *GetTopicRequest) (*GetTopicResponse, error)
 	// DescribeTopic returns the topic specified by the request.
 	// Deprecated: Use GetTopic.
@@ -3058,15 +3136,45 @@ type ClusterManagerServer interface {
 	// ListTopics returns a list of topics in the cluster.
 	ListTopics(context.Context, *ListTopicsRequest) (*ListTopicsResponse, error)
 	// AddTopic adds a new topic and returns its metadata.
+	// It produces a gRPC Internal error if the metadata rejects the request.
 	AddTopic(context.Context, *AddTopicRequest) (*AddTopicResponse, error)
+	// UnregisterTopic unregisters the topic specified by the argument tpid.
+	// It returns a gRPC Unavailable error if the metadata cannot be fetched from
+	// the metadata repository.
+	// TODO: Its behavior is unclear if the topic has already been removed.
+	// FIXME: It overwrites the gRPC errors returned from the metadata repository,
+	// even if some may be important.
 	UnregisterTopic(context.Context, *UnregisterTopicRequest) (*UnregisterTopicResponse, error)
+	// GetLogStream returns the metadata of the log stream specified by the
+	// arguments tpid and lsid. The metadata is the type stored in the metadata
+	// repository.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - NotFound: Either the topic or the log stream does not exist.
+	// - Internal: The TopicID in the log stream metadata doesn't match.
 	GetLogStream(context.Context, *GetLogStreamRequest) (*GetLogStreamResponse, error)
+	// ListLogStreams returns all log streams belonging to the topic specified by
+	// the argument tpid.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - NotFound: The topic does not exist.
+	// - Internal: The TopicID in the log stream metadata doesn't match.
 	ListLogStreams(context.Context, *ListLogStreamsRequest) (*ListLogStreamsResponse, error)
 	// AddLogStream adds a new log stream to the cluster.
-	// The error code ResourceExhausted is returned if the number of log streams
-	// is reached the upper limit.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - ResourceExhausted: The number of log streams is reached the upper limit.
+	// - FailedPrecondition: Replicas information in the request is invalid; for
+	// example, the number of log stream replicas in the request does not equal
+	// the replication factor, or the storage node for the replica does not exist.
+	//
+	// TODO: Not all errors are codified.
 	AddLogStream(context.Context, *AddLogStreamRequest) (*AddLogStreamResponse, error)
 	// UpdateLogStream changes the configuration of replicas in a log stream.
+	//
 	// Its codes are defines as followings:
 	// - InvalidArgument: The client tries to swap the same replica.
 	// - Unavailable: The cluster metadata cannot be fetched from the metadata
@@ -3082,7 +3190,17 @@ type ClusterManagerServer interface {
 	// TODO: We will define codes for errors returned from storage nodes and
 	// metadata repository soon.
 	UpdateLogStream(context.Context, *UpdateLogStreamRequest) (*UpdateLogStreamResponse, error)
+	// UnregisterLogStream unregisters the log stream specified by the arguments
+	// tpid and lsid.
+	// TODO: It is not tested.
 	UnregisterLogStream(context.Context, *UnregisterLogStreamRequest) (*UnregisterLogStreamResponse, error)
+	// RemoveLogStreamReplica removes the log stream replica specified by the
+	// arguments snid, tpid, and lsid.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The metadata cannot be fetched from the metadata repository.
+	// - FailedPrecondition: The log stream of the log stream replica can't be
+	// removable, e.g., clients still can append logs to the log stream.
 	RemoveLogStreamReplica(context.Context, *RemoveLogStreamReplicaRequest) (*RemoveLogStreamReplicaResponse, error)
 	Seal(context.Context, *SealRequest) (*SealResponse, error)
 	Unseal(context.Context, *UnsealRequest) (*UnsealResponse, error)
