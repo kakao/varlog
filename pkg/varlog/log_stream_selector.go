@@ -13,7 +13,7 @@ var (
 // LogStreamSelector is the interface that wraps the Select method.
 //
 // Select selects a log stream, but if there is no log stream to choose it returns false.
-// GetAll returns all log steams
+// GetAll returns all log steams.
 type LogStreamSelector interface {
 	Select(topicID types.TopicID) (types.LogStreamID, bool)
 	GetAll(topicID types.TopicID) []types.LogStreamID
