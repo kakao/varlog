@@ -906,11 +906,46 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type LogIOClient interface {
+	// Append stores a list of log entries to the end of the log stream specified
+	// by AppendRequest. The log entries are appended partially; that is, some of
+	// the log entries could not be stored due to failures.
+	//
+	// It returns the following gRPC errors:
+	// - InvalidArgument: AppendRequest has invalid fields; for instance, TopicID
+	// is invalid.
+	// - NotFound: The log stream replica specified by the AppendRequest does not
+	// exist in the storage node. Note that it does not mean that the log stream
+	// does not exist in the cluster.
+	// - FailedPrecondition: The log stream may be sealed; thus, clients cannot
+	// write the log entry. Clients should unseal the log stream to append a log
+	// entry to the log stream.
+	// - Unavailable: The storage node is shutting down, or the log stream replica
+	// is not primary.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
+	//
+	// FIXME: Partial failures are not specified by the gRPC error codes.
 	Append(ctx context.Context, in *AppendRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	// Read reads a log entry from the log stream specified by ReadRequest.
+	// Deprecated: Use Subscribe or SubscribeTo.
 	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+	// Subscribe reads a range of log entries specified by SubscribeRequest.
+	//
+	// It returns the following gRPC errors:
+	// - NotFound: The log stream replica specified by the SubscribeRequest does
+	// not exist in the storage node. Note that it does not mean that the log
+	// stream does not exist in the cluster.
+	// - Unavailable: The storage node is shutting down.
+	// - InvalidArgument: The range is invalid; for example, the beginning of the
+	// range is greater than or equal to the end.
+	// - OutOfRange: The parts or whole range are already trimmed.
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (LogIO_SubscribeClient, error)
+	// SubscribeTo is similar to Subscribe except that it specifies the range with
+	// LLSN.
 	SubscribeTo(ctx context.Context, in *SubscribeToRequest, opts ...grpc.CallOption) (LogIO_SubscribeToClient, error)
 	TrimDeprecated(ctx context.Context, in *TrimDeprecatedRequest, opts ...grpc.CallOption) (*types.Empty, error)
+	// LogStreamReplicaMetadata returns metadata of the log stream replica
+	// specified by the LogStreamReplicaMetadataRequest.
 	LogStreamReplicaMetadata(ctx context.Context, in *LogStreamReplicaMetadataRequest, opts ...grpc.CallOption) (*LogStreamReplicaMetadataResponse, error)
 }
 
@@ -1024,11 +1059,46 @@ func (c *logIOClient) LogStreamReplicaMetadata(ctx context.Context, in *LogStrea
 
 // LogIOServer is the server API for LogIO service.
 type LogIOServer interface {
+	// Append stores a list of log entries to the end of the log stream specified
+	// by AppendRequest. The log entries are appended partially; that is, some of
+	// the log entries could not be stored due to failures.
+	//
+	// It returns the following gRPC errors:
+	// - InvalidArgument: AppendRequest has invalid fields; for instance, TopicID
+	// is invalid.
+	// - NotFound: The log stream replica specified by the AppendRequest does not
+	// exist in the storage node. Note that it does not mean that the log stream
+	// does not exist in the cluster.
+	// - FailedPrecondition: The log stream may be sealed; thus, clients cannot
+	// write the log entry. Clients should unseal the log stream to append a log
+	// entry to the log stream.
+	// - Unavailable: The storage node is shutting down, or the log stream replica
+	// is not primary.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
+	//
+	// FIXME: Partial failures are not specified by the gRPC error codes.
 	Append(context.Context, *AppendRequest) (*AppendResponse, error)
+	// Read reads a log entry from the log stream specified by ReadRequest.
+	// Deprecated: Use Subscribe or SubscribeTo.
 	Read(context.Context, *ReadRequest) (*ReadResponse, error)
+	// Subscribe reads a range of log entries specified by SubscribeRequest.
+	//
+	// It returns the following gRPC errors:
+	// - NotFound: The log stream replica specified by the SubscribeRequest does
+	// not exist in the storage node. Note that it does not mean that the log
+	// stream does not exist in the cluster.
+	// - Unavailable: The storage node is shutting down.
+	// - InvalidArgument: The range is invalid; for example, the beginning of the
+	// range is greater than or equal to the end.
+	// - OutOfRange: The parts or whole range are already trimmed.
 	Subscribe(*SubscribeRequest, LogIO_SubscribeServer) error
+	// SubscribeTo is similar to Subscribe except that it specifies the range with
+	// LLSN.
 	SubscribeTo(*SubscribeToRequest, LogIO_SubscribeToServer) error
 	TrimDeprecated(context.Context, *TrimDeprecatedRequest) (*types.Empty, error)
+	// LogStreamReplicaMetadata returns metadata of the log stream replica
+	// specified by the LogStreamReplicaMetadataRequest.
 	LogStreamReplicaMetadata(context.Context, *LogStreamReplicaMetadataRequest) (*LogStreamReplicaMetadataResponse, error)
 }
 
