@@ -10,8 +10,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 )
 
 type Controller struct {
@@ -62,7 +62,7 @@ func (c *Controller) AddStorageNode(t *testing.T, snid types.StorageNodeID, snad
 	require.NoErrorf(t, err, "%s: %s", cmd.String(), string(out))
 }
 
-func (c *Controller) ListStorageNodes(t *testing.T) []vmspb.StorageNodeMetadata {
+func (c *Controller) ListStorageNodes(t *testing.T) []admpb.StorageNodeMetadata {
 	args := []string{
 		"storagenode",
 		"get",
@@ -72,7 +72,7 @@ func (c *Controller) ListStorageNodes(t *testing.T) []vmspb.StorageNodeMetadata 
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "%s: %s", cmd.String(), string(out))
 
-	var snms []vmspb.StorageNodeMetadata
+	var snms []admpb.StorageNodeMetadata
 	require.NoError(t, json.Unmarshal(out, &snms))
 	return snms
 }

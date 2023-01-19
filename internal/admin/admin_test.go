@@ -24,10 +24,10 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 )
 
 func TestAdmin_InvalidConfig(t *testing.T) {
@@ -160,7 +160,7 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 						},
 					}, nil,
 				).AnyTimes()
-				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(&vmspb.StorageNodeMetadata{
+				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(&admpb.StorageNodeMetadata{
 					StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 						StorageNode: varlogpb.StorageNode{
 							StorageNodeID: snid,
@@ -378,7 +378,7 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 					}, nil,
 				).AnyTimes()
 				mock.MockRepository.EXPECT().ListStorageNodes().Return(
-					map[types.StorageNodeID]*vmspb.StorageNodeMetadata{
+					map[types.StorageNodeID]*admpb.StorageNodeMetadata{
 						snid: {
 							StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 								StorageNode: varlogpb.StorageNode{
@@ -445,7 +445,7 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 			success: true,
 			prepare: func(mock *testMock) {
 				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(
-					&vmspb.StorageNodeMetadata{
+					&admpb.StorageNodeMetadata{
 						StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 							StorageNode: varlogpb.StorageNode{
 								StorageNodeID: snid,
@@ -499,7 +499,7 @@ func TestAdmin_AddStorageNode(t *testing.T) {
 				mock.MockRepository.EXPECT().Report(gomock.Any(), gomock.Any(), gomock.Any())
 				f := mock.MockRepository.EXPECT().GetStorageNode(snid).Return(nil, false)
 				mock.MockRepository.EXPECT().GetStorageNode(snid).Return(
-					&vmspb.StorageNodeMetadata{
+					&admpb.StorageNodeMetadata{
 						StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 							StorageNode: varlogpb.StorageNode{
 								StorageNodeID: snid,
