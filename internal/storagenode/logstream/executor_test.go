@@ -15,6 +15,7 @@ import (
 
 	"github.com/kakao/varlog/internal/batchlet"
 	"github.com/kakao/varlog/internal/storage"
+	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
@@ -88,7 +89,7 @@ func TestExecutor_Closed(t *testing.T) {
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
 	_, _, err = lse.Seal(context.Background(), types.MinGLSN)
-	assert.ErrorIs(t, err, verrors.ErrClosed)
+	assert.ErrorIs(t, err, snerrors.ErrClosed)
 
 	err = lse.Unseal(context.Background(), []varlogpb.LogStreamReplica{
 		{

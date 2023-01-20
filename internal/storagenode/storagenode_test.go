@@ -22,7 +22,6 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -1319,44 +1318,144 @@ func TestStorageNode_LogStreamReplicaMetadata(t *testing.T) {
 	}
 }
 
-func TestStorageNode_RemoveLogStreamReplica(t *testing.T) {
+func TestStorageNode_GetMetadata(t *testing.T) {
 	const (
-		tpid = types.TopicID(1)
-		lsid = types.LogStreamID(1)
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
 	)
 
 	tcs := []struct {
 		name  string
-		testf func(t *testing.T, snpath string, mc *client.ManagementClient)
+		testf func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient)
 	}{
 		{
-			name: "Succeed",
-			testf: func(t *testing.T, snpath string, mc *client.ManagementClient) {
-				ctx := context.Background()
-				lsrmd, err := mc.AddLogStreamReplica(ctx, tpid, lsid, snpath)
-				require.NoError(t, err)
-				_, err = os.ReadDir(lsrmd.Path)
+			name: "NoLogStreamReplica",
+			testf: func(t *testing.T, _ *StorageNode, mc snpb.ManagementClient) {
+				rsp, err := mc.GetMetadata(context.Background(), &snpb.GetMetadataRequest{
+					ClusterID: cid,
+				})
 				require.NoError(t, err)
 
-				err = mc.RemoveLogStream(ctx, tpid, lsid)
-				require.NoError(t, err)
-				_, err = os.ReadDir(lsrmd.Path)
-				require.ErrorIs(t, err, fs.ErrNotExist)
+				snmd := rsp.StorageNodeMetadata
+				require.Equal(t, cid, snmd.ClusterID)
+				require.Equal(t, snid, snmd.StorageNodeID)
+				require.NotEmpty(t, snmd.Storages)
+				require.Empty(t, snmd.LogStreamReplicas)
+				require.NotZero(t, snmd.StartTime)
 			},
 		},
 		{
-			name: "NotFound",
-			testf: func(t *testing.T, _ string, mc *client.ManagementClient) {
+			name: "LogStreamReplica",
+			testf: func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient) {
 				ctx := context.Background()
-				err := mc.RemoveLogStream(ctx, tpid, lsid)
-				require.ErrorIs(t, err, verrors.ErrNotExist)
+				_, err := mc.AddLogStreamReplica(ctx, &snpb.AddLogStreamReplicaRequest{
+					ClusterID:       cid,
+					StorageNodeID:   snid,
+					TopicID:         tpid,
+					LogStreamID:     lsid,
+					StorageNodePath: sn.snPaths[0],
+				})
+				require.NoError(t, err)
+
+				rsp, err := mc.GetMetadata(ctx, &snpb.GetMetadataRequest{
+					ClusterID: cid,
+				})
+				require.NoError(t, err)
+				snmd := rsp.StorageNodeMetadata
+				require.Len(t, snmd.LogStreamReplicas, 1)
+				require.Equal(t, tpid, snmd.LogStreamReplicas[0].TopicID)
+				require.Equal(t, lsid, snmd.LogStreamReplicas[0].LogStreamID)
 			},
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			sn := TestNewSimpleStorageNode(t)
+			sn := TestNewSimpleStorageNode(t, WithClusterID(cid), WithStorageNodeID(snid))
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			defer func() {
+				require.NoError(t, sn.Close())
+				wg.Wait()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+			rpcConn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			defer func() {
+				err := rpcConn.Close()
+				require.NoError(t, err)
+			}()
+			mc := snpb.NewManagementClient(rpcConn.Conn)
+
+			tc.testf(t, sn, mc)
+		})
+	}
+}
+
+func TestStorageNode_RemoveLogStreamReplica(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+	)
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, snpath string, mc snpb.ManagementClient)
+	}{
+		{
+			name: "Succeed",
+			testf: func(t *testing.T, snpath string, mc snpb.ManagementClient) {
+				ctx := context.Background()
+
+				rsp, err := mc.AddLogStreamReplica(ctx, &snpb.AddLogStreamReplicaRequest{
+					ClusterID:       cid,
+					StorageNodeID:   snid,
+					TopicID:         tpid,
+					LogStreamID:     lsid,
+					StorageNodePath: snpath,
+				})
+				require.NoError(t, err)
+
+				_, err = os.ReadDir(rsp.LogStreamReplica.Path)
+				require.NoError(t, err)
+
+				_, err = mc.RemoveLogStream(ctx, &snpb.RemoveLogStreamRequest{
+					ClusterID:     cid,
+					StorageNodeID: snid,
+					TopicID:       tpid,
+					LogStreamID:   lsid,
+				})
+				require.NoError(t, err)
+				_, err = os.ReadDir(rsp.LogStreamReplica.Path)
+				require.ErrorIs(t, err, fs.ErrNotExist)
+			},
+		},
+		{
+			name: "NotFound",
+			testf: func(t *testing.T, _ string, mc snpb.ManagementClient) {
+				_, err := mc.RemoveLogStream(context.Background(), &snpb.RemoveLogStreamRequest{
+					ClusterID:     cid,
+					StorageNodeID: snid,
+					TopicID:       tpid,
+					LogStreamID:   lsid,
+				})
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t, WithClusterID(cid), WithStorageNodeID(snid))
 			var wg sync.WaitGroup
 			wg.Add(1)
 			go func() {
@@ -1369,8 +1468,13 @@ func TestStorageNode_RemoveLogStreamReplica(t *testing.T) {
 			}()
 
 			addr := TestGetAdvertiseAddress(t, sn)
-			mc, mcClose := TestNewManagementClient(t, sn.cid, sn.snid, addr)
-			defer mcClose()
+			rpcConn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			defer func() {
+				err := rpcConn.Close()
+				require.NoError(t, err)
+			}()
+			mc := snpb.NewManagementClient(rpcConn.Conn)
 
 			tc.testf(t, sn.snPaths[0], mc)
 		})
@@ -2071,7 +2175,7 @@ func TestStorageNode_Sync(t *testing.T) {
 	}
 }
 
-func TestStorageNode_MaxLogStreamReplicasCount(t *testing.T) {
+func TestStorageNode_AddLogStreamReplica(t *testing.T) {
 	ctx := context.Background()
 
 	tcs := []struct {
@@ -2127,6 +2231,215 @@ func TestStorageNode_MaxLogStreamReplicasCount(t *testing.T) {
 			defer mcClose()
 
 			tc.testf(t, sn.snPaths[0], mc)
+		})
+	}
+}
+
+func TestStorageNode_Seal(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+	)
+
+	tcs := []struct {
+		testf func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient)
+		name  string
+	}{
+		{
+			name: "InvalidTopicID",
+			testf: func(t *testing.T, _ *StorageNode, mc snpb.ManagementClient) {
+				const invalidTopicID = types.TopicID(0)
+
+				_, err := mc.Seal(context.Background(), &snpb.SealRequest{
+					ClusterID:         cid,
+					StorageNodeID:     snid,
+					TopicID:           invalidTopicID,
+					LogStreamID:       lsid,
+					LastCommittedGLSN: types.InvalidGLSN,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "InvalidLogStreamID",
+			testf: func(t *testing.T, _ *StorageNode, mc snpb.ManagementClient) {
+				const invalidLogStreamID = types.LogStreamID(0)
+
+				_, err := mc.Seal(context.Background(), &snpb.SealRequest{
+					ClusterID:         cid,
+					StorageNodeID:     snid,
+					TopicID:           tpid,
+					LogStreamID:       invalidLogStreamID,
+					LastCommittedGLSN: types.InvalidGLSN,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "NotFound",
+			testf: func(t *testing.T, _ *StorageNode, mc snpb.ManagementClient) {
+				_, err := mc.Seal(context.Background(), &snpb.SealRequest{
+					ClusterID:         cid,
+					StorageNodeID:     snid,
+					TopicID:           tpid,
+					LogStreamID:       lsid,
+					LastCommittedGLSN: types.InvalidGLSN,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t, WithClusterID(cid), WithStorageNodeID(snid))
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			defer func() {
+				assert.NoError(t, sn.Close())
+				wg.Wait()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+			rpcConn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			defer func() {
+				err := rpcConn.Close()
+				require.NoError(t, err)
+			}()
+			mc := snpb.NewManagementClient(rpcConn.Conn)
+
+			tc.testf(t, sn, mc)
+		})
+	}
+}
+
+func TestStorageNode_Unseal(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+	)
+
+	tcs := []struct {
+		testf func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient)
+		name  string
+	}{
+		{
+			name: "InvalidTopicID",
+			testf: func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient) {
+				const invalidTopicID = types.TopicID(0)
+
+				_, err := mc.Unseal(context.Background(), &snpb.UnsealRequest{
+					ClusterID:     cid,
+					StorageNodeID: snid,
+					TopicID:       invalidTopicID,
+					LogStreamID:   lsid,
+					Replicas: []varlogpb.LogStreamReplica{
+						{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+								Address:       sn.advertise,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     invalidTopicID,
+								LogStreamID: lsid,
+							},
+						},
+					},
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "InvalidLogStreamID",
+			testf: func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient) {
+				const invalidLogStreamID = types.LogStreamID(0)
+
+				_, err := mc.Unseal(context.Background(), &snpb.UnsealRequest{
+					ClusterID:     cid,
+					StorageNodeID: snid,
+					TopicID:       tpid,
+					LogStreamID:   invalidLogStreamID,
+					Replicas: []varlogpb.LogStreamReplica{
+						{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+								Address:       sn.advertise,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid,
+								LogStreamID: invalidLogStreamID,
+							},
+						},
+					},
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "NotFound",
+			testf: func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient) {
+				_, err := mc.Unseal(context.Background(), &snpb.UnsealRequest{
+					ClusterID:     cid,
+					StorageNodeID: snid,
+					TopicID:       tpid,
+					LogStreamID:   lsid,
+					Replicas: []varlogpb.LogStreamReplica{
+						{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+								Address:       sn.advertise,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+							},
+						},
+					},
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t, WithClusterID(cid), WithStorageNodeID(snid))
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			defer func() {
+				assert.NoError(t, sn.Close())
+				wg.Wait()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+			rpcConn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			defer func() {
+				err := rpcConn.Close()
+				require.NoError(t, err)
+			}()
+			mc := snpb.NewManagementClient(rpcConn.Conn)
+
+			tc.testf(t, sn, mc)
 		})
 	}
 }

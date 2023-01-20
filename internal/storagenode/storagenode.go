@@ -22,12 +22,11 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/internal/storage"
+	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/internal/storagenode/executorsmap"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/internal/storagenode/pprof"
@@ -36,7 +35,6 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/fputil"
 	"github.com/kakao/varlog/pkg/util/netutil"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -252,7 +250,7 @@ func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadata
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {
-		return nil, errors.New("storage node: closed")
+		return nil, snerrors.ErrClosed
 	}
 
 	ret, _, _ := sn.sf.Do(singleflightKeyMetadata, func() (interface{}, error) {
@@ -293,7 +291,7 @@ func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.Topic
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {
-		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("storage node: closed")
+		return snpb.LogStreamReplicaMetadataDescriptor{}, snerrors.ErrClosed
 	}
 
 	lsDirName := volume.LogStreamDirName(tpid, lsid)
@@ -310,7 +308,7 @@ func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.Topic
 func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID, lsPath string) (*logstream.Executor, error) {
 	if added := sn.limits.logStreamReplicasCount.Add(1); sn.maxLogStreamReplicasCount >= 0 && added > sn.maxLogStreamReplicasCount {
 		sn.limits.logStreamReplicasCount.Add(-1)
-		return nil, status.Errorf(codes.ResourceExhausted, "storagenode: too many logstream replicas (tpid=%d, lsid=%d)", tpid, lsid)
+		return nil, snerrors.ErrTooManyReplicas
 	}
 
 	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, lsid)
@@ -360,12 +358,12 @@ func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.Topi
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {
-		return errors.New("storage node: closed")
+		return snerrors.ErrClosed
 	}
 
 	lse, loaded := sn.executors.LoadAndDelete(tpid, lsid)
 	if !loaded {
-		return verrors.ErrNotExist
+		return snerrors.ErrNotExist
 	}
 	if err := lse.Close(); err != nil {
 		sn.logger.Warn("error while closing log stream replica")
@@ -382,12 +380,12 @@ func (sn *StorageNode) seal(ctx context.Context, tpid types.TopicID, lsid types.
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {
-		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, errors.New("storage node: closed")
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, snerrors.ErrClosed
 	}
 
 	lse, loaded := sn.executors.Load(tpid, lsid)
 	if !loaded {
-		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, errors.New("storage node: no log stream")
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, snerrors.ErrNotExist
 	}
 
 	return lse.Seal(ctx, lastCommittedGLSN)
@@ -397,12 +395,12 @@ func (sn *StorageNode) unseal(ctx context.Context, tpid types.TopicID, lsid type
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {
-		return errors.New("storage node: closed")
+		return snerrors.ErrClosed
 	}
 
 	lse, loaded := sn.executors.Load(tpid, lsid)
 	if !loaded {
-		return errors.New("storage node: no log stream")
+		return snerrors.ErrNotExist
 	}
 
 	return lse.Unseal(ctx, replicas)
@@ -412,12 +410,12 @@ func (sn *StorageNode) sync(ctx context.Context, tpid types.TopicID, lsid types.
 	sn.mu.RLock()
 	defer sn.mu.RUnlock()
 	if sn.closed {
-		return nil, errors.New("storage node: closed")
+		return nil, snerrors.ErrClosed
 	}
 
 	lse, loaded := sn.executors.Load(tpid, lsid)
 	if !loaded {
-		return nil, errors.New("storage node: no log stream")
+		return nil, snerrors.ErrNotExist
 	}
 
 	return lse.Sync(ctx, dst)

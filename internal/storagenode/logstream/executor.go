@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kakao/varlog/internal/storage"
+	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -222,7 +223,7 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 
 	if lse.esm.load() == executorStateClosed {
 		// FIXME: strange logstream status
-		err = verrors.ErrClosed
+		err = snerrors.ErrClosed
 		return
 	}
 
