@@ -295,7 +295,7 @@ github.com/tklauser/go-sysconf
 # github.com/tklauser/numcpus v0.3.0
 ## explicit; go 1.11
 github.com/tklauser/numcpus
-# github.com/urfave/cli/v2 v2.23.7
+# github.com/urfave/cli/v2 v2.24.1
 ## explicit; go 1.18
 github.com/urfave/cli/v2
 # github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2
