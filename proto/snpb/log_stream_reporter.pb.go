@@ -196,19 +196,29 @@ func (m *GetReportResponse) GetUncommitReports() []LogStreamUncommitReport {
 	return nil
 }
 
-// GlobalLogStreamDescriptor is a committing result against with
-// LocalLogStreamDescriptor. Field highest_glsn is the highest position in the
-// global log space.
-// Field commit_result contains positions of all log entries of log streams in
-// a storage node which is a receiver of this GlobalLogStreamDescriptor.
+// LogStreamCommitResult has information about commit for a log stream, and it
+// tells the log stream how many log entries can be committed. Even if the log
+// stream can't commit anything, CommittedLLSNOffset and CommittedGLSNOffset
+// should be valid. For example, if there is no log entry to be committed yet,
+// the CommittedLLSNOffset and CommittedGLSNOffset must be one, and
+// CommittedGLSNLength must be zero.
 type LogStreamCommitResult struct {
-	LogStreamID         github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
-	TopicID             github_com_kakao_varlog_pkg_types.TopicID     `protobuf:"varint,2,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
-	CommittedLLSNOffset github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,3,opt,name=committed_llsn_offset,json=committedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"committed_llsn_offset,omitempty"`
-	CommittedGLSNOffset github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,4,opt,name=committed_glsn_offset,json=committedGlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_offset,omitempty"`
-	CommittedGLSNLength uint64                                        `protobuf:"varint,5,opt,name=committed_glsn_length,json=committedGlsnLength,proto3" json:"committed_glsn_length,omitempty"`
-	Version             github_com_kakao_varlog_pkg_types.Version     `protobuf:"varint,6,opt,name=version,proto3,casttype=github.com/kakao/varlog/pkg/types.Version" json:"version,omitempty"`
-	HighWatermark       github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,7,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
+	// LogStreamID is the identifier for the log stream.
+	LogStreamID github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	// TopicID is the identifier for the topic to which the log stream belongs.
+	TopicID github_com_kakao_varlog_pkg_types.TopicID `protobuf:"varint,2,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	// CommittedLLSNOffset is the starting LLSN of the commit range.
+	CommittedLLSNOffset github_com_kakao_varlog_pkg_types.LLSN `protobuf:"varint,3,opt,name=committed_llsn_offset,json=committedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"committed_llsn_offset,omitempty"`
+	// CommittedGLSNOffset is the starting GLSN of the commit range.
+	CommittedGLSNOffset github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,4,opt,name=committed_glsn_offset,json=committedGlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_offset,omitempty"`
+	// CommittedGLSNLength is the length of the commit range.
+	CommittedGLSNLength uint64 `protobuf:"varint,5,opt,name=committed_glsn_length,json=committedGlsnLength,proto3" json:"committed_glsn_length,omitempty"`
+	// Version is a unique number for the commit issued by the metadata
+	// repository.
+	Version github_com_kakao_varlog_pkg_types.Version `protobuf:"varint,6,opt,name=version,proto3,casttype=github.com/kakao/varlog/pkg/types.Version" json:"version,omitempty"`
+	// HighWatermark is the maximum GLSN across all log streams of the topic in a
+	// specific commit version.
+	HighWatermark github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,7,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
 }
 
 func (m *LogStreamCommitResult) Reset()         { *m = LogStreamCommitResult{} }
