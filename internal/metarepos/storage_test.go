@@ -18,7 +18,6 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -51,7 +50,7 @@ func TestStorageRegisterSN(t *testing.T) {
 			}
 
 			err = ms.registerStorageNode(dupSN)
-			So(err, ShouldResemble, verrors.ErrAlreadyExists)
+			So(status.Code(err), ShouldEqual, codes.AlreadyExists)
 		})
 	})
 }
@@ -64,7 +63,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 		Convey("When SN is not exist", func(ctx C) {
 			Convey("Then it should not be registered", func(ctx C) {
 				err := ms.unregisterStorageNode(snID)
-				So(err, ShouldResemble, verrors.ErrNotExist)
+				So(status.Code(err), ShouldEqual, codes.NotFound)
 			})
 		})
 
@@ -120,7 +119,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 
 				Convey("Then SN should not be unregistered", func(ctx C) {
 					err := ms.unregisterStorageNode(snID)
-					So(err, ShouldResemble, verrors.ErrInvalidArgument)
+					So(status.Code(err), ShouldEqual, codes.InvalidArgument)
 				})
 			})
 		})
@@ -275,7 +274,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		ls := makeLogStream(types.TopicID(1), lsID, nil)
 
 		err = ms.registerLogStream(ls)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
 	})
 
 	Convey("LS should not be registered if not exist proper SN", t, func(ctx C) {
@@ -295,7 +294,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
 		err = ms.registerLogStream(ls)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
@@ -307,7 +306,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		err = ms.registerLogStream(ls)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
 
 		Convey("LS should be registered if exist all SN", func(ctx C) {
 			sn := &varlogpb.StorageNodeDescriptor{
@@ -339,7 +338,7 @@ func TestStoragUnregisterLS(t *testing.T) {
 		lsID := types.LogStreamID(time.Now().UnixNano())
 
 		err := ms.unregisterLogStream(lsID)
-		So(err, ShouldResemble, verrors.ErrNotExist)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		Convey("LS which is exist should be unregistered", func(ctx C) {
 			rep := 1
@@ -435,7 +434,7 @@ func TestStorageUpdateLS(t *testing.T) {
 		updateLS := makeLogStream(types.TopicID(1), lsID, updateSnIDs)
 
 		err = ms.UpdateLogStream(updateLS, 0, 0)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
 
 		Convey("LS should be updated if exist all SN", func(ctx C) {
 			for i := 1; i < rep; i++ {
@@ -568,7 +567,7 @@ func TestStorageSealLS(t *testing.T) {
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		err := ms.SealLogStream(lsID, 0, 0)
-		So(err, ShouldResemble, verrors.ErrNotExist)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 	})
 
 	Convey("For resigtered LS", t, func(ctx C) {
@@ -740,7 +739,7 @@ func TestStorageUnsealLS(t *testing.T) {
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		err := ms.UnsealLogStream(lsID, 0, 0)
-		So(err, ShouldResemble, verrors.ErrNotExist)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 	})
 
 	Convey("For resigtered LS", t, func(ctx C) {
@@ -984,7 +983,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 			},
 		}
 		err = ms.RegisterStorageNode(sn, 0, 0)
-		So(err, ShouldResemble, verrors.ErrAlreadyExists)
+		So(status.Code(err), ShouldEqual, codes.AlreadyExists)
 
 		snID2 := snID + types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
@@ -1037,7 +1036,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		conflict := makeLogStream(types.TopicID(1), lsID, snIDs)
 		ls.Replicas[0].StorageNodeID += 100
 		err = ms.RegisterLogStream(conflict, 0, 0)
-		So(err, ShouldResemble, verrors.ErrAlreadyExists)
+		So(status.Code(err), ShouldEqual, codes.AlreadyExists)
 
 		err = ms.RegisterLogStream(ls2, 0, 0)
 		So(err, ShouldBeNil)
@@ -1853,7 +1852,7 @@ func TestStorageRegisterTopic(t *testing.T) {
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
 		err := ms.registerLogStream(ls)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
 
 		Convey("LS should be registered if exist topic", func(ctx C) {
 			err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
@@ -1883,7 +1882,7 @@ func TestStoragUnregisterTopic(t *testing.T) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, zap.NewNop())
 
 		err := ms.unregisterTopic(types.TopicID(1))
-		So(err, ShouldResemble, verrors.ErrNotExist)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 	})
 
 	Convey("unregister exist topic", t, func(ctx C) {
