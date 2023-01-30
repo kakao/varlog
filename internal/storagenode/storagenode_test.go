@@ -20,6 +20,7 @@ import (
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
@@ -436,6 +437,885 @@ func TestStorageNode_MakeVolumesAbsolute(t *testing.T) {
 
 	for _, volume := range sn.volumes {
 		assert.True(t, filepath.IsAbs(volume))
+	}
+}
+
+func TestStorageNode_Append(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+	)
+	payload := [][]byte{{}}
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, addr string, lc snpb.LogIOClient)
+	}{
+		{
+			name: "InvalidTopicID",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				const invalidTopicID = types.TopicID(0)
+				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
+					TopicID:     invalidTopicID,
+					LogStreamID: lsid,
+					Payload:     payload,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "InvalidLogStreamID",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				const invalidLogStreamID = types.LogStreamID(0)
+				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
+					TopicID:     tpid,
+					LogStreamID: invalidLogStreamID,
+					Payload:     payload,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "NoSuchTopic",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
+					TopicID:     tpid + 1,
+					LogStreamID: lsid,
+					Payload:     payload,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+		{
+			name: "NoSuchLogStream",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid + 1,
+					Payload:     payload,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+		{
+			name: "NotPrimary",
+			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+				lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				require.True(t, lastGLSN.Invalid())
+
+				TestUnsealLogStreamReplica(t, cid, snid, tpid, lsid, []varlogpb.LogStreamReplica{
+					{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid + 1,
+							Address:       addr,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+					{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+							Address:       addr,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+				}, addr)
+
+				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					Payload:     payload,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.Unavailable, status.Code(err))
+			},
+		},
+		{
+			name: "Sealed",
+			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+				lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				require.True(t, lastGLSN.Invalid())
+
+				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					Payload:     payload,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.FailedPrecondition, status.Code(err))
+			},
+		},
+		{
+			name: "DeadlineExceeded",
+			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+				lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				require.True(t, lastGLSN.Invalid())
+
+				TestUnsealLogStreamReplica(t, cid, snid, tpid, lsid, []varlogpb.LogStreamReplica{
+					{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+							Address:       addr,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+				}, addr)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+				defer cancel()
+				_, err := lc.Append(ctx, &snpb.AppendRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					Payload:     payload,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.DeadlineExceeded, status.Code(err))
+			},
+		},
+		{
+			name: "Canceled",
+			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+				lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				require.True(t, lastGLSN.Invalid())
+
+				TestUnsealLogStreamReplica(t, cid, snid, tpid, lsid, []varlogpb.LogStreamReplica{
+					{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+							Address:       addr,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+				}, addr)
+
+				ctx, cancel := context.WithCancel(context.Background())
+				var wg sync.WaitGroup
+				defer func() {
+					cancel()
+					wg.Wait()
+				}()
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_, err := lc.Append(ctx, &snpb.AppendRequest{
+						TopicID:     tpid,
+						LogStreamID: lsid,
+						Payload:     payload,
+					})
+					assert.Error(t, err)
+					assert.Equal(t, codes.Canceled, status.Code(err))
+				}()
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t, WithClusterID(cid), WithStorageNodeID(snid))
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			defer func() {
+				err := sn.Close()
+				require.NoError(t, err)
+				wg.Wait()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+
+			mc, mcClose := TestNewManagementClient(t, cid, snid, addr)
+			defer mcClose()
+
+			_, err := mc.AddLogStreamReplica(context.Background(), tpid, lsid, sn.snPaths[0])
+			require.NoError(t, err)
+
+			rpcConn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, rpcConn.Close())
+			}()
+			lc := snpb.NewLogIOClient(rpcConn.Conn)
+
+			tc.testf(t, addr, lc)
+		})
+	}
+}
+
+func TestStorageNode_Subscribe(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+	)
+	payload := [][]byte{[]byte("foo"), []byte("bar")}
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, addr string, lc snpb.LogIOClient)
+	}{
+		{
+			name: "InvalidTopicID",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				const invalidTopicID = types.TopicID(0)
+				stream, err := lc.Subscribe(context.Background(), &snpb.SubscribeRequest{
+					TopicID:     invalidTopicID,
+					LogStreamID: lsid,
+					GLSNBegin:   1,
+					GLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "InvalidLogStreamID",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				const invalidLogStreamID = types.LogStreamID(0)
+				stream, err := lc.Subscribe(context.Background(), &snpb.SubscribeRequest{
+					TopicID:     tpid,
+					LogStreamID: invalidLogStreamID,
+					GLSNBegin:   1,
+					GLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "NoSuchTopic",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				stream, err := lc.Subscribe(context.Background(), &snpb.SubscribeRequest{
+					TopicID:     tpid + 1,
+					LogStreamID: lsid,
+					GLSNBegin:   1,
+					GLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+		{
+			name: "NoSuchLogStream",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				stream, err := lc.Subscribe(context.Background(), &snpb.SubscribeRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid + 1,
+					GLSNBegin:   1,
+					GLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+		{
+			name: "InvalidRange",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				stream, err := lc.Subscribe(context.Background(), &snpb.SubscribeRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					GLSNBegin:   1,
+					GLSNEnd:     1,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "Trimmed",
+			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+				ret := TestTrim(t, cid, snid, tpid, 1, addr)
+				require.Len(t, ret, 1)
+				require.Contains(t, ret, lsid)
+				require.NoError(t, ret[lsid])
+
+				stream, err := lc.Subscribe(context.Background(), &snpb.SubscribeRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					GLSNBegin:   1,
+					GLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.OutOfRange, status.Code(err))
+			},
+		},
+		{
+			name: "DeadlineExceeded",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+				defer cancel()
+
+				stream, err := lc.Subscribe(ctx, &snpb.SubscribeRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					GLSNBegin:   1,
+					GLSNEnd:     4,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				require.Eventually(t, func() bool {
+					_, err := stream.Recv()
+					return err != nil && status.Code(err) == codes.DeadlineExceeded
+				}, time.Second, 10*time.Millisecond)
+			},
+		},
+		{
+			name: "Canceled",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+
+				stream, err := lc.Subscribe(ctx, &snpb.SubscribeRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					GLSNBegin:   1,
+					GLSNEnd:     4,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				var wg sync.WaitGroup
+				defer wg.Wait()
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					cancel()
+				}()
+
+				require.Eventually(t, func() bool {
+					_, err := stream.Recv()
+					return err != nil && status.Code(err) == codes.Canceled
+				}, time.Second, 10*time.Millisecond)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t, WithClusterID(cid), WithStorageNodeID(snid))
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			defer func() {
+				require.NoError(t, sn.Close())
+				wg.Wait()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+
+			mc, mcClose := TestNewManagementClient(t, cid, snid, addr)
+			defer mcClose()
+
+			_, err := mc.AddLogStreamReplica(context.Background(), tpid, lsid, sn.snPaths[0])
+			require.NoError(t, err)
+
+			lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
+			require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+			require.True(t, lastGLSN.Invalid())
+
+			TestUnsealLogStreamReplica(t, cid, snid, tpid, lsid, []varlogpb.LogStreamReplica{
+				{
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: snid,
+						Address:       addr,
+					},
+					TopicLogStream: varlogpb.TopicLogStream{
+						TopicID:     tpid,
+						LogStreamID: lsid,
+					},
+				},
+			}, addr)
+
+			var appendWg sync.WaitGroup
+			appendWg.Add(2)
+			go func() {
+				defer appendWg.Done()
+				res := TestAppend(t, tpid, lsid, payload, []varlogpb.LogStreamReplica{
+					{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+							Address:       addr,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+				})
+				assert.Len(t, res, len(payload))
+			}()
+			go func() {
+				defer appendWg.Done()
+				assert.Eventually(t, func() bool {
+					reportcommitter.TestCommit(t, addr, snpb.CommitRequest{
+						StorageNodeID: snid,
+						CommitResult: snpb.LogStreamCommitResult{
+							TopicID:             tpid,
+							LogStreamID:         lsid,
+							CommittedLLSNOffset: 1,
+							CommittedGLSNOffset: 1,
+							CommittedGLSNLength: 2,
+							Version:             1,
+							HighWatermark:       2,
+						},
+					})
+					reports := reportcommitter.TestGetReport(t, addr)
+					assert.Len(t, reports, 1)
+					return reports[0].Version == types.Version(1)
+				}, time.Second, 10*time.Millisecond)
+			}()
+			appendWg.Wait()
+
+			rpcConn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, rpcConn.Close())
+			}()
+			lc := snpb.NewLogIOClient(rpcConn.Conn)
+
+			tc.testf(t, addr, lc)
+		})
+	}
+}
+
+func TestStorageNode_SubscribeTo(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+	)
+	payload := [][]byte{[]byte("foo"), []byte("bar")}
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, addr string, lc snpb.LogIOClient)
+	}{
+		{
+			name: "InvalidTopicID",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				const invalidTopicID = types.TopicID(0)
+				stream, err := lc.SubscribeTo(context.Background(), &snpb.SubscribeToRequest{
+					TopicID:     invalidTopicID,
+					LogStreamID: lsid,
+					LLSNBegin:   1,
+					LLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "InvalidLogStreamID",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				const invalidLogStreamID = types.LogStreamID(0)
+				stream, err := lc.SubscribeTo(context.Background(), &snpb.SubscribeToRequest{
+					TopicID:     tpid,
+					LogStreamID: invalidLogStreamID,
+					LLSNBegin:   1,
+					LLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "NoSuchTopic",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				stream, err := lc.SubscribeTo(context.Background(), &snpb.SubscribeToRequest{
+					TopicID:     tpid + 1,
+					LogStreamID: lsid,
+					LLSNBegin:   1,
+					LLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+		{
+			name: "NoSuchLogStream",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				stream, err := lc.SubscribeTo(context.Background(), &snpb.SubscribeToRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid + 1,
+					LLSNBegin:   1,
+					LLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+		{
+			name: "InvalidRange",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				stream, err := lc.SubscribeTo(context.Background(), &snpb.SubscribeToRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					LLSNBegin:   1,
+					LLSNEnd:     1,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "Trimmed",
+			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+				ret := TestTrim(t, cid, snid, tpid, 1, addr)
+				require.Len(t, ret, 1)
+				require.Contains(t, ret, lsid)
+				require.NoError(t, ret[lsid])
+
+				stream, err := lc.SubscribeTo(context.Background(), &snpb.SubscribeToRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					LLSNBegin:   1,
+					LLSNEnd:     3,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				_, err = stream.Recv()
+				require.Error(t, err)
+				require.Equal(t, codes.OutOfRange, status.Code(err))
+			},
+		},
+		{
+			name: "DeadlineExceeded",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+				defer cancel()
+
+				stream, err := lc.SubscribeTo(ctx, &snpb.SubscribeToRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					LLSNBegin:   1,
+					LLSNEnd:     4,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				require.Eventually(t, func() bool {
+					_, err := stream.Recv()
+					return err != nil && status.Code(err) == codes.DeadlineExceeded
+				}, time.Second, 10*time.Millisecond)
+			},
+		},
+		{
+			name: "Canceled",
+			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+
+				stream, err := lc.SubscribeTo(ctx, &snpb.SubscribeToRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+					LLSNBegin:   1,
+					LLSNEnd:     4,
+				})
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, stream.CloseSend())
+				}()
+
+				var wg sync.WaitGroup
+				defer wg.Wait()
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					cancel()
+				}()
+
+				require.Eventually(t, func() bool {
+					_, err := stream.Recv()
+					return err != nil && status.Code(err) == codes.Canceled
+				}, time.Second, 10*time.Millisecond)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t, WithClusterID(cid), WithStorageNodeID(snid))
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			defer func() {
+				require.NoError(t, sn.Close())
+				wg.Wait()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+
+			mc, mcClose := TestNewManagementClient(t, cid, snid, addr)
+			defer mcClose()
+
+			_, err := mc.AddLogStreamReplica(context.Background(), tpid, lsid, sn.snPaths[0])
+			require.NoError(t, err)
+
+			lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
+			require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+			require.True(t, lastGLSN.Invalid())
+
+			TestUnsealLogStreamReplica(t, cid, snid, tpid, lsid, []varlogpb.LogStreamReplica{
+				{
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: snid,
+						Address:       addr,
+					},
+					TopicLogStream: varlogpb.TopicLogStream{
+						TopicID:     tpid,
+						LogStreamID: lsid,
+					},
+				},
+			}, addr)
+
+			var appendWg sync.WaitGroup
+			appendWg.Add(2)
+			go func() {
+				defer appendWg.Done()
+				res := TestAppend(t, tpid, lsid, payload, []varlogpb.LogStreamReplica{
+					{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+							Address:       addr,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+				})
+				assert.Len(t, res, len(payload))
+			}()
+			go func() {
+				defer appendWg.Done()
+				assert.Eventually(t, func() bool {
+					reportcommitter.TestCommit(t, addr, snpb.CommitRequest{
+						StorageNodeID: snid,
+						CommitResult: snpb.LogStreamCommitResult{
+							TopicID:             tpid,
+							LogStreamID:         lsid,
+							CommittedLLSNOffset: 1,
+							CommittedGLSNOffset: 1,
+							CommittedGLSNLength: 2,
+							Version:             1,
+							HighWatermark:       2,
+						},
+					})
+					reports := reportcommitter.TestGetReport(t, addr)
+					assert.Len(t, reports, 1)
+					return reports[0].Version == types.Version(1)
+				}, time.Second, 10*time.Millisecond)
+			}()
+			appendWg.Wait()
+
+			rpcConn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, rpcConn.Close())
+			}()
+			lc := snpb.NewLogIOClient(rpcConn.Conn)
+
+			tc.testf(t, addr, lc)
+		})
+	}
+}
+
+func TestStorageNode_LogStreamReplicaMetadata(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+	)
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, lc snpb.LogIOClient)
+	}{
+		{
+			name: "InvalidTopicID",
+			testf: func(t *testing.T, lc snpb.LogIOClient) {
+				const invalidTopicID = types.TopicID(0)
+				_, err := lc.LogStreamReplicaMetadata(context.Background(), &snpb.LogStreamReplicaMetadataRequest{
+					TopicID:     invalidTopicID,
+					LogStreamID: lsid,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "InvalidLogStreamID",
+			testf: func(t *testing.T, lc snpb.LogIOClient) {
+				const invalidLogStreamID = types.LogStreamID(0)
+				_, err := lc.LogStreamReplicaMetadata(context.Background(), &snpb.LogStreamReplicaMetadataRequest{
+					TopicID:     tpid,
+					LogStreamID: invalidLogStreamID,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "NoSuchTopic",
+			testf: func(t *testing.T, lc snpb.LogIOClient) {
+				_, err := lc.LogStreamReplicaMetadata(context.Background(), &snpb.LogStreamReplicaMetadataRequest{
+					TopicID:     tpid + 1,
+					LogStreamID: lsid,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+		{
+			name: "NoSuchLogStream",
+			testf: func(t *testing.T, lc snpb.LogIOClient) {
+				_, err := lc.LogStreamReplicaMetadata(context.Background(), &snpb.LogStreamReplicaMetadataRequest{
+					TopicID:     tpid,
+					LogStreamID: lsid + 1,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sn := TestNewSimpleStorageNode(t, WithClusterID(cid), WithStorageNodeID(snid))
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			defer func() {
+				require.NoError(t, sn.Close())
+				wg.Wait()
+			}()
+
+			addr := TestGetAdvertiseAddress(t, sn)
+
+			mc, mcClose := TestNewManagementClient(t, cid, snid, addr)
+			defer mcClose()
+
+			_, err := mc.AddLogStreamReplica(context.Background(), tpid, lsid, sn.snPaths[0])
+			require.NoError(t, err)
+
+			rpcConn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, rpcConn.Close())
+			}()
+			lc := snpb.NewLogIOClient(rpcConn.Conn)
+
+			tc.testf(t, lc)
+		})
 	}
 }
 
