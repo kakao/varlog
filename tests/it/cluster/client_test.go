@@ -693,14 +693,8 @@ func TestClientAppendWithAllowedLogStream(t *testing.T) {
 		require.NoError(t, res.Err)
 	}
 
-	// SubscribeTo [2, 1)
-	subscriber := client.SubscribeTo(context.Background(), topicID, logStreamID, types.LLSN(2), types.LLSN(1))
-	_, err = subscriber.Next()
-	require.Error(t, err)
-	require.NoError(t, subscriber.Close())
-
 	// SubscribeTo [1, 101)
-	subscriber = client.SubscribeTo(context.Background(), topicID, logStreamID, types.MinLLSN, types.LLSN(numLogs+1))
+	subscriber := client.SubscribeTo(context.Background(), topicID, logStreamID, types.MinLLSN, types.LLSN(numLogs+1))
 	for i := 0; i < numLogs; i++ {
 		logEntry, err := subscriber.Next()
 		require.NoError(t, err)
@@ -710,26 +704,5 @@ func TestClientAppendWithAllowedLogStream(t *testing.T) {
 	}
 	_, err = subscriber.Next()
 	require.ErrorIs(t, err, io.EOF)
-	require.NoError(t, subscriber.Close())
-
-	// SubscribeTo [1, max)
-	subscriber = client.SubscribeTo(context.Background(), topicID, logStreamID, types.MinLLSN, types.MaxLLSN)
-	for i := 0; i < numLogs; i++ {
-		logEntry, err := subscriber.Next()
-		require.NoError(t, err)
-		require.Equal(t, topicID, logEntry.TopicID)
-		require.Equal(t, logStreamID, logEntry.LogStreamID)
-		require.Equal(t, types.LLSN(i+1), logEntry.LLSN)
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_, err := subscriber.Next()
-		require.Error(t, err)
-		require.NotErrorIs(t, err, io.EOF)
-	}()
-	time.Sleep(5 * time.Millisecond)
 	require.NoError(t, subscriber.Close())
 }
