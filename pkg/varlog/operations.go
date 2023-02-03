@@ -47,14 +47,11 @@ RETRY:
 					rand.Shuffle(len(lsids), func(i, j int) { lsids[i], lsids[j] = lsids[j], lsids[i] })
 				}
 
-			SELECT:
 				for ; lsidx < len(lsids); lsidx++ {
 					lsid = lsids[lsidx]
-					if _, ok := appendOpts.allowedLogStreams[lsid]; !ok {
-						v.allowlist.Deny(tpid, lsid)
-						continue SELECT
+					if _, ok := appendOpts.allowedLogStreams[lsid]; ok {
+						break
 					}
-					break
 				}
 
 				if lsidx == len(lsids) {
