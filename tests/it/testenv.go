@@ -31,9 +31,9 @@ import (
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 	"github.com/kakao/varlog/vtesting"
 )
 
@@ -716,7 +716,7 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types
 	}
 }
 
-func (clus *VarlogCluster) Seal(tpID types.TopicID, lsID types.LogStreamID) (*vmspb.SealResponse, error) {
+func (clus *VarlogCluster) Seal(tpID types.TopicID, lsID types.LogStreamID) (*admpb.SealResponse, error) {
 	return clus.vmsCL.Seal(context.Background(), tpID, lsID)
 }
 
