@@ -3,6 +3,7 @@ package varlog
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 
@@ -21,29 +22,56 @@ func (v *logImpl) append(ctx context.Context, tpid types.TopicID, lsid types.Log
 		opt.apply(&appendOpts)
 	}
 
+	lsidx := 0
+	var lsids []types.LogStreamID
+
+RETRY:
 	for i := 0; i < appendOpts.retryCount+1; i++ {
 		if appendOpts.selectLogStream {
-			var ok bool
-			if lsid, ok = v.lsSelector.Select(tpid); !ok {
-				err := fmt.Errorf("append: no usable log stream in topic %d", tpid)
-				result.Err = multierr.Append(result.Err, err)
-				continue
-			}
-			if _, ok = appendOpts.allowedLogStreams[lsid]; appendOpts.allowedLogStreams != nil && !ok {
-				err := fmt.Errorf("append: not allowed lsid %d", lsid)
-				result.Err = multierr.Append(result.Err, err)
+			if appendOpts.allowedLogStreams == nil {
+				var ok bool
+				if lsid, ok = v.lsSelector.Select(tpid); !ok {
+					err := fmt.Errorf("append: no usable log stream in topic %d", tpid)
+					result.Err = multierr.Append(result.Err, err)
+					continue RETRY
+				}
+			} else {
+				if len(lsids) == lsidx {
+					lsidx = 0
+					if lsids = v.lsSelector.GetAll(tpid); len(lsids) == 0 {
+						err := fmt.Errorf("append: no usable log stream in topic %d", tpid)
+						result.Err = multierr.Append(result.Err, err)
+						continue RETRY
+					}
 
-				v.allowlist.Deny(tpid, lsid)
-				i--
-				continue
+					rand.Shuffle(len(lsids), func(i, j int) { lsids[i], lsids[j] = lsids[j], lsids[i] })
+				}
+
+				for ; lsidx < len(lsids); lsidx++ {
+					lsid = lsids[lsidx]
+					if _, ok := appendOpts.allowedLogStreams[lsid]; ok {
+						break
+					}
+				}
+
+				if lsidx == len(lsids) {
+					err := fmt.Errorf("append: no allowed log stream in topic %d", tpid)
+					result.Err = multierr.Append(result.Err, err)
+
+					continue RETRY
+				}
+
+				lsidx++
 			}
 		}
+
 		res, err := v.appendTo(ctx, tpid, lsid, data)
 		if err != nil {
 			result.Err = err
 			continue
 		}
 		result.Err = nil
+
 		for idx := 0; idx < len(res); idx++ {
 			if len(res[idx].Error) > 0 {
 				if strings.Contains(err.Error(), "sealed") {
