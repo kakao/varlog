@@ -44,34 +44,50 @@ message GetReportResponse {
     [(gogoproto.nullable) = false];
 }
 
-// GlobalLogStreamDescriptor is a committing result against with
-// LocalLogStreamDescriptor. Field highest_glsn is the highest position in the
-// global log space.
-// Field commit_result contains positions of all log entries of log streams in
-// a storage node which is a receiver of this GlobalLogStreamDescriptor.
+// LogStreamCommitResult has information about commit for a log stream, and it
+// tells the log stream how many log entries can be committed. Even if the log
+// stream can't commit anything, CommittedLLSNOffset and CommittedGLSNOffset
+// should be valid. For example, if there is no log entry to be committed yet,
+// the CommittedLLSNOffset and CommittedGLSNOffset must be one, and
+// CommittedGLSNLength must be zero.
 message LogStreamCommitResult {
   option (gogoproto.equal) = true;
 
+  // LogStreamID is the identifier for the log stream.
   int32 log_stream_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
+
+  // TopicID is the identifier for the topic to which the log stream belongs.
   int32 topic_id = 2 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
   ];
+
+  // CommittedLLSNOffset is the starting LLSN of the commit range.
   uint64 committed_llsn_offset = 3 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
     (gogoproto.customname) = "CommittedLLSNOffset"
   ];
+
+  // CommittedGLSNOffset is the starting GLSN of the commit range.
   uint64 committed_glsn_offset = 4 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
     (gogoproto.customname) = "CommittedGLSNOffset"
   ];
+
+  // CommittedGLSNLength is the length of the commit range.
   uint64 committed_glsn_length = 5
     [(gogoproto.customname) = "CommittedGLSNLength"];
+
+  // Version is a unique number for the commit issued by the metadata
+  // repository.
   uint64 version = 6
     [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
+
+  // HighWatermark is the maximum GLSN across all log streams of the topic in a
+  // specific commit version.
   uint64 high_watermark = 7 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
     (gogoproto.customname) = "HighWatermark"

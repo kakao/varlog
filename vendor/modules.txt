@@ -295,7 +295,7 @@ github.com/tklauser/go-sysconf
 # github.com/tklauser/numcpus v0.3.0
 ## explicit; go 1.11
 github.com/tklauser/numcpus
-# github.com/urfave/cli/v2 v2.23.7
+# github.com/urfave/cli/v2 v2.24.2
 ## explicit; go 1.18
 github.com/urfave/cli/v2
 # github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2
@@ -334,7 +334,7 @@ go.opentelemetry.io/contrib/instrumentation/host
 # go.opentelemetry.io/contrib/instrumentation/runtime v0.27.0
 ## explicit; go 1.15
 go.opentelemetry.io/contrib/instrumentation/runtime
-# go.opentelemetry.io/otel v1.11.2
+# go.opentelemetry.io/otel v1.12.0
 ## explicit; go 1.18
 go.opentelemetry.io/otel
 go.opentelemetry.io/otel/attribute
@@ -346,7 +346,7 @@ go.opentelemetry.io/otel/internal/baggage
 go.opentelemetry.io/otel/internal/global
 go.opentelemetry.io/otel/propagation
 go.opentelemetry.io/otel/semconv/internal
-go.opentelemetry.io/otel/semconv/v1.12.0
+go.opentelemetry.io/otel/semconv/v1.17.0
 go.opentelemetry.io/otel/semconv/v1.7.0
 # go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0
 ## explicit; go 1.16
@@ -374,7 +374,7 @@ go.opentelemetry.io/otel/metric/global
 go.opentelemetry.io/otel/metric/number
 go.opentelemetry.io/otel/metric/sdkapi
 go.opentelemetry.io/otel/metric/unit
-# go.opentelemetry.io/otel/sdk v1.11.2
+# go.opentelemetry.io/otel/sdk v1.12.0
 ## explicit; go 1.18
 go.opentelemetry.io/otel/sdk/instrumentation
 go.opentelemetry.io/otel/sdk/resource
@@ -393,7 +393,7 @@ go.opentelemetry.io/otel/sdk/metric/controller/basic
 go.opentelemetry.io/otel/sdk/metric/controller/time
 go.opentelemetry.io/otel/sdk/metric/processor/basic
 go.opentelemetry.io/otel/sdk/metric/selector/simple
-# go.opentelemetry.io/otel/trace v1.11.2
+# go.opentelemetry.io/otel/trace v1.12.0
 ## explicit; go 1.18
 go.opentelemetry.io/otel/trace
 # go.opentelemetry.io/proto/otlp v0.11.0
@@ -455,8 +455,8 @@ golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
-# golang.org/x/oauth2 v0.0.0-20220223155221-ee480838109b
-## explicit; go 1.11
+# golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783
+## explicit; go 1.17
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
 # golang.org/x/sync v0.1.0
@@ -513,13 +513,13 @@ google.golang.org/appengine/internal/log
 google.golang.org/appengine/internal/remote_api
 google.golang.org/appengine/internal/urlfetch
 google.golang.org/appengine/urlfetch
-# google.golang.org/genproto v0.0.0-20210402141018-6c239bbf2bb1
-## explicit; go 1.11
+# google.golang.org/genproto v0.0.0-20221118155620-16455021b5e6
+## explicit; go 1.19
 google.golang.org/genproto/googleapis/api/httpbody
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
 google.golang.org/genproto/protobuf/field_mask
-# google.golang.org/grpc v1.51.0
+# google.golang.org/grpc v1.52.3
 ## explicit; go 1.17
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -622,7 +622,7 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# k8s.io/api v0.26.0
+# k8s.io/api v0.26.1
 ## explicit; go 1.19
 k8s.io/api/admissionregistration/v1
 k8s.io/api/admissionregistration/v1alpha1
@@ -675,7 +675,7 @@ k8s.io/api/scheduling/v1beta1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apimachinery v0.26.0
+# k8s.io/apimachinery v0.26.1
 ## explicit; go 1.19
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
@@ -712,7 +712,7 @@ k8s.io/apimachinery/pkg/util/yaml
 k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/client-go v0.26.0
+# k8s.io/client-go v0.26.1
 ## explicit; go 1.19
 k8s.io/client-go/applyconfigurations/admissionregistration/v1
 k8s.io/client-go/applyconfigurations/admissionregistration/v1alpha1

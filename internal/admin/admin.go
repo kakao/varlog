@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"sort"
 	"sync"
@@ -21,15 +20,14 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/kakao/varlog/internal/admin/admerrors"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/proto/vmspb"
 )
 
 const numLogStreamMutex = 512
@@ -126,7 +124,7 @@ func (adm *Admin) Serve() error {
 	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
 	adm.serverAddr = addrs[0]
 
-	vmspb.RegisterClusterManagerServer(adm.server, &server{admin: adm})
+	admpb.RegisterClusterManagerServer(adm.server, &server{admin: adm})
 	grpc_health_v1.RegisterHealthServer(adm.server, adm.healthServer)
 	adm.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
@@ -168,13 +166,13 @@ func (adm *Admin) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, e
 	return adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 }
 
-func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) (*vmspb.StorageNodeMetadata, error) {
+func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) (*admpb.StorageNodeMetadata, error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
 
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Unavailable, "get storage node: cluster metadata not fetched")
+		return nil, status.Errorf(codes.Unavailable, "get storage node: %s", err.Error())
 	}
 	snd := md.GetStorageNode(snid)
 	if snd == nil {
@@ -183,7 +181,7 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 	if snm, ok := adm.statRepository.GetStorageNode(snid); ok {
 		return snm, nil
 	}
-	snm := &vmspb.StorageNodeMetadata{
+	snm := &admpb.StorageNodeMetadata{
 		StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 			ClusterID:   adm.cid,
 			StorageNode: snd.StorageNode,
@@ -214,13 +212,13 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 	return snm, nil
 }
 
-func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMetadata, error) {
+func (adm *Admin) listStorageNodes(ctx context.Context) ([]admpb.StorageNodeMetadata, error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
 
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Unavailable, "list storage nodes: cluster metadata not fetched")
+		return nil, status.Errorf(codes.Unavailable, "list storage nodes: %s", err.Error())
 	}
 
 	lazyInit := false
@@ -253,7 +251,7 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 		return lazyReplicasMap, nil
 	}
 
-	snms := make([]vmspb.StorageNodeMetadata, 0, len(md.StorageNodes))
+	snms := make([]admpb.StorageNodeMetadata, 0, len(md.StorageNodes))
 	snmsMap := adm.statRepository.ListStorageNodes()
 	for _, snd := range md.StorageNodes {
 		if snm, ok := snmsMap[snd.StorageNodeID]; ok {
@@ -264,7 +262,7 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 		if err != nil {
 			return nil, err
 		}
-		snms = append(snms, vmspb.StorageNodeMetadata{
+		snms = append(snms, admpb.StorageNodeMetadata{
 			StorageNodeMetadataDescriptor: snpb.StorageNodeMetadataDescriptor{
 				ClusterID:         adm.cid,
 				StorageNode:       snd.StorageNode,
@@ -285,7 +283,7 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]vmspb.StorageNodeMeta
 // It could not add a storage node under the following conditions:
 //   - It could not fetch metadata from the storage node.
 //   - It is rejected by the metadata repository.
-func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*vmspb.StorageNodeMetadata, error) {
+func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*admpb.StorageNodeMetadata, error) {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
 
@@ -298,24 +296,25 @@ func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, 
 
 	snmd, err := adm.snmgr.GetMetadataByAddress(ctx, snid, addr)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(status.Code(err), "add storage node: %s", err.Error())
 	}
 
 	now := time.Now().UTC()
 	snd := snmd.ToStorageNodeDescriptor()
 	snd.Status = varlogpb.StorageNodeStatusRunning
 	snd.CreateTime = now
-	if err = adm.mrmgr.RegisterStorageNode(ctx, snd); err != nil {
-		return nil, err
+	err = adm.mrmgr.RegisterStorageNode(ctx, snd)
+	if err != nil {
+		return nil, status.Errorf(status.Code(err), "add storage node: %s", err.Error())
 	}
 
 	adm.snmgr.AddStorageNode(ctx, snmd.StorageNode.StorageNodeID, addr)
 	adm.statRepository.Report(ctx, snmd, now)
 	snm, ok := adm.statRepository.GetStorageNode(snid)
 	if !ok {
-		return nil, fmt.Errorf("add storage node: temporal failure")
+		return nil, status.Error(codes.Unavailable, "add storage node: call again")
 	}
-	return snm, err
+	return snm, nil
 }
 
 func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageNodeID) error {
@@ -324,7 +323,7 @@ func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageN
 
 	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return err
+		return status.Errorf(codes.Unavailable, "unregister storage node: %s", err.Error())
 	}
 
 	if clusmeta.GetStorageNode(snid) == nil {
@@ -335,13 +334,13 @@ func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageN
 	for _, lsdesc := range clusmeta.GetLogStreams() {
 		for _, replica := range lsdesc.GetReplicas() {
 			if replica.GetStorageNodeID() == snid {
-				return errors.WithMessagef(admerrors.ErrNotIdleReplicas, "unregister storage node")
+				return status.Errorf(codes.FailedPrecondition, "unregister storage node: non-idle replicas: %s", replica.String())
 			}
 		}
 	}
 
 	if err := adm.mrmgr.UnregisterStorageNode(ctx, snid); err != nil {
-		return err
+		return status.Errorf(status.Code(err), "unregister storage node: %s", err.Error())
 	}
 
 	adm.snmgr.RemoveStorageNode(snid)
@@ -352,11 +351,11 @@ func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageN
 func (adm *Admin) getTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Unavailable, "get topic: %s", err.Error())
 	}
 	td := md.GetTopic(tpid)
 	if td == nil {
-		return nil, errors.WithMessagef(admerrors.ErrNoSuchTopic, "get topic %d", int32(tpid))
+		return nil, status.Errorf(codes.NotFound, "get topic: no such topic %d", tpid)
 	}
 	return td, nil
 }
@@ -366,8 +365,8 @@ func (adm *Admin) listTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, e
 	defer adm.mu.Unlock()
 
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
-	if err != nil || len(md.Topics) == 0 {
-		return nil, err
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "list topics: %s", err.Error())
 	}
 
 	tds := make([]varlogpb.TopicDescriptor, len(md.Topics))
@@ -385,7 +384,7 @@ func (adm *Admin) addTopic(ctx context.Context) (*varlogpb.TopicDescriptor, erro
 	// Note that the metadata repository accepts redundant RegisterTopic
 	// RPC only if the topic has no log streams.
 	if err := adm.mrmgr.RegisterTopic(ctx, topicID); err != nil {
-		return nil, err
+		return nil, status.Errorf(status.Code(err), "add topic: %s", err.Error())
 	}
 
 	return &varlogpb.TopicDescriptor{TopicID: topicID}, nil
@@ -397,7 +396,7 @@ func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error
 
 	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return err
+		return status.Errorf(codes.Unavailable, "unregister topic: %s", err.Error())
 	}
 
 	// TODO: Should it returns an error when removing the topic that has already been deleted or does not exist?
@@ -420,21 +419,21 @@ func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error
 func (adm *Admin) getLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, errors.WithMessage(err, "get log stream")
+		return nil, status.Errorf(codes.Unavailable, "get log stream: %s", err.Error())
 	}
 	td := md.GetTopic(tpid)
 	if td == nil {
-		return nil, errors.WithMessagef(admerrors.ErrNoSuchTopic, "get log stream: tpid %d", int32(tpid))
+		return nil, status.Errorf(codes.NotFound, "get log stream: no such topic: tpid %d", tpid)
 	}
 	if !td.HasLogStream(lsid) {
-		return nil, errors.WithMessagef(admerrors.ErrNoSuchLogStream, "get log stream: no log stream in topic: lsid %d", int32(lsid))
+		return nil, status.Errorf(codes.NotFound, "get log stream: no log stream in the topic: tpid %d, lsid %d", tpid, lsid)
 	}
 	lsd := md.GetLogStream(lsid)
 	if lsd == nil {
-		return nil, errors.WithMessagef(admerrors.ErrNoSuchLogStream, "get log stream: lsid %d", int32(lsid))
+		return nil, status.Errorf(codes.NotFound, "get log stream: no log stream: lsid %d", lsid)
 	}
 	if lsd.TopicID != tpid {
-		return nil, fmt.Errorf("get log stream: unexpected topic: expected %d, actual %d", int32(tpid), int32(lsd.TopicID))
+		return nil, status.Errorf(codes.Internal, "get log stream: unexpected topic: expected %d, actual %d", tpid, lsd.TopicID)
 	}
 	return lsd, nil
 }
@@ -442,11 +441,11 @@ func (adm *Admin) getLogStream(ctx context.Context, tpid types.TopicID, lsid typ
 func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, errors.WithMessage(err, "list log streams")
+		return nil, status.Errorf(codes.Unavailable, "list log streams: %s", err.Error())
 	}
 	td := md.GetTopic(tpid)
 	if td == nil {
-		return nil, errors.WithMessagef(admerrors.ErrNoSuchTopic, "list log streams: tpid %d", int32(tpid))
+		return nil, status.Errorf(codes.NotFound, "list log streams: no such topic: tpid %d", tpid)
 	}
 	lsds := make([]varlogpb.LogStreamDescriptor, 0, len(td.LogStreams))
 	for _, lsid := range td.LogStreams {
@@ -455,7 +454,7 @@ func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]var
 			continue
 		}
 		if lsd.TopicID != tpid {
-			return nil, fmt.Errorf("list log streams: unexpected topic: expected %d, actual %d", int32(tpid), int32(lsd.TopicID))
+			return nil, status.Errorf(codes.Internal, "list log streams: unexpected topic: lsid %d, expected %d, actual %d", lsd.LogStreamID, tpid, lsd.TopicID)
 		}
 		lsds = append(lsds, *lsd)
 	}
@@ -540,17 +539,6 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 
 	lsid := adm.lsidGen.Generate()
 
-	// duplicated by verifyLogStream
-	/*
-		if err := clusmeta.MustNotHaveLogStream(logStreamID); err != nil {
-			if e := adm.lsidGen.Refresh(ctx); e != nil {
-				err = multierr.Append(err, e)
-				adm.logger.Panic("could not refresh LogStreamIDGenerator", zap.Error(err))
-			}
-			return nil, err
-		}
-	*/
-
 	lsd := &varlogpb.LogStreamDescriptor{
 		TopicID:     tpid,
 		LogStreamID: lsid,
@@ -560,7 +548,7 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 
 	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(status.Code(err), "add log stream: %s", err.Error())
 	}
 	if err := adm.verifyLogStream(clusmeta, lsd); err != nil {
 		return nil, err
@@ -569,29 +557,33 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 	// TODO: Choose the primary - e.g., shuffle logStreamReplicaMetas
 	lsd, err = adm.snmgr.AddLogStream(ctx, lsd)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(status.Code(err), "add log stream: %s", err.Error())
 	}
 
 	// NB: RegisterLogStream returns nil if the logstream already exists.
-	return lsd, adm.mrmgr.RegisterLogStream(ctx, lsd)
+	err = adm.mrmgr.RegisterLogStream(ctx, lsd)
+	if err != nil {
+		return nil, status.Errorf(status.Code(err), "add log stream: %s", err.Error())
+	}
+	return lsd, nil
 }
 
 func (adm *Admin) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor, lsdesc *varlogpb.LogStreamDescriptor) error {
 	replicas := lsdesc.GetReplicas()
 	// the number of logstream replica
 	if uint(len(replicas)) != adm.replicationFactor {
-		return errors.Errorf("invalid number of log stream replicas: %d", len(replicas))
+		return status.Errorf(codes.FailedPrecondition, "add log stream: invalid number of log stream replicas: expected %d, actual %d", adm.replicationFactor, len(replicas))
 	}
 	// storagenode existence
 	for _, replica := range replicas {
 		if _, err := clusmeta.MustHaveStorageNode(replica.GetStorageNodeID()); err != nil {
-			return err
+			return status.Errorf(codes.FailedPrecondition, "add log stream: no such storage node: snid %d", replica.StorageNodeID)
 		}
 	}
 	// logstream existence
 	if err := clusmeta.MustNotHaveLogStream(lsdesc.GetLogStreamID()); err != nil {
 		_ = adm.lsidGen.Refresh(context.TODO())
-		return err
+		return status.Errorf(codes.FailedPrecondition, "add log stream: duplicated log stream id: %d", lsdesc.LogStreamID)
 	}
 	return nil
 }
@@ -783,14 +775,17 @@ func (adm *Admin) removeLogStreamReplica(ctx context.Context, snid types.Storage
 
 	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
-		return err
+		return status.Errorf(codes.Unavailable, "remove log stream replica: %s", err.Error())
 	}
 
 	if err := adm.removableLogStreamReplica(clusmeta, snid, lsid); err != nil {
 		return err
 	}
 
-	return adm.snmgr.RemoveLogStreamReplica(ctx, snid, tpid, lsid)
+	if err := adm.snmgr.RemoveLogStreamReplica(ctx, snid, tpid, lsid); err != nil {
+		return status.Errorf(status.Code(err), "remove log stream replica: %s", err.Error())
+	}
+	return nil
 }
 
 func (adm *Admin) removableLogStreamReplica(clusmeta *varlogpb.MetadataDescriptor, snid types.StorageNodeID, lsid types.LogStreamID) error {
@@ -803,7 +798,7 @@ func (adm *Admin) removableLogStreamReplica(clusmeta *varlogpb.MetadataDescripto
 	replicas := lsdesc.GetReplicas()
 	for _, replica := range replicas {
 		if replica.GetStorageNodeID() == snid {
-			return errors.Wrap(verrors.ErrState, "running log stream is not removable")
+			return status.Errorf(codes.FailedPrecondition, "remove log stream replica: appendable log stream")
 		}
 	}
 	return nil
@@ -903,7 +898,7 @@ func (adm *Admin) syncInternal(ctx context.Context, tpid types.TopicID, lsid typ
 // trim removes log entries from the log streams in a topic.
 // The argument tpid is the topic ID of the topic to be trimmed.
 // The argument lastGLSN is the last global sequence number of the log stream to be trimmed.
-func (adm *Admin) trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]vmspb.TrimResult, error) {
+func (adm *Admin) trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]admpb.TrimResult, error) {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
 	return adm.snmgr.Trim(ctx, tpid, lastGLSN)
