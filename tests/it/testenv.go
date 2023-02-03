@@ -716,11 +716,11 @@ func (clus *VarlogCluster) UpdateLS(t *testing.T, tpID types.TopicID, lsID types
 	}
 }
 
-func (clus *VarlogCluster) Seal(t *testing.T, tpID types.TopicID, lsID types.LogStreamID) (*vmspb.SealResponse, error) {
+func (clus *VarlogCluster) Seal(tpID types.TopicID, lsID types.LogStreamID) (*vmspb.SealResponse, error) {
 	return clus.vmsCL.Seal(context.Background(), tpID, lsID)
 }
 
-func (clus *VarlogCluster) Unseal(t *testing.T, tpID types.TopicID, lsID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+func (clus *VarlogCluster) Unseal(tpID types.TopicID, lsID types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
 	return clus.vmsCL.Unseal(context.Background(), tpID, lsID)
 }
 

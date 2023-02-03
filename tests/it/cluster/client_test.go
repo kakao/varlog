@@ -580,7 +580,7 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 				}
 
 				require.Eventually(t, func() bool {
-					lsDesc, err := env.Unseal(t, topicID, lsID)
+					lsDesc, err := env.Unseal(topicID, lsID)
 					if err != nil {
 						return false
 					}
@@ -683,7 +683,7 @@ func TestClientAppendWithAllowedLogStream(t *testing.T) {
 	allowedLogStreams[logStreamID] = struct{}{}
 	allowedLogStreams[sealedLogStreamID] = struct{}{}
 
-	rsp, err := clus.Seal(t, topicID, sealedLogStreamID)
+	rsp, err := clus.Seal(topicID, sealedLogStreamID)
 	require.NoError(t, err)
 	require.Len(t, rsp.LogStreams, 1)
 	require.Equal(t, varlogpb.LogStreamStatusSealed, rsp.LogStreams[0].Status)
