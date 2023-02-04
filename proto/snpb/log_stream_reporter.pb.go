@@ -199,9 +199,97 @@ func (m *GetReportResponse) GetUncommitReports() []LogStreamUncommitReport {
 // LogStreamCommitResult has information about commit for a log stream, and it
 // tells the log stream how many log entries can be committed. Even if the log
 // stream can't commit anything, CommittedLLSNOffset and CommittedGLSNOffset
-// should be valid. For example, if there is no log entry to be committed yet,
-// the CommittedLLSNOffset and CommittedGLSNOffset must be one, and
-// CommittedGLSNLength must be zero.
+// should be valid.
+//
+// Here are examples for clarity. Assume that there are two log streams in a
+// topic.
+//
+//	// LogStream 1 has not committed any log entries, and LogStream 2 has
+//	// committed ten.
+//	LogStreamCommitResult{
+//	    TopicID: 1,
+//	    LogStreamID: 1,
+//	    Version: 1,
+//	    HighWatermark: 10,
+//	    CommittedLLSNOffset: 1,
+//	    CommittedGLSNOffset: 1,
+//	    CommittedGLSNLength: 0,
+//	}
+//	LogStreamCommitResult{
+//	    TopicID: 1,
+//	    LogStreamID: 2,
+//	    Version: 1,
+//	    HighWatermark: 10,
+//	    CommittedLLSNOffset: 1,
+//	    CommittedGLSNOffset: 1,
+//	    CommittedGLSNLength: 10,
+//	}
+//
+//	// LogStream 1 has not committed any log entries again, and LogStream 2 has
+//	// committed ten.
+//	// Note that the CommittedGLSNOffset of LogStream 1 is one even though the
+//	// GLSN 1 has already been issued to other log entries in LogStream 2.
+//	LogStreamCommitResult{
+//	    TopicID: 1,
+//	    LogStreamID: 1,
+//	    Version 2,
+//	    HighWatermark: 20,
+//	    CommittedLLSNOffset: 1,
+//	    CommittedGLSNOffset: 1,
+//	    CommittedGLSNLength: 0,
+//	}
+//	LogStreamCommitResult{
+//	    TopicID: 1,
+//	    LogStreamID: 2,
+//	    Version 2,
+//	    HighWatermark: 20,
+//	    CommittedLLSNOffset: 11,
+//	    CommittedGLSNOffset: 11,
+//	    CommittedGLSNLength: 10,
+//	}
+//
+//	// LogStream 1 has committed ten log entries, and LogStream 2 has committed
+//	// ten.
+//	LogStreamCommitResult{
+//	    TopicID: 1,
+//	    LogStreamID: 1,
+//	    Version 3,
+//	    HighWatermark: 40,
+//	    CommittedLLSNOffset: 1,
+//	    CommittedGLSNOffset: 21,
+//	    CommittedGLSNLength: 10,
+//	}
+//	LogStreamCommitResult{
+//	    TopicID: 1,
+//	    LogStreamID: 2,
+//	    Version 3,
+//	    HighWatermark: 20,
+//	    CommittedLLSNOffset: 21,
+//	    CommittedGLSNOffset: 31,
+//	    CommittedGLSNLength: 10,
+//	}
+//
+//	// LogStream 1 has committed ten log entries, and LogStream 2 has not.
+//	// Note that the CommittedGLSNOffset of LogStream 2 is next to the last
+//	// committed GLSN of itself, regardless of LogStream 1.
+//	LogStreamCommitResult{
+//	    TopicID: 1,
+//	    LogStreamID: 1,
+//	    Version 4,
+//	    HighWatermark: 50,
+//	    CommittedLLSNOffset: 11,
+//	    CommittedGLSNOffset: 41,
+//	    CommittedGLSNLength: 10,
+//	}
+//	LogStreamCommitResult{
+//	    TopicID: 1,
+//	    LogStreamID: 2,
+//	    Version 4,
+//	    HighWatermark: 50,
+//	    CommittedLLSNOffset: 31,
+//	    CommittedGLSNOffset: 41,
+//	    CommittedGLSNLength: 0,
+//	}
 type LogStreamCommitResult struct {
 	// LogStreamID is the identifier for the log stream.
 	LogStreamID github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
@@ -210,6 +298,8 @@ type LogStreamCommitResult struct {
 	// CommittedLLSNOffset is the starting LLSN of the commit range.
 	CommittedLLSNOffset github_com_kakao_varlog_pkg_types.LLSN `protobuf:"varint,3,opt,name=committed_llsn_offset,json=committedLlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"committed_llsn_offset,omitempty"`
 	// CommittedGLSNOffset is the starting GLSN of the commit range.
+	// If there is no log entry to be committed, the CommittedGLSNOffset should be
+	// next to the last committed GLSN.
 	CommittedGLSNOffset github_com_kakao_varlog_pkg_types.GLSN `protobuf:"varint,4,opt,name=committed_glsn_offset,json=committedGlsnOffset,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_offset,omitempty"`
 	// CommittedGLSNLength is the length of the commit range.
 	CommittedGLSNLength uint64 `protobuf:"varint,5,opt,name=committed_glsn_length,json=committedGlsnLength,proto3" json:"committed_glsn_length,omitempty"`
