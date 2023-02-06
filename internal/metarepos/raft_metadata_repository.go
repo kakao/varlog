@@ -1425,7 +1425,7 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 
 func (mr *RaftMetadataRepository) GetClusterInfo(context.Context, types.ClusterID) (*mrpb.ClusterInfo, error) {
 	if !mr.IsMember() {
-		return nil, status.Errorf(codes.PermissionDenied, "not member")
+		return nil, status.Errorf(codes.Unavailable, "this mr is not member")
 	}
 
 	peerMap := mr.membership.GetPeers()

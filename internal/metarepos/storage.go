@@ -345,7 +345,7 @@ func (ms *MetadataStorage) unregisterStorageNode(snID types.StorageNodeID) error
 	}
 
 	if !ms.unregistableStorageNode(snID) {
-		return status.Errorf(codes.InvalidArgument, "unregistable sn %d", snID)
+		return status.Errorf(codes.FailedPrecondition, "unregistable sn %d", snID)
 	}
 
 	pre, cur := ms.getStateMachine()
@@ -425,12 +425,12 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 
 	topic := ms.lookupTopic(ls.TopicID)
 	if topic == nil {
-		return status.Errorf(codes.InvalidArgument, "empty replicas")
+		return status.Errorf(codes.NotFound, "topic %d is not found", ls.TopicID)
 	}
 
 	for _, r := range ls.Replicas {
 		if ms.lookupStorageNode(r.StorageNodeID) == nil {
-			return status.Errorf(codes.InvalidArgument, "sn %d is not exist", r.StorageNodeID)
+			return status.Errorf(codes.NotFound, "sn %d is not exist", r.StorageNodeID)
 		}
 	}
 
@@ -563,7 +563,7 @@ func (ms *MetadataStorage) updateLogStream(ls *varlogpb.LogStreamDescriptor) err
 
 	for _, r := range ls.Replicas {
 		if ms.lookupStorageNode(r.StorageNodeID) == nil {
-			return status.Errorf(codes.InvalidArgument, "sn %d is not exist", r.StorageNodeID)
+			return status.Errorf(codes.NotFound, "sn %d is not exist", r.StorageNodeID)
 		}
 	}
 
