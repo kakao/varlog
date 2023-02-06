@@ -119,7 +119,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 
 				Convey("Then SN should not be unregistered", func(ctx C) {
 					err := ms.unregisterStorageNode(snID)
-					So(status.Code(err), ShouldEqual, codes.InvalidArgument)
+					So(status.Code(err), ShouldEqual, codes.FailedPrecondition)
 				})
 			})
 		})
@@ -294,7 +294,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
 		err = ms.registerLogStream(ls)
-		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
@@ -306,7 +306,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		err = ms.registerLogStream(ls)
-		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		Convey("LS should be registered if exist all SN", func(ctx C) {
 			sn := &varlogpb.StorageNodeDescriptor{
@@ -434,7 +434,7 @@ func TestStorageUpdateLS(t *testing.T) {
 		updateLS := makeLogStream(types.TopicID(1), lsID, updateSnIDs)
 
 		err = ms.UpdateLogStream(updateLS, 0, 0)
-		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		Convey("LS should be updated if exist all SN", func(ctx C) {
 			for i := 1; i < rep; i++ {
@@ -1852,7 +1852,7 @@ func TestStorageRegisterTopic(t *testing.T) {
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
 		err := ms.registerLogStream(ls)
-		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		Convey("LS should be registered if exist topic", func(ctx C) {
 			err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})

@@ -1752,7 +1752,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 
 			Convey("Then it should not have member info", func(ctx C) {
 				_, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), types.ClusterID(0))
-				So(status.Code(err), ShouldEqual, codes.PermissionDenied)
+				So(status.Code(err), ShouldEqual, codes.Unavailable)
 
 				cinfo, err := clus.nodes[0].GetClusterInfo(context.TODO(), types.ClusterID(0))
 				So(err, ShouldBeNil)
