@@ -2,11 +2,11 @@ package logstream
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 	"time"
 
 	"github.com/kakao/varlog/internal/batchlet"
+	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
@@ -36,7 +36,7 @@ func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.App
 	}
 
 	if !lse.isPrimary() {
-		return nil, errors.New("log stream: not primary")
+		return nil, snerrors.ErrNotPrimary
 	}
 
 	startTime := time.Now()
