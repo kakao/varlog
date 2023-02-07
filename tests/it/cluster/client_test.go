@@ -574,7 +574,21 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 
 				env.UpdateLS(t, topicID, lsID, snID, addedSN)
 
-				for i := 0; i < nrLogs/2; i++ {
+				for i := 0; i < nrLogs/4; i++ {
+					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+					require.NoError(t, res.Err)
+				}
+
+				require.Eventually(t, func() bool {
+					lsDesc, err := env.Unseal(topicID, lsID)
+					if err != nil {
+						return false
+					}
+
+					return lsDesc.Status == varlogpb.LogStreamStatusRunning
+				}, 5*time.Second, 10*time.Millisecond)
+
+				for i := 0; i < nrLogs/4; i++ {
 					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
 					require.NoError(t, res.Err)
 				}
@@ -641,4 +655,54 @@ func TestClientPeekLogStream(t *testing.T) {
 
 	_, _, err = client.PeekLogStream(context.Background(), tpid, lsid)
 	require.Error(t, err)
+}
+
+func TestClientAppendWithAllowedLogStream(t *testing.T) {
+	const numLogs = 100
+	const numLogStreams = 10
+
+	clus := it.NewVarlogCluster(t,
+		it.WithNumberOfStorageNodes(1),
+		it.WithNumberOfLogStreams(numLogStreams),
+		it.WithNumberOfClients(1),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
+		it.WithNumberOfTopics(1),
+	)
+
+	defer func() {
+		clus.Close(t)
+		testutil.GC()
+	}()
+
+	topicID := clus.TopicIDs()[0]
+	logStreamID := clus.LogStreamIDs(topicID)[0]
+	sealedLogStreamID := clus.LogStreamIDs(topicID)[1]
+	client := clus.ClientAtIndex(t, 0)
+
+	allowedLogStreams := make(map[types.LogStreamID]struct{})
+	allowedLogStreams[logStreamID] = struct{}{}
+	allowedLogStreams[sealedLogStreamID] = struct{}{}
+
+	rsp, err := clus.Seal(topicID, sealedLogStreamID)
+	require.NoError(t, err)
+	require.Len(t, rsp.LogStreams, 1)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, rsp.LogStreams[0].Status)
+
+	for i := 0; i < numLogs; i++ {
+		res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")}, varlog.WithAllowedLogStreams(allowedLogStreams))
+		require.NoError(t, res.Err)
+	}
+
+	// SubscribeTo [1, 101)
+	subscriber := client.SubscribeTo(context.Background(), topicID, logStreamID, types.MinLLSN, types.LLSN(numLogs+1))
+	for i := 0; i < numLogs; i++ {
+		logEntry, err := subscriber.Next()
+		require.NoError(t, err)
+		require.Equal(t, topicID, logEntry.TopicID)
+		require.Equal(t, logStreamID, logEntry.LogStreamID)
+		require.Equal(t, types.LLSN(i+1), logEntry.LLSN)
+	}
+	_, err = subscriber.Next()
+	require.ErrorIs(t, err, io.EOF)
+	require.NoError(t, subscriber.Close())
 }
