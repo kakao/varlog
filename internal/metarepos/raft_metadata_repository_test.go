@@ -24,7 +24,6 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -1753,7 +1752,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 
 			Convey("Then it should not have member info", func(ctx C) {
 				_, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), types.ClusterID(0))
-				So(err, ShouldResemble, verrors.ErrNotMember)
+				So(status.Code(err), ShouldEqual, codes.Unavailable)
 
 				cinfo, err := clus.nodes[0].GetClusterInfo(context.TODO(), types.ClusterID(0))
 				So(err, ShouldBeNil)
