@@ -174,19 +174,61 @@ message TrimResponse {
 
 // Management defines the public APIs for managing StorageNode.
 service Management {
-  // GetMetadata returns metadata of StorageNode.
+  // GetMetadata returns the metadata of the storage node. It produces a gRPC
+  // Unavailable error if the storage node is shutting down.
   rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
   // AddLogStreamReplica adds a new log stream replica to a storage node.
+  //
+  // It returns the following gRPC errors:
+  // - Unavailable: The storage node is shutting down.
+  // - ResourceExhausted: The number of log stream replicas in the storage node
+  // reaches the upper limit.
+  // - Canceled: The client canceled the request.
+  // DeadlineExceeded: The client's timeout has expired.
   rpc AddLogStreamReplica(AddLogStreamReplicaRequest)
     returns (AddLogStreamReplicaResponse) {}
-  // RemoveLogStream removes a LogStream from StorageNode.
+  // RemoveLogStream removes a log stream replica from the storage node.
+  //
+  // It returns the following gRPC errors:
+  // - Unavailable: The storage node is shutting down.
+  // - NotFound: The log stream replica does not exist.
+  // - Canceled: The client canceled the request.
+  // - DeadlineExceeded: The client's timeout has expired.
+  //
+  // TODO: It should be renamed to RemoveLogStreamReplica to represent its
+  // purpose precisely.
   rpc RemoveLogStream(RemoveLogStreamRequest) returns (google.protobuf.Empty) {}
-  // Seal changes the status of LogStreamExecutor to LogStreamStatusSealing or
-  // LogStreamStatusSealed.
+  // Seal changes the status of the log stream replica to LogStreamStatusSealing
+  // or LogStreamStatusSealed.
+  //
+  // It returns the following gRPC errors:
+  // - InvalidArgument: SealRequest has invalid fields; for instance, TopicID
+  // is invalid.
+  // - Unavailable: The storage node is shutting down.
+  // - NotFound: The log stream replica does not exist.
+  // - Canceled: The client canceled the request.
+  // - DeadlineExceeded: The client's timeout has expired.
   rpc Seal(SealRequest) returns (SealResponse) {}
-  // Unseal changes the status of LogStreamExecutor to LogStreamStatusRunning.
+  // Unseal changes the status of the log stream replica to
+  // LogStreamStatusRunning.
+  //
+  // It returns the following gRPC errors:
+  // - InvalidArgument: UnsealRequest has invalid fields; for instance, TopicID
+  // is invalid.
+  // - Unavailable: The storage node is shutting down.
+  // - NotFound: The log stream replica does not exist.
+  // - Canceled: The client canceled the request.
+  // - DeadlineExceeded: The client's timeout has expired.
   rpc Unseal(UnsealRequest) returns (google.protobuf.Empty) {}
-  // Sync starts mirroring between two StorageNodes.
+  // Sync duplicates log entries from the source log stream replica to the
+  // destination log stream replica.
+  //
+  // It returns the following gRPC errors:
+  // - Unavailable: The storage node is shutting down.
+  // - NotFound: The log stream replica does not exist.
+  // - Canceled: The client canceled the request.
+  // - DeadlineExceeded: The client's timeout has expired.
   rpc Sync(SyncRequest) returns (SyncResponse) {}
+  // Trim removes prefix log entries from each log stream replica in the topic.
   rpc Trim(TrimRequest) returns (TrimResponse) {}
 }

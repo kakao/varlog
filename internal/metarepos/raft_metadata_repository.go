@@ -18,8 +18,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
+
+	"github.com/gogo/status"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/pkg/types"
@@ -1350,7 +1353,7 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, _ types.ClusterID, nodeID types.NodeID, url string) error {
 	if mr.membership.IsMember(nodeID) ||
 		mr.membership.IsLearner(nodeID) {
-		return verrors.ErrAlreadyExists
+		return status.Errorf(codes.AlreadyExists, "node %d, addr:%s", nodeID, url)
 	}
 
 	r := raftpb.ConfChange{
@@ -1382,7 +1385,7 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, _ types.ClusterID
 func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, _ types.ClusterID, nodeID types.NodeID) error {
 	if !mr.membership.IsMember(nodeID) &&
 		!mr.membership.IsLearner(nodeID) {
-		return verrors.ErrNotExist
+		return status.Errorf(codes.NotFound, "node %d", nodeID)
 	}
 
 	r := raftpb.ConfChange{
@@ -1422,7 +1425,7 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 
 func (mr *RaftMetadataRepository) GetClusterInfo(context.Context, types.ClusterID) (*mrpb.ClusterInfo, error) {
 	if !mr.IsMember() {
-		return nil, verrors.ErrNotMember
+		return nil, status.Errorf(codes.Unavailable, "this mr is not member")
 	}
 
 	peerMap := mr.membership.GetPeers()

@@ -879,19 +879,61 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ManagementClient interface {
-	// GetMetadata returns metadata of StorageNode.
+	// GetMetadata returns the metadata of the storage node. It produces a gRPC
+	// Unavailable error if the storage node is shutting down.
 	GetMetadata(ctx context.Context, in *GetMetadataRequest, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// AddLogStreamReplica adds a new log stream replica to a storage node.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The storage node is shutting down.
+	// - ResourceExhausted: The number of log stream replicas in the storage node
+	// reaches the upper limit.
+	// - Canceled: The client canceled the request.
+	// DeadlineExceeded: The client's timeout has expired.
 	AddLogStreamReplica(ctx context.Context, in *AddLogStreamReplicaRequest, opts ...grpc.CallOption) (*AddLogStreamReplicaResponse, error)
-	// RemoveLogStream removes a LogStream from StorageNode.
+	// RemoveLogStream removes a log stream replica from the storage node.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The storage node is shutting down.
+	// - NotFound: The log stream replica does not exist.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
+	//
+	// TODO: It should be renamed to RemoveLogStreamReplica to represent its
+	// purpose precisely.
 	RemoveLogStream(ctx context.Context, in *RemoveLogStreamRequest, opts ...grpc.CallOption) (*types.Empty, error)
-	// Seal changes the status of LogStreamExecutor to LogStreamStatusSealing or
-	// LogStreamStatusSealed.
+	// Seal changes the status of the log stream replica to LogStreamStatusSealing
+	// or LogStreamStatusSealed.
+	//
+	// It returns the following gRPC errors:
+	// - InvalidArgument: SealRequest has invalid fields; for instance, TopicID
+	// is invalid.
+	// - Unavailable: The storage node is shutting down.
+	// - NotFound: The log stream replica does not exist.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
 	Seal(ctx context.Context, in *SealRequest, opts ...grpc.CallOption) (*SealResponse, error)
-	// Unseal changes the status of LogStreamExecutor to LogStreamStatusRunning.
+	// Unseal changes the status of the log stream replica to
+	// LogStreamStatusRunning.
+	//
+	// It returns the following gRPC errors:
+	// - InvalidArgument: UnsealRequest has invalid fields; for instance, TopicID
+	// is invalid.
+	// - Unavailable: The storage node is shutting down.
+	// - NotFound: The log stream replica does not exist.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
 	Unseal(ctx context.Context, in *UnsealRequest, opts ...grpc.CallOption) (*types.Empty, error)
-	// Sync starts mirroring between two StorageNodes.
+	// Sync duplicates log entries from the source log stream replica to the
+	// destination log stream replica.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The storage node is shutting down.
+	// - NotFound: The log stream replica does not exist.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
 	Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error)
+	// Trim removes prefix log entries from each log stream replica in the topic.
 	Trim(ctx context.Context, in *TrimRequest, opts ...grpc.CallOption) (*TrimResponse, error)
 }
 
@@ -968,19 +1010,61 @@ func (c *managementClient) Trim(ctx context.Context, in *TrimRequest, opts ...gr
 
 // ManagementServer is the server API for Management service.
 type ManagementServer interface {
-	// GetMetadata returns metadata of StorageNode.
+	// GetMetadata returns the metadata of the storage node. It produces a gRPC
+	// Unavailable error if the storage node is shutting down.
 	GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error)
 	// AddLogStreamReplica adds a new log stream replica to a storage node.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The storage node is shutting down.
+	// - ResourceExhausted: The number of log stream replicas in the storage node
+	// reaches the upper limit.
+	// - Canceled: The client canceled the request.
+	// DeadlineExceeded: The client's timeout has expired.
 	AddLogStreamReplica(context.Context, *AddLogStreamReplicaRequest) (*AddLogStreamReplicaResponse, error)
-	// RemoveLogStream removes a LogStream from StorageNode.
+	// RemoveLogStream removes a log stream replica from the storage node.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The storage node is shutting down.
+	// - NotFound: The log stream replica does not exist.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
+	//
+	// TODO: It should be renamed to RemoveLogStreamReplica to represent its
+	// purpose precisely.
 	RemoveLogStream(context.Context, *RemoveLogStreamRequest) (*types.Empty, error)
-	// Seal changes the status of LogStreamExecutor to LogStreamStatusSealing or
-	// LogStreamStatusSealed.
+	// Seal changes the status of the log stream replica to LogStreamStatusSealing
+	// or LogStreamStatusSealed.
+	//
+	// It returns the following gRPC errors:
+	// - InvalidArgument: SealRequest has invalid fields; for instance, TopicID
+	// is invalid.
+	// - Unavailable: The storage node is shutting down.
+	// - NotFound: The log stream replica does not exist.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
 	Seal(context.Context, *SealRequest) (*SealResponse, error)
-	// Unseal changes the status of LogStreamExecutor to LogStreamStatusRunning.
+	// Unseal changes the status of the log stream replica to
+	// LogStreamStatusRunning.
+	//
+	// It returns the following gRPC errors:
+	// - InvalidArgument: UnsealRequest has invalid fields; for instance, TopicID
+	// is invalid.
+	// - Unavailable: The storage node is shutting down.
+	// - NotFound: The log stream replica does not exist.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
 	Unseal(context.Context, *UnsealRequest) (*types.Empty, error)
-	// Sync starts mirroring between two StorageNodes.
+	// Sync duplicates log entries from the source log stream replica to the
+	// destination log stream replica.
+	//
+	// It returns the following gRPC errors:
+	// - Unavailable: The storage node is shutting down.
+	// - NotFound: The log stream replica does not exist.
+	// - Canceled: The client canceled the request.
+	// - DeadlineExceeded: The client's timeout has expired.
 	Sync(context.Context, *SyncRequest) (*SyncResponse, error)
+	// Trim removes prefix log entries from each log stream replica in the topic.
 	Trim(context.Context, *TrimRequest) (*TrimResponse, error)
 }
 
