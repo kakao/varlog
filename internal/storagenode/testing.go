@@ -209,6 +209,7 @@ type testRPCServer struct {
 
 	*mock.MockLogIOServer
 	*mock.MockManagementServer
+	*mock.MockLogStreamReporterServer
 }
 
 var _ snpb.LogIOServer = (*testRPCServer)(nil)
@@ -227,15 +228,17 @@ func TestNewRPCServer(t *testing.T, ctrl *gomock.Controller, snid types.StorageN
 	addr = lis.Addr().String()
 
 	trs := &testRPCServer{
-		listener:             lis,
-		grpcServer:           grpc.NewServer(),
-		address:              addr,
-		snid:                 snid,
-		MockLogIOServer:      mock.NewMockLogIOServer(ctrl),
-		MockManagementServer: mock.NewMockManagementServer(ctrl),
+		listener:                    lis,
+		grpcServer:                  grpc.NewServer(),
+		address:                     addr,
+		snid:                        snid,
+		MockLogIOServer:             mock.NewMockLogIOServer(ctrl),
+		MockManagementServer:        mock.NewMockManagementServer(ctrl),
+		MockLogStreamReporterServer: mock.NewMockLogStreamReporterServer(ctrl),
 	}
 	snpb.RegisterLogIOServer(trs.grpcServer, trs.MockLogIOServer)
 	snpb.RegisterManagementServer(trs.grpcServer, trs.MockManagementServer)
+	snpb.RegisterLogStreamReporterServer(trs.grpcServer, trs.MockLogStreamReporterServer)
 	return trs
 }
 
