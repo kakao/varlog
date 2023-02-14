@@ -21,7 +21,7 @@ require (
 	go.etcd.io/etcd v0.0.0-20211015134708-72d3e382e73c
 	go.opentelemetry.io/contrib/instrumentation/host v0.27.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.27.0
-	go.opentelemetry.io/otel v1.12.0
+	go.opentelemetry.io/otel v1.13.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.26.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.26.0
 	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v0.26.0
@@ -102,7 +102,7 @@ require (
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0 // indirect
 	go.opentelemetry.io/otel/internal/metric v0.26.0 // indirect
-	go.opentelemetry.io/otel/trace v1.12.0 // indirect
+	go.opentelemetry.io/otel/trace v1.13.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.11.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/mod v0.8.0 // indirect
