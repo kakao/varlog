@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.0](https://github.com/kakao/varlog/compare/v0.10.0...v0.11.0) (2023-02-20)
+
+
+### Features
+
+* **admin:** defines error codes of several RPCs in the admin server ([f5ed66f](https://github.com/kakao/varlog/commit/f5ed66ff776db710bd13e5782de404f6c888cae6)), closes [#312](https://github.com/kakao/varlog/issues/312)
+* **metarepos:** add grpc error codes to the metadata repository service ([2903f8c](https://github.com/kakao/varlog/commit/2903f8cbc438653a92cb855d991ef78e6845142f))
+* **metarepos:** fix grpc error code ([ce5feb3](https://github.com/kakao/varlog/commit/ce5feb36392b26f729da9d8fe0c29ed01bef5bdc))
+* **storagenode:** add gRPC error codes to the admin service ([80cd082](https://github.com/kakao/varlog/commit/80cd08283fcc5eb36e60340c7a24ad56cb43556c)), closes [#312](https://github.com/kakao/varlog/issues/312)
+* **storagenode:** add gRPC error codes to the log server ([5e813fc](https://github.com/kakao/varlog/commit/5e813fce4fc87fd0ce0c82ecbd8c16d409194cce)), closes [#312](https://github.com/kakao/varlog/issues/312)
+* **varlogcli:** do not deny filtered logsteam ([26fec68](https://github.com/kakao/varlog/commit/26fec688596bf059b5cc0f42d04cdf05fff5a74c))
+* **varlogcli:** select log stream within AllowedLogStreams ([26627a0](https://github.com/kakao/varlog/commit/26627a09c53891855c56cb55b5b20f643f555eb8))
+
 ## [0.10.0](https://github.com/kakao/varlog/compare/v0.9.2...v0.10.0) (2023-01-04)
 
 
