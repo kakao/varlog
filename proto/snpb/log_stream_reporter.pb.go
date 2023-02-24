@@ -263,7 +263,7 @@ func (m *GetReportResponse) GetUncommitReports() []LogStreamUncommitReport {
 //	    TopicID: 1,
 //	    LogStreamID: 2,
 //	    Version 3,
-//	    HighWatermark: 20,
+//	    HighWatermark: 40,
 //	    CommittedLLSNOffset: 21,
 //	    CommittedGLSNOffset: 31,
 //	    CommittedGLSNLength: 10,
