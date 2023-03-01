@@ -2,6 +2,7 @@ package grpc_zap
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/golang/protobuf/jsonpb"
@@ -10,13 +11,13 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
 var (
 	// JsonPbMarshaller is the marshaller used for serializing protobuf messages.
-	JsonPbMarshaller = &jsonpb.Marshaler{}
+	// If needed, this variable can be reassigned with a different marshaller with the same Marshal() signature.
+	JsonPbMarshaller grpc_logging.JsonPbMarshaler = &jsonpb.Marshaler{}
 )
 
 // PayloadUnaryServerInterceptor returns a new unary server interceptors that logs the payloads of requests.
@@ -33,7 +34,7 @@ func PayloadUnaryServerInterceptor(logger *zap.Logger, decider grpc_logging.Serv
 		logProtoMessageAsJson(logEntry, req, "grpc.request.content", "server request payload logged as grpc.request.content field")
 		resp, err := handler(ctx, req)
 		if err == nil {
-			logProtoMessageAsJson(logEntry, resp, "grpc.response.content", "server response payload logged as grpc.request.content field")
+			logProtoMessageAsJson(logEntry, resp, "grpc.response.content", "server response payload logged as grpc.response.content field")
 		}
 		return resp, err
 	}
@@ -54,7 +55,7 @@ func PayloadStreamServerInterceptor(logger *zap.Logger, decider grpc_logging.Ser
 	}
 }
 
-// PayloadUnaryClientInterceptor returns a new unary client interceptor that logs the paylods of requests and responses.
+// PayloadUnaryClientInterceptor returns a new unary client interceptor that logs the payloads of requests and responses.
 func PayloadUnaryClientInterceptor(logger *zap.Logger, decider grpc_logging.ClientPayloadLoggingDecider) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		if !decider(ctx, method) {
@@ -70,7 +71,7 @@ func PayloadUnaryClientInterceptor(logger *zap.Logger, decider grpc_logging.Clie
 	}
 }
 
-// PayloadStreamClientInterceptor returns a new streaming client interceptor that logs the paylods of requests and responses.
+// PayloadStreamClientInterceptor returns a new streaming client interceptor that logs the payloads of requests and responses.
 func PayloadStreamClientInterceptor(logger *zap.Logger, decider grpc_logging.ClientPayloadLoggingDecider) grpc.StreamClientInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 		if !decider(ctx, method) {
