@@ -173,6 +173,9 @@ func (s *Storage) readLLSN(llsn types.LLSN) (le varlogpb.LogEntry, err error) {
 func (s *Storage) ReadCommitContext() (cc CommitContext, err error) {
 	buf, closer, err := s.db.Get(commitContextKey)
 	if err != nil {
+		if err == pebble.ErrNotFound {
+			err = ErrNoCommitContext
+		}
 		return
 	}
 	defer func() {
