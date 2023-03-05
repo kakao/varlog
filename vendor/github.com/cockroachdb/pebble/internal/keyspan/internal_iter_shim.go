@@ -16,6 +16,7 @@ import "github.com/cockroachdb/pebble/internal/base"
 // keyspan.FragmentIterator with point keys.
 type InternalIteratorShim struct {
 	miter   MergingIter
+	mbufs   MergingBuffers
 	span    *Span
 	iterKey base.InternalKey
 }
@@ -26,7 +27,7 @@ var _ base.InternalIterator = &InternalIteratorShim{}
 // Init initializes the internal iterator shim to merge the provided fragment
 // iterators.
 func (i *InternalIteratorShim) Init(cmp base.Compare, iters ...FragmentIterator) {
-	i.miter.Init(cmp, noopTransform, iters...)
+	i.miter.Init(cmp, noopTransform, &i.mbufs, iters...)
 }
 
 // Span returns the span containing the full set of keys over the key span at
@@ -85,6 +86,11 @@ func (i *InternalIteratorShim) Next() (*base.InternalKey, base.LazyValue) {
 	}
 	i.iterKey = base.InternalKey{UserKey: i.span.Start, Trailer: i.span.Keys[0].Trailer}
 	return &i.iterKey, base.MakeInPlaceValue(i.span.End)
+}
+
+// NextPrefix implements (base.InternalIterator).NextPrefix.
+func (i *InternalIteratorShim) NextPrefix([]byte) (*base.InternalKey, base.LazyValue) {
+	panic("unimplemented")
 }
 
 // Prev implements (base.InternalIterator).Prev.

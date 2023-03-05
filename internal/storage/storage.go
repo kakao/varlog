@@ -59,7 +59,8 @@ func New(opts ...Option) (*Storage, error) {
 	pebbleOpts.EnsureDefaults()
 
 	if cfg.verbose {
-		pebbleOpts.EventListener = pebble.MakeLoggingEventListener(newLogAdaptor(cfg.logger))
+		el := pebble.MakeLoggingEventListener(newLogAdaptor(cfg.logger))
+		pebbleOpts.EventListener = &el
 		pebbleOpts.EventListener.TableDeleted = nil
 		pebbleOpts.EventListener.TableIngested = nil
 		pebbleOpts.EventListener.WALCreated = nil

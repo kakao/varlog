@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/invariants"
-	"github.com/cockroachdb/pebble/vfs"
 )
 
 // Compare exports the base.Compare type.
@@ -42,7 +41,8 @@ type TableInfo struct {
 	LargestSeqNum uint64
 }
 
-// TableStats contains statistics on a table used for compaction heuristics.
+// TableStats contains statistics on a table used for compaction heuristics,
+// and export via Metrics.
 type TableStats struct {
 	// The total number of entries in the table.
 	NumEntries uint64
@@ -64,6 +64,8 @@ type TableStats struct {
 	// if snapshots or move compactions prevented the elision of their range
 	// tombstones.
 	RangeDeletionsBytesEstimate uint64
+	// Total size of value blocks and value index block.
+	ValueBlocksSize uint64
 }
 
 // boundType represents the type of key (point or range) present as the smallest
@@ -79,10 +81,10 @@ const (
 //
 // The following shows the valid state transitions:
 //
-//    NotCompacting --> Compacting --> Compacted
-//          ^               |
-//          |               |
-//          +-------<-------+
+//	NotCompacting --> Compacting --> Compacted
+//	      ^               |
+//	      |               |
+//	      +-------<-------+
 //
 // Input files to a compaction transition to Compacting when a compaction is
 // picked. A file that has finished compacting typically transitions into the
@@ -143,7 +145,7 @@ type FileMetadata struct {
 	// Reference count for the file: incremented when a file is added to a
 	// version and decremented when the version is unreferenced. The file is
 	// obsolete when the reference count falls to zero.
-	refs int32
+	Refs int32
 	// FileNum is the file number.
 	FileNum base.FileNum
 	// Size is the size of the file, in bytes.
@@ -351,6 +353,66 @@ func (m *FileMetadata) extendOverallBounds(
 			m.Largest = largest
 			m.boundTypeLargest = bTyp
 		}
+	}
+}
+
+// Overlaps returns true if the file key range overlaps with the given range.
+func (m *FileMetadata) Overlaps(cmp Compare, start []byte, end []byte, exclusiveEnd bool) bool {
+	if c := cmp(m.Largest.UserKey, start); c < 0 || (c == 0 && m.Largest.IsExclusiveSentinel()) {
+		// f is completely before the specified range; no overlap.
+		return false
+	}
+	if c := cmp(m.Smallest.UserKey, end); c > 0 || (c == 0 && exclusiveEnd) {
+		// f is completely after the specified range; no overlap.
+		return false
+	}
+	return true
+}
+
+// ContainsKeyType returns whether or not the file contains keys of the provided
+// type.
+func (m *FileMetadata) ContainsKeyType(kt KeyType) bool {
+	switch kt {
+	case KeyTypePointAndRange:
+		return true
+	case KeyTypePoint:
+		return m.HasPointKeys
+	case KeyTypeRange:
+		return m.HasRangeKeys
+	default:
+		panic("unrecognized key type")
+	}
+}
+
+// SmallestBound returns the file's smallest bound of the key type. It returns a
+// false second return value if the file does not contain any keys of the key
+// type.
+func (m *FileMetadata) SmallestBound(kt KeyType) (*InternalKey, bool) {
+	switch kt {
+	case KeyTypePointAndRange:
+		return &m.Smallest, true
+	case KeyTypePoint:
+		return &m.SmallestPointKey, m.HasPointKeys
+	case KeyTypeRange:
+		return &m.SmallestRangeKey, m.HasRangeKeys
+	default:
+		panic("unrecognized key type")
+	}
+}
+
+// LargestBound returns the file's largest bound of the key type. It returns a
+// false second return value if the file does not contain any keys of the key
+// type.
+func (m *FileMetadata) LargestBound(kt KeyType) (*InternalKey, bool) {
+	switch kt {
+	case KeyTypePointAndRange:
+		return &m.Largest, true
+	case KeyTypePoint:
+		return &m.LargestPointKey, m.HasPointKeys
+	case KeyTypeRange:
+		return &m.LargestRangeKey, m.HasRangeKeys
+	default:
+		panic("unrecognized key type")
 	}
 }
 
@@ -626,51 +688,50 @@ func SortBySmallest(files []*FileMetadata, cmp Compare) {
 
 func overlaps(iter LevelIterator, cmp Compare, start, end []byte, exclusiveEnd bool) LevelSlice {
 	startIter := iter.Clone()
-	startIter.SeekGE(cmp, start)
-
-	// SeekGE compares user keys. The user key `start` may be equal to the
-	// f.Largest because f.Largest is a range deletion sentinel, indicating that
-	// the user key `start` is NOT contained within the file f. If that's the
-	// case, we can narrow the overlapping bounds to exclude the file with the
-	// sentinel.
-	if f := startIter.Current(); f != nil && f.Largest.IsExclusiveSentinel() &&
-		cmp(f.Largest.UserKey, start) == 0 {
-		startIter.Next()
+	{
+		startIterFile := startIter.SeekGE(cmp, start)
+		// SeekGE compares user keys. The user key `start` may be equal to the
+		// f.Largest because f.Largest is a range deletion sentinel, indicating
+		// that the user key `start` is NOT contained within the file f. If
+		// that's the case, we can narrow the overlapping bounds to exclude the
+		// file with the sentinel.
+		if startIterFile != nil && startIterFile.Largest.IsExclusiveSentinel() &&
+			cmp(startIterFile.Largest.UserKey, start) == 0 {
+			startIterFile = startIter.Next()
+		}
+		_ = startIterFile // Ignore unused assignment.
 	}
 
 	endIter := iter.Clone()
-	endIter.SeekGE(cmp, end)
+	{
+		endIterFile := endIter.SeekGE(cmp, end)
 
-	if !exclusiveEnd {
-		// endIter is now pointing at the *first* file with a largest key >= end.
-		// If there are multiple files including the user key `end`, we want all
-		// of them, so move forward.
-		for f := endIter.Current(); f != nil && cmp(f.Largest.UserKey, end) == 0; {
-			f = endIter.Next()
+		if !exclusiveEnd {
+			// endIter is now pointing at the *first* file with a largest key >= end.
+			// If there are multiple files including the user key `end`, we want all
+			// of them, so move forward.
+			for endIterFile != nil && cmp(endIterFile.Largest.UserKey, end) == 0 {
+				endIterFile = endIter.Next()
+			}
 		}
-	}
 
-	// LevelSlice uses inclusive bounds, so if we seeked to the end sentinel
-	// or nexted too far because Largest.UserKey equaled `end`, go back.
-	//
-	// Consider !exclusiveEnd and end = 'f', with the following file bounds:
-	//
-	//     [b,d] [e, f] [f, f] [g, h]
-	//
-	// the above for loop will Next until it arrives at [g, h]. We need to
-	// observe that g > f, and Prev to the file with bounds [f, f].
-	if !endIter.iter.valid() {
-		endIter.Prev()
-	} else if c := cmp(endIter.Current().Smallest.UserKey, end); c > 0 || c == 0 && exclusiveEnd {
-		endIter.Prev()
+		// LevelSlice uses inclusive bounds, so if we seeked to the end sentinel
+		// or nexted too far because Largest.UserKey equaled `end`, go back.
+		//
+		// Consider !exclusiveEnd and end = 'f', with the following file bounds:
+		//
+		//     [b,d] [e, f] [f, f] [g, h]
+		//
+		// the above for loop will Next until it arrives at [g, h]. We need to
+		// observe that g > f, and Prev to the file with bounds [f, f].
+		if endIterFile == nil {
+			endIterFile = endIter.Prev()
+		} else if c := cmp(endIterFile.Smallest.UserKey, end); c > 0 || c == 0 && exclusiveEnd {
+			endIterFile = endIter.Prev()
+		}
+		_ = endIterFile // Ignore unused assignment.
 	}
-
-	iter = startIter.Clone()
-	return LevelSlice{
-		iter:  iter.iter,
-		start: &startIter.iter,
-		end:   &endIter.iter,
-	}
+	return newBoundedLevelSlice(startIter.Clone().iter, &startIter.iter, &endIter.iter)
 }
 
 // NumLevels is the number of levels a Version contains.
@@ -933,11 +994,11 @@ func (v *Version) Contains(level int, cmp Compare, m *FileMetadata) bool {
 }
 
 // Overlaps returns all elements of v.files[level] whose user key range
-// intersects the inclusive range [start, end]. If level is non-zero then the
-// user key ranges of v.files[level] are assumed to not overlap (although they
-// may touch). If level is zero then that assumption cannot be made, and the
-// [start, end] range is expanded to the union of those matching ranges so far
-// and the computation is repeated until [start, end] stabilizes.
+// intersects the given range. If level is non-zero then the user key ranges of
+// v.files[level] are assumed to not overlap (although they may touch). If level
+// is zero then that assumption cannot be made, and the [start, end] range is
+// expanded to the union of those matching ranges so far and the computation is
+// repeated until [start, end] stabilizes.
 // The returned files are a subsequence of the input files, i.e., the ordering
 // is not changed.
 func (v *Version) Overlaps(
@@ -957,20 +1018,16 @@ func (v *Version) Overlaps(
 				if selected {
 					continue
 				}
-				smallest := meta.Smallest.UserKey
-				largest := meta.Largest.UserKey
-				if c := cmp(largest, start); c < 0 || c == 0 && meta.Largest.IsExclusiveSentinel() {
-					// meta is completely before the specified range; skip it.
-					continue
-				}
-				if c := cmp(smallest, end); c > 0 || c == 0 && exclusiveEnd {
-					// meta is completely after the specified range; skip it.
+				if !meta.Overlaps(cmp, start, end, exclusiveEnd) {
+					// meta is completely outside the specified range; skip it.
 					continue
 				}
 				// Overlaps.
 				selectedIndices[i] = true
 				numSelected++
 
+				smallest := meta.Smallest.UserKey
+				largest := meta.Largest.UserKey
 				// Since level == 0, check if the newly added fileMetadata has
 				// expanded the range. We expand the range immediately for files
 				// we have remaining to check in this loop. All already checked
@@ -998,17 +1055,17 @@ func (v *Version) Overlaps(
 				tr.cmp = v.Levels[level].tree.cmp
 				for i, meta := 0, l0Iter.First(); meta != nil; i, meta = i+1, l0Iter.Next() {
 					if selectedIndices[i] {
-						err := tr.insert(meta)
+						err := tr.Insert(meta)
 						if err != nil {
 							panic(err)
 						}
 					}
 				}
-				slice = LevelSlice{iter: tr.iter(), length: tr.length}
+				slice = newLevelSlice(tr.Iter())
 				// TODO(jackson): Avoid the oddity of constructing and
 				// immediately releasing a B-Tree. Make LevelSlice an
 				// interface?
-				tr.release()
+				tr.Release()
 				break
 			}
 			// Continue looping to retry the files that were not selected.
@@ -1036,37 +1093,6 @@ func (v *Version) CheckOrdering(cmp Compare, format base.FormatKey) error {
 		}
 	}
 	return nil
-}
-
-// CheckConsistency checks that all of the files listed in the version exist
-// and their on-disk sizes match the sizes listed in the version.
-func (v *Version) CheckConsistency(dirname string, fs vfs.FS) error {
-	var buf bytes.Buffer
-	var args []interface{}
-
-	for level, files := range v.Levels {
-		iter := files.Iter()
-		for f := iter.First(); f != nil; f = iter.Next() {
-			path := base.MakeFilepath(fs, dirname, base.FileTypeTable, f.FileNum)
-			info, err := fs.Stat(path)
-			if err != nil {
-				buf.WriteString("L%d: %s: %v\n")
-				args = append(args, errors.Safe(level), errors.Safe(f.FileNum), err)
-				continue
-			}
-			if info.Size() != int64(f.Size) {
-				buf.WriteString("L%d: %s: file size mismatch (%s): %d (disk) != %d (MANIFEST)\n")
-				args = append(args, errors.Safe(level), errors.Safe(f.FileNum), path,
-					errors.Safe(info.Size()), errors.Safe(f.Size))
-				continue
-			}
-		}
-	}
-
-	if buf.Len() == 0 {
-		return nil
-	}
-	return errors.Errorf(buf.String(), args...)
 }
 
 // VersionList holds a list of versions. The versions are ordered from oldest

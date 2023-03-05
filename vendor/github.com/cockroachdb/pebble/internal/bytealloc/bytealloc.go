@@ -26,7 +26,7 @@ import "github.com/cockroachdb/pebble/internal/rawalloc"
 type A []byte
 
 const chunkAllocMinSize = 512
-const chunkAllocMaxSize = 16384
+const chunkAllocMaxSize = 512 << 10 // 512 KB
 
 func (a A) reserve(n int) A {
 	allocSize := cap(a) * 2
@@ -58,4 +58,12 @@ func (a A) Copy(src []byte) (A, []byte) {
 	a, alloc = a.Alloc(len(src))
 	copy(alloc, src)
 	return a, alloc
+}
+
+// Reset returns the current chunk, resetting allocated memory back to none.
+// Future allocations will use memory previously allocated by previous calls to
+// Alloc or Copy, so the caller must know know that none of the previously
+// allocated byte slices are still in use.
+func (a A) Reset() A {
+	return a[:0]
 }
