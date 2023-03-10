@@ -305,7 +305,7 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 		GLSN: cc.CommittedGLSNBegin + types.GLSN(numCommits),
 	}
 	cm.lse.decider.change(func() {
-		cm.lse.lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false)
+		cm.lse.lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false /*invalid*/)
 	})
 
 	for _, cwt := range committedTasks {
