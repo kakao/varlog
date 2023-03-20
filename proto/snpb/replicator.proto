@@ -63,15 +63,53 @@ message SyncPosition {
   ];
 }
 
+// SyncRange indicates a range of synchronization. In request, it represents the
+// boundary of copiable log entries; conversely, in response, it means the
+// border of necessary log entries.
 message SyncRange {
+  // FirstLLSN is the inclusive lower LLSN of SyncRange.
   uint64 first_llsn = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
     (gogoproto.customname) = "FirstLLSN"
   ];
+  // LastLLSN is the inclusive upper LLSN of SyncRange.
   uint64 last_llsn = 2 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
     (gogoproto.customname) = "LastLLSN"
   ];
+}
+
+// SyncInitRequest represents a range of synchronization from source to
+// destination. The field Range indicates the first and the last log sequence
+// numbers the source can send to the destination. The field CommitContext
+// indicates the last commit sent from the metadata repository to the source.
+message SyncInitRequest {
+  // ClusterID is the identifier of the cluster.
+  uint32 cluster_id = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
+  // Source is metadata for source log stream replica.
+  varlogpb.LogStreamReplica source = 2 [(gogoproto.nullable) = false];
+  // Destination is metadata for destination log stream replica.
+  varlogpb.LogStreamReplica destination = 3 [(gogoproto.nullable) = false];
+  // Range is the boundaries of log entries that can be copied from source to
+  // destination.
+  SyncRange range = 4 [(gogoproto.nullable) = false];
+  // LastCommittedLLSN is the LLSN to which the last log entry was committed in
+  // the source replica.
+  uint64 last_committed_llsn = 5 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LastCommittedLLSN"
+  ];
+}
+
+// SyncInitResponse represents a range of log entries necessary for the
+// destination. If all fields of Range that are FirstLLSN and LastLLSN are
+// InvalidLLSN, the destination does not need any log entry, but only the commit
+// context.
+message SyncInitResponse {
+  SyncRange range = 1 [(gogoproto.nullable) = false];
 }
 
 message SyncStatus {
@@ -85,20 +123,6 @@ message SyncPayload {
   option (gogoproto.onlyone) = true;
   varlogpb.CommitContext commit_context = 1;
   varlogpb.LogEntry log_entry = 2;
-}
-
-message SyncInitRequest {
-  uint32 cluster_id = 1 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
-    (gogoproto.customname) = "ClusterID"
-  ];
-  varlogpb.LogStreamReplica source = 2 [(gogoproto.nullable) = false];
-  varlogpb.LogStreamReplica destination = 3 [(gogoproto.nullable) = false];
-  SyncRange range = 4 [(gogoproto.nullable) = false];
-}
-
-message SyncInitResponse {
-  SyncRange range = 1 [(gogoproto.nullable) = false];
 }
 
 message SyncReplicateRequest {
@@ -117,6 +141,48 @@ message SyncReplicateResponse {
 
 service Replicator {
   rpc Replicate(stream ReplicateRequest) returns (ReplicateResponse) {}
+  // SyncInit tells the source replica's log entries range to the destination
+  // replica. According to the range sent by the request of SyncInit, the
+  // destination replica can decide whether it is necessary to copy log entries
+  // from the source and even delete stale ones.
+  //
+  // To be a source replica, the status of the log stream replica must be
+  // SEALED, which indicates that the log stream replica has all the log entries
+  // that the metadata repository has committed. To be a destination replica,
+  // the status of the log stream replica must be SEALING which means that the
+  // log stream replica does not have all log entries yet.
+  //
+  // To represent log entry ranges, each request and response of SyncInit embeds
+  // a field of type SyncRange. The source replica sends a range of overall log
+  // entries to the destination replica; that is, the FirstLLSN of SyncRange is
+  // the local low watermark, and the LastLLSN of it is the local high
+  // watermark. There are several cases in the destination replica:
+  //
+  // - The destination replica already has log entries and the commit context,
+  // which are the same as the source replica: No synchronization is necessary.
+  // The destination replica should reply with a SyncInitResponse having the
+  // FirstLLSN and the LastLLSN as InvalidLLSNs.
+  // - The destination replica's local high watermark is equal to the LastLLSN.
+  // However, it does not have the corresponding commit context that contains
+  // the last log entry: It means that only copying the commit context from the
+  // source to the destination is necessary. The destination should reply with a
+  // SyncInitResponse having a larger FirstLLSN than the LastLLSN.
+  // - The destination replica's local high watermark is lower than the LastLLSN
+  // of SyncInitRequest: Some log entries should be cloned from the source to
+  // the destination. The destination replica should reply with a
+  // SyncInitResponse denoting the missing range.
+  //
+  // A destination replica sometimes should remove log entries according to the
+  // SyncRange in the request, usually when the source replica has trimmed the
+  // log entries.
+  //
+  // When a source replica has no log entries due to Trim, the source replica
+  // can invoke SyncInit with InvalidLLSNs for FirstLLSN and LastLLSN of
+  // SyncRange. Destination replica should remove their stale log entries and
+  // receive a commit context from the source replica.
+  //
+  // TODO: Use the gRPC error code instead of setting particular values for the
+  // SyncRange to avoid ambiguity.
   rpc SyncInit(SyncInitRequest) returns (SyncInitResponse) {}
   // SyncReplicate
   //

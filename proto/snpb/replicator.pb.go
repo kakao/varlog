@@ -222,9 +222,14 @@ func (m *SyncPosition) GetGLSN() github_com_kakao_varlog_pkg_types.GLSN {
 	return 0
 }
 
+// SyncRange indicates a range of synchronization. In request, it represents the
+// boundary of copiable log entries; conversely, in response, it means the
+// border of necessary log entries.
 type SyncRange struct {
+	// FirstLLSN is the inclusive lower LLSN of SyncRange.
 	FirstLLSN github_com_kakao_varlog_pkg_types.LLSN `protobuf:"varint,1,opt,name=first_llsn,json=firstLlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"first_llsn,omitempty"`
-	LastLLSN  github_com_kakao_varlog_pkg_types.LLSN `protobuf:"varint,2,opt,name=last_llsn,json=lastLlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"last_llsn,omitempty"`
+	// LastLLSN is the inclusive upper LLSN of SyncRange.
+	LastLLSN github_com_kakao_varlog_pkg_types.LLSN `protobuf:"varint,2,opt,name=last_llsn,json=lastLlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"last_llsn,omitempty"`
 }
 
 func (m *SyncRange) Reset()         { *m = SyncRange{} }
@@ -274,6 +279,141 @@ func (m *SyncRange) GetLastLLSN() github_com_kakao_varlog_pkg_types.LLSN {
 	return 0
 }
 
+// SyncInitRequest represents a range of synchronization from source to
+// destination. The field Range indicates the first and the last log sequence
+// numbers the source can send to the destination. The field CommitContext
+// indicates the last commit sent from the metadata repository to the source.
+type SyncInitRequest struct {
+	// ClusterID is the identifier of the cluster.
+	ClusterID github_com_kakao_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
+	// Source is metadata for source log stream replica.
+	Source varlogpb.LogStreamReplica `protobuf:"bytes,2,opt,name=source,proto3" json:"source"`
+	// Destination is metadata for destination log stream replica.
+	Destination varlogpb.LogStreamReplica `protobuf:"bytes,3,opt,name=destination,proto3" json:"destination"`
+	// Range is the boundaries of log entries that can be copied from source to
+	// destination.
+	Range SyncRange `protobuf:"bytes,4,opt,name=range,proto3" json:"range"`
+	// LastCommittedLLSN is the LLSN to which the last log entry was committed in
+	// the source replica.
+	LastCommittedLLSN github_com_kakao_varlog_pkg_types.LLSN `protobuf:"varint,5,opt,name=last_committed_llsn,json=lastCommittedLlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"last_committed_llsn,omitempty"`
+}
+
+func (m *SyncInitRequest) Reset()         { *m = SyncInitRequest{} }
+func (m *SyncInitRequest) String() string { return proto.CompactTextString(m) }
+func (*SyncInitRequest) ProtoMessage()    {}
+func (*SyncInitRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_85705cb817486b63, []int{4}
+}
+func (m *SyncInitRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SyncInitRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SyncInitRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SyncInitRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncInitRequest.Merge(m, src)
+}
+func (m *SyncInitRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *SyncInitRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncInitRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncInitRequest proto.InternalMessageInfo
+
+func (m *SyncInitRequest) GetClusterID() github_com_kakao_varlog_pkg_types.ClusterID {
+	if m != nil {
+		return m.ClusterID
+	}
+	return 0
+}
+
+func (m *SyncInitRequest) GetSource() varlogpb.LogStreamReplica {
+	if m != nil {
+		return m.Source
+	}
+	return varlogpb.LogStreamReplica{}
+}
+
+func (m *SyncInitRequest) GetDestination() varlogpb.LogStreamReplica {
+	if m != nil {
+		return m.Destination
+	}
+	return varlogpb.LogStreamReplica{}
+}
+
+func (m *SyncInitRequest) GetRange() SyncRange {
+	if m != nil {
+		return m.Range
+	}
+	return SyncRange{}
+}
+
+func (m *SyncInitRequest) GetLastCommittedLLSN() github_com_kakao_varlog_pkg_types.LLSN {
+	if m != nil {
+		return m.LastCommittedLLSN
+	}
+	return 0
+}
+
+// SyncInitResponse represents a range of log entries necessary for the
+// destination. If all fields of Range that are FirstLLSN and LastLLSN are
+// InvalidLLSN, the destination does not need any log entry, but only the commit
+// context.
+type SyncInitResponse struct {
+	Range SyncRange `protobuf:"bytes,1,opt,name=range,proto3" json:"range"`
+}
+
+func (m *SyncInitResponse) Reset()         { *m = SyncInitResponse{} }
+func (m *SyncInitResponse) String() string { return proto.CompactTextString(m) }
+func (*SyncInitResponse) ProtoMessage()    {}
+func (*SyncInitResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_85705cb817486b63, []int{5}
+}
+func (m *SyncInitResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SyncInitResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SyncInitResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SyncInitResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncInitResponse.Merge(m, src)
+}
+func (m *SyncInitResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *SyncInitResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncInitResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncInitResponse proto.InternalMessageInfo
+
+func (m *SyncInitResponse) GetRange() SyncRange {
+	if m != nil {
+		return m.Range
+	}
+	return SyncRange{}
+}
+
 type SyncStatus struct {
 	State   SyncState    `protobuf:"varint,1,opt,name=state,proto3,enum=varlog.snpb.SyncState" json:"state,omitempty"`
 	First   SyncPosition `protobuf:"bytes,2,opt,name=first,proto3" json:"first"`
@@ -285,7 +425,7 @@ func (m *SyncStatus) Reset()         { *m = SyncStatus{} }
 func (m *SyncStatus) String() string { return proto.CompactTextString(m) }
 func (*SyncStatus) ProtoMessage()    {}
 func (*SyncStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_85705cb817486b63, []int{4}
+	return fileDescriptor_85705cb817486b63, []int{6}
 }
 func (m *SyncStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -351,7 +491,7 @@ func (m *SyncPayload) Reset()         { *m = SyncPayload{} }
 func (m *SyncPayload) String() string { return proto.CompactTextString(m) }
 func (*SyncPayload) ProtoMessage()    {}
 func (*SyncPayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_85705cb817486b63, []int{5}
+	return fileDescriptor_85705cb817486b63, []int{7}
 }
 func (m *SyncPayload) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -392,118 +532,6 @@ func (m *SyncPayload) GetLogEntry() *varlogpb.LogEntry {
 		return m.LogEntry
 	}
 	return nil
-}
-
-type SyncInitRequest struct {
-	ClusterID   github_com_kakao_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
-	Source      varlogpb.LogStreamReplica                   `protobuf:"bytes,2,opt,name=source,proto3" json:"source"`
-	Destination varlogpb.LogStreamReplica                   `protobuf:"bytes,3,opt,name=destination,proto3" json:"destination"`
-	Range       SyncRange                                   `protobuf:"bytes,4,opt,name=range,proto3" json:"range"`
-}
-
-func (m *SyncInitRequest) Reset()         { *m = SyncInitRequest{} }
-func (m *SyncInitRequest) String() string { return proto.CompactTextString(m) }
-func (*SyncInitRequest) ProtoMessage()    {}
-func (*SyncInitRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_85705cb817486b63, []int{6}
-}
-func (m *SyncInitRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *SyncInitRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_SyncInitRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *SyncInitRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SyncInitRequest.Merge(m, src)
-}
-func (m *SyncInitRequest) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *SyncInitRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_SyncInitRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_SyncInitRequest proto.InternalMessageInfo
-
-func (m *SyncInitRequest) GetClusterID() github_com_kakao_varlog_pkg_types.ClusterID {
-	if m != nil {
-		return m.ClusterID
-	}
-	return 0
-}
-
-func (m *SyncInitRequest) GetSource() varlogpb.LogStreamReplica {
-	if m != nil {
-		return m.Source
-	}
-	return varlogpb.LogStreamReplica{}
-}
-
-func (m *SyncInitRequest) GetDestination() varlogpb.LogStreamReplica {
-	if m != nil {
-		return m.Destination
-	}
-	return varlogpb.LogStreamReplica{}
-}
-
-func (m *SyncInitRequest) GetRange() SyncRange {
-	if m != nil {
-		return m.Range
-	}
-	return SyncRange{}
-}
-
-type SyncInitResponse struct {
-	Range SyncRange `protobuf:"bytes,1,opt,name=range,proto3" json:"range"`
-}
-
-func (m *SyncInitResponse) Reset()         { *m = SyncInitResponse{} }
-func (m *SyncInitResponse) String() string { return proto.CompactTextString(m) }
-func (*SyncInitResponse) ProtoMessage()    {}
-func (*SyncInitResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_85705cb817486b63, []int{7}
-}
-func (m *SyncInitResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *SyncInitResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_SyncInitResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *SyncInitResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SyncInitResponse.Merge(m, src)
-}
-func (m *SyncInitResponse) XXX_Size() int {
-	return m.ProtoSize()
-}
-func (m *SyncInitResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_SyncInitResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_SyncInitResponse proto.InternalMessageInfo
-
-func (m *SyncInitResponse) GetRange() SyncRange {
-	if m != nil {
-		return m.Range
-	}
-	return SyncRange{}
 }
 
 type SyncReplicateRequest struct {
@@ -624,10 +652,10 @@ func init() {
 	proto.RegisterType((*ReplicateResponse)(nil), "varlog.snpb.ReplicateResponse")
 	proto.RegisterType((*SyncPosition)(nil), "varlog.snpb.SyncPosition")
 	proto.RegisterType((*SyncRange)(nil), "varlog.snpb.SyncRange")
-	proto.RegisterType((*SyncStatus)(nil), "varlog.snpb.SyncStatus")
-	proto.RegisterType((*SyncPayload)(nil), "varlog.snpb.SyncPayload")
 	proto.RegisterType((*SyncInitRequest)(nil), "varlog.snpb.SyncInitRequest")
 	proto.RegisterType((*SyncInitResponse)(nil), "varlog.snpb.SyncInitResponse")
+	proto.RegisterType((*SyncStatus)(nil), "varlog.snpb.SyncStatus")
+	proto.RegisterType((*SyncPayload)(nil), "varlog.snpb.SyncPayload")
 	proto.RegisterType((*SyncReplicateRequest)(nil), "varlog.snpb.SyncReplicateRequest")
 	proto.RegisterType((*SyncReplicateResponse)(nil), "varlog.snpb.SyncReplicateResponse")
 }
@@ -635,68 +663,70 @@ func init() {
 func init() { proto.RegisterFile("proto/snpb/replicator.proto", fileDescriptor_85705cb817486b63) }
 
 var fileDescriptor_85705cb817486b63 = []byte{
-	// 975 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe4, 0x56, 0x4f, 0x6f, 0xe3, 0xd4,
-	0x17, 0x8d, 0x53, 0xa7, 0x4d, 0x6e, 0xda, 0xfe, 0x32, 0xaf, 0xbf, 0xa1, 0x21, 0x50, 0x3b, 0x63,
-	0x24, 0x14, 0xfe, 0x4c, 0x2c, 0x65, 0xc4, 0x30, 0x8c, 0x46, 0x02, 0x12, 0xd2, 0x12, 0x29, 0xb4,
-	0xd5, 0x73, 0x85, 0x10, 0x2c, 0x82, 0xe3, 0xbc, 0x31, 0x56, 0x1d, 0x3f, 0x63, 0xbf, 0x20, 0xfa,
-	0x0d, 0x50, 0x57, 0x88, 0x7d, 0xa5, 0x91, 0xa8, 0x10, 0x6c, 0x10, 0x4b, 0xf8, 0x06, 0x5d, 0xce,
-	0x92, 0x55, 0x24, 0x92, 0x0d, 0x9f, 0x61, 0x56, 0xe8, 0x3d, 0xff, 0x69, 0x9a, 0x4c, 0x99, 0x8c,
-	0x60, 0xc7, 0xce, 0x7e, 0xf7, 0xdc, 0xf3, 0x8e, 0xef, 0xbd, 0xe7, 0x26, 0xf0, 0x92, 0x1f, 0x50,
-	0x46, 0xf5, 0xd0, 0xf3, 0xfb, 0x7a, 0x40, 0x7c, 0xd7, 0xb1, 0x4c, 0x46, 0x83, 0xba, 0x38, 0x45,
-	0xc5, 0xaf, 0xcc, 0xc0, 0xa5, 0x76, 0x9d, 0x47, 0x2b, 0xaa, 0x4d, 0xa9, 0xed, 0x12, 0x5d, 0x84,
-	0xfa, 0xa3, 0x87, 0x3a, 0x73, 0x86, 0x24, 0x64, 0xe6, 0xd0, 0x8f, 0xd0, 0x95, 0xdb, 0xb6, 0xc3,
-	0xbe, 0x18, 0xf5, 0xeb, 0x16, 0x1d, 0xea, 0x36, 0xb5, 0xe9, 0x25, 0x92, 0xbf, 0x45, 0xf7, 0xf0,
-	0xa7, 0x18, 0xbe, 0x1d, 0x91, 0xfb, 0x7d, 0x7d, 0x48, 0x98, 0x39, 0x30, 0x99, 0x19, 0x05, 0xb4,
-	0x9f, 0xb2, 0x50, 0xc2, 0xb1, 0x14, 0x82, 0xc9, 0x97, 0x23, 0x12, 0x32, 0x64, 0x40, 0x9e, 0x51,
-	0xdf, 0xb1, 0x7a, 0xce, 0xa0, 0x2c, 0x55, 0xa5, 0x5a, 0xae, 0x79, 0x6f, 0x32, 0x56, 0xd7, 0x8e,
-	0xf8, 0x59, 0xe7, 0x83, 0x27, 0x63, 0xf5, 0xb5, 0x99, 0xdb, 0x8f, 0xcd, 0x63, 0x93, 0xea, 0x11,
-	0xbf, 0xee, 0x1f, 0xdb, 0x3a, 0x3b, 0xf1, 0x49, 0x58, 0x8f, 0xc1, 0x78, 0x4d, 0x30, 0x75, 0x06,
-	0x68, 0x00, 0x1b, 0x2e, 0xb5, 0x7b, 0x21, 0x0b, 0x88, 0x39, 0xe4, 0xcc, 0x59, 0xc1, 0xfc, 0xde,
-	0x64, 0xac, 0x16, 0xbb, 0xd4, 0x36, 0xc4, 0xb9, 0x60, 0xbf, 0xfd, 0x6c, 0xf6, 0x99, 0x04, 0x5c,
-	0x74, 0xd3, 0x97, 0x01, 0xda, 0x05, 0xd9, 0x75, 0x43, 0xaf, 0xbc, 0x52, 0x5d, 0xa9, 0xc9, 0xcd,
-	0xc6, 0x64, 0xac, 0xca, 0xdd, 0xae, 0xb1, 0xff, 0x64, 0xac, 0xbe, 0xba, 0x04, 0x6b, 0xd7, 0xd8,
-	0xc7, 0x22, 0x1f, 0x21, 0x90, 0x79, 0x95, 0xca, 0x72, 0x75, 0xa5, 0xb6, 0x8e, 0xc5, 0xb3, 0xb6,
-	0x05, 0x37, 0x66, 0x4a, 0x15, 0xfa, 0xd4, 0x0b, 0x89, 0x76, 0x2e, 0xc1, 0xba, 0x71, 0xe2, 0x59,
-	0x87, 0x34, 0x74, 0x98, 0x43, 0xbd, 0x54, 0x01, 0x2f, 0xdc, 0x3f, 0x51, 0xb0, 0x0b, 0xb2, 0xcd,
-	0x79, 0xb2, 0x97, 0x3c, 0x7b, 0x4b, 0xf3, 0xec, 0x09, 0x1e, 0x9e, 0x7f, 0x5f, 0xfe, 0xf3, 0x91,
-	0x2a, 0x69, 0xbf, 0x4a, 0x50, 0xe0, 0x32, 0xb1, 0xe9, 0xd9, 0x04, 0x7d, 0x0c, 0xf0, 0xd0, 0x09,
-	0x42, 0xd6, 0x9b, 0x51, 0xfa, 0xf6, 0x64, 0xac, 0x16, 0x76, 0xf9, 0xe9, 0x73, 0xca, 0x2d, 0x08,
-	0xaa, 0x2e, 0xd7, 0x6c, 0x40, 0xc1, 0x35, 0x13, 0xda, 0x48, 0xf8, 0xdd, 0xc9, 0x58, 0xcd, 0x77,
-	0xcd, 0xe7, 0x66, 0xcd, 0x73, 0x22, 0x4e, 0xaa, 0xfd, 0x21, 0x01, 0x70, 0xe9, 0x06, 0x33, 0xd9,
-	0x28, 0x44, 0x6f, 0x42, 0x2e, 0x64, 0x26, 0x23, 0x42, 0xf6, 0x66, 0xe3, 0x85, 0xfa, 0x8c, 0x6f,
-	0xea, 0x09, 0x8e, 0xe0, 0x08, 0x84, 0xde, 0x82, 0x9c, 0x90, 0x27, 0xd4, 0x14, 0x1b, 0x2f, 0x2e,
-	0xa0, 0x93, 0xbe, 0x35, 0xe5, 0x8b, 0xb1, 0x9a, 0xc1, 0x11, 0x1a, 0xdd, 0x01, 0x99, 0xdf, 0x5f,
-	0x5e, 0x59, 0x2e, 0x4b, 0x80, 0xd1, 0x3b, 0xb0, 0x66, 0x8d, 0x82, 0x80, 0x78, 0xac, 0x2c, 0x2f,
-	0x97, 0x97, 0xe0, 0xb5, 0xef, 0x24, 0x28, 0x8a, 0xb8, 0x79, 0xe2, 0x52, 0x73, 0x80, 0xda, 0xb0,
-	0x69, 0xd1, 0xe1, 0xd0, 0x61, 0x3d, 0x8b, 0x7a, 0x8c, 0x7c, 0xcd, 0xc4, 0xd7, 0x16, 0x1b, 0x4a,
-	0xc2, 0x98, 0xf8, 0xb9, 0xde, 0x12, 0xb0, 0x56, 0x84, 0xc2, 0x1b, 0xd6, 0xec, 0x2b, 0xba, 0x0b,
-	0x05, 0xee, 0x39, 0xe2, 0xb1, 0xe0, 0x64, 0xbe, 0x02, 0x29, 0x43, 0x97, 0xda, 0x6d, 0x0e, 0xc0,
-	0x79, 0x37, 0x7e, 0xba, 0x2f, 0x5f, 0xf0, 0x99, 0xf9, 0x39, 0x0b, 0xff, 0xe3, 0xa2, 0x3a, 0x9e,
-	0xc3, 0x92, 0xd5, 0xf0, 0x19, 0x80, 0xe5, 0x8e, 0x42, 0x46, 0x82, 0x64, 0x39, 0x6c, 0x34, 0x1f,
-	0xf0, 0xc9, 0x69, 0x45, 0xa7, 0xc2, 0xc0, 0x6f, 0x3c, 0xbb, 0xc7, 0x29, 0x1c, 0x17, 0x62, 0xbe,
-	0xce, 0x00, 0xbd, 0x0b, 0xab, 0x21, 0x1d, 0x05, 0x16, 0x89, 0xb5, 0xde, 0x7a, 0x9a, 0xd6, 0xc8,
-	0xea, 0xb1, 0x11, 0xe3, 0x3a, 0xc6, 0x69, 0xa8, 0x03, 0xc5, 0x01, 0x09, 0x99, 0xe3, 0x99, 0xbc,
-	0xc8, 0x71, 0xf7, 0x96, 0x66, 0x99, 0xcd, 0x45, 0x0d, 0xc8, 0x05, 0xdc, 0x2b, 0x71, 0x2b, 0x17,
-	0xc7, 0x4c, 0x38, 0x29, 0x99, 0x1a, 0x01, 0xd5, 0x76, 0xa1, 0x74, 0x59, 0xaf, 0x68, 0x3f, 0x5c,
-	0xf2, 0x48, 0xcb, 0xf3, 0xfc, 0x96, 0x85, 0xff, 0x8b, 0xd0, 0xfc, 0x62, 0xfe, 0xcf, 0x54, 0xff,
-	0x1e, 0xac, 0xf9, 0x91, 0x15, 0xe2, 0xfa, 0x97, 0x17, 0xad, 0x14, 0xc5, 0x13, 0x27, 0xc5, 0x70,
-	0xed, 0x43, 0xb8, 0x39, 0x57, 0xba, 0xb8, 0x11, 0x3a, 0xac, 0x86, 0x62, 0x83, 0xc4, 0x9d, 0xd8,
-	0x7e, 0xea, 0xe2, 0x18, 0x85, 0x38, 0x86, 0xbd, 0xfe, 0x43, 0xbc, 0x32, 0xc5, 0x3e, 0x41, 0x3b,
-	0x90, 0x6b, 0x63, 0x7c, 0x80, 0x4b, 0x99, 0x0a, 0x3a, 0x3d, 0xab, 0x6e, 0xa6, 0x91, 0x76, 0x10,
-	0xd0, 0x00, 0xd5, 0xa0, 0xd8, 0xd9, 0xef, 0x1d, 0xe2, 0x83, 0x3d, 0xdc, 0x36, 0x8c, 0x92, 0x54,
-	0xd9, 0x3e, 0x3d, 0xab, 0x6e, 0xa5, 0xa0, 0x8e, 0x77, 0x18, 0x50, 0x3b, 0x20, 0x61, 0x88, 0x5e,
-	0x81, 0x7c, 0xeb, 0xe0, 0xa3, 0xc3, 0x6e, 0xfb, 0xa8, 0x5d, 0xca, 0x56, 0x6e, 0x9e, 0x9e, 0x55,
-	0x6f, 0xa4, 0xb0, 0x16, 0x1d, 0xfa, 0x2e, 0x89, 0x6e, 0x33, 0x8e, 0xde, 0xc7, 0x47, 0xa5, 0x95,
-	0xb9, 0xdb, 0x0c, 0x66, 0x06, 0xac, 0xb2, 0xfe, 0xcd, 0xf7, 0x4a, 0xe6, 0xc7, 0x73, 0x25, 0xf3,
-	0xcb, 0xb9, 0x22, 0x35, 0xa6, 0x59, 0x00, 0x9c, 0xfe, 0x9d, 0x40, 0xfb, 0x50, 0x48, 0xbf, 0x1e,
-	0xed, 0x5c, 0xf9, 0xca, 0xf9, 0x81, 0xaa, 0x28, 0xd7, 0x85, 0xe3, 0x5f, 0xb7, 0x4c, 0x4d, 0x42,
-	0x1d, 0xc8, 0x27, 0x53, 0x8d, 0x5e, 0x5e, 0x28, 0xda, 0xcc, 0x72, 0xa8, 0xec, 0x5c, 0x13, 0x4d,
-	0xc8, 0xd0, 0x27, 0xb0, 0x71, 0xa5, 0x39, 0xe8, 0xd6, 0xa2, 0x1d, 0xe6, 0x25, 0x6a, 0x7f, 0x07,
-	0x49, 0x99, 0x3f, 0x87, 0xad, 0x2b, 0xa1, 0x68, 0xc2, 0xfe, 0x35, 0xfe, 0x9a, 0xd4, 0x7c, 0x70,
-	0x31, 0x51, 0xa4, 0xc7, 0x13, 0x45, 0xfa, 0x76, 0xaa, 0x64, 0x1e, 0x4d, 0x15, 0xe9, 0xf1, 0x54,
-	0xc9, 0xfc, 0x3e, 0x55, 0x32, 0x9f, 0x6a, 0xd7, 0x1a, 0x2e, 0xfd, 0xbb, 0xd7, 0x5f, 0x15, 0xcf,
-	0x77, 0xfe, 0x0a, 0x00, 0x00, 0xff, 0xff, 0x09, 0xc7, 0xc8, 0xff, 0x03, 0x0a, 0x00, 0x00,
+	// 1002 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe4, 0x56, 0xcf, 0x6f, 0xe3, 0x44,
+	0x14, 0x8e, 0x13, 0xa7, 0x4d, 0x5e, 0xda, 0x92, 0x4e, 0x59, 0x1a, 0x02, 0xb5, 0xb3, 0x46, 0x42,
+	0xe1, 0xc7, 0xc6, 0x52, 0x57, 0x2c, 0xcb, 0x6a, 0xa5, 0x85, 0x96, 0xb4, 0x44, 0x0a, 0x6d, 0x35,
+	0xae, 0x10, 0x82, 0x43, 0x71, 0x9d, 0x59, 0x63, 0xd5, 0xf1, 0x18, 0x7b, 0x82, 0xe8, 0x7f, 0x80,
+	0x7a, 0x42, 0xdc, 0x2b, 0x56, 0xa2, 0x42, 0x70, 0xe3, 0x08, 0xff, 0x41, 0x8f, 0x7b, 0xe4, 0x14,
+	0x89, 0xf4, 0xc2, 0xdf, 0xb0, 0x27, 0x34, 0xe3, 0xb1, 0x9b, 0x26, 0x5b, 0xda, 0x0a, 0x6e, 0xdc,
+	0xec, 0x79, 0xdf, 0xfb, 0xe6, 0xcd, 0xfb, 0xbe, 0x37, 0x36, 0xbc, 0x12, 0x46, 0x94, 0x51, 0x33,
+	0x0e, 0xc2, 0x7d, 0x33, 0x22, 0xa1, 0xef, 0x39, 0x36, 0xa3, 0x51, 0x4b, 0xac, 0xa2, 0xca, 0xd7,
+	0x76, 0xe4, 0x53, 0xb7, 0xc5, 0xa3, 0x75, 0xdd, 0xa5, 0xd4, 0xf5, 0x89, 0x29, 0x42, 0xfb, 0x83,
+	0xc7, 0x26, 0xf3, 0xfa, 0x24, 0x66, 0x76, 0x3f, 0x4c, 0xd0, 0xf5, 0x3b, 0xae, 0xc7, 0xbe, 0x1c,
+	0xec, 0xb7, 0x1c, 0xda, 0x37, 0x5d, 0xea, 0xd2, 0x73, 0x24, 0x7f, 0x4b, 0xf6, 0xe1, 0x4f, 0x12,
+	0xbe, 0x9c, 0x90, 0x87, 0xfb, 0x66, 0x9f, 0x30, 0xbb, 0x67, 0x33, 0x3b, 0x09, 0x18, 0xbf, 0xe4,
+	0xa1, 0x8a, 0x65, 0x29, 0x04, 0x93, 0xaf, 0x06, 0x24, 0x66, 0xc8, 0x82, 0x12, 0xa3, 0xa1, 0xe7,
+	0xec, 0x79, 0xbd, 0x9a, 0xd2, 0x50, 0x9a, 0xc5, 0xb5, 0xfb, 0xa3, 0xa1, 0x3e, 0xbb, 0xcb, 0xd7,
+	0x3a, 0x1f, 0x3e, 0x1b, 0xea, 0x6f, 0x8c, 0xed, 0x7e, 0x60, 0x1f, 0xd8, 0xd4, 0x4c, 0xf8, 0xcd,
+	0xf0, 0xc0, 0x35, 0xd9, 0x61, 0x48, 0xe2, 0x96, 0x04, 0xe3, 0x59, 0xc1, 0xd4, 0xe9, 0xa1, 0x1e,
+	0xcc, 0xfb, 0xd4, 0xdd, 0x8b, 0x59, 0x44, 0xec, 0x3e, 0x67, 0xce, 0x0b, 0xe6, 0xf7, 0x47, 0x43,
+	0xbd, 0xd2, 0xa5, 0xae, 0x25, 0xd6, 0x05, 0xfb, 0x9d, 0xab, 0xd9, 0xc7, 0x12, 0x70, 0xc5, 0xcf,
+	0x5e, 0x7a, 0x68, 0x03, 0x54, 0xdf, 0x8f, 0x83, 0x5a, 0xa1, 0x51, 0x68, 0xaa, 0x6b, 0xab, 0xa3,
+	0xa1, 0xae, 0x76, 0xbb, 0xd6, 0xd6, 0xb3, 0xa1, 0xfe, 0xfa, 0x35, 0x58, 0xbb, 0xd6, 0x16, 0x16,
+	0xf9, 0x08, 0x81, 0xca, 0xbb, 0x54, 0x53, 0x1b, 0x85, 0xe6, 0x1c, 0x16, 0xcf, 0xc6, 0x12, 0x2c,
+	0x8e, 0xb5, 0x2a, 0x0e, 0x69, 0x10, 0x13, 0xe3, 0x44, 0x81, 0x39, 0xeb, 0x30, 0x70, 0x76, 0x68,
+	0xec, 0x31, 0x8f, 0x06, 0x59, 0x05, 0xbc, 0x71, 0xff, 0xa6, 0x82, 0x0d, 0x50, 0x5d, 0xce, 0x93,
+	0x3f, 0xe7, 0xd9, 0xbc, 0x36, 0xcf, 0xa6, 0xe0, 0xe1, 0xf9, 0x0f, 0xd4, 0xbf, 0x9e, 0xe8, 0x8a,
+	0xf1, 0x9b, 0x02, 0x65, 0x5e, 0x26, 0xb6, 0x03, 0x97, 0xa0, 0x4f, 0x00, 0x1e, 0x7b, 0x51, 0xcc,
+	0xf6, 0xc6, 0x2a, 0x7d, 0x77, 0x34, 0xd4, 0xcb, 0x1b, 0x7c, 0xf5, 0x86, 0xe5, 0x96, 0x05, 0x55,
+	0x97, 0xd7, 0x6c, 0x41, 0xd9, 0xb7, 0x53, 0xda, 0xa4, 0xf0, 0x7b, 0xa3, 0xa1, 0x5e, 0xea, 0xda,
+	0x37, 0x66, 0x2d, 0x71, 0x22, 0x4e, 0x6a, 0xfc, 0x50, 0x80, 0x17, 0x78, 0xe9, 0x9d, 0xc0, 0x63,
+	0xa9, 0x43, 0x3f, 0x07, 0x70, 0xfc, 0x41, 0xcc, 0x48, 0x94, 0x7a, 0x74, 0x7e, 0xed, 0x21, 0x3f,
+	0xc0, 0x7a, 0xb2, 0x2a, 0x7c, 0xf4, 0xd6, 0xd5, 0x5b, 0x65, 0x70, 0x5c, 0x96, 0x7c, 0x9d, 0x1e,
+	0x7a, 0x04, 0x33, 0x31, 0x1d, 0x44, 0x0e, 0x11, 0x47, 0xa8, 0xac, 0xde, 0x6e, 0xc9, 0xd1, 0x4c,
+	0x87, 0xe8, 0xdc, 0x7e, 0xd2, 0x0f, 0x6b, 0xea, 0xe9, 0x50, 0xcf, 0x61, 0x99, 0x86, 0x3a, 0x50,
+	0xe9, 0x91, 0x98, 0x79, 0x81, 0xcd, 0x1d, 0x51, 0x2b, 0xdc, 0x8c, 0x65, 0x3c, 0x17, 0xad, 0x42,
+	0x31, 0xe2, 0x92, 0xd5, 0x54, 0x41, 0xf2, 0x52, 0x6b, 0xec, 0x96, 0x68, 0x65, 0x82, 0xca, 0xcc,
+	0x04, 0x8a, 0x28, 0x2c, 0x09, 0x15, 0x1c, 0xda, 0xef, 0x7b, 0x8c, 0x91, 0x5e, 0xa2, 0x47, 0x51,
+	0xe8, 0xf1, 0x68, 0x34, 0xd4, 0x17, 0xb9, 0x1e, 0xeb, 0x69, 0xf4, 0x86, 0xc2, 0x2c, 0xfa, 0x17,
+	0x92, 0xb9, 0x42, 0x1b, 0x50, 0x3d, 0x17, 0x28, 0x99, 0x8b, 0xf3, 0xc2, 0x95, 0x6b, 0x17, 0x6e,
+	0xfc, 0xa9, 0x00, 0xf0, 0x90, 0xc5, 0x6c, 0x36, 0x88, 0xd1, 0xdb, 0x50, 0x8c, 0x99, 0xcd, 0x12,
+	0x8a, 0x85, 0xe7, 0x50, 0x70, 0x1c, 0xc1, 0x09, 0x08, 0xbd, 0x03, 0x45, 0x61, 0x44, 0x29, 0xda,
+	0xcb, 0x53, 0xe8, 0x74, 0x42, 0xd3, 0x3d, 0x05, 0x1a, 0xdd, 0x05, 0x95, 0x1f, 0x48, 0x8a, 0x74,
+	0x65, 0x96, 0x00, 0xa3, 0xf7, 0x60, 0xd6, 0x19, 0x44, 0x11, 0x09, 0x98, 0xd4, 0xe5, 0xca, 0xbc,
+	0x14, 0x6f, 0x7c, 0xaf, 0x40, 0x45, 0xc4, 0xed, 0x43, 0x9f, 0xda, 0x3d, 0xd4, 0x86, 0x85, 0x44,
+	0xa7, 0x3d, 0x87, 0x06, 0x8c, 0x7c, 0xc3, 0x64, 0xc3, 0xb4, 0x29, 0xbb, 0x24, 0x3d, 0x5f, 0x4f,
+	0x50, 0x78, 0xde, 0x19, 0x7f, 0x45, 0xf7, 0xa0, 0xcc, 0x6f, 0x57, 0x12, 0xb0, 0xe8, 0x70, 0xb2,
+	0x03, 0xe3, 0x86, 0x6b, 0x73, 0x00, 0x2e, 0xf9, 0xf2, 0xe9, 0x81, 0x7a, 0xca, 0x6f, 0x87, 0xdf,
+	0xf3, 0xf0, 0xa2, 0xd0, 0x64, 0xf2, 0x4b, 0xf0, 0xbf, 0x99, 0xb3, 0xfb, 0x30, 0x1b, 0x26, 0x8a,
+	0x48, 0x45, 0x6b, 0xd3, 0x8a, 0x26, 0xf1, 0x54, 0x50, 0x09, 0x37, 0x3e, 0x82, 0x5b, 0x13, 0xad,
+	0x93, 0x13, 0x60, 0xc2, 0x4c, 0x2c, 0x8c, 0x2c, 0x15, 0x5d, 0x7e, 0xae, 0x7f, 0x07, 0x31, 0x96,
+	0xb0, 0x37, 0x7f, 0x92, 0x77, 0xb4, 0xb0, 0x35, 0x5a, 0x81, 0x62, 0x1b, 0xe3, 0x6d, 0x5c, 0xcd,
+	0xd5, 0xd1, 0xd1, 0x71, 0x63, 0x21, 0x8b, 0xb4, 0xa3, 0x88, 0x46, 0xa8, 0x09, 0x95, 0xce, 0xd6,
+	0xde, 0x0e, 0xde, 0xde, 0xc4, 0x6d, 0xcb, 0xaa, 0x2a, 0xf5, 0xe5, 0xa3, 0xe3, 0xc6, 0x52, 0x06,
+	0xea, 0x04, 0x3b, 0x11, 0x75, 0x23, 0x12, 0xc7, 0xe8, 0x35, 0x28, 0xad, 0x6f, 0x7f, 0xbc, 0xd3,
+	0x6d, 0xef, 0xb6, 0xab, 0xf9, 0xfa, 0xad, 0xa3, 0xe3, 0xc6, 0x62, 0x06, 0x5b, 0xa7, 0xfd, 0xd0,
+	0x27, 0xc9, 0x6e, 0xd6, 0xee, 0x07, 0x78, 0xb7, 0x5a, 0x98, 0xd8, 0xcd, 0x62, 0x76, 0xc4, 0xea,
+	0x73, 0xdf, 0xfe, 0xa8, 0xe5, 0x7e, 0x3e, 0xd1, 0x72, 0xbf, 0x9e, 0x68, 0xca, 0xea, 0x59, 0x1e,
+	0x00, 0x67, 0xff, 0x2f, 0x68, 0x0b, 0xca, 0xd9, 0xe9, 0xd1, 0xca, 0x85, 0x53, 0x4e, 0x1a, 0xaa,
+	0xae, 0x5d, 0x16, 0x96, 0x9f, 0xd3, 0x5c, 0x53, 0x41, 0x1d, 0x28, 0xa5, 0xd7, 0x09, 0x7a, 0x75,
+	0xaa, 0x69, 0x63, 0x9f, 0x81, 0xfa, 0xca, 0x25, 0xd1, 0x94, 0x0c, 0x7d, 0x0a, 0xf3, 0x17, 0xc4,
+	0x41, 0xb7, 0xa7, 0xef, 0xa1, 0xc9, 0x12, 0x8d, 0x7f, 0x82, 0x64, 0xcc, 0x5f, 0xc0, 0xd2, 0x85,
+	0x50, 0xe2, 0xb0, 0xff, 0x8c, 0xbf, 0xa9, 0xac, 0x3d, 0x3c, 0x1d, 0x69, 0xca, 0xd3, 0x91, 0xa6,
+	0x7c, 0x77, 0xa6, 0xe5, 0x9e, 0x9c, 0x69, 0xca, 0xd3, 0x33, 0x2d, 0xf7, 0xc7, 0x99, 0x96, 0xfb,
+	0xcc, 0xb8, 0x74, 0xe0, 0xb2, 0xff, 0xcb, 0xfd, 0x19, 0xf1, 0x7c, 0xf7, 0xef, 0x00, 0x00, 0x00,
+	0xff, 0xff, 0xf2, 0xb0, 0x60, 0xe6, 0x74, 0x0a, 0x00, 0x00,
 }
 
 func (x SyncState) String() string {
@@ -747,6 +777,48 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ReplicatorClient interface {
 	Replicate(ctx context.Context, opts ...grpc.CallOption) (Replicator_ReplicateClient, error)
+	// SyncInit tells the source replica's log entries range to the destination
+	// replica. According to the range sent by the request of SyncInit, the
+	// destination replica can decide whether it is necessary to copy log entries
+	// from the source and even delete stale ones.
+	//
+	// To be a source replica, the status of the log stream replica must be
+	// SEALED, which indicates that the log stream replica has all the log entries
+	// that the metadata repository has committed. To be a destination replica,
+	// the status of the log stream replica must be SEALING which means that the
+	// log stream replica does not have all log entries yet.
+	//
+	// To represent log entry ranges, each request and response of SyncInit embeds
+	// a field of type SyncRange. The source replica sends a range of overall log
+	// entries to the destination replica; that is, the FirstLLSN of SyncRange is
+	// the local low watermark, and the LastLLSN of it is the local high
+	// watermark. There are several cases in the destination replica:
+	//
+	// - The destination replica already has log entries and the commit context,
+	// which are the same as the source replica: No synchronization is necessary.
+	// The destination replica should reply with a SyncInitResponse having the
+	// FirstLLSN and the LastLLSN as InvalidLLSNs.
+	// - The destination replica's local high watermark is equal to the LastLLSN.
+	// However, it does not have the corresponding commit context that contains
+	// the last log entry: It means that only copying the commit context from the
+	// source to the destination is necessary. The destination should reply with a
+	// SyncInitResponse having a larger FirstLLSN than the LastLLSN.
+	// - The destination replica's local high watermark is lower than the LastLLSN
+	// of SyncInitRequest: Some log entries should be cloned from the source to
+	// the destination. The destination replica should reply with a
+	// SyncInitResponse denoting the missing range.
+	//
+	// A destination replica sometimes should remove log entries according to the
+	// SyncRange in the request, usually when the source replica has trimmed the
+	// log entries.
+	//
+	// When a source replica has no log entries due to Trim, the source replica
+	// can invoke SyncInit with InvalidLLSNs for FirstLLSN and LastLLSN of
+	// SyncRange. Destination replica should remove their stale log entries and
+	// receive a commit context from the source replica.
+	//
+	// TODO: Use the gRPC error code instead of setting particular values for the
+	// SyncRange to avoid ambiguity.
 	SyncInit(ctx context.Context, in *SyncInitRequest, opts ...grpc.CallOption) (*SyncInitResponse, error)
 	// SyncReplicate
 	//
@@ -853,6 +925,48 @@ func (x *replicatorSyncReplicateStreamClient) CloseAndRecv() (*SyncReplicateResp
 // ReplicatorServer is the server API for Replicator service.
 type ReplicatorServer interface {
 	Replicate(Replicator_ReplicateServer) error
+	// SyncInit tells the source replica's log entries range to the destination
+	// replica. According to the range sent by the request of SyncInit, the
+	// destination replica can decide whether it is necessary to copy log entries
+	// from the source and even delete stale ones.
+	//
+	// To be a source replica, the status of the log stream replica must be
+	// SEALED, which indicates that the log stream replica has all the log entries
+	// that the metadata repository has committed. To be a destination replica,
+	// the status of the log stream replica must be SEALING which means that the
+	// log stream replica does not have all log entries yet.
+	//
+	// To represent log entry ranges, each request and response of SyncInit embeds
+	// a field of type SyncRange. The source replica sends a range of overall log
+	// entries to the destination replica; that is, the FirstLLSN of SyncRange is
+	// the local low watermark, and the LastLLSN of it is the local high
+	// watermark. There are several cases in the destination replica:
+	//
+	// - The destination replica already has log entries and the commit context,
+	// which are the same as the source replica: No synchronization is necessary.
+	// The destination replica should reply with a SyncInitResponse having the
+	// FirstLLSN and the LastLLSN as InvalidLLSNs.
+	// - The destination replica's local high watermark is equal to the LastLLSN.
+	// However, it does not have the corresponding commit context that contains
+	// the last log entry: It means that only copying the commit context from the
+	// source to the destination is necessary. The destination should reply with a
+	// SyncInitResponse having a larger FirstLLSN than the LastLLSN.
+	// - The destination replica's local high watermark is lower than the LastLLSN
+	// of SyncInitRequest: Some log entries should be cloned from the source to
+	// the destination. The destination replica should reply with a
+	// SyncInitResponse denoting the missing range.
+	//
+	// A destination replica sometimes should remove log entries according to the
+	// SyncRange in the request, usually when the source replica has trimmed the
+	// log entries.
+	//
+	// When a source replica has no log entries due to Trim, the source replica
+	// can invoke SyncInit with InvalidLLSNs for FirstLLSN and LastLLSN of
+	// SyncRange. Destination replica should remove their stale log entries and
+	// receive a commit context from the source replica.
+	//
+	// TODO: Use the gRPC error code instead of setting particular values for the
+	// SyncRange to avoid ambiguity.
 	SyncInit(context.Context, *SyncInitRequest) (*SyncInitResponse, error)
 	// SyncReplicate
 	//
@@ -1148,6 +1262,102 @@ func (m *SyncRange) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *SyncInitRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SyncInitRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SyncInitRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.LastCommittedLLSN != 0 {
+		i = encodeVarintReplicator(dAtA, i, uint64(m.LastCommittedLLSN))
+		i--
+		dAtA[i] = 0x28
+	}
+	{
+		size, err := m.Range.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintReplicator(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x22
+	{
+		size, err := m.Destination.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintReplicator(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.Source.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintReplicator(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	if m.ClusterID != 0 {
+		i = encodeVarintReplicator(dAtA, i, uint64(m.ClusterID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SyncInitResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SyncInitResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SyncInitResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.Range.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintReplicator(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
 func (m *SyncStatus) Marshal() (dAtA []byte, err error) {
 	size := m.ProtoSize()
 	dAtA = make([]byte, size)
@@ -1250,97 +1460,6 @@ func (m *SyncPayload) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0xa
 	}
-	return len(dAtA) - i, nil
-}
-
-func (m *SyncInitRequest) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *SyncInitRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *SyncInitRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	{
-		size, err := m.Range.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
-		}
-		i -= size
-		i = encodeVarintReplicator(dAtA, i, uint64(size))
-	}
-	i--
-	dAtA[i] = 0x22
-	{
-		size, err := m.Destination.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
-		}
-		i -= size
-		i = encodeVarintReplicator(dAtA, i, uint64(size))
-	}
-	i--
-	dAtA[i] = 0x1a
-	{
-		size, err := m.Source.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
-		}
-		i -= size
-		i = encodeVarintReplicator(dAtA, i, uint64(size))
-	}
-	i--
-	dAtA[i] = 0x12
-	if m.ClusterID != 0 {
-		i = encodeVarintReplicator(dAtA, i, uint64(m.ClusterID))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *SyncInitResponse) Marshal() (dAtA []byte, err error) {
-	size := m.ProtoSize()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *SyncInitResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.ProtoSize()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *SyncInitResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	{
-		size, err := m.Range.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
-		}
-		i -= size
-		i = encodeVarintReplicator(dAtA, i, uint64(size))
-	}
-	i--
-	dAtA[i] = 0xa
 	return len(dAtA) - i, nil
 }
 
@@ -1515,6 +1634,38 @@ func (m *SyncRange) ProtoSize() (n int) {
 	return n
 }
 
+func (m *SyncInitRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.ClusterID != 0 {
+		n += 1 + sovReplicator(uint64(m.ClusterID))
+	}
+	l = m.Source.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	l = m.Destination.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	l = m.Range.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	if m.LastCommittedLLSN != 0 {
+		n += 1 + sovReplicator(uint64(m.LastCommittedLLSN))
+	}
+	return n
+}
+
+func (m *SyncInitResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.Range.ProtoSize()
+	n += 1 + l + sovReplicator(uint64(l))
+	return n
+}
+
 func (m *SyncStatus) ProtoSize() (n int) {
 	if m == nil {
 		return 0
@@ -1547,35 +1698,6 @@ func (m *SyncPayload) ProtoSize() (n int) {
 		l = m.LogEntry.ProtoSize()
 		n += 1 + l + sovReplicator(uint64(l))
 	}
-	return n
-}
-
-func (m *SyncInitRequest) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.ClusterID != 0 {
-		n += 1 + sovReplicator(uint64(m.ClusterID))
-	}
-	l = m.Source.ProtoSize()
-	n += 1 + l + sovReplicator(uint64(l))
-	l = m.Destination.ProtoSize()
-	n += 1 + l + sovReplicator(uint64(l))
-	l = m.Range.ProtoSize()
-	n += 1 + l + sovReplicator(uint64(l))
-	return n
-}
-
-func (m *SyncInitResponse) ProtoSize() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = m.Range.ProtoSize()
-	n += 1 + l + sovReplicator(uint64(l))
 	return n
 }
 
@@ -2059,6 +2181,276 @@ func (m *SyncRange) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *SyncInitRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowReplicator
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SyncInitRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SyncInitRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterID", wireType)
+			}
+			m.ClusterID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ClusterID |= github_com_kakao_varlog_pkg_types.ClusterID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Source", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Source.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Destination", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Destination.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Range", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Range.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LastCommittedLLSN", wireType)
+			}
+			m.LastCommittedLLSN = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LastCommittedLLSN |= github_com_kakao_varlog_pkg_types.LLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipReplicator(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SyncInitResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowReplicator
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SyncInitResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SyncInitResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Range", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowReplicator
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Range.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipReplicator(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthReplicator
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *SyncStatus) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2325,257 +2717,6 @@ func (m *SyncPayload) Unmarshal(dAtA []byte) error {
 				m.LogEntry = &varlogpb.LogEntry{}
 			}
 			if err := m.LogEntry.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipReplicator(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *SyncInitRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowReplicator
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: SyncInitRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SyncInitRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClusterID", wireType)
-			}
-			m.ClusterID = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowReplicator
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.ClusterID |= github_com_kakao_varlog_pkg_types.ClusterID(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Source", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowReplicator
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Source.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Destination", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowReplicator
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Destination.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Range", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowReplicator
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Range.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipReplicator(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *SyncInitResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowReplicator
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: SyncInitResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SyncInitResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Range", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowReplicator
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthReplicator
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Range.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

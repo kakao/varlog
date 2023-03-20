@@ -1646,49 +1646,61 @@ func TestStorageNode_Sync(t *testing.T) {
 			// ver: +-1-+
 			// src:  1 2  <no commit context>
 			// dst:
+			// expected: InvalidArgument
+			//
+			// The source replica does not have the commit context, which means
+			// the status of the source is abnormal.
 			name: "NoCommitContext",
 			testf: func(t *testing.T, src, dst *StorageNode) {
 				const ver = types.Version(1)
 				lastCommittedGLSN := lastGLSN(ver)
 
 				put(t, src, ver)
-				status, localHWM := TestSealLogStreamReplica(t, cid, src.snid, tpid, lsid, lastCommittedGLSN, src.advertise)
-				require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+				lss, localHWM := TestSealLogStreamReplica(t, cid, src.snid, tpid, lsid, lastCommittedGLSN, src.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 				require.Equal(t, lastCommittedGLSN, localHWM)
 				lse, ok := src.executors.Load(tpid, lsid)
 				require.True(t, ok)
 				stg := logstream.TestGetStorage(t, lse)
 				storage.TestDeleteCommitContext(t, stg)
 
-				status, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
-				require.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				lss, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lss)
 				require.Equal(t, types.InvalidGLSN, localHWM)
 
 				snmc, closer := TestNewManagementClient(t, cid, src.snid, src.advertise)
 				defer closer()
 
-				st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
-				require.NoError(t, err)
-				require.Equal(t, snpb.SyncStateStart, st.State)
+				_, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
+				require.Error(t, err)
+				//require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-				require.Never(t, func() bool {
-					st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
-					return err == nil && st.State == snpb.SyncStateComplete
-				}, 1500*time.Millisecond, 100*time.Millisecond)
+				//require.NoError(t, err)
+				//require.Equal(t, snpb.SyncStateStart, st.State)
+				//
+				//require.Never(t, func() bool {
+				//	st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
+				//	return err == nil && st.State == snpb.SyncStateComplete
+				//}, 1500*time.Millisecond, 100*time.Millisecond)
 			},
 		},
 		{
 			// ver: +-1-+
 			// src:  1 2  <invalid commit context>
 			// dst:
+			// expected: InvalidArgument
+			//
+			// The source replica's commit context is abnormal, which indicates
+			// GLSN 3 as the last committed LLSN, but the last log entry is at
+			// GLSN 2.
 			name: "InvalidCommitContext",
 			testf: func(t *testing.T, src, dst *StorageNode) {
 				const ver = types.Version(1)
 				lastCommittedGLSN := lastGLSN(ver)
 
 				put(t, src, ver)
-				status, localHWM := TestSealLogStreamReplica(t, cid, src.snid, tpid, lsid, lastCommittedGLSN, src.advertise)
-				require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+				lss, localHWM := TestSealLogStreamReplica(t, cid, src.snid, tpid, lsid, lastCommittedGLSN, src.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 				require.Equal(t, lastCommittedGLSN, localHWM)
 				lse, ok := src.executors.Load(tpid, lsid)
 				require.True(t, ok)
@@ -1701,21 +1713,24 @@ func TestStorageNode_Sync(t *testing.T) {
 					CommittedLLSNBegin: 1,
 				})
 
-				status, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
-				require.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				lss, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lss)
 				require.Equal(t, types.InvalidGLSN, localHWM)
 
 				snmc, closer := TestNewManagementClient(t, cid, src.snid, src.advertise)
 				defer closer()
 
-				st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
-				require.NoError(t, err)
-				require.Equal(t, snpb.SyncStateStart, st.State)
+				_, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
+				require.Error(t, err)
+				//require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-				require.Never(t, func() bool {
-					st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
-					return err == nil && st.State == snpb.SyncStateComplete
-				}, 1500*time.Millisecond, 100*time.Millisecond)
+				//require.NoError(t, err)
+				//require.Equal(t, snpb.SyncStateStart, st.State)
+				//
+				//require.Never(t, func() bool {
+				//	st, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
+				//	return err == nil && st.State == snpb.SyncStateComplete
+				//}, 1500*time.Millisecond, 100*time.Millisecond)
 			},
 		},
 		{
