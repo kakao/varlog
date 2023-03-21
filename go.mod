@@ -29,7 +29,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.14.0
 	go.opentelemetry.io/otel/sdk/export/metric v0.26.0
 	go.opentelemetry.io/otel/sdk/metric v0.26.0
-	go.uber.org/automaxprocs v1.5.1
+	go.uber.org/automaxprocs v1.5.2
 	go.uber.org/goleak v1.2.1
 	go.uber.org/multierr v1.10.0
 	go.uber.org/zap v1.24.0
@@ -39,11 +39,11 @@ require (
 	golang.org/x/sys v0.6.0
 	golang.org/x/tools v0.7.0
 	google.golang.org/grpc v1.53.0
-	google.golang.org/protobuf v1.29.1
+	google.golang.org/protobuf v1.30.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
-	k8s.io/api v0.26.2
-	k8s.io/apimachinery v0.26.2
-	k8s.io/client-go v0.26.2
+	k8s.io/api v0.26.3
+	k8s.io/apimachinery v0.26.3
+	k8s.io/client-go v0.26.3
 )
 
 require (
