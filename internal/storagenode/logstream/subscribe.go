@@ -55,6 +55,13 @@ func (sr *SubscribeResult) stop() {
 	})
 }
 
+func (lse *Executor) newEmptySubscribeResult() (*SubscribeResult, context.Context) {
+	sr, ctx := lse.newSubscribeResult()
+	close(sr.c)
+	sr.err = nil
+	return sr, ctx
+}
+
 // SubscribeWithGLSN subscribes to the log stream with the given range of GLSNs.
 // TODO: The first argument ctx may not be necessary, since the subscription can be stopped by the `internal/varlogsn/logstream.(*SubscribeResult).Stop()`.
 func (lse *Executor) SubscribeWithGLSN(begin, end types.GLSN) (*SubscribeResult, error) {
@@ -75,6 +82,17 @@ func (lse *Executor) SubscribeWithGLSN(begin, end types.GLSN) (*SubscribeResult,
 		return nil, fmt.Errorf("log stream: %w", verrors.ErrTrimmed)
 	}
 	lse.globalLowWatermark.mu.Unlock()
+
+	localLWM, _, _ := lse.lsc.localWatermarks()
+	if end <= localLWM.GLSN {
+		sr, _ := lse.newEmptySubscribeResult()
+		return sr, nil
+	}
+	_, globalHWM, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+	if !invalid && uncommittedBegin.GLSN <= begin && end <= globalHWM+1 {
+		sr, _ := lse.newEmptySubscribeResult()
+		return sr, nil
+	}
 
 	sr, ctx := lse.newSubscribeResult()
 	sr.wg.Add(1)
@@ -116,6 +134,7 @@ func (lse *Executor) SubscribeWithLLSN(begin, end types.LLSN) (*SubscribeResult,
 func (lse *Executor) scanWithGLSN(ctx context.Context, begin, end types.GLSN, sr *SubscribeResult) error {
 	defer close(sr.c)
 	scanBegin := begin
+	scanEnd := end
 	for {
 		select {
 		case <-ctx.Done():
@@ -124,9 +143,13 @@ func (lse *Executor) scanWithGLSN(ctx context.Context, begin, end types.GLSN, sr
 		}
 
 		_, globalHWM, _, _ := lse.lsc.reportCommitBase()
+		_, localHWM, _ := lse.lsc.localWatermarks()
+		if localHWM.GLSN < scanEnd && scanEnd <= globalHWM+1 {
+			scanEnd = localHWM.GLSN + 1
+		}
 
 		lastGLSN := types.InvalidGLSN
-		scanner := lse.stg.NewScanner(storage.WithGLSN(scanBegin, end))
+		scanner := lse.stg.NewScanner(storage.WithGLSN(scanBegin, scanEnd))
 		for scanner.Valid() {
 			le, err := scanner.Value()
 			if err != nil {
@@ -145,7 +168,7 @@ func (lse *Executor) scanWithGLSN(ctx context.Context, begin, end types.GLSN, sr
 			_ = scanner.Next()
 		}
 		_ = scanner.Close()
-		if lastGLSN == end-1 {
+		if lastGLSN == scanEnd-1 {
 			return nil
 		}
 		if !lastGLSN.Invalid() {

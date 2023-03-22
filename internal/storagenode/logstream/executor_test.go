@@ -1012,6 +1012,328 @@ func TestExecutor_SubscribeWithInvalidRange(t *testing.T) {
 	assert.ErrorIs(t, err, verrors.ErrTrimmed)
 }
 
+func TestExecutor_SubscribeWithGLSN(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+
+		localLWM  = 11
+		localHWM  = 20
+		numLogs   = localHWM - localLWM + 1
+		globalHWM = localHWM + 10
+	)
+
+	msg := []byte("foo")
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, lse *Executor)
+	}{
+		{
+			// LLSN  :        1  2  3  4  5  6  7  8  9 10
+			// GLSN  :       11 12 13 14 15 16 17 18 19 20
+			// GLWM  : 0 (no trim)
+			// GHWM  :                                                30
+			//
+			// SCAN  : [1    11)
+			// Result: None
+			name: "SubscribeNothing_TooLowerRange_LowerThanLocalLWM",
+			testf: func(t *testing.T, lse *Executor) {
+				sr, err := lse.SubscribeWithGLSN(1, localLWM /*11*/)
+				require.NoError(t, err)
+				defer sr.Stop()
+
+				_, ok := <-sr.Result()
+				require.False(t, ok)
+			},
+		},
+		{
+			// LLSN  :        1  2  3  4  5  6  7  8  9 10
+			// GLSN  :       11 12 13 14 15 16 17 18 19 20
+			// GLWM  : 0 (no trim)
+			// GHWM  :                                                30
+			//
+			// SCAN  :                                     [21           31)
+			// Result: None
+			name: "SubscribeNothing_TooHigherRange_HigherThanLocalHWM_LowerThanGlobalHWM",
+			testf: func(t *testing.T, lse *Executor) {
+				sr, err := lse.SubscribeWithGLSN(localHWM+1 /*21*/, globalHWM+1 /*31*/)
+				require.NoError(t, err)
+				defer sr.Stop()
+
+				_, ok := <-sr.Result()
+				require.False(t, ok)
+			},
+		},
+		{
+			// LLSN  :        1  2  3  4  5  6  7  8  9 10
+			// GLSN  :       11 12 13 14 15 16 17 18 19 20
+			// GLWM  : 0 (no trim)
+			// GHWM  :                                                30
+			//
+			// SCAN  :      [11                            21)
+			// Result: 11, 12, .... 20
+			name: "SubscribeAll_FromLocalLWM_ToLocalHWM",
+			testf: func(t *testing.T, lse *Executor) {
+				sr, err := lse.SubscribeWithGLSN(localLWM /*11*/, localHWM+1 /*21*/)
+				require.NoError(t, err)
+				defer sr.Stop()
+
+				for i := 0; i < numLogs; i++ {
+					llsn := types.LLSN(i + 1)
+					glsn := types.GLSN(i + localLWM)
+					assert.Equal(t, varlogpb.LogEntry{
+						LogEntryMeta: varlogpb.LogEntryMeta{
+							TopicID:     lse.tpid,
+							LogStreamID: lse.lsid,
+							LLSN:        llsn,
+							GLSN:        glsn,
+						},
+						Data: msg,
+					}, <-sr.Result())
+				}
+				_, ok := <-sr.Result()
+				require.False(t, ok)
+			},
+		},
+		{
+			// LLSN  :        1  2  3  4  5  6  7  8  9 10
+			// GLSN  :       11 12 13 14 15 16 17 18 19 20
+			// GLWM  : 0 (no trim)
+			// GHWM  :                                                30
+			//
+			// SCAN  :      [11                             22)
+			// Result: 11, 12, .... 20
+			name: "SubscribeAll_FromLocalLWM_ToHigherThanLocalHWM_LowerThanGlobalHWM",
+			testf: func(t *testing.T, lse *Executor) {
+				sr, err := lse.SubscribeWithGLSN(localLWM /*11*/, localHWM+2 /*22*/)
+				require.NoError(t, err)
+				defer sr.Stop()
+
+				for i := 0; i < numLogs; i++ {
+					llsn := types.LLSN(i + 1)
+					glsn := types.GLSN(i + localLWM)
+					assert.Equal(t, varlogpb.LogEntry{
+						LogEntryMeta: varlogpb.LogEntryMeta{
+							TopicID:     lse.tpid,
+							LogStreamID: lse.lsid,
+							LLSN:        llsn,
+							GLSN:        glsn,
+						},
+						Data: msg,
+					}, <-sr.Result())
+				}
+				_, ok := <-sr.Result()
+				require.False(t, ok)
+			},
+		},
+		{
+			// LLSN  :        1  2  3  4  5  6  7  8  9 10
+			// GLSN  :       11 12 13 14 15 16 17 18 19 20
+			// GLWM  : 0 (no trim)
+			// GHWM  :                                                30
+			//
+			// SCAN  :      [11                                          31)
+			// Result: 11, 12, .... 20
+			name: "SubscribeAll_FromLocalLWM_ToGlobalHWM",
+			testf: func(t *testing.T, lse *Executor) {
+				sr, err := lse.SubscribeWithGLSN(localLWM /*11*/, globalHWM+1 /*31*/)
+				require.NoError(t, err)
+				defer sr.Stop()
+
+				for i := 0; i < numLogs; i++ {
+					llsn := types.LLSN(i + 1)
+					glsn := types.GLSN(i + localLWM)
+					assert.Equal(t, varlogpb.LogEntry{
+						LogEntryMeta: varlogpb.LogEntryMeta{
+							TopicID:     lse.tpid,
+							LogStreamID: lse.lsid,
+							LLSN:        llsn,
+							GLSN:        glsn,
+						},
+						Data: msg,
+					}, <-sr.Result())
+				}
+				_, ok := <-sr.Result()
+				require.False(t, ok)
+			},
+		},
+		{
+			// LLSN  :        1  2  3  4  5  6  7  8  9 10
+			// GLSN  :       11 12 13 14 15 16 17 18 19 20
+			// GLWM  : 0 (no trim)
+			// GHWM  :                                                30
+			//
+			// SCAN  :      [11                                            32)
+			// Result: 11, 12, .... 20, wait...
+			name: "SubscribeAll_FromLocalLWM_ToHigherThanGlobalHWM",
+			testf: func(t *testing.T, lse *Executor) {
+				sr, err := lse.SubscribeWithGLSN(localLWM /*11*/, globalHWM+2 /*32*/)
+				require.NoError(t, err)
+				defer sr.Stop()
+
+				for i := 0; i < numLogs; i++ {
+					llsn := types.LLSN(i + 1)
+					glsn := types.GLSN(i + localLWM)
+					assert.Equal(t, varlogpb.LogEntry{
+						LogEntryMeta: varlogpb.LogEntryMeta{
+							TopicID:     lse.tpid,
+							LogStreamID: lse.lsid,
+							LLSN:        llsn,
+							GLSN:        glsn,
+						},
+						Data: msg,
+					}, <-sr.Result())
+				}
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_, ok := <-sr.Result()
+					assert.False(t, ok)
+				}()
+				sr.Stop()
+				wg.Wait()
+				assert.Error(t, sr.Err())
+			},
+		},
+		{
+			// LLSN  :        1  2  3  4  5  6  7  8  9 10
+			// GLSN  :       11 12 13 14 15 16 17 18 19 20
+			// GLWM  : 0 (no trim)
+			// GHWM  :                                                30
+			//
+			// SCAN  :      [11                                            max)
+			// Result: 11, 12, .... 20, wait...
+			name: "SubscribeAll_FromLocalLWM_ToMax",
+			testf: func(t *testing.T, lse *Executor) {
+				sr, err := lse.SubscribeWithGLSN(localLWM /*11*/, types.MaxGLSN)
+				require.NoError(t, err)
+				defer sr.Stop()
+
+				for i := 0; i < numLogs; i++ {
+					llsn := types.LLSN(i + 1)
+					glsn := types.GLSN(i + localLWM)
+					assert.Equal(t, varlogpb.LogEntry{
+						LogEntryMeta: varlogpb.LogEntryMeta{
+							TopicID:     lse.tpid,
+							LogStreamID: lse.lsid,
+							LLSN:        llsn,
+							GLSN:        glsn,
+						},
+						Data: msg,
+					}, <-sr.Result())
+				}
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_, ok := <-sr.Result()
+					assert.False(t, ok)
+				}()
+				sr.Stop()
+				wg.Wait()
+				assert.Error(t, sr.Err())
+			},
+		},
+		{
+			// LLSN  :        1  2  3  4  5  6  7  8  9 10
+			// GLSN  :       11 12 13 14 15 16 17 18 19 20
+			// GLWM  : 0 (no trim)
+			// GHWM  :                                                30
+			//
+			// SCAN  :                                    [21              32)
+			// Result: wait...
+			name: "SubscribeAll_FromHigherThanLocalLWM_ToHigherThanGlobalHWM",
+			testf: func(t *testing.T, lse *Executor) {
+				sr, err := lse.SubscribeWithGLSN(localHWM+1 /*21*/, globalHWM+2 /*32*/)
+				require.NoError(t, err)
+				defer sr.Stop()
+
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_, ok := <-sr.Result()
+					assert.False(t, ok)
+				}()
+				time.Sleep(100 * time.Millisecond)
+				sr.Stop()
+				wg.Wait()
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			lse := testNewExecutor(t,
+				WithClusterID(cid),
+				WithStorageNodeID(snid),
+				WithTopicID(tpid),
+				WithLogStreamID(lsid),
+				WithStorage(storage.TestNewStorage(t)),
+			)
+			defer func() {
+				err := lse.Close()
+				require.NoError(t, err)
+			}()
+
+			lss, lastCommittedGLSN, err := lse.Seal(context.Background(), types.InvalidGLSN)
+			require.NoError(t, err)
+			require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+			require.Zero(t, lastCommittedGLSN)
+
+			err = lse.Unseal(context.Background(), []varlogpb.LogStreamReplica{{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snid,
+				},
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+				},
+			}})
+			require.NoError(t, err)
+
+			var wg sync.WaitGroup
+			for i := 0; i < numLogs; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_, err := lse.Append(context.Background(), [][]byte{msg})
+					assert.NoError(t, err)
+				}()
+			}
+			assert.Eventually(t, func() bool {
+				_ = lse.Commit(context.Background(), snpb.LogStreamCommitResult{
+					TopicID:             tpid,
+					LogStreamID:         lsid,
+					CommittedLLSNOffset: 1,
+					CommittedGLSNOffset: localLWM,
+					CommittedGLSNLength: numLogs,
+					Version:             1,
+					HighWatermark:       globalHWM,
+				})
+
+				rpt, err := lse.Report(context.Background())
+				assert.NoError(t, err)
+
+				return rpt.Version == types.Version(1)
+			}, time.Second, 10*time.Millisecond)
+			wg.Wait()
+
+			lsrmd, err := lse.Metadata()
+			require.NoError(t, err)
+			require.Equal(t, types.GLSN(globalHWM), lsrmd.GlobalHighWatermark)
+			require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: localLWM}, lsrmd.LocalLowWatermark)
+			require.Equal(t, varlogpb.LogSequenceNumber{LLSN: numLogs, GLSN: localHWM}, lsrmd.LocalHighWatermark)
+
+			tc.testf(t, lse)
+		})
+	}
+}
+
 func TestExecutor_Subscribe(t *testing.T) {
 	const numLogs = 10
 
