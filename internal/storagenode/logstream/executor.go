@@ -530,46 +530,45 @@ func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
 		return fmt.Errorf("log stream: trim: %d not appended, global high watermark %d", glsn, globalHWM)
 	}
 
-	const safetyGap = 1
-	_, localHighWatermark, _ := lse.lsc.localWatermarks()
-	if glsn > localHighWatermark.GLSN-safetyGap {
-		return fmt.Errorf("log stream: trim: too high to trim %d, local high watermark %d, safety gap: %d",
-			glsn, localHighWatermark.GLSN, safetyGap)
-	}
-
-	// find next low watermark
-	sr, err := lse.SubscribeWithGLSN(glsn+1, localHighWatermark.GLSN+1)
-	if err != nil {
-		return fmt.Errorf("log stream: trim: %w", err)
-	}
-	nextLowWatermark, ok := <-sr.Result()
-	sr.Stop()
-	if !ok {
-		return fmt.Errorf("log stream: trim: too high to trim %d", glsn)
-	}
-
-	lse.globalLowWatermark.mu.Lock()
-	if glsn < lse.globalLowWatermark.glsn {
-		lse.globalLowWatermark.mu.Unlock()
+	localLowWatermark, localHighWatermark, _ := lse.lsc.localWatermarks()
+	if localHighWatermark.Invalid() || glsn < localLowWatermark.GLSN {
 		// already trimmed
 		return nil
 	}
-	lse.globalLowWatermark.mu.Unlock()
+
+	var nextLocalLWM varlogpb.LogSequenceNumber
+	if localHighWatermark.GLSN <= glsn {
+		// delete all log entries, so no local lwm
+		nextLocalLWM = varlogpb.LogSequenceNumber{LLSN: types.InvalidLLSN, GLSN: types.InvalidGLSN}
+	} else {
+		// find next low watermark
+		sr, err := lse.SubscribeWithGLSN(glsn+1, localHighWatermark.GLSN+1)
+		if err != nil {
+			return fmt.Errorf("log stream: trim: %w", err)
+		}
+		entry, ok := <-sr.Result()
+		if !ok {
+			return fmt.Errorf("log stream: trim: too high to trim %d", glsn)
+		}
+		sr.Stop()
+
+		nextLocalLWM = varlogpb.LogSequenceNumber{
+			LLSN: entry.LLSN,
+			GLSN: entry.GLSN,
+		}
+	}
 
 	if err := lse.stg.Trim(glsn); err != nil {
 		return err
 	}
+
+	lse.lsc.setLocalLowWatermark(nextLocalLWM)
 
 	// update global low watermark
 	lse.globalLowWatermark.mu.Lock()
 	defer lse.globalLowWatermark.mu.Unlock()
 	lse.globalLowWatermark.glsn = glsn + 1
 
-	// update local low watermark
-	lse.lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
-		LLSN: nextLowWatermark.LLSN,
-		GLSN: nextLowWatermark.GLSN,
-	})
 	return nil
 }
 

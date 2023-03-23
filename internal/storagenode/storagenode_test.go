@@ -2,6 +2,7 @@ package storagenode
 
 import (
 	"context"
+	"io"
 	"io/fs"
 	"math/rand"
 	"os"
@@ -13,6 +14,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/multierr"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -22,6 +27,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -2455,6 +2461,431 @@ func TestStorageNode_Unseal(t *testing.T) {
 			mc := snpb.NewManagementClient(rpcConn.Conn)
 
 			tc.testf(t, sn, mc)
+		})
+	}
+}
+
+func TestStorageNode_Trim(t *testing.T) {
+	const (
+		cid   = types.ClusterID(1)
+		snid  = types.StorageNodeID(2)
+		tpid  = types.TopicID(3)
+		lsid1 = types.LogStreamID(1)
+		lsid2 = types.LogStreamID(2)
+	)
+
+	tcs := []struct {
+		name  string
+		pref  func(t *testing.T, sn *StorageNode)
+		postf func(t *testing.T, sn *StorageNode)
+	}{
+		{
+			// G.HWM:                                  20
+			// LLSN1: 1   2   3   4   5
+			// GLSN1: 1   3   5   7   9
+			// LLSN2:   1   2   3   4   5
+			// GLSN2:   2   4   6   8   10
+			//
+			// Trim :         ^
+			// LLSN1:             4   5
+			// GLSN1:             7   9
+			// LLSN2:           3   4   5
+			// GLSN2:           6   8   10
+			name: "Trim",
+			pref: func(t *testing.T, sn *StorageNode) {
+				trimRes := TestTrim(t, cid, snid, tpid, 5, sn.advertise)
+				require.Len(t, trimRes, 2)
+				errs := maps.Values(trimRes)
+				require.NoError(t, multierr.Combine(errs...))
+
+				c, closer := TestNewLogIOClient(t, snid, sn.advertise)
+				defer closer()
+
+				// Subscribe: AlreadyTrimmed
+				res, err := c.Subscribe(context.Background(), tpid, lsid1, 1, 7)
+				require.NoError(t, err)
+				sr := <-res
+				require.ErrorIs(t, sr.Error, verrors.ErrTrimmed) // TODO: Use gRPC status code.
+
+				// SubscribeTo: AlreadyTrimmed
+				res, err = c.SubscribeTo(context.Background(), tpid, lsid1, 1, 4)
+				require.NoError(t, err)
+				sr = <-res
+				require.ErrorIs(t, sr.Error, verrors.ErrTrimmed) // TODO: Use gRPC status code.
+			},
+			postf: func(t *testing.T, sn *StorageNode) {
+				addr := sn.advertise
+
+				func() {
+					mc, closer := TestNewManagementClient(t, cid, snid, addr)
+					defer closer()
+					snmd, err := mc.GetMetadata(context.Background())
+					require.NoError(t, err)
+					require.Len(t, snmd.LogStreamReplicas, 2)
+
+					lsrmd1 := snmd.LogStreamReplicas[0]
+					require.Equal(t, lsid1, lsrmd1.LogStreamID)
+					require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 4, GLSN: 7}, lsrmd1.LocalLowWatermark)
+					require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 5, GLSN: 9}, lsrmd1.LocalHighWatermark)
+
+					lsrmd2 := snmd.LogStreamReplicas[1]
+					require.Equal(t, lsid2, lsrmd2.LogStreamID)
+					require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 3, GLSN: 6}, lsrmd2.LocalLowWatermark)
+					require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 5, GLSN: 10}, lsrmd2.LocalHighWatermark)
+				}()
+
+				c, closer := TestNewLogIOClient(t, snid, addr)
+				defer closer()
+
+				// Subscribe: AlreadyTrimmed
+				res, err := c.Subscribe(context.Background(), tpid, lsid1, 1, 7)
+				require.NoError(t, err)
+				sr := <-res
+				// Because the log stream executor cannot know the global low watermark after a restart, it returns an io.EOF error instead of ErrTrimmed. Note that the log stream executor keeps the global low watermark in memory.
+				// NOTE: The client who calls Subscribe API should handle the above issue.
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// SubscribeTo: AlreadyTrimmed
+				res, err = c.SubscribeTo(context.Background(), tpid, lsid1, 1, 4)
+				require.NoError(t, err)
+				sr = <-res
+				// Unlike SubscribeWithGLSN, the SubscribeWithLLSN can decide if the prefix log entries were trimmed after a restart.
+				require.ErrorIs(t, sr.Error, verrors.ErrTrimmed) // TODO: Use gRPC status code.
+
+				// Subscribe: No logs
+				res, err = c.Subscribe(context.Background(), tpid, lsid1, 10, 21)
+				require.NoError(t, err)
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// Subscribe: 7, 9
+				res, err = c.Subscribe(context.Background(), tpid, lsid1, 7, 10)
+				require.NoError(t, err)
+				for llsn := 4; llsn <= 5; llsn++ {
+					glsn := llsn*2 - 1
+					sr = <-res
+					require.Equal(t, types.GLSN(glsn), sr.GLSN)
+					require.Equal(t, types.LLSN(llsn), sr.LLSN)
+				}
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// SubscribeTo: 4, 5
+				res, err = c.SubscribeTo(context.Background(), tpid, lsid1, 4, 6)
+				require.NoError(t, err)
+				for llsn := 4; llsn <= 5; llsn++ {
+					sr = <-res
+					require.Equal(t, types.LLSN(llsn), sr.LLSN)
+				}
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// Subscribe: AlreadyTrimmed
+				res, err = c.Subscribe(context.Background(), tpid, lsid2, 1, 6)
+				require.NoError(t, err)
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// SubscribeTo: AlreadyTrimmed
+				res, err = c.SubscribeTo(context.Background(), tpid, lsid2, 1, 3)
+				require.NoError(t, err)
+				sr = <-res
+				require.ErrorIs(t, sr.Error, verrors.ErrTrimmed) // TODO: Use gRPC status code.
+
+				// Subscribe: No logs
+				res, err = c.Subscribe(context.Background(), tpid, lsid2, 11, 21)
+				require.NoError(t, err)
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// Subscribe: 6, 8, 10
+				res, err = c.Subscribe(context.Background(), tpid, lsid2, 6, 11)
+				require.NoError(t, err)
+				for llsn := 3; llsn <= 5; llsn++ {
+					glsn := llsn * 2
+					sr = <-res
+					require.Equal(t, types.GLSN(glsn), sr.GLSN)
+					require.Equal(t, types.LLSN(llsn), sr.LLSN)
+				}
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// SubscribeTo: 3, 4, 5
+				res, err = c.SubscribeTo(context.Background(), tpid, lsid2, 3, 6)
+				require.NoError(t, err)
+				for llsn := 3; llsn <= 5; llsn++ {
+					sr = <-res
+					require.Equal(t, types.LLSN(llsn), sr.LLSN)
+				}
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+			},
+		},
+		{
+			// G.HWM:                                  20
+			// LLSN1: 1   2   3   4   5
+			// GLSN1: 1   3   5   7   9
+			// LLSN2:   1   2   3   4   5
+			// GLSN2:   2   4   6   8   10
+			//
+			// Trim :                    ^
+			// LLSN1:
+			// GLSN1:
+			// LLSN2:
+			// GLSN2:
+			name: "TrimAll",
+			pref: func(t *testing.T, sn *StorageNode) {
+				res := TestTrim(t, cid, snid, tpid, types.GLSN(10), sn.advertise)
+				require.Len(t, res, 2)
+				errs := maps.Values(res)
+				require.NoError(t, multierr.Combine(errs...))
+			},
+			postf: func(t *testing.T, sn *StorageNode) {
+				addr := sn.advertise
+
+				func() {
+					mc, closer := TestNewManagementClient(t, cid, snid, addr)
+					defer closer()
+					snmd, err := mc.GetMetadata(context.Background())
+					require.NoError(t, err)
+					require.Len(t, snmd.LogStreamReplicas, 2)
+
+					lsrmd1 := snmd.LogStreamReplicas[0]
+					require.Equal(t, lsid1, lsrmd1.LogStreamID)
+					require.Equal(t, varlogpb.LogSequenceNumber{}, lsrmd1.LocalLowWatermark)
+					require.Equal(t, varlogpb.LogSequenceNumber{}, lsrmd1.LocalHighWatermark)
+
+					lsrmd2 := snmd.LogStreamReplicas[1]
+					require.Equal(t, lsid2, lsrmd2.LogStreamID)
+					require.Equal(t, varlogpb.LogSequenceNumber{}, lsrmd2.LocalLowWatermark)
+					require.Equal(t, varlogpb.LogSequenceNumber{}, lsrmd2.LocalHighWatermark)
+				}()
+
+				c, closer := TestNewLogIOClient(t, snid, addr)
+				defer closer()
+
+				// Subscribe: AlreadyTrimmed
+				res, err := c.Subscribe(context.Background(), tpid, lsid1, 1, 10)
+				require.NoError(t, err)
+				sr := <-res
+				// Because the log stream executor cannot know the global low watermark after a restart, it returns an io.EOF error instead of ErrTrimmed. Note that the log stream executor keeps the global low watermark in memory.
+				// NOTE: The client who calls Subscribe API should handle the above issue.
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// SubscribeTo: AlreadyTrimmed
+				res, err = c.SubscribeTo(context.Background(), tpid, lsid1, 1, 6)
+				require.NoError(t, err)
+				sr = <-res
+				// Unlike SubscribeWithGLSN, the SubscribeWithLLSN can decide if the prefix log entries were trimmed after a restart.
+				require.ErrorIs(t, sr.Error, verrors.ErrTrimmed) // TODO: Use gRPC status code.
+
+				// Subscribe: No Logs
+				res, err = c.Subscribe(context.Background(), tpid, lsid1, 10, 21)
+				require.NoError(t, err)
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// Subscribe: AlreadyTrimmed
+				res, err = c.Subscribe(context.Background(), tpid, lsid2, 2, 11)
+				require.NoError(t, err)
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+
+				// SubscribeTo: AlreadyTrimmed
+				res, err = c.SubscribeTo(context.Background(), tpid, lsid2, 1, 6)
+				require.NoError(t, err)
+				sr = <-res
+				require.ErrorIs(t, sr.Error, verrors.ErrTrimmed) // TODO: Use gRPC status code.
+
+				// Subscribe: No Logs
+				res, err = c.Subscribe(context.Background(), tpid, lsid2, 11, 21)
+				require.NoError(t, err)
+				sr = <-res
+				require.ErrorIs(t, io.EOF, sr.Error)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := zaptest.NewLogger(t, zaptest.Level(zap.ErrorLevel))
+			vol := t.TempDir()
+
+			func() {
+				sn := TestNewSimpleStorageNode(t,
+					WithClusterID(cid),
+					WithStorageNodeID(snid),
+					WithVolumes(vol),
+					WithLogger(logger),
+				)
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_ = sn.Serve()
+				}()
+				TestWaitForStartingOfServe(t, sn)
+
+				defer func() {
+					err := sn.Close()
+					require.NoError(t, err)
+					wg.Wait()
+				}()
+
+				snpath := sn.snPaths[0]
+				addr := sn.advertise
+				for _, lsid := range []types.LogStreamID{lsid1, lsid2} {
+					TestAddLogStreamReplica(t, cid, snid, tpid, lsid, snpath, addr)
+					lss, lastCommitted := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
+					require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+					require.Zero(t, lastCommitted)
+					TestUnsealLogStreamReplica(t, cid, snid, tpid, lsid, []varlogpb.LogStreamReplica{
+						{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+								Address:       addr,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+							},
+						},
+					}, addr)
+				}
+
+				for i := 0; i < 10; i++ {
+					lsid := lsid1
+					if i%2 != 0 {
+						lsid = lsid2
+					}
+
+					llsn := types.LLSN(i/2 + 1)
+					glsn := types.GLSN(i + 1)
+					version := types.Version(i + 1)
+
+					var wg sync.WaitGroup
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						TestAppend(t, tpid, lsid, [][]byte{[]byte("foo")}, []varlogpb.LogStreamReplica{
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: snid,
+									Address:       addr,
+								},
+								TopicLogStream: varlogpb.TopicLogStream{
+									TopicID:     tpid,
+									LogStreamID: lsid,
+								},
+							},
+						})
+					}()
+					require.Eventually(t, func() bool {
+						reportcommitter.TestCommit(t, addr, snpb.CommitRequest{
+							StorageNodeID: snid,
+							CommitResult: snpb.LogStreamCommitResult{
+								TopicID:             tpid,
+								LogStreamID:         lsid,
+								CommittedLLSNOffset: llsn,
+								CommittedGLSNOffset: glsn,
+								CommittedGLSNLength: 1,
+								Version:             version,
+								HighWatermark:       glsn,
+							},
+						})
+						reports := reportcommitter.TestGetReport(t, addr)
+						require.Len(t, reports, 2)
+						for _, report := range reports {
+							if report.LogStreamID == lsid && report.Version == version {
+								return true
+							}
+						}
+						return false
+					}, time.Second, 10*time.Millisecond)
+					wg.Wait()
+				}
+
+				require.Eventually(t, func() bool {
+					reportcommitter.TestCommitBatch(t, addr, snpb.CommitBatchRequest{
+						StorageNodeID: snid,
+						CommitResults: []snpb.LogStreamCommitResult{
+							{
+								TopicID:             tpid,
+								LogStreamID:         lsid1,
+								CommittedLLSNOffset: 6,
+								CommittedGLSNOffset: 10,
+								CommittedGLSNLength: 0,
+								Version:             11,
+								HighWatermark:       20,
+							},
+							{
+								TopicID:             tpid,
+								LogStreamID:         lsid2,
+								CommittedLLSNOffset: 6,
+								CommittedGLSNOffset: 11,
+								CommittedGLSNLength: 0,
+								Version:             11,
+								HighWatermark:       20,
+							},
+						},
+					})
+					reports := reportcommitter.TestGetReport(t, addr)
+					require.Len(t, reports, 2)
+					for _, report := range reports {
+						if report.Version != types.Version(11) {
+							return false
+						}
+					}
+					return true
+				}, time.Second, 10*time.Millisecond)
+
+				func() {
+					mc, closer := TestNewManagementClient(t, cid, snid, addr)
+					defer closer()
+					snmd, err := mc.GetMetadata(context.Background())
+					require.NoError(t, err)
+					require.Len(t, snmd.LogStreamReplicas, 2)
+
+					lsrmd1 := snmd.LogStreamReplicas[0]
+					require.Equal(t, lsid1, lsrmd1.LogStreamID)
+					require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd1.LocalLowWatermark)
+					require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 5, GLSN: 9}, lsrmd1.LocalHighWatermark)
+					require.Equal(t, types.GLSN(20), lsrmd1.GlobalHighWatermark)
+
+					lsrmd2 := snmd.LogStreamReplicas[1]
+					require.Equal(t, lsid2, lsrmd2.LogStreamID)
+					require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 2}, lsrmd2.LocalLowWatermark)
+					require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 5, GLSN: 10}, lsrmd2.LocalHighWatermark)
+					require.Equal(t, types.GLSN(20), lsrmd2.GlobalHighWatermark)
+				}()
+
+				tc.pref(t, sn)
+			}()
+
+			sn := TestNewSimpleStorageNode(t,
+				WithClusterID(cid),
+				WithStorageNodeID(snid),
+				WithVolumes(vol),
+				WithLogger(logger),
+			)
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = sn.Serve()
+			}()
+			TestWaitForStartingOfServe(t, sn)
+
+			reports := reportcommitter.TestGetReport(t, sn.advertise)
+			require.Len(t, reports, 2)
+
+			defer func() {
+				err := sn.Close()
+				require.NoError(t, err)
+				wg.Wait()
+			}()
+
+			tc.postf(t, sn)
 		})
 	}
 }

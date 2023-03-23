@@ -435,6 +435,7 @@ go.uber.org/zap/zaptest
 # golang.org/x/exp v0.0.0-20221114191408-850992195362
 ## explicit; go 1.18
 golang.org/x/exp/constraints
+golang.org/x/exp/maps
 golang.org/x/exp/rand
 golang.org/x/exp/slices
 golang.org/x/exp/slog
