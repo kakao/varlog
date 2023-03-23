@@ -143,7 +143,7 @@ func NewExternalIter(
 	}
 	if iterOpts != nil {
 		dbi.opts = *iterOpts
-		dbi.saveBounds(iterOpts.LowerBound, iterOpts.UpperBound)
+		dbi.processBounds(iterOpts.LowerBound, iterOpts.UpperBound)
 	}
 	for i := range extraOpts {
 		extraOpts[i].iterApply(dbi)
@@ -199,6 +199,7 @@ func createExternalPointIter(it *Iterator) (internalIterator, error) {
 				nil,   /* BlockPropertiesFilterer */
 				false, /* useFilterBlock */
 				&it.stats.InternalStats,
+				sstable.TrivialReaderProvider{Reader: r},
 			)
 			if err != nil {
 				return nil, err
@@ -248,7 +249,9 @@ func createExternalPointIter(it *Iterator) (internalIterator, error) {
 
 	it.alloc.merging.init(&it.opts, &it.stats.InternalStats, it.comparer.Compare, it.comparer.Split, mlevels...)
 	it.alloc.merging.snapshot = base.InternalKeySeqNumMax
-	it.alloc.merging.elideRangeTombstones = true
+	if len(mlevels) <= cap(it.alloc.levelsPositioned) {
+		it.alloc.merging.levelsPositioned = it.alloc.levelsPositioned[:len(mlevels)]
+	}
 	return &it.alloc.merging, nil
 }
 
@@ -291,6 +294,7 @@ func finishInitializingExternal(it *Iterator) {
 					base.InternalKeySeqNumMax,
 					it.opts.LowerBound, it.opts.UpperBound,
 					&it.hasPrefix, &it.prefixOrFullSeekKey,
+					true /* onlySets */, &it.rangeKey.internal,
 				)
 				for i := range rangeKeyIters {
 					it.rangeKey.iterConfig.AddLevel(rangeKeyIters[i])
@@ -314,7 +318,11 @@ func openExternalTables(
 ) (readers []*sstable.Reader, err error) {
 	readers = make([]*sstable.Reader, 0, len(files))
 	for i := range files {
-		r, err := sstable.NewReader(files[i], readerOpts, extraReaderOpts...)
+		readable, err := sstable.NewSimpleReadable(files[i])
+		if err != nil {
+			return readers, err
+		}
+		r, err := sstable.NewReader(readable, readerOpts, extraReaderOpts...)
 		if err != nil {
 			return readers, err
 		}
@@ -472,6 +480,20 @@ func (s *simpleLevelIter) Next() (*base.InternalKey, base.LazyValue) {
 	}
 	s.currentIdx++
 	return s.skipEmptyFileForward(nil /* seekKey */, base.SeekGEFlagsNone)
+}
+
+func (s *simpleLevelIter) NextPrefix(succKey []byte) (*base.InternalKey, base.LazyValue) {
+	if s.err != nil {
+		return nil, base.LazyValue{}
+	}
+	if s.currentIdx < 0 || s.currentIdx >= len(s.filtered) {
+		return nil, base.LazyValue{}
+	}
+	if iterKey, val := s.filtered[s.currentIdx].NextPrefix(succKey); iterKey != nil {
+		return iterKey, val
+	}
+	s.currentIdx++
+	return s.skipEmptyFileForward(succKey /* seekKey */, base.SeekGEFlagsNone)
 }
 
 func (s *simpleLevelIter) Prev() (*base.InternalKey, base.LazyValue) {

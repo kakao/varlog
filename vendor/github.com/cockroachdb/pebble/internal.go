@@ -22,6 +22,7 @@ const (
 	InternalKeyKindRangeKeySet     = base.InternalKeyKindRangeKeySet
 	InternalKeyKindRangeKeyUnset   = base.InternalKeyKindRangeKeyUnset
 	InternalKeyKindRangeKeyDelete  = base.InternalKeyKindRangeKeyDelete
+	InternalKeyKindIngestSST       = base.InternalKeyIngestSST
 	InternalKeyKindInvalid         = base.InternalKeyKindInvalid
 	InternalKeySeqNumBatch         = base.InternalKeySeqNumBatch
 	InternalKeySeqNumMax           = base.InternalKeySeqNumMax
@@ -36,3 +37,14 @@ type internalIterator = base.InternalIterator
 // ErrCorruption is a marker to indicate that data in a file (WAL, MANIFEST,
 // sstable) isn't in the expected format.
 var ErrCorruption = base.ErrCorruption
+
+// AttributeAndLen exports the base.AttributeAndLen type.
+type AttributeAndLen = base.AttributeAndLen
+
+// ShortAttribute exports the base.ShortAttribute type.
+type ShortAttribute = base.ShortAttribute
+
+// LazyFetcher exports the base.LazyFetcher type. This export is needed since
+// LazyValue.Clone requires a pointer to a LazyFetcher struct to avoid
+// allocations. No code outside Pebble needs to peer into a LazyFetcher.
+type LazyFetcher = base.LazyFetcher

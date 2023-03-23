@@ -27,44 +27,44 @@
 //
 // To return the value for a key:
 //
-// 	r := table.NewReader(file, options)
-// 	defer r.Close()
-// 	i := r.NewIter(nil, nil)
-// 	defer i.Close()
-// 	ikey, value := r.SeekGE(key)
-// 	if options.Comparer.Compare(ikey.UserKey, key) != 0 {
-// 	  // not found
-// 	} else {
-// 	  // value is the first record containing key
-// 	}
+//	r := table.NewReader(file, options)
+//	defer r.Close()
+//	i := r.NewIter(nil, nil)
+//	defer i.Close()
+//	ikey, value := r.SeekGE(key)
+//	if options.Comparer.Compare(ikey.UserKey, key) != 0 {
+//	  // not found
+//	} else {
+//	  // value is the first record containing key
+//	}
 //
 // To count the number of entries in a table:
 //
-// 	i, n := r.NewIter(nil, nil), 0
-// 	for key, value := i.First(); key != nil; key, value = i.Next() {
-// 		n++
-// 	}
-// 	if err := i.Close(); err != nil {
-// 		return 0, err
-// 	}
-// 	return n, nil
+//	i, n := r.NewIter(nil, nil), 0
+//	for key, value := i.First(); key != nil; key, value = i.Next() {
+//		n++
+//	}
+//	if err := i.Close(); err != nil {
+//		return 0, err
+//	}
+//	return n, nil
 //
 // To write a table with three entries:
 //
-// 	w := table.NewWriter(file, options)
-// 	if err := w.Set([]byte("apple"), []byte("red")); err != nil {
-// 		w.Close()
-// 		return err
-// 	}
-// 	if err := w.Set([]byte("banana"), []byte("yellow")); err != nil {
-// 		w.Close()
-// 		return err
-// 	}
-// 	if err := w.Set([]byte("cherry"), []byte("red")); err != nil {
-// 		w.Close()
-// 		return err
-// 	}
-// 	return w.Close()
+//	w := table.NewWriter(file, options)
+//	if err := w.Set([]byte("apple"), []byte("red")); err != nil {
+//		w.Close()
+//		return err
+//	}
+//	if err := w.Set([]byte("banana"), []byte("yellow")); err != nil {
+//		w.Close()
+//		return err
+//	}
+//	if err := w.Set([]byte("cherry"), []byte("red")); err != nil {
+//		w.Close()
+//		return err
+//	}
+//	return w.Close()
 package sstable // import "github.com/cockroachdb/pebble/sstable"
 
 import (
@@ -73,6 +73,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/objstorage"
 )
 
 /*
@@ -87,6 +88,9 @@ The table file format looks like:
 [index block] (for single level index)
 [meta rangedel block] (optional)
 [meta range key block] (optional)
+[value block 0] (optional)
+[value block M-1] (optional)
+[meta value index block] (optional)
 [meta properties block]
 [metaindex block]
 [footer]
@@ -110,8 +114,9 @@ byte of the trailer (i.e. the block type), and is serialized as little-endian.
 The block type gives the per-block compression used; each block is compressed
 independently. The checksum algorithm is described in the pebble/crc package.
 
-Most blocks, other than the meta filter block, contain key/value pairs. The
-remainder of this comment refers to the decompressed block, which has its 5 byte
+Most blocks, other than the meta filter block, value blocks and meta value
+index block, contain key/value pairs. The remainder of this comment refers to
+the decompressed block, containing key/value pairs, which has its 5 byte
 trailer stripped. The decompressed block data consists of a sequence of such
 key/value entries followed by a block suffix. Each key is encoded as a shared
 prefix length and a remainder string. For example, if two adjacent keys are
@@ -154,6 +159,9 @@ lower-level index blocks.
 The metaindex block also contains block handles as values, with keys being
 the names of the meta blocks.
 
+For a description of value blocks and the meta value index block, see
+value_block.go
+
 */
 
 const (
@@ -183,6 +191,7 @@ const (
 	rocksDBFormatVersion2 = 2
 
 	metaRangeKeyName   = "pebble.range_key"
+	metaValueIndexName = "pebble.value_index"
 	metaPropertiesName = "rocksdb.properties"
 	metaRangeDelName   = "rocksdb.range_del"
 	metaRangeDelV2Name = "rocksdb.range_del2"
@@ -274,17 +283,20 @@ func (t blockType) String() string {
 }
 
 // legacy (LevelDB) footer format:
-//    metaindex handle (varint64 offset, varint64 size)
-//    index handle     (varint64 offset, varint64 size)
-//    <padding> to make the total size 2 * BlockHandle::kMaxEncodedLength
-//    table_magic_number (8 bytes)
+//
+//	metaindex handle (varint64 offset, varint64 size)
+//	index handle     (varint64 offset, varint64 size)
+//	<padding> to make the total size 2 * BlockHandle::kMaxEncodedLength
+//	table_magic_number (8 bytes)
+//
 // new (RocksDB) footer format:
-//    checksum type (char, 1 byte)
-//    metaindex handle (varint64 offset, varint64 size)
-//    index handle     (varint64 offset, varint64 size)
-//    <padding> to make the total size 2 * BlockHandle::kMaxEncodedLength + 1
-//    footer version (4 bytes)
-//    table_magic_number (8 bytes)
+//
+//	checksum type (char, 1 byte)
+//	metaindex handle (varint64 offset, varint64 size)
+//	index handle     (varint64 offset, varint64 size)
+//	<padding> to make the total size 2 * BlockHandle::kMaxEncodedLength + 1
+//	footer version (4 bytes)
+//	table_magic_number (8 bytes)
 type footer struct {
 	format      TableFormat
 	checksum    ChecksumType
@@ -293,18 +305,15 @@ type footer struct {
 	footerBH    BlockHandle
 }
 
-func readFooter(f ReadableFile) (footer, error) {
+func readFooter(f objstorage.Readable) (footer, error) {
 	var footer footer
-	stat, err := f.Stat()
-	if err != nil {
-		return footer, errors.Wrap(err, "pebble/table: invalid table (could not stat file)")
-	}
-	if stat.Size() < minFooterLen {
+	size := f.Size()
+	if size < minFooterLen {
 		return footer, base.CorruptionErrorf("pebble/table: invalid table (file size is too small)")
 	}
 
 	buf := make([]byte, maxFooterLen)
-	off := stat.Size() - maxFooterLen
+	off := size - maxFooterLen
 	if off < 0 {
 		off = 0
 	}
@@ -358,7 +367,7 @@ func readFooter(f ReadableFile) (footer, error) {
 	}
 
 	{
-		end := uint64(stat.Size())
+		end := uint64(size)
 		var n int
 		footer.metaindexBH, n = decodeBlockHandle(buf)
 		if n == 0 || footer.metaindexBH.Offset+footer.metaindexBH.Length > end {
@@ -420,7 +429,7 @@ func supportsTwoLevelIndex(format TableFormat) bool {
 	switch format {
 	case TableFormatLevelDB:
 		return false
-	case TableFormatRocksDBv2, TableFormatPebblev1, TableFormatPebblev2:
+	case TableFormatRocksDBv2, TableFormatPebblev1, TableFormatPebblev2, TableFormatPebblev3:
 		return true
 	default:
 		panic("sstable: unspecified table format version")

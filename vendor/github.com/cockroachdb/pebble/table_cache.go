@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/manifest"
 	"github.com/cockroachdb/pebble/internal/private"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/vfs"
 )
 
 var emptyIter = &errorIter{err: nil}
@@ -67,8 +67,7 @@ type tableCacheOpts struct {
 
 	logger        Logger
 	cacheID       uint64
-	dirname       string
-	fs            vfs.FS
+	objProvider   *objstorage.Provider
 	opts          sstable.ReaderOptions
 	filterMetrics *FilterMetrics
 }
@@ -86,7 +85,7 @@ type tableCacheContainer struct {
 // newTableCacheContainer will panic if the underlying cache in the table cache
 // doesn't match Options.Cache.
 func newTableCacheContainer(
-	tc *TableCache, cacheID uint64, dirname string, fs vfs.FS, opts *Options, size int,
+	tc *TableCache, cacheID uint64, objProvider *objstorage.Provider, opts *Options, size int,
 ) *tableCacheContainer {
 	// We will release a ref to table cache acquired here when tableCacheContainer.close is called.
 	if tc != nil {
@@ -104,8 +103,7 @@ func newTableCacheContainer(
 	t.tableCache = tc
 	t.dbOpts.logger = opts.Logger
 	t.dbOpts.cacheID = cacheID
-	t.dbOpts.dirname = dirname
-	t.dbOpts.fs = fs
+	t.dbOpts.objProvider = objProvider
 	t.dbOpts.opts = opts.MakeReaderOptions()
 	t.dbOpts.filterMetrics = &FilterMetrics{}
 	t.dbOpts.atomic.iterCount = new(int32)
@@ -175,7 +173,6 @@ func (c *tableCacheContainer) withReader(meta *fileMetadata, fn func(*sstable.Re
 	v := s.findNode(meta, &c.dbOpts)
 	defer s.unrefValue(v)
 	if v.err != nil {
-		base.MustExist(c.dbOpts.fs, v.filename, c.dbOpts.logger, v.err)
 		return v.err
 	}
 	return fn(v.reader)
@@ -368,7 +365,6 @@ func (c *tableCacheShard) newIters(
 	v := c.findNode(file, dbOpts)
 	if v.err != nil {
 		defer c.unrefValue(v)
-		base.MustExist(dbOpts.fs, v.filename, dbOpts.logger, v.err)
 		return nil, nil, v.err
 	}
 
@@ -413,11 +409,19 @@ func (c *tableCacheShard) newIters(
 	if opts != nil {
 		useFilter = manifest.LevelToInt(opts.level) != 6 || opts.UseL6Filters
 	}
+	tableFormat, err := v.reader.TableFormat()
+	if err != nil {
+		return nil, nil, err
+	}
+	var rp sstable.ReaderProvider
+	if tableFormat == sstable.TableFormatPebblev3 && v.reader.Properties.NumValueBlocks > 0 {
+		rp = &tableCacheShardReaderProvider{c: c, file: file, dbOpts: dbOpts}
+	}
 	if internalOpts.bytesIterated != nil {
-		iter, err = v.reader.NewCompactionIter(internalOpts.bytesIterated)
+		iter, err = v.reader.NewCompactionIter(internalOpts.bytesIterated, rp)
 	} else {
 		iter, err = v.reader.NewIterWithBlockPropertyFilters(
-			opts.GetLowerBound(), opts.GetUpperBound(), filterer, useFilter, internalOpts.stats)
+			opts.GetLowerBound(), opts.GetUpperBound(), filterer, useFilter, internalOpts.stats, rp)
 	}
 	if err != nil {
 		if rangeDelIter != nil {
@@ -427,7 +431,7 @@ func (c *tableCacheShard) newIters(
 		return nil, nil, err
 	}
 	// NB: v.closeHook takes responsibility for calling unrefValue(v) here. Take
-	// care to avoid introduceingan allocation here by adding a closure.
+	// care to avoid introducing an allocation here by adding a closure.
 	iter.SetCloseHook(v.closeHook)
 
 	atomic.AddInt32(&c.atomic.iterCount, 1)
@@ -450,7 +454,6 @@ func (c *tableCacheShard) newRangeKeyIter(
 	v := c.findNode(file, dbOpts)
 	if v.err != nil {
 		defer c.unrefValue(v)
-		base.MustExist(dbOpts.fs, v.filename, dbOpts.logger, v.err)
 		return nil, v.err
 	}
 
@@ -481,11 +484,51 @@ func (c *tableCacheShard) newRangeKeyIter(
 	// No need to hold onto a ref of the cache value.
 	c.unrefValue(v)
 
-	if err != nil || iter == nil {
+	if err != nil {
 		return nil, err
 	}
 
+	if iter == nil {
+		// NewRawRangeKeyIter can return nil even if there's no error. However,
+		// the keyspan.LevelIter expects a non-nil iterator if err is nil.
+		return emptyKeyspanIter, nil
+	}
+
 	return iter, nil
+}
+
+type tableCacheShardReaderProvider struct {
+	c      *tableCacheShard
+	file   *manifest.FileMetadata
+	dbOpts *tableCacheOpts
+	v      *tableCacheValue
+}
+
+var _ sstable.ReaderProvider = &tableCacheShardReaderProvider{}
+
+// GetReader implements sstable.ReaderProvider. Note that it is not the
+// responsibility of tableCacheShardReaderProvider to ensure that the file
+// continues to exist. The ReaderProvider is used in iterators where the
+// top-level iterator is pinning the read state and preventing the files from
+// being deleted.
+//
+// The caller must call tableCacheShardReaderProvider.Close.
+func (rp *tableCacheShardReaderProvider) GetReader() (*sstable.Reader, error) {
+	// Calling findNode gives us the responsibility of decrementing v's
+	// refCount.
+	v := rp.c.findNode(rp.file, rp.dbOpts)
+	if v.err != nil {
+		defer rp.c.unrefValue(v)
+		return nil, v.err
+	}
+	rp.v = v
+	return v.reader, nil
+}
+
+// Close implements sstable.ReaderProvider.
+func (rp *tableCacheShardReaderProvider) Close() {
+	rp.c.unrefValue(rp.v)
+	rp.v = nil
 }
 
 // getTableProperties return sst table properties for target file
@@ -870,7 +913,6 @@ func (c *tableCacheShard) Close() error {
 type tableCacheValue struct {
 	closeHook func(i sstable.Iterator) error
 	reader    *sstable.Reader
-	filename  string
 	err       error
 	loaded    chan struct{}
 	// Reference count for the value. The reader is closed when the reference
@@ -879,14 +921,12 @@ type tableCacheValue struct {
 }
 
 func (v *tableCacheValue) load(meta *fileMetadata, c *tableCacheShard, dbOpts *tableCacheOpts) {
-	// Try opening the fileTypeTable first.
-	var f vfs.File
-	v.filename = base.MakeFilepath(dbOpts.fs, dbOpts.dirname, fileTypeTable, meta.FileNum)
-	f, v.err = dbOpts.fs.Open(v.filename, vfs.RandomReadsOption)
+	// Try opening the file first.
+	var f objstorage.Readable
+	f, v.err = dbOpts.objProvider.OpenForReadingMustExist(fileTypeTable, meta.FileNum)
 	if v.err == nil {
 		cacheOpts := private.SSTableCacheOpts(dbOpts.cacheID, meta.FileNum).(sstable.ReaderOption)
-		reopenOpt := sstable.FileReopenOpt{FS: dbOpts.fs, Filename: v.filename}
-		v.reader, v.err = sstable.NewReader(f, dbOpts.opts, cacheOpts, dbOpts.filterMetrics, reopenOpt)
+		v.reader, v.err = sstable.NewReader(f, dbOpts.opts, cacheOpts, dbOpts.filterMetrics)
 	}
 	if v.err == nil {
 		if meta.SmallestSeqNum == meta.LargestSeqNum {

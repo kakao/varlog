@@ -3,7 +3,7 @@ module github.com/kakao/varlog
 go 1.19
 
 require (
-	github.com/cockroachdb/pebble v0.0.0-20221103174942-7486bbcf2861
+	github.com/cockroachdb/pebble v0.0.0-20230301151825-0cd1ceea645a
 	github.com/docker/go-units v0.5.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.1
@@ -80,7 +80,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jtolds/gls v4.20.0+incompatible // indirect
-	github.com/klauspost/compress v1.15.9 // indirect
+	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/kr/pretty v0.2.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/pebble/internal/humanize"
 	"github.com/cockroachdb/pebble/internal/manifest"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 )
 
@@ -118,6 +119,8 @@ func (i levelInfos) SafeFormat(w redact.SafePrinter, _ rune) {
 type DiskSlowInfo struct {
 	// Path of file being written to.
 	Path string
+	// Operation being performed on the file.
+	OpType vfs.OpType
 	// Duration that has elapsed since this disk operation started.
 	Duration time.Duration
 }
@@ -128,8 +131,8 @@ func (i DiskSlowInfo) String() string {
 
 // SafeFormat implements redact.SafeFormatter.
 func (i DiskSlowInfo) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("disk slowness detected: write to file %s has been ongoing for %0.1fs",
-		i.Path, redact.Safe(i.Duration.Seconds()))
+	w.Printf("disk slowness detected: %s on file %s has been ongoing for %0.1fs",
+		redact.Safe(i.OpType.String()), i.Path, redact.Safe(i.Duration.Seconds()))
 }
 
 // FlushInfo contains the info for a flush event.
@@ -283,7 +286,10 @@ type TableIngestInfo struct {
 	// GlobalSeqNum is the sequence number that was assigned to all entries in
 	// the ingested table.
 	GlobalSeqNum uint64
-	Err          error
+	// flushable indicates whether the ingested sstable was treated as a
+	// flushable.
+	flushable bool
+	Err       error
 }
 
 func (i TableIngestInfo) String() string {
@@ -297,7 +303,12 @@ func (i TableIngestInfo) SafeFormat(w redact.SafePrinter, _ rune) {
 		return
 	}
 
-	w.Printf("[JOB %d] ingested", redact.Safe(i.JobID))
+	if i.flushable {
+		w.Printf("[JOB %d] ingested as flushable", redact.Safe(i.JobID))
+	} else {
+		w.Printf("[JOB %d] ingested", redact.Safe(i.JobID))
+	}
+
 	for j := range i.Tables {
 		t := &i.Tables[j]
 		if j > 0 {
@@ -427,9 +438,14 @@ type EventListener struct {
 	// has been installed.
 	CompactionEnd func(CompactionInfo)
 
-	// DiskSlow is invoked after a disk write operation on a file created
-	// with a disk health checking vfs.FS (see vfs.DefaultWithDiskHealthChecks)
-	// is observed to exceed the specified disk slowness threshold duration.
+	// DiskSlow is invoked after a disk write operation on a file created with a
+	// disk health checking vfs.FS (see vfs.DefaultWithDiskHealthChecks) is
+	// observed to exceed the specified disk slowness threshold duration. DiskSlow
+	// is called on a goroutine that is monitoring slowness/stuckness. The callee
+	// MUST return without doing any IO, or blocking on anything (like a mutex)
+	// that is waiting on IO. This is imperative in order to reliably monitor for
+	// slowness, since if this goroutine gets stuck, the monitoring will stop
+	// working.
 	DiskSlow func(DiskSlowInfo)
 
 	// FlushBegin is invoked after the inputs to a flush have been determined,
