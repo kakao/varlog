@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -16,6 +17,7 @@ const (
 	DefaultMemTableSize                = 4 << 20
 	DefaultMemTableStopWritesThreshold = 2
 	DefaultMaxConcurrentCompactions    = 1
+	DefaultMetricsLogInterval          = time.Duration(0)
 )
 
 type config struct {
@@ -31,6 +33,7 @@ type config struct {
 	memTableStopWritesThreshold int
 	maxConcurrentCompaction     int
 	verbose                     bool
+	metricsLogInterval          time.Duration
 	logger                      *zap.Logger
 
 	readOnly bool
@@ -50,7 +53,8 @@ func newConfig(opts []Option) (config, error) {
 		memTableStopWritesThreshold: DefaultMemTableStopWritesThreshold,
 		maxConcurrentCompaction:     DefaultMaxConcurrentCompactions,
 
-		logger: zap.NewNop(),
+		metricsLogInterval: DefaultMetricsLogInterval,
+		logger:             zap.NewNop(),
 	}
 	for _, opt := range opts {
 		opt.apply(&cfg)
@@ -150,6 +154,12 @@ func WithMaxConcurrentCompaction(maxConcurrentCompaction int) Option {
 func WithVerboseLogging() Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.verbose = true
+	})
+}
+
+func WithMetrisLogInterval(metricsLogInterval time.Duration) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.metricsLogInterval = metricsLogInterval
 	})
 }
 

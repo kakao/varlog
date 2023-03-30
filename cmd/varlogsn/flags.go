@@ -4,6 +4,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/flags"
+	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode"
 )
 
@@ -121,6 +122,11 @@ var (
 	flagStorageMaxConcurrentCompaction = flags.FlagDesc{
 		Name: "storage-max-concurrent-compaction",
 		Envs: []string{"STORAGE_MAX_CONCURRENT_COMPACTION"},
+	}
+	flagStorageMetricsLogInterval = &cli.DurationFlag{
+		Name:    "storage-metrics-log-interval",
+		EnvVars: []string{"STORAGE_METRICS_LOG_INTERVAL"},
+		Value:   storage.DefaultMetricsLogInterval,
 	}
 	flagStorageVerbose = flags.FlagDesc{
 		Name: "storage-verbose",
