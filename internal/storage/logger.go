@@ -18,9 +18,9 @@ func newLogAdaptor(logger *zap.Logger) *logAdaptor {
 }
 
 func (l *logAdaptor) Infof(format string, args ...interface{}) {
-	l.logger.Infof(format, args)
+	l.logger.Infof(format, args...)
 }
 
 func (l *logAdaptor) Fatalf(format string, args ...interface{}) {
-	l.logger.Fatalf(format, args)
+	l.logger.Fatalf(format, args...)
 }
