@@ -63,7 +63,7 @@ func newStartCommand() *cli.Command {
 			flagStorageL0StopWritesThreshold.IntFlag(false, storage.DefaultL0StopWritesThreshold),
 			flagStorageLBaseMaxBytes.StringFlag(false, units.ToByteSizeString(storage.DefaultLBaseMaxBytes)),
 			flagStorageMaxOpenFiles.IntFlag(false, storage.DefaultMaxOpenFiles),
-			flagStorageMemTableSize.StringFlag(false, units.ToByteSizeString(storage.DefaultMemTableSize)),
+			flagStorageMemTableSize,
 			flagStorageMemTableStopWritesThreshold.IntFlag(false, storage.DefaultMemTableStopWritesThreshold),
 			flagStorageMaxConcurrentCompaction.IntFlag(false, storage.DefaultMaxConcurrentCompactions),
 			flagStorageMetricsLogInterval,
