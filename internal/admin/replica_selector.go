@@ -26,6 +26,56 @@ type ReplicaSelector interface {
 	Select(ctx context.Context) ([]*varlogpb.ReplicaDescriptor, error)
 }
 
+type randomReplicaSelector struct {
+	rng       *rand.Rand
+	cmview    mrmanager.ClusterMetadataView
+	repfactor int
+}
+
+var _ ReplicaSelector = (*randomReplicaSelector)(nil)
+
+func newRandomReplicaSelector(cmview mrmanager.ClusterMetadataView, repfactor int) (*randomReplicaSelector, error) {
+	if repfactor < 1 {
+		return nil, errors.Wrap(verrors.ErrInvalid, "replica selector: negative replication factor")
+	}
+	if cmview == nil {
+		return nil, errors.Wrap(verrors.ErrInvalid, "replica selector: invalid cluster metadata view")
+	}
+	s := &randomReplicaSelector{
+		rng:       rand.New(rand.NewSource(time.Now().Unix())),
+		cmview:    cmview,
+		repfactor: repfactor,
+	}
+	return s, nil
+}
+
+func (s *randomReplicaSelector) Name() string {
+	return "random"
+}
+
+func (s *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.ReplicaDescriptor, error) {
+	md, err := s.cmview.ClusterMetadata(ctx)
+	if err != nil {
+		return nil, errors.WithMessage(err, "replica selector")
+	}
+
+	ret := make([]*varlogpb.ReplicaDescriptor, s.repfactor)
+
+	snds := md.StorageNodes
+	sndIndices := s.rng.Perm(len(snds))[:s.repfactor]
+	for idx, sndIdx := range sndIndices {
+		snd := snds[sndIdx]
+		snpaths := snd.Paths
+		pathIdx := s.rng.Intn(len(snpaths))
+		ret[idx] = &varlogpb.ReplicaDescriptor{
+			StorageNodeID:   snd.StorageNodeID,
+			StorageNodePath: snpaths[pathIdx],
+		}
+	}
+
+	return ret, nil
+}
+
 // balancedReplicaSelector selects storage nodes and volumes for a new log stream to be balanced in
 // terms of the number of replicas as well as the number of primary replica per storage node.
 // Note that it does not consider loads of storage nodes.
