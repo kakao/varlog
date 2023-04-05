@@ -330,6 +330,7 @@ func TestReportCommit(t *testing.T) {
 					assert.Contains(t, knownVersions.vers, lsid)
 					ver := knownVersions.vers[lsid]
 					if ver >= cr.Version {
+						knownVersions.Unlock()
 						continue
 					}
 					assert.Equal(t, reportsCommits[lsid][ver].expectedCommit, cr)
