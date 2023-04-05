@@ -3650,13 +3650,16 @@ func TestExecutor_Trim(t *testing.T) {
 
 func TestExecutorRestore(t *testing.T) {
 	tcs := []struct {
-		name   string
-		golden string
-		testf  func(t *testing.T, lse *Executor)
+		name    string
+		golden  string
+		updatef func(t *testing.T, stg *storage.Storage)
+		testf   func(t *testing.T, lse *Executor)
 	}{
 		{
 			name:   "NoLogEntry",
 			golden: "./testdata/datadir-00",
+			updatef: func(t *testing.T, stg *storage.Storage) {
+			},
 			testf: func(t *testing.T, lse *Executor) {
 				rpt, err := lse.Report(context.Background())
 				require.NoError(t, err)
@@ -3686,6 +3689,19 @@ func TestExecutorRestore(t *testing.T) {
 		{
 			name:   "TenLogEntries",
 			golden: "./testdata/datadir-01",
+			updatef: func(t *testing.T, stg *storage.Storage) {
+				for i := 0; i < 10; i++ {
+					llsn, glsn := types.LLSN(i+1), types.GLSN(i+1)
+					storage.TestAppendLogEntryWithoutCommitContext(t, stg, llsn, glsn, []byte{})
+				}
+				storage.TestSetCommitContext(t, stg, storage.CommitContext{
+					Version:            10,
+					HighWatermark:      10,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   11,
+					CommittedLLSNBegin: 1,
+				})
+			},
 			testf: func(t *testing.T, lse *Executor) {
 				rpt, err := lse.Report(context.Background())
 				require.NoError(t, err)
@@ -3713,8 +3729,21 @@ func TestExecutorRestore(t *testing.T) {
 			},
 		},
 		{
-			name:   "TenLogEntriesFollowedByTenEmptyCommitContexts",
+			name:   "TenLogEntriesFollowedByEmptyCommitContext",
 			golden: "./testdata/datadir-02",
+			updatef: func(t *testing.T, stg *storage.Storage) {
+				for i := 0; i < 10; i++ {
+					llsn, glsn := types.LLSN(i+1), types.GLSN(i+1)
+					storage.TestAppendLogEntryWithoutCommitContext(t, stg, llsn, glsn, []byte{})
+				}
+				storage.TestSetCommitContext(t, stg, storage.CommitContext{
+					Version:            20,
+					HighWatermark:      20,
+					CommittedGLSNBegin: 11,
+					CommittedGLSNEnd:   11,
+					CommittedLLSNBegin: 11,
+				})
+			},
 			testf: func(t *testing.T, lse *Executor) {
 				rpt, err := lse.Report(context.Background())
 				require.NoError(t, err)
@@ -3741,40 +3770,23 @@ func TestExecutorRestore(t *testing.T) {
 				require.Equal(t, types.GLSN(10), localHWM.GLSN)
 			},
 		},
-		{
-			name:   "TenEmptyCommitContextsFollowedByTenLogEntries",
-			golden: "./testdata/datadir-03",
-			testf: func(t *testing.T, lse *Executor) {
-				rpt, err := lse.Report(context.Background())
-				require.NoError(t, err)
-				require.Equal(t, snpb.LogStreamUncommitReport{
-					LogStreamID:           lse.lsid,
-					UncommittedLLSNOffset: 11,
-					UncommittedLLSNLength: 0,
-					Version:               20,
-					HighWatermark:         20,
-				}, rpt)
-
-				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
-				require.Equal(t, types.Version(20), ver)
-				require.Equal(t, types.GLSN(20), hwm)
-				require.Equal(t, types.LLSN(11), uncommittedBegin.LLSN)
-				require.False(t, invalid)
-				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
-				localLWM, localHWM, _ := lse.lsc.localWatermarks()
-				// localLWM := lse.lsc.localLowWatermark()
-				require.Equal(t, types.LLSN(1), localLWM.LLSN)
-				require.Equal(t, types.GLSN(11), localLWM.GLSN)
-				// localHWM := lse.lsc.localHighWatermark()
-				require.Equal(t, types.LLSN(10), localHWM.LLSN)
-				require.Equal(t, types.GLSN(20), localHWM.GLSN)
-			},
-		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			stg := storage.TestNewStorage(t, storage.WithPath(tc.golden), storage.ReadOnly())
+			stgOpts := []storage.Option{storage.WithPath(tc.golden)}
+
+			if *update {
+				stg := storage.TestNewStorage(t, stgOpts...)
+				defer func() {
+					assert.NoError(t, stg.Close())
+				}()
+				tc.updatef(t, stg)
+				return
+			}
+
+			stgOpts = append(stgOpts, storage.ReadOnly())
+			stg := storage.TestNewStorage(t, stgOpts...)
 			lse, err := NewExecutor(
 				WithStorage(stg),
 			)

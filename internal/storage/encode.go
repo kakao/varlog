@@ -8,15 +8,15 @@ import (
 )
 
 const (
-	dataKeyPrefix         = byte('d')
-	dataKeySentinelPrefix = byte('e')
+	dataKeyPrefix         = byte(0x40)
+	dataKeySentinelPrefix = byte(0x41)
 	dataKeyLength         = 9 // prefix(1) + LLSN(8)
 
-	commitKeyPrefix         = byte('c')
-	commitKeySentinelPrefix = byte('d')
+	commitKeyPrefix         = byte(0x80)
+	commitKeySentinelPrefix = byte(0x81)
 	commitKeyLength         = 9 // prefix(1) + GLSN(8)
 
-	commitContextKeyMarker = byte('b')
+	commitContextKeyMarker = byte(0xc0)
 	commitContextLength    = 40
 )
 
