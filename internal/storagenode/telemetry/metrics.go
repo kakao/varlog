@@ -161,8 +161,7 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 	}
 	appendDuration, err = batchObserver.NewInt64CounterObserver(
 		"sn.append.duration",
-		metric.WithDescription("Time spent appending to the log stream"),
-		metric.WithUnit(unit.Milliseconds),
+		metric.WithDescription("Time spent appending to the log stream in microseconds"),
 	)
 	if err != nil {
 		return nil, err
@@ -177,7 +176,7 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 	}
 	appendPreparationMicroseconds, err = batchObserver.NewInt64CounterObserver(
 		"sn.append.preparation.us",
-		metric.WithDescription("Time spent preparing append operation"),
+		metric.WithDescription("Time spent preparing append operation in microseconds"),
 	)
 	if err != nil {
 		return nil, err
@@ -200,7 +199,7 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 	}
 	sequencerFanoutDuration, err = batchObserver.NewInt64CounterObserver(
 		"sn.sequencer.fanout.duration",
-		metric.WithDescription("Time spent in sequencer fanout"),
+		metric.WithDescription("Time spent in sequencer fanout in microseconds"),
 	)
 	if err != nil {
 		return nil, err
@@ -224,7 +223,7 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 
 	writerOperationDuration, err = batchObserver.NewInt64CounterObserver(
 		"sn.writer.operation.duration",
-		metric.WithDescription("Time spent in writer operation"),
+		metric.WithDescription("Time spent in writer operation in microseconds"),
 	)
 	if err != nil {
 		return nil, err
@@ -248,7 +247,7 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 
 	committerOperationDuration, err = batchObserver.NewInt64CounterObserver(
 		"sn.committer.operation.duration",
-		metric.WithDescription("Time spent in committer operation"),
+		metric.WithDescription("Time spent in committer operation in microseconds"),
 	)
 	if err != nil {
 		return nil, err
@@ -272,7 +271,7 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 
 	replicateClientOperationDuration, err = batchObserver.NewInt64CounterObserver(
 		"sn.replicate.client.operation.duration",
-		metric.WithDescription("Time spent in replicate client operation"),
+		metric.WithDescription("Time spent in replicate client operation in microseconds"),
 	)
 	if err != nil {
 		return nil, err
@@ -321,8 +320,7 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 	}
 	replicateDuration, err = batchObserver.NewInt64CounterObserver(
 		"sn.replicate.duration",
-		metric.WithDescription("Time spent replicating from the log stream"),
-		metric.WithUnit(unit.Milliseconds),
+		metric.WithDescription("Time spent replicating from the log stream in microseconds"),
 	)
 	if err != nil {
 		return nil, err

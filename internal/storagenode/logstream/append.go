@@ -54,7 +54,7 @@ func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.App
 		}
 		atomic.AddInt64(&lse.lsm.AppendLogs, int64(dataBatchLen))
 		atomic.AddInt64(&lse.lsm.AppendBytes, apc.totalBytes)
-		atomic.AddInt64(&lse.lsm.AppendDuration, time.Since(startTime).Milliseconds())
+		atomic.AddInt64(&lse.lsm.AppendDuration, time.Since(startTime).Microseconds())
 		atomic.AddInt64(&lse.lsm.AppendOperations, 1)
 		atomic.AddInt64(&lse.lsm.AppendPreparationMicro, preparationDuration.Microseconds())
 	}()
