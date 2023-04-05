@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	DefaultBallastSize                    = "0B"
 	DefaultServerReadBufferSize           = 32 << 10
 	DefaultServerWriteBufferSize          = 32 << 10
 	DefaultServerMaxRecvSize              = 4 << 20

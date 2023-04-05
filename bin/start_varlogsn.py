@@ -169,6 +169,9 @@ def start(args: argparse.Namespace) -> None:
             for volume in volumes:
                 cmd.append(f"--volumes={volume}")
 
+            if args.ballast_size:
+                cmd.append(f"--ballast-size={args.ballast_size}")
+
             # grpc options
             if args.server_read_buffer_size:
                 cmd.append(
