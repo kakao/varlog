@@ -98,7 +98,7 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 		}
 	}()
 
-	localLWM, localHWM := lse.lsc.localLowWatermark(), lse.lsc.localHighWatermark()
+	localLWM, localHWM, _ := lse.lsc.localWatermarks()
 	syncRange, err := sc.syncInit(ctx, snpb.SyncRange{
 		FirstLLSN: localLWM.LLSN,
 		LastLLSN:  localHWM.LLSN,
@@ -289,7 +289,7 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 	}
 
 	trimGLSN := types.InvalidGLSN
-	lwm := lse.lsc.localLowWatermark()
+	lwm, _, _ := lse.lsc.localWatermarks()
 
 	if lwm.LLSN < srcRange.FirstLLSN && srcRange.FirstLLSN <= lastCommittedLLSN {
 		// The source replica has already trimmed some prefix log
@@ -371,7 +371,7 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 	lse.lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{
 		LLSN: lastCommittedLLSN + 1,
 		GLSN: uncommittedGLSNBegin,
-	}, true)
+	}, true /*invalid*/)
 
 	// learning
 	lse.resetInternalState(lastCommittedLLSN, !lse.isPrimary())

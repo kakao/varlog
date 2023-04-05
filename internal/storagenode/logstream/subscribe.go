@@ -99,7 +99,8 @@ func (lse *Executor) SubscribeWithLLSN(begin, end types.LLSN) (*SubscribeResult,
 		return nil, fmt.Errorf("log stream: invalid range: %w", verrors.ErrInvalid)
 	}
 
-	if begin < lse.lsc.localLowWatermark().LLSN {
+	localLowWatermark, _, _ := lse.lsc.localWatermarks()
+	if begin < localLowWatermark.LLSN {
 		return nil, fmt.Errorf("log stream: %w", verrors.ErrTrimmed)
 	}
 
@@ -168,7 +169,7 @@ func (lse *Executor) scanWithLLSN(ctx context.Context, begin, end types.LLSN, sr
 		}
 
 		_, globalHWM, _, _ := lse.lsc.reportCommitBase()
-		localHWM := lse.lsc.localHighWatermark()
+		_, localHWM, _ := lse.lsc.localWatermarks()
 		scanEnd := end
 		if localHWM.LLSN+1 < scanEnd {
 			scanEnd = localHWM.LLSN + 1

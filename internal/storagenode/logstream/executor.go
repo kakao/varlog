@@ -214,6 +214,13 @@ func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataL
 	return nil
 }
 
+// Seal checks whether the log stream replica has committed the log entry
+// confirmed lastly by the metadata repository. Since Trim can remove the last
+// log entry, Seal compares the argument lastCommittedGLSN to the
+// uncommittedBegin of the log stream context instead of the local high
+// watermark.
+//
+// FIXME: No need to return localHWM.
 func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (status varlogpb.LogStreamStatus, localHWM types.GLSN, err error) {
 	atomic.AddInt64(&lse.inflight, 1)
 	defer atomic.AddInt64(&lse.inflight, -1)
@@ -232,13 +239,12 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		return varlogpb.LogStreamStatusSealed, lastCommittedGLSN, nil
 	}
 
-	// TODO: We can deduplicate uncommittedLLSNBegin and local high
-	// watermark.
-	_, _, _, invalid := lse.lsc.reportCommitBase()
-	localHighWatermark := lse.lsc.localHighWatermark()
-	localHWM = localHighWatermark.GLSN
-	if localHighWatermark.GLSN > lastCommittedGLSN {
-		panic("log stream: seal: metadata repository may be behind of log stream")
+	_, _, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+	if uncommittedBegin.GLSN-1 > lastCommittedGLSN {
+		lse.logger.Panic("log stream: seal: metadata repository may be behind of log stream",
+			zap.Any("local", uncommittedBegin.GLSN-1),
+			zap.Any("mr", lastCommittedGLSN),
+		)
 	}
 	if lastCommittedGLSN.Invalid() && invalid {
 		// NOTE: Invalid last committed GLSN means this log stream just
@@ -248,11 +254,15 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		// log stream.
 		lse.logger.Panic("log stream: seal: unexpected last committed GLSN")
 	}
+
+	_, localHighWatermark, _ := lse.lsc.localWatermarks()
+	localHWM = localHighWatermark.GLSN
+
 	if lse.esm.load() == executorStateLearning {
 		return varlogpb.LogStreamStatusSealing, localHWM, nil
 	}
 
-	if localHighWatermark.GLSN < lastCommittedGLSN || invalid {
+	if uncommittedBegin.GLSN-1 < lastCommittedGLSN || invalid {
 		status = varlogpb.LogStreamStatusSealing
 		return status, localHWM, nil
 	}
@@ -263,7 +273,7 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		return status, localHWM, nil
 	}
 
-	lse.resetInternalState(localHighWatermark.LLSN, true)
+	lse.resetInternalState(uncommittedBegin.LLSN-1, true)
 
 	lse.esm.store(executorStateSealed)
 	return status, localHWM, nil
@@ -468,8 +478,7 @@ func (lse *Executor) metadataDescriptor(state executorState) snpb.LogStreamRepli
 		status = varlogpb.LogStreamStatusSealed
 	}
 
-	localLowWatermark := lse.lsc.localLowWatermark()
-	localHighWatermark := lse.lsc.localHighWatermark()
+	localLowWatermark, localHighWatermark, _ := lse.lsc.localWatermarks()
 	version, globalHighWatermark, _, _ := lse.lsc.reportCommitBase()
 	return snpb.LogStreamReplicaMetadataDescriptor{
 		LogStreamReplica: varlogpb.LogStreamReplica{
@@ -522,7 +531,7 @@ func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
 	}
 
 	const safetyGap = 1
-	localHighWatermark := lse.lsc.localHighWatermark()
+	_, localHighWatermark, _ := lse.lsc.localWatermarks()
 	if glsn > localHighWatermark.GLSN-safetyGap {
 		return fmt.Errorf("log stream: trim: too high to trim %d, local high watermark %d, safety gap: %d",
 			glsn, localHighWatermark.GLSN, safetyGap)
@@ -633,6 +642,18 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 		return lsc
 	}
 
+	if cc != nil && last == nil { // maybe trimmed
+		restoreMode = "recovered"
+		uncommittedLLSNBegin := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
+		uncommittedBegin := varlogpb.LogSequenceNumber{
+			LLSN: uncommittedLLSNBegin,
+			GLSN: cc.CommittedGLSNEnd,
+		}
+		lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false /*invalid*/)
+		lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
+		return lsc
+	}
+
 	if cc != nil && last != nil { // recovery
 		restoreMode = "recovered"
 		uncommittedLLSNBegin := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
@@ -641,7 +662,7 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 				LLSN: last.LLSN + 1,
 				GLSN: last.GLSN + 1,
 			}
-			lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false)
+			lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false /*invalid*/)
 			lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
 			lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
 				LLSN: first.LLSN,
@@ -653,13 +674,13 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 
 	// something wrong
 	restoreMode = "invalid"
-	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{}, true)
+	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{}, true /*invalid*/)
 	if last != nil {
 		uncommittedBegin := varlogpb.LogSequenceNumber{
 			LLSN: last.LLSN + 1,
 			GLSN: last.GLSN + 1,
 		}
-		lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, uncommittedBegin, true)
+		lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, uncommittedBegin, true /*invalid*/)
 		lsc.uncommittedLLSNEnd.Store(last.LLSN + 1)
 		lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
 			LLSN: first.LLSN,

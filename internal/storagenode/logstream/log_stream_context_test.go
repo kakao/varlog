@@ -14,26 +14,86 @@ import (
 )
 
 func TestLogStreamContext(t *testing.T) {
-	lsc := newLogStreamContext()
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, lsc *logStreamContext)
+	}{
+		{
+			name: "InitialValue",
+			testf: func(t *testing.T, lsc *logStreamContext) {
+				version, highWatermark, uncommittedBegin, invalid := lsc.reportCommitBase()
+				require.Equal(t, types.InvalidVersion, version)
+				require.Equal(t, types.InvalidGLSN, highWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: types.MinLLSN,
+					GLSN: types.MinGLSN,
+				}, uncommittedBegin)
+				require.False(t, invalid)
 
-	version, highWatermark, uncommittedBegin, invalid := lsc.reportCommitBase()
-	require.Equal(t, types.InvalidVersion, version)
-	require.Equal(t, types.InvalidGLSN, highWatermark)
-	require.Equal(t, types.MinLLSN, uncommittedBegin.LLSN)
-	require.False(t, invalid)
+				require.Equal(t, types.MinLLSN, lsc.uncommittedLLSNEnd.Load())
 
-	expected := varlogpb.LogSequenceNumber{
-		LLSN: 3,
-		GLSN: 4,
+				localLWM, localHWM, _ := lsc.localWatermarks()
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: types.InvalidLLSN,
+					GLSN: types.InvalidGLSN,
+				}, localLWM)
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: types.InvalidLLSN,
+					GLSN: types.InvalidGLSN,
+				}, localHWM)
+			},
+		},
+		{
+			name: "MaybeTrimmed",
+			testf: func(t *testing.T, lsc *logStreamContext) {
+				lsc.storeReportCommitBase(types.Version(1), types.GLSN(10), varlogpb.LogSequenceNumber{
+					LLSN: 10,
+					GLSN: 10,
+				}, true)
+
+				localLWM, localHWM, _ := lsc.localWatermarks()
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: types.InvalidLLSN,
+					GLSN: types.InvalidGLSN,
+				}, localLWM)
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: types.InvalidLLSN,
+					GLSN: types.InvalidGLSN,
+				}, localHWM)
+			},
+		},
+		{
+			name: "HasLogs",
+			testf: func(t *testing.T, lsc *logStreamContext) {
+				lsc.storeReportCommitBase(types.Version(1), types.GLSN(10), varlogpb.LogSequenceNumber{
+					LLSN: 10,
+					GLSN: 10,
+				}, true)
+
+				lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
+					LLSN: 1,
+					GLSN: 1,
+				})
+
+				localLWM, localHWM, _ := lsc.localWatermarks()
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: 1,
+					GLSN: 1,
+				}, localLWM)
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: 9,
+					GLSN: 9,
+				}, localHWM)
+			},
+		},
 	}
-	uncommittedBegin = expected
-	uncommittedBegin.LLSN++
-	uncommittedBegin.GLSN++
-	lsc.storeReportCommitBase(version, highWatermark, uncommittedBegin, invalid)
-	assert.Equal(t, expected, lsc.localHighWatermark())
 
-	lsc.setLocalLowWatermark(expected)
-	assert.Equal(t, expected, lsc.localLowWatermark())
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			lsc := newLogStreamContext()
+			tc.testf(t, lsc)
+		})
+	}
 }
 
 func TestDecidableCondition(t *testing.T) {
