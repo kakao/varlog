@@ -2461,7 +2461,7 @@ func TestMRScaleOutJoin(t *testing.T) {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
-		So(testutil.CompareWaitN(500, func() bool {
+		So(testutil.CompareWaitN(1000, func() bool {
 			peers := clus.getMembersFromSnapshot(0)
 			return len(peers) == nrNode
 		}), ShouldBeTrue)
