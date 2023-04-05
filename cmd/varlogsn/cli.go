@@ -66,6 +66,7 @@ func newStartCommand() *cli.Command {
 			flagStorageMemTableSize.StringFlag(false, units.ToByteSizeString(storage.DefaultMemTableSize)),
 			flagStorageMemTableStopWritesThreshold.IntFlag(false, storage.DefaultMemTableStopWritesThreshold),
 			flagStorageMaxConcurrentCompaction.IntFlag(false, storage.DefaultMaxConcurrentCompactions),
+			flagStorageMetricsLogInterval,
 			flagStorageVerbose.BoolFlag(),
 
 			flagLogDir.StringFlag(false, ""),

@@ -143,6 +143,7 @@ func start(c *cli.Context) error {
 		storage.WithMemTableSize(c.Int(flagStorageMemTableSize.Name)),
 		storage.WithMemTableStopWritesThreshold(c.Int(flagStorageMemTableStopWritesThreshold.Name)),
 		storage.WithMaxConcurrentCompaction(c.Int(flagStorageMaxConcurrentCompaction.Name)),
+		storage.WithMetrisLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
 	}
 	if c.Bool(flagStorageDisableWAL.Name) {
 		storageOpts = append(storageOpts, storage.WithoutWAL())
