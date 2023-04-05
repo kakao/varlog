@@ -39,7 +39,7 @@ func (s *Storage) ReadRecoveryPoints() (rp RecoveryPoints, err error) {
 func (s *Storage) readLastCommitContext() (*CommitContext, error) {
 	cc, err := s.ReadCommitContext()
 	if err != nil {
-		if errors.Is(err, pebble.ErrNotFound) {
+		if errors.Is(err, ErrNoCommitContext) {
 			return nil, nil
 		}
 		return nil, err
