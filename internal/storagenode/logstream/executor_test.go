@@ -3513,6 +3513,10 @@ func TestExecutor_Trim(t *testing.T) {
 		}, time.Second, 10*time.Millisecond)
 	}
 	wg.Wait()
+	lsrmd, err := lse.Metadata()
+	assert.NoError(t, err)
+	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
 
 	// CC:   +-- 1 --+ +--  2 --+
 	// LLSN: _ _ _ _ 5 6 7 8 9 10
@@ -3551,6 +3555,10 @@ func TestExecutor_Trim(t *testing.T) {
 	sr.Stop()
 	// FIXME(jun): revisit context of subscriber
 	// assert.NoError(t, sr.Err())
+	lsrmd, err = lse.Metadata()
+	assert.NoError(t, err)
+	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 5, GLSN: 5}, lsrmd.LocalLowWatermark)
+	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
 
 	// restart after trim
 	assert.NoError(t, lse.Close())
@@ -3578,6 +3586,10 @@ func TestExecutor_Trim(t *testing.T) {
 	sr.Stop()
 	// FIXME(jun): revisit context of subscriber
 	// assert.NoError(t, sr.Err())
+	lsrmd, err = lse.Metadata()
+	assert.NoError(t, err)
+	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 5, GLSN: 5}, lsrmd.LocalLowWatermark)
+	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
 
 	// CC:   +-- 1 --+ +--  2 --+
 	// LLSN: _ _ _ _ _ 6 7 8 9 10
@@ -3611,9 +3623,27 @@ func TestExecutor_Trim(t *testing.T) {
 	sr.Stop()
 	// FIXME(jun): revisit context of subscriber
 	// assert.NoError(t, sr.Err())
+	lsrmd, err = lse.Metadata()
+	assert.NoError(t, err)
+	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 6, GLSN: 6}, lsrmd.LocalLowWatermark)
+	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
 
+	// CC:   +-- 1 --+ +--  2 --+
+	// LLSN: _ _ _ _ _ _ _ _ _ __
+	// GLSN: _ _ _ _ _ _ _ _ _ __
 	err = lse.Trim(context.Background(), 10)
+	assert.NoError(t, err)
+	_, err = lse.SubscribeWithGLSN(1, types.MaxGLSN)
 	assert.Error(t, err)
+
+	lsrmd, err = lse.Metadata()
+	assert.NoError(t, err)
+	assert.Equal(t, varlogpb.LogSequenceNumber{
+		LLSN: types.InvalidLLSN, GLSN: types.InvalidGLSN,
+	}, lsrmd.LocalLowWatermark)
+	assert.Equal(t, varlogpb.LogSequenceNumber{
+		LLSN: types.InvalidLLSN, GLSN: types.InvalidGLSN,
+	}, lsrmd.LocalHighWatermark)
 
 	assert.NoError(t, lse.Close())
 }

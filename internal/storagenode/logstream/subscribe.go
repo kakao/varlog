@@ -76,6 +76,8 @@ func (lse *Executor) SubscribeWithGLSN(begin, end types.GLSN) (*SubscribeResult,
 		return nil, fmt.Errorf("log stream: invalid range: %w", verrors.ErrInvalid)
 	}
 
+	// Because the log stream executor cannot know the global low watermark after a restart, it returns an io.EOF error instead of ErrTrimmed. Note that the log stream executor keeps the global low watermark in memory.
+	// NOTE: The client who calls Subscribe API should handle the above issue.
 	lse.globalLowWatermark.mu.Lock()
 	if begin < lse.globalLowWatermark.glsn {
 		lse.globalLowWatermark.mu.Unlock()
@@ -89,6 +91,11 @@ func (lse *Executor) SubscribeWithGLSN(begin, end types.GLSN) (*SubscribeResult,
 		return sr, nil
 	}
 	_, globalHWM, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+	if localLWM.GLSN.Invalid() && end <= uncommittedBegin.GLSN {
+		// NOTE: There are no log entries in the log stream replica. Since the subscribe range is less than uncommittedBegin, the range could have been trimmed. However, there is the possibility that the log entries could not have been written into that range. Due to this ambiguity, it returns an empty result.
+		sr, _ := lse.newEmptySubscribeResult()
+		return sr, nil
+	}
 	if !invalid && uncommittedBegin.GLSN <= begin && end <= globalHWM+1 {
 		sr, _ := lse.newEmptySubscribeResult()
 		return sr, nil
@@ -120,6 +127,12 @@ func (lse *Executor) SubscribeWithLLSN(begin, end types.LLSN) (*SubscribeResult,
 	localLowWatermark, _, _ := lse.lsc.localWatermarks()
 	if begin < localLowWatermark.LLSN {
 		return nil, fmt.Errorf("log stream: %w", verrors.ErrTrimmed)
+	}
+	_, _, uncommittedBegin, _ := lse.lsc.reportCommitBase()
+	if localLowWatermark.LLSN.Invalid() && end <= uncommittedBegin.LLSN {
+		return nil, fmt.Errorf("log stream: %w", verrors.ErrTrimmed)
+		//sr, _ := lse.newEmptySubscribeResult()
+		//return sr, nil
 	}
 
 	sr, ctx := lse.newSubscribeResult()
