@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/internal/batchlet"
 	"github.com/kakao/varlog/internal/storage"
@@ -60,7 +62,7 @@ func TestExecutor_Closed(t *testing.T) {
 		lsid = types.LogStreamID(3)
 	)
 
-	lse := testNewExecutor(t,
+	lse := testNewAppendableExecutor(t,
 		[]varlogpb.LogStreamReplica{
 			{
 				StorageNode: varlogpb.StorageNode{
@@ -120,7 +122,7 @@ func TestExecutor_Closed(t *testing.T) {
 	_, err = lse.SubscribeWithLLSN(types.MinLLSN, types.MinLLSN)
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
-	_, err = lse.SyncInit(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncRange{FirstLLSN: 1, LastLLSN: 1})
+	_, err = lse.SyncInit(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncRange{FirstLLSN: 1, LastLLSN: 1}, 1)
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
 	err = lse.SyncReplicate(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncPayload{
@@ -164,10 +166,10 @@ func TestExecutor_Sealing(t *testing.T) {
 		{
 			name: "CouldNotAppend",
 			testf: func(t *testing.T, lse *Executor) {
-				status, localHWM, err := lse.Seal(context.Background(), types.MaxGLSN)
+				st, localHWM, err := lse.Seal(context.Background(), types.MaxGLSN)
 				assert.NoError(t, err)
 				assert.Equal(t, types.InvalidGLSN, localHWM)
-				assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				assert.Equal(t, varlogpb.LogStreamStatusSealing, st)
 				assert.Equal(t, executorStateSealing, lse.esm.load())
 
 				_, err = lse.Append(context.Background(), TestNewBatchData(t, 1, 0))
@@ -177,10 +179,10 @@ func TestExecutor_Sealing(t *testing.T) {
 		{
 			name: "CouldNotReplicate",
 			testf: func(t *testing.T, lse *Executor) {
-				status, localHWM, err := lse.Seal(context.Background(), types.MaxGLSN)
+				st, localHWM, err := lse.Seal(context.Background(), types.MaxGLSN)
 				assert.NoError(t, err)
 				assert.Equal(t, types.InvalidGLSN, localHWM)
-				assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				assert.Equal(t, varlogpb.LogStreamStatusSealing, st)
 				assert.Equal(t, executorStateSealing, lse.esm.load())
 
 				err = lse.Replicate(context.Background(), []types.LLSN{1}, TestNewBatchData(t, 1, 0))
@@ -207,10 +209,10 @@ func TestExecutor_Sealing(t *testing.T) {
 					GLSN: types.GLSN(lastLSN + 1),
 				}, true)
 				lse.lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{LLSN: lastLSN, GLSN: lastLSN})
-				status, localHWM, err := lse.Seal(context.Background(), types.GLSN(lastLSN))
+				st, localHWM, err := lse.Seal(context.Background(), types.GLSN(lastLSN))
 				assert.NoError(t, err)
 				assert.Equal(t, types.GLSN(lastLSN), localHWM)
-				assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				assert.Equal(t, varlogpb.LogStreamStatusSealing, st)
 				assert.Equal(t, executorStateSealing, lse.esm.load())
 			},
 		},
@@ -218,7 +220,7 @@ func TestExecutor_Sealing(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			lse := testNewExecutor(t,
+			lse := testNewAppendableExecutor(t,
 				[]varlogpb.LogStreamReplica{
 					{
 						StorageNode: varlogpb.StorageNode{
@@ -254,7 +256,7 @@ func TestExecutor_Sealed(t *testing.T) {
 		lsid = types.LogStreamID(3)
 	)
 
-	lse := testNewExecutor(t,
+	lse := testNewAppendableExecutor(t,
 		[]varlogpb.LogStreamReplica{
 			{
 				StorageNode: varlogpb.StorageNode{
@@ -278,10 +280,10 @@ func TestExecutor_Sealed(t *testing.T) {
 		assert.NoError(t, err)
 	}()
 
-	status, localHWM, err := lse.Seal(context.Background(), types.InvalidGLSN)
+	st, localHWM, err := lse.Seal(context.Background(), types.InvalidGLSN)
 	assert.NoError(t, err)
 	assert.Equal(t, types.InvalidGLSN, localHWM)
-	assert.Equal(t, varlogpb.LogStreamStatusSealed, status)
+	assert.Equal(t, varlogpb.LogStreamStatusSealed, st)
 	assert.Equal(t, executorStateSealed, lse.esm.load())
 
 	_, err = lse.Append(context.Background(), TestNewBatchData(t, 1, 0))
@@ -299,8 +301,8 @@ func testUnsealInitialExecutor(t *testing.T, lse *Executor, replicas []varlogpb.
 	_, err = lse.Append(context.Background(), [][]byte{[]byte("hello")})
 	assert.Error(t, err)
 
-	status, localHWM, err := lse.Seal(context.Background(), lastGLSN)
-	assert.Equal(t, varlogpb.LogStreamStatusSealed, status)
+	st, localHWM, err := lse.Seal(context.Background(), lastGLSN)
+	assert.Equal(t, varlogpb.LogStreamStatusSealed, st)
 	assert.Equal(t, lastGLSN, localHWM)
 	assert.NoError(t, err)
 
@@ -312,11 +314,21 @@ func testUnsealInitialExecutor(t *testing.T, lse *Executor, replicas []varlogpb.
 	assert.Equal(t, varlogpb.LogStreamStatusRunning, lsmd.Status)
 }
 
-func testNewExecutor(t *testing.T, replicas []varlogpb.LogStreamReplica, executorOpts ...ExecutorOption) *Executor {
+// testNewExecutor returns a log stream executor created by given executorOpts.
+// Result executor's state is SEALING.
+func testNewExecutor(t *testing.T, executorOpts ...ExecutorOption) *Executor {
+	lse, err := NewExecutor(executorOpts...)
+	require.NoError(t, err)
+	return lse
+}
+
+func testNewAppendableExecutor(t *testing.T, replicas []varlogpb.LogStreamReplica, executorOpts ...ExecutorOption) *Executor {
 	stg := storage.TestNewStorage(t)
 
-	lse, err := NewExecutor(append(executorOpts, WithStorage(stg))...)
-	assert.NoError(t, err)
+	opts := make([]ExecutorOption, len(executorOpts))
+	copy(opts, executorOpts)
+	opts = append(opts, WithStorage(stg))
+	lse := testNewExecutor(t, opts...)
 
 	testUnsealInitialExecutor(t, lse, replicas, types.InvalidGLSN)
 	return lse
@@ -365,7 +377,7 @@ func testNewPrimaryExecutor(t *testing.T, opts ...ExecutorOption) *Executor {
 		WithCommitQueueCapacity(0),
 	}
 	executorOpts = append(executorOpts, opts...)
-	lse := testNewExecutor(t,
+	lse := testNewAppendableExecutor(t,
 		replicas,
 		executorOpts...,
 	)
@@ -408,7 +420,7 @@ func testNewBackupExecutor(t *testing.T, opts ...ExecutorOption) *Executor {
 		WithCommitQueueCapacity(queueCapacity),
 	}
 	executorOpts = append(executorOpts, opts...)
-	lse := testNewExecutor(t,
+	lse := testNewAppendableExecutor(t,
 		replicas,
 		executorOpts...,
 	)
@@ -762,9 +774,9 @@ func TestExecutor_AppendSeal(t *testing.T) {
 
 	// Seal
 	assert.Eventually(t, func() bool {
-		status, localHWM, err := lse.Seal(context.Background(), lastGLSN)
+		st, localHWM, err := lse.Seal(context.Background(), lastGLSN)
 		assert.NoError(t, err)
-		return status == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
+		return st == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
 	}, time.Second, 10*time.Millisecond)
 
 	wg.Wait()
@@ -828,9 +840,9 @@ func TestExecutor_AppendSeal(t *testing.T) {
 
 	// Seal
 	assert.Eventually(t, func() bool {
-		status, localHWM, err := lse.Seal(context.Background(), lastGLSN)
+		st, localHWM, err := lse.Seal(context.Background(), lastGLSN)
 		assert.NoError(t, err)
-		return status == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
+		return st == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
 	}, time.Second, 10*time.Millisecond)
 
 	wg.Wait()
@@ -899,9 +911,9 @@ func TestExecutor_ReplicateSeal(t *testing.T) {
 
 	// Seal
 	assert.Eventually(t, func() bool {
-		status, localHWM, err := lse.Seal(context.Background(), lastGLSN)
+		st, localHWM, err := lse.Seal(context.Background(), lastGLSN)
 		assert.NoError(t, err)
-		return status == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
+		return st == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
 	}, time.Second, 10*time.Millisecond)
 
 	// wait for stopping a goroutine that calls Replicate RPC.
@@ -959,9 +971,9 @@ func TestExecutor_ReplicateSeal(t *testing.T) {
 
 	// Seal
 	assert.Eventually(t, func() bool {
-		status, localHWM, err := lse.Seal(context.Background(), lastGLSN)
+		st, localHWM, err := lse.Seal(context.Background(), lastGLSN)
 		assert.NoError(t, err)
-		return status == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
+		return st == varlogpb.LogStreamStatusSealed && localHWM == lastGLSN
 	}, time.Second, 10*time.Millisecond)
 
 	wg.Wait()
@@ -1418,14 +1430,13 @@ func TestExecutor_SealAfterRestart(t *testing.T) {
 		} else {
 			stg = storage.TestNewStorage(t, storage.WithPath(path))
 		}
-		lse, err := NewExecutor(
+		lse := testNewExecutor(t,
 			WithClusterID(cid),
 			WithStorageNodeID(snid),
 			WithTopicID(tpid),
 			WithLogStreamID(lsid),
 			WithStorage(stg),
 		)
-		require.NoError(t, err)
 		return lse
 	}
 
@@ -1936,7 +1947,7 @@ func TestExecutorSyncInit_InvalidState(t *testing.T) {
 			_, err := lse.SyncInit(context.Background(), varlogpb.LogStreamReplica{}, snpb.SyncRange{
 				FirstLLSN: 1,
 				LastLLSN:  10,
-			})
+			}, 10)
 			assert.Error(t, err)
 		})
 	}
@@ -1944,93 +1955,505 @@ func TestExecutorSyncInit_InvalidState(t *testing.T) {
 
 func TestExecutorSyncInit(t *testing.T) {
 	const (
-		numLogs     = 10
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+
+		dstLastLSN  = 10
+		dstVersion  = 1
 		syncTimeout = time.Second
 	)
 
+	newExecutor := func(t *testing.T, path string) *Executor {
+		var stg *storage.Storage
+		if path == "" {
+			stg = storage.TestNewStorage(t)
+		} else {
+			stg = storage.TestNewStorage(t, storage.WithPath(path))
+		}
+		lse := testNewExecutor(t,
+			WithClusterID(cid),
+			WithStorageNodeID(snid),
+			WithTopicID(tpid),
+			WithLogStreamID(lsid),
+			WithStorage(stg),
+			WithSyncTimeout(syncTimeout),
+		)
+		return lse
+	}
+
 	tcs := []struct {
 		name  string
+		pref  func(t *testing.T, dst *Executor)
 		testf func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica)
 	}{
 		{
-			name: "InvalidLLSN",
+			// dst logs     :   1, 2, ......, 10 (any)
+			// dst last llsn:                 10 (any)
+			// src logs     : 0               10
+			// src last llsn:                 10 (any)
+			// response     : InvalidArgument
+			name: "InvalidSyncRange_InvalidFirstLLSN_ValidLastLLSN",
+			pref: func(t *testing.T, dst *Executor) {},
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
 				_, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
 					FirstLLSN: types.InvalidLLSN,
-					LastLLSN:  types.LLSN(numLogs + 10),
-				})
+					LastLLSN:  types.LLSN(dstLastLSN + 10),
+				}, 10)
 				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 0,
+					Version:               1,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.Version(dstVersion), lsrmd.Version)
+				require.Equal(t, types.GLSN(dstLastLSN), lsrmd.GlobalHighWatermark)
 			},
 		},
 		{
-			name: "InvalidRange",
+			// dst logs     : 1, 2, ......, 10 (any)
+			// dst last llsn:               10 (any)
+			// src logs     : 10, ........., 1
+			// src last llsn:               10 (any)
+			// response     : InvalidArgument
+			name: "InvalidSyncRange_Reversed",
+			pref: func(t *testing.T, dst *Executor) {},
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
 				_, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
-					FirstLLSN: types.LLSN(numLogs + 10),
+					FirstLLSN: types.LLSN(dstLastLSN + 10),
 					LastLLSN:  1,
-				})
+				}, 10)
 				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 0,
+					Version:               1,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.Version(dstVersion), lsrmd.Version)
+				require.Equal(t, types.GLSN(dstLastLSN), lsrmd.GlobalHighWatermark)
 			},
 		},
 		{
-			name: "TooManyLogs",
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn:               10 (any)
+			// src logs     : 1, 2, ......9
+			// src last llsn:             9 (any)
+			// response     : Panic
+			//
+			// The source replica proposed a narrow synchronization range than
+			// the destination replica, and it is no way.
+			// TODO: Return an error rather than panic.
+			name: "DestinationHasMoreLogsThanSource",
+			pref: func(t *testing.T, dst *Executor) {},
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
 				assert.Panics(t, func() {
 					_, _ = dst.SyncInit(context.Background(), src, snpb.SyncRange{
 						FirstLLSN: 1,
-						LastLLSN:  numLogs - 1,
-					})
+						LastLLSN:  dstLastLSN - 1,
+					}, 9)
 				})
+			},
+		},
+		{
+			// dst logs     : 1, 2, ......, 10 (any)
+			// dst last llsn:               10 (any)
+			// src logs     : 1, 2, ......, 10
+			// src last llsn:             9
+			// response     : InvalidArgument
+			//
+			// The source replica is abnormal because it proposed the wrong
+			// state. This request should fail regardless of the status of the
+			// destination replica.
+			name: "SourceTooLowerLastLLSN",
+			pref: func(t *testing.T, dst *Executor) {},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				_, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
+					FirstLLSN: 1,
+					LastLLSN:  10,
+				}, 9)
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
 
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 0,
+					Version:               1,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.Version(dstVersion), lsrmd.Version)
+				require.Equal(t, types.GLSN(dstLastLSN), lsrmd.GlobalHighWatermark)
 			},
 		},
 		{
-			// dst       : 1, 2, ......, 10
-			// proposed  : 1, 2, ......, 10
+			// dst logs     : 1, 2, ......, 10 (any)
+			// dst last llsn:               10 (any)
+			// src logs     : 1, 2, ......, 10
+			// src last llsn:                  11
+			// response     : InvalidArgument
+			//
+			// The source replica is abnormal because it proposed the wrong
+			// state. This request should fail regardless of the status of the
+			// destination replica.
+			name: "SourceTooHigherLastLLSN",
+			pref: func(t *testing.T, dst *Executor) {},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				_, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
+					FirstLLSN: 1,
+					LastLLSN:  10,
+				}, 11)
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 0,
+					Version:               1,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.Version(dstVersion), lsrmd.Version)
+				require.Equal(t, types.GLSN(dstLastLSN), lsrmd.GlobalHighWatermark)
+			},
+		},
+		{
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn: no commit context
+			// src logs     : 1, 2, ......, 10
+			// src last llsn:               10
+			// response     : [first, last] = [0, 0]
+			//
+			// The destination replica has all log entries but no commit
+			// context; thus, it replies with a sync range whose fields are
+			// InvalidLLSNs. It will lead the source to copy only the commit
+			// context to the destination.
+			name: "DestinationWithoutOnlyCommitContext",
+			pref: func(t *testing.T, dst *Executor) {
+				storage.TestDeleteCommitContext(t, dst.stg)
+			},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				storage.TestDeleteCommitContext(t, dst.stg)
+				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
+					FirstLLSN: 1,
+					LastLLSN:  10,
+				}, 10)
+				require.NoError(t, err)
+				require.Equal(t, snpb.SyncRange{FirstLLSN: types.InvalidLLSN, LastLLSN: types.InvalidLLSN}, syncRange)
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 0,
+					UncommittedLLSNLength: 0,
+					Version:               0,
+					HighWatermark:         0,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.InvalidVersion, lsrmd.Version)
+				require.Equal(t, types.InvalidGLSN, lsrmd.GlobalHighWatermark)
+
+				require.Equal(t, executorStateLearning, dst.esm.load())
+			},
+		},
+		{
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn:               10
+			// src logs     : 1, 2, ......, 10
+			// src last llsn:               10
+			// response     : AlreadyExists
 			name: "AlreadySynchronized",
+			pref: func(t *testing.T, dst *Executor) {},
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
-				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
+				_, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
 					FirstLLSN: 1,
-					LastLLSN:  numLogs,
-				})
-				assert.NoError(t, err)
-				assert.True(t, syncRange.FirstLLSN.Invalid())
-				assert.True(t, syncRange.LastLLSN.Invalid())
+					LastLLSN:  dstLastLSN,
+				}, 10)
+				assert.Error(t, err)
+				require.Equal(t, codes.AlreadyExists, status.Code(err))
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 0,
+					Version:               1,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.Version(dstVersion), lsrmd.Version)
+				require.Equal(t, types.GLSN(dstLastLSN), lsrmd.GlobalHighWatermark)
+
+				require.Equal(t, executorStateSealing, dst.esm.load())
 			},
 		},
 		{
-			// dst       : 1, 2, ......, 10
-			// proposed  : 1, 2, ......, 10, 11, ......, 20
-			// negotiated:                   11, ......, 20
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn:               10
+			// src logs     : no logs
+			// src last llsn:              9
+			// response     : Panic
+			//
+			// The proposed sync range has InvalidLLSN for both FirstLLSN and
+			// LastLLSN. Therefore, all log entries in the source replica have
+			// been trimmed.
+			// SyncInitRequest represents that the last committed LLSN of the
+			// source replica is 9. However, the destination replica has more
+			// log entries, up to 10. It must be no way.
+			name: "TrimmedSource_BadLastCommittedLLSN",
+			pref: func(t *testing.T, dst *Executor) {},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				require.Panics(t, func() {
+					_, _ = dst.SyncInit(context.Background(), src, snpb.SyncRange{}, 9)
+				})
+			},
+		},
+		{
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn:               10
+			// src logs     : no logs
+			// src last llsn:               10
+			// response     : AlreadyExists
+			// trimmed      : 1, 2, ......, 10
+			name: "TrimmedSource_AlreadySynchronized",
+			pref: func(t *testing.T, dst *Executor) {},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				_, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{}, 10)
+				assert.Error(t, err)
+				require.Equal(t, codes.AlreadyExists, status.Code(err))
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 0,
+					Version:               1,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.Version(dstVersion), lsrmd.Version)
+				require.Equal(t, types.GLSN(dstLastLSN), lsrmd.GlobalHighWatermark)
+
+				require.Equal(t, executorStateSealing, dst.esm.load())
+			},
+		},
+		{
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn: no commit context
+			// src logs     : no logs
+			// src last llsn:               10
+			// response     : [first, last] = [0, 0]
+			// trimmed      : 1, 2, ......, 10
+			//
+			// Since the source replica already trimmed log entries, the
+			// destination replica also trims them. The destination replica
+			// needs to receive the commit context from the source replica.
+			name: "TrimmedSource_DestinationWithoutOnlyCommitContext",
+			pref: func(t *testing.T, dst *Executor) {
+				storage.TestDeleteCommitContext(t, dst.stg)
+			},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{}, 10)
+				require.NoError(t, err)
+				require.Equal(t, snpb.SyncRange{FirstLLSN: types.InvalidLLSN, LastLLSN: types.InvalidLLSN}, syncRange)
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 0,
+					UncommittedLLSNLength: 0,
+					Version:               0,
+					HighWatermark:         0,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.InvalidVersion, lsrmd.Version)
+				require.Equal(t, types.InvalidGLSN, lsrmd.GlobalHighWatermark)
+
+				require.Equal(t, executorStateLearning, dst.esm.load())
+			},
+		},
+		{
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn:               10
+			// src logs     : no logs
+			// src last llsn:                               20
+			// response     : [first, last] = [0, 0]
+			// trimmed      : 1, 2, ......, 10
+			//
+			// Since the source replica already trimmed log entries, the
+			// destination replica also trims them. The destination replica
+			// needs to receive the commit context from the source replica.
+			name: "TrimmedSource_Synchronize",
+			pref: func(t *testing.T, dst *Executor) {},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{}, 20)
+				require.NoError(t, err)
+				require.Equal(t, snpb.SyncRange{FirstLLSN: types.InvalidLLSN, LastLLSN: types.InvalidLLSN}, syncRange)
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 0,
+					UncommittedLLSNLength: 0,
+					Version:               0,
+					HighWatermark:         0,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.InvalidVersion, lsrmd.Version)
+				require.Equal(t, types.InvalidGLSN, lsrmd.GlobalHighWatermark)
+
+				require.Equal(t, executorStateLearning, dst.esm.load())
+			},
+		},
+		{
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn:               10
+			// src logs     : 1, 2, ......, 10, 11, ......, 20
+			// src last llsn:                               20
+			// response     :                   11, ......, 20
 			name: "SynchronizeNext",
+			pref: func(t *testing.T, dst *Executor) {},
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
 				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
 					FirstLLSN: 1,
-					LastLLSN:  numLogs + 10,
-				})
+					LastLLSN:  dstLastLSN + 10,
+				}, 20)
 				assert.NoError(t, err)
 				assert.Equal(t, snpb.SyncRange{
-					FirstLLSN: numLogs + 1,
-					LastLLSN:  numLogs + 10,
+					FirstLLSN: dstLastLSN + 1,
+					LastLLSN:  dstLastLSN + 10,
 				}, syncRange)
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 0,
+					UncommittedLLSNLength: 0,
+					Version:               0,
+					HighWatermark:         0,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.InvalidVersion, lsrmd.Version)
+				require.Equal(t, types.InvalidGLSN, lsrmd.GlobalHighWatermark)
+
+				require.Equal(t, executorStateLearning, dst.esm.load())
 			},
 		},
 		{
-			// dst       : 1, 2, ......, 10
-			// proposed  :        5, .., 10, 11, ......, 20
-			// negotiated:                   11, ......, 20
-			// trimmed   : 1 .. 4
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn:               10
+			// src logs     :        5, .., 10, 11, ......, 20
+			// src last llsn:                               20
+			// response     :                   11, ......, 20
+			// trimmed      : 1 .. 4
 			name: "SynchronizeMiddle",
+			pref: func(t *testing.T, dst *Executor) {},
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
 				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
-					FirstLLSN: numLogs - 5,
-					LastLLSN:  numLogs + 10,
-				})
+					FirstLLSN: dstLastLSN - 5,
+					LastLLSN:  dstLastLSN + 10,
+				}, 20)
 				assert.NoError(t, err)
 				assert.Equal(t, snpb.SyncRange{
-					FirstLLSN: numLogs + 1,
-					LastLLSN:  numLogs + 10,
+					FirstLLSN: dstLastLSN + 1,
+					LastLLSN:  dstLastLSN + 10,
 				}, syncRange)
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 0,
+					UncommittedLLSNLength: 0,
+					Version:               0,
+					HighWatermark:         0,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 5, GLSN: 5}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.InvalidVersion, lsrmd.Version)
+				require.Equal(t, types.InvalidGLSN, lsrmd.GlobalHighWatermark)
+
+				require.Equal(t, executorStateLearning, dst.esm.load())
 
 				localLWM, localHWM, _ := dst.lsc.localWatermarks()
 				require.Equal(t, varlogpb.LogSequenceNumber{
@@ -2048,59 +2471,130 @@ func TestExecutorSyncInit(t *testing.T) {
 			},
 		},
 		{
-			// dst       : 1, 2, ......, 10
-			// proposed  :        5, .., 10, 11, ......, 20
-			// cannot find 4
+			// dst logs     : 1, 2, ......, 10 (cannot find 4)
+			// dst last llsn:               10
+			// src logs     :        5, .., 10, 11, ......, 20
+			// src last llsn:                               20
+			// response     : InternalError
+			//
+			// The destination replica has a hole; it does not have the log
+			// entry at LLSN 4. It is a bizarre situation.
 			name: "SynchronizeMiddleButCannotFindTrimPosition",
-			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+			pref: func(t *testing.T, dst *Executor) {
 				storage.TestDeleteLogEntry(t, dst.stg, varlogpb.LogSequenceNumber{
 					LLSN: 4, GLSN: 4,
 				})
+			},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
 				_, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
-					FirstLLSN: numLogs - 5,
-					LastLLSN:  numLogs + 10,
-				})
+					FirstLLSN: dstLastLSN - 5,
+					LastLLSN:  dstLastLSN + 10,
+				}, 20)
 				assert.Error(t, err)
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 0,
+					Version:               1,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.Version(dstVersion), lsrmd.Version)
+				require.Equal(t, types.GLSN(dstLastLSN), lsrmd.GlobalHighWatermark)
 			},
 		},
 		{
-			// dst       : 1, 2, ......, 10
-			// proposed  :        5, .., 10, 11, ......, 20
-			// cannot find 5
+			// dst logs     : 1, 2, ......, 10 (cannot find 5)
+			// dst last llsn:               10
+			// src logs     :        5, .., 10, 11, ......, 20
+			// src last llsn:                               20
+			// response     : InternalError
+			//
+			// The destination replica has a hole; it does not have the log
+			// entry at LLSN 5. It is a bizarre situation.
 			name: "SynchronizeMiddleButCannotFindNextLWM",
-			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+			pref: func(t *testing.T, dst *Executor) {
 				storage.TestDeleteLogEntry(t, dst.stg, varlogpb.LogSequenceNumber{
 					LLSN: 5, GLSN: 5,
 				})
+			},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
 				_, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
-					FirstLLSN: numLogs - 5,
-					LastLLSN:  numLogs + 10,
-				})
+					FirstLLSN: dstLastLSN - 5,
+					LastLLSN:  dstLastLSN + 10,
+				}, 20)
 				assert.Error(t, err)
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 0,
+					Version:               1,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.Version(dstVersion), lsrmd.Version)
+				require.Equal(t, types.GLSN(dstLastLSN), lsrmd.GlobalHighWatermark)
 			},
 		},
 		{
-			// dst       : 1, 2, ......, 10
-			// proposed  :                       15, .., 20
-			// negotiated:                       15, .., 20
-			// trimmed    : 1, 2, ......, 10
+			// dst logs     : 1, 2, ......, 10
+			// dst last llsn:               10
+			// src logs     :                       15, .., 20
+			// src last llsn:                               20
+			// response     :                       15, .., 20
+			// trimmed      : 1, 2, ......, 10
 			name: "SynchronizeFarFromNext",
+			pref: func(t *testing.T, dst *Executor) {},
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
 				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
-					FirstLLSN: numLogs + 5,
-					LastLLSN:  numLogs + 10,
-				})
+					FirstLLSN: dstLastLSN + 5,
+					LastLLSN:  dstLastLSN + 10,
+				}, 20)
 				assert.NoError(t, err)
 				assert.Equal(t, snpb.SyncRange{
-					FirstLLSN: numLogs + 5,
-					LastLLSN:  numLogs + 10,
+					FirstLLSN: dstLastLSN + 5,
+					LastLLSN:  dstLastLSN + 10,
 				}, syncRange)
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 0,
+					UncommittedLLSNLength: 0,
+					Version:               0,
+					HighWatermark:         0,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.InvalidVersion, lsrmd.Version)
+				require.Equal(t, types.InvalidGLSN, lsrmd.GlobalHighWatermark)
 
 				ver, hwm, uncommittedBegin, _ := dst.lsc.reportCommitBase()
 				require.True(t, ver.Invalid())
 				require.True(t, hwm.Invalid())
 				// NOTE: Checking values of uncommittedBegin is implementation-detail.
-				require.Equal(t, types.LLSN(numLogs+5), uncommittedBegin.LLSN)
+				require.Equal(t, types.LLSN(dstLastLSN+5), uncommittedBegin.LLSN)
 				require.True(t, uncommittedBegin.GLSN.Invalid())
 
 				// Check whether there are no log entries in the replica.
@@ -2116,6 +2610,7 @@ func TestExecutorSyncInit(t *testing.T) {
 		},
 		{
 			name: "SyncInitTimeout",
+			pref: func(t *testing.T, dst *Executor) {},
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
 				newSrcPtr, ok := proto.Clone(&src).(*varlogpb.LogStreamReplica)
 				require.True(t, ok)
@@ -2124,16 +2619,16 @@ func TestExecutorSyncInit(t *testing.T) {
 
 				_, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{
 					FirstLLSN: 1,
-					LastLLSN:  numLogs + 10,
-				})
+					LastLLSN:  dstLastLSN + 10,
+				}, dstLastLSN+10)
 				assert.NoError(t, err)
 
 				newSrc.StorageNodeID++
 				assert.Eventually(t, func() bool {
 					_, err := dst.SyncInit(context.Background(), newSrc, snpb.SyncRange{
 						FirstLLSN: 1,
-						LastLLSN:  numLogs + 10,
-					})
+						LastLLSN:  dstLastLSN + 10,
+					}, dstLastLSN+10)
 					return err == nil
 				}, syncTimeout*3, syncTimeout)
 			},
@@ -2142,47 +2637,85 @@ func TestExecutorSyncInit(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			dst := testNewPrimaryExecutor(t, WithSyncTimeout(syncTimeout))
+			path := t.TempDir()
+			func() {
+				dst := newExecutor(t, path)
+				defer func() {
+					require.NoError(t, dst.Close())
+				}()
+
+				replicas := []varlogpb.LogStreamReplica{{
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: snid,
+					},
+					TopicLogStream: varlogpb.TopicLogStream{
+						TopicID:     tpid,
+						LogStreamID: lsid,
+					},
+				}}
+				_, _, err := dst.Seal(context.Background(), types.InvalidGLSN)
+				require.NoError(t, err)
+				err = dst.Unseal(context.Background(), replicas)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				for i := 0; i < dstLastLSN; i++ {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						_, err := dst.Append(context.Background(), [][]byte{[]byte("foo")})
+						assert.NoError(t, err)
+					}()
+				}
+
+				assert.Eventually(t, func() bool {
+					_ = dst.Commit(context.Background(), snpb.LogStreamCommitResult{
+						TopicID:             dst.tpid,
+						LogStreamID:         dst.lsid,
+						CommittedLLSNOffset: types.LLSN(1),
+						CommittedGLSNOffset: types.GLSN(1),
+						CommittedGLSNLength: dstLastLSN,
+						Version:             types.Version(dstVersion),
+						HighWatermark:       types.GLSN(dstLastLSN),
+					})
+
+					rpt, err := dst.Report(context.Background())
+					assert.NoError(t, err)
+
+					return rpt.UncommittedLLSNOffset == types.LLSN(dstLastLSN+1) &&
+						rpt.UncommittedLLSNLength == 0 &&
+						rpt.HighWatermark == types.GLSN(dstLastLSN) &&
+						rpt.Version == types.Version(1)
+
+				}, time.Second, 10*time.Millisecond)
+				wg.Wait()
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusRunning, lsrmd.Status)
+				require.Equal(t, types.Version(dstVersion), lsrmd.Version)
+				require.Equal(t, types.GLSN(dstLastLSN), lsrmd.GlobalHighWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: dstLastLSN, GLSN: dstLastLSN}, lsrmd.LocalHighWatermark)
+
+				tc.pref(t, dst)
+			}()
+
+			dst := newExecutor(t, path)
 			defer func() {
 				require.NoError(t, dst.Close())
 			}()
 
-			var wg sync.WaitGroup
-			for i := 0; i < numLogs; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					_, err := dst.Append(context.Background(), [][]byte{[]byte("foo")})
-					assert.NoError(t, err)
-				}()
-			}
+			lsrmd, err := dst.Metadata()
+			require.NoError(t, err)
+			require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
 
-			assert.Eventually(t, func() bool {
-				_ = dst.Commit(context.Background(), snpb.LogStreamCommitResult{
-					TopicID:             dst.tpid,
-					LogStreamID:         dst.lsid,
-					CommittedLLSNOffset: types.LLSN(1),
-					CommittedGLSNOffset: types.GLSN(1),
-					CommittedGLSNLength: numLogs,
-					Version:             types.Version(1),
-					HighWatermark:       types.GLSN(numLogs),
-				})
-
-				rpt, err := dst.Report(context.Background())
+			/*
+				status, localHWM, err := dst.Seal(context.Background(), dstLastLSN+10)
 				assert.NoError(t, err)
-
-				return rpt.UncommittedLLSNOffset == types.LLSN(numLogs+1) &&
-					rpt.UncommittedLLSNLength == 0 &&
-					rpt.HighWatermark == types.GLSN(numLogs) &&
-					rpt.Version == types.Version(1)
-
-			}, time.Second, 10*time.Millisecond)
-			wg.Wait()
-
-			status, localHWM, err := dst.Seal(context.Background(), numLogs+10)
-			assert.NoError(t, err)
-			assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
-			assert.Equal(t, types.GLSN(numLogs), localHWM)
+				assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				assert.Equal(t, types.GLSN(dstLastLSN), localHWM)
+			*/
 
 			// dst: Sealing
 			// LLSN: 1..numLogs
@@ -2205,12 +2738,12 @@ func TestExecutorSyncReplicate(t *testing.T) {
 	const numLogs = 10
 
 	makeLearningState := func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica, lastCommittedGLSN types.GLSN, proposed, agreed snpb.SyncRange) {
-		status, localHWM, err := dst.Seal(context.Background(), lastCommittedGLSN)
+		st, localHWM, err := dst.Seal(context.Background(), lastCommittedGLSN)
 		require.NoError(t, err)
-		require.Equal(t, varlogpb.LogStreamStatusSealing, status)
+		require.Equal(t, varlogpb.LogStreamStatusSealing, st)
 		require.Equal(t, types.GLSN(numLogs), localHWM)
 
-		actual, err := dst.SyncInit(context.Background(), src, proposed)
+		actual, err := dst.SyncInit(context.Background(), src, proposed, proposed.LastLLSN)
 		require.NoError(t, err)
 		require.Equal(t, agreed, actual)
 		require.Equal(t, executorStateLearning, dst.esm.load())
@@ -2230,9 +2763,9 @@ func TestExecutorSyncReplicate(t *testing.T) {
 		{
 			name: "SealingState",
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
-				status, localHWM, err := dst.Seal(context.Background(), numLogs+10)
+				st, localHWM, err := dst.Seal(context.Background(), numLogs+10)
 				assert.NoError(t, err)
-				assert.Equal(t, varlogpb.LogStreamStatusSealing, status)
+				assert.Equal(t, varlogpb.LogStreamStatusSealing, st)
 				assert.Equal(t, types.GLSN(numLogs), localHWM)
 
 				err = dst.SyncReplicate(context.Background(), src, snpb.SyncPayload{})
@@ -2242,9 +2775,9 @@ func TestExecutorSyncReplicate(t *testing.T) {
 		{
 			name: "SealedState",
 			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
-				status, localHWM, err := dst.Seal(context.Background(), numLogs)
+				st, localHWM, err := dst.Seal(context.Background(), numLogs)
 				assert.NoError(t, err)
-				assert.Equal(t, varlogpb.LogStreamStatusSealed, status)
+				assert.Equal(t, varlogpb.LogStreamStatusSealed, st)
 				assert.Equal(t, types.GLSN(numLogs), localHWM)
 
 				err = dst.SyncReplicate(context.Background(), src, snpb.SyncPayload{})
@@ -2475,9 +3008,9 @@ func TestExecutorSyncReplicate(t *testing.T) {
 
 				assert.Equal(t, executorStateSealing, dst.esm.load())
 
-				status, localHWM, err := dst.Seal(context.Background(), lastCommittedLSN)
+				st, localHWM, err := dst.Seal(context.Background(), lastCommittedLSN)
 				require.NoError(t, err)
-				require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, st)
 				require.Equal(t, types.GLSN(lastCommittedLSN), localHWM)
 			},
 		},
@@ -2519,9 +3052,9 @@ func TestExecutorSyncReplicate(t *testing.T) {
 
 				assert.Equal(t, executorStateSealing, dst.esm.load())
 
-				status, localHWM, err := dst.Seal(context.Background(), lastCommittedLSN)
+				st, localHWM, err := dst.Seal(context.Background(), lastCommittedLSN)
 				require.NoError(t, err)
-				require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, st)
 				require.Equal(t, types.GLSN(lastCommittedLSN), localHWM)
 			},
 		},

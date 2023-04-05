@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/rpc"
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -32,12 +33,13 @@ func newSyncClient(cfg syncClientConfig) *syncClient {
 	return sc
 }
 
-func (sc *syncClient) syncInit(ctx context.Context, srcRange snpb.SyncRange) (syncRange snpb.SyncRange, err error) {
+func (sc *syncClient) syncInit(ctx context.Context, srcRange snpb.SyncRange, lastCommittedLLSN types.LLSN) (syncRange snpb.SyncRange, err error) {
 	rsp, err := sc.rpcClient.SyncInit(ctx, &snpb.SyncInitRequest{
-		ClusterID:   sc.lse.cid,
-		Source:      sc.srcReplica,
-		Destination: sc.dstReplica,
-		Range:       srcRange,
+		ClusterID:         sc.lse.cid,
+		Source:            sc.srcReplica,
+		Destination:       sc.dstReplica,
+		Range:             srcRange,
+		LastCommittedLLSN: lastCommittedLLSN,
 	})
 	return rsp.GetRange(), err
 }

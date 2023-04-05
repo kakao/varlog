@@ -40,7 +40,7 @@ func (rs *replicationServer) SyncInit(ctx context.Context, req *snpb.SyncInitReq
 	if !loaded {
 		return nil, fmt.Errorf("replication server: no log stream %v", req.Destination.LogStreamID)
 	}
-	syncRange, err := lse.SyncInit(ctx, req.Source, req.Range)
+	syncRange, err := lse.SyncInit(ctx, req.Source, req.Range, req.LastCommittedLLSN)
 	return &snpb.SyncInitResponse{Range: syncRange}, err
 }
 
