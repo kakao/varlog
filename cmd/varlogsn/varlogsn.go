@@ -135,12 +135,17 @@ func start(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	memTableSize, err := units.FromByteSizeString(c.String(flagStorageMemTableSize.Name))
+	if err != nil {
+		return err
+	}
+
 	storageOpts := []storage.Option{
 		storage.WithL0CompactionThreshold(c.Int(flagStorageL0CompactionThreshold.Name)),
 		storage.WithL0StopWritesThreshold(c.Int(flagStorageL0StopWritesThreshold.Name)),
 		storage.WithLBaseMaxBytes(lbaseMaxBytes),
 		storage.WithMaxOpenFiles(c.Int(flagStorageMaxOpenFiles.Name)),
-		storage.WithMemTableSize(c.Int(flagStorageMemTableSize.Name)),
+		storage.WithMemTableSize(int(memTableSize)),
 		storage.WithMemTableStopWritesThreshold(c.Int(flagStorageMemTableStopWritesThreshold.Name)),
 		storage.WithMaxConcurrentCompaction(c.Int(flagStorageMaxConcurrentCompaction.Name)),
 		storage.WithMetrisLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
