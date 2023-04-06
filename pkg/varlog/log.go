@@ -5,6 +5,7 @@ package varlog
 import (
 	"context"
 	"io"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
-	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -64,7 +64,7 @@ type logImpl struct {
 
 	runner *runner.Runner
 
-	closed atomicutil.AtomicBool
+	closed atomic.Bool
 }
 
 var _ Log = (*logImpl)(nil)
