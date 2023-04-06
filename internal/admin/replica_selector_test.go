@@ -21,7 +21,7 @@ func TestReplicaSelector_NewUnknown(t *testing.T) {
 	cmview := mrmanager.NewMockClusterMetadataView(ctrl)
 	cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
 
-	_, err := newReplicaSelector("foo", cmview, 1)
+	_, err := NewReplicaSelector("foo", cmview, 1)
 	require.Error(t, err)
 
 }
@@ -34,8 +34,8 @@ func TestReplicaSelector_New(t *testing.T) {
 	cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
 
 	selectors := []string{
-		replicaSelectorNameRandom,
-		replicaSelectorNameLFU,
+		ReplicaSelectorNameRandom,
+		ReplicaSelectorNameLFU,
 	}
 	tcs := []struct {
 		name      string
@@ -57,7 +57,7 @@ func TestReplicaSelector_New(t *testing.T) {
 	for _, tc := range tcs {
 		for _, selector := range selectors {
 			t.Run(selector+tc.name, func(t *testing.T) {
-				_, err := newReplicaSelector(selector, tc.cmview, tc.repfactor)
+				_, err := NewReplicaSelector(selector, tc.cmview, tc.repfactor)
 				require.Error(t, err)
 			})
 		}
@@ -102,7 +102,7 @@ func TestReplicaSelector(t *testing.T) {
 	tcs := []*testCase{
 		{
 			name:      "NotEnoughStorageNodes",
-			selectors: []string{replicaSelectorNameRandom, replicaSelectorNameLFU},
+			selectors: []string{ReplicaSelectorNameRandom, ReplicaSelectorNameLFU},
 			repfactor: 1,
 			md:        &varlogpb.MetadataDescriptor{},
 			testf: func(t *testing.T, _ *testCase, s ReplicaSelector) {
@@ -112,7 +112,7 @@ func TestReplicaSelector(t *testing.T) {
 		},
 		{
 			name:      "InvalidClusterMetadataInvalidStorageNodeID",
-			selectors: []string{replicaSelectorNameRandom, replicaSelectorNameLFU},
+			selectors: []string{ReplicaSelectorNameRandom, ReplicaSelectorNameLFU},
 			repfactor: 1,
 			md: &varlogpb.MetadataDescriptor{
 				StorageNodes: []*varlogpb.StorageNodeDescriptor{
@@ -130,7 +130,7 @@ func TestReplicaSelector(t *testing.T) {
 		},
 		{
 			name:      "InvalidClusterMetadataNoStoragePath",
-			selectors: []string{replicaSelectorNameRandom, replicaSelectorNameLFU},
+			selectors: []string{ReplicaSelectorNameRandom, ReplicaSelectorNameLFU},
 			repfactor: 1,
 			md: &varlogpb.MetadataDescriptor{
 				StorageNodes: []*varlogpb.StorageNodeDescriptor{
@@ -148,7 +148,7 @@ func TestReplicaSelector(t *testing.T) {
 		},
 		{
 			name:      "InvalidClusterMetadataNoStorageNode",
-			selectors: []string{replicaSelectorNameLFU},
+			selectors: []string{ReplicaSelectorNameLFU},
 			repfactor: 1,
 			md: &varlogpb.MetadataDescriptor{
 				StorageNodes: []*varlogpb.StorageNodeDescriptor{
@@ -177,7 +177,7 @@ func TestReplicaSelector(t *testing.T) {
 		},
 		{
 			name:      "InvalidClusterMetadataNoStorageNodePath",
-			selectors: []string{replicaSelectorNameLFU},
+			selectors: []string{ReplicaSelectorNameLFU},
 			repfactor: 1,
 			md: &varlogpb.MetadataDescriptor{
 				StorageNodes: []*varlogpb.StorageNodeDescriptor{
@@ -206,7 +206,7 @@ func TestReplicaSelector(t *testing.T) {
 		},
 		{
 			name:      "Select",
-			selectors: []string{replicaSelectorNameRandom},
+			selectors: []string{ReplicaSelectorNameRandom},
 			repfactor: 2,
 			md: &varlogpb.MetadataDescriptor{
 				StorageNodes: []*varlogpb.StorageNodeDescriptor{
@@ -246,7 +246,7 @@ func TestReplicaSelector(t *testing.T) {
 		},
 		{
 			name:      "Select",
-			selectors: []string{replicaSelectorNameLFU},
+			selectors: []string{ReplicaSelectorNameLFU},
 			repfactor: 3,
 			md: &varlogpb.MetadataDescriptor{
 				StorageNodes: []*varlogpb.StorageNodeDescriptor{
@@ -327,7 +327,7 @@ func TestReplicaSelector(t *testing.T) {
 				cmview := mrmanager.NewMockClusterMetadataView(ctrl)
 				cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(tc.md, nil).AnyTimes()
 
-				s, err := newReplicaSelector(selector, cmview, tc.repfactor)
+				s, err := NewReplicaSelector(selector, cmview, tc.repfactor)
 				require.NoError(t, err)
 				require.Equal(t, selector, s.Name())
 				tc.testf(t, tc, s)
