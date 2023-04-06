@@ -17,9 +17,12 @@ import (
 )
 
 // ReplicaSelector selects storage nodes and volumes to store data for replicas of a new log stream.
-// This method returns a slice of `varlogpb.ReplicaDescriptor` and its length should be equal to the
-// replication factor.
 type ReplicaSelector interface {
+	// Name returns the name of the replica selector, and it should be unique
+	// among all replica selectors.
+	Name() string
+	// Select returns a slice of `varlogpb.ReplicaDescriptor`; its length
+	// should equal the replication factor.
 	Select(ctx context.Context) ([]*varlogpb.ReplicaDescriptor, error)
 }
 
@@ -47,6 +50,10 @@ func newBalancedReplicaSelector(cmView mrmanager.ClusterMetadataView, replicatio
 		replicationFactor: replicationFactor,
 	}
 	return sel, nil
+}
+
+func (sel *balancedReplicaSelector) Name() string {
+	return "balanced"
 }
 
 func (sel *balancedReplicaSelector) Select(ctx context.Context) ([]*varlogpb.ReplicaDescriptor, error) {
