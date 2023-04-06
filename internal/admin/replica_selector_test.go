@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -15,6 +16,130 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
+
+func newTestReplicaSelector(t *testing.T, name string, cmview mrmanager.ClusterMetadataView, repfactor int) (ReplicaSelector, error) {
+	switch strings.ToLower(name) {
+	case "random":
+		return newRandomReplicaSelector(cmview, repfactor)
+	case "balanced":
+		return newBalancedReplicaSelector(cmview, repfactor)
+	default:
+		return nil, fmt.Errorf("unknown selector: %s", name)
+	}
+}
+
+func TestReplicaSelector_ReplicationFactorZero(t *testing.T) {
+	tcs := []string{
+		"Random",
+		"Balanced",
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			cmview := mrmanager.NewMockClusterMetadataView(ctrl)
+			cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(&varlogpb.MetadataDescriptor{}, nil).AnyTimes()
+			_, err := newTestReplicaSelector(t, tc, cmview, 0)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestReplicaSelector_ClusterMetadataViewNil(t *testing.T) {
+	tcs := []string{
+		"Random",
+		"Balanced",
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc, func(t *testing.T) {
+			_, err := newTestReplicaSelector(t, tc, nil, 1)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestReplicaSelector(t *testing.T) {
+	type testCase struct {
+		name      string
+		md        *varlogpb.MetadataDescriptor
+		repfactor int
+	}
+
+	getInfo := func(md *varlogpb.MetadataDescriptor) map[types.StorageNodeID]map[string]bool {
+		snpaths := make(map[types.StorageNodeID]map[string]bool, len(md.StorageNodes))
+		for _, snd := range md.StorageNodes {
+			if _, ok := snpaths[snd.StorageNodeID]; !ok {
+				snpaths[snd.StorageNodeID] = make(map[string]bool, len(snd.Paths))
+			}
+			for _, path := range snd.Paths {
+				snpaths[snd.StorageNodeID][path] = true
+			}
+		}
+		return snpaths
+	}
+
+	tcs := []*testCase{
+		{
+			name:      "Random",
+			repfactor: 2,
+			md: &varlogpb.MetadataDescriptor{
+				StorageNodes: []*varlogpb.StorageNodeDescriptor{
+					{
+						StorageNode: varlogpb.StorageNode{StorageNodeID: 1, Address: "sn1"},
+						Paths:       []string{"/data1", "/data2"},
+					},
+					{
+						StorageNode: varlogpb.StorageNode{StorageNodeID: 2, Address: "sn2"},
+						Paths:       []string{"/data1", "/data2"},
+					},
+					{
+						StorageNode: varlogpb.StorageNode{StorageNodeID: 3, Address: "sn3"},
+						Paths:       []string{"/data1", "/data2"},
+					},
+					{
+						StorageNode: varlogpb.StorageNode{StorageNodeID: 4, Address: "sn4"},
+						Paths:       []string{"/data1", "/data2"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			cmview := mrmanager.NewMockClusterMetadataView(ctrl)
+			cmview.EXPECT().ClusterMetadata(gomock.Any()).Return(tc.md, nil).AnyTimes()
+
+			s, err := newTestReplicaSelector(t, tc.name, cmview, tc.repfactor)
+			require.NoError(t, err)
+
+			require.Equal(t, strings.ToLower(tc.name), s.Name())
+
+			replicas, err := s.Select(context.Background())
+			require.NoError(t, err)
+
+			snpaths := make(map[types.StorageNodeID]string, tc.repfactor)
+			for _, replica := range replicas {
+				require.False(t, replica.StorageNodeID.Invalid())
+				require.NotEmpty(t, replica.StorageNodePath)
+				snpaths[replica.StorageNodeID] = replica.StorageNodePath
+			}
+			require.Len(t, snpaths, tc.repfactor)
+
+			mdSnpaths := getInfo(tc.md)
+			for snid, snpath := range snpaths {
+				require.Contains(t, mdSnpaths, snid)
+				require.Contains(t, mdSnpaths[snid], snpath)
+			}
+		})
+	}
+}
 
 func TestBalancedReplicaSelector(t *testing.T) {
 	ctrl := gomock.NewController(t)
