@@ -81,7 +81,7 @@ func (cfg config) validate() error {
 
 func (cfg *config) ensureDefault() error {
 	if cfg.snSelector == nil {
-		rs, err := newReplicaSelector(replicaSelectorNameLFU, cfg.mrmgr.ClusterMetadataView(), int(cfg.replicationFactor))
+		rs, err := NewReplicaSelector(ReplicaSelectorNameLFU, cfg.mrmgr.ClusterMetadataView(), int(cfg.replicationFactor))
 		if err != nil {
 			return err
 		}
