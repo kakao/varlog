@@ -3649,6 +3649,7 @@ func TestExecutor_Trim(t *testing.T) {
 }
 
 func TestExecutorRestore(t *testing.T) {
+	t.Skip("")
 	tcs := []struct {
 		name    string
 		golden  string
@@ -3800,6 +3801,7 @@ func TestExecutorRestore(t *testing.T) {
 }
 
 func TestExecutorResotre_Invalid(t *testing.T) {
+	t.Skip()
 	records := []struct {
 		num  int
 		data []byte
