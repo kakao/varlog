@@ -271,8 +271,8 @@ github.com/shirou/gopsutil/v3/internal/common
 github.com/shirou/gopsutil/v3/mem
 github.com/shirou/gopsutil/v3/net
 github.com/shirou/gopsutil/v3/process
-# github.com/smartystreets/assertions v1.13.0
-## explicit; go 1.17
+# github.com/smartystreets/assertions v1.13.1
+## explicit; go 1.18
 github.com/smartystreets/assertions
 github.com/smartystreets/assertions/internal/go-diff/diffmatchpatch
 github.com/smartystreets/assertions/internal/go-render/render
