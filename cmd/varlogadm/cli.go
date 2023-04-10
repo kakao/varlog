@@ -40,6 +40,7 @@ func newStartCommand() *cli.Command {
 			flagLogStreamGCTimeout.DurationFlag(false, admin.DefaultLogStreamGCTimeout),
 			flagDisableAutoLogStreamSync.BoolFlag(),
 			flagAutoUnseal.BoolFlag(),
+			flagReplicaSelector,
 
 			flagMetadataRepository.StringSliceFlag(true, nil),
 			flagInitMRConnRetryCount.IntFlag(false, mrmanager.DefaultInitialMRConnectRetryCount),
@@ -95,10 +96,17 @@ func start(c *cli.Context) error {
 		return err
 	}
 
+	repfactor := c.Uint(flagReplicationFactor.Name)
+	repsel, err := admin.NewReplicaSelector(c.String(flagReplicaSelector.Name), mrMgr.ClusterMetadataView(), int(repfactor))
+	if err != nil {
+		return err
+	}
+
 	opts := []admin.Option{
 		admin.WithLogger(logger),
 		admin.WithListenAddress(c.String(flagListen.Name)),
-		admin.WithReplicationFactor(c.Uint(flagReplicationFactor.Name)),
+		admin.WithReplicationFactor(repfactor),
+		admin.WithReplicaSelector(repsel),
 		admin.WithLogStreamGCTimeout(c.Duration(flagLogStreamGCTimeout.Name)),
 		admin.WithMetadataRepositoryManager(mrMgr),
 		admin.WithStorageNodeManager(snMgr),

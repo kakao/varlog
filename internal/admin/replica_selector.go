@@ -31,11 +31,11 @@ type ReplicaSelector interface {
 }
 
 const (
-	replicaSelectorNameRandom = "random"
-	replicaSelectorNameLFU    = "lfu" // least frequently used
+	ReplicaSelectorNameRandom = "random"
+	ReplicaSelectorNameLFU    = "lfu" // least frequently used
 )
 
-func newReplicaSelector(selector string, cmview mrmanager.ClusterMetadataView, repfactor int) (ReplicaSelector, error) {
+func NewReplicaSelector(selector string, cmview mrmanager.ClusterMetadataView, repfactor int) (ReplicaSelector, error) {
 	if repfactor < 1 {
 		return nil, errors.Wrap(verrors.ErrInvalid, "replica selector: negative replication factor")
 	}
@@ -45,9 +45,9 @@ func newReplicaSelector(selector string, cmview mrmanager.ClusterMetadataView, r
 	}
 
 	switch strings.ToLower(selector) {
-	case replicaSelectorNameRandom:
+	case ReplicaSelectorNameRandom:
 		return newRandomReplicaSelector(cmview, repfactor)
-	case replicaSelectorNameLFU:
+	case ReplicaSelectorNameLFU:
 		return newLFUSelector(cmview, repfactor)
 	default:
 		return nil, fmt.Errorf("unknown selector: %s", selector)
@@ -72,7 +72,7 @@ func newRandomReplicaSelector(cmview mrmanager.ClusterMetadataView, repfactor in
 }
 
 func (s *randomReplicaSelector) Name() string {
-	return replicaSelectorNameRandom
+	return ReplicaSelectorNameRandom
 }
 
 func (s *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.ReplicaDescriptor, error) {
@@ -131,7 +131,7 @@ func newLFUSelector(cmview mrmanager.ClusterMetadataView, repfactor int) (*lfuSe
 }
 
 func (s *lfuSelector) Name() string {
-	return replicaSelectorNameLFU
+	return ReplicaSelectorNameLFU
 }
 
 func (s *lfuSelector) Select(ctx context.Context) ([]*varlogpb.ReplicaDescriptor, error) {
