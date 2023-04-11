@@ -15,7 +15,6 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
-	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -173,8 +172,8 @@ type subscriber struct {
 	transmitCV chan struct{}
 
 	done     chan struct{}
-	closed   atomicutil.AtomicBool
-	complete atomicutil.AtomicBool
+	closed   atomic.Bool
+	complete atomic.Bool
 
 	lastSubscribeAt atomic.Value
 

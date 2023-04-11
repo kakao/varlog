@@ -1,6 +1,11 @@
 package main
 
 import (
+	"strings"
+
+	"github.com/urfave/cli/v2"
+
+	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/flags"
 )
 
@@ -29,6 +34,13 @@ var (
 		Name:    "auto-unseal",
 		Aliases: []string{"enable-auto-unseal", "with-auto-unseal"},
 		Envs:    []string{"AUTO_UNSEAL", "ENABLE_AUTO_UNSEAL", "WITH_AUTO_UNSEAL"},
+	}
+	flagReplicaSelector = &cli.StringFlag{
+		Name:    "replica-selector",
+		Aliases: []string{"repsel"},
+		EnvVars: []string{"REPLICA_SELECTOR"},
+		Value:   admin.ReplicaSelectorNameLFU,
+		Usage:   strings.Join([]string{admin.ReplicaSelectorNameRandom, admin.ReplicaSelectorNameLFU}, " | "),
 	}
 
 	flagInitMRConnRetryCount = flags.FlagDesc{

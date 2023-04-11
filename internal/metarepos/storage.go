@@ -19,7 +19,6 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/mathutil"
 	"github.com/kakao/varlog/pkg/util/runner"
-	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
@@ -81,7 +80,7 @@ type MetadataStorage struct {
 	// while copyOnWrite set true
 	origStateMachine *mrpb.MetadataRepositoryDescriptor
 	diffStateMachine *mrpb.MetadataRepositoryDescriptor
-	copyOnWrite      atomicutil.AtomicBool
+	copyOnWrite      atomic.Bool
 
 	sortedTopicLSIDs []TopicLSID
 
@@ -127,7 +126,7 @@ type MetadataStorage struct {
 	jobC chan *storageAsyncJob
 
 	runner  *runner.Runner
-	running atomicutil.AtomicBool
+	running atomic.Bool
 
 	limits struct {
 		maxTopicsCount             int32

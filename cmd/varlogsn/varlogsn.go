@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	_ "go.uber.org/automaxprocs"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -134,14 +135,20 @@ func start(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	memTableSize, err := units.FromByteSizeString(c.String(flagStorageMemTableSize.Name))
+	if err != nil {
+		return err
+	}
+
 	storageOpts := []storage.Option{
 		storage.WithL0CompactionThreshold(c.Int(flagStorageL0CompactionThreshold.Name)),
 		storage.WithL0StopWritesThreshold(c.Int(flagStorageL0StopWritesThreshold.Name)),
 		storage.WithLBaseMaxBytes(lbaseMaxBytes),
 		storage.WithMaxOpenFiles(c.Int(flagStorageMaxOpenFiles.Name)),
-		storage.WithMemTableSize(c.Int(flagStorageMemTableSize.Name)),
+		storage.WithMemTableSize(int(memTableSize)),
 		storage.WithMemTableStopWritesThreshold(c.Int(flagStorageMemTableStopWritesThreshold.Name)),
 		storage.WithMaxConcurrentCompaction(c.Int(flagStorageMaxConcurrentCompaction.Name)),
+		storage.WithMetrisLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
 	}
 	if c.Bool(flagStorageDisableWAL.Name) {
 		storageOpts = append(storageOpts, storage.WithoutWAL())

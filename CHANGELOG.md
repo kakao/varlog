@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.12.0](https://github.com/kakao/varlog/compare/v0.11.0...v0.12.0) (2023-04-06)
+
+
+### Features
+
+* **admin:** add a name to the replica selector ([6e7e74f](https://github.com/kakao/varlog/commit/6e7e74fda80693a86f8c45819ba9616c3dbad7ef)), closes [#393](https://github.com/kakao/varlog/issues/393)
+* **admin:** LFU replica selector ([0e08901](https://github.com/kakao/varlog/commit/0e08901189896d7dae74d694d78a82768cf130d9)), closes [#393](https://github.com/kakao/varlog/issues/393)
+* **admin:** random replica selector ([ad1226e](https://github.com/kakao/varlog/commit/ad1226e031fb5b90a6a2634901e84efbe8f84a6b)), closes [#393](https://github.com/kakao/varlog/issues/393)
+* **storage:** metrics logging and less verbose event logging ([3b47f8b](https://github.com/kakao/varlog/commit/3b47f8be0a34c57f931c1133853c7b6cb6811ab9))
+* **storagenode:** add automaxprocs to storagenode ([64f2afe](https://github.com/kakao/varlog/commit/64f2afef925a570831e6823ed0c3754cc77ed975))
+* **storagenode:** change SyncInit to handle trimmed source replica ([79c5323](https://github.com/kakao/varlog/commit/79c5323f0656cf7c17077d7ed3f98b5ddebb4f34)), closes [#351](https://github.com/kakao/varlog/issues/351)
+* **storagenode:** restore trimmed log stream replica ([02106fa](https://github.com/kakao/varlog/commit/02106fae07af76c132c0d3fadbf83557a3b369c8)), closes [#351](https://github.com/kakao/varlog/issues/351)
+* **storagenode:** trim API with no safety gap ([2fe4a8e](https://github.com/kakao/varlog/commit/2fe4a8e01b9cf1211cacd95a167cad819087e656)), closes [#351](https://github.com/kakao/varlog/issues/351)
+
+
+### Bug Fixes
+
+* **metarepos:** fix race in TestReportCommit ([ff21f66](https://github.com/kakao/varlog/commit/ff21f66ab5b6eb63267a16311fabcf73bb18603b)), closes [#379](https://github.com/kakao/varlog/issues/379)
+* **storagenode:** configure ballast by using flags ([cc38fcc](https://github.com/kakao/varlog/commit/cc38fccab50a58defef6f756d8da3ee7fbe09c55))
+* **storagenode:** set the flag --storage-mem-table-size correctly ([872d796](https://github.com/kakao/varlog/commit/872d79699bae3533565108819a81cbfc87709010))
+* **storagenode:** subscribe empty range below the global high watermark ([1ef39f8](https://github.com/kakao/varlog/commit/1ef39f8adfa19c90b467b357b69979b478425e29)), closes [#375](https://github.com/kakao/varlog/issues/375)
+* **storage:** prints storage log clearly ([6e868be](https://github.com/kakao/varlog/commit/6e868be273d581e7910da29b5ffe655b1dbb3c04))
+
+
+### Performance Improvements
+
+* **storage:** change storage key prefixes ([8d49523](https://github.com/kakao/varlog/commit/8d4952300bb80627b3270e8daccd69bc29ac3f69))
+
 ## [0.11.0](https://github.com/kakao/varlog/compare/v0.10.0...v0.11.0) (2023-02-20)
 
 

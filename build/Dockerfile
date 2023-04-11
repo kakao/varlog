@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.19.3
+ARG GO_VERSION=1.20
 ARG PYTHON_VERSION=3.9
 ARG BUSYBOX_VERSION=stable
 ARG GRPC_HEALTH_PROBE_VERSION=v0.4.11
@@ -140,7 +140,6 @@ EXPOSE ${VARLOGADM_RPC_PORT}
 USER varlog
 WORKDIR /varlog
 COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
-COPY --from=builder-debug /varlog/bin/start_varlogadm.py /varlog/bin/start_varlogadm.py
 COPY --from=builder-debug /varlog/bin/varlogadm /varlog/bin/varlogadm
 COPY --from=builder-debug /varlog/pylib /varlog/pylib
 
@@ -151,7 +150,6 @@ EXPOSE ${VARLOGADM_RPC_PORT}
 USER varlog
 WORKDIR /varlog
 COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
-COPY --from=builder-cgo /varlog/bin/start_varlogadm.py /varlog/bin/start_varlogadm.py
 COPY --from=builder-cgo /varlog/bin/varlogadm /varlog/bin/varlogadm
 COPY --from=builder-cgo /varlog/pylib /varlog/pylib
 
@@ -162,7 +160,6 @@ EXPOSE ${VARLOGADM_RPC_PORT}
 USER varlog
 WORKDIR /varlog
 COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
-COPY --from=builder-noncgo /varlog/bin/start_varlogadm.py /varlog/bin/start_varlogadm.py
 COPY --from=builder-noncgo /varlog/bin/varlogadm /varlog/bin/varlogadm
 COPY --from=builder-noncgo /varlog/pylib /varlog/pylib
 

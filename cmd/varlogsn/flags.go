@@ -4,7 +4,9 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/flags"
+	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/pkg/util/units"
 )
 
 var (
@@ -108,10 +110,11 @@ var (
 		Name: "storage-max-open-files",
 		Envs: []string{"STORAGE_MAX_OPEN_FILES"},
 	}
-	flagStorageMemTableSize = flags.FlagDesc{
+	flagStorageMemTableSize = &cli.StringFlag{
 		Name:    "storage-mem-table-size",
 		Aliases: []string{"storage-memtable-size"},
-		Envs:    []string{"STORAGE_MEM_TABLE_SIZE", "STORAGE_MEMTABLE_SIZE"},
+		EnvVars: []string{"STORAGE_MEM_TABLE_SIZE", "STORAGE_MEMTABLE_SIZE"},
+		Value:   units.ToByteSizeString(storage.DefaultMemTableSize),
 	}
 	flagStorageMemTableStopWritesThreshold = flags.FlagDesc{
 		Name:    "storage-mem-table-stop-writes-threshold",
@@ -121,6 +124,11 @@ var (
 	flagStorageMaxConcurrentCompaction = flags.FlagDesc{
 		Name: "storage-max-concurrent-compaction",
 		Envs: []string{"STORAGE_MAX_CONCURRENT_COMPACTION"},
+	}
+	flagStorageMetricsLogInterval = &cli.DurationFlag{
+		Name:    "storage-metrics-log-interval",
+		EnvVars: []string{"STORAGE_METRICS_LOG_INTERVAL"},
+		Value:   storage.DefaultMetricsLogInterval,
 	}
 	flagStorageVerbose = flags.FlagDesc{
 		Name: "storage-verbose",

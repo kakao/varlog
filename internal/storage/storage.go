@@ -2,6 +2,8 @@ package storage
 
 import (
 	"errors"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
@@ -22,6 +24,12 @@ type Storage struct {
 
 	db        *pebble.DB
 	writeOpts *pebble.WriteOptions
+
+	metricsLogger struct {
+		wg     sync.WaitGroup
+		ticker *time.Ticker
+		stop   chan struct{}
+	}
 }
 
 // New creates a new storage.
@@ -61,8 +69,19 @@ func New(opts ...Option) (*Storage, error) {
 	if cfg.verbose {
 		el := pebble.MakeLoggingEventListener(newLogAdaptor(cfg.logger))
 		pebbleOpts.EventListener = &el
+		// BackgroundError, DiskSlow, WriteStallBegin, WriteStallEnd
+		pebbleOpts.EventListener.CompactionBegin = nil
+		pebbleOpts.EventListener.CompactionEnd = nil
+		pebbleOpts.EventListener.FlushBegin = nil
+		pebbleOpts.EventListener.FlushEnd = nil
+		pebbleOpts.EventListener.FormatUpgrade = nil
+		pebbleOpts.EventListener.ManifestCreated = nil
+		pebbleOpts.EventListener.ManifestDeleted = nil
+		pebbleOpts.EventListener.TableCreated = nil
 		pebbleOpts.EventListener.TableDeleted = nil
 		pebbleOpts.EventListener.TableIngested = nil
+		pebbleOpts.EventListener.TableStatsLoaded = nil
+		pebbleOpts.EventListener.TableValidated = nil
 		pebbleOpts.EventListener.WALCreated = nil
 		pebbleOpts.EventListener.WALDeleted = nil
 	}
@@ -75,11 +94,14 @@ func New(opts ...Option) (*Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Storage{
+
+	stg := &Storage{
 		config:    cfg,
 		db:        db,
 		writeOpts: &pebble.WriteOptions{Sync: cfg.sync},
-	}, nil
+	}
+	stg.startMetricsLogger()
+	return stg, nil
 }
 
 // NewWriteBatch creates a batch for write operations.
@@ -251,10 +273,40 @@ func (s *Storage) DiskUsage() uint64 {
 	return s.db.Metrics().DiskSpaceUsage()
 }
 
+func (s *Storage) startMetricsLogger() {
+	if s.metricsLogInterval <= 0 {
+		return
+	}
+	s.metricsLogger.stop = make(chan struct{})
+	s.metricsLogger.ticker = time.NewTicker(s.metricsLogInterval)
+	s.metricsLogger.wg.Add(1)
+	go func() {
+		defer s.metricsLogger.wg.Done()
+		for {
+			select {
+			case <-s.metricsLogger.ticker.C:
+				s.logger.Info("\n" + s.db.Metrics().String())
+			case <-s.metricsLogger.stop:
+				return
+			}
+		}
+	}()
+}
+
+func (s *Storage) stopMetricsLogger() {
+	if s.metricsLogInterval <= 0 {
+		return
+	}
+	s.metricsLogger.ticker.Stop()
+	close(s.metricsLogger.stop)
+	s.metricsLogger.wg.Wait()
+}
+
 // Close closes the storage.
 func (s *Storage) Close() (err error) {
 	if !s.readOnly {
 		err = s.db.Flush()
 	}
+	s.stopMetricsLogger()
 	return multierr.Append(err, s.db.Close())
 }

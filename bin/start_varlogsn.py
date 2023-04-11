@@ -169,6 +169,9 @@ def start(args: argparse.Namespace) -> None:
             for volume in volumes:
                 cmd.append(f"--volumes={volume}")
 
+            if args.ballast_size:
+                cmd.append(f"--ballast-size={args.ballast_size}")
+
             # grpc options
             if args.server_read_buffer_size:
                 cmd.append(
@@ -209,6 +212,8 @@ def start(args: argparse.Namespace) -> None:
             if args.storage_max_concurrent_compaction:
                 cmd.append(
                     f"--storage-max-concurrent-compaction={args.storage_max_concurrent_compaction}")
+            if args.storage_metrics_log_interval:
+                cmd.append(f"--storage-metrics-log-interval={args.storage_metrics_log_interval}")
             if args.storage_verbose:
                 cmd.append("--storage-verbose")
 
@@ -263,6 +268,7 @@ def main() -> None:
     parser.add_argument("--storage-mem-table-size", type=str)
     parser.add_argument("--storage-mem-table-stop-writes-threshold", type=int)
     parser.add_argument("--storage-max-concurrent-compaction", type=int)
+    parser.add_argument("--storage-metrics-log-interval", type=str)
     parser.add_argument("--storage-verbose", action="store_true")
 
     # logging options

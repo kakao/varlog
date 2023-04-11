@@ -135,6 +135,15 @@ func (adm *Admin) Serve() error {
 	}
 	adm.mu.Unlock()
 
+	if ce := adm.logger.Check(zap.InfoLevel, "starting"); ce != nil {
+		ce.Write(
+			zap.String("address", adm.serverAddr),
+			zap.Uint("replicationFactor", adm.replicationFactor),
+			zap.String("replicationSelector", adm.snSelector.Name()),
+			zap.Duration("logStreamGCTimeout", adm.logStreamGCTimeout),
+		)
+	}
+
 	return adm.server.Serve(lis)
 }
 
