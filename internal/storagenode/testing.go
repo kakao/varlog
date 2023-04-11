@@ -132,14 +132,7 @@ func TestAppend(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, dataBa
 	lc, closer := TestNewLogIOClient(t, replicas[0].StorageNodeID, replicas[0].Address)
 	defer closer()
 
-	var backups []varlogpb.StorageNode
-	for _, replica := range replicas[1:] {
-		backups = append(backups, varlogpb.StorageNode{
-			StorageNodeID: replica.StorageNodeID,
-			Address:       replica.Address,
-		})
-	}
-	res, err := lc.Append(context.Background(), tpid, lsid, dataBatch, backups...)
+	res, err := lc.Append(context.Background(), tpid, lsid, dataBatch)
 	assert.NoError(t, err)
 	return res
 }
