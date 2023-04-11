@@ -51,7 +51,10 @@ type config struct {
 
 	mrMgrOpts []mrmanager.Option
 	VMSOpts   []admin.Option
-	logger    *zap.Logger
+	logger    struct {
+		*zap.Logger
+		injected bool
+	}
 
 	portBase      int
 	vmsPortOffset int
@@ -67,7 +70,6 @@ func newConfig(t *testing.T, opts []Option) config {
 		unsafeNoWAL:       defaultUnsafeNoWAL,
 		reporterClientFac: defaultReportClientFactory(),
 		VMSOpts:           NewTestVMSOptions(),
-		logger:            zaptest.NewLogger(t),
 		portBase:          defaultPortBase,
 		vmsPortOffset:     defaultVMSPortOffset,
 		startVMS:          defaultStartVMS,
@@ -75,6 +77,11 @@ func newConfig(t *testing.T, opts []Option) config {
 
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+
+	if cfg.logger.Logger == nil {
+		cfg.logger.Logger = zaptest.NewLogger(t)
+		cfg.logger.injected = false
 	}
 
 	cfg.validate(t)
@@ -169,7 +176,8 @@ func WithVMSOptions(vmsOpts ...admin.Option) Option {
 
 func WithLogger(logger *zap.Logger) Option {
 	return func(c *config) {
-		c.logger = logger
+		c.logger.Logger = logger
+		c.logger.injected = true
 	}
 }
 

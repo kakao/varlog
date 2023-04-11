@@ -262,7 +262,7 @@ func (clus *VarlogCluster) createMR(t *testing.T, idx int, join, unsafeNoWal boo
 		metarepos.WithRPCAddress(clus.mrRPCEndpoints[idx]),
 		metarepos.WithRaftAddress(clus.mrPeers[idx]),
 		metarepos.WithReporterClientFactory(clus.reporterClientFac),
-		metarepos.WithLogger(clus.logger),
+		metarepos.WithLogger(clus.logger.Logger),
 		metarepos.WithSnapshotCount(uint64(clus.snapCount)),
 		metarepos.WithRaftTick(vtesting.TestRaftTick()),
 		metarepos.WithRaftDirectory(vtesting.TestRaftDir()),
@@ -389,6 +389,12 @@ func (clus *VarlogCluster) CloseMRAllForRestart(t *testing.T) {
 
 // Close closes all cluster MRs.
 func (clus *VarlogCluster) Close(t *testing.T) {
+	defer func() {
+		if !clus.logger.injected {
+			_ = clus.logger.Sync()
+		}
+	}()
+
 	clus.muMR.Lock()
 	defer clus.muMR.Unlock()
 
@@ -534,7 +540,7 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 	_, err := clus.vmsCL.AddStorageNode(context.Background(), snID, addr)
 	require.NoError(t, err)
 
-	mcl, err := client.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger)
+	mcl, err := client.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger.Logger)
 	require.NoError(t, err)
 
 	clus.storageNodes[snID] = sn
@@ -574,7 +580,7 @@ func (clus *VarlogCluster) NewSNClient(t *testing.T, snID types.StorageNodeID) {
 	addr, ok := clus.snAddrs[snID]
 	require.True(t, ok)
 
-	mcl, err := client.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger)
+	mcl, err := client.NewManagementClient(context.Background(), clus.clusterID, addr, clus.logger.Logger)
 	require.NoError(t, err)
 
 	clus.snMCLs[snID] = mcl
@@ -1178,7 +1184,7 @@ func (clus *VarlogCluster) NewLogIOClient(t *testing.T, lsID types.LogStreamID) 
 func (clus *VarlogCluster) initVMS(t *testing.T) {
 	mrMgrOpts := append(clus.mrMgrOpts,
 		mrmanager.WithAddresses(clus.mrRPCEndpoints...),
-		mrmanager.WithLogger(clus.logger),
+		mrmanager.WithLogger(clus.logger.Logger),
 	)
 	mrMgr, err := mrmanager.New(context.TODO(), mrMgrOpts...)
 	require.NoError(t, err)
@@ -1186,7 +1192,7 @@ func (clus *VarlogCluster) initVMS(t *testing.T) {
 	snMgr, err := snmanager.New(context.TODO(),
 		snmanager.WithClusterID(clus.clusterID),
 		snmanager.WithClusterMetadataView(mrMgr.ClusterMetadataView()),
-		snmanager.WithLogger(clus.logger),
+		snmanager.WithLogger(clus.logger.Logger),
 	)
 	require.NoError(t, err)
 
@@ -1270,7 +1276,7 @@ func (clus *VarlogCluster) GetVMSClient(t *testing.T) varlog.Admin {
 }
 
 func (clus *VarlogCluster) Logger() *zap.Logger {
-	return clus.logger
+	return clus.logger.Logger
 }
 
 func (clus *VarlogCluster) TopicIDs() []types.TopicID {
