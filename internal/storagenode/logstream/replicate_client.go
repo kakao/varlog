@@ -74,10 +74,12 @@ func (rc *replicateClient) send(ctx context.Context, rt *replicateTask) (err err
 		if err != nil {
 			inflight = atomic.AddInt64(&rc.inflight, -1)
 		}
-		rc.logger.Debug("sent replicate client a task",
-			zap.Int64("inflight", inflight),
-			zap.Error(err),
-		)
+		if ce := rc.logger.Check(zap.DebugLevel, "sent replicate client a task"); ce != nil {
+			ce.Write(
+				zap.Int64("inflight", inflight),
+				zap.Error(err),
+			)
+		}
 	}()
 
 	switch rc.lse.esm.load() {
