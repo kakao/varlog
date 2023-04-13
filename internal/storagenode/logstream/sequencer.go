@@ -104,9 +104,9 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		sq.llsn++
 		st.awgs[dataIdx].setLLSN(sq.llsn)
 		sq.logger.Debug("sequencer: issued llsn", zap.Uint64("llsn", uint64(sq.llsn)))
-		for replicaIdx := 0; replicaIdx < len(st.rts); replicaIdx++ {
+		for replicaIdx := 0; replicaIdx < len(st.rts.tasks); replicaIdx++ {
 			// NOTE: Use "append" since the length of st.rts is not enough to use index. Its capacity is enough because it is created to be reused.
-			st.rts[replicaIdx].llsnList = append(st.rts[replicaIdx].llsnList, sq.llsn)
+			st.rts.tasks[replicaIdx].llsnList = append(st.rts.tasks[replicaIdx].llsnList, sq.llsn)
 		}
 		//nolint:staticcheck
 		if err := st.wb.Set(sq.llsn, st.dataBatch[dataIdx]); err != nil {
@@ -141,7 +141,7 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		st.wwg.done(err)
 		_ = st.wb.Close()
 		releaseCommitWaitTaskList(cwts)
-		releaseReplicateTasks(rts)
+		releaseReplicateTasks(rts.tasks)
 		releaseReplicateTaskSlice(rts)
 		st.release()
 		return
@@ -154,7 +154,7 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		st.wwg.done(err)
 		_ = st.wb.Close()
 		releaseCommitWaitTaskList(cwts)
-		releaseReplicateTasks(rts)
+		releaseReplicateTasks(rts.tasks)
 		releaseReplicateTaskSlice(rts)
 		st.release()
 		return
@@ -162,8 +162,8 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 
 	// send to replicator
 	ridx := 0
-	for ridx < len(rts) {
-		err := sq.lse.rcs.clients[ridx].send(ctx, rts[ridx])
+	for ridx < len(rts.tasks) {
+		err := sq.lse.rcs.clients[ridx].send(ctx, rts.tasks[ridx])
 		if err != nil {
 			sq.logger.Error("could not send to replicate client", zap.Error(err))
 			sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
@@ -171,7 +171,7 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		}
 		ridx++
 	}
-	releaseReplicateTasks(rts[ridx:])
+	releaseReplicateTasks(rts.tasks[ridx:])
 	releaseReplicateTaskSlice(rts)
 }
 
@@ -248,7 +248,7 @@ type sequenceTask struct {
 	wb        *storage.WriteBatch
 	dataBatch [][]byte
 	cwts      *listQueue
-	rts       []*replicateTask
+	rts       *replicateTaskSlice
 }
 
 func newSequenceTask() *sequenceTask {
