@@ -55,7 +55,7 @@ benchmark:
 
 
 # testing
-TEST_FLAGS := -race -failfast -count=1
+TEST_FLAGS := -race -failfast -count=1 -timeout=20m -p=1
 GO_COVERAGE_OUTPUT := coverage.out
 GO_COVERAGE_OUTPUT_TMP := $(GO_COVERAGE_OUTPUT).tmp
 PYTEST := pytest
