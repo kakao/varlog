@@ -68,7 +68,7 @@ func (s *Scanner) Close() error {
 func (s *Scanner) valueByGLSN() (le varlogpb.LogEntry, err error) {
 	ck := s.it.Key()
 	dk := s.it.Value()
-	data, closer, err := s.stg.db.Get(dk)
+	data, closer, err := s.stg.dataDB.Get(dk)
 	if err != nil {
 		if err == pebble.ErrNotFound {
 			return le, fmt.Errorf("%s: %w", s.stg.path, ErrInconsistentWriteCommitState)

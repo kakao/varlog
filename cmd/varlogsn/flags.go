@@ -86,6 +86,11 @@ var (
 	}
 
 	// flags for storage.
+	flagExperimentalStorageSeparateDB = &cli.BoolFlag{
+		Name:    "experimental-storage-separate-db",
+		EnvVars: []string{"EXPERIMENTAL_STORAGE_SEPARATE_DB"},
+		Usage:   "Separate databases of storage experimentally.",
+	}
 	flagStorageDisableWAL = flags.FlagDesc{
 		Name: "storage-disable-wal",
 		Envs: []string{"STORAGE_DISABLE_WAL"},
@@ -94,45 +99,77 @@ var (
 		Name: "storage-no-sync",
 		Envs: []string{"STORAGE_NO_SYNC"},
 	}
-	flagStorageL0CompactionThreshold = flags.FlagDesc{
-		Name: "storage-l0-compaction-threshold",
-		Envs: []string{"STORAGE_L0_COMPACTION_THRESHOLD"},
+	flagStorageVerbose = flags.FlagDesc{
+		Name: "storage-verbose",
+		Envs: []string{"STORAGE_VERBOSE"},
 	}
-	flagStorageL0StopWritesThreshold = flags.FlagDesc{
-		Name: "storage-l0-stop-writes-threshold",
-		Envs: []string{"STORAGE_L0_STOP_WRITES_THRESHOLD"},
+
+	flagStorageL0CompactionFileThreshold = &cli.IntSliceFlag{
+		Name:    "storage-l0-compaction-file-threshold",
+		EnvVars: []string{"STORAGE_L0_COMPACTION_FILE_THRESHOLD"},
+		Value:   cli.NewIntSlice(storage.DefaultL0CompactionFileThreshold),
+		Usage:   `L0CompactionFileThreshold of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
 	}
-	flagStorageLBaseMaxBytes = flags.FlagDesc{
-		Name: "storage-lbase-max-bytes",
-		Envs: []string{"STORAGE_LBASE_MAX_BYTES"},
+	flagStorageL0CompactionThreshold = &cli.IntSliceFlag{
+		Name:    "storage-l0-compaction-threshold",
+		EnvVars: []string{"STORAGE_L0_COMPACTION_THRESHOLD"},
+		Value:   cli.NewIntSlice(storage.DefaultL0CompactionThreshold),
+		Usage:   `L0CompactionThreshold of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
 	}
-	flagStorageMaxOpenFiles = flags.FlagDesc{
-		Name: "storage-max-open-files",
-		Envs: []string{"STORAGE_MAX_OPEN_FILES"},
+	flagStorageL0StopWritesThreshold = &cli.IntSliceFlag{
+		Name:    "storage-l0-stop-writes-threshold",
+		EnvVars: []string{"STORAGE_L0_STOP_WRITES_THRESHOLD"},
+		Value:   cli.NewIntSlice(storage.DefaultL0StopWritesThreshold),
+		Usage:   `L0StopWritesThreshold of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
 	}
-	flagStorageMemTableSize = &cli.StringFlag{
+	flagStorageL0TargetFileSize = &cli.StringSliceFlag{
+		Name:    "storage-l0-target-file-size",
+		EnvVars: []string{"STORAGE_L0_TARGET_FILE_SIZE"},
+		Value:   cli.NewStringSlice(units.ToByteSizeString(storage.DefaultL0TargetFileSize)),
+		Usage:   `L0TargetFileSize of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
+	}
+	flagStorageFlushSplitBytes = &cli.StringSliceFlag{
+		Name:    "storage-flush-split-bytes",
+		EnvVars: []string{"STORAGE_FLUSH_SPLIT_BYTES"},
+		Value:   cli.NewStringSlice(units.ToByteSizeString(storage.DefaultFlushSplitBytes)),
+		Usage:   `FlushSplitBytes of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
+	}
+	flagStorageLBaseMaxBytes = &cli.StringSliceFlag{
+		Name:    "storage-lbase-max-bytes",
+		EnvVars: []string{"STORAGE_LBASE_MAX_BYTES"},
+		Value:   cli.NewStringSlice(units.ToByteSizeString(storage.DefaultLBaseMaxBytes)),
+		Usage:   `LBaseMaxBytes of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
+	}
+	flagStorageMaxOpenFiles = &cli.IntSliceFlag{
+		Name:    "storage-max-open-files",
+		EnvVars: []string{"STORAGE_MAX_OPEN_FILES"},
+		Value:   cli.NewIntSlice(storage.DefaultMaxOpenFiles),
+		Usage:   `MaxOpenFiles of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
+	}
+	flagStorageMemTableSize = &cli.StringSliceFlag{
 		Name:    "storage-mem-table-size",
 		Aliases: []string{"storage-memtable-size"},
 		EnvVars: []string{"STORAGE_MEM_TABLE_SIZE", "STORAGE_MEMTABLE_SIZE"},
-		Value:   units.ToByteSizeString(storage.DefaultMemTableSize),
+		Value:   cli.NewStringSlice(units.ToByteSizeString(storage.DefaultMemTableSize)),
+		Usage:   `MemTableSize of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
 	}
-	flagStorageMemTableStopWritesThreshold = flags.FlagDesc{
+	flagStorageMemTableStopWritesThreshold = &cli.IntSliceFlag{
 		Name:    "storage-mem-table-stop-writes-threshold",
 		Aliases: []string{"storage-memtable-stop-writes-threshold"},
-		Envs:    []string{"STORAGE_MEM_TABLE_STOP_WRITES_THRESHOLD", "STORAGE_MEMTABLE_STOP_WRITES_THRESHOLD"},
+		EnvVars: []string{"STORAGE_MEM_TABLE_STOP_WRITES_THRESHOLD", "STORAGE_MEMTABLE_STOP_WRITES_THRESHOLD"},
+		Value:   cli.NewIntSlice(storage.DefaultMemTableStopWritesThreshold),
+		Usage:   `MemTableStopWritesThreshold of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
 	}
-	flagStorageMaxConcurrentCompaction = flags.FlagDesc{
-		Name: "storage-max-concurrent-compaction",
-		Envs: []string{"STORAGE_MAX_CONCURRENT_COMPACTION"},
+	flagStorageMaxConcurrentCompaction = &cli.IntSliceFlag{
+		Name:    "storage-max-concurrent-compaction",
+		EnvVars: []string{"STORAGE_MAX_CONCURRENT_COMPACTION"},
+		Value:   cli.NewIntSlice(storage.DefaultMaxConcurrentCompactions),
+		Usage:   `MaxConcurrentCompaction of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>.`,
 	}
 	flagStorageMetricsLogInterval = &cli.DurationFlag{
 		Name:    "storage-metrics-log-interval",
 		EnvVars: []string{"STORAGE_METRICS_LOG_INTERVAL"},
 		Value:   storage.DefaultMetricsLogInterval,
-	}
-	flagStorageVerbose = flags.FlagDesc{
-		Name: "storage-verbose",
-		Envs: []string{"STORAGE_VERBOSE"},
 	}
 
 	// flags for logging.

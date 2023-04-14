@@ -5,7 +5,6 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/types"
@@ -57,15 +56,19 @@ func newStartCommand() *cli.Command {
 			flagMaxLogStreamReplicasCount,
 
 			// storage options
+			flagExperimentalStorageSeparateDB,
 			flagStorageDisableWAL.BoolFlag(),
 			flagStorageNoSync.BoolFlag(),
-			flagStorageL0CompactionThreshold.IntFlag(false, storage.DefaultL0CompactionThreshold),
-			flagStorageL0StopWritesThreshold.IntFlag(false, storage.DefaultL0StopWritesThreshold),
-			flagStorageLBaseMaxBytes.StringFlag(false, units.ToByteSizeString(storage.DefaultLBaseMaxBytes)),
-			flagStorageMaxOpenFiles.IntFlag(false, storage.DefaultMaxOpenFiles),
+			flagStorageL0CompactionFileThreshold,
+			flagStorageL0CompactionThreshold,
+			flagStorageL0StopWritesThreshold,
+			flagStorageL0TargetFileSize,
+			flagStorageFlushSplitBytes,
+			flagStorageLBaseMaxBytes,
+			flagStorageMaxOpenFiles,
 			flagStorageMemTableSize,
-			flagStorageMemTableStopWritesThreshold.IntFlag(false, storage.DefaultMemTableStopWritesThreshold),
-			flagStorageMaxConcurrentCompaction.IntFlag(false, storage.DefaultMaxConcurrentCompactions),
+			flagStorageMemTableStopWritesThreshold,
+			flagStorageMaxConcurrentCompaction,
 			flagStorageMetricsLogInterval,
 			flagStorageVerbose.BoolFlag(),
 

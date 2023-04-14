@@ -23,13 +23,15 @@ func BenchmarkStorage_WriteBatch(b *testing.B) {
 			b.Run(name, func(b *testing.B) {
 				stg := TestNewStorage(b,
 					WithoutSync(),
-					WithL0CompactionThreshold(2),
-					WithL0StopWritesThreshold(1000),
-					WithLBaseMaxBytes(64<<20),
-					WithMaxOpenFiles(16384),
-					WithMemTableSize(64<<20),
-					WithMemTableStopWritesThreshold(4),
-					WithMaxConcurrentCompaction(3),
+					WithDataDBOptions(
+						WithL0CompactionThreshold(2),
+						WithL0StopWritesThreshold(1000),
+						WithLBaseMaxBytes(64<<20),
+						WithMaxOpenFiles(16384),
+						WithMemTableSize(64<<20),
+						WithMemTableStopWritesThreshold(4),
+						WithMaxConcurrentCompaction(3),
+					),
 				)
 				defer func() {
 					assert.NoError(b, stg.Close())

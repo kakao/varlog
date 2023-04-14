@@ -187,16 +187,27 @@ def start(args: argparse.Namespace) -> None:
                     f"--replication-client-write-buffer-size={args.replication_client_write_buffer_size}")
 
             # storage options
+            if args.experimental_storage_separate_db:
+                cmd.append("--experimental-storage-separate-db")
             if args.storage_disable_wal:
                 cmd.append("--storage-disable-wal")
             if args.storage_no_sync:
                 cmd.append("--storage-no-sync")
+            if args.storage_l0_compaction_file_threshold:
+                cmd.append(
+                    f"--storage-l0-compaction-file-threshold={args.storage_l0_compaction_file_threshold}")
             if args.storage_l0_compaction_threshold:
                 cmd.append(
                     f"--storage-l0-compaction-threshold={args.storage_l0_compaction_threshold}")
             if args.storage_l0_stop_writes_threshold:
                 cmd.append(
                     f"--storage-l0-stop-writes-threshold={args.storage_l0_stop_writes_threshold}")
+            if args.storage_l0_target_file_size:
+                cmd.append(
+                    f"--storage-l0-target-file-size={args.storage_l0_target_file_size}")
+            if args.storage_flush_split_bytes:
+                cmd.append(
+                    f"--storage-flush-split-bytes={args.storage_flush_split_bytes}")
             if args.storage_lbase_max_bytes:
                 cmd.append(
                     f"--storage-lbase-max-bytes={args.storage_lbase_max_bytes}")
@@ -259,15 +270,19 @@ def main() -> None:
     parser.add_argument("--replication-client-write-buffer-size", type=str)
 
     # storage options
+    parser.add_argument("--experimental-storage-separate-db", action="store_true")
     parser.add_argument("--storage-disable-wal", action="store_true")
     parser.add_argument("--storage-no-sync", action="store_true")
-    parser.add_argument("--storage-l0-compaction-threshold", type=int)
-    parser.add_argument("--storage-l0-stop-writes-threshold", type=int)
+    parser.add_argument("--storage-l0-compaction-file-threshold", type=str)
+    parser.add_argument("--storage-l0-compaction-threshold", type=str)
+    parser.add_argument("--storage-l0-stop-writes-threshold", type=str)
+    parser.add_argument("--storage-l0-target-file-size", type=str)
+    parser.add_argument("--storage-flush-split-bytes", type=str)
     parser.add_argument("--storage-lbase-max-bytes", type=str)
-    parser.add_argument("--storage-max-open-files", type=int)
+    parser.add_argument("--storage-max-open-files", type=str)
     parser.add_argument("--storage-mem-table-size", type=str)
-    parser.add_argument("--storage-mem-table-stop-writes-threshold", type=int)
-    parser.add_argument("--storage-max-concurrent-compaction", type=int)
+    parser.add_argument("--storage-mem-table-stop-writes-threshold", type=str)
+    parser.add_argument("--storage-max-concurrent-compaction", type=str)
     parser.add_argument("--storage-metrics-log-interval", type=str)
     parser.add_argument("--storage-verbose", action="store_true")
 

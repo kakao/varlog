@@ -48,7 +48,7 @@ func (s *Storage) readLastCommitContext() (*CommitContext, error) {
 }
 
 func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogEntryMeta, err error) {
-	it := s.db.NewIter(&pebble.IterOptions{
+	it := s.commitDB.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
 	})

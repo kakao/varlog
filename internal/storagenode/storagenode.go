@@ -296,6 +296,12 @@ func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.Topic
 
 	lsDirName := volume.LogStreamDirName(tpid, lsid)
 	lsPath := path.Join(snPath, lsDirName)
+	// If flag `--experimental-storage-seprate-db` is turned on, the data
+	// directory should be created first because it might not exist currently.
+	// The storage engine will create subdirectories within the data directory
+	// while the flag is set.
+	// If the directory already exists, the error can be ignored silently.
+	_ = os.Mkdir(lsPath, volume.VolumeFileMode)
 
 	lse, err := sn.runLogStreamReplica(ctx, tpid, lsid, lsPath)
 	if err != nil {
