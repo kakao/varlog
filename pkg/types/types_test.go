@@ -47,21 +47,6 @@ func TestGLSN(t *testing.T) {
 
 		var invalid GLSN
 		So(invalid.Invalid(), ShouldBeTrue)
-
-		Convey("AtomicGLSN should work", func() {
-			glsn := AtomicGLSN(1)
-			glsn.Add(10)
-			So(glsn.Load(), ShouldEqual, GLSN(11))
-
-			glsn.Store(20)
-			So(glsn.Load(), ShouldEqual, GLSN(20))
-
-			So(glsn.CompareAndSwap(GLSN(20), GLSN(21)), ShouldBeTrue)
-			So(glsn.Load(), ShouldEqual, GLSN(21))
-
-			So(glsn.CompareAndSwap(GLSN(20), GLSN(22)), ShouldBeFalse)
-			So(glsn.Load(), ShouldEqual, GLSN(21))
-		})
 	})
 }
 

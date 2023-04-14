@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/pkg/types"
@@ -65,8 +64,8 @@ func (lse *Executor) newEmptySubscribeResult() (*SubscribeResult, context.Contex
 // SubscribeWithGLSN subscribes to the log stream with the given range of GLSNs.
 // TODO: The first argument ctx may not be necessary, since the subscription can be stopped by the `internal/varlogsn/logstream.(*SubscribeResult).Stop()`.
 func (lse *Executor) SubscribeWithGLSN(begin, end types.GLSN) (*SubscribeResult, error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	if lse.esm.load() == executorStateClosed {
 		return nil, verrors.ErrClosed
@@ -113,8 +112,8 @@ func (lse *Executor) SubscribeWithGLSN(begin, end types.GLSN) (*SubscribeResult,
 // SubscribeWithLLSN subscribes to the log stream with the given range of LLSNs.
 // TODO: The first argument ctx may not be necessary, since the subscription can be stopped by the `internal/varlogsn/logstream.(*SubscribeResult).Stop()`.
 func (lse *Executor) SubscribeWithLLSN(begin, end types.LLSN) (*SubscribeResult, error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	if lse.esm.load() == executorStateClosed {
 		return nil, verrors.ErrClosed

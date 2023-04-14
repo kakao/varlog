@@ -57,7 +57,7 @@ type RaftMetadataRepository struct {
 	storage         *MetadataStorage
 
 	// for ack
-	requestNum uint64
+	requestNum atomic.Uint64
 	requestMap sync.Map
 
 	// for raft
@@ -85,7 +85,7 @@ type RaftMetadataRepository struct {
 	// membership
 	membership Membership
 
-	nrReport            uint64
+	nrReport            atomic.Uint64
 	nrReportSinceCommit uint64
 
 	// commit helper
@@ -107,7 +107,6 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 
 	mr := &RaftMetadataRepository{
 		config:        cfg,
-		requestNum:    uint64(time.Now().UnixNano()),
 		proposeC:      make(chan *mrpb.RaftEntry, 4096),
 		commitC:       make(chan *committedEntry, 4096),
 		rnConfChangeC: make(chan raftpb.ConfChange, 1),
@@ -118,7 +117,7 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 		tmStub:        tmStub,
 		topicEndPos:   make(map[types.TopicID]int),
 	}
-
+	mr.requestNum.Store(uint64(time.Now().UnixNano()))
 	mr.storage = NewMetadataStorage(mr.sendAck, cfg.snapCount, mr.logger.Named("storage"))
 	mr.storage.limits.maxTopicsCount = mr.maxTopicsCount
 	mr.storage.limits.maxLogStreamsCountPerTopic = mr.maxLogStreamsCountPerTopic
@@ -759,7 +758,7 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, 
 }
 
 func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
-	atomic.AddUint64(&mr.nrReport, 1)
+	mr.nrReport.Add(1)
 	mr.nrReportSinceCommit++
 
 	mr.tmStub.mb.Records("mr.raft.reports.delay").Record(context.TODO(),
@@ -1152,7 +1151,7 @@ func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, gu
 
 	if guarantee {
 		c := make(chan error, 1)
-		rIdx := atomic.AddUint64(&mr.requestNum, 1)
+		rIdx := mr.requestNum.Add(1)
 
 		e.RequestIndex = rIdx
 		mr.requestMap.Store(rIdx, c)
@@ -1442,7 +1441,7 @@ func (mr *RaftMetadataRepository) GetServerAddr() string {
 }
 
 func (mr *RaftMetadataRepository) GetReportCount() uint64 {
-	return atomic.LoadUint64(&mr.nrReport)
+	return mr.nrReport.Load()
 }
 
 func (mr *RaftMetadataRepository) GetLastCommitVersion() types.Version {

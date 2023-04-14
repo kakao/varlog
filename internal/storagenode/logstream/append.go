@@ -2,7 +2,6 @@ package logstream
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/kakao/varlog/internal/batchlet"
@@ -20,12 +19,12 @@ type appendContext struct {
 
 // Append appends a batch of logs to the log stream.
 func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.AppendResult, error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	atomic.AddInt64(&lse.inflightAppend, 1)
+	lse.inflight.Add(1)
+	lse.inflightAppend.Add(1)
 
 	defer func() {
-		atomic.AddInt64(&lse.inflightAppend, -1)
-		atomic.AddInt64(&lse.inflight, -1)
+		lse.inflightAppend.Add(-1)
+		lse.inflight.Add(-1)
 	}()
 
 	switch lse.esm.load() {
@@ -59,11 +58,11 @@ func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.App
 		if lse.lsm == nil {
 			return
 		}
-		atomic.AddInt64(&lse.lsm.AppendLogs, int64(dataBatchLen))
-		atomic.AddInt64(&lse.lsm.AppendBytes, apc.totalBytes)
-		atomic.AddInt64(&lse.lsm.AppendDuration, time.Since(startTime).Microseconds())
-		atomic.AddInt64(&lse.lsm.AppendOperations, 1)
-		atomic.AddInt64(&lse.lsm.AppendPreparationMicro, preparationDuration.Microseconds())
+		lse.lsm.AppendLogs.Add(int64(dataBatchLen))
+		lse.lsm.AppendBytes.Add(apc.totalBytes)
+		lse.lsm.AppendDuration.Add(time.Since(startTime).Microseconds())
+		lse.lsm.AppendOperations.Add(1)
+		lse.lsm.AppendPreparationMicro.Add(preparationDuration.Microseconds())
 	}()
 
 	lse.prepareAppendContext(dataBatch, &apc)

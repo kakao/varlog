@@ -21,7 +21,7 @@ import (
 type replicateClient struct {
 	replicateClientConfig
 	queue    chan *replicateTask
-	inflight int64
+	inflight atomic.Int64
 	runner   *runner.Runner
 
 	rpcClient    snpb.ReplicatorClient
@@ -69,10 +69,10 @@ func newReplicateClient(ctx context.Context, cfg replicateClientConfig) (*replic
 
 // send sends a replicate task to the queue of the replicate client.
 func (rc *replicateClient) send(ctx context.Context, rt *replicateTask) (err error) {
-	inflight := atomic.AddInt64(&rc.inflight, 1)
+	inflight := rc.inflight.Add(1)
 	defer func() {
 		if err != nil {
-			inflight = atomic.AddInt64(&rc.inflight, -1)
+			inflight = rc.inflight.Add(-1)
 		}
 		if ce := rc.logger.Check(zap.DebugLevel, "sent replicate client a task"); ce != nil {
 			ce.Write(
@@ -142,11 +142,11 @@ func (rc *replicateClient) sendLoopInternal(_ context.Context, rt *replicateTask
 	req.Data = rt.dataList
 	rt.release()
 	err := rc.streamClient.Send(req)
-	inflight := atomic.AddInt64(&rc.inflight, -1)
+	inflight := rc.inflight.Add(-1)
 	if rc.lse.lsm != nil {
-		atomic.StoreInt64(&rc.lse.lsm.ReplicateClientInflightOperations, inflight)
-		atomic.AddInt64(&rc.lse.lsm.ReplicateClientOperationDuration, time.Since(startTime).Microseconds())
-		atomic.AddInt64(&rc.lse.lsm.ReplicateClientOperations, 1)
+		rc.lse.lsm.ReplicateClientInflightOperations.Store(inflight)
+		rc.lse.lsm.ReplicateClientOperationDuration.Add(time.Since(startTime).Microseconds())
+		rc.lse.lsm.ReplicateClientOperations.Add(1)
 	}
 	return err
 }
@@ -156,12 +156,12 @@ func (rc *replicateClient) waitForDrainage() {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	for atomic.LoadInt64(&rc.inflight) > 0 || len(rc.queue) > 0 {
+	for rc.inflight.Load() > 0 || len(rc.queue) > 0 {
 		select {
 		case <-timer.C:
 			timer.Reset(tick)
 		case rt := <-rc.queue:
-			atomic.AddInt64(&rc.inflight, -1)
+			rc.inflight.Add(-1)
 			rt.release()
 		}
 	}

@@ -3,7 +3,6 @@ package logstream
 import (
 	"context"
 	"errors"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -162,12 +161,12 @@ func TestReplicateClientDrain(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	assert.EqualValues(t, numTasks, atomic.LoadInt64(&rc.inflight))
+	assert.EqualValues(t, numTasks, rc.inflight.Load())
 	assert.Len(t, rc.queue, numTasks)
 
 	rc.waitForDrainage()
 
-	assert.Zero(t, atomic.LoadInt64(&rc.inflight))
+	assert.Zero(t, rc.inflight.Load())
 	assert.Empty(t, rc.queue)
 }
 
