@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/multierr"
@@ -65,8 +64,8 @@ func (st *syncTracker) setCursor(cursor varlogpb.LogEntryMeta) {
 }
 
 func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()
@@ -251,8 +250,8 @@ func (lse *Executor) syncLoop(_ context.Context, sc *syncClient, st *syncTracker
 }
 
 func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamReplica, srcRange snpb.SyncRange, srcLastCommittedLLSN types.LLSN) (syncRange snpb.SyncRange, err error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()
@@ -458,8 +457,8 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 }
 
 func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStreamReplica, payload snpb.SyncPayload) (err error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()

@@ -3,7 +3,6 @@ package logstream
 import (
 	"context"
 	"errors"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -93,10 +92,10 @@ func TestWriter_DrainForce(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	assert.EqualValues(t, numTasks, atomic.LoadInt64(&wr.inflight))
+	assert.EqualValues(t, numTasks, wr.inflight.Load())
 	assert.Len(t, wr.queue, numTasks)
 	wr.waitForDrainage(errors.New("force drain"), true)
-	assert.Zero(t, atomic.LoadInt64(&wr.inflight))
+	assert.Zero(t, wr.inflight.Load())
 	assert.Empty(t, wr.queue)
 }
 

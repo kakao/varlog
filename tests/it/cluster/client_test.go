@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -231,7 +232,7 @@ func TestClientAppendCancel(t *testing.T) {
 	client := clus.ClientAtIndex(t, 0)
 
 	var (
-		atomicGLSN types.AtomicGLSN
+		atomicGLSN atomic.Uint64
 		wg         sync.WaitGroup
 	)
 	wg.Add(1)
@@ -244,7 +245,7 @@ func TestClientAppendCancel(t *testing.T) {
 			if res.Err == nil {
 				require.Equal(t, expectedGLSN, res.Metadata[0].GLSN)
 				expectedGLSN++
-				atomicGLSN.Store(res.Metadata[0].GLSN)
+				atomicGLSN.Store(uint64(res.Metadata[0].GLSN))
 			} else {
 				t.Logf("canceled")
 				return

@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -870,7 +869,7 @@ func TestMRRequestMap(t *testing.T) {
 			},
 		}
 
-		requestNum := atomic.LoadUint64(&mr.requestNum)
+		requestNum := mr.requestNum.Load()
 
 		var wg sync.WaitGroup
 		var st sync.WaitGroup
@@ -954,7 +953,7 @@ func TestMRRequestMap(t *testing.T) {
 		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(1))
 		defer cancel()
 
-		requestNum := atomic.LoadUint64(&mr.requestNum)
+		requestNum := mr.requestNum.Load()
 		err := mr.RegisterStorageNode(rctx, sn)
 		So(err, ShouldNotBeNil)
 
@@ -984,7 +983,7 @@ func TestMRRequestMap(t *testing.T) {
 			},
 		}
 
-		requestNum := atomic.LoadUint64(&mr.requestNum)
+		requestNum := mr.requestNum.Load()
 		err := mr.RegisterStorageNode(context.TODO(), sn)
 		So(err, ShouldBeNil)
 
