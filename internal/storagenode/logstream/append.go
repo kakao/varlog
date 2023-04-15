@@ -102,7 +102,7 @@ func (lse *Executor) prepareAppendContextInternal(dataBatch [][]byte, begin, end
 		rt.tpid = lse.tpid
 		rt.lsid = lse.lsid
 		rt.dataList = batchletData
-		st.rts = append(st.rts, rt)
+		st.rts.tasks = append(st.rts.tasks, rt)
 	}
 
 	// write wait group
@@ -138,7 +138,7 @@ func (lse *Executor) sendSequenceTasks(ctx context.Context, sts []*sequenceTask)
 		// _ = st.dwb.Close()
 		_ = st.wb.Close()
 		releaseCommitWaitTaskList(st.cwts)
-		releaseReplicateTasks(st.rts)
+		releaseReplicateTasks(st.rts.tasks)
 		releaseReplicateTaskSlice(st.rts)
 		st.release()
 	}

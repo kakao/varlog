@@ -81,6 +81,8 @@ func testSequenceTask(stg *storage.Storage) *sequenceTask {
 	st.cwts = newListQueue()
 	st.cwts.PushFront(newCommitWaitTask(awg))
 
+	st.rts = &replicateTaskSlice{}
+
 	return st
 }
 
@@ -192,8 +194,10 @@ func TestSequencer_FailToSendToReplicateClient(t *testing.T) {
 	}
 
 	st := testSequenceTask(stg)
-	st.rts = []*replicateTask{
-		{},
+	st.rts = &replicateTaskSlice{
+		tasks: []*replicateTask{
+			{},
+		},
 	}
 	sq.sequenceLoopInternal(context.Background(), st)
 	assert.Len(t, wr.queue, 1)
