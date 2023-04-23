@@ -15,7 +15,6 @@ import (
 	"go.etcd.io/etcd/pkg/fileutil"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
-	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -765,10 +764,7 @@ func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
 
 	mr.tmStub.mb.Records("mr.raft.reports.delay").Record(context.TODO(),
 		float64(time.Since(reports.CreatedTime).Nanoseconds())/float64(time.Millisecond),
-		attribute.KeyValue{
-			Key:   "nodeid",
-			Value: attribute.StringValue(mr.nodeID.String()),
-		})
+	)
 
 	for _, r := range reports.Reports {
 		snID := r.StorageNodeID
@@ -814,10 +810,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 	if r != nil {
 		mr.tmStub.mb.Records("mr.raft.commit.delay").Record(context.TODO(),
 			float64(time.Since(r.CreatedTime).Nanoseconds())/float64(time.Millisecond),
-			attribute.KeyValue{
-				Key:   "nodeid",
-				Value: attribute.StringValue(mr.nodeID.String()),
-			})
+		)
 	}
 
 	startTime := time.Now()
@@ -832,19 +825,11 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 		crs := &mrpb.LogStreamCommitResults{}
 
-		mr.tmStub.mb.Records("mr.reports_log.count").Record(context.Background(),
-			float64(mr.nrReportSinceCommit),
-			attribute.KeyValue{
-				Key:   "nodeid",
-				Value: attribute.StringValue(mr.nodeID.String()),
-			})
+		mr.tmStub.mb.Records("mr.reports_log.count").Record(context.Background(), float64(mr.nrReportSinceCommit))
 
 		mr.tmStub.mb.Records("mr.update_reports.count").Record(context.Background(),
 			float64(mr.storage.NumUpdateSinceCommit()),
-			attribute.KeyValue{
-				Key:   "nodeid",
-				Value: attribute.StringValue(mr.nodeID.String()),
-			})
+		)
 
 		mr.nrReportSinceCommit = 0
 
@@ -956,10 +941,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 			mr.tmStub.mb.Records("mr.build_commit_results.pure.duration").Record(context.TODO(),
 				float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
-				attribute.KeyValue{
-					Key:   "nodeid",
-					Value: attribute.StringValue(mr.nodeID.String()),
-				})
+			)
 		}
 		crs.Version = curVer + 1
 
@@ -980,10 +962,6 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 	mr.tmStub.mb.Records("mr.build_commit_results.duration").Record(context.Background(),
 		float64(time.Since(startTime).Nanoseconds())/float64(time.Millisecond),
-		attribute.KeyValue{
-			Key:   "nodeid",
-			Value: attribute.StringValue(mr.nodeID.String()),
-		},
 	)
 
 	return err
@@ -1504,11 +1482,6 @@ type handler func(ctx context.Context) (interface{}, error)
 func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string, h handler) (interface{}, error) {
 	st := time.Now()
 	rsp, err := h(ctx)
-	mr.tmStub.mb.Records(name).Record(ctx,
-		float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
-		attribute.KeyValue{
-			Key:   "nodeid",
-			Value: attribute.StringValue(mr.nodeID.String()),
-		})
+	mr.tmStub.mb.Records(name).Record(ctx, float64(time.Since(st).Nanoseconds())/float64(time.Millisecond))
 	return rsp, err
 }

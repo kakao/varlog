@@ -870,11 +870,8 @@ CatchupLoop:
 
 		min, max, recordable := lc.sampleTracer.commit(lc.lsID, cr.CommittedLLSNOffset, cr.CommittedLLSNOffset+types.LLSN(cr.CommittedGLSNLength))
 		if recordable {
-			lc.tmStub.mb.Records("mr.report_commit.delay").Record(ctx,
-				float64(time.Since(min).Nanoseconds())/float64(time.Millisecond))
-
-			lc.tmStub.mb.Records("mr.replicate.delay").Record(ctx,
-				float64(max.Sub(min).Nanoseconds())/float64(time.Millisecond))
+			lc.tmStub.mb.Records("mr.report_commit.delay").Record(ctx, float64(time.Since(min).Nanoseconds())/float64(time.Millisecond))
+			lc.tmStub.mb.Records("mr.replicate.delay").Record(ctx, float64(max.Sub(min).Nanoseconds())/float64(time.Millisecond))
 		}
 
 		lc.setSentVersion(crs.Version)
