@@ -2,6 +2,7 @@ package mrpb
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
@@ -73,6 +74,24 @@ func (crs *LogStreamCommitResults) getCommitResultByIdx(idx int) (snpb.LogStream
 
 func (l *LogStreamUncommitReports) Deleted() bool {
 	return l.Status == varlogpb.LogStreamStatusDeleted
+}
+
+var storageNodeUncommitReportPool = sync.Pool{
+	New: func() any {
+		return new(StorageNodeUncommitReport)
+	},
+}
+
+func NewStoragenodeUncommitReport(snid types.StorageNodeID) *StorageNodeUncommitReport {
+	r := storageNodeUncommitReportPool.Get().(*StorageNodeUncommitReport)
+	r.StorageNodeID = snid
+	return r
+}
+
+func (l *StorageNodeUncommitReport) Release() {
+	l.StorageNodeID = types.StorageNodeID(0)
+	l.UncommitReports = nil
+	storageNodeUncommitReportPool.Put(l)
 }
 
 func (l *StorageNodeUncommitReport) Len() int {
