@@ -79,17 +79,23 @@ var (
 
 const defaultLengthOfReplicationTaskSlice = 3
 
+type replicateTaskSlice struct {
+	tasks []*replicateTask
+}
+
 var replicateTaskSlicePool = sync.Pool{
 	New: func() interface{} {
-		return make([]*replicateTask, 0, defaultLengthOfReplicationTaskSlice)
+		return &replicateTaskSlice{
+			tasks: make([]*replicateTask, 0, defaultLengthOfReplicationTaskSlice),
+		}
 	},
 }
 
-func newReplicateTaskSlice() []*replicateTask {
-	return replicateTaskSlicePool.Get().([]*replicateTask)
+func newReplicateTaskSlice() *replicateTaskSlice {
+	return replicateTaskSlicePool.Get().(*replicateTaskSlice)
 }
 
-func releaseReplicateTaskSlice(rts []*replicateTask) {
-	rts = rts[0:0]
-	replicateTaskSlicePool.Put(rts) //nolint:staticcheck
+func releaseReplicateTaskSlice(rts *replicateTaskSlice) {
+	rts.tasks = rts.tasks[0:0]
+	replicateTaskSlicePool.Put(rts)
 }
