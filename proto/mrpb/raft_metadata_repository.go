@@ -127,7 +127,7 @@ func (crs *LogStreamCommitResults) LastHighWatermark(topicID types.TopicID, hint
 		return crs.CommitResults[i].TopicID >= topicID+1
 	})
 
-	if i > 0 {
+	if i > 0 && crs.GetCommitResults()[i-1].TopicID == topicID {
 		return crs.GetCommitResults()[i-1].GetHighWatermark(), i - 1
 	}
 
