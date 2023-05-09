@@ -2,16 +2,15 @@ package main
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snmanager"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
 )
@@ -51,11 +50,16 @@ func newStartCommand() *cli.Command {
 			flagSNWatcherHeartbeatCheckDeadline.DurationFlag(false, snwatcher.DefaultHeartbeatDeadline),
 			flagSNWatcherReportDeadline.DurationFlag(false, snwatcher.DefaultReportDeadline),
 
-			flagLogDir.StringFlag(false, ""),
-			flagLogToStderr.BoolFlag(),
-			flagLogFileRetentionDays.IntFlag(false, 0),
-			flagLogFileCompression.BoolFlag(),
-			flagLogLevel.StringFlag(false, "info"),
+			// logger options
+			flags.LogDir,
+			flags.LogToStderr,
+			flags.LogFileMaxSizeMB,
+			flags.LogFileMaxBackups,
+			flags.LogFileRetentionDays,
+			flags.LogFileNameUTC,
+			flags.LogFileCompression,
+			flags.LogHumanReadable,
+			flags.LogLevel,
 		},
 	}
 }
@@ -65,7 +69,13 @@ func start(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	logger, err := newLogger(c)
+
+	logOpts, err := flags.ParseLoggerFlags(c, "varlogadm.log")
+	if err != nil {
+		return err
+	}
+	logOpts = append(logOpts, log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)))
+	logger, err := log.New(logOpts...)
 	if err != nil {
 		return err
 	}
@@ -122,35 +132,4 @@ func start(c *cli.Context) error {
 		opts = append(opts, admin.WithAutoUnseal())
 	}
 	return Main(opts, logger)
-}
-
-func newLogger(c *cli.Context) (*zap.Logger, error) {
-	level, err := zapcore.ParseLevel(c.String(flagLogLevel.Name))
-	if err != nil {
-		return nil, err
-	}
-
-	opts := []log.Option{
-		log.WithHumanFriendly(),
-		log.WithLocalTime(),
-		log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)),
-		log.WithLogLevel(level),
-	}
-	if !c.Bool(flagLogToStderr.Name) {
-		opts = append(opts, log.WithoutLogToStderr())
-	}
-	if logdir := c.String(flagLogDir.Name); len(logdir) != 0 {
-		absDir, err := filepath.Abs(logdir)
-		if err != nil {
-			return nil, err
-		}
-		opts = append(opts, log.WithPath(filepath.Join(absDir, "varlogadm.log")))
-	}
-	if c.Bool(flagLogFileCompression.Name) {
-		opts = append(opts, log.WithCompression())
-	}
-	if retention := c.Int(flagLogFileRetentionDays.Name); retention > 0 {
-		opts = append(opts, log.WithAgeDays(retention))
-	}
-	return log.New(opts...)
 }
