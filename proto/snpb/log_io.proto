@@ -175,9 +175,9 @@ message LogStreamReplicaMetadataResponse {
 }
 
 service LogIO {
-  // Append stores a list of log entries to the end of the log stream specified
-  // by AppendRequest. The log entries are appended partially; that is, some of
-  // the log entries could not be stored due to failures.
+  // Append stores a list of log entries to the end of the log stream
+  // specified by AppendRequest. The log entries are appended partially; that
+  // is, some of the log entries could not be stored due to failures.
   //
   // It returns the following gRPC errors:
   // - InvalidArgument: AppendRequest has invalid fields; for instance, TopicID
@@ -194,7 +194,8 @@ service LogIO {
   // - DeadlineExceeded: The client's timeout has expired.
   //
   // FIXME: Partial failures are not specified by the gRPC error codes.
-  rpc Append(AppendRequest) returns (AppendResponse) {}
+  rpc Append(stream AppendRequest) returns (stream AppendResponse) {}
+
   // Read reads a log entry from the log stream specified by ReadRequest.
   // Deprecated: Use Subscribe or SubscribeTo.
   rpc Read(ReadRequest) returns (ReadResponse) {}

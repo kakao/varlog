@@ -3,6 +3,7 @@ package storagenode
 import (
 	"context"
 	"errors"
+	"io"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"go.uber.org/multierr"
@@ -22,33 +23,48 @@ type logServer struct {
 
 var _ snpb.LogIOServer = (*logServer)(nil)
 
-func (ls logServer) Append(ctx context.Context, req *snpb.AppendRequest) (*snpb.AppendResponse, error) {
-	err := snpb.ValidateTopicLogStream(req)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+func (ls logServer) Append(stream snpb.LogIO_AppendServer) (err error) {
+	req, rsp := &snpb.AppendRequest{}, &snpb.AppendResponse{}
 
-	payload := req.GetPayload()
-	req.Payload = nil
-	lse, loaded := ls.sn.executors.Load(req.TopicID, req.LogStreamID)
-	if !loaded {
-		return nil, status.Error(codes.NotFound, "no such log stream")
-	}
-
-	res, err := lse.Append(ctx, payload)
-	if err != nil {
-		var code codes.Code
-		switch err {
-		case verrors.ErrSealed:
-			code = codes.FailedPrecondition
-		case snerrors.ErrNotPrimary:
-			code = codes.Unavailable
-		default:
-			code = status.FromContextError(err).Code()
+	for {
+		req.Reset()
+		err = stream.RecvMsg(req)
+		if err == io.EOF {
+			return nil
 		}
-		return nil, status.Error(code, err.Error())
+		if err != nil {
+			return err
+		}
+
+		err = snpb.ValidateTopicLogStream(req)
+		if err != nil {
+			return status.Error(codes.InvalidArgument, err.Error())
+		}
+
+		lse, loaded := ls.sn.executors.Load(req.TopicID, req.LogStreamID)
+		if !loaded {
+			return status.Error(codes.NotFound, "no such log stream")
+		}
+		res, err := lse.Append(stream.Context(), req.Payload)
+		if err != nil {
+			var code codes.Code
+			switch err {
+			case verrors.ErrSealed:
+				code = codes.FailedPrecondition
+			case snerrors.ErrNotPrimary:
+				code = codes.Unavailable
+			default:
+				code = status.FromContextError(err).Code()
+			}
+			return status.Error(code, err.Error())
+		}
+
+		rsp.Results = res
+		err = stream.Send(rsp)
+		if err != nil {
+			return err
+		}
 	}
-	return &snpb.AppendResponse{Results: res}, nil
 }
 
 func (ls logServer) Read(context.Context, *snpb.ReadRequest) (*snpb.ReadResponse, error) {
