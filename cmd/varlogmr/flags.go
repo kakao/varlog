@@ -150,11 +150,4 @@ var (
 		Usage:   "Collector endpoint",
 		Envs:    []string{"COLLECTOR_ENDPOINT"},
 	}
-
-	flagLogDir = flags.FlagDesc{
-		Name:    "log-dir",
-		Aliases: []string{},
-		Usage:   "Log Dir",
-		Envs:    []string{"LOG_DIR"},
-	}
 )

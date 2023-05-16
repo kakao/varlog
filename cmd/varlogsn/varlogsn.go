@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -21,9 +20,9 @@ import (
 	_ "go.uber.org/automaxprocs"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
@@ -47,29 +46,11 @@ func run() int {
 }
 
 func start(c *cli.Context) error {
-	level, err := zapcore.ParseLevel(c.String(flagLogLevel.Name))
+	logOpts, err := flags.ParseLoggerFlags(c, "varlogsn.log")
 	if err != nil {
 		return err
 	}
-
-	logOpts := []log.Option{
-		log.WithHumanFriendly(),
-		log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)),
-		log.WithLogLevel(level),
-	}
-	if c.Bool(flagLogFileCompression.Name) {
-		logOpts = append(logOpts, log.WithCompression())
-	}
-	if retention := c.Int(flagLogFileRetentionDays.Name); retention > 0 {
-		logOpts = append(logOpts, log.WithAgeDays(retention))
-	}
-	if logDir := c.String(flagLogDir.Name); len(logDir) != 0 {
-		absDir, err := filepath.Abs(logDir)
-		if err != nil {
-			return err
-		}
-		logOpts = append(logOpts, log.WithPath(filepath.Join(absDir, "storagenode.log")))
-	}
+	logOpts = append(logOpts, log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)))
 	logger, err := log.New(logOpts...)
 	if err != nil {
 		return err
