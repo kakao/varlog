@@ -194,7 +194,7 @@ func initTelemetry(ctx context.Context, c *cli.Context, snid types.StorageNodeID
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String("sn"),
 			semconv.ServiceNamespaceKey.String("varlog"),
-			semconv.ServiceInstanceIDKey.String(snid.String()),
+			semconv.ServiceInstanceIDKey.Int64(int64(snid)),
 		))
 	if err != nil {
 		return nil, nil, err
