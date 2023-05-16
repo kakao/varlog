@@ -636,6 +636,7 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 	}
 
 	report := rce.processReport(response)
+	defer report.Release()
 	if report.Len() > 0 {
 		if err := rce.helper.ProposeReport(rce.storageNodeID, report.UncommitReports); err != nil {
 			rce.reportCtx.setExpire()
@@ -646,10 +647,8 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 }
 
 func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse) *mrpb.StorageNodeUncommitReport {
-	report := &mrpb.StorageNodeUncommitReport{
-		StorageNodeID:   response.StorageNodeID,
-		UncommitReports: response.UncommitReports,
-	}
+	report := mrpb.NewStoragenodeUncommitReport(response.StorageNodeID)
+	report.UncommitReports = response.UncommitReports
 
 	if report.Len() == 0 {
 		return report
@@ -664,9 +663,9 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 		return report
 	}
 
-	diff := &mrpb.StorageNodeUncommitReport{
-		StorageNodeID: report.StorageNodeID,
-	}
+	diff := mrpb.NewStoragenodeUncommitReport(report.StorageNodeID)
+	diff.UncommitReports = make([]snpb.LogStreamUncommitReport, 0, len(report.UncommitReports))
+	defer report.Release()
 
 	i := 0
 	j := 0
@@ -919,7 +918,8 @@ func (rc *reportContext) saveReport(report *mrpb.StorageNodeUncommitReport) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	rc.report = report
+	rc.report = mrpb.NewStoragenodeUncommitReport(report.StorageNodeID)
+	rc.report.UncommitReports = report.UncommitReports
 }
 
 func (rc *reportContext) getReport() *mrpb.StorageNodeUncommitReport {
