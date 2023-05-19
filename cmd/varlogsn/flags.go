@@ -56,6 +56,16 @@ var (
 		Envs:    []string{"SERVER_MAX_MSG_SIZE", "SERVER_MAX_MESSAGE_SIZE"},
 		Usage:   "B, KiB, MiB, GiB",
 	}
+	flagServerInitialConnWindowSize = &cli.StringFlag{
+		Name:    "server-initial-conn-window-size",
+		EnvVars: []string{"SERVER_INITIAL_CONN_WINDOW_SIZE"},
+		Usage:   "Window size for a connection.",
+	}
+	flagServerInitialStreamWindowSize = &cli.StringFlag{
+		Name:    "server-initial-stream-window-size",
+		EnvVars: []string{"SERVER_INITIAL_STREAM_WINDOW_SIZE"},
+		Usage:   "Window size for stream.",
+	}
 	flagReplicationClientReadBufferSize = flags.FlagDesc{
 		Name:  "replication-client-read-buffer-size",
 		Envs:  []string{"REPLICATION_CLIENT_READ_BUFFER_SIZE"},

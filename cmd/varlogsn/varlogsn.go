@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/signal"
 	"strings"
@@ -117,7 +118,7 @@ func start(c *cli.Context) error {
 		return err
 	}
 
-	sn, err := storagenode.NewStorageNode(
+	snOpts := []storagenode.Option{
 		storagenode.WithClusterID(clusterID),
 		storagenode.WithStorageNodeID(storageNodeID),
 		storagenode.WithListenAddress(c.String(flagListen.Name)),
@@ -138,7 +139,23 @@ func start(c *cli.Context) error {
 		storagenode.WithMaxLogStreamReplicasCount(int32(c.Int(flagMaxLogStreamReplicasCount.Name))),
 		storagenode.WithDefaultStorageOptions(storageOpts...),
 		storagenode.WithLogger(logger),
-	)
+	}
+	if initialConnWindowSize := c.String(flagServerInitialConnWindowSize.Name); initialConnWindowSize != "" {
+		size, err := units.FromByteSizeString(initialConnWindowSize, 0, math.MaxInt32)
+		if err != nil {
+			return err
+		}
+		snOpts = append(snOpts, storagenode.WithGRPCServerInitialConnWindowSize(int32(size)))
+	}
+	if initialStreamWindowSize := c.String(flagServerInitialStreamWindowSize.Name); initialStreamWindowSize != "" {
+		size, err := units.FromByteSizeString(initialStreamWindowSize, 0, math.MaxInt32)
+		if err != nil {
+			return err
+		}
+		snOpts = append(snOpts, storagenode.WithGRPCServerInitialWindowSize(int32(size)))
+	}
+
+	sn, err := storagenode.NewStorageNode(snOpts...)
 	if err != nil {
 		return err
 	}
