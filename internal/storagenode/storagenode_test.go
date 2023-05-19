@@ -601,6 +601,67 @@ func TestStorageNode_Append(t *testing.T) {
 				}()
 			},
 		},
+		{
+			name: "AppendBatch",
+			testf: func(t *testing.T, addr string, lc *client.LogClient) {
+				lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				require.True(t, lastGLSN.Invalid())
+
+				TestUnsealLogStreamReplica(t, cid, snid, tpid, lsid, []varlogpb.LogStreamReplica{
+					{
+						StorageNode: varlogpb.StorageNode{
+							StorageNodeID: snid,
+							Address:       addr,
+						},
+						TopicLogStream: varlogpb.TopicLogStream{
+							TopicID:     tpid,
+							LogStreamID: lsid,
+						},
+					},
+				}, addr)
+
+				batch := [][]byte{[]byte("msg1"), []byte("msg2"), []byte("msg3")}
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					res, err := lc.Append(context.Background(), tpid, lsid, batch)
+					require.NoError(t, err)
+					require.Len(t, res, len(batch))
+					require.Empty(t, res[0].Error)
+					require.False(t, res[0].Meta.GLSN.Invalid())
+					require.NotEmpty(t, res[1].Error)
+					require.True(t, res[1].Meta.GLSN.Invalid())
+					require.NotEmpty(t, res[2].Error)
+					require.True(t, res[2].Meta.GLSN.Invalid())
+				}()
+
+				require.Eventually(t, func() bool {
+					reportcommitter.TestCommit(t, addr, snpb.CommitRequest{
+						StorageNodeID: snid,
+						CommitResult: snpb.LogStreamCommitResult{
+							TopicID:             tpid,
+							LogStreamID:         lsid,
+							CommittedLLSNOffset: 1,
+							CommittedGLSNOffset: 1,
+							CommittedGLSNLength: 1,
+							Version:             1,
+							HighWatermark:       1,
+						},
+					})
+					reports := reportcommitter.TestGetReport(t, addr)
+					require.Len(t, reports, 1)
+					return reports[0].Version == types.Version(1)
+				}, time.Second, 10*time.Millisecond)
+
+				lss, lastGLSN = TestSealLogStreamReplica(t, cid, snid, tpid, lsid, 1, addr)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				require.Equal(t, types.GLSN(1), lastGLSN)
+
+				wg.Wait()
+			},
+		},
 	}
 
 	for _, tc := range tcs {
