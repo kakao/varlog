@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gogo/status"
+	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/soheilhy/cmux"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.uber.org/multierr"
@@ -50,7 +51,7 @@ type StorageNode struct {
 
 	executors *executorsmap.ExecutorsMap
 
-	mu           sync.RWMutex
+	mu           *xsync.RBMutex
 	lis          net.Listener
 	server       *grpc.Server
 	healthServer *health.Server
@@ -71,6 +72,8 @@ type StorageNode struct {
 	limits struct {
 		logStreamReplicasCount atomic.Int32
 	}
+
+	wgAppenders sync.WaitGroup
 }
 
 func NewStorageNode(opts ...Option) (*StorageNode, error) {
@@ -137,6 +140,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		metrics:      metrics,
 		startTime:    time.Now().UTC(),
 	}
+	sn.mu = xsync.NewRBMutex()
 	if sn.ballastSize > 0 {
 		sn.ballast = make([]byte, sn.ballastSize)
 	}
@@ -254,13 +258,14 @@ func (sn *StorageNode) Close() (err error) {
 		return true
 	})
 	sn.server.Stop() // TODO: sn.server.GracefulStop() -> need not to use mutex
+	sn.wgAppenders.Wait()
 	sn.logger.Info("closed")
 	return err
 }
 
 func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
 		return nil, snerrors.ErrClosed
 	}
@@ -300,8 +305,8 @@ func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadata
 }
 
 func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, snPath string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
 		return snpb.LogStreamReplicaMetadataDescriptor{}, snerrors.ErrClosed
 	}
@@ -373,8 +378,8 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 }
 
 func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
 		return snerrors.ErrClosed
 	}
@@ -395,8 +400,8 @@ func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.Topi
 }
 
 func (sn *StorageNode) seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
 		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, snerrors.ErrClosed
 	}
@@ -410,8 +415,8 @@ func (sn *StorageNode) seal(ctx context.Context, tpid types.TopicID, lsid types.
 }
 
 func (sn *StorageNode) unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.LogStreamReplica) error {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
 		return snerrors.ErrClosed
 	}
@@ -425,8 +430,8 @@ func (sn *StorageNode) unseal(ctx context.Context, tpid types.TopicID, lsid type
 }
 
 func (sn *StorageNode) sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, dst varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
 		return nil, snerrors.ErrClosed
 	}
