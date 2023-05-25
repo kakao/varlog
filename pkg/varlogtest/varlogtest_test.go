@@ -21,6 +21,81 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
+func TestVarlotTest_LogStreamAppender(t *testing.T) {
+	const (
+		cid               = types.ClusterID(1)
+		numLogs           = 10
+		replicationFactor = 3
+	)
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, lsa varlog.LogStreamAppender)
+	}{
+		{
+			name: "Closed",
+			testf: func(t *testing.T, lsa varlog.LogStreamAppender) {
+				lsa.Close()
+				err := lsa.AppendBatch([][]byte{[]byte("foo")}, nil)
+				require.Equal(t, varlog.ErrClosed, err)
+			},
+		},
+		{
+			name: "AppendLogs",
+			testf: func(t *testing.T, lsa varlog.LogStreamAppender) {
+				cb := func(_ []varlogpb.LogEntryMeta, err error) {
+					assert.NoError(t, err)
+				}
+				for i := 0; i < numLogs; i++ {
+					err := lsa.AppendBatch([][]byte{[]byte("foo")}, cb)
+					require.NoError(t, err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			vt := varlogtest.New(cid, replicationFactor)
+			adm := vt.Admin()
+			vlg := vt.Log()
+			defer func() {
+				require.NoError(t, vlg.Close())
+				require.NoError(t, adm.Close())
+			}()
+
+			for i := 0; i < replicationFactor; i++ {
+				snid := types.StorageNodeID(i + 1)
+				addr := fmt.Sprintf("sn%03d", i+1)
+				snMetaDesc, err := adm.AddStorageNode(context.Background(), snid, addr)
+				require.NoError(t, err)
+				require.Equal(t, cid, snMetaDesc.ClusterID)
+				require.Empty(t, snMetaDesc.LogStreamReplicas)
+				require.Equal(t, varlogpb.StorageNodeStatusRunning, snMetaDesc.Status)
+				require.Equal(t, addr, snMetaDesc.StorageNode.Address)
+				require.NotEmpty(t, snMetaDesc.Storages)
+			}
+
+			td, err := adm.AddTopic(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, varlogpb.TopicStatusRunning, td.Status)
+
+			lsd, err := adm.AddLogStream(context.Background(), td.TopicID, nil)
+			require.NoError(t, err)
+			require.Equal(t, td.TopicID, lsd.TopicID)
+			require.Equal(t, varlogpb.LogStreamStatusRunning, lsd.Status)
+			require.Len(t, lsd.Replicas, replicationFactor)
+
+			lsa, err := vlg.NewLogStreamAppender(td.TopicID, lsd.LogStreamID)
+			require.NoError(t, err)
+			defer lsa.Close()
+
+			tc.testf(t, lsa)
+		})
+	}
+}
+
 func TestVarlogTest(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
