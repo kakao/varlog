@@ -60,6 +60,11 @@ var (
 		Name:  "print-json",
 		Usage: "Print json output if it is set",
 	}
+	flagPipelineSize = &cli.IntFlag{
+		Name:  "pipeline-size",
+		Usage: "Pipeline size, no pipelined requests if zero. Not support per-target pipeline size yet.",
+		Value: 0,
+	}
 )
 
 func newCommandTest() *cli.Command {
@@ -77,6 +82,7 @@ func newCommandTest() *cli.Command {
 			flagDuration,
 			flagReportInterval,
 			flagPrintJSON,
+			flagPipelineSize,
 		},
 		Action: runCommandTest,
 	}
@@ -109,6 +115,7 @@ func runCommandTest(c *cli.Context) error {
 				return fmt.Errorf("malformed target %s: invalid log stream %s", str, toks[1])
 			}
 		}
+		target.PipelineSize = c.Int(flagPipelineSize.Name)
 		targets[idx] = target
 	}
 
