@@ -42,9 +42,16 @@ func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.App
 	startTime := time.Now()
 	var preparationDuration time.Duration
 	dataBatchLen := len(dataBatch)
+
+	_, batchletLen := batchlet.SelectLengthClass(dataBatchLen)
+	batchletCount := dataBatchLen / batchletLen
+	if dataBatchLen%batchletLen > 0 {
+		batchletCount++
+	}
+
 	apc := appendContext{
-		sts:  make([]*sequenceTask, 0, dataBatchLen/batchlet.LengthClasses[0]),
-		wwgs: make([]*writeWaitGroup, 0, dataBatchLen/batchlet.LengthClasses[0]),
+		sts:  make([]*sequenceTask, 0, batchletCount),
+		wwgs: make([]*writeWaitGroup, 0, batchletCount),
 		awgs: make([]*appendWaitGroup, 0, dataBatchLen),
 	}
 
