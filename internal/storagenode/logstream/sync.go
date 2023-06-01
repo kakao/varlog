@@ -504,7 +504,9 @@ func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStr
 		if err != nil {
 			return err
 		}
-		lse.logger.Info("log stream: sync replicate: copy", zap.String("log entry", entry.String()))
+		if ce := lse.logger.Check(zap.DebugLevel, "log stream: sync replicate: copy"); ce != nil {
+			ce.Write(zap.String("log entry", entry.String()))
+		}
 		uncommittedLLSNBegin = entry.LLSN + 1
 		uncommittedGLSNBegin = entry.GLSN + 1
 		lem = &varlogpb.LogEntryMeta{
@@ -531,7 +533,9 @@ func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStr
 		if err != nil {
 			return err
 		}
-		lse.logger.Info("log stream: sync replicate: copy", zap.String("commit context", cc.String()))
+		if ce := lse.logger.Check(zap.DebugLevel, "log stream: sync replicate: copy"); ce != nil {
+			ce.Write(zap.String("commit context", cc.String()))
+		}
 
 		ver = cc.Version
 		hwm = cc.HighWatermark

@@ -344,10 +344,12 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamRepl
 }
 
 func (lse *Executor) resetInternalState(lastCommittedLLSN types.LLSN, discardCommitWaitTasks bool) {
-	lse.logger.Debug("resetting internal state",
-		zap.Int64("inflight", atomic.LoadInt64(&lse.inflight)),
-		zap.Int64("inflight_append", atomic.LoadInt64(&lse.inflightAppend)),
-	)
+	if ce := lse.logger.Check(zap.DebugLevel, "resetting internal state"); ce != nil {
+		ce.Write(
+			zap.Int64("inflight", atomic.LoadInt64(&lse.inflight)),
+			zap.Int64("inflight_append", atomic.LoadInt64(&lse.inflightAppend)),
+		)
+	}
 
 	// close replicClients in replica connector
 	lse.rcs.close()
@@ -406,7 +408,9 @@ func (lse *Executor) Report(_ context.Context) (report snpb.LogStreamUncommitRep
 	}
 	prevUncommittedLLSNEnd := lse.prevUncommittedLLSNEnd.Load()
 	if prevUncommittedLLSNEnd != uncommittedLLSNEnd {
-		lse.logger.Debug("log stream: report", zap.Any("report", report))
+		if ce := lse.logger.Check(zap.DebugLevel, "log stream: report"); ce != nil {
+			ce.Write(zap.Any("report", report))
+		}
 		lse.prevUncommittedLLSNEnd.Store(uncommittedLLSNEnd)
 	}
 
@@ -433,7 +437,9 @@ func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamComm
 	}
 
 	if types.Version(atomic.LoadUint64(&lse.prevCommitVersion)) != commitResult.Version {
-		lse.logger.Debug("commit", zap.String("commit_result", commitResult.String()))
+		if ce := lse.logger.Check(zap.DebugLevel, "commit"); ce != nil {
+			ce.Write(zap.String("commit_result", commitResult.String()))
+		}
 		atomic.StoreUint64(&lse.prevCommitVersion, uint64(commitResult.Version))
 	}
 

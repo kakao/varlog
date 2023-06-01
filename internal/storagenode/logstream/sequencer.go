@@ -47,10 +47,12 @@ func (sq *sequencer) send(ctx context.Context, st *sequenceTask) (err error) {
 		if err != nil {
 			inflight = atomic.AddInt64(&sq.inflight, -1)
 		}
-		sq.logger.Debug("sent seqeuencer a task",
-			zap.Int64("inflight", inflight),
-			zap.Error(err),
-		)
+		if ce := sq.logger.Check(zap.DebugLevel, "sent seqeuencer a task"); ce != nil {
+			ce.Write(
+				zap.Int64("inflight", inflight),
+				zap.Error(err),
+			)
+		}
 	}()
 
 	switch sq.lse.esm.load() {
@@ -103,7 +105,9 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 	for dataIdx := 0; dataIdx < len(st.awgs); dataIdx++ {
 		sq.llsn++
 		st.awgs[dataIdx].setLLSN(sq.llsn)
-		sq.logger.Debug("sequencer: issued llsn", zap.Uint64("llsn", uint64(sq.llsn)))
+		if ce := sq.logger.Check(zap.DebugLevel, "sequencer: issued llsn"); ce != nil {
+			ce.Write(zap.Uint64("llsn", uint64(sq.llsn)))
+		}
 		for replicaIdx := 0; replicaIdx < len(st.rts.tasks); replicaIdx++ {
 			// NOTE: Use "append" since the length of st.rts is not enough to use index. Its capacity is enough because it is created to be reused.
 			st.rts.tasks[replicaIdx].llsnList = append(st.rts.tasks[replicaIdx].llsnList, sq.llsn)
@@ -183,10 +187,12 @@ func (sq *sequencer) waitForDrainage(cause error, forceDrain bool) {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	sq.logger.Debug("draining sequencer tasks",
-		zap.Int64("inflight", atomic.LoadInt64(&sq.inflight)),
-		zap.Error(cause),
-	)
+	if ce := sq.logger.Check(zap.DebugLevel, "draining sequencer tasks"); ce != nil {
+		ce.Write(
+			zap.Int64("inflight", atomic.LoadInt64(&sq.inflight)),
+			zap.Error(cause),
+		)
+	}
 
 	for atomic.LoadInt64(&sq.inflight) > 0 {
 		if !forceDrain {

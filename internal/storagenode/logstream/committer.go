@@ -64,10 +64,12 @@ func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) (err
 		if err != nil {
 			inflight = atomic.AddInt64(&cm.inflightCommitWait, -int64(cnt))
 		}
-		cm.logger.Debug("send committer commit wait tasks",
-			zap.Int64("inflight", inflight),
-			zap.Error(err),
-		)
+		if ce := cm.logger.Check(zap.DebugLevel, "send committer commit wait tasks"); ce != nil {
+			ce.Write(
+				zap.Int64("inflight", inflight),
+				zap.Error(err),
+			)
+		}
 	}()
 
 	switch cm.lse.esm.load() {
@@ -143,17 +145,21 @@ func (cm *committer) commitLoopInternal(ctx context.Context, ct *commitTask) {
 	// TODO: Move these condition expressions to `internal/storagenode/logstream.(*committer).commit` method.
 	commitVersion, _, _, invalid := cm.lse.lsc.reportCommitBase()
 	if ct.stale(commitVersion) {
-		cm.logger.Debug("discard a stale commit message",
-			zap.Any("replica", commitVersion),
-			zap.Any("commit", ct.version),
-		)
+		if ce := cm.logger.Check(zap.DebugLevel, "discard a stale commit message"); ce != nil {
+			ce.Write(
+				zap.Any("replica", commitVersion),
+				zap.Any("commit", ct.version),
+			)
+		}
 		return
 	}
 	if invalid {
 		// Synchronization should fix this invalid replica status
 		// caused by the inconsistency between the commit context and
 		// the last log entry.
-		cm.logger.Debug("discard a commit message due to invalid replica status")
+		if ce := cm.logger.Check(zap.DebugLevel, "discard a commit message due to invalid replica status"); ce != nil {
+			ce.Write()
+		}
 		return
 	}
 
@@ -323,10 +329,12 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 
 // drainCommitWaitQ drains the commit wait tasks in commitWaitQ.
 func (cm *committer) drainCommitWaitQ(cause error) {
-	cm.logger.Debug("draining commit wait tasks",
-		zap.Int64("inflight", atomic.LoadInt64(&cm.inflightCommitWait)),
-		zap.Error(cause),
-	)
+	if ce := cm.logger.Check(zap.DebugLevel, "draining commit wait tasks"); ce != nil {
+		ce.Write(
+			zap.Int64("inflight", atomic.LoadInt64(&cm.inflightCommitWait)),
+			zap.Error(cause),
+		)
+	}
 
 	for atomic.LoadInt64(&cm.inflightCommitWait) > 0 {
 		cwt := cm.commitWaitQ.pop()
@@ -336,7 +344,9 @@ func (cm *committer) drainCommitWaitQ(cause error) {
 		cwt.awg.commitDone(cause)
 		cwt.release()
 		inflight := atomic.AddInt64(&cm.inflightCommitWait, -1)
-		cm.logger.Debug("discard a commit wait task", zap.Int64("inflight", inflight))
+		if ce := cm.logger.Check(zap.DebugLevel, "discard a commit wait task"); ce != nil {
+			ce.Write(zap.Int64("inflight", inflight))
+		}
 	}
 }
 
