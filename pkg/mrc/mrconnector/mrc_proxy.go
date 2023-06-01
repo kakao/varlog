@@ -21,7 +21,7 @@ type mrProxy struct {
 	cl     mrc.MetadataRepositoryClient
 	mcl    mrc.MetadataRepositoryManagementClient
 
-	inflight int64
+	inflight atomic.Int64
 	mu       sync.RWMutex
 	cond     *sync.Cond
 }
@@ -46,7 +46,7 @@ func (m *mrProxy) Close() error {
 
 	m.cond.L.Lock()
 	defer m.cond.L.Unlock()
-	for atomic.LoadInt64(&m.inflight) > 0 {
+	for m.inflight.Load() > 0 {
 		m.cond.Wait()
 	}
 	return multierr.Append(m.cl.Close(), m.mcl.Close())
@@ -55,11 +55,11 @@ func (m *mrProxy) Close() error {
 func (m *mrProxy) RegisterStorageNode(ctx context.Context, descriptor *varlogpb.StorageNodeDescriptor) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.RegisterStorageNode(ctx, descriptor)
 }
@@ -67,11 +67,11 @@ func (m *mrProxy) RegisterStorageNode(ctx context.Context, descriptor *varlogpb.
 func (m *mrProxy) UnregisterStorageNode(ctx context.Context, id types.StorageNodeID) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.UnregisterStorageNode(ctx, id)
 }
@@ -79,11 +79,11 @@ func (m *mrProxy) UnregisterStorageNode(ctx context.Context, id types.StorageNod
 func (m *mrProxy) RegisterTopic(ctx context.Context, id types.TopicID) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.RegisterTopic(ctx, id)
 }
@@ -91,11 +91,11 @@ func (m *mrProxy) RegisterTopic(ctx context.Context, id types.TopicID) error {
 func (m *mrProxy) UnregisterTopic(ctx context.Context, id types.TopicID) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.UnregisterTopic(ctx, id)
 }
@@ -103,11 +103,11 @@ func (m *mrProxy) UnregisterTopic(ctx context.Context, id types.TopicID) error {
 func (m *mrProxy) RegisterLogStream(ctx context.Context, descriptor *varlogpb.LogStreamDescriptor) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.RegisterLogStream(ctx, descriptor)
 }
@@ -115,11 +115,11 @@ func (m *mrProxy) RegisterLogStream(ctx context.Context, descriptor *varlogpb.Lo
 func (m *mrProxy) UnregisterLogStream(ctx context.Context, id types.LogStreamID) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.UnregisterLogStream(ctx, id)
 }
@@ -127,11 +127,11 @@ func (m *mrProxy) UnregisterLogStream(ctx context.Context, id types.LogStreamID)
 func (m *mrProxy) UpdateLogStream(ctx context.Context, descriptor *varlogpb.LogStreamDescriptor) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.UpdateLogStream(ctx, descriptor)
 }
@@ -139,11 +139,11 @@ func (m *mrProxy) UpdateLogStream(ctx context.Context, descriptor *varlogpb.LogS
 func (m *mrProxy) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.GetMetadata(ctx)
 }
@@ -151,11 +151,11 @@ func (m *mrProxy) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor
 func (m *mrProxy) Seal(ctx context.Context, id types.LogStreamID) (types.GLSN, error) {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.Seal(ctx, id)
 }
@@ -163,11 +163,11 @@ func (m *mrProxy) Seal(ctx context.Context, id types.LogStreamID) (types.GLSN, e
 func (m *mrProxy) Unseal(ctx context.Context, id types.LogStreamID) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.cl.Unseal(ctx, id)
 }
@@ -175,11 +175,11 @@ func (m *mrProxy) Unseal(ctx context.Context, id types.LogStreamID) error {
 func (m *mrProxy) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.mcl.AddPeer(ctx, clusterID, nodeID, url)
 }
@@ -187,11 +187,11 @@ func (m *mrProxy) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID
 func (m *mrProxy) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.mcl.RemovePeer(ctx, clusterID, nodeID)
 }
@@ -199,17 +199,17 @@ func (m *mrProxy) RemovePeer(ctx context.Context, clusterID types.ClusterID, nod
 func (m *mrProxy) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.GetClusterInfoResponse, error) {
 	m.mu.RLock()
 	defer func() {
-		atomic.AddInt64(&m.inflight, -1)
+		m.inflight.Add(-1)
 		m.mu.RUnlock()
 		m.cond.Signal()
 	}()
-	atomic.AddInt64(&m.inflight, 1)
+	m.inflight.Add(1)
 
 	return m.mcl.GetClusterInfo(ctx, clusterID)
 }
 
 func (m *mrProxy) String() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "proxy{nodeID:%d inflight:%d}", m.nodeID, atomic.LoadInt64(&m.inflight))
+	fmt.Fprintf(&sb, "proxy{nodeID:%d inflight:%d}", m.nodeID, m.inflight.Load())
 	return sb.String()
 }

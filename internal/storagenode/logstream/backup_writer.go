@@ -18,7 +18,7 @@ import (
 type backupWriter struct {
 	backupWriterConfig
 	queue    chan *backupWriteTask
-	inflight int64
+	inflight atomic.Int64
 	runner   *runner.Runner
 }
 
@@ -38,10 +38,10 @@ func newBackupWriter(cfg backupWriterConfig) (*backupWriter, error) {
 }
 
 func (bw *backupWriter) send(ctx context.Context, bwt *backupWriteTask) (err error) {
-	atomic.AddInt64(&bw.inflight, 1)
+	bw.inflight.Add(1)
 	defer func() {
 		if err != nil {
-			atomic.AddInt64(&bw.inflight, -1)
+			bw.inflight.Add(-1)
 		}
 	}()
 
@@ -80,12 +80,12 @@ func (bw *backupWriter) writeLoopInternal(_ context.Context, bwt *backupWriteTas
 	defer func() {
 		_ = wb.Close()
 		bwt.release()
-		atomic.AddInt64(&bw.inflight, -1)
+		bw.inflight.Add(-1)
 		if bw.lse.lsm == nil {
 			return
 		}
-		atomic.AddInt64(&bw.lse.lsm.WriterOperationDuration, time.Since(startTime).Microseconds())
-		atomic.AddInt64(&bw.lse.lsm.WriterOperations, 1)
+		bw.lse.lsm.WriterOperationDuration.Add(time.Since(startTime).Microseconds())
+		bw.lse.lsm.WriterOperations.Add(1)
 	}()
 
 	if err := wb.Apply(); err != nil {
@@ -116,7 +116,7 @@ func (bw *backupWriter) waitForDrainage(forceDrain bool) {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	for atomic.LoadInt64(&bw.inflight) > 0 {
+	for bw.inflight.Load() > 0 {
 		if !forceDrain {
 			<-timer.C
 			timer.Reset(tick)
@@ -128,7 +128,7 @@ func (bw *backupWriter) waitForDrainage(forceDrain bool) {
 			timer.Reset(tick)
 		case bt := <-bw.queue:
 			bt.release()
-			atomic.AddInt64(&bw.inflight, -1)
+			bw.inflight.Add(-1)
 		}
 	}
 }

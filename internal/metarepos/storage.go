@@ -113,7 +113,7 @@ type MetadataStorage struct {
 	leader uint64
 
 	// number of running async job
-	nrRunning           int64
+	nrRunning           atomic.Int64
 	nrUpdateSinceCommit uint64
 
 	lsMu sync.RWMutex // mutex for GlobalLogStream
@@ -202,7 +202,7 @@ Loop:
 				ms.createMetadataCache(r)
 			}
 
-			atomic.AddInt64(&ms.nrRunning, -1)
+			ms.nrRunning.Add(-1)
 		case <-ctx.Done():
 			break Loop
 		}
@@ -218,7 +218,7 @@ Loop:
 			}
 		}
 
-		atomic.AddInt64(&ms.nrRunning, -1)
+		ms.nrRunning.Add(-1)
 	}
 }
 
@@ -1849,7 +1849,7 @@ func (ms *MetadataStorage) trimLogStreamCommitHistory() {
 }
 
 func (ms *MetadataStorage) mergeStateMachine() {
-	if atomic.LoadInt64(&ms.nrRunning) != 0 {
+	if ms.nrRunning.Load() != 0 {
 		return
 	}
 
@@ -1891,7 +1891,7 @@ func (ms *MetadataStorage) triggerSnapshot(appliedIndex uint64) {
 		return
 	}
 
-	if !atomic.CompareAndSwapInt64(&ms.nrRunning, 0, 1) {
+	if !ms.nrRunning.CompareAndSwap(0, 1) {
 		// While other snapshots are running,
 		// there is no quarantee that an entry
 		// with appliedIndex has been applied to origStateMachine
@@ -1911,7 +1911,7 @@ func (ms *MetadataStorage) triggerMetadataCache(nodeIndex, requestIndex uint64) 
 		return
 	}
 
-	atomic.AddInt64(&ms.nrRunning, 1)
+	ms.nrRunning.Add(1)
 	ms.setCopyOnWrite()
 
 	job := &jobMetadataCache{

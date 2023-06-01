@@ -14,37 +14,37 @@ import (
 )
 
 type LogStreamMetrics struct {
-	AppendLogs             int64
-	AppendBytes            int64
-	AppendDuration         int64
-	AppendOperations       int64
-	AppendPreparationMicro int64
-	AppendBatchCommitGap   int64
+	AppendLogs             atomic.Int64
+	AppendBytes            atomic.Int64
+	AppendDuration         atomic.Int64
+	AppendOperations       atomic.Int64
+	AppendPreparationMicro atomic.Int64
+	AppendBatchCommitGap   atomic.Int64
 
-	SequencerOperationDuration  int64
-	SequencerFanoutDuration     int64
-	SequencerOperations         int64
-	SequencerInflightOperations int64
+	SequencerOperationDuration  atomic.Int64
+	SequencerFanoutDuration     atomic.Int64
+	SequencerOperations         atomic.Int64
+	SequencerInflightOperations atomic.Int64
 
-	WriterOperationDuration  int64
-	WriterOperations         int64
-	WriterInflightOperations int64
+	WriterOperationDuration  atomic.Int64
+	WriterOperations         atomic.Int64
+	WriterInflightOperations atomic.Int64
 
-	CommitterOperationDuration int64
-	CommitterOperations        int64
-	CommitterLogs              int64
+	CommitterOperationDuration atomic.Int64
+	CommitterOperations        atomic.Int64
+	CommitterLogs              atomic.Int64
 
-	ReplicateClientOperationDuration  int64
-	ReplicateClientOperations         int64
-	ReplicateClientInflightOperations int64
+	ReplicateClientOperationDuration  atomic.Int64
+	ReplicateClientOperations         atomic.Int64
+	ReplicateClientInflightOperations atomic.Int64
 
-	ReplicateServerOperations int64
+	ReplicateServerOperations atomic.Int64
 
-	ReplicateLogs             int64
-	ReplicateBytes            int64
-	ReplicateDuration         int64
-	ReplicateOperations       int64
-	ReplicatePreparationMicro int64
+	ReplicateLogs             atomic.Int64
+	ReplicateBytes            atomic.Int64
+	ReplicateDuration         atomic.Int64
+	ReplicateOperations       atomic.Int64
+	ReplicatePreparationMicro atomic.Int64
 }
 
 type Metrics struct {
@@ -106,37 +106,37 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 			}
 
 			result.Observe(attrs,
-				appendLogs.Observation(atomic.LoadInt64(&lsm.AppendLogs)),
-				appendBytes.Observation(atomic.LoadInt64(&lsm.AppendBytes)),
-				appendDuration.Observation(atomic.LoadInt64(&lsm.AppendDuration)),
-				appendOperations.Observation(atomic.LoadInt64(&lsm.AppendOperations)),
-				appendPreparationMicroseconds.Observation(atomic.LoadInt64(&lsm.AppendPreparationMicro)),
-				appendBatchCommitGap.Observation(atomic.LoadInt64(&lsm.AppendBatchCommitGap)),
+				appendLogs.Observation(lsm.AppendLogs.Load()),
+				appendBytes.Observation(lsm.AppendBytes.Load()),
+				appendDuration.Observation(lsm.AppendDuration.Load()),
+				appendOperations.Observation(lsm.AppendOperations.Load()),
+				appendPreparationMicroseconds.Observation(lsm.AppendPreparationMicro.Load()),
+				appendBatchCommitGap.Observation(lsm.AppendBatchCommitGap.Load()),
 
-				sequencerOperationDuration.Observation(atomic.LoadInt64(&lsm.SequencerOperationDuration)),
-				sequencerFanoutDuration.Observation(atomic.LoadInt64(&lsm.SequencerFanoutDuration)),
-				sequencerOperations.Observation(atomic.LoadInt64(&lsm.SequencerOperations)),
-				sequencerInflightOperations.Observation(atomic.LoadInt64(&lsm.SequencerInflightOperations)),
+				sequencerOperationDuration.Observation(lsm.SequencerOperationDuration.Load()),
+				sequencerFanoutDuration.Observation(lsm.SequencerFanoutDuration.Load()),
+				sequencerOperations.Observation(lsm.SequencerOperations.Load()),
+				sequencerInflightOperations.Observation(lsm.SequencerInflightOperations.Load()),
 
-				writerOperationDuration.Observation(atomic.LoadInt64(&lsm.WriterOperationDuration)),
-				writerOperations.Observation(atomic.LoadInt64(&lsm.WriterOperations)),
-				writerInflightOperations.Observation(atomic.LoadInt64(&lsm.WriterInflightOperations)),
+				writerOperationDuration.Observation(lsm.WriterOperationDuration.Load()),
+				writerOperations.Observation(lsm.WriterOperations.Load()),
+				writerInflightOperations.Observation(lsm.WriterInflightOperations.Load()),
 
-				committerOperationDuration.Observation(atomic.LoadInt64(&lsm.CommitterOperationDuration)),
-				committerOperations.Observation(atomic.LoadInt64(&lsm.CommitterOperations)),
-				committerLogs.Observation(atomic.LoadInt64(&lsm.CommitterLogs)),
+				committerOperationDuration.Observation(lsm.CommitterOperationDuration.Load()),
+				committerOperations.Observation(lsm.CommitterOperations.Load()),
+				committerLogs.Observation(lsm.CommitterLogs.Load()),
 
-				replicateClientOperationDuration.Observation(atomic.LoadInt64(&lsm.ReplicateClientOperationDuration)),
-				replicateClientOperations.Observation(atomic.LoadInt64(&lsm.ReplicateClientOperations)),
-				replicateClientInflightOperations.Observation(atomic.LoadInt64(&lsm.ReplicateClientInflightOperations)),
+				replicateClientOperationDuration.Observation(lsm.ReplicateClientOperationDuration.Load()),
+				replicateClientOperations.Observation(lsm.ReplicateClientOperations.Load()),
+				replicateClientInflightOperations.Observation(lsm.ReplicateClientInflightOperations.Load()),
 
-				replicateServerOperations.Observation(atomic.LoadInt64(&lsm.ReplicateServerOperations)),
+				replicateServerOperations.Observation(lsm.ReplicateServerOperations.Load()),
 
-				replicateLogs.Observation(atomic.LoadInt64(&lsm.ReplicateLogs)),
-				replicateBytes.Observation(atomic.LoadInt64(&lsm.ReplicateBytes)),
-				replicateDuration.Observation(atomic.LoadInt64(&lsm.ReplicateDuration)),
-				replicateOperations.Observation(atomic.LoadInt64(&lsm.ReplicateOperations)),
-				replicatePreparationMicroseconds.Observation(atomic.LoadInt64(&lsm.ReplicatePreparationMicro)),
+				replicateLogs.Observation(lsm.ReplicateLogs.Load()),
+				replicateBytes.Observation(lsm.ReplicateBytes.Load()),
+				replicateDuration.Observation(lsm.ReplicateDuration.Load()),
+				replicateOperations.Observation(lsm.ReplicateOperations.Load()),
+				replicatePreparationMicroseconds.Observation(lsm.ReplicatePreparationMicro.Load()),
 			)
 
 			return true

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -165,7 +164,7 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *rep
 				}
 			}
 
-			atomic.AddInt64(&lse.Metrics().ReplicateServerOperations, 1)
+			lse.Metrics().ReplicateServerOperations.Add(1)
 
 			err = lse.Replicate(ctx, rst.req.LLSN, rst.req.Data)
 			if err != nil {

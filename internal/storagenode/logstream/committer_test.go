@@ -5,7 +5,6 @@ import (
 	"errors"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -147,10 +146,10 @@ func TestCommitter_DrainCommitWaitQ(t *testing.T) {
 	err := cm.sendCommitWaitTask(context.Background(), cwts)
 	assert.NoError(t, err)
 
-	assert.EqualValues(t, 1, atomic.LoadInt64(&cm.inflightCommitWait))
+	assert.EqualValues(t, 1, cm.inflightCommitWait.Load())
 	assert.EqualValues(t, 1, cm.commitWaitQ.size())
 
 	cm.drainCommitWaitQ(errors.New("drain"))
-	assert.Zero(t, atomic.LoadInt64(&cm.inflightCommitWait))
+	assert.Zero(t, cm.inflightCommitWait.Load())
 	assert.Zero(t, cm.commitWaitQ.size())
 }

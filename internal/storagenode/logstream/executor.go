@@ -40,8 +40,8 @@ type Executor struct {
 	cm      *committer
 	bw      *backupWriter
 
-	inflight       int64
-	inflightAppend int64
+	inflight       atomic.Int64
+	inflightAppend atomic.Int64
 
 	// FIXME: move to lsc
 	globalLowWatermark struct {
@@ -153,8 +153,8 @@ func NewExecutor(opts ...ExecutorOption) (lse *Executor, err error) {
 }
 
 func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataList [][]byte) error {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	switch lse.esm.load() {
 	case executorStateSealing, executorStateSealed, executorStateLearning:
@@ -175,11 +175,11 @@ func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataL
 		if lse.lsm == nil {
 			return
 		}
-		atomic.AddInt64(&lse.lsm.ReplicateLogs, int64(batchSize))
-		atomic.AddInt64(&lse.lsm.ReplicateBytes, dataBytes)
-		atomic.AddInt64(&lse.lsm.ReplicateDuration, time.Since(startTime).Microseconds())
-		atomic.AddInt64(&lse.lsm.ReplicateOperations, 1)
-		atomic.AddInt64(&lse.lsm.ReplicatePreparationMicro, preparationDuration.Microseconds())
+		lse.lsm.ReplicateLogs.Add(int64(batchSize))
+		lse.lsm.ReplicateBytes.Add(dataBytes)
+		lse.lsm.ReplicateDuration.Add(time.Since(startTime).Microseconds())
+		lse.lsm.ReplicateOperations.Add(1)
+		lse.lsm.ReplicatePreparationMicro.Add(preparationDuration.Microseconds())
 	}()
 
 	oldLLSN, newLLSN := llsnList[0], llsnList[batchSize-1]+1
@@ -222,8 +222,8 @@ func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataL
 //
 // FIXME: No need to return localHWM.
 func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (status varlogpb.LogStreamStatus, localHWM types.GLSN, err error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()
@@ -280,8 +280,8 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 }
 
 func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamReplica) (err error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()
@@ -346,8 +346,8 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamRepl
 func (lse *Executor) resetInternalState(lastCommittedLLSN types.LLSN, discardCommitWaitTasks bool) {
 	if ce := lse.logger.Check(zap.DebugLevel, "resetting internal state"); ce != nil {
 		ce.Write(
-			zap.Int64("inflight", atomic.LoadInt64(&lse.inflight)),
-			zap.Int64("inflight_append", atomic.LoadInt64(&lse.inflightAppend)),
+			zap.Int64("inflight", lse.inflight.Load()),
+			zap.Int64("inflight_append", lse.inflightAppend.Load()),
 		)
 	}
 
@@ -379,8 +379,8 @@ func (lse *Executor) resetInternalState(lastCommittedLLSN types.LLSN, discardCom
 }
 
 func (lse *Executor) Report(_ context.Context) (report snpb.LogStreamUncommitReport, err error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	if lse.esm.load() == executorStateClosed {
 		return snpb.LogStreamUncommitReport{}, verrors.ErrClosed
@@ -421,8 +421,8 @@ func (lse *Executor) Report(_ context.Context) (report snpb.LogStreamUncommitRep
 }
 
 func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamCommitResult) error {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	if lse.esm.load() == executorStateClosed {
 		return verrors.ErrClosed
@@ -457,8 +457,8 @@ func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamComm
 }
 
 func (lse *Executor) Metadata() (snpb.LogStreamReplicaMetadataDescriptor, error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	ret, err, _ := lse.sf.Do(singleflightKeyMetadata, func() (interface{}, error) {
 		state := lse.esm.load()
@@ -514,8 +514,8 @@ func (lse *Executor) metadataDescriptor(state executorState) snpb.LogStreamRepli
 }
 
 func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()
@@ -621,7 +621,7 @@ func (lse *Executor) waitForDrainage() {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	for atomic.LoadInt64(&lse.inflight) > 0 {
+	for lse.inflight.Load() > 0 {
 		<-timer.C
 		timer.Reset(tick)
 	}
