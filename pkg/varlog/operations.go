@@ -102,13 +102,7 @@ func (v *logImpl) appendTo(ctx context.Context, tpid types.TopicID, lsid types.L
 		return nil, fmt.Errorf("append: %w", err)
 	}
 
-	backup := make([]varlogpb.StorageNode, len(replicas)-1)
-	for i := 0; i < len(replicas)-1; i++ {
-		backup[i].StorageNodeID = replicas[i+1].StorageNodeID
-		backup[i].Address = replicas[i+1].Address
-	}
-
-	res, err := cl.Append(ctx, tpid, lsid, data, backup...)
+	res, err := cl.Append(ctx, tpid, lsid, data)
 	if err != nil {
 		if strings.Contains(err.Error(), "sealed") {
 			err = fmt.Errorf("append: %s: %w", err.Error(), verrors.ErrSealed)

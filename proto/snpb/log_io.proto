@@ -29,7 +29,6 @@ message AppendRequest {
     (gogoproto.customname) = "LogStreamID"
   ];
   repeated bytes payload = 3;
-  repeated varlogpb.StorageNode backups = 4 [(gogoproto.nullable) = false];
 }
 
 message AppendResult {
