@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.13.0](https://github.com/kakao/varlog/compare/v0.12.0...v0.13.0) (2023-06-01)
+
+
+### Features
+
+* **admin:** add a new flag `replica-selector` to the varlogadm ([805f8de](https://github.com/kakao/varlog/commit/805f8de5ad7f20cf3153c81afd04a41fe70ff67c)), closes [#393](https://github.com/kakao/varlog/issues/393)
+* **all:** add flags for logger ([7efe407](https://github.com/kakao/varlog/commit/7efe407f2e85d2ac6271873d7424ec0f5d28e857)), closes [#439](https://github.com/kakao/varlog/issues/439)
+* **all:** add flags for logger ([#447](https://github.com/kakao/varlog/issues/447)) ([f2e1193](https://github.com/kakao/varlog/commit/f2e1193d453a5f724d85e4d3c8aa3ad1aa3287d8)), closes [#439](https://github.com/kakao/varlog/issues/439)
+* **storage:** separate storage databases experimentally ([b3845f5](https://github.com/kakao/varlog/commit/b3845f568fb6f39b284d38935e991f8d5df3c4ac))
+* **storage:** separate storage databases experimentally ([#410](https://github.com/kakao/varlog/issues/410)) ([9f64785](https://github.com/kakao/varlog/commit/9f64785de64b4bdc8ecb67ee746bdd36cfbf52e3))
+
+
+### Bug Fixes
+
+* **metarepos:** new topic should start from MinGLSN ([d1ae8c8](https://github.com/kakao/varlog/commit/d1ae8c808f69a7c2c4b425c1dc98ceffc153ffd6))
+
+
+### Performance Improvements
+
+* **metarepos:** add mrpb.StorageNodeUncommitReport pool ([4c624da](https://github.com/kakao/varlog/commit/4c624dabce5ec063c797df92ed44930178b67d2b))
+* **metarepos:** add mrpb.StorageNodeUncommitReport pool ([#446](https://github.com/kakao/varlog/issues/446)) ([60f2cfe](https://github.com/kakao/varlog/commit/60f2cfe96d4cc574ab933358217811635f3649be))
+* **storagenode:** check log level ([39cdbae](https://github.com/kakao/varlog/commit/39cdbaeb1b2b8412af6f8b80853d6fe67f45f887))
+* **storagenode:** check log level ([#411](https://github.com/kakao/varlog/issues/411)) ([da1409d](https://github.com/kakao/varlog/commit/da1409d1d555351eca099bbf1c507d2c2b0d583a))
+* **storagenode:** estimate the number of batchlets ([3c91b62](https://github.com/kakao/varlog/commit/3c91b6214a058fa5850885d13f550a23c2ddde8c))
+* **storagenode:** estimate the number of batchlets ([#414](https://github.com/kakao/varlog/issues/414)) ([cb25d19](https://github.com/kakao/varlog/commit/cb25d195cbac2a25c58c0ccb0d5aa34d383241f3))
+* **storagenode:** remove backup from append request ([f75ef55](https://github.com/kakao/varlog/commit/f75ef55b2dcf5098b35750660691c9893a088446))
+* **storagenode:** remove backup from append request ([#412](https://github.com/kakao/varlog/issues/412)) ([0abcb1a](https://github.com/kakao/varlog/commit/0abcb1a029036f20d59b2c5038b68632a4ecdbf8))
+* **storagenode:** wrap replicateTask slice with struct ([37250e1](https://github.com/kakao/varlog/commit/37250e1670831baa7d472e3c4832c4f21701944c)), closes [#75](https://github.com/kakao/varlog/issues/75)
+* **storagenode:** wrap replicateTask slice with struct ([#416](https://github.com/kakao/varlog/issues/416)) ([911b5fe](https://github.com/kakao/varlog/commit/911b5fe7d298aaa5a4ca74b9501a2778b49f4c77)), closes [#75](https://github.com/kakao/varlog/issues/75)
+
 ## [0.12.0](https://github.com/kakao/varlog/compare/v0.11.0...v0.12.0) (2023-04-06)
 
 
