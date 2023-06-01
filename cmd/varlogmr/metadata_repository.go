@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/urfave/cli/v2"
 	_ "go.uber.org/automaxprocs"
+	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/metarepos"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
@@ -24,16 +25,14 @@ func main() {
 }
 
 func start(c *cli.Context) error {
-	logDir, err := filepath.Abs(c.String(flagLogDir.Name))
+	logOpts, err := flags.ParseLoggerFlags(c, "varlogmr.log")
 	if err != nil {
-		return fmt.Errorf("could not create abs path: %w", err)
+		return err
 	}
-	logger, err := log.New(
-		log.WithoutLogToStderr(),
-		log.WithPath(fmt.Sprintf("%s/log.txt", logDir)),
-	)
+	logOpts = append(logOpts, log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)))
+	logger, err := log.New(logOpts...)
 	if err != nil {
-		return fmt.Errorf("could not create logger: %w", err)
+		return err
 	}
 	defer func() {
 		_ = logger.Sync()
@@ -125,7 +124,19 @@ func initCLI() *cli.App {
 				flagMaxLogStreamsCountPerTopic,
 				flagTelemetryCollectorName.StringFlag(false, metarepos.DefaultTelemetryCollectorName),
 				flagTelemetryCollectorEndpoint.StringFlag(false, metarepos.DefaultTelmetryCollectorEndpoint),
-				flagLogDir.StringFlag(false, metarepos.DefaultLogDir),
+
+				//flagLogDir.StringFlag(false, metarepos.DefaultLogDir),
+
+				// logger options
+				flags.LogDir,
+				flags.LogToStderr,
+				flags.LogFileMaxSizeMB,
+				flags.LogFileMaxBackups,
+				flags.LogFileRetentionDays,
+				flags.LogFileNameUTC,
+				flags.LogFileCompression,
+				flags.LogHumanReadable,
+				flags.LogLevel,
 			},
 		}},
 	}

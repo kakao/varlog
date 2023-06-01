@@ -5,6 +5,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/types"
@@ -72,11 +73,16 @@ func newStartCommand() *cli.Command {
 			flagStorageMetricsLogInterval,
 			flagStorageVerbose.BoolFlag(),
 
-			flagLogDir.StringFlag(false, ""),
-			flagLogToStderr.BoolFlag(),
-			flagLogFileRetentionDays.IntFlag(false, 0),
-			flagLogFileCompression.BoolFlag(),
-			flagLogLevel.StringFlag(false, "info"),
+			// logger options
+			flags.LogDir,
+			flags.LogToStderr,
+			flags.LogFileMaxSizeMB,
+			flags.LogFileMaxBackups,
+			flags.LogFileRetentionDays,
+			flags.LogFileNameUTC,
+			flags.LogFileCompression,
+			flags.LogHumanReadable,
+			flags.LogLevel,
 
 			flagExporterType.StringFlag(false, "noop"),
 			flagExporterStopTimeout.DurationFlag(false, 5*time.Second),

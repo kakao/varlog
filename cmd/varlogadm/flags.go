@@ -72,30 +72,4 @@ var (
 		Name: "sn-watcher-report-deadline",
 		Envs: []string{"SN_WATCHER_REPORT_DEADLINE"},
 	}
-
-	flagLogDir = flags.FlagDesc{
-		Name:    "logdir",
-		Aliases: []string{"log-dir"},
-		Envs:    []string{"LOG_DIR", "LOGDIR"},
-	}
-	flagLogToStderr = flags.FlagDesc{
-		Name:    "logtostderr",
-		Aliases: []string{"log-to-stderr"},
-		Envs:    []string{"LOGTOSTDERR", "LOG_TO_STDERR"},
-	}
-	flagLogFileRetentionDays = flags.FlagDesc{
-		Name:    "logfile-retention-days",
-		Aliases: []string{"log-file-retention-days"},
-		Envs:    []string{"LOGFILE_RETENTION_DAYS", "LOG_FILE_RETENTION_DAYS"},
-	}
-	flagLogFileCompression = flags.FlagDesc{
-		Name:    "logfile-compression",
-		Aliases: []string{"log-file-compression"},
-		Envs:    []string{"LOGFILE_COMPRESSION", "LOG_FILE_COMPRESSION"},
-	}
-	flagLogLevel = flags.FlagDesc{
-		Name:    "loglevel",
-		Aliases: []string{"log-level"},
-		Envs:    []string{"LOGLEVEL", "LOG_LEVEL"},
-	}
 )
