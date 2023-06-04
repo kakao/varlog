@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/kakao/varlog/internal/batchlet"
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -155,16 +157,24 @@ func (lse *Executor) waitForCompletionOfAppends(ctx context.Context, dataBatchLe
 	result := make([]snpb.AppendResult, dataBatchLen)
 	for i := range awgs {
 		cerr := awgs[i].wait(ctx)
-		if err == nil && cerr != nil {
-			err = cerr
+		if cerr != nil {
+			result[i].Error = cerr.Error()
+			if err == nil {
+				err = cerr
+			}
+			continue
 		}
-		if cerr == nil {
-			result[i].Meta.TopicID = lse.tpid
-			result[i].Meta.LogStreamID = lse.lsid
-			result[i].Meta.GLSN = awgs[i].glsn
-			result[i].Meta.LLSN = awgs[i].llsn
-			awgs[i].release()
+		if err != nil {
+			lse.logger.Panic("Results of batch requests of Append RPC must not be interleaved with success and failure", zap.Error(err))
 		}
+		result[i].Meta.TopicID = lse.tpid
+		result[i].Meta.LogStreamID = lse.lsid
+		result[i].Meta.GLSN = awgs[i].glsn
+		result[i].Meta.LLSN = awgs[i].llsn
+		awgs[i].release()
 	}
-	return result, err
+	if result[0].Meta.GLSN.Invalid() {
+		return nil, err
+	}
+	return result, nil
 }
