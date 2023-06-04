@@ -30,6 +30,7 @@ type storageNode struct {
 	llsn       types.LLSN
 	logEntries map[types.GLSN][]byte
 	glsnToLLSN map[types.GLSN]types.LLSN
+	appendReq  *snpb.AppendRequest
 	mu         sync.Mutex
 }
 
@@ -46,16 +47,19 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 	mockClient := mock.NewMockLogIOClient(ctrl)
 
 	// Append
-	mockClient.EXPECT().Append(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
-	).DoAndReturn(func(ctx context.Context, req *snpb.AppendRequest, opts ...grpc.CallOption) (*snpb.AppendResponse, error) {
+	mockAppendClient := mock.NewMockLogIO_AppendClient(ctrl)
+	mockAppendClient.EXPECT().Send(gomock.Any()).DoAndReturn(func(req *snpb.AppendRequest) error {
+		sn.mu.Lock()
+		defer sn.mu.Unlock()
+		sn.appendReq = req
+		return nil
+	}).AnyTimes()
+	mockAppendClient.EXPECT().Recv().DoAndReturn(func() (*snpb.AppendResponse, error) {
 		sn.mu.Lock()
 		defer sn.mu.Unlock()
 
 		rsp := &snpb.AppendResponse{}
-		for _, buf := range req.GetPayload() {
+		for _, buf := range sn.appendReq.GetPayload() {
 			sn.logEntries[sn.glsn] = buf
 			sn.glsnToLLSN[sn.glsn] = sn.llsn
 			rsp.Results = append(rsp.Results, snpb.AppendResult{
@@ -71,6 +75,8 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 		}
 		return rsp, nil
 	}).AnyTimes()
+	mockAppendClient.EXPECT().CloseSend().Return(nil).AnyTimes()
+	mockClient.EXPECT().Append(gomock.Any(), gomock.Any()).Return(mockAppendClient, nil).AnyTimes()
 
 	// Read
 	mockClient.EXPECT().Read(

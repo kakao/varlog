@@ -42,14 +42,30 @@ func (c *LogClient) reset(rpcConn *rpc.Conn, _ types.ClusterID, target varlogpb.
 // The backup indicates the storage nodes that have backup replicas of that log stream.
 // It returns valid GLSN if the append completes successfully.
 func (c *LogClient) Append(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, data [][]byte) ([]snpb.AppendResult, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	stream, err := c.rpcClient.Append(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = stream.CloseSend()
+	}()
+
 	req := &snpb.AppendRequest{
 		TopicID:     tpid,
 		LogStreamID: lsid,
 		Payload:     data,
 	}
-	rsp, err := c.rpcClient.Append(ctx, req)
+	err = stream.Send(req)
 	if err != nil {
-		return nil, fmt.Errorf("logclient: %w", verrors.FromStatusError(err))
+		return nil, err
+	}
+
+	rsp, err := stream.Recv()
+	if err != nil {
+		return nil, err
 	}
 	return rsp.Results, nil
 }

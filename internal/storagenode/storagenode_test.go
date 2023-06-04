@@ -456,61 +456,45 @@ func TestStorageNode_Append(t *testing.T) {
 
 	tcs := []struct {
 		name  string
-		testf func(t *testing.T, addr string, lc snpb.LogIOClient)
+		testf func(t *testing.T, addr string, lc *client.LogClient)
 	}{
 		{
 			name: "InvalidTopicID",
-			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+			testf: func(t *testing.T, _ string, lc *client.LogClient) {
 				const invalidTopicID = types.TopicID(0)
-				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
-					TopicID:     invalidTopicID,
-					LogStreamID: lsid,
-					Payload:     payload,
-				})
+				_, err := lc.Append(context.Background(), invalidTopicID, lsid, payload)
 				require.Error(t, err)
 				require.Equal(t, codes.InvalidArgument, status.Code(err))
 			},
 		},
 		{
 			name: "InvalidLogStreamID",
-			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
+			testf: func(t *testing.T, _ string, lc *client.LogClient) {
 				const invalidLogStreamID = types.LogStreamID(0)
-				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
-					TopicID:     tpid,
-					LogStreamID: invalidLogStreamID,
-					Payload:     payload,
-				})
+				_, err := lc.Append(context.Background(), tpid, invalidLogStreamID, payload)
 				require.Error(t, err)
 				require.Equal(t, codes.InvalidArgument, status.Code(err))
 			},
 		},
 		{
 			name: "NoSuchTopic",
-			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
-				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
-					TopicID:     tpid + 1,
-					LogStreamID: lsid,
-					Payload:     payload,
-				})
+			testf: func(t *testing.T, _ string, lc *client.LogClient) {
+				_, err := lc.Append(context.Background(), tpid+1, lsid, payload)
 				require.Error(t, err)
 				require.Equal(t, codes.NotFound, status.Code(err))
 			},
 		},
 		{
 			name: "NoSuchLogStream",
-			testf: func(t *testing.T, _ string, lc snpb.LogIOClient) {
-				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
-					TopicID:     tpid,
-					LogStreamID: lsid + 1,
-					Payload:     payload,
-				})
+			testf: func(t *testing.T, _ string, lc *client.LogClient) {
+				_, err := lc.Append(context.Background(), tpid, lsid+1, payload)
 				require.Error(t, err)
 				require.Equal(t, codes.NotFound, status.Code(err))
 			},
 		},
 		{
 			name: "NotPrimary",
-			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+			testf: func(t *testing.T, addr string, lc *client.LogClient) {
 				lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
 				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 				require.True(t, lastGLSN.Invalid())
@@ -538,34 +522,26 @@ func TestStorageNode_Append(t *testing.T) {
 					},
 				}, addr)
 
-				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
-					TopicID:     tpid,
-					LogStreamID: lsid,
-					Payload:     payload,
-				})
+				_, err := lc.Append(context.Background(), tpid, lsid, payload)
 				require.Error(t, err)
 				require.Equal(t, codes.Unavailable, status.Code(err))
 			},
 		},
 		{
 			name: "Sealed",
-			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+			testf: func(t *testing.T, addr string, lc *client.LogClient) {
 				lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
 				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 				require.True(t, lastGLSN.Invalid())
 
-				_, err := lc.Append(context.Background(), &snpb.AppendRequest{
-					TopicID:     tpid,
-					LogStreamID: lsid,
-					Payload:     payload,
-				})
+				_, err := lc.Append(context.Background(), tpid, lsid, payload)
 				require.Error(t, err)
 				require.Equal(t, codes.FailedPrecondition, status.Code(err))
 			},
 		},
 		{
 			name: "DeadlineExceeded",
-			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+			testf: func(t *testing.T, addr string, lc *client.LogClient) {
 				lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
 				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 				require.True(t, lastGLSN.Invalid())
@@ -585,18 +561,14 @@ func TestStorageNode_Append(t *testing.T) {
 
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 				defer cancel()
-				_, err := lc.Append(ctx, &snpb.AppendRequest{
-					TopicID:     tpid,
-					LogStreamID: lsid,
-					Payload:     payload,
-				})
+				_, err := lc.Append(ctx, tpid, lsid, payload)
 				require.Error(t, err)
 				require.Equal(t, codes.DeadlineExceeded, status.Code(err))
 			},
 		},
 		{
 			name: "Canceled",
-			testf: func(t *testing.T, addr string, lc snpb.LogIOClient) {
+			testf: func(t *testing.T, addr string, lc *client.LogClient) {
 				lss, lastGLSN := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.InvalidGLSN, addr)
 				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 				require.True(t, lastGLSN.Invalid())
@@ -623,11 +595,7 @@ func TestStorageNode_Append(t *testing.T) {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					_, err := lc.Append(ctx, &snpb.AppendRequest{
-						TopicID:     tpid,
-						LogStreamID: lsid,
-						Payload:     payload,
-					})
+					_, err := lc.Append(ctx, tpid, lsid, payload)
 					assert.Error(t, err)
 					assert.Equal(t, codes.Canceled, status.Code(err))
 				}()
@@ -663,8 +631,12 @@ func TestStorageNode_Append(t *testing.T) {
 			defer func() {
 				require.NoError(t, rpcConn.Close())
 			}()
-			lc := snpb.NewLogIOClient(rpcConn.Conn)
-
+			lc := client.TestNewLogClient(t, snpb.NewLogIOClient(rpcConn.Conn),
+				varlogpb.StorageNode{
+					StorageNodeID: snid,
+					Address:       addr,
+				},
+			)
 			tc.testf(t, addr, lc)
 		})
 	}
