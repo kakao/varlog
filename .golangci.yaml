@@ -25,9 +25,11 @@ linters:
 
 linters-settings:
   depguard:
-    list-type: denylist
-    packages:
-      - golang.org/x/net/context
+    rules:
+      main:
+        deny:
+          - pkg: golang.org/x/net/context
+            desc: Should be replaced by standard lib context package
   godot:
     exclude:
       - "^ TODO"
