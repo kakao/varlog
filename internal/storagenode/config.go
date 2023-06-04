@@ -33,6 +33,14 @@ type config struct {
 	grpcServerReadBufferSize        int64
 	grpcServerWriteBufferSize       int64
 	grpcServerMaxRecvMsgSize        int64
+	grpcServerInitialConnWindowSize struct {
+		value int32
+		set   bool
+	}
+	grpcServerInitialWindowSize struct {
+		value int32
+		set   bool
+	}
 	replicateClientReadBufferSize   int64
 	replicateClientWriteBufferSize  int64
 	maxLogStreamReplicasCount       int32
@@ -165,6 +173,20 @@ func WithGRPCServerWriteBufferSize(grpcServerWriteBufferSize int64) Option {
 func WithGRPCServerMaxRecvMsgSize(grpcServerMaxRecvMsgSize int64) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.grpcServerMaxRecvMsgSize = grpcServerMaxRecvMsgSize
+	})
+}
+
+func WithGRPCServerInitialConnWindowSize(grpcServerInitialConnWindowSize int32) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.grpcServerInitialConnWindowSize.value = grpcServerInitialConnWindowSize
+		cfg.grpcServerInitialConnWindowSize.set = true
+	})
+}
+
+func WithGRPCServerInitialWindowSize(grpcServerInitialWindowSize int32) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.grpcServerInitialWindowSize.value = grpcServerInitialWindowSize
+		cfg.grpcServerInitialWindowSize.set = true
 	})
 }
 

@@ -98,7 +98,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 	}
 	dataDirs = filterValidDataDirectories(dataDirs, cfg.cid, cfg.snid, cfg.logger)
 
-	grpcServer := grpc.NewServer(
+	grpcServerOpts := []grpc.ServerOption{
 		grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
 		grpc.WriteBufferSize(int(cfg.grpcServerWriteBufferSize)),
 		grpc.MaxRecvMsgSize(int(cfg.grpcServerMaxRecvMsgSize)),
@@ -118,12 +118,18 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 				return resp, err
 			},
 		),
-	)
+	}
+	if opt := cfg.grpcServerInitialConnWindowSize; opt.set {
+		grpcServerOpts = append(grpcServerOpts, grpc.InitialConnWindowSize(opt.value))
+	}
+	if opt := cfg.grpcServerInitialWindowSize; opt.set {
+		grpcServerOpts = append(grpcServerOpts, grpc.InitialWindowSize(opt.value))
+	}
 
 	sn := &StorageNode{
 		config:       cfg,
 		executors:    executorsmap.New(hintNumExecutors),
-		server:       grpcServer,
+		server:       grpc.NewServer(grpcServerOpts...),
 		healthServer: health.NewServer(),
 		closedC:      make(chan struct{}),
 		snPaths:      snPaths,
@@ -198,6 +204,8 @@ func (sn *StorageNode) Serve() error {
 		zap.Int64("grpcServerReadBufferSize", sn.grpcServerReadBufferSize),
 		zap.Int64("grpcServerWriteBufferSize", sn.grpcServerWriteBufferSize),
 		zap.Int64("grpcServerMaxRecvMsgSize", sn.grpcServerMaxRecvMsgSize),
+		zap.Int32("grpcServerInitialConnWindowSize", sn.grpcServerInitialConnWindowSize.value),
+		zap.Int32("grpcServerInitialStreamWindowSize", sn.grpcServerInitialWindowSize.value),
 		zap.Int64("grpcReplicateClientReadBufferSize", sn.replicateClientReadBufferSize),
 		zap.Int64("grpcReplicateClientWriteBufferSize", sn.replicateClientWriteBufferSize),
 	)

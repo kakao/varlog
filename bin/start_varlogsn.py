@@ -179,6 +179,12 @@ def start(args: argparse.Namespace) -> None:
             if args.server_write_buffer_size:
                 cmd.append(
                     f"--server-write-buffer-size={args.server_write_buffer_size}")
+            if args.server_initial_conn_window_size:
+                cmd.append(
+                        f"--server-initial-conn-window-size={args.server_initial_conn_window_size}")
+            if args.server_initial_stream_window_size:
+                cmd.append(
+                        f"--server-initial-stream-window-size={args.server_initial_stream_window_size}")
             if args.replication_client_read_buffer_size:
                 cmd.append(
                     f"--replication-client-read-buffer-size={args.replication_client_read_buffer_size}")
@@ -266,6 +272,8 @@ def main() -> None:
     # grpc options
     parser.add_argument("--server-read-buffer-size", type=str)
     parser.add_argument("--server-write-buffer-size", type=str)
+    parser.add_argument("--server-initial-conn-window-size", type=str)
+    parser.add_argument("--server-initial-stream-window-size", type=str)
     parser.add_argument("--replication-client-read-buffer-size", type=str)
     parser.add_argument("--replication-client-write-buffer-size", type=str)
 
