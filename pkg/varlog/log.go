@@ -42,6 +42,9 @@ type Log interface {
 	// replica. If none of the replicas' statuses is either appendable or
 	// sealed, it returns an error.
 	PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error)
+
+	// NewLogStreamAppender returns a new LogStreamAppender.
+	NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, opts ...LogStreamAppenderOption) (LogStreamAppender, error)
 }
 
 type AppendResult struct {
@@ -175,6 +178,10 @@ func (v *logImpl) Trim(ctx context.Context, topicID types.TopicID, until types.G
 
 func (v *logImpl) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {
 	return v.peekLogStream(ctx, tpid, lsid)
+}
+
+func (v *logImpl) NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, opts ...LogStreamAppenderOption) (LogStreamAppender, error) {
+	return v.newLogStreamAppender(context.Background(), tpid, lsid, opts...)
 }
 
 func (v *logImpl) Close() (err error) {
