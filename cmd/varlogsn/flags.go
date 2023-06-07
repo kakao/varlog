@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/flags"
@@ -37,6 +39,18 @@ var (
 		Name:  "max-logstream-replicas-count",
 		Usage: "The maximum number of log stream replicas in a storage node, infinity if a negative value",
 		Value: storagenode.DefaultMaxLogStreamReplicasCount,
+	}
+
+	flagAppendPipelineSize = &cli.IntFlag{
+		Name:  "append-pipeline-size",
+		Usage: "Append pipleline size",
+		Value: storagenode.DefaultAppendPipelineSize,
+		Action: func(_ *cli.Context, value int) error {
+			if value < storagenode.MinAppendPipelineSize || value > storagenode.MaxAppendPipelineSize {
+				return fmt.Errorf("invalid value \"%d\" for flag --append-pipeline-size", value)
+			}
+			return nil
+		},
 	}
 
 	// flags for grpc options.

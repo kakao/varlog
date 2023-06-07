@@ -12,6 +12,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/lib/pq v1.10.9
 	github.com/pkg/errors v0.9.1
+	github.com/puzpuzpuz/xsync/v2 v2.4.0
 	github.com/smartystreets/assertions v1.13.1
 	github.com/smartystreets/goconvey v1.8.0
 	github.com/soheilhy/cmux v0.1.5

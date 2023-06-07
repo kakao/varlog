@@ -172,6 +172,9 @@ def start(args: argparse.Namespace) -> None:
             if args.ballast_size:
                 cmd.append(f"--ballast-size={args.ballast_size}")
 
+            if args.append_pipeline_size:
+                cmd.append(f"--append-pipeline-size={args.append_pipeline_size}")
+
             # grpc options
             if args.server_read_buffer_size:
                 cmd.append(
@@ -268,6 +271,7 @@ def main() -> None:
     parser.add_argument("--volumes", nargs="+", required=True, action="extend",
                         type=str)
     parser.add_argument("--ballast-size", type=str)
+    parser.add_argument("--append-pipeline-size", type=int)
 
     # grpc options
     parser.add_argument("--server-read-buffer-size", type=str)

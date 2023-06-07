@@ -22,6 +22,10 @@ const (
 	DefaultReplicateClientReadBufferSize  = 32 << 10
 	DefaultReplicateClientWriteBufferSize = 32 << 10
 	DefaultMaxLogStreamReplicasCount      = -1
+
+	DefaultAppendPipelineSize = 8
+	MinAppendPipelineSize     = 1
+	MaxAppendPipelineSize     = 16
 )
 
 type config struct {
@@ -44,6 +48,7 @@ type config struct {
 	replicateClientReadBufferSize   int64
 	replicateClientWriteBufferSize  int64
 	maxLogStreamReplicasCount       int32
+	appendPipelineSize              int32
 	volumes                         []string
 	defaultLogStreamExecutorOptions []logstream.ExecutorOption
 	pprofOpts                       []pprof.Option
@@ -59,6 +64,7 @@ func newConfig(opts []Option) (config, error) {
 		replicateClientReadBufferSize:  DefaultReplicateClientReadBufferSize,
 		replicateClientWriteBufferSize: DefaultReplicateClientWriteBufferSize,
 		maxLogStreamReplicasCount:      DefaultMaxLogStreamReplicasCount,
+		appendPipelineSize:             DefaultAppendPipelineSize,
 		logger:                         zap.NewNop(),
 	}
 	for _, opt := range opts {
@@ -84,6 +90,9 @@ func (cfg *config) validate() error {
 	}
 	if err := cfg.validateVolumes(); err != nil {
 		return fmt.Errorf("storage node: invalid volume: %w", err)
+	}
+	if cfg.appendPipelineSize < MinAppendPipelineSize || cfg.appendPipelineSize > MaxAppendPipelineSize {
+		return fmt.Errorf("storage node: invalid append pipeline size \"%d\"", cfg.appendPipelineSize)
 	}
 	return nil
 }
@@ -211,6 +220,12 @@ func WithDefaultLogStreamExecutorOptions(defaultLSEOptions ...logstream.Executor
 func WithMaxLogStreamReplicasCount(maxLogStreamReplicasCount int32) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.maxLogStreamReplicasCount = maxLogStreamReplicasCount
+	})
+}
+
+func WithAppendPipelineSize(appendPipelineSize int32) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.appendPipelineSize = appendPipelineSize
 	})
 }
 
