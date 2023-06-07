@@ -70,6 +70,10 @@ func (c *LogClient) Append(ctx context.Context, tpid types.TopicID, lsid types.L
 	return rsp.Results, nil
 }
 
+func (c *LogClient) AppendStream(ctx context.Context) (snpb.LogIO_AppendClient, error) {
+	return c.rpcClient.Append(ctx)
+}
+
 // Subscribe gets log entries continuously from the storage node. It guarantees that LLSNs of log
 // entries taken are sequential.
 func (c *LogClient) Subscribe(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, begin, end types.GLSN) (<-chan SubscribeResult, error) {
