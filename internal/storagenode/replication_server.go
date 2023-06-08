@@ -60,8 +60,9 @@ func (rs *replicationServer) SyncReplicateStream(stream snpb.Replicator_SyncRepl
 		if err != nil {
 			if err == io.EOF {
 				err = nil
+			} else {
+				err = fmt.Errorf("replication server: sync replicate stream: %w", err)
 			}
-			err = fmt.Errorf("replication server: sync replicate stream: %w", err)
 			break
 		}
 

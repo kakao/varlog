@@ -134,21 +134,24 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 		return nil, err
 	}
 
-	// If the FirstLLSN of the sync range is greater than the LastLLSN of
-	// it, the destination has all log entries but commit context.
-	var first varlogpb.LogEntry
-	if !syncRange.FirstLLSN.Invalid() && syncRange.FirstLLSN <= syncRange.LastLLSN {
-		first, err = lse.stg.Read(storage.AtLLSN(syncRange.FirstLLSN))
+	var first, last varlogpb.LogSequenceNumber
+	if !syncRange.FirstLLSN.Invalid() {
+		logEntry, err := lse.stg.Read(storage.AtLLSN(syncRange.FirstLLSN))
 		if err != nil {
 			return nil, err
 		}
+		first = varlogpb.LogSequenceNumber{LLSN: logEntry.LLSN, GLSN: logEntry.GLSN}
+	}
+	if !syncRange.LastLLSN.Invalid() {
+		logEntry, err := lse.stg.Read(storage.AtLLSN(syncRange.LastLLSN))
+		if err != nil {
+			return nil, err
+		}
+		last = varlogpb.LogSequenceNumber{LLSN: logEntry.LLSN, GLSN: logEntry.GLSN}
 	}
 
 	// make tracker
-	st := newSyncTracker(varlogpb.LogSequenceNumber{
-		LLSN: first.LogEntryMeta.LLSN,
-		GLSN: first.LogEntryMeta.GLSN,
-	}, localHWM)
+	st := newSyncTracker(first, last)
 	lse.sts[dstReplica.StorageNodeID] = st
 	_, _ = lse.syncRunner.Run(func(ctx context.Context) {
 		snid := sc.dstReplica.StorageNodeID
@@ -229,14 +232,18 @@ func (lse *Executor) syncLoop(_ context.Context, sc *syncClient, st *syncTracker
 		err = fmt.Errorf("commit context: %w", err)
 		return
 	}
-	if cc.CommittedLLSNBegin+types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)-1 != st.syncRange.last.LLSN {
-		err = fmt.Errorf("commit context: invalid LLSN: %+v", cc)
-	}
-	if cc.CommittedGLSNEnd-1 != st.syncRange.last.GLSN {
-		err = fmt.Errorf("commit context: invalid GLSN: %+v", cc)
-	}
-	if err != nil {
-		return
+	if !st.syncRange.first.LLSN.Invalid() {
+		// If the first LLSN of the sync range is invalid, there isn't a log entry to copy.
+		lastCommittedLLSN := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin) - 1
+		if lastCommittedLLSN != st.syncRange.last.LLSN {
+			err = fmt.Errorf("commit context: invalid LLSN: %+v", cc)
+		}
+		if cc.CommittedGLSNEnd-1 != st.syncRange.last.GLSN {
+			err = fmt.Errorf("commit context: invalid GLSN: %+v", cc)
+		}
+		if err != nil {
+			return
+		}
 	}
 	req.Payload.LogEntry = nil
 	req.Payload.CommitContext = &varlogpb.CommitContext{
@@ -297,7 +304,7 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 	// NOTE: When the replica has all log entries, it returns its range of logs and non-error results.
 	// In this case, this replica remains executorStateSealing.
 	// Breaking change: previously it returns ErrExist when the replica has all log entries to replicate.
-	if dstLastCommittedLLSN == srcRange.LastLLSN && !invalid {
+	if dstLastCommittedLLSN == srcLastCommittedLLSN && dstLastCommittedLLSN == srcRange.LastLLSN && !invalid {
 		return snpb.SyncRange{}, status.Errorf(codes.AlreadyExists, "already synchronized")
 	}
 
@@ -330,7 +337,7 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		trimGLSN = types.MaxGLSN
 		lwm = varlogpb.LogSequenceNumber{LLSN: types.InvalidLLSN, GLSN: types.InvalidGLSN}
 		uncommittedBegin = varlogpb.LogSequenceNumber{
-			LLSN: srcLastCommittedLLSN,
+			LLSN: srcLastCommittedLLSN + 1,
 			GLSN: types.InvalidGLSN, // It is set to InvalidGLSN since it cannot be known.
 		}
 
@@ -488,37 +495,32 @@ func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStr
 		}
 	}()
 
-	var lem *varlogpb.LogEntryMeta
 	ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
-	uncommittedLLSNBegin := uncommittedBegin.LLSN
-	uncommittedGLSNBegin := uncommittedBegin.GLSN
-
-	if entry := payload.LogEntry; entry != nil {
-		if entry.LLSN != uncommittedLLSNBegin {
-			err = fmt.Errorf("log stream: sync replicate: unexpected log entry: expected_llsn=%v, actual_llsn=%v", uncommittedLLSNBegin, entry.LLSN)
+	logEntry := payload.LogEntry
+	if logEntry != nil {
+		if logEntry.LLSN != uncommittedBegin.LLSN {
+			err = fmt.Errorf("log stream: sync replicate: unexpected log entry: expected_llsn=%v, actual_llsn=%v", uncommittedBegin.LLSN, logEntry.LLSN)
 			return err
 		}
 
-		err = batch.SetLogEntry(entry.LLSN, entry.GLSN, entry.Data)
+		err = batch.SetLogEntry(logEntry.LLSN, logEntry.GLSN, logEntry.Data)
 		if err != nil {
 			return err
 		}
 		if ce := lse.logger.Check(zap.DebugLevel, "log stream: sync replicate: copy"); ce != nil {
-			ce.Write(zap.String("log entry", entry.String()))
+			ce.Write(zap.String("log entry", logEntry.String()))
 		}
-		uncommittedLLSNBegin = entry.LLSN + 1
-		uncommittedGLSNBegin = entry.GLSN + 1
-		lem = &varlogpb.LogEntryMeta{
-			TopicID:     lse.tpid,
-			LogStreamID: lse.lsid,
-			LLSN:        entry.LLSN,
-			GLSN:        entry.GLSN,
+
+		uncommittedBegin = varlogpb.LogSequenceNumber{
+			LLSN: logEntry.LLSN + 1,
+			GLSN: logEntry.GLSN + 1, // It might not be exact.
 		}
+		invalid = true
 	}
 	if cc := payload.CommitContext; cc != nil {
 		lastLLSN := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin) - 1
-		if lastLLSN != uncommittedLLSNBegin-1 {
-			err = fmt.Errorf("log stream: sync replicate: unexpected commit context: expected_last_llsn=%v, actual_last_llsn=%v", uncommittedLLSNBegin-1, lastLLSN)
+		if lastLLSN != uncommittedBegin.LLSN-1 {
+			err = fmt.Errorf("log stream: sync replicate: unexpected commit context: expected_last_llsn=%v, actual_last_llsn=%v", uncommittedBegin.LLSN-1, lastLLSN)
 			return err
 		}
 
@@ -538,6 +540,10 @@ func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStr
 
 		ver = cc.Version
 		hwm = cc.HighWatermark
+		uncommittedBegin = varlogpb.LogSequenceNumber{
+			LLSN: cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin),
+			GLSN: cc.CommittedGLSNEnd,
+		}
 		invalid = false
 		done = true
 	}
@@ -546,17 +552,14 @@ func (lse *Executor) SyncReplicate(_ context.Context, srcReplica varlogpb.LogStr
 		return err
 	}
 
-	if lem != nil {
+	if logEntry != nil {
 		lse.lsc.localLWM.CompareAndSwap(varlogpb.LogSequenceNumber{}, varlogpb.LogSequenceNumber{
-			LLSN: lem.LLSN,
-			GLSN: lem.GLSN,
+			LLSN: logEntry.LLSN,
+			GLSN: logEntry.GLSN,
 		})
 	}
-	lse.lsc.storeReportCommitBase(ver, hwm, varlogpb.LogSequenceNumber{
-		LLSN: uncommittedLLSNBegin,
-		GLSN: uncommittedGLSNBegin,
-	}, invalid)
-	lse.lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
+	lse.lsc.storeReportCommitBase(ver, hwm, uncommittedBegin, invalid)
+	lse.lsc.uncommittedLLSNEnd.Store(uncommittedBegin.LLSN)
 	lse.dstSyncInfo.lastSyncTime = time.Now()
 	return nil
 }
