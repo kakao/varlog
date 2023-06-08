@@ -2698,6 +2698,49 @@ func TestExecutorSyncInit(t *testing.T) {
 			},
 		},
 		{
+			// dst logs     : no logs
+			// dst last llsn: no commit context
+			// src logs     : no logs
+			// src last llsn:               10
+			// response     : [first, last] = [0, 0]
+			//
+			name: "TrimmedSource_EmptyDestination_Synchronize",
+			pref: func(t *testing.T, dst *Executor) {
+				for i := 1; i <= dstLastLSN; i++ {
+					storage.TestDeleteLogEntry(t, dst.stg, varlogpb.LogSequenceNumber{
+						LLSN: types.LLSN(i),
+						GLSN: types.GLSN(i),
+					})
+					storage.TestDeleteCommitContext(t, dst.stg)
+				}
+			},
+			testf: func(t *testing.T, dst *Executor, src varlogpb.LogStreamReplica) {
+				syncRange, err := dst.SyncInit(context.Background(), src, snpb.SyncRange{}, 10)
+				require.NoError(t, err)
+				require.Equal(t, snpb.SyncRange{FirstLLSN: types.InvalidLLSN, LastLLSN: types.InvalidLLSN}, syncRange)
+
+				rpt, err := dst.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lsid,
+					UncommittedLLSNOffset: 0,
+					UncommittedLLSNLength: 0,
+					Version:               0,
+					HighWatermark:         0,
+				}, rpt)
+
+				lsrmd, err := dst.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalHighWatermark)
+				require.Equal(t, types.InvalidVersion, lsrmd.Version)
+				require.Equal(t, types.InvalidGLSN, lsrmd.GlobalHighWatermark)
+
+				require.Equal(t, executorStateLearning, dst.esm.load())
+			},
+		},
+		{
 			// dst logs     : 1, 2, ......, 10
 			// dst last llsn:               10
 			// src logs     : 1, 2, ......, 10, 11, ......, 20

@@ -2182,6 +2182,63 @@ func TestStorageNode_Sync(t *testing.T) {
 				}, snmd.LogStreamReplicas[0].LocalHighWatermark)
 			},
 		},
+		{
+			// ver: +-1-+
+			// src:       <commit context = 2>
+			// dst:       <empty>
+			name: "TrimmedSourceEmptyDestination",
+			testf: func(t *testing.T, src, dst *StorageNode) {
+				const ver = types.Version(1)
+				lastCommittedGLSN := lastGLSN(ver)
+
+				put(t, src, ver)
+				trim(t, src, lastCommittedGLSN)
+				lss, localHWM := TestSealLogStreamReplica(t, cid, src.snid, tpid, lsid, lastCommittedGLSN, src.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				// NOTE: localHWM in src is 0 since src was trimmed.
+				require.True(t, localHWM.Invalid())
+
+				lss, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lss)
+				require.Equal(t, types.InvalidGLSN, localHWM)
+
+				syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+					StorageNodeID: dst.snid,
+					Address:       dst.advertise,
+				})
+				require.Equal(t, snpb.SyncStateStart, syncStatus.State)
+
+				require.Eventually(t, func() bool {
+					syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+						StorageNodeID: dst.snid,
+						Address:       dst.advertise,
+					})
+					return syncStatus.State == snpb.SyncStateComplete
+				}, 10*time.Second, 100*time.Millisecond)
+
+				lss, localHWM = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, lastCommittedGLSN, dst.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				// NOTE: localHWM in dst is 0 since dst has no log entries.
+				require.True(t, localHWM.Invalid())
+
+				// Check those replicas are ready to accept Append.
+				for _, sn := range []*StorageNode{src, dst} {
+					TestUnsealLogStreamReplica(t, cid, sn.snid, tpid, lsid, makeReplicas(sn), sn.advertise)
+
+					lse, ok := src.executors.Load(tpid, lsid)
+					require.True(t, ok)
+
+					version, hwm, uncommittedBegin, invalid := logstream.TestGetReportCommitBase(t, lse)
+					require.Equal(t, ver, version)
+					require.Equal(t, lastCommittedGLSN, hwm)
+					require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 3, GLSN: 3}, uncommittedBegin)
+					require.False(t, invalid)
+
+					uncommittedLLSNEnd := logstream.TestGetUncommittedLLSNEnd(t, lse)
+					require.Equal(t, types.LLSN(lastCommittedGLSN+1), uncommittedLLSNEnd)
+				}
+			},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -2217,8 +2274,8 @@ func TestStorageNode_Sync(t *testing.T) {
 
 				TestAddLogStreamReplica(t, cid, sn.snid, tpid, lsid, sn.snPaths[0], sn.advertise)
 
-				status, localHWM := TestSealLogStreamReplica(t, cid, sn.snid, tpid, lsid, types.InvalidGLSN, sn.advertise)
-				require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+				lss, localHWM := TestSealLogStreamReplica(t, cid, sn.snid, tpid, lsid, types.InvalidGLSN, sn.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
 				require.Equal(t, types.InvalidGLSN, localHWM)
 
 				TestUnsealLogStreamReplica(t, cid, sn.snid, tpid, lsid, makeReplicas(sn), sn.advertise)
