@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/puzpuzpuz/xsync/v2"
 
@@ -20,16 +21,20 @@ type LogStreamAppender interface {
 	// Users can call this method without being blocked until the pipeline of
 	// the LogStreamAppender is full. If the pipeline of the LogStreamAppender
 	// is already full, it may become blocked. However, the process will
-	// continue once a response is received from the storage node.
+	// continue once a response is received from the storage node. A long block
+	// duration with a configured WithCallTimeout can cause ErrCallTimeout to
+	// occur.
 	// On completion of AppendBatch, the argument callback provided by users
 	// will be invoked. All callback functions registered to the same
 	// LogStreamAppender will be called by the same goroutine sequentially.
 	// Therefore, the callback should be lightweight. If heavy work is
 	// necessary for the callback, it would be better to use separate worker
 	// goroutines.
-	// The only error from the AppendBatch is ErrClosed, which is returned when
-	// the LogStreamAppender is already closed. It returns nil even if the
-	// underlying stream is disconnected and notifies errors via callback.
+	// Once the stream in the LogStreamAppender is either done or broken, the
+	// AppendBatch returns an error. It returns an ErrClosed when the
+	// LogStreamAppender is closed and an ErrCallTimeout when the call timeout
+	// expires.
+	//
 	// It is safe to have multiple goroutines calling AppendBatch
 	// simultaneously, but the order between them is not guaranteed.
 	AppendBatch(dataBatch [][]byte, callback BatchCallback) error
@@ -48,12 +53,15 @@ type LogStreamAppender interface {
 type BatchCallback func([]varlogpb.LogEntryMeta, error)
 
 type cbQueueEntry struct {
-	cb  BatchCallback
-	err error
+	cb         BatchCallback
+	err        error
+	expireTime time.Time
 }
 
-func newCallbackQueueEntry() *cbQueueEntry {
-	return callbackQueueEntryPool.Get().(*cbQueueEntry)
+func newCallbackQueueEntry(cb BatchCallback) *cbQueueEntry {
+	qe := callbackQueueEntryPool.Get().(*cbQueueEntry)
+	qe.cb = cb
+	return qe
 }
 
 func (cqe *cbQueueEntry) Release() {
@@ -69,12 +77,13 @@ var callbackQueueEntryPool = sync.Pool{
 
 type logStreamAppender struct {
 	logStreamAppenderConfig
-	stream     snpb.LogIO_AppendClient
-	cancelFunc context.CancelCauseFunc
-	sema       chan struct{}
-	cbq        chan *cbQueueEntry
-	wg         sync.WaitGroup
-	closed     struct {
+	stream             snpb.LogIO_AppendClient
+	cancelFunc         context.CancelCauseFunc
+	contextCancelCause func() error
+	sema               chan struct{}
+	cbq                chan *cbQueueEntry
+	wg                 sync.WaitGroup
+	closed             struct {
 		xsync.RBMutex
 		value bool
 	}
@@ -112,6 +121,9 @@ func (v *logImpl) newLogStreamAppender(ctx context.Context, tpid types.TopicID, 
 		sema:                    make(chan struct{}, cfg.pipelineSize),
 		cbq:                     make(chan *cbQueueEntry, cfg.pipelineSize),
 		cancelFunc:              cancelFunc,
+		contextCancelCause: func() error {
+			return context.Cause(ctx)
+		},
 	}
 	lsa.wg.Add(1)
 	go lsa.recvLoop()
@@ -125,18 +137,52 @@ func (lsa *logStreamAppender) AppendBatch(dataBatch [][]byte, callback BatchCall
 		return ErrClosed
 	}
 
-	lsa.sema <- struct{}{}
+	if err := lsa.contextCancelCause(); err != nil {
+		return err
+	}
 
-	qe := newCallbackQueueEntry()
-	qe.cb = callback
+	var err error
+	now := time.Now()
+	if lsa.callTimeout > 0 {
+		timer := time.NewTimer(lsa.callTimeout)
+		defer timer.Stop()
+		select {
+		case lsa.sema <- struct{}{}:
+		case <-timer.C:
+			return ErrCallTimeout
+		}
+	} else {
+		lsa.sema <- struct{}{}
+	}
 
-	err := lsa.stream.Send(&snpb.AppendRequest{
-		TopicID:     lsa.tpid,
-		LogStreamID: lsa.lsid,
-		Payload:     dataBatch,
-	})
+	qe := newCallbackQueueEntry(callback)
+	qe.expireTime = now.Add(lsa.callTimeout)
+
+	if err == nil {
+		var wg sync.WaitGroup
+		var watchdog *time.Timer
+		if lsa.callTimeout > 0 {
+			wg.Add(1)
+			watchdog = time.AfterFunc(time.Until(now.Add(lsa.callTimeout)), func() {
+				defer wg.Done()
+				lsa.cancelFunc(ErrCallTimeout)
+			})
+		}
+		err = lsa.stream.Send(&snpb.AppendRequest{
+			TopicID:     lsa.tpid,
+			LogStreamID: lsa.lsid,
+			Payload:     dataBatch,
+		})
+		if watchdog != nil && !watchdog.Stop() {
+			wg.Wait()
+			err = ErrCallTimeout
+		}
+	}
 	if err != nil {
 		_ = lsa.stream.CloseSend()
+		if lsa.contextCancelCause() == ErrCallTimeout {
+			err = ErrCallTimeout
+		}
 		qe.err = err
 	}
 	lsa.cbq <- qe
@@ -144,7 +190,7 @@ func (lsa *logStreamAppender) AppendBatch(dataBatch [][]byte, callback BatchCall
 }
 
 func (lsa *logStreamAppender) Close() {
-	lsa.cancelFunc(nil)
+	lsa.cancelFunc(ErrClosed)
 
 	lsa.closed.Lock()
 	defer lsa.closed.Unlock()
@@ -166,14 +212,27 @@ func (lsa *logStreamAppender) recvLoop() {
 	rsp := &snpb.AppendResponse{}
 
 	for qe := range lsa.cbq {
+		var wg sync.WaitGroup
+		var watchdog *time.Timer
 		meta = nil
+
 		err = qe.err
 		if err != nil {
 			goto Call
 		}
 
+		if lsa.callTimeout > 0 {
+			wg.Add(1)
+			watchdog = time.AfterFunc(time.Until(qe.expireTime), func() {
+				defer wg.Done()
+				lsa.cancelFunc(ErrCallTimeout)
+			})
+		}
 		rsp.Reset()
 		err = lsa.stream.RecvMsg(rsp)
+		if watchdog != nil && !watchdog.Stop() {
+			wg.Wait()
+		}
 		if err != nil {
 			goto Call
 		}
@@ -194,6 +253,9 @@ func (lsa *logStreamAppender) recvLoop() {
 			cb = lsa.defaultBatchCallback
 		}
 		if cb != nil {
+			if err != nil && lsa.contextCancelCause() == ErrCallTimeout {
+				err = ErrCallTimeout
+			}
 			cb(meta, err)
 		}
 		<-lsa.sema
