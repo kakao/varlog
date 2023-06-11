@@ -12,8 +12,6 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
@@ -780,7 +778,7 @@ func TestLogStreamAppender(t *testing.T) {
 				cb := func(metas []varlogpb.LogEntryMeta, err error) {
 					called.Add(1)
 					if err != nil {
-						assert.Equal(t, codes.Canceled, status.Code(err))
+						assert.Equal(t, varlog.ErrClosed, err)
 						return
 					}
 					assert.NoError(t, err)
@@ -831,6 +829,37 @@ func TestLogStreamAppender(t *testing.T) {
 				require.Eventually(t, func() bool {
 					return called.Load() == calls
 				}, 5*time.Second, 100*time.Millisecond)
+			},
+		},
+		{
+			name: "ConcurrentAppendBatch",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid, varlog.WithPipelineSize(pipelineSize))
+				require.NoError(t, err)
+				defer func() {
+					lsa.Close()
+				}()
+
+				var wg sync.WaitGroup
+				wg.Add(calls * 2)
+				expected := 0
+				dataBatch := [][]byte{[]byte("foo")}
+				cb := func(metas []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+					assert.Len(t, metas, 1)
+					expected++
+					assert.EqualValues(t, expected, metas[0].LLSN)
+					assert.EqualValues(t, expected, metas[0].GLSN)
+				}
+				for i := 0; i < calls; i++ {
+					go func() {
+						defer wg.Done()
+						err := lsa.AppendBatch(dataBatch, cb)
+						require.NoError(t, err)
+					}()
+				}
+				wg.Wait()
 			},
 		},
 	}
