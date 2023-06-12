@@ -297,11 +297,39 @@ func (c *testLog) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid ty
 
 }
 
+func (c *testLog) AppendableLogStreams(tpid types.TopicID) map[types.LogStreamID]struct{} {
+	if err := c.lock(); err != nil {
+		return nil
+	}
+	defer c.unlock()
+
+	topicDesc, ok := c.vt.topics[tpid]
+	if !ok {
+		return nil
+	}
+
+	ret := make(map[types.LogStreamID]struct{}, len(topicDesc.LogStreams))
+	for _, lsid := range topicDesc.LogStreams {
+		ret[lsid] = struct{}{}
+	}
+	return ret
+}
+
 // NewLogStreamAppender returns a new fake LogStreamAppender for testing. It
 // ignores options; the pipeline size is five, and the default callback has no
 // operation.
 func (c *testLog) NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, _ ...varlog.LogStreamAppenderOption) (varlog.LogStreamAppender, error) {
 	const pipelineSize = 5
+
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	_, err := c.vt.logStreamDescriptor(tpid, lsid)
+	if err != nil {
+		return nil, err
+	}
 
 	lsa := &logStreamAppender{
 		c:               c,

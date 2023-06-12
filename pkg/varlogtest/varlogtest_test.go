@@ -16,6 +16,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/x/mlsa"
 	"github.com/kakao/varlog/pkg/varlogtest"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -30,19 +31,26 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 
 	tcs := []struct {
 		name  string
-		testf func(t *testing.T, lsa varlog.LogStreamAppender)
+		testf func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID)
 	}{
 		{
 			name: "Closed",
-			testf: func(t *testing.T, lsa varlog.LogStreamAppender) {
+			testf: func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid)
+				require.NoError(t, err)
+
 				lsa.Close()
-				err := lsa.AppendBatch([][]byte{[]byte("foo")}, nil)
+				err = lsa.AppendBatch([][]byte{[]byte("foo")}, nil)
 				require.Equal(t, varlog.ErrClosed, err)
 			},
 		},
 		{
 			name: "AppendLogs",
-			testf: func(t *testing.T, lsa varlog.LogStreamAppender) {
+			testf: func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid)
+				require.NoError(t, err)
+				defer lsa.Close()
+
 				cb := func(_ []varlogpb.LogEntryMeta, err error) {
 					assert.NoError(t, err)
 				}
@@ -50,6 +58,49 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 					err := lsa.AppendBatch([][]byte{[]byte("foo")}, cb)
 					require.NoError(t, err)
 				}
+			},
+		},
+		{
+			name: "Manager",
+			testf: func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+				mgr := mlsa.New(vcli)
+
+				_, err := mgr.Get(tpid+1, lsid)
+				require.Error(t, err)
+
+				_, err = mgr.Get(tpid, lsid+1)
+				require.Error(t, err)
+
+				lsa1, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				lsa2, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				wg.Add(2)
+				cb := func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				}
+				err = lsa1.AppendBatch([][]byte{[]byte("foo")}, cb)
+				require.NoError(t, err)
+				err = lsa2.AppendBatch([][]byte{[]byte("foo")}, cb)
+				require.NoError(t, err)
+				wg.Wait()
+
+				lsa1.Close()
+				err = lsa2.AppendBatch([][]byte{[]byte("foo")}, nil)
+				require.Equal(t, varlog.ErrClosed, err)
+
+				lsa1, err = mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				wg.Add(1)
+				err = lsa1.AppendBatch([][]byte{[]byte("foo")}, cb)
+				require.NoError(t, err)
+				err = lsa2.AppendBatch([][]byte{[]byte("foo")}, nil)
+				require.Equal(t, varlog.ErrClosed, err)
+				wg.Wait()
+				lsa1.Close()
 			},
 		},
 	}
@@ -87,11 +138,7 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 			require.Equal(t, varlogpb.LogStreamStatusRunning, lsd.Status)
 			require.Len(t, lsd.Replicas, replicationFactor)
 
-			lsa, err := vlg.NewLogStreamAppender(td.TopicID, lsd.LogStreamID)
-			require.NoError(t, err)
-			defer lsa.Close()
-
-			tc.testf(t, lsa)
+			tc.testf(t, vlg, td.TopicID, lsd.LogStreamID)
 		})
 	}
 }

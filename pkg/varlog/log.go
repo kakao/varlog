@@ -45,6 +45,10 @@ type Log interface {
 
 	// NewLogStreamAppender returns a new LogStreamAppender.
 	NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, opts ...LogStreamAppenderOption) (LogStreamAppender, error)
+
+	// AppendableLogStreams returns all writable log streams belonging to the
+	// topic specified by the argument tpid.
+	AppendableLogStreams(tpid types.TopicID) map[types.LogStreamID]struct{}
 }
 
 type AppendResult struct {
@@ -182,6 +186,15 @@ func (v *logImpl) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid ty
 
 func (v *logImpl) NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, opts ...LogStreamAppenderOption) (LogStreamAppender, error) {
 	return v.newLogStreamAppender(context.Background(), tpid, lsid, opts...)
+}
+
+func (v *logImpl) AppendableLogStreams(tpid types.TopicID) map[types.LogStreamID]struct{} {
+	ids := v.lsSelector.GetAll(tpid)
+	ret := make(map[types.LogStreamID]struct{})
+	for _, id := range ids {
+		ret[id] = struct{}{}
+	}
+	return ret
 }
 
 func (v *logImpl) Close() (err error) {
