@@ -39,8 +39,6 @@ type LogStreamAppender interface {
 	// calling AppendBatch will fail immediately. If AppendBatch still waits
 	// for room of pipeline, Close will be blocked. It also waits for all
 	// pending callbacks to be called.
-	// It's important for users to avoid calling Close within the callback
-	// function, as it may cause indefinite blocking.
 	Close()
 }
 
@@ -52,6 +50,7 @@ type cbQueueEntry struct {
 	cb   BatchCallback
 	data [][]byte
 	err  error
+	meta []varlogpb.LogEntryMeta
 }
 
 func newCallbackQueueEntry() *cbQueueEntry {
@@ -77,6 +76,7 @@ type logStreamAppender struct {
 	sema       chan struct{}
 	sq         chan *cbQueueEntry
 	rq         chan *cbQueueEntry
+	cq         chan *cbQueueEntry
 	wg         sync.WaitGroup
 	closed     struct {
 		xsync.RBMutex
@@ -116,10 +116,17 @@ func (v *logImpl) newLogStreamAppender(ctx context.Context, tpid types.TopicID, 
 		sema:                    make(chan struct{}, cfg.pipelineSize),
 		sq:                      make(chan *cbQueueEntry, cfg.pipelineSize),
 		rq:                      make(chan *cbQueueEntry, cfg.pipelineSize),
+		cq:                      make(chan *cbQueueEntry, cfg.pipelineSize),
 		cancelFunc:              cancelFunc,
 		causeFunc: func() error {
 			return context.Cause(ctx)
 		},
+	}
+	_, err = v.runner.Run(func(context.Context) {
+		lsa.callbackLoop()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("client: %w", err)
 	}
 	lsa.wg.Add(2)
 	go lsa.sendLoop()
@@ -187,15 +194,16 @@ func (lsa *logStreamAppender) sendLoop() {
 }
 
 func (lsa *logStreamAppender) recvLoop() {
-	defer lsa.wg.Done()
+	defer func() {
+		close(lsa.cq)
+		lsa.wg.Done()
+	}()
 
-	var err error
-	var meta []varlogpb.LogEntryMeta
-	var cb BatchCallback
 	rsp := &snpb.AppendResponse{}
-
 	for qe := range lsa.rq {
-		meta = nil
+		var err error
+		var meta []varlogpb.LogEntryMeta
+
 		err = qe.err
 		if err != nil {
 			goto Call
@@ -217,18 +225,27 @@ func (lsa *logStreamAppender) recvLoop() {
 			break
 		}
 	Call:
+		qe.meta = meta
 		if err != nil {
 			if cause := lsa.causeFunc(); cause != nil {
 				err = cause
 			}
+			qe.err = err
 		}
+		lsa.cq <- qe
+	}
+}
+
+func (lsa *logStreamAppender) callbackLoop() {
+	for qe := range lsa.cq {
+		var cb BatchCallback
 		if qe.cb != nil {
 			cb = qe.cb
 		} else {
 			cb = lsa.defaultBatchCallback
 		}
 		if cb != nil {
-			cb(meta, err)
+			cb(qe.meta, qe.err)
 		}
 		<-lsa.sema
 	}

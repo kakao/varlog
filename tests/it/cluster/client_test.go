@@ -733,12 +733,12 @@ func TestLogStreamAppender(t *testing.T) {
 			name: "CloseAfterProcessingCallbacks",
 			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
 				var (
-					llsn   types.LLSN
-					glsn   types.GLSN
-					called atomic.Int32
+					llsn types.LLSN
+					glsn types.GLSN
+					wg   sync.WaitGroup
 				)
 				cb := func(metas []varlogpb.LogEntryMeta, err error) {
-					called.Add(1)
+					defer wg.Done()
 					assert.NoError(t, err)
 					assert.Len(t, metas, batchSize)
 					assert.Less(t, llsn, metas[batchSize-1].LLSN)
@@ -750,10 +750,11 @@ func TestLogStreamAppender(t *testing.T) {
 				lsa, err := vcli.NewLogStreamAppender(tpid, lsid, varlog.WithPipelineSize(pipelineSize))
 				require.NoError(t, err)
 				defer func() {
+					wg.Wait()
 					lsa.Close()
-					require.EqualValues(t, calls, called.Load())
 				}()
 
+				wg.Add(calls)
 				for i := 0; i < calls; i++ {
 					data := make([][]byte, batchSize)
 					for j := 0; j < batchSize; j++ {
@@ -762,21 +763,18 @@ func TestLogStreamAppender(t *testing.T) {
 					err := lsa.AppendBatch(data, cb)
 					require.NoError(t, err)
 				}
-				require.Eventually(t, func() bool {
-					return called.Load() == calls
-				}, 5*time.Second, 100*time.Millisecond)
 			},
 		},
 		{
 			name: "CloseWhileProcessingCallbacks",
 			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
 				var (
-					llsn   types.LLSN
-					glsn   types.GLSN
-					called atomic.Int32
+					llsn types.LLSN
+					glsn types.GLSN
+					wg   sync.WaitGroup
 				)
 				cb := func(metas []varlogpb.LogEntryMeta, err error) {
-					called.Add(1)
+					defer wg.Done()
 					if err != nil {
 						assert.Equal(t, varlog.ErrClosed, err)
 						return
@@ -793,9 +791,10 @@ func TestLogStreamAppender(t *testing.T) {
 				require.NoError(t, err)
 				defer func() {
 					lsa.Close()
-					require.EqualValues(t, calls, called.Load())
+					wg.Wait()
 				}()
 
+				wg.Add(calls)
 				for i := 0; i < calls; i++ {
 					data := make([][]byte, batchSize)
 					for j := 0; j < batchSize; j++ {
@@ -804,9 +803,32 @@ func TestLogStreamAppender(t *testing.T) {
 					err := lsa.AppendBatch(data, cb)
 					require.NoError(t, err)
 				}
-				require.Eventually(t, func() bool {
-					return called.Load() > 0
-				}, time.Second, 10*time.Millisecond)
+			},
+		},
+		{
+			name: "CloseInCallback",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid, varlog.WithPipelineSize(pipelineSize))
+				require.NoError(t, err)
+				defer func() {
+					lsa.Close()
+				}()
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+					lsa.Close()
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				err = lsa.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
 			},
 		},
 		{

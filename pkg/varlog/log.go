@@ -198,5 +198,6 @@ func (v *logImpl) Close() (err error) {
 		err = e
 	}
 	v.closed.Store(true)
+	v.runner.Stop()
 	return
 }
