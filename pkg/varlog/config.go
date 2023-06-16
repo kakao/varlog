@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -97,8 +98,8 @@ func WithTimeout(timeout time.Duration) AdminCallOption {
 
 const (
 	defaultPipelineSize = 2
-	minPipelineSize     = 1
-	maxPipelineSize     = 8
+	minPipelineSize     = storagenode.MinAppendPipelineSize
+	maxPipelineSize     = storagenode.MaxAppendPipelineSize
 )
 
 type logStreamAppenderConfig struct {
