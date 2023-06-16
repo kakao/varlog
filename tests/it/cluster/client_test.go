@@ -884,6 +884,80 @@ func TestLogStreamAppender(t *testing.T) {
 				wg.Wait()
 			},
 		},
+		{
+			name: "CallTimeoutCausedBySemaphore",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				const (
+					callTimeout         = 500 * time.Millisecond
+					blockedPipelineSize = 1
+				)
+
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid,
+					varlog.WithPipelineSize(blockedPipelineSize),
+					varlog.WithCallTimeout(callTimeout),
+				)
+				require.NoError(t, err)
+				defer lsa.Close()
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+					time.Sleep(callTimeout * 2)
+				})
+				require.NoError(t, err)
+
+				err = lsa.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+				require.Equal(t, varlog.ErrCallTimeout, err)
+
+				wg.Wait()
+			},
+		},
+		{
+			name: "CallTimeoutCausedSlowCallback",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				const callTimeout = 500 * time.Millisecond
+
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid,
+					varlog.WithCallTimeout(callTimeout),
+					varlog.WithPipelineSize(5),
+				)
+				require.NoError(t, err)
+				defer lsa.Close()
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+
+				var failfast atomic.Bool
+				for err == nil {
+					wg.Add(1)
+					err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, cerr error) {
+						defer wg.Done()
+						if cerr != nil {
+							assert.Equal(t, varlog.ErrCallTimeout, cerr)
+							failfast.Store(true)
+							return
+						}
+						time.Sleep(callTimeout * 2)
+					})
+					if err == nil {
+						require.True(t, failfast.CompareAndSwap(false, false))
+					} else {
+						wg.Done()
+						require.Equal(t, varlog.ErrCallTimeout, err)
+					}
+					time.Sleep(callTimeout)
+				}
+
+				wg.Wait()
+			},
+		},
 	}
 
 	for _, tc := range tcs {

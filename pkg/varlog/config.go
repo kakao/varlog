@@ -107,6 +107,7 @@ type logStreamAppenderConfig struct {
 	tpid                 types.TopicID
 	lsid                 types.LogStreamID
 	pipelineSize         int
+	callTimeout          time.Duration
 }
 
 func newLogStreamAppenderConfig(opts []LogStreamAppenderOption) logStreamAppenderConfig {
@@ -162,5 +163,20 @@ func WithPipelineSize(pipelineSize int) LogStreamAppenderOption {
 func WithDefaultBatchCallback(defaultBatchCallback BatchCallback) LogStreamAppenderOption {
 	return newFuncLogStreamAppenderOption(func(cfg *logStreamAppenderConfig) {
 		cfg.defaultBatchCallback = defaultBatchCallback
+	})
+}
+
+// WithCallTimeout configures a timeout for each AppendBatch call. If the
+// timeout has elapsed, the AppendBatch and callback functions may result in an
+// ErrCallTimeout error.
+//
+// ErrCallTimeout may be returned in the following scenarios:
+// - Waiting for the pipeline too long since it is full.
+// - Sending RPC requests to the varlog is blocked for too long.
+// - Receiving RPC response from the varlog is blocked too long.
+// - User codes for callback take time too long.
+func WithCallTimeout(callTimeout time.Duration) LogStreamAppenderOption {
+	return newFuncLogStreamAppenderOption(func(cfg *logStreamAppenderConfig) {
+		cfg.callTimeout = callTimeout
 	})
 }
