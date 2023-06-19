@@ -301,10 +301,18 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 		)
 	}
 
+	lwm, hwm, _ := lse.lsc.localWatermarks()
+
 	// NOTE: When the replica has all log entries, it returns its range of logs and non-error results.
 	// In this case, this replica remains executorStateSealing.
 	// Breaking change: previously it returns ErrExist when the replica has all log entries to replicate.
-	if dstLastCommittedLLSN == srcLastCommittedLLSN && dstLastCommittedLLSN == srcRange.LastLLSN && !invalid {
+	//
+	// The last committed LLSNs denoted by the commit context in the source and
+	// destination are the same, and the local high watermarks in both replicas
+	// are also the same. Therefore, synchronization is not necessary between
+	// them. Even though the local low watermarks differ, they will be the same
+	// by Trim operation.
+	if dstLastCommittedLLSN == srcLastCommittedLLSN && hwm.LLSN == srcRange.LastLLSN && !invalid {
 		return snpb.SyncRange{}, status.Errorf(codes.AlreadyExists, "already synchronized")
 	}
 
@@ -317,7 +325,6 @@ func (lse *Executor) SyncInit(_ context.Context, srcReplica varlogpb.LogStreamRe
 	}
 
 	trimGLSN := types.InvalidGLSN
-	lwm, _, _ := lse.lsc.localWatermarks()
 	alreadySynchronized := false
 
 	switch {
