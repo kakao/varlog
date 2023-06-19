@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.14.0](https://github.com/kakao/varlog/compare/v0.13.0...v0.14.0) (2023-06-19)
+
+
+### Features
+
+* **client:** add call timeout to log stream appender ([6f916d4](https://github.com/kakao/varlog/commit/6f916d4272ac9ba779e15f71e76e8e2e521ae9f8))
+* **client:** add call timeout to log stream appender ([#474](https://github.com/kakao/varlog/issues/474)) ([6db401a](https://github.com/kakao/varlog/commit/6db401a59fcadbe37a0bb1cff7da779f6a266b0f))
+* **client:** add LogStreamAppender ([dec3421](https://github.com/kakao/varlog/commit/dec3421ddf305ec161e274643089a5dcfb415b53))
+* **client:** add LogStreamAppender ([#459](https://github.com/kakao/varlog/issues/459)) ([bfe88d7](https://github.com/kakao/varlog/commit/bfe88d742e65b3f1265bfa63ef36355b79e4ef6e)), closes [#433](https://github.com/kakao/varlog/issues/433)
+* **client:** add settings for gRPC client ([917e5fc](https://github.com/kakao/varlog/commit/917e5fc5231d119ac51b44e6076e4cd0445dcec1))
+* **client:** add settings for gRPC client ([#479](https://github.com/kakao/varlog/issues/479)) ([4b8f01c](https://github.com/kakao/varlog/commit/4b8f01c9a50cd0b4770c6a8107c8eb9c5c5707eb))
+* **client:** can call Close at callback in LogStreamAppender ([77b8de8](https://github.com/kakao/varlog/commit/77b8de8e041bee5dc9e6a92afe4ab8f653f11205))
+* **client:** can call Close at callback in LogStreamAppender ([#473](https://github.com/kakao/varlog/issues/473)) ([23236c1](https://github.com/kakao/varlog/commit/23236c18a7cac87961f7d469989070367dd1cacd))
+* **client:** log stream appender manager ([64eae0b](https://github.com/kakao/varlog/commit/64eae0bf9aff698961db7ed27a0fec6ae6923bec))
+* **client:** log stream appender manager ([#475](https://github.com/kakao/varlog/issues/475)) ([ac6c7c6](https://github.com/kakao/varlog/commit/ac6c7c6bdc675aeb5881e94bf0015196636b8386))
+* **client:** support goroutine-safety of pkg/var log.(LogStream Appender).Append Batch ([7fa53f3](https://github.com/kakao/varlog/commit/7fa53f303e0623dbe966e763dfbfff263f6fddba))
+* **client:** support goroutine-safety of pkg/var log.(LogStream Appender).Append Batch ([#472](https://github.com/kakao/varlog/issues/472)) ([46f0d0b](https://github.com/kakao/varlog/commit/46f0d0b8179e4a70c1244e759082014bc8c799a3))
+* **storagenode:** add configurations for initial window size ([8b623b0](https://github.com/kakao/varlog/commit/8b623b012a95123b393ed85f69cee0df0deae0c9))
+* **storagenode:** add configurations for initial window size ([#451](https://github.com/kakao/varlog/issues/451)) ([5269481](https://github.com/kakao/varlog/commit/5269481c0e80c2eebf8214116a2d1544a26cb443))
+* **storagenode:** add pipelined Append RPC handler ([8535a4d](https://github.com/kakao/varlog/commit/8535a4daa4d7f749ad8601a455a5f6cda1344800))
+* **storagenode:** add pipelined Append RPC handler ([#457](https://github.com/kakao/varlog/issues/457)) ([0323629](https://github.com/kakao/varlog/commit/0323629d50d547e6312d01e3dcf6e2b0d7324b30))
+* **storagenode:** change append rpc from unary to stream ([5b27a18](https://github.com/kakao/varlog/commit/5b27a186988a725acfe5880db910f61169aa3aea))
+* **storagenode:** change append rpc from unary to stream ([#449](https://github.com/kakao/varlog/issues/449)) ([7e4ef03](https://github.com/kakao/varlog/commit/7e4ef0351ed3cc74d4e11f9ce18bf2dcbf9444d2))
+
+
+### Bug Fixes
+
+* **storagenode:** accept SyncInit sent from trimmed source to new destination ([0e141bd](https://github.com/kakao/varlog/commit/0e141bdc1e180dfa8b877f3de083e1c9efe29cd0)), closes [#478](https://github.com/kakao/varlog/issues/478)
+* **storagenode:** support partial success/failure for append ([5d438bb](https://github.com/kakao/varlog/commit/5d438bb111cb6bfd7af69821200420afcdbbd151))
+* **storagenode:** support partial success/failure for append ([#450](https://github.com/kakao/varlog/issues/450)) ([c8b7fe0](https://github.com/kakao/varlog/commit/c8b7fe07c346295e81c3b1639d432d4000ecd6b0))
+
 ## [0.13.0](https://github.com/kakao/varlog/compare/v0.12.0...v0.13.0) (2023-06-01)
 
 
