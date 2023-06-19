@@ -16,6 +16,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/x/mlsa"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/tests/it"
 )
@@ -956,6 +957,137 @@ func TestLogStreamAppender(t *testing.T) {
 				}
 
 				wg.Wait()
+			},
+		},
+		{
+			name: "Manager_NoSuchTopic",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+				_, err := mgr.Get(tpid+1, lsid)
+				require.Error(t, err)
+
+				_, err = mgr.Any(tpid+1, nil)
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "Manager_NoSuchLogStream",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+				_, err := mgr.Get(tpid, lsid+1)
+				require.Error(t, err)
+
+				_, err = mgr.Any(tpid, map[types.LogStreamID]struct{}{
+					lsid + 1: {},
+				})
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "Manager_AppendBatch",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa1, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				lsa2, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+
+				wg.Add(2)
+				err = lsa1.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				err = lsa2.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				lsa1.Close()
+				lsa2.Close()
+			},
+		},
+		{
+			name: "Manager_Close",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa1, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				lsa2, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				dataBatch := [][]byte{[]byte("foo")}
+
+				lsa1.Close()
+				err = lsa1.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+				err = lsa2.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "Manager_CloseAndGet",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa1, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				lsa2, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				lsa1.Close()
+				lsa1, err = mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+				wg.Add(1)
+				err = lsa1.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				err = lsa2.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+				wg.Wait()
+
+				lsa1.Close()
+			},
+		},
+		{
+			name: "Manager_Any",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa, err := mgr.Any(tpid, map[types.LogStreamID]struct{}{
+					lsid: {},
+				})
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				lsa.Close()
 			},
 		},
 	}
