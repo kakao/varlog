@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1](https://github.com/kakao/varlog/compare/v0.14.0...v0.14.1) (2023-06-20)
+
+
+### Bug Fixes
+
+* **client:** add missing method pkg/varlog.(*MockLog).AppendableLogStreams ([7bf9bf9](https://github.com/kakao/varlog/commit/7bf9bf91660f1361c78976716e9570884f5e86e0))
+* **client:** add missing method pkg/varlog.(*MockLog).AppendableLogStreams ([#487](https://github.com/kakao/varlog/issues/487)) ([61747ed](https://github.com/kakao/varlog/commit/61747ed0077d6f7aca9c3a220f0f488bfb154bb8))
+
 ## [0.14.0](https://github.com/kakao/varlog/compare/v0.13.0...v0.14.0) (2023-06-19)
 
 
