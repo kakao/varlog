@@ -23,10 +23,22 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Install tools
+        run: |
+          make tools
+
       - name: Check go mod
         run: |
-          go mod tidy
-          git diff --exit-code go.mod
+          make mod-tidy-check
+          make mod-vendor-check
+
+      - name: Check proto
+        run: |
+          make proto-check
+
+      - name: Check generate
+        run: |
+          make generate-check
 
   lint:
     runs-on: ubuntu-latest
