@@ -3739,7 +3739,7 @@ func TestExecutorRestore(t *testing.T) {
 			// data  : none
 			// commit: none
 			// cmtctx: none
-			name: "NoLogEntry",
+			name: "ValidLogStreamReplica_NoCommittedLog_NoCommitContext",
 			pref: func(t *testing.T, lse *Executor) {
 			},
 			testf: func(t *testing.T, lse *Executor) {
@@ -3777,10 +3777,85 @@ func TestExecutorRestore(t *testing.T) {
 			},
 		},
 		{
+			// data  : 1 2 3 4 5 6 7 8 9 10
+			// commit: none
+			// cmtctx: none
+			name: "ValidLogStreamReplica_NoCommittedLog_NoCommitContext_UncommittedLogs",
+			pref: func(t *testing.T, lse *Executor) {
+				for i := 1; i <= 10; i++ {
+					storage.TestWriteLogEntry(t, lse.stg, types.LLSN(i), []byte{})
+				}
+			},
+			testf: func(t *testing.T, lse *Executor) {
+				rpt, err := lse.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lse.lsid,
+					UncommittedLLSNOffset: 1,
+					UncommittedLLSNLength: 10,
+					Version:               0,
+					HighWatermark:         0,
+				}, rpt)
+
+				lsrmd, err := lse.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, types.Version(0), lsrmd.Version)
+				require.Equal(t, types.GLSN(0), lsrmd.GlobalHighWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalHighWatermark)
+
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+				require.Equal(t, types.InvalidVersion, ver)
+				require.Equal(t, types.InvalidGLSN, hwm)
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: types.MinLLSN, GLSN: types.MinGLSN,
+				}, uncommittedBegin)
+				require.False(t, invalid)
+				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
+				localLWM, localHWM, _ := lse.lsc.localWatermarks()
+				require.True(t, localLWM.LLSN.Invalid())
+				require.True(t, localLWM.GLSN.Invalid())
+				require.True(t, localHWM.LLSN.Invalid())
+				require.True(t, localHWM.GLSN.Invalid())
+
+				// Commit uncommitted logs after restarting.
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					_ = lse.Commit(context.Background(), snpb.LogStreamCommitResult{
+						TopicID:             lse.tpid,
+						LogStreamID:         lse.lsid,
+						CommittedLLSNOffset: 1,
+						CommittedGLSNOffset: 1,
+						CommittedGLSNLength: 5,
+						Version:             1,
+						HighWatermark:       5,
+					})
+					rpt, err := lse.Report(context.Background())
+					assert.NoError(c, err)
+					assert.EqualValues(c, 1, rpt.Version)
+				}, time.Second, 10*time.Millisecond)
+
+				lss, lhwm, err := lse.Seal(context.Background(), 5)
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				require.EqualValues(t, 5, lhwm)
+
+				rpt, err = lse.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lse.lsid,
+					UncommittedLLSNOffset: 6,
+					UncommittedLLSNLength: 0,
+					Version:               1,
+					HighWatermark:         5,
+				}, rpt)
+			},
+		},
+		{
 			// data  : 1, 2, 3, ... , 10
 			// commit: 1, 2, 3, ...., 10
 			// cmtctx:                10
-			name: "TenLogEntries",
+			name: "ValidLogStreamReplica_CommittedLogs_CommitContext",
 			pref: func(t *testing.T, lse *Executor) {
 				for i := 0; i < 10; i++ {
 					llsn, glsn := types.LLSN(i+1), types.GLSN(i+1)
@@ -3830,10 +3905,97 @@ func TestExecutorRestore(t *testing.T) {
 			},
 		},
 		{
+			// data  : 1, 2, 3, ... , 10, 11, 12, 13, ...., 20
+			// commit: 1, 2, 3, ...., 10
+			// cmtctx:                10
+			name: "ValidLogStreamReplica_CommittedLogs_CommitContext",
+			pref: func(t *testing.T, lse *Executor) {
+				for i := 0; i < 10; i++ {
+					llsn, glsn := types.LLSN(i+1), types.GLSN(i+1)
+					storage.TestAppendLogEntryWithoutCommitContext(t, lse.stg, llsn, glsn, []byte{})
+				}
+				storage.TestSetCommitContext(t, lse.stg, storage.CommitContext{
+					Version:            10,
+					HighWatermark:      10,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   11,
+					CommittedLLSNBegin: 1,
+				})
+				for i := 11; i <= 20; i++ {
+					storage.TestWriteLogEntry(t, lse.stg, types.LLSN(i), []byte{})
+				}
+			},
+			testf: func(t *testing.T, lse *Executor) {
+				rpt, err := lse.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lse.lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 10,
+					Version:               10,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := lse.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, types.Version(10), lsrmd.Version)
+				require.Equal(t, types.GLSN(10), lsrmd.GlobalHighWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+				require.Equal(t, types.Version(10), ver)
+				require.Equal(t, types.GLSN(10), hwm)
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: types.LLSN(11),
+					GLSN: types.GLSN(11),
+				}, uncommittedBegin)
+				require.False(t, invalid)
+				require.Equal(t, types.LLSN(21), lse.lsc.uncommittedLLSNEnd.Load())
+				localLWM, localHWM, _ := lse.lsc.localWatermarks()
+				require.Equal(t, types.LLSN(1), localLWM.LLSN)
+				require.Equal(t, types.GLSN(1), localLWM.GLSN)
+				require.Equal(t, types.LLSN(10), localHWM.LLSN)
+				require.Equal(t, types.GLSN(10), localHWM.GLSN)
+
+				// Commit uncommitted logs after restarting.
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					_ = lse.Commit(context.Background(), snpb.LogStreamCommitResult{
+						TopicID:             lse.tpid,
+						LogStreamID:         lse.lsid,
+						CommittedLLSNOffset: 11,
+						CommittedGLSNOffset: 11,
+						CommittedGLSNLength: 5,
+						Version:             11,
+						HighWatermark:       15,
+					})
+					rpt, err := lse.Report(context.Background())
+					assert.NoError(c, err)
+					assert.EqualValues(c, 11, rpt.Version)
+				}, time.Second, 10*time.Millisecond)
+
+				lss, lhwm, err := lse.Seal(context.Background(), 15)
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				require.EqualValues(t, 15, lhwm)
+
+				rpt, err = lse.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lse.lsid,
+					UncommittedLLSNOffset: 16,
+					UncommittedLLSNLength: 0,
+					Version:               11,
+					HighWatermark:         15,
+				}, rpt)
+			},
+		},
+		{
 			// data  : 1, 2, 3, ... , 10
 			// commit: 1, 2, 3, ...., 10
 			// cmtctx:                10
-			name: "TenLogEntriesFollowedByEmptyCommitContext",
+			name: "ValidLogStreamReplica_CommittedLogs_EmptyCommitContext",
 			pref: func(t *testing.T, lse *Executor) {
 				for i := 0; i < 10; i++ {
 					llsn, glsn := types.LLSN(i+1), types.GLSN(i+1)
@@ -3886,7 +4048,7 @@ func TestExecutorRestore(t *testing.T) {
 			// data  : 1, 2, 3, ... , 10
 			// commit: 1, 2, 3, ...., 10
 			// cmtctx: none
-			name: "TenLogEntriesWithoutCommitContext",
+			name: "InvalidLogStreamReplica_CommittedLogs_NoCommitContext",
 			pref: func(t *testing.T, lse *Executor) {
 				for i := 0; i < 10; i++ {
 					llsn, glsn := types.LLSN(i+1), types.GLSN(i+1)
@@ -3929,10 +4091,64 @@ func TestExecutorRestore(t *testing.T) {
 			},
 		},
 		{
+			// data  : 1, 2, 3, ... , 10, 11, 12, 13, ..., 20
+			// commit: 1, 2, 3, ...., 10
+			// cmtctx: none
+			name: "InvalidLogStreamReplica_CommittedLogs_NoCommitContext_UncommittedLogs",
+			pref: func(t *testing.T, lse *Executor) {
+				for i := 0; i < 10; i++ {
+					llsn, glsn := types.LLSN(i+1), types.GLSN(i+1)
+					storage.TestAppendLogEntryWithoutCommitContext(t, lse.stg, llsn, glsn, []byte{})
+				}
+				for i := 11; i <= 20; i++ {
+					storage.TestWriteLogEntry(t, lse.stg, types.LLSN(i), []byte{})
+				}
+			},
+			testf: func(t *testing.T, lse *Executor) {
+				rpt, err := lse.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lse.lsid,
+					UncommittedLLSNOffset: 0,
+					UncommittedLLSNLength: 0,
+					Version:               0,
+					HighWatermark:         0,
+				}, rpt)
+
+				lsrmd, err := lse.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, types.InvalidVersion, lsrmd.Version)
+				require.Equal(t, types.InvalidGLSN, lsrmd.GlobalHighWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 10, GLSN: 10}, lsrmd.LocalHighWatermark)
+
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+				require.Equal(t, types.InvalidVersion, ver)
+				require.Equal(t, types.InvalidGLSN, hwm)
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: types.LLSN(11),
+					GLSN: types.GLSN(11),
+				}, uncommittedBegin)
+				require.True(t, invalid)
+				require.Equal(t, types.LLSN(11), lse.lsc.uncommittedLLSNEnd.Load())
+				localLWM, localHWM, _ := lse.lsc.localWatermarks()
+				require.Equal(t, types.LLSN(1), localLWM.LLSN)
+				require.Equal(t, types.GLSN(1), localLWM.GLSN)
+				require.Equal(t, types.LLSN(10), localHWM.LLSN)
+				require.Equal(t, types.GLSN(10), localHWM.GLSN)
+
+				lss, lhwm, err := lse.Seal(context.Background(), 10)
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lss)
+				require.EqualValues(t, 10, lhwm)
+			},
+		},
+		{
 			// data  : 1, 2, 3, ... , 10
 			// commit: 1, 2, 3, ...., 10
 			// cmtctx:                                  20
-			name: "TenLogEntriesWithFutureCommitContext",
+			name: "InvalidLogStreamReplica_CommittedLogs_FutureCommitContext",
 			pref: func(t *testing.T, lse *Executor) {
 				for i := 0; i < 10; i++ {
 					llsn, glsn := types.LLSN(i+1), types.GLSN(i+1)
@@ -3985,7 +4201,7 @@ func TestExecutorRestore(t *testing.T) {
 			// data  : 1, 2, 3, ... , 10
 			// commit: 1, 2, 3, ...., 10
 			// cmtctx:          5
-			name: "TenLogEntriesWithPastCommitContext",
+			name: "InvalidLogStreamReplica_CommittedLogs_PastCommitContext",
 			pref: func(t *testing.T, lse *Executor) {
 				for i := 0; i < 10; i++ {
 					llsn, glsn := types.LLSN(i+1), types.GLSN(i+1)
@@ -4038,7 +4254,7 @@ func TestExecutorRestore(t *testing.T) {
 			// data  :       5, ... , 10
 			// commit:       5, ...., 10
 			// cmtctx:                10
-			name: "TrimmedPrefix",
+			name: "ValidLogStreamReplica_PrefixTrimmed_CommittedLogs_CommitContext",
 			pref: func(t *testing.T, lse *Executor) {
 				for i := 5; i <= 10; i++ {
 					llsn, glsn := types.LLSN(i), types.GLSN(i)
@@ -4091,7 +4307,7 @@ func TestExecutorRestore(t *testing.T) {
 			// data  : none
 			// commit: none
 			// cmtctx:                10
-			name: "TrimmedAll",
+			name: "ValidLogStreamReplica_AllTrimmed_NoCommittedLogs_CommitContext",
 			pref: func(t *testing.T, lse *Executor) {
 				storage.TestSetCommitContext(t, lse.stg, storage.CommitContext{
 					Version:            10,
@@ -4136,6 +4352,89 @@ func TestExecutorRestore(t *testing.T) {
 				require.Equal(t, types.GLSN(0), localHWM.GLSN)
 			},
 		},
+		{
+			// data  :                   11, 12, 13, ..., 20
+			// commit: none
+			// cmtctx:                10
+			name: "ValidLogStreamReplica_AllTrimmed_NoCommittedLogs_CommitContext_UncommittedLogs",
+			pref: func(t *testing.T, lse *Executor) {
+				storage.TestSetCommitContext(t, lse.stg, storage.CommitContext{
+					Version:            10,
+					HighWatermark:      10,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   11,
+					CommittedLLSNBegin: 1,
+				})
+				for i := 11; i <= 20; i++ {
+					storage.TestWriteLogEntry(t, lse.stg, types.LLSN(i), []byte{})
+				}
+			},
+			testf: func(t *testing.T, lse *Executor) {
+				rpt, err := lse.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lse.lsid,
+					UncommittedLLSNOffset: 11,
+					UncommittedLLSNLength: 10,
+					Version:               10,
+					HighWatermark:         10,
+				}, rpt)
+
+				lsrmd, err := lse.Metadata()
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lsrmd.Status)
+				require.Equal(t, types.Version(10), lsrmd.Version)
+				require.Equal(t, types.GLSN(10), lsrmd.GlobalHighWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalLowWatermark)
+				require.Equal(t, varlogpb.LogSequenceNumber{LLSN: 0, GLSN: 0}, lsrmd.LocalHighWatermark)
+
+				ver, hwm, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+				require.Equal(t, types.Version(10), ver)
+				require.Equal(t, types.GLSN(10), hwm)
+				require.Equal(t, varlogpb.LogSequenceNumber{
+					LLSN: types.LLSN(11),
+					GLSN: types.GLSN(11),
+				}, uncommittedBegin)
+				require.False(t, invalid)
+				require.Equal(t, types.LLSN(21), lse.lsc.uncommittedLLSNEnd.Load())
+				localLWM, localHWM, _ := lse.lsc.localWatermarks()
+				require.Equal(t, types.LLSN(0), localLWM.LLSN)
+				require.Equal(t, types.GLSN(0), localLWM.GLSN)
+				require.Equal(t, types.LLSN(0), localHWM.LLSN)
+				require.Equal(t, types.GLSN(0), localHWM.GLSN)
+
+				// Commit uncommitted logs after restarting.
+				require.EventuallyWithT(t, func(c *assert.CollectT) {
+					_ = lse.Commit(context.Background(), snpb.LogStreamCommitResult{
+						TopicID:             lse.tpid,
+						LogStreamID:         lse.lsid,
+						CommittedLLSNOffset: 11,
+						CommittedGLSNOffset: 11,
+						CommittedGLSNLength: 5,
+						Version:             11,
+						HighWatermark:       15,
+					})
+					rpt, err := lse.Report(context.Background())
+					assert.NoError(c, err)
+					assert.EqualValues(c, 11, rpt.Version)
+				}, time.Second, 10*time.Millisecond)
+
+				lss, lhwm, err := lse.Seal(context.Background(), 15)
+				require.NoError(t, err)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+				require.EqualValues(t, 15, lhwm)
+
+				rpt, err = lse.Report(context.Background())
+				require.NoError(t, err)
+				require.Equal(t, snpb.LogStreamUncommitReport{
+					LogStreamID:           lse.lsid,
+					UncommittedLLSNOffset: 16,
+					UncommittedLLSNLength: 0,
+					Version:               11,
+					HighWatermark:         15,
+				}, rpt)
+			},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -4146,6 +4445,7 @@ func TestExecutorRestore(t *testing.T) {
 			func() {
 				stg := storage.TestNewStorage(t, storage.WithPath(storagePath))
 				lse, err := NewExecutor(WithStorage(stg))
+				require.NoError(t, err)
 				tc.pref(t, lse)
 				defer func() {
 					err = lse.Close()
@@ -4156,6 +4456,7 @@ func TestExecutorRestore(t *testing.T) {
 			func() {
 				stg := storage.TestNewStorage(t, storage.WithPath(storagePath))
 				lse, err := NewExecutor(WithStorage(stg))
+				require.NoError(t, err)
 				tc.testf(t, lse)
 				defer func() {
 					err = lse.Close()

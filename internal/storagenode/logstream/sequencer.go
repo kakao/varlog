@@ -139,7 +139,7 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 	// before sending tasks to writer. It prevents the above subtle case.
 	//
 	// send to committer
-	if err := sq.lse.cm.sendCommitWaitTask(ctx, cwts); err != nil {
+	if err := sq.lse.cm.sendCommitWaitTask(ctx, cwts, false /*ignoreSealing*/); err != nil {
 		sq.logger.Error("could not send to committer", zap.Error(err))
 		sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		st.wwg.done(err)

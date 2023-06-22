@@ -148,6 +148,14 @@ func NewExecutor(opts ...ExecutorOption) (lse *Executor, err error) {
 		lse:           lse,
 		logger:        lse.logger.Named("backup writer"),
 	})
+	if err != nil {
+		return
+	}
+
+	err = lse.restoreCommitWaitTasks(rp)
+	if err != nil {
+		return
+	}
 
 	return lse, err
 }
@@ -201,7 +209,7 @@ func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataL
 		return err
 	}
 
-	if err := lse.cm.sendCommitWaitTask(ctx, cwts); err != nil {
+	if err := lse.cm.sendCommitWaitTask(ctx, cwts, false /*ignoreSealing*/); err != nil {
 		lse.logger.Error("could not send commit wait task list", zap.Error(err))
 		cwtListNode := cwts.Back()
 		for cwtListNode != nil {
@@ -643,11 +651,21 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 		lse.logger.Info("restore log stream context", zap.String("mode", restoreMode))
 	}()
 
-	if cc == nil && last == nil { // new log stream replica
+	// Log stream replica that has not committed any logs yet. For example, a
+	// new log stream replica.
+	if cc == nil && last == nil {
+		uncommittedLLSNEnd := lsc.uncommittedLLSNEnd.Load()
+		if !rp.UncommittedLLSN.End.Invalid() {
+			uncommittedLLSNEnd = rp.UncommittedLLSN.End
+		}
+		lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
+
 		return lsc
 	}
 
-	if cc != nil && last == nil { // maybe trimmed
+	// Log stream replica with a commit context but no log entry. For instance,
+	// the log stream replica that trimmed all log entries.
+	if cc != nil && last == nil {
 		restoreMode = "recovered"
 		uncommittedLLSNBegin := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
 		uncommittedBegin := varlogpb.LogSequenceNumber{
@@ -655,11 +673,19 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 			GLSN: cc.CommittedGLSNEnd,
 		}
 		lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false /*invalid*/)
-		lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
+
+		uncommittedLLSNEnd := uncommittedLLSNBegin
+		if !rp.UncommittedLLSN.End.Invalid() {
+			uncommittedLLSNEnd = rp.UncommittedLLSN.End
+		}
+		lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
+
 		return lsc
 	}
 
-	if cc != nil && last != nil { // recovery
+	// Log stream replica that has a commit context and log entries. The commit
+	// context specifies the last log entry exactly.
+	if cc != nil && last != nil {
 		restoreMode = "recovered"
 		uncommittedLLSNBegin := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
 		if uncommittedLLSNBegin-1 == last.LLSN {
@@ -668,7 +694,13 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 				GLSN: last.GLSN + 1,
 			}
 			lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false /*invalid*/)
-			lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
+
+			uncommittedLLSNEnd := uncommittedLLSNBegin
+			if !rp.UncommittedLLSN.End.Invalid() {
+				uncommittedLLSNEnd = rp.UncommittedLLSN.End
+			}
+			lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
+
 			lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
 				LLSN: first.LLSN,
 				GLSN: first.GLSN,
@@ -677,7 +709,17 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 		}
 	}
 
-	// something wrong
+	// Log stream replica is invalid:
+	//
+	// - It has committed log entries but no commit context.
+	// - It has a commit context and committed log entries, but the commit
+	//   context doesn't specify the last log entry.
+	//
+	// Invalid log stream replica should be resolved by synchronization from
+	// the sealed source replica. Log stream context should be set carefully to
+	// receive copies of log entries through synchronization. To restore the
+	// log stream replica restarted during the synchronization phase, the log
+	// stream context is initiated by the committed log entries.
 	restoreMode = "invalid"
 	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{}, true /*invalid*/)
 	if last != nil {
@@ -693,4 +735,34 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 		})
 	}
 	return lsc
+}
+
+func (lse *Executor) restoreCommitWaitTasks(rp storage.RecoveryPoints) error {
+	// Invalid log stream replica does not receive commit messages from the metadata repository since synchronization can resolve it only.
+	_, _, _, invalid := lse.lsc.reportCommitBase()
+	if invalid {
+		return nil
+	}
+
+	// No uncommitted logs, so no CommitWaitTasks.
+	if rp.UncommittedLLSN.Begin.Invalid() {
+		return nil
+	}
+
+	cwts := newListQueue()
+	for i := rp.UncommittedLLSN.Begin; i < rp.UncommittedLLSN.End; i++ {
+		cwts.PushFront(newCommitWaitTask(nil))
+	}
+	err := lse.cm.sendCommitWaitTask(context.Background(), cwts, true /*ignoreSealing*/)
+	if err != nil {
+		lse.logger.Error("could not send commit wait task list", zap.Error(err))
+		cwtListNode := cwts.Back()
+		for cwtListNode != nil {
+			cwt := cwtListNode.value.(*commitWaitTask)
+			cwt.release()
+			cwtListNode = cwtListNode.Prev()
+		}
+		return err
+	}
+	return nil
 }

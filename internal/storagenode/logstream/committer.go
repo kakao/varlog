@@ -50,7 +50,7 @@ func newCommitter(cfg committerConfig) (*committer, error) {
 // The commit wait task is pushed into commitWaitQ in the committer.
 // The writer calls this method internally to push commit wait tasks to the committer.
 // If the input list of commit wait tasks are nil or empty, it panics.
-func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) (err error) {
+func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue, ignoreSealing bool) (err error) {
 	if cwts == nil {
 		panic("log stream: committer: commit wait task list is nil")
 	}
@@ -73,7 +73,11 @@ func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) (err
 	}()
 
 	switch cm.lse.esm.load() {
-	case executorStateSealing, executorStateSealed, executorStateLearning:
+	case executorStateSealing:
+		if !ignoreSealing {
+			err = verrors.ErrSealed
+		}
+	case executorStateSealed, executorStateLearning:
 		err = verrors.ErrSealed
 	case executorStateClosed:
 		err = verrors.ErrClosed
