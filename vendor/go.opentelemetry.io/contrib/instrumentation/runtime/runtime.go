@@ -20,12 +20,11 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/global"
-	"go.opentelemetry.io/otel/metric/unit"
 )
 
-// Runtime reports the work-in-progress conventional runtime metrics specified by OpenTelemetry
+// Runtime reports the work-in-progress conventional runtime metrics specified by OpenTelemetry.
 type runtime struct {
 	config config
 	meter  metric.Meter
@@ -87,7 +86,7 @@ func (o metricProviderOption) apply(c *config) {
 // newConfig computes a config from the supplied Options.
 func newConfig(opts ...Option) config {
 	c := config{
-		MeterProvider:               global.GetMeterProvider(),
+		MeterProvider:               otel.GetMeterProvider(),
 		MinimumReadMemStatsInterval: DefaultMinimumReadMemStatsInterval,
 	}
 	for _, opt := range opts {
@@ -103,12 +102,12 @@ func Start(opts ...Option) error {
 		c.MinimumReadMemStatsInterval = DefaultMinimumReadMemStatsInterval
 	}
 	if c.MeterProvider == nil {
-		c.MeterProvider = global.GetMeterProvider()
+		c.MeterProvider = otel.GetMeterProvider()
 	}
 	r := &runtime{
 		meter: c.MeterProvider.Meter(
 			"go.opentelemetry.io/contrib/instrumentation/runtime",
-			metric.WithInstrumentationVersion(SemVersion()),
+			metric.WithInstrumentationVersion(Version()),
 		),
 		config: c,
 	}
@@ -117,34 +116,43 @@ func Start(opts ...Option) error {
 
 func (r *runtime) register() error {
 	startTime := time.Now()
-	if _, err := r.meter.NewInt64CounterObserver(
+	uptime, err := r.meter.Int64ObservableCounter(
 		"runtime.uptime",
-		func(_ context.Context, result metric.Int64ObserverResult) {
-			result.Observe(time.Since(startTime).Milliseconds())
-		},
-		metric.WithUnit(unit.Milliseconds),
+		metric.WithUnit("ms"),
 		metric.WithDescription("Milliseconds since application was initialized"),
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
-	if _, err := r.meter.NewInt64UpDownCounterObserver(
-		"runtime.go.goroutines",
-		func(_ context.Context, result metric.Int64ObserverResult) {
-			result.Observe(int64(goruntime.NumGoroutine()))
-		},
+	goroutines, err := r.meter.Int64ObservableUpDownCounter(
+		"process.runtime.go.goroutines",
 		metric.WithDescription("Number of goroutines that currently exist"),
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
-	if _, err := r.meter.NewInt64CounterObserver(
-		"runtime.go.cgo.calls",
-		func(_ context.Context, result metric.Int64ObserverResult) {
-			result.Observe(goruntime.NumCgoCall())
-		},
+	cgoCalls, err := r.meter.Int64ObservableUpDownCounter(
+		"process.runtime.go.cgo.calls",
 		metric.WithDescription("Number of cgo calls made by the current process"),
-	); err != nil {
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.meter.RegisterCallback(
+		func(ctx context.Context, o metric.Observer) error {
+			o.ObserveInt64(uptime, time.Since(startTime).Milliseconds())
+			o.ObserveInt64(goroutines, int64(goruntime.NumGoroutine()))
+			o.ObserveInt64(cgoCalls, goruntime.NumCgoCall())
+			return nil
+		},
+		uptime,
+		goroutines,
+		cgoCalls,
+	)
+	if err != nil {
 		return err
 	}
 
@@ -155,20 +163,20 @@ func (r *runtime) registerMemStats() error {
 	var (
 		err error
 
-		heapAlloc    metric.Int64UpDownCounterObserver
-		heapIdle     metric.Int64UpDownCounterObserver
-		heapInuse    metric.Int64UpDownCounterObserver
-		heapObjects  metric.Int64UpDownCounterObserver
-		heapReleased metric.Int64UpDownCounterObserver
-		heapSys      metric.Int64UpDownCounterObserver
-		liveObjects  metric.Int64UpDownCounterObserver
+		heapAlloc    metric.Int64ObservableUpDownCounter
+		heapIdle     metric.Int64ObservableUpDownCounter
+		heapInuse    metric.Int64ObservableUpDownCounter
+		heapObjects  metric.Int64ObservableUpDownCounter
+		heapReleased metric.Int64ObservableUpDownCounter
+		heapSys      metric.Int64ObservableUpDownCounter
+		liveObjects  metric.Int64ObservableUpDownCounter
 
 		// TODO: is ptrLookups useful? I've not seen a value
 		// other than zero.
-		ptrLookups metric.Int64CounterObserver
+		ptrLookups metric.Int64ObservableCounter
 
-		gcCount      metric.Int64CounterObserver
-		pauseTotalNs metric.Int64CounterObserver
+		gcCount      metric.Int64ObservableCounter
+		pauseTotalNs metric.Int64ObservableCounter
 		gcPauseNs    metric.Int64Histogram
 
 		lastNumGC    uint32
@@ -182,61 +190,32 @@ func (r *runtime) registerMemStats() error {
 	lock.Lock()
 	defer lock.Unlock()
 
-	batchObserver := r.meter.NewBatchObserver(func(ctx context.Context, result metric.BatchObserverResult) {
-		lock.Lock()
-		defer lock.Unlock()
-
-		now := time.Now()
-		if now.Sub(lastMemStats) >= r.config.MinimumReadMemStatsInterval {
-			goruntime.ReadMemStats(&memStats)
-			lastMemStats = now
-		}
-
-		result.Observe(
-			nil,
-			heapAlloc.Observation(int64(memStats.HeapAlloc)),
-			heapIdle.Observation(int64(memStats.HeapIdle)),
-			heapInuse.Observation(int64(memStats.HeapInuse)),
-			heapObjects.Observation(int64(memStats.HeapObjects)),
-			heapReleased.Observation(int64(memStats.HeapReleased)),
-			heapSys.Observation(int64(memStats.HeapSys)),
-			liveObjects.Observation(int64(memStats.Mallocs-memStats.Frees)),
-			ptrLookups.Observation(int64(memStats.Lookups)),
-			gcCount.Observation(int64(memStats.NumGC)),
-			pauseTotalNs.Observation(int64(memStats.PauseTotalNs)),
-		)
-
-		computeGCPauses(ctx, &gcPauseNs, memStats.PauseNs[:], lastNumGC, memStats.NumGC)
-
-		lastNumGC = memStats.NumGC
-	})
-
-	if heapAlloc, err = batchObserver.NewInt64UpDownCounterObserver(
-		"runtime.go.mem.heap_alloc",
-		metric.WithUnit(unit.Bytes),
+	if heapAlloc, err = r.meter.Int64ObservableUpDownCounter(
+		"process.runtime.go.mem.heap_alloc",
+		metric.WithUnit("By"),
 		metric.WithDescription("Bytes of allocated heap objects"),
 	); err != nil {
 		return err
 	}
 
-	if heapIdle, err = batchObserver.NewInt64UpDownCounterObserver(
-		"runtime.go.mem.heap_idle",
-		metric.WithUnit(unit.Bytes),
+	if heapIdle, err = r.meter.Int64ObservableUpDownCounter(
+		"process.runtime.go.mem.heap_idle",
+		metric.WithUnit("By"),
 		metric.WithDescription("Bytes in idle (unused) spans"),
 	); err != nil {
 		return err
 	}
 
-	if heapInuse, err = batchObserver.NewInt64UpDownCounterObserver(
-		"runtime.go.mem.heap_inuse",
-		metric.WithUnit(unit.Bytes),
+	if heapInuse, err = r.meter.Int64ObservableUpDownCounter(
+		"process.runtime.go.mem.heap_inuse",
+		metric.WithUnit("By"),
 		metric.WithDescription("Bytes in in-use spans"),
 	); err != nil {
 		return err
 	}
 
-	if heapObjects, err = batchObserver.NewInt64UpDownCounterObserver(
-		"runtime.go.mem.heap_objects",
+	if heapObjects, err = r.meter.Int64ObservableUpDownCounter(
+		"process.runtime.go.mem.heap_objects",
 		metric.WithDescription("Number of allocated heap objects"),
 	); err != nil {
 		return err
@@ -244,38 +223,38 @@ func (r *runtime) registerMemStats() error {
 
 	// FYI see https://github.com/golang/go/issues/32284 to help
 	// understand the meaning of this value.
-	if heapReleased, err = batchObserver.NewInt64UpDownCounterObserver(
-		"runtime.go.mem.heap_released",
-		metric.WithUnit(unit.Bytes),
+	if heapReleased, err = r.meter.Int64ObservableUpDownCounter(
+		"process.runtime.go.mem.heap_released",
+		metric.WithUnit("By"),
 		metric.WithDescription("Bytes of idle spans whose physical memory has been returned to the OS"),
 	); err != nil {
 		return err
 	}
 
-	if heapSys, err = batchObserver.NewInt64UpDownCounterObserver(
-		"runtime.go.mem.heap_sys",
-		metric.WithUnit(unit.Bytes),
+	if heapSys, err = r.meter.Int64ObservableUpDownCounter(
+		"process.runtime.go.mem.heap_sys",
+		metric.WithUnit("By"),
 		metric.WithDescription("Bytes of heap memory obtained from the OS"),
 	); err != nil {
 		return err
 	}
 
-	if ptrLookups, err = batchObserver.NewInt64CounterObserver(
-		"runtime.go.mem.lookups",
+	if ptrLookups, err = r.meter.Int64ObservableCounter(
+		"process.runtime.go.mem.lookups",
 		metric.WithDescription("Number of pointer lookups performed by the runtime"),
 	); err != nil {
 		return err
 	}
 
-	if liveObjects, err = batchObserver.NewInt64UpDownCounterObserver(
-		"runtime.go.mem.live_objects",
+	if liveObjects, err = r.meter.Int64ObservableUpDownCounter(
+		"process.runtime.go.mem.live_objects",
 		metric.WithDescription("Number of live objects is the number of cumulative Mallocs - Frees"),
 	); err != nil {
 		return err
 	}
 
-	if gcCount, err = batchObserver.NewInt64CounterObserver(
-		"runtime.go.gc.count",
+	if gcCount, err = r.meter.Int64ObservableCounter(
+		"process.runtime.go.gc.count",
 		metric.WithDescription("Number of completed garbage collection cycles"),
 	); err != nil {
 		return err
@@ -284,28 +263,72 @@ func (r *runtime) registerMemStats() error {
 	// Note that the following could be derived as a sum of
 	// individual pauses, but we may lose individual pauses if the
 	// observation interval is too slow.
-	if pauseTotalNs, err = batchObserver.NewInt64CounterObserver(
-		"runtime.go.gc.pause_total_ns",
+	if pauseTotalNs, err = r.meter.Int64ObservableCounter(
+		"process.runtime.go.gc.pause_total_ns",
 		// TODO: nanoseconds units
 		metric.WithDescription("Cumulative nanoseconds in GC stop-the-world pauses since the program started"),
 	); err != nil {
 		return err
 	}
 
-	if gcPauseNs, err = r.meter.NewInt64Histogram(
-		"runtime.go.gc.pause_ns",
+	if gcPauseNs, err = r.meter.Int64Histogram(
+		"process.runtime.go.gc.pause_ns",
 		// TODO: nanoseconds units
 		metric.WithDescription("Amount of nanoseconds in GC stop-the-world pauses"),
 	); err != nil {
 		return err
 	}
 
+	_, err = r.meter.RegisterCallback(
+		func(ctx context.Context, o metric.Observer) error {
+			lock.Lock()
+			defer lock.Unlock()
+
+			now := time.Now()
+			if now.Sub(lastMemStats) >= r.config.MinimumReadMemStatsInterval {
+				goruntime.ReadMemStats(&memStats)
+				lastMemStats = now
+			}
+
+			o.ObserveInt64(heapAlloc, int64(memStats.HeapAlloc))
+			o.ObserveInt64(heapIdle, int64(memStats.HeapIdle))
+			o.ObserveInt64(heapInuse, int64(memStats.HeapInuse))
+			o.ObserveInt64(heapObjects, int64(memStats.HeapObjects))
+			o.ObserveInt64(heapReleased, int64(memStats.HeapReleased))
+			o.ObserveInt64(heapSys, int64(memStats.HeapSys))
+			o.ObserveInt64(liveObjects, int64(memStats.Mallocs-memStats.Frees))
+			o.ObserveInt64(ptrLookups, int64(memStats.Lookups))
+			o.ObserveInt64(gcCount, int64(memStats.NumGC))
+			o.ObserveInt64(pauseTotalNs, int64(memStats.PauseTotalNs))
+
+			computeGCPauses(ctx, gcPauseNs, memStats.PauseNs[:], lastNumGC, memStats.NumGC)
+
+			lastNumGC = memStats.NumGC
+
+			return nil
+		},
+		heapAlloc,
+		heapIdle,
+		heapInuse,
+		heapObjects,
+		heapReleased,
+		heapSys,
+		liveObjects,
+
+		ptrLookups,
+
+		gcCount,
+		pauseTotalNs,
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func computeGCPauses(
 	ctx context.Context,
-	recorder *metric.Int64Histogram,
+	recorder metric.Int64Histogram,
 	circular []uint64,
 	lastNumGC, currentNumGC uint32,
 ) {
@@ -337,7 +360,7 @@ func computeGCPauses(
 
 func recordGCPauses(
 	ctx context.Context,
-	recorder *metric.Int64Histogram,
+	recorder metric.Int64Histogram,
 	pauses []uint64,
 ) {
 	for _, pause := range pauses {

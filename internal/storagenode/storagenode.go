@@ -16,7 +16,7 @@ import (
 	"github.com/gogo/status"
 	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/soheilhy/cmux"
-	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -82,7 +82,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		return nil, err
 	}
 
-	metrics, err := telemetry.RegisterMetrics(global.Meter("varlogsn"), cfg.snid)
+	metrics, err := telemetry.RegisterMetrics(otel.Meter("varlogsn"), cfg.snid)
 	if err != nil {
 		return nil, err
 	}

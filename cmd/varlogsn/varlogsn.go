@@ -12,12 +12,10 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/metric"
-	metricsdk "go.opentelemetry.io/otel/sdk/export/metric"
-	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
+	metricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
 	_ "go.uber.org/automaxprocs"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -191,9 +189,9 @@ func initTelemetry(ctx context.Context, c *cli.Context, snid types.StorageNodeID
 		resource.WithFromEnv(),
 		resource.WithHost(),
 		resource.WithAttributes(
-			semconv.ServiceNameKey.String("sn"),
-			semconv.ServiceNamespaceKey.String("varlog"),
-			semconv.ServiceInstanceIDKey.Int64(int64(snid)),
+			semconv.ServiceName("sn"),
+			semconv.ServiceNamespace("varlog"),
+			semconv.ServiceInstanceID(snid.String()),
 		))
 	if err != nil {
 		return nil, nil, err
@@ -202,15 +200,10 @@ func initTelemetry(ctx context.Context, c *cli.Context, snid types.StorageNodeID
 	meterProviderOpts := []telemetry.MeterProviderOption{
 		telemetry.WithResource(res),
 		telemetry.WithRuntimeInstrumentation(),
-		telemetry.WithAggregatorSelector(simple.NewWithInexpensiveDistribution()),
 	}
 	switch strings.ToLower(c.String(flagExporterType.Name)) {
 	case "stdout":
-		var opts []stdoutmetric.Option
-		if c.Bool(flagStdoutExporterPrettyPrint.Name) {
-			opts = append(opts, stdoutmetric.WithPrettyPrint())
-		}
-		exporter, shutdown, err = telemetry.NewStdoutExporter(opts...)
+		exporter, shutdown, err = telemetry.NewStdoutExporter()
 	case "otlp":
 		var opts []otlpmetricgrpc.Option
 		if c.Bool(flagOTLPExporterInsecure.Name) {

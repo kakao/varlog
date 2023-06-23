@@ -7,9 +7,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/global"
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	metricsdk "go.opentelemetry.io/otel/sdk/metric"
 )
 
 // StopMeterProvider is the type for stop function of meter provider.
@@ -21,43 +20,34 @@ func NewMeterProvider(opts ...MeterProviderOption) (metric.MeterProvider, StopMe
 	cfg := newMeterProviderConfig(opts)
 
 	if cfg.exporter == nil {
-		mp := metric.NewNoopMeterProvider()
+		mp := noopmetric.NewMeterProvider()
 		return mp, func(context.Context) {}, nil
 	}
 
-	pusher := controller.New(
-		processor.NewFactory(
-			cfg.aggregatorSelector,
-			cfg.exporter,
-		),
-		controller.WithResource(cfg.resource),
-		controller.WithExporter(cfg.exporter),
+	reader := metricsdk.NewPeriodicReader(cfg.exporter)
+
+	mp := metricsdk.NewMeterProvider(
+		metricsdk.WithResource(cfg.resource),
+		metricsdk.WithReader(reader),
 	)
 
 	if cfg.hostInstrumentation {
-		if err := initHostInstrumentation(pusher); err != nil {
+		if err := initHostInstrumentation(mp); err != nil {
 			return nil, func(context.Context) {}, err
 		}
 	}
 
 	if cfg.runtimeInstrumentation {
-		if err := initRuntimeInstrumentation(pusher, cfg.runtimeInstrumentationOpts); err != nil {
+		if err := initRuntimeInstrumentation(mp, cfg.runtimeInstrumentationOpts); err != nil {
 			return nil, func(context.Context) {}, err
 		}
 	}
 
-	if err := pusher.Start(context.Background()); err != nil {
-		return nil, func(context.Context) {}, err
-	}
-
 	stop := func(ctx context.Context) {
-		if err := pusher.Stop(ctx); err != nil {
-			otel.Handle(err)
-		}
-		cfg.shutdownExporter(ctx)
+		_ = mp.Shutdown(ctx)
 	}
 
-	return pusher, stop, nil
+	return mp, stop, nil
 }
 
 func initHostInstrumentation(mp metric.MeterProvider) error {
@@ -69,5 +59,5 @@ func initRuntimeInstrumentation(mp metric.MeterProvider, opts []runtime.Option) 
 }
 
 func SetGlobalMeterProvider(mp metric.MeterProvider) {
-	global.SetMeterProvider(mp)
+	otel.SetMeterProvider(mp)
 }

@@ -89,7 +89,6 @@ func newStartCommand() *cli.Command {
 
 			flagExporterType.StringFlag(false, "noop"),
 			flagExporterStopTimeout.DurationFlag(false, 5*time.Second),
-			flagStdoutExporterPrettyPrint.BoolFlag(),
 			flagOTLPExporterInsecure.BoolFlag(),
 			flagOTLPExporterEndpoint.StringFlag(false, ""),
 		},
