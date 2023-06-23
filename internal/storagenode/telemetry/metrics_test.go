@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/goleak"
 )
 
@@ -13,7 +13,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestRegisterLogStreamMetrics(t *testing.T) {
-	m, err := RegisterMetrics(global.Meter("test"), 1)
+	m, err := RegisterMetrics(otel.Meter("test"), 1)
 	assert.NoError(t, err)
 
 	_, err = RegisterLogStreamMetrics(m, 1)

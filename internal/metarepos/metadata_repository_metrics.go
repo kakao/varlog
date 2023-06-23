@@ -14,16 +14,23 @@ type metricsBag struct {
 }
 
 func newMetricsBag(mt metric.Meter) *metricsBag {
+	counter, err := mt.Int64UpDownCounter("requests")
+	if err != nil {
+		panic(err)
+	}
 	return &metricsBag{
 		mt:       mt,
-		requests: metric.Must(mt).NewInt64UpDownCounter("requests"),
+		requests: counter,
 	}
 }
 
 func (mb *metricsBag) Records(name string) metric.Float64Histogram {
 	f, ok := mb.records.Load(name)
 	if !ok {
-		r := metric.Must(mb.mt).NewFloat64Histogram(name)
+		r, err := mb.mt.Float64Histogram(name)
+		if err != nil {
+			panic(err)
+		}
 		f, _ = mb.records.LoadOrStore(name, r)
 	}
 
@@ -33,7 +40,10 @@ func (mb *metricsBag) Records(name string) metric.Float64Histogram {
 func (mb *metricsBag) Counts(name string) metric.Int64Counter {
 	f, ok := mb.counts.Load(name)
 	if !ok {
-		r := metric.Must(mb.mt).NewInt64Counter(name)
+		r, err := mb.mt.Int64Counter(name)
+		if err != nil {
+			panic(err)
+		}
 		f, _ = mb.records.LoadOrStore(name, r)
 	}
 

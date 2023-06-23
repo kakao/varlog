@@ -8,7 +8,6 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/unit"
 
 	"github.com/kakao/varlog/pkg/types"
 )
@@ -56,132 +55,86 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 	m = &Metrics{snid: snid}
 
 	var (
-		appendLogs                    metric.Int64CounterObserver
-		appendBytes                   metric.Int64CounterObserver
-		appendDuration                metric.Int64CounterObserver
-		appendOperations              metric.Int64CounterObserver
-		appendPreparationMicroseconds metric.Int64CounterObserver
-		appendBatchCommitGap          metric.Int64CounterObserver
+		appendLogs                    metric.Int64ObservableCounter
+		appendBytes                   metric.Int64ObservableCounter
+		appendDuration                metric.Int64ObservableCounter
+		appendOperations              metric.Int64ObservableCounter
+		appendPreparationMicroseconds metric.Int64ObservableCounter
+		appendBatchCommitGap          metric.Int64ObservableCounter
 
-		sequencerOperationDuration  metric.Int64CounterObserver
-		sequencerFanoutDuration     metric.Int64CounterObserver
-		sequencerOperations         metric.Int64CounterObserver
-		sequencerInflightOperations metric.Int64GaugeObserver
+		sequencerOperationDuration  metric.Int64ObservableCounter
+		sequencerFanoutDuration     metric.Int64ObservableCounter
+		sequencerOperations         metric.Int64ObservableCounter
+		sequencerInflightOperations metric.Int64ObservableGauge
 
-		writerOperationDuration  metric.Int64CounterObserver
-		writerOperations         metric.Int64CounterObserver
-		writerInflightOperations metric.Int64GaugeObserver
+		writerOperationDuration  metric.Int64ObservableCounter
+		writerOperations         metric.Int64ObservableCounter
+		writerInflightOperations metric.Int64ObservableGauge
 
-		committerOperationDuration metric.Int64CounterObserver
-		committerOperations        metric.Int64CounterObserver
-		committerLogs              metric.Int64CounterObserver
+		committerOperationDuration metric.Int64ObservableCounter
+		committerOperations        metric.Int64ObservableCounter
+		committerLogs              metric.Int64ObservableCounter
 
-		replicateClientOperationDuration  metric.Int64CounterObserver
-		replicateClientOperations         metric.Int64CounterObserver
-		replicateClientInflightOperations metric.Int64GaugeObserver
+		replicateClientOperationDuration  metric.Int64ObservableCounter
+		replicateClientOperations         metric.Int64ObservableCounter
+		replicateClientInflightOperations metric.Int64ObservableGauge
 
-		replicateServerOperations metric.Int64CounterObserver
+		replicateServerOperations metric.Int64ObservableCounter
 
-		replicateLogs                    metric.Int64CounterObserver
-		replicateBytes                   metric.Int64CounterObserver
-		replicateDuration                metric.Int64CounterObserver
-		replicateOperations              metric.Int64CounterObserver
-		replicatePreparationMicroseconds metric.Int64CounterObserver
+		replicateLogs                    metric.Int64ObservableCounter
+		replicateBytes                   metric.Int64ObservableCounter
+		replicateDuration                metric.Int64ObservableCounter
+		replicateOperations              metric.Int64ObservableCounter
+		replicatePreparationMicroseconds metric.Int64ObservableCounter
 
 		mu sync.Mutex
 	)
 
-	mu.Lock()
-	defer mu.Unlock()
-
-	batchObserver := meter.NewBatchObserver(func(ctx context.Context, result metric.BatchObserverResult) {
-		mu.Lock()
-		defer mu.Unlock()
-
-		m.metricsMap.Range(func(key, value interface{}) bool {
-			lsid := key.(types.LogStreamID)
-			lsm := value.(*LogStreamMetrics)
-			attrs := []attribute.KeyValue{
-				attribute.Int("lsid", int(lsid)),
-			}
-
-			result.Observe(attrs,
-				appendLogs.Observation(lsm.AppendLogs.Load()),
-				appendBytes.Observation(lsm.AppendBytes.Load()),
-				appendDuration.Observation(lsm.AppendDuration.Load()),
-				appendOperations.Observation(lsm.AppendOperations.Load()),
-				appendPreparationMicroseconds.Observation(lsm.AppendPreparationMicro.Load()),
-				appendBatchCommitGap.Observation(lsm.AppendBatchCommitGap.Load()),
-
-				sequencerOperationDuration.Observation(lsm.SequencerOperationDuration.Load()),
-				sequencerFanoutDuration.Observation(lsm.SequencerFanoutDuration.Load()),
-				sequencerOperations.Observation(lsm.SequencerOperations.Load()),
-				sequencerInflightOperations.Observation(lsm.SequencerInflightOperations.Load()),
-
-				writerOperationDuration.Observation(lsm.WriterOperationDuration.Load()),
-				writerOperations.Observation(lsm.WriterOperations.Load()),
-				writerInflightOperations.Observation(lsm.WriterInflightOperations.Load()),
-
-				committerOperationDuration.Observation(lsm.CommitterOperationDuration.Load()),
-				committerOperations.Observation(lsm.CommitterOperations.Load()),
-				committerLogs.Observation(lsm.CommitterLogs.Load()),
-
-				replicateClientOperationDuration.Observation(lsm.ReplicateClientOperationDuration.Load()),
-				replicateClientOperations.Observation(lsm.ReplicateClientOperations.Load()),
-				replicateClientInflightOperations.Observation(lsm.ReplicateClientInflightOperations.Load()),
-
-				replicateServerOperations.Observation(lsm.ReplicateServerOperations.Load()),
-
-				replicateLogs.Observation(lsm.ReplicateLogs.Load()),
-				replicateBytes.Observation(lsm.ReplicateBytes.Load()),
-				replicateDuration.Observation(lsm.ReplicateDuration.Load()),
-				replicateOperations.Observation(lsm.ReplicateOperations.Load()),
-				replicatePreparationMicroseconds.Observation(lsm.ReplicatePreparationMicro.Load()),
-			)
-
-			return true
-		})
-	})
-
-	appendLogs, err = batchObserver.NewInt64CounterObserver(
+	appendLogs, err = meter.Int64ObservableCounter(
 		"sn.append.logs",
 		metric.WithDescription("Number of logs appended to the log stream"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
-	appendBytes, err = batchObserver.NewInt64CounterObserver(
+
+	appendLogs, err = meter.Int64ObservableCounter(
+		"sn.append.logs",
+		metric.WithDescription("Number of logs appended to the log stream"),
+	)
+	if err != nil {
+		return nil, err
+	}
+	appendBytes, err = meter.Int64ObservableCounter(
 		"sn.append.bytes",
 		metric.WithDescription("Bytes appended to the log stream"),
-		metric.WithUnit(unit.Bytes),
+		metric.WithUnit("By"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	appendDuration, err = batchObserver.NewInt64CounterObserver(
+	appendDuration, err = meter.Int64ObservableCounter(
 		"sn.append.duration",
 		metric.WithDescription("Time spent appending to the log stream in microseconds"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	appendOperations, err = batchObserver.NewInt64CounterObserver(
+	appendOperations, err = meter.Int64ObservableCounter(
 		"sn.append.operations",
 		metric.WithDescription("Number of append operations"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
-	appendPreparationMicroseconds, err = batchObserver.NewInt64CounterObserver(
+	appendPreparationMicroseconds, err = meter.Int64ObservableCounter(
 		"sn.append.preparation.us",
 		metric.WithDescription("Time spent preparing append operation in microseconds"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	appendBatchCommitGap, err = batchObserver.NewInt64CounterObserver(
+	appendBatchCommitGap, err = meter.Int64ObservableCounter(
 		"sn.append.batch.commit.gap",
 		metric.WithDescription("Time gap between the first and last commit in a batch"),
 	)
@@ -189,154 +142,202 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 		return nil, err
 	}
 
-	sequencerOperationDuration, err = batchObserver.NewInt64CounterObserver(
+	sequencerOperationDuration, err = meter.Int64ObservableCounter(
 		"sn.sequencer.operation.duration",
 		metric.WithDescription("Time spent in sequencer operation"),
-		metric.WithUnit(unit.Milliseconds),
+		metric.WithUnit("ms"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	sequencerFanoutDuration, err = batchObserver.NewInt64CounterObserver(
+	sequencerFanoutDuration, err = meter.Int64ObservableCounter(
 		"sn.sequencer.fanout.duration",
 		metric.WithDescription("Time spent in sequencer fanout in microseconds"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	sequencerOperations, err = batchObserver.NewInt64CounterObserver(
+	sequencerOperations, err = meter.Int64ObservableCounter(
 		"sn.sequencer.operations",
 		metric.WithDescription("Number of sequencer operations"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
-	sequencerInflightOperations, err = batchObserver.NewInt64GaugeObserver(
+	sequencerInflightOperations, err = meter.Int64ObservableGauge(
 		"sn.sequencer.inflight.operations",
 		metric.WithDescription("Number of sequencer operations in flight"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	writerOperationDuration, err = batchObserver.NewInt64CounterObserver(
+	writerOperationDuration, err = meter.Int64ObservableCounter(
 		"sn.writer.operation.duration",
 		metric.WithDescription("Time spent in writer operation in microseconds"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	writerOperations, err = batchObserver.NewInt64CounterObserver(
+	writerOperations, err = meter.Int64ObservableCounter(
 		"sn.writer.operations",
 		metric.WithDescription("Number of writer operations"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
-	writerInflightOperations, err = batchObserver.NewInt64GaugeObserver(
+	writerInflightOperations, err = meter.Int64ObservableGauge(
 		"sn.writer.inflight.operations",
 		metric.WithDescription("Number of writer operations in flight"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	committerOperationDuration, err = batchObserver.NewInt64CounterObserver(
+	committerOperationDuration, err = meter.Int64ObservableCounter(
 		"sn.committer.operation.duration",
 		metric.WithDescription("Time spent in committer operation in microseconds"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	committerOperations, err = batchObserver.NewInt64CounterObserver(
+	committerOperations, err = meter.Int64ObservableCounter(
 		"sn.committer.operations",
 		metric.WithDescription("Number of committer operations"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
-	committerLogs, err = batchObserver.NewInt64CounterObserver(
+	committerLogs, err = meter.Int64ObservableCounter(
 		"sn.committer.logs",
 		metric.WithDescription("Number of logs committed"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	replicateClientOperationDuration, err = batchObserver.NewInt64CounterObserver(
+	replicateClientOperationDuration, err = meter.Int64ObservableCounter(
 		"sn.replicate.client.operation.duration",
 		metric.WithDescription("Time spent in replicate client operation in microseconds"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	replicateClientOperations, err = batchObserver.NewInt64CounterObserver(
+	replicateClientOperations, err = meter.Int64ObservableCounter(
 		"sn.replicate.client.operations",
 		metric.WithDescription("Number of replicate client operations"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
-	replicateClientInflightOperations, err = batchObserver.NewInt64GaugeObserver(
+	replicateClientInflightOperations, err = meter.Int64ObservableGauge(
 		"sn.replicate.client.inflight.operations",
 		metric.WithDescription("Number of replicate client operations in flight"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	replicateServerOperations, err = batchObserver.NewInt64CounterObserver(
+	replicateServerOperations, err = meter.Int64ObservableCounter(
 		"sn.replicate.server.operations",
 		metric.WithDescription("Number of replicate server operations"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	replicateLogs, err = batchObserver.NewInt64CounterObserver(
+	replicateLogs, err = meter.Int64ObservableCounter(
 		"sn.replicate.logs",
 		metric.WithDescription("Number of logs replicated from the log stream"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
-	replicateBytes, err = batchObserver.NewInt64CounterObserver(
+	replicateBytes, err = meter.Int64ObservableCounter(
 		"sn.replicate.bytes",
 		metric.WithDescription("Bytes replicated from the log stream"),
-		metric.WithUnit(unit.Bytes),
+		metric.WithUnit("By"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	replicateDuration, err = batchObserver.NewInt64CounterObserver(
+	replicateDuration, err = meter.Int64ObservableCounter(
 		"sn.replicate.duration",
 		metric.WithDescription("Time spent replicating from the log stream in microseconds"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	replicateOperations, err = batchObserver.NewInt64CounterObserver(
+	replicateOperations, err = meter.Int64ObservableCounter(
 		"sn.replicate.operations",
 		metric.WithDescription("Number of replicate operations"),
-		metric.WithUnit(unit.Dimensionless),
 	)
 	if err != nil {
 		return nil, err
 	}
-	replicatePreparationMicroseconds, err = batchObserver.NewInt64CounterObserver(
+	replicatePreparationMicroseconds, err = meter.Int64ObservableCounter(
 		"sn.replicate.preparation.us",
 		metric.WithDescription("Time spent preparing append operation"),
-		metric.WithUnit(unit.Dimensionless),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	_, err = meter.RegisterCallback(func(_ context.Context, observer metric.Observer) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		m.metricsMap.Range(func(key, value any) bool {
+			lsid := key.(types.LogStreamID)
+			lsm := value.(*LogStreamMetrics)
+			attrs := attribute.NewSet(attribute.Int("lsid", int(lsid)))
+
+			observer.ObserveInt64(appendLogs, lsm.AppendLogs.Load(), metric.WithAttributeSet(attrs))
+			observer.ObserveInt64(appendBytes, lsm.AppendBytes.Load())
+			observer.ObserveInt64(appendDuration, lsm.AppendDuration.Load())
+			observer.ObserveInt64(appendOperations, lsm.AppendOperations.Load())
+			observer.ObserveInt64(appendPreparationMicroseconds, lsm.AppendPreparationMicro.Load())
+			observer.ObserveInt64(appendBatchCommitGap, lsm.AppendBatchCommitGap.Load())
+
+			observer.ObserveInt64(sequencerOperationDuration, lsm.SequencerOperationDuration.Load())
+			observer.ObserveInt64(sequencerFanoutDuration, lsm.SequencerFanoutDuration.Load())
+			observer.ObserveInt64(sequencerOperations, lsm.SequencerOperations.Load())
+			observer.ObserveInt64(sequencerInflightOperations, lsm.SequencerInflightOperations.Load())
+
+			observer.ObserveInt64(writerOperationDuration, lsm.WriterOperationDuration.Load())
+			observer.ObserveInt64(writerOperations, lsm.WriterOperations.Load())
+			observer.ObserveInt64(writerInflightOperations, lsm.WriterInflightOperations.Load())
+
+			observer.ObserveInt64(committerOperationDuration, lsm.CommitterOperationDuration.Load())
+			observer.ObserveInt64(committerOperations, lsm.CommitterOperations.Load())
+			observer.ObserveInt64(committerLogs, lsm.CommitterLogs.Load())
+
+			observer.ObserveInt64(replicateClientOperationDuration, lsm.ReplicateClientOperationDuration.Load())
+			observer.ObserveInt64(replicateClientOperations, lsm.ReplicateClientOperations.Load())
+			observer.ObserveInt64(replicateClientInflightOperations, lsm.ReplicateClientInflightOperations.Load())
+
+			observer.ObserveInt64(replicateServerOperations, lsm.ReplicateServerOperations.Load())
+
+			observer.ObserveInt64(replicateLogs, lsm.ReplicateLogs.Load())
+			observer.ObserveInt64(replicateBytes, lsm.ReplicateBytes.Load())
+			observer.ObserveInt64(replicateDuration, lsm.ReplicateDuration.Load())
+			observer.ObserveInt64(replicateOperations, lsm.ReplicateOperations.Load())
+			observer.ObserveInt64(replicatePreparationMicroseconds, lsm.ReplicatePreparationMicro.Load())
+
+			return true
+		})
+
+		return nil
+	}, appendLogs, appendBytes, appendDuration, appendOperations, appendPreparationMicroseconds, appendBatchCommitGap,
+		sequencerOperationDuration, sequencerFanoutDuration, sequencerOperations, sequencerInflightOperations,
+		writerOperationDuration, writerOperations, writerInflightOperations,
+		committerOperationDuration, committerOperations, committerLogs,
+		replicateClientOperationDuration, replicateClientOperations, replicateClientInflightOperations,
+		replicateServerOperations,
+		replicateLogs, replicateBytes, replicateDuration, replicateOperations, replicatePreparationMicroseconds,
 	)
 	if err != nil {
 		return nil, err
