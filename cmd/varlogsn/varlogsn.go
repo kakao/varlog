@@ -7,15 +7,9 @@ import (
 	"math"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/urfave/cli/v2"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/metric"
-	metricsdk "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
 	_ "go.uber.org/automaxprocs"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -100,15 +94,19 @@ func start(c *cli.Context) error {
 
 	logger = logger.Named("sn").With(zap.Uint32("cid", uint32(clusterID)), zap.Int32("snid", int32(storageNodeID)))
 
-	mp, stop, err := initTelemetry(context.Background(), c, storageNodeID)
+	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "sn", storageNodeID.String())
+	if err != nil {
+		return err
+	}
+	mp, stop, err := telemetry.NewMeterProvider(meterProviderOpts...)
 	if err != nil {
 		return err
 	}
 	telemetry.SetGlobalMeterProvider(mp)
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), c.Duration(flagExporterStopTimeout.Name))
+		ctx, cancel := context.WithTimeout(context.Background(), c.Duration(flags.TelemetryExporterStopTimeout.Name))
 		defer cancel()
-		stop(ctx)
+		_ = stop(ctx)
 	}()
 
 	storageOpts, err := parseStorageOptions(c)
@@ -176,54 +174,6 @@ func start(c *cli.Context) error {
 		}
 	})
 	return g.Wait()
-}
-
-func initTelemetry(ctx context.Context, c *cli.Context, snid types.StorageNodeID) (metric.MeterProvider, telemetry.StopMeterProvider, error) {
-	var (
-		err      error
-		exporter metricsdk.Exporter
-		shutdown telemetry.ShutdownExporter
-	)
-
-	res, err := resource.New(ctx,
-		resource.WithFromEnv(),
-		resource.WithHost(),
-		resource.WithAttributes(
-			semconv.ServiceName("sn"),
-			semconv.ServiceNamespace("varlog"),
-			semconv.ServiceInstanceID(snid.String()),
-		))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	meterProviderOpts := []telemetry.MeterProviderOption{
-		telemetry.WithResource(res),
-		telemetry.WithRuntimeInstrumentation(),
-	}
-	switch strings.ToLower(c.String(flagExporterType.Name)) {
-	case "stdout":
-		exporter, shutdown, err = telemetry.NewStdoutExporter()
-	case "otlp":
-		var opts []otlpmetricgrpc.Option
-		if c.Bool(flagOTLPExporterInsecure.Name) {
-			opts = append(opts, otlpmetricgrpc.WithInsecure())
-		}
-		if !c.IsSet(flagOTLPExporterEndpoint.Name) {
-			return nil, nil, errors.New("no exporter endpoint")
-		}
-		opts = append(opts, otlpmetricgrpc.WithEndpoint(c.String(flagOTLPExporterEndpoint.Name)))
-		exporter, shutdown, err = telemetry.NewOLTPExporter(context.Background(), opts...)
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if exporter != nil {
-		meterProviderOpts = append(meterProviderOpts, telemetry.WithExporter(exporter, shutdown))
-	}
-
-	return telemetry.NewMeterProvider(meterProviderOpts...)
 }
 
 func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {

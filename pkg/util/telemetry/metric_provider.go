@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -13,15 +14,17 @@ import (
 
 // StopMeterProvider is the type for stop function of meter provider.
 // It stops both meter provider and exporter.
-type StopMeterProvider func(context.Context)
+type StopMeterProvider func(context.Context) error
 
 // NewMeterProvider creates a new meter provider and its stop function.
 func NewMeterProvider(opts ...MeterProviderOption) (metric.MeterProvider, StopMeterProvider, error) {
 	cfg := newMeterProviderConfig(opts)
 
+	stop := func(ctx context.Context) error { return nil }
+
 	if cfg.exporter == nil {
 		mp := noopmetric.NewMeterProvider()
-		return mp, func(context.Context) {}, nil
+		return mp, stop, nil
 	}
 
 	reader := metricsdk.NewPeriodicReader(cfg.exporter)
@@ -33,18 +36,18 @@ func NewMeterProvider(opts ...MeterProviderOption) (metric.MeterProvider, StopMe
 
 	if cfg.hostInstrumentation {
 		if err := initHostInstrumentation(mp); err != nil {
-			return nil, func(context.Context) {}, err
+			return nil, stop, err
 		}
 	}
 
 	if cfg.runtimeInstrumentation {
 		if err := initRuntimeInstrumentation(mp, cfg.runtimeInstrumentationOpts); err != nil {
-			return nil, func(context.Context) {}, err
+			return nil, stop, err
 		}
 	}
 
-	stop := func(ctx context.Context) {
-		_ = mp.Shutdown(ctx)
+	stop = func(ctx context.Context) error {
+		return errors.Join(mp.Shutdown(ctx), cfg.exporter.Shutdown(ctx))
 	}
 
 	return mp, stop, nil
@@ -60,4 +63,8 @@ func initRuntimeInstrumentation(mp metric.MeterProvider, opts []runtime.Option) 
 
 func SetGlobalMeterProvider(mp metric.MeterProvider) {
 	otel.SetMeterProvider(mp)
+}
+
+func GetGlobalMeterProvider() metric.MeterProvider {
+	return otel.GetMeterProvider()
 }

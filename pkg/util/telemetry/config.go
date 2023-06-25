@@ -7,9 +7,8 @@ import (
 )
 
 type meterProviderConfig struct {
-	resource         *resource.Resource
-	exporter         metricsdk.Exporter
-	shutdownExporter ShutdownExporter
+	resource *resource.Resource
+	exporter metricsdk.Exporter
 
 	hostInstrumentation bool
 
@@ -38,10 +37,9 @@ func WithResource(resource *resource.Resource) MeterProviderOption {
 }
 
 // WithExporter sets exporter and its shutdown function.
-func WithExporter(exporter metricsdk.Exporter, shutdownExporter ShutdownExporter) MeterProviderOption {
+func WithExporter(exporter metricsdk.Exporter) MeterProviderOption {
 	return func(cfg *meterProviderConfig) {
 		cfg.exporter = exporter
-		cfg.shutdownExporter = shutdownExporter
 	}
 }
 
