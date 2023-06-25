@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 	"github.com/kakao/varlog/internal/metarepos"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
+	"github.com/kakao/varlog/pkg/util/telemetry"
 	"github.com/kakao/varlog/pkg/util/units"
 )
 
@@ -53,10 +55,27 @@ func start(c *cli.Context) error {
 		return err
 	}
 
+	raftAddr := c.String(flagRaftAddr.Name)
+	nodeID := types.NewNodeIDFromURL(raftAddr)
+	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "mr", nodeID.String())
+	if err != nil {
+		return err
+	}
+	mp, stop, err := telemetry.NewMeterProvider(meterProviderOpts...)
+	if err != nil {
+		return err
+	}
+	telemetry.SetGlobalMeterProvider(mp)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), c.Duration(flags.TelemetryExporterStopTimeout.Name))
+		defer cancel()
+		_ = stop(ctx)
+	}()
+
 	opts := []metarepos.Option{
 		metarepos.WithClusterID(cid),
 		metarepos.WithRPCAddress(c.String(flagRPCAddr.Name)),
-		metarepos.WithRaftAddress(c.String(flagRaftAddr.Name)),
+		metarepos.WithRaftAddress(raftAddr),
 		metarepos.WithDebugAddress(c.String(flagDebugAddr.Name)),
 		metarepos.WithRaftDirectory(c.String(flagRaftDir.Name)),
 		metarepos.WithReplicationFactor(c.Int(flagReplicationFactor.Name)),
@@ -122,10 +141,14 @@ func initCLI() *cli.App {
 				flagReportCommitterWriteBufferSize.StringFlag(false, units.ToByteSizeString(metarepos.DefaultReportCommitterWriteBufferSize)),
 				flagMaxTopicsCount,
 				flagMaxLogStreamsCountPerTopic,
-				flagTelemetryCollectorName.StringFlag(false, metarepos.DefaultTelemetryCollectorName),
-				flagTelemetryCollectorEndpoint.StringFlag(false, metarepos.DefaultTelmetryCollectorEndpoint),
 
-				//flagLogDir.StringFlag(false, metarepos.DefaultLogDir),
+				// telemetry
+				flags.TelemetryExporter,
+				flags.TelemetryExporterStopTimeout,
+				flags.TelemetryOTLPEndpoint,
+				flags.TelemetryOTLPInsecure,
+				flags.TelemetryHost,
+				flags.TelemetryRuntime,
 
 				// logger options
 				flags.LogDir,

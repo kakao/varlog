@@ -276,7 +276,6 @@ func (mr *RaftMetadataRepository) Close() error {
 
 	// FIXME (jun, pharrell): Stop gracefully
 	mr.server.Stop()
-	mr.tmStub.close(context.TODO())
 	return nil
 }
 
